@@ -1,6 +1,7 @@
 import { createStore } from '@bundled/solid-js/store';
 import type {
   Section, RepoRef, RateLimit, Repo, Issue, Comment, Pull, CommitItem, Release, ContentEntry,
+  GHUser, AuthState,
 } from './types';
 
 export const DEFAULT_REPO: RepoRef = { owner: 'sorryhyun', name: 'yaar' };
@@ -12,6 +13,8 @@ export const [state, setState] = createStore({
   // Repo + auth
   repo: { ...DEFAULT_REPO } as RepoRef,
   token: '' as string,
+  user: null as GHUser | null,
+  auth: { status: 'idle', userCode: '', verificationUri: '', error: '' } as AuthState,
   rateLimit: null as RateLimit | null,
 
   // Global
@@ -61,6 +64,7 @@ export const [state, setState] = createStore({
   fileDownloadUrl: '' as string,
 });
 
+/** Whether an OAuth access token is present (i.e. the user is signed in). */
 export function hasToken(): boolean {
   return state.token.trim().length > 0;
 }

@@ -557,6 +557,39 @@ body,
   color: var(--yaar-error);
 }
 
+/* ── Account / device-flow sign-in ── */
+.auth-signed-in,
+.auth-signed-out,
+.auth-pending,
+.auth-steps,
+.auth-clientid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-3);
+}
+.auth-user {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+.auth-login {
+  font-weight: 600;
+  color: var(--yaar-text);
+}
+.device-code {
+  align-self: flex-start;
+  font-family: var(--yaar-font-mono);
+  font-size: 1.5rem;
+  letter-spacing: 0.15em;
+  font-weight: 700;
+  color: var(--yaar-accent);
+  background: var(--yaar-bg-surface-hover);
+  border: 1px solid var(--yaar-border);
+  border-radius: 6px;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  user-select: all;
+}
+
 /* ── Markdown body ── */
 .md-body {
   line-height: 1.6;

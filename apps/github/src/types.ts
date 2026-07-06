@@ -18,6 +18,18 @@ export interface GHUser {
   html_url: string;
 }
 
+/** OAuth device-flow sign-in state. */
+export interface AuthState {
+  /** idle → starting (requesting a code) → pending (awaiting authorization) → authed / error */
+  status: 'idle' | 'starting' | 'pending' | 'authed' | 'error';
+  /** The short code the user types at github.com/login/device (while pending). */
+  userCode: string;
+  /** The URL the user opens to enter the code (while pending). */
+  verificationUri: string;
+  /** Human-readable error message (while status === 'error'). */
+  error: string;
+}
+
 export interface Repo {
   full_name: string;
   description: string | null;

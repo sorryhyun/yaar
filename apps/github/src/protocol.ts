@@ -6,8 +6,9 @@ function guard<T>(fn: () => Promise<T>): Promise<T> {
 }
 import {
   setRepoAction, refreshAll, createIssueAction, commentIssueAction,
-  setIssueStateAction, setTokenAction,
+  setIssueStateAction,
 } from './actions';
+import { startDeviceLogin, signOut } from './auth';
 
 function issueSummary() {
   return state.issues.map((i) => ({
@@ -40,8 +41,13 @@ export function registerAppProtocol(): void {
     name: 'GitHub',
     state: {
       repo: {
-        description: 'The active repository (owner/name) and whether a token is set',
-        handler: () => ({ owner: state.repo.owner, name: state.repo.name, hasToken: hasToken() }),
+        description: 'The active repository (owner/name), sign-in state, and signed-in user login',
+        handler: () => ({
+          owner: state.repo.owner,
+          name: state.repo.name,
+          signedIn: hasToken(),
+          user: state.user?.login ?? null,
+        }),
       },
       issues: {
         description: 'Currently loaded issues (respecting the open/closed filter)',
@@ -103,7 +109,7 @@ export function registerAppProtocol(): void {
         handler: () => guard(async () => { await refreshAll(); return { ok: true }; }),
       },
       createIssue: {
-        description: 'Create a new issue (requires a token)',
+        description: 'Create a new issue (requires sign-in)',
         params: {
           type: 'object',
           properties: { title: { type: 'string' }, body: { type: 'string' } },
@@ -112,7 +118,7 @@ export function registerAppProtocol(): void {
         handler: (p: Record<string, unknown>) => guard(() => createIssueAction(String(p.title), String(p.body || ''))),
       },
       commentIssue: {
-        description: 'Add a comment to an issue (requires a token)',
+        description: 'Add a comment to an issue (requires sign-in)',
         params: {
           type: 'object',
           properties: { number: { type: 'number' }, body: { type: 'string' } },
@@ -124,7 +130,7 @@ export function registerAppProtocol(): void {
         }),
       },
       closeIssue: {
-        description: 'Close an issue (requires a token)',
+        description: 'Close an issue (requires sign-in)',
         params: { type: 'object', properties: { number: { type: 'number' } }, required: ['number'] },
         handler: (p: Record<string, unknown>) => guard(async () => {
           await setIssueStateAction(Number(p.number), 'closed');
@@ -132,19 +138,29 @@ export function registerAppProtocol(): void {
         }),
       },
       reopenIssue: {
-        description: 'Reopen a closed issue (requires a token)',
+        description: 'Reopen a closed issue (requires sign-in)',
         params: { type: 'object', properties: { number: { type: 'number' } }, required: ['number'] },
         handler: (p: Record<string, unknown>) => guard(async () => {
           await setIssueStateAction(Number(p.number), 'open');
           return { ok: true };
         }),
       },
-      setToken: {
-        description: 'Save (or clear) the GitHub Personal Access Token in storage',
-        params: { type: 'object', properties: { token: { type: 'string' } }, required: ['token'] },
-        handler: (p: Record<string, unknown>) => guard(async () => {
-          await setTokenAction(String(p.token || ''));
-          return { hasToken: hasToken() };
+      signIn: {
+        description:
+          'Start GitHub sign-in via the OAuth device flow. Returns a userCode and verificationUri — ' +
+          'tell the user to open the URL and enter the code; the app completes sign-in once they authorize.',
+        params: { type: 'object', properties: {} },
+        handler: () => guard(async () => {
+          const { userCode, verificationUri } = await startDeviceLogin();
+          return { userCode, verificationUri };
+        }),
+      },
+      signOut: {
+        description: 'Sign out of GitHub and clear the stored token',
+        params: { type: 'object', properties: {} },
+        handler: () => guard(async () => {
+          await signOut();
+          return { signedIn: hasToken() };
         }),
       },
     },

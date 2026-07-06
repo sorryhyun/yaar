@@ -4,11 +4,14 @@ import { DEFAULT_REPO, setState, state } from './store';
 
 const TOKEN_PATH = 'github/token';
 const CONFIG_PATH = 'github/config.json';
+const CLIENT_ID_PATH = 'github/client_id';
 
-/** Read the PAT from yaar storage (github/token). Returns '' when absent. */
+/** Read the OAuth access token from yaar storage (github/token). Returns '' when absent. */
 export async function readToken(): Promise<string> {
   try {
-    const raw = await storage.read(TOKEN_PATH);
+    // Force text: extensionless files are served as application/octet-stream, and
+    // storage.read()'s auto mode would return a Blob (String(blob) === "[object Blob]").
+    const raw = await storage.read(TOKEN_PATH, { as: 'text' });
     if (raw == null) return '';
     return String(raw).trim();
   } catch {
@@ -26,10 +29,33 @@ export async function writeToken(token: string): Promise<void> {
   setState('token', trimmed);
 }
 
+/**
+ * Read the OAuth App Client ID override (github/client_id). Empty when unset —
+ * callers fall back to the built-in client id baked into auth.ts.
+ */
+export async function readClientId(): Promise<string> {
+  try {
+    const raw = await storage.read(CLIENT_ID_PATH, { as: 'text' });
+    if (raw == null) return '';
+    return String(raw).trim();
+  } catch {
+    return '';
+  }
+}
+
+export async function writeClientId(clientId: string): Promise<void> {
+  const trimmed = clientId.trim();
+  if (!trimmed) {
+    try { await storage.remove(CLIENT_ID_PATH); } catch { /* ignore */ }
+  } else {
+    await storage.save(CLIENT_ID_PATH, trimmed);
+  }
+}
+
 /** Read the active repo from github/config.json, falling back to the default. */
 export async function readConfig(): Promise<RepoRef> {
   try {
-    const raw = await storage.read(CONFIG_PATH);
+    const raw = await storage.read(CONFIG_PATH, { as: 'text' });
     if (raw == null) return { ...DEFAULT_REPO };
     const parsed = typeof raw === 'string' ? JSON.parse(raw) : (raw as Record<string, unknown>);
     const owner = String((parsed as any)?.owner || '').trim();
@@ -51,5 +77,6 @@ export async function bootstrapStorage(): Promise<void> {
   const [token, cfg] = await Promise.all([readToken(), readConfig()]);
   setState('token', token);
   setState('repo', cfg);
+  if (token) setState('auth', 'status', 'authed');
   void state;
 }

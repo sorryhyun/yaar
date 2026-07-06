@@ -1,6 +1,6 @@
 import { invoke } from '@bundled/yaar';
 import type {
-  RateLimit, Repo, Issue, Comment, Pull, CommitItem, Release, ContentEntry,
+  RateLimit, Repo, Issue, Comment, Pull, CommitItem, Release, ContentEntry, GHUser,
 } from './types';
 import { state, setState } from './store';
 
@@ -81,6 +81,11 @@ async function gh<T = unknown>(path: string, opts: RequestOpts = {}): Promise<GH
 }
 
 const slug = () => `${state.repo.owner}/${state.repo.name}`;
+
+// ── Authenticated user ──────────────────────────────────────────────────────
+export async function fetchUser(): Promise<GHUser> {
+  return (await gh<GHUser>('/user')).data;
+}
 
 // ── Repo / overview ─────────────────────────────────────────────────────────
 export async function fetchRepo(): Promise<Repo> {

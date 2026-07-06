@@ -4,6 +4,7 @@ import type { Section } from './types';
 import { state, hasToken } from './store';
 import { bootstrapStorage } from './storage';
 import { selectSection, loadSection, refreshAll } from './actions';
+import { refreshUser } from './auth';
 import { registerAppProtocol } from './protocol';
 import { resetCountdown } from './utils';
 import { overviewView } from './views/overview';
@@ -41,7 +42,7 @@ function sidebar() {
     <div class="sidebar-foot">
       <button class=${() => 'nav-item' + (state.section === 'settings' ? ' active' : '')} onClick=${() => selectSection('settings')}>
         <span class="nav-icon">⚙️</span><span>Settings</span>
-        ${() => hasToken() ? html`<span class="tok-dot" title="Token set"></span>` : null}
+        ${() => hasToken() ? html`<span class="tok-dot" title="Signed in"></span>` : null}
       </button>
     </div>
   </aside>`;
@@ -67,7 +68,7 @@ function content() {
       }}
     </div>
     <div class="y-statusbar">
-      <span>${() => `${state.repo.owner}/${state.repo.name}`}${() => hasToken() ? ' · 🔑 token' : ' · read-only'}</span>
+      <span>${() => `${state.repo.owner}/${state.repo.name}`}${() => state.user ? ` · @${state.user.login}` : hasToken() ? ' · signed in' : ' · read-only'}</span>
       <span>${() => state.rateLimit
         ? `API ${state.rateLimit.remaining}/${state.rateLimit.limit}${state.rateLimit.remaining === 0 ? ` · resets in ${resetCountdown(state.rateLimit.reset)}` : ''}`
         : ''}</span>
@@ -86,5 +87,6 @@ registerAppProtocol();
 
 void (async () => {
   await bootstrapStorage();
+  if (state.token) void refreshUser();
   await loadSection('overview', true);
 })();

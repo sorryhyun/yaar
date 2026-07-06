@@ -2,8 +2,10 @@ import { errMsg, showToast } from '@bundled/yaar';
 import type { Issue, Pull, RepoRef, ContentEntry } from './types';
 import { state, setState, hasToken } from './store';
 import { renderMarkdown, decodeBase64Utf8 } from './markdown';
-import { writeConfig, writeToken } from './storage';
+import { writeConfig } from './storage';
 import * as api from './api';
+
+const SIGN_IN_REQUIRED = 'Sign in to GitHub (Settings) to ';
 
 const MARKDOWN_EXT = /\.(md|markdown|mdown|mkd)$/i;
 const TEXT_EXT = /\.(ts|tsx|js|jsx|json|css|scss|html|xml|yml|yaml|txt|py|rb|go|rs|java|c|h|cpp|cc|sh|toml|ini|cfg|env|sql|graphql|svg|lock|gitignore|editorconfig|dockerfile|makefile)$/i;
@@ -84,7 +86,7 @@ export function closeActiveIssue(): void {
 }
 
 export async function createIssueAction(title: string, body: string): Promise<{ number: number }> {
-  if (!hasToken()) throw new Error('A Personal Access Token is required to create issues.');
+  if (!hasToken()) throw new Error(`${SIGN_IN_REQUIRED}create issues.`);
   if (!title.trim()) throw new Error('Issue title is required.');
   setState('mutating', true);
   try {
@@ -100,7 +102,7 @@ export async function createIssueAction(title: string, body: string): Promise<{ 
 }
 
 export async function commentIssueAction(number: number, body: string): Promise<void> {
-  if (!hasToken()) throw new Error('A Personal Access Token is required to comment.');
+  if (!hasToken()) throw new Error(`${SIGN_IN_REQUIRED}comment.`);
   if (!body.trim()) throw new Error('Comment body is required.');
   setState('mutating', true);
   try {
@@ -114,7 +116,7 @@ export async function commentIssueAction(number: number, body: string): Promise<
 }
 
 export async function setIssueStateAction(number: number, newState: 'open' | 'closed'): Promise<void> {
-  if (!hasToken()) throw new Error('A Personal Access Token is required to change issue state.');
+  if (!hasToken()) throw new Error(`${SIGN_IN_REQUIRED}change issue state.`);
   setState('mutating', true);
   try {
     const issue = await api.setIssueState(number, newState);
@@ -287,11 +289,6 @@ export async function setRepoAction(owner: string, name: string): Promise<void> 
   resetRepoData();
   await loadSection(state.section, true);
   showToast(`Switched to ${o}/${n}`, 'success');
-}
-
-export async function setTokenAction(token: string): Promise<void> {
-  await writeToken(token);
-  showToast(token.trim() ? 'Token saved' : 'Token cleared', 'success');
 }
 
 export async function refreshAll(): Promise<void> {
