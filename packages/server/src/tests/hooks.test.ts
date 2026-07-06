@@ -2,8 +2,11 @@ import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { mkdir, writeFile, rm } from 'fs/promises';
 import { join } from 'path';
 
-// Use a temporary config directory for tests
+// Use a temporary config directory for tests. NOTE: the dir is checked into git
+// (it also holds the tracked curl_allowed_domains.yaml fixture), so cleanup must
+// only remove this test's own hooks.json — never rm the whole dir.
 const TEST_CONFIG_DIR = join(import.meta.dirname, '__test-config__');
+const HOOKS_FILE = join(TEST_CONFIG_DIR, 'hooks.json');
 
 // Mock storage-manager to point to our test directory
 mock.module('../storage/storage-manager.js', () => ({
@@ -51,10 +54,11 @@ describe('hooks storage', () => {
   beforeEach(async () => {
     _resetHooksCache();
     await mkdir(TEST_CONFIG_DIR, { recursive: true });
+    await rm(HOOKS_FILE, { force: true });
   });
 
   afterEach(async () => {
-    await rm(TEST_CONFIG_DIR, { recursive: true, force: true });
+    await rm(HOOKS_FILE, { force: true });
   });
 
   it('returns empty array when no hooks file exists', async () => {
@@ -147,10 +151,11 @@ describe('getToolUseHooks — URI-based matching', () => {
   beforeEach(async () => {
     _resetHooksCache();
     await mkdir(TEST_CONFIG_DIR, { recursive: true });
+    await rm(HOOKS_FILE, { force: true });
   });
 
   afterEach(async () => {
-    await rm(TEST_CONFIG_DIR, { recursive: true, force: true });
+    await rm(HOOKS_FILE, { force: true });
   });
 
   it('matches by verb + uri + action', async () => {

@@ -38,7 +38,7 @@ Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`
 
 | Call | Description |
 |------|-------------|
-| `invoke('yaar://windows/{windowId}', { action: 'app_query', stateKey? })` | Read a state key, or the manifest if `stateKey` is omitted (defaults to `'manifest'`). |
+| `invoke('yaar://windows/{windowId}', { action: 'app_query', stateKey? })` | Read a state key, or the manifest if `stateKey` is omitted (defaults to `'manifest'`). The reserved key `'__console'` pulls the app's console-capture buffer (`window.__YAAR_CONSOLE`) directly from the injected app-protocol script — it works even when the app never called `app.register()` and bypasses the app-ready wait (used by devtools to read a preview app's console logs). |
 | `invoke('yaar://windows/{windowId}', { action: 'app_command', command, params? })` | Execute a command. |
 
 ### Scoped tools (app agents)
@@ -51,7 +51,7 @@ Each persistent app agent (one per `appId`) instead gets dedicated `query` / `co
 
 **Behavior (both entry points):**
 1. Validates the window exists and uses the `iframe` renderer.
-2. Waits up to 5 s for the app to send `yaar:app-ready` (skipped if already registered — cached on `WindowState.appProtocol`).
+2. Waits up to 5 s for the app to send `yaar:app-ready` (skipped if already registered — cached on `WindowState.appProtocol`). Also skipped for the reserved `__console` state key (see below), so unregistered preview apps can still answer it.
 3. Sends the request through the protocol pipeline (`ActionEmitter.emitAppProtocolRequest`).
 4. For `app_command`, records the command via `WindowStateRegistry.recordAppCommand()` for replay on reload.
 5. Returns the JSON response (manifest responses are enriched with resource `uri` hints per state/command key) or an error string. Large text/resource results are truncated to ~400KB.
