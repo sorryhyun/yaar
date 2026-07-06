@@ -2,6 +2,7 @@ import html from '@bundled/solid-js/html';
 import type { SessionSummary } from './types';
 import { state } from './store';
 import { loadDetail } from './api';
+import { TranscriptSection } from './transcript';
 import {
   formatDateTime,
   formatFull,
@@ -107,14 +108,7 @@ export const DetailView = () => {
 
       </div>
 
-      <div class="transcript-section">
-        <div class="y-label transcript-title">Transcript</div>
-        <pre class="transcript-content">${() =>
-          state.transcript
-            ? state.transcript
-            : 'Loading transcript...'
-        }</pre>
-      </div>
+      ${TranscriptSection()}
 
     </div>
   `;

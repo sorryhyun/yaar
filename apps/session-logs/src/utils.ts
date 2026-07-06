@@ -31,6 +31,19 @@ export function formatFull(iso: string | undefined): string {
   } catch { return '-'; }
 }
 
+/** HH:MM:SS local time for a transcript turn */
+export function formatTime(iso: string | undefined): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '';
+    const hh = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    const sec = String(d.getSeconds()).padStart(2, '0');
+    return `${hh}:${min}:${sec}`;
+  } catch { return ''; }
+}
+
 /** Human-readable duration between two ISO timestamps */
 export function durationBetween(a: string | undefined, b: string | undefined): string {
   if (!a || !b) return '-';

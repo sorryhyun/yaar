@@ -4,8 +4,8 @@ import { render } from '@bundled/solid-js/web';
 import './styles.css';
 
 import { state, setState } from './store';
-import { loadSessions, loadDetail } from './api';
-import { getDateKey, formatDateLabel, providerLabel, providerCls, formatDateTime } from './utils';
+import { loadSessions } from './api';
+import { getDateKey, formatDateLabel, providerLabel } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
 import { registerProtocol } from './protocol';
 import type { SessionSummary } from './types';
