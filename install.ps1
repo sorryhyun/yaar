@@ -1,7 +1,7 @@
 # YAAR installer for Windows (PowerShell)
 #
 # Usage:
-#   irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex
+#   irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex
 #
 # Options (env vars):
 #   $env:INSTALL_DIR  — where to put the binary (default: ~\.local\bin)

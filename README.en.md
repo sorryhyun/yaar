@@ -21,13 +21,13 @@ MCP tools, skills, plugins, and A2A — all within an 8K-token system prompt. Bu
 Codex or Claude Code authentication is required.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
+curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
 yaar                # Browser opens automatically
 ```
 
 Supports Linux, macOS (Intel & Apple Silicon), and Windows (WSL). Single binary — no Bun or Node.js required.
 
-Windows (PowerShell): `irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex`
+Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex`
 
 Once running, start with something like "install essential apps".
 

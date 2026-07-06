@@ -22,13 +22,13 @@ MCP 도구, 스킬, 플러그인, A2A까지 — 시스템 프롬프트 8K 토큰
 Codex 혹은 Claude Code 사용자 인증이 필수입니다.
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
+curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
 yaar                # 브라우저가 자동으로 열립니다
 ```
 
 Linux, macOS (Intel & Apple Silicon), Windows (WSL) 지원. 바이너리 하나로 실행되며, Bun이나 Node.js 설치가 필요 없습니다.
 
-Windows (PowerShell): `irm https://raw.githubusercontent.com/sorryhyun/yaar/master/install.ps1 | iex`
+Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/download/install.ps1 | iex`
 
 실행 후 "필수 앱 설치해줘" 같은 말로 시작하시면 됩니다.
 

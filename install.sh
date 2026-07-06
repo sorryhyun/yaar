@@ -2,7 +2,7 @@
 # YAAR installer — downloads the latest release binary for your platform.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/sorryhyun/yaar/master/install.sh | bash
+#   curl -fsSL https://github.com/sorryhyun/yaar/releases/latest/download/install.sh | bash
 #
 # Options (env vars):
 #   INSTALL_DIR  — where to put the binary (default: ~/.local/bin)
