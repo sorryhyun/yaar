@@ -216,11 +216,13 @@ Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata
 
 ### App Agent Architecture
 
-When a user interacts with an app window, a **persistent app agent** is created (one per `appId`, reused across all windows of that app). App agents have only 3 tools: `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent).
+When a user interacts with an app window, a **persistent app agent** is created (one per `appId`, reused across all windows of that app). App agents have four scoped tools — `describe` (read an app's protocol), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
 
-**Prompt priority:** `AGENTS.md` (full custom prompt, replaces generic) > `SKILL.md` (appended to generic prompt). `protocol.json` manifest is always appended. Use `AGENTS.md` for apps like devtools that need precise agent behavior; `SKILL.md` for simpler apps where the generic prompt suffices. `HINT.md` is separate — its content is injected into the **monitor agent's** system prompt (not the app agent's), providing orchestration hints that auto-sync with app install/uninstall.
+**Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window (no permission needed). Passing another app's id targets that app — gated by the caller's `app.json` `controls` list (bundled apps only, mirroring the `kind: "system"` guard). `controls` accepts a string shorthand (`["browser-user"]`) or object form (`[{ "appId": "browser-user", "commands": ["navigate", "click"] }]`) to restrict which commands may be issued. The target app must have an open window (resolved via `pool.getActiveAppWindow`). This is direct synchronous protocol control; contrast with `direct_message` to `app:{id}`, which hands a natural-language request to the other app's own agent. E.g. devtools declares `"controls": ["browser-user"]` to drive the real browser end-to-end. The app's own protocol is injected at boot; controlled apps' protocols are discovered on demand via `describe(appId)`.
 
-Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (query/command/relay tools).
+**Prompt priority:** `AGENTS.md` (full custom prompt, replaces generic) > `SKILL.md` (appended to generic prompt). `protocol.json` manifest is always appended, as is a "Controllable Apps" section when `controls` is set. Use `AGENTS.md` for apps like devtools that need precise agent behavior; `SKILL.md` for simpler apps where the generic prompt suffices. `HINT.md` is separate — its content is injected into the **monitor agent's** system prompt (not the app agent's), providing orchestration hints that auto-sync with app install/uninstall.
+
+Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (describe/query/command/relay tools), `features/apps/discovery.ts` (`controls` parsing + bundled-only guard).
 
 ### Compiler & Bundled Libraries
 

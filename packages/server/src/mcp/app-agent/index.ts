@@ -1,13 +1,18 @@
 /**
  * MCP tools for app agents — scoped tools for app protocol communication.
  *
- * Three tools:
+ * Four tools:
+ * - describe: read an app's protocol (state keys + commands)
  * - query: read app state via app protocol (also handles app-scoped storage reads)
  * - command: send commands to the app via app protocol (also handles storage write/delete/list)
  * - relay: hand off a message to the monitor agent
  *
  * Storage access is built-in: query/command with storage paths are intercepted server-side
  * and resolved against the app's scoped storage (storage/apps/{appId}/...) automatically.
+ *
+ * Cross-app control: describe/query/command take an optional `appId`. Omitting it (or passing
+ * your own id) targets your own window — no permission needed. Passing another app's id targets
+ * that app, gated by the caller's app.json `controls` list (and, for command, its command list).
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -15,7 +20,9 @@ import { z } from 'zod';
 import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
 import { getWindowId, getSessionId, getMonitorId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
+import type { LiveSession } from '../../session/live-session.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
+import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
 import {
   storageRead,
   storageWrite,
@@ -23,7 +30,12 @@ import {
   storageDelete,
 } from '../../storage/storage-manager.js';
 
-export const APP_TOOL_NAMES = ['mcp__app__query', 'mcp__app__command', 'mcp__app__relay'] as const;
+export const APP_TOOL_NAMES = [
+  'mcp__app__query',
+  'mcp__app__command',
+  'mcp__app__relay',
+  'mcp__app__describe',
+] as const;
 
 /** Resolve the appId for the current window context. */
 function getAppId(windowState: WindowStateRegistry, windowId: string): string | undefined {
@@ -37,11 +49,56 @@ function appStoragePath(appId: string, relativePath: string): string {
 }
 
 export function registerAppAgentTools(server: McpServer): void {
-  const getWindowState = (): WindowStateRegistry => {
+  const getSession = (): LiveSession => {
     const sid = getSessionId();
     const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
     if (!session) throw new Error('No active session.');
-    return session.windowState;
+    return session;
+  };
+  const getWindowState = (): WindowStateRegistry => getSession().windowState;
+
+  const errText = (text: string) => ({
+    content: [{ type: 'text' as const, text: `Error: ${text}` }],
+  });
+
+  /**
+   * Resolve which window a query/command should target.
+   * - No appId (or appId === own) → the caller's own window; no permission needed.
+   * - A foreign appId → requires the caller's app.json to list it under "controls",
+   *   and the target app to have an open window.
+   */
+  const resolveTarget = async (
+    ownWindowId: string,
+    targetAppId: string | undefined,
+  ): Promise<
+    | { ok: true; windowId: string; ownAppId?: string; foreign: boolean; entry?: ControlEntry }
+    | { ok: false; error: string }
+  > => {
+    const session = getSession();
+    const ownAppId = getAppId(session.windowState, ownWindowId);
+    if (!targetAppId || targetAppId === ownAppId) {
+      return { ok: true, windowId: ownWindowId, ownAppId, foreign: false };
+    }
+    if (!ownAppId) {
+      return { ok: false, error: 'could not resolve your appId; cannot target another app.' };
+    }
+    const meta = await getAppMeta(ownAppId);
+    const entry = meta?.controls?.find((c) => c.appId === targetAppId);
+    if (!entry) {
+      const allowed = (meta?.controls ?? []).map((c) => c.appId);
+      return {
+        ok: false,
+        error:
+          `app "${ownAppId}" is not permitted to control "${targetAppId}". ` +
+          (allowed.length ? `Permitted apps: ${allowed.join(', ')}. ` : '') +
+          `Add "${targetAppId}" to "controls" in ${ownAppId}'s app.json.`,
+      };
+    }
+    const windowId = session.getPool()?.getActiveAppWindow(targetAppId);
+    if (!windowId) {
+      return { ok: false, error: `app "${targetAppId}" has no open window to control.` };
+    }
+    return { ok: true, windowId, ownAppId, foreign: true, entry };
   };
 
   // query — query app state, manifest, or app-scoped storage
@@ -58,24 +115,26 @@ export function registerAppAgentTools(server: McpServer): void {
           .describe(
             'State key to query (omit for manifest). Use "storage/{path}" to read app storage.',
           ),
+        appId: z
+          .string()
+          .optional()
+          .describe(
+            'Target another app you are permitted to control (via "controls"). Omit to read your own app.',
+          ),
       },
     },
     async (args) => {
       const windowId = getWindowId();
-      if (!windowId) {
-        return { content: [{ type: 'text', text: 'Error: no active window context.' }] };
-      }
+      if (!windowId) return errText('no active window context.');
 
       const windowState = getWindowState();
 
-      // Intercept storage reads
+      // Intercept storage reads — storage is app-scoped, so only your own app.
       if (args.stateKey?.startsWith('storage/') || args.stateKey === 'storage') {
+        if (args.appId)
+          return errText("storage is app-scoped; you cannot read another app's storage.");
         const appId = getAppId(windowState, windowId);
-        if (!appId) {
-          return {
-            content: [{ type: 'text', text: 'Error: could not resolve appId for this window.' }],
-          };
-        }
+        if (!appId) return errText('could not resolve appId for this window.');
         const relativePath =
           args.stateKey === 'storage' ? '' : args.stateKey.slice('storage/'.length);
         if (!relativePath) {
@@ -84,14 +143,15 @@ export function registerAppAgentTools(server: McpServer): void {
           return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
         }
         const result = await storageRead(appStoragePath(appId, relativePath));
-        if (!result.success) {
-          return { content: [{ type: 'text', text: `Error: ${result.error}` }] };
-        }
+        if (!result.success) return errText(result.error ?? 'read failed.');
         return { content: [{ type: 'text', text: result.content ?? '' }] };
       }
 
+      const target = await resolveTarget(windowId, args.appId);
+      if (!target.ok) return errText(target.error);
+
       return {
-        ...(await handleAppQuery(windowState, windowId, {
+        ...(await handleAppQuery(windowState, target.windowId, {
           stateKey: args.stateKey,
         })),
       };
@@ -113,24 +173,26 @@ export function registerAppAgentTools(server: McpServer): void {
             'Command name to execute. Use "storage:write", "storage:delete", or "storage:list" for app storage.',
           ),
         params: z.record(z.string(), z.unknown()).optional().describe('Command parameters'),
+        appId: z
+          .string()
+          .optional()
+          .describe(
+            'Target another app you are permitted to control (via "controls"). Omit to drive your own app.',
+          ),
       },
     },
     async (args) => {
       const windowId = getWindowId();
-      if (!windowId) {
-        return { content: [{ type: 'text', text: 'Error: no active window context.' }] };
-      }
+      if (!windowId) return errText('no active window context.');
 
       const windowState = getWindowState();
 
-      // Intercept storage commands
+      // Intercept storage commands — storage is app-scoped, so only your own app.
       if (args.command.startsWith('storage:')) {
+        if (args.appId)
+          return errText("storage is app-scoped; you cannot modify another app's storage.");
         const appId = getAppId(windowState, windowId);
-        if (!appId) {
-          return {
-            content: [{ type: 'text', text: 'Error: could not resolve appId for this window.' }],
-          };
-        }
+        if (!appId) return errText('could not resolve appId for this window.');
         const subCommand = args.command.slice('storage:'.length);
         const path = (args.params?.path as string) ?? '';
 
@@ -181,11 +243,74 @@ export function registerAppAgentTools(server: McpServer): void {
         }
       }
 
+      const target = await resolveTarget(windowId, args.appId);
+      if (!target.ok) return errText(target.error);
+      if (
+        target.foreign &&
+        target.entry?.commands &&
+        !target.entry.commands.includes(args.command)
+      ) {
+        return errText(
+          `app "${target.ownAppId}" is not permitted to run "${args.command}" on "${args.appId}". ` +
+            `Permitted commands: ${target.entry.commands.join(', ')}.`,
+        );
+      }
+
       return {
-        ...(await handleAppCommand(windowState, windowId, {
+        ...(await handleAppCommand(windowState, target.windowId, {
           command: args.command,
           params: args.params,
         })),
+      };
+    },
+  );
+
+  // describe — read an app's protocol (state + commands); own app by default,
+  // or a controllable app when appId is passed and permitted.
+  server.registerTool(
+    'describe',
+    {
+      description:
+        "Describe an app's protocol — its available state keys and commands. " +
+        'Omit appId to describe your own app; pass appId to inspect another app you are permitted to control.',
+      inputSchema: {
+        appId: z
+          .string()
+          .optional()
+          .describe(
+            'App to describe (omit for your own app). Other apps require "controls" permission.',
+          ),
+      },
+    },
+    async (args) => {
+      const windowId = getWindowId();
+      if (!windowId) return errText('no active window context.');
+      const ownAppId = getAppId(getWindowState(), windowId);
+      const targetAppId = args.appId ?? ownAppId;
+      if (!targetAppId) return errText('could not resolve appId.');
+
+      // Describing a foreign app requires "controls" permission.
+      if (args.appId && args.appId !== ownAppId) {
+        const meta = ownAppId ? await getAppMeta(ownAppId) : null;
+        if (!meta?.controls?.some((c) => c.appId === args.appId)) {
+          return errText(
+            `app "${ownAppId ?? '?'}" is not permitted to describe "${args.appId}". ` +
+              `Add it to "controls" in app.json.`,
+          );
+        }
+      }
+
+      const apps = await listApps();
+      const app = apps.find((a) => a.id === targetAppId);
+      if (!app) return errText(`app "${targetAppId}" not found.`);
+      if (!app.protocol) return errText(`app "${targetAppId}" exposes no protocol.`);
+      return {
+        content: [
+          {
+            type: 'text',
+            text: JSON.stringify({ appId: app.id, name: app.name, ...app.protocol }, null, 2),
+          },
+        ],
       };
     },
   );

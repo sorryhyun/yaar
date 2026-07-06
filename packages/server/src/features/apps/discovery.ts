@@ -5,7 +5,7 @@
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { hasConfig } from './config.js';
-import { APP_ROOTS, resolveAppDir, type AppSource } from './roots.js';
+import { APP_ROOTS, resolveAppDir, resolveAppSource, type AppSource } from './roots.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/routes/verb.js';
@@ -30,6 +30,40 @@ function parsePermissions(raw: unknown[]): PermissionEntry[] {
       const parsed: PermissionEntry = { uri: obj.uri };
       if (Array.isArray(obj.verbs) && obj.verbs.every((v) => typeof v === 'string')) {
         parsed.verbs = obj.verbs as Verb[];
+      }
+      result.push(parsed);
+    }
+  }
+  return result;
+}
+
+/**
+ * A single entry in an app's `controls` list — another app this app is allowed
+ * to drive (describe/query/command with an `appId` param). Optionally restricted
+ * to specific commands.
+ */
+export interface ControlEntry {
+  appId: string;
+  /** If set, only these commands may be issued to the target app. Omit = all commands. */
+  commands?: string[];
+}
+
+/** Parse `controls` from app.json, supporting string shorthand and object form. */
+function parseControls(raw: unknown[]): ControlEntry[] {
+  const result: ControlEntry[] = [];
+  for (const entry of raw) {
+    if (typeof entry === 'string') {
+      result.push({ appId: entry });
+    } else if (
+      entry &&
+      typeof entry === 'object' &&
+      'appId' in entry &&
+      typeof (entry as { appId: unknown }).appId === 'string'
+    ) {
+      const obj = entry as { appId: string; commands?: unknown };
+      const parsed: ControlEntry = { appId: obj.appId };
+      if (Array.isArray(obj.commands) && obj.commands.every((c) => typeof c === 'string')) {
+        parsed.commands = obj.commands as string[];
       }
       result.push(parsed);
     }
@@ -71,6 +105,8 @@ export interface AppInfo {
   windowStyle?: Record<string, string | number>;
   permissions?: PermissionEntry[];
   agentType?: string;
+  /** Other apps this app may drive via the `appId` param on describe/query/command. */
+  controls?: ControlEntry[];
 }
 
 /** Build an AppInfo for a single app directory under `root`. */
@@ -118,6 +154,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   let defaultHeight: number | undefined;
   let permissions: PermissionEntry[] | undefined;
   let agentType: string | undefined;
+  let controls: ControlEntry[] | undefined;
   try {
     const metaContent = await Bun.file(join(appPath, 'app.json')).text();
     const meta = JSON.parse(metaContent);
@@ -139,6 +176,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     if (typeof meta.defaultHeight === 'number') defaultHeight = meta.defaultHeight;
     if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
     if (typeof meta.agentType === 'string') agentType = meta.agentType;
+    if (Array.isArray(meta.controls)) controls = parseControls(meta.controls);
   } catch {
     // No metadata or invalid JSON
   }
@@ -146,6 +184,10 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   // Only bundled apps may declare themselves `system` — an installed app cannot
   // claim protected/auto-trusted status by shipping kind:"system" in its manifest.
   if (kind === 'system' && source !== 'bundled') kind = 'app';
+
+  // Same guard for `controls`: only bundled apps may declare authority to drive
+  // other apps, so an installed app can't grab control of e.g. the real browser.
+  if (controls && source !== 'bundled') controls = undefined;
 
   // Load dist/protocol.json (implies appProtocol support)
   try {
@@ -216,6 +258,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     ...(defaultHeight && { defaultHeight }),
     ...(permissions && { permissions }),
     ...(agentType && { agentType }),
+    ...(controls && controls.length > 0 && { controls }),
   };
 }
 
@@ -258,6 +301,7 @@ export async function getAppMeta(appId: string): Promise<{
   defaultWidth?: number;
   defaultHeight?: number;
   messaging?: 'all';
+  controls?: ControlEntry[];
 } | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
@@ -274,8 +318,14 @@ export async function getAppMeta(appId: string): Promise<{
       defaultWidth?: number;
       defaultHeight?: number;
       messaging?: 'all';
+      controls?: ControlEntry[];
     } = {};
     if (meta.messaging === 'all') result.messaging = 'all';
+    // Only bundled apps may declare authority to drive other apps (see readAppInfo).
+    if (Array.isArray(meta.controls) && resolveAppSource(appId) === 'bundled') {
+      const controls = parseControls(meta.controls);
+      if (controls.length > 0) result.controls = controls;
+    }
     if (meta.variant === 'widget' || meta.variant === 'panel') result.variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') result.dockEdge = meta.dockEdge;
     if (meta.frameless === true) result.frameless = true;

@@ -49,8 +49,9 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
     systemPrompt = `You are an AI assistant for the "${appName}" app in YAAR, a reactive AI-driven operating system interface.
 
 You handle user interactions within this app's windows. You have these tools available:
-- **query** — read the app's state (pass a stateKey, or omit for the manifest)
-- **command** — execute an action in the app (pass command name and params)
+- **describe** — read an app's protocol (state keys + commands). Omit appId for your own app; pass appId to inspect an app you're permitted to control.
+- **query** — read the app's state (pass a stateKey, or omit for the manifest). Pass appId to read a controllable app's state.
+- **command** — execute an action in the app (pass command name and params). Pass appId to drive a controllable app.
 - **relay** — hand off a message to the monitor agent when the request is outside your domain
 - **direct_message** — send an addressed message to another agent or the user. \`to\` is "monitor", "user", and (if your app.json declares \`"messaging": "all"\`) "app:{appId}" or "window:{id}". Set \`end_turn: true\` to hand off, or \`false\` to keep working after sending. Delivery is async — replies arrive as separate messages.
 
@@ -101,6 +102,21 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
         systemPrompt += `- \`${key}\`: ${description}\n`;
       }
     }
+  }
+
+  // Controllable apps — always appended (applies to AGENTS.md apps too). These are
+  // the apps this app may drive via the `appId` param on describe/query/command.
+  const controls = appInfo?.controls ?? [];
+  if (controls.length > 0) {
+    systemPrompt += '\n## Controllable Apps\n\n';
+    systemPrompt +=
+      'You may drive these apps by passing their id as `appId` to describe/query/command:\n';
+    for (const c of controls) {
+      const cmds = c.commands?.length ? ` (commands: ${c.commands.join(', ')})` : '';
+      systemPrompt += `- \`${c.appId}\`${cmds}\n`;
+    }
+    systemPrompt +=
+      "\nCall `describe(appId)` first to learn an app's protocol, then `command(appId, ...)` to drive it. The target app must have an open window.\n";
   }
 
   return {

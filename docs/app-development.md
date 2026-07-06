@@ -225,7 +225,7 @@ and type checker.
 
 ### SKILL.md (default)
 
-The agent gets a generic prompt ("You are an AI assistant for the X app...") with `SKILL.md` content appended under an "App Documentation" heading. Good for apps where the default 3-tool behavior (query, command, relay) is sufficient and you just need to add domain knowledge.
+The agent gets a generic prompt ("You are an AI assistant for the X app...") with `SKILL.md` content appended under an "App Documentation" heading. Good for apps where the default tool behavior (describe, query, command, relay) is sufficient and you just need to add domain knowledge.
 
 ### AGENTS.md (full control)
 
@@ -234,7 +234,7 @@ The agent's entire system prompt is replaced with the contents of `AGENTS.md`. U
 - You want to define anti-patterns, gotchas, or domain-specific rules
 - The generic prompt's behavior guidelines don't fit
 
-Since `AGENTS.md` replaces the base prompt, you must document the 3 available tools (`query`, `command`, `relay`) yourself if the agent needs to know about them.
+Since `AGENTS.md` replaces the base prompt, you must document the available tools (`describe`, `query`, `command`, `relay`) yourself if the agent needs to know about them. (`protocol.json`, and a "Controllable Apps" section when `controls` is set, are still appended automatically.)
 
 ### Example structure
 

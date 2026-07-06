@@ -9,6 +9,9 @@
     "yaar-dev"
   ],
   "messaging": "all",
+  "controls": [
+    "browser-user"
+  ],
   "permissions": [
     "yaar://storage/",
     "yaar://apps/",

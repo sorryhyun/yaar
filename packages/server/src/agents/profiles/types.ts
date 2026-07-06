@@ -31,5 +31,6 @@ export const APP_AGENT_TOOL_NAMES = [
   'mcp__app__query',
   'mcp__app__command',
   'mcp__app__relay',
+  'mcp__app__describe',
   ...MESSAGING_TOOL_NAMES,
 ] as const;
