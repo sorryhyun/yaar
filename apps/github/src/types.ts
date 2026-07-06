@@ -1,0 +1,116 @@
+export type Section = 'overview' | 'issues' | 'pulls' | 'releases' | 'code' | 'settings';
+
+export interface RepoRef {
+  owner: string;
+  name: string;
+}
+
+export interface RateLimit {
+  limit: number;
+  remaining: number;
+  reset: number;
+  used: number;
+}
+
+export interface GHUser {
+  login: string;
+  avatar_url: string;
+  html_url: string;
+}
+
+export interface Repo {
+  full_name: string;
+  description: string | null;
+  stargazers_count: number;
+  forks_count: number;
+  subscribers_count: number;
+  watchers_count: number;
+  open_issues_count: number;
+  default_branch: string;
+  html_url: string;
+  language: string | null;
+  license: { name: string } | null;
+  homepage: string | null;
+  topics?: string[];
+  updated_at: string;
+}
+
+export interface Label {
+  name: string;
+  color: string;
+}
+
+export interface Issue {
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  body: string | null;
+  user: GHUser;
+  labels: Label[];
+  comments: number;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  pull_request?: unknown;
+}
+
+export interface Comment {
+  id: number;
+  user: GHUser;
+  body: string;
+  created_at: string;
+}
+
+export interface Pull {
+  number: number;
+  title: string;
+  state: 'open' | 'closed';
+  body: string | null;
+  user: GHUser;
+  created_at: string;
+  updated_at: string;
+  html_url: string;
+  merged: boolean;
+  merged_at: string | null;
+  changed_files?: number;
+  commits?: number;
+  additions?: number;
+  deletions?: number;
+  head: { ref: string };
+  base: { ref: string };
+}
+
+export interface CommitItem {
+  sha: string;
+  commit: { message: string; author: { name: string; date: string } };
+  author: GHUser | null;
+}
+
+export interface ReleaseAsset {
+  name: string;
+  browser_download_url: string;
+  size: number;
+  download_count: number;
+}
+
+export interface Release {
+  id: number;
+  tag_name: string;
+  name: string | null;
+  body: string | null;
+  published_at: string | null;
+  created_at: string;
+  html_url: string;
+  prerelease: boolean;
+  draft: boolean;
+  author: GHUser;
+  assets: ReleaseAsset[];
+}
+
+export interface ContentEntry {
+  name: string;
+  path: string;
+  type: 'file' | 'dir' | 'symlink' | 'submodule';
+  size: number;
+  download_url: string | null;
+}

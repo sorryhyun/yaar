@@ -1,0 +1,13 @@
+{
+  "id": "github",
+  "name": "GitHub",
+  "description": "Manage GitHub issues, PRs, releases and browse repos",
+  "icon": "🐙",
+  "permissions": [
+    "yaar://http",
+    "yaar://storage/"
+  ],
+  "run": "dist/index.html",
+  "version": "1.0.0",
+  "author": "YAAR"
+}
