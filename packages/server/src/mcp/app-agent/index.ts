@@ -18,6 +18,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
+import { handleCreate } from '../../features/window/create.js';
 import { getWindowId, getSessionId, getMonitorId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import type { LiveSession } from '../../session/live-session.js';
@@ -48,6 +49,25 @@ function appStoragePath(appId: string, relativePath: string): string {
   return `apps/${appId}/${clean}`;
 }
 
+/**
+ * Open a window for a controllable app that has no live window yet, so a
+ * cross-app query/command has an iframe to talk to. Uses the appId as the
+ * deterministic windowId (mirrors deriveWindowId) and blocks on iframe load
+ * (handleCreate awaits load feedback). Returns the windowId, or undefined if
+ * the app is unknown or the launch failed.
+ */
+async function launchControlledApp(appId: string): Promise<string | undefined> {
+  const app = (await listApps()).find((a) => a.id === appId);
+  if (!app) return undefined;
+  const result = await handleCreate(appId, {
+    title: app.name ?? appId,
+    renderer: 'iframe',
+    content: `yaar://apps/${appId}`,
+    appId,
+  });
+  return result.isError ? undefined : appId;
+}
+
 export function registerAppAgentTools(server: McpServer): void {
   const getSession = (): LiveSession => {
     const sid = getSessionId();
@@ -64,8 +84,8 @@ export function registerAppAgentTools(server: McpServer): void {
   /**
    * Resolve which window a query/command should target.
    * - No appId (or appId === own) → the caller's own window; no permission needed.
-   * - A foreign appId → requires the caller's app.json to list it under "controls",
-   *   and the target app to have an open window.
+   * - A foreign appId → requires the caller's app.json to list it under "controls".
+   *   Reuses an open window of that app if one exists, otherwise auto-launches one.
    */
   const resolveTarget = async (
     ownWindowId: string,
@@ -94,9 +114,17 @@ export function registerAppAgentTools(server: McpServer): void {
           `Add "${targetAppId}" to "controls" in ${ownAppId}'s app.json.`,
       };
     }
-    const windowId = session.getPool()?.getActiveAppWindow(targetAppId);
+    // Resolve a live window for the target: prefer one its app agent has already
+    // touched, else any open window of that app, else launch a fresh one so the
+    // caller doesn't have to open it manually first.
+    let windowId =
+      session.getPool()?.getActiveAppWindow(targetAppId) ??
+      session.windowState.listWindows().find((w) => w.appId === targetAppId)?.id;
     if (!windowId) {
-      return { ok: false, error: `app "${targetAppId}" has no open window to control.` };
+      windowId = await launchControlledApp(targetAppId);
+    }
+    if (!windowId) {
+      return { ok: false, error: `app "${targetAppId}" could not be opened to control.` };
     }
     return { ok: true, windowId, ownAppId, foreign: true, entry };
   };

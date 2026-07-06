@@ -10,7 +10,8 @@
   ],
   "messaging": "all",
   "controls": [
-    "browser-user"
+    "browser-user",
+    "search"
   ],
   "permissions": [
     "yaar://storage/",
