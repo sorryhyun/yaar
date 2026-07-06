@@ -166,8 +166,11 @@ export class AppTaskProcessor {
             );
           }
 
-          // Fire message hook if the originating agent requested it
-          if (task.hook === 'response' && task.monitorId) {
+          // Fire message hook if the originating agent requested it.
+          // Skip it when the turn was interrupted (e.g. "stop all") — otherwise
+          // the hook re-enqueues a monitor task and resurrects the monitor agent
+          // the user just asked to stop.
+          if (task.hook === 'response' && task.monitorId && !agent.session.wasInterrupted()) {
             this.ctx.notifyHookResponse(appId, windowId, task.monitorId, appResponseText);
           }
         },

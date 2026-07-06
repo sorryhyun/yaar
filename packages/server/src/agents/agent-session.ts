@@ -103,6 +103,13 @@ export class AgentSession {
   private provider: AITransport | null = null;
   private sessionId: string | null = null;
   private running = false;
+  /**
+   * True when the current turn was interrupted (e.g. "stop all"). Reset at the
+   * start of every turn. `running` can't distinguish interruption inside a
+   * post-turn callback because it's cleared for normal completion too, so
+   * post-turn side effects (response hooks, relays) check this instead.
+   */
+  private interrupted = false;
   private sessionLogger: SessionLogger | null = null;
   private unsubscribeAction: (() => void) | null = null;
   private instanceId: string;
@@ -198,6 +205,11 @@ export class AgentSession {
     return this.running;
   }
 
+  /** True if the most recent turn was interrupted (stays true through the post-turn callbacks). */
+  wasInterrupted(): boolean {
+    return this.interrupted;
+  }
+
   getCurrentMessageId(): string | null {
     return this.currentMessageId;
   }
@@ -249,6 +261,7 @@ export class AgentSession {
     }
 
     this.running = true;
+    this.interrupted = false;
     this.currentMessageId = messageId ?? null;
     this.recordedActions = [];
 
@@ -386,6 +399,7 @@ export class AgentSession {
 
   async interrupt(): Promise<void> {
     this.running = false;
+    this.interrupted = true;
     this.provider?.interrupt();
   }
 
