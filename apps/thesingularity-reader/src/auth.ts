@@ -31,7 +31,13 @@ const DC_LOGIN_URL = 'https://msign.dcinside.com/login?r_url=https%3A%2F%2Fm.dci
 const DC_VERIFY_URL = 'https://m.dcinside.com/board/thesingularity';
 const DC_VERIFY_URL_HTTP = 'https://gall.dcinside.com/mgallery/board/lists?id=thesingularity';
 
-const MOBILE_UA = 'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+// iOS Safari UA: DC's server misclassifies our Android/Chrome UA as a
+// "WebP-unsupported environment" and rewrites image URLs to a static
+// m_webp.png notice placeholder. An iOS Safari UA is treated as WebP-capable,
+// so DC serves the real viewimage.php URLs. This is a fixed spoofed UA sent
+// server-side, independent of the actual host OS.
+const MOBILE_UA =
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
 export interface DcSession {
   /** 소켓 포맷 쿠키 헤더 ("Name=Value; Name2=Value2") */

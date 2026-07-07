@@ -18,8 +18,12 @@ import { extractRealImageUrl, LAZY_IMAGE_ATTRS } from './helpers';
 const GALLERY_ID = 'thesingularity';
 const GALLERY_URL = `https://m.dcinside.com/board/${GALLERY_ID}`;
 
+// iOS Safari UA — DC misclassifies our previous Android/Chrome UA as
+// WebP-unsupported and swaps image URLs for a static m_webp.png notice. An iOS
+// Safari UA is treated as WebP-capable, so DC returns the real viewimage.php
+// URLs. Fixed spoofed UA sent server-side; independent of the host OS.
 const MOBILE_UA =
-  'Mozilla/5.0 (Linux; Android 12; SM-G991B) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36';
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1';
 
 async function browseUrl(url: string, tabId: string, waitForIdle = false): Promise<string> {
   await openOrNavigate(url, tabId, {
