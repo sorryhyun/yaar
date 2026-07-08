@@ -8,7 +8,7 @@
  *   invoke yaar://mcp                    → manage servers (add/remove/reload/refresh)
  */
 
-import type { ResourceRegistry } from './uri-registry.js';
+import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { ok, okJson, error } from './utils.js';
 import { getMcpClientManager } from '../mcp/external/index.js';
@@ -180,10 +180,7 @@ export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
       }
     },
 
-    async invoke(
-      resolved: ResolvedUri,
-      payload?: Record<string, unknown>,
-    ): Promise<ReturnType<typeof ok>> {
+    async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
       const parsed = parseMcpUri(resolved.sourceUri);
       if (!parsed) return error('Invalid MCP URI');
       if (!parsed.toolName) return error('Specify a tool name: yaar://mcp/{server}/{tool}');
@@ -201,12 +198,17 @@ export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
           return error(text || 'Tool returned an error');
         }
 
-        // Map MCP content to VerbResult content
-        // Flatten to text — most MCP tools return text content
-        const text = result.content
-          .map((c) => (c.type === 'text' ? c.text : JSON.stringify(c)))
-          .join('\n');
-        return ok(text || '(empty response)');
+        // Map MCP content to VerbResult content. Preserve text AND image blocks
+        // so tools that return images (e.g. an image generator) reach the agent
+        // as real images, not a stringified base64 blob. Other block types
+        // (embedded resources, etc.) fall back to a text representation.
+        const content = result.content.map((c) => {
+          if (c.type === 'text') return { type: 'text' as const, text: c.text ?? '' };
+          if (c.type === 'image' && c.data && c.mimeType)
+            return { type: 'image' as const, data: c.data, mimeType: c.mimeType };
+          return { type: 'text' as const, text: JSON.stringify(c) };
+        });
+        return content.length ? { content } : ok('(empty response)');
       } catch (err) {
         return error(err instanceof Error ? err.message : 'Tool call failed');
       }
