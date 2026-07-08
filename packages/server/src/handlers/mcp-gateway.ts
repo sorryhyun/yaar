@@ -13,6 +13,67 @@ import type { ResolvedUri } from './uri-resolve.js';
 import { ok, okJson, error } from './utils.js';
 import { getMcpClientManager } from '../mcp/external/index.js';
 import type { McpServerConfig } from '../mcp/external/types.js';
+import { storageWrite } from '../storage/index.js';
+
+/** File extension for a persisted image, derived from its MIME type. */
+const IMAGE_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/jpg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif',
+  'image/bmp': 'bmp',
+  'image/svg+xml': 'svg',
+};
+
+/** Filesystem-safe slug for use in a generated filename. */
+function slug(s: string): string {
+  return s.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'x';
+}
+
+/**
+ * Persist any image content blocks returned by an external MCP tool into
+ * `storage/generated/` so the calling agent gets a durable `yaar://storage/...`
+ * URI it can drop into an iframe window — rather than a base64 blob it cannot
+ * render (and which, as text, the CLI truncates to a file). The image blocks are
+ * kept inline too, so the agent still *sees* what the tool produced.
+ *
+ * Returns extra text content blocks (one per saved image, plus a display hint),
+ * or an empty array if there were no images / all writes failed.
+ */
+async function persistImageBlocks(
+  server: string,
+  tool: string,
+  content: Array<{ type: string; data?: string; mimeType?: string }>,
+): Promise<Array<{ type: 'text'; text: string }>> {
+  const images = content.filter((c) => c.type === 'image' && c.data);
+  if (images.length === 0) return [];
+
+  const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const saved: string[] = [];
+
+  for (let i = 0; i < images.length; i++) {
+    const img = images[i];
+    const ext = IMAGE_EXT[(img.mimeType ?? '').toLowerCase()] ?? 'png';
+    const suffix = images.length > 1 ? `-${i}` : '';
+    const path = `generated/${slug(server)}-${slug(tool)}-${stamp}${suffix}.${ext}`;
+    try {
+      const buf = Buffer.from(img.data!, 'base64');
+      const res = await storageWrite(path, buf);
+      if (res.success) saved.push(path);
+    } catch {
+      // Best-effort — a failed persist just means no durable URI for this image.
+    }
+  }
+
+  if (saved.length === 0) return [];
+  const uris = saved.map((p) => `yaar://storage/${p}`);
+  const hint =
+    uris.length === 1
+      ? `Saved the image to ${uris[0]}. To display it, create an iframe window with content="${uris[0]}".`
+      : `Saved the images to:\n${uris.map((u) => `- ${u}`).join('\n')}\nTo display one, create an iframe window with content="<uri>".`;
+  return [{ type: 'text' as const, text: hint }];
+}
 
 /** Parse yaar://mcp/{server}/{tool} from a raw URI string. */
 function parseMcpUri(uri: string): { serverName: string; toolName?: string } | null {
@@ -208,6 +269,12 @@ export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
             return { type: 'image' as const, data: c.data, mimeType: c.mimeType };
           return { type: 'text' as const, text: JSON.stringify(c) };
         });
+
+        // Persist returned images to storage and append their yaar:// URIs, so the
+        // agent has a durable, renderable handle (not just an inline blob).
+        const pointers = await persistImageBlocks(parsed.serverName, parsed.toolName, content);
+        content.push(...pointers);
+
         return content.length ? { content } : ok('(empty response)');
       } catch (err) {
         return error(err instanceof Error ? err.message : 'Tool call failed');

@@ -19,6 +19,13 @@ import type {
 } from './types.js';
 
 const CONNECT_TIMEOUT_MS = 30_000;
+/**
+ * Per-tool-call timeout. The MCP SDK defaults to 60s, which is too strict for
+ * slow tools like image generators (e.g. anima routinely takes 60s+ per image).
+ * We give tool calls a generous ceiling and reset the clock whenever the server
+ * reports progress, so a genuinely-working tool is never aborted mid-flight.
+ */
+const CALL_TIMEOUT_MS = 300_000;
 const CONFIG_FILE = 'mcp-servers.json';
 
 class McpClientManager {
@@ -175,7 +182,11 @@ class McpClientManager {
     const client = await this.ensureConnected(name);
 
     try {
-      const result = await client.callTool({ name: toolName, arguments: args });
+      const result = await client.callTool({ name: toolName, arguments: args }, undefined, {
+        timeout: CALL_TIMEOUT_MS,
+        resetTimeoutOnProgress: true,
+        maxTotalTimeout: CALL_TIMEOUT_MS,
+      });
       return {
         content: (result.content ?? []) as Array<{
           type: string;
