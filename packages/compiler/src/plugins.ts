@@ -37,6 +37,7 @@ export const BUNDLED_SHIMS: Record<string, string> = {
   yaar: toForwardSlash(join(SHIMS_DIR, 'yaar.ts')),
   'yaar-dev': toForwardSlash(join(SHIMS_DIR, 'yaar-dev.ts')),
   'yaar-web': toForwardSlash(join(SHIMS_DIR, 'yaar-web.ts')),
+  'yaar-ml': toForwardSlash(join(SHIMS_DIR, 'yaar-ml.ts')),
 };
 
 /**
@@ -79,6 +80,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   yaar: 'yaar',
   'yaar-dev': 'yaar-dev',
   'yaar-web': 'yaar-web',
+  'yaar-ml': 'yaar-ml',
 };
 
 /**

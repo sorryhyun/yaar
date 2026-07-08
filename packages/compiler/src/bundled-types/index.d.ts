@@ -439,6 +439,121 @@ declare module '@bundled/yaar-dev' {
   export function bundledLibraries(name: string): Promise<{ name: string; types: string }>;
 }
 
+declare module '@bundled/yaar-ml' {
+  // In-browser model inference via onnxruntime-web (WebGPU EP + wasm fallback).
+  // Requires "bundles": ["yaar-ml"] in app.json.
+
+  export type Backend = 'webgpu' | 'wasm' | 'auto';
+
+  /** A numeric type ORT tensors can hold. */
+  export type MlTensorType =
+    | 'float32'
+    | 'float16'
+    | 'int64'
+    | 'int32'
+    | 'int16'
+    | 'int8'
+    | 'uint8'
+    | 'bool'
+    | 'string';
+
+  /** A minimal onnxruntime-web Tensor. Construct with `new Tensor(...)`. */
+  export interface MlTensor {
+    readonly type: MlTensorType;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    readonly data: any;
+    readonly dims: readonly number[];
+  }
+
+  /** Tensor constructor (subset of onnxruntime-web's Tensor). */
+  export const Tensor: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    new (type: MlTensorType, data: any, dims?: readonly number[]): MlTensor;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    new (data: any, dims?: readonly number[]): MlTensor;
+  };
+
+  /** An opaque compiled model session. Pass to `run()` / `dispose()`. */
+  export interface InferenceSession {
+    readonly inputNames: readonly string[];
+    readonly outputNames: readonly string[];
+    run(
+      feeds: Record<string, MlTensor>,
+      options?: Record<string, unknown>,
+    ): Promise<Record<string, MlTensor>>;
+    release?(): Promise<void>;
+  }
+
+  export interface MlCapabilities {
+    /** WebGPU adapter available in this tab. */
+    webgpu: boolean;
+    /** Adapter supports `shader-f16` (half-precision compute). */
+    f16: boolean;
+    /** `maxBufferSize` in bytes (0 when no WebGPU). */
+    maxBufferSize: number;
+    /** `maxStorageBufferBindingSize` — the practical per-tensor ceiling, in bytes. */
+    maxStorageBufferBindingSize: number;
+    /** Rough usable single-model GPU budget, in bytes. */
+    estMemoryBudget: number;
+    /** Human-readable adapter description, when available. */
+    adapter?: string;
+  }
+
+  export interface DownloadProgress {
+    loaded: number;
+    total: number;
+    /** loaded/total in [0, 1] (0 when total is unknown). */
+    ratio: number;
+    /** True when served from the IndexedDB cache (no network). */
+    cached?: boolean;
+  }
+
+  export interface FetchWeightsOptions {
+    onProgress?: (p: DownloadProgress) => void;
+    force?: boolean;
+    signal?: AbortSignal;
+  }
+
+  export interface SessionOptions {
+    backend?: Backend;
+    onProgress?: (p: DownloadProgress) => void;
+    signal?: AbortSignal;
+    sessionOptions?: Record<string, unknown>;
+  }
+
+  /** Detect WebGPU/f16 support and GPU buffer limits. Never throws; cached. */
+  export function capabilities(): Promise<MlCapabilities>;
+
+  /** Download weights (IndexedDB-cached, streamed with progress) as an ArrayBuffer. */
+  export function fetchWeights(url: string, opts?: FetchWeightsOptions): Promise<ArrayBuffer>;
+
+  /** Remove one cached weight file, or the whole cache when no URL is given. */
+  export function clearCache(url?: string): Promise<void>;
+
+  /** Create (or return a memoized) session from a model URL or raw bytes. */
+  export function session(
+    model: string | ArrayBuffer | Uint8Array,
+    opts?: SessionOptions,
+  ): Promise<InferenceSession>;
+
+  /** Run inference: `feeds` maps input names to Tensors; resolves to the output map. */
+  export function run(
+    session: InferenceSession,
+    feeds: Record<string, MlTensor>,
+    options?: Record<string, unknown>,
+  ): Promise<Record<string, MlTensor>>;
+
+  /** Release a session's native resources. */
+  export function dispose(session: InferenceSession): Promise<void>;
+
+  /** onnxruntime-web env (advanced tuning). */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const env: any;
+  /** The raw onnxruntime-web namespace, for APIs not surfaced above. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  export const ort: any;
+}
+
 declare module '@bundled/yaar-web' {
   // ── Tab lifecycle ──────────────────────────────────────────────
   /** Create a new browser tab without navigating. */

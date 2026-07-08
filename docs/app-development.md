@@ -129,6 +129,9 @@ Some `@bundled/*` SDKs require explicit opt-in via the `"bundles"` field in `app
 |-----|------------|---------|------------------------|
 | Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()`, etc. | `"yaar-web"` |
+| ML runtime | `@bundled/yaar-ml` | In-browser model inference (WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
+
+See [`docs/yaar_ml_runtime.md`](./yaar_ml_runtime.md) for the ML runtime's capabilities, memory limits, and "what fits" guidance.
 
 **app.json:**
 ```json
