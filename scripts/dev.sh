@@ -13,6 +13,31 @@ if [ -n "$1" ]; then
   echo "Using provider: $PROVIDER_ARG"
 fi
 
+# Pick a free port up front so the server, the browser tab we open, and the
+# "running at" banner all agree. The server has its own EADDRINUSE fallback, but
+# dev.sh can't see which port it landed on — so if 8000 is busy the server would
+# quietly move to 8001 while we still open the browser at 8000 (hitting whatever
+# else is on 8000). Choosing here and passing it via PORT (honored by getPort())
+# keeps both sides in sync.
+port_in_use() {
+  # Returns 0 (in use) if something accepts a TCP connect on the port.
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null && { exec 3>&-; return 0; }
+  return 1
+}
+find_free_port() {
+  local p base="${1:-8000}"
+  for p in $(seq "$base" "$((base + 20))"); do
+    port_in_use "$p" || { echo "$p"; return 0; }
+  done
+  echo "$base" # give up; let the server's own fallback handle it
+}
+REQUESTED_PORT="${PORT:-8000}"
+PORT="$(find_free_port "$REQUESTED_PORT")"
+export PORT
+if [ "$PORT" != "$REQUESTED_PORT" ]; then
+  echo "Port $REQUESTED_PORT in use, using $PORT instead"
+fi
+
 # Build shared and compiler packages first (needed by other packages)
 echo "Building shared package..."
 bun run --filter @yaar/shared build
@@ -119,7 +144,7 @@ SERVER_PID=$!
 launch_chrome_when_ready
 
 echo ""
-echo "YAAR running at http://localhost:8000"
+echo "YAAR running at http://localhost:${PORT}"
 echo "Press Ctrl+C to stop"
 
 # Wait for server
