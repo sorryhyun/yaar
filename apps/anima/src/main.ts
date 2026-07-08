@@ -387,8 +387,8 @@ function App() {
 
 render(() => html`<${App} />`, document.getElementById('app')!);
 
-// Headless driver hook: lets a CDP script run the pipeline and read structured
-// results (JSON) without clicking the UI — see scripts anima_cdp.ts.
+// Headless driver hook: lets a CDP/automation script run the pipeline and read
+// structured JSON results (steps, image stats, PNG dataURL) without clicking the UI.
 (window as unknown as { __anima: unknown }).__anima = {
   ready: true,
   generate, // ({model?, seed?}) => result
