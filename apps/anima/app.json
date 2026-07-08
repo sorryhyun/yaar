@@ -1,0 +1,12 @@
+{
+  "icon": "🌸",
+  "name": "Anima (WebGPU)",
+  "description": "Runs the Anima diffusion pipeline (Qwen3 → conditioner → DiT → VAE) fully in-browser on WebGPU via @bundled/yaar-ml",
+  "run": "dist/index.html",
+  "createShortcut": true,
+  "capture": "dom",
+  "bundles": ["yaar-ml"],
+  "permissions": ["yaar://storage/"],
+  "version": "0.1.0",
+  "author": "YAAR"
+}
