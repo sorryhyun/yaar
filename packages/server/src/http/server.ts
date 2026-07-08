@@ -25,6 +25,7 @@ import {
   handleBrowserRoutes,
   handleDevRoutes,
   handleFileRoutes,
+  handleMlRuntimeRoutes,
   handleProxyRoutes,
   handleSessionRoutes,
   handleSettingsRoutes,
@@ -38,6 +39,7 @@ import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from './routes/bridge.js';
 import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from './routes/browser.js';
 import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from './routes/dev.js';
 import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from './routes/files.js';
+import { PUBLIC_ENDPOINTS as ML_RUNTIME_PUBLIC } from './routes/ml-runtime.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from './routes/proxy.js';
 import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from './routes/sessions.js';
 import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from './routes/settings.js';
@@ -61,6 +63,7 @@ function buildPublicRoutes(): PublicRoute[] {
     ...BROWSER_PUBLIC,
     ...DEV_PUBLIC,
     ...FILES_PUBLIC,
+    ...ML_RUNTIME_PUBLIC,
     ...PROXY_PUBLIC,
     ...SESSIONS_PUBLIC,
     ...SETTINGS_PUBLIC,
@@ -228,6 +231,9 @@ export function createFetchHandler() {
 
     const verbResponse = await handleVerbRoutes(req, url);
     if (verbResponse) return withCors(verbResponse, corsHeaders);
+
+    const mlRuntimeResponse = await handleMlRuntimeRoutes(req, url);
+    if (mlRuntimeResponse) return withCors(mlRuntimeResponse, corsHeaders);
 
     const fileResponse = await handleFileRoutes(req, url);
     if (fileResponse) return withCors(fileResponse, corsHeaders);

@@ -101,6 +101,46 @@ export const MIME_TYPES: Record<string, string> = {
 
 export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
 
+/**
+ * Directory holding the onnxruntime-web runtime artifacts (`.wasm`/`.mjs`),
+ * served to app iframes at `/api/ml-runtime/` for the @bundled/yaar-ml SDK.
+ *
+ * - Environment override: `YAAR_ML_RUNTIME_DIR`
+ * - Bundled exe: `./ml-runtime/` alongside the executable (shipped at build time)
+ * - Development: resolved from the installed `onnxruntime-web` package's `dist/`
+ *
+ * Returns `null` when the runtime can't be located (route then 404s cleanly).
+ */
+let _mlRuntimeDir: string | null | undefined;
+export function getMlRuntimeDir(): string | null {
+  if (_mlRuntimeDir !== undefined) return _mlRuntimeDir;
+
+  if (process.env.YAAR_ML_RUNTIME_DIR) {
+    _mlRuntimeDir = process.env.YAAR_ML_RUNTIME_DIR;
+    return _mlRuntimeDir;
+  }
+  if (IS_BUNDLED_EXE) {
+    const dir = join(dirname(process.execPath), 'ml-runtime');
+    _mlRuntimeDir = existsSync(dir) ? dir : null;
+    return _mlRuntimeDir;
+  }
+  // Dev: locate the onnxruntime-web package and point at its dist/.
+  for (const from of [__dirname, PROJECT_ROOT, join(PROJECT_ROOT, 'packages', 'server')]) {
+    try {
+      const pkgJson = Bun.resolveSync('onnxruntime-web/package.json', from);
+      const dist = join(dirname(pkgJson), 'dist');
+      if (existsSync(dist)) {
+        _mlRuntimeDir = dist;
+        return _mlRuntimeDir;
+      }
+    } catch {
+      /* try next base dir */
+    }
+  }
+  _mlRuntimeDir = null;
+  return _mlRuntimeDir;
+}
+
 const DEFAULT_PORT = getEnvInt('PORT', 8000);
 
 /** Current server port (may differ from default if the default was in use). */

@@ -28,6 +28,7 @@ src/
     ├── yaar.ts            # Main SDK: verb functions, appStorage, createPersistedSignal, onShortcut
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
+    ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     └── anime.ts           # v3→v4 easing name compat wrapper
 ```
 
@@ -49,7 +50,7 @@ src/
 4. Fallback (`Bun.resolveSync`)
 5. Disk (`bundled-libs/` next to exe)
 
-Gating: `yaar-dev` and `yaar-web` require explicit `"bundles"` in app.json. Solid-js imports from bundled libs are intercepted to prevent duplicate module instances.
+Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires explicit `"bundles"` in app.json. Solid-js imports from bundled libs are intercepted to prevent duplicate module instances.
 
 **`cssFilePlugin()`** — converts `.css` imports to JS that injects a `<style>` element at runtime.
 
@@ -64,7 +65,7 @@ Gating: `yaar-dev` and `yaar-web` require explicit `"bundles"` in app.json. Soli
 - **Data:** chart.js, d3, diff, diff2html, xlsx, marked, mammoth, prismjs
 - **Animation:** anime (with v3 compat shim)
 - **Audio:** tone
-- **YAAR SDKs:** yaar, yaar-dev (gated), yaar-web (gated)
+- **YAAR SDKs:** yaar, yaar-dev (gated), yaar-web (gated), yaar-ml (gated — in-browser ONNX/WebGPU inference)
 
 ## Shims
 

@@ -3,6 +3,7 @@ export { handleBridgeRoutes } from './bridge.js';
 export { handleBrowserRoutes } from './browser.js';
 export { handleDevRoutes } from './dev.js';
 export { handleFileRoutes } from './files.js';
+export { handleMlRuntimeRoutes } from './ml-runtime.js';
 export { handleProxyRoutes } from './proxy.js';
 export { handleSessionRoutes } from './sessions.js';
 export { handleSettingsRoutes } from './settings.js';
