@@ -16,7 +16,7 @@
 
 import { ContextTape, monitorSource, type ContextMessage } from './context.js';
 import { runAgentTurn, buildReloadContext } from './turn-helpers.js';
-import { SESSION_AGENT_PROFILE } from './profiles/index.js';
+import { SESSION_AGENT_PROFILE, claudeModelToCodex } from './profiles/index.js';
 import { AgentPool, type PooledAgent } from './agent-pool.js';
 import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
@@ -345,9 +345,10 @@ export class ContextPool implements PoolContext {
         systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
         allowedTools:
           this.providerType === 'codex' ? undefined : SESSION_AGENT_PROFILE.allowedTools,
-        // Codex has no Claude models — passing 'claude-opus-4-8' makes the openai
-        // provider reject the turn. Leave undefined so Codex uses its default.
-        model: this.providerType === 'codex' ? undefined : SESSION_AGENT_PROFILE.model,
+        model:
+          this.providerType === 'codex'
+            ? claudeModelToCodex(SESSION_AGENT_PROFILE.model)
+            : SESSION_AGENT_PROFILE.model,
       });
     } finally {
       this.inflightExit();

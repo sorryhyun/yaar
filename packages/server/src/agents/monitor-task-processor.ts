@@ -8,7 +8,7 @@
 import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-pool.js';
-import { getDeveloperAllowedTools } from './profiles/index.js';
+import { claudeModelToCodex, getDeveloperAllowedTools } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { monitorSource } from './context.js';
 
@@ -185,10 +185,10 @@ export class MonitorTaskProcessor {
       canonicalAgent: canonicalMonitor,
       resumeSessionId,
       monitorId,
-      // Codex has no Claude models — passing 'claude-opus-4-8' makes the openai
-      // provider reject the turn with a systemError. Leave undefined so Codex
-      // uses its configured default model (mirrors the session/app agents).
-      model: this.ctx.providerType === 'codex' ? undefined : 'claude-opus-4-8',
+      model:
+        this.ctx.providerType === 'codex'
+          ? claudeModelToCodex('claude-opus-4-8')
+          : 'claude-opus-4-8',
       allowedTools: this.ctx.providerType === 'codex' ? undefined : getDeveloperAllowedTools(),
       onFinally: () => {
         agent.session.setOutputCallback(null);

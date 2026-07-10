@@ -46,6 +46,14 @@ export function getDeveloperAllowedTools(): string[] {
   return [...DEVELOPER_PROFILE.allowedTools];
 }
 
+/** Map Claude capability tiers to their Codex equivalents. */
+export function claudeModelToCodex(model?: string): string | undefined {
+  if (!model) return undefined;
+  if (model.includes('opus')) return 'gpt-5.6-sol';
+  if (model.includes('sonnet')) return 'gpt-5.6-terra';
+  return undefined;
+}
+
 // ── Codex agent roles ────────────────────────────────────────────────
 
 export interface CodexAgentRole {

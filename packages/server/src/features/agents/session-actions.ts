@@ -5,7 +5,7 @@
  */
 
 import type { ContextPool } from '../../agents/context-pool.js';
-import { SESSION_AGENT_PROFILE } from '../../agents/profiles/index.js';
+import { SESSION_AGENT_PROFILE, claudeModelToCodex } from '../../agents/profiles/index.js';
 
 export type SessionAction = 'audit' | 'coordinate' | 'query';
 
@@ -60,8 +60,10 @@ export async function executeSessionAction(
       messageId: role,
       allowedTools: SESSION_AGENT_PROFILE.allowedTools,
       systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
-      // Codex has no Claude models — leave undefined so it uses its default.
-      model: pool.providerType === 'codex' ? undefined : SESSION_AGENT_PROFILE.model,
+      model:
+        pool.providerType === 'codex'
+          ? claudeModelToCodex(SESSION_AGENT_PROFILE.model)
+          : SESSION_AGENT_PROFILE.model,
     });
   } finally {
     agent.currentRole = null;
