@@ -7,10 +7,10 @@
 // into `.onnx` + `.onnx.data`. So we fetch both files ourselves (same-origin,
 // CSP `connect-src 'self'`) and hand the model bytes + external-data buffer to
 // `session(bytes, { sessionOptions: { externalData } })`.
-import { session, run, Tensor, capabilities } from '@bundled/yaar-ml';
+import { session, run, Tensor, capabilities, dispose } from '@bundled/yaar-ml';
 import type { InferenceSession } from '@bundled/yaar-ml';
 
-export { Tensor, run, capabilities };
+export { Tensor, run, capabilities, dispose };
 
 export const BASE = '/api/storage/mounts/krea';
 
@@ -150,6 +150,44 @@ export async function loadModel(
     backend,
     sessionOptions: { externalData: [{ path: dataPath, data }], ...extraSessionOptions },
   });
+}
+
+// ── fp16 → fp32 ──────────────────────────────────────────────────────────────
+// `convert_fp16.py` passes keep_io_types=True, but the text graphs still declare
+// FLOAT16 outputs. The conditioner (source_hidden_states) and the DiT
+// (encoder_hidden_states) both want fp32, so we convert on the way out —
+// see `asF32` for the two shapes that conversion can take.
+
+/** Decode raw fp16 bits (Uint16) → f32: exp==0x1f & mant!=0 → NaN, ==0 → Inf. */
+export function f16ToF32(bits: ArrayLike<number>): Float32Array {
+  const out = new Float32Array(bits.length);
+  for (let i = 0; i < bits.length; i++) {
+    const b = bits[i];
+    const s = b & 0x8000 ? -1 : 1;
+    const e = (b & 0x7c00) >> 10;
+    const m = b & 0x03ff;
+    if (e === 0) out[i] = s * Math.pow(2, -14) * (m / 1024);
+    else if (e === 0x1f) out[i] = m ? NaN : s * Infinity;
+    else out[i] = s * Math.pow(2, e - 15) * (1 + m / 1024);
+  }
+  return out;
+}
+
+/** Read an ORT output as fp32 regardless of how float16 came back.
+ *
+ *  A `float16` tensor's `.data` is EITHER a `Float16Array` of real floats (when
+ *  the browser has the type — Chrome ≥ 135) OR a `Uint16Array` of raw half bits.
+ *  Bit-decoding a Float16Array silently yields all zeros (every |v|<1 truncates
+ *  to exponent 0, mantissa 0), so dispatch on the actual constructor, not on
+ *  `t.type`. */
+export function asF32(t: { data: unknown; type: string }): Float32Array {
+  const d = t.data;
+  if (d instanceof Float32Array) return d;
+  const F16 = (globalThis as { Float16Array?: new () => unknown }).Float16Array;
+  if (F16 && d instanceof (F16 as unknown as new () => object))
+    return Float32Array.from(d as unknown as ArrayLike<number>);
+  if (d instanceof Uint16Array) return f16ToF32(d);
+  return Float32Array.from(d as ArrayLike<number>);
 }
 
 // ── Image helpers ────────────────────────────────────────────────────────────
