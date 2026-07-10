@@ -59,6 +59,9 @@ export interface CompileResult {
  * Get the full path to a sandbox directory.
  */
 export function getSandboxPath(sandboxId: string): string {
+  if (!/^(?!\.\.?$)[A-Za-z0-9._-]+$/.test(sandboxId)) {
+    throw new Error(`Invalid sandbox id: ${JSON.stringify(sandboxId)}`);
+  }
   return join(getSandboxDir(), sandboxId);
 }
 
@@ -151,6 +154,9 @@ async function compileWithBun(
     minify,
     format: 'esm',
     target: 'browser',
+    // Resolve with { success: false, logs } instead of throwing, so errors
+    // keep their file/line/column positions (the catch path loses them).
+    throw: false,
     plugins: [
       bundledLibraryPluginBun(bundles),
       cssFilePlugin(),
@@ -267,9 +273,15 @@ export async function compileTypeScript(
   } catch (err) {
     let errors: string[];
     if (err instanceof AggregateError && err.errors?.length) {
-      errors = err.errors.map((e: unknown) => String(e));
+      // BuildMessage/ResolveMessage carry a .position that String() discards
+      errors = err.errors.map((e: unknown) => {
+        const pos = (e as { position?: { file?: string; line?: number; column?: number } })
+          ?.position;
+        const msg = e instanceof Error ? e.message : String(e);
+        return pos?.file ? `${pos.file}:${pos.line}:${pos.column}: ${msg}` : msg;
+      });
     } else {
-      errors = [String(err)];
+      errors = [err instanceof Error ? err.message : String(err)];
     }
     return {
       success: false,

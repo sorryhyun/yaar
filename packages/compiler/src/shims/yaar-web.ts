@@ -26,8 +26,14 @@ async function browserPost<T>(body: Record<string, unknown>): Promise<T> {
     method: 'POST',
     headers: browserHeaders(),
     body: JSON.stringify(body),
+    // Bound stuck CDP actions — most have no server-side timeout
+    signal: AbortSignal.timeout(120_000),
   });
-  return res.json();
+  const json = await res.json().catch(() => null);
+  if (json === null) {
+    throw new Error(`browser action "${String(body.action)}" failed: HTTP ${res.status}`);
+  }
+  return json as T;
 }
 
 // ── Tab lifecycle ───────────────────────────────────────────────
