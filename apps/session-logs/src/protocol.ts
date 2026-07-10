@@ -1,4 +1,4 @@
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import { state } from './store';
 import { loadSessions, loadDetail } from './api';
 
@@ -35,7 +35,7 @@ export function registerProtocol(): void {
       },
     },
     commands: {
-      selectSession: {
+      selectSession: defineCommand({
         description: 'Select and load a session by ID (loads transcript and messages)',
         params: {
           type: 'object',
@@ -44,20 +44,20 @@ export function registerProtocol(): void {
           },
           required: ['sessionId'],
         },
-        handler: async (params: Record<string, unknown>) => {
+        handler: async (params) => {
           const sessionId = String(params.sessionId);
           await loadDetail(sessionId);
           return { success: true, sessionId };
         },
-      },
-      refresh: {
+      }),
+      refresh: defineCommand({
         description: 'Reload the session list from disk',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await loadSessions();
           return { success: true, count: state.sessions.length };
         },
-      },
+      }),
     },
   });
 }

@@ -4,7 +4,7 @@
 // focused on UI.  The compiler auto-extracts the protocol manifest from this
 // file and embeds it into app.json at deploy time.
 
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import {
   marketApps,
   setMarketApps,
@@ -59,7 +59,7 @@ if (app) {
       },
     },
     commands: {
-      setDomain: {
+      setDomain: defineCommand({
         description: 'Set marketplace API domain (e.g. https://example.com)',
         params: {
           type: 'object',
@@ -69,20 +69,20 @@ if (app) {
           },
           required: ['domain'],
         },
-        handler: async (p: { domain: string; autoRefresh?: boolean }) => {
+        handler: async (p) => {
           setDomain(p.domain);
           if (p.autoRefresh !== false) await refreshData();
           return { domain: apiBase() };
         },
-      },
-      refresh: {
+      }),
+      refresh: defineCommand({
         description: 'Fetch data from configured domain',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await refreshData();
           return { marketCount: marketApps().length, installedCount: installedApps().length };
         },
-      },
+      }),
       setData: {
         description: 'Set marketplace and installed data manually',
         params: {
@@ -93,7 +93,11 @@ if (app) {
             status: { type: 'string' },
           },
         },
-        handler: (p: { marketApps?: ListedApp[]; installedApps?: InstalledApp[]; status?: string }) => {
+        handler: (p: {
+          marketApps?: ListedApp[];
+          installedApps?: InstalledApp[];
+          status?: string;
+        }) => {
           if (p.marketApps) setMarketApps(p.marketApps);
           if (p.installedApps) setInstalledApps(p.installedApps);
           if (p.status) setStatus(p.status);
@@ -101,30 +105,30 @@ if (app) {
           return { marketCount: marketApps().length, installedCount: installedApps().length };
         },
       },
-      setStatus: {
+      setStatus: defineCommand({
         description: 'Update status line',
         params: {
           type: 'object',
           properties: { status: { type: 'string' } },
           required: ['status'],
         },
-        handler: (p: { status: string }) => {
+        handler: (p) => {
           setStatus(p.status);
         },
-      },
-      setHideInstalled: {
+      }),
+      setHideInstalled: defineCommand({
         description: 'Toggle the Hide Installed filter on or off',
         params: {
           type: 'object',
           properties: { hide: { type: 'boolean' } },
           required: ['hide'],
         },
-        handler: (p: { hide: boolean }) => {
+        handler: (p) => {
           setHideInstalled(p.hide);
           return { hideInstalled: hideInstalled() };
         },
-      },
-      clearData: {
+      }),
+      clearData: defineCommand({
         description: 'Clear all app data',
         params: { type: 'object', properties: {} },
         handler: () => {
@@ -132,7 +136,7 @@ if (app) {
           setInstalledApps([]);
           setStatus('Cleared');
         },
-      },
+      }),
     },
   });
 }

@@ -339,7 +339,7 @@ Iframe App → postMessage → WebSocket → MCP tool returns
 
 ### Registering in Your App
 
-Import `app` from `@bundled/yaar` and call `app.register()` with state handlers and command handlers.
+Import `app` and `defineCommand` from `@bundled/yaar` and call `app.register()` with state handlers and command handlers.
 
 ```typescript
 // src/store.ts
@@ -347,7 +347,7 @@ import { createSignal } from '@bundled/solid-js';
 export const [items, setItems] = createSignal<string[]>([]);
 
 // src/protocol.ts
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import { items, setItems } from './store';
 
 export function registerProtocol() {
@@ -361,18 +361,57 @@ export function registerProtocol() {
       },
     },
     commands: {
-      addItem: {
-        description: 'Add an item. Params: { text: string }',
+      addItem: defineCommand({
+        description: 'Add an item',
         params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-        handler: (p: { text: string }) => {
-          setItems([...items(), p.text]);  // immutable signal write, no render() needed
+        handler: (p) => {                 // p is inferred as { text: string }
+          setItems([...items(), p.text]); // immutable signal write, no render() needed
           return { ok: true };
         },
-      },
+      }),
     },
   });
 }
 ```
+
+### `defineCommand` — infer the handler's params from the schema
+
+A command declares its parameter shape twice: once as the `params` JSON Schema the
+agent reads, once as the handler's TypeScript type. Nothing keeps the two in sync, so
+`handler: (p: { text: string })` will happily compile against a schema that says
+`content`, and the mismatch only shows up when an agent calls the command.
+
+`defineCommand` derives the handler's parameter type from the schema, making the schema
+the single source of truth:
+
+```typescript
+addItem: defineCommand({
+  description: 'Add an item',
+  params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+  handler: (p) => setItems([...items(), p.txt]),
+  //                                       ^^^ compile error: did you mean 'text'?
+})
+```
+
+It is a runtime no-op — an identity function — so `dist/protocol.json` and everything the
+agent sees are unchanged. It exists purely to make the compiler check the handler.
+
+What it infers: `enum` (as a literal union), `string` / `number` / `integer` / `boolean` /
+`null`, `array` + `items`, and `object` + `properties` / `required`, nested arbitrarily.
+Keys absent from `required` are inferred optional. An `object` with no `properties` but an
+`additionalProperties` schema is a dictionary: `{ type: 'object', additionalProperties: {
+type: 'string' } }` infers `Record<string, string>`. A bare `{ type: 'object' }` infers
+`Record<string, unknown>`.
+
+What it doesn't: `anyOf`, `oneOf`, `$ref` and other keywords infer as `unknown`. Annotate
+that handler's parameter explicitly, or leave the command as a plain object literal —
+descriptors without `defineCommand` still work exactly as before, and the two forms mix
+freely within one `commands` block.
+
+Keep the call shape literal — `defineCommand({ ... })` wrapping an inline object. The
+build-time protocol extractor is a source parser, not an evaluator: it steps over a single
+identifier call to find the descriptor, so a spread descriptor or a computed callee will
+make it skip the command and silently drop it from `dist/protocol.json`.
 
 ### Talking Back to the Agent
 

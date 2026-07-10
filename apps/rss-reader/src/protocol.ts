@@ -1,6 +1,6 @@
 import type { Article } from './types';
 import { state } from './store';
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 
 export interface ProtocolActions {
   refresh: () => Promise<{ totalUnread: number }>;
@@ -34,40 +34,72 @@ export function registerAppProtocol(actions: ProtocolActions) {
       unreadCount: { description: 'Total unread article count', handler: () => getTotalUnread() },
       feeds: {
         description: 'All feeds with unread counts',
-        handler: () => state.feeds.map(f => ({
-          id: f.id, name: f.name, url: f.url,
-          unreadCount: state.unreadCounts[f.id] || 0,
-        })),
+        handler: () =>
+          state.feeds.map((f) => ({
+            id: f.id,
+            name: f.name,
+            url: f.url,
+            unreadCount: state.unreadCounts[f.id] || 0,
+          })),
       },
       articles: {
         description: 'Current visible articles (max 50)',
-        handler: (): Array<{ title: string; feedName: string; pubDate: string; isRead: boolean; link: string }> =>
-          getCurrentArticles().slice(0, 50).map(a => ({
-            title: a.title, feedName: a.feedName, pubDate: a.pubDate,
-            isRead: state.readArticleIds.includes(a.id), link: a.link,
-          })),
+        handler: (): Array<{
+          title: string;
+          feedName: string;
+          pubDate: string;
+          isRead: boolean;
+          link: string;
+        }> =>
+          getCurrentArticles()
+            .slice(0, 50)
+            .map((a) => ({
+              title: a.title,
+              feedName: a.feedName,
+              pubDate: a.pubDate,
+              isRead: state.readArticleIds.includes(a.id),
+              link: a.link,
+            })),
       },
       selectedArticle: {
         description: 'Currently selected article or null',
         handler: () => {
           const a = state.selectedArticle;
-          return a ? { title: a.title, feedName: a.feedName, pubDate: a.pubDate, link: a.link } : null;
+          return a
+            ? { title: a.title, feedName: a.feedName, pubDate: a.pubDate, link: a.link }
+            : null;
         },
       },
     },
     commands: {
-      refresh: { description: 'Refresh all feeds', params: { type: 'object', properties: {} }, handler: async () => actions.refresh() },
-      markAllRead: { description: 'Mark all visible articles as read', params: { type: 'object', properties: {} }, handler: () => actions.markAllRead() },
-      selectFeed: {
+      refresh: defineCommand({
+        description: 'Refresh all feeds',
+        params: { type: 'object', properties: {} },
+        handler: async () => actions.refresh(),
+      }),
+      markAllRead: defineCommand({
+        description: 'Mark all visible articles as read',
+        params: { type: 'object', properties: {} },
+        handler: () => actions.markAllRead(),
+      }),
+      selectFeed: defineCommand({
         description: 'Select a feed by ID',
-        params: { type: 'object', properties: { feedId: { type: 'string' } }, required: ['feedId'] },
-        handler: (p: Record<string, unknown>) => actions.selectFeed(p.feedId as string),
-      },
-      addFeed: {
+        params: {
+          type: 'object',
+          properties: { feedId: { type: 'string' } },
+          required: ['feedId'],
+        },
+        handler: (p) => actions.selectFeed(p.feedId),
+      }),
+      addFeed: defineCommand({
         description: 'Add a new feed by URL',
-        params: { type: 'object', properties: { url: { type: 'string' }, name: { type: 'string' } }, required: ['url'] },
-        handler: (p: Record<string, unknown>) => actions.addFeed(p.url as string, p.name as string | undefined),
-      },
+        params: {
+          type: 'object',
+          properties: { url: { type: 'string' }, name: { type: 'string' } },
+          required: ['url'],
+        },
+        handler: (p) => actions.addFeed(p.url, p.name),
+      }),
     },
   });
 }

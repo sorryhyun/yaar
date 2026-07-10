@@ -1,7 +1,14 @@
-import { app, errMsg } from '@bundled/yaar';
+import { app, defineCommand, errMsg } from '@bundled/yaar';
 import type { DailyPaperItem, Recommendation, PaperDetails } from './types';
 import { fetchPaperDetailsById } from './data';
-import { paperId, paperTitle, paperSummary, getUpvotes, getComments, getSource } from './paper-utils';
+import {
+  paperId,
+  paperTitle,
+  paperSummary,
+  getUpvotes,
+  getComments,
+  getSource,
+} from './paper-utils';
 
 export type ProtocolDeps = {
   getPapers: () => DailyPaperItem[];
@@ -17,8 +24,13 @@ export function registerProtocol(deps: ProtocolDeps): void {
   if (!app) return;
 
   const {
-    getPapers, getSourcePapers, getRecommendations, setRecommendations,
-    loadPapers, requestRecommendationsFromAgent, paperDetailsCache,
+    getPapers,
+    getSourcePapers,
+    getRecommendations,
+    setRecommendations,
+    loadPapers,
+    requestRecommendationsFromAgent,
+    paperDetailsCache,
   } = deps;
 
   app.register({
@@ -27,14 +39,15 @@ export function registerProtocol(deps: ProtocolDeps): void {
     state: {
       papers: {
         description: 'Current filtered paper list loaded in the UI',
-        handler: () => getPapers().map((p) => ({
-          id: paperId(p),
-          source: getSource(p),
-          title: paperTitle(p),
-          summary: paperSummary(p),
-          upvotes: getUpvotes(p),
-          comments: getComments(p),
-        })),
+        handler: () =>
+          getPapers().map((p) => ({
+            id: paperId(p),
+            source: getSource(p),
+            title: paperTitle(p),
+            summary: paperSummary(p),
+            upvotes: getUpvotes(p),
+            comments: getComments(p),
+          })),
       },
       recommendations: {
         description: 'Current recommended papers',
@@ -46,15 +59,15 @@ export function registerProtocol(deps: ProtocolDeps): void {
       },
     },
     commands: {
-      refresh: {
+      refresh: defineCommand({
         description: 'Reload papers from selected sources',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await loadPapers();
           return { count: getPapers().length };
         },
-      },
-      recommendTop2Today: {
+      }),
+      recommendTop2Today: defineCommand({
         description: 'Ask the AI agent to recommend 2 papers from current context',
         params: { type: 'object', properties: {} },
         handler: async () => {
@@ -62,28 +75,28 @@ export function registerProtocol(deps: ProtocolDeps): void {
           requestRecommendationsFromAgent('app-command');
           return { queued: true, candidateCount: getPapers().length };
         },
-      },
-      fetchPaperDetails: {
+      }),
+      fetchPaperDetails: defineCommand({
         description: 'Fetch detailed summary/content metadata for one Hugging Face paper by id',
         params: {
           type: 'object',
           properties: { id: { type: 'string' } },
           required: ['id'],
         },
-        handler: async (p: Record<string, unknown>) => {
-          const detail = await fetchPaperDetailsById(p.id as string, paperDetailsCache);
+        handler: async (p) => {
+          const detail = await fetchPaperDetailsById(p.id, paperDetailsCache);
           return { detail };
         },
-      },
-      fetchPaperDetailsBatch: {
+      }),
+      fetchPaperDetailsBatch: defineCommand({
         description: 'Fetch detailed summary/content metadata for multiple Hugging Face paper ids',
         params: {
           type: 'object',
           properties: { ids: { type: 'array', items: { type: 'string' } } },
           required: ['ids'],
         },
-        handler: async (p: Record<string, unknown>) => {
-          const ids = Array.isArray(p.ids) ? (p.ids as string[]).filter(Boolean).slice(0, 20) : [];
+        handler: async (p) => {
+          const ids = Array.isArray(p.ids) ? p.ids.filter(Boolean).slice(0, 20) : [];
           const details: any[] = [];
           for (const id of ids) {
             try {
@@ -94,8 +107,8 @@ export function registerProtocol(deps: ProtocolDeps): void {
           }
           return { count: details.length, details };
         },
-      },
-      setRecommendations: {
+      }),
+      setRecommendations: defineCommand({
         description: 'Set AI-generated recommendations to display in the UI',
         params: {
           type: 'object',
@@ -119,9 +132,9 @@ export function registerProtocol(deps: ProtocolDeps): void {
           },
           required: ['recommendations'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           setRecommendations(
-            ((p.recommendations as Recommendation[]) || []).slice(0, 2).map((r) => ({
+            (p.recommendations || []).slice(0, 2).map((r) => ({
               id: String(r.id || ''),
               title: String(r.title || 'Untitled paper'),
               reason: String(r.reason || ''),
@@ -133,7 +146,7 @@ export function registerProtocol(deps: ProtocolDeps): void {
           );
           return { count: getRecommendations().length };
         },
-      },
+      }),
     },
   });
 }

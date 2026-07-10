@@ -1,21 +1,23 @@
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import {
-  bpm, isPlaying, scale, chordProgression,
-  drumPattern, melodyPattern, currentStep,
-  setBpm, setScale, setChordProgression,
-  setDrumPattern, setMelodyPattern,
+  bpm,
+  isPlaying,
+  scale,
+  chordProgression,
+  drumPattern,
+  melodyPattern,
+  currentStep,
+  setBpm,
+  setScale,
+  setChordProgression,
+  setDrumPattern,
+  setMelodyPattern,
 } from './store';
 import type { ScaleType, ChordProgression } from './types';
 import { generateMelody, randomizeDrumPattern } from './melody';
-import {
-  startTransport, stopTransport, setBpmValue,
-  scheduleDrums, scheduleMelody,
-} from './audio';
+import { startTransport, stopTransport, setBpmValue, scheduleDrums, scheduleMelody } from './audio';
 
-export function registerProtocol(
-  onPlay: () => void,
-  onStop: () => void,
-) {
+export function registerProtocol(onPlay: () => void, onStop: () => void) {
   if (!app) return;
 
   app.register({
@@ -23,7 +25,8 @@ export function registerProtocol(
     name: 'Music Maker',
     state: {
       getState: {
-        description: 'Get full app state including bpm, isPlaying, scale, chordProgression, drumPattern, melodyPattern',
+        description:
+          'Get full app state including bpm, isPlaying, scale, chordProgression, drumPattern, melodyPattern',
         handler: () => ({
           bpm: bpm(),
           isPlaying: isPlaying(),
@@ -36,33 +39,37 @@ export function registerProtocol(
       },
     },
     commands: {
-      play: {
+      play: defineCommand({
         description: 'Start playback',
         params: { type: 'object', properties: {} },
-        handler: () => { onPlay(); },
-      },
-      stop: {
+        handler: () => {
+          onPlay();
+        },
+      }),
+      stop: defineCommand({
         description: 'Stop playback',
         params: { type: 'object', properties: {} },
-        handler: () => { onStop(); },
-      },
-      setBpm: {
+        handler: () => {
+          onStop();
+        },
+      }),
+      setBpm: defineCommand({
         description: 'Set BPM',
         params: { type: 'object', properties: { bpm: { type: 'number' } }, required: ['bpm'] },
-        handler: (p: { bpm: number }) => {
+        handler: (p) => {
           setBpm(p.bpm);
           setBpmValue(p.bpm);
           return { bpm: p.bpm };
         },
-      },
-      setScale: {
+      }),
+      setScale: defineCommand({
         description: 'Set musical scale',
         params: { type: 'object', properties: { scale: { type: 'string' } }, required: ['scale'] },
-        handler: (p: { scale: string }) => {
+        handler: (p) => {
           setScale(p.scale as ScaleType);
         },
-      },
-      generateMelody: {
+      }),
+      generateMelody: defineCommand({
         description: 'Generate a new melody based on current scale and chord progression',
         params: { type: 'object', properties: {} },
         handler: () => {
@@ -71,19 +78,19 @@ export function registerProtocol(
           scheduleMelody(notes);
           return { noteCount: notes.length };
         },
-      },
-      setDrumStep: {
+      }),
+      setDrumStep: defineCommand({
         description: 'Toggle a drum step on/off',
         params: {
           type: 'object',
           properties: {
-            track: { type: 'string', enum: ['kick','snare','hihat','perc'] },
-            step:  { type: 'number' },
+            track: { type: 'string', enum: ['kick', 'snare', 'hihat', 'perc'] },
+            step: { type: 'number' },
             active: { type: 'boolean' },
           },
           required: ['track', 'step', 'active'],
         },
-        handler: (p: { track: 'kick'|'snare'|'hihat'|'perc'; step: number; active: boolean }) => {
+        handler: (p) => {
           const pat = { ...drumPattern() };
           const arr = [...pat[p.track]];
           arr[p.step] = p.active;
@@ -91,8 +98,8 @@ export function registerProtocol(
           setDrumPattern(pat);
           scheduleDrums(pat);
         },
-      },
-      randomizeDrums: {
+      }),
+      randomizeDrums: defineCommand({
         description: 'Randomize the drum pattern',
         params: { type: 'object', properties: {} },
         handler: () => {
@@ -100,7 +107,7 @@ export function registerProtocol(
           setDrumPattern(pat);
           scheduleDrums(pat);
         },
-      },
+      }),
     },
   });
 }

@@ -1,10 +1,19 @@
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import type { Composition } from './core/types';
 import type { SceneProps } from './core/scene-registry';
 
 export interface EditorControllerApi {
-  getCurrentSource: () => { sourceKind: 'url' | 'file' | null; sourceValue: string; objectUrl: string | null };
-  getPlaybackState: () => { playing: boolean; paused: boolean; playbackRate: number; loopPreview: boolean };
+  getCurrentSource: () => {
+    sourceKind: 'url' | 'file' | null;
+    sourceValue: string;
+    objectUrl: string | null;
+  };
+  getPlaybackState: () => {
+    playing: boolean;
+    paused: boolean;
+    playbackRate: number;
+    loopPreview: boolean;
+  };
   getTimeline: () => { currentTime: number; duration: number };
   getTrimRange: () => { trimStart: number; trimEnd: number; selectedDuration: number };
   loadSource: (params: { url?: string; path?: string }) => { source: string };
@@ -13,9 +22,25 @@ export interface EditorControllerApi {
   seek: (time: number) => { currentTime: number };
   setPlaybackRate: (rate: number) => { playbackRate: number };
   // Creator mode API
-  createComposition: (params: { width?: number; height?: number; fps?: number; durationInFrames?: number }) => { config: Composition['config'] };
-  addScene: (params: { type: string; from?: number; durationInFrames?: number; props?: SceneProps; layerId?: string }) => { sceneId: string };
-  updateScene: (params: { id: string; from?: number; durationInFrames?: number; props?: SceneProps }) => void;
+  createComposition: (params: {
+    width?: number;
+    height?: number;
+    fps?: number;
+    durationInFrames?: number;
+  }) => { config: Composition['config'] };
+  addScene: (params: {
+    type: string;
+    from?: number;
+    durationInFrames?: number;
+    props?: SceneProps;
+    layerId?: string;
+  }) => { sceneId: string };
+  updateScene: (params: {
+    id: string;
+    from?: number;
+    durationInFrames?: number;
+    props?: SceneProps;
+  }) => void;
   removeScene: (params: { id: string }) => void;
   reorderScenes: (params: { ids: string[] }) => void;
   getComposition: () => { composition: unknown };
@@ -27,7 +52,15 @@ export interface EditorControllerApi {
   reorderLayers: (params: { ids: string[] }) => void;
   selectLayer: (params: { id: string }) => void;
   moveSceneToLayer: (params: { sceneId: string; layerId: string }) => void;
-  getLayers: () => { layers: Array<{ id: string; name: string; visible: boolean; locked: boolean; sceneIds: string[] }> };
+  getLayers: () => {
+    layers: Array<{
+      id: string;
+      name: string;
+      visible: boolean;
+      locked: boolean;
+      sceneIds: string[];
+    }>;
+  };
 }
 
 export function registerProtocol(controller: EditorControllerApi): void {
@@ -63,7 +96,7 @@ export function registerProtocol(controller: EditorControllerApi): void {
       },
     },
     commands: {
-      loadSource: {
+      loadSource: defineCommand({
         description: 'Load a media source by direct URL or storage path.',
         params: {
           type: 'object',
@@ -73,23 +106,23 @@ export function registerProtocol(controller: EditorControllerApi): void {
           },
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) =>
+        handler: (params) =>
           controller.loadSource({
             url: typeof params.url === 'string' ? params.url : undefined,
             path: typeof params.path === 'string' ? params.path : undefined,
           }),
-      },
-      play: {
+      }),
+      play: defineCommand({
         description: 'Start playback (edit mode: video, create mode: composition preview).',
         params: { type: 'object', properties: {}, additionalProperties: false },
         handler: async () => controller.play(),
-      },
-      pause: {
+      }),
+      pause: defineCommand({
         description: 'Pause playback.',
         params: { type: 'object', properties: {}, additionalProperties: false },
         handler: () => controller.pause(),
-      },
-      seek: {
+      }),
+      seek: defineCommand({
         description: 'Seek to an absolute playback time in seconds.',
         params: {
           type: 'object',
@@ -97,12 +130,12 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['time'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) => {
+        handler: (params) => {
           const time = typeof params.time === 'number' ? params.time : Number.NaN;
           return controller.seek(time);
         },
-      },
-      setPlaybackRate: {
+      }),
+      setPlaybackRate: defineCommand({
         description: 'Set playback speed. Allowed values: 0.5, 1, 1.5, 2.',
         params: {
           type: 'object',
@@ -110,13 +143,14 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['rate'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) => {
+        handler: (params) => {
           const rate = typeof params.rate === 'number' ? params.rate : Number.NaN;
           return controller.setPlaybackRate(rate);
         },
-      },
-      createComposition: {
-        description: 'Create a new video composition. Switches to Create mode. Default: 1280x720 @ 30fps, 150 frames (5s).',
+      }),
+      createComposition: defineCommand({
+        description:
+          'Create a new video composition. Switches to Create mode. Default: 1280x720 @ 30fps, 150 frames (5s).',
         params: {
           type: 'object',
           properties: {
@@ -127,23 +161,28 @@ export function registerProtocol(controller: EditorControllerApi): void {
           },
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) =>
+        handler: (params) =>
           controller.createComposition({
             width: typeof params.width === 'number' ? params.width : undefined,
             height: typeof params.height === 'number' ? params.height : undefined,
             fps: typeof params.fps === 'number' ? params.fps : undefined,
-            durationInFrames: typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
+            durationInFrames:
+              typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
           }),
-      },
-      addScene: {
-        description: 'Add a scene to the composition. Types: solid, text, shape, image, video-clip. Optionally specify a layerId to target a specific layer (default: selected layer).',
+      }),
+      addScene: defineCommand({
+        description:
+          'Add a scene to the composition. Types: solid, text, shape, image, video-clip. Optionally specify a layerId to target a specific layer (default: selected layer).',
         params: {
           type: 'object',
           properties: {
             type: { type: 'string', enum: ['solid', 'text', 'shape', 'image', 'video-clip'] },
             from: { type: 'number', description: 'Start frame (default: 0)' },
             durationInFrames: { type: 'number', description: 'Scene duration in frames' },
-            layerId: { type: 'string', description: 'Target layer ID (default: currently selected layer)' },
+            layerId: {
+              type: 'string',
+              description: 'Target layer ID (default: currently selected layer)',
+            },
             props: {
               type: 'object',
               description: 'Scene-specific properties.',
@@ -152,16 +191,20 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['type'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) =>
+        handler: (params) =>
           controller.addScene({
-            type: params.type as string,
+            type: params.type,
             from: typeof params.from === 'number' ? params.from : undefined,
-            durationInFrames: typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
+            durationInFrames:
+              typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
             layerId: typeof params.layerId === 'string' ? params.layerId : undefined,
-            props: typeof params.props === 'object' && params.props ? (params.props as Record<string, unknown>) : undefined,
+            props:
+              typeof params.props === 'object' && params.props
+                ? (params.props as Record<string, unknown>)
+                : undefined,
           }),
-      },
-      updateScene: {
+      }),
+      updateScene: defineCommand({
         description: 'Update an existing scene by ID.',
         params: {
           type: 'object',
@@ -169,20 +212,27 @@ export function registerProtocol(controller: EditorControllerApi): void {
             id: { type: 'string' },
             from: { type: 'number' },
             durationInFrames: { type: 'number' },
-            props: { type: 'object', description: 'Updated scene properties (merged with defaults).' },
+            props: {
+              type: 'object',
+              description: 'Updated scene properties (merged with defaults).',
+            },
           },
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) =>
+        handler: (params) =>
           controller.updateScene({
-            id: params.id as string,
+            id: params.id,
             from: typeof params.from === 'number' ? params.from : undefined,
-            durationInFrames: typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
-            props: typeof params.props === 'object' && params.props ? (params.props as Record<string, unknown>) : undefined,
+            durationInFrames:
+              typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
+            props:
+              typeof params.props === 'object' && params.props
+                ? (params.props as Record<string, unknown>)
+                : undefined,
           }),
-      },
-      removeScene: {
+      }),
+      removeScene: defineCommand({
         description: 'Remove a scene by ID.',
         aliases: ['deleteScene'],
         params: {
@@ -191,9 +241,9 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) => controller.removeScene({ id: params.id as string }),
-      },
-      reorderScenes: {
+        handler: (params) => controller.removeScene({ id: params.id }),
+      }),
+      reorderScenes: defineCommand({
         description: 'Reorder scenes by providing an array of IDs in the desired order.',
         params: {
           type: 'object',
@@ -201,41 +251,45 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['ids'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) => controller.reorderScenes({ ids: params.ids as string[] }),
-      },
-      preview: {
+        handler: (params) => controller.reorderScenes({ ids: params.ids }),
+      }),
+      preview: defineCommand({
         description: 'Switch to Create mode and start playing the composition preview.',
         params: { type: 'object', properties: {}, additionalProperties: false },
         handler: () => controller.preview(),
-      },
-      exportVideo: {
+      }),
+      exportVideo: defineCommand({
         description: 'Export the composition as a WebM video file.',
         params: { type: 'object', properties: {}, additionalProperties: false },
         handler: async () => controller.exportVideo(),
-      },
-      getComposition: {
+      }),
+      getComposition: defineCommand({
         description: 'Get the current composition state.',
         params: { type: 'object', properties: {}, additionalProperties: false },
         handler: () => controller.getComposition(),
-      },
-      addLayer: {
+      }),
+      addLayer: defineCommand({
         description: 'Add a new layer to the composition. Returns the new layer ID.',
         params: {
           type: 'object',
           properties: {
             name: { type: 'string', description: 'Layer name (default: "Layer N")' },
-            index: { type: 'number', description: 'Insert position (0 = bottom/background). Default: top.' },
+            index: {
+              type: 'number',
+              description: 'Insert position (0 = bottom/background). Default: top.',
+            },
           },
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) =>
+        handler: (params) =>
           controller.addLayer({
             name: typeof params.name === 'string' ? params.name : undefined,
             index: typeof params.index === 'number' ? params.index : undefined,
           }),
-      },
-      removeLayer: {
-        description: 'Remove a layer and all its scenes by layer ID. The last layer cannot be removed.',
+      }),
+      removeLayer: defineCommand({
+        description:
+          'Remove a layer and all its scenes by layer ID. The last layer cannot be removed.',
         aliases: ['deleteLayer'],
         params: {
           type: 'object',
@@ -245,43 +299,55 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) => controller.removeLayer({ id: params.id as string }),
-      },
-      updateLayer: {
+        handler: (params) => controller.removeLayer({ id: params.id }),
+      }),
+      updateLayer: defineCommand({
         description: 'Update layer properties: rename, toggle visibility, or toggle lock.',
         params: {
           type: 'object',
           properties: {
             id: { type: 'string', description: 'Layer ID' },
             name: { type: 'string', description: 'New layer name' },
-            visible: { type: 'boolean', description: 'Layer visibility (hidden layers are not rendered or exported)' },
-            locked: { type: 'boolean', description: 'Locked layers cannot have their scenes edited' },
+            visible: {
+              type: 'boolean',
+              description: 'Layer visibility (hidden layers are not rendered or exported)',
+            },
+            locked: {
+              type: 'boolean',
+              description: 'Locked layers cannot have their scenes edited',
+            },
           },
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) =>
+        handler: (params) =>
           controller.updateLayer({
-            id: params.id as string,
+            id: params.id,
             name: typeof params.name === 'string' ? params.name : undefined,
             visible: typeof params.visible === 'boolean' ? params.visible : undefined,
             locked: typeof params.locked === 'boolean' ? params.locked : undefined,
           }),
-      },
-      reorderLayers: {
-        description: 'Reorder all layers. ids[0] = bottom (background), ids[last] = top (foreground).',
+      }),
+      reorderLayers: defineCommand({
+        description:
+          'Reorder all layers. ids[0] = bottom (background), ids[last] = top (foreground).',
         params: {
           type: 'object',
           properties: {
-            ids: { type: 'array', items: { type: 'string' }, description: 'Layer IDs in new order (bottom to top)' },
+            ids: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Layer IDs in new order (bottom to top)',
+            },
           },
           required: ['ids'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) => controller.reorderLayers({ ids: params.ids as string[] }),
-      },
-      selectLayer: {
-        description: 'Select the active layer. New scenes added via addScene will go into this layer.',
+        handler: (params) => controller.reorderLayers({ ids: params.ids }),
+      }),
+      selectLayer: defineCommand({
+        description:
+          'Select the active layer. New scenes added via addScene will go into this layer.',
         params: {
           type: 'object',
           properties: {
@@ -290,9 +356,9 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['id'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) => controller.selectLayer({ id: params.id as string }),
-      },
-      moveSceneToLayer: {
+        handler: (params) => controller.selectLayer({ id: params.id }),
+      }),
+      moveSceneToLayer: defineCommand({
         description: 'Move a scene from its current layer to a different layer.',
         params: {
           type: 'object',
@@ -303,12 +369,12 @@ export function registerProtocol(controller: EditorControllerApi): void {
           required: ['sceneId', 'layerId'],
           additionalProperties: false,
         },
-        handler: (params: Record<string, unknown>) =>
+        handler: (params) =>
           controller.moveSceneToLayer({
-            sceneId: params.sceneId as string,
-            layerId: params.layerId as string,
+            sceneId: params.sceneId,
+            layerId: params.layerId,
           }),
-      },
+      }),
     },
   });
 }

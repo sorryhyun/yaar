@@ -1,4 +1,4 @@
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import { messages, isWaiting, finishWithMessage } from './store';
 import { makeMessage } from './helpers';
 
@@ -11,7 +11,7 @@ export function registerProtocol() {
     state: {
       messages: {
         description: 'All chat messages',
-        handler: () => messages().map(m => ({ id: m.id, role: m.role, content: m.content })),
+        handler: () => messages().map((m) => ({ id: m.id, role: m.role, content: m.content })),
       },
       isWaiting: {
         description: 'Whether app is waiting for AI response',
@@ -19,7 +19,7 @@ export function registerProtocol() {
       },
     },
     commands: {
-      addMessage: {
+      addMessage: defineCommand({
         description:
           'Add an AI response message to the chat. Call this EXACTLY ONCE per user message. ' +
           'Pass `replyTo` set to the msgId from the user_message interaction so repeated/trailing ' +
@@ -37,14 +37,11 @@ export function registerProtocol() {
           },
           required: ['content'],
         },
-        handler: (p: Record<string, unknown>) => {
-          finishWithMessage(
-            makeMessage('assistant', p.content as string, 'done', p.id as string | undefined),
-            p.replyTo as string | undefined,
-          );
+        handler: (p) => {
+          finishWithMessage(makeMessage('assistant', p.content, 'done', p.id), p.replyTo);
         },
-      },
-      setError: {
+      }),
+      setError: defineCommand({
         description: 'Show an error message',
         aliases: ['showError', 'displayError', 'addError'],
         params: {
@@ -58,13 +55,10 @@ export function registerProtocol() {
           },
           required: ['content'],
         },
-        handler: (p: Record<string, unknown>) => {
-          finishWithMessage(
-            makeMessage('assistant', p.content as string, 'error'),
-            p.replyTo as string | undefined,
-          );
+        handler: (p) => {
+          finishWithMessage(makeMessage('assistant', p.content, 'error'), p.replyTo);
         },
-      },
+      }),
     },
   });
 }

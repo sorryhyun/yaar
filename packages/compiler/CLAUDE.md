@@ -20,7 +20,7 @@ src/
 ├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
-├── extract-protocol.ts    # Regex-based protocol manifest extraction from source
+├── extract-protocol.ts    # Regex-based protocol manifest extraction from source (sees through `defineCommand({...})`)
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS (variables + utility classes)
 ├── build-manifest.ts      # SHA-256 source/app.json hashing for staleness detection
 ├── bundled-types/
@@ -39,7 +39,7 @@ src/
 2. **Bundle:** `Bun.build()` with 3 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags
 3. **SDK injection:** 8 iframe SDK scripts (capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
 4. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + app `<script type="module">`
-5. **Protocol extraction:** Best-effort regex parse of `.register({...})` for state/command descriptors → `dist/protocol.json`
+5. **Protocol extraction:** Best-effort regex parse of `.register({...})` for state/command descriptors → `dist/protocol.json`. A descriptor may be wrapped in a single identifier call (`defineCommand({...})`) — the parser steps over it. Anything less literal (spread, computed callee) is skipped, so the command silently vanishes from the manifest.
 6. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
 
 ## Bun Plugins (`plugins.ts`)
@@ -74,7 +74,7 @@ Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires e
 
 Shims wrap npm packages with compatibility fixes or SDK wrappers:
 
-- **`yaar.ts`** — thin wrapper over `window.yaar` global. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`), `createPersistedSignal` (Solid signal auto-synced to storage), `onShortcut`, `showToast`, `withLoading`, `AppCommandError`
+- **`yaar.ts`** — thin wrapper over `window.yaar` global. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`), `createPersistedSignal` (Solid signal auto-synced to storage), `defineCommand`, `onShortcut`, `showToast`, `withLoading`, `AppCommandError`
 - **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4

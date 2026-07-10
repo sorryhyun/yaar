@@ -38,13 +38,64 @@ documented as ignored rather than deleted, since removing them touches `apps/`:
 
 ## Improvement suggestions (by leverage)
 
-### 1. Typed command builder for `app.register`
-The single biggest win. There are ~210 hand-written JSON Schema `params` blocks and ~271
-handlers across apps, each declaring the shape twice (schema + `p as {...}` cast) with
-nothing keeping them in sync. A `defineCommand` helper that derives the JSON Schema from a
-typed descriptor (or types the handler from the schema) would delete the largest category
-of hand-authored app code. Protocol files are the biggest hand-written surface
-(`apps/devtools/src/protocol.ts` is 557 LOC, mostly this boilerplate).
+### 1. Typed command builder for `app.register` — **shipped and adopted**
+`defineCommand` now derives a command handler's parameter type from its `params` JSON
+Schema, so the schema is the single source of truth and a stale handler annotation is a
+compile error instead of a runtime surprise. It is an identity function at runtime;
+`dist/protocol.json` and the agent-facing manifest are unchanged.
+
+Of the two options originally sketched, this is "types the handler from the schema", not
+"derives the schema from a typed descriptor". The schema has to stay a plain object
+literal because `extract-protocol.ts` is a source *parser*, not an evaluator — it cannot
+see through a `str('Page URL')` helper. Deriving schemas from a terser descriptor would
+mean evaluating the protocol module at build time (or replacing the extractor with a
+proper AST walk), which is a much larger change than the win justifies. The schema was
+never the redundant half anyway: its `description` strings are the agent's contract.
+
+- `packages/compiler/src/bundled-types/index.d.ts` — `YaarInferSchema` + `defineCommand`
+  overloads. Handles `enum` (→ literal union), the primitive types, `array`/`items`,
+  `object`/`properties`/`required`, and `object`/`additionalProperties` (→ `Record`),
+  nested. `anyOf`/`oneOf`/`$ref` degrade to `unknown`.
+- `packages/compiler/src/shims/yaar.ts` — the runtime identity function.
+- `packages/compiler/src/extract-protocol.ts` — steps over a single identifier call
+  wrapping a descriptor literal. Verified manifest-identical across all 22 apps.
+- `packages/compiler/src/define-command.test.ts` — runs real `tsc` over fixtures, since
+  nothing else in the suite would notice the type machinery breaking.
+
+**Adoption:** all 22 apps migrated — 166 of 172 commands wrapped, every extracted manifest
+byte-identical to its pre-migration baseline, all 22 still compile. The plain-literal form
+still works and the two mix freely within one `commands` block, which is why the remaining
+six can stay as they are:
+
+- `devtools.readFile` — `path` uses `oneOf`.
+- `devtools.editFile` — see finding below.
+- `image-viewer.setImages` / `.addImages` — see finding below.
+- `market-apps.setData` — schema says `items: { type: 'object' }`, handler wants
+  `ListedApp[]`.
+- `excel-lite.setStyles` — schema is a bare `{ type: 'object' }`, handler wants
+  `Record<string, Partial<CellStyle>>`.
+
+The last two are schemas that are genuinely vaguer than their handlers. Tightening them
+would change what the agent is told, so it is a deliberate follow-up, not a refactor.
+
+#### Latent bugs the migration surfaced
+
+Both pre-existing, both confirmed against `dist/protocol.json`. Left unfixed here so the
+migration commit stays behaviour-neutral.
+
+- **`image-viewer.setImages` / `.addImages` ship no `params` schema at all.** They write
+  `params: IMAGE_ITEMS_SCHEMA` — a reference to a module-level const. `extract-protocol.ts`
+  is a source parser and cannot resolve a variable, so both commands land in
+  `dist/protocol.json` with `params: undefined`. The agent is told nothing about what to
+  send. Inline the schema (or teach the extractor to resolve top-level consts).
+- **`devtools.editFile` reads params that are not in its schema.** The handler does
+  `String(p.search ?? p.oldString)` and `String(p.replace ?? p.newString)`, but only
+  `search` / `replace` are declared (their `description`s advertise the aliases in prose).
+  No agent will ever send `oldString` / `newString`, so both fallbacks are dead code.
+
+Minor, not a bug: `music-maker.setScale` declares `scale: { type: 'string' }` while the
+handler needs the narrower `ScaleType`, so it keeps a cast. An `enum` there would let the
+cast go and would tell the agent which scales are legal.
 
 ### 2. Surface storage errors instead of letting apps swallow them
 17 catch-and-ignore blocks sit around storage saves across apps (`excel-lite/src/state.ts:295`,

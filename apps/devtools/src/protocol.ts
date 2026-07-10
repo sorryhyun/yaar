@@ -1,5 +1,15 @@
 export {};
-import { app, appStorage, invoke, read, describe, list, errMsg, AppCommandError } from '@bundled/yaar';
+import {
+  app,
+  appStorage,
+  invoke,
+  read,
+  describe,
+  list,
+  errMsg,
+  AppCommandError,
+  defineCommand,
+} from '@bundled/yaar';
 import { bundledLibraries } from '@bundled/yaar-dev';
 import {
   activeProject,
@@ -33,10 +43,16 @@ import {
 } from './project';
 
 const MIME_MAP: Record<string, string> = {
-  ts: 'text/typescript', tsx: 'text/typescript',
-  js: 'application/javascript', jsx: 'application/javascript',
-  json: 'application/json', html: 'text/html', css: 'text/css',
-  md: 'text/markdown', txt: 'text/plain', svg: 'image/svg+xml',
+  ts: 'text/typescript',
+  tsx: 'text/typescript',
+  js: 'application/javascript',
+  jsx: 'application/javascript',
+  json: 'application/json',
+  html: 'text/html',
+  css: 'text/css',
+  md: 'text/markdown',
+  txt: 'text/plain',
+  svg: 'image/svg+xml',
 };
 
 function getMimeType(path: string): string {
@@ -76,7 +92,11 @@ export function registerProtocol() {
           const numbered = lines
             .map((line, i) => `${String(i + 1).padStart(width)}│${line}`)
             .join('\n');
-          return { path, content: `── ${path} (${lines.length} lines) ──\n${numbered}`, language: ext };
+          return {
+            path,
+            content: `── ${path} (${lines.length} lines) ──\n${numbered}`,
+            language: ext,
+          };
         },
       },
       diagnostics: {
@@ -122,7 +142,7 @@ export function registerProtocol() {
       },
     },
     commands: {
-      createProject: {
+      createProject: defineCommand({
         description: 'Create a new project',
         params: {
           type: 'object',
@@ -131,19 +151,19 @@ export function registerProtocol() {
           },
           required: ['name'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const id = await createProject(String(p.name));
           return { projectId: id };
         },
-      },
-      openProject: {
+      }),
+      openProject: defineCommand({
         description: 'Switch to an existing project',
         params: {
           type: 'object',
           properties: { id: { type: 'string' } },
           required: ['id'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           await openProject(String(p.id));
           const proj = activeProject();
           if (!proj) throw new AppCommandError('Project not found');
@@ -152,28 +172,33 @@ export function registerProtocol() {
             files: files().map((f) => f.path),
           };
         },
-      },
-      deleteProject: {
+      }),
+      deleteProject: defineCommand({
         description: 'Delete a project',
         params: {
           type: 'object',
           properties: { id: { type: 'string' } },
           required: ['id'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           await deleteProject(String(p.id));
         },
-      },
-      openFile: {
-        description: 'Open a file (or multiple files) in the editor. Use `path` for a single file or `files` array for multiple files.',
+      }),
+      openFile: defineCommand({
+        description:
+          'Open a file (or multiple files) in the editor. Use `path` for a single file or `files` array for multiple files.',
         params: {
           type: 'object',
           properties: {
             path: { type: 'string', description: 'Single file path' },
-            files: { type: 'array', items: { type: 'string' }, description: 'Multiple file paths to open as tabs' },
+            files: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Multiple file paths to open as tabs',
+            },
           },
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const paths: string[] = [];
           if (Array.isArray(p.files)) paths.push(...p.files.map(String));
           if (p.path) paths.push(String(p.path));
@@ -181,7 +206,7 @@ export function registerProtocol() {
           for (const fp of paths) await openFile(fp);
           return { opened: paths };
         },
-      },
+      }),
       readFile: {
         description:
           'Read one or more files and return their contents with line numbers. Does NOT change the editor open state. ' +
@@ -205,16 +230,12 @@ export function registerProtocol() {
         },
         handler: async (p: Record<string, unknown>) => {
           const rawPath = p.path;
-          const paths: string[] = Array.isArray(rawPath)
-            ? rawPath.map(String)
-            : [String(rawPath)];
+          const paths: string[] = Array.isArray(rawPath) ? rawPath.map(String) : [String(rawPath)];
           const opts = {
             startLine: p.startLine != null ? Number(p.startLine) : undefined,
             endLine: p.endLine != null ? Number(p.endLine) : undefined,
           };
-          const results = await Promise.all(
-            paths.map((fp) => readFileContent(fp, opts)),
-          );
+          const results = await Promise.all(paths.map((fp) => readFileContent(fp, opts)));
           if (p.openInEditor) {
             for (const fp of paths) await openFile(fp);
           }
@@ -231,7 +252,7 @@ export function registerProtocol() {
           }));
         },
       },
-      writeFile: {
+      writeFile: defineCommand({
         description: 'Write content to a file',
         params: {
           type: 'object',
@@ -241,10 +262,10 @@ export function registerProtocol() {
           },
           required: ['path', 'content'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           await writeFile(String(p.path), String(p.content));
         },
-      },
+      }),
       editFile: {
         description: 'Edit a file (search & replace)',
         params: {
@@ -259,24 +280,23 @@ export function registerProtocol() {
         handler: async (p: Record<string, unknown>) => {
           const search = String(p.search ?? p.oldString);
           const replace = String(p.replace ?? p.newString);
-          if (!search || search === 'undefined')
-            throw new AppCommandError('Missing search string');
+          if (!search || search === 'undefined') throw new AppCommandError('Missing search string');
           const changed = await editFile(String(p.path), search, replace);
           if (!changed) throw new AppCommandError('Search string not found in file');
         },
       },
-      deleteFile: {
+      deleteFile: defineCommand({
         description: 'Delete a file',
         params: {
           type: 'object',
           properties: { path: { type: 'string' } },
           required: ['path'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           await deleteFile(String(p.path));
         },
-      },
-      copyFile: {
+      }),
+      copyFile: defineCommand({
         description:
           'Copy a file to another path within the active project. ' +
           'Reads the source and writes it to the destination — destination directories are created automatically. ' +
@@ -286,13 +306,13 @@ export function registerProtocol() {
           type: 'object',
           properties: {
             from: { type: 'string', description: 'Source file path (e.g. "src/Foo.ts")' },
-            to:   { type: 'string', description: 'Destination file path (e.g. "src/ui/Foo.ts")' },
+            to: { type: 'string', description: 'Destination file path (e.g. "src/ui/Foo.ts")' },
           },
           required: ['from', 'to'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const from = String(p.from);
-          const to   = String(p.to);
+          const to = String(p.to);
           if (from === to) throw new AppCommandError('Source and destination are the same path');
           try {
             await copyFile(from, to);
@@ -301,8 +321,8 @@ export function registerProtocol() {
             throw new AppCommandError(errMsg(err));
           }
         },
-      },
-      grep: {
+      }),
+      grep: defineCommand({
         description: 'Search file contents with regex across the project',
         params: {
           type: 'object',
@@ -312,7 +332,7 @@ export function registerProtocol() {
           },
           required: ['pattern'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const result = await grep(String(p.pattern), p.glob ? String(p.glob) : undefined);
           if (result.matches.length === 0) return 'No matches found.';
           // Group matches by file and return as embedded resource blocks
@@ -324,7 +344,10 @@ export function registerProtocol() {
             arr.push(m);
             byFile.set(m.file, arr);
           }
-          const blocks: { type: 'resource'; resource: { uri: string; text: string; mimeType: string } }[] = [];
+          const blocks: {
+            type: 'resource';
+            resource: { uri: string; text: string; mimeType: string };
+          }[] = [];
           for (const [file, matches] of byFile) {
             const lines = matches.map((m) => `${m.line}│${m.content}`).join('\n');
             blocks.push({
@@ -341,8 +364,8 @@ export function registerProtocol() {
           }
           return blocks;
         },
-      },
-      compile: {
+      }),
+      compile: defineCommand({
         description: 'Compile the active project',
         params: { type: 'object', properties: {} },
         handler: async () => {
@@ -355,16 +378,16 @@ export function registerProtocol() {
             ...(status === 'error' && errors.length > 0 ? { errors } : {}),
           };
         },
-      },
-      typecheck: {
+      }),
+      typecheck: defineCommand({
         description: 'Run TypeScript type checker',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await typecheck();
           return { diagnostics: diagnostics() };
         },
-      },
-      deploy: {
+      }),
+      deploy: defineCommand({
         description: 'Deploy to apps/',
         params: {
           type: 'object',
@@ -376,7 +399,7 @@ export function registerProtocol() {
           },
           required: ['appId'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           await deploy({
             appId: String(p.appId),
             name: p.name ? String(p.name) : undefined,
@@ -384,8 +407,8 @@ export function registerProtocol() {
             description: p.description ? String(p.description) : undefined,
           });
         },
-      },
-      preview: {
+      }),
+      preview: defineCommand({
         description: 'Open preview window for the compiled app',
         params: { type: 'object', properties: {} },
         handler: async () => {
@@ -412,8 +435,8 @@ export function registerProtocol() {
           if (result?.windowId) setPreviewWindowId(result.windowId);
           return { previewUrl: url, ...result };
         },
-      },
-      viewPreview: {
+      }),
+      viewPreview: defineCommand({
         description: 'Read the current preview window state (content, size, position)',
         params: { type: 'object', properties: {} },
         handler: async () => {
@@ -427,15 +450,15 @@ export function registerProtocol() {
             throw new AppCommandError('Preview window no longer exists.');
           }
         },
-      },
-      previewQuery: {
+      }),
+      previewQuery: defineCommand({
         description: 'Query app protocol state from the preview window',
         params: {
           type: 'object',
           properties: { stateKey: { type: 'string', description: 'State key to query' } },
           required: ['stateKey'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const wid = previewWindowId();
           if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
           try {
@@ -447,8 +470,8 @@ export function registerProtocol() {
             throw new AppCommandError('Preview window not responding.');
           }
         },
-      },
-      previewCommand: {
+      }),
+      previewCommand: defineCommand({
         description: 'Send an app protocol command to the preview window',
         params: {
           type: 'object',
@@ -458,7 +481,7 @@ export function registerProtocol() {
           },
           required: ['command'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const wid = previewWindowId();
           if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
           try {
@@ -471,17 +494,21 @@ export function registerProtocol() {
             throw new AppCommandError('Preview window not responding.');
           }
         },
-      },
-      describeUri: {
-        description: 'Describe a yaar:// URI — returns supported verbs, description, and invoke schema',
+      }),
+      describeUri: defineCommand({
+        description:
+          'Describe a yaar:// URI — returns supported verbs, description, and invoke schema',
         params: {
           type: 'object',
           properties: {
-            uri: { type: 'string', description: 'yaar:// URI to describe (e.g. "yaar://sessions/")' },
+            uri: {
+              type: 'string',
+              description: 'yaar:// URI to describe (e.g. "yaar://sessions/")',
+            },
           },
           required: ['uri'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           try {
             const result = await describe(String(p.uri));
             return { result };
@@ -489,8 +516,8 @@ export function registerProtocol() {
             throw new AppCommandError(`Failed to describe URI: ${p.uri}`);
           }
         },
-      },
-      listUri: {
+      }),
+      listUri: defineCommand({
         description: 'List child resources under a yaar:// URI',
         params: {
           type: 'object',
@@ -499,7 +526,7 @@ export function registerProtocol() {
           },
           required: ['uri'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           try {
             const result = await list(String(p.uri));
             return { items: result };
@@ -507,8 +534,8 @@ export function registerProtocol() {
             throw new AppCommandError(`Failed to list URI: ${p.uri}`);
           }
         },
-      },
-      cloneApp: {
+      }),
+      cloneApp: defineCommand({
         description: 'Clone an installed app source into a new project',
         params: {
           type: 'object',
@@ -517,7 +544,7 @@ export function registerProtocol() {
           },
           required: ['appId'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const projectId = await cloneApp(String(p.appId));
           const proj = activeProject();
           return {
@@ -526,8 +553,8 @@ export function registerProtocol() {
             files: files().map((f) => f.path),
           };
         },
-      },
-      describeBundledLibrary: {
+      }),
+      describeBundledLibrary: defineCommand({
         description: 'Get detailed type information (methods, interfaces) for a @bundled/* library',
         params: {
           type: 'object',
@@ -536,7 +563,7 @@ export function registerProtocol() {
           },
           required: ['name'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           try {
             const result = await bundledLibraries(String(p.name));
             return result;
@@ -544,14 +571,14 @@ export function registerProtocol() {
             throw new AppCommandError(errMsg(err));
           }
         },
-      },
-      clearConsole: {
+      }),
+      clearConsole: defineCommand({
         description: 'Clear console output',
         params: { type: 'object', properties: {} },
         handler: () => {
           clearConsoleLogs();
         },
-      },
+      }),
     },
   });
 }

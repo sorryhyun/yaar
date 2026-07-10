@@ -252,18 +252,26 @@ function extractObjectProp(body: string, propName: string): object | null {
 /**
  * Parse top-level keys from an object body, extracting each key's block.
  * Yields [keyName, blockContent] pairs for keys whose value is `{ ... }`.
+ *
+ * A single identifier call may wrap the literal — `navigate: defineCommand({ ... })`
+ * — in which case the wrapper is stepped over and the inner block is yielded.
+ * The trailing `)` is consumed by the inter-key skip below.
  */
 function* iterateTopLevelKeys(body: string): Generator<[string, string]> {
   // Match key: { at the top level of the body
   // Supports bare identifiers (navigate) and quoted keys ('current-path', "select-file")
   let pos = 0;
   while (pos < body.length) {
-    // Skip whitespace, commas, line comments, and block comments before the next key
-    const skip = body.slice(pos).match(/^(?:\s|,|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*/);
+    // Skip whitespace, commas, close parens (from a descriptor-builder call),
+    // line comments, and block comments before the next key
+    const skip = body.slice(pos).match(/^(?:\s|,|\)|\/\/[^\n]*\n|\/\*[\s\S]*?\*\/)*/);
     if (skip) pos += skip[0].length;
     if (pos >= body.length) break;
 
-    const keyMatch = body.slice(pos).match(/^(?:(['"])([^'"]+)\1|(\w+))\s*:\s*\{/);
+    // Optional `ident(` or `ident<T>(` between the colon and the opening brace.
+    const keyMatch = body
+      .slice(pos)
+      .match(/^(?:(['"])([^'"]+)\1|(\w+))\s*:\s*(?:[A-Za-z_$][\w$]*\s*(?:<[^<>]*>\s*)?\(\s*)?\{/);
     if (!keyMatch || keyMatch.index === undefined) break;
 
     const keyName = keyMatch[2] ?? keyMatch[3]; // quoted group or bare group

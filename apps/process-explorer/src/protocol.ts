@@ -1,6 +1,6 @@
 export {};
 
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import {
   agentStats,
   agentList,
@@ -43,50 +43,50 @@ export function registerProtocol() {
     },
 
     commands: {
-      refresh: {
+      refresh: defineCommand({
         description: 'Force refresh all data',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await refreshAll();
           return { ok: true };
         },
-      },
-      interruptAgent: {
+      }),
+      interruptAgent: defineCommand({
         description: 'Interrupt a running agent by ID',
         params: {
           type: 'object',
           properties: { agentId: { type: 'string' } },
           required: ['agentId'],
         },
-        handler: async (p: { agentId: string }) => {
+        handler: async (p) => {
           await interruptAgent(p.agentId);
           return { ok: true };
         },
-      },
-      closeWindow: {
+      }),
+      closeWindow: defineCommand({
         description: 'Close a window by ID',
         params: {
           type: 'object',
           properties: { windowId: { type: 'string' } },
           required: ['windowId'],
         },
-        handler: async (p: { windowId: string }) => {
+        handler: async (p) => {
           await closeWindow(p.windowId);
           return { ok: true };
         },
-      },
-      closeBrowser: {
+      }),
+      closeBrowser: defineCommand({
         description: 'Close a browser tab by ID',
         params: {
           type: 'object',
           properties: { browserId: { type: 'string' } },
           required: ['browserId'],
         },
-        handler: async (p: { browserId: string }) => {
+        handler: async (p) => {
           await closeBrowser(p.browserId);
           return { ok: true };
         },
-      },
+      }),
     },
   });
 }

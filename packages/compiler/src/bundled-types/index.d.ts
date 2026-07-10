@@ -193,6 +193,83 @@ interface YaarAppEventDescriptor {
   description: string;
 }
 
+// -- JSON Schema → TypeScript inference (used by defineCommand) --
+
+/**
+ * Structural constraint for a `params` / `schema` JSON Schema literal.
+ * The index signature keeps unknown keywords (`default`, `examples`, ...) legal.
+ */
+interface YaarJsonSchema {
+  type?: string;
+  description?: string;
+  enum?: readonly unknown[];
+  properties?: Record<string, unknown>;
+  required?: readonly string[];
+  items?: unknown;
+  additionalProperties?: unknown;
+  [keyword: string]: unknown;
+}
+
+/** Collapse an intersection into a single object type so hovers stay readable. */
+type YaarFlatten<T> = { [K in keyof T]: T[K] } & {};
+
+/** The union of a schema's `required` entries, or `never` when it declares none. */
+type YaarRequiredKeys<S> = S extends { required: readonly (infer R)[] }
+  ? R extends string
+    ? R
+    : never
+  : never;
+
+/**
+ * Map a schema's `properties` to an object type, honouring `required`.
+ *
+ * With no `properties`, fall back to `additionalProperties` — the idiomatic way to
+ * describe a dictionary (`{ type: 'object', additionalProperties: { type: 'string' } }`
+ * → `Record<string, string>`). A bare `{ type: 'object' }` stays `Record<string, unknown>`.
+ */
+type YaarInferObject<S> = S extends { properties: infer P }
+  ? YaarFlatten<
+      {
+        [K in keyof P as K extends YaarRequiredKeys<S> ? K : never]: YaarInferSchema<P[K]>;
+      } & {
+        [K in keyof P as K extends YaarRequiredKeys<S> ? never : K]?: YaarInferSchema<P[K]>;
+      }
+    >
+  : S extends { additionalProperties: infer A }
+    ? A extends true
+      ? Record<string, unknown>
+      : A extends false
+        ? Record<string, never>
+        : Record<string, YaarInferSchema<A>>
+    : Record<string, unknown>;
+
+/**
+ * Translate a JSON Schema literal into the TypeScript type it describes.
+ *
+ * Covers the keywords app protocols actually use: `enum`, the six primitive
+ * `type`s, `array` + `items`, and `object` + `properties`/`required` (nested).
+ * Anything else — `anyOf`, `oneOf`, `$ref` — falls back to `unknown`, which
+ * surfaces as a type error in the handler rather than a wrong type. Annotate
+ * that handler's parameter explicitly, or keep the plain-object descriptor.
+ */
+type YaarInferSchema<S> = S extends { enum: readonly (infer E)[] }
+  ? E
+  : S extends { type: 'string' }
+    ? string
+    : S extends { type: 'number' | 'integer' }
+      ? number
+      : S extends { type: 'boolean' }
+        ? boolean
+        : S extends { type: 'null' }
+          ? null
+          : S extends { type: 'array' }
+            ? S extends { items: infer I }
+              ? YaarInferSchema<I>[]
+              : unknown[]
+            : S extends { type: 'object' }
+              ? YaarInferObject<S>
+              : unknown;
+
 interface YaarAppRegistration {
   appId: string;
   name: string;
@@ -381,6 +458,45 @@ declare module '@bundled/yaar' {
   export const app: YaarApp;
   export const notifications: YaarNotifications;
   export const windows: YaarWindows;
+
+  /**
+   * Declare a command for `app.register({ commands })`, deriving the handler's
+   * parameter type from the `params` JSON Schema.
+   *
+   * The schema stays a plain literal — it is still the agent-facing contract and
+   * is still extracted into `dist/protocol.json` at build time. What goes away is
+   * the second, unchecked declaration of the same shape:
+   *
+   * ```ts
+   * // before — schema and annotation drift apart silently
+   * focus: {
+   *   description: 'Focus a tab',
+   *   params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
+   *   handler: (p: { tabId: number }) => bridge.focus(p.tabId),
+   * }
+   *
+   * // after — `p` is inferred as `{ tabId: number }`; `p.tabld` is a compile error
+   * focus: defineCommand({
+   *   description: 'Focus a tab',
+   *   params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
+   *   handler: (p) => bridge.focus(p.tabId),
+   * })
+   * ```
+   */
+  export function defineCommand<const S extends YaarJsonSchema, R>(descriptor: {
+    description: string;
+    aliases?: readonly string[];
+    params: S;
+    returns?: object;
+    handler: (params: YaarInferSchema<S>) => R | Promise<R>;
+  }): YaarAppCommandDescriptor;
+  /** Parameterless variant — the handler receives nothing. */
+  export function defineCommand<R>(descriptor: {
+    description: string;
+    aliases?: readonly string[];
+    returns?: object;
+    handler: () => R | Promise<R>;
+  }): YaarAppCommandDescriptor;
 
   /** Returns a promise that resolves after `ms` milliseconds. */
   export function wait(ms: number): Promise<void>;

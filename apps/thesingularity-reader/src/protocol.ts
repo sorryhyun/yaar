@@ -1,8 +1,7 @@
 import { state, setState } from './store';
-import { app, AppCommandError } from '@bundled/yaar';
+import { app, AppCommandError, defineCommand } from '@bundled/yaar';
 import { saveCredentials, loadCredentials } from './credentials';
 import { submitComment, submitPost, doSearch, clearSearch } from './actions';
-import type { SearchType } from './types';
 
 export function registerProtocol() {
   if (!app) return;
@@ -63,7 +62,7 @@ export function registerProtocol() {
       },
     },
     commands: {
-      search: {
+      search: defineCommand({
         description:
           '갤러리 내 검색을 실행합니다. keyword는 검색어, type은 검색 대상(subject_m=제목+내용, subject=제목, memo=내용, name=글쓴이, comment=댓글). keyword가 비어 있으면 검색을 해제하고 전체 목록으로 돌아갑니다.',
         params: {
@@ -77,10 +76,9 @@ export function registerProtocol() {
             },
           },
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const keyword = typeof p.keyword === 'string' ? p.keyword : '';
-          const type =
-            typeof p.type === 'string' ? (p.type as SearchType) : undefined;
+          const type = typeof p.type === 'string' ? p.type : undefined;
           if (!keyword.trim()) {
             await clearSearch();
             return { active: false, resultCount: state.posts.length };
@@ -93,16 +91,16 @@ export function registerProtocol() {
             resultCount: state.posts.length,
           };
         },
-      },
-      clearSearch: {
+      }),
+      clearSearch: defineCommand({
         description: '검색을 해제하고 전체 갤러리 목록으로 돌아갑니다.',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await clearSearch();
           return { active: false, resultCount: state.posts.length };
         },
-      },
-      saveCredentials: {
+      }),
+      saveCredentials: defineCommand({
         description: '아이디/비밀번호를 앱 스토리지(auth/credentials.json)에 저장합니다.',
         params: {
           type: 'object',
@@ -112,13 +110,13 @@ export function registerProtocol() {
           },
           required: ['username', 'password'],
         },
-        handler: async (p: Record<string, unknown>) => {
-          const creds = await saveCredentials(p.username as string, p.password as string);
+        handler: async (p) => {
+          const creds = await saveCredentials(p.username, p.password);
           setState('savedCredentials', creds);
           return { username: creds.username, savedAt: creds.savedAt };
         },
-      },
-      loadCredentials: {
+      }),
+      loadCredentials: defineCommand({
         description: '저장된 자격증명을 불러옵니다. 없으면 에러를 던집니다.',
         params: { type: 'object', properties: {} },
         handler: async () => {
@@ -127,8 +125,8 @@ export function registerProtocol() {
           setState('savedCredentials', creds);
           return { username: creds.username, savedAt: creds.savedAt };
         },
-      },
-      submitComment: {
+      }),
+      submitComment: defineCommand({
         description:
           '현재 선택된 게시물에 댓글을 작성합니다. 로그인과 게시물 선택이 필요합니다. text를 주면 해당 내용으로, 없으면 현재 입력창의 내용으로 작성합니다.',
         params: {
@@ -137,7 +135,7 @@ export function registerProtocol() {
             text: { type: 'string', description: '작성할 댓글 내용' },
           },
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!state.isLoggedIn) throw new AppCommandError('로그인이 필요합니다');
           if (!state.selectedPost) throw new AppCommandError('선택된 게시물이 없습니다');
           if (typeof p.text === 'string' && p.text.trim()) {
@@ -156,8 +154,8 @@ export function registerProtocol() {
             commentCount: state.comments.length,
           };
         },
-      },
-      submitPost: {
+      }),
+      submitPost: defineCommand({
         description:
           '새 게시물을 작성합니다. 로그인이 필요합니다. title(제목)과 content(본문)은 필수, category(말머리: 예) 일반/정보/활용)는 선택입니다. 등록 성공 시 폼을 닫고 목록을 새로고침합니다.',
         params: {
@@ -169,7 +167,7 @@ export function registerProtocol() {
           },
           required: ['title', 'content'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!state.isLoggedIn) throw new AppCommandError('로그인이 필요합니다');
           const title = typeof p.title === 'string' ? p.title.trim() : '';
           const content = typeof p.content === 'string' ? p.content.trim() : '';
@@ -187,9 +185,10 @@ export function registerProtocol() {
           }
           return { ok: true };
         },
-      },
-      setRecommendations: {
-        description: 'AI 분석 결과를 앱에 반영합니다. topics는 현재 뜨는 주제 키워드 목록(5~8개), bestPost는 오늘의 베스트 게시물 번호와 추천 이유',
+      }),
+      setRecommendations: defineCommand({
+        description:
+          'AI 분석 결과를 앱에 반영합니다. topics는 현재 뜨는 주제 키워드 목록(5~8개), bestPost는 오늘의 베스트 게시물 번호와 추천 이유',
         params: {
           type: 'object',
           properties: {
@@ -210,9 +209,9 @@ export function registerProtocol() {
           },
           required: ['topics'],
         },
-        handler: (p: Record<string, unknown>) => {
-          const topics = p.topics as string[];
-          const bestPost = p.bestPost as { num: string; reason: string } | undefined;
+        handler: (p) => {
+          const topics = p.topics;
+          const bestPost = p.bestPost;
           setState('recLoading', false);
           setState('recommendation', {
             topics,
@@ -221,7 +220,7 @@ export function registerProtocol() {
             analyzedAt: new Date(),
           });
         },
-      },
+      }),
     },
   });
 }

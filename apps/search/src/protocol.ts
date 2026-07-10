@@ -1,5 +1,5 @@
 export {};
-import { app, invoke, del, storage } from '@bundled/yaar';
+import { app, defineCommand, invoke, del, storage } from '@bundled/yaar';
 import { state, setState } from './store';
 import type { SearchResult } from './types';
 
@@ -32,7 +32,9 @@ export async function performSearch(pattern: string, glob?: string, scope?: stri
 
 /** Callback set by main.ts to scroll preview after content loads. */
 let _onPreviewLoaded: (() => void) | null = null;
-export function setOnPreviewLoaded(fn: () => void) { _onPreviewLoaded = fn; }
+export function setOnPreviewLoaded(fn: () => void) {
+  _onPreviewLoaded = fn;
+}
 
 export async function selectResult(index: number) {
   const match = state.matches[index];
@@ -53,7 +55,10 @@ export async function cloneApp(appId: string, destPath?: string) {
   const dest = destPath || `apps-source/${appId}`;
   setState('statusText', `Cloning ${appId}…`);
   try {
-    const result = await invoke<{ files?: { path: string; content: string }[]; meta?: { name: string; icon: string; description: string } }>(`yaar://apps/${appId}`, { action: 'clone' });
+    const result = await invoke<{
+      files?: { path: string; content: string }[];
+      meta?: { name: string; icon: string; description: string };
+    }>(`yaar://apps/${appId}`, { action: 'clone' });
     if (!result.files?.length) {
       setState('statusText', `Clone failed: no source files found`);
       return { success: false, error: 'no source files found' };
@@ -137,7 +142,7 @@ export function registerProtocol() {
       },
     },
     commands: {
-      search: {
+      search: defineCommand({
         description: 'Run regex search across storage',
         params: {
           type: 'object',
@@ -148,20 +153,20 @@ export function registerProtocol() {
           },
           required: ['pattern'],
         },
-        handler: async (params: Record<string, unknown>) => {
+        handler: async (params) => {
           const pattern = String(params.pattern);
           setState('query', pattern);
           if (params.glob) setState('glob', String(params.glob));
           if (params.scope != null) setState('scope', String(params.scope));
-          await performSearch(pattern, params.glob as string, params.scope as string);
+          await performSearch(pattern, params.glob, params.scope);
           return {
             success: true,
             matchCount: state.matches.length,
             truncated: state.truncated,
           };
         },
-      },
-      select: {
+      }),
+      select: defineCommand({
         description: 'Select a search result by index to preview the file',
         params: {
           type: 'object',
@@ -170,12 +175,12 @@ export function registerProtocol() {
           },
           required: ['index'],
         },
-        handler: async (params: Record<string, unknown>) => {
+        handler: async (params) => {
           await selectResult(Number(params.index));
           return { success: true };
         },
-      },
-      'clone-app': {
+      }),
+      'clone-app': defineCommand({
         description: 'Clone an app source into storage for inspection',
         params: {
           type: 'object',
@@ -188,11 +193,11 @@ export function registerProtocol() {
           },
           required: ['appId'],
         },
-        handler: async (params: Record<string, unknown>) => {
-          return await cloneApp(String(params.appId), params.destPath as string | undefined);
+        handler: async (params) => {
+          return await cloneApp(String(params.appId), params.destPath);
         },
-      },
-      'remove-clone': {
+      }),
+      'remove-clone': defineCommand({
         description: 'Remove a previously cloned app source from storage',
         params: {
           type: 'object',
@@ -205,18 +210,18 @@ export function registerProtocol() {
           },
           required: ['appId'],
         },
-        handler: async (params: Record<string, unknown>) => {
-          return await removeClone(String(params.appId), params.destPath as string | undefined);
+        handler: async (params) => {
+          return await removeClone(String(params.appId), params.destPath);
         },
-      },
-      clear: {
+      }),
+      clear: defineCommand({
         description: 'Clear search results and preview',
         params: { type: 'object', properties: {} },
         handler: () => {
           clearSearch();
           return { success: true };
         },
-      },
+      }),
     },
   });
 }

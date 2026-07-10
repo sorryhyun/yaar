@@ -2,7 +2,7 @@ import { normalizeAspectRatio } from './aspect-ratio';
 import { isFontSize, newSlide, normalizeDeck, normalizeSlideInput } from './deck-utils';
 import { isThemeId } from './theme';
 import type { Deck, FontSize, Slide, ThemeId } from './types';
-import { app, storage, AppCommandError } from '@bundled/yaar';
+import { app, storage, AppCommandError, defineCommand } from '@bundled/yaar';
 
 // === Types used only in protocol ===
 type StorageReadMode = 'text' | 'json' | 'auto';
@@ -105,8 +105,13 @@ function parseDeckOrSlidesFromStorage(
         return { title: normalized.title, slides: normalized.slides };
       }
     }
-  } catch { /* non-json */ }
-  return { title: fallbackTitle, slides: [normalizeSlideInput({ title: fallbackTitle, body: raw })] };
+  } catch {
+    /* non-json */
+  }
+  return {
+    title: fallbackTitle,
+    slides: [normalizeSlideInput({ title: fallbackTitle, body: raw })],
+  };
 }
 
 // === Register App Protocol ===
@@ -165,7 +170,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
       },
     },
     commands: {
-      setDeck: {
+      setDeck: defineCommand({
         description:
           'Replace the entire deck at once. All fields are normalized on write. ' +
           'Deck-level fontSize defaults to "md" if absent. ' +
@@ -208,7 +213,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['deck'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           ctx.setDeck(normalizeDeck(p.deck as Deck));
           ctx.setFilterQuery('');
           ctx.persist(false);
@@ -216,8 +221,8 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.bumpActiveIndex();
           return { slideCount: ctx.getDeck().slides.length };
         },
-      },
-      setSlides: {
+      }),
+      setSlides: defineCommand({
         description:
           'Set slides in "replace" (default) or "append" mode. ' +
           'In replace mode the existing slides are discarded and replaced with the provided array. ' +
@@ -240,9 +245,11 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['slides'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           const deck = ctx.getDeck();
-          const slides = (Array.isArray(p.slides) ? p.slides as Partial<Slide>[] : []).map((s) => normalizeSlideInput(s));
+          const slides = (Array.isArray(p.slides) ? (p.slides as Partial<Slide>[]) : []).map((s) =>
+            normalizeSlideInput(s),
+          );
           const mode = (p.mode as StorageMergeMode) || 'replace';
           if (mode === 'append') {
             if (slides.length) deck.slides.push(...slides);
@@ -257,8 +264,8 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.bumpActiveIndex();
           return { mode, slideCount: deck.slides.length };
         },
-      },
-      appendSlides: {
+      }),
+      appendSlides: defineCommand({
         description:
           'Append one or more slides to the end of the deck and select the last appended slide. ' +
           'Equivalent to setSlides with mode "append". ' +
@@ -275,9 +282,11 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['slides'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           const deck = ctx.getDeck();
-          const slides = (Array.isArray(p.slides) ? p.slides as Partial<Slide>[] : []).map((s) => normalizeSlideInput(s));
+          const slides = (Array.isArray(p.slides) ? (p.slides as Partial<Slide>[]) : []).map((s) =>
+            normalizeSlideInput(s),
+          );
           if (slides.length) {
             deck.slides.push(...slides);
             deck.activeIndex = deck.slides.length - 1;
@@ -288,20 +297,25 @@ export function registerProtocol(ctx: ProtocolContext): void {
           }
           return { appended: slides.length, slideCount: deck.slides.length };
         },
-      },
-      setActiveIndex: {
-        description: 'Select a slide by zero-based index. Clamped to valid range. Returns { activeIndex }.',
+      }),
+      setActiveIndex: defineCommand({
+        description:
+          'Select a slide by zero-based index. Clamped to valid range. Returns { activeIndex }.',
         aliases: ['selectSlide', 'goToSlide', 'jumpToSlide'],
-        params: { type: 'object', properties: { index: { type: 'number', description: 'Zero-based slide index.' } }, required: ['index'] },
-        handler: (p: Record<string, unknown>) => {
+        params: {
+          type: 'object',
+          properties: { index: { type: 'number', description: 'Zero-based slide index.' } },
+          required: ['index'],
+        },
+        handler: (p) => {
           const deck = ctx.getDeck();
-          deck.activeIndex = Math.max(0, Math.min(Math.floor(p.index as number), deck.slides.length - 1));
+          deck.activeIndex = Math.max(0, Math.min(Math.floor(p.index), deck.slides.length - 1));
           ctx.bumpDeck();
           ctx.bumpActiveIndex();
           return { activeIndex: deck.activeIndex };
         },
-      },
-      setTheme: {
+      }),
+      setTheme: defineCommand({
         description:
           'Change the deck theme. Valid themeId values: "classic-light", "midnight-dark", "ocean", "sunset". ' +
           'Returns { themeId } or throws for invalid IDs.',
@@ -321,7 +335,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['themeId'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           const themeId = p.themeId as ThemeId;
           if (!isThemeId(themeId)) throw new AppCommandError(`Invalid themeId: ${String(themeId)}`);
           ctx.getDeck().themeId = themeId;
@@ -329,8 +343,8 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.bumpDeck();
           return { themeId: ctx.getDeck().themeId };
         },
-      },
-      setAspectRatio: {
+      }),
+      setAspectRatio: defineCommand({
         description:
           'Set slide aspect ratio. Pass a "W:H" string. ' +
           'Named presets: "16:9" (widescreen), "4:3" (standard), "1:1" (square). ' +
@@ -345,14 +359,14 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['aspectRatio'],
         },
-        handler: (p: Record<string, unknown>) => {
-          ctx.getDeck().aspectRatio = normalizeAspectRatio(p.aspectRatio as string);
+        handler: (p) => {
+          ctx.getDeck().aspectRatio = normalizeAspectRatio(p.aspectRatio);
           ctx.persist(false);
           ctx.bumpDeck();
           return { aspectRatio: ctx.getDeck().aspectRatio };
         },
-      },
-      setFontSize: {
+      }),
+      setFontSize: defineCommand({
         description:
           'Set global font size scale for all slides. ' +
           'Scales heading and body text proportionally via a CSS multiplier. ' +
@@ -369,7 +383,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           },
           required: ['size'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           const size = p.size as FontSize;
           if (!isFontSize(size)) throw new AppCommandError(`Invalid size: ${String(size)}`);
           ctx.getDeck().fontSize = size;
@@ -377,21 +391,24 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.bumpDeck();
           return { fontSize: ctx.getDeck().fontSize };
         },
-      },
-      saveToStorage: {
-        description: 'Save current deck JSON to YAAR storage at the given path. Returns { path, slideCount }.',
+      }),
+      saveToStorage: defineCommand({
+        description:
+          'Save current deck JSON to YAAR storage at the given path. Returns { path, slideCount }.',
         params: {
           type: 'object',
-          properties: { path: { type: 'string', description: 'Storage path, e.g. "my-deck.json".' } },
+          properties: {
+            path: { type: 'string', description: 'Storage path, e.g. "my-deck.json".' },
+          },
           required: ['path'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
-          await storage.save(p.path as string, JSON.stringify(ctx.getDeck(), null, 2));
+          await storage.save(p.path, JSON.stringify(ctx.getDeck(), null, 2));
           return { path: p.path, slideCount: ctx.getDeck().slides.length };
         },
-      },
-      loadFromStorage: {
+      }),
+      loadFromStorage: defineCommand({
         description:
           'Load one or many deck JSON files from YAAR storage and merge into the current deck. ' +
           'Accepts path (single) and/or paths (array). mode "replace" (default) resets slides; ' +
@@ -400,26 +417,31 @@ export function registerProtocol(ctx: ProtocolContext): void {
           type: 'object',
           properties: {
             path: { type: 'string', description: 'Single storage path to load.' },
-            paths: { type: 'array', items: { type: 'string' }, description: 'Multiple storage paths to load.' },
+            paths: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Multiple storage paths to load.',
+            },
             mode: { type: 'string', enum: ['replace', 'append'], description: 'Merge mode.' },
           },
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
           const candidatePaths = [
             ...(p.path ? [p.path as string] : []),
-            ...(Array.isArray(p.paths) ? p.paths as string[] : []),
+            ...(Array.isArray(p.paths) ? (p.paths as string[]) : []),
           ].filter(Boolean);
           if (!candidatePaths.length) throw new AppCommandError('Provide path or paths');
           const deck = ctx.getDeck();
           const loadedSlides: Slide[] = [];
           let firstTitle = deck.title;
           for (const path of candidatePaths) {
-            const raw = await storage.read(path, { as: 'text' }) as unknown as string;
+            const raw = (await storage.read(path, { as: 'text' })) as unknown as string;
             const fallbackTitle =
               (path.split('/').pop() || path).replace(/\.[^/.]+$/, '') || 'Imported Deck';
             const parsed = parseDeckOrSlidesFromStorage(raw, fallbackTitle);
-            if (!firstTitle || firstTitle === 'Untitled Deck') firstTitle = parsed.title || firstTitle;
+            if (!firstTitle || firstTitle === 'Untitled Deck')
+              firstTitle = parsed.title || firstTitle;
             loadedSlides.push(...parsed.slides);
           }
           const mode = (p.mode as StorageMergeMode) || 'replace';
@@ -437,38 +459,52 @@ export function registerProtocol(ctx: ProtocolContext): void {
           ctx.bumpActiveIndex();
           return { mode, loaded: loadedSlides.length, paths: candidatePaths };
         },
-      },
-      readStorageFile: {
-        description: 'Read a single file from YAAR storage and return its content. Returns { path, as, content }.',
+      }),
+      readStorageFile: defineCommand({
+        description:
+          'Read a single file from YAAR storage and return its content. Returns { path, as, content }.',
         params: {
           type: 'object',
           properties: {
             path: { type: 'string', description: 'Storage path to read.' },
-            as: { type: 'string', enum: ['text', 'json', 'auto'], description: 'Read mode (default: "text").' },
+            as: {
+              type: 'string',
+              enum: ['text', 'json', 'auto'],
+              description: 'Read mode (default: "text").',
+            },
           },
           required: ['path'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
           const as = (p.as as StorageReadMode) || 'text';
-          const content = await storage.read(p.path as string, { as });
+          const content = await storage.read(p.path, { as });
           return { path: p.path, as, content };
         },
-      },
-      readStorageFiles: {
-        description: 'Read multiple files from YAAR storage. Returns { as, files: [{ path, content }] }.',
+      }),
+      readStorageFiles: defineCommand({
+        description:
+          'Read multiple files from YAAR storage. Returns { as, files: [{ path, content }] }.',
         params: {
           type: 'object',
           properties: {
-            paths: { type: 'array', items: { type: 'string' }, description: 'Storage paths to read.' },
-            as: { type: 'string', enum: ['text', 'json', 'auto'], description: 'Read mode (default: "text").' },
+            paths: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'Storage paths to read.',
+            },
+            as: {
+              type: 'string',
+              enum: ['text', 'json', 'auto'],
+              description: 'Read mode (default: "text").',
+            },
           },
           required: ['paths'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
           const as = (p.as as StorageReadMode) || 'text';
-          const paths = (Array.isArray(p.paths) ? p.paths as string[] : []).filter(Boolean);
+          const paths = (Array.isArray(p.paths) ? (p.paths as string[]) : []).filter(Boolean);
           const files = await Promise.all(
             paths.map(async (path) => ({
               path,
@@ -477,7 +513,7 @@ export function registerProtocol(ctx: ProtocolContext): void {
           );
           return { as, files };
         },
-      },
+      }),
     },
   });
 }

@@ -2,7 +2,7 @@
  * App Protocol registration for the Browser app.
  * Command handlers use the @bundled/yaar-web SDK for browser automation.
  */
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 
 export interface BrowserProtocolDeps {
@@ -34,7 +34,7 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
     if (creatingSession) return creatingSession;
 
     creatingSession = (async () => {
-      const result = await web.open('about:blank', { visible: false }) as { browserId?: string };
+      const result = (await web.open('about:blank', { visible: false })) as { browserId?: string };
       const newId = result?.browserId ?? '0';
       deps.setActiveBrowserId(newId);
       return newId;
@@ -61,11 +61,24 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         handler: () => ({
           state: ['currentUrl', 'pageTitle', 'browserId'],
           commands: [
-            'open', 'click', 'type', 'press', 'scroll',
-            'navigate_back', 'navigate_forward', 'hover', 'wait_for',
-            'screenshot', 'extract', 'extract_images', 'html',
-            'annotate', 'remove_annotations',
-            'refresh', 'clear', 'attach',
+            'open',
+            'click',
+            'type',
+            'press',
+            'scroll',
+            'navigate_back',
+            'navigate_forward',
+            'hover',
+            'wait_for',
+            'screenshot',
+            'extract',
+            'extract_images',
+            'html',
+            'annotate',
+            'remove_annotations',
+            'refresh',
+            'clear',
+            'attach',
           ],
         }),
       },
@@ -84,40 +97,41 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
     },
     commands: {
       // ── Navigation ──────────────────────────────────────────────────
-      open: {
+      open: defineCommand({
         description: 'Navigate to URL (auto-creates session if needed)',
         params: {
           type: 'object',
           properties: { url: { type: 'string' }, mobile: { type: 'boolean' } },
           required: ['url'],
         },
-        handler: async (p: { url: string; mobile?: boolean }) => {
-          return web.open(p.url, { ...await bid(), mobile: p.mobile, visible: false });
+        handler: async (p) => {
+          return web.open(p.url, { ...(await bid()), mobile: p.mobile, visible: false });
         },
-      },
-      navigate_back: {
+      }),
+      navigate_back: defineCommand({
         description: 'Go back in browser history',
         params: { type: 'object', properties: {} },
-        handler: async () => web.navigate({ direction: 'back', browserId: (await bid()).browserId }),
-      },
-      navigate_forward: {
+        handler: async () =>
+          web.navigate({ direction: 'back', browserId: (await bid()).browserId }),
+      }),
+      navigate_forward: defineCommand({
         description: 'Go forward in browser history',
         params: { type: 'object', properties: {} },
-        handler: async () => web.navigate({ direction: 'forward', browserId: (await bid()).browserId }),
-      },
-      scroll: {
+        handler: async () =>
+          web.navigate({ direction: 'forward', browserId: (await bid()).browserId }),
+      }),
+      scroll: defineCommand({
         description: 'Scroll the page',
         params: {
           type: 'object',
           properties: { direction: { type: 'string', enum: ['up', 'down'] } },
           required: ['direction'],
         },
-        handler: async (p: { direction: 'up' | 'down' }) =>
-          web.scroll({ ...p, ...await bid() }),
-      },
+        handler: async (p) => web.scroll({ ...p, ...(await bid()) }),
+      }),
 
       // ── Interaction ─────────────────────────────────────────────────
-      click: {
+      click: defineCommand({
         description: 'Click an element',
         params: {
           type: 'object',
@@ -129,35 +143,27 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
             index: { type: 'number' },
           },
         },
-        handler: async (p: {
-          selector?: string;
-          text?: string;
-          x?: number;
-          y?: number;
-          index?: number;
-        }) => web.click({ ...p, ...await bid() }),
-      },
-      type: {
+        handler: async (p) => web.click({ ...p, ...(await bid()) }),
+      }),
+      type: defineCommand({
         description: 'Type text into an element',
         params: {
           type: 'object',
           properties: { selector: { type: 'string' }, text: { type: 'string' } },
           required: ['selector', 'text'],
         },
-        handler: async (p: { selector: string; text: string }) =>
-          web.type({ ...p, ...await bid() }),
-      },
-      press: {
+        handler: async (p) => web.type({ ...p, ...(await bid()) }),
+      }),
+      press: defineCommand({
         description: 'Press a key',
         params: {
           type: 'object',
           properties: { key: { type: 'string' }, selector: { type: 'string' } },
           required: ['key'],
         },
-        handler: async (p: { key: string; selector?: string }) =>
-          web.press({ ...p, ...await bid() }),
-      },
-      hover: {
+        handler: async (p) => web.press({ ...p, ...(await bid()) }),
+      }),
+      hover: defineCommand({
         description: 'Hover over an element',
         params: {
           type: 'object',
@@ -168,26 +174,20 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
             y: { type: 'number' },
           },
         },
-        handler: async (p: {
-          selector?: string;
-          text?: string;
-          x?: number;
-          y?: number;
-        }) => web.hover({ ...p, ...await bid() }),
-      },
+        handler: async (p) => web.hover({ ...p, ...(await bid()) }),
+      }),
 
       // ── Observation ─────────────────────────────────────────────────
-      wait_for: {
+      wait_for: defineCommand({
         description: 'Wait for a selector to appear',
         params: {
           type: 'object',
           properties: { selector: { type: 'string' }, timeout: { type: 'number' } },
           required: ['selector'],
         },
-        handler: async (p: { selector: string; timeout?: number }) =>
-          web.waitFor({ ...p, ...await bid() }),
-      },
-      screenshot: {
+        handler: async (p) => web.waitFor({ ...p, ...(await bid()) }),
+      }),
+      screenshot: defineCommand({
         description: 'Take a screenshot',
         params: {
           type: 'object',
@@ -198,13 +198,8 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
             y1: { type: 'number' },
           },
         },
-        handler: async (p?: {
-          x0?: number;
-          y0?: number;
-          x1?: number;
-          y1?: number;
-        }) => {
-          const result = await web.screenshot({ ...p, ...await bid() }) as {
+        handler: async (p) => {
+          const result = (await web.screenshot({ ...p, ...(await bid()) })) as {
             ok: boolean;
             text?: string;
             images?: Array<{ data: string; mimeType?: string }>;
@@ -220,8 +215,8 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
             })),
           ];
         },
-      },
-      extract: {
+      }),
+      extract: defineCommand({
         description: 'Extract page text, links, and forms',
         params: {
           type: 'object',
@@ -232,14 +227,9 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
             maxLinks: { type: 'number' },
           },
         },
-        handler: async (p?: {
-          selector?: string;
-          mainContentOnly?: boolean;
-          maxTextLength?: number;
-          maxLinks?: number;
-        }) => web.extract({ ...p, ...await bid() }),
-      },
-      extract_images: {
+        handler: async (p) => web.extract({ ...p, ...(await bid()) }),
+      }),
+      extract_images: defineCommand({
         description: 'Extract images with data URLs. Filter by size or extension.',
         params: {
           type: 'object',
@@ -255,68 +245,61 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
             },
           },
         },
-        handler: async (p?: {
-          selector?: string;
-          mainContentOnly?: boolean;
-          minWidth?: number;
-          minHeight?: number;
-          extensions?: string[];
-        }) => web.extractImages({ ...p, ...await bid() }),
-      },
-      html: {
+        handler: async (p) => web.extractImages({ ...p, ...(await bid()) }),
+      }),
+      html: defineCommand({
         description: 'Get raw innerHTML',
         params: {
           type: 'object',
           properties: { selector: { type: 'string' } },
         },
-        handler: async (p?: { selector?: string }) =>
-          web.html({ ...p, ...await bid() }),
-      },
+        handler: async (p) => web.html({ ...p, ...(await bid()) }),
+      }),
 
       // ── Visual ──────────────────────────────────────────────────────
-      annotate: {
+      annotate: defineCommand({
         description: 'Show numbered badges on interactive elements',
         params: { type: 'object', properties: {} },
         handler: async () => web.annotate((await bid()).browserId),
-      },
-      remove_annotations: {
+      }),
+      remove_annotations: defineCommand({
         description: 'Remove annotation badges',
         params: { type: 'object', properties: {} },
         handler: async () => web.removeAnnotations((await bid()).browserId),
-      },
+      }),
 
       // ── UI Controls (local, no verb call) ───────────────────────────
-      refresh: {
+      refresh: defineCommand({
         description: 'Refresh screenshot and optionally update URL bar',
         params: {
           type: 'object',
           properties: { url: { type: 'string' }, title: { type: 'string' } },
         },
-        handler: (p?: { url?: string; title?: string }) => {
+        handler: (p) => {
           if (p?.url) deps.updateUrlBar(p.url, p.title);
           deps.refreshScreenshot();
           return { currentUrl: deps.getCurrentUrl() };
         },
-      },
-      clear: {
+      }),
+      clear: defineCommand({
         description: 'Clear the browser display',
         params: { type: 'object', properties: {} },
         handler: () => {
           deps.clearDisplay();
         },
-      },
-      attach: {
+      }),
+      attach: defineCommand({
         description: 'Switch to a different browser by ID',
         params: {
           type: 'object',
           properties: { browserId: { type: 'string' } },
           required: ['browserId'],
         },
-        handler: (p: { browserId: string }) => {
+        handler: (p) => {
           deps.attach(p.browserId);
           return { browserId: p.browserId };
         },
-      },
+      }),
     },
   });
 }

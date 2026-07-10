@@ -13,7 +13,7 @@
  * (tab-control consent for click/type/scroll/navigate, content-read for extract/screenshot) — the
  * user's "Allow use" button pre-grants both, so a granted tab drives without further prompts.
  */
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import { tabs, connected, activeTab, pollOnce } from './store';
 import * as bridge from './bridge';
 
@@ -82,8 +82,7 @@ export function registerBrowserUserProtocol(): void {
           'A native alert/confirm/prompt fired on a driven tab. Payload: { kind, message, tabId? }.',
       },
       navigated: {
-        description:
-          'A driven tab finished loading a new URL. Payload: { tabId, url, title? }.',
+        description: 'A driven tab finished loading a new URL. Payload: { tabId, url, title? }.',
       },
     },
     state: {
@@ -123,16 +122,16 @@ export function registerBrowserUserProtocol(): void {
       },
     },
     commands: {
-      focus: {
+      focus: defineCommand({
         description: 'Focus (activate) a real browser tab by its id',
         params: {
           type: 'object',
           properties: { tabId: { type: 'number' } },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number }) => unwrap(bridge.focus(p.tabId)),
-      },
-      close: {
+        handler: (p) => unwrap(bridge.focus(p.tabId)),
+      }),
+      close: defineCommand({
         description:
           "Close a real browser tab. Refused for YAAR's own tab; may prompt per-origin consent for logged-in sites.",
         params: {
@@ -140,9 +139,9 @@ export function registerBrowserUserProtocol(): void {
           properties: { tabId: { type: 'number' } },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number }) => unwrap(bridge.close(p.tabId)),
-      },
-      group: {
+        handler: (p) => unwrap(bridge.close(p.tabId)),
+      }),
+      group: defineCommand({
         description:
           'Group real browser tabs together, optionally under a title. May prompt per-origin consent.',
         params: {
@@ -154,10 +153,9 @@ export function registerBrowserUserProtocol(): void {
           },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number; tabIds?: number[]; groupTitle?: string }) =>
-          unwrap(bridge.group(p.tabId, p.tabIds, p.groupTitle)),
-      },
-      move: {
+        handler: (p) => unwrap(bridge.group(p.tabId, p.tabIds, p.groupTitle)),
+      }),
+      move: defineCommand({
         description:
           'Move a real browser tab to a new index and/or window. May prompt per-origin consent.',
         params: {
@@ -169,19 +167,18 @@ export function registerBrowserUserProtocol(): void {
           },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number; index?: number; windowId?: number }) =>
-          unwrap(bridge.move(p.tabId, p.index, p.windowId)),
-      },
-      track: {
+        handler: (p) => unwrap(bridge.move(p.tabId, p.index, p.windowId)),
+      }),
+      track: defineCommand({
         description: 'Show a tracking cursor / highlight on a real browser tab',
         params: {
           type: 'object',
           properties: { tabId: { type: 'number' } },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number }) => unwrap(bridge.track(p.tabId)),
-      },
-      extract: {
+        handler: (p) => unwrap(bridge.track(p.tabId)),
+      }),
+      extract: defineCommand({
         description:
           'Extract the visible page text from a real browser tab. May prompt per-origin consent. maxChars caps the returned text.',
         params: {
@@ -192,10 +189,9 @@ export function registerBrowserUserProtocol(): void {
           },
           required: ['tabId'],
         },
-        handler: (p: { tabId: number; maxChars?: number }) =>
-          unwrap(bridge.extract(p.tabId, p.maxChars)),
-      },
-      screenshot: {
+        handler: (p) => unwrap(bridge.extract(p.tabId, p.maxChars)),
+      }),
+      screenshot: defineCommand({
         description:
           'Capture a WebP screenshot of a real tab and return it as an image the agent can see. ' +
           'The tab must be focused first (see `focus`). May prompt per-origin content consent.',
@@ -206,12 +202,12 @@ export function registerBrowserUserProtocol(): void {
         },
         // Return an MCP image content block (not the raw data-URL object) so the agent actually
         // *sees* the pixels via vision, instead of receiving a giant opaque base64 string as text.
-        handler: async (p: { tabId: number }) => {
+        handler: async (p) => {
           const shot = await unwrap(bridge.screenshot(p.tabId));
           return shotToBlocks(shot, `Screenshot of "${shot.title}" — ${shot.url}`);
         },
-      },
-      click: {
+      }),
+      click: defineCommand({
         description:
           'Click the element matching a CSS selector in a real tab. Set screenshot=true to get an ' +
           'image of the resulting page back (best-effort; the tab must be focused). May prompt ' +
@@ -225,10 +221,10 @@ export function registerBrowserUserProtocol(): void {
           },
           required: ['tabId', 'selector'],
         },
-        handler: async (p: { tabId: number; selector: string; screenshot?: boolean }) =>
+        handler: async (p) =>
           withOptionalShot(p.tabId, p.screenshot, await unwrap(bridge.click(p.tabId, p.selector))),
-      },
-      type: {
+      }),
+      type: defineCommand({
         description:
           'Type text into the field matching a CSS selector in a real tab; set submit=true to press ' +
           'Enter / submit the form. Set screenshot=true to get an image of the result back ' +
@@ -244,20 +240,14 @@ export function registerBrowserUserProtocol(): void {
           },
           required: ['tabId', 'selector', 'text'],
         },
-        handler: async (p: {
-          tabId: number;
-          selector: string;
-          text: string;
-          submit?: boolean;
-          screenshot?: boolean;
-        }) =>
+        handler: async (p) =>
           withOptionalShot(
             p.tabId,
             p.screenshot,
             await unwrap(bridge.typeText(p.tabId, p.selector, p.text, p.submit)),
           ),
-      },
-      scroll: {
+      }),
+      scroll: defineCommand({
         description:
           'Scroll a real tab — into view of `selector`, to absolute `top`, or by `deltaY` pixels ' +
           '(default 600). Set screenshot=true to get an image of the result back (best-effort). ' +
@@ -273,13 +263,7 @@ export function registerBrowserUserProtocol(): void {
           },
           required: ['tabId'],
         },
-        handler: async (p: {
-          tabId: number;
-          selector?: string;
-          deltaY?: number;
-          top?: number;
-          screenshot?: boolean;
-        }) =>
+        handler: async (p) =>
           withOptionalShot(
             p.tabId,
             p.screenshot,
@@ -287,8 +271,8 @@ export function registerBrowserUserProtocol(): void {
               bridge.scroll(p.tabId, { selector: p.selector, deltaY: p.deltaY, top: p.top }),
             ),
           ),
-      },
-      navigate: {
+      }),
+      navigate: defineCommand({
         description:
           'Load a URL in a real tab. May prompt per-origin tab-control consent (for the current origin).',
         params: {
@@ -296,13 +280,13 @@ export function registerBrowserUserProtocol(): void {
           properties: { tabId: { type: 'number' }, url: { type: 'string' } },
           required: ['tabId', 'url'],
         },
-        handler: (p: { tabId: number; url: string }) => unwrap(bridge.navigate(p.tabId, p.url)),
-      },
-      refresh: {
+        handler: (p) => unwrap(bridge.navigate(p.tabId, p.url)),
+      }),
+      refresh: defineCommand({
         description: 'Force an immediate re-poll of the real tab list and return it',
         params: { type: 'object', properties: {} },
         handler: () => pollOnce(),
-      },
+      }),
     },
   });
 }

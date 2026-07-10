@@ -138,6 +138,20 @@ export const app = y.app;
 export const notifications = y.notifications;
 export const windows = y.windows;
 
+// ── App Protocol descriptor builders ─────────────────────────────
+
+/**
+ * Identity at runtime — the descriptor is passed to `app.register()` untouched.
+ * All the work happens in the type declarations (`bundled-types/index.d.ts`),
+ * which infer the handler's parameter type from the `params` JSON Schema.
+ *
+ * Keep the call shape `defineCommand({ ... })`: the build-time protocol
+ * extractor recognises a bare identifier wrapping the descriptor literal, and
+ * anything fancier (a computed callee, a spread descriptor) will make it skip
+ * the command.
+ */
+export const defineCommand = <T>(descriptor: T): T => descriptor;
+
 // ── Utilities ───────────────────────────────────────────────────
 
 /** Returns a promise that resolves after `ms` milliseconds. */

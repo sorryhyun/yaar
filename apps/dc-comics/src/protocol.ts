@@ -1,5 +1,5 @@
 import { state } from './store';
-import { app, AppCommandError } from '@bundled/yaar';
+import { app, AppCommandError, defineCommand } from '@bundled/yaar';
 import {
   doRefresh,
   setTab,
@@ -72,15 +72,15 @@ export function registerProtocol() {
       },
     },
     commands: {
-      refresh: {
+      refresh: defineCommand({
         description: '현재 탭/페이지의 글 목록을 새로고침합니다.',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await doRefresh();
           return { ok: true, postCount: state.posts.length };
         },
-      },
-      setTab: {
+      }),
+      setTab: defineCommand({
         description: "피드 탭을 전환합니다. mode는 'all'(전체글) 또는 'recommend'(개념글).",
         params: {
           type: 'object',
@@ -89,7 +89,7 @@ export function registerProtocol() {
           },
           required: ['mode'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           const mode = p.mode;
           if (mode !== 'all' && mode !== 'recommend') {
             throw new AppCommandError("mode는 'all' 또는 'recommend'여야 합니다");
@@ -97,8 +97,8 @@ export function registerProtocol() {
           setTab(mode);
           return { ok: true, tab: mode };
         },
-      },
-      selectPost: {
+      }),
+      selectPost: defineCommand({
         description:
           '현재 목록에서 글 번호(num)로 게시물을 선택해 본문과 댓글을 불러옵니다. 목록에 없는 번호면 에러를 던집니다.',
         params: {
@@ -108,7 +108,7 @@ export function registerProtocol() {
           },
           required: ['num'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const num = String(p.num ?? '').trim();
           if (!num) throw new AppCommandError('게시물 번호가 비어 있습니다');
           const post = state.posts.find((x) => x.num === num);
@@ -116,8 +116,8 @@ export function registerProtocol() {
           await selectPost(post);
           return { ok: true, num, title: post.title, commentCount: state.comments.length };
         },
-      },
-      subscribeSeries: {
+      }),
+      subscribeSeries: defineCommand({
         description: '시리즈를 구독합니다. title(시리즈 제목)과 url(시리즈 목록 URL)이 필요합니다.',
         params: {
           type: 'object',
@@ -127,7 +127,7 @@ export function registerProtocol() {
           },
           required: ['title', 'url'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const title = typeof p.title === 'string' ? p.title.trim() : '';
           const url = typeof p.url === 'string' ? p.url.trim() : '';
           if (!title) throw new AppCommandError('제목이 비어 있습니다');
@@ -135,8 +135,8 @@ export function registerProtocol() {
           await subscribeSeries({ title, url });
           return { ok: true, count: state.subscriptions.length };
         },
-      },
-      unsubscribeSeries: {
+      }),
+      unsubscribeSeries: defineCommand({
         description: '구독 중인 시리즈를 id로 구독 취소합니다.',
         params: {
           type: 'object',
@@ -145,14 +145,14 @@ export function registerProtocol() {
           },
           required: ['id'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const id = String(p.id ?? '').trim();
           if (!id) throw new AppCommandError('구독 id가 비어 있습니다');
           await unsubscribeSeries(id);
           return { ok: true, count: state.subscriptions.length };
         },
-      },
-      refreshSubscriptions: {
+      }),
+      refreshSubscriptions: defineCommand({
         description: '구독 중인 모든 시리즈의 새 글을 확인하고 안 읽은 수를 갱신합니다.',
         params: { type: 'object', properties: {} },
         handler: async () => {
@@ -160,7 +160,7 @@ export function registerProtocol() {
           const totalUnread = state.subscriptions.reduce((a, s) => a + s.unreadCount, 0);
           return { ok: true, totalUnread };
         },
-      },
+      }),
     },
   });
 }

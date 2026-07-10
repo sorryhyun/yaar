@@ -1,5 +1,5 @@
 export {};
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 import { state } from './state';
 import { basename, sanitizeAlias } from './helpers';
 import { navigate, selectFile } from './navigation';
@@ -39,33 +39,33 @@ export function registerProtocol() {
       },
     },
     commands: {
-      navigate: {
+      navigate: defineCommand({
         description: 'Navigate to a directory path',
         params: {
           type: 'object',
           properties: { path: { type: 'string', description: 'Directory path to navigate to' } },
           required: ['path'],
         },
-        handler: (params: Record<string, unknown>) => {
+        handler: (params) => {
           navigate(String(params.path));
           return { success: true, path: params.path };
         },
-      },
-      'select-file': {
+      }),
+      'select-file': defineCommand({
         description: 'Select and preview a file',
         params: {
           type: 'object',
           properties: { path: { type: 'string', description: 'File path to select' } },
           required: ['path'],
         },
-        handler: (params: Record<string, unknown>) => {
+        handler: (params) => {
           const entry = state.entries.find((e) => e.path === params.path);
           if (!entry || entry.isDirectory) return { success: false, error: 'File not found' };
           selectFile(entry);
           return { success: true };
         },
-      },
-      'request-mount': {
+      }),
+      'request-mount': defineCommand({
         description: 'Send a mount request for the agent to execute with host permission',
         params: {
           type: 'object',
@@ -76,7 +76,7 @@ export function registerProtocol() {
           },
           required: ['alias', 'hostPath'],
         },
-        handler: (params: Record<string, unknown>) => {
+        handler: (params) => {
           if (!app?.sendInteraction) return { success: false, error: 'Agent bridge unavailable' };
           app.sendInteraction({
             event: 'storage_mount_request',
@@ -87,15 +87,15 @@ export function registerProtocol() {
           });
           return { success: true };
         },
-      },
-      refresh: {
+      }),
+      refresh: defineCommand({
         description: 'Refresh the current directory listing',
         params: { type: 'object', properties: {} },
         handler: () => {
           navigate(state.currentPath);
           return { success: true };
         },
-      },
+      }),
     },
   });
 }

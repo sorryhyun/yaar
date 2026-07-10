@@ -1,11 +1,16 @@
-import { app, AppCommandError, errMsg } from '@bundled/yaar';
+import { app, AppCommandError, defineCommand, errMsg } from '@bundled/yaar';
 import { state, hasToken } from './store';
 
 function guard<T>(fn: () => Promise<T>): Promise<T> {
-  return fn().catch((e) => { throw new AppCommandError(errMsg(e)); });
+  return fn().catch((e) => {
+    throw new AppCommandError(errMsg(e));
+  });
 }
 import {
-  setRepoAction, refreshAll, createIssueAction, commentIssueAction,
+  setRepoAction,
+  refreshAll,
+  createIssueAction,
+  commentIssueAction,
   setIssueStateAction,
 } from './actions';
 import { startDeviceLogin, signOut } from './auth';
@@ -66,7 +71,11 @@ export function registerAppProtocol(): void {
             labels: i.labels.map((l) => l.name),
             author: i.user?.login,
             url: i.html_url,
-            comments: state.activeIssueComments.map((c) => ({ author: c.user?.login, body: c.body, created_at: c.created_at })),
+            comments: state.activeIssueComments.map((c) => ({
+              author: c.user?.login,
+              body: c.body,
+              created_at: c.created_at,
+            })),
           };
         },
       },
@@ -76,14 +85,19 @@ export function registerAppProtocol(): void {
       },
       releases: {
         description: 'Loaded releases with tag, notes and assets',
-        handler: () => state.releases.map((r) => ({
-          tag: r.tag_name,
-          name: r.name,
-          published_at: r.published_at,
-          prerelease: r.prerelease,
-          url: r.html_url,
-          assets: r.assets.map((a) => ({ name: a.name, url: a.browser_download_url, downloads: a.download_count })),
-        })),
+        handler: () =>
+          state.releases.map((r) => ({
+            tag: r.tag_name,
+            name: r.name,
+            published_at: r.published_at,
+            prerelease: r.prerelease,
+            url: r.html_url,
+            assets: r.assets.map((a) => ({
+              name: a.name,
+              url: a.browser_download_url,
+              downloads: a.download_count,
+            })),
+          })),
       },
       rateLimit: {
         description: 'GitHub API rate-limit info from the last response',
@@ -91,78 +105,96 @@ export function registerAppProtocol(): void {
       },
     },
     commands: {
-      setRepo: {
+      setRepo: defineCommand({
         description: 'Switch the active repository and persist it',
         params: {
           type: 'object',
           properties: { owner: { type: 'string' }, name: { type: 'string' } },
           required: ['owner', 'name'],
         },
-        handler: (p: Record<string, unknown>) => guard(async () => {
-          await setRepoAction(String(p.owner), String(p.name));
-          return { repo: `${state.repo.owner}/${state.repo.name}` };
-        }),
-      },
-      refresh: {
+        handler: (p) =>
+          guard(async () => {
+            await setRepoAction(String(p.owner), String(p.name));
+            return { repo: `${state.repo.owner}/${state.repo.name}` };
+          }),
+      }),
+      refresh: defineCommand({
         description: 'Reload data for the current section',
         params: { type: 'object', properties: {} },
-        handler: () => guard(async () => { await refreshAll(); return { ok: true }; }),
-      },
-      createIssue: {
+        handler: () =>
+          guard(async () => {
+            await refreshAll();
+            return { ok: true };
+          }),
+      }),
+      createIssue: defineCommand({
         description: 'Create a new issue (requires sign-in)',
         params: {
           type: 'object',
           properties: { title: { type: 'string' }, body: { type: 'string' } },
           required: ['title'],
         },
-        handler: (p: Record<string, unknown>) => guard(() => createIssueAction(String(p.title), String(p.body || ''))),
-      },
-      commentIssue: {
+        handler: (p) => guard(() => createIssueAction(String(p.title), String(p.body || ''))),
+      }),
+      commentIssue: defineCommand({
         description: 'Add a comment to an issue (requires sign-in)',
         params: {
           type: 'object',
           properties: { number: { type: 'number' }, body: { type: 'string' } },
           required: ['number', 'body'],
         },
-        handler: (p: Record<string, unknown>) => guard(async () => {
-          await commentIssueAction(Number(p.number), String(p.body));
-          return { ok: true };
-        }),
-      },
-      closeIssue: {
+        handler: (p) =>
+          guard(async () => {
+            await commentIssueAction(Number(p.number), String(p.body));
+            return { ok: true };
+          }),
+      }),
+      closeIssue: defineCommand({
         description: 'Close an issue (requires sign-in)',
-        params: { type: 'object', properties: { number: { type: 'number' } }, required: ['number'] },
-        handler: (p: Record<string, unknown>) => guard(async () => {
-          await setIssueStateAction(Number(p.number), 'closed');
-          return { ok: true };
-        }),
-      },
-      reopenIssue: {
+        params: {
+          type: 'object',
+          properties: { number: { type: 'number' } },
+          required: ['number'],
+        },
+        handler: (p) =>
+          guard(async () => {
+            await setIssueStateAction(Number(p.number), 'closed');
+            return { ok: true };
+          }),
+      }),
+      reopenIssue: defineCommand({
         description: 'Reopen a closed issue (requires sign-in)',
-        params: { type: 'object', properties: { number: { type: 'number' } }, required: ['number'] },
-        handler: (p: Record<string, unknown>) => guard(async () => {
-          await setIssueStateAction(Number(p.number), 'open');
-          return { ok: true };
-        }),
-      },
-      signIn: {
+        params: {
+          type: 'object',
+          properties: { number: { type: 'number' } },
+          required: ['number'],
+        },
+        handler: (p) =>
+          guard(async () => {
+            await setIssueStateAction(Number(p.number), 'open');
+            return { ok: true };
+          }),
+      }),
+      signIn: defineCommand({
         description:
           'Start GitHub sign-in via the OAuth device flow. Returns a userCode and verificationUri — ' +
           'tell the user to open the URL and enter the code; the app completes sign-in once they authorize.',
         params: { type: 'object', properties: {} },
-        handler: () => guard(async () => {
-          const { userCode, verificationUri } = await startDeviceLogin();
-          return { userCode, verificationUri };
-        }),
-      },
-      signOut: {
+        handler: () =>
+          guard(async () => {
+            const { userCode, verificationUri } = await startDeviceLogin();
+            return { userCode, verificationUri };
+          }),
+      }),
+      signOut: defineCommand({
         description: 'Sign out of GitHub and clear the stored token',
         params: { type: 'object', properties: {} },
-        handler: () => guard(async () => {
-          await signOut();
-          return { signedIn: hasToken() };
-        }),
-      },
+        handler: () =>
+          guard(async () => {
+            await signOut();
+            return { signedIn: hasToken() };
+          }),
+      }),
     },
   });
 }

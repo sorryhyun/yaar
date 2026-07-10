@@ -1,4 +1,4 @@
-import { app, storage, windows, AppCommandError } from '@bundled/yaar';
+import { app, storage, windows, AppCommandError, defineCommand } from '@bundled/yaar';
 import { countTextStats, nowLabel, textToHtml } from './utils';
 import { editorEl, docTitleEl, saveStateText, setSaveStateText } from './state';
 import { refreshStats } from './editor';
@@ -59,8 +59,9 @@ export function registerAppProtocol() {
       },
     },
     commands: {
-      setContent: {
-        description: 'Replace document content. Params: { content: string, renderer?: "html"|"text" }',
+      setContent: defineCommand({
+        description:
+          'Replace document content. Params: { content: string, renderer?: "html"|"text" }',
         params: {
           type: 'object',
           properties: {
@@ -69,31 +70,32 @@ export function registerAppProtocol() {
           },
           required: ['content'],
         },
-        handler: (p: Record<string, unknown>) => {
-          if (((p.renderer as string) ?? 'html') === 'text') {
-            setEditorFromPlainText((p.content as string) || '');
+        handler: (p) => {
+          if ((p.renderer ?? 'html') === 'text') {
+            setEditorFromPlainText(p.content || '');
           } else {
-            setEditorFromHtml((p.content as string) || '<p></p>');
+            setEditorFromHtml(p.content || '<p></p>');
           }
           setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
         },
-      },
-      setTitle: {
+      }),
+      setTitle: defineCommand({
         description: 'Update document title. Params: { title: string }',
         params: {
           type: 'object',
           properties: { title: { type: 'string' } },
           required: ['title'],
         },
-        handler: (p: Record<string, unknown>) => {
-          docTitleEl.value = ((p.title as string) || '').trim() || 'Untitled Document';
+        handler: (p) => {
+          docTitleEl.value = (p.title || '').trim() || 'Untitled Document';
           setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
         },
-      },
-      appendContent: {
-        description: 'Append content to the end of the document. Params: { content: string, renderer?: "html"|"text" }',
+      }),
+      appendContent: defineCommand({
+        description:
+          'Append content to the end of the document. Params: { content: string, renderer?: "html"|"text" }',
         params: {
           type: 'object',
           properties: {
@@ -102,67 +104,71 @@ export function registerAppProtocol() {
           },
           required: ['content'],
         },
-        handler: (p: Record<string, unknown>) => {
-          if (((p.renderer as string) ?? 'html') === 'text') {
+        handler: (p) => {
+          if ((p.renderer ?? 'html') === 'text') {
             const para = document.createElement('p');
-            para.innerHTML = textToHtml((p.content as string) || '');
+            para.innerHTML = textToHtml(p.content || '');
             editorEl.appendChild(para);
             refreshStats();
           } else {
-            appendHtmlFragment((p.content as string) || '');
+            appendHtmlFragment(p.content || '');
           }
           setSaveStateText(UPDATED_VIA_PROTOCOL);
           saveDoc();
         },
-      },
-      setDocuments: {
-        description: 'Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
+      }),
+      setDocuments: defineCommand({
+        description:
+          'Replace the editor with multiple documents at once. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
         params: {
           type: 'object',
           properties: { docs: docsParamSchema },
           required: ['docs'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           const docs = Array.isArray(p.docs) ? (p.docs as BatchDocInput[]) : [];
           setEditorFromHtml(docsToMergedHtml(docs));
           setSaveStateText(`Loaded ${docs.length} document(s) via app protocol`);
           saveDoc();
           return { count: docs.length };
         },
-      },
-      appendDocuments: {
-        description: 'Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
+      }),
+      appendDocuments: defineCommand({
+        description:
+          'Append multiple documents to the current editor. Params: { docs: Array<{ title?: string, text?: string, html?: string }> }',
         params: {
           type: 'object',
           properties: { docs: docsParamSchema },
           required: ['docs'],
         },
-        handler: (p: Record<string, unknown>) => {
+        handler: (p) => {
           const docs = Array.isArray(p.docs) ? (p.docs as BatchDocInput[]) : [];
           appendHtmlFragment(docsToMergedHtml(docs));
           setSaveStateText(`Appended ${docs.length} document(s) via app protocol`);
           saveDoc();
           return { count: docs.length };
         },
-      },
-      saveToStorage: {
-        description: 'Save the current document to YAAR persistent storage. Params: { path: string } — e.g. "docs/my-doc.html"',
+      }),
+      saveToStorage: defineCommand({
+        description:
+          'Save the current document to YAAR persistent storage. Params: { path: string } — e.g. "docs/my-doc.html"',
         params: {
           type: 'object',
           properties: { path: { type: 'string' } },
           required: ['path'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
           const title = getTitle();
           const htmlContent = `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title></head><body>${editorEl.innerHTML}</body></html>`;
-          await storage.save(p.path as string, htmlContent);
+          await storage.save(p.path, htmlContent);
           setSaveStateText(`Saved to storage: ${p.path}`);
           return { path: p.path, savedAt: nowLabel() };
         },
-      },
-      loadFromStorage: {
-        description: 'Load one or many documents from YAAR storage. Params: { path?: string, paths?: string[], mode?: "replace"|"append" }',
+      }),
+      loadFromStorage: defineCommand({
+        description:
+          'Load one or many documents from YAAR storage. Params: { path?: string, paths?: string[], mode?: "replace"|"append" }',
         params: {
           type: 'object',
           properties: {
@@ -171,12 +177,12 @@ export function registerAppProtocol() {
             mode: { type: 'string', enum: ['replace', 'append'] },
           },
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
 
           const candidatePaths = [
-            ...(p.path ? [p.path as string] : []),
-            ...(Array.isArray(p.paths) ? (p.paths as string[]) : []),
+            ...(p.path ? [p.path] : []),
+            ...(Array.isArray(p.paths) ? p.paths : []),
           ].filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
 
           if (!candidatePaths.length) {
@@ -185,14 +191,16 @@ export function registerAppProtocol() {
 
           const loadedDocs: BatchDocInput[] = [];
           for (const path of candidatePaths) {
-            const raw = await storage.read(path, { as: 'text' as StorageReadAs }) as unknown as string;
+            const raw = (await storage.read(path, {
+              as: 'text' as StorageReadAs,
+            })) as unknown as string;
             const body = extractBodyHtml(raw);
             const filename = path.split('/').pop() || path;
             const title = filename.replace(/\.[^/.]+$/, '') || 'Untitled Document';
             loadedDocs.push({ title, html: body });
           }
 
-          const mode = (p.mode as string) || 'replace';
+          const mode = p.mode || 'replace';
           const merged = docsToMergedHtml(loadedDocs);
           if (mode === 'append') {
             appendHtmlFragment(merged);
@@ -204,9 +212,10 @@ export function registerAppProtocol() {
           saveDoc();
           return { count: loadedDocs.length, paths: candidatePaths, mode };
         },
-      },
-      readStorageFile: {
-        description: 'Read one file from YAAR storage without mutating the editor. Params: { path: string, as?: "text"|"json"|"auto" }',
+      }),
+      readStorageFile: defineCommand({
+        description:
+          'Read one file from YAAR storage without mutating the editor. Params: { path: string, as?: "text"|"json"|"auto" }',
         params: {
           type: 'object',
           properties: {
@@ -215,15 +224,16 @@ export function registerAppProtocol() {
           },
           required: ['path'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
-          const readAs = ((p.as as string) || 'text') as StorageReadAs;
-          const content = await storage.read(p.path as string, { as: readAs });
+          const readAs = (p.as || 'text') as StorageReadAs;
+          const content = await storage.read(p.path, { as: readAs });
           return { path: p.path, as: readAs, content };
         },
-      },
-      readStorageFiles: {
-        description: 'Read multiple files from YAAR storage without mutating the editor. Params: { paths: string[], as?: "text"|"json"|"auto" }',
+      }),
+      readStorageFiles: defineCommand({
+        description:
+          'Read multiple files from YAAR storage without mutating the editor. Params: { paths: string[], as?: "text"|"json"|"auto" }',
         params: {
           type: 'object',
           properties: {
@@ -232,13 +242,13 @@ export function registerAppProtocol() {
           },
           required: ['paths'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!storage) throw new AppCommandError('Storage API not available');
 
-          const paths = (Array.isArray(p.paths) ? (p.paths as string[]) : []).filter(
+          const paths = (Array.isArray(p.paths) ? p.paths : []).filter(
             (v): v is string => typeof v === 'string' && v.trim().length > 0,
           );
-          const readAs = ((p.as as string) || 'text') as StorageReadAs;
+          const readAs = (p.as || 'text') as StorageReadAs;
 
           const files = await Promise.all(
             paths.map(async (path) => ({
@@ -249,8 +259,8 @@ export function registerAppProtocol() {
 
           return { as: readAs, files };
         },
-      },
-      newDocument: {
+      }),
+      newDocument: defineCommand({
         description: 'Clear current document to a blank paragraph. Params: {}',
         params: { type: 'object', properties: {} },
         handler: () => {
@@ -259,17 +269,18 @@ export function registerAppProtocol() {
           refreshStats();
           setSaveStateText('Unsaved new document');
         },
-      },
-      saveDraft: {
+      }),
+      saveDraft: defineCommand({
         description: 'Save current document to local draft storage. Params: {}',
         params: { type: 'object', properties: {} },
         handler: () => {
           saveDoc();
           return { savedAt: nowLabel() };
         },
-      },
-      importFromWindow: {
-        description: 'Import content from another open window into this document. Params: { windowId: string, mode?: "replace"|"append", includeImage?: boolean }',
+      }),
+      importFromWindow: defineCommand({
+        description:
+          'Import content from another open window into this document. Params: { windowId: string, mode?: "replace"|"append", includeImage?: boolean }',
         params: {
           type: 'object',
           properties: {
@@ -279,13 +290,16 @@ export function registerAppProtocol() {
           },
           required: ['windowId'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           if (!windows) throw new AppCommandError('yaar.windows API not available');
 
-          const result = await (windows as any).read(p.windowId as string, { includeImage: (p.includeImage as boolean) ?? false });
-          if (!result) throw new AppCommandError(`Window "${p.windowId}" not found or returned no data`);
+          const result = await (windows as any).read(p.windowId, {
+            includeImage: p.includeImage ?? false,
+          });
+          if (!result)
+            throw new AppCommandError(`Window "${p.windowId}" not found or returned no data`);
 
-          const mode = (p.mode as string) ?? 'append';
+          const mode = p.mode ?? 'append';
           let html = '';
 
           if (result.content) {
@@ -308,7 +322,7 @@ export function registerAppProtocol() {
           saveDoc();
           return { windowId: p.windowId, mode, hasImage: !!(p.includeImage && result.image) };
         },
-      },
+      }),
     },
   });
 }

@@ -1,10 +1,20 @@
-import type { ImageItem, LayoutMode, RawImageInput } from './types';
+import type { ImageItem, RawImageInput } from './types';
 import {
-  images, selectedIds, setSelectedIds,
-  mode, setMode, columns, setColumns, setStatus,
-  setImages, normalizeInputImage, loadStoragePaths, loadAllStorageImages,
+  images,
+  selectedIds,
+  setSelectedIds,
+  mode,
+  setMode,
+  columns,
+  setColumns,
+  setStatus,
+  setImages,
+  normalizeInputImage,
+  loadStoragePaths,
+  loadAllStorageImages,
 } from './store';
 import { makeStatusText, clampColumns } from './helpers';
+import { defineCommand } from '@bundled/yaar';
 
 type AppApi = {
   register: (manifest: unknown) => void;
@@ -52,15 +62,23 @@ export function setupProtocol(appApi: AppApi): void {
     commands: {
       setImages: {
         description: 'Replace images with a new set. Accepts URL/dataUrl/path+url.',
-        params: { type: 'object', properties: { images: IMAGE_ITEMS_SCHEMA }, required: ['images'] },
+        params: {
+          type: 'object',
+          properties: { images: IMAGE_ITEMS_SCHEMA },
+          required: ['images'],
+        },
         handler: (p: { images: RawImageInput[] }) => processImages(p.images, true),
       },
       addImages: {
         description: 'Append images to the current set.',
-        params: { type: 'object', properties: { images: IMAGE_ITEMS_SCHEMA }, required: ['images'] },
+        params: {
+          type: 'object',
+          properties: { images: IMAGE_ITEMS_SCHEMA },
+          required: ['images'],
+        },
         handler: (p: { images: RawImageInput[] }) => processImages(p.images, false),
       },
-      openStoragePaths: {
+      openStoragePaths: defineCommand({
         description: 'Load multiple storage file paths at once.',
         params: {
           type: 'object',
@@ -70,20 +88,20 @@ export function setupProtocol(appApi: AppApi): void {
           },
           required: ['paths'],
         },
-        handler: (p: { paths: string[]; replace?: boolean }) => {
+        handler: (p) => {
           loadStoragePaths(p.paths, p.replace ?? false);
           return { count: p.paths.length };
         },
-      },
-      loadStorageAll: {
+      }),
+      loadStorageAll: defineCommand({
         description: 'Load all image files from storage root.',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await loadAllStorageImages();
           return { count: images().length };
         },
-      },
-      setLayout: {
+      }),
+      setLayout: defineCommand({
         description: 'Set viewer layout mode and columns.',
         params: {
           type: 'object',
@@ -93,33 +111,35 @@ export function setupProtocol(appApi: AppApi): void {
           },
           required: ['mode'],
         },
-        handler: (p: { mode: LayoutMode; columns?: number }) => {
+        handler: (p) => {
           setMode(p.mode);
           if (typeof p.columns === 'number') setColumns(clampColumns(p.columns));
           setStatus(makeStatusText(images().length, mode(), columns()));
           return { layout: { mode: mode(), columns: columns() } };
         },
-      },
-      selectImages: {
+      }),
+      selectImages: defineCommand({
         description: 'Select images by IDs.',
         params: {
           type: 'object',
           properties: { ids: { type: 'array', items: { type: 'number' } } },
           required: ['ids'],
         },
-        handler: (p: { ids: number[] }) => {
+        handler: (p) => {
           const imgs = images();
           const valid = new Set(p.ids.filter((id) => imgs.some((img) => img.id === id)));
           if (!valid.size && imgs.length) valid.add(imgs[0].id);
           setSelectedIds(valid);
           return { selectedIds: [...selectedIds()] };
         },
-      },
-      clear: {
+      }),
+      clear: defineCommand({
         description: 'Clear all loaded images.',
         params: { type: 'object', properties: {} },
-        handler: () => { setImages([], true); },
-      },
+        handler: () => {
+          setImages([], true);
+        },
+      }),
     },
   });
 }

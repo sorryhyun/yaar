@@ -2,7 +2,7 @@
  * App Protocol registration for the Dock app.
  * Separated to keep main.ts focused on rendering and lifecycle logic.
  */
-import { app } from '@bundled/yaar';
+import { app, defineCommand } from '@bundled/yaar';
 
 export interface DockProtocolDeps {
   /* ── State getters ───────────────────── */
@@ -62,15 +62,15 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
       },
     },
     commands: {
-      refreshNow: {
+      refreshNow: defineCommand({
         description: 'Force immediate clock refresh. Params: {}',
         params: { type: 'object', properties: {} },
         handler: () => {
           deps.renderNow();
           return { nowIso: deps.getNowIso() };
         },
-      },
-      refreshWeather: {
+      }),
+      refreshWeather: defineCommand({
         description: 'Force re-fetch weather data. Params: {}',
         params: { type: 'object', properties: {} },
         handler: async () => {
@@ -83,8 +83,8 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
             },
           };
         },
-      },
-      setAppearance: {
+      }),
+      setAppearance: defineCommand({
         description:
           'Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0–1), panelBlurPx?: number (0–40) }',
         params: {
@@ -95,12 +95,12 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
             panelBlurPx: { type: 'number', minimum: 0, maximum: 40 },
           },
         },
-        handler: (p: Record<string, unknown>) => {
-          if (typeof p?.showPanel === 'boolean') deps.setShowPanel(p.showPanel as boolean);
+        handler: (p) => {
+          if (typeof p?.showPanel === 'boolean') deps.setShowPanel(p.showPanel);
           if (typeof p?.panelOpacity === 'number')
-            deps.setPanelOpacity(Math.max(0, Math.min(1, p.panelOpacity as number)));
+            deps.setPanelOpacity(Math.max(0, Math.min(1, p.panelOpacity)));
           if (typeof p?.panelBlurPx === 'number')
-            deps.setPanelBlurPx(Math.max(0, Math.min(40, p.panelBlurPx as number)));
+            deps.setPanelBlurPx(Math.max(0, Math.min(40, p.panelBlurPx)));
           // Signals are reactive — DOM updates automatically, no applyAppearance() needed
           return {
             appearance: {
@@ -110,7 +110,7 @@ export function registerDockProtocol(deps: DockProtocolDeps): void {
             },
           };
         },
-      },
+      }),
     },
   });
 }
