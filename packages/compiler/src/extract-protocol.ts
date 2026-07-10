@@ -98,16 +98,28 @@ function findPropertyBlock(body: string, propName: string): string | null {
 
 /**
  * Extract a string value for a property like `description: 'some text'`.
+ *
+ * Descriptions routinely exceed the line limit and get written as adjacent
+ * literals joined by `+`. Those are concatenated here — taking only the first
+ * literal would silently truncate the text the agent reads. Concatenation stops
+ * at the first non-literal operand (`'a' + name`), yielding the literal prefix.
  */
 function extractStringProp(body: string, propName: string): string | null {
   const pattern = new RegExp(`\\b${propName}\\s*:\\s*(['"\`])`);
   const match = body.match(pattern);
   if (!match || match.index === undefined) return null;
-  const quote = match[1];
-  const strStart = body.indexOf(quote, match.index + propName.length);
-  const strEnd = skipString(body, strStart);
-  if (strEnd === -1) return null;
-  return body.slice(strStart + 1, strEnd);
+
+  let pos = body.indexOf(match[1], match.index + propName.length);
+  let out = '';
+  for (;;) {
+    const end = skipString(body, pos);
+    if (end === -1) return out || null;
+    out += body.slice(pos + 1, end);
+
+    const next = body.slice(end + 1).match(/^\s*\+\s*(?=['"`])/);
+    if (!next) return out;
+    pos = end + 1 + next[0].length;
+  }
 }
 
 /**

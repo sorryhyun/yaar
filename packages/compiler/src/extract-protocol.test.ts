@@ -129,6 +129,42 @@ describe('extractProtocolFromSource', () => {
     expect(Object.keys(commands)).toEqual(['first', 'second', 'third']);
   });
 
+  test('joins a description split across concatenated literals', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A', state: {},
+      commands: {
+        screenshot: defineCommand({
+          description:
+            'Capture a screenshot of a real tab. ' +
+            'The tab must be focused first (see \\'focus\\'). ' +
+            'May prompt per-origin consent.',
+          handler: () => shoot(),
+        }),
+      },
+    });`;
+    expect(extractProtocolFromSource(source)?.commands.screenshot.description).toBe(
+      "Capture a screenshot of a real tab. The tab must be focused first (see \\'focus\\'). May prompt per-origin consent.",
+    );
+  });
+
+  test('concatenation stops at the first non-literal operand', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A', state: {},
+      commands: {
+        run: { description: 'Run ' + verb + ' now', handler: () => go() },
+      },
+    });`;
+    expect(extractProtocolFromSource(source)?.commands.run.description).toBe('Run ');
+  });
+
+  test('a lone literal description is unaffected', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A', state: {},
+      commands: { run: { description: 'Run it', handler: () => go() } },
+    });`;
+    expect(extractProtocolFromSource(source)?.commands.run.description).toBe('Run it');
+  });
+
   test('returns null when there is no register call', () => {
     expect(extractProtocolFromSource('export const x = 1;')).toBeNull();
   });

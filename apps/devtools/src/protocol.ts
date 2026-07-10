@@ -266,25 +266,34 @@ export function registerProtocol() {
           await writeFile(String(p.path), String(p.content));
         },
       }),
-      editFile: {
-        description: 'Edit a file (search & replace)',
+      editFile: defineCommand({
+        description:
+          'Edit a file (search & replace, first match only). Pass search/replace, or their ' +
+          'oldString/newString aliases.',
         params: {
           type: 'object',
           properties: {
             path: { type: 'string' },
-            search: { type: 'string', description: 'Text to find (alias: oldString)' },
-            replace: { type: 'string', description: 'Replacement text (alias: newString)' },
+            search: { type: 'string', description: 'Text to find. Alias: oldString.' },
+            replace: { type: 'string', description: 'Replacement text. Alias: newString.' },
+            oldString: { type: 'string', description: 'Alias for search.' },
+            newString: { type: 'string', description: 'Alias for replace.' },
           },
-          required: ['path', 'search', 'replace'],
+          required: ['path'],
         },
-        handler: async (p: Record<string, unknown>) => {
-          const search = String(p.search ?? p.oldString);
-          const replace = String(p.replace ?? p.newString);
-          if (!search || search === 'undefined') throw new AppCommandError('Missing search string');
-          const changed = await editFile(String(p.path), search, replace);
+        handler: async (p) => {
+          const search = p.search ?? p.oldString;
+          const replace = p.replace ?? p.newString;
+          if (!search)
+            throw new AppCommandError('Missing search string (pass search or oldString)');
+          // `''` is a valid replacement (delete the match), so only `undefined` is missing.
+          if (replace === undefined) {
+            throw new AppCommandError('Missing replacement text (pass replace or newString)');
+          }
+          const changed = await editFile(p.path, search, replace);
           if (!changed) throw new AppCommandError('Search string not found in file');
         },
-      },
+      }),
       deleteFile: defineCommand({
         description: 'Delete a file',
         params: {

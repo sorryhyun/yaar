@@ -267,7 +267,10 @@ export async function editFile(path: string, oldString: string, newString: strin
   const content = await appStorage.read(projectPath(proj.id, path));
   if (typeof content !== 'string') return false;
   if (!content.includes(oldString)) return false;
-  const updated = content.replace(oldString, newString);
+  // A function replacer inserts newString literally. Passing it as a string would
+  // expand $&, $1, $` and $' — so replacing with source containing a `$` would
+  // silently corrupt the file.
+  const updated = content.replace(oldString, () => newString);
   await writeFile(path, updated);
   return true;
 }

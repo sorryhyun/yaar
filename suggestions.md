@@ -68,7 +68,6 @@ still works and the two mix freely within one `commands` block, which is why the
 six can stay as they are:
 
 - `devtools.readFile` — `path` uses `oneOf`.
-- `devtools.editFile` — see finding below.
 - `image-viewer.setImages` / `.addImages` — see finding below.
 - `market-apps.setData` — schema says `items: { type: 'object' }`, handler wants
   `ListedApp[]`.
@@ -80,18 +79,38 @@ would change what the agent is told, so it is a deliberate follow-up, not a refa
 
 #### Latent bugs the migration surfaced
 
-Both pre-existing, both confirmed against `dist/protocol.json`. Left unfixed here so the
-migration commit stays behaviour-neutral.
+All pre-existing, all confirmed against `dist/protocol.json`.
+
+**Fixed:**
+
+- **Concatenated descriptions were silently truncated.** `extractStringProp` took only the
+  first literal of a `'a' + 'b'` expression, so every description written across two lines
+  lost everything after the first `+` — 15 command and 6 state descriptions across 5 apps.
+  The agent was reading half a sentence: `browser-user.screenshot` never mentioned that the
+  tab must be focused first, and `slides-lite.theme` listed one of its four valid themes.
+  The runtime manifest (built from the live descriptor in `app-protocol.ts`) was always
+  correct; only the build-time `protocol.json` that seeds the agent's prompt was clipped.
+  Now the literals are joined, stopping at the first non-literal operand.
+- **`devtools.editFile` could write the string `"undefined"` into a source file.** The
+  handler did `String(p.replace ?? p.newString)` with no guard on the result — only `search`
+  was checked. Nothing validates params against the schema (`command` takes
+  `z.record(z.string(), z.unknown())` and passes it through), so `required` is advisory: an
+  agent omitting `replace` got `"undefined"` substituted into its own code, reported as
+  success. Its `oldString` / `newString` aliases were also real but undeclared, advertised
+  only in prose inside a `description`. Both aliases are now in the schema (with only `path`
+  required) and both operands are guarded, `''` still being a legal replacement.
+- **`editFile` expanded `$` patterns in the replacement.** It passed the replacement to
+  `String.prototype.replace` as a string, so `$&`, `$1`, `` $` `` and `$'` were interpreted
+  — replacing with source that contains a `$` corrupted the file (`` $` `` splices in the
+  entire preceding file). Now uses a function replacer, which inserts the text literally.
+
+**Open:**
 
 - **`image-viewer.setImages` / `.addImages` ship no `params` schema at all.** They write
   `params: IMAGE_ITEMS_SCHEMA` — a reference to a module-level const. `extract-protocol.ts`
   is a source parser and cannot resolve a variable, so both commands land in
   `dist/protocol.json` with `params: undefined`. The agent is told nothing about what to
   send. Inline the schema (or teach the extractor to resolve top-level consts).
-- **`devtools.editFile` reads params that are not in its schema.** The handler does
-  `String(p.search ?? p.oldString)` and `String(p.replace ?? p.newString)`, but only
-  `search` / `replace` are declared (their `description`s advertise the aliases in prose).
-  No agent will ever send `oldString` / `newString`, so both fallbacks are dead code.
 
 Minor, not a bug: `music-maker.setScale` declares `scale: { type: 'string' }` while the
 handler needs the narrower `ScaleType`, so it keeps a cast. An `enum` there would let the
