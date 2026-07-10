@@ -178,11 +178,54 @@ export async function fetchF32(name: string): Promise<Float32Array> {
 //   'blob'  — pass a Blob (also not bound by the 2 GB ArrayBuffer cap).
 export type ExtDataMode = 'bytes' | 'url' | 'blob';
 
+/** Live sessions keyed by name/backend/mode/options. Sessions are EXPENSIVE to
+ *  create (the DiT streams 3.9 GB into the wasm heap and up to the GPU), and
+ *  ORT-web does NOT free native/GPU memory when a session is garbage-collected —
+ *  only an explicit release does. So loadModel memoizes, and releaseModel(s) is
+ *  the one true way to drop a session (a bare `dispose()` would free the native
+ *  side but leave a dead session memoized here). */
+const _modelSessions = new Map<string, Promise<InferenceSession>>();
+
+/** Release memoized sessions whose model name matches. */
+export async function releaseModels(match: (name: string) => boolean): Promise<void> {
+  for (const [key, promise] of [..._modelSessions]) {
+    if (!match(key.split('::')[0])) continue;
+    _modelSessions.delete(key);
+    const s = await promise.catch(() => null);
+    if (s) await dispose(s);
+  }
+}
+
+export function releaseModel(name: string): Promise<void> {
+  return releaseModels((n) => n === name);
+}
+
 /** Load `<name>.onnx` + `<name>.onnx.data` → WebGPU session, from whichever
- *  source `assetUrl` resolves to. `dataName` overrides the sidecar filename when
- *  the `.onnx`'s recorded external-data `location` differs from `<name>` (e.g.
- *  probe graphs that reuse another model's `.onnx.data`). */
-export async function loadModel(
+ *  source `assetUrl` resolves to. Memoized: repeat calls (e.g. every ✨ Generate)
+ *  reuse the live session instead of re-streaming the weights. `dataName`
+ *  overrides the sidecar filename when the `.onnx`'s recorded external-data
+ *  `location` differs from `<name>` (e.g. probe graphs that reuse another
+ *  model's `.onnx.data`). */
+export function loadModel(
+  name: string,
+  onProgress?: ProgressFn,
+  backend: 'webgpu' | 'wasm' | 'auto' = 'webgpu',
+  mode: ExtDataMode = 'bytes',
+  extraSessionOptions: Record<string, unknown> = {},
+  dataName?: string,
+): Promise<InferenceSession> {
+  const key = [name, backend, mode, dataName ?? '', JSON.stringify(extraSessionOptions)].join(
+    '::',
+  );
+  const hit = _modelSessions.get(key);
+  if (hit) return hit;
+  const promise = createModelSession(name, onProgress, backend, mode, extraSessionOptions, dataName);
+  promise.catch(() => _modelSessions.delete(key)); // let a failed load be retried clean
+  _modelSessions.set(key, promise);
+  return promise;
+}
+
+async function createModelSession(
   name: string,
   onProgress?: ProgressFn,
   backend: 'webgpu' | 'wasm' | 'auto' = 'webgpu',

@@ -11,9 +11,11 @@
 //
 // Cost: text_encoder_fp16 is 1.19 GB and text_conditioner_fp16 is 269 MB of
 // external data. We use 'bytes' mode so both land in the IndexedDB cache (they're
-// under the 2 GB ArrayBuffer cap, unlike the DiT), and we `dispose()` both
-// sessions before returning so their memory is freed before the 3.9 GB DiT loads.
-import { loadModel, run, Tensor, asF32, dispose, type ProgressFn } from './ml';
+// under the 2 GB ArrayBuffer cap, unlike the DiT), and we `releaseModel()` both
+// sessions before returning so their memory is freed before the 3.9 GB DiT loads
+// (releaseModel also evicts them from loadModel's session memo — a bare dispose
+// would leave a dead session cached there).
+import { loadModel, run, Tensor, asF32, releaseModel, type ProgressFn } from './ml';
 import { loadTokenizers, tokenizePrompt, SEQ } from './tokenizer';
 
 const DIM = 1024;
@@ -54,7 +56,7 @@ export async function promptEmbeds(prompt: string, opts: EncodeOpts = {}): Promi
   });
   // keep_io_types didn't stick: the graph declares a float16 output.
   const hidden = asF32(encOut.qwen_prompt_embeds);
-  await dispose(enc);
+  await releaseModel('text_encoder_fp16');
 
   const t1 = performance.now();
   const cond = await loadModel(
@@ -72,7 +74,7 @@ export async function promptEmbeds(prompt: string, opts: EncodeOpts = {}): Promi
     source_attention_mask: new Tensor('int64', qwen.mask, [1, SEQ]),
   });
   const embeds = asF32(condOut.prompt_embeds);
-  await dispose(cond);
+  await releaseModel('text_conditioner_fp16');
 
   let nan = 0;
   for (const v of embeds) if (Number.isNaN(v)) nan++;

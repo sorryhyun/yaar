@@ -8,13 +8,20 @@
 //   DiT gate    — single DiT forward (memory/latency check).
 //   DiT probe   — per-block residual absmax/NaN trace (diagnostic).
 //
-// The DiT model selector: the default `dit_512_fp16_webgpu` stores fp16 WEIGHTS
-// but keeps ACTIVATIONS fp32 (each weight is Cast fp16→fp32 at inference). The
-// plain fp16 DiT returns all-NaN on the WebGPU EP because the residual stream
-// legitimately reaches |x|~2.6e5, which overflows fp16 (65504) → Inf → NaN. fp32
-// activations fix it; fp16 weights keep the download at 3.9 GB. See
-// ../krea/scripts/export_onnx_dit_webgpu.py. Requires graphOptimizationLevel
-// 'disabled' so ORT doesn't constant-fold the weight casts (→ 7.8 GB in memory).
+// The DiT model selector, three exports of the same weights:
+//   dit_512_fp16_r16    — residual stream rescaled ×1/16 (folded into patch-embed
+//                         + branch out-projections, exact invariance), so plain
+//                         fp16 activations fit (peak ~1.66e4 < 65504) and graph
+//                         optimizations/fusions stay ENABLED. The fast path.
+//                         See ../krea/scripts/rescale_dit_residual.py.
+//   dit_512_fp16_webgpu — fp16 WEIGHTS, fp32 ACTIVATIONS (each weight Cast
+//                         fp16→fp32 per op). Dodges the overflow at the cost of
+//                         fp32 bandwidth + graphOptimizationLevel 'disabled'
+//                         (else ORT constant-folds the casts → 7.8 GB in memory).
+//                         See ../krea/scripts/export_onnx_dit_webgpu.py.
+//   dit_512_fp16        — plain fp16: all-NaN on the WebGPU EP; the residual
+//                         stream legitimately reaches |x|~2.6e5 > 65504 → Inf→NaN.
+//                         Kept for repro.
 import { onMount } from '@bundled/solid-js';
 import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
@@ -22,6 +29,7 @@ import { render } from '@bundled/solid-js/web';
 import {
   capabilities,
   loadModel,
+  releaseModels,
   run,
   Tensor,
   fetchF32,
@@ -49,9 +57,22 @@ const [prompt, setPrompt] = createSignal(GOLDEN_PROMPT);
 const [dl, setDl] = createSignal<DownloadProgress | null>(null);
 const [logLines, setLog] = createSignal<string[]>([]);
 const [busy, setBusy] = createSignal(false);
-// DiT weights variant. 'dit_512_fp16_webgpu' pins attention matmuls to fp32 to
-// dodge the WebGPU-EP fp16 overflow→NaN; 'dit_512_fp16' is the original export.
+// DiT weights variant — see the header comment for what each export is.
 const [ditModel, setDitModel] = createSignal('dit_512_fp16_webgpu');
+
+// Session options per DiT export. The cast-hack exports NEED graph opt disabled
+// (constant folding would materialise the fp32 weights); the rescaled export runs
+// with full optimizations — that's its whole point.
+function ditSessionOptions(model: string, graphOpt?: string): Record<string, unknown> {
+  if (graphOpt) return { graphOptimizationLevel: graphOpt };
+  return model.includes('_r16') ? {} : { graphOptimizationLevel: 'disabled' };
+}
+
+/** Free GPU/wasm memory held by DiT sessions other than `keep` (sessions are
+ *  memoized in loadModel — see ml.ts — so an old variant would stay resident). */
+function releaseOtherDits(keep?: string): Promise<void> {
+  return releaseModels((n) => n.startsWith('dit_') && n !== keep);
+}
 const [seed, setSeed] = createSignal(0);
 let canvasEl: HTMLCanvasElement | undefined;
 
@@ -158,11 +179,10 @@ async function ditGate() {
       latent[i] = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
     }
     const t0 = performance.now();
+    await releaseOtherDits(ditModel());
     // 'url' mode: ORT streams the 3.9 GB sidecar into its wasm heap (no >2 GB JS buffer).
-    log('loading DiT via externalData URL mode, graphOpt=disabled…');
-    const s = await loadModel(ditModel(), onProg, 'webgpu', 'url', {
-      graphOptimizationLevel: 'disabled', // stop a bad fp16 attention fusion that bypasses fp32-pinned softmax
-    });
+    log('loading DiT via externalData URL mode…');
+    const s = await loadModel(ditModel(), onProg, 'webgpu', 'url', ditSessionOptions(ditModel()));
     log(
       `✅ DiT session created (${((performance.now() - t0) / 1000).toFixed(1)}s) — it FITS. inputs=${s.inputNames}`,
     );
@@ -196,6 +216,7 @@ async function ditProbe(opts: { model?: string; dataName?: string } = {}): Promi
     log(`— DiT probe (${model}) —`);
     const pe = await fetchF32('webgpu/prompt_embeds.f32');
     const latent = randn(new Float32Array(16 * 64 * 64), makeRng(0));
+    await releaseOtherDits(model);
     const s = await loadModel(
       model,
       onProg,
@@ -212,12 +233,17 @@ async function ditProbe(opts: { model?: string; dataName?: string } = {}): Promi
       timestep: new Tensor('float32', new Float32Array([1.0]), [1]),
       encoder_hidden_states: new Tensor('float32', pe, [1, 512, 1024]),
     });
-    // outputs: probe_absmax_NN / probe_nan_NN — the fp32 residual stream entering
-    // LayerNorm NN. Print in block order; flag the first block that overflows/NaNs.
+    // outputs: probe_absmax_NN / probe_nan_NN — the residual stream entering
+    // LayerNorm NN (older probes, 2-digit) or, for probes built by
+    // make_dit_probe.py (3-digit): 000..083 = trunk Add outputs in forward order,
+    // 100..183 = branch out-projection inputs (SDPA/GELU outputs — the branch
+    // interior maxima). Print in order; flag the first tap that overflows/NaNs.
     const blocks: { block: number; absmax: number; nan: number }[] = [];
     let firstBad = -1;
-    for (let i = 0; i < 90; i++) {
-      const nn = String(i).padStart(2, '0');
+    for (let i = 0; i < 200; i++) {
+      const nn2 = String(i).padStart(2, '0');
+      const nn3 = String(i).padStart(3, '0');
+      const nn = out[`probe_absmax_${nn3}`] ? nn3 : nn2;
       const am = out[`probe_absmax_${nn}`]?.data as Float32Array | undefined;
       const nc = out[`probe_nan_${nn}`]?.data as Float32Array | undefined;
       if (!am || !nc) continue;
@@ -251,7 +277,8 @@ async function ditProbe(opts: { model?: string; dataName?: string } = {}): Promi
 
 // Pull the whole weight set to storage/anima/ via the server. Without this the app
 // still works — assetUrl() streams from Hugging Face through /api/ml-weights — but
-// every session re-fetches the 3.9 GB DiT, which the proxy sends `no-store`.
+// each fresh page load re-fetches the 3.9 GB DiT, which the proxy sends `no-store`
+// (within a page, loadModel's session memo means it streams at most once).
 async function downloadModels(): Promise<unknown> {
   if (busy()) return { ok: false, error: 'busy' };
   setBusy(true);
@@ -299,6 +326,8 @@ async function generate(
     seed?: number;
     ditBackend?: 'webgpu' | 'wasm';
     prompt?: string;
+    /** Override the per-model graphOptimizationLevel choice (experiments). */
+    graphOpt?: string;
   } = {},
 ): Promise<unknown> {
   if (busy()) return { ok: false, error: 'busy' };
@@ -322,10 +351,14 @@ async function generate(
     if (golden) log('using precomputed golden prompt_embeds (text path skipped)');
 
     const t0 = performance.now();
-    log(`loading DiT (externalData URL mode, ${ditBackend}, graphOpt disabled)…`);
-    const dit = await loadModel(model, onProg, ditBackend, 'url', {
-      graphOptimizationLevel: 'disabled',
-    });
+    await releaseOtherDits(model);
+    const sessOpts = ditSessionOptions(model, opts.graphOpt);
+    log(
+      `loading DiT (externalData URL mode, ${ditBackend}, graphOpt ${
+        (sessOpts.graphOptimizationLevel as string) ?? 'default'
+      })…`,
+    );
+    const dit = await loadModel(model, onProg, ditBackend, 'url', sessOpts);
     log(`DiT ready (${((performance.now() - t0) / 1000).toFixed(1)}s). inputs=${dit.inputNames}`);
     const tv = performance.now();
     const vae = await loadModel('vae_decoder_512_fp16', onProg, 'webgpu', 'url');
@@ -436,13 +469,21 @@ ${prompt()}</textarea
         <select
           class="y-select"
           disabled=${busy}
-          onchange=${(e: Event) => setDitModel((e.target as HTMLSelectElement).value)}
+          onchange=${(e: Event) => {
+            const v = (e.target as HTMLSelectElement).value;
+            if (v === ditModel()) return;
+            setDitModel(v);
+            void releaseOtherDits(v); // free the old variant's 3.9 GB immediately
+          }}
         >
           <option
             value="dit_512_fp16_webgpu"
             selected=${() => ditModel() === 'dit_512_fp16_webgpu'}
           >
             fp16 weights / fp32 acts ✓
+          </option>
+          <option value="dit_512_fp16_r16" selected=${() => ditModel() === 'dit_512_fp16_r16'}>
+            fp16 rescaled ×1/16 (graph opt on)
           </option>
           <option value="dit_512_fp16" selected=${() => ditModel() === 'dit_512_fp16'}>
             fp16 (NaN on WebGPU)
@@ -520,6 +561,25 @@ render(() => html`<${App} />`, document.getElementById('app')!);
   download: downloadModels, // () => {ok, elapsed}
   resolve: assetUrl, // (path) => the same-origin URL a given asset loads from
   clearCache: () => clearWeightCache(),
+  release: (prefix = '') => releaseModels((n) => n.startsWith(prefix)), // free live sessions
+  // Micro-benchmark/repro hook: run `<name>.onnx` (input x [M,K] f32, output y)
+  // with the deterministic `<name>_x.f32`, report absmax + head for comparison
+  // against a CPU-EP reference. Used to isolate WebGPU-EP kernel bugs.
+  mm: async (name: string, o: { backend?: 'webgpu' | 'wasm'; m?: number; k?: number } = {}) => {
+    const M = o.m ?? 4096;
+    const K = o.k ?? 2048;
+    const x = await fetchF32(`${name}_x.f32`);
+    const s = await loadModel(name, onProg, o.backend ?? 'webgpu', 'url');
+    const out = await run(s, { x: new Tensor('float32', x.slice(0, M * K), [M, K]) });
+    const y = asF32(out.y as { data: unknown; type: string });
+    let mx = 0;
+    let nan = 0;
+    for (const v of y) {
+      if (Number.isNaN(v)) nan++;
+      else if (Math.abs(v) > mx) mx = Math.abs(v);
+    }
+    return { absmax: mx, nan, head: [...y.slice(0, 6)].map((v) => Number(v.toFixed(4))) };
+  },
   caps: () => capabilities(),
   // Text path only (1.46 GB): prompt → encoder_hidden_states, no DiT.
   embeds: async (
