@@ -4,6 +4,7 @@
 import type { PluginAuthPolicy } from "./PluginAuthPolicy.js";
 import type { PluginAvailability } from "./PluginAvailability.js";
 import type { PluginInstallPolicy } from "./PluginInstallPolicy.js";
+import type { PluginInstallPolicySource } from "./PluginInstallPolicySource.js";
 import type { PluginInterface } from "./PluginInterface.js";
 import type { PluginShareContext } from "./PluginShareContext.js";
 import type { PluginSource } from "./PluginSource.js";
@@ -14,13 +15,17 @@ export type PluginSummary = { id: string,
  */
 remotePluginId: string | null,
 /**
+ * Version advertised by the remote marketplace backend when available.
+ */
+version: string | null,
+/**
  * Version of the locally materialized plugin package when available.
  */
 localVersion: string | null, name: string,
 /**
  * Remote sharing context associated with this plugin when available.
  */
-shareContext: PluginShareContext | null, source: PluginSource, installed: boolean, enabled: boolean, installPolicy: PluginInstallPolicy, authPolicy: PluginAuthPolicy,
+shareContext: PluginShareContext | null, source: PluginSource, installed: boolean, enabled: boolean, installPolicy: PluginInstallPolicy, installPolicySource: PluginInstallPolicySource | null, authPolicy: PluginAuthPolicy,
 /**
  * Availability state for installing and using the plugin.
  */

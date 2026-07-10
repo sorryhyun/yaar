@@ -11,7 +11,11 @@
 import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-types.js';
 import type { AgentProfile } from './profiles/types.js';
-import { buildAppAgentProfile, APP_AGENT_TOOL_NAMES } from './profiles/index.js';
+import {
+  buildAppAgentProfile,
+  APP_AGENT_TOOL_NAMES,
+  claudeModelToCodex,
+} from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 
@@ -126,11 +130,8 @@ export class AppTaskProcessor {
         // tools. Mirrors the monitor/session agents' Codex handling.
         allowedTools: this.ctx.providerType === 'codex' ? undefined : [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
-        // Codex has no Claude models — passing e.g. 'claude-opus-4-8' (from the
-        // app's agentType) makes the openai provider reject the turn with a 400.
-        // Leave undefined so Codex uses its configured default model. Mirrors the
-        // allowedTools handling above and the monitor agent's Codex guard.
-        model: this.ctx.providerType === 'codex' ? undefined : profile.model,
+        model:
+          this.ctx.providerType === 'codex' ? claudeModelToCodex(profile.model) : profile.model,
         onAssistantResponse: (text) => {
           appResponseText = text;
         },
