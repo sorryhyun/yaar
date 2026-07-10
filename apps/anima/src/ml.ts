@@ -2,17 +2,74 @@
 // sidecars (`.onnx` + `.onnx.data`), cached in IndexedDB, run on WebGPU.
 //
 // The @bundled/yaar-ml shim's `session(url)` path fetches a single buffer through
-// the domain-allowlisted `/api/ml-weights` proxy. Our weights are *local*, served
-// same-origin from a read-only mount at `/api/storage/mounts/krea/…`, and split
-// into `.onnx` + `.onnx.data`. So we fetch both files ourselves (same-origin,
-// CSP `connect-src 'self'`) and hand the model bytes + external-data buffer to
-// `session(bytes, { sessionOptions: { externalData } })`.
+// the domain-allowlisted `/api/ml-weights` proxy. Our weights are split into
+// `.onnx` + `.onnx.data`, so we fetch both ourselves and hand the model bytes +
+// external-data buffer to `session(bytes, { sessionOptions: { externalData } })`.
+//
+// Every asset URL must be SAME-ORIGIN — the app iframe's CSP is `connect-src
+// 'self'`, and in `'url'` external-data mode onnxruntime fetches the sidecar
+// itself, so a raw huggingface.co URL would be blocked. `assetUrl()` resolves
+// each path against, in order:
+//
+//   1. storage/anima/…            — what the download button fills in
+//   2. storage/mounts/krea/…      — a hand-configured local mount, if present
+//   3. /api/ml-weights?url=<hf>   — same-origin streaming proxy to Hugging Face
+//
+// So a fresh install works with zero setup (streaming from HF on demand), and
+// downloading just makes it fast and offline-capable.
 import { session, run, Tensor, capabilities, dispose } from '@bundled/yaar-ml';
 import type { InferenceSession } from '@bundled/yaar-ml';
 
 export { Tensor, run, capabilities, dispose };
 
-export const BASE = '/api/storage/mounts/krea';
+/** Upstream weights repo. `resolve/main` serves raw bytes (and 302s to the LFS CDN). */
+export const HF_BASE = 'https://huggingface.co/sorryhyun/anima-turbo-4step/resolve/main/onnx';
+
+/** Where the download button writes, relative to storage/. */
+export const LOCAL_DIR = 'anima';
+
+/** Same-origin candidates, most-preferred first. */
+const LOCAL_SOURCES = [`/api/storage/${LOCAL_DIR}`, '/api/storage/mounts/krea'];
+
+/** Wrap a remote URL in the server's same-origin streaming proxy. */
+export const proxied = (url: string) => `/api/ml-weights?url=${encodeURIComponent(url)}`;
+
+/** Does a same-origin path exist? Abort as soon as headers land — the body may be
+ *  gigabytes, and `GET /api/storage/…` doesn't honour Range. */
+async function exists(url: string): Promise<boolean> {
+  const ctl = new AbortController();
+  try {
+    const res = await fetch(url, { signal: ctl.signal });
+    return res.ok;
+  } catch {
+    return false;
+  } finally {
+    ctl.abort();
+  }
+}
+
+const _assetUrls = new Map<string, Promise<string>>();
+
+/** Resolve one asset path (e.g. `webgpu/latent_stats.json`) to a same-origin URL. */
+export function assetUrl(path: string): Promise<string> {
+  let hit = _assetUrls.get(path);
+  if (!hit) {
+    hit = (async () => {
+      for (const base of LOCAL_SOURCES) {
+        const url = `${base}/${path}`;
+        if (await exists(url)) return url;
+      }
+      return proxied(`${HF_BASE}/${path}`);
+    })();
+    _assetUrls.set(path, hit);
+  }
+  return hit;
+}
+
+/** Forget cached resolutions — call after a download so local files win. */
+export function resetAssetUrls(): void {
+  _assetUrls.clear();
+}
 
 export interface Progress {
   file: string;
@@ -106,10 +163,10 @@ export async function fetchFile(url: string, onProgress?: ProgressFn): Promise<A
 }
 
 export async function fetchJSON<T = any>(name: string): Promise<T> {
-  return JSON.parse(new TextDecoder().decode(await fetchFile(`${BASE}/${name}`)));
+  return JSON.parse(new TextDecoder().decode(await fetchFile(await assetUrl(name))));
 }
 export async function fetchF32(name: string): Promise<Float32Array> {
-  return new Float32Array(await fetchFile(`${BASE}/${name}`));
+  return new Float32Array(await fetchFile(await assetUrl(name)));
 }
 
 // ── Model loading (external data) ────────────────────────────────────────────
@@ -121,10 +178,10 @@ export async function fetchF32(name: string): Promise<Float32Array> {
 //   'blob'  — pass a Blob (also not bound by the 2 GB ArrayBuffer cap).
 export type ExtDataMode = 'bytes' | 'url' | 'blob';
 
-/** Load `<name>.onnx` + `<name>.onnx.data` from the mount → WebGPU session.
- *  `dataName` overrides the sidecar filename when the `.onnx`'s recorded
- *  external-data `location` differs from `<name>` (e.g. probe graphs that reuse
- *  another model's `.onnx.data`). */
+/** Load `<name>.onnx` + `<name>.onnx.data` → WebGPU session, from whichever
+ *  source `assetUrl` resolves to. `dataName` overrides the sidecar filename when
+ *  the `.onnx`'s recorded external-data `location` differs from `<name>` (e.g.
+ *  probe graphs that reuse another model's `.onnx.data`). */
 export async function loadModel(
   name: string,
   onProgress?: ProgressFn,
@@ -133,9 +190,10 @@ export async function loadModel(
   extraSessionOptions: Record<string, unknown> = {},
   dataName?: string,
 ): Promise<InferenceSession> {
-  const model = await fetchFile(`${BASE}/${name}.onnx`, onProgress); // small graph proto
+  const model = await fetchFile(await assetUrl(`${name}.onnx`), onProgress); // small graph proto
   const dataPath = dataName ?? `${name}.onnx.data`; // must match the `location` recorded in the .onnx
-  const dataUrl = `${location.origin}${BASE}/${dataPath}`;
+  // ORT resolves this itself in 'url' mode, so it has to be absolute and same-origin.
+  const dataUrl = new URL(await assetUrl(dataPath), location.origin).href;
   let data: string | Blob | Uint8Array;
   if (mode === 'url') {
     data = dataUrl; // ORT fetches + streams into wasm memory itself
@@ -144,7 +202,7 @@ export async function loadModel(
     if (!res.ok) throw new Error(`fetch ${dataUrl} → ${res.status}`);
     data = await res.blob(); // Blob is not bound by the 2 GB ArrayBuffer cap
   } else {
-    data = new Uint8Array(await fetchFile(`${BASE}/${dataPath}`, onProgress));
+    data = new Uint8Array(await fetchFile(dataUrl, onProgress));
   }
   return session(new Uint8Array(model), {
     backend,

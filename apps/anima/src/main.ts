@@ -29,11 +29,13 @@ import {
   chwToImageData,
   clearWeightCache,
   asF32,
+  assetUrl,
   type Progress,
 } from './ml';
 import { ErSDEScheduler, makeRng, randn } from './scheduler';
 import { promptEmbeds } from './text';
 import { loadTokenizers, tokenizePrompt } from './tokenizer';
+import { downloadWeights, TOTAL_BYTES, type DownloadProgress } from './download';
 
 // The prompt that `webgpu/prompt_embeds.f32` was precomputed from. Leaving the box
 // at this exact text lets us skip the 1.46 GB text path and reuse the golden embeds.
@@ -44,6 +46,7 @@ const GOLDEN_PROMPT =
 
 const [caps, setCaps] = createSignal('probing…');
 const [prompt, setPrompt] = createSignal(GOLDEN_PROMPT);
+const [dl, setDl] = createSignal<DownloadProgress | null>(null);
 const [logLines, setLog] = createSignal<string[]>([]);
 const [busy, setBusy] = createSignal(false);
 // DiT weights variant. 'dit_512_fp16_webgpu' pins attention matmuls to fp32 to
@@ -246,6 +249,38 @@ async function ditProbe(opts: { model?: string; dataName?: string } = {}): Promi
   }
 }
 
+// Pull the whole weight set to storage/anima/ via the server. Without this the app
+// still works — assetUrl() streams from Hugging Face through /api/ml-weights — but
+// every session re-fetches the 3.9 GB DiT, which the proxy sends `no-store`.
+async function downloadModels(): Promise<unknown> {
+  if (busy()) return { ok: false, error: 'busy' };
+  setBusy(true);
+  const t0 = performance.now();
+  try {
+    log(`— Downloading weights (${gb(TOTAL_BYTES)}) from Hugging Face —`);
+    let lastFile = '';
+    await downloadWeights((p) => {
+      setDl(p);
+      if (p.file !== lastFile) {
+        lastFile = p.file;
+        log(`  [${p.index}/${p.count}] ${p.file} (${mb(p.total)})`);
+      }
+    });
+    setDl(null);
+    log(
+      `✅ weights on disk (${((performance.now() - t0) / 1000).toFixed(0)}s) — now loading locally`,
+    );
+    return { ok: true, elapsed: (performance.now() - t0) / 1000 };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    setDl(null);
+    log('❌ ' + msg);
+    return { ok: false, error: msg };
+  } finally {
+    setBusy(false);
+  }
+}
+
 interface LatentStats {
   latents_mean: number[];
   latents_std: number[];
@@ -391,8 +426,8 @@ ${prompt()}</textarea
       <div class="y-label">
         ${() =>
           prompt().trim() === GOLDEN_PROMPT || !prompt().trim()
-            ? 'golden prompt — reuses precomputed embeds (no extra download)'
-            : 'custom prompt — downloads the text encoder + conditioner (1.46 GB, cached)'}
+            ? 'golden prompt — reuses precomputed embeds (skips the text encoder)'
+            : 'custom prompt — runs the text encoder + conditioner (1.46 GB)'}
       </div>
       <div class="y-flex" style="gap: var(--yaar-sp-2); flex-wrap: wrap; align-items: center;">
         <button class="y-btn y-btn-primary" disabled=${busy} onclick=${() => generate()}>
@@ -423,6 +458,19 @@ ${prompt()}</textarea
             onchange=${(e: Event) => setSeed(Number((e.target as HTMLInputElement).value) | 0)}
           />
         </label>
+      </div>
+      <div class="y-flex" style="gap: var(--yaar-sp-2); flex-wrap: wrap; align-items: center;">
+        <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${downloadModels}>
+          ⬇ Download weights (${gb(TOTAL_BYTES)})
+        </button>
+        <span class="y-label">
+          ${() => {
+            const p = dl();
+            if (!p) return '';
+            const pct = p.overallTotal ? (p.overallLoaded / p.overallTotal) * 100 : 0;
+            return `${pct.toFixed(1)}% — ${p.file.split('/').pop()} [${p.index}/${p.count}]`;
+          }}
+        </span>
       </div>
       <div class="y-flex" style="gap: var(--yaar-sp-2); flex-wrap: wrap;">
         <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${vaeProbe}>
@@ -469,6 +517,8 @@ render(() => html`<${App} />`, document.getElementById('app')!);
   ready: true,
   generate, // ({model?, seed?, prompt?}) => result
   probe: ditProbe, // () => {rows, firstBad}
+  download: downloadModels, // () => {ok, elapsed}
+  resolve: assetUrl, // (path) => the same-origin URL a given asset loads from
   clearCache: () => clearWeightCache(),
   caps: () => capabilities(),
   // Text path only (1.46 GB): prompt → encoder_hidden_states, no DiT.
