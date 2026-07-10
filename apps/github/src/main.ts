@@ -1,11 +1,11 @@
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import type { Section } from './types';
-import { state, setState, hasToken } from './store';
+import { state, setState, hasToken, showToast } from './store';
 import { bootstrapStorage } from './storage';
 import {
   selectSection, loadSection, refreshAll, toggleRepoPicker, closeRepoPicker,
-  loadAccountRepos, selectAccountRepo,
+  loadAccountRepos, selectAccountRepo, setRepoAction,
 } from './actions';
 import { refreshUser } from './auth';
 import { registerAppProtocol } from './protocol';
@@ -26,6 +26,18 @@ const NAV: Array<{ id: Section; icon: string; label: string }> = [
   { id: 'code', icon: '📁', label: 'Code' },
 ];
 
+let pickerOwnerEl: HTMLInputElement | null = null;
+let pickerNameEl: HTMLInputElement | null = null;
+
+async function switchTypedRepo(): Promise<void> {
+  try {
+    await setRepoAction(pickerOwnerEl?.value || '', pickerNameEl?.value || '');
+    closeRepoPicker();
+  } catch (e) {
+    showToast(e instanceof Error ? e.message : String(e), 'error');
+  }
+}
+
 function repoPicker() {
   return () => state.repoPickerOpen ? html`
     <div class="repo-picker-scrim" onClick=${closeRepoPicker}></div>
@@ -36,6 +48,15 @@ function repoPicker() {
           <div class="repo-picker-account">${() => state.user ? '@' + state.user.login : 'GitHub account'}</div>
         </div>
         <button class="y-btn y-btn-ghost y-btn-sm repo-picker-close" aria-label="Close repository picker" onClick=${closeRepoPicker}>×</button>
+      </div>
+      <div class="repo-picker-manual" aria-label="Open repository by owner and name">
+        <div class="repo-picker-manual-label">Open any repository</div>
+        <div class="repo-picker-manual-row">
+          <input class="y-input" aria-label="Repository owner" placeholder="owner" value=${() => state.repo.owner} ref=${(el: HTMLInputElement) => { pickerOwnerEl = el; }} />
+          <span class="slash">/</span>
+          <input class="y-input" aria-label="Repository name" placeholder="repository" value=${() => state.repo.name} ref=${(el: HTMLInputElement) => { pickerNameEl = el; }} />
+          <button class="y-btn y-btn-primary y-btn-sm" onClick=${() => void switchTypedRepo()}>Open</button>
+        </div>
       </div>
       ${() => !hasToken() ? html`
         <div class="repo-picker-message">

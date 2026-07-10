@@ -244,7 +244,9 @@ interface YaarAppStorage {
   readJson<T = unknown>(path: string): Promise<T>;
   /** Read JSON with a fallback value returned when the file doesn't exist or is unparseable. */
   readJsonOr<T>(path: string, fallback: T): Promise<T>;
-  readBinary(path: string): Promise<{ data: string; mimeType: string }>;
+  readBinary(
+    path: string,
+  ): Promise<{ data: string; mimeType: string; encoding: 'base64' | 'text' }>;
   /** Read binary data and return as a Blob. Handles the base64 → binary conversion. */
   readBlob(path: string): Promise<Blob>;
   list(dirPath?: string): Promise<unknown[]>;
@@ -297,11 +299,15 @@ interface YaarDevCompileResult {
   success: boolean;
   previewUrl?: string;
   errors?: string[];
+  /** Set on transport/auth failures (4xx/5xx) instead of the compile-result fields. */
+  error?: string;
 }
 
 interface YaarDevTypecheckResult {
   success: boolean;
   diagnostics: string[];
+  /** Set on transport/auth failures (4xx/5xx) instead of the typecheck-result fields. */
+  error?: string;
 }
 
 interface YaarDevDeployOpts {
@@ -423,7 +429,7 @@ declare module '@bundled/yaar' {
 
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;
-  export default YaarGlobal;
+  export default yaar;
 }
 
 // ── Gated SDKs ─────────────────────────────────────────────────────────────

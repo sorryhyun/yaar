@@ -2,23 +2,35 @@ import { errMsg, showToast } from '@bundled/yaar';
 import type { Issue, Pull, RepoRef, ContentEntry, AccountRepo } from './types';
 import { state, setState, hasToken } from './store';
 import { renderMarkdown, decodeBase64Utf8 } from './markdown';
-import { writeConfig } from './storage';
+import { writeConfig, ready } from './storage';
 import * as api from './api';
 
 const SIGN_IN_REQUIRED = 'Sign in to GitHub (Settings) to ';
+
+/**
+ * Bumped whenever the active repository changes. Loaders capture it before
+ * fetching and drop their result if it moved on, so a slow response for the
+ * previous repo can never clobber the current repo's state.
+ */
+let repoGen = 0;
+const stale = (gen: number): boolean => gen !== repoGen;
 
 const MARKDOWN_EXT = /\.(md|markdown|mdown|mkd)$/i;
 const TEXT_EXT = /\.(ts|tsx|js|jsx|json|css|scss|html|xml|yml|yaml|txt|py|rb|go|rs|java|c|h|cpp|cc|sh|toml|ini|cfg|env|sql|graphql|svg|lock|gitignore|editorconfig|dockerfile|makefile)$/i;
 
 // ── Overview ────────────────────────────────────────────────────
 export async function loadOverview(): Promise<void> {
+  await ready();
+  const gen = repoGen;
   setState('loading', true);
   setState('error', '');
   try {
     const repo = await api.fetchRepo();
+    if (stale(gen)) return;
     setState('repoInfo', repo);
     try {
       const readme = await api.fetchReadme();
+      if (stale(gen)) return;
       if (readme && readme.encoding === 'base64') {
         setState('readmeHtml', renderMarkdown(decodeBase64Utf8(readme.content)));
         setState('readmeMissing', false);
@@ -27,31 +39,37 @@ export async function loadOverview(): Promise<void> {
         setState('readmeMissing', true);
       }
     } catch {
+      if (stale(gen)) return;
       setState('readmeHtml', '');
       setState('readmeMissing', true);
     }
   } catch (e) {
+    if (stale(gen)) return;
     setState('repoInfo', null);
     setState('error', errMsg(e));
   } finally {
-    setState('loading', false);
+    if (!stale(gen)) setState('loading', false);
   }
 }
 
 // ── Issues ───────────────────────────────────────────────────
 export async function loadIssues(): Promise<Issue[]> {
+  await ready();
+  const gen = repoGen;
   setState('issuesLoading', true);
   setState('error', '');
   try {
     const issues = await api.fetchIssues(state.issueFilter);
+    if (stale(gen)) return issues;
     setState('issues', issues);
     return issues;
   } catch (e) {
+    if (stale(gen)) return [];
     setState('issues', []);
     setState('error', errMsg(e));
     return [];
   } finally {
-    setState('issuesLoading', false);
+    if (!stale(gen)) setState('issuesLoading', false);
   }
 }
 
@@ -86,6 +104,7 @@ export function closeActiveIssue(): void {
 }
 
 export async function createIssueAction(title: string, body: string): Promise<{ number: number }> {
+  await ready();
   if (!hasToken()) throw new Error(`${SIGN_IN_REQUIRED}create issues.`);
   if (!title.trim()) throw new Error('Issue title is required.');
   setState('mutating', true);
@@ -102,6 +121,7 @@ export async function createIssueAction(title: string, body: string): Promise<{ 
 }
 
 export async function commentIssueAction(number: number, body: string): Promise<void> {
+  await ready();
   if (!hasToken()) throw new Error(`${SIGN_IN_REQUIRED}comment.`);
   if (!body.trim()) throw new Error('Comment body is required.');
   setState('mutating', true);
@@ -116,6 +136,7 @@ export async function commentIssueAction(number: number, body: string): Promise<
 }
 
 export async function setIssueStateAction(number: number, newState: 'open' | 'closed'): Promise<void> {
+  await ready();
   if (!hasToken()) throw new Error(`${SIGN_IN_REQUIRED}change issue state.`);
   setState('mutating', true);
   try {
@@ -130,18 +151,22 @@ export async function setIssueStateAction(number: number, newState: 'open' | 'cl
 
 // ── Pull requests ───────────────────────────────────────────────
 export async function loadPulls(): Promise<Pull[]> {
+  await ready();
+  const gen = repoGen;
   setState('pullsLoading', true);
   setState('error', '');
   try {
     const pulls = await api.fetchPulls(state.pullFilter);
+    if (stale(gen)) return pulls;
     setState('pulls', pulls);
     return pulls;
   } catch (e) {
+    if (stale(gen)) return [];
     setState('pulls', []);
     setState('error', errMsg(e));
     return [];
   } finally {
-    setState('pullsLoading', false);
+    if (!stale(gen)) setState('pullsLoading', false);
   }
 }
 
@@ -181,15 +206,20 @@ export function closeActivePull(): void {
 
 // ── Releases ────────────────────────────────────────────────────
 export async function loadReleases(): Promise<void> {
+  await ready();
+  const gen = repoGen;
   setState('releasesLoading', true);
   setState('error', '');
   try {
-    setState('releases', await api.fetchReleases());
+    const releases = await api.fetchReleases();
+    if (stale(gen)) return;
+    setState('releases', releases);
   } catch (e) {
+    if (stale(gen)) return;
     setState('releases', []);
     setState('error', errMsg(e));
   } finally {
-    setState('releasesLoading', false);
+    if (!stale(gen)) setState('releasesLoading', false);
   }
 }
 
@@ -204,11 +234,14 @@ function resetFileView(): void {
 }
 
 export async function loadDir(path: string): Promise<void> {
+  await ready();
+  const gen = repoGen;
   setState('codeLoading', true);
   setState('error', '');
   resetFileView();
   try {
     const result = await api.fetchContents(path);
+    if (stale(gen)) return;
     const entries = (Array.isArray(result) ? result : [result]) as ContentEntry[];
     entries.sort((a, b) => {
       if (a.type !== b.type) return a.type === 'dir' ? -1 : 1;
@@ -217,10 +250,11 @@ export async function loadDir(path: string): Promise<void> {
     setState('codeEntries', entries);
     setState('codePath', path.replace(/^\/+|\/+$/g, ''));
   } catch (e) {
+    if (stale(gen)) return;
     setState('codeEntries', []);
     setState('error', errMsg(e));
   } finally {
-    setState('codeLoading', false);
+    if (!stale(gen)) setState('codeLoading', false);
   }
 }
 
@@ -286,12 +320,15 @@ export async function setRepoAction(owner: string, name: string): Promise<void> 
   if (!o || !n) throw new Error('Both owner and repository name are required.');
   const repo: RepoRef = { owner: o, name: n };
   await writeConfig(repo);
+  // Invalidate any in-flight fetches for the previous repo before resetting.
+  repoGen += 1;
   resetRepoData();
   await loadSection(state.section, true);
   showToast(`Switched to ${o}/${n}`, 'success');
 }
 
 export async function loadAccountRepos(force = false): Promise<AccountRepo[]> {
+  await ready();
   if (!hasToken()) {
     setState('repoPickerError', 'Sign in from Settings to browse your repositories.');
     return [];
@@ -335,6 +372,8 @@ export async function refreshAll(): Promise<void> {
 
 // ── Section loader ───────────────────────────────────────────────
 export async function loadSection(section: import('./types').Section, force = false): Promise<void> {
+  // Wait for the persisted repo + token before deciding what (and where) to fetch.
+  await ready();
   switch (section) {
     case 'overview':
       if (force || !state.repoInfo) await loadOverview();

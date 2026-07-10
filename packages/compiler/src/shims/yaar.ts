@@ -13,7 +13,7 @@
  */
 
 // Solid.js primitives — imported from solid-js directly (the Bun plugin resolves to the browser build)
-import { createSignal, createEffect } from 'solid-js';
+import { createSignal } from 'solid-js';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const y = (window as any).yaar;
@@ -85,20 +85,30 @@ export const appStorage = {
       return fallback;
     }
   },
-  async readBinary(path: string): Promise<{ data: string; mimeType: string }> {
+  async readBinary(
+    path: string,
+  ): Promise<{ data: string; mimeType: string; encoding: 'base64' | 'text' }> {
     const result = await y.read(appStorageUri(path));
-    // When images are present, callVerb returns { data, images }
+    // When images are present, callVerb returns { data, images } with base64 data
     if (result && typeof result === 'object' && result.images?.length) {
       const img = result.images[0];
-      return { data: img.data, mimeType: img.mimeType ?? 'application/octet-stream' };
+      return {
+        data: img.data,
+        mimeType: img.mimeType ?? 'application/octet-stream',
+        encoding: 'base64',
+      };
     }
-    return { data: asText(result), mimeType: 'application/octet-stream' };
+    // Non-image reads come back as text — flag it so callers don't atob() plain text
+    return { data: asText(result), mimeType: 'application/octet-stream', encoding: 'text' };
   },
-  /** Read binary data and return as a Blob. Handles the base64 → binary conversion. */
+  /** Read file contents as a Blob. Decodes base64 for binary (image) reads; wraps text as-is. */
   async readBlob(path: string): Promise<Blob> {
-    const { data, mimeType } = await appStorage.readBinary(path);
-    const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
-    return new Blob([bytes], { type: mimeType });
+    const { data, mimeType, encoding } = await appStorage.readBinary(path);
+    if (encoding === 'base64') {
+      const bytes = Uint8Array.from(atob(data), (c) => c.charCodeAt(0));
+      return new Blob([bytes], { type: mimeType });
+    }
+    return new Blob([data], { type: mimeType });
   },
   async list(dirPath?: string): Promise<unknown[]> {
     const result = await y.list(appStorageUri(dirPath ?? ''));
@@ -237,29 +247,26 @@ export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): 
 /**
  * Create a Solid.js signal that auto-persists to appStorage.
  * Loads the saved value on creation (async — the signal starts with `fallback`
- * and updates once the stored value is read). Saves automatically on every change.
+ * and updates once the stored value is read). Saves automatically on every set.
+ * A set that lands before the initial load resolves wins over the stored value.
  */
 export function createPersistedSignal<T>(
   key: string,
   fallback: T,
 ): [() => T, (v: T | ((prev: T) => T)) => void] {
   const [value, setValue] = createSignal<T>(fallback);
-  let skipNextSave = true;
-  // Load persisted value
+  let written = false;
   appStorage.readJsonOr<T>(key, fallback).then((stored) => {
-    skipNextSave = true;
-    setValue(() => stored as any);
+    if (!written) setValue(() => stored as any);
   });
-  // Auto-save on changes
-  createEffect(() => {
-    const v = value();
-    if (skipNextSave) {
-      skipNextSave = false;
-      return;
-    }
-    appStorage.save(key, JSON.stringify(v));
-  });
-  return [value, setValue] as [() => T, (v: T | ((prev: T) => T)) => void];
+  const set = (v: T | ((prev: T) => T)) => {
+    written = true;
+    const next = setValue(v as any);
+    void appStorage.save(key, JSON.stringify(next)).catch((e) => {
+      console.error(`createPersistedSignal: failed to save "${key}"`, e);
+    });
+  };
+  return [value, set];
 }
 
 // ── Default export: the raw global ───────────────────────────────

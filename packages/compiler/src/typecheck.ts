@@ -39,7 +39,9 @@ export async function typecheckSandbox(sandboxPath: string): Promise<TypecheckRe
   const BUNDLED_TYPES_DIR = getBundledTypesDir();
   const TSC_PATH = getTscPath();
 
-  const tsconfigPath = join(sandboxPath, 'tsconfig.typecheck.json');
+  // Unique per invocation — concurrent typechecks on the same sandbox must not
+  // overwrite or unlink each other's config while tsc is reading it.
+  const tsconfigPath = join(sandboxPath, `tsconfig.typecheck.${crypto.randomUUID()}.json`);
 
   const tsconfig = {
     compilerOptions: {

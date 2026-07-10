@@ -372,7 +372,9 @@ export async function session(
   const backend = opts.backend ?? 'auto';
 
   if (typeof model === 'string') {
-    const key = `${model}::${backend}`;
+    // Include sessionOptions so a call with different options doesn't get a stale session
+    const optsKey = opts.sessionOptions ? JSON.stringify(opts.sessionOptions) : '';
+    const key = `${model}::${backend}::${optsKey}`;
     const existing = _sessions.get(key);
     if (existing) return existing;
     const promise = (async () => {

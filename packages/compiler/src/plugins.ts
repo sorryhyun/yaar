@@ -9,6 +9,7 @@
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
+import { scanSource, formatFindings } from './solid-html-guard.js';
 
 /**
  * Normalize a file path to use forward slashes.
@@ -408,6 +409,59 @@ export function solidHtmlClosingTagPlugin(): Bun.BunPlugin {
           contents: text.replace(/<\/\$\{([^}]+)\}>/g, '</>'),
           loader: filePath.endsWith('.tsx') ? 'tsx' : 'ts',
         };
+      });
+    },
+  };
+}
+
+/**
+ * Bun plugin that fails the build on `solid-js/html` templates that would
+ * silently drop text or throw a stackless SyntaxError from `new Function`.
+ *
+ * See `solid-html-guard.ts` for the root cause. This runs before
+ * `solidHtmlClosingTagPlugin` and never loads the file itself — it throws on a
+ * defect and otherwise returns `undefined` so the normal loader chain proceeds.
+ *
+ * `typescript` is a devDependency and is absent in bundled-exe mode (same as
+ * `tsc` in typecheck.ts), so the specifier is assembled at runtime to keep the
+ * exe bundler from pulling it in. When it can't be loaded the guard is skipped,
+ * which leaves exe-mode compiles exactly as they are today.
+ */
+export function solidHtmlTemplateGuardPlugin(): Bun.BunPlugin {
+  let tsModule: typeof import('typescript') | null | undefined;
+
+  const loadTs = async (): Promise<typeof import('typescript') | null> => {
+    if (tsModule !== undefined) return tsModule;
+    const specifier = ['type', 'script'].join('');
+    try {
+      const mod = (await import(specifier)) as {
+        default?: typeof import('typescript');
+      } & typeof import('typescript');
+      tsModule = mod.default ?? mod;
+    } catch {
+      tsModule = null;
+    }
+    return tsModule;
+  };
+
+  return {
+    name: 'solid-html-template-guard',
+    setup(build: Bun.PluginBuilder) {
+      build.onLoad({ filter: /\.tsx?$/ }, async (args: Bun.OnLoadArgs) => {
+        const filePath = toForwardSlash(args.path);
+        const text = await Bun.file(filePath).text();
+        if (!text.includes('html`')) return undefined; // fast skip
+
+        const ts = await loadTs();
+        if (!ts) return undefined; // exe mode — no typescript available
+
+        // Match what actually reaches the bundler: solidHtmlClosingTagPlugin
+        // rewrites `</${X}>` to `</>` before Bun sees the source.
+        const rewritten = text.replace(/<\/\$\{([^}]+)\}>/g, '</>');
+
+        const findings = scanSource(ts, rewritten, filePath);
+        if (findings.length > 0) throw new Error(formatFindings(filePath, findings));
+        return undefined;
       });
     },
   };

@@ -19,8 +19,17 @@ async function devPost<T>(action: string, body: Record<string, unknown>): Promis
     method: 'POST',
     headers: devHeaders(),
     body: JSON.stringify(body),
+    // Compiles can be slow, but a hung server must not leave the app awaiting forever
+    signal: AbortSignal.timeout(120_000),
   });
-  return res.json();
+  const json = await res.json().catch(() => null);
+  // Error routes (403/400/413) return bare { error } — normalize to the
+  // declared result shape so callers can rely on `success` being present.
+  if (!res.ok && (json === null || typeof json !== 'object' || !('success' in json))) {
+    const msg = (json as { error?: string } | null)?.error ?? `HTTP ${res.status}`;
+    return { success: false, error: msg, errors: [msg], diagnostics: [msg] } as T;
+  }
+  return json as T;
 }
 
 export function compile(path: string, opts?: { title?: string }) {

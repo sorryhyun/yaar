@@ -13,6 +13,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "bun test",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },
