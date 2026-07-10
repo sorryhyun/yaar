@@ -41,7 +41,7 @@ runs a model, no Python") is done. See [`yaar_ml_runtime.md`](./yaar_ml_runtime.
   stored fp16 and fed through a `Cast(fp16→fp32)`, so activations never materialise
   as fp16. Download stays ~3.9 GB; load with `graphOptimizationLevel:'disabled'` so
   ORT doesn't constant-fold the casts (→ 7.8 GB fp32 in memory). Script:
-  `../krea/scripts/export_onnx_dit_webgpu.py` → `dit_512_fp16_webgpu.onnx`. No
+  `../krea/scripts/export_onnx_dit_webgpu.py` → `dit_512_fp16_r16.onnx`. No
   op-pinning within the fp16 export works (any fp16 tensor the residual touches —
   MatMul/Add/**Reshape/Transpose/Concat** — overflows); only full fp32 activations do.
   Verified: `apps/anima` renders a coherent, on-prompt 512² image on the WebGPU EP.

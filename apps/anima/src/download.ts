@@ -12,8 +12,8 @@ import { HF_BASE, LOCAL_DIR, resetAssetUrls } from './ml';
 export const MANIFEST: { path: string; bytes: number }[] = [
   // DiT — the `_webgpu` export (fp16 weights / fp32 activations). The plain
   // `dit_512_fp16` in the same repo returns all-NaN on the WebGPU EP.
-  { path: 'dit_512_fp16_webgpu.onnx', bytes: 9_445_509 },
-  { path: 'dit_512_fp16_webgpu.onnx.data', bytes: 3_913_625_600 },
+  { path: 'dit_512_fp16_r16.onnx', bytes: 9_445_509 },
+  { path: 'dit_512_fp16_r16.onnx.data', bytes: 3_913_625_600 },
   { path: 'vae_decoder_512_fp16.onnx', bytes: 553_438 },
   { path: 'vae_decoder_512_fp16.onnx.data', bytes: 56_053_056 },
   // text path (typed prompts)

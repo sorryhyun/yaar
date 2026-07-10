@@ -14,7 +14,7 @@
 //                         fp16 activations fit (peak ~1.66e4 < 65504) and graph
 //                         optimizations/fusions stay ENABLED. The fast path.
 //                         See ../krea/scripts/rescale_dit_residual.py.
-//   dit_512_fp16_webgpu — fp16 WEIGHTS, fp32 ACTIVATIONS (each weight Cast
+//   dit_512_fp16_r16    — fp16 WEIGHTS, fp32 ACTIVATIONS (each weight Cast
 //                         fp16→fp32 per op). Dodges the overflow at the cost of
 //                         fp32 bandwidth + graphOptimizationLevel 'disabled'
 //                         (else ORT constant-folds the casts → 7.8 GB in memory).
@@ -58,7 +58,7 @@ const [dl, setDl] = createSignal<DownloadProgress | null>(null);
 const [logLines, setLog] = createSignal<string[]>([]);
 const [busy, setBusy] = createSignal(false);
 // DiT weights variant — see the header comment for what each export is.
-const [ditModel, setDitModel] = createSignal('dit_512_fp16_webgpu');
+const [ditModel, setDitModel] = createSignal('dit_512_fp16_r16');
 
 // Session options per DiT export. The cast-hack exports NEED graph opt disabled
 // (constant folding would materialise the fp32 weights); the rescaled export runs
@@ -477,8 +477,8 @@ ${prompt()}</textarea
           }}
         >
           <option
-            value="dit_512_fp16_webgpu"
-            selected=${() => ditModel() === 'dit_512_fp16_webgpu'}
+            value="dit_512_fp16_r16"
+            selected=${() => ditModel() === 'dit_512_fp16_r16'}
           >
             fp16 weights / fp32 acts ✓
           </option>
