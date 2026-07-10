@@ -21,7 +21,13 @@
  * The ORT `.wasm` runtime artifacts are served from `/api/ml-runtime/`.
  */
 
-import * as ort from 'onnxruntime-web';
+// The `/webgpu` flavor is the NEW native (Dawn-based) WebGPU EP compiled into the
+// asyncify wasm artifact. The package default ('.') is the older JSEP WebGPU EP,
+// whose buffer allocator miscomputes fp16 graphs with single-consumer alias views
+// (measured: adaLN Split→Unsqueeze→broadcast in the anima DiT comes back ~10× too
+// large per block → residual overflow → all-NaN). The native EP does not share
+// that allocator. Both flavors load their artifacts from /api/ml-runtime/.
+import * as ort from 'onnxruntime-web/webgpu';
 
 // ── Runtime configuration (runs once on import) ──────────────────────────────
 
