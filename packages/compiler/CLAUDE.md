@@ -74,7 +74,7 @@ Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires e
 
 Shims wrap npm packages with compatibility fixes or SDK wrappers:
 
-- **`yaar.ts`** — thin wrapper over `window.yaar` global. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`), `createPersistedSignal` (Solid signal auto-synced to storage), `defineCommand`, `onShortcut`, `showToast`, `withLoading`, `AppCommandError`
+- **`yaar.ts`** — thin wrapper over `window.yaar` global. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`, plus `trySave` — reports the failure and resolves `false` instead of throwing, so callers can withhold a "Saved" UI), `createPersistedSignal` (Solid signal auto-synced to storage via `trySave`), `defineCommand`, `onShortcut`, `showToast`, `withLoading`, `errMsg`, `wait`, `AppCommandError`
 - **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4

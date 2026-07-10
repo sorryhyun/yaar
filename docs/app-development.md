@@ -193,6 +193,8 @@ Common mistakes to avoid when building apps:
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
 - **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `invoke('yaar://http', { url, method?, headers?, body? })` and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
+- **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `withLoading`, `wait` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`.
 
 ### Right Pattern for External Service Integration
 
@@ -480,8 +482,11 @@ Each app has isolated file storage at `storage/apps/{appId}/`. Apps use `self` a
 ```typescript
 import { appStorage } from '@bundled/yaar';
 
-// Write a file
+// Write a file — throws on failure
 await appStorage.save('data.json', JSON.stringify({ key: 'value' }));
+
+// Write a file — reports failure and resolves false instead of throwing
+const saved = await appStorage.trySave('data.json', JSON.stringify({ key: 'value' }));
 
 // Read as JSON
 const data = await appStorage.readJson<{ key: string }>('data.json');
@@ -505,6 +510,61 @@ await appStorage.remove('data.json');
 > **`list()` returns no `size` or `modifiedAt`.** Each entry is `{ path, isDirectory, uri, mimeType }`. If you need file sizes or timestamps, use the REST API (`GET /api/storage/{dir}/?list=true`), which returns `StorageEntry` objects with `size` and `modifiedAt`.
 
 > **`readBlob()` on a PDF returns the first page rendered as PNG, not the PDF bytes.** The server converts PDFs to page images on read (`packages/server/src/handlers/apps.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
+
+### Never swallow a failed save
+
+A `try { await appStorage.save(...) } catch { /* ignore */ }` around an autosave turns
+data loss into silence: the app keeps showing "Saved", the user keeps typing, and nothing
+reaches disk. Reach for `trySave()` instead — it logs the failure, toasts it (at most once
+per 5s per path, so a failing autosave doesn't spam), and resolves `false` so the caller
+can *withhold* its success UI:
+
+```typescript
+// Bad — the "Saved" chip lies whenever the write fails.
+try { await appStorage.save('draft.json', json); } catch { /* ignore */ }
+setDirty(false);
+
+// Good — stay dirty when the write didn't land.
+if (await appStorage.trySave('draft.json', json, { label: 'draft' })) {
+  setDirty(false);
+}
+```
+
+`label` names the data in the toast (`Couldn't save draft: …`). Pass `onError` to replace
+the toast with your own surface — an inline status line, say. Failures are logged either
+way, so `onError` never costs you the console trace:
+
+```typescript
+await appStorage.trySave('draft.json', json, {
+  onError: (message) => setSaveStateText(`Not saved — ${message}`),
+});
+```
+
+`createPersistedSignal()` routes its writes through `trySave` and takes the same
+`label` / `onError` options, so a signal that stops persisting says so.
+
+Keep `save()` where the caller genuinely handles the throw — propagating to an agent-facing
+command handler, for instance, where an `AppCommandError` is the right outcome.
+
+### Error handling helpers
+
+`@bundled/yaar` ships the small helpers apps otherwise rewrite. Prefer them over inlining:
+
+```typescript
+import { errMsg, showToast, withLoading, wait, AppCommandError } from '@bundled/yaar';
+
+errMsg(e);                       // not: e instanceof Error ? e.message : String(e)
+showToast('Deleted', 'success'); // 'info' | 'success' | 'error', auto-dismissing
+await wait(200);                 // not: new Promise(r => setTimeout(r, 200))
+
+// Sets loading true, runs fn, routes a throw to onError, always clears loading.
+await withLoading(setLoading, () => fetchIssues(), (msg) => showToast(msg, 'error'));
+
+// Throw from a command handler to report failure to the agent.
+throw new AppCommandError('No document open');
+```
+
+`debounce` / `throttle` come from `@bundled/lodash` — don't hand-roll them.
 
 ### From Agent (MCP Tools)
 

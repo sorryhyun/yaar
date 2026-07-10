@@ -1,8 +1,8 @@
 import { createSignal } from '@bundled/solid-js';
+import { debounce } from '@bundled/lodash';
 import { showToast } from '@bundled/yaar';
 import { saveDeck } from './storage';
 import { newDeck, normalizeDeck } from './deck-utils';
-import { debounce } from './utils';
 import type { Deck, Slide } from './types';
 
 // deck state (mutable, shared via get/set)
@@ -15,6 +15,7 @@ export const [deckVer, setDeckVer] = createSignal(0);
 export const [activeIndexVer, setActiveIndexVer] = createSignal(0);
 export const [dirty, setDirty] = createSignal(false);
 export const [lastSavedAt, setLastSavedAt] = createSignal(Date.now());
+export const [saveFailed, setSaveFailed] = createSignal(false);
 
 // misc mutable
 export let filterQueryValue = '';
@@ -45,20 +46,25 @@ export function activeSlide(): Slide {
   return _deck.slides[_deck.activeIndex];
 }
 
-const debouncedSave = debounce(() => {
-  setDirty(false);
-  setLastSavedAt(Date.now());
-  void saveDeck(_deck);
-}, 700);
+const debouncedSave = debounce(() => void persist(false), 700);
+
+// Bumped on every edit, so a save that started before the latest edit does not
+// clear the dirty flag — the chip would then read "Saved" over unsaved changes.
+let editSeq = 0;
 
 export function markDirty() {
+  editSeq++;
   setDirty(true);
   debouncedSave();
 }
 
-export function persist(withToast = false) {
-  void saveDeck(_deck);
-  setDirty(false);
+/** Save the deck. Leaves the deck dirty when the write fails (saveDeck reports it). */
+export async function persist(withToast = false): Promise<void> {
+  const savedAt = editSeq;
+  const ok = await saveDeck(_deck);
+  setSaveFailed(!ok);
+  if (!ok) return;
+  if (editSeq === savedAt) setDirty(false);
   setLastSavedAt(Date.now());
   if (withToast) showToast('Saved', 'success');
 }

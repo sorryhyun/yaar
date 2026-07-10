@@ -180,6 +180,8 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 - **외부 서버가 실행 중이라고 가정하지 마세요** — `localhost:3000`이나 다른 포트에 백엔드가 없습니다. 앱은 완전히 자체 완결형이어야 합니다.
 - **iframe에서 서버 기능을 복제하지 마세요** — 인증이 필요한 외부 API를 호출해야 하면, AI 에이전트가 `invoke('yaar://http', { url, method?, headers?, body? })`로 HTTP 호출을 처리하고 App Protocol로 데이터를 전달해야 합니다.
 - **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
+- **저장 실패를 삼키지 마세요** — `appStorage.save()` 를 `catch { /* ignore */ }` 로 감싸면 UI는 "저장됨"이라고 표시한 채 데이터가 조용히 사라집니다. `appStorage.trySave()` 를 쓰고 그 결과에 따라 성공 UI를 표시하세요. [저장 실패를 삼키지 마세요](#저장-실패를-삼키지-마세요) 참고.
+- **SDK 헬퍼를 다시 구현하지 마세요** — `errMsg`, `showToast`, `withLoading`, `wait` 는 `@bundled/yaar` 가, `debounce` 는 `@bundled/lodash` 가 제공합니다.
 
 ### 외부 서비스 연동의 올바른 패턴
 
@@ -354,8 +356,11 @@ config/
 ```typescript
 import { appStorage } from '@bundled/yaar';
 
-// 파일 저장
+// 파일 저장 — 실패 시 throw
 await appStorage.save('data.json', JSON.stringify({ key: 'value' }));
+
+// 파일 저장 — throw 대신 실패를 보고하고 false 로 resolve
+const saved = await appStorage.trySave('data.json', JSON.stringify({ key: 'value' }));
 
 // JSON으로 읽기
 const data = await appStorage.readJson<{ key: string }>('data.json');
@@ -376,6 +381,61 @@ const files = await appStorage.list();
 // 파일 삭제
 await appStorage.remove('data.json');
 ```
+
+### 저장 실패를 삼키지 마세요
+
+자동 저장을 `try { await appStorage.save(...) } catch { /* ignore */ }` 로 감싸면 데이터
+손실이 침묵으로 바뀝니다. 앱은 계속 "저장됨"을 표시하고, 사용자는 계속 입력하지만, 아무것도
+디스크에 기록되지 않습니다. 대신 `trySave()` 를 쓰세요 — 실패를 로그로 남기고 토스트로
+알리며(같은 경로에 대해 5초에 한 번까지만 — 실패하는 자동 저장이 토스트를 도배하지 않도록),
+`false` 로 resolve 하므로 호출자가 성공 UI를 *보류*할 수 있습니다:
+
+```typescript
+// 나쁨 — 쓰기가 실패해도 "저장됨" 칩이 거짓말을 합니다.
+try { await appStorage.save('draft.json', json); } catch { /* ignore */ }
+setDirty(false);
+
+// 좋음 — 쓰기가 성사되지 않으면 dirty 를 유지합니다.
+if (await appStorage.trySave('draft.json', json, { label: '초안' })) {
+  setDirty(false);
+}
+```
+
+`label` 은 토스트에 표시될 데이터 이름입니다(`Couldn't save 초안: …`). `onError` 를 넘기면
+토스트 대신 앱 고유의 표시 수단(예: 인라인 상태 줄)을 쓸 수 있습니다. 어느 쪽이든 실패는
+항상 로그로 남으므로 `onError` 를 쓴다고 콘솔 추적을 잃지 않습니다:
+
+```typescript
+await appStorage.trySave('draft.json', json, {
+  onError: (message) => setSaveStateText(`저장되지 않음 — ${message}`),
+});
+```
+
+`createPersistedSignal()` 은 쓰기를 `trySave` 로 처리하며 동일한 `label` / `onError` 옵션을
+받습니다. 따라서 더 이상 저장되지 않는 시그널은 그 사실을 알립니다.
+
+호출자가 throw 를 실제로 처리하는 곳에는 `save()` 를 그대로 두세요 — 예컨대 에이전트가
+호출하는 커맨드 핸들러로 전파해 `AppCommandError` 로 처리하는 경우입니다.
+
+### 에러 처리 헬퍼
+
+`@bundled/yaar` 는 앱들이 자꾸 다시 만드는 작은 헬퍼들을 제공합니다. 인라인 구현보다 이쪽을 쓰세요:
+
+```typescript
+import { errMsg, showToast, withLoading, wait, AppCommandError } from '@bundled/yaar';
+
+errMsg(e);                       // e instanceof Error ? e.message : String(e) 대신
+showToast('삭제됨', 'success');  // 'info' | 'success' | 'error', 자동 사라짐
+await wait(200);                 // new Promise(r => setTimeout(r, 200)) 대신
+
+// loading 을 true 로 두고 fn 실행, throw 는 onError 로, 끝나면 항상 loading 해제.
+await withLoading(setLoading, () => fetchIssues(), (msg) => showToast(msg, 'error'));
+
+// 커맨드 핸들러에서 throw 하면 에이전트에 실패가 전달됩니다.
+throw new AppCommandError('열린 문서가 없습니다');
+```
+
+`debounce` / `throttle` 은 `@bundled/lodash` 에서 가져오세요 — 직접 만들지 마세요.
 
 ### 에이전트에서 (MCP 도구)
 

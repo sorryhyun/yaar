@@ -1,5 +1,5 @@
 import html from '@bundled/solid-js/html';
-import { getDeck, setDeck, deckVer, activeIndexVer, dirty, lastSavedAt, markDirty, persist, bumpDeck, bumpActiveIndex, activeSlide, setFilterQueryValue } from '../store';
+import { getDeck, setDeck, deckVer, activeIndexVer, dirty, saveFailed, lastSavedAt, markDirty, persist, bumpDeck, bumpActiveIndex, activeSlide, setFilterQueryValue } from '../store';
 import { newDeck, newSlide, isFontSize, FONT_SIZES } from '../deck-utils';
 import { THEMES } from '../theme';
 import { parseAspectRatio, RATIO_PRESETS, type RatioPreset } from '../aspect-ratio';
@@ -44,8 +44,12 @@ export function createTopbar() {
       <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => persist(true)}>Save</button>
       <button class="y-btn y-btn-sm y-btn-primary" onClick=${startPresent}>Present</button>
       <button class="y-btn y-btn-sm y-btn-ghost" onClick=${exportPdf}>Export PDF</button>
-      <span class=${() => `chip${dirty() ? ' dirty' : ''}`}>
-        ${() => dirty() ? 'Saving…' : `Saved ${formatDistanceToNow(lastSavedAt(), { addSuffix: true })}`}
+      <span class=${() => `chip${dirty() || saveFailed() ? ' dirty' : ''}`}>
+        ${() => saveFailed()
+          ? 'Not saved'
+          : dirty()
+            ? 'Saving…'
+            : `Saved ${formatDistanceToNow(lastSavedAt(), { addSuffix: true })}`}
       </span>
     </div>
   `;

@@ -1,14 +1,6 @@
 // ── Shared constants
 export const DEFAULT_TITLE = 'Untitled Document';
 
-export function debounce<T extends (...args: any[]) => void>(fn: T, delay = 500) {
-  let timer: number | null = null;
-  return (...args: Parameters<T>) => {
-    if (timer) window.clearTimeout(timer);
-    timer = window.setTimeout(() => fn(...args), delay);
-  };
-}
-
 export function countTextStats(text: string) {
   const trimmed = text.trim();
   const words = trimmed ? trimmed.split(/\s+/).length : 0;

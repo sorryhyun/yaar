@@ -1,7 +1,7 @@
 import html from '@bundled/solid-js/html';
 import { getDeck, activeIndexVer, activeSlide, markDirty, bumpDeck, bumpActiveIndex, clampActive } from '../store';
 import { newSlide, isFontSize, FONT_SIZES } from '../deck-utils';
-import { debounce } from '../utils';
+import { debounce } from '@bundled/lodash';
 import type { SlideLayout } from '../types';
 
 // Debounced version of bumpDeck for text input fields (350ms)

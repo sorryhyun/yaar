@@ -116,13 +116,51 @@ Minor, not a bug: `music-maker.setScale` declares `scale: { type: 'string' }` wh
 handler needs the narrower `ScaleType`, so it keeps a cast. An `enum` there would let the
 cast go and would tell the agent which scales are legal.
 
-### 2. Surface storage errors instead of letting apps swallow them
-17 catch-and-ignore blocks sit around storage saves across apps (`excel-lite/src/state.ts:295`,
-`slides-lite/src/storage.ts:7`, `github/src/storage.ts:25,49`, `rss-reader/src/storage.ts:38`).
-Consider a save API variant that toasts/reports failure by default, and show `errMsg` /
-`showToast` / `withLoading` in the guide's examples — apps re-implement all of them
-(inline `e instanceof Error ? e.message : String(e)` appears 14× across 7 apps; `debounce`
-re-implemented twice despite bundled lodash; `wait` re-implemented in browser-user).
+### 2. Surface storage errors instead of letting apps swallow them — **shipped**
+`appStorage.trySave(path, content, { encoding?, label?, onError? })` is the reporting save:
+it resolves `false` instead of throwing, always logs, and toasts once per 5s per path (an
+autosave retries every tick, so an undeduped toast would be a stream). A success re-arms the
+toast. `onError` replaces the toast — never the log — for apps with their own error surface.
+`createPersistedSignal` now writes through it and forwards both options.
+
+- `packages/compiler/src/shims/yaar.ts` — `trySave` + the dedup, `createPersistedSignal`.
+- `packages/compiler/src/bundled-types/index.d.ts` — `YaarAppStorageTrySaveOptions`.
+- `packages/compiler/src/shims/yaar.test.ts` — stubs `window.yaar`/`document` and imports the
+  real shim. `src/shims/**` is tsconfig-excluded, so the file runs under `bun test` without
+  entering the build.
+- `docs/app-development.md` + `docs/ko/app-development.md` — "Never swallow a failed save" and
+  "Error handling helpers" sections, plus two anti-pattern bullets.
+
+**The bug it was really about.** `slides-lite.persist()` called the swallowing `saveDeck()`
+without awaiting it, then unconditionally cleared the dirty flag, stamped `lastSavedAt`, and
+toasted "Saved". A failed write was reported to the user as a successful one. `persist()` now
+awaits, holds back all three on failure, and the topbar chip reads "Not saved" instead of
+"Saving…" forever. `word-lite` had the same shape via `createPersistedSignal` +
+`setSaveStateText('Saved at …')`; it now passes `onError` to overwrite that label.
+
+Verified against the compiled bundle in a browser (not just unit tests): stubbing
+`window.yaar.invoke` to reject drives the chip Saved → Not saved → Saved across a
+fail/recover cycle, with 3 failures logged and 1 toast shown.
+
+**The counts in the original finding were wrong**, which is worth recording since they were
+cited as evidence:
+
+- "17 catch-and-ignore blocks around storage saves" — there were **two**
+  (`excel-lite/src/state.ts:295` autosave, `slides-lite/src/storage.ts:7`). Both are gone.
+  `rss-reader/src/storage.ts:38` is a *read* miss on an optional file, and
+  `github/src/storage.ts:25,49` swallow `remove()` of a possibly-absent token. Both are
+  correct as written and were left alone.
+- "`wait` re-implemented in browser-user" — it is not; no app re-implements `wait`.
+- "`debounce` re-implemented twice despite bundled lodash" — true, and fixed: `slides-lite`
+  and `word-lite` now import it from `@bundled/lodash`, as `excel-lite` already did.
+- "inline `e instanceof Error ? … : String(e)` 14× across 7 apps" — roughly right (20 sites,
+  9 apps). Left as-is: the guide now shows `errMsg`, which is what the finding actually asked
+  for. Mechanically rewriting 20 call sites across apps that already import `errMsg` for
+  *other* lines is a separate, reviewable sweep.
+
+Still open, deliberately: `github/src/storage.ts` `writeToken`/`writeClientId` swallow a failed
+`storage.remove()`, so a logout that fails to delete the token reports success. That is the raw
+`storage` SDK, not `appStorage`, and it has no `trySave` equivalent.
 
 ### 3. Make `subscribe()` real or document polling
 The SDK exports `subscribe()` and the docs promote it, but zero apps use it — five apps

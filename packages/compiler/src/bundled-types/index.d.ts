@@ -315,8 +315,21 @@ interface YaarAppStorageSaveOptions {
   encoding?: 'utf-8' | 'base64';
 }
 
+interface YaarAppStorageTrySaveOptions extends YaarAppStorageSaveOptions {
+  /** Name shown in the failure toast. Defaults to `path`. */
+  label?: string;
+  /** Replaces the failure toast. Failures are logged either way. */
+  onError?: (message: string, error: unknown) => void;
+}
+
 interface YaarAppStorage {
   save(path: string, content: string, options?: YaarAppStorageSaveOptions): Promise<void>;
+  /**
+   * `save()` that reports failure instead of throwing. Resolves to whether the
+   * write landed, so callers can hold back a "Saved" toast or a dirty-flag clear.
+   * Failures are logged, and toasted at most once per 5s per path.
+   */
+  trySave(path: string, content: string, options?: YaarAppStorageTrySaveOptions): Promise<boolean>;
   read(path: string): Promise<string>;
   readJson<T = unknown>(path: string): Promise<T>;
   /** Read JSON with a fallback value returned when the file doesn't exist or is unparseable. */
@@ -537,10 +550,15 @@ declare module '@bundled/yaar' {
    * Create a Solid.js signal that auto-persists to appStorage.
    * The signal starts with `fallback` and updates once the stored value loads.
    * Saves to appStorage automatically on every change.
+   *
+   * A failed save is reported (logged, and toasted at most once per 5s) rather
+   * than dropped. Pass `label` to name the data in that toast, or `onError` to
+   * replace it.
    */
   export function createPersistedSignal<T>(
     key: string,
     fallback: T,
+    options?: { label?: string; onError?: (message: string, error: unknown) => void },
   ): [get: () => T, set: (v: T | ((prev: T) => T)) => void];
 
   /** The raw window.yaar global. */

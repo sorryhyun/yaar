@@ -25,11 +25,3 @@ export function formatDistanceToNow(ts: number, opts?: { addSuffix?: boolean }) 
   if (!opts?.addSuffix) return txt;
   return delta >= 0 ? `${txt} ago` : `in ${txt}`;
 }
-
-export function debounce<T extends (...args: never[]) => void>(fn: T, wait = 300) {
-  let t: number | null = null;
-  return (...args: Parameters<T>) => {
-    if (t) window.clearTimeout(t);
-    t = window.setTimeout(() => fn(...args), wait);
-  };
-}

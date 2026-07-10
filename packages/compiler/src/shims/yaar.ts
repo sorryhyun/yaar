@@ -61,6 +61,22 @@ function appStorageUri(path: string): string {
   return clean ? `yaar://apps/self/storage/${clean}` : 'yaar://apps/self/storage/';
 }
 
+/**
+ * A failing autosave usually fails again on every tick, so `trySave` toasts a
+ * given path at most once per window. Every failure is logged regardless. A
+ * success clears the entry, so a later failure is toasted again.
+ */
+const SAVE_FAILURE_TOAST_INTERVAL_MS = 5000;
+const lastSaveFailureToast = new Map<string, number>();
+
+function toastSaveFailure(path: string, label: string, error: unknown): void {
+  const now = Date.now();
+  const last = lastSaveFailureToast.get(path);
+  if (last != null && now - last < SAVE_FAILURE_TOAST_INTERVAL_MS) return;
+  lastSaveFailureToast.set(path, now);
+  showToast(`Couldn't save ${label}: ${errMsg(error)}`, 'error');
+}
+
 export const appStorage = {
   async save(
     path: string,
@@ -70,6 +86,35 @@ export const appStorage = {
     const payload: Record<string, unknown> = { action: 'write', content };
     if (options?.encoding) payload.encoding = options.encoding;
     await y.invoke(appStorageUri(path), payload);
+  },
+  /**
+   * `save()` that reports failure instead of throwing. Returns whether the write
+   * landed, so callers can hold back a "Saved" toast or a dirty-flag clear.
+   *
+   * A failure is always logged. It is also toasted, unless `onError` is given —
+   * then that runs instead, for apps with their own error surface.
+   */
+  async trySave(
+    path: string,
+    content: string,
+    options?: {
+      encoding?: 'utf-8' | 'base64';
+      /** Name shown in the failure toast. Defaults to `path`. */
+      label?: string;
+      /** Replaces the failure toast. */
+      onError?: (message: string, error: unknown) => void;
+    },
+  ): Promise<boolean> {
+    try {
+      await appStorage.save(path, content, { encoding: options?.encoding });
+      lastSaveFailureToast.delete(path);
+      return true;
+    } catch (e) {
+      console.error(`[yaar] appStorage.trySave: failed to save "${path}"`, e);
+      if (options?.onError) options.onError(errMsg(e), e);
+      else toastSaveFailure(path, options?.label ?? path, e);
+      return false;
+    }
   },
   async read(path: string): Promise<string> {
     return asText(await y.read(appStorageUri(path)));
@@ -263,10 +308,15 @@ export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): 
  * Loads the saved value on creation (async — the signal starts with `fallback`
  * and updates once the stored value is read). Saves automatically on every set.
  * A set that lands before the initial load resolves wins over the stored value.
+ *
+ * A failed save is reported (logged, and toasted at most once per 5s) rather
+ * than dropped: the signal keeps the new value, but it is no longer persisted.
+ * Pass `label` to name the data in that toast, or `onError` to replace it.
  */
 export function createPersistedSignal<T>(
   key: string,
   fallback: T,
+  options?: { label?: string; onError?: (message: string, error: unknown) => void },
 ): [() => T, (v: T | ((prev: T) => T)) => void] {
   const [value, setValue] = createSignal<T>(fallback);
   let written = false;
@@ -276,8 +326,9 @@ export function createPersistedSignal<T>(
   const set = (v: T | ((prev: T) => T)) => {
     written = true;
     const next = setValue(v as any);
-    void appStorage.save(key, JSON.stringify(next)).catch((e) => {
-      console.error(`createPersistedSignal: failed to save "${key}"`, e);
+    void appStorage.trySave(key, JSON.stringify(next), {
+      label: options?.label,
+      onError: options?.onError,
     });
   };
   return [value, set];

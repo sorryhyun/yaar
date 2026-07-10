@@ -289,11 +289,7 @@ export function tryImportWorkbook(text: string, errorMessage = 'Invalid JSON') {
 export const autosavePath = 'autosave.json';
 
 const _autosaveWorkbook = debounce(async () => {
-  try {
-    await storageSave(autosavePath, serializeWorkbook());
-  } catch {
-    // ignore autosave errors
-  }
+  await appStorage.trySave(autosavePath, serializeWorkbook(), { label: 'workbook' });
 }, 1400);
 
 export function scheduleAutosave() {

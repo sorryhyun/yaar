@@ -1,5 +1,6 @@
+import { debounce } from '@bundled/lodash';
 import { appStorage, createPersistedSignal } from '@bundled/yaar';
-import { nowLabel, sanitizeFilename, debounce, textToHtml, DEFAULT_TITLE } from './utils';
+import { nowLabel, sanitizeFilename, textToHtml, DEFAULT_TITLE } from './utils';
 import { editorEl, docTitleEl, setSaveStateText } from './state';
 import { refreshStats } from './editor';
 
@@ -13,8 +14,11 @@ const EMPTY_DRAFT: DraftState = {
 };
 
 // Signal: auto-persists to storage on every setDraft() call.
-// Replaces the old window.yaar.invoke pattern for saves.
-const [, setDraft] = createPersistedSignal<DraftState>(STORAGE_KEY, EMPTY_DRAFT);
+// The save is async, so a failure lands here after saveDoc() has already
+// reported success — overwrite the label rather than toast over the editor.
+const [, setDraft] = createPersistedSignal<DraftState>(STORAGE_KEY, EMPTY_DRAFT, {
+  onError: (message) => setSaveStateText(`Not saved — ${message}`),
+});
 
 export const getTitle = () => (docTitleEl?.value || '').trim() || DEFAULT_TITLE;
 export const exportBaseName = () => sanitizeFilename(getTitle());
