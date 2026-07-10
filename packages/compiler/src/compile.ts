@@ -22,6 +22,7 @@ import {
   COMPILER_VERSION,
 } from './build-manifest.js';
 import {
+  IFRAME_IME_GUARD_SCRIPT,
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_VERB_SDK_SCRIPT,
@@ -67,6 +68,8 @@ let sdkScriptsCache: { raw: string; minified: string } | null = null;
 
 function getRawSdkScripts(): string {
   return [
+    // First — the guard must be listening before any app code registers handlers
+    IFRAME_IME_GUARD_SCRIPT,
     IFRAME_CAPTURE_HELPER_SCRIPT,
     IFRAME_STORAGE_SDK_SCRIPT,
     IFRAME_VERB_SDK_SCRIPT,

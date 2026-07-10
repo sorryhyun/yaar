@@ -1,3 +1,4 @@
+export { IFRAME_IME_GUARD_SCRIPT } from './ime-guard.js';
 export { IFRAME_CAPTURE_HELPER_SCRIPT } from './capture.js';
 export { IFRAME_FETCH_PROXY_SCRIPT } from './fetch-proxy.js';
 export { IFRAME_CONTEXTMENU_SCRIPT } from './contextmenu.js';

@@ -9,6 +9,7 @@ import type { MessageStatus } from '@/store/types';
 import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
 import { apiFetch, isRemoteMode } from '@/lib/api';
+import { isComposingKey } from '@/lib/ime';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
 
 function readFilesAsDataUrls(files: File[]): Promise<string[]> {
@@ -172,6 +173,9 @@ export function CommandPalette() {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      // Let the IME consume keys while a syllable is still composing
+      if (isComposingKey(e)) return;
+
       // @mention dropdown navigation
       if (mentionMatches.length > 0) {
         if (e.key === 'ArrowDown') {

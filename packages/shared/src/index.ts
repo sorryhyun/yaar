@@ -13,6 +13,7 @@ export type MonitorId = string;
 /** Default monitor ID. */
 export const DEFAULT_MONITOR_ID = '0';
 export {
+  IFRAME_IME_GUARD_SCRIPT,
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,

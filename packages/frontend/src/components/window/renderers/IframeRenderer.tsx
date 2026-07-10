@@ -5,6 +5,7 @@
  */
 import { memo, useEffect, useRef, useState, useCallback } from 'react';
 import {
+  IFRAME_IME_GUARD_SCRIPT,
   IFRAME_CAPTURE_HELPER_SCRIPT,
   IFRAME_STORAGE_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,
@@ -194,6 +195,13 @@ function IframeRenderer({
             tokenScript.setAttribute('data-yaar-token', '1');
             tokenScript.textContent = `window.__YAAR_TOKEN__=${JSON.stringify(iframeToken)};`;
             doc.head.appendChild(tokenScript);
+          }
+          // First — the guard must be listening before any app code registers handlers
+          if (doc && !doc.querySelector('script[data-yaar-ime-guard]')) {
+            const imeScript = doc.createElement('script');
+            imeScript.setAttribute('data-yaar-ime-guard', '1');
+            imeScript.textContent = IFRAME_IME_GUARD_SCRIPT;
+            doc.head.appendChild(imeScript);
           }
           if (doc && !doc.querySelector('script[data-yaar-capture]')) {
             const script = doc.createElement('script');

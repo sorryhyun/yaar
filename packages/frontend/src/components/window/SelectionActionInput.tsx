@@ -4,6 +4,7 @@
  */
 import { useCallback, useEffect, useRef } from 'react';
 import { useDesktopStore } from '@/store';
+import { isComposingKey } from '@/lib/ime';
 import styles from '@/styles/window/WindowFrame.module.css';
 
 interface SelectionActionInputProps {
@@ -75,12 +76,14 @@ export function SelectionActionInput({
           selectedText ? 'What to do with selection...' : 'What to do with this region...'
         }
         onKeyDown={(e) => {
+          e.stopPropagation();
+          // Enter/Escape belong to the IME while a syllable is composing
+          if (isComposingKey(e)) return;
           if (e.key === 'Enter') {
             handleSubmit((e.target as HTMLInputElement).value);
           } else if (e.key === 'Escape') {
             onClose();
           }
-          e.stopPropagation();
         }}
         onClick={(e) => e.stopPropagation()}
       />

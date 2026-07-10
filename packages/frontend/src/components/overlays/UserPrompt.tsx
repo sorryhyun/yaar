@@ -11,6 +11,7 @@ import { useDesktopStore, selectUserPrompts } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import type { UserPromptModel } from '@/types/state';
+import { isComposingKey } from '@/lib/ime';
 import styles from '@/styles/overlays/UserPrompt.module.css';
 
 function PromptBox({
@@ -59,7 +60,8 @@ function PromptBox({
     onSubmit(prompt.id, selectedValues, inputText);
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (isComposingKey(e)) return;
     if (e.key === 'Enter' && !e.shiftKey && canSubmit) {
       e.preventDefault();
       handleSubmit();
