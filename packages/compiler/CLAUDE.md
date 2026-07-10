@@ -16,7 +16,8 @@ bun run dev              # Watch mode
 src/
 ├── index.ts               # Barrel exports
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
-├── plugins.ts             # 3 Bun plugins: bundledLibrary, cssFile, solidHtmlClosingTag
+├── plugins.ts             # 4 Bun plugins: bundledLibrary, cssFile, solidHtmlTemplateGuard, solidHtmlClosingTag
+├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
 ├── extract-protocol.ts    # Regex-based protocol manifest extraction from source
@@ -53,6 +54,8 @@ src/
 Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires explicit `"bundles"` in app.json. Solid-js imports from bundled libs are intercepted to prevent duplicate module instances.
 
 **`cssFilePlugin()`** — converts `.css` imports to JS that injects a `<style>` element at runtime.
+
+**`solidHtmlTemplateGuardPlugin()`** — fails the build on `html` templates that solid-js/html mis-compiles. `solid-js/html` joins the static parts with a `<!--#-->` marker and feeds generated source to `new Function`, but its parser only emits text nodes from inside a matched-tag callback — so top-level text before the first tag is dropped, and a lone top-level marker yields `.firstChild` with no parent. Finds templates via the TypeScript AST (correct under nesting), classifies them with `classifyTemplate()`, and reports file/line/column plus a fix. `typescript` is a devDependency absent in exe mode, so it is imported through a runtime-assembled specifier and the guard no-ops when unavailable.
 
 **`solidHtmlClosingTagPlugin()`** — rewrites `</${Component}>` to `</>` in source before bundling (closing tags cause expression index misalignment in solid-js/html).
 

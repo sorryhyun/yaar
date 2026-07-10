@@ -11,6 +11,7 @@ import {
   bundledLibraryPluginBun,
   cssFilePlugin,
   solidHtmlClosingTagPlugin,
+  solidHtmlTemplateGuardPlugin,
   toForwardSlash,
 } from './plugins.js';
 import { extractProtocolFromSource } from './extract-protocol.js';
@@ -150,7 +151,12 @@ async function compileWithBun(
     minify,
     format: 'esm',
     target: 'browser',
-    plugins: [bundledLibraryPluginBun(bundles), cssFilePlugin(), solidHtmlClosingTagPlugin()],
+    plugins: [
+      bundledLibraryPluginBun(bundles),
+      cssFilePlugin(),
+      solidHtmlTemplateGuardPlugin(),
+      solidHtmlClosingTagPlugin(),
+    ],
   });
 
   if (!result.success) {
