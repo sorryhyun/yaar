@@ -69,8 +69,10 @@ async function poll(path: string): Promise<JobStatus> {
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-/** Download every manifest entry that isn't already on disk. Sequential: these are
- *  big, and parallel streams would just contend for the same bandwidth. */
+/** Download every manifest entry that isn't already on disk, one file at a time.
+ *  Each file is itself fetched over parallel Range requests server-side, which
+ *  already saturates the CDN edge — overlapping whole files on top of that only
+ *  adds contention. */
 export async function downloadWeights(onProgress?: (p: DownloadProgress) => void): Promise<void> {
   let done = 0;
   for (let i = 0; i < MANIFEST.length; i++) {
