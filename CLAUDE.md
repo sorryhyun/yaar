@@ -229,15 +229,17 @@ Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lif
 Apps are compiled via Bun into a single self-contained HTML file. Entry point is always `src/main.ts`. The compiler injects design tokens, SDK scripts (capture, storage, verb, app-protocol, etc.), and the bundled code.
 
 **`@bundled/*` imports** — no `npm install` needed. Available libraries:
-- **UI**: `solid-js`, `solid-js/html`, `solid-js/web` (preferred framework)
+- **UI**: `solid-js`, `solid-js/html`, `solid-js/web`, `solid-js/store` (preferred framework)
 - **Utilities**: `uuid`, `lodash`, `date-fns`, `clsx`, `diff`, `diff2html`
-- **Graphics/3D**: `three`, `konva`, `pixi.js`, `p5`, `matter-js`
+- **Graphics/3D**: `three`, `cannon-es`, `konva`, `pixi.js`, `p5`, `matter-js`
 - **Data/Charts**: `chart.js`, `d3`, `xlsx`
 - **Animation**: `anime`
 - **Audio**: `tone`
 - **Parsing**: `marked`, `prismjs`, `mammoth`
 - **YAAR SDK**: `yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, etc.
-- **Gated SDKs** (require `"bundles"` in `app.json`): `yaar-dev` (compile, typecheck, deploy), `yaar-web` (browser automation: open, click, extract, etc.)
+- **Gated SDKs** (require `"bundles"` in `app.json`): `yaar-dev` (compile, typecheck, deploy), `yaar-web` (browser automation: open, click, extract, etc.), `yaar-ml` (in-browser ONNX inference — see [`docs/yaar_ml_runtime.md`](./docs/yaar_ml_runtime.md))
+
+The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.
 
 Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/plugins.ts` (bundled library resolution + gated SDK enforcement), `packages/compiler/src/shims/` (yaar.ts, yaar-dev.ts, yaar-web.ts), `packages/compiler/src/extract-protocol.ts` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
 

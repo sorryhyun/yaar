@@ -376,6 +376,10 @@ All operations resolve paths in order:
 
 Unknown extensions fall back to `application/octet-stream`.
 
+## Upload Size Limit
+
+`MAX_UPLOAD_SIZE` (50 MB) caps every request body the server reads, not just storage writes. It is applied via `readBodyWithLimit()` in the `/api/storage`, `/api/verb`, `/api/bridge`, `/api/proxy`, `/api/browser`, and `/api/dev` routes. Exceeding it returns HTTP 413.
+
 ---
 
 ## Frontend Integration

@@ -284,7 +284,8 @@ iframe 앱 → postMessage → WebSocket → MCP 도구 응답
 ```typescript
 // src/protocol.ts
 import { app } from '@bundled/yaar';
-import { items } from './store';
+// src/store.ts: export const [items, setItems] = createSignal<string[]>([]);
+import { items, setItems } from './store';
 
 export function registerProtocol() {
   app.register({
@@ -301,7 +302,7 @@ export function registerProtocol() {
         description: '아이템 추가. Params: { text: string }',
         params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
         handler: (p: { text: string }) => {
-          items([...items(), p.text]);  // 불변 시그널 쓰기, render() 불필요
+          setItems([...items(), p.text]);  // 불변 시그널 쓰기, render() 불필요
           return { ok: true };
         },
       },
@@ -362,10 +363,14 @@ const data = await appStorage.readJson<{ key: string }>('data.json');
 // 텍스트로 읽기
 const text = await appStorage.read('data.json');
 
-// 바이너리 읽기 (returns { data: base64, mimeType })
+// 바이너리 읽기 (returns { data, mimeType, encoding: 'base64' | 'text' })
+// 디코딩 전에 `encoding` 을 확인하세요 — base64 페이로드만 atob() 해야 합니다.
+// 분기를 대신 처리해 주는 readBlob() 사용을 권장합니다.
 const binary = await appStorage.readBinary('image.png');
 
-// 파일 목록 (returns [{ path, isDirectory, size, modifiedAt }])
+// 파일 목록 (returns [{ path, isDirectory, uri, mimeType }])
+// 얕은 목록 — 직계 자식만 반환합니다. 하위 디렉터리는 직접 재귀 순회해야 합니다.
+// size / modifiedAt 은 포함되지 않습니다. 필요하면 REST API(`GET /api/storage/{dir}/?list=true`)를 사용하세요.
 const files = await appStorage.list();
 
 // 파일 삭제

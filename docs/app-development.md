@@ -94,11 +94,14 @@ The AI clones an existing app's source into the devtools workspace, makes edits,
 
 ## Bundled Libraries
 
-Available via `@bundled/*` imports — no npm install needed:
+Available via `@bundled/*` imports — no npm install needed. The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.
 
 | Library | Import Path | Purpose |
 |---------|------------|---------|
 | solid-js | `@bundled/solid-js` | Reactive UI (createSignal, createEffect, Show, For, etc.) |
+| solid-js/html | `@bundled/solid-js/html` | `html` tagged templates (no JSX) |
+| solid-js/web | `@bundled/solid-js/web` | `render`, DOM helpers |
+| solid-js/store | `@bundled/solid-js/store` | Nested reactive stores (`createStore`) |
 | uuid | `@bundled/uuid` | ID generation |
 | lodash | `@bundled/lodash` | Utilities (debounce, cloneDeep, groupBy, etc.) |
 | date-fns | `@bundled/date-fns` | Date handling |
@@ -114,6 +117,11 @@ Available via `@bundled/*` imports — no npm install needed:
 | Tone.js | `@bundled/tone` | Audio/music synthesis |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL rendering |
 | p5.js | `@bundled/p5` | Creative coding |
+| marked | `@bundled/marked` | Markdown → HTML |
+| Prism | `@bundled/prismjs` | Syntax highlighting |
+| mammoth | `@bundled/mammoth` | `.docx` → HTML |
+| diff | `@bundled/diff` | Text diffing |
+| diff2html | `@bundled/diff2html` | Rendered diff views |
 
 ```typescript
 import { v4 as uuid } from '@bundled/uuid';
@@ -251,6 +259,39 @@ apps/my-app/
 └── src/            # Source code (if compiled)
 ```
 
+## `app.json` Reference
+
+**Source:** `packages/server/src/features/apps/discovery.ts`
+
+The app's **id is its folder name**. `app.json` is parsed leniently — unknown fields and wrong-typed values are silently ignored, so a typo fails quietly.
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `name` | `string` | Display name |
+| `icon` | `string` | Emoji. An `icon.{png,jpg,svg,…}` file in the app folder overrides it |
+| `description` | `string` | Shown in launchers; also given to the agent |
+| `version` | `string` | Informational |
+| `author` | `string` | Informational |
+| `run` | `string` | Iframe entry — `dist/index.html`, or a `yaar://apps/{id}/…` URI |
+| `kind` | `"system"` | Marks a protected/auto-trusted app. **Bundled apps only** — ignored for installed apps |
+| `createShortcut` | `boolean` | `false` hides the app from the launcher (`"hidden": true` is a synonym) |
+| `permissions` | `(string \| { uri, verbs? })[]` | Pre-granted URI permissions, e.g. `"yaar://storage/"` or `{ "uri": "yaar://http", "verbs": ["read"] }` |
+| `bundles` | `string[]` | Opt in to gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`). The compiler rejects the import without it |
+| `agentType` | `string` | Override the agent profile used for this app's agent |
+| `messaging` | `"all"` | Lets the app agent `direct_message` other apps/windows, not just monitor/user |
+| `controls` | `(string \| { appId, commands? })[]` | Other apps this app may drive. **Bundled apps only** |
+| `fileAssociations` | `{ extensions, command, paramKey }[]` | Open matching files by invoking a protocol command |
+| `variant` | `"widget" \| "panel"` | Window variant |
+| `dockEdge` | `"top" \| "bottom"` | Dock the window to a screen edge |
+| `frameless` | `boolean` | Drop the window chrome |
+| `windowStyle` | `object` | CSS overrides applied to the window |
+| `defaultWidth` / `defaultHeight` | `number` | Initial window size in px |
+
+**Ignored fields seen in the wild** — these parse as unknown keys and do nothing:
+
+- `capture` (`"dom"` / `"canvas"`) — present in 19 bundled apps, read by no current code. It once named a screenshot strategy for a `window.capture` tool that has since been removed; the manifest field outlived it.
+- `id` (`apps/github`) and `appId` (`apps/memo`, `apps/music-maker`) — the folder name is always the id. The `appId` passed to `app.register()` in your source is a separate thing and *is* used.
+
 ## App Types
 
 ### Compiled Apps
@@ -301,9 +342,13 @@ Iframe App → postMessage → WebSocket → MCP tool returns
 Import `app` from `@bundled/yaar` and call `app.register()` with state handlers and command handlers.
 
 ```typescript
+// src/store.ts
+import { createSignal } from '@bundled/solid-js';
+export const [items, setItems] = createSignal<string[]>([]);
+
 // src/protocol.ts
 import { app } from '@bundled/yaar';
-import { items } from './store';
+import { items, setItems } from './store';
 
 export function registerProtocol() {
   app.register({
@@ -320,13 +365,37 @@ export function registerProtocol() {
         description: 'Add an item. Params: { text: string }',
         params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
         handler: (p: { text: string }) => {
-          items([...items(), p.text]);  // immutable signal write, no render() needed
+          setItems([...items(), p.text]);  // immutable signal write, no render() needed
           return { ok: true };
         },
       },
     },
   });
 }
+```
+
+### Talking Back to the Agent
+
+`app.register()` is how the agent reads *you*. These three APIs are how you reach the agent. See [`docs/app_protocol_reference.md`](./app_protocol_reference.md) for full signatures.
+
+**`app.sendInteraction(description)`** — push a free-form message to the agent, typically after a user action inside the iframe. Takes a string, or an object with `instructions` and `toMonitor` (route to the monitor agent instead of this window's app agent) plus arbitrary payload fields.
+
+```typescript
+app.sendInteraction('User clicked Save');
+app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection: text });
+```
+
+**`app.emit(channel, payload)`** — fire-and-forget event on a channel declared in `app.register({ events })`. Delivered only to agents that subscribed; undeclared or unsubscribed channels are dropped server-side.
+
+```typescript
+app.register({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
+app.emit('item-added', { text: 'Buy milk' });
+```
+
+**`onClose`** — an optional hook on the `app.register()` config, invoked when the window is about to be destroyed. Use it to flush unsaved state.
+
+```typescript
+app.register({ /* ... */ onClose: () => saveDraft(editor().value) });
 ```
 
 ### MCP Tools
@@ -381,15 +450,22 @@ const data = await appStorage.readJson<{ key: string }>('data.json');
 // Read as text
 const text = await appStorage.read('data.json');
 
-// Read binary (returns { data: base64, mimeType })
+// Read binary (returns { data, mimeType, encoding: 'base64' | 'text' })
+// Check `encoding` before decoding — only base64 payloads should be atob()'d.
+// Prefer readBlob(), which handles the branch for you.
 const binary = await appStorage.readBinary('image.png');
 
-// List files (returns [{ path, isDirectory, size, modifiedAt }])
+// List files (returns [{ path, isDirectory, uri, mimeType }])
+// Shallow — direct children only. Recurse yourself to walk subdirectories.
 const files = await appStorage.list();
 
 // Delete a file
 await appStorage.remove('data.json');
 ```
+
+> **`list()` returns no `size` or `modifiedAt`.** Each entry is `{ path, isDirectory, uri, mimeType }`. If you need file sizes or timestamps, use the REST API (`GET /api/storage/{dir}/?list=true`), which returns `StorageEntry` objects with `size` and `modifiedAt`.
+
+> **`readBlob()` on a PDF returns the first page rendered as PNG, not the PDF bytes.** The server converts PDFs to page images on read (`packages/server/src/handlers/apps.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
 
 ### From Agent (MCP Tools)
 

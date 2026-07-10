@@ -5,54 +5,33 @@ docs app authors (mostly AI agents) work from. Bugs found in the same review wer
 directly (see git history); this file tracks the remaining documentation drift and
 improvement opportunities.
 
-## Doc drift
+The documentation-drift items have been fixed (see the `docs: fix app-dev doc drift`
+commit): the `appStorage.list()` contract, the root `CLAUDE.md` and guide bundled-library
+lists, the `app.register` signal-setter example (English + Korean), the missing
+`sendInteraction` / `emit` / `onClose` docs, the `app.json` field reference, and the
+`readBlob()`-on-PDF quirk. What remains below is code, not prose.
 
-### `appStorage.list()` contract is wrong in the guide
-- `docs/app-development.md:387` promises `[{ path, isDirectory, size, modifiedAt }]`; the
-  shim (`packages/compiler/src/shims/yaar.ts`) actually returns
-  `{ path, isDirectory, uri, mimeType }` — no `size`, no `modifiedAt`. This already
-  produced a silent bug: `apps/devtools/src/project.ts:95` reads `entry.size` and always
-  gets `undefined`.
-- Its shallow (non-recursive) behavior is undocumented; the devtools author discovered it
-  the hard way (`apps/devtools/src/project.ts:72` comment).
+## Inert manifest fields (code cleanup)
 
-### Root `CLAUDE.md` bundled-lib list has drifted
-- Omits the entire `yaar-ml` gated SDK, plus `solid-js/store` and `cannon-es`.
-  `packages/compiler/CLAUDE.md` and `docs/app-development.md` are up to date; root
-  `CLAUDE.md` is not. Since agents treat CLAUDE.md as authoritative, they will believe
-  in-browser inference doesn't exist.
-- There are four hand-maintained copies of the bundled-lib list (`plugins.ts`
-  `BUNDLED_LIBRARIES`, compiler CLAUDE.md, root CLAUDE.md, app-development.md) and they
-  have already diverged. Consider generating the prose lists from
-  `getAvailableBundledLibraries()` (already exposed via `GET /api/dev/bundled-libraries`).
+Verifying the doc-drift findings turned up two fields that no code reads. They were
+documented as ignored rather than deleted, since removing them touches `apps/`:
 
-### The main guide omits APIs a third of apps depend on
-- `app.sendInteraction()` — used by 9 apps, documented only in
-  `docs/app_protocol_reference.md:279`, never in `app-development.md`.
-- `app.emit()` / `events` channels and the `onClose` hook — same situation
-  (`onClose` is used by zero apps, likely a discoverability problem).
-- `app-development.md:322-327` has a register example that calls a `createSignal` getter
-  as a setter (`items([...items(), p.text])`) — copy-paste bait for an AI author. The two
-  docs also contradict each other (reactive style vs. imperative `render()` style).
+- **`capture`** (`"dom"` / `"canvas"`) — carried by 19 bundled apps, read by nothing. It
+  once named a screenshot strategy for a `window.capture` tool removed in the
+  "legacy removal" commit; the manifest field outlived the feature. Either delete it from
+  all 19 `app.json` files or re-wire it to whatever replaced `window.capture`.
+- **`id` / `appId` in `app.json`** — the folder name is the only app id;
+  `discovery.ts` never reads `meta.id` or `meta.appId`. So `apps/github` (`"id"`) and
+  `apps/memo` / `apps/music-maker` (`"appId"`) are carrying dead keys. This supersedes the
+  original "three id conventions, pick one and migrate" finding: there is only one
+  convention, and the other two are no-ops. Just delete the keys. (The `appId` passed to
+  `app.register()` in app source is a separate, live thing.)
 
-### `app.json` has no reference and three id conventions
-- Field frequency across 30 apps: `capture` (19) is essentially undocumented; `variant`,
-  `agentType`, `createShortcut` (6), `windowStyle`, `frameless`, `dockEdge`,
-  `defaultWidth/Height`, `fileAssociations` have zero mentions in the author-facing docs.
-  `controls`/`messaging` are documented only in root CLAUDE.md.
-- App id is specified three different ways in the wild: implicit folder name (most),
-  `"id"` (`apps/github`), `"appId"` (`apps/memo`, `apps/music-maker`). Pick one, document
-  it, migrate the outliers.
-- Suggestion: publish a single `app.json` field reference (or a JSON Schema — it could
-  even be validated at discovery time). When the multi-window proposal lands, `windowMode`
-  belongs there too.
+## Doc drift — remaining
 
-### Dead / misleading doc content
 - 5 apps ship both `SKILL.md` and `AGENTS.md` (`browser`, `devtools`, `session-logs`,
   `slides-lite`, `video-editor-lite`); per the docs only AGENTS.md is used, so those
-  SKILL.md files are dead and silently drifting.
-- `app-development.md:249` shows `protocol.json` in the authored file tree, but it is
-  compiler-generated (`dist/`), never checked in.
+  SKILL.md files are dead and silently drifting. Delete them or make the loader merge them.
 - Advertised-but-unused bundled libraries: `clsx`, `konva`, `pixi.js`, `p5`, `cannon-es`,
   `matter-js` are imported by zero apps. Either trim the advertising or keep them and say
   nothing — but the guide currently reads as a recommendation list.
@@ -81,7 +60,22 @@ run `setInterval` polls instead (`dc-comics`, `thesingularity-reader`, `process-
 `dock`, `browser`). Either the primitive doesn't fit real needs or it's undiscoverable.
 Find out which; if it works, ship one bundled app on it as the reference example.
 
-### 4. Compiler hygiene
+### 4. Type `appStorage.list()`'s return value
+`YaarAppStorage.list()` is declared `Promise<unknown[]>` in
+`packages/compiler/src/bundled-types/index.d.ts`, which is why `apps/devtools/src/project.ts`
+could read `entry.size` (always `undefined`) and still typecheck. Declaring a
+`YaarAppStorageEntry { path; isDirectory; uri; mimeType }` would make that class of bug a
+compile error instead of a doc footnote. Note it will surface the existing `entry.size`
+read in devtools, which needs fixing at the same time.
+
+### 5. Generate the bundled-library lists
+There are three hand-maintained prose copies of the bundled-lib list (compiler CLAUDE.md,
+root CLAUDE.md, app-development.md) beside the real one (`plugins.ts` `BUNDLED_LIBRARIES`).
+They have already diverged once. Generate the prose from `getAvailableBundledLibraries()`
+(already exposed via `GET /api/dev/bundled-libraries`), or add a check like
+`scripts/check-doc-freshness.ts` that diffs them.
+
+### 6. Compiler hygiene
 - Merge the two `onLoad` hooks that each read every `.ts` source file
   (`solidHtmlTemplateGuardPlugin` + `solidHtmlClosingTagPlugin` in
   `packages/compiler/src/plugins.ts`) — every file is currently read from disk twice per
@@ -98,16 +92,10 @@ Find out which; if it works, ship one bundled app on it as the reference example
   (tight, no line break) and that any `html` tagged template is solid's. All 20 current
   apps satisfy this; worth a comment in the guard since it is a hard build-failure gate.
 
-### 5. SDK API consistency (minor, breaking-ish — batch for a cleanup pass)
+### 7. SDK API consistency (minor, breaking-ish — batch for a cleanup pass)
 - `yaar-web`'s `navigate(url, browserId)` is the only function taking `browserId`
   positionally; everything else uses `{ ...opts, browserId }`.
 - `del(uri)` vs `appStorage.remove(path)` vs `deleteCookies` — three delete verbs in one
   SDK surface.
 - `devHeaders()` / `browserHeaders()` are byte-identical private helpers in
   `yaar-dev.ts` / `yaar-web.ts`; share one.
-
-### Known quirk worth documenting
-`appStorage.readBlob('*.pdf')` returns the **first page rendered as PNG**, not the PDF
-bytes — the server converts PDFs to page images on read
-(`packages/server/src/handlers/apps.ts:151-154`). Apps that need raw bytes should use the
-`/api/storage/` URL directly. `apps/pdf-viewer`'s `openFromStorage` is affected today.
