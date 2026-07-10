@@ -75,17 +75,22 @@ function issueList() {
         const items = filteredIssues();
         if (items.length === 0) return emptyBlock('📭', `No ${state.issueFilter} issues`);
         return items.map((i) => html`
-          <div class=${() => 'issue-row y-list-item' + (state.activeIssue?.number === i.number ? ' active' : '')}
+          <button type="button" class=${() => 'issue-row y-list-item' + (state.activeIssue?.number === i.number ? ' active' : '')}
+            aria-pressed=${() => state.activeIssue?.number === i.number}
             onClick=${() => void openIssue(i.number)}>
-            <div class="row-main">
-              <div class="row-title">
-                <span class=${'state-dot ' + i.state}></span>
-                <span class="y-truncate">${i.title}</span>
-              </div>
-              <div class="row-meta y-text-dim">#${i.number} · ${i.user?.login || ''} · ${timeAgo(i.updated_at)}${i.comments ? ` · 💬 ${i.comments}` : ''}</div>
+            <span class="issue-state-icon" aria-hidden="true">${i.state === 'open' ? '○' : '●'}</span>
+            <span class="row-main">
+              <span class="row-title" title=${i.title}>${i.title}</span>
+              <span class="row-meta">
+                <span class=${'issue-state-label ' + i.state}>${i.state === 'open' ? 'Open' : 'Closed'}</span>
+                <span>#${i.number}</span>
+                <span class="row-author">${i.user?.login || ''}</span>
+                <span>${timeAgo(i.updated_at)}</span>
+                ${i.comments ? html`<span>💬 ${i.comments}</span>` : null}
+              </span>
               ${labelChips(i.labels)}
-            </div>
-          </div>`);
+            </span>
+          </button>`);
       }}
     </div>
   </div>`;
@@ -136,8 +141,12 @@ function issueDetail() {
   </div>`;
 }
 
+// NOTE: returns a bare accessor, not html`${...}`. A template literal with no
+// static markup compiles to an invalid `new Function` body in solid-js/html
+// ("Unexpected token '.'") the moment it is instantiated. Same pattern as
+// repoPicker() in main.ts.
 function newIssueModal() {
-  return html`${() => state.showNewIssue ? html`
+  return () => state.showNewIssue ? html`
     <div class="y-overlay" onClick=${(e: MouseEvent) => { if (e.target === e.currentTarget) setState('showNewIssue', false); }}>
       <div class="y-modal">
         <h3 class="modal-title">New Issue</h3>
@@ -148,11 +157,11 @@ function newIssueModal() {
           <button class="y-btn y-btn-primary" disabled=${() => state.mutating} onClick=${() => void submitNewIssue()}>Create issue</button>
         </div>
       </div>
-    </div>` : null}`;
+    </div>` : null;
 }
 
 export function issuesView() {
-  return html`<div class="split-view">
+  return html`<div class=${() => 'split-view issues-split' + (state.activeIssue ? ' has-selection' : '')}>
     ${issueList()}
     ${issueDetail()}
     ${newIssueModal()}

@@ -1,6 +1,6 @@
 import { storage } from '@bundled/yaar';
 import type { RepoRef } from './types';
-import { DEFAULT_REPO, setState, state } from './store';
+import { DEFAULT_REPO, setState } from './store';
 
 const TOKEN_PATH = 'github/token';
 const CONFIG_PATH = 'github/config.json';
@@ -72,11 +72,34 @@ export async function writeConfig(repo: RepoRef): Promise<void> {
   setState('repo', { ...repo });
 }
 
-/** Load token + config into the store on boot. */
-export async function bootstrapStorage(): Promise<void> {
+async function doBootstrap(): Promise<void> {
   const [token, cfg] = await Promise.all([readToken(), readConfig()]);
   setState('token', token);
   setState('repo', cfg);
   if (token) setState('auth', 'status', 'authed');
-  void state;
+}
+
+let bootPromise: Promise<void> | null = null;
+
+/**
+ * Load token + config into the store on boot. Idempotent — repeated calls share
+ * the same in-flight promise, so it is safe to await from anywhere.
+ */
+export function bootstrapStorage(): Promise<void> {
+  // Never reject: a storage failure must not deadlock every data fetch behind
+  // ready(). readToken/readConfig already fall back to sane defaults.
+  if (!bootPromise) bootPromise = doBootstrap().catch(() => undefined);
+  return bootPromise;
+}
+
+/**
+ * Resolves once the active repo + token are loaded into the store.
+ *
+ * Every data fetch must await this before reading `state.repo` / `state.token`,
+ * otherwise an early interaction (clicking a nav tab, or an agent driving the
+ * app protocol right after the window opens) fetches DEFAULT_REPO unauthenticated
+ * and caches the wrong result.
+ */
+export function ready(): Promise<void> {
+  return bootstrapStorage();
 }

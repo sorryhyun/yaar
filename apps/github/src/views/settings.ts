@@ -2,12 +2,9 @@ import html from '@bundled/solid-js/html';
 import { createSignal } from '@bundled/solid-js';
 import { errMsg } from '@bundled/yaar';
 import { state, hasToken, showToast } from '../store';
-import { setRepoAction } from '../actions';
 import { startDeviceLogin, cancelLogin, signOut, resolveClientId } from '../auth';
 import { writeClientId } from '../storage';
 
-let ownerEl: HTMLInputElement | null = null;
-let nameEl: HTMLInputElement | null = null;
 let clientIdEl: HTMLInputElement | null = null;
 
 // Whether a client id is available (built-in or stored). Checked once at import;
@@ -15,14 +12,6 @@ let clientIdEl: HTMLInputElement | null = null;
 // one-time OAuth App setup prompt.
 const [clientIdConfigured, setClientIdConfigured] = createSignal(true);
 void resolveClientId().then((id) => setClientIdConfigured(Boolean(id)));
-
-async function saveRepo() {
-  try {
-    await setRepoAction(ownerEl?.value || '', nameEl?.value || '');
-  } catch (e) {
-    showToast(errMsg(e), 'error');
-  }
-}
 
 async function beginSignIn() {
   try {
@@ -119,16 +108,6 @@ function accountCard() {
 export function settingsView() {
   return html`<div class="section-scroll y-scroll">
     <div class="settings-body">
-      <div class="y-card settings-card">
-        <div class="card-hdr">📁 Active Repository</div>
-        <div class="settings-row">
-          <input class="y-input" placeholder="owner" value=${() => state.repo.owner} ref=${(el: HTMLInputElement) => { ownerEl = el; }} />
-          <span class="slash">/</span>
-          <input class="y-input" placeholder="repository" value=${() => state.repo.name} ref=${(el: HTMLInputElement) => { nameEl = el; }} />
-        </div>
-        <button class="y-btn y-btn-primary" onClick=${() => void saveRepo()}>Switch repository</button>
-      </div>
-
       ${accountCard()}
 
       <div class="y-card settings-card">
