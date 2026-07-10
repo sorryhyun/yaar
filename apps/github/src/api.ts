@@ -1,6 +1,6 @@
 import { invoke } from '@bundled/yaar';
 import type {
-  RateLimit, Repo, Issue, Comment, Pull, CommitItem, Release, ContentEntry, GHUser,
+  RateLimit, Repo, Issue, Comment, Pull, CommitItem, Release, ContentEntry, GHUser, AccountRepo,
 } from './types';
 import { state, setState } from './store';
 
@@ -85,6 +85,17 @@ const slug = () => `${state.repo.owner}/${state.repo.name}`;
 // ── Authenticated user ──────────────────────────────────────────────────────
 export async function fetchUser(): Promise<GHUser> {
   return (await gh<GHUser>('/user')).data;
+}
+
+/** Repositories visible to the signed-in account, including private and org repos. */
+export async function fetchUserRepos(): Promise<AccountRepo[]> {
+  const repos: AccountRepo[] = [];
+  for (let page = 1; page <= 10; page += 1) {
+    const batch = (await gh<AccountRepo[]>(`/user/repos?affiliation=owner,collaborator,organization_member&visibility=all&sort=updated&direction=desc&per_page=100&page=${page}`)).data || [];
+    repos.push(...batch);
+    if (batch.length < 100) break;
+  }
+  return repos;
 }
 
 // ── Repo / overview ─────────────────────────────────────────────────────────

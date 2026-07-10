@@ -1,5 +1,5 @@
 import { errMsg, showToast } from '@bundled/yaar';
-import type { Issue, Pull, RepoRef, ContentEntry } from './types';
+import type { Issue, Pull, RepoRef, ContentEntry, AccountRepo } from './types';
 import { state, setState, hasToken } from './store';
 import { renderMarkdown, decodeBase64Utf8 } from './markdown';
 import { writeConfig } from './storage';
@@ -289,6 +289,43 @@ export async function setRepoAction(owner: string, name: string): Promise<void> 
   resetRepoData();
   await loadSection(state.section, true);
   showToast(`Switched to ${o}/${n}`, 'success');
+}
+
+export async function loadAccountRepos(force = false): Promise<AccountRepo[]> {
+  if (!hasToken()) {
+    setState('repoPickerError', 'Sign in from Settings to browse your repositories.');
+    return [];
+  }
+  if (state.accountReposLoaded && !force) return state.accountRepos;
+  setState('accountReposLoading', true);
+  setState('repoPickerError', '');
+  try {
+    const repos = await api.fetchUserRepos();
+    setState('accountRepos', repos);
+    setState('accountReposLoaded', true);
+    return repos;
+  } catch (e) {
+    setState('repoPickerError', errMsg(e));
+    return [];
+  } finally {
+    setState('accountReposLoading', false);
+  }
+}
+
+export function toggleRepoPicker(): void {
+  const open = !state.repoPickerOpen;
+  setState('repoPickerOpen', open);
+  if (open) void loadAccountRepos();
+}
+
+export function closeRepoPicker(): void {
+  setState('repoPickerOpen', false);
+  setState('repoSearch', '');
+}
+
+export async function selectAccountRepo(repo: AccountRepo): Promise<void> {
+  closeRepoPicker();
+  await setRepoAction(repo.owner.login, repo.name);
 }
 
 export async function refreshAll(): Promise<void> {

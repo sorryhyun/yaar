@@ -1,7 +1,7 @@
 {
   "id": "github",
   "name": "GitHub",
-  "description": "Manage GitHub issues, PRs, releases and browse repos",
+  "description": "Manage GitHub repositories, issues, pull requests, releases, and code.",
   "icon": "🐙",
   "permissions": [
     "yaar://http",

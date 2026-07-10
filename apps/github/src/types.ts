@@ -5,6 +5,17 @@ export interface RepoRef {
   name: string;
 }
 
+export interface AccountRepo {
+  id: number;
+  name: string;
+  full_name: string;
+  private: boolean;
+  archived: boolean;
+  description: string | null;
+  owner: { login: string; avatar_url: string };
+  updated_at: string;
+}
+
 export interface RateLimit {
   limit: number;
   remaining: number;

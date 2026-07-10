@@ -1,7 +1,7 @@
 import { createStore } from '@bundled/solid-js/store';
 import type {
   Section, RepoRef, RateLimit, Repo, Issue, Comment, Pull, CommitItem, Release, ContentEntry,
-  GHUser, AuthState,
+  GHUser, AuthState, AccountRepo,
 } from './types';
 
 export const DEFAULT_REPO: RepoRef = { owner: 'sorryhyun', name: 'yaar' };
@@ -16,6 +16,14 @@ export const [state, setState] = createStore({
   user: null as GHUser | null,
   auth: { status: 'idle', userCode: '', verificationUri: '', error: '' } as AuthState,
   rateLimit: null as RateLimit | null,
+
+  // Repository picker
+  repoPickerOpen: false,
+  accountRepos: [] as AccountRepo[],
+  accountReposLoading: false,
+  accountReposLoaded: false,
+  repoSearch: '',
+  repoPickerError: '',
 
   // Global
   loading: false,
