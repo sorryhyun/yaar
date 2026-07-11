@@ -47,6 +47,11 @@ server:
 # Install all dependencies
 install:
 	bun install
+	@./scripts/setup-webgpu-linux.sh
+
+# Enable WebGPU in local Chrome/Chromium profiles (Linux only; no-op elsewhere)
+webgpu:
+	@./scripts/setup-webgpu-linux.sh
 
 # Lint all packages
 lint:

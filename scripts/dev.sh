@@ -88,6 +88,20 @@ launch_chrome_when_ready() {
   command -v cygpath >/dev/null 2>&1 && profile="$(cygpath -w "$profile")"
   local url="http://localhost:${PORT:-8000}"
 
+  # WebGPU is off by default in Linux Chrome (its Vulkan backend is
+  # soft-blocklisted), which breaks yaar-ml/anima inference with "Failed to get
+  # GPU adapter". Opt in here — Windows/macOS enable WebGPU out of the box.
+  # The Dawn toggle vulkan_enable_f16_on_nvidia lifts Dawn's NVIDIA-wide hold
+  # on shader-f16 (crbug.com/42251215) — without it fp16 models fail on Linux
+  # while working on Windows/macOS; it's ignored on non-NVIDIA GPUs. Dawn
+  # toggles have no chrome://flags entry, so the command line is the only way
+  # to set it — which is why this lives here and not in setup-webgpu-linux.sh.
+  # Only takes effect when this actually starts a new Chrome: if one with this
+  # profile is already running, close it and re-run to pick up the flags.
+  local gpu_flags=()
+  [ "$(uname -s)" = "Linux" ] && gpu_flags=(--enable-unsafe-webgpu --enable-features=Vulkan
+    --enable-dawn-features=vulkan_enable_f16_on_nvidia)
+
   (
     # Wait up to ~60s for the server to start answering before opening the tab.
     for _ in $(seq 1 120); do
@@ -98,7 +112,7 @@ launch_chrome_when_ready() {
     # If a Chrome with this profile is already running, this just opens a tab in
     # it and exits; otherwise it starts a fresh instance with the debug port.
     exec "$bin" --remote-debugging-port="${port}" --user-data-dir="${profile}" \
-      --no-first-run --no-default-browser-check "${url}" >/dev/null 2>&1
+      --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${url}" >/dev/null 2>&1
   ) &
   CHROME_PID=$!
 }
