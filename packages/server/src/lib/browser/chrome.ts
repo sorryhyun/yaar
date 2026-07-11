@@ -145,6 +145,12 @@ export async function launchChrome(chromePath: string): Promise<ChromeInstance> 
     '--no-sandbox',
     '--disable-setuid-sandbox',
     '--disable-dev-shm-usage',
+    // New headless still creates a real (hidden) browser window. When the
+    // server runs elevated on Windows, Chrome de-elevates by relaunching
+    // itself (--do-not-de-elevate) and the relaunched instance can show that
+    // window as a blank frame on the desktop. Park it far offscreen so it can
+    // never become visible.
+    '--window-position=-2400,-2400',
     'about:blank',
   ];
 

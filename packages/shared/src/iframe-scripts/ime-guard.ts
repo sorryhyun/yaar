@@ -21,11 +21,17 @@
  *
  * We never call preventDefault — the IME needs the key to do its own work, and
  * stopping propagation does not affect a key's default action.
+ *
+ * Windows is excluded: the replayed post-composition Enter this guards against
+ * is a macOS IME quirk. Windows IMEs deliver the committing Enter exactly once
+ * (as a composing keydown), so swallowing it would force users to press Enter
+ * twice to submit — the guard would introduce the very annoyance it prevents.
  */
 export const IFRAME_IME_GUARD_SCRIPT = `
 (function() {
   if (window.__yaarImeGuardInstalled) return;
   window.__yaarImeGuardInstalled = true;
+  if (/Win/.test(navigator.platform)) return;
 
   window.addEventListener('keydown', function(e) {
     if (e.isComposing || e.keyCode === 229) {
