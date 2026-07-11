@@ -4,9 +4,11 @@
 //                 3.9 GB DiT → per-channel denorm → 56 MB VAE decode → 512² canvas.
 //                 Typed prompts run the in-browser text path (tokenizer.ts +
 //                 text.ts); the golden prompt reuses the precomputed embeds.
-//   VAE probe   — decode a Python-precomputed latent (plumbing sanity check).
-//   DiT gate    — single DiT forward (memory/latency check).
-//   DiT probe   — per-block residual absmax/NaN trace (diagnostic).
+//
+// Diagnostics have no UI buttons — they're headless-only via window.__anima:
+//   vaeProbe — decode a Python-precomputed latent (plumbing sanity check).
+//   ditGate  — single DiT forward (memory/latency check).
+//   probe    — per-block residual absmax/NaN trace (diagnostic).
 //
 // The DiT model selector, three exports of the same weights:
 //   dit_512_fp16_r16    — residual stream rescaled ×1/16 (folded into patch-embed
@@ -43,7 +45,7 @@ import {
 import { ErSDEScheduler, makeRng, randn } from './scheduler';
 import { promptEmbeds } from './text';
 import { loadTokenizers, tokenizePrompt } from './tokenizer';
-import { downloadWeights, TOTAL_BYTES, type DownloadProgress } from './download';
+import { downloadWeights, TOTAL_BYTES } from './download';
 
 // The prompt that `webgpu/prompt_embeds.f32` was precomputed from. Leaving the box
 // at this exact text lets us skip the 1.46 GB text path and reuse the golden embeds.
@@ -54,9 +56,13 @@ const GOLDEN_PROMPT =
 
 const [caps, setCaps] = createSignal('probing…');
 const [prompt, setPrompt] = createSignal(GOLDEN_PROMPT);
-const [dl, setDl] = createSignal<DownloadProgress | null>(null);
-const [logLines, setLog] = createSignal<string[]>([]);
 const [busy, setBusy] = createSignal(false);
+// Progress bar state: label + percent (pct null = indeterminate). `status` is the
+// last outcome line (✅/❌/📋) shown under the bar. Detailed traces go to the
+// devtools console only — no on-screen log dump.
+const [progress, setProgress] = createSignal<{ label: string; pct: number | null } | null>(null);
+const [status, setStatus] = createSignal('');
+const [hasImage, setHasImage] = createSignal(false);
 // DiT weights variant — see the header comment for what each export is.
 const [ditModel, setDitModel] = createSignal('dit_512_fp16_r16');
 
@@ -77,17 +83,26 @@ const [seed, setSeed] = createSignal(0);
 let canvasEl: HTMLCanvasElement | undefined;
 
 function log(msg: string) {
-  setLog((l) => [...l, msg]);
   // eslint-disable-next-line no-console
   console.log('[anima]', msg);
+}
+/** Set the on-screen progress bar (and mirror the label to the console). */
+function phase(label: string, pct: number | null = null) {
+  setProgress({ label, pct });
+  log(label);
 }
 const mb = (n: number) => (n / 1024 / 1024).toFixed(0) + ' MB';
 const gb = (n: number) => (n / 1024 / 1024 / 1024).toFixed(2) + ' GB';
 
 let _lastPct = -1;
 function onProg(p: Progress) {
-  if (p.cached) return log(`  ${p.file}: cached (${mb(p.loaded)})`);
+  const name = p.file.split('/').pop() ?? p.file;
+  if (p.cached) {
+    setProgress({ label: `${name} (cached)`, pct: 100 });
+    return log(`  ${p.file}: cached (${mb(p.loaded)})`);
+  }
   const pct = Math.floor(p.ratio * 100);
+  setProgress({ label: `Loading ${name}`, pct: p.total ? pct : null });
   if (pct !== _lastPct && pct % 5 === 0) {
     _lastPct = pct;
     log(`  ${p.file}: ${pct}% (${mb(p.loaded)}${p.total ? ' / ' + mb(p.total) : ''})`);
@@ -151,12 +166,16 @@ async function vaeProbe() {
       `decode ${((performance.now() - t1) / 1000).toFixed(2)}s → image ${out.image.dims}. ` +
         `min=${st.min.toFixed(2)} max=${st.max.toFixed(2)} nan=${st.nan}`,
     );
-    if (canvasEl) canvasEl.getContext('2d')!.putImageData(chwToImageData(img, 512, 512), 0, 0);
+    if (canvasEl) {
+      canvasEl.getContext('2d')!.putImageData(chwToImageData(img, 512, 512), 0, 0);
+      setHasImage(true);
+    }
     log('✅ VAE probe done — compare canvas to golden_512_fp16_seed0.png');
   } catch (e) {
     log('❌ ' + (e instanceof Error ? e.message : String(e)));
   } finally {
     setBusy(false);
+    setProgress(null);
   }
 }
 
@@ -201,6 +220,7 @@ async function ditGate() {
     log('❌ ' + (e instanceof Error ? e.message : String(e)));
   } finally {
     setBusy(false);
+    setProgress(null);
   }
 }
 
@@ -272,6 +292,7 @@ async function ditProbe(opts: { model?: string; dataName?: string } = {}): Promi
     return { error: msg };
   } finally {
     setBusy(false);
+    setProgress(null);
   }
 }
 
@@ -282,29 +303,34 @@ async function ditProbe(opts: { model?: string; dataName?: string } = {}): Promi
 async function downloadModels(): Promise<unknown> {
   if (busy()) return { ok: false, error: 'busy' };
   setBusy(true);
+  setStatus('');
   const t0 = performance.now();
   try {
     log(`— Downloading weights (${gb(TOTAL_BYTES)}) from Hugging Face —`);
     let lastFile = '';
     await downloadWeights((p) => {
-      setDl(p);
+      const pct = p.overallTotal ? (p.overallLoaded / p.overallTotal) * 100 : null;
+      setProgress({
+        label: `Downloading ${p.file.split('/').pop()} [${p.index}/${p.count}]`,
+        pct,
+      });
       if (p.file !== lastFile) {
         lastFile = p.file;
         log(`  [${p.index}/${p.count}] ${p.file} (${mb(p.total)})`);
       }
     });
-    setDl(null);
-    log(
-      `✅ weights on disk (${((performance.now() - t0) / 1000).toFixed(0)}s) — now loading locally`,
-    );
-    return { ok: true, elapsed: (performance.now() - t0) / 1000 };
+    const elapsed = (performance.now() - t0) / 1000;
+    setStatus(`✅ weights on disk (${elapsed.toFixed(0)}s) — models now load locally`);
+    log(`✅ weights on disk (${elapsed.toFixed(0)}s) — now loading locally`);
+    return { ok: true, elapsed };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    setDl(null);
+    setStatus('❌ ' + msg);
     log('❌ ' + msg);
     return { ok: false, error: msg };
   } finally {
     setBusy(false);
+    setProgress(null);
   }
 }
 
@@ -338,13 +364,16 @@ async function generate(
   const pr = (opts.prompt ?? prompt()).trim();
   const result: Record<string, unknown> = { model, seed: sd, ditBackend, prompt: pr, ok: false };
   try {
+    setStatus('');
     log(`— Generate (DiT: ${model} on ${ditBackend}, seed ${sd}) —`);
     log(`prompt: ${JSON.stringify(pr.slice(0, 80))}${pr.length > 80 ? '…' : ''}`);
+    phase('Preparing…');
     const cfg = await fetchJSON<LatentStats>('webgpu/latent_stats.json');
     const Z = cfg.z; // 16
     const L = cfg.size / 8; // 64 latent grid
     // (1,512,1024) encoder_hidden_states
     const golden = !pr || pr === GOLDEN_PROMPT;
+    if (!golden) phase('Encoding prompt (text encoder, 1.46 GB)…');
     const pe = golden
       ? await fetchF32('webgpu/prompt_embeds.f32')
       : await promptEmbeds(pr, { onProgress: onProg, log });
@@ -353,6 +382,7 @@ async function generate(
     const t0 = performance.now();
     await releaseOtherDits(model);
     const sessOpts = ditSessionOptions(model, opts.graphOpt);
+    phase(`Loading DiT (${model})…`);
     log(
       `loading DiT (externalData URL mode, ${ditBackend}, graphOpt ${
         (sessOpts.graphOptimizationLevel as string) ?? 'default'
@@ -361,6 +391,7 @@ async function generate(
     const dit = await loadModel(model, onProg, ditBackend, 'url', sessOpts);
     log(`DiT ready (${((performance.now() - t0) / 1000).toFixed(1)}s). inputs=${dit.inputNames}`);
     const tv = performance.now();
+    phase('Loading VAE decoder…');
     const vae = await loadModel('vae_decoder_512_fp16', onProg, 'webgpu', 'url');
     log(`VAE ready (${((performance.now() - tv) / 1000).toFixed(1)}s).`);
 
@@ -371,6 +402,10 @@ async function generate(
 
     for (let i = 0; i < sched.numSteps; i++) {
       const sigma = sched.timestepSigma(i);
+      setProgress({
+        label: `Denoising step ${i + 1}/${sched.numSteps} (σ=${sigma.toFixed(3)})`,
+        pct: (i / sched.numSteps) * 100,
+      });
       const ts = performance.now();
       const out = await run(dit, {
         latent: new Tensor('float32', latent, [1, Z, 1, L, L]),
@@ -381,6 +416,7 @@ async function generate(
       const st = stats(noisePred);
       steps.push({ step: i + 1, sigma, npMin: st.min, npMax: st.max, npNan: st.nan });
       if (st.nan > 0) {
+        setStatus(`❌ step ${i + 1}: noise_pred has ${st.nan} NaN — DiT numerics broken on this EP`);
         log(`❌ step ${i + 1}: noise_pred has ${st.nan} NaN — DiT numerics broken on this EP.`);
         result.nanAtStep = i + 1;
         result.steps = steps;
@@ -406,6 +442,7 @@ async function generate(
     }
 
     const td = performance.now();
+    phase('Decoding image (VAE)…', 100);
     const dec = await run(vae, { latent: new Tensor('float32', denorm, [1, Z, L, L]) });
     const img = dec.image.data as Float32Array;
     const ist = stats(img);
@@ -413,8 +450,12 @@ async function generate(
       `VAE decode ${((performance.now() - td) / 1000).toFixed(2)}s → ${dec.image.dims}. ` +
         `min=${ist.min.toFixed(2)} max=${ist.max.toFixed(2)} nan=${ist.nan}`,
     );
-    if (canvasEl) canvasEl.getContext('2d')!.putImageData(chwToImageData(img, 512, 512), 0, 0);
+    if (canvasEl) {
+      canvasEl.getContext('2d')!.putImageData(chwToImageData(img, 512, 512), 0, 0);
+      setHasImage(true);
+    }
     const elapsed = (performance.now() - t0) / 1000;
+    setStatus(`✅ generated in ${elapsed.toFixed(1)}s (seed ${sd})`);
     log(`✅ generated in ${elapsed.toFixed(1)}s`);
     result.ok = ist.nan === 0;
     result.steps = steps;
@@ -424,12 +465,44 @@ async function generate(
     return result;
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
+    setStatus('❌ ' + msg);
     log('❌ ' + msg);
     result.error = msg;
     return result;
   } finally {
     setBusy(false);
+    setProgress(null);
   }
+}
+
+function canvasBlob(): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    canvasEl!.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('canvas.toBlob returned null'))),
+      'image/png',
+    );
+  });
+}
+
+async function copyImage() {
+  if (!canvasEl || !hasImage()) return;
+  try {
+    const blob = await canvasBlob();
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    setStatus('📋 image copied to clipboard');
+  } catch (e) {
+    setStatus('❌ copy failed: ' + (e instanceof Error ? e.message : String(e)));
+  }
+}
+
+function saveImage() {
+  if (!canvasEl || !hasImage()) return;
+  const name = `anima-seed${seed()}.png`;
+  const a = document.createElement('a');
+  a.href = canvasEl.toDataURL('image/png');
+  a.download = name;
+  a.click();
+  setStatus(`💾 saved ${name}`);
 }
 
 function App() {
@@ -504,47 +577,58 @@ ${prompt()}</textarea
         <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${downloadModels}>
           ⬇ Download weights (${gb(TOTAL_BYTES)})
         </button>
-        <span class="y-label">
-          ${() => {
-            const p = dl();
-            if (!p) return '';
-            const pct = p.overallTotal ? (p.overallLoaded / p.overallTotal) * 100 : 0;
-            return `${pct.toFixed(1)}% — ${p.file.split('/').pop()} [${p.index}/${p.count}]`;
-          }}
-        </span>
-      </div>
-      <div class="y-flex" style="gap: var(--yaar-sp-2); flex-wrap: wrap;">
-        <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${vaeProbe}>
-          VAE probe (56 MB)
-        </button>
-        <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${ditGate}>
-          DiT gate (fwd only)
-        </button>
-        <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${() => ditProbe()}>
-          DiT probe (find NaN)
-        </button>
         <button
           class="y-btn y-btn-ghost"
           disabled=${busy}
-          onclick=${() => clearWeightCache().then(() => log('cache cleared'))}
+          onclick=${() => clearWeightCache().then(() => setStatus('🧹 weight cache cleared'))}
         >
           clear cache
         </button>
       </div>
-      <div class="y-flex" style="gap: var(--yaar-sp-3); align-items: flex-start; flex-wrap: wrap;">
+      <div style=${() => `display:${progress() ? 'block' : 'none'};`}>
+        <div
+          class="y-flex"
+          style="justify-content:space-between; align-items:center; margin-bottom:4px;"
+        >
+          <span class="y-label">${() => progress()?.label ?? ''}</span>
+          <span class="y-label">
+            ${() => {
+              const p = progress();
+              return p && p.pct != null ? `${p.pct.toFixed(0)}%` : '';
+            }}
+          </span>
+        </div>
+        <div
+          style="height:10px; background: var(--yaar-bg-surface); border:1px solid var(--yaar-border); border-radius:5px; overflow:hidden;"
+        >
+          <div
+            style=${() => {
+              const pct = progress()?.pct;
+              const w = pct == null ? 100 : Math.max(0, Math.min(100, pct));
+              return (
+                `height:100%; background: var(--yaar-accent); transition:width .15s ease; ` +
+                `width:${w}%; opacity:${pct == null ? 0.35 : 1};`
+              );
+            }}
+          ></div>
+        </div>
+      </div>
+      <div class="y-label" style=${() => `display:${status() ? 'block' : 'none'};`}>${status}</div>
+      <div class="y-flex-col" style="gap: var(--yaar-sp-2); align-items: flex-start;">
         <canvas
           ref=${(el: HTMLCanvasElement) => (canvasEl = el)}
           width="512"
           height="512"
-          style="width:512px; height:512px; background: var(--yaar-bg-surface); border:1px solid var(--yaar-border); border-radius:6px;"
+          style="width:512px; height:512px; max-width:100%; background: var(--yaar-bg-surface); border:1px solid var(--yaar-border); border-radius:6px;"
         ></canvas>
-        <pre
-          style="flex:1; min-width:320px; max-height:512px; overflow:auto; margin:0; padding: var(--yaar-sp-2);
-          background: var(--yaar-bg-surface); border:1px solid var(--yaar-border); border-radius:6px;
-          font-size:12px; line-height:1.5; white-space:pre-wrap;"
-        >
-${() => logLines().join('\n')}</pre
-        >
+        <div class="y-flex" style="gap: var(--yaar-sp-2);">
+          <button class="y-btn" disabled=${() => busy() || !hasImage()} onclick=${copyImage}>
+            📋 Copy image
+          </button>
+          <button class="y-btn" disabled=${() => busy() || !hasImage()} onclick=${saveImage}>
+            💾 Save PNG
+          </button>
+        </div>
       </div>
     </div>
   `;
@@ -558,6 +642,8 @@ render(() => html`<${App} />`, document.getElementById('app')!);
   ready: true,
   generate, // ({model?, seed?, prompt?}) => result
   probe: ditProbe, // () => {rows, firstBad}
+  vaeProbe, // decode a precomputed latent (plumbing sanity check; no UI button)
+  ditGate, // single DiT forward (memory/latency check; no UI button)
   download: downloadModels, // () => {ok, elapsed}
   resolve: assetUrl, // (path) => the same-origin URL a given asset loads from
   clearCache: () => clearWeightCache(),
