@@ -1,5 +1,12 @@
 .PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types
 
+# GNU make on Windows runs recipes with cmd.exe by default, which can't parse
+# the POSIX `VAR=1 ./script.sh` lines below. Route recipes through Git Bash
+# (ships with Git for Windows) instead.
+ifeq ($(OS),Windows_NT)
+SHELL := C:/Program Files/Git/bin/bash.exe
+endif
+
 # Codex CLI binary (override with: make codex-types CODEX_BIN=./my-codex)
 CODEX_BIN ?= codex
 

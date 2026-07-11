@@ -55,7 +55,8 @@ launch_chrome_when_ready() {
   [ "${LAUNCH_CHROME:-0}" = "1" ] || return 0
 
   # Look on PATH first (Linux), then fall back to the standard macOS app-bundle
-  # locations — on macOS Chrome lives inside /Applications and is not on PATH.
+  # and Windows install locations — on macOS Chrome lives inside /Applications
+  # and is not on PATH; on Windows (Git Bash) it lives under Program Files.
   local bin
   bin="$(command -v google-chrome || command -v google-chrome-stable \
     || command -v chromium-browser || command -v chromium || true)"
@@ -65,7 +66,9 @@ launch_chrome_when_ready() {
       "$HOME/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
       "/Applications/Chromium.app/Contents/MacOS/Chromium" \
       "$HOME/Applications/Chromium.app/Contents/MacOS/Chromium" \
-      "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary"; do
+      "/Applications/Google Chrome Canary.app/Contents/MacOS/Google Chrome Canary" \
+      "${PROGRAMFILES:-}/Google/Chrome/Application/chrome.exe" \
+      "${LOCALAPPDATA:-}/Google/Chrome/Application/chrome.exe"; do
       if [ -x "$candidate" ]; then
         bin="$candidate"
         break
@@ -81,6 +84,8 @@ launch_chrome_when_ready() {
   # A non-default profile is mandatory: Chrome refuses remote debugging on the
   # default profile (the one holding your real logins).
   local profile="${YAAR_CHROME_PROFILE:-$HOME/.yaar-chrome}"
+  # chrome.exe can't interpret MSYS /c/... paths — convert on Git Bash.
+  command -v cygpath >/dev/null 2>&1 && profile="$(cygpath -w "$profile")"
   local url="http://localhost:${PORT:-8000}"
 
   (
