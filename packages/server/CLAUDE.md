@@ -68,6 +68,7 @@ src/
 │   ├── dev/              # Compile, typecheck, deploy, clone
 │   ├── http/             # fetch.ts — proxied HTTP fetch
 │   └── window/           # Window create/update/manage, app protocol, app query/command, subscribe/unsubscribe
+├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder
 ├── reload/               # Fingerprint-based action cache
 ├── logging/              # Session logging (JSONL), reading, context/window restore
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts

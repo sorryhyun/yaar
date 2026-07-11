@@ -15,6 +15,17 @@
  *   delete('yaar://apps/{appId}/storage/{path}')     → delete file
  *
  * On disk: storage/apps/{appId}/{path}
+ *
+ * App-scoped database (SQLite collections, see docs/sqlite-plan.md):
+ *   list('yaar://apps/{appId}/db')                          → collection names
+ *   read('yaar://apps/{appId}/db/{coll}')                   → recent documents
+ *   read('yaar://apps/{appId}/db/{coll}/{id}')              → one document
+ *   invoke('yaar://apps/{appId}/db/{coll}', { action })     → insert | insertMany | find | search | count | removeWhere
+ *   invoke('yaar://apps/{appId}/db/{coll}/{id}', { action })→ update
+ *   delete('yaar://apps/{appId}/db/{coll}/{id}')            → remove document
+ *   delete('yaar://apps/{appId}/db/{coll}')                 → drop collection
+ *
+ * On disk: storage/apps/{appId}/data.db
  */
 
 import type { OSAction } from '@yaar/shared';
@@ -44,6 +55,7 @@ import {
   storageGrep,
 } from '../storage/storage-manager.js';
 import { uninstallApp } from '../features/apps/install.js';
+import { getAppDatabase, type DbFilter, type DbFindOptions } from '../db/index.js';
 
 /**
  * Parse `yaar://apps/{appId}/storage/{path}` → { appId, path } or null.
@@ -56,6 +68,178 @@ function parseAppStoragePath(uri: string): { appId: string; path: string } | nul
   // Block path traversal — apps must stay within their own namespace
   if (validateRelativePath(path)) return null;
   return { appId: match[1], path };
+}
+
+/** Parse `yaar://apps/{appId}/db[/{collection}[/{docId}]]` or null. */
+function parseAppDbPath(
+  uri: string,
+): { appId: string; collection?: string; docId?: string } | null {
+  const match = uri.match(/^yaar:\/\/apps\/([^/]+)\/db(?:\/([^/]+)(?:\/([^/]+))?)?\/?$/);
+  if (!match) return null;
+  return { appId: match[1], collection: match[2], docId: match[3] };
+}
+
+/** Extract find options ({ sort, limit, offset }) from an invoke payload. */
+function findOptionsFrom(payload: Record<string, unknown>): DbFindOptions {
+  const options: DbFindOptions = {};
+  if (payload.sort && typeof payload.sort === 'object') {
+    options.sort = payload.sort as DbFindOptions['sort'];
+  }
+  if (typeof payload.limit === 'number') options.limit = payload.limit;
+  if (typeof payload.offset === 'number') options.offset = payload.offset;
+  return options;
+}
+
+const DB_DESCRIBE = {
+  description:
+    'App-scoped SQLite database. Documents are stored in named collections and queried ' +
+    'with Mongo-style filters: exact match { status: "active" }, operators ' +
+    '{ age: { $gt: 18 } } ($gt/$gte/$lt/$lte/$ne/$in/$exists), array contains { tags: "intro" }. ' +
+    'Meta fields _id, _created_at, _updated_at are set by the server.',
+  verbs: ['read', 'list', 'invoke', 'delete'],
+  invokeSchema: {
+    type: 'object',
+    required: ['action'],
+    properties: {
+      action: {
+        type: 'string',
+        enum: ['insert', 'insertMany', 'find', 'search', 'count', 'removeWhere', 'update'],
+        description:
+          'Collection actions: insert/insertMany/find/search/count/removeWhere. ' +
+          'Document actions (URI ends with /{docId}): update.',
+      },
+      doc: { type: 'object', description: 'Document to insert (for insert)' },
+      docs: { type: 'array', description: 'Documents to insert (for insertMany)' },
+      filter: { type: 'object', description: 'Filter object (for find/count/removeWhere)' },
+      sort: { type: 'object', description: 'Sort spec, e.g. { _created_at: -1 } (for find)' },
+      limit: { type: 'number', description: 'Max results (default 100, max 1000)' },
+      offset: { type: 'number', description: 'Skip N results (for find)' },
+      query: { type: 'string', description: 'Full-text search query (for search)' },
+      patch: { type: 'object', description: 'Fields to shallow-merge (for update)' },
+    },
+  },
+};
+
+/**
+ * Handle all verbs for `yaar://apps/{appId}/db/...` URIs.
+ * Returns null when the URI is not a db path (caller falls through).
+ */
+async function handleDbVerb(
+  verb: 'read' | 'list' | 'invoke' | 'delete',
+  resolved: ResolvedUri,
+  payload?: Record<string, unknown>,
+): Promise<VerbResult | null> {
+  const dbPath = parseAppDbPath(resolved.sourceUri);
+  if (!dbPath) return null;
+  const { appId, collection, docId } = dbPath;
+
+  try {
+    const db = getAppDatabase(appId);
+
+    // ── Bare /db — collection listing ──
+    if (!collection) {
+      if (verb === 'read' || verb === 'list') {
+        return okLinks(
+          db.collections().map((name) => ({
+            uri: `yaar://apps/${appId}/db/${name}`,
+            name,
+            description: `${db.count(name)} documents`,
+          })),
+        );
+      }
+      if (verb === 'delete') {
+        return error('Cannot delete the whole database. Drop collections individually.');
+      }
+      return error('Invoke requires a collection: yaar://apps/{appId}/db/{collection}.');
+    }
+
+    // ── /db/{collection}/{docId} — single document ──
+    if (docId) {
+      if (verb === 'read' || verb === 'list') {
+        const doc = db.get(collection, docId);
+        if (!doc) return error(`Document "${docId}" not found in collection "${collection}".`);
+        return okJson(doc);
+      }
+      if (verb === 'delete') {
+        const deleted = db.remove(collection, docId);
+        if (!deleted) return error(`Document "${docId}" not found in collection "${collection}".`);
+        subscriptionRegistry.notifyChange(resolved.sourceUri);
+        return okJson({ deleted: true });
+      }
+      // invoke
+      if (payload?.action !== 'update') {
+        return error('Document URIs support only { action: "update", patch: {...} }.');
+      }
+      if (!payload.patch || typeof payload.patch !== 'object') {
+        return error('"patch" (object) is required for update.');
+      }
+      const updated = db.update(collection, docId, payload.patch as Record<string, unknown>);
+      if (!updated) return error(`Document "${docId}" not found in collection "${collection}".`);
+      subscriptionRegistry.notifyChange(resolved.sourceUri);
+      return okJson({ updated: true });
+    }
+
+    // ── /db/{collection} — collection-level verbs ──
+    if (verb === 'read' || verb === 'list') {
+      return okJson(db.find(collection, undefined, { sort: { _created_at: -1 } }));
+    }
+    if (verb === 'delete') {
+      db.drop(collection);
+      subscriptionRegistry.notifyChange(resolved.sourceUri);
+      return okJson({ dropped: true });
+    }
+
+    // invoke
+    const action = payload?.action;
+    if (!action) return error('Payload must include "action".');
+    const filter = (payload?.filter ?? undefined) as DbFilter | undefined;
+
+    switch (action) {
+      case 'insert': {
+        if (!payload?.doc || typeof payload.doc !== 'object') {
+          return error('"doc" (object) is required for insert.');
+        }
+        const _id = db.insert(collection, payload.doc as Record<string, unknown>);
+        subscriptionRegistry.notifyChange(resolved.sourceUri);
+        return okJson({ _id });
+      }
+      case 'insertMany': {
+        if (!Array.isArray(payload?.docs)) {
+          return error('"docs" (array of objects) is required for insertMany.');
+        }
+        const ids = db.insertMany(collection, payload.docs as Record<string, unknown>[]);
+        subscriptionRegistry.notifyChange(resolved.sourceUri);
+        return okJson({ ids });
+      }
+      case 'find':
+        return okJson(db.find(collection, filter, findOptionsFrom(payload!)));
+      case 'search': {
+        if (typeof payload?.query !== 'string') {
+          return error('"query" (string) is required for search.');
+        }
+        const limit = typeof payload.limit === 'number' ? payload.limit : undefined;
+        return okJson(db.search(collection, payload.query, limit));
+      }
+      case 'count':
+        return okJson({ count: db.count(collection, filter) });
+      case 'removeWhere': {
+        if (!filter || Object.keys(filter).length === 0) {
+          return error(
+            'removeWhere requires a non-empty "filter". To delete everything, drop the collection.',
+          );
+        }
+        const deleted = db.removeWhere(collection, filter);
+        if (deleted > 0) subscriptionRegistry.notifyChange(resolved.sourceUri);
+        return okJson({ deleted });
+      }
+      default:
+        return error(
+          `Unknown db action "${String(action)}". Supported: insert, insertMany, find, search, count, removeWhere.`,
+        );
+    }
+  } catch (err) {
+    return error(err instanceof Error ? err.message : String(err));
+  }
 }
 
 export function registerAppsHandlers(registry: ResourceRegistry): void {
@@ -78,11 +262,12 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   };
   registry.register('yaar://apps', listHandler);
 
-  // ── yaar://apps/{appId} — per-app operations + app-scoped storage ──
+  // ── yaar://apps/{appId} — per-app operations + app-scoped storage/db ──
   registry.register('yaar://apps/*', {
     description:
       'A specific app. Read to load its SKILL.md, invoke to set_badge/install, delete to uninstall. ' +
-      'Sub-path /storage/{path} provides app-scoped file storage.',
+      'Sub-path /storage/{path} provides app-scoped file storage. ' +
+      'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search).',
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -105,6 +290,11 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async describe(resolved: ResolvedUri): Promise<VerbResult> {
+      // Db sub-paths get the db API describe
+      if (parseAppDbPath(resolved.sourceUri)) {
+        return okJson({ uri: resolved.sourceUri, ...DB_DESCRIBE });
+      }
+
       // Storage sub-paths get generic describe
       if (parseAppStoragePath(resolved.sourceUri)) {
         return okJson({
@@ -125,6 +315,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
+      // ── App db sub-path ──
+      const dbResult = await handleDbVerb('read', resolved);
+      if (dbResult) return dbResult;
+
       // ── App storage sub-path ──
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {
@@ -177,6 +371,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {
+      // ── App db sub-path ──
+      const dbResult = await handleDbVerb('list', resolved);
+      if (dbResult) return dbResult;
+
       // ── App storage sub-path ──
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {
@@ -205,6 +403,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      // ── App db sub-path ──
+      const dbResult = await handleDbVerb('invoke', resolved, payload);
+      if (dbResult) return dbResult;
+
       // ── App storage sub-path ──
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {
@@ -267,6 +469,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
+      // ── App db sub-path ──
+      const dbResult = await handleDbVerb('delete', resolved);
+      if (dbResult) return dbResult;
+
       // ── App storage sub-path ──
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {

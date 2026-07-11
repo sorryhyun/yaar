@@ -215,11 +215,24 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         return errorResponse('URI not accessible to iframe apps', 403);
       }
 
+      // Resolve `self` → real appId so notifyChange() (which fires with real
+      // appId URIs) reaches subscriptions made from inside the app's iframe.
+      let subscribeUri = body.uri;
+      if (body.uri === 'yaar://apps/self' || body.uri.startsWith('yaar://apps/self/')) {
+        if (!tokenEntry.appId) {
+          return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
+        }
+        subscribeUri =
+          body.uri === 'yaar://apps/self'
+            ? `yaar://apps/${tokenEntry.appId}`
+            : body.uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
+      }
+
       const subscriptionId = subscriptionRegistry.subscribe(
         token!,
         tokenEntry.windowId,
         tokenEntry.sessionId,
-        body.uri,
+        subscribeUri,
       );
       return jsonResponse({ subscriptionId });
     }

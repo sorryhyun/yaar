@@ -360,6 +360,14 @@ export async function shutdown(server: Server<any>): Promise<void> {
       // External MCP module not initialized — nothing to clean up
     }
 
+    // Flush and close per-app SQLite databases
+    try {
+      const { closeAllAppDatabases } = await import('./db/index.js');
+      closeAllAppDatabases();
+    } catch {
+      // db module never loaded — nothing to clean up
+    }
+
     await getWarmPool().cleanup();
 
     server.stop();

@@ -574,3 +574,79 @@ read('yaar://apps/my-app/storage/data.json')
 list('yaar://apps/my-app/storage/')
 delete('yaar://apps/my-app/storage/data.json')
 ```
+
+## App-Scoped Database (`appDb`)
+
+For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`
+(design: [`docs/sqlite-plan.md`](./sqlite-plan.md)). Unlike `appStorage`, it supports queries,
+counting, pagination, and full-text search server-side — no more load-all-JSON-and-filter.
+Binary blobs and simple single files should stay on `appStorage`; the two coexist.
+
+Requires `"yaar://apps/self/db/"` in the app's `app.json` permissions.
+
+### From App Code (`@bundled/yaar`)
+
+```typescript
+import { appDb } from '@bundled/yaar';
+
+interface Note { title: string; tags: string[] }
+const notes = appDb.collection<Note>('notes');
+
+const id = await notes.insert({ title: 'Hello', tags: ['intro'] }); // → generated _id
+await notes.insertMany([{ title: 'A', tags: [] }, { title: 'B', tags: [] }]);
+
+const one = await notes.get(id);                    // → doc | null (has _id, _created_at, _updated_at)
+const page = await notes.find(
+  { tags: 'intro' },                                // filter (see syntax below)
+  { sort: { _created_at: -1 }, limit: 20, offset: 0 },
+);
+const hits = await notes.search('hello world');     // FTS5 full-text search, best matches first
+
+await notes.update(id, { title: 'Updated' });       // shallow merge
+await notes.remove(id);
+await notes.removeWhere({ tags: 'draft' });         // filter must be non-empty
+const n = await notes.count({ tags: 'intro' });
+
+await appDb.collections();                          // → ['notes', ...]
+await appDb.drop('notes');                          // delete collection + documents
+```
+
+**Filter syntax** (Mongo-style, fields AND together):
+
+```typescript
+{ status: 'active' }                 // exact match
+{ tags: 'intro' }                    // array contains (same syntax as scalar equality)
+{ age: { $gt: 18 } }                 // $gt / $gte / $lt / $lte
+{ name: { $ne: 'admin' } }           // not equal (also matches docs missing the field)
+{ kind: { $in: ['a', 'b'] } }        // one of
+{ avatar: { $exists: true } }        // field presence
+{ 'author.name': 'kim' }             // dotted paths reach into nested objects
+```
+
+**Reactive binding** — a Solid signal that tracks a query:
+
+```typescript
+const [docs, { insert, update, remove, refresh }] = appDb.createReactiveCollection<Note>(
+  'notes',
+  { sort: { _created_at: -1 }, limit: 50 },
+);
+// docs() re-renders on mutations made through these helpers; external changes
+// (agent, another window) arrive via a verb subscription.
+```
+
+### From Agent (MCP Tools)
+
+The agent can query app data directly — no need to load whole files:
+
+```
+list('yaar://apps/memo/db')                                            → collection names
+read('yaar://apps/memo/db/notes')                                      → recent documents
+read('yaar://apps/memo/db/notes/{id}')                                 → one document
+invoke('yaar://apps/memo/db/notes', { action: 'find', filter: { tags: 'important' }, limit: 5 })
+invoke('yaar://apps/memo/db/notes', { action: 'search', query: 'quarterly report' })
+invoke('yaar://apps/memo/db/notes', { action: 'insert', doc: { ... } })  → { _id }
+invoke('yaar://apps/memo/db/notes/{id}', { action: 'update', patch: { ... } })
+invoke('yaar://apps/memo/db/notes', { action: 'count' })                 → { count }
+delete('yaar://apps/memo/db/notes/{id}')                                 → remove document
+delete('yaar://apps/memo/db/notes')                                      → drop collection
+```

@@ -343,6 +343,81 @@ interface YaarAppStorage {
   remove(path: string): Promise<void>;
 }
 
+// -- App-scoped database (SQLite collections) --
+
+/** Meta fields the server adds to every stored document. */
+interface YaarDbMeta {
+  _id: string;
+  _created_at: string;
+  _updated_at: string;
+}
+
+/**
+ * Mongo-style filter: exact match `{ status: 'active' }`, operators
+ * `{ age: { $gt: 18 } }` ($gt/$gte/$lt/$lte/$ne/$in/$exists), array contains
+ * `{ tags: 'intro' }`. Multiple fields AND together.
+ */
+type YaarDbFilter = Record<string, unknown>;
+
+interface YaarDbFindOptions {
+  /** Sort spec, e.g. `{ _created_at: -1 }`. Ascending: 1, descending: -1. */
+  sort?: Record<string, 1 | -1>;
+  /** Max results (default 100, max 1000). */
+  limit?: number;
+  /** Skip N results (for pagination). */
+  offset?: number;
+}
+
+interface YaarDbCollection<T extends object = Record<string, unknown>> {
+  /** Insert a document. Returns the generated _id. */
+  insert(doc: T): Promise<string>;
+  /** Insert many documents in one transaction. Returns generated ids. */
+  insertMany(docs: T[]): Promise<string[]>;
+  /** Fetch one document by _id, or null if it doesn't exist. */
+  get(id: string): Promise<(T & YaarDbMeta) | null>;
+  /** Query documents matching the filter (all documents when omitted). */
+  find(filter?: YaarDbFilter, options?: YaarDbFindOptions): Promise<(T & YaarDbMeta)[]>;
+  /** Full-text search across all document fields, best matches first. */
+  search(query: string, limit?: number): Promise<(T & YaarDbMeta)[]>;
+  /** Shallow-merge patch into the stored document. */
+  update(id: string, patch: Partial<T>): Promise<void>;
+  /** Delete one document by _id. */
+  remove(id: string): Promise<void>;
+  /** Delete all documents matching a non-empty filter. Returns deleted count. */
+  removeWhere(filter: YaarDbFilter): Promise<number>;
+  /** Count documents matching the filter (all documents when omitted). */
+  count(filter?: YaarDbFilter): Promise<number>;
+}
+
+interface YaarDbReactiveHelpers<T extends object> {
+  insert(doc: T): Promise<string>;
+  update(id: string, patch: Partial<T>): Promise<void>;
+  remove(id: string): Promise<void>;
+  /** Re-run the query and update the signal. */
+  refresh(): Promise<void>;
+  /** Stop refreshing and drop the change subscription (auto on Solid cleanup). */
+  dispose(): void;
+}
+
+interface YaarAppDb {
+  /** Get a collection handle (lazy — no network call until used). */
+  collection<T extends object = Record<string, unknown>>(name: string): YaarDbCollection<T>;
+  /** List collection names in this app's database. */
+  collections(): Promise<string[]>;
+  /** Drop a collection and all its documents. */
+  drop(name: string): Promise<void>;
+  /**
+   * Reactive Solid.js binding for a collection query: `docs()` is a signal
+   * holding the current results; helper mutations refresh it, and external
+   * changes arrive via a verb subscription (requires read permission on
+   * `yaar://apps/self/db/`).
+   */
+  createReactiveCollection<T extends object = Record<string, unknown>>(
+    name: string,
+    options?: YaarDbFindOptions & { filter?: YaarDbFilter },
+  ): [() => (T & YaarDbMeta)[], YaarDbReactiveHelpers<T>];
+}
+
 // -- Notifications SDK --
 
 interface YaarNotificationItem {
@@ -465,6 +540,13 @@ declare module '@bundled/yaar' {
 
   /** App-scoped storage (wraps yaar://apps/self/storage/ verbs). */
   export const appStorage: YaarAppStorage;
+
+  /**
+   * App-scoped SQLite database (wraps yaar://apps/self/db/ verbs).
+   * Structured collections with Mongo-style filters and full-text search.
+   * Requires `yaar://apps/self/db/` in app.json permissions.
+   */
+  export const appDb: YaarAppDb;
 
   /** Re-exported sub-objects from window.yaar. */
   export const storage: YaarStorage;

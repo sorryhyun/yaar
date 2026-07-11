@@ -1,5 +1,13 @@
 # SQLite for App Storage — Design Plan
 
+> **Status: Phases 1–2 implemented.** `packages/server/src/db/` (AppDatabase, pool,
+> query builder), `yaar://apps/{appId}/db/*` verb routes in `handlers/apps.ts`, and the
+> `appDb` SDK (including `createReactiveCollection`) in the compiler shim. Two deltas from
+> this plan: filtered finds go through `invoke {action:'find'}` (the `read` verb carries no
+> payload), and reactive bindings are `appDb.createReactiveCollection` backed by verb
+> subscriptions. Phase 3 (JSON-path indexes, raw SQL escape hatch, export/import) remains
+> future work. Usage docs: [app-development.md](./app-development.md#app-scoped-database-appdb).
+
 ## Motivation
 
 Apps currently store data as flat files under `storage/apps/{appId}/`. This works but limits what apps can do:
