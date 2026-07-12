@@ -3,12 +3,12 @@ export {};
 import { onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import type { AgentEntry, WindowInfo, BrowserTab } from './types';
+import type { AgentEntry, WindowInfo, AppProcess } from './types';
 import {
   agentStats,
   agentList,
   windows,
-  browsers,
+  appProcesses,
   lastRefresh,
   activeTab,
   selectTab,
@@ -16,7 +16,8 @@ import {
   refreshAll,
   interruptAgent,
   closeWindow,
-  closeBrowser,
+  killAppAgent,
+  closeAppWindows,
 } from './data';
 import { registerProtocol } from './protocol';
 import './styles.css';
@@ -64,12 +65,15 @@ function StatsBar() {
         }}</div>
       </div>
       <div
-        class=${() => `stat-card y-card${activeTab() === 'browsers' ? ' active' : ''}`}
-        onClick=${() => selectTab('browsers')}
+        class=${() => `stat-card y-card${activeTab() === 'apps' ? ' active' : ''}`}
+        onClick=${() => selectTab('apps')}
       >
-        <div class="stat-value">${() => browsers().length}</div>
-        <div class="stat-label">Browsers</div>
-        <div class="stat-sub">tabs</div>
+        <div class="stat-value">${() => appProcesses().length}</div>
+        <div class="stat-label">Apps</div>
+        <div class="stat-sub">${() => {
+          const orphaned = appProcesses().filter((p) => p.orphaned).length;
+          return orphaned > 0 ? orphaned + ' orphaned' : 'none orphaned';
+        }}</div>
       </div>
     </div>
   `;
@@ -91,7 +95,7 @@ function AgentRow(props: { agent: AgentEntry }) {
           <div class="process-title">${() => a().label}</div>
           <div class="process-meta">
             <span style=${() => `color: ${typeBadge(a().type)}`}>${() => a().type}</span>
-            <span> ${() => (a().busy ? 'busy' : 'idle')}</span>
+            <span>${() => (a().busy ? 'busy' : 'idle')}</span>
           </div>
         </div>
       </div>
@@ -131,8 +135,8 @@ function WindowRow(props: { win: WindowInfo }) {
           </div>
           <div class="process-meta">
             <span class="y-badge">${() => w().renderer}</span>
-            ${() => (w().appId ? html` <span class="y-badge">${w().appId}</span>` : null)}
-            <span> ${() => w().size}</span>
+            ${() => (w().appId ? html`<span class="y-badge">${w().appId}</span>` : null)}
+            <span>${() => w().size}</span>
           </div>
         </div>
       </div>
@@ -160,37 +164,73 @@ function WindowList() {
   `;
 }
 
-function BrowserRow(props: { tab: BrowserTab }) {
-  const t = () => props.tab;
+function AppRow(props: { proc: AppProcess }) {
+  const p = () => props.proc;
+
+  const dotClass = () => {
+    if (p().agent?.busy) return 'dot dot-warn';
+    if (p().orphaned) return 'dot dot-warn';
+    return 'dot dot-ok';
+  };
+
+  const agentLabel = () => {
+    const agent = p().agent;
+    if (!agent) return 'no agent';
+    return agent.busy ? 'agent busy' : 'agent idle';
+  };
+
+  const windowLabel = () => {
+    const n = p().windows.length;
+    return n === 1 ? '1 window' : `${n} windows`;
+  };
+
   return html`
     <div class="process-row">
       <div class="process-info">
-        <span class="dot dot-ok"></span>
+        <span class=${dotClass}></span>
         <div class="process-detail">
-          <div class="process-title">${() => t().title || '(no title)'}</div>
-          <div class="process-meta">${() => t().url}</div>
+          <div class="process-title">${() => p().name}</div>
+          <div class="process-meta">
+            <span>${windowLabel}</span>
+            <span>${agentLabel}</span>
+            ${() =>
+              p().orphaned
+                ? html`<span class="y-badge" title="Agent still holds a slot and its context, with no window open">orphaned</span>`
+                : null}
+          </div>
         </div>
       </div>
       <div class="process-actions">
-        <button
-          class="y-btn y-btn-ghost btn-sm btn-danger"
-          onClick=${() => closeBrowser(t().id)}
-          title="Close tab"
-        >
-          Close
-        </button>
+        <${Show} when=${() => p().windows.length > 0}>
+          <button
+            class="y-btn y-btn-ghost btn-sm"
+            onClick=${() => closeAppWindows(p().appId)}
+            title="Close all windows of this app"
+          >
+            Close
+          </button>
+        </>
+        <${Show} when=${() => p().agent !== null}>
+          <button
+            class="y-btn y-btn-ghost btn-sm btn-danger"
+            onClick=${() => killAppAgent(p().appId)}
+            title="Dispose the app agent, freeing its slot and dropping its context"
+          >
+            Kill
+          </button>
+        </>
       </div>
     </div>
   `;
 }
 
-function BrowserList() {
+function AppList() {
   return html`
     <${Show}
-      when=${() => browsers().length > 0}
-      fallback=${html`<div class="y-empty"><div class="y-empty-icon">&#127760;</div>No browser tabs</div>`}
+      when=${() => appProcesses().length > 0}
+      fallback=${html`<div class="y-empty"><div class="y-empty-icon">&#9635;</div>No apps running</div>`}
     >
-      <${For} each=${browsers}>${(tab: BrowserTab) => html`<${BrowserRow} tab=${tab} />`}</>
+      <${For} each=${appProcesses}>${(proc: AppProcess) => html`<${AppRow} proc=${proc} />`}</>
     </>
   `;
 }
@@ -216,7 +256,7 @@ function App() {
       <div class="tab-content">
         <${Show} when=${() => activeTab() === 'agents'}><${AgentList} /></>
         <${Show} when=${() => activeTab() === 'windows'}><${WindowList} /></>
-        <${Show} when=${() => activeTab() === 'browsers'}><${BrowserList} /></>
+        <${Show} when=${() => activeTab() === 'apps'}><${AppList} /></>
       </div>
       <${StatusBar} />
     </div>

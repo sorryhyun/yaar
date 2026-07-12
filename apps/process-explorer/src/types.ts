@@ -34,11 +34,29 @@ export interface WindowInfo {
   appId?: string;
 }
 
-export interface BrowserTab {
+/** An installed app, as reported by `list('yaar://apps')`. */
+export interface InstalledApp {
   id: string;
-  uri: string;
-  url: string;
-  title: string;
+  name: string;
+  description?: string;
 }
 
-export type TabId = 'agents' | 'windows' | 'browsers';
+/**
+ * A running app — the join of an app's open windows and its app agent.
+ *
+ * An app counts as running if it has at least one open window OR a live agent.
+ * The two are independent: agents are keyed by appId and persist for the whole
+ * session, so an app whose last window was closed keeps its agent (and its
+ * context, and its slot against MAX_AGENTS). Those show up here as `orphaned`.
+ */
+export interface AppProcess {
+  appId: string;
+  name: string;
+  windows: WindowInfo[];
+  /** The app's agent, or null if it has never been interacted with. */
+  agent: AgentEntry | null;
+  /** Has a live agent but no open window — nothing will reclaim it on its own. */
+  orphaned: boolean;
+}
+
+export type TabId = 'agents' | 'windows' | 'apps';

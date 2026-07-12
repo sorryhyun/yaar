@@ -2,35 +2,72 @@ export {};
 
 import { createSignal, createMemo, onCleanup } from '@bundled/solid-js';
 import { list, invoke, del, subscribe, showToast } from '@bundled/yaar';
-import { listTabs, closeTab } from '@bundled/yaar-web';
-import type { AgentStats, AgentEntry, WindowInfo, BrowserTab, TabId } from './types';
+import type { AgentStats, AgentEntry, WindowInfo, InstalledApp, AppProcess, TabId } from './types';
 
 // ── Signals ──────────────────────────────────────────────────
 
 const [agentStats, setAgentStats] = createSignal<AgentStats | null>(null);
 const [windows, setWindows] = createSignal<WindowInfo[]>([]);
-const [browsers, setBrowsers] = createSignal<BrowserTab[]>([]);
+const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
 const [lastRefresh, setLastRefresh] = createSignal<Date | null>(null);
 const [activeTab, setActiveTab] = createSignal<TabId>('agents');
 
-export { agentStats, windows, browsers, lastRefresh, activeTab };
+export { agentStats, windows, installedApps, lastRefresh, activeTab };
 
-/**
- * Switch tabs. Opening the browsers tab fetches immediately rather than waiting
- * out the poll interval — the other two tabs are pushed to by subscriptions.
- */
 export function selectTab(tab: TabId) {
   setActiveTab(tab);
-  if (tab === 'browsers') {
-    void fetchBrowsers().then(() => setLastRefresh(new Date()));
-  }
 }
 
-// ── Derived: agent list from stats ───────────────────────────
+// ── Derived ──────────────────────────────────────────────────
 
 export const agentList = createMemo<AgentEntry[]>(() => agentStats()?.agents ?? []);
 
+/**
+ * Running apps, joined from the two lists we already subscribe to: windows carry
+ * an appId, and so do app agents. An app is running if it has either. Sorted so
+ * orphans (agent alive, no windows) surface first — they're the ones you'd want
+ * to kill.
+ */
+export const appProcesses = createMemo<AppProcess[]>(() => {
+  const names = new Map(installedApps().map((a) => [a.id, a.name]));
+  const byApp = new Map<string, AppProcess>();
+
+  const slot = (appId: string): AppProcess => {
+    let proc = byApp.get(appId);
+    if (!proc) {
+      proc = { appId, name: names.get(appId) ?? appId, windows: [], agent: null, orphaned: false };
+      byApp.set(appId, proc);
+    }
+    return proc;
+  };
+
+  for (const win of windows()) {
+    if (win.appId) slot(win.appId).windows.push(win);
+  }
+  for (const agent of agentList()) {
+    if (agent.type === 'app' && agent.appId) slot(agent.appId).agent = agent;
+  }
+
+  const procs = [...byApp.values()];
+  for (const proc of procs) {
+    proc.orphaned = proc.agent !== null && proc.windows.length === 0;
+  }
+
+  return procs.sort((a, b) => {
+    if (a.orphaned !== b.orphaned) return a.orphaned ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+});
+
 // ── Fetch functions ──────────────────────────────────────────
+
+/**
+ * Adapt a resource_link list — `{ uri, name, description }` — into a flat record.
+ * The verb layer returns links for `yaar://windows` and `yaar://apps` alike.
+ */
+function isResourceLink(entry: any): boolean {
+  return entry && entry.uri && entry.name != null && !entry.id;
+}
 
 async function fetchAgents() {
   try {
@@ -48,10 +85,9 @@ async function fetchWindows() {
       setWindows([]);
       return;
     }
-    // Adapt resource_link format { uri, name, description } → WindowInfo
     setWindows(
       raw.map((entry: any) => {
-        if (entry.uri && entry.name != null && !entry.id) {
+        if (isResourceLink(entry)) {
           const id = entry.uri.replace(/^yaar:\/\/windows\//, '');
           const parts: string[] = (entry.description ?? '').split(', ');
           const appPart = parts.find((p: string) => p.startsWith('app:'));
@@ -74,34 +110,50 @@ async function fetchWindows() {
   }
 }
 
-async function fetchBrowsers() {
+/**
+ * The installed-app roster, for display names only — the running set comes from
+ * windows and agents. Fetched once at mount: apps change on install/uninstall,
+ * which is rare and doesn't push a change ping. An app installed mid-session just
+ * shows its appId until the next refresh.
+ */
+async function fetchApps() {
   try {
-    const data = await listTabs() as BrowserTab[] | { data: BrowserTab[] };
-    const tabs = Array.isArray(data) ? data : Array.isArray((data as { data: BrowserTab[] })?.data) ? (data as { data: BrowserTab[] }).data : [];
-    setBrowsers(tabs);
+    const raw = await list<unknown[]>('yaar://apps');
+    if (!Array.isArray(raw)) {
+      setInstalledApps([]);
+      return;
+    }
+    setInstalledApps(
+      raw.map((entry: any) => {
+        if (isResourceLink(entry)) {
+          return {
+            id: entry.uri.replace(/^yaar:\/\/apps\//, ''),
+            name: entry.name,
+            description: entry.description,
+          } as InstalledApp;
+        }
+        return entry as InstalledApp;
+      }),
+    );
   } catch {
-    setBrowsers([]);
+    setInstalledApps([]);
   }
 }
 
 export async function refreshAll() {
-  await Promise.all([fetchAgents(), fetchWindows(), fetchBrowsers()]);
+  await Promise.all([fetchAgents(), fetchWindows(), fetchApps()]);
   setLastRefresh(new Date());
 }
 
 // ── Watching ─────────────────────────────────────────────────
 
-/** Interval for the browsers tab, which has nothing to subscribe to. */
-const BROWSER_POLL_MS = 5000;
-
 /**
- * Subscribe rather than poll. The server pushes a change ping whenever an agent
- * is created, disposed, or flips busy/idle, and on every window.* action — so a
- * quiet desktop costs nothing and a busy one updates as it happens.
+ * Subscribe rather than poll. The server pushes a change ping whenever an agent is
+ * created, disposed, or flips busy/idle, and on every window.* action — so a quiet
+ * desktop costs nothing and a busy one updates as it happens.
  *
- * Browser tabs are the exception: they live in Chrome, not in YAAR's state, so
- * nothing notifies us when the user opens one. They stay on a timer, and only
- * while the user is actually looking at that tab.
+ * The apps view needs no subscription of its own: it is derived from these same two
+ * lists, so it re-renders whenever either is pushed.
  */
 export function startWatching() {
   refreshAll();
@@ -132,20 +184,13 @@ export function startWatching() {
 
   watch('yaar://session/agents', fetchAgents);
   watch('yaar://windows', fetchWindows);
-
-  const timer = setInterval(() => {
-    if (activeTab() !== 'browsers') return;
-    void fetchBrowsers().then(() => setLastRefresh(new Date()));
-  }, BROWSER_POLL_MS);
-  onCleanup(() => clearInterval(timer));
 }
 
 // ── Actions ──────────────────────────────────────────────────
 
-// Each action re-fetches only the list it touched. The subscription would push
-// the same change a moment later, but refreshing here keeps the row from lingering
-// if the ping is lost — and re-fetching all three would mean a CDP round-trip on
-// every button click.
+// Each action re-fetches only the list it touched. The subscription would push the
+// same change a moment later, but refreshing here keeps the row from lingering if
+// the ping is lost.
 
 export async function interruptAgent(agentId: string) {
   try {
@@ -169,13 +214,33 @@ export async function closeWindow(windowId: string) {
   setLastRefresh(new Date());
 }
 
-export async function closeBrowser(browserId: string) {
+/**
+ * Kill an app's agent, freeing its slot and dropping its context. The app itself
+ * stays installed and its windows stay open — the next interaction spawns a fresh
+ * agent. This is the only way to reclaim an orphaned agent.
+ */
+export async function killAppAgent(appId: string) {
   try {
-    await closeTab(browserId);
-    showToast(`Closed browser tab`, 'success');
+    await del(`yaar://session/agents/${appId}`);
+    showToast(`Killed ${appId} agent`, 'success');
+  } catch (err) {
+    showToast(err instanceof Error ? err.message : 'Kill failed', 'error');
+  }
+  await fetchAgents();
+  setLastRefresh(new Date());
+}
+
+/** Close every open window belonging to an app. Leaves the app agent alone. */
+export async function closeAppWindows(appId: string) {
+  const targets = appProcesses().find((p) => p.appId === appId)?.windows ?? [];
+  if (targets.length === 0) return;
+
+  try {
+    await Promise.all(targets.map((w) => del(`yaar://windows/${w.id}`)));
+    showToast(`Closed ${targets.length} window${targets.length === 1 ? '' : 's'}`, 'success');
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Close failed', 'error');
   }
-  await fetchBrowsers();
+  await fetchWindows();
   setLastRefresh(new Date());
 }

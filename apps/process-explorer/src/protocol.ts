@@ -5,11 +5,12 @@ import {
   agentStats,
   agentList,
   windows,
-  browsers,
+  appProcesses,
   refreshAll,
   interruptAgent,
   closeWindow,
-  closeBrowser,
+  killAppAgent,
+  closeAppWindows,
 } from './data';
 
 export function registerProtocol() {
@@ -21,11 +22,12 @@ export function registerProtocol() {
 
     state: {
       stats: {
-        description: 'Overview: agent, window, and browser counts',
+        description: 'Overview: agent, window, and running-app counts',
         handler: () => ({
           agents: agentStats(),
           windowCount: windows().length,
-          browserCount: browsers().length,
+          appCount: appProcesses().length,
+          orphanedAppCount: appProcesses().filter((p) => p.orphaned).length,
         }),
       },
       agents: {
@@ -36,9 +38,11 @@ export function registerProtocol() {
         description: 'List of all open windows',
         handler: () => windows(),
       },
-      browsers: {
-        description: 'List of all open browser tabs',
-        handler: () => browsers(),
+      apps: {
+        description:
+          'Running apps — each with its open windows and its app agent. An app is "orphaned" ' +
+          'when its agent is still alive with no window open, holding a slot and its context.',
+        handler: () => appProcesses(),
       },
     },
 
@@ -75,15 +79,29 @@ export function registerProtocol() {
           return { ok: true };
         },
       }),
-      closeBrowser: defineCommand({
-        description: 'Close a browser tab by ID',
+      killAppAgent: defineCommand({
+        description:
+          'Dispose an app agent by appId, freeing its slot and dropping its context. The app stays ' +
+          'installed and its windows stay open; the next interaction spawns a fresh agent.',
         params: {
           type: 'object',
-          properties: { browserId: { type: 'string' } },
-          required: ['browserId'],
+          properties: { appId: { type: 'string' } },
+          required: ['appId'],
         },
         handler: async (p) => {
-          await closeBrowser(p.browserId);
+          await killAppAgent(p.appId);
+          return { ok: true };
+        },
+      }),
+      closeAppWindows: defineCommand({
+        description: 'Close every open window belonging to an app. Leaves its agent alone.',
+        params: {
+          type: 'object',
+          properties: { appId: { type: 'string' } },
+          required: ['appId'],
+        },
+        handler: async (p) => {
+          await closeAppWindows(p.appId);
           return { ok: true };
         },
       }),

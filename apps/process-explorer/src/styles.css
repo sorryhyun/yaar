@@ -130,10 +130,23 @@
   color: #e2e8f0;
 }
 
+/*
+ * Solid's html`` templates strip leading whitespace inside a tag, so adjacent
+ * <span>s in a meta line render flush against each other ("1 windowno agent").
+ * Space them here rather than smuggling separators into the markup.
+ */
 .process-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
   font-size: 0.75rem;
   color: #94a3b8;
   white-space: nowrap;
+  overflow: hidden;
+}
+
+.process-meta > * {
   overflow: hidden;
   text-overflow: ellipsis;
 }

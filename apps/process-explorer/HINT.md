@@ -1,1 +1,1 @@
-Open Process Explorer when users ask about running agents, active windows, browser tabs, system processes, or want to manage/stop/kill any of these. It provides a real-time task manager view with control actions.
+Open Process Explorer when users ask about running agents, active windows, running apps, system processes, or want to manage/stop/kill any of these. It provides a real-time task manager view with control actions, including killing an app's agent to reclaim its slot and context.

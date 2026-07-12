@@ -6,6 +6,7 @@
  *   list('yaar://session/agents')                         → list all active agents
  *   read('yaar://session/agents/{agentId}')               → agent info
  *   invoke('yaar://session/agents/{agentId}', { action }) → interrupt / relay
+ *   delete('yaar://session/agents/{agentId}')             → dispose a session or app agent
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
@@ -62,7 +63,8 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
   // ── yaar://session/agents/* — agent instance operations ──
   registry.register('yaar://session/agents/*', {
     description:
-      'Agent instance. Read for agent info, invoke to interrupt, relay, or invoke the session agent.',
+      'Agent instance. Read for agent info, invoke to interrupt, relay, or invoke the session agent, ' +
+      'delete to dispose the session agent or an app agent (by instanceId or appId).',
     verbs: ['describe', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -176,10 +178,10 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertSessionAgents(resolved);
 
-      if (resolved.id === 'session') {
-        const pool = getPool();
-        if (!pool) return error('Session not initialized.');
+      const pool = getPool();
+      if (!pool) return error('Session not initialized.');
 
+      if (resolved.id === 'session') {
         if (!pool.agentPool.hasSessionAgent()) {
           return error('Session agent does not exist.');
         }
@@ -188,7 +190,21 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         return ok('Session agent disposed.');
       }
 
-      return error('Delete is only supported on yaar://session/agents/session.');
+      // App agents outlive the windows that spawned them — they are keyed by appId and
+      // reused, so nothing reclaims one when its last window closes. Deleting frees the
+      // agent slot and drops its context; the next interaction with the app spawns a
+      // fresh one. Addressable by instanceId (what listAgents reports) or by appId.
+      const appAgent = pool.agentPool
+        .listAgents()
+        .find((a) => a.type === 'app' && (a.id === resolved.id || a.appId === resolved.id));
+      if (appAgent?.appId) {
+        await pool.agentPool.disposeAppAgent(appAgent.appId);
+        return ok(`App agent for "${appAgent.appId}" disposed.`);
+      }
+
+      return error(
+        `Delete is only supported on the session agent and app agents. "${resolved.id}" is neither.`,
+      );
     },
   });
 }

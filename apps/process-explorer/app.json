@@ -1,16 +1,14 @@
 {
   "icon": "🔍",
   "name": "Process Explorer",
-  "description": "Monitor and control agents, windows, and browser tabs",
+  "description": "Monitor and control agents, windows, and running apps",
   "run": "dist/index.html",
   "permissions": [
     "yaar://session/",
-    "yaar://windows/"
+    "yaar://windows/",
+    { "uri": "yaar://apps/", "verbs": ["list"] }
   ],
-  "bundles": [
-    "yaar-web"
-  ],
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "YAAR",
   "kind": "system"
 }
