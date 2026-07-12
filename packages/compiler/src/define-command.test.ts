@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
@@ -21,6 +21,10 @@ const BUNDLED_TYPES = resolve(import.meta.dir, 'bundled-types');
 const TSC_JS = resolve(import.meta.dir, '../node_modules/typescript/lib/tsc.js');
 
 let sandbox: string;
+
+// These tests launch tsc, and the enum case launches it twice. Leave enough
+// headroom when workspace test suites are running in parallel on slower hosts.
+setDefaultTimeout(15_000);
 
 /** Typecheck `source` as an app's `src/main.ts` and return tsc's diagnostics. */
 async function check(source: string): Promise<string[]> {

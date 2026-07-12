@@ -14,8 +14,20 @@ import type { Subprocess } from 'bun';
 
 import { createServer } from 'net';
 
-import { writePidFile, removePidFile, cleanupStaleChrome } from './pid-file.js';
-export { writePidFile, removePidFile, cleanupStaleChrome };
+import {
+  writePidFile as writePidFileImpl,
+  removePidFile as removePidFileImpl,
+  cleanupStaleChrome as cleanupStaleChromeImpl,
+} from './pid-file.js';
+
+// Keep these as wrappers instead of live re-exports. Bun's process-wide module
+// mocks can otherwise replace the original pid-file bindings in unrelated tests.
+export const writePidFile = (...args: Parameters<typeof writePidFileImpl>) =>
+  writePidFileImpl(...args);
+export const removePidFile = (...args: Parameters<typeof removePidFileImpl>) =>
+  removePidFileImpl(...args);
+export const cleanupStaleChrome = (...args: Parameters<typeof cleanupStaleChromeImpl>) =>
+  cleanupStaleChromeImpl(...args);
 
 /** Find a free TCP port by briefly binding to port 0. */
 async function findFreePort(): Promise<number> {

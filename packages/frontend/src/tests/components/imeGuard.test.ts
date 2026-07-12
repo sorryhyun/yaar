@@ -11,8 +11,15 @@ import { IFRAME_IME_GUARD_SCRIPT } from '@yaar/shared';
 describe('IFRAME_IME_GUARD_SCRIPT', () => {
   let input: HTMLInputElement;
   let seen: number[];
+  let platformDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
+    platformDescriptor = Object.getOwnPropertyDescriptor(navigator, 'platform');
+    Object.defineProperty(navigator, 'platform', {
+      configurable: true,
+      value: 'MacIntel',
+    });
+
     // The script self-installs once per window; reset the latch between tests.
     delete (globalThis.window as unknown as Record<string, unknown>).__yaarImeGuardInstalled;
 
@@ -25,6 +32,11 @@ describe('IFRAME_IME_GUARD_SCRIPT', () => {
 
   afterEach(() => {
     input.remove();
+    if (platformDescriptor) {
+      Object.defineProperty(navigator, 'platform', platformDescriptor);
+    } else {
+      delete (navigator as unknown as Record<string, unknown>).platform;
+    }
   });
 
   function install() {

@@ -18,23 +18,31 @@ interface PidRecord {
 /** PID file to track Chrome process across server restarts / crashes. */
 const PID_FILE = join(tmpdir(), 'yaar-browser.pid');
 
+interface CleanupOptions {
+  pidFile?: string;
+  tempDir?: string;
+}
+
 /** Write PID record so a future server restart can find and kill an orphan. */
-export async function writePidFile(instance: {
-  process: { pid: number };
-  userDataDir: string;
-}): Promise<void> {
+export async function writePidFile(
+  instance: {
+    process: { pid: number };
+    userDataDir: string;
+  },
+  pidFile = PID_FILE,
+): Promise<void> {
   try {
     const record: PidRecord = { pid: instance.process.pid, userDataDir: instance.userDataDir };
-    await writeFile(PID_FILE, JSON.stringify(record));
+    await writeFile(pidFile, JSON.stringify(record));
   } catch {
     /* non-critical — stale cleanup on next restart just won't find this run */
   }
 }
 
 /** Remove the PID file (called on clean shutdown). */
-export async function removePidFile(): Promise<void> {
+export async function removePidFile(pidFile = PID_FILE): Promise<void> {
   try {
-    await rm(PID_FILE, { force: true });
+    await rm(pidFile, { force: true });
   } catch {
     /* non-critical */
   }
@@ -57,12 +65,14 @@ function isProcessAlive(pid: number): boolean {
  * 1. PID file exists → kill the orphaned Chrome process
  * 2. /tmp/yaar-browser-* dirs exist → remove them (all are stale since we haven't launched yet)
  */
-export async function cleanupStaleChrome(): Promise<void> {
+export async function cleanupStaleChrome(options: CleanupOptions = {}): Promise<void> {
+  const pidFile = options.pidFile ?? PID_FILE;
+  const tempDir = options.tempDir ?? tmpdir();
   let killedPid = false;
 
   // 1. Check PID file for an orphaned Chrome process
   try {
-    const data = await readFile(PID_FILE, 'utf-8');
+    const data = await readFile(pidFile, 'utf-8');
     const record: PidRecord = JSON.parse(data);
     if (record.pid && isProcessAlive(record.pid)) {
       console.log(`[browser] Killing stale Chrome process (PID ${record.pid})`);
@@ -84,11 +94,10 @@ export async function cleanupStaleChrome(): Promise<void> {
 
   // 2. Remove all stale yaar-browser-* temp directories
   try {
-    const tmp = tmpdir();
-    const entries = await readdir(tmp);
+    const entries = await readdir(tempDir);
     for (const entry of entries) {
       if (entry.startsWith('yaar-browser-')) {
-        const fullPath = join(tmp, entry);
+        const fullPath = join(tempDir, entry);
         await rm(fullPath, { recursive: true, force: true }).catch(() => {});
       }
     }
@@ -97,5 +106,5 @@ export async function cleanupStaleChrome(): Promise<void> {
   }
 
   // 3. Remove stale PID file
-  await removePidFile();
+  await removePidFile(pidFile);
 }

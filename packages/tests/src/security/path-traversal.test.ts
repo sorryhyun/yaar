@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { join, normalize } from 'path';
 import { resolveMountPath, _setMountsForTest } from '@yaar/server/storage/mounts';
 import { resolvePath } from '@yaar/server/storage/storage-manager';
 
@@ -48,8 +49,7 @@ describe('resolveMountPath — mount-scoped path traversal', () => {
   it('allows a valid sub-path within the mount', () => {
     const result = resolveMountPath('mounts/data/subdir/file.txt');
     expect(result).not.toBeNull();
-    expect(result!.absolutePath).toContain('/tmp/testmount');
-    expect(result!.absolutePath).toContain('subdir');
+    expect(result!.absolutePath).toBe(normalize(join('/tmp/testmount', 'subdir', 'file.txt')));
     // Sanity: resolved path should not contain '..'
     expect(result!.absolutePath).not.toContain('..');
   });
