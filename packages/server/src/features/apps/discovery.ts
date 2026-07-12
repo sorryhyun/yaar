@@ -302,6 +302,7 @@ export async function getAppMeta(appId: string): Promise<{
   defaultHeight?: number;
   messaging?: 'all';
   controls?: ControlEntry[];
+  systemApp?: boolean;
 } | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
@@ -319,8 +320,12 @@ export async function getAppMeta(appId: string): Promise<{
       defaultHeight?: number;
       messaging?: 'all';
       controls?: ControlEntry[];
+      systemApp?: boolean;
     } = {};
     if (meta.messaging === 'all') result.messaging = 'all';
+    // Only bundled apps may be `system` (see readAppInfo) — an installed app
+    // can't claim it by shipping kind:"system" in its manifest.
+    if (meta.kind === 'system' && resolveAppSource(appId) === 'bundled') result.systemApp = true;
     // Only bundled apps may declare authority to drive other apps (see readAppInfo).
     if (Array.isArray(meta.controls) && resolveAppSource(appId) === 'bundled') {
       const controls = parseControls(meta.controls);

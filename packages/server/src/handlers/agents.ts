@@ -27,7 +27,7 @@ function getPool() {
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
   // ── yaar://session/agents — list all agents ──
   registry.register('yaar://session/agents', {
-    description: 'List all active agents (monitor, app, ephemeral).',
+    description: 'List all active agents (session, monitor, app, ephemeral).',
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
@@ -37,9 +37,11 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           totalAgents: 0,
           idleAgents: 0,
           busyAgents: 0,
-          monitorAgent: [],
+          monitorAgents: 0,
           appAgents: 0,
-          ephemeralAgents: [],
+          ephemeralAgents: 0,
+          sessionAgent: false,
+          agents: [],
         });
 
       const stats = pool.getStats();
@@ -47,10 +49,12 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         totalAgents: stats.totalAgents,
         idleAgents: stats.idleAgents,
         busyAgents: stats.busyAgents,
-        monitorAgent: stats.monitorAgent,
+        monitorAgents: stats.monitorAgents,
         appAgents: stats.appAgents,
         ephemeralAgents: stats.ephemeralAgents,
         sessionAgent: stats.sessionAgent,
+        // One entry per live agent — `id` is what `invoke(.../{id}, { action: 'interrupt' })` takes.
+        agents: pool.agentPool.listAgents(),
       });
     },
   });

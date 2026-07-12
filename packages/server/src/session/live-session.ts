@@ -135,6 +135,16 @@ export class LiveSession {
       if (event.monitorId && this.pool) {
         this.pool.recordMonitorAction(event.monitorId);
       }
+      // Wake iframe apps subscribed to yaar://windows (see http/subscriptions.ts).
+      // The window is gone by now for window.close, so resolve() falls back to the
+      // raw id — subscribers on the `yaar://windows` prefix match either form.
+      if (event.action.type.startsWith('window.')) {
+        const rawId = (event.action as { windowId?: string }).windowId;
+        if (rawId) {
+          const handle = this.windowState.handleMap.resolve(rawId) ?? rawId;
+          subscriptionRegistry.notifyChange(`yaar://windows/${handle}`, this.sessionId);
+        }
+      }
       // Notify window subscribers of state changes
       if (this.pool) {
         const changeEvent = mapActionToSubscriptionEvent(event.action);

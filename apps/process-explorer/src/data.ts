@@ -1,9 +1,9 @@
 export {};
 
 import { createSignal, createMemo, onCleanup } from '@bundled/solid-js';
-import { list, invoke, del, showToast } from '@bundled/yaar';
+import { list, invoke, del, subscribe, showToast } from '@bundled/yaar';
 import { listTabs, closeTab } from '@bundled/yaar-web';
-import type { AgentStats, AgentEntry, WindowInfo, BrowserTab } from './types';
+import type { AgentStats, AgentEntry, WindowInfo, BrowserTab, TabId } from './types';
 
 // ── Signals ──────────────────────────────────────────────────
 
@@ -11,34 +11,24 @@ const [agentStats, setAgentStats] = createSignal<AgentStats | null>(null);
 const [windows, setWindows] = createSignal<WindowInfo[]>([]);
 const [browsers, setBrowsers] = createSignal<BrowserTab[]>([]);
 const [lastRefresh, setLastRefresh] = createSignal<Date | null>(null);
+const [activeTab, setActiveTab] = createSignal<TabId>('agents');
 
-export { agentStats, windows, browsers, lastRefresh };
+export { agentStats, windows, browsers, lastRefresh, activeTab };
+
+/**
+ * Switch tabs. Opening the browsers tab fetches immediately rather than waiting
+ * out the poll interval — the other two tabs are pushed to by subscriptions.
+ */
+export function selectTab(tab: TabId) {
+  setActiveTab(tab);
+  if (tab === 'browsers') {
+    void fetchBrowsers().then(() => setLastRefresh(new Date()));
+  }
+}
 
 // ── Derived: agent list from stats ───────────────────────────
 
-export const agentList = createMemo<AgentEntry[]>(() => {
-  const stats = agentStats();
-  if (!stats) return [];
-  const entries: AgentEntry[] = [];
-
-  for (const id of stats.monitorAgent) {
-    entries.push({ id, type: 'monitor' });
-  }
-  for (const id of stats.ephemeralAgents) {
-    entries.push({ id, type: 'ephemeral' });
-  }
-  if (stats.sessionAgent?.exists) {
-    entries.push({ id: 'session', type: 'session', busy: stats.sessionAgent.busy });
-  }
-  // App agents are a count — we don't have individual IDs from the stats endpoint
-  if (stats.appAgents > 0) {
-    for (let i = 0; i < stats.appAgents; i++) {
-      entries.push({ id: `app-${i}`, type: 'app' });
-    }
-  }
-
-  return entries;
-});
+export const agentList = createMemo<AgentEntry[]>(() => agentStats()?.agents ?? []);
 
 // ── Fetch functions ──────────────────────────────────────────
 
@@ -99,15 +89,63 @@ export async function refreshAll() {
   setLastRefresh(new Date());
 }
 
-// ── Polling ──────────────────────────────────────────────────
+// ── Watching ─────────────────────────────────────────────────
 
-export function startPolling(interval = 3000) {
+/** Interval for the browsers tab, which has nothing to subscribe to. */
+const BROWSER_POLL_MS = 5000;
+
+/**
+ * Subscribe rather than poll. The server pushes a change ping whenever an agent
+ * is created, disposed, or flips busy/idle, and on every window.* action — so a
+ * quiet desktop costs nothing and a busy one updates as it happens.
+ *
+ * Browser tabs are the exception: they live in Chrome, not in YAAR's state, so
+ * nothing notifies us when the user opens one. They stay on a timer, and only
+ * while the user is actually looking at that tab.
+ */
+export function startWatching() {
   refreshAll();
-  const timer = setInterval(refreshAll, interval);
+
+  const watch = (uri: string, onChange: () => void) => {
+    let unsubscribe: (() => void) | null = null;
+    let cancelled = false;
+
+    subscribe(uri, () => {
+      void onChange();
+      setLastRefresh(new Date());
+    })
+      .then((unsub) => {
+        // Unmounted before the subscription landed — drop it immediately.
+        if (cancelled) unsub();
+        else unsubscribe = unsub;
+      })
+      .catch((err) => {
+        console.error(`[process-explorer] subscribe(${uri}) failed`, err);
+        showToast(`Live updates unavailable for ${uri}`, 'error');
+      });
+
+    onCleanup(() => {
+      cancelled = true;
+      unsubscribe?.();
+    });
+  };
+
+  watch('yaar://session/agents', fetchAgents);
+  watch('yaar://windows', fetchWindows);
+
+  const timer = setInterval(() => {
+    if (activeTab() !== 'browsers') return;
+    void fetchBrowsers().then(() => setLastRefresh(new Date()));
+  }, BROWSER_POLL_MS);
   onCleanup(() => clearInterval(timer));
 }
 
 // ── Actions ──────────────────────────────────────────────────
+
+// Each action re-fetches only the list it touched. The subscription would push
+// the same change a moment later, but refreshing here keeps the row from lingering
+// if the ping is lost — and re-fetching all three would mean a CDP round-trip on
+// every button click.
 
 export async function interruptAgent(agentId: string) {
   try {
@@ -116,7 +154,8 @@ export async function interruptAgent(agentId: string) {
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Interrupt failed', 'error');
   }
-  await refreshAll();
+  await fetchAgents();
+  setLastRefresh(new Date());
 }
 
 export async function closeWindow(windowId: string) {
@@ -126,7 +165,8 @@ export async function closeWindow(windowId: string) {
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Close failed', 'error');
   }
-  await refreshAll();
+  await fetchWindows();
+  setLastRefresh(new Date());
 }
 
 export async function closeBrowser(browserId: string) {
@@ -136,5 +176,6 @@ export async function closeBrowser(browserId: string) {
   } catch (err) {
     showToast(err instanceof Error ? err.message : 'Close failed', 'error');
   }
-  await refreshAll();
+  await fetchBrowsers();
+  setLastRefresh(new Date());
 }

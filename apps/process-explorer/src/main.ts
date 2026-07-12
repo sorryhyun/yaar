@@ -1,16 +1,18 @@
 export {};
 
-import { createSignal, onMount, For, Show } from '@bundled/solid-js';
+import { onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import type { TabId, AgentEntry, WindowInfo, BrowserTab } from './types';
+import type { AgentEntry, WindowInfo, BrowserTab } from './types';
 import {
   agentStats,
   agentList,
   windows,
   browsers,
   lastRefresh,
-  startPolling,
+  activeTab,
+  selectTab,
+  startWatching,
   refreshAll,
   interruptAgent,
   closeWindow,
@@ -18,10 +20,6 @@ import {
 } from './data';
 import { registerProtocol } from './protocol';
 import './styles.css';
-
-// ── State ────────────────────────────────────────────────────
-
-const [activeTab, setActiveTab] = createSignal<TabId>('agents');
 
 // ── Helpers ──────────────────────────────────────────────────
 
@@ -48,7 +46,7 @@ function StatsBar() {
     <div class="stats-bar">
       <div
         class=${() => `stat-card y-card${activeTab() === 'agents' ? ' active' : ''}`}
-        onClick=${() => setActiveTab('agents')}
+        onClick=${() => selectTab('agents')}
       >
         <div class="stat-value">${() => stats()?.totalAgents ?? 0}</div>
         <div class="stat-label">Agents</div>
@@ -56,7 +54,7 @@ function StatsBar() {
       </div>
       <div
         class=${() => `stat-card y-card${activeTab() === 'windows' ? ' active' : ''}`}
-        onClick=${() => setActiveTab('windows')}
+        onClick=${() => selectTab('windows')}
       >
         <div class="stat-value">${() => windows().length}</div>
         <div class="stat-label">Windows</div>
@@ -67,7 +65,7 @@ function StatsBar() {
       </div>
       <div
         class=${() => `stat-card y-card${activeTab() === 'browsers' ? ' active' : ''}`}
-        onClick=${() => setActiveTab('browsers')}
+        onClick=${() => selectTab('browsers')}
       >
         <div class="stat-value">${() => browsers().length}</div>
         <div class="stat-label">Browsers</div>
@@ -90,9 +88,10 @@ function AgentRow(props: { agent: AgentEntry }) {
       <div class="process-info">
         <span class=${dotClass}></span>
         <div class="process-detail">
-          <div class="process-title">${() => a().id}</div>
+          <div class="process-title">${() => a().label}</div>
           <div class="process-meta">
             <span style=${() => `color: ${typeBadge(a().type)}`}>${() => a().type}</span>
+            <span> ${() => (a().busy ? 'busy' : 'idle')}</span>
           </div>
         </div>
       </div>
@@ -207,7 +206,7 @@ function StatusBar() {
 
 function App() {
   onMount(() => {
-    startPolling();
+    startWatching();
     registerProtocol();
   });
 

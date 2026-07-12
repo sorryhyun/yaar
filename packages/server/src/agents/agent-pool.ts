@@ -13,6 +13,7 @@ import { AgentSession } from './agent-session.js';
 import { getAgentLimiter } from './limiter.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';
+import { notifyAgentsChanged } from '../http/subscriptions.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -29,6 +30,18 @@ export interface PooledAgent {
   lastUsed: number;
   currentRole: string | null; // 'monitor-{messageId}' or 'app-{id}' when active
   idleTimer: NodeJS.Timeout | null;
+}
+
+/** One live agent, as reported by `listAgents()`. */
+export interface AgentEntry {
+  /** instanceId — stable across turns; accepted by `interruptByIdOrRole`. */
+  id: string;
+  type: 'session' | 'monitor' | 'app' | 'ephemeral';
+  /** Human-readable name: the monitorId, the appId, or the current role. */
+  label: string;
+  busy: boolean;
+  monitorId?: string;
+  appId?: string;
 }
 
 export class AgentPool {
@@ -65,6 +78,24 @@ export class AgentPool {
 
   setLogger(logger: SessionLogger): void {
     this.logger = logger;
+  }
+
+  // ── Roster tracking ──────────────────────────────────────────────────
+  //
+  // Every agent that exists is in `agentIds`, so adding and removing there is
+  // the one place that knows the roster changed. Both notify subscribers of
+  // yaar://session/agents (Process Explorer watches it instead of polling).
+
+  private trackAgent(instanceId: string): void {
+    this.agentIds.add(instanceId);
+    getSessionHub().registerAgent(instanceId, this.sessionId);
+    notifyAgentsChanged(this.sessionId);
+  }
+
+  private untrackAgent(instanceId: string): void {
+    this.agentIds.delete(instanceId);
+    getSessionHub().unregisterAgent(instanceId);
+    notifyAgentsChanged(this.sessionId);
   }
 
   // ── Agent creation ───────────────────────────────────────────────────
@@ -108,8 +139,7 @@ export class AgentPool {
       idleTimer: null,
     };
 
-    this.agentIds.add(instanceId);
-    getSessionHub().registerAgent(instanceId, this.sessionId);
+    this.trackAgent(instanceId);
 
     console.log(`[AgentPool] Created agent ${id} (${instanceId})`);
     return agent;
@@ -151,8 +181,7 @@ export class AgentPool {
    */
   async disposeEphemeral(agent: PooledAgent): Promise<void> {
     this.ephemeralAgents.delete(agent);
-    this.agentIds.delete(agent.instanceId);
-    getSessionHub().unregisterAgent(agent.instanceId);
+    this.untrackAgent(agent.instanceId);
     try {
       await agent.session.cleanup();
     } finally {
@@ -216,8 +245,7 @@ export class AgentPool {
     if (!agent) return false;
 
     this.monitorAgents.delete(monitorId);
-    this.agentIds.delete(agent.instanceId);
-    getSessionHub().unregisterAgent(agent.instanceId);
+    this.untrackAgent(agent.instanceId);
     if (agent.session.isRunning()) {
       await agent.session.interrupt();
     }
@@ -284,8 +312,7 @@ export class AgentPool {
     if (!agent) return;
 
     this.appAgents.delete(appId);
-    this.agentIds.delete(agent.instanceId);
-    getSessionHub().unregisterAgent(agent.instanceId);
+    this.untrackAgent(agent.instanceId);
     if (agent.session.isRunning()) {
       await agent.session.interrupt();
     }
@@ -336,8 +363,7 @@ export class AgentPool {
     if (!agent) return;
 
     this.sessionAgent = null;
-    this.agentIds.delete(agent.instanceId);
-    getSessionHub().unregisterAgent(agent.instanceId);
+    this.untrackAgent(agent.instanceId);
     if (agent.session.isRunning()) {
       await agent.session.interrupt();
     }
@@ -437,31 +463,22 @@ export class AgentPool {
   }
 
   /**
-   * Interrupt a specific agent by its current role.
+   * Interrupt a specific agent, identified either by its current role
+   * (`monitor-{messageId}`, `app-{id}`, …) or by its instanceId — the id
+   * `listAgents()` reports, which is stable across turns.
    */
-  async interruptByRole(role: string): Promise<boolean> {
-    // Check session agent
-    if (this.sessionAgent?.currentRole === role) {
-      await this.sessionAgent.session.interrupt();
-      return true;
-    }
-    // Check monitor agents
-    for (const agent of this.monitorAgents.values()) {
-      if (agent.currentRole === role) {
-        await agent.session.interrupt();
-        return true;
-      }
-    }
-    // Check app agents
-    for (const agent of this.appAgents.values()) {
-      if (agent.currentRole === role) {
-        await agent.session.interrupt();
-        return true;
-      }
-    }
-    // Check ephemeral agents
-    for (const agent of this.ephemeralAgents) {
-      if (agent.currentRole === role) {
+  async interruptByIdOrRole(idOrRole: string): Promise<boolean> {
+    const matches = (agent: PooledAgent) =>
+      agent.currentRole === idOrRole || agent.instanceId === idOrRole;
+
+    const candidates: PooledAgent[] = [];
+    if (this.sessionAgent) candidates.push(this.sessionAgent);
+    candidates.push(...this.monitorAgents.values());
+    candidates.push(...this.appAgents.values());
+    candidates.push(...this.ephemeralAgents);
+
+    for (const agent of candidates) {
+      if (matches(agent)) {
         await agent.session.interrupt();
         return true;
       }
@@ -486,6 +503,54 @@ export class AgentPool {
     return false;
   }
 
+  // ── Roster ─────────────────────────────────────────────────────────
+
+  /**
+   * List every live agent, one entry each. `getStats()` only counts them;
+   * this names them, so a caller can show a roster and interrupt a specific
+   * agent by `id` (see `interruptByIdOrRole`).
+   */
+  listAgents(): AgentEntry[] {
+    const entries: AgentEntry[] = [];
+    const isBusy = (agent: PooledAgent) => agent.session.isRunning() || agent.currentRole !== null;
+
+    if (this.sessionAgent) {
+      entries.push({
+        id: this.sessionAgent.instanceId,
+        type: 'session',
+        label: 'session',
+        busy: isBusy(this.sessionAgent),
+      });
+    }
+    for (const [monitorId, agent] of this.monitorAgents) {
+      entries.push({
+        id: agent.instanceId,
+        type: 'monitor',
+        label: `monitor ${monitorId}`,
+        busy: isBusy(agent),
+        monitorId,
+      });
+    }
+    for (const [appId, agent] of this.appAgents) {
+      entries.push({
+        id: agent.instanceId,
+        type: 'app',
+        label: appId,
+        busy: isBusy(agent),
+        appId,
+      });
+    }
+    for (const agent of this.ephemeralAgents) {
+      entries.push({
+        id: agent.instanceId,
+        type: 'ephemeral',
+        label: agent.currentRole ?? 'ephemeral',
+        busy: isBusy(agent),
+      });
+    }
+    return entries;
+  }
+
   // ── Stats ──────────────────────────────────────────────────────────
 
   /**
@@ -495,7 +560,6 @@ export class AgentPool {
     totalAgents: number;
     idleAgents: number;
     busyAgents: number;
-    monitorAgent: boolean;
     monitorAgents: number;
     appAgents: number;
     ephemeralAgents: number;
@@ -523,7 +587,6 @@ export class AgentPool {
       totalAgents: total,
       idleAgents: idle,
       busyAgents: busy,
-      monitorAgent: this.monitorAgents.size > 0,
       monitorAgents: this.monitorAgents.size,
       appAgents: this.appAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
@@ -564,5 +627,6 @@ export class AgentPool {
       getSessionHub().unregisterAgent(id);
     }
     this.agentIds.clear();
+    notifyAgentsChanged(this.sessionId);
   }
 }

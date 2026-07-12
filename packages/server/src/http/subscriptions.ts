@@ -103,10 +103,15 @@ class SubscriptionRegistry {
   /**
    * Notify all subscribers watching a URI (or a parent prefix of it).
    * Emits events via actionEmitter so LiveSession can broadcast them to the frontend.
+   *
+   * `sessionId` scopes the notification to one session — pass it for URIs whose
+   * data is per-session (windows, agents), so a change in session A doesn't wake
+   * subscribers in session B. Omit it for session-independent URIs (app storage).
    */
-  notifyChange(uri: string): void {
+  notifyChange(uri: string, sessionId?: string): void {
     const subscribers = this.getSubscribers(uri);
     for (const sub of subscribers) {
+      if (sessionId && sub.sessionId !== sessionId) continue;
       actionEmitter.emit('verb-subscription', {
         sessionId: sub.sessionId,
         event: {
@@ -137,3 +142,14 @@ class SubscriptionRegistry {
 }
 
 export const subscriptionRegistry = new SubscriptionRegistry();
+
+/** URI whose subscribers watch the session's agent roster. */
+export const AGENTS_URI = 'yaar://session/agents';
+
+/**
+ * Notify subscribers that the session's agents changed — one was created,
+ * disposed, or flipped between busy and idle.
+ */
+export function notifyAgentsChanged(sessionId: string): void {
+  subscriptionRegistry.notifyChange(AGENTS_URI, sessionId);
+}

@@ -16,6 +16,8 @@ interface TokenEntry {
   sessionId: string;
   appId?: string;
   permissions?: PermissionEntry[];
+  /** Bundled `kind: "system"` app — may reach yaar://session/* (see routes/verb.ts). */
+  systemApp?: boolean;
   createdAt: number;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -31,6 +33,7 @@ export function generateIframeToken(
   sessionId: string,
   appId?: string,
   permissions?: PermissionEntry[],
+  systemApp?: boolean,
 ): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
@@ -38,7 +41,15 @@ export function generateIframeToken(
     if (entry) clearJar(jarKey(entry.sessionId, entry.appId));
     tokens.delete(token);
   }, TOKEN_TTL_MS);
-  tokens.set(token, { windowId, sessionId, appId, permissions, createdAt: Date.now(), timer });
+  tokens.set(token, {
+    windowId,
+    sessionId,
+    appId,
+    permissions,
+    systemApp,
+    createdAt: Date.now(),
+    timer,
+  });
   return token;
 }
 
@@ -68,7 +79,7 @@ export async function generateAppIframeToken(
     }
   }
 
-  return generateIframeToken(windowId, sessionId, appId, permissions);
+  return generateIframeToken(windowId, sessionId, appId, permissions, appMeta?.systemApp);
 }
 
 /**

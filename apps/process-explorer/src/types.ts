@@ -4,16 +4,22 @@ export interface AgentStats {
   totalAgents: number;
   idleAgents: number;
   busyAgents: number;
-  monitorAgent: string[];
+  monitorAgents: number;
   appAgents: number;
-  ephemeralAgents: string[];
-  sessionAgent?: { exists: boolean; busy: boolean };
+  ephemeralAgents: number;
+  sessionAgent: boolean;
+  agents: AgentEntry[];
 }
 
 export interface AgentEntry {
+  /** instanceId — what the interrupt action takes. */
   id: string;
-  type: 'monitor' | 'app' | 'ephemeral' | 'session';
-  busy?: boolean;
+  type: 'session' | 'monitor' | 'app' | 'ephemeral';
+  /** Human-readable name: the monitorId, the appId, or the current role. */
+  label: string;
+  busy: boolean;
+  monitorId?: string;
+  appId?: string;
 }
 
 export interface WindowInfo {

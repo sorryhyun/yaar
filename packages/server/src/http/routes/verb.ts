@@ -210,6 +210,13 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         return errorResponse('Missing or invalid "uri" field', 400);
       }
 
+      // Same session-namespace gate as the main verb endpoint — a subscription
+      // that only fires change pings is still a subscription to session state.
+      const isSessionUri = body.uri === 'yaar://session' || body.uri.startsWith('yaar://session/');
+      if (isSessionUri && !tokenEntry.systemApp) {
+        return errorResponse('yaar://session/* is restricted to the session agent', 403);
+      }
+
       const effectivePermissions = tokenEntry.permissions ?? NO_PERMISSIONS;
       if (!isUriAllowed(body.uri, 'read', effectivePermissions)) {
         return errorResponse('URI not accessible to iframe apps', 403);
@@ -268,16 +275,20 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('Missing or invalid "uri" field', 400);
   }
 
-  // Non-self-grant: yaar://session/* is the session principal's private namespace
-  // and is never reachable by apps, regardless of what app.json declares. Apps
-  // cannot self-grant it. See docs/session_agent_browser_design.md §4b.
-  if (uri === 'yaar://session' || uri.startsWith('yaar://session/')) {
-    return errorResponse('yaar://session/* is restricted to the session agent', 403);
-  }
-
   // Validate iframe token (needed for both permission check and `self` resolution)
   const token = req.headers.get('X-Iframe-Token');
   const tokenEntry = token ? validateIframeToken(token) : null;
+
+  // Non-self-grant: yaar://session/* is the session principal's private namespace.
+  // A marketplace app cannot self-grant it by declaring it in app.json — the only
+  // apps that get through are bundled `kind: "system"` ones (Process Explorer et al),
+  // which ship with the repo and still need the URI in their permissions list.
+  // See docs/session_agent_browser_design.md §4b.
+  if (uri === 'yaar://session' || uri.startsWith('yaar://session/')) {
+    if (!tokenEntry?.systemApp) {
+      return errorResponse('yaar://session/* is restricted to the session agent', 403);
+    }
+  }
 
   // Compute effective permissions from app.json (no access if undeclared)
   const effectivePermissions = tokenEntry?.permissions ?? NO_PERMISSIONS;

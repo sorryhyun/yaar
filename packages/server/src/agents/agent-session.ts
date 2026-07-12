@@ -14,6 +14,7 @@ import {
 } from '@yaar/shared';
 import type { SessionLogger } from '../logging/index.js';
 import { actionEmitter } from '../session/action-emitter.js';
+import { notifyAgentsChanged } from '../http/subscriptions.js';
 import type { ConnectionId } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';
@@ -205,6 +206,17 @@ export class AgentSession {
     return this.running;
   }
 
+  /**
+   * Flip the busy flag, waking anything subscribed to yaar://session/agents on
+   * a real transition (Process Explorer renders busy/idle from it). Interrupt
+   * and the post-turn `finally` both clear it, so no-op writes stay silent.
+   */
+  private setRunning(value: boolean): void {
+    if (this.running === value) return;
+    this.running = value;
+    notifyAgentsChanged(this.liveSessionId);
+  }
+
   /** True if the most recent turn was interrupted (stays true through the post-turn callbacks). */
   wasInterrupted(): boolean {
     return this.interrupted;
@@ -306,7 +318,7 @@ export class AgentSession {
       return;
     }
 
-    this.running = true;
+    this.setRunning(true);
     this.interrupted = false;
     this.currentMessageId = messageId ?? null;
     this.recordedActions = [];
@@ -430,7 +442,7 @@ export class AgentSession {
         monitorId: options.monitorId,
         messageId: messageId ?? undefined,
       });
-      this.running = false;
+      this.setRunning(false);
       this.currentMessageId = null;
       this.currentRole = null;
     }
@@ -442,7 +454,7 @@ export class AgentSession {
   }
 
   async interrupt(): Promise<void> {
-    this.running = false;
+    this.setRunning(false);
     this.interrupted = true;
     this.provider?.interrupt();
   }

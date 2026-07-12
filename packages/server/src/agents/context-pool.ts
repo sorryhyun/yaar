@@ -557,7 +557,7 @@ export class ContextPool implements PoolContext {
   }
 
   async interruptAgent(agentId: string): Promise<boolean> {
-    return this.agentPool.interruptByRole(agentId);
+    return this.agentPool.interruptByIdOrRole(agentId);
   }
 
   hasAgent(agentId: string): boolean {
@@ -582,7 +582,7 @@ export class ContextPool implements PoolContext {
     windowQueueSizes: Record<string, number>;
     contextTapeSize: number;
     timelineSize: number;
-    monitorAgent: boolean;
+    monitorAgents: number;
     appAgents: number;
     ephemeralAgents: number;
     sessionAgent: boolean;
