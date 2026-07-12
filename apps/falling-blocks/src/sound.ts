@@ -8,10 +8,6 @@ export async function ensureAudio(): Promise<void> {
   ready = true;
 }
 
-function synth(options: Tone.SynthOptions) {
-  return new Tone.Synth(options).toDestination();
-}
-
 function makeMoveSound() {
   const s = new Tone.Synth({
     oscillator: { type: 'square' },
@@ -19,7 +15,9 @@ function makeMoveSound() {
     volume: -18,
   }).toDestination();
   return () => {
-    try { s.triggerAttackRelease('C4', '32n'); } catch {}
+    try {
+      s.triggerAttackRelease('C4', '32n');
+    } catch {}
   };
 }
 
@@ -30,7 +28,9 @@ function makeRotateSound() {
     volume: -16,
   }).toDestination();
   return () => {
-    try { s.triggerAttackRelease('E4', '32n'); } catch {}
+    try {
+      s.triggerAttackRelease('E4', '32n');
+    } catch {}
   };
 }
 
@@ -41,7 +41,9 @@ function makeDropSound() {
     volume: -14,
   }).toDestination();
   return () => {
-    try { s.triggerAttackRelease('G3', '16n'); } catch {}
+    try {
+      s.triggerAttackRelease('G3', '16n');
+    } catch {}
   };
 }
 
@@ -52,7 +54,9 @@ function makeLockSound() {
     volume: -20,
   }).toDestination();
   return () => {
-    try { s.triggerAttackRelease('A3', '32n'); } catch {}
+    try {
+      s.triggerAttackRelease('A3', '32n');
+    } catch {}
   };
 }
 

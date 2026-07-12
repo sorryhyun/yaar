@@ -7,15 +7,15 @@ export {
   type CompileOptions,
   type CompileResult,
 } from './compile.js';
-export { typecheckSandbox, type TypecheckResult } from './typecheck.js';
+export { typecheckSandbox, type TypecheckOptions, type TypecheckResult } from './typecheck.js';
 export {
   BUNDLED_LIBRARIES,
+  GATED_BUNDLED_LIBRARIES,
   getAvailableBundledLibraries,
   getBundledLibraryDetail,
   bundledLibraryPluginBun,
   cssFilePlugin,
-  solidHtmlClosingTagPlugin,
-  solidHtmlTemplateGuardPlugin,
+  solidHtmlSourcePlugin,
 } from './plugins.js';
 export {
   classifyTemplate,

@@ -9,13 +9,12 @@ import {
   currentStep,
   setBpm,
   setScale,
-  setChordProgression,
   setDrumPattern,
   setMelodyPattern,
 } from './store';
-import type { ScaleType, ChordProgression } from './types';
+import type { ScaleType } from './types';
 import { generateMelody, randomizeDrumPattern } from './melody';
-import { startTransport, stopTransport, setBpmValue, scheduleDrums, scheduleMelody } from './audio';
+import { setBpmValue, scheduleDrums, scheduleMelody } from './audio';
 
 export function registerProtocol(onPlay: () => void, onStop: () => void) {
   if (!app) return;

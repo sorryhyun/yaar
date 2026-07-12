@@ -17,7 +17,10 @@ export const SCENE_COLORS: Record<string, string> = {
 let _playheadOverlay: HTMLDivElement | null = null;
 let _playheadLine: HTMLDivElement | null = null;
 // Map of layerId -> { rowEl, trackEl, blockMap }
-let _layerRows = new Map<string, { rowEl: HTMLDivElement; trackEl: HTMLDivElement; blockMap: Map<string, HTMLDivElement> }>();
+let _layerRows = new Map<
+  string,
+  { rowEl: HTMLDivElement; trackEl: HTMLDivElement; blockMap: Map<string, HTMLDivElement> }
+>();
 let _sceneItems = new Map<string, HTMLDivElement>();
 let _layerGroupEls = new Map<string, HTMLDivElement>(); // layerId -> group container
 let _sceneEmptyEl: HTMLDivElement | null = null;
@@ -92,16 +95,26 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
   ui.creatorStatusLabel.textContent = state.exportMessage ?? '';
   ui.creatorErrorLabel.textContent = state.error ?? '';
 
-  if (document.activeElement !== ui.compWidthInput) ui.compWidthInput.value = String(comp.config.width);
-  if (document.activeElement !== ui.compHeightInput) ui.compHeightInput.value = String(comp.config.height);
+  if (document.activeElement !== ui.compWidthInput)
+    ui.compWidthInput.value = String(comp.config.width);
+  if (document.activeElement !== ui.compHeightInput)
+    ui.compHeightInput.value = String(comp.config.height);
   if (document.activeElement !== ui.compFpsInput) ui.compFpsInput.value = String(comp.config.fps);
-  if (document.activeElement !== ui.compDurationInput) ui.compDurationInput.value = String(comp.config.durationInFrames);
+  if (document.activeElement !== ui.compDurationInput)
+    ui.compDurationInput.value = String(comp.config.durationInFrames);
 
   // ── Layer list in sidebar ────────────────────────────────────────────────
   renderLayerList(ui, layers, state.selectedLayerId);
 
   // ── Timeline (multi-row, diff-based) ─────────────────────────────────────
-  renderTimeline(ui, layers, totalFrames, state.selectedSceneId, state.selectedLayerId, state.creatorFrame);
+  renderTimeline(
+    ui,
+    layers,
+    totalFrames,
+    state.selectedSceneId,
+    state.selectedLayerId,
+    state.creatorFrame,
+  );
 
   // ── Scene list (grouped by layer, diff-based) ────────────────────────────
   renderSceneList(ui, layers, state.selectedSceneId, state.selectedLayerId);
@@ -109,7 +122,7 @@ export function renderEditor(ui: EditorUI, state: EditorState): void {
   // ── Scene properties panel ───────────────────────────────────────────────
   const allScenes = layers.flatMap((l) => l.scenes);
   const selectedScene = state.selectedSceneId
-    ? allScenes.find((s) => s.id === state.selectedSceneId) ?? null
+    ? (allScenes.find((s) => s.id === state.selectedSceneId) ?? null)
     : null;
   renderScenePropsPanel(ui.scenePropsPanel, selectedScene);
 }
@@ -231,7 +244,6 @@ function renderTimeline(
 
   for (const layer of displayOrder) {
     let layerRow = _layerRows.get(layer.id);
-    const isNewRow = !layerRow;
 
     if (!layerRow) {
       const rowEl = document.createElement('div');
@@ -359,7 +371,8 @@ function renderSceneList(
       container.appendChild(headerEl);
     }
 
-    headerEl.className = 'scene-layer-header' + (layer.id === selectedLayerId ? ' active-layer' : '');
+    headerEl.className =
+      'scene-layer-header' + (layer.id === selectedLayerId ? ' active-layer' : '');
     headerEl.innerHTML = '';
 
     const visSpan = document.createElement('span');
@@ -386,7 +399,6 @@ function renderSceneList(
     // Scene items within this layer
     for (const scene of layer.scenes) {
       let item = _sceneItems.get(scene.id);
-      const isNew = !item;
 
       if (!item) {
         item = createSceneListItem(scene, layer.locked);
@@ -395,7 +407,10 @@ function renderSceneList(
         newItems.push(item);
       }
 
-      item.className = 'scene-item' + (scene.id === selectedSceneId ? ' selected' : '') + (layer.locked ? ' locked' : '');
+      item.className =
+        'scene-item' +
+        (scene.id === selectedSceneId ? ' selected' : '') +
+        (layer.locked ? ' locked' : '');
       item.style.opacity = layer.visible ? '1' : '0.5';
 
       const rangeEl = item.querySelector('.scene-range') as HTMLElement | null;
@@ -464,7 +479,12 @@ function makeField(label: string, inputEl: HTMLElement): HTMLDivElement {
   return wrapper;
 }
 
-function makeInput(type: string, value: string | number, prop: string, extra?: Partial<HTMLInputElement>): HTMLInputElement {
+function makeInput(
+  type: string,
+  value: string | number,
+  prop: string,
+  extra?: Partial<HTMLInputElement>,
+): HTMLInputElement {
   const el = document.createElement('input');
   el.type = type;
   el.value = String(value);
@@ -474,7 +494,11 @@ function makeInput(type: string, value: string | number, prop: string, extra?: P
   return el;
 }
 
-function makeSelect(options: { value: string; label: string }[], value: string, prop: string): HTMLSelectElement {
+function makeSelect(
+  options: { value: string; label: string }[],
+  value: string,
+  prop: string,
+): HTMLSelectElement {
   const el = document.createElement('select');
   el.dataset.prop = prop;
   el.className = 'sb-input';
@@ -495,9 +519,12 @@ function updatePropValues(panelEl: HTMLDivElement, scene: Scene): void {
   const fromInput = panelEl.querySelector<HTMLInputElement>('[data-prop="from"]');
   if (fromInput && document.activeElement !== fromInput) fromInput.value = String(scene.from);
   const durInput = panelEl.querySelector<HTMLInputElement>('[data-prop="durationInFrames"]');
-  if (durInput && document.activeElement !== durInput) durInput.value = String(scene.durationInFrames);
+  if (durInput && document.activeElement !== durInput)
+    durInput.value = String(scene.durationInFrames);
   for (const [key, val] of Object.entries(props)) {
-    const input = panelEl.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-prop="${key}"]`);
+    const input = panelEl.querySelector<HTMLInputElement | HTMLSelectElement>(
+      `[data-prop="${key}"]`,
+    );
     if (input && document.activeElement !== input) input.value = String(val);
   }
 }
@@ -530,8 +557,21 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
   grid.className = 'props-grid';
   panelEl.appendChild(grid);
 
-  grid.appendChild(makeField('Start Frame', makeInput('number', scene.from, 'from', { min: '0', step: '1' } as Partial<HTMLInputElement>)));
-  grid.appendChild(makeField('Duration (frames)', makeInput('number', scene.durationInFrames, 'durationInFrames', { min: '1', step: '1' } as Partial<HTMLInputElement>)));
+  grid.appendChild(
+    makeField(
+      'Start Frame',
+      makeInput('number', scene.from, 'from', { min: '0', step: '1' } as Partial<HTMLInputElement>),
+    ),
+  );
+  grid.appendChild(
+    makeField(
+      'Duration (frames)',
+      makeInput('number', scene.durationInFrames, 'durationInFrames', {
+        min: '1',
+        step: '1',
+      } as Partial<HTMLInputElement>),
+    ),
+  );
 
   const props = (scene as any).props ?? {};
 
@@ -556,15 +596,53 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
     textInput.dataset.prop = 'text';
     textInput.className = 'sb-input';
     grid.appendChild(makeField('Text', textInput));
-    grid.appendChild(makeField('Font Size', makeInput('number', props.fontSize ?? 48, 'fontSize', { min: '1', step: '1' } as Partial<HTMLInputElement>)));
+    grid.appendChild(
+      makeField(
+        'Font Size',
+        makeInput('number', props.fontSize ?? 48, 'fontSize', {
+          min: '1',
+          step: '1',
+        } as Partial<HTMLInputElement>),
+      ),
+    );
     grid.appendChild(makeField('Color', makeInput('color', props.color ?? '#ffffff', 'color')));
-    grid.appendChild(makeField('Animation', makeSelect(animOptions, props.animation ?? 'none', 'animation')));
-    grid.appendChild(makeField('Anim Duration', makeInput('number', props.animationDuration ?? 15, 'animationDuration', { min: '1', step: '1' } as Partial<HTMLInputElement>)));
-    grid.appendChild(makeField('X (0-1)', makeInput('number', props.x ?? 0.5, 'x', { min: '0', max: '1', step: '0.01' } as Partial<HTMLInputElement>)));
-    grid.appendChild(makeField('Y (0-1)', makeInput('number', props.y ?? 0.5, 'y', { min: '0', max: '1', step: '0.01' } as Partial<HTMLInputElement>)));
+    grid.appendChild(
+      makeField('Animation', makeSelect(animOptions, props.animation ?? 'none', 'animation')),
+    );
+    grid.appendChild(
+      makeField(
+        'Anim Duration',
+        makeInput('number', props.animationDuration ?? 15, 'animationDuration', {
+          min: '1',
+          step: '1',
+        } as Partial<HTMLInputElement>),
+      ),
+    );
+    grid.appendChild(
+      makeField(
+        'X (0-1)',
+        makeInput('number', props.x ?? 0.5, 'x', {
+          min: '0',
+          max: '1',
+          step: '0.01',
+        } as Partial<HTMLInputElement>),
+      ),
+    );
+    grid.appendChild(
+      makeField(
+        'Y (0-1)',
+        makeInput('number', props.y ?? 0.5, 'y', {
+          min: '0',
+          max: '1',
+          step: '0.01',
+        } as Partial<HTMLInputElement>),
+      ),
+    );
   } else if (scene.type === 'solid') {
     grid.appendChild(makeField('Color', makeInput('color', props.color ?? '#000000', 'color')));
-    grid.appendChild(makeField('Color End', makeInput('color', props.colorEnd ?? '#000000', 'colorEnd')));
+    grid.appendChild(
+      makeField('Color End', makeInput('color', props.colorEnd ?? '#000000', 'colorEnd')),
+    );
   } else if (scene.type === 'shape') {
     const shapeOptions = [
       { value: 'rect', label: 'Rectangle' },
@@ -573,10 +651,36 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
       { value: 'line', label: 'Line' },
     ];
     grid.appendChild(makeField('Shape', makeSelect(shapeOptions, props.shape ?? 'rect', 'shape')));
-    grid.appendChild(makeField('X', makeInput('number', props.x ?? 0, 'x', { step: '1' } as Partial<HTMLInputElement>)));
-    grid.appendChild(makeField('Y', makeInput('number', props.y ?? 0, 'y', { step: '1' } as Partial<HTMLInputElement>)));
-    grid.appendChild(makeField('Width', makeInput('number', props.width ?? 200, 'width', { min: '1', step: '1' } as Partial<HTMLInputElement>)));
-    grid.appendChild(makeField('Height', makeInput('number', props.height ?? 200, 'height', { min: '1', step: '1' } as Partial<HTMLInputElement>)));
+    grid.appendChild(
+      makeField(
+        'X',
+        makeInput('number', props.x ?? 0, 'x', { step: '1' } as Partial<HTMLInputElement>),
+      ),
+    );
+    grid.appendChild(
+      makeField(
+        'Y',
+        makeInput('number', props.y ?? 0, 'y', { step: '1' } as Partial<HTMLInputElement>),
+      ),
+    );
+    grid.appendChild(
+      makeField(
+        'Width',
+        makeInput('number', props.width ?? 200, 'width', {
+          min: '1',
+          step: '1',
+        } as Partial<HTMLInputElement>),
+      ),
+    );
+    grid.appendChild(
+      makeField(
+        'Height',
+        makeInput('number', props.height ?? 200, 'height', {
+          min: '1',
+          step: '1',
+        } as Partial<HTMLInputElement>),
+      ),
+    );
     grid.appendChild(makeField('Color', makeInput('color', props.color ?? '#ffffff', 'color')));
   } else if (scene.type === 'image' || scene.type === 'video-clip') {
     const srcInput = document.createElement('input');

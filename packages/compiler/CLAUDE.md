@@ -16,7 +16,7 @@ bun run dev              # Watch mode
 src/
 ├── index.ts               # Barrel exports
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
-├── plugins.ts             # 4 Bun plugins: bundledLibrary, cssFile, solidHtmlTemplateGuard, solidHtmlClosingTag
+├── plugins.ts             # 3 Bun plugins: bundledLibrary, cssFile, solidHtmlSource
 ├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
@@ -55,9 +55,11 @@ Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires e
 
 **`cssFilePlugin()`** — converts `.css` imports to JS that injects a `<style>` element at runtime.
 
-**`solidHtmlTemplateGuardPlugin()`** — fails the build on `html` templates that solid-js/html mis-compiles. `solid-js/html` joins the static parts with a `<!--#-->` marker and feeds generated source to `new Function`, but its parser only emits text nodes from inside a matched-tag callback — so top-level text before the first tag is dropped, and a lone top-level marker yields `.firstChild` with no parent. Finds templates via the TypeScript AST (correct under nesting), classifies them with `classifyTemplate()`, and reports file/line/column plus a fix. `typescript` is a devDependency absent in exe mode, so it is imported through a runtime-assembled specifier and the guard no-ops when unavailable.
+**`solidHtmlSourcePlugin()`** — reads each TypeScript source once, rewrites `</${Component}>` to `</>` (closing tags cause expression index misalignment in solid-js/html), then fails the build on `html` templates that would silently drop text or throw a stackless `SyntaxError`. Finds templates via the TypeScript AST, classifies them with `classifyTemplate()`, and reports file/line/column plus a fix. The fast gate intentionally recognizes the current literal `html\`` spelling and does not trace the tag's import. `typescript` is absent in exe mode, so validation no-ops there while the rewrite still runs.
 
-**`solidHtmlClosingTagPlugin()`** — rewrites `</${Component}>` to `</>` in source before bundling (closing tags cause expression index misalignment in solid-js/html).
+Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LIBS=1` to print plugin initialization, resolution strategy, and resolved filesystem paths.
+
+**`typecheckSandbox(path, { bundles })`** — runs the real TypeScript JS entry through Bun and removes ambient declarations for gated SDKs not present in `app.json` `bundles`. Compile and typecheck therefore reject the same unauthorized `@bundled/yaar-*` imports.
 
 ## Bundled Libraries
 

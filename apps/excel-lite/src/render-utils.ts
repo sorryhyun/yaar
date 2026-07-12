@@ -6,10 +6,14 @@ import { Chart, registerables } from '@bundled/chart.js';
 import { format as d3Format, sum, mean, median, min, max } from '@bundled/d3';
 import { selectionChartPoints } from './chart-utils';
 import {
-  mutable, refs,
+  mutable,
+  refs,
   cells,
-  chartPanelOpen, setChartPanelOpen, chartTitleText, setChartTitleText,
-  statsRows, setStatsRows, statsRangeLabel, setStatsRangeLabel, statsPanelOpen, setStatsPanelOpen,
+  setChartPanelOpen,
+  setChartTitleText,
+  setStatsRows,
+  setStatsRangeLabel,
+  setStatsPanelOpen,
   setIoStatus,
   formulaEngine,
 } from './state';
@@ -44,8 +48,8 @@ function getSelectionRangeLabel(): string {
 // ── Exported renderers ─────────────────────────────────────────────────
 
 export function renderSelectionChart() {
-  const rect   = rangeRect(mutable.selectionStart, mutable.selectionEnd);
-  const rects  = refsInRect(rect);
+  const rect = rangeRect(mutable.selectionStart, mutable.selectionEnd);
+  const rects = refsInRect(rect);
   const points = selectionChartPoints(rects, cells, (ref) => formulaEngine.display(ref));
 
   if (!points.length) {
@@ -53,19 +57,30 @@ export function renderSelectionChart() {
     return;
   }
 
-  const chartType = (refs.chartTypeSel?.value ?? 'bar') as 'bar' | 'line' | 'pie' | 'doughnut' | 'scatter';
+  const chartType = (refs.chartTypeSel?.value ?? 'bar') as
+    | 'bar'
+    | 'line'
+    | 'pie'
+    | 'doughnut'
+    | 'scatter';
   selectionChart?.destroy();
 
   const labels = points.map((p) => p.label);
   const values = points.map((p) => p.value);
 
   const colors = [
-    '#2a6df6', '#60a5fa', '#93c5fd', '#3b82f6',
-    '#1d4ed8', '#bfdbfe', '#dbeafe', '#2563eb',
+    '#2a6df6',
+    '#60a5fa',
+    '#93c5fd',
+    '#3b82f6',
+    '#1d4ed8',
+    '#bfdbfe',
+    '#dbeafe',
+    '#2563eb',
   ];
 
   const isScatter = chartType === 'scatter';
-  const isRound   = chartType === 'pie' || chartType === 'doughnut';
+  const isRound = chartType === 'pie' || chartType === 'doughnut';
 
   // Theme-aware colors
   const textColor = cssVar('--yaar-text', '#e6edf3');
@@ -86,7 +101,7 @@ export function renderSelectionChart() {
           fill: chartType === 'line',
           tension: 0.3,
           pointBackgroundColor: '#2a6df6',
-          pointRadius: (chartType === 'line' || isScatter) ? 4 : 0,
+          pointRadius: chartType === 'line' || isScatter ? 4 : 0,
           pointHoverRadius: 6,
         },
       ],
@@ -108,10 +123,19 @@ export function renderSelectionChart() {
           },
         },
       },
-      scales: !isRound ? {
-        x: { grid: { color: gridColor }, ticks: { color: textMuted, font: { size: 11 }, maxRotation: 45 } },
-        y: { grid: { color: gridColor }, ticks: { color: textMuted, font: { size: 11 } }, beginAtZero: true },
-      } : undefined,
+      scales: !isRound
+        ? {
+            x: {
+              grid: { color: gridColor },
+              ticks: { color: textMuted, font: { size: 11 }, maxRotation: 45 },
+            },
+            y: {
+              grid: { color: gridColor },
+              ticks: { color: textMuted, font: { size: 11 } },
+              beginAtZero: true,
+            },
+          }
+        : undefined,
     },
   } as any);
 
@@ -121,8 +145,8 @@ export function renderSelectionChart() {
 }
 
 export function renderSelectionStats() {
-  const rect    = rangeRect(mutable.selectionStart, mutable.selectionEnd);
-  const rects   = refsInRect(rect);
+  const rect = rangeRect(mutable.selectionStart, mutable.selectionEnd);
+  const rects = refsInRect(rect);
   const numeric = rects
     .map((ref) => Number.parseFloat(formulaEngine.display(ref)))
     .filter((value) => Number.isFinite(value));
@@ -132,14 +156,14 @@ export function renderSelectionStats() {
     return;
   }
 
-  const fmt  = d3Format(',.4~f');
+  const fmt = d3Format(',.4~f');
   const rows = [
-    { label: 'Count',  value: String(numeric.length) },
-    { label: 'Sum',    value: fmt(sum(numeric)) },
-    { label: 'Mean',   value: fmt(mean(numeric) ?? 0) },
+    { label: 'Count', value: String(numeric.length) },
+    { label: 'Sum', value: fmt(sum(numeric)) },
+    { label: 'Mean', value: fmt(mean(numeric) ?? 0) },
     { label: 'Median', value: fmt(median(numeric) ?? 0) },
-    { label: 'Min',    value: fmt(min(numeric) ?? 0) },
-    { label: 'Max',    value: fmt(max(numeric) ?? 0) },
+    { label: 'Min', value: fmt(min(numeric) ?? 0) },
+    { label: 'Max', value: fmt(max(numeric) ?? 0) },
   ];
 
   setStatsRows(rows);

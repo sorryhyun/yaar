@@ -135,7 +135,7 @@ function extractStringArrayProp(body: string, propName: string): string[] | null
   if (end === -1) return null;
   const raw = body.slice(bracketStart, end + 1);
   try {
-    const parsed = JSON.parse(raw.replace(/'/g, '"'));
+    const parsed = JSON.parse(normalizeToJson(raw));
     if (Array.isArray(parsed) && parsed.every((s) => typeof s === 'string')) return parsed;
     return null;
   } catch {
@@ -174,7 +174,10 @@ function normalizeToJson(src: string): string {
       i++;
       while (i < src.length && src[i] !== "'") {
         if (src[i] === '\\') {
-          out += src[i] + src[i + 1];
+          const escaped = src[i + 1];
+          if (escaped === "'") out += "'";
+          else if (escaped === '"') out += '\\"';
+          else out += src[i] + escaped;
           i += 2;
           continue;
         }

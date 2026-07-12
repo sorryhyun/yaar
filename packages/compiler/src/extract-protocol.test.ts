@@ -165,6 +165,29 @@ describe('extractProtocolFromSource', () => {
     expect(extractProtocolFromSource(source)?.commands.run.description).toBe('Run it');
   });
 
+  test('normalizes comments, trailing commas and quotes in alias arrays', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A', state: {},
+      commands: {
+        run: {
+          description: 'Run it',
+          aliases: [
+            'say "go"',
+            'don\\'t stop',
+            // Kept readable for app authors.
+            "finish",
+          ],
+          handler: () => go(),
+        },
+      },
+    });`;
+    expect(extractProtocolFromSource(source)?.commands.run.aliases).toEqual([
+      'say "go"',
+      "don't stop",
+      'finish',
+    ]);
+  });
+
   test('returns null when there is no register call', () => {
     expect(extractProtocolFromSource('export const x = 1;')).toBeNull();
   });

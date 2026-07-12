@@ -183,22 +183,20 @@ The existing `bun run check:docs` CI step therefore fails on either a missing or
 extra entry. The two CLAUDE lists now spell out full `@bundled/*` import paths so the check
 reads the same visible prose app authors use rather than relying on hidden metadata.
 
-### 6. Compiler hygiene
-- Merge the two `onLoad` hooks that each read every `.ts` source file
-  (`solidHtmlTemplateGuardPlugin` + `solidHtmlClosingTagPlugin` in
-  `packages/compiler/src/plugins.ts`) — every file is currently read from disk twice per
-  compile.
-- Gate the verbose per-resolution `console.log`s in `bundledLibraryPluginBun` behind a
-  debug env var — they run multiple lines per `@bundled/*` import on every compile and
-  leak filesystem paths into server logs.
-- `typecheckSandbox` doesn't know about the `bundles` gate: gated-SDK imports typecheck
-  fine and only fail later at compile time — a confusing two-step failure for authors.
-  Thread `bundles` through and drop the gated module declarations when not granted.
-- `extract-protocol.ts` `extractStringArrayProp` still uses naive `'` → `"` replacement
-  where `extractObjectProp` already has `normalizeToJson()`; reuse it.
-- The solid-html-guard's template detection assumes the tag is literally `` html` ``
-  (tight, no line break) and that any `html` tagged template is solid's. All 20 current
-  apps satisfy this; worth a comment in the guard since it is a hard build-failure gate.
+### 6. Compiler hygiene — **shipped**
+- `solidHtmlSourcePlugin` now performs the template guard and closing-tag rewrite from one
+  source read. Its literal `` html` `` and import-provenance assumptions are documented.
+- Bundled-library resolution is quiet unless `YAAR_DEBUG_BUNDLED_LIBS=1` is set.
+- `typecheckSandbox(path, { bundles })` filters ungranted gated-SDK declarations, and the
+  dev route reads `app.json` bundles once for both typecheck and compile. Real-`tsc` tests
+  cover base access, denial, grant, and isolation between gated SDKs.
+- That work exposed a deeper pre-existing bug: spawning `node_modules/.bin/tsc` through
+  Bun exited successfully without running TypeScript, so sandbox typechecks were no-ops.
+  The runner now invokes TypeScript's JS entry directly, checks its exit code, drains both
+  output streams, supports relative sandbox paths, and reports an exit with no diagnostics.
+- `extractStringArrayProp` now uses `normalizeToJson()`; tests cover comments, trailing
+  commas, double quotes, and escaped apostrophes. The normalizer now emits escaped single
+  quotes correctly when converting a single-quoted string to JSON.
 
 ### 7. SDK API consistency (minor, breaking-ish — batch for a cleanup pass)
 - `yaar-web`'s `navigate(url, browserId)` is the only function taking `browserId`

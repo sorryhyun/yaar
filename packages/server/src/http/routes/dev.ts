@@ -96,17 +96,18 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
     return errorResponse(`Path "${path}" not found`, 404);
   }
 
+  // Both typecheck and compile must enforce gated @bundled/yaar-* imports.
+  let bundles: string[] | undefined;
+  try {
+    const appJson = JSON.parse(await Bun.file(join(absolutePath, 'app.json')).text());
+    if (Array.isArray(appJson.bundles)) bundles = appJson.bundles;
+  } catch {
+    /* no app.json */
+  }
+
   switch (action) {
     case 'compile': {
       const { compileTypeScript } = await import('@yaar/compiler');
-      // Read bundles from app.json if present (gates @bundled/yaar-* imports)
-      let bundles: string[] | undefined;
-      try {
-        const appJson = JSON.parse(await Bun.file(join(absolutePath, 'app.json')).text());
-        if (Array.isArray(appJson.bundles)) bundles = appJson.bundles;
-      } catch {
-        /* no app.json */
-      }
       const result = await compileTypeScript(absolutePath, {
         title: (body.title as string) ?? 'App',
         bundles,
@@ -125,7 +126,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
 
     case 'typecheck': {
       const { typecheckSandbox } = await import('@yaar/compiler');
-      const result = await typecheckSandbox(absolutePath);
+      const result = await typecheckSandbox(absolutePath, { bundles });
       return jsonResponse({
         success: result.success,
         diagnostics: result.diagnostics,

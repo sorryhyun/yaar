@@ -9,11 +9,18 @@ import { parseAspectRatio } from './aspect-ratio';
 import { renderSlideHtml } from './slide-render';
 import { THEMES } from './theme';
 import {
-  getDeck, setDeck, deckVer,
-  activeSlide, clampActive, persist, markDirty, moveSlide,
-  bumpDeck, bumpActiveIndex,
+  getDeck,
+  setDeck,
+  deckVer,
+  activeSlide,
+  clampActive,
+  persist,
+  moveSlide,
+  bumpDeck,
+  bumpActiveIndex,
   isPresenting,
-  filterQueryValue, setFilterQueryValue,
+  filterQueryValue,
+  setFilterQueryValue,
 } from './store';
 import { createTopbar } from './ui/topbar';
 import { createThumbnailList } from './ui/thumbnail-list';
@@ -47,33 +54,42 @@ function updateSlideSize() {
 
   let w = Math.min(availW, 860); // visual max-width cap
   let h = w / ratio;
-  if (h > availH) { h = availH; w = h * ratio; } // height overflows → height-first
+  if (h > availH) {
+    h = availH;
+    w = h * ratio;
+  } // height overflows → height-first
 
   slideEl.style.width = `${Math.round(w)}px`;
   slideEl.style.height = `${Math.round(h)}px`;
 }
 
 // Mount
-render(() => html`
-  <div class="root y-light">
-    ${createTopbar()}
-    <div class="main">
-      ${createThumbnailList()}
-      <div
-        class="center"
-        ref=${(el: HTMLDivElement) => {
-          canvasEl = el;
-          // Re-compute slide size whenever the canvas container is resized
-          // (window resize, sidebar toggled, etc.).
-          const obs = new ResizeObserver(() => updateSlideSize());
-          obs.observe(el);
-        }}
-        style=${() => { deckVer(); return `background:${THEMES[getDeck().themeId].canvas}`; }}
-      ></div>
-      ${createEditorPanel()}
+render(
+  () => html`
+    <div class="root y-light">
+      ${createTopbar()}
+      <div class="main">
+        ${createThumbnailList()}
+        <div
+          class="center"
+          ref=${(el: HTMLDivElement) => {
+            canvasEl = el;
+            // Re-compute slide size whenever the canvas container is resized
+            // (window resize, sidebar toggled, etc.).
+            const obs = new ResizeObserver(() => updateSlideSize());
+            obs.observe(el);
+          }}
+          style=${() => {
+            deckVer();
+            return `background:${THEMES[getDeck().themeId].canvas}`;
+          }}
+        ></div>
+        ${createEditorPanel()}
+      </div>
     </div>
-  </div>
-`, document.getElementById('app')!);
+  `,
+  document.getElementById('app')!,
+);
 
 // Reactive canvas update
 createEffect(() => {
@@ -86,7 +102,10 @@ createEffect(() => {
   const slideEl = canvasEl.querySelector('.slide') as HTMLElement | null;
   if (slideEl) {
     slideEl.animate(
-      [{ opacity: 0, transform: 'translateY(16px)' }, { opacity: 1, transform: 'translateY(0px)' }],
+      [
+        { opacity: 0, transform: 'translateY(16px)' },
+        { opacity: 1, transform: 'translateY(0px)' },
+      ],
       { duration: 260, easing: 'cubic-bezier(0.22, 1, 0.36, 1)' },
     );
   }
@@ -94,9 +113,17 @@ createEffect(() => {
 
 // Keyboard shortcuts
 onShortcut('ctrl+s', () => persist(true));
-onShortcut('ctrl+enter', () => { if (!isPresenting()) startPresent(); });
-onShortcut('alt+arrowup', () => { const deck = getDeck(); moveSlide(deck.activeIndex, deck.activeIndex - 1); });
-onShortcut('alt+arrowdown', () => { const deck = getDeck(); moveSlide(deck.activeIndex, deck.activeIndex + 1); });
+onShortcut('ctrl+enter', () => {
+  if (!isPresenting()) startPresent();
+});
+onShortcut('alt+arrowup', () => {
+  const deck = getDeck();
+  moveSlide(deck.activeIndex, deck.activeIndex - 1);
+});
+onShortcut('alt+arrowdown', () => {
+  const deck = getDeck();
+  moveSlide(deck.activeIndex, deck.activeIndex + 1);
+});
 
 // Async initialization
 (async () => {

@@ -2,7 +2,7 @@ import { createEffect } from '@bundled/solid-js';
 import { EditorStore } from './editor/state';
 import { createEditorUI } from './editor/ui';
 import { renderEditor } from './editor/render';
-import { prefs, setPrefs, loadPrefs, ALLOWED_PLAYBACK_RATES, DEFAULT_PREFS } from './editor/prefs';
+import { prefs, setPrefs, loadPrefs, ALLOWED_PLAYBACK_RATES } from './editor/prefs';
 import type { EditorPrefs } from './editor/prefs';
 import { parseNumber, clamp } from './editor/utils/time';
 import type { Composition, Scene } from './core/types';
@@ -14,7 +14,11 @@ import { createFileBrowser } from './editor/file-browser';
 import { createEditMode } from './editor/edit-mode';
 import { createCreatorMode } from './editor/creator-mode';
 import { setupKeyboardShortcuts } from './editor/keyboard';
-import { normalizeStoragePath, toStorageUrl, DEFAULT_STORAGE_LIST_PATH } from './editor/storage-utils';
+import {
+  normalizeStoragePath,
+  toStorageUrl,
+  DEFAULT_STORAGE_LIST_PATH,
+} from './editor/storage-utils';
 import { registerProtocol } from './protocol';
 
 // Register all scene types (side-effect imports)
@@ -27,7 +31,7 @@ import './scenes/video-clip';
 const store = new EditorStore();
 const ui = createEditorUI(document.body, store);
 const persistPrefs = (patch: Partial<EditorPrefs>): void => {
-  setPrefs(prev => ({ ...prev, ...patch }));
+  setPrefs((prev) => ({ ...prev, ...patch }));
 };
 
 // Create sub-controllers
@@ -96,8 +100,12 @@ ui.video.addEventListener('timeupdate', () => {
   }
 });
 
-ui.video.addEventListener('play', () => { store.setPlaying(true); });
-ui.video.addEventListener('pause', () => { store.setPlaying(false); });
+ui.video.addEventListener('play', () => {
+  store.setPlaying(true);
+});
+ui.video.addEventListener('pause', () => {
+  store.setPlaying(false);
+});
 
 ui.startRange.addEventListener('input', () => {
   editMode.applyTrimStart(parseNumber(ui.startRange.value));
@@ -244,7 +252,7 @@ ui.addSceneButton.addEventListener('click', () => {
   const type = ui.addSceneSelect.value;
   const fromVal = parseInt(ui.addSceneFromInput.value, 10) || 0;
   const durRaw = parseInt(ui.addSceneDurInput.value, 10);
-  const dur = (durRaw > 0) ? durRaw : undefined; // undefined = auto
+  const dur = durRaw > 0 ? durRaw : undefined; // undefined = auto
   creatorMode.addSceneToComposition(type, fromVal, dur);
 });
 
@@ -348,21 +356,39 @@ ui.scenePropsPanel.addEventListener('change', (e) => {
   if (layer?.locked) return;
 
   let value: string | number = target.value;
-  if ((target as HTMLInputElement).type === 'number' || (target as HTMLInputElement).type === 'range') {
+  if (
+    (target as HTMLInputElement).type === 'number' ||
+    (target as HTMLInputElement).type === 'range'
+  ) {
     value = parseFloat(value as string);
   }
 
   if (prop === 'from') {
     const newFrom = Math.max(0, parseInt(String(value), 10) || 0);
-    const updated = createScene(scene.type, scene.id, newFrom, scene.durationInFrames, getCurrentSceneProps(scene));
+    const updated = createScene(
+      scene.type,
+      scene.id,
+      newFrom,
+      scene.durationInFrames,
+      getCurrentSceneProps(scene),
+    );
     store.updateScene(sceneId, updated);
   } else if (prop === 'durationInFrames') {
     const newDur = Math.max(1, parseInt(String(value), 10) || 1);
-    const updated = createScene(scene.type, scene.id, scene.from, newDur, getCurrentSceneProps(scene));
+    const updated = createScene(
+      scene.type,
+      scene.id,
+      scene.from,
+      newDur,
+      getCurrentSceneProps(scene),
+    );
     store.updateScene(sceneId, updated);
   } else {
     const currentProps = getCurrentSceneProps(scene);
-    const updated = createScene(scene.type, scene.id, scene.from, scene.durationInFrames, { ...currentProps, [prop]: value });
+    const updated = createScene(scene.type, scene.id, scene.from, scene.durationInFrames, {
+      ...currentProps,
+      [prop]: value,
+    });
     store.updateScene(sceneId, updated);
   }
   creatorMode.syncPlayerToComposition();
@@ -394,14 +420,17 @@ ui.compDurationInput.addEventListener('change', handleCompSettingChange);
   const p = await loadPrefs();
   setPrefs(p); // sync signal with validated loaded value
   ui.urlInput.value = p.lastUrl;
-  ui.storagePathInput.value = normalizeStoragePath(p.lastStorageListPath) || DEFAULT_STORAGE_LIST_PATH;
+  ui.storagePathInput.value =
+    normalizeStoragePath(p.lastStorageListPath) || DEFAULT_STORAGE_LIST_PATH;
   ui.video.playbackRate = p.playbackRate;
   store.setPlaybackRate(p.playbackRate);
   store.setLoopPreview(p.loopPreview);
   void fileBrowser.refresh();
 })();
 
-createEffect(() => { renderEditor(ui, store.getState()); });
+createEffect(() => {
+  renderEditor(ui, store.getState());
+});
 
 window.addEventListener('beforeunload', () => {
   cleanupKeyboard();
@@ -507,7 +536,12 @@ registerProtocol({
       if (!layer) throw new Error(`Layer "${params.layerId}" not found.`);
       store.setSelectedLayer(params.layerId);
     }
-    const id = creatorMode.addSceneToComposition(params.type, params.from, params.durationInFrames, params.props);
+    const id = creatorMode.addSceneToComposition(
+      params.type,
+      params.from,
+      params.durationInFrames,
+      params.props,
+    );
     return { sceneId: id };
   },
 
@@ -647,7 +681,8 @@ registerProtocol({
     const scene = sourceLayer.scenes.find((s) => s.id === params.sceneId)!;
     // Remove from source, add to target
     const newLayers = comp.layers.map((l) => {
-      if (l.id === sourceLayer.id) return { ...l, scenes: l.scenes.filter((s) => s.id !== params.sceneId) };
+      if (l.id === sourceLayer.id)
+        return { ...l, scenes: l.scenes.filter((s) => s.id !== params.sceneId) };
       if (l.id === params.layerId) return { ...l, scenes: [...l.scenes, scene] };
       return l;
     });

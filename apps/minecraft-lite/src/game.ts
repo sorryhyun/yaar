@@ -4,7 +4,6 @@ import { createUI } from './ui';
 import { createWorld } from './world';
 
 export function startGame(root: HTMLElement) {
-
   const ui = createUI(root);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -28,7 +27,7 @@ export function startGame(root: HTMLElement) {
   scene.add(sun);
 
   const world = createWorld(scene);
-  const { WORLD_X, WORLD_Z, MAX_H, defs, worldGroup, getBlock, setBlock, getTopY } = world;
+  const { WORLD_X, WORLD_Z, defs, worldGroup, getBlock, setBlock, getTopY } = world;
 
   const mobGroup = new THREE.Group();
   scene.add(mobGroup);
@@ -43,17 +42,36 @@ export function startGame(root: HTMLElement) {
     pitch: 0,
     health: 100,
     hunger: 100,
-    hurtTimer: 0
+    hurtTimer: 0,
   };
 
   const hotbarSlots = [1, 2, 3, 4, 5, 6, 9];
   let selectedSlot = 0;
-  const inventory: Record<number, number> = { 1: 20, 2: 20, 3: 20, 4: 12, 5: 0, 6: 0, 7: 0, 8: 0, 9: 0 };
+  const inventory: Record<number, number> = {
+    1: 20,
+    2: 20,
+    3: 20,
+    4: 12,
+    5: 0,
+    6: 0,
+    7: 0,
+    8: 0,
+    9: 0,
+  };
 
   const recipes = [
     { id: 'planks', outId: 5, out: 4, costs: [{ id: 4, n: 1 }], label: '1 Log -> 4 Planks' },
     { id: 'glass', outId: 6, out: 1, costs: [{ id: 7, n: 2 }], label: '2 Sand -> 1 Glass' },
-    { id: 'lamp', outId: 9, out: 2, costs: [{ id: 5, n: 2 }, { id: 4, n: 1 }], label: '2 Planks + 1 Log -> 2 Lamps' }
+    {
+      id: 'lamp',
+      outId: 9,
+      out: 2,
+      costs: [
+        { id: 5, n: 2 },
+        { id: 4, n: 1 },
+      ],
+      label: '2 Planks + 1 Log -> 2 Lamps',
+    },
   ];
 
   const selectedBlockId = () => hotbarSlots[selectedSlot];
@@ -104,13 +122,17 @@ export function startGame(root: HTMLElement) {
   const keys = new Set<string>();
   let panelOpen = false;
 
-  const canCraft = (recipe: { costs: { id: number; n: number }[] }) => recipe.costs.every(c => (inventory[c.id] || 0) >= c.n);
+  const canCraft = (recipe: { costs: { id: number; n: number }[] }) =>
+    recipe.costs.every((c) => (inventory[c.id] || 0) >= c.n);
 
   function renderPanel() {
     if (!panelOpen) return;
     const invRows = Object.keys(defs)
-      .map(k => Number(k))
-      .map(id => `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${defs[id].name}</span><b>${inventory[id] || 0}</b></div>`)
+      .map((k) => Number(k))
+      .map(
+        (id) =>
+          `<div style="display:flex;justify-content:space-between;padding:3px 0;"><span>${defs[id].name}</span><b>${inventory[id] || 0}</b></div>`,
+      )
       .join('');
 
     const craftRows = recipes
@@ -135,12 +157,12 @@ export function startGame(root: HTMLElement) {
       <div style="margin-top:10px;opacity:0.8;font-size:12px;">Press E to close inventory.</div>
     `;
 
-    ui.panel.querySelectorAll('button[data-r]').forEach(btn => {
+    ui.panel.querySelectorAll('button[data-r]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const i = Number((btn as HTMLElement).getAttribute('data-r'));
         const r = recipes[i];
         if (!canCraft(r)) return;
-        r.costs.forEach(c => inventory[c.id] -= c.n);
+        r.costs.forEach((c) => (inventory[c.id] -= c.n));
         inventory[r.outId] = (inventory[r.outId] || 0) + r.out;
         showToast(`Crafted ${r.out} ${defs[r.outId].name}`);
         renderPanel();
@@ -175,7 +197,7 @@ export function startGame(root: HTMLElement) {
         flexDirection: 'column',
         justifyContent: 'space-between',
         padding: '5px',
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
       });
       slot.innerHTML = `<div>${i + 1}: ${defs[id].name}</div><b style="text-align:right">${inventory[id] || 0}</b>`;
       ui.hotbar.appendChild(slot);
@@ -239,7 +261,8 @@ export function startGame(root: HTMLElement) {
       const nz = pos.z + to.z * mob.speed * dt;
       const gx = Math.floor(nx);
       const gz = Math.floor(nz);
-      const gy = getTopY(Math.max(0, Math.min(WORLD_X - 1, gx)), Math.max(0, Math.min(WORLD_Z - 1, gz))) + 1;
+      const gy =
+        getTopY(Math.max(0, Math.min(WORLD_X - 1, gx)), Math.max(0, Math.min(WORLD_Z - 1, gz))) + 1;
 
       pos.x = nx;
       pos.z = nz;
@@ -268,7 +291,7 @@ export function startGame(root: HTMLElement) {
     if (e.button === 0) {
       const mobHit = ray.intersectObjects(mobGroup.children, false)[0];
       if (mobHit && mobHit.distance <= 3.2) {
-        const mob = mobs.find(m => m.mesh === mobHit.object);
+        const mob = mobs.find((m) => m.mesh === mobHit.object);
         if (mob) {
           mob.hp -= 1;
           showToast('Hit!');
@@ -281,7 +304,9 @@ export function startGame(root: HTMLElement) {
     if (!hits.length) return;
 
     const hit = hits[0];
-    const p = (hit.object as any)?.userData?.blockPos as { x: number; y: number; z: number } | undefined;
+    const p = (hit.object as any)?.userData?.blockPos as
+      | { x: number; y: number; z: number }
+      | undefined;
     if (!p || hit.distance > 7) return;
 
     if (e.button === 0) {
@@ -293,8 +318,12 @@ export function startGame(root: HTMLElement) {
     } else if (e.button === 2) {
       const b = selectedBlockId();
       if ((inventory[b] || 0) <= 0) return showToast(`No ${defs[b].name} left`);
-      const n = ((hit.face as any)?.normal as { x: number; y: number; z: number } | undefined) || new THREE.Vector3();
-      const ax = p.x + Math.round(n.x), ay = p.y + Math.round(n.y), az = p.z + Math.round(n.z);
+      const n =
+        ((hit.face as any)?.normal as { x: number; y: number; z: number } | undefined) ||
+        new THREE.Vector3();
+      const ax = p.x + Math.round(n.x),
+        ay = p.y + Math.round(n.y),
+        az = p.z + Math.round(n.z);
       if (getBlock(ax, ay, az) === 0 && !collides(ax + 0.5, ay, az + 0.5)) {
         setBlock(ax, ay, az, b);
         inventory[b] -= 1;
@@ -383,9 +412,10 @@ export function startGame(root: HTMLElement) {
     }
 
     if (player.hunger <= 0) player.health = Math.max(0, player.health - dt * 3.2);
-    else if (player.hunger > 70 && player.health < 100) player.health = Math.min(100, player.health + dt * 1.8);
+    else if (player.hunger > 70 && player.health < 100)
+      player.health = Math.min(100, player.health + dt * 1.8);
 
-    const isNight = dayClock <= 0.20 || dayClock >= 0.78;
+    const isNight = dayClock <= 0.2 || dayClock >= 0.78;
     mobSpawnTimer -= dt;
     if (isNight && mobSpawnTimer <= 0 && mobs.length < 8) {
       spawnMob();

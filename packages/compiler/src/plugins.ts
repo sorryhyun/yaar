@@ -28,6 +28,12 @@ const PLUGIN_DIR = toForwardSlash(dirname(fileURLToPath(import.meta.url)));
  */
 const SHIMS_DIR = toForwardSlash(join(PLUGIN_DIR.replace(/\/dist$/, '/src'), 'shims'));
 
+const DEBUG_BUNDLED_LIBRARIES = process.env.YAAR_DEBUG_BUNDLED_LIBS === '1';
+
+function debugBundledLibrary(message: string): void {
+  if (DEBUG_BUNDLED_LIBRARIES) console.log(message);
+}
+
 /**
  * Local shim files that wrap npm libraries with compatibility fixes.
  * When a @bundled/* import matches a shim, it resolves to the shim file
@@ -83,6 +89,10 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   'yaar-web': 'yaar-web',
   'yaar-ml': 'yaar-ml',
 };
+
+export const GATED_BUNDLED_LIBRARIES = Object.freeze(
+  Object.keys(BUNDLED_LIBRARIES).filter((name) => name.startsWith('yaar-')),
+);
 
 /**
  * Resolve a npm package to its browser entry point by reading package.json exports.
@@ -146,7 +156,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
   const embeddedLibsSnapshot = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
     | Record<string, string>
     | undefined;
-  console.log(
+  debugBundledLibrary(
     `[bundled-lib] plugin init: __YAAR_BUNDLED_LIBS is ${
       embeddedLibsSnapshot === undefined
         ? 'undefined'
@@ -166,7 +176,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           throw new Error(`Unknown bundled library: "${libName}". Available: ${available}`);
         }
         // Gate yaar-* extended SDKs — require explicit declaration in app.json bundles
-        if (libName.startsWith('yaar-')) {
+        if (GATED_BUNDLED_LIBRARIES.includes(libName)) {
           if (!allowedBundles?.includes(libName)) {
             throw new Error(
               `"@bundled/${libName}" requires "${libName}" in app.json bundles field. ` +
@@ -180,7 +190,9 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
-          console.log(`[bundled-lib] @bundled/${libName} → embedded (namespace=${NAMESPACE})`);
+          debugBundledLibrary(
+            `[bundled-lib] @bundled/${libName} → embedded (namespace=${NAMESPACE})`,
+          );
           return { path: libName, namespace: NAMESPACE };
         }
 
@@ -190,7 +202,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         // In exe mode, shims are pre-bundled and must be in __YAAR_BUNDLED_LIBS.
         const isExeMode = embeddedLibs !== undefined;
         if (BUNDLED_SHIMS[libName] && !isExeMode) {
-          console.log(`[bundled-lib] @bundled/${libName} → shim ${BUNDLED_SHIMS[libName]}`);
+          debugBundledLibrary(`[bundled-lib] @bundled/${libName} → shim ${BUNDLED_SHIMS[libName]}`);
           return { path: BUNDLED_SHIMS[libName] };
         }
 
@@ -201,7 +213,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         const npmName = BUNDLED_LIBRARIES[libName];
         const browserPath = resolveBrowserEntry(npmName, PLUGIN_DIR);
         if (browserPath) {
-          console.log(`[bundled-lib] @bundled/${libName} → browser entry ${browserPath}`);
+          debugBundledLibrary(`[bundled-lib] @bundled/${libName} → browser entry ${browserPath}`);
           return { path: browserPath };
         }
 
@@ -211,16 +223,18 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           // On Windows, resolveBrowserEntry can fail while Bun.resolveSync picks the
           // node condition (e.g. solid-js/dist/server.js instead of dist/solid.js).
           if (CONDITIONAL_EXPORT_LIBS.includes(npmName) && resolved.includes('/server.')) {
-            console.log(`[bundled-lib] @bundled/${libName} → REJECTED SSR build ${resolved}`);
+            debugBundledLibrary(
+              `[bundled-lib] @bundled/${libName} → REJECTED SSR build ${resolved}`,
+            );
             throw new Error(`Resolved SSR build for ${npmName}, need browser build`);
           }
-          console.log(`[bundled-lib] @bundled/${libName} → Bun.resolveSync ${resolved}`);
+          debugBundledLibrary(`[bundled-lib] @bundled/${libName} → Bun.resolveSync ${resolved}`);
           return { path: resolved };
         } catch {
           // fall through to namespace for disk-based resolution
         }
 
-        console.log(
+        debugBundledLibrary(
           `[bundled-lib] @bundled/${libName} → fallback namespace (will try disk/embedded in onLoad)`,
         );
         return { path: libName, namespace: NAMESPACE };
@@ -243,7 +257,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           | Record<string, string>
           | undefined;
         if (embeddedLibs?.[libName]) {
-          console.log(
+          debugBundledLibrary(
             `[bundled-lib] bare ${libName} (from ${args.importer}) → embedded (namespace=${NAMESPACE})`,
           );
           return { path: libName, namespace: NAMESPACE };
@@ -252,7 +266,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         // Dev mode: resolve browser entry from node_modules
         const browserPath = resolveBrowserEntry(libName, PLUGIN_DIR);
         if (browserPath) {
-          console.log(
+          debugBundledLibrary(
             `[bundled-lib] bare ${libName} (from ${args.importer}) → browser entry ${browserPath}`,
           );
           return { path: browserPath };
@@ -261,17 +275,17 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           const resolved = toForwardSlash(Bun.resolveSync(libName, PLUGIN_DIR));
           // Reject SSR builds — see guard in @bundled/* resolver above
           if (resolved.includes('/server.')) {
-            console.log(
+            debugBundledLibrary(
               `[bundled-lib] bare ${libName} (from ${args.importer}) → REJECTED SSR build ${resolved}`,
             );
             return undefined;
           }
-          console.log(
+          debugBundledLibrary(
             `[bundled-lib] bare ${libName} (from ${args.importer}) → Bun.resolveSync ${resolved}`,
           );
           return { path: resolved };
         } catch {
-          console.log(
+          debugBundledLibrary(
             `[bundled-lib] bare ${libName} (from ${args.importer}) → UNRESOLVED (returning undefined)`,
           );
           return undefined;
@@ -287,9 +301,9 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           | undefined;
         if (embeddedLibs?.[libName]) {
           const filePath = embeddedLibs[libName];
-          console.log(`[bundled-lib] onLoad ${libName} → embedded file ${filePath}`);
+          debugBundledLibrary(`[bundled-lib] onLoad ${libName} → embedded file ${filePath}`);
           const contents = await Bun.file(filePath).text();
-          console.log(`[bundled-lib] onLoad ${libName} → loaded ${contents.length} chars`);
+          debugBundledLibrary(`[bundled-lib] onLoad ${libName} → loaded ${contents.length} chars`);
           return { contents, loader: 'js' };
         }
 
@@ -298,13 +312,13 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         const diskPath = toForwardSlash(join(exeDir, 'bundled-libs', `${libName}.js`));
         const diskFile = Bun.file(diskPath);
         if (await diskFile.exists()) {
-          console.log(`[bundled-lib] onLoad ${libName} → disk file ${diskPath}`);
+          debugBundledLibrary(`[bundled-lib] onLoad ${libName} → disk file ${diskPath}`);
           const contents = await diskFile.text();
-          console.log(`[bundled-lib] onLoad ${libName} → loaded ${contents.length} chars`);
+          debugBundledLibrary(`[bundled-lib] onLoad ${libName} → loaded ${contents.length} chars`);
           return { contents, loader: 'js' };
         }
 
-        console.log(
+        debugBundledLibrary(
           `[bundled-lib] onLoad ${libName} → NOT FOUND (embedded=${embeddedLibs !== undefined}, diskPath=${diskPath})`,
         );
         throw new Error(
@@ -386,48 +400,23 @@ export function cssFilePlugin(): Bun.BunPlugin {
 }
 
 /**
- * Bun plugin that strips expressions from closing component tags in
- * solid-js/html tagged template literals.
+ * Bun plugin that validates and rewrites solid-js/html source in one file read.
  *
- * `</${Show}>` produces an extra expression that the html runtime parser
- * never consumes, shifting all subsequent expression indices by 1 and
- * causing crashes. Replacing `</${X}>` with `</>` in source removes the
- * extra expression slot before Bun bundles.
+ * `</${Show}>` produces an extra expression that the html runtime parser never
+ * consumes, shifting later expression indices. Replacing it with `</>` is safe
+ * because solid-js/html only decrements nesting depth for closing tags; it does
+ * not compare their names.
  *
- * This is safe because solid-js/html's parser ignores closing tag names —
- * it only uses level-decrement, never matching open/close tag names.
+ * The guard detects templates tagged literally as `html` and intentionally does
+ * not trace the tag back to its import. The fast check also assumes the current
+ * `html\`` spelling (no whitespace before the backtick). All bundled apps follow
+ * that convention; changing it requires updating this gate and its tests.
+ *
+ * `typescript` is a devDependency and is absent in bundled-exe mode, so the
+ * specifier is assembled at runtime. When unavailable, the guard is skipped but
+ * the closing-tag rewrite still runs.
  */
-export function solidHtmlClosingTagPlugin(): Bun.BunPlugin {
-  return {
-    name: 'solid-html-closing-tag-fix',
-    setup(build: Bun.PluginBuilder) {
-      build.onLoad({ filter: /\.tsx?$/ }, async (args: Bun.OnLoadArgs) => {
-        const filePath = toForwardSlash(args.path);
-        const text = await Bun.file(filePath).text();
-        if (!text.includes('</${')) return undefined; // fast skip
-        return {
-          contents: text.replace(/<\/\$\{([^}]+)\}>/g, '</>'),
-          loader: filePath.endsWith('.tsx') ? 'tsx' : 'ts',
-        };
-      });
-    },
-  };
-}
-
-/**
- * Bun plugin that fails the build on `solid-js/html` templates that would
- * silently drop text or throw a stackless SyntaxError from `new Function`.
- *
- * See `solid-html-guard.ts` for the root cause. This runs before
- * `solidHtmlClosingTagPlugin` and never loads the file itself — it throws on a
- * defect and otherwise returns `undefined` so the normal loader chain proceeds.
- *
- * `typescript` is a devDependency and is absent in bundled-exe mode (same as
- * `tsc` in typecheck.ts), so the specifier is assembled at runtime to keep the
- * exe bundler from pulling it in. When it can't be loaded the guard is skipped,
- * which leaves exe-mode compiles exactly as they are today.
- */
-export function solidHtmlTemplateGuardPlugin(): Bun.BunPlugin {
+export function solidHtmlSourcePlugin(): Bun.BunPlugin {
   let tsModule: typeof import('typescript') | null | undefined;
 
   const loadTs = async (): Promise<typeof import('typescript') | null> => {
@@ -445,23 +434,26 @@ export function solidHtmlTemplateGuardPlugin(): Bun.BunPlugin {
   };
 
   return {
-    name: 'solid-html-template-guard',
+    name: 'solid-html-source',
     setup(build: Bun.PluginBuilder) {
       build.onLoad({ filter: /\.tsx?$/ }, async (args: Bun.OnLoadArgs) => {
         const filePath = toForwardSlash(args.path);
         const text = await Bun.file(filePath).text();
-        if (!text.includes('html`')) return undefined; // fast skip
-
-        const ts = await loadTs();
-        if (!ts) return undefined; // exe mode — no typescript available
-
-        // Match what actually reaches the bundler: solidHtmlClosingTagPlugin
-        // rewrites `</${X}>` to `</>` before Bun sees the source.
         const rewritten = text.replace(/<\/\$\{([^}]+)\}>/g, '</>');
 
-        const findings = scanSource(ts, rewritten, filePath);
-        if (findings.length > 0) throw new Error(formatFindings(filePath, findings));
-        return undefined;
+        if (text.includes('html`')) {
+          const ts = await loadTs();
+          if (ts) {
+            const findings = scanSource(ts, rewritten, filePath);
+            if (findings.length > 0) throw new Error(formatFindings(filePath, findings));
+          }
+        }
+
+        if (rewritten === text) return undefined;
+        return {
+          contents: rewritten,
+          loader: filePath.endsWith('.tsx') ? 'tsx' : 'ts',
+        };
       });
     },
   };

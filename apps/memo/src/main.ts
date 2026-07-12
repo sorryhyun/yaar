@@ -4,13 +4,22 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import { showToast, errMsg, onShortcut } from '@bundled/yaar';
 import {
-  memos, selectedId, setSelectedId,
-  editMode, setEditMode,
-  editTitle, setEditTitle,
-  editContent, setEditContent,
-  searchQuery, setSearchQuery,
-  loadMemos, addMemo, updateMemo, deleteMemo,
-  getFilteredMemos, getMemoById,
+  selectedId,
+  setSelectedId,
+  editMode,
+  setEditMode,
+  editTitle,
+  setEditTitle,
+  editContent,
+  setEditContent,
+  searchQuery,
+  setSearchQuery,
+  loadMemos,
+  addMemo,
+  updateMemo,
+  deleteMemo,
+  getFilteredMemos,
+  getMemoById,
 } from './store';
 import { registerProtocol } from './protocol';
 import './styles.css';
@@ -106,7 +115,11 @@ function App() {
       if (confirmDelete()) setConfirmDelete(false);
       else if (editMode() !== 'none') cancelEdit();
     });
-    onCleanup(() => { unN(); unS(); unEsc(); });
+    onCleanup(() => {
+      unN();
+      unS();
+      unEsc();
+    });
   });
 
   // Sidebar list item
@@ -146,7 +159,7 @@ function App() {
             onClick=${handleSave}
             disabled=${saving}
           >
-            ${() => saving() ? 'Saving…' : 'Save'}
+            ${() => (saving() ? 'Saving…' : 'Save')}
           </button>
           <button class="y-btn y-btn-ghost" onClick=${cancelEdit}>Cancel</button>
         </div>
@@ -162,7 +175,7 @@ function App() {
           <div>
             <div class="memo-view-title">${() => selectedMemo()?.title}</div>
             <div class="memo-view-meta">
-              Updated ${() => selectedMemo() ? formatDate(selectedMemo()!.updatedAt) : ''}
+              Updated ${() => (selectedMemo() ? formatDate(selectedMemo()!.updatedAt) : '')}
             </div>
           </div>
           <div class="memo-view-actions">
@@ -204,12 +217,12 @@ function App() {
           <div class="memo-list y-scroll">
             <${Show}
               when=${() => filteredMemos().length > 0}
-              fallback=${
-                html`<div class="y-empty" style="padding: 24px 0">
-                  <div class="memo-empty-icon">📝</div>
-                  <div class="memo-empty-text">${() => searchQuery() ? 'No results' : 'No memos yet'}</div>
-                </div>`
-              }
+              fallback=${html`<div class="y-empty" style="padding: 24px 0">
+                <div class="memo-empty-icon">📝</div>
+                <div class="memo-empty-text">
+                  ${() => (searchQuery() ? 'No results' : 'No memos yet')}
+                </div>
+              </div>`}
             >
               <${For} each=${filteredMemos}>
                 ${(m: ReturnType<typeof getFilteredMemos>[number]) =>
@@ -218,8 +231,7 @@ function App() {
                     title=${m.title}
                     content=${m.content}
                     updatedAt=${m.updatedAt}
-                  />`
-                }
+                  />`}
               </For>
             </Show>
           </div>

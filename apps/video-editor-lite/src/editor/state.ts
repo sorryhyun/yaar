@@ -1,7 +1,6 @@
 import { createSignal } from '@bundled/solid-js';
 import type { EditorState, EditorMode, TrimPatch } from './types';
 import type { Composition, Scene, Layer } from '../core/types';
-import { makeDefaultLayer } from '../core/types';
 import { clamp } from './utils/time';
 
 const EPSILON = 0.01;
@@ -89,13 +88,22 @@ export class EditorStore {
     this.currentTime[1](clamp(currentTime, 0, this.duration[0]() || 0));
   }
 
-  setPlaying(playing: boolean): void { this.playing[1](playing); }
-  setLoopPreview(loopPreview: boolean): void { this.loopPreview[1](loopPreview); }
-  setPlaybackRate(playbackRate: number): void { this.playbackRate[1](playbackRate); }
+  setPlaying(playing: boolean): void {
+    this.playing[1](playing);
+  }
+  setLoopPreview(loopPreview: boolean): void {
+    this.loopPreview[1](loopPreview);
+  }
+  setPlaybackRate(playbackRate: number): void {
+    this.playbackRate[1](playbackRate);
+  }
 
   setTrim(patch: TrimPatch): boolean {
     const duration = this.duration[0]();
-    if (duration <= 0) { this.error[1]('Load a video first.'); return false; }
+    if (duration <= 0) {
+      this.error[1]('Load a video first.');
+      return false;
+    }
     const nextStart = patch.trimStart ?? this.trimStart[0]();
     const nextEnd = patch.trimEnd ?? this.trimEnd[0]();
     const clampedStart = clamp(nextStart, 0, duration);
@@ -110,14 +118,22 @@ export class EditorStore {
     return true;
   }
 
-  setExportState(patch: { exporting?: boolean; exportProgress?: number; exportMessage?: string | null }): void {
+  setExportState(patch: {
+    exporting?: boolean;
+    exportProgress?: number;
+    exportMessage?: string | null;
+  }): void {
     if (patch.exporting !== undefined) this.exporting[1](patch.exporting);
     if (patch.exportProgress !== undefined) this.exportProgress[1](patch.exportProgress);
     if (patch.exportMessage !== undefined) this.exportMessage[1](patch.exportMessage ?? null);
   }
 
-  clearExportMessage(): void { if (this.exportMessage[0]()) this.exportMessage[1](null); }
-  clearError(): void { if (this.error[0]()) this.error[1](null); }
+  clearExportMessage(): void {
+    if (this.exportMessage[0]()) this.exportMessage[1](null);
+  }
+  clearError(): void {
+    if (this.error[0]()) this.error[1](null);
+  }
 
   setComposition(composition: Composition | null): void {
     this.composition[1](composition);
@@ -148,7 +164,9 @@ export class EditorStore {
       this.selectedLayerId[1](newLayers[newLayers.length - 1]?.id ?? null);
     }
     if (this.selectedSceneId[0]()) {
-      const stillExists = newLayers.some((l) => l.scenes.some((s) => s.id === this.selectedSceneId[0]()));
+      const stillExists = newLayers.some((l) =>
+        l.scenes.some((s) => s.id === this.selectedSceneId[0]()),
+      );
       if (!stillExists) this.selectedSceneId[1](null);
     }
   }
@@ -158,7 +176,7 @@ export class EditorStore {
     if (!comp) return;
     this.composition[1]({
       ...comp,
-      layers: comp.layers.map((l) => l.id === layerId ? { ...l, ...patch } : l),
+      layers: comp.layers.map((l) => (l.id === layerId ? { ...l, ...patch } : l)),
     });
   }
 
@@ -188,9 +206,7 @@ export class EditorStore {
     this.composition[1]({
       ...comp,
       layers: comp.layers.map((l) =>
-        l.id === targetLayerId
-          ? { ...l, scenes: [...l.scenes, scene] }
-          : l
+        l.id === targetLayerId ? { ...l, scenes: [...l.scenes, scene] } : l,
       ),
     });
     this.selectedSceneId[1](scene.id);
@@ -240,11 +256,22 @@ export class EditorStore {
     });
   }
 
-  setSelectedScene(id: string | null): void { this.selectedSceneId[1](id); }
-  setCreatorPlaying(playing: boolean): void { this.creatorPlaying[1](playing); }
-  setCreatorFrame(frame: number): void { this.creatorFrame[1](frame); }
+  setSelectedScene(id: string | null): void {
+    this.selectedSceneId[1](id);
+  }
+  setCreatorPlaying(playing: boolean): void {
+    this.creatorPlaying[1](playing);
+  }
+  setCreatorFrame(frame: number): void {
+    this.creatorFrame[1](frame);
+  }
 
-  updateCompositionConfig(patch: { width?: number; height?: number; fps?: number; durationInFrames?: number }): void {
+  updateCompositionConfig(patch: {
+    width?: number;
+    height?: number;
+    fps?: number;
+    durationInFrames?: number;
+  }): void {
     const comp = this.composition[0]();
     if (!comp) return;
     this.composition[1]({ ...comp, config: { ...comp.config, ...patch } });

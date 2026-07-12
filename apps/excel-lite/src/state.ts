@@ -7,7 +7,7 @@ import { cloneMap } from './data-utils';
 import { applySnapshotToMaps, pushHistorySnapshot } from './history-utils';
 import { rangeRect, refsInRect } from './ref-utils';
 import { getStyleForRef, normalizeStyle } from './style-utils';
-import type { Align, CellMap, CellStyle, CellStyleMap, Rect, Snapshot } from './types';
+import type { CellMap, CellStyle, CellStyleMap, Rect, Snapshot } from './types';
 
 // ── UI Signals ────────────────────────────────────────────────────────
 export const [chartPanelOpen, setChartPanelOpen] = createSignal(false);

@@ -1,6 +1,6 @@
 export {};
 import { app, storage } from '@bundled/yaar';
-import { state, setState, elMountAlias, elMountHostPath, elMountReadonly } from './state';
+import { setState, elMountAlias, elMountHostPath, elMountReadonly } from './state';
 import { basename, sanitizeAlias } from './helpers';
 
 export function openMountDialog() {

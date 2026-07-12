@@ -10,8 +10,7 @@ import { join } from 'path';
 import {
   bundledLibraryPluginBun,
   cssFilePlugin,
-  solidHtmlClosingTagPlugin,
-  solidHtmlTemplateGuardPlugin,
+  solidHtmlSourcePlugin,
   toForwardSlash,
 } from './plugins.js';
 import { extractProtocolFromSource } from './extract-protocol.js';
@@ -157,12 +156,7 @@ async function compileWithBun(
     // Resolve with { success: false, logs } instead of throwing, so errors
     // keep their file/line/column positions (the catch path loses them).
     throw: false,
-    plugins: [
-      bundledLibraryPluginBun(bundles),
-      cssFilePlugin(),
-      solidHtmlTemplateGuardPlugin(),
-      solidHtmlClosingTagPlugin(),
-    ],
+    plugins: [bundledLibraryPluginBun(bundles), cssFilePlugin(), solidHtmlSourcePlugin()],
   });
 
   if (!result.success) {

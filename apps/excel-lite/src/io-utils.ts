@@ -6,17 +6,20 @@ import { createXlsxWorkbook, parseXlsxWorkbook } from './xlsx-utils';
 import { parseRef, key as cellKey } from './ref-utils';
 import { csvEscape } from './data-utils';
 import {
-  storageSave, storageRead,
+  storageSave,
+  storageRead,
   storagePath,
-  cells, setIoStatus,
-  tryImportWorkbook, importWorkbook,
-  serializeWorkbook, getRaw,
+  cells,
+  setIoStatus,
+  tryImportWorkbook,
+  importWorkbook,
+  getRaw,
 } from './state';
 import { errMsg } from '@bundled/yaar';
 
 export async function saveWorkbookToStorage() {
   try {
-    const path   = storagePath();
+    const path = storagePath();
     const binary = createXlsxWorkbook(cells);
     await storageSave(path, binary);
     setIoStatus(`Saved XLSX to storage: ${path}`);
@@ -27,7 +30,7 @@ export async function saveWorkbookToStorage() {
 
 export async function openWorkbookFromStorage() {
   try {
-    const path  = storagePath();
+    const path = storagePath();
     const lower = path.toLowerCase();
 
     if (lower.endsWith('.json')) {
@@ -39,7 +42,7 @@ export async function openWorkbookFromStorage() {
       return;
     }
 
-    const data  = await storageRead(path, 'arraybuffer');
+    const data = await storageRead(path, 'arraybuffer');
     const bytes = data instanceof Uint8Array ? data : new Uint8Array(data as ArrayBuffer);
     importWorkbook(parseXlsxWorkbook(bytes));
     setIoStatus(`Opened XLSX from storage: ${path}`);
@@ -67,9 +70,9 @@ export function exportCsv() {
   }
 
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
   a.download = 'sheet.csv';
   a.click();
   URL.revokeObjectURL(url);

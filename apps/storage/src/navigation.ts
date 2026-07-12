@@ -2,7 +2,7 @@ export {};
 import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
 import { storage } from '@bundled/yaar';
-import { state, setState, elPreviewBody } from './state';
+import { setState, elPreviewBody } from './state';
 import { basename, formatSize, isImage, isMarkdown, isPreviewable, getFileIcon, getExtension } from './helpers';
 import { refreshMountAliases } from './mount-dialog';
 

@@ -4,7 +4,6 @@ import type { ImageItem, LayoutMode, RawImageInput } from './types';
 import {
   baseName,
   makeStatusText,
-  clampColumns,
   IMAGE_EXT_REGEX,
   STORAGE_UNAVAILABLE,
   fileToDataUrl,
@@ -73,7 +72,12 @@ export async function loadAllStorageImages(): Promise<void> {
     return;
   }
   try {
-    const entries = await list('yaar://apps/self/storage/') as Array<{ name: string; description?: string; path?: string; isDirectory?: boolean }>;
+    const entries = (await list('yaar://apps/self/storage/')) as Array<{
+      name: string;
+      description?: string;
+      path?: string;
+      isDirectory?: boolean;
+    }>;
     const paths = entries
       .filter((e) => {
         const isDir = e.isDirectory ?? e.description === 'directory';
