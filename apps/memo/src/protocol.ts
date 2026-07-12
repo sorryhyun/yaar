@@ -1,5 +1,5 @@
 import { app, defineCommand } from '@bundled/yaar';
-import { memos, addMemo, updateMemo, deleteMemo, searchMemos, getMemoById } from './store';
+import { memos, addMemo, updateMemo, deleteMemo, searchMemosFts } from './store';
 
 export function registerProtocol() {
   if (!app) return;
@@ -8,27 +8,29 @@ export function registerProtocol() {
     appId: 'memo',
     name: 'Memo',
     state: {
+      // State handlers receive no params — parameterized reads (search, get by
+      // id) are commands or direct yaar://apps/memo/db/memos queries instead.
       memos: {
         description: 'All memos',
         handler: () => ({ memos: memos() }),
       },
-      getMemo: {
-        description: 'Get a specific memo by id',
-        handler: ((params: unknown) => {
-          const { id } = (params as { id: string }) ?? {};
-          const memo = getMemoById(id);
-          return { memo: memo ?? null };
-        }) as () => unknown,
-      },
-      search: {
-        description: 'Search memos by keyword',
-        handler: ((params: unknown) => {
-          const { query } = (params as { query: string }) ?? {};
-          return { memos: searchMemos(query ?? '') };
-        }) as () => unknown,
-      },
     },
     commands: {
+      searchMemos: defineCommand({
+        description: 'Full-text search memos (server-side FTS5), best matches first',
+        params: {
+          type: 'object',
+          properties: {
+            query: { type: 'string' },
+            limit: { type: 'number' },
+          },
+          required: ['query'],
+        },
+        handler: async (p) => {
+          const { query, limit } = p;
+          return { memos: await searchMemosFts(query, limit) };
+        },
+      }),
       addMemo: defineCommand({
         description: 'Add a new memo',
         params: {
