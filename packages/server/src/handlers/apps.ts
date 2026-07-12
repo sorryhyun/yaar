@@ -16,7 +16,7 @@
  *
  * On disk: storage/apps/{appId}/{path}
  *
- * App-scoped database (SQLite collections, see docs/sqlite-plan.md):
+ * App-scoped database (SQLite collections, see docs/sqlite.md):
  *   list('yaar://apps/{appId}/db')                          → collection names
  *   read('yaar://apps/{appId}/db/{coll}')                   → recent documents
  *   read('yaar://apps/{appId}/db/{coll}/{id}')              → one document

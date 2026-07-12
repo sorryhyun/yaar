@@ -1,16 +1,14 @@
-# SQLite for App Storage — Design Plan
+# SQLite for App Storage (`appDb`)
 
-> **Status: Phases 1–2 implemented.** `packages/server/src/db/` (AppDatabase, pool,
-> query builder), `yaar://apps/{appId}/db/*` verb routes in `handlers/apps.ts`, and the
-> `appDb` SDK (including `createReactiveCollection`) in the compiler shim. Two deltas from
-> this plan: filtered finds go through `invoke {action:'find'}` (the `read` verb carries no
-> payload), and reactive bindings are `appDb.createReactiveCollection` backed by verb
-> subscriptions. Phase 3 (JSON-path indexes, raw SQL escape hatch, export/import) remains
-> future work. Usage docs: [app-development.md](./app-development.md#app-scoped-database-appdb).
+`appDb` is the structured storage layer for apps: one SQLite database per app, exposed as a
+collection API. It lives in `packages/server/src/db/` (AppDatabase, pool, query builder), is
+routed via `yaar://apps/{appId}/db/*` verbs in `handlers/apps.ts`, and surfaces in apps as
+`import { appDb } from '@bundled/yaar'` (compiler shim, including `createReactiveCollection`).
+Usage docs: [app-development.md](./app-development.md#app-scoped-database-appdb).
 
 ## Motivation
 
-Apps currently store data as flat files under `storage/apps/{appId}/`. This works but limits what apps can do:
+Before `appDb`, apps stored data only as flat files under `storage/apps/{appId}/`. That works but limits what apps can do:
 
 - **No queries** — Apps load entire JSON files into memory to filter/search
 - **No transactions** — Multi-file writes can partially fail
@@ -18,13 +16,15 @@ Apps currently store data as flat files under `storage/apps/{appId}/`. This work
 - **No search** — `storageGrep` does regex over raw text files (O(n) per file)
 - **No aggregation** — Counting, summing, grouping requires full data load
 
-Bun has `bun:sqlite` built in — zero dependencies, WAL mode, fast. This plan adds SQLite as a structured storage layer for apps while keeping the existing filesystem API working.
+Bun has `bun:sqlite` built in — zero dependencies, WAL mode, fast. `appDb` adds SQLite as a structured storage layer for apps while keeping the existing filesystem API working.
 
 ---
 
-## Current State
+## Filesystem Storage (`appStorage`)
 
-### How apps store data today
+`appDb` sits alongside the file-based `appStorage` API, which remains the right choice for binary blobs and simple single-file state.
+
+### File-based storage patterns
 
 | Pattern | Apps | Example |
 |---------|------|---------|
@@ -68,7 +68,7 @@ appStorage.save('notes.json', data)
 - Existing apps keep working without changes
 - SQLite's value is structured queries — shoehorning it behind a file-path API wastes the capability
 - Apps opt in to SQLite when they need it; simple apps stay with `appStorage`
-- `appStorage` could later be backed by SQLite transparently (Phase 3), but the user-facing API stays
+- `appStorage` could later be backed by SQLite transparently (future work), but the user-facing API stays
 
 ### 2. One database per app
 
@@ -224,7 +224,7 @@ Simple, LLM-friendly filter objects:
 { avatar: { $exists: true } }
 ```
 
-### `createPersistedCollection` — reactive Solid.js binding
+### `createReactiveCollection` — reactive Solid.js binding
 
 ```typescript
 import { appDb } from '@bundled/yaar';
@@ -237,13 +237,14 @@ const [notes, { insert, update, remove, refresh }] = appDb.createReactiveCollect
 
 // notes() is a Solid signal — rerenders on change
 // insert/update/remove mutate SQLite then refresh the signal
+// Backed by verb subscriptions: external writes (e.g. the agent) also trigger refresh
 ```
 
 ---
 
 ## Server-Side Implementation
 
-### New files
+### Files
 
 ```
 packages/server/src/
@@ -292,32 +293,35 @@ class AppDatabase {
 // Max open: 20 databases (LRU eviction)
 ```
 
-### URI routing — new verbs on existing `yaar://apps/{appId}/db` path
+### URI routing — verbs on the `yaar://apps/{appId}/db` path
+
+The `read` verb carries no payload, so filtered finds go through `invoke { action: 'find' }`;
+plain `read` on a collection returns recent documents.
 
 ```
-invoke('yaar://apps/{appId}/db/{collection}', { action: 'insert', doc: {...} })
-  → 201, { _id: '...' }
+list('yaar://apps/{appId}/db')
+  → collection names: ['notes', 'tags', ...]
 
-read('yaar://apps/{appId}/db/{collection}', { filter?, sort?, limit?, offset? })
-  → 200, [{ _id, ...doc, _created_at, _updated_at }]
+read('yaar://apps/{appId}/db/{collection}')
+  → recent documents: [{ _id, ...doc, _created_at, _updated_at }]
 
 read('yaar://apps/{appId}/db/{collection}/{id}')
-  → 200, { _id, ...doc, _created_at, _updated_at }
+  → one document: { _id, ...doc, _created_at, _updated_at }
+
+invoke('yaar://apps/{appId}/db/{collection}', { action, ... })
+  → action: insert | insertMany | find | search | count | removeWhere
+    e.g. { action: 'insert', doc: {...} }           → { _id: '...' }
+         { action: 'find', filter, sort?, limit?, offset? } → [docs]
+         { action: 'search', query: 'hello' }       → [{ _id, ...doc, rank }]
 
 invoke('yaar://apps/{appId}/db/{collection}/{id}', { action: 'update', patch: {...} })
-  → 200, { updated: true }
-
-invoke('yaar://apps/{appId}/db/{collection}', { action: 'search', query: 'hello' })
-  → 200, [{ _id, ...doc, rank }]
+  → { updated: true }
 
 delete('yaar://apps/{appId}/db/{collection}/{id}')
-  → 200, { deleted: true }
-
-list('yaar://apps/{appId}/db')
-  → 200, ['notes', 'tags', ...]   (collection names)
+  → { deleted: true }
 
 delete('yaar://apps/{appId}/db/{collection}')
-  → 200, { dropped: true }
+  → { dropped: true }
 ```
 
 ### Query builder: filter → SQL
@@ -339,7 +343,8 @@ function buildWhere(filter: Record<string, unknown>): { sql: string; params: unk
 
 ## SDK Shim (`packages/compiler/src/shims/yaar.ts`)
 
-Add `appDb` alongside existing `appStorage`:
+`appDb` lives alongside `appStorage` in the shim (abridged — see the file for the full
+implementation including `createReactiveCollection`):
 
 ```typescript
 function appDbUri(path: string): string {
@@ -361,7 +366,7 @@ class CollectionHandle<T> {
   }
 
   async find(filter?: object, options?: FindOptions): Promise<T[]> {
-    return y.read(appDbUri(this.name), { filter, ...options });
+    return y.invoke(appDbUri(this.name), { action: 'find', filter, ...options });
   }
 
   async search(query: string): Promise<T[]> {
@@ -444,42 +449,23 @@ This is a major upgrade — the agent can now search and filter app data without
 
 ---
 
-## Phase Plan
+## Implementation Status
 
-### Phase 1: Core infrastructure (smallest useful thing)
+**Implemented:**
+- Core infrastructure — `AppDatabase` class, pool, query builder (`packages/server/src/db/`),
+  `yaar://apps/{appId}/db/*` verb routes (`handlers/apps.ts`), `appDb` + `CollectionHandle`
+  SDK shim and type declarations (`packages/compiler/src/shims/yaar.ts`,
+  `bundled-types/index.d.ts`)
+- Full-text search — FTS5 tables with sync triggers, `collection.search(query)`
+- Reactive bindings — `appDb.createReactiveCollection` for Solid.js, backed by verb
+  subscriptions so external writes (e.g. the agent) refresh the UI
 
-**Scope:** `AppDatabase` class + pool + URI handlers + SDK shim
-
-**Files to create:**
-- `packages/server/src/db/app-db.ts`
-- `packages/server/src/db/pool.ts`
-- `packages/server/src/db/query-builder.ts`
-- `packages/server/src/db/index.ts`
-
-**Files to modify:**
-- `packages/server/src/handlers/apps.ts` — add `yaar://apps/{appId}/db/*` routes
-- `packages/compiler/src/shims/yaar.ts` — add `appDb` and `CollectionHandle`
-- `packages/compiler/src/bundled-types/index.d.ts` — add type declarations
-
-**Deliverable:** An app can `import { appDb } from '@bundled/yaar'` and do insert/find/get/update/remove on collections.
-
-### Phase 2: Full-text search + reactive bindings
-
-**Scope:** FTS5 integration + `createReactiveCollection` for Solid.js
-
-**Files to create/modify:**
-- `packages/server/src/db/app-db.ts` — add FTS table creation + search method
-- `packages/compiler/src/shims/yaar.ts` — add `createReactiveCollection`
-
-**Deliverable:** Apps can do `notes.search('hello')` and use reactive collections that auto-update UI.
-
-### Phase 3: Advanced (optional, future)
-
+**Future work:**
 - **Indexes on JSON paths** — `appDb.collection('notes').createIndex('$.tag')`
-- **Cross-session persistence** — Agent can query app data across sessions
+- **Raw SQL escape hatch** — `appDb.raw(sql, params)` for queries the filter syntax can't express
 - **Backup/export** — `appDb.export()` → JSON dump, `appDb.import(json)` → restore
 - **`appStorage` backed by SQLite** — Transparent migration of file API to SQLite KV table (non-breaking)
-- **Subscriptions** — `appDb.collection('notes').subscribe(filter, callback)` for live queries
+- **Filtered live queries** — `appDb.collection('notes').subscribe(filter, callback)`
 
 ---
 
@@ -490,7 +476,7 @@ This is a major upgrade — the agent can now search and filter app data without
 | SQLite file locking under concurrent access | App agent + iframe writing simultaneously | WAL mode handles concurrent readers; writes are serialized per-db (single-process server) |
 | Database corruption on crash | Data loss | WAL + `PRAGMA synchronous=NORMAL` — survives process crashes. Worst case: rebuild from WAL |
 | Large databases slow down app uninstall | UX lag | Just `rm data.db` — SQLite is a single file |
-| Filter syntax too limited | Apps need raw SQL | Could add `appDb.raw(sql, params)` escape hatch in Phase 3 |
+| Filter syntax too limited | Apps need raw SQL | Could add `appDb.raw(sql, params)` escape hatch (future work) |
 | Memory usage from open databases | Server OOM | Pool with LRU eviction (max 20 open, 5min idle timeout) |
 | Breaking change to app shim | Existing apps break | Purely additive — `appDb` is new, `appStorage` unchanged |
 

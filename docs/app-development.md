@@ -578,7 +578,7 @@ delete('yaar://apps/my-app/storage/data.json')
 ## App-Scoped Database (`appDb`)
 
 For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`
-(design: [`docs/sqlite-plan.md`](./sqlite-plan.md)). Unlike `appStorage`, it supports queries,
+(design: [`docs/sqlite.md`](./sqlite.md)). Unlike `appStorage`, it supports queries,
 counting, pagination, and full-text search server-side — no more load-all-JSON-and-filter.
 Binary blobs and simple single files should stay on `appStorage`; the two coexist.
 
