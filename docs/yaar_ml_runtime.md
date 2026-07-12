@@ -1,5 +1,7 @@
 # `@bundled/yaar-ml` — In-Browser Model Runtime
 
+**Source:** `packages/compiler/src/shims/yaar-ml.ts`, `packages/compiler/src/bundled-types/index.d.ts`, `packages/server/src/http/routes/ml-runtime.ts`, `packages/server/src/config.ts`
+
 Run a model *inside a YAAR app iframe* — no Python, no install — using WebGPU
 (with a single-thread wasm fallback). Weights download once and cache in the
 browser, so an ML app ships its model and runs anywhere the desktop runs,
