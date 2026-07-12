@@ -65,7 +65,7 @@ src/
 │   ├── apps/             # App listing, skill loading, marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
-│   ├── dev/              # Compile, typecheck, deploy, clone
+│   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)
 │   ├── http/             # fetch.ts — proxied HTTP fetch
 │   └── window/           # Window create/update/manage, app protocol, app query/command, subscribe/unsubscribe
 ├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder

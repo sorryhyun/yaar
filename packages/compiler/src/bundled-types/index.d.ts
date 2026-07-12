@@ -488,6 +488,8 @@ interface YaarDevDeployOpts {
   icon?: string;
   description?: string;
   permissions?: string[];
+  /** Commit message for the history snapshot this deploy records. */
+  message?: string;
 }
 
 interface YaarDevDeployResult {
@@ -498,11 +500,67 @@ interface YaarDevDeployResult {
   error?: string;
 }
 
+/** A commit in an app's version history. */
+interface YaarDevCommit {
+  hash: string;
+  shortHash: string;
+  /** Unix ms. */
+  timestamp: number;
+  message: string;
+}
+
+interface YaarDevHistoryResult {
+  success: boolean;
+  commits?: YaarDevCommit[];
+  error?: string;
+}
+
+interface YaarDevDiffOpts {
+  /** Commit to diff against. A hash or `HEAD~N`. Defaults to `HEAD`. Snapshot base only. */
+  ref?: string;
+  /**
+   * `snapshot` (default) — diff against the app's own history ("what changed
+   * since the last deploy"). `repo` — diff against the user's git repo ("what
+   * has this app changed relative to what the user committed"); bundled apps only.
+   */
+  against?: 'snapshot' | 'repo';
+}
+
+interface YaarDevDiffResult {
+  success: boolean;
+  /** Unified diff. Empty when there are no changes. */
+  diff?: string;
+  /** Paths touched, relative to the app directory. */
+  files?: string[];
+  against?: 'snapshot' | 'repo';
+  ref?: string;
+  /** True when the diff was clipped to stay under the size cap. */
+  truncated?: boolean;
+  error?: string;
+}
+
+interface YaarDevRestoreResult {
+  success: boolean;
+  appId?: string;
+  /** The commit that was restored, fully resolved. */
+  ref?: string;
+  files?: string[];
+  /** Whether dist/ was rebuilt from the restored source. */
+  recompiled?: boolean;
+  /** Set when the source restored but recompiling it failed. */
+  compileError?: string;
+  error?: string;
+}
+
 interface YaarDev {
   compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
   typecheck(path: string): Promise<YaarDevTypecheckResult>;
   deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
   bundledLibraries(): Promise<string[]>;
+  gitHistory(appId?: string, opts?: { limit?: number }): Promise<YaarDevHistoryResult>;
+  gitDiff(appId?: string, opts?: YaarDevDiffOpts): Promise<YaarDevDiffResult>;
+  gitRestore(appId: string, ref: string): Promise<YaarDevRestoreResult>;
+  gitCheckpoint(appId?: string, opts?: { message?: string }): Promise<YaarDevHistoryResult>;
 }
 
 // -- Global --
@@ -666,6 +724,29 @@ declare module '@bundled/yaar-dev' {
   export function bundledLibraries(): Promise<string[]>;
   /** Get detailed type information for a specific bundled library. */
   export function bundledLibraries(name: string): Promise<{ name: string; types: string }>;
+
+  // -- Version history --
+  // Every deploy is snapshotted into a per-app shadow git repo, so a bad deploy
+  // is undoable. `appId` defaults to the calling app; naming another app
+  // requires the caller to be a bundled app.
+
+  /** Commits for an app, newest first. */
+  export function gitHistory(
+    appId?: string,
+    opts?: { limit?: number },
+  ): Promise<YaarDevHistoryResult>;
+  /** Diff an app's current files against its history, or against the user's repo. */
+  export function gitDiff(appId?: string, opts?: YaarDevDiffOpts): Promise<YaarDevDiffResult>;
+  /**
+   * Roll an app back to an earlier commit and rebuild it. The current state is
+   * snapshotted first, so a restore is itself undoable.
+   */
+  export function gitRestore(appId: string, ref: string): Promise<YaarDevRestoreResult>;
+  /** Snapshot an app's current state as a commit — e.g. before a risky change. */
+  export function gitCheckpoint(
+    appId?: string,
+    opts?: { message?: string },
+  ): Promise<YaarDevHistoryResult>;
 }
 
 declare module '@bundled/yaar-ml' {

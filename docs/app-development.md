@@ -135,11 +135,21 @@ Some `@bundled/*` SDKs require explicit opt-in via the `"bundles"` field in `app
 
 | SDK | Import Path | Purpose | Required `bundles` value |
 |-----|------------|---------|------------------------|
-| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()` | `"yaar-dev"` |
+| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`, and per-app version history: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()`, etc. | `"yaar-web"` |
 | ML runtime | `@bundled/yaar-ml` | In-browser model inference (WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
 
 See [`docs/yaar_ml_runtime.md`](./yaar_ml_runtime.md) for the ML runtime's capabilities, memory limits, and "what fits" guidance.
+
+### Per-app version history
+
+Deploy is destructive — it overwrites source and deletes files no longer present — so every deploy is snapshotted first. Each app gets its own shadow git repo whose **work-tree is the app directory**, which is what makes "the app boundary" a boundary git enforces rather than one we filter for. The repo metadata lives in git-ignored `storage/app-git/<appId>.git`, never inside the app: the user's own repo never sees a nested `.git` and their history is never polluted with agent commits. `dist/` and `credentials.json` are excluded.
+
+`gitDiff` takes two bases. `against: "snapshot"` (default) compares the app's files to a commit in its own history — *what changed since the last deploy* — and works for every app. `against: "repo"` compares against the user's own git repo — *what changed relative to what the user committed* — and is read-only and bundled-apps-only, since `user-apps/` is git-ignored.
+
+`gitRestore(appId, ref)` rolls an app back and rebuilds it. It snapshots the current state first and appends the rollback as a new commit rather than moving `HEAD`, so history is append-only and a restore is itself undoable.
+
+Writing another app's directory (`deploy`, `gitRestore`, `gitCheckpoint`) is restricted to bundled apps — a marketplace app that declares `"bundles": ["yaar-dev"]` may only modify itself.
 
 **app.json:**
 ```json

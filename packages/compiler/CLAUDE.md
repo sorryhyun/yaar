@@ -27,7 +27,7 @@ src/
 │   └── index.d.ts         # Type declarations for all @bundled/* imports
 └── shims/
     ├── yaar.ts            # Main SDK: verb functions, appStorage, createPersistedSignal, onShortcut
-    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy (requires bundles: ["yaar-dev"])
+    ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     └── anime.ts           # v3→v4 easing name compat wrapper
@@ -77,7 +77,7 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 Shims wrap npm packages with compatibility fixes or SDK wrappers:
 
 - **`yaar.ts`** — thin wrapper over `window.yaar` global. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`, plus `trySave` — reports the failure and resolves `false` instead of throwing, so callers can withhold a "Saved" UI), `appDb` (SQLite-backed collections via `yaar://apps/self/db/*` — insert/find/search/update/remove with Mongo-style filters, plus `createReactiveCollection` for a query-tracking Solid signal), `createPersistedSignal` (Solid signal auto-synced to storage via `trySave`), `defineCommand`, `onShortcut`, `showToast`, `withLoading`, `errMsg`, `wait`, `AppCommandError`
-- **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy
+- **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy, plus per-app version history (`gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint`) backed by a shadow git repo per app
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4
 

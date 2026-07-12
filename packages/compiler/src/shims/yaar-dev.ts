@@ -51,6 +51,8 @@ export function deploy(
     icon?: string;
     description?: string;
     permissions?: string[];
+    /** Commit message for the history snapshot this deploy records. */
+    message?: string;
   },
 ) {
   return devPost<{
@@ -60,6 +62,71 @@ export function deploy(
     icon?: string;
     error?: string;
   }>('deploy', { path, ...opts });
+}
+
+// ── Version history ────────────────────────────────────────────────────────
+// Every deploy is snapshotted into a per-app shadow git repo, so a bad deploy is
+// undoable. `appId` defaults to the calling app; naming another app requires the
+// caller to be a bundled app.
+
+interface AppCommit {
+  hash: string;
+  shortHash: string;
+  /** Unix ms. */
+  timestamp: number;
+  message: string;
+}
+
+/** Commits for an app, newest first. */
+export function gitHistory(appId?: string, opts?: { limit?: number }) {
+  return devPost<{ success: boolean; commits?: AppCommit[]; error?: string }>('git-history', {
+    appId,
+    ...opts,
+  });
+}
+
+/**
+ * Diff an app's current files.
+ *
+ * `against: 'snapshot'` (default) compares against a commit in the app's own
+ * history — "what changed since the last deploy". `against: 'repo'` compares
+ * against the user's git repo — "what has this app changed relative to what the
+ * user committed" — and works only for bundled apps.
+ */
+export function gitDiff(appId?: string, opts?: { ref?: string; against?: 'snapshot' | 'repo' }) {
+  return devPost<{
+    success: boolean;
+    diff?: string;
+    files?: string[];
+    against?: 'snapshot' | 'repo';
+    ref?: string;
+    truncated?: boolean;
+    error?: string;
+  }>('git-diff', { appId, ...opts });
+}
+
+/**
+ * Roll an app back to an earlier commit and rebuild it. The current state is
+ * snapshotted first, so a restore is itself undoable.
+ */
+export function gitRestore(appId: string, ref: string) {
+  return devPost<{
+    success: boolean;
+    appId?: string;
+    ref?: string;
+    files?: string[];
+    recompiled?: boolean;
+    compileError?: string;
+    error?: string;
+  }>('git-restore', { appId, ref });
+}
+
+/** Snapshot an app's current state as a commit — e.g. before a risky change. */
+export function gitCheckpoint(appId?: string, opts?: { message?: string }) {
+  return devPost<{ success: boolean; commits?: AppCommit[]; error?: string }>('git-checkpoint', {
+    appId,
+    ...opts,
+  });
 }
 
 export async function bundledLibraries(name?: string) {

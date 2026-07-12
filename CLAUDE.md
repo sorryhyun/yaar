@@ -237,7 +237,7 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 - **Audio**: `@bundled/tone`
 - **Parsing**: `@bundled/marked`, `@bundled/prismjs`, `@bundled/mammoth`
 - **YAAR SDK**: `@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, `appDb` (SQLite collections), etc.
-- **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/yaar_ml_runtime.md`](./docs/yaar_ml_runtime.md))
+- **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy, plus per-app version history: gitHistory/gitDiff/gitRestore/gitCheckpoint), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/yaar_ml_runtime.md`](./docs/yaar_ml_runtime.md))
 
 The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.
 

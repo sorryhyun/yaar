@@ -10,6 +10,7 @@ import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
+import { snapshotApp } from './git.js';
 
 /**
  * Sync a source directory to a destination, only writing files whose content changed.
@@ -82,6 +83,7 @@ export interface DeployArgs {
   keepSource?: boolean;
   skill?: string;
   sourcePath?: string; // Override sandbox path — use this directory as source
+  message?: string; // Commit message for this deploy's history snapshot
 }
 
 export interface DeployResult {
@@ -211,6 +213,12 @@ export async function doDeploy(
   const resolvedIcon = icon ?? (existingMeta.icon as string | undefined) ?? '🎮';
   const displayName = name ?? (existingMeta.name as string | undefined) ?? toDisplayName(appId);
 
+  // Deploy is destructive: `syncDir` deletes files no longer in source and dist/
+  // is wiped. Snapshot the current state first so the previous version is always
+  // recoverable via `restoreApp()`. No-ops for an app being created for the
+  // first time (nothing on disk to snapshot yet).
+  await snapshotApp(appId, `checkpoint: before deploy of ${appId}`);
+
   try {
     await mkdir(appPath, { recursive: true });
 
@@ -325,6 +333,10 @@ export async function doDeploy(
 
     // Emit refreshApps AFTER shortcut changes are persisted to disk.
     actionEmitter.emitAction({ type: 'desktop.refreshApps' });
+
+    // Record the deployed state as a commit — this is the ref a later deploy
+    // rolls back to.
+    await snapshotApp(appId, args.message?.trim() || `deploy: ${appId}`);
 
     return { success: true, appId, name: finalName, icon: finalIcon };
   } catch (err) {
