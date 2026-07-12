@@ -17,9 +17,11 @@
  *   bun run scripts/check-doc-freshness.ts            # check all docs/*.md
  *   bun run scripts/check-doc-freshness.ts docs/x.md  # check specific docs
  *   bun run scripts/check-doc-freshness.ts --quiet     # only print problems
+ *   bun run scripts/check-doc-freshness.ts --strict    # fail on stale sources too
  *
- * Exit code: 0 if all docs are fresh, 1 if any doc is stale or has a broken pointer.
- * Intended for CI and pre-commit use.
+ * Exit code: 1 for broken pointers or bundled-library list drift. Stale sources
+ * are advisory unless --strict is passed, since a source file may change in a
+ * way unrelated to the section a doc describes.
  */
 
 import { execFileSync } from 'child_process';
@@ -137,6 +139,7 @@ function checkBundledLibraryDocs(quiet: boolean): number {
 function main(): void {
   const rawArgs = process.argv.slice(2);
   const quiet = rawArgs.includes('--quiet');
+  const strict = rawArgs.includes('--strict');
   const fileArgs = rawArgs.filter((a) => !a.startsWith('--'));
 
   const docs =
@@ -193,16 +196,23 @@ function main(): void {
     }
   }
 
-  const problems = staleCount + brokenCount + bundledLibraryDocProblems;
+  const problems = brokenCount + bundledLibraryDocProblems + (strict ? staleCount : 0);
   if (problems > 0) {
     console.error(
-      `\n${staleCount} stale doc(s), ${brokenCount} broken pointer(s). ` +
+      `\n${staleCount} stale doc warning(s), ${brokenCount} broken pointer(s). ` +
         `${bundledLibraryDocProblems} bundled-library list problem(s). ` +
+        `${strict ? 'Strict mode requires stale docs to be reviewed. ' : ''}` +
         `Update the doc(s) above, or move the **Source:** pointer if the code moved.`,
     );
     process.exit(1);
   }
-  if (!quiet) console.log('\nAll docs fresh.');
+  if (!quiet) {
+    if (staleCount > 0) {
+      console.log(`\nRequired doc checks passed (${staleCount} stale doc warning(s)).`);
+    } else {
+      console.log('\nAll docs fresh.');
+    }
+  }
 }
 
 main();

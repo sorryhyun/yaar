@@ -28,6 +28,7 @@
     "build:exe:bundle:macos": "bun scripts/build-exe-bundle.js --target macos",
     "generate:openapi": "bun run scripts/generate-openapi.ts",
     "check:docs": "bun run scripts/check-doc-freshness.ts",
+    "check:docs:strict": "bun run scripts/check-doc-freshness.ts --strict",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
     "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",
     "prepare": "husky"
