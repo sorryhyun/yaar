@@ -4,8 +4,9 @@
  * Instead of creating providers on-demand when a WebSocket connection arrives,
  * this pool maintains ready-to-use provider instances that can be quickly assigned.
  *
- * For Claude, this uses ClaudeSessionProvider which sends a warmup message to
- * pre-create a session with MCP tools loaded.
+ * For Claude, this uses ClaudeSessionProvider; the real warmup happens when an
+ * agent adopts the provider and prewarms its persistent stream (process + MCP
+ * connections) with the exact options its first turn will use.
  */
 
 import type { AITransport, ProviderType } from './types.js';

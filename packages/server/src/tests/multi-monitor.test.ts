@@ -185,6 +185,8 @@ mock.module('../agents/profiles/index.js', () => ({
   ORCHESTRATOR_PROMPT: '',
   getOrchestratorPrompt: mock(() => ''),
   getDeveloperAllowedTools: mock(() => []),
+  claudeModelToCodex: mock(() => undefined),
+  getMonitorTurnOptions: mock(() => ({ model: undefined, allowedTools: [] })),
   CODEX_AGENT_ROLES: {},
   codexRoleToToml: mock(() => ''),
 }));
@@ -205,6 +207,7 @@ mock.module('../agents/agent-session.js', () => {
     getCurrentRole = mock(() => null);
     getCurrentMessageId = mock(() => null);
     steer = mock(async () => false);
+    prewarm = mock(async () => {});
   }
   return {
     AgentSession: MockAgentSession,

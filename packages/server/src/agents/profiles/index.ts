@@ -54,6 +54,20 @@ export function claudeModelToCodex(model?: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Model + tool set a monitor agent's turns run with. Single source for the
+ * turn runner (monitor-task-processor) and prewarm (context-pool) so the
+ * prewarmed provider stream matches the first real turn exactly.
+ */
+export function getMonitorTurnOptions(providerType: string): {
+  model?: string;
+  allowedTools?: string[];
+} {
+  return providerType === 'codex'
+    ? { model: claudeModelToCodex('claude-opus-4-8'), allowedTools: undefined }
+    : { model: 'claude-opus-4-8', allowedTools: getDeveloperAllowedTools() };
+}
+
 // ── Codex agent roles ────────────────────────────────────────────────
 
 export interface CodexAgentRole {

@@ -205,6 +205,12 @@ export class LiveSession {
     console.log(
       `[LiveSession ${this.sessionId}] Connection added: ${connectionId} (total: ${this.connections.size})`,
     );
+    // Warm the pool (provider + monitor agent + persistent provider stream)
+    // while the user is still looking at an empty desktop, so their first
+    // message skips provider setup, process spawn, and the MCP handshake.
+    if (!this.initialized) {
+      void this.ensureInitialized();
+    }
   }
 
   removeConnection(connectionId: ConnectionId): void {

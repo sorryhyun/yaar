@@ -155,6 +155,7 @@ mock.module('../agents/agent-session.js', () => {
     getCurrentRole = mock(() => null);
     getCurrentMessageId = mock(() => null);
     steer = mock(async () => false);
+    prewarm = mock(async () => {});
   }
   return {
     AgentSession: MockAgentSession,

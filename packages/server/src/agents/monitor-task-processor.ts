@@ -8,7 +8,7 @@
 import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-pool.js';
-import { claudeModelToCodex, getDeveloperAllowedTools } from './profiles/index.js';
+import { getMonitorTurnOptions } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { monitorSource } from './context.js';
 
@@ -185,11 +185,7 @@ export class MonitorTaskProcessor {
       canonicalAgent: canonicalMonitor,
       resumeSessionId,
       monitorId,
-      model:
-        this.ctx.providerType === 'codex'
-          ? claudeModelToCodex('claude-opus-4-8')
-          : 'claude-opus-4-8',
-      allowedTools: this.ctx.providerType === 'codex' ? undefined : getDeveloperAllowedTools(),
+      ...getMonitorTurnOptions(this.ctx.providerType ?? ''),
       onFinally: () => {
         agent.session.setOutputCallback(null);
       },

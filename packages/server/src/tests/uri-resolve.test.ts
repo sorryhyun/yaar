@@ -59,8 +59,11 @@ mock.module('../agents/agent-context.js', () => ({
   getSessionId: () => undefined,
   getMonitorId: () => '0',
   getWindowId: () => undefined,
+  getAgentRole: () => undefined,
+  principalRole: () => 'monitor',
   runWithAgentId: (_id: string, fn: () => unknown) => fn(),
   runWithAgentContext: (_ctx: unknown, fn: () => unknown) => fn(),
+  runInAgentContext: (_ctx: unknown, fn: () => unknown) => fn(),
 }));
 
 const { resolveUri } = await import('../handlers/uri-resolve.js');

@@ -16,7 +16,11 @@
 
 import { ContextTape, monitorSource, type ContextMessage } from './context.js';
 import { runAgentTurn, buildReloadContext } from './turn-helpers.js';
-import { SESSION_AGENT_PROFILE, claudeModelToCodex } from './profiles/index.js';
+import {
+  SESSION_AGENT_PROFILE,
+  claudeModelToCodex,
+  getMonitorTurnOptions,
+} from './profiles/index.js';
 import { AgentPool, type PooledAgent } from './agent-pool.js';
 import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
@@ -184,6 +188,7 @@ export class ContextPool implements PoolContext {
       await provider.dispose();
       return false;
     }
+    this.prewarmMonitorAgent(monitorAgent, '0');
 
     await this.sendEvent({
       type: ServerEventType.CONNECTION_STATUS,
@@ -219,8 +224,21 @@ export class ContextPool implements PoolContext {
       return false;
     }
 
+    this.prewarmMonitorAgent(agent, monitorId);
     console.log(`[ContextPool] Created monitor agent for ${monitorId}`);
     return true;
+  }
+
+  /**
+   * Fire-and-forget: open the monitor agent's provider stream (process + MCP
+   * connections) with the exact options its first turn will use, so the first
+   * user message starts instantly instead of paying spawn + MCP handshake.
+   */
+  private prewarmMonitorAgent(agent: PooledAgent, monitorId: string): void {
+    void agent.session.prewarm(`monitor-${monitorId}`, {
+      monitorId,
+      ...getMonitorTurnOptions(this.providerType ?? ''),
+    });
   }
 
   hasMonitorAgent(monitorId: string): boolean {

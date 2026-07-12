@@ -249,6 +249,52 @@ export class AgentSession {
     return this.sessionLogger;
   }
 
+  /** Full system prompt for a turn: profile base + scope + environment + memory. */
+  private async assembleSystemPrompt(
+    role: string,
+    monitorId?: string,
+    systemPromptOverride?: string,
+  ): Promise<string> {
+    const [memory, environment] = await Promise.all([
+      loadMemory(),
+      buildEnvironmentSection(this.provider!.providerType),
+    ]);
+    const basePrompt = systemPromptOverride ?? this.provider!.systemPrompt;
+    return basePrompt + buildScopeSection(role, monitorId) + environment + memory;
+  }
+
+  /**
+   * Pre-open the provider's persistent stream with the same options the first
+   * real turn will use, so that turn starts on a live process with MCP tools
+   * already connected. No-op for providers without prewarm support.
+   */
+  async prewarm(
+    role: string,
+    options: {
+      monitorId?: string;
+      systemPromptOverride?: string;
+      allowedTools?: string[];
+      model?: string;
+    } = {},
+  ): Promise<void> {
+    if (!this.provider?.prewarm) return;
+    try {
+      await this.provider.prewarm({
+        systemPrompt: await this.assembleSystemPrompt(
+          role,
+          options.monitorId,
+          options.systemPromptOverride,
+        ),
+        agentId: this.instanceId,
+        allowedTools: options.allowedTools,
+        model: options.model,
+        monitorId: options.monitorId,
+      });
+    } catch (err) {
+      console.warn('[AgentSession] prewarm failed (first turn will cold-start):', err);
+    }
+  }
+
   async handleMessage(content: string, options: HandleMessageOptions): Promise<void> {
     const { role, interactions, messageId, onContextMessage } = options;
 
@@ -296,14 +342,12 @@ export class AgentSession {
         sessionIdToUse = this.sessionId;
       }
 
-      const [memory, environment] = await Promise.all([
-        loadMemory(),
-        buildEnvironmentSection(this.provider.providerType),
-      ]);
-      const basePrompt = options.systemPromptOverride ?? this.provider.systemPrompt;
-      const scopeSection = buildScopeSection(role, options.monitorId);
       const transportOptions: TransportOptions = {
-        systemPrompt: basePrompt + scopeSection + environment + memory,
+        systemPrompt: await this.assembleSystemPrompt(
+          role,
+          options.monitorId,
+          options.systemPromptOverride,
+        ),
         sessionId: sessionIdToUse,
         forkSession: options.forkSession,
         resumeThread,

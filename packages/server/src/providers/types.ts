@@ -91,4 +91,11 @@ export interface AITransport {
    * Optional: Get the current session/thread ID.
    */
   getSessionId?(): string | null;
+
+  /**
+   * Optional: Pre-open the provider's long-lived stream (process + MCP
+   * connections) with the exact options the first turn will use, so that
+   * turn starts instantly. No message is sent.
+   */
+  prewarm?(options: TransportOptions): Promise<void>;
 }
