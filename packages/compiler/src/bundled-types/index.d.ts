@@ -322,6 +322,13 @@ interface YaarAppStorageTrySaveOptions extends YaarAppStorageSaveOptions {
   onError?: (message: string, error: unknown) => void;
 }
 
+interface YaarAppStorageEntry {
+  path: string;
+  isDirectory: boolean;
+  uri: string;
+  mimeType?: string;
+}
+
 interface YaarAppStorage {
   save(path: string, content: string, options?: YaarAppStorageSaveOptions): Promise<void>;
   /**
@@ -339,7 +346,7 @@ interface YaarAppStorage {
   ): Promise<{ data: string; mimeType: string; encoding: 'base64' | 'text' }>;
   /** Read binary data and return as a Blob. Handles the base64 → binary conversion. */
   readBlob(path: string): Promise<Blob>;
-  list(dirPath?: string): Promise<unknown[]>;
+  list(dirPath?: string): Promise<YaarAppStorageEntry[]>;
   remove(path: string): Promise<void>;
 }
 

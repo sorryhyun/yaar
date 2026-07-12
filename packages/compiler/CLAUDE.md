@@ -62,13 +62,13 @@ Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires e
 ## Bundled Libraries
 
 30+ libraries available via `@bundled/*` — no npm install needed in apps:
-- **UI:** solid-js, solid-js/web, solid-js/html, solid-js/store
-- **Utils:** uuid, lodash, date-fns, clsx
-- **Graphics:** three, konva, pixi.js, p5, cannon-es, matter-js
-- **Data:** chart.js, d3, diff, diff2html, xlsx, marked, mammoth, prismjs
-- **Animation:** anime (with v3 compat shim)
-- **Audio:** tone
-- **YAAR SDKs:** yaar, yaar-dev (gated), yaar-web (gated), yaar-ml (gated — in-browser ONNX/WebGPU inference)
+- **UI:** `@bundled/solid-js`, `@bundled/solid-js/web`, `@bundled/solid-js/html`, `@bundled/solid-js/store`
+- **Utils:** `@bundled/uuid`, `@bundled/lodash`, `@bundled/date-fns`, `@bundled/clsx`
+- **Graphics:** `@bundled/three`, `@bundled/konva`, `@bundled/pixi.js`, `@bundled/p5`, `@bundled/cannon-es`, `@bundled/matter-js`
+- **Data:** `@bundled/chart.js`, `@bundled/d3`, `@bundled/diff`, `@bundled/diff2html`, `@bundled/xlsx`, `@bundled/marked`, `@bundled/mammoth`, `@bundled/prismjs`
+- **Animation:** `@bundled/anime` (with v3 compat shim)
+- **Audio:** `@bundled/tone`
+- **YAAR SDKs:** `@bundled/yaar`, `@bundled/yaar-dev` (gated), `@bundled/yaar-web` (gated), `@bundled/yaar-ml` (gated — in-browser ONNX/WebGPU inference)
 
 ## Shims
 

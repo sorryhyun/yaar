@@ -25,8 +25,14 @@
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { relative, resolve } from 'path';
+import { BUNDLED_LIBRARIES } from '../packages/compiler/src/plugins.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..');
+const BUNDLED_LIBRARY_DOCS = [
+  'CLAUDE.md',
+  'packages/compiler/CLAUDE.md',
+  'docs/app-development.md',
+];
 
 function git(args: string[]): string {
   try {
@@ -79,6 +85,55 @@ function parseSources(docText: string): { valid: string[]; broken: string[] } {
   return { valid: [...valid], broken: [...broken] };
 }
 
+/** Extract @bundled/* import names from a doc's Bundled Libraries section. */
+function parseDocumentedBundledLibraries(docText: string): Set<string> | null {
+  const lines = docText.split('\n');
+  const start = lines.findIndex((line) => /^#{2,6}\s+.*Bundled Libraries\s*$/.test(line.trim()));
+  if (start === -1) return null;
+
+  const headingLevel = lines[start].match(/^#+/)![0].length;
+  const endOffset = lines
+    .slice(start + 1)
+    .findIndex((line) => new RegExp(`^#{1,${headingLevel}}\\s`).test(line));
+  const end = endOffset === -1 ? lines.length : start + 1 + endOffset;
+  const section = lines.slice(start + 1, end).join('\n');
+  const libraries = new Set<string>();
+  for (const match of section.matchAll(/`@bundled\/([^`]+)`/g)) {
+    if (match[1] !== '*') libraries.add(match[1]);
+  }
+  return libraries;
+}
+
+/** Ensure every prose library list exactly matches the compiler's import surface. */
+function checkBundledLibraryDocs(quiet: boolean): number {
+  const expected = new Set(Object.keys(BUNDLED_LIBRARIES));
+  let problemCount = 0;
+
+  for (const doc of BUNDLED_LIBRARY_DOCS) {
+    const documented = parseDocumentedBundledLibraries(
+      readFileSync(resolve(REPO_ROOT, doc), 'utf8'),
+    );
+    if (!documented) {
+      console.error(`❌ ${doc}: missing a Bundled Libraries section`);
+      problemCount++;
+      continue;
+    }
+
+    const missing = [...expected].filter((name) => !documented.has(name)).sort();
+    const unexpected = [...documented].filter((name) => !expected.has(name)).sort();
+    if (missing.length > 0 || unexpected.length > 0) {
+      console.error(`❌ ${doc}: bundled-library list differs from BUNDLED_LIBRARIES:`);
+      if (missing.length > 0) console.error(`     missing: ${missing.join(', ')}`);
+      if (unexpected.length > 0) console.error(`     unexpected: ${unexpected.join(', ')}`);
+      problemCount++;
+    } else if (!quiet) {
+      console.log(`✅ ${doc}: bundled-library list is current (${expected.size} imports)`);
+    }
+  }
+
+  return problemCount;
+}
+
 function main(): void {
   const rawArgs = process.argv.slice(2);
   const quiet = rawArgs.includes('--quiet');
@@ -91,6 +146,7 @@ function main(): void {
 
   let staleCount = 0;
   let brokenCount = 0;
+  const bundledLibraryDocProblems = checkBundledLibraryDocs(quiet);
 
   for (const doc of docs) {
     const absDoc = resolve(REPO_ROOT, doc);
@@ -125,7 +181,9 @@ function main(): void {
 
     if (staleSources.length > 0) {
       staleCount++;
-      console.error(`⚠️  ${doc}: source changed since doc's last update (${docHash.slice(0, 7) || 'uncommitted'}):`);
+      console.error(
+        `⚠️  ${doc}: source changed since doc's last update (${docHash.slice(0, 7) || 'uncommitted'}):`,
+      );
       for (const { src, commits } of staleSources) {
         console.error(`     ${src}`);
         for (const c of commits) console.error(`       · ${c}`);
@@ -135,10 +193,11 @@ function main(): void {
     }
   }
 
-  const problems = staleCount + brokenCount;
+  const problems = staleCount + brokenCount + bundledLibraryDocProblems;
   if (problems > 0) {
     console.error(
       `\n${staleCount} stale doc(s), ${brokenCount} broken pointer(s). ` +
+        `${bundledLibraryDocProblems} bundled-library list problem(s). ` +
         `Update the doc(s) above, or move the **Source:** pointer if the code moved.`,
     );
     process.exit(1);

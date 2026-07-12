@@ -168,20 +168,20 @@ run `setInterval` polls instead (`dc-comics`, `thesingularity-reader`, `process-
 `dock`, `browser`). Either the primitive doesn't fit real needs or it's undiscoverable.
 Find out which; if it works, ship one bundled app on it as the reference example.
 
-### 4. Type `appStorage.list()`'s return value
-`YaarAppStorage.list()` is declared `Promise<unknown[]>` in
-`packages/compiler/src/bundled-types/index.d.ts`, which is why `apps/devtools/src/project.ts`
-could read `entry.size` (always `undefined`) and still typecheck. Declaring a
-`YaarAppStorageEntry { path; isDirectory; uri; mimeType }` would make that class of bug a
-compile error instead of a doc footnote. Note it will surface the existing `entry.size`
-read in devtools, which needs fixing at the same time.
+### 4. Type `appStorage.list()`'s return value — **shipped**
+`YaarAppStorage.list()` now returns `Promise<YaarAppStorageEntry[]>`, where each entry has
+`path`, `isDirectory`, `uri`, and optional `mimeType`. The runtime shim carries the same
+return type. The bogus `entry.size` read and casts in devtools are gone; Excel's duplicate
+raw-storage shape was removed too. Type-level tests verify both the supported fields and
+that `entry.size` is a compile error.
 
-### 5. Generate the bundled-library lists
-There are three hand-maintained prose copies of the bundled-lib list (compiler CLAUDE.md,
-root CLAUDE.md, app-development.md) beside the real one (`plugins.ts` `BUNDLED_LIBRARIES`).
-They have already diverged once. Generate the prose from `getAvailableBundledLibraries()`
-(already exposed via `GET /api/dev/bundled-libraries`), or add a check like
-`scripts/check-doc-freshness.ts` that diffs them.
+### 5. Generate the bundled-library lists — **shipped as a freshness check**
+The existing `scripts/check-doc-freshness.ts` now extracts `@bundled/*` imports from the
+Bundled Libraries sections in the root CLAUDE.md, compiler CLAUDE.md, and
+app-development.md, then compares each set exactly with `plugins.ts` `BUNDLED_LIBRARIES`.
+The existing `bun run check:docs` CI step therefore fails on either a missing or a stale
+extra entry. The two CLAUDE lists now spell out full `@bundled/*` import paths so the check
+reads the same visible prose app authors use rather than relying on hidden metadata.
 
 ### 6. Compiler hygiene
 - Merge the two `onLoad` hooks that each read every `.ts` source file

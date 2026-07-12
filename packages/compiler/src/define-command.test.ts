@@ -204,3 +204,31 @@ describe('defineCommand type inference', () => {
     expect(diagnostics).toEqual([]);
   });
 });
+
+describe('appStorage types', () => {
+  test('list exposes the app-scoped storage entry shape', async () => {
+    const diagnostics = await check(`
+      import { appStorage } from '@bundled/yaar';
+      async function inspect() {
+        const entries = await appStorage.list('projects/');
+        const path: string = entries[0].path;
+        const isDirectory: boolean = entries[0].isDirectory;
+        const uri: string = entries[0].uri;
+        const mimeType: string | undefined = entries[0].mimeType;
+        return { path, isDirectory, uri, mimeType };
+      }
+    `);
+    expect(diagnostics).toEqual([]);
+  });
+
+  test('list entries do not claim to expose raw storage metadata', async () => {
+    const diagnostics = await check(`
+      import { appStorage } from '@bundled/yaar';
+      async function inspect() {
+        const entries = await appStorage.list();
+        return entries[0].size;
+      }
+    `);
+    expect(diagnostics.join('\n')).toContain("Property 'size' does not exist");
+  });
+});

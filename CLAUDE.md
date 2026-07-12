@@ -229,15 +229,15 @@ Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lif
 Apps are compiled via Bun into a single self-contained HTML file. Entry point is always `src/main.ts`. The compiler injects design tokens, SDK scripts (capture, storage, verb, app-protocol, etc.), and the bundled code.
 
 **`@bundled/*` imports** — no `npm install` needed. Available libraries:
-- **UI**: `solid-js`, `solid-js/html`, `solid-js/web`, `solid-js/store` (preferred framework)
-- **Utilities**: `uuid`, `lodash`, `date-fns`, `clsx`, `diff`, `diff2html`
-- **Graphics/3D**: `three`, `cannon-es`, `konva`, `pixi.js`, `p5`, `matter-js`
-- **Data/Charts**: `chart.js`, `d3`, `xlsx`
-- **Animation**: `anime`
-- **Audio**: `tone`
-- **Parsing**: `marked`, `prismjs`, `mammoth`
-- **YAAR SDK**: `yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, `appDb` (SQLite collections), etc.
-- **Gated SDKs** (require `"bundles"` in `app.json`): `yaar-dev` (compile, typecheck, deploy), `yaar-web` (browser automation: open, click, extract, etc.), `yaar-ml` (in-browser ONNX inference — see [`docs/yaar_ml_runtime.md`](./docs/yaar_ml_runtime.md))
+- **UI**: `@bundled/solid-js`, `@bundled/solid-js/html`, `@bundled/solid-js/web`, `@bundled/solid-js/store` (preferred framework)
+- **Utilities**: `@bundled/uuid`, `@bundled/lodash`, `@bundled/date-fns`, `@bundled/clsx`, `@bundled/diff`, `@bundled/diff2html`
+- **Graphics/3D**: `@bundled/three`, `@bundled/cannon-es`, `@bundled/konva`, `@bundled/pixi.js`, `@bundled/p5`, `@bundled/matter-js`
+- **Data/Charts**: `@bundled/chart.js`, `@bundled/d3`, `@bundled/xlsx`
+- **Animation**: `@bundled/anime`
+- **Audio**: `@bundled/tone`
+- **Parsing**: `@bundled/marked`, `@bundled/prismjs`, `@bundled/mammoth`
+- **YAAR SDK**: `@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, `appDb` (SQLite collections), etc.
+- **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/yaar_ml_runtime.md`](./docs/yaar_ml_runtime.md))
 
 The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.
 

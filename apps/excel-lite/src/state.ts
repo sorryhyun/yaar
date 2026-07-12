@@ -12,7 +12,10 @@ import type { Align, CellMap, CellStyle, CellStyleMap, Rect, Snapshot } from './
 // ── UI Signals ────────────────────────────────────────────────────────
 export const [chartPanelOpen, setChartPanelOpen] = createSignal(false);
 export const [chartTitleText, setChartTitleText] = createSignal('Selection Chart');
-export interface StatRow { label: string; value: string; }
+export interface StatRow {
+  label: string;
+  value: string;
+}
 export const [statsRows, setStatsRows] = createSignal<StatRow[]>([]);
 export const [statsRangeLabel, setStatsRangeLabel] = createSignal('');
 export const [statsPanelOpen, setStatsPanelOpen] = createSignal(false);
@@ -71,7 +74,10 @@ export async function storageSave(path: string, content: string | Uint8Array): P
   }
 }
 
-export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuffer' = 'text'): Promise<any> {
+export async function storageRead(
+  path: string,
+  as: 'text' | 'json' | 'arraybuffer' = 'text',
+): Promise<any> {
   if (as === 'arraybuffer') {
     const blob = await appStorage.readBlob(path);
     return blob.arrayBuffer();
@@ -81,9 +87,9 @@ export async function storageRead(path: string, as: 'text' | 'json' | 'arraybuff
   return text;
 }
 
-export async function storageList(dir: string): Promise<Array<{ path: string; isDirectory: boolean; size: number; modifiedAt: string }>> {
+export async function storageList(dir: string) {
   try {
-    return (await appStorage.list(dir)) as any[];
+    return await appStorage.list(dir);
   } catch {
     return [];
   }
@@ -108,7 +114,7 @@ export function setIoStatus(message: string, isError = false) {
 }
 
 export function storagePath() {
-  const path = (refs.storagePathInput!.value.trim()) || 'sheet.xlsx';
+  const path = refs.storagePathInput!.value.trim() || 'sheet.xlsx';
   refs.storagePathInput!.value = path;
   return path;
 }
@@ -136,7 +142,7 @@ export function redo() {
 
 // ── UI State Operations ───────────────────────────────────────────────
 export function clearHighlights(className: string) {
-  tds.forEach(td => td.classList.remove(className));
+  tds.forEach((td) => td.classList.remove(className));
 }
 
 export function updateToolbarState() {
@@ -146,7 +152,8 @@ export function updateToolbarState() {
   refs.underlineBtn?.classList.toggle('active', !!style.underline);
   if (refs.fontSizeSel) refs.fontSizeSel.value = String(style.fontSize);
   if (refs.textColor) refs.textColor.value = style.color || '#e6edf3';
-  if (refs.bgColor) refs.bgColor.value = style.bg === 'transparent' ? '#161b22' : (style.bg || '#161b22');
+  if (refs.bgColor)
+    refs.bgColor.value = style.bg === 'transparent' ? '#161b22' : style.bg || '#161b22';
   if (refs.alignSel) refs.alignSel.value = style.align;
 }
 
@@ -165,9 +172,10 @@ export function updateSelectionUI() {
   }
 
   if (refs.cellName) {
-    refs.cellName.textContent = mutable.selectionStart === mutable.selectionEnd
-      ? mutable.selected
-      : `${mutable.selectionStart}:${mutable.selectionEnd}`;
+    refs.cellName.textContent =
+      mutable.selectionStart === mutable.selectionEnd
+        ? mutable.selected
+        : `${mutable.selectionStart}:${mutable.selectionEnd}`;
   }
 
   if (refs.formulaInput && mutable.editingRef !== mutable.selected) {

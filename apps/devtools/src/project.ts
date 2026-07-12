@@ -19,7 +19,6 @@ export interface ProjectMeta {
 export interface FileEntry {
   path: string;
   isDirectory: boolean;
-  size?: number;
 }
 
 export interface Diagnostic {
@@ -75,7 +74,7 @@ function projectPath(projectId: string, sub?: string): string {
 async function listAllFiles(storagePath: string, prefix: string): Promise<FileEntry[]> {
   let entries: FileEntry[];
   try {
-    entries = (await appStorage.list(storagePath)) as FileEntry[];
+    entries = await appStorage.list(storagePath);
   } catch {
     return [];
   }
@@ -86,13 +85,13 @@ async function listAllFiles(storagePath: string, prefix: string): Promise<FileEn
     const relativePath = entry.path.startsWith(prefix + '/')
       ? entry.path.slice(prefix.length + 1)
       : entry.path.startsWith(prefix)
-      ? entry.path.slice(prefix.length)
-      : entry.path;
+        ? entry.path.slice(prefix.length)
+        : entry.path;
 
     // Normalize: remove trailing slash from directory paths
     const cleanPath = relativePath.replace(/\/$/, '');
 
-    result.push({ path: cleanPath, isDirectory: entry.isDirectory, size: entry.size });
+    result.push({ path: cleanPath, isDirectory: entry.isDirectory });
 
     // Recurse into subdirectories
     if (entry.isDirectory) {
@@ -109,12 +108,15 @@ async function listAllFiles(storagePath: string, prefix: string): Promise<FileEn
 export async function loadProjects(): Promise<void> {
   try {
     const entries = await appStorage.list('projects/');
-    const dirs = (entries as FileEntry[]).filter((e) => e.isDirectory);
+    const dirs = entries.filter((e) => e.isDirectory);
     const metas: ProjectMeta[] = [];
     for (const dir of dirs) {
       const id = dir.path.replace(/\/$/, '').split('/').pop()!;
       let name = id;
-      const meta = await appStorage.readJsonOr<{ name: string } | null>(`projects/${id}/app.json`, null);
+      const meta = await appStorage.readJsonOr<{ name: string } | null>(
+        `projects/${id}/app.json`,
+        null,
+      );
       if (meta?.name) name = meta.name;
       metas.push({ id, name, lastModified: Date.now() });
     }
@@ -128,7 +130,7 @@ export async function createProject(name: string): Promise<string> {
   const id = Date.now().toString();
   await appStorage.save(
     projectPath(id, 'src/main.ts'),
-    `export {};\nimport { createSignal } from '@bundled/solid-js';\nimport html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\nimport './styles.css';\n\nconst App = () => html\`\n  <div class="y-app y-p-3">\n    <h1>Hello, ${name}!</h1>\n  </div>\`\n;\n\nrender(App, document.getElementById('app')!);\n`
+    `export {};\nimport { createSignal } from '@bundled/solid-js';\nimport html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\nimport './styles.css';\n\nconst App = () => html\`\n  <div class="y-app y-p-3">\n    <h1>Hello, ${name}!</h1>\n  </div>\`\n;\n\nrender(App, document.getElementById('app')!);\n`,
   );
   await appStorage.save(projectPath(id, 'src/styles.css'), `#app { height: 100%; }\n`);
   await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ name }, null, 2));
@@ -261,7 +263,11 @@ export async function writeFile(path: string, content: string): Promise<void> {
   setStatusText(`Saved ${path}`);
 }
 
-export async function editFile(path: string, oldString: string, newString: string): Promise<boolean> {
+export async function editFile(
+  path: string,
+  oldString: string,
+  newString: string,
+): Promise<boolean> {
   const proj = activeProject();
   if (!proj) return false;
   const content = await appStorage.read(projectPath(proj.id, path));
@@ -318,7 +324,9 @@ export async function compile(): Promise<void> {
         setStatusText('Compilation successful');
       });
     } else {
-      const errors = result.errors ?? [(result as { error?: string }).error ?? 'Compilation failed'];
+      const errors = result.errors ?? [
+        (result as { error?: string }).error ?? 'Compilation failed',
+      ];
       batch(() => {
         setCompileStatus('error');
         setCompileErrors(errors);
@@ -347,7 +355,11 @@ export async function typecheck(): Promise<void> {
     } else {
       const raw = result.diagnostics ?? [(result as { error?: string }).error ?? 'Unknown error'];
       const parsed = parseDiagnostics(raw.join('\n'));
-      setDiagnostics(parsed.length > 0 ? parsed : raw.map((m) => ({ file: '?', line: 0, message: m, severity: 'error' as const })));
+      setDiagnostics(
+        parsed.length > 0
+          ? parsed
+          : raw.map((m) => ({ file: '?', line: 0, message: m, severity: 'error' as const })),
+      );
       setStatusText(`${parsed.length || raw.length} type error(s)`);
     }
   } catch (err) {
@@ -445,7 +457,8 @@ export async function readFileContent(
   opts?: { startLine?: number; endLine?: number },
 ): Promise<ReadFileResult> {
   const proj = activeProject();
-  if (!proj) return { path, content: '// No active project', totalLines: 0, startLine: 1, endLine: 0 };
+  if (!proj)
+    return { path, content: '// No active project', totalLines: 0, startLine: 1, endLine: 0 };
   try {
     const raw = await appStorage.read(projectPath(proj.id, path));
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
@@ -458,7 +471,7 @@ export async function readFileContent(
     const numbered = sliced
       .map((line, i) => `${String(start + i).padStart(width)}\t│${line}`)
       .join('\n');
-    const rangeTag = (opts?.startLine || opts?.endLine) ? ` [${start}-${end}]` : '';
+    const rangeTag = opts?.startLine || opts?.endLine ? ` [${start}-${end}]` : '';
     const header = `── ${path} (${totalLines} lines)${rangeTag} ──\n`;
     return { path, content: header + numbered, totalLines, startLine: start, endLine: end };
   } catch {
@@ -474,7 +487,10 @@ export interface GrepMatch {
   content: string;
 }
 
-export async function grep(pattern: string, glob?: string): Promise<{ matches: GrepMatch[]; truncated?: boolean }> {
+export async function grep(
+  pattern: string,
+  glob?: string,
+): Promise<{ matches: GrepMatch[]; truncated?: boolean }> {
   const proj = activeProject();
   if (!proj) return { matches: [] };
   const storagePath = `projects/${proj.id}`;

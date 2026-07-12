@@ -77,6 +77,13 @@ function toastSaveFailure(path: string, label: string, error: unknown): void {
   showToast(`Couldn't save ${label}: ${errMsg(error)}`, 'error');
 }
 
+export interface YaarAppStorageEntry {
+  path: string;
+  isDirectory: boolean;
+  uri: string;
+  mimeType?: string;
+}
+
 export const appStorage = {
   async save(
     path: string,
@@ -155,11 +162,11 @@ export const appStorage = {
     }
     return new Blob([data], { type: mimeType });
   },
-  async list(dirPath?: string): Promise<unknown[]> {
+  async list(dirPath?: string): Promise<YaarAppStorageEntry[]> {
     const result = await y.list(appStorageUri(dirPath ?? ''));
     if (!Array.isArray(result)) return [];
     // Convert resource_link format to storage entry shape for backward compat
-    return result.map((entry: any) => {
+    return result.map((entry: any): YaarAppStorageEntry => {
       if (entry.uri && entry.name != null && !entry.path) {
         return {
           path: entry.name,
