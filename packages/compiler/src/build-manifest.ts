@@ -9,8 +9,16 @@
 import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 
-/** Bump this to force a full rebuild of all apps. */
-export const COMPILER_VERSION = '1';
+/**
+ * Bump this to force a full rebuild of all apps.
+ *
+ * Staleness is otherwise judged from an app's own src/ and app.json, so a change to
+ * something the compiler *injects* — the design tokens, or an SDK script out of
+ * @yaar/shared/iframe-scripts — leaves every hash identical and reaches no existing
+ * dist/. Bumping is how such a change gets picked up. ('3': form controls inherit
+ * font-family, which browsers do not do by default.)
+ */
+export const COMPILER_VERSION = '3';
 
 export interface BuildManifest {
   sourceHash: string;
