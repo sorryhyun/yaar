@@ -66,12 +66,28 @@ export class WindowStateRegistry {
 
   /**
    * Determine the internal key for a given action windowId + monitorId.
+   *
+   * Every key here should be monitor-scoped — either because a monitor was passed, or
+   * because the id already carries one ("0/dock", as restore replays them). A key that
+   * is neither is a window on no monitor, which is not a thing: it means some path
+   * emitted a window action without resolving a monitor, and the frontend — which
+   * always picks one — will key the same window differently. That divergence is how one
+   * app came to show as two windows, and it is silent, so name it when it happens.
+   * ActionEmitter.resolveWindowMonitor() exists to keep this from being reachable.
    */
   private actionKey(rawId: string, monitorId?: string): string {
     if (monitorId) return this.handleMap.register(rawId, monitorId);
     // Backward compat: try to find an existing handle for this raw ID
     const resolved = this.resolve(rawId);
-    return resolved ? resolved[0] : rawId;
+    if (resolved) return resolved[0];
+    if (!rawId.includes('/')) {
+      console.warn(
+        `[WindowStateRegistry] Unscoped window key "${rawId}" — the action carried no monitor ` +
+          `and none could be resolved. The frontend will place this window on its active ` +
+          `monitor, so the two registries now disagree about its key.`,
+      );
+    }
+    return rawId;
   }
 
   handleAction(action: OSAction, monitorId?: string): void {

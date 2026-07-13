@@ -119,9 +119,13 @@ export async function refreshIframeTokens(
         typeof data === 'string'
           ? (extractAppId(data) ?? extractAppIdFromPath(data) ?? undefined)
           : undefined;
+      // Restored ids are scoped handles ("0/dock"), so the monitor is right there in
+      // the id — carry it onto the token rather than making the verb route re-derive it.
+      const slashIdx = action.windowId.indexOf('/');
+      const monitorId = slashIdx > 0 ? action.windowId.slice(0, slashIdx) : undefined;
       return {
         ...action,
-        iframeToken: await generateAppIframeToken(action.windowId, sessionId, appId),
+        iframeToken: await generateAppIframeToken(action.windowId, sessionId, { appId, monitorId }),
       };
     }),
   );

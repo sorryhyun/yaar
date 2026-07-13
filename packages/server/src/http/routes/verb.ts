@@ -335,11 +335,16 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // context carries no monitor, and everything downstream that scopes by
   // `getMonitorId()` — window creation, raw window-ID resolution — falls back to
   // monitor 0: an app launched from monitor 1's dock would open on monitor 0.
+  //
+  // The token records that monitor at mint time. Re-deriving it from the window id is
+  // only a fallback (older tokens), and a lossy one: raw ids repeat across monitors, so
+  // the lookup is ambiguous for any app open on two of them and then yields nothing.
   const callerWindowId = tokenEntry?.windowId;
   const monitorId =
-    sessionId && callerWindowId
+    tokenEntry?.monitorId ??
+    (sessionId && callerWindowId
       ? getSessionHub().get(sessionId)?.windowState.getMonitorForWindow(callerWindowId)
-      : undefined;
+      : undefined);
   const dispatch = () => {
     const execute = () => registry.execute(verb, resolvedUri, body.payload);
     return sessionId

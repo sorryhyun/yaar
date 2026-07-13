@@ -18,6 +18,7 @@ import {
   type UserPromptOption,
   type UserPromptInputField,
 } from '@yaar/shared';
+import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { getAgentId, getMonitorId, getSessionId } from '../agents/agent-context.js';
 import {
   checkPermission,
@@ -25,6 +26,18 @@ import {
   type PermissionDecision,
 } from '../storage/permissions.js';
 import { PendingStore } from './pending-store.js';
+
+/**
+ * Resolves a session's active monitor — the one the user is looking at.
+ *
+ * Injected (wired in lifecycle.ts) rather than imported: SessionHub → LiveSession →
+ * ActionEmitter, so importing the hub here would close a cycle.
+ */
+let activeMonitorResolver: ((sessionId?: string) => string | undefined) | undefined;
+
+export function setActiveMonitorResolver(fn: (sessionId?: string) => string | undefined): void {
+  activeMonitorResolver = fn;
+}
 
 /**
  * Action event data.
@@ -176,6 +189,37 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * The monitor a *window* action belongs to — never undefined.
+   *
+   * Windows are keyed by `{monitorId}/{rawId}` in both registries, so an unstamped
+   * window action is not a window on no monitor; it is a window whose monitor the
+   * server and the frontend then each guess at, separately. The server fell back to
+   * a bare `"ai-chat"` key while the frontend used its active monitor and produced
+   * `"1/ai-chat"` — one app, two keys, and a second window on screen.
+   *
+   * Every window action therefore resolves a monitor here, once, before it is
+   * broadcast: the acting agent's monitor if there is one, else the session's active
+   * monitor (what the user is actually looking at, which is what the frontend would
+   * have guessed anyway — the point is that it is decided in one place), else
+   * monitor 0. Non-window actions keep their optional monitor: an undefined monitor
+   * means session-wide delivery for those, which is a real distinction.
+   */
+  resolveWindowMonitor(sessionId?: string): string {
+    return (
+      this.resolveMonitorId() ??
+      activeMonitorResolver?.(sessionId ?? getSessionId()) ??
+      DEFAULT_MONITOR_ID
+    );
+  }
+
+  /** Monitor to stamp on an emitted action, forced for window actions. */
+  private monitorForAction(action: OSAction, sessionId?: string): string | undefined {
+    return action.type.startsWith('window.')
+      ? this.resolveWindowMonitor(sessionId)
+      : this.resolveMonitorId();
+  }
+
+  /**
    * Emit an OS Action to all listeners.
    */
   emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
@@ -183,7 +227,7 @@ class ActionEmitter extends EventEmitter {
       action,
       sessionId,
       agentId: this.resolveAgentId(agentId),
-      monitorId: this.resolveMonitorId(),
+      monitorId: this.monitorForAction(action, sessionId),
     } as ActionEvent);
   }
 
@@ -215,7 +259,7 @@ class ActionEmitter extends EventEmitter {
       requestId,
       sessionId,
       agentId,
-      monitorId: this.resolveMonitorId(),
+      monitorId: this.monitorForAction(action, currentSessionId),
     } as ActionEvent);
 
     return feedbackPromise;

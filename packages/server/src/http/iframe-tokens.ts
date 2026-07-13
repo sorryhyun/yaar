@@ -15,6 +15,17 @@ interface TokenEntry {
   windowId: string;
   sessionId: string;
   appId?: string;
+  /**
+   * The monitor this iframe's window lives on, pinned at mint time.
+   *
+   * Everything the iframe does through POST /api/verb acts on this monitor. Deriving
+   * it later from the windowId cannot be trusted: window IDs are only unique within a
+   * monitor, so the same app open on two monitors makes a raw-ID lookup ambiguous, and
+   * an ambiguous lookup yields no monitor at all — which is how an app-created window
+   * ended up with an unscoped key. The monitor is known when the window is created;
+   * record it then.
+   */
+  monitorId?: string;
   permissions?: PermissionEntry[];
   /** Bundled `kind: "system"` app — may reach yaar://session/* (see routes/verb.ts). */
   systemApp?: boolean;
@@ -24,6 +35,15 @@ interface TokenEntry {
 
 const tokens = new Map<string, TokenEntry>();
 
+/** Identity carried by an iframe token, beyond the window and session it belongs to. */
+export interface IframeTokenOptions {
+  appId?: string;
+  permissions?: PermissionEntry[];
+  /** Monitor the window lives on. See TokenEntry.monitorId. */
+  monitorId?: string;
+  systemApp?: boolean;
+}
+
 /**
  * Generate a short-lived token tied to a windowId.
  * The token is injected into the iframe SDK so requests can self-identify.
@@ -31,9 +51,7 @@ const tokens = new Map<string, TokenEntry>();
 export function generateIframeToken(
   windowId: string,
   sessionId: string,
-  appId?: string,
-  permissions?: PermissionEntry[],
-  systemApp?: boolean,
+  { appId, permissions, monitorId, systemApp }: IframeTokenOptions = {},
 ): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
@@ -45,6 +63,7 @@ export function generateIframeToken(
     windowId,
     sessionId,
     appId,
+    monitorId,
     permissions,
     systemApp,
     createdAt: Date.now(),
@@ -60,8 +79,7 @@ export function generateIframeToken(
 export async function generateAppIframeToken(
   windowId: string,
   sessionId: string,
-  appId?: string,
-  explicitPermissions?: PermissionEntry[],
+  { appId, permissions: explicitPermissions, monitorId }: IframeTokenOptions = {},
 ): Promise<string> {
   const { getAppMeta } = await import('../features/apps/discovery.js');
   const appMeta = appId ? await getAppMeta(appId) : null;
@@ -79,7 +97,12 @@ export async function generateAppIframeToken(
     }
   }
 
-  return generateIframeToken(windowId, sessionId, appId, permissions, appMeta?.systemApp);
+  return generateIframeToken(windowId, sessionId, {
+    appId,
+    permissions,
+    monitorId,
+    systemApp: appMeta?.systemApp,
+  });
 }
 
 /**

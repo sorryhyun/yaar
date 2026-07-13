@@ -172,12 +172,16 @@ export async function handleCreate(
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
-          iframeToken: await generateAppIframeToken(
-            actualId,
-            getSessionId() ?? '',
+          iframeToken: await generateAppIframeToken(actualId, getSessionId() ?? '', {
             appId,
-            Array.isArray(payload.permissions) ? (payload.permissions as string[]) : undefined,
-          ),
+            permissions: Array.isArray(payload.permissions)
+              ? (payload.permissions as string[])
+              : undefined,
+            // Pin the monitor now, using the same resolution the emitter will stamp on
+            // the create action below. Left to be derived later from the window id, it
+            // is ambiguous whenever the app is open on more than one monitor.
+            monitorId: actionEmitter.resolveWindowMonitor(),
+          }),
         }
       : {}),
   };

@@ -186,6 +186,9 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
                 windowId: app.id,
                 sessionId: store.sessionId,
                 appId: app.id,
+                // The monitor this icon was clicked on. Everything the app then does
+                // through /api/verb acts on it — including opening further windows.
+                monitorId,
               }),
             })
               .then((res) => res.json())

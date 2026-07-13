@@ -94,15 +94,16 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
   if (url.pathname === '/api/iframe-token' && req.method === 'POST') {
     try {
       const body = await req.json();
-      const { windowId, sessionId, appId } = body as {
+      const { windowId, sessionId, appId, monitorId } = body as {
         windowId?: string;
         sessionId?: string;
         appId?: string;
+        monitorId?: string;
       };
       if (!windowId || !sessionId) {
         return errorResponse('windowId and sessionId are required', 400);
       }
-      const token = await generateAppIframeToken(windowId, sessionId, appId);
+      const token = await generateAppIframeToken(windowId, sessionId, { appId, monitorId });
       return jsonResponse({ token });
     } catch {
       return errorResponse('Invalid request body', 400);

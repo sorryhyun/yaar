@@ -11,7 +11,11 @@ import { describe, it, expect } from 'bun:test';
 import type { OSAction } from '@yaar/shared';
 import { WindowHandleMap } from '../session/window-handle-map.js';
 import { WindowStateRegistry } from '../session/window-state.js';
-import { actionEmitter, type ActionEvent } from '../session/action-emitter.js';
+import {
+  actionEmitter,
+  setActiveMonitorResolver,
+  type ActionEvent,
+} from '../session/action-emitter.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import type { SessionId } from '../session/types.js';
 
@@ -116,6 +120,39 @@ describe('Emitted actions carry the acting monitor', () => {
       expect(stampedMonitor(() => actionEmitter.emitAction(createAppWindow('ai-chat')))).toBe('1');
     } finally {
       actionEmitter.clearCurrentMonitor();
+    }
+  });
+
+  it('places an unstamped window action on the session’s active monitor', () => {
+    // A window create can arrive with no monitor at all — from an HTTP route, or an
+    // iframe whose token predates monitor pinning. Server and frontend then each chose
+    // a monitor independently: the server keyed the window bare ("ai-chat") while the
+    // frontend used its active monitor ("1/ai-chat"). One app, two keys, two windows.
+    // The monitor must be decided once, here, and the session's active monitor is the
+    // one the frontend would have picked — so picking it centrally changes nothing
+    // except that both sides now agree.
+    setActiveMonitorResolver(() => '2');
+    try {
+      expect(stampedMonitor(() => actionEmitter.emitAction(createAppWindow('ai-chat')))).toBe('2');
+    } finally {
+      setActiveMonitorResolver(() => undefined);
+    }
+  });
+
+  it('falls back to monitor 0 when even the session has no active monitor', () => {
+    expect(stampedMonitor(() => actionEmitter.emitAction(createAppWindow('ai-chat')))).toBe('0');
+  });
+
+  it('leaves a non-window action unstamped, so it still broadcasts session-wide', () => {
+    // Only windows are keyed by monitor. For everything else an absent monitor is a
+    // real distinction — it means "deliver to the whole session" (LiveSession.broadcast)
+    // — so forcing a monitor here would quietly narrow a toast to one monitor.
+    setActiveMonitorResolver(() => '2');
+    try {
+      const notify = { type: 'notification.show', message: 'hi' } as unknown as OSAction;
+      expect(stampedMonitor(() => actionEmitter.emitAction(notify))).toBeUndefined();
+    } finally {
+      setActiveMonitorResolver(() => undefined);
     }
   });
 });

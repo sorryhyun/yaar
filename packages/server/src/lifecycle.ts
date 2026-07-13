@@ -25,7 +25,9 @@ import {
 import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, IS_DEV, getPort } from './config.js';
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
-import { initSessionHub } from './session/session-hub.js';
+import { initSessionHub, getSessionHub } from './session/session-hub.js';
+import type { SessionId } from './session/types.js';
+import { setActiveMonitorResolver } from './session/action-emitter.js';
 import { setAccessRoleResolver } from './handlers/uri-registry.js';
 import { getAgentRole } from './agents/agent-context.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
@@ -52,6 +54,13 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   // named import of agent-context's getters from inside the handlers/agents
   // import cycle mis-links under Bun's module loader.
   setAccessRoleResolver(getAgentRole);
+
+  // Let the action emitter place a window action that carries no monitor of its own
+  // (an app's iframe calling a verb) on the monitor the user is actually looking at.
+  // Injected for the same reason: SessionHub → LiveSession → ActionEmitter.
+  setActiveMonitorResolver((sessionId) =>
+    sessionId ? getSessionHub().get(sessionId as SessionId)?.activeMonitorId : undefined,
+  );
 
   await ensureStorageDir();
 

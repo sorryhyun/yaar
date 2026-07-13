@@ -24,6 +24,7 @@ import { getBroadcastCenter } from './broadcast-center.js';
 import {
   ServerEventType,
   ClientEventType,
+  DEFAULT_MONITOR_ID,
   type ClientEvent,
   type ServerEvent,
   type OSAction,
@@ -96,6 +97,15 @@ export class LiveSession {
   readonly windowState: WindowStateRegistry;
   readonly layoutContext: LayoutContext;
   readonly reloadCache: ReloadCache;
+
+  /**
+   * The monitor the user is currently looking at, tracked from SUBSCRIBE_MONITOR.
+   *
+   * Read by ActionEmitter.resolveWindowMonitor() to place a window action that
+   * arrives with no monitor of its own (an app's iframe calling a verb, say).
+   * Before this, server and frontend each guessed at that case and disagreed.
+   */
+  activeMonitorId: string = DEFAULT_MONITOR_ID;
 
   // Restored state
   private restoredContext: ContextMessage[];
@@ -693,6 +703,7 @@ export class LiveSession {
 
       case ClientEventType.SUBSCRIBE_MONITOR:
         getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
+        this.activeMonitorId = event.monitorId;
         if (event.viewport) {
           this.layoutContext.setViewport(event.monitorId, event.viewport);
         }
