@@ -1,7 +1,7 @@
 import html from '@bundled/solid-js/html';
 import { state } from '../store';
 import { loadReleases } from '../actions';
-import { renderMarkdown } from '../markdown';
+import { renderRepoMarkdown } from '../markdown';
 import { formatDate, formatBytes, compactNum } from '../utils';
 import { loadingBlock, emptyBlock, errorBlock, mdBody } from './common';
 
@@ -23,7 +23,7 @@ export function releasesView() {
               </div>
               <span class="y-text-dim">${formatDate(r.published_at || r.created_at)}</span>
             </div>
-            ${r.body ? html`<div class="release-notes">${mdBody(() => renderMarkdown(r.body))}</div>` : html`<div class="y-text-muted">No release notes.</div>`}
+            ${r.body ? html`<div class="release-notes">${mdBody(() => renderRepoMarkdown(r.body))}</div>` : html`<div class="y-text-muted">No release notes.</div>`}
             ${r.assets && r.assets.length ? html`<div class="assets">
               <div class="y-label">Assets</div>
               ${r.assets.map((a) => html`

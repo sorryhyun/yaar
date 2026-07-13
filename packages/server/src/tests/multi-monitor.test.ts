@@ -224,6 +224,9 @@ mock.module('../agents/agent-session.js', () => {
 // ── Test setup ─────────────────────────────────────────────────────────────
 
 const { ContextPool } = await import('../agents/context-pool.js');
+import type { OSAction } from '@yaar/shared';
+import { WindowStateRegistry } from '../session/window-state.js';
+import type { Task } from '../agents/pool-types.js';
 import type { SessionId } from '../session/types.js';
 
 function createMockWindowState() {
@@ -311,5 +314,178 @@ describe('Multi-monitor lifecycle', () => {
 
     // Verify a never-created monitor also returns false
     expect(pool.hasMonitorAgent('99')).toBe(false);
+  });
+});
+
+describe('App agents are scoped to their monitor', () => {
+  let pool: InstanceType<typeof ContextPool>;
+
+  beforeEach(async () => {
+    pool = new ContextPool(
+      'test-session' as SessionId,
+      createMockWindowState() as any,
+      createMockReloadCache() as any,
+      mock(() => {}),
+    );
+    await pool.initialize();
+    await pool.createMonitorAgent('1');
+  });
+
+  afterEach(async () => {
+    await pool.cleanup();
+  });
+
+  it('the same app on two monitors gets two distinct agents', async () => {
+    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'storage');
+    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+
+    expect(onZero).not.toBeNull();
+    expect(onOne).not.toBeNull();
+    expect(onOne!.instanceId).not.toBe(onZero!.instanceId);
+    expect(pool.agentPool.getAppAgentCount()).toBe(2);
+  });
+
+  it('reuses one agent per (monitor, app) pair', async () => {
+    const first = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+    const again = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+
+    expect(again!.instanceId).toBe(first!.instanceId);
+    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+  });
+
+  it('a monitor cannot see another monitor’s app agent', async () => {
+    await pool.agentPool.getOrCreateAppAgent('0', 'storage');
+
+    expect(pool.agentPool.hasAppAgent('0', 'storage')).toBe(true);
+    expect(pool.agentPool.hasAppAgent('1', 'storage')).toBe(false);
+    expect(pool.agentPool.getAppAgent('1', 'storage')).toBeUndefined();
+  });
+
+  it('removing a monitor disposes only its own app agents', async () => {
+    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'storage');
+    await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+    await pool.agentPool.getOrCreateAppAgent('1', 'dock');
+    expect(pool.agentPool.getAppAgentCount()).toBe(3);
+
+    await pool.removeMonitorAgent('1');
+
+    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+    expect(pool.agentPool.hasAppAgent('1', 'storage')).toBe(false);
+    expect(pool.agentPool.hasAppAgent('1', 'dock')).toBe(false);
+    expect(pool.agentPool.getAppAgent('0', 'storage')!.instanceId).toBe(onZero!.instanceId);
+  });
+
+  it('findMonitorForAgent reports an app agent’s owning monitor', async () => {
+    // Every MCP request scopes its window lookups by getMonitorId(), which is fed
+    // from here. If app agents were absent, they'd all default to monitor 0 and an
+    // app agent on monitor 1 would look for its own window on monitor 0.
+    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'devtools');
+    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'devtools');
+
+    expect(pool.agentPool.findMonitorForAgent(onOne!.instanceId)).toBe('1');
+    expect(pool.agentPool.findMonitorForAgent(onZero!.instanceId)).toBe('0');
+  });
+
+  it('reports the owning monitor on the roster and resolves it back from an instanceId', async () => {
+    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+
+    const entry = pool.agentPool.listAgents().find((a) => a.id === onOne!.instanceId);
+    expect(entry).toMatchObject({ type: 'app', appId: 'storage', monitorId: '1' });
+
+    expect(pool.agentPool.findAppForAgent(onOne!.instanceId)).toEqual({
+      monitorId: '1',
+      appId: 'storage',
+    });
+  });
+});
+
+describe('App events reach only their own monitor’s subscribers', () => {
+  let pool: InstanceType<typeof ContextPool>;
+  let windowState: WindowStateRegistry;
+  let delivered: Task[];
+
+  /** An app window for `appId` — the raw id is the appId, so both monitors share it. */
+  function appWindow(appId: string): OSAction {
+    return {
+      type: 'window.create',
+      windowId: appId,
+      title: appId,
+      bounds: { x: 0, y: 0, w: 100, h: 100 },
+      content: { renderer: 'iframe', data: `yaar://apps/${appId}` },
+      appId,
+    } as OSAction;
+  }
+
+  beforeEach(async () => {
+    windowState = new WindowStateRegistry();
+    // The same app open on both monitors — the case where a raw-keyed index collides.
+    windowState.handleAction(appWindow('ai-chat'), '0');
+    windowState.handleAction(appWindow('ai-chat'), '1');
+
+    pool = new ContextPool(
+      'test-session' as SessionId,
+      windowState as any,
+      createMockReloadCache() as any,
+      mock(() => {}),
+    );
+    await pool.initialize();
+    await pool.createMonitorAgent('1');
+
+    delivered = [];
+    // Deliver tasks straight into an array instead of running an agent turn.
+    (pool as any).handleTask = async (task: Task) => {
+      delivered.push(task);
+    };
+  });
+
+  afterEach(async () => {
+    await pool.cleanup();
+  });
+
+  /** Subscribe monitor 0's agent to ai-chat's "dialog" channel on monitor 0's window. */
+  function subscribeMonitorZero(): void {
+    pool.windowSubscriptionPolicy.subscribeChannels({
+      subscriberAgentKey: 'monitor-0',
+      subscriberType: 'monitor',
+      subscriberMonitorId: '0',
+      targetWindowId: '0/ai-chat',
+      channels: ['dialog'],
+      mode: 'wake',
+      debounceMs: 10,
+    });
+  }
+
+  const settle = () => new Promise((r) => setTimeout(r, 30));
+
+  it('does not deliver monitor 1’s app event to monitor 0’s subscriber', async () => {
+    subscribeMonitorZero();
+
+    // The frontend reports the scoped key of the window that emitted.
+    pool.notifyAppChannel('1/ai-chat', 'dialog', { message: 'from monitor 1' });
+    await settle();
+
+    expect(delivered).toEqual([]);
+  });
+
+  it('delivers monitor 0’s app event to monitor 0’s subscriber', async () => {
+    subscribeMonitorZero();
+
+    pool.notifyAppChannel('0/ai-chat', 'dialog', { message: 'from monitor 0' });
+    await settle();
+
+    expect(delivered.length).toBe(1);
+    expect(delivered[0].content).toContain('from monitor 0');
+  });
+
+  it('clears only the closed window’s subscriptions', async () => {
+    subscribeMonitorZero();
+
+    // Monitor 1's copy of the app closing must not tear down monitor 0's subscription.
+    pool.handleWindowClose('1/ai-chat', 'ai-chat', '1');
+
+    pool.notifyAppChannel('0/ai-chat', 'dialog', { message: 'still listening' });
+    await settle();
+
+    expect(delivered.length).toBe(1);
   });
 });

@@ -1,7 +1,7 @@
 import html from '@bundled/solid-js/html';
 import { state } from '../store';
 import { loadPulls, setPullFilter, openPull, closeActivePull } from '../actions';
-import { renderMarkdown } from '../markdown';
+import { renderRepoMarkdown } from '../markdown';
 import { timeAgo } from '../utils';
 import { avatar, loadingBlock, emptyBlock, errorBlock, mdBody } from './common';
 
@@ -64,7 +64,7 @@ function pullDetail() {
           ${p.deletions != null ? html`<span class="y-badge y-badge-error">-${p.deletions}</span>` : null}
         </div>
         ${state.pullDetailLoading && !p.changed_files ? loadingBlock() : html`<div class="y-card comment-card">
-          ${p.body ? mdBody(() => renderMarkdown(p.body)) : html`<span class="y-text-muted">No description provided.</span>`}
+          ${p.body ? mdBody(() => renderRepoMarkdown(p.body)) : html`<span class="y-text-muted">No description provided.</span>`}
         </div>`}
         <div class="comments-hdr y-label">Commits (${state.activePullCommits.length})</div>
         <div class="y-card commit-list">
@@ -80,7 +80,7 @@ function pullDetail() {
         ${state.activePullComments.map((c) => html`
           <div class="y-card comment-card">
             <div class="comment-hdr">${avatar(c.user)}<strong>${c.user?.login || ''}</strong><span class="y-text-dim">${timeAgo(c.created_at)}</span></div>
-            ${mdBody(() => renderMarkdown(c.body))}
+            ${mdBody(() => renderRepoMarkdown(c.body))}
           </div>`)}
       </div>`;
     }}

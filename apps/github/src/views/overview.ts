@@ -2,7 +2,7 @@ import html from '@bundled/solid-js/html';
 import { state } from '../store';
 import { loadOverview } from '../actions';
 import { compactNum, formatDate } from '../utils';
-import { loadingBlock, errorBlock, mdBody } from './common';
+import { loadingBlock, errorBlock, emptyBlock, mdBody } from './common';
 
 function stat(icon: string, label: string, value: number) {
   return html`<div class="stat-card">
@@ -40,7 +40,7 @@ export function overviewView() {
         <div class="readme-card y-card">
           <div class="card-hdr">📖 README</div>
           ${() => state.readmeMissing
-            ? html`<div class="y-text-muted">No README found for this repository.</div>`
+            ? emptyBlock('📄', 'This repository has no README.')
             : mdBody(() => state.readmeHtml)}
         </div>
       </div>`;

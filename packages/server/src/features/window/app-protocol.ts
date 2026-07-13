@@ -85,14 +85,21 @@ function wrapAppValue(value: unknown): VerbResult {
   return ok(String(value));
 }
 
-/** Ensure app protocol is ready, waiting if needed. Returns error on timeout. */
+/**
+ * Ensure app protocol is ready, waiting if needed. Returns error on timeout.
+ *
+ * `windowKey` must be the resolved window key (`win.id`), not the raw AI-facing id.
+ * Readiness is tracked per window, and a raw id names one window per *monitor* — the
+ * same app open on two monitors shares a raw id, so a raw key would let one monitor's
+ * registration mark the other's window ready (and vice versa).
+ */
 async function requireAppReady(
   windowState: WindowStateRegistry,
-  windowId: string,
+  windowKey: string,
 ): Promise<VerbResult | null> {
-  const win = windowState.getWindow(windowId);
+  const win = windowState.getWindow(windowKey);
   if (win && !win.appProtocol) {
-    const ready = await actionEmitter.waitForAppReady(windowId, 5000);
+    const ready = await actionEmitter.waitForAppReady(windowKey, 5000);
     if (!ready) return error('App did not register with the App Protocol (timeout).');
   }
   return null;
@@ -108,22 +115,22 @@ export async function handleAppQuery(
   if (!win) return error(`Window "${windowId}" not found.`);
   if (win.content.renderer !== 'iframe') return error(`Window "${windowId}" is not an iframe app.`);
 
+  // Address the window by its resolved key (monitor-scoped), never the raw id the
+  // caller passed: the frontend routes a raw id by whichever monitor the *user* is
+  // looking at, which is not necessarily the monitor of the agent that asked.
+  const key = win.id;
   const stateKey = (payload.stateKey as string) || 'manifest';
 
   // '__console' is a built-in state key answered by the injected app-protocol
   // script (reads the console-capture buffer) — it works even when the app
   // never called app.register(), so don't wait for app-ready.
   if (stateKey !== '__console') {
-    const readyErr = await requireAppReady(windowState, windowId);
+    const readyErr = await requireAppReady(windowState, key);
     if (readyErr) return readyErr;
   }
 
   if (stateKey === 'manifest') {
-    const response = await actionEmitter.emitAppProtocolRequest(
-      windowId,
-      { kind: 'manifest' },
-      5000,
-    );
+    const response = await actionEmitter.emitAppProtocolRequest(key, { kind: 'manifest' }, 5000);
     if (!response) return error('App did not respond to manifest request (timeout).');
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
@@ -132,7 +139,7 @@ export async function handleAppQuery(
   }
 
   const response = await actionEmitter.emitAppProtocolRequest(
-    windowId,
+    key,
     { kind: 'query', stateKey },
     5000,
   );
@@ -154,7 +161,9 @@ export async function handleAppCommand(
 
   if (!payload.command) return error('"command" is required for app_command.');
 
-  const readyErr = await requireAppReady(windowState, windowId);
+  // See handleAppQuery: address the window by its monitor-scoped key, not the raw id.
+  const key = win.id;
+  const readyErr = await requireAppReady(windowState, key);
   if (readyErr) return readyErr;
 
   const request: AppProtocolRequest = {
@@ -163,10 +172,10 @@ export async function handleAppCommand(
     params: payload.params as Record<string, unknown> | undefined,
   };
 
-  const response = await actionEmitter.emitAppProtocolRequest(windowId, request, 5000);
+  const response = await actionEmitter.emitAppProtocolRequest(key, request, 5000);
   if (!response) return error('App did not respond (timeout).');
   if (response.kind !== 'command') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
-  windowState.recordAppCommand(windowId, request);
+  windowState.recordAppCommand(key, request);
   return wrapAppValue(response.result);
 }

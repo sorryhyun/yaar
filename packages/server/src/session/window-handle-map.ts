@@ -12,8 +12,16 @@
 export class WindowHandleMap {
   /** handle → monitorId */
   private handleToMonitor = new Map<string, string>();
-  /** rawWindowId → handle (for O(1) lookup by AI-facing ID) */
-  private rawToHandle = new Map<string, string>();
+  /**
+   * rawWindowId → monitorId → handle (for O(1) lookup by AI-facing ID).
+   *
+   * Nested by monitor because a raw ID is only unique *within* a monitor: window
+   * IDs are derived from the appId (`deriveWindowId`), so the same app open on two
+   * monitors has the same raw ID on both. A flat rawId → handle index would let
+   * whichever monitor registered last own the ID session-wide, and the other
+   * monitor's lookups would silently resolve into its windows.
+   */
+  private rawToHandles = new Map<string, Map<string, string>>();
 
   /**
    * Register a new window and return its handle.
@@ -23,31 +31,50 @@ export class WindowHandleMap {
     const handle = monitorId ? `${monitorId}/${rawWindowId}` : rawWindowId;
     if (monitorId) {
       this.handleToMonitor.set(handle, monitorId);
-      this.rawToHandle.set(rawWindowId, handle);
+      let byMonitor = this.rawToHandles.get(rawWindowId);
+      if (!byMonitor) {
+        byMonitor = new Map();
+        this.rawToHandles.set(rawWindowId, byMonitor);
+      }
+      byMonitor.set(monitorId, handle);
     }
     return handle;
   }
 
   /**
-   * Remove a handle and its index entries.
+   * Remove a handle and its index entries. Only the owning monitor's entry is
+   * dropped — another monitor's window with the same raw ID keeps its mapping.
    */
   remove(handle: string): void {
+    const monitorId = this.handleToMonitor.get(handle);
     this.handleToMonitor.delete(handle);
     const raw = this.extractRawId(handle);
-    if (raw !== handle) {
-      this.rawToHandle.delete(raw);
-    }
+    if (raw === handle) return;
+    const byMonitor = this.rawToHandles.get(raw);
+    if (!byMonitor) return;
+    if (monitorId !== undefined) byMonitor.delete(monitorId);
+    if (byMonitor.size === 0) this.rawToHandles.delete(raw);
   }
 
   /**
    * Resolve a windowId (raw or handle) to its handle.
-   * Returns undefined if not found.
+   *
+   * Pass the caller's `monitorId` whenever it is known: a raw ID names a window
+   * only within one monitor, so an unscoped lookup cannot tell two monitors'
+   * copies of the same app apart. With a monitorId, only that monitor's window
+   * can match — never another's. Without one, an unambiguous raw ID (open on
+   * exactly one monitor) still resolves; an ambiguous one returns undefined
+   * rather than guessing a monitor.
    */
-  resolve(windowId: string): string | undefined {
+  resolve(windowId: string, monitorId?: string): string | undefined {
     // Already a known handle?
     if (this.handleToMonitor.has(windowId)) return windowId;
-    // Raw ID lookup
-    return this.rawToHandle.get(windowId);
+
+    const byMonitor = this.rawToHandles.get(windowId);
+    if (!byMonitor) return undefined;
+    if (monitorId !== undefined) return byMonitor.get(monitorId);
+    if (byMonitor.size === 1) return byMonitor.values().next().value;
+    return undefined;
   }
 
   /**
@@ -76,15 +103,17 @@ export class WindowHandleMap {
   }
 
   /**
-   * Check if a handle (or raw ID) is registered.
+   * Check if a handle (or raw ID) is registered. Scoped to a monitor when one is
+   * given, so a raw ID open only on another monitor does not count as present.
    */
-  has(windowId: string): boolean {
-    return this.handleToMonitor.has(windowId) || this.rawToHandle.has(windowId);
+  has(windowId: string, monitorId?: string): boolean {
+    if (this.handleToMonitor.has(windowId)) return true;
+    return this.resolve(windowId, monitorId) !== undefined;
   }
 
   clear(): void {
     this.handleToMonitor.clear();
-    this.rawToHandle.clear();
+    this.rawToHandles.clear();
   }
 
   /**

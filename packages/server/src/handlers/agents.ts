@@ -190,16 +190,21 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         return ok('Session agent disposed.');
       }
 
-      // App agents outlive the windows that spawned them — they are keyed by appId and
-      // reused, so nothing reclaims one when its last window closes. Deleting frees the
-      // agent slot and drops its context; the next interaction with the app spawns a
-      // fresh one. Addressable by instanceId (what listAgents reports) or by appId.
-      const appAgent = pool.agentPool
+      // App agents outlive the windows that spawned them — they are keyed by
+      // (monitor, app) and reused, so nothing reclaims one when its last window closes
+      // (short of tearing down the monitor). Deleting frees the agent slot and drops its
+      // context; the next interaction with the app spawns a fresh one. Addressable by
+      // instanceId (what listAgents reports) or by appId — the latter matches every
+      // monitor's copy of that app, since an appId alone doesn't name just one agent.
+      const appAgents = pool.agentPool
         .listAgents()
-        .find((a) => a.type === 'app' && (a.id === resolved.id || a.appId === resolved.id));
-      if (appAgent?.appId) {
-        await pool.agentPool.disposeAppAgent(appAgent.appId);
-        return ok(`App agent for "${appAgent.appId}" disposed.`);
+        .filter((a) => a.type === 'app' && (a.id === resolved.id || a.appId === resolved.id));
+      if (appAgents.length > 0) {
+        for (const a of appAgents) {
+          await pool.agentPool.disposeAppAgent(a.monitorId ?? '0', a.appId!);
+        }
+        const names = appAgents.map((a) => `"${a.appId}" (monitor ${a.monitorId})`).join(', ');
+        return ok(`App agent${appAgents.length > 1 ? 's' : ''} disposed: ${names}.`);
       }
 
       return error(

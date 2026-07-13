@@ -18,7 +18,7 @@ import {
   type UserPromptOption,
   type UserPromptInputField,
 } from '@yaar/shared';
-import { getAgentId, getSessionId } from '../agents/agent-context.js';
+import { getAgentId, getMonitorId, getSessionId } from '../agents/agent-context.js';
 import {
   checkPermission,
   savePermission,
@@ -161,6 +161,21 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * The monitor an emitted action belongs to.
+   *
+   * Prefers the AsyncLocalStorage context, which is exact per emitter — it names
+   * the monitor of whoever is running right now. `currentMonitorId` is a single
+   * mutable field set around provider turns, so it is only a fallback (Codex,
+   * which cannot stamp identity onto MCP requests). Reading the field first would
+   * stamp actions emitted outside a turn — an app's iframe calling a verb, say —
+   * with whichever monitor the last agent turn happened to leave behind, which is
+   * how a window opened from monitor 1's dock lands on monitor 0.
+   */
+  private resolveMonitorId(): string | undefined {
+    return getMonitorId() ?? this.currentMonitorId;
+  }
+
+  /**
    * Emit an OS Action to all listeners.
    */
   emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
@@ -168,7 +183,7 @@ class ActionEmitter extends EventEmitter {
       action,
       sessionId,
       agentId: this.resolveAgentId(agentId),
-      monitorId: this.currentMonitorId,
+      monitorId: this.resolveMonitorId(),
     } as ActionEvent);
   }
 
@@ -200,7 +215,7 @@ class ActionEmitter extends EventEmitter {
       requestId,
       sessionId,
       agentId,
-      monitorId: this.currentMonitorId,
+      monitorId: this.resolveMonitorId(),
     } as ActionEvent);
 
     return feedbackPromise;

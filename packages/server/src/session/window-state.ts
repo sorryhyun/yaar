@@ -10,6 +10,7 @@
 
 import type { OSAction, WindowState, AppProtocolRequest } from '@yaar/shared';
 import { applyContentOperation } from '@yaar/shared';
+import { getMonitorId } from '../agents/agent-context.js';
 import { WindowHandleMap } from './window-handle-map.js';
 
 // Re-export WindowState for convenience
@@ -21,7 +22,7 @@ export type { WindowState } from '@yaar/shared';
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
-  private onWindowCloseCallback?: (windowId: string, appId?: string) => void;
+  private onWindowCloseCallback?: (windowId: string, appId?: string, monitorId?: string) => void;
 
   readonly handleMap: WindowHandleMap;
 
@@ -33,21 +34,28 @@ export class WindowStateRegistry {
    * Set a callback to be invoked when a window is closed.
    * Used to invalidate reload cache entries that depend on the closed window.
    */
-  setOnWindowClose(cb: (windowId: string, appId?: string) => void): void {
+  setOnWindowClose(cb: (windowId: string, appId?: string, monitorId?: string) => void): void {
     this.onWindowCloseCallback = cb;
   }
 
   /**
    * Resolve a windowId (raw or handle) to its internal map key.
    * Returns the resolved key and the stored WindowState, or undefined.
+   *
+   * Raw IDs are only unique within a monitor (they are derived from the appId), so
+   * a raw lookup is scoped to the caller's monitor — taken from the ambient agent
+   * context, since an agent may only address windows on the monitor it runs on.
+   * Without that scope an agent on monitor 1 asking for "devtools" could resolve
+   * into monitor 0's copy of the app. Outside an agent turn (HTTP, restore) the
+   * handle map falls back to resolving unambiguous raw IDs.
    */
   private resolve(windowId: string): [string, WindowState] | undefined {
     // 1. Exact match (handle or legacy raw key)
     const exact = this.windows.get(windowId);
     if (exact) return [windowId, exact];
 
-    // 2. Resolve via handle map (raw ID → handle)
-    const handle = this.handleMap.resolve(windowId);
+    // 2. Resolve via handle map (raw ID → handle), scoped to the caller's monitor
+    const handle = this.handleMap.resolve(windowId, getMonitorId());
     if (handle) {
       const state = this.windows.get(handle);
       if (state) return [handle, state];
@@ -93,10 +101,13 @@ export class WindowStateRegistry {
       case 'window.close': {
         const key = this.actionKey(action.windowId, monitorId);
         const appId = this.windows.get(key)?.appId;
+        // Read the owner before remove() drops it — the callback needs it to find
+        // the app agent that was driving this window.
+        const owner = this.handleMap.getMonitorId(key) ?? monitorId;
         this.windows.delete(key);
         this.appCommands.delete(key);
         this.handleMap.remove(key);
-        this.onWindowCloseCallback?.(key, appId);
+        this.onWindowCloseCallback?.(key, appId, owner);
         break;
       }
 
@@ -233,6 +244,16 @@ export class WindowStateRegistry {
   getAppIdForWindow(windowId: string): string | undefined {
     const resolved = this.resolve(windowId);
     return resolved ? resolved[1].appId : undefined;
+  }
+
+  /**
+   * The monitor that owns this window, or undefined for legacy/restored windows
+   * whose handle carries no monitor. App agents are keyed by this — a window's
+   * monitor is what decides which monitor's app agent may drive it.
+   */
+  getMonitorForWindow(windowId: string): string | undefined {
+    const resolved = this.resolve(windowId);
+    return resolved ? this.handleMap.getMonitorId(resolved[0]) : undefined;
   }
 
   isAppProtocolWindow(windowId: string): boolean {

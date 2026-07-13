@@ -20,6 +20,7 @@ import { validateIframeToken } from '../iframe-tokens.js';
 import { subscriptionRegistry } from '../subscriptions.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
+import { compactVerbPayload, shouldLogVerb } from '../../lib/format-verb-log.js';
 import type { SessionId } from '../../session/types.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -311,15 +312,16 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         : uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
   }
 
-  // Log to session logs
-  if (tokenEntry?.sessionId) {
+  // Log to session logs. Data-plane verbs (an app's proxied fetch) are skipped and the
+  // rest are summarized — see lib/format-verb-log.ts.
+  if (tokenEntry?.sessionId && shouldLogVerb(resolvedUri)) {
     const session = getSessionHub().get(tokenEntry.sessionId);
     const logger = session?.getPool()?.getSessionLogger();
     if (logger) {
       const appLabel = tokenEntry.appId ?? 'unknown';
       logger.logToolUse(
         `iframe:${appLabel}`,
-        { verb, uri: resolvedUri, ...(body.payload ?? {}) },
+        { verb, uri: resolvedUri, ...compactVerbPayload(body.payload) },
         undefined,
       );
     }
@@ -329,11 +331,25 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // (e.g. installApp) can resolve the session via getSessionId() for permission dialogs.
   const registry = initRegistry();
   const sessionId = tokenEntry?.sessionId as SessionId | undefined;
+  // The calling iframe's own window pins the monitor it acts on. Without it the
+  // context carries no monitor, and everything downstream that scopes by
+  // `getMonitorId()` — window creation, raw window-ID resolution — falls back to
+  // monitor 0: an app launched from monitor 1's dock would open on monitor 0.
+  const callerWindowId = tokenEntry?.windowId;
+  const monitorId =
+    sessionId && callerWindowId
+      ? getSessionHub().get(sessionId)?.windowState.getMonitorForWindow(callerWindowId)
+      : undefined;
   const dispatch = () => {
     const execute = () => registry.execute(verb, resolvedUri, body.payload);
     return sessionId
       ? runWithAgentContext(
-          { agentId: `iframe:${tokenEntry?.appId ?? 'unknown'}`, sessionId },
+          {
+            agentId: `iframe:${tokenEntry?.appId ?? 'unknown'}`,
+            sessionId,
+            monitorId,
+            windowId: callerWindowId,
+          },
           execute,
         )
       : execute();

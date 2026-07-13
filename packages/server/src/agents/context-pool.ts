@@ -117,8 +117,14 @@ export class ContextPool implements PoolContext {
     this.agentPool = new AgentPool(sessionId, broadcast, (rawId, monitorId) => {
       // Resolve raw window ID to scoped handle via the handle map.
       // If monitorId is provided, register/resolve; otherwise try lookup.
+      //
+      // The lookup must be scoped to the acting monitor before we fall back to
+      // registering. Raw IDs are derived from the appId, so an unscoped resolve
+      // would hand monitor 1's agent the handle of monitor 0's window of the same
+      // app — its window.create would land on monitor 0's window and every message
+      // after it would drive monitor 0's app agent instead of its own.
       if (monitorId) {
-        const existing = windowState.handleMap.resolve(rawId);
+        const existing = windowState.handleMap.resolve(rawId, monitorId);
         return existing ?? windowState.handleMap.register(rawId, monitorId);
       }
       return windowState.handleMap.resolve(rawId) ?? rawId;
@@ -272,7 +278,10 @@ export class ContextPool implements PoolContext {
       this.monitorQueues.delete(monitorId);
     }
 
+    // AgentPool.removeMonitorAgent disposes the monitor's app agents too; drop the
+    // processor's window tracking for them so nothing dangles.
     const removed = await this.agentPool.removeMonitorAgent(monitorId);
+    this.appProcessor.clearMonitor(monitorId);
     if (removed) {
       console.log(`[ContextPool] Removed monitor agent for ${monitorId}`);
     }
@@ -439,19 +448,36 @@ export class ContextPool implements PoolContext {
    */
   findWindowForAgent(agentId: string): string | undefined {
     // App agent -> look up active window via AppTaskProcessor
-    const appId = this.agentPool.findAppIdForAgent(agentId);
-    if (appId) return this.appProcessor.getActiveWindowId(appId);
+    const app = this.agentPool.findAppForAgent(agentId);
+    if (app) return this.appProcessor.getActiveWindowId(app.monitorId, app.appId);
 
     return undefined;
   }
 
-  /** Resolve the most recently active window for an app (used by DirectMessage routing). */
-  getActiveAppWindow(appId: string): string | undefined {
-    return this.appProcessor.getActiveWindowId(appId);
+  /**
+   * Resolve the most recently active window for an app on a monitor (used by
+   * DirectMessage and cross-app control routing). Scoped to the monitor so a
+   * caller on monitor 1 can never reach into monitor 0's copy of the app.
+   */
+  getActiveAppWindow(monitorId: string, appId: string): string | undefined {
+    return this.appProcessor.getActiveWindowId(monitorId, appId);
   }
 
   recordMonitorAction(monitorId: string): void {
     this.monitorProcessor.recordMonitorAction(monitorId);
+  }
+
+  /**
+   * The monitor-scoped key a subscription is indexed under.
+   *
+   * Subscriptions are keyed by window, and callers hand us a mix: an agent's raw
+   * AI-facing id ("ai-chat") from a verb, or the frontend's scoped key ("1/ai-chat")
+   * from a client event. A raw id names one window *per monitor*, so indexing on it
+   * would let monitor 0's subscription match an event emitted by monitor 1's copy of
+   * the same app. Both ends of the channel — subscribe and notify — normalize here.
+   */
+  private windowKey(windowId: string): string {
+    return this.windowState.getWindow(windowId)?.id ?? windowId;
   }
 
   notifyWindowSubscribers(
@@ -460,7 +486,8 @@ export class ContextPool implements PoolContext {
     summary: string,
     sourceAgentKey?: string,
   ): void {
-    this.windowSubscriptionPolicy.notifyChange(windowId, event, summary, sourceAgentKey, (task) => {
+    const key = this.windowKey(windowId);
+    this.windowSubscriptionPolicy.notifyChange(key, event, summary, sourceAgentKey, (task) => {
       this.handleTask(task).catch((err) => {
         console.error('[ContextPool] Error delivering subscription notification:', err);
       });
@@ -480,15 +507,16 @@ export class ContextPool implements PoolContext {
     payload: unknown,
     sourceAgentKey?: string,
   ): void {
-    if (this.isAppEventRateLimited(windowId)) {
+    const key = this.windowKey(windowId);
+    if (this.isAppEventRateLimited(key)) {
       console.warn(
-        `[ContextPool] App event rate limit hit for window "${windowId}" (channel "${channel}") — dropped.`,
+        `[ContextPool] App event rate limit hit for window "${key}" (channel "${channel}") — dropped.`,
       );
       return;
     }
 
     this.windowSubscriptionPolicy.notifyChannel(
-      windowId,
+      key,
       channel,
       payload,
       sourceAgentKey,
@@ -516,15 +544,19 @@ export class ContextPool implements PoolContext {
     return entry.count > APP_EVENT_RATE_LIMIT;
   }
 
-  handleWindowClose(windowId: string, appId?: string): void {
-    // Clean up subscriptions and prune context for this window
-    this.windowSubscriptionPolicy.clearForWindow(windowId);
+  handleWindowClose(windowId: string, appId?: string, monitorId?: string): void {
+    // Clean up subscriptions and prune context for this window. Subscriptions are
+    // indexed by the scoped key (see windowKey), so clear under that — clearing by a
+    // raw id would leave this window's subscriptions live and, worse, could drop the
+    // same-named window on another monitor.
+    const key = this.windowKey(windowId);
+    this.windowSubscriptionPolicy.clearForWindow(key);
     this.contextTape.pruneWindow(windowId);
-    this.appEventRate.delete(windowId);
+    this.appEventRate.delete(key);
 
     // If this window belongs to an app, interrupt the running agent and clear its queue
     if (appId) {
-      this.appProcessor.handleWindowClose(windowId, appId).catch((err) => {
+      this.appProcessor.handleWindowClose(windowId, appId, monitorId).catch((err) => {
         console.error(`[ContextPool] Error interrupting app agent on window close:`, err);
       });
     }
@@ -573,10 +605,12 @@ export class ContextPool implements PoolContext {
   }
 
   hasActiveAgent(windowId: string): boolean {
-    // Check app agents via appId lookup
+    // Check app agents via appId lookup, scoped to the window's own monitor —
+    // the same app running on another monitor is a different agent.
     const appId = this.windowState.getAppIdForWindow(windowId);
     if (appId) {
-      return this.agentPool.hasRolePrefix(`app-${appId}`);
+      const monitorId = this.windowState.getMonitorForWindow(windowId) ?? '0';
+      return this.agentPool.hasRolePrefix(`app-${appId}-m${monitorId}`);
     }
     // Plain windows are handled by the monitor agent, so check for monitor agent activity
     return false;
