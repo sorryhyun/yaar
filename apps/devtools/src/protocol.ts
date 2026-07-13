@@ -124,23 +124,49 @@ export function registerProtocol() {
         handler: () => [...bundledLibs()],
       },
       consoleLogs: {
-        description: 'Console output from preview app',
+        description:
+          'Console output from the preview app, with connection state. `connected: false` means ' +
+          'the buffer could not be read — an empty `logs` then says nothing about whether the ' +
+          'app logged anything.',
         handler: async () => {
           // Pull the live console buffer straight from the preview window over
           // the app protocol. The preview runs as its own registered window
           // (where verb calls work), so its console-capture buffer is the
           // source of truth — the local signal is only a display cache updated
           // by the poll in project.ts.
+          //
+          // Every failure here used to collapse into the same empty array, so "no preview open",
+          // "preview unreachable" and "app logged nothing" were indistinguishable — a reader had
+          // no choice but to guess. Report which one it is.
           const wid = previewWindowId();
-          if (!wid) return [...consoleLogs()];
+          if (!wid) {
+            return {
+              connected: false,
+              reason: 'No preview window is open. Run the preview command first.',
+              logs: [],
+            };
+          }
           try {
             const entries = await invoke(`yaar://windows/${wid}`, {
               action: 'app_query',
               stateKey: '__console',
             });
-            return Array.isArray(entries) ? entries : [...consoleLogs()];
-          } catch {
-            return [...consoleLogs()];
+            if (!Array.isArray(entries)) {
+              return {
+                connected: false,
+                reason: 'Preview window did not return a console buffer.',
+                windowId: wid,
+                logs: [...consoleLogs()],
+              };
+            }
+            return { connected: true, windowId: wid, logs: entries };
+          } catch (err) {
+            return {
+              connected: false,
+              reason: `Preview console unreachable: ${errMsg(err)}`,
+              windowId: wid,
+              logs: [...consoleLogs()],
+            };
           }
         },
       },
@@ -257,17 +283,24 @@ export function registerProtocol() {
         },
       },
       writeFile: defineCommand({
-        description: 'Write content to a file',
+        description: 'Write content to a file. Objects are serialized as pretty-printed JSON.',
         params: {
           type: 'object',
           properties: {
             path: { type: 'string' },
-            content: { type: 'string' },
+            content: {
+              description: 'File body. A string is written verbatim; an object is JSON-serialized.',
+            },
           },
           required: ['path', 'content'],
         },
         handler: async (p) => {
-          await writeFile(String(p.path), String(p.content));
+          // `String(content)` turned an object into the literal "[object Object]" and wrote that
+          // to disk — silent corruption, and passing an object is the natural thing to do for
+          // app.json. Mirrors copyFile/readFileContent, which already guard this way.
+          const content =
+            typeof p.content === 'string' ? p.content : JSON.stringify(p.content, null, 2);
+          await writeFile(String(p.path), content);
         },
       }),
       editFile: defineCommand({
@@ -379,25 +412,62 @@ export function registerProtocol() {
         },
       }),
       compile: defineCommand({
-        description: 'Compile the active project',
-        params: { type: 'object', properties: {} },
-        handler: async () => {
+        description:
+          'Type check and compile the active project. Returns type diagnostics alongside the ' +
+          'build result — no separate typecheck call needed. Slow: pass timeoutMs (e.g. 60000).',
+        params: {
+          type: 'object',
+          properties: {
+            skipTypecheck: {
+              type: 'boolean',
+              description: 'Build without type checking first. Faster, but ships blind.',
+            },
+          },
+        },
+        handler: async (p) => {
+          // Typecheck and compile were always run back-to-back as two round trips, and compiling
+          // does not typecheck — so it was easy to ship code that built but never type checked.
+          // Fold them: check first, build regardless, report both.
+          const skip = p.skipTypecheck === true;
+          if (!skip) await typecheck();
           await compile();
           const status = compileStatus();
           const errors = compileErrors();
+          const diags = skip ? [] : diagnostics();
           return {
             status,
             previewUrl: previewUrl(),
             ...(status === 'error' && errors.length > 0 ? { errors } : {}),
+            ...(diags.length > 0 ? { diagnostics: diags } : {}),
           };
         },
       }),
       typecheck: defineCommand({
-        description: 'Run TypeScript type checker',
+        description: 'Run TypeScript type checker only. `compile` already does this.',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await typecheck();
           return { diagnostics: diagnostics() };
+        },
+      }),
+      protocolLog: defineCommand({
+        description:
+          'Read App Protocol traffic for the preview window — every query/command sent to it ' +
+          'and every event it emitted, in order, with results and timings. Use this to see what ' +
+          'the app actually did, rather than inferring it from source.',
+        params: {
+          type: 'object',
+          properties: {
+            limit: { type: 'number', description: 'Max entries, newest last (default 100).' },
+          },
+        },
+        handler: async (p) => {
+          const wid = previewWindowId();
+          if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+          return await invoke(`yaar://windows/${wid}`, {
+            action: 'protocol_log',
+            ...(typeof p.limit === 'number' ? { limit: p.limit } : {}),
+          });
         },
       }),
       deploy: defineCommand({
@@ -519,15 +589,22 @@ export function registerProtocol() {
             );
             if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
           }
-          const result = await invoke<{ windowId?: string }>('yaar://windows/', {
+          // Address the window by an explicit, namespaced id. Left to the server, the id is
+          // derived by slugging the title — and the title is the project name, so previewing a
+          // clone of `ai-chat` produced the window id `ai-chat`, colliding with the *running*
+          // app. Window registration is last-write-wins, so the preview silently replaced the
+          // real app's window record (and its appId), severing the real app from its agent.
+          const previewId = `devtools-preview-${proj?.id ?? 'scratch'}`;
+          const result = await invoke<{ windowId?: string }>(`yaar://windows/${previewId}`, {
             action: 'create',
-            title: name,
+            title: `${name} (preview)`,
             renderer: 'iframe',
             content: url,
             ...(permissions ? { permissions } : {}),
           });
-          if (result?.windowId) setPreviewWindowId(result.windowId);
-          return { previewUrl: url, ...result };
+          // Trust the id the server actually registered, not the one we asked for.
+          setPreviewWindowId(result?.windowId ?? previewId);
+          return { previewUrl: url, windowId: result?.windowId ?? previewId };
         },
       }),
       viewPreview: defineCommand({
