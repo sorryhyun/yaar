@@ -10,7 +10,8 @@ import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 import { resolveAppDir } from '../../features/apps/roots.js';
 import { parseContentPath, type ParsedContentPath } from '../../lib/yaar-uri-server.js';
-import { validateIframeToken } from '../iframe-tokens.js';
+import { requirePermission, resolvePrincipal, storageUriFor, type Principal } from '../access.js';
+import type { Verb } from '../../handlers/uri-registry.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -83,12 +84,21 @@ function maybeGzip(
 }
 
 export async function handleFileRoutes(req: Request, url: URL): Promise<Response | null> {
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+
   // Render PDF page as image
   // URL format: /api/pdf/<path>/<page> (e.g., /api/pdf/documents/paper.pdf/1)
   const pdfMatch = url.pathname.match(/^\/api\/pdf\/(.+)\/(\d+)$/);
   if (pdfMatch && req.method === 'GET') {
     const pdfPath = decodeURIComponent(pdfMatch[1]);
     const pageNum = parseInt(pdfMatch[2], 10);
+
+    // Rendering a page of a PDF is reading the file. Same gate as reading it.
+    const pdfUri = storageUriFor(principal, pdfPath);
+    if (pdfUri instanceof Response) return pdfUri;
+    const denied = requirePermission(principal, pdfUri, 'read');
+    if (denied) return denied;
 
     const resolved = resolvePath(pdfPath);
     if (!resolved) {
@@ -125,11 +135,25 @@ export async function handleFileRoutes(req: Request, url: URL): Promise<Response
       case 'apps':
         return handleApps(req, parsed);
       case 'storage':
-        return handleStorage(req, url, parsed);
+        return handleStorage(req, url, parsed, principal);
     }
   }
 
   return null;
+}
+
+/** The verb each storage method performs, in the vocabulary the permission model uses. */
+function storageVerb(req: Request, url: URL): Verb | null {
+  switch (req.method) {
+    case 'GET':
+      return url.searchParams.get('list') === 'true' ? 'list' : 'read';
+    case 'POST':
+      return 'invoke'; // write
+    case 'DELETE':
+      return 'delete';
+    default:
+      return null;
+  }
 }
 
 /** Serve app static files (for deployed apps). */
@@ -152,17 +176,24 @@ async function handleStorage(
   req: Request,
   url: URL,
   parsed: Extract<ParsedContentPath, { authority: 'storage' }>,
+  principal: Principal,
 ): Promise<Response | null> {
-  // Resolve apps/self/ → apps/{appId}/ using iframe token
-  let filePath = parsed.path;
-  if (filePath.startsWith('apps/self/') || filePath === 'apps/self') {
-    const token = req.headers.get('X-Iframe-Token');
-    const entry = token ? validateIframeToken(token) : null;
-    if (!entry?.appId) return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
-    filePath = filePath.replace('apps/self', `apps/${entry.appId}`);
-    // Block path traversal after self resolution
-    if (filePath.split('/').includes('..')) return errorResponse('Invalid path', 403);
-  }
+  const verb = storageVerb(req, url);
+  if (!verb) return null;
+
+  // Name the resource in the permission model's own vocabulary, then ask. This also
+  // resolves `apps/self/` → `apps/{appId}/` and rejects traversal, so `filePath`
+  // below is the real path and the URI is the one the app holds a permission for.
+  const uri = storageUriFor(principal, parsed.path);
+  if (uri instanceof Response) return uri;
+  const denied = requirePermission(principal, uri, verb);
+  if (denied) return denied;
+
+  const filePath =
+    principal.kind === 'app' && principal.appId
+      ? parsed.path.replace(/^apps\/self(?=\/|$)/, `apps/${principal.appId}`)
+      : parsed.path;
+
   const resolved = resolvePath(filePath);
   if (!resolved) return errorResponse('Access denied', 403);
 

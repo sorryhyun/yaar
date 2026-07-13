@@ -18,7 +18,7 @@ import { stat } from 'fs/promises';
 import { MAX_UPLOAD_SIZE, PROJECT_ROOT } from '../../config.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
-import { validateIframeToken } from '../iframe-tokens.js';
+import { requireBundle, resolvePrincipal } from '../access.js';
 import { resolveAppSource } from '../../features/apps/roots.js';
 import type { EndpointMeta } from '../utils.js';
 
@@ -135,13 +135,18 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   const action = url.pathname.slice('/api/dev/'.length);
   if (!isDevAction(action)) return null;
 
-  // Auth
-  const token = req.headers.get('X-Iframe-Token');
-  const tokenEntry = token ? validateIframeToken(token) : null;
-  if (!tokenEntry?.appId) {
+  // Auth. `yaar-dev` opens compile/typecheck/deploy and per-app git history — the
+  // compiler already refuses to bundle that SDK unless app.json declares it, but the
+  // compiler only sees the app's *source*. A hand-written fetch() never went near it,
+  // so the door checks the declaration itself.
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+  if (principal.kind !== 'app' || !principal.appId) {
     return errorResponse('Invalid or missing iframe token', 403);
   }
-  const callerAppId = tokenEntry.appId;
+  const bundleDenied = requireBundle(principal, 'yaar-dev');
+  if (bundleDenied) return bundleDenied;
+  const callerAppId = principal.appId;
 
   // Body
   let body: Record<string, unknown>;
@@ -197,7 +202,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   const path = body.path as string;
   if (!path) return errorResponse('"path" is required', 400);
 
-  const absolutePath = resolveAppPath(tokenEntry.appId, path);
+  const absolutePath = resolveAppPath(callerAppId, path);
   if (!absolutePath) return errorResponse('Invalid path', 400);
 
   try {
@@ -230,7 +235,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
       }
       return jsonResponse({
         success: true,
-        previewUrl: `/api/storage/apps/${tokenEntry.appId}/${path}/dist/index.html`,
+        previewUrl: `/api/storage/apps/${callerAppId}/${path}/dist/index.html`,
       });
     }
 

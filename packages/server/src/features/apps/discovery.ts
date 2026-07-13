@@ -8,7 +8,7 @@ import { hasConfig } from './config.js';
 import { APP_ROOTS, resolveAppDir, resolveAppSource, type AppSource } from './roots.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';
-import type { PermissionEntry } from '../../http/routes/verb.js';
+import type { PermissionEntry } from '../../http/access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 
 /** Supported image extensions for app icons */
@@ -310,6 +310,7 @@ export async function getAppMeta(appId: string): Promise<{
   messaging?: 'all';
   controls?: ControlEntry[];
   systemApp?: boolean;
+  bundles?: string[];
 } | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
@@ -328,6 +329,7 @@ export async function getAppMeta(appId: string): Promise<{
       messaging?: 'all';
       controls?: ControlEntry[];
       systemApp?: boolean;
+      bundles?: string[];
     } = {};
     if (meta.messaging === 'all') result.messaging = 'all';
     // Only bundled apps may be `system` (see readAppInfo) — an installed app
@@ -346,6 +348,12 @@ export async function getAppMeta(appId: string): Promise<{
     if (typeof meta.defaultWidth === 'number') result.defaultWidth = meta.defaultWidth;
     if (typeof meta.defaultHeight === 'number') result.defaultHeight = meta.defaultHeight;
     if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
+    // Gated SDKs — carried onto the iframe token so the HTTP doors those SDKs open
+    // can check the declaration at runtime, not just at compile time (see access.ts).
+    if (Array.isArray(meta.bundles)) {
+      const bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
+      if (bundles.length > 0) result.bundles = bundles;
+    }
     // Check for dist/protocol.json to determine appProtocol support
     try {
       await Bun.file(join(appDir, 'dist', 'protocol.json')).text();

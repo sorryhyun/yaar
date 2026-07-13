@@ -29,6 +29,20 @@
 // that allocator. Both flavors load their artifacts from /api/ml-runtime/.
 import * as ort from 'onnxruntime-web/webgpu';
 
+/**
+ * The app's iframe token, for the weight routes.
+ *
+ * `/api/ml-weights*` proxies an arbitrary URL and streams it to disk, so it is gated
+ * on the app having declared `"bundles": ["yaar-ml"]` — the same declaration that let
+ * this SDK be bundled in the first place. The token is what carries that declaration
+ * to the server. `/api/ml-runtime/` needs none: ORT loads those artifacts itself and
+ * they are inert.
+ */
+function mlHeaders(): Record<string, string> {
+  const token = (window as unknown as { __YAAR_TOKEN__?: string }).__YAAR_TOKEN__;
+  return token ? { 'X-Iframe-Token': token } : {};
+}
+
 // ── Runtime configuration (runs once on import) ──────────────────────────────
 
 // ORT loads its `.wasm` binaries at runtime from this same-origin static route
@@ -282,7 +296,7 @@ export async function fetchWeights(
   }
 
   const proxied = '/api/ml-weights?url=' + encodeURIComponent(url);
-  const res = await fetch(proxied, { signal: opts.signal });
+  const res = await fetch(proxied, { signal: opts.signal, headers: mlHeaders() });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`Failed to download weights (${res.status}): ${detail || res.statusText}`);

@@ -166,18 +166,32 @@ export function createFetchHandler() {
     }
 
     // Phase B: Iframe-scoped token check — catches fetch() calls from within iframes.
-    // If X-Iframe-Token is present and valid, restrict to public routes only.
+    // A route not on the iframe allowlist is refused outright; the routes that *are*
+    // on it then run the permission check in http/access.ts. This is the coarse gate,
+    // not the only one.
     const iframeToken = req.headers.get('x-iframe-token');
     if (iframeToken) {
       const tokenEntry = validateIframeToken(iframeToken);
-      if (tokenEntry && !isPublicRoute(req.method, url.pathname)) {
+
+      // An invalid or expired token used to fall through here and be handled as a
+      // *host* request — so an app whose token had merely aged out silently gained
+      // full access instead of losing it. Presenting a token is a claim of identity;
+      // a claim that doesn't check out is refused, not promoted.
+      if (!tokenEntry) {
+        return withCors(
+          Response.json({ error: 'Invalid or expired iframe token' }, { status: 403 }),
+          corsHeaders,
+        );
+      }
+
+      if (!isPublicRoute(req.method, url.pathname)) {
         return withCors(
           Response.json({ error: 'Route not available to iframe apps' }, { status: 403 }),
           corsHeaders,
         );
       }
       // Per-app route scoping: block cross-app static file access
-      if (tokenEntry?.appId && url.pathname.startsWith('/api/apps/')) {
+      if (tokenEntry.appId && url.pathname.startsWith('/api/apps/')) {
         const appsMatch = url.pathname.match(/^\/api\/apps\/([^/]+)\//);
         if (appsMatch && appsMatch[1] !== tokenEntry.appId) {
           return withCors(
@@ -186,7 +200,6 @@ export function createFetchHandler() {
           );
         }
       }
-      // Invalid/expired token — treat as host request (don't block)
     }
 
     // MCP endpoints for tool calls (/mcp/system, /mcp/window, /mcp/apps, /mcp/basic, ...)

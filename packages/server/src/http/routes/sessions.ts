@@ -18,37 +18,26 @@ import {
 } from '../../logging/index.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { requireHost, requirePermission, resolvePrincipal } from '../access.js';
 
-export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
-  {
-    method: 'GET',
-    path: '/api/sessions',
-    response: '`{ sessions: SessionInfo[] }`',
-    description: 'List all saved sessions',
-  },
-  {
-    method: 'GET',
-    path: '/api/sessions/:id/transcript',
-    response: '`{ transcript: string }`',
-    description: 'Get session transcript',
-  },
-  {
-    method: 'GET',
-    path: '/api/sessions/:id/messages',
-    response: '`{ messages: SessionMessage[] }`',
-    description: 'Get session messages for replay',
-  },
-  {
-    method: 'POST',
-    path: '/api/sessions/:id/restore',
-    response: '`{ actions: OSAction[], contextMessages: Message[] }`',
-    description: 'Restore session with window actions and context',
-  },
-];
+/**
+ * Empty on purpose — a session transcript is the user's entire conversation with the
+ * AI, for *every* session, and this was public. An app that needs history declares
+ * `yaar://history/` in app.json and reads it through POST /api/verb, which is the
+ * same data behind the same check.
+ */
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [];
 
 export async function handleSessionRoutes(req: Request, url: URL): Promise<Response | null> {
+  if (!url.pathname.startsWith('/api/sessions')) return null;
+
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+
   // List all sessions
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
+    const denied = requirePermission(principal, 'yaar://history/', 'list');
+    if (denied) return denied;
     try {
       const sessions = await listSessions();
       return jsonResponse({ sessions });
@@ -61,6 +50,8 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
   const transcriptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/transcript$/);
   if (transcriptMatch && req.method === 'GET') {
     const sessionId = transcriptMatch[1];
+    const denied = requirePermission(principal, `yaar://history/${sessionId}/transcript`, 'read');
+    if (denied) return denied;
     try {
       const transcript = await readSessionTranscript(sessionId);
       if (transcript === null) {
@@ -76,6 +67,8 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
   const messagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
   if (messagesMatch && req.method === 'GET') {
     const sessionId = messagesMatch[1];
+    const denied = requirePermission(principal, `yaar://history/${sessionId}/messages`, 'read');
+    if (denied) return denied;
     try {
       const messagesJsonl = await readSessionMessages(sessionId);
       if (messagesJsonl === null) {
@@ -92,6 +85,11 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
   const restoreMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/restore$/);
   if (restoreMatch && req.method === 'POST') {
     const sessionId = restoreMatch[1];
+    // Host only. Restoring rebuilds the desktop *and mints fresh iframe tokens* for
+    // every window it brings back (refreshIframeTokens below) — it is the desktop
+    // reconstituting itself, not a resource an app can hold a permission for.
+    const denied = requireHost(principal);
+    if (denied) return denied;
     try {
       let policy: ContextRestorePolicy | undefined;
       const body = await req.text();

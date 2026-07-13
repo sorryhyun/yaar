@@ -20,6 +20,7 @@ import { registerReloadTools } from './system/reload.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
+import { resolveAgentToken } from './agent-tokens.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
 import { registerAppAgentTools } from './app-agent/index.js';
 import { registerMessagingTools, MESSAGING_TOOL_NAMES } from './messaging/index.js';
@@ -166,12 +167,21 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   }
 
   // Restore agent context so tools can resolve the active session/window.
-  // Claude sets X-Agent-Id per MCP request; Codex's app-server cannot, so we
-  // fall back to the agent the active Codex turn stamped on the emitter (the
-  // same fallback used for outbound action routing). Without this, app-agent
-  // tools (app:command/query) can't resolve their window → "no active window
-  // context".
-  const agentId = req.headers.get('x-agent-id') ?? actionEmitter.getCurrentAgentId() ?? 'unknown';
+  //
+  // The caller proves which agent it is by presenting the token minted for that agent
+  // (see mcp/agent-tokens.ts). It used to *assert* it, in an `x-agent-id` header that
+  // anyone behind the shared bearer token could set to any value they liked — which
+  // made the whole role-based access tier, `session-principal` included, advisory.
+  //
+  // Falling back to the emitter's current agent is safe: that value is set server-side
+  // by the running turn, not by the request. It covers a provider that hasn't attached
+  // a token yet, and is the same fallback used for outbound action routing.
+  const presented = req.headers.get('x-agent-token');
+  if (presented && !resolveAgentToken(presented)) {
+    return Response.json({ error: 'Unknown agent token' }, { status: 403 });
+  }
+  const agentId =
+    (presented && resolveAgentToken(presented)) ?? actionEmitter.getCurrentAgentId() ?? 'unknown';
   const hub = getSessionHub();
   const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
   const monitorId = hub.findMonitorForAgent(agentId);

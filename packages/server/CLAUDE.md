@@ -28,7 +28,8 @@ src/
 ├── config.ts             # Constants, paths, MIME types, PORT, monitor budget limits
 ├── lifecycle.ts          # initializeSubsystems(), printBanner(), shutdown()
 ├── http/                 # HTTP server: createFetchHandler() (CORS, auth, MCP dispatch)
-│   ├── auth.ts           # checkHttpAuth(), generateRemoteToken()
+│   ├── access.ts         # THE ACCESS CHOKEPOINT — resolvePrincipal(), requirePermission(), requireHost(), requireBundle()
+│   ├── auth.ts           # checkHttpAuth(), generateRemoteToken(), isStaticAsset()
 │   ├── iframe-tokens.ts  # generateIframeToken(), validateIframeToken()
 │   ├── subscriptions.ts  # subscriptionRegistry — reactive verb URI subscriptions
 │   └── routes/           # api.ts (REST), verb.ts (iframe verb proxy), files.ts, browse.ts, proxy.ts, static.ts
@@ -171,3 +172,27 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 ## REST API
 
 Routes in `http/routes/`. Pattern: `GET /health`, `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.
+
+### The access chokepoint (`http/access.ts`)
+
+**A route never invents its own permission check.** It resolves the caller to a `Principal` and names the `yaar://` URI + verb it is about to perform:
+
+```ts
+const principal = resolvePrincipal(req, url);        // host | app  (or a 403 Response)
+if (principal instanceof Response) return principal;
+const denied = requirePermission(principal, 'yaar://config/domains', 'invoke');
+if (denied) return denied;
+```
+
+This is the same check `POST /api/verb` runs, shared rather than duplicated — the REST routes used to reach storage, config, and session logs with no check at all.
+
+- **`host`** — the desktop (no iframe token). Unconfined; in `REMOTE=1` it has already proven the remote token in `auth.ts`.
+- **`app`** — an iframe token. Confined to its app.json `permissions`, plus the auto-granted `yaar://apps/self/storage/`.
+- `requireHost()` — routes no app can hold a permission for (`/api/iframe-token`, `/api/pick-directory`, `/api/remote-info`, `/api/agents/stats`, session restore).
+- `requireBundle()` — gated SDK doors (`/api/dev/*` → `yaar-dev`; `/api/browser`, `/api/bridge` → `yaar-web`; `/api/ml-weights*` → `yaar-ml`). The compiler's `bundles` gate only sees an app's *source*; a hand-written `fetch()` never went near it.
+- `storageUriFor()` — maps an HTTP storage path to the URI that names the same file. `/api/storage/apps/{id}/x` **is** `yaar://apps/{id}/storage/x`; only that spelling is what an app holds a permission for. `self` is resolved on both sides of the match (app.json says `apps/self`, a URI from a path says `apps/notes`).
+- Tokens for subresources that cannot set a header (`<img src>`, `EventSource`) ride as `?__yaar_token=`.
+
+**Known gap (F-23):** app iframes are same-origin and unsandboxed, so a *hostile* app can omit its token and be resolved as `host`. The gate binds network callers, cross-session reads, and well-behaved apps; closing it against malicious app code needs an origin boundary, not another header. See `plan.md`.
+
+**MCP principal:** each agent gets a token minted by `mcp/agent-tokens.ts` and bound to its id server-side; providers send it as `X-Agent-Token`. The shared bearer token (`getMcpToken()`) is transport auth only and says nothing about *which* agent is calling. There is deliberately no `x-agent-id` header — an agent that can name a principal can become it.

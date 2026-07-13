@@ -16,7 +16,7 @@ import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError } from '../../handlers/utils.js';
 import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
-import { validateIframeToken } from '../iframe-tokens.js';
+import { requirePermission, resolvePrincipal, type Principal } from '../access.js';
 import { subscriptionRegistry } from '../subscriptions.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
@@ -39,33 +39,6 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
       'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId? }`.',
   },
 ];
-
-/**
- * A permission entry is either:
- * - a URI prefix string (allows all verbs), or
- * - an object with `uri` and optional `verbs` array (restricts to listed verbs).
- */
-export type PermissionEntry = string | { uri: string; verbs?: Verb[] };
-
-/** No verb access by default — apps must declare permissions in app.json. */
-const NO_PERMISSIONS: PermissionEntry[] = [];
-
-/** Check if a single permission entry matches the URI. */
-function uriMatches(uri: string, pattern: string): boolean {
-  return (
-    uri === pattern || (pattern.endsWith('/') && (uri.startsWith(pattern) || uri + '/' === pattern))
-  );
-}
-
-/** Check if a URI + verb is allowed by the given permission entries. */
-function isUriAllowed(uri: string, verb: Verb, entries: PermissionEntry[]): boolean {
-  return entries.some((entry) => {
-    if (typeof entry === 'string') {
-      return uriMatches(uri, entry); // string entry → all verbs allowed
-    }
-    return uriMatches(uri, entry.uri) && (!entry.verbs || entry.verbs.includes(verb));
-  });
-}
 
 const VALID_VERBS: Verb[] = ['describe', 'read', 'list', 'invoke', 'delete'];
 
@@ -193,9 +166,9 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       return errorResponse('Invalid JSON body', 400);
     }
 
-    const token = req.headers.get('X-Iframe-Token');
-    const tokenEntry = token ? validateIframeToken(token) : null;
-    if (!tokenEntry) {
+    const principal = resolvePrincipal(req, url);
+    if (principal instanceof Response) return principal;
+    if (principal.kind !== 'app') {
       return errorResponse('Invalid or missing iframe token', 403);
     }
 
@@ -212,35 +185,28 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         return errorResponse('Missing or invalid "uri" field', 400);
       }
 
-      // Same session-namespace gate as the main verb endpoint — a subscription
-      // that only fires change pings is still a subscription to session state.
-      const isSessionUri = body.uri === 'yaar://session' || body.uri.startsWith('yaar://session/');
-      if (isSessionUri && !tokenEntry.systemApp) {
-        return errorResponse('yaar://session/* is restricted to the session agent', 403);
-      }
-
-      const effectivePermissions = tokenEntry.permissions ?? NO_PERMISSIONS;
-      if (!isUriAllowed(body.uri, 'read', effectivePermissions)) {
-        return errorResponse('URI not accessible to iframe apps', 403);
-      }
+      // A subscription that only fires change pings is still a subscription to the
+      // resource's state, so it goes through the same gate as reading it.
+      const denied = requirePermission(principal, body.uri, 'read');
+      if (denied) return denied;
 
       // Resolve `self` → real appId so notifyChange() (which fires with real
       // appId URIs) reaches subscriptions made from inside the app's iframe.
       let subscribeUri = body.uri;
       if (body.uri === 'yaar://apps/self' || body.uri.startsWith('yaar://apps/self/')) {
-        if (!tokenEntry.appId) {
+        if (!principal.appId) {
           return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
         }
         subscribeUri =
           body.uri === 'yaar://apps/self'
-            ? `yaar://apps/${tokenEntry.appId}`
-            : body.uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
+            ? `yaar://apps/${principal.appId}`
+            : body.uri.replace('yaar://apps/self/', `yaar://apps/${principal.appId}/`);
       }
 
       const subscriptionId = subscriptionRegistry.subscribe(
-        token!,
-        tokenEntry.windowId,
-        tokenEntry.sessionId,
+        principal.token,
+        principal.windowId,
+        principal.sessionId,
         subscribeUri,
       );
       return jsonResponse({ subscriptionId });
@@ -277,28 +243,21 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('Missing or invalid "uri" field', 400);
   }
 
-  // Validate iframe token (needed for both permission check and `self` resolution)
-  const token = req.headers.get('X-Iframe-Token');
-  const tokenEntry = token ? validateIframeToken(token) : null;
-
-  // Non-self-grant: yaar://session/* is the session principal's private namespace.
-  // A marketplace app cannot self-grant it by declaring it in app.json — the only
-  // apps that get through are bundled `kind: "system"` ones (Process Explorer et al),
-  // which ship with the repo and still need the URI in their permissions list.
-  // See docs/session_agent_browser_design.md §4b.
-  if (uri === 'yaar://session' || uri.startsWith('yaar://session/')) {
-    if (!tokenEntry?.systemApp) {
-      return errorResponse('yaar://session/* is restricted to the session agent', 403);
-    }
+  // Resolve the caller. This endpoint is the *app* door — the desktop drives the
+  // server over the WebSocket, not through here — so a caller presenting no iframe
+  // token is not the host asking a favour, it is an app with nothing declared. It
+  // gets nothing but `describe`, which is metadata-only.
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+  if (principal.kind !== 'app' && verb !== 'describe') {
+    return errorResponse('Invalid or missing iframe token', 403);
   }
 
-  // Compute effective permissions from app.json (no access if undeclared)
-  const effectivePermissions = tokenEntry?.permissions ?? NO_PERMISSIONS;
+  const denied = requirePermission(principal, uri, verb);
+  if (denied) return denied;
 
-  // Allowlist check — `describe` is metadata-only, so it bypasses permission checks
-  if (verb !== 'describe' && !isUriAllowed(uri, verb, effectivePermissions)) {
-    return errorResponse('URI not accessible to iframe apps', 403);
-  }
+  const tokenEntry: Extract<Principal, { kind: 'app' }> | null =
+    principal.kind === 'app' ? principal : null;
 
   // Resolve `self` → real appId from iframe token
   let resolvedUri = uri;

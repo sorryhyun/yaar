@@ -6,7 +6,7 @@
  * them to PUBLIC_ENDPOINTS only.
  */
 
-import type { PermissionEntry } from './routes/verb.js';
+import type { PermissionEntry } from './access.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -27,8 +27,17 @@ interface TokenEntry {
    */
   monitorId?: string;
   permissions?: PermissionEntry[];
-  /** Bundled `kind: "system"` app — may reach yaar://session/* (see routes/verb.ts). */
+  /** Bundled `kind: "system"` app — may reach yaar://session/* (see http/access.ts). */
   systemApp?: boolean;
+  /**
+   * Gated SDKs the app declared in app.json `bundles` (yaar-dev / yaar-web / yaar-ml).
+   *
+   * The compiler refuses to bundle those SDKs without the declaration, but that only
+   * constrains the app's *source*. The HTTP doors they open (`/api/dev/*`,
+   * `/api/browser`, `/api/bridge`, `/api/ml-*`) are reachable by any `fetch()`, so
+   * they check this list themselves — see requireBundle() in access.ts.
+   */
+  bundles?: string[];
   createdAt: number;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -42,6 +51,8 @@ export interface IframeTokenOptions {
   /** Monitor the window lives on. See TokenEntry.monitorId. */
   monitorId?: string;
   systemApp?: boolean;
+  /** Gated SDKs from app.json `bundles`. See TokenEntry.bundles. */
+  bundles?: string[];
 }
 
 /**
@@ -51,7 +62,7 @@ export interface IframeTokenOptions {
 export function generateIframeToken(
   windowId: string,
   sessionId: string,
-  { appId, permissions, monitorId, systemApp }: IframeTokenOptions = {},
+  { appId, permissions, monitorId, systemApp, bundles }: IframeTokenOptions = {},
 ): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
@@ -66,6 +77,7 @@ export function generateIframeToken(
     monitorId,
     permissions,
     systemApp,
+    bundles,
     createdAt: Date.now(),
     timer,
   });
@@ -97,11 +109,15 @@ export async function generateAppIframeToken(
     }
   }
 
+  // systemApp and bundles come from the app's own manifest, never from the caller —
+  // they are the app's declared identity, not a property of the request that mints
+  // the token.
   return generateIframeToken(windowId, sessionId, {
     appId,
     permissions,
     monitorId,
     systemApp: appMeta?.systemApp,
+    bundles: appMeta?.bundles,
   });
 }
 

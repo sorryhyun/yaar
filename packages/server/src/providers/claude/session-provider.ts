@@ -9,7 +9,7 @@ import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/cla
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
-import { getToolNames, getMcpToken, getActiveServers } from '../../mcp/index.js';
+import { getToolNames, getMcpToken, getActiveServers, getAgentToken } from '../../mcp/index.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath, getPort } from '../../config.js';
 import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator.js';
@@ -118,11 +118,15 @@ export class ClaudeSessionProvider extends BaseTransport {
     agentId?: string,
     allowedTools?: string[],
   ): SDKOptions {
+    // Authorization is transport auth (this process is one YAAR spawned). X-Agent-Token
+    // is the principal: a credential minted for this agent alone, which the server maps
+    // back to its id. The agent id itself is never sent — asserting it in a header is
+    // what let any agent claim to be the session agent.
     const mcpHeaders: Record<string, string> = {
       Authorization: `Bearer ${getMcpToken()}`,
     };
     if (agentId) {
-      mcpHeaders['X-Agent-Id'] = agentId;
+      mcpHeaders['X-Agent-Token'] = getAgentToken(agentId);
     }
 
     // Only enable builtin tools if allowedTools includes them (or is unfiltered)

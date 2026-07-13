@@ -12,6 +12,7 @@ import { readSettings } from '../../storage/settings.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
+import { requireHost, resolvePrincipal } from '../access.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -57,6 +58,23 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     }
   }
 
+  // ── Host-only routes ──
+  // None of these is a resource an app could hold a permission for: a native folder
+  // dialog on the user's machine, the remote access token itself, process-wide agent
+  // stats, and the iframe-token mint. They belong to the desktop.
+  const HOST_ONLY = [
+    '/api/pick-directory',
+    '/api/remote-info',
+    '/api/agents/stats',
+    '/api/iframe-token',
+  ];
+  if (HOST_ONLY.includes(url.pathname)) {
+    const principal = resolvePrincipal(req, url);
+    if (principal instanceof Response) return principal;
+    const denied = requireHost(principal);
+    if (denied) return denied;
+  }
+
   // Pick directory (native folder dialog)
   if (url.pathname === '/api/pick-directory' && req.method === 'POST') {
     try {
@@ -90,7 +108,12 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     });
   }
 
-  // Generate an iframe token for client-side window creation (e.g. desktop icon click)
+  // Generate an iframe token for client-side window creation (e.g. desktop icon click).
+  //
+  // Host-only (see HOST_ONLY above), because the caller names the `appId` and gets back
+  // a token carrying *that app's* permissions and its systemApp flag. Reachable by apps,
+  // it is a privilege-escalation oracle: any app mints itself a bundled system app's
+  // token and walks into yaar://session/*.
   if (url.pathname === '/api/iframe-token' && req.method === 'POST') {
     try {
       const body = await req.json();

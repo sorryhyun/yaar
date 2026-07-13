@@ -14,6 +14,9 @@ export {
   formatToolDisplay,
 } from './server.js';
 
+// Per-agent MCP credentials
+export { getAgentToken, resolveAgentToken, revokeAgentToken } from './agent-tokens.js';
+
 // Domain tool registrations
 export { SYSTEM_TOOL_NAMES } from './system/index.js';
 

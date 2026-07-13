@@ -13,7 +13,7 @@
 import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
-import { validateIframeToken } from '../iframe-tokens.js';
+import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runBridgeAction } from '../../features/browser/bridge-actions.js';
@@ -28,17 +28,24 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   },
 ];
 
-function requireAuth(req: Request): ReturnType<typeof validateIframeToken> | Response {
-  const token = req.headers.get('X-Iframe-Token');
-  const entry = token ? validateIframeToken(token) : null;
-  if (!entry) return errorResponse('Invalid or missing iframe token', 403);
-  return entry;
+/**
+ * The bridge observes and manages the user's *real* browser tabs through the
+ * companion extension. It was gated on "holds some valid iframe token" — any app,
+ * declared or not. It is `yaar-web` surface, so it is held to the same declaration.
+ */
+function requireAuth(req: Request, url: URL): Principal | Response {
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
+  const denied = requireBundle(principal, 'yaar-web');
+  if (denied) return denied;
+  return principal;
 }
 
 export async function handleBridgeRoutes(req: Request, url: URL): Promise<Response | null> {
   if (url.pathname !== '/api/bridge' || req.method !== 'POST') return null;
 
-  const auth = requireAuth(req);
+  const auth = requireAuth(req, url);
   if (auth instanceof Response) return auth;
 
   let body: Record<string, unknown>;

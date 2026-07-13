@@ -17,7 +17,7 @@ import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { readSettings } from '../../storage/settings.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
-import type { PermissionEntry } from '../../http/routes/verb.js';
+import type { PermissionEntry } from '../../http/access.js';
 
 /**
  * Broadcast a desktop action through the session-scoped 'desktop-shortcut' channel

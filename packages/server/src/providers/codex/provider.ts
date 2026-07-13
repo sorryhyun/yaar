@@ -19,7 +19,7 @@ import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
 import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getActiveServers } from '../../mcp/index.js';
+import { getActiveServers, getAgentToken } from '../../mcp/index.js';
 import { getPort } from '../../config.js';
 import type {
   ThreadStartParams,
@@ -137,8 +137,8 @@ export class CodexProvider extends BaseTransport {
       }
 
       // Stamp monitorId and agentId so actions emitted during this turn carry the
-      // correct origin. Codex's app-server cannot send X-Agent-Id headers on MCP
-      // requests, so we set the fallback on the emitter instead.
+      // correct origin, and so an MCP request that arrives without a per-agent token
+      // still resolves to the right agent (see handleMcpRequest's fallback).
       if (options.monitorId) {
         actionEmitter.setCurrentMonitor(options.monitorId);
       }
@@ -384,10 +384,16 @@ export class CodexProvider extends BaseTransport {
    * Returns true if a new thread was created (caller should yield sessionId).
    */
   /**
-   * Build a per-thread `mcp_servers` override that pins the caller's `agentId`
-   * onto every YAAR MCP server as an `x-agent-id` HTTP header. The shared MCP
-   * server reads that header (mcp/server.ts) to resolve the calling agent's
-   * session/monitor/window/role context.
+   * Build a per-thread `mcp_servers` override that pins the caller's identity onto
+   * every YAAR MCP server as an `x-agent-token` HTTP header — a credential minted for
+   * this agent alone, which the server maps back to its id (mcp/agent-tokens.ts) to
+   * resolve session/monitor/window/role context.
+   *
+   * This used to send the agent *id* itself, which the server took at face value. All
+   * Codex agents share one app-server process and one bearer token — which lives in
+   * that process's environment as YAAR_MCP_TOKEN — so a model with shell access could
+   * read the token, set the header to the session agent's id, and be the session
+   * agent. A token it cannot mint or guess closes that.
    *
    * Why this is required for Codex: all agents share one app-server process and
    * one HTTP MCP server, so a tool call arriving over HTTP carries no inherent
@@ -417,7 +423,7 @@ export class CodexProvider extends BaseTransport {
       servers[ns] = {
         url: `http://127.0.0.1:${getPort()}/mcp/${ns}`,
         bearer_token_env_var: 'YAAR_MCP_TOKEN',
-        http_headers: { 'x-agent-id': agentId },
+        http_headers: { 'x-agent-token': getAgentToken(agentId) },
       };
     }
     // agentId is stable for a given provider instance, so this signature is

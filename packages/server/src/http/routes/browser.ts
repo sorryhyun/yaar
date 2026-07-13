@@ -11,7 +11,7 @@
 import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
-import { validateIframeToken } from '../iframe-tokens.js';
+import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
 import { getHeadlessBrowser } from '../../lib/browser/index.js';
 import {
   enforceBrowserGuards,
@@ -91,11 +91,24 @@ function verbResultToResponse(result: {
   }
 }
 
-function requireAuth(req: Request): ReturnType<typeof validateIframeToken> | Response {
-  const token = req.headers.get('X-Iframe-Token');
-  const entry = token ? validateIframeToken(token) : null;
-  if (!entry) return errorResponse('Invalid or missing iframe token', 403);
-  return entry;
+/**
+ * Every browser route is behind the `yaar-web` bundle declaration.
+ *
+ * It used to be "holds *some* valid iframe token" — any app at all, whether or not it
+ * declared browser access, could drive the headless browser. And the screenshot and
+ * SSE routes below had no check whatsoever, so an app could watch the frames of a
+ * browser session it never opened.
+ *
+ * Screenshots load as `<img src>` and events over `EventSource`; neither can set a
+ * header, so those two carry the token as `?__yaar_token=` (see resolvePrincipal).
+ */
+function requireWeb(req: Request, url: URL): Principal | Response {
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
+  const denied = requireBundle(principal, 'yaar-web');
+  if (denied) return denied;
+  return principal;
 }
 
 export async function handleBrowserRoutes(req: Request, url: URL): Promise<Response | null> {
@@ -107,7 +120,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
 
   // GET /api/browser/sessions — list all open sessions
   if (url.pathname === '/api/browser/sessions' && req.method === 'GET') {
-    const auth = requireAuth(req);
+    const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
 
     const browsers = pool.getAllSessions();
@@ -126,7 +139,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     const id = url.pathname.slice('/api/browser/'.length);
     if (!id) return null;
 
-    const auth = requireAuth(req);
+    const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
 
     const session = pool.getSession(id);
@@ -143,6 +156,8 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
   const screenshotMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/screenshot$/);
   if (screenshotMatch && req.method === 'GET') {
     const browserId = decodeURIComponent(screenshotMatch[1]);
+    const auth = requireWeb(req, url);
+    if (auth instanceof Response) return auth;
     try {
       const session = pool.getSession(browserId);
       if (!session) return errorResponse('Browser not found', 404);
@@ -165,6 +180,8 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
   const eventsMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/events$/);
   if (eventsMatch && req.method === 'GET') {
     const browserId = decodeURIComponent(eventsMatch[1]);
+    const auth = requireWeb(req, url);
+    if (auth instanceof Response) return auth;
     try {
       const session = pool.getSession(browserId);
       if (!session) return errorResponse('Browser session not found', 404);
@@ -239,7 +256,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
 
   // POST /api/browser — dispatch action
   if (url.pathname === '/api/browser' && req.method === 'POST') {
-    const auth = requireAuth(req);
+    const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
 
     let body: Record<string, unknown>;

@@ -15,35 +15,50 @@ import {
 } from '../../storage/shortcuts.js';
 import type { DesktopShortcut } from '@yaar/shared';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { requirePermission, resolvePrincipal } from '../access.js';
+import type { Verb } from '../../handlers/uri-registry.js';
 
-export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
-  {
-    method: 'GET',
-    path: '/api/shortcuts',
-    response: '`{ shortcuts: DesktopShortcut[] }`',
-    description: 'List desktop shortcuts',
-  },
-  {
-    method: 'POST',
-    path: '/api/shortcuts',
-    response: '`{ shortcut: DesktopShortcut }`',
-    description: 'Create a desktop shortcut',
-  },
-  {
-    method: 'PATCH',
-    path: '/api/shortcuts/:id',
-    response: '`{ shortcut: DesktopShortcut }`',
-    description: 'Update a desktop shortcut',
-  },
-  {
-    method: 'DELETE',
-    path: '/api/shortcuts/:id',
-    response: '`{ ok: true }`',
-    description: 'Delete a desktop shortcut',
-  },
-];
+/**
+ * Empty on purpose. A shortcut carries `osActions` — it is stored, user-clickable
+ * code. Writing one is not a data write, it is planting an action on the desktop.
+ * An app that needs it declares `yaar://config/shortcuts` in app.json.
+ */
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [];
+
+/** The verb each shortcut method performs. */
+function shortcutVerb(method: string): Verb | null {
+  switch (method) {
+    case 'GET':
+      return 'read';
+    case 'POST':
+    case 'PATCH':
+      return 'invoke';
+    case 'DELETE':
+      return 'delete';
+    default:
+      return null;
+  }
+}
 
 export async function handleShortcutRoutes(req: Request, url: URL): Promise<Response | null> {
+  if (!url.pathname.startsWith('/api/shortcuts')) return null;
+
+  const idMatch = url.pathname.match(/^\/api\/shortcuts\/([^/]+)$/);
+  const verb = shortcutVerb(req.method);
+  if (!verb) return null;
+
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+
+  const denied = requirePermission(
+    principal,
+    idMatch
+      ? `yaar://config/shortcuts/${decodeURIComponent(idMatch[1])}`
+      : 'yaar://config/shortcuts',
+    verb,
+  );
+  if (denied) return denied;
+
   // List desktop shortcuts
   if (url.pathname === '/api/shortcuts' && req.method === 'GET') {
     try {

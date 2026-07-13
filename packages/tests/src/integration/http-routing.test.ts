@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { checkHttpAuth, generateRemoteToken } from '@yaar/server/http/auth';
+import { checkHttpAuth, generateRemoteToken, isStaticAsset } from '@yaar/server/http/auth';
 import { checkWsAuth } from '@yaar/server/http/auth';
 
 // ── checkHttpAuth ──────────────────────────────────────────────────────────
@@ -110,5 +110,40 @@ describe('createFetchHandler CORS + routing', () => {
     expect(res?.status).toBe(200);
     const body = await res!.json();
     expect(body).toMatchObject({ status: 'ok' });
+  });
+});
+
+// ── isStaticAsset (F-20) ───────────────────────────────────────────────────
+//
+// Remote auth used to be bypassable by choosing a filename. isStaticAsset() ran
+// before any /api check and looked only at the extension, so in REMOTE=1 mode
+// `GET /api/storage/anything.png` and `POST /api/storage/payload.js` skipped the
+// token entirely — and storage is where the user's files and every app's secrets
+// live. The attacker picks the extension, so the extension cannot be the credential.
+
+describe('isStaticAsset', () => {
+  it('never treats anything under /api/ as a static asset, whatever it is named', () => {
+    expect(isStaticAsset('/api/storage/secrets.png')).toBe(false);
+    expect(isStaticAsset('/api/storage/payload.js')).toBe(false);
+    expect(isStaticAsset('/api/storage/apps/vault/db.json')).toBe(false);
+    expect(isStaticAsset('/api/apps/notes/index.html')).toBe(false);
+    expect(isStaticAsset('/api/sessions/x/transcript')).toBe(false);
+  });
+
+  it('never treats /mcp/ as a static asset', () => {
+    expect(isStaticAsset('/mcp/verbs')).toBe(false);
+  });
+
+  it('still serves the frontend build unauthenticated, so the client can read the token', () => {
+    // The desktop's own bundle has to load before any JS exists to attach a token.
+    expect(isStaticAsset('/')).toBe(true);
+    expect(isStaticAsset('/index.html')).toBe(true);
+    expect(isStaticAsset('/assets/main.js')).toBe(true);
+    expect(isStaticAsset('/assets/main.css')).toBe(true);
+    expect(isStaticAsset('/favicon.ico')).toBe(true);
+  });
+
+  it('treats an extensionless frontend route as an asset (SPA fallback serves index.html)', () => {
+    expect(isStaticAsset('/settings')).toBe(true);
   });
 });

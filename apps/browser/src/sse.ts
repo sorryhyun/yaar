@@ -6,6 +6,7 @@
  * injected via initSSE() to avoid circular imports with actions.ts.
  */
 import { setShowScreenshot, setPlaceholderText, updateUrlBar } from './store';
+import { withToken } from './token';
 
 // ── Injected callbacks ───────────────────────────────────────────────
 
@@ -56,7 +57,7 @@ export function startPolling(bid: string): void {
         screenshotEl.src = img.src;
         setShowScreenshot(true);
       };
-      img.src = `/api/browser/${bid}/screenshot?t=${ts}`;
+      img.src = withToken(`/api/browser/${bid}/screenshot?t=${ts}`);
     });
   }, 200);
 }
@@ -76,7 +77,7 @@ export function connectSSE(bid: string): void {
   lastVersion = -1;
 
   let sseErrorCount = 0;
-  const evtSource = new EventSource(`/api/browser/${bid}/events`);
+  const evtSource = new EventSource(withToken(`/api/browser/${bid}/events`));
   currentEvtSource = evtSource;
   startPolling(bid);
 

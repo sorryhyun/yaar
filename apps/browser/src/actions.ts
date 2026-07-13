@@ -6,6 +6,7 @@
 import { app } from '@bundled/yaar';
 import { navigate } from '@bundled/yaar-web';
 import { activeBrowserId, setLoading, setShowScreenshot } from './store';
+import { withToken } from './token';
 
 // ── Screenshot DOM ref ──────────────────────────────────────────────
 
@@ -24,7 +25,7 @@ export function setScreenshotEl(el: HTMLImageElement): void {
 export function refreshScreenshot(fresh = false): void {
   const bid = activeBrowserId();
   const ts = Date.now();
-  const src = `/api/browser/${bid}/screenshot?t=${ts}${fresh ? '&fresh' : ''}`;
+  const src = withToken(`/api/browser/${bid}/screenshot?t=${ts}${fresh ? '&fresh' : ''}`);
   setLoading(true);
 
   screenshotEl.onload = () => {

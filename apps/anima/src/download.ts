@@ -51,10 +51,16 @@ export interface DownloadProgress {
 
 const dest = (path: string) => `${LOCAL_DIR}/${path}`;
 
+/** The weight routes are gated on this app's `yaar-ml` declaration; the token carries it. */
+function authHeaders(): Record<string, string> {
+  const token = (window as unknown as { __YAAR_TOKEN__?: string }).__YAAR_TOKEN__;
+  return token ? { 'X-Iframe-Token': token } : {};
+}
+
 async function post(path: string): Promise<JobStatus> {
   const res = await fetch('/api/ml-weights/download', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
     body: JSON.stringify({ url: `${HF_BASE}/${path}`, dest: dest(path) }),
   });
   if (!res.ok) throw new Error(`start ${path} → ${res.status} ${await res.text()}`);
@@ -62,7 +68,9 @@ async function post(path: string): Promise<JobStatus> {
 }
 
 async function poll(path: string): Promise<JobStatus> {
-  const res = await fetch(`/api/ml-weights/download?dest=${encodeURIComponent(dest(path))}`);
+  const res = await fetch(`/api/ml-weights/download?dest=${encodeURIComponent(dest(path))}`, {
+    headers: authHeaders(),
+  });
   if (!res.ok) throw new Error(`status ${path} → ${res.status}`);
   return res.json();
 }

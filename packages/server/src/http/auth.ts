@@ -51,23 +51,54 @@ export function checkWsAuth(url: URL): boolean {
   return url.searchParams.get('token') === remoteToken;
 }
 
-/** Routes that serve static frontend assets (no secrets, needed to bootstrap the app). */
-function isStaticAsset(pathname: string): boolean {
+/**
+ * Routes that serve static frontend assets (no secrets, needed to bootstrap the app).
+ *
+ * Exported for tests: `IS_REMOTE` is fixed at module load, so the predicate is the
+ * honest unit under test rather than a process with REMOTE=1 in its environment.
+ *
+ * This is a question about *where* a path is served from, not what it is named. It
+ * used to be a pure extension test, which meant remote auth was bypassable by
+ * choosing a filename: in REMOTE mode `GET /api/storage/anything.png` and
+ * `POST /api/storage/payload.js` skipped the token entirely, because the check ran
+ * before any `/api` check and only looked at the suffix. Storage holds user files —
+ * an attacker picks the extension, so the extension can't be the credential.
+ *
+ * Nothing under `/api/` or `/mcp/` is ever a static asset. Everything else is
+ * served by static.ts out of the frontend build, and must load unauthenticated so
+ * the client JS can read the `#remote=<token>` fragment and attach it to the calls
+ * that follow.
+ */
+export function isStaticAsset(pathname: string): boolean {
+  if (pathname.startsWith('/api/') || pathname.startsWith('/mcp/')) return false;
   if (pathname === '/' || pathname === '/index.html') return true;
+  // The SPA fallback in static.ts serves index.html for unknown non-/api paths, so an
+  // extensionless route (/settings, /window/3) is a frontend route, not an asset.
   const ext = extname(pathname);
-  return [
-    '.js',
-    '.css',
-    '.html',
-    '.svg',
-    '.png',
-    '.ico',
-    '.woff',
-    '.woff2',
-    '.ttf',
-    '.otf',
-  ].includes(ext);
+  if (!ext) return true;
+  return ASSET_EXTENSIONS.includes(ext);
 }
+
+/** Extensions the frontend build emits. */
+const ASSET_EXTENSIONS = [
+  '.js',
+  '.mjs',
+  '.map',
+  '.css',
+  '.html',
+  '.json',
+  '.svg',
+  '.png',
+  '.jpg',
+  '.jpeg',
+  '.gif',
+  '.webp',
+  '.ico',
+  '.woff',
+  '.woff2',
+  '.ttf',
+  '.otf',
+];
 
 /** Extract token from Authorization header, query param, or Referer. */
 function extractToken(req: Request, url: URL): string | null {

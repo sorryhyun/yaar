@@ -20,6 +20,7 @@ import { join, basename, extname } from 'path';
 import { stat } from 'fs/promises';
 import { getMlRuntimeDir, MIME_TYPES } from '../../config.js';
 import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
+import { requireBundle, resolvePrincipal } from '../access.js';
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
 import { downloadToFile } from '../../lib/download/chunked.js';
 import { extractDomain, isDomainAllowed } from '../../features/config/domains.js';
@@ -56,9 +57,25 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
 const ML_RUNTIME_FILE = /^[A-Za-z0-9._-]+\.(wasm|mjs|js)$/;
 
 export async function handleMlRuntimeRoutes(req: Request, url: URL): Promise<Response | null> {
+  // The ORT runtime artifacts are inert binaries, name-checked against traversal, and
+  // onnxruntime loads them itself (ort.env.wasm.wasmPaths) with no way to attach a
+  // token. They stay open — there is nothing behind them to protect.
   if (url.pathname.startsWith('/api/ml-runtime/')) {
     return serveRuntimeArtifact(req, url);
   }
+
+  // The weight routes are a different matter: they fetch an attacker-nameable URL and
+  // stream the result to a path under storage. `yaar-ml` is what declares an app needs
+  // that, so `yaar-ml` is what it takes to reach it.
+  const weightRoute =
+    url.pathname === '/api/ml-weights' || url.pathname === '/api/ml-weights/download';
+  if (weightRoute) {
+    const principal = resolvePrincipal(req, url);
+    if (principal instanceof Response) return principal;
+    const denied = requireBundle(principal, 'yaar-ml');
+    if (denied) return denied;
+  }
+
   if (url.pathname === '/api/ml-weights/download') {
     if (req.method === 'POST') return startDownload(req);
     if (req.method === 'GET') return downloadStatus(url);

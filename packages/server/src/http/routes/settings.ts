@@ -14,29 +14,33 @@ import {
   setAllowAllDomains,
 } from '../../features/config/domains.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { requirePermission, resolvePrincipal } from '../access.js';
 
-export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
-  {
-    method: 'PATCH',
-    path: '/api/settings',
-    response: '`Settings`',
-    description: 'Update user settings',
-  },
-  {
-    method: 'GET',
-    path: '/api/domains',
-    response: '`{ allowAllDomains: boolean, domains: string[] }`',
-    description: 'Get allowed domain settings',
-  },
-  {
-    method: 'PATCH',
-    path: '/api/domains',
-    response: '`{ allowAllDomains: boolean, domains: string[] }`',
-    description: 'Update domain settings',
-  },
-];
+/**
+ * Empty on purpose. These are global switches, not app resources.
+ *
+ * `PATCH /api/domains {allowAllDomains: true}` disables the domain allowlist for
+ * every HTTP fetch, browser navigation, tab control, and ML weight download in the
+ * process — one unauthenticated call, no prompt. `PATCH /api/settings` swaps the AI
+ * provider and restarts the warm pool. Neither is something an app has any business
+ * reaching, so they are off the iframe allowlist entirely, and the permission check
+ * below is the second lock rather than the only one.
+ *
+ * The equivalent capability, for an app that genuinely needs it, is to declare
+ * `yaar://config/domains` in app.json and go through POST /api/verb.
+ */
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [];
 
 export async function handleSettingsRoutes(req: Request, url: URL): Promise<Response | null> {
+  if (url.pathname !== '/api/settings' && url.pathname !== '/api/domains') return null;
+
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+
+  const uri = url.pathname === '/api/settings' ? 'yaar://config/settings' : 'yaar://config/domains';
+  const denied = requirePermission(principal, uri, req.method === 'GET' ? 'read' : 'invoke');
+  if (denied) return denied;
+
   // Update settings
   if (url.pathname === '/api/settings' && req.method === 'PATCH') {
     try {
