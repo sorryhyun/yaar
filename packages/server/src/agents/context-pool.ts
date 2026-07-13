@@ -467,13 +467,27 @@ export class ContextPool implements PoolContext {
     this.monitorProcessor.recordMonitorAction(monitorId);
   }
 
+  /**
+   * The monitor-scoped key a subscription is indexed under.
+   *
+   * Subscriptions are keyed by window, and callers hand us a mix: an agent's raw
+   * AI-facing id ("ai-chat") from a verb, or the frontend's scoped key ("1/ai-chat")
+   * from a client event. A raw id names one window *per monitor*, so indexing on it
+   * would let monitor 0's subscription match an event emitted by monitor 1's copy of
+   * the same app. Both ends of the channel — subscribe and notify — normalize here.
+   */
+  private windowKey(windowId: string): string {
+    return this.windowState.getWindow(windowId)?.id ?? windowId;
+  }
+
   notifyWindowSubscribers(
     windowId: string,
     event: WindowChangeEvent,
     summary: string,
     sourceAgentKey?: string,
   ): void {
-    this.windowSubscriptionPolicy.notifyChange(windowId, event, summary, sourceAgentKey, (task) => {
+    const key = this.windowKey(windowId);
+    this.windowSubscriptionPolicy.notifyChange(key, event, summary, sourceAgentKey, (task) => {
       this.handleTask(task).catch((err) => {
         console.error('[ContextPool] Error delivering subscription notification:', err);
       });
@@ -493,15 +507,16 @@ export class ContextPool implements PoolContext {
     payload: unknown,
     sourceAgentKey?: string,
   ): void {
-    if (this.isAppEventRateLimited(windowId)) {
+    const key = this.windowKey(windowId);
+    if (this.isAppEventRateLimited(key)) {
       console.warn(
-        `[ContextPool] App event rate limit hit for window "${windowId}" (channel "${channel}") — dropped.`,
+        `[ContextPool] App event rate limit hit for window "${key}" (channel "${channel}") — dropped.`,
       );
       return;
     }
 
     this.windowSubscriptionPolicy.notifyChannel(
-      windowId,
+      key,
       channel,
       payload,
       sourceAgentKey,
@@ -530,10 +545,14 @@ export class ContextPool implements PoolContext {
   }
 
   handleWindowClose(windowId: string, appId?: string, monitorId?: string): void {
-    // Clean up subscriptions and prune context for this window
-    this.windowSubscriptionPolicy.clearForWindow(windowId);
+    // Clean up subscriptions and prune context for this window. Subscriptions are
+    // indexed by the scoped key (see windowKey), so clear under that — clearing by a
+    // raw id would leave this window's subscriptions live and, worse, could drop the
+    // same-named window on another monitor.
+    const key = this.windowKey(windowId);
+    this.windowSubscriptionPolicy.clearForWindow(key);
     this.contextTape.pruneWindow(windowId);
-    this.appEventRate.delete(windowId);
+    this.appEventRate.delete(key);
 
     // If this window belongs to an app, interrupt the running agent and clear its queue
     if (appId) {

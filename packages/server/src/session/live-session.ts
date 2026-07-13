@@ -579,11 +579,12 @@ export class LiveSession {
       }
 
       case ClientEventType.APP_EVENT: {
-        // An app emitted on a declared channel. Normalize the monitor-scoped
-        // window key (from the iframe element's data-window-id) to the raw
-        // AI-facing id so it matches what agents subscribed against.
-        const rawWindowId = this.windowState.handleMap.getRawWindowId(event.windowId);
-        this.pool?.notifyAppChannel(rawWindowId, event.channel, event.payload);
+        // An app emitted on a declared channel. Pass the monitor-scoped window key
+        // (from the iframe element's data-window-id) through as-is — ContextPool
+        // indexes subscriptions by that key. Collapsing it to the raw AI-facing id
+        // would deliver monitor 1's app events to a subscriber watching monitor 0's
+        // copy of the same app, since both windows share the raw id.
+        this.pool?.notifyAppChannel(event.windowId, event.channel, event.payload);
         break;
       }
 

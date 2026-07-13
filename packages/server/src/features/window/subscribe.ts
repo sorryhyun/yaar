@@ -53,12 +53,18 @@ export function handleSubscribe(
       ? Math.max(100, Math.min(5000, payload.debounceMs))
       : undefined;
 
+  // Index the subscription under the target's monitor-scoped key: the raw id the
+  // agent passed names one window per monitor, so a raw index would match events
+  // from another monitor's copy of the same app. Report the raw id back — that is
+  // the id the agent addresses windows by.
+  const targetWindowId = windowState.getWindow(windowId)?.id ?? windowId;
+
   const subscriptionId = pool.windowSubscriptionPolicy.subscribe({
     subscriberAgentKey,
     subscriberType,
     subscriberWindowId,
     subscriberMonitorId: monitorId,
-    targetWindowId: windowId,
+    targetWindowId,
     events,
     debounceMs,
   });
@@ -111,11 +117,14 @@ export function handleAppSubscribe(
       ? Math.max(100, Math.min(5000, payload.debounceMs))
       : undefined;
 
+  // Monitor-scoped key for the index; raw id in the reply. See handleSubscribe.
+  const targetWindowId = windowState.getWindow(windowId)?.id ?? windowId;
+
   const subscriptionId = pool.windowSubscriptionPolicy.subscribeChannels({
     subscriberAgentKey,
     subscriberType,
     subscriberMonitorId: monitorId,
-    targetWindowId: windowId,
+    targetWindowId,
     channels,
     mode,
     debounceMs,
