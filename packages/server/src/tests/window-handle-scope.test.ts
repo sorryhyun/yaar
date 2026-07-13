@@ -143,6 +143,34 @@ describe('Emitted actions carry the acting monitor', () => {
     expect(stampedMonitor(() => actionEmitter.emitAction(createAppWindow('ai-chat')))).toBe('0');
   });
 
+  it('delivers a capture to the target window’s monitor, not the caller’s', async () => {
+    // Reading a window screenshots it, and only the monitor that *holds* the window can
+    // paint it. The caller may be somewhere else entirely — devtools' viewPreview runs in
+    // an iframe with no monitor of its own, which is why the capture used to be skipped
+    // for it, leaving the tool that builds a window unable to look at it. An explicit
+    // monitor therefore has to beat the ambient one.
+    let seen: ActionEvent | undefined;
+    const listener = (event: ActionEvent) => {
+      seen = event;
+    };
+    actionEmitter.on('action', listener);
+    try {
+      await runWithAgentContext(
+        { agentId: 'iframe:devtools', sessionId: 'test-session' as SessionId, monitorId: '0' },
+        () =>
+          actionEmitter.emitActionWithFeedback(
+            { type: 'window.capture', windowId: '1/devtools-preview-x' } as OSAction,
+            10,
+            undefined,
+            '1',
+          ),
+      );
+    } finally {
+      actionEmitter.off('action', listener);
+    }
+    expect(seen?.monitorId).toBe('1');
+  });
+
   it('leaves a non-window action unstamped, so it still broadcasts session-wide', () => {
     // Only windows are keyed by monitor. For everything else an absent monitor is a
     // real distinction — it means "deliver to the whole session" (LiveSession.broadcast)

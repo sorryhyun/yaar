@@ -33,7 +33,7 @@ import {
   handleUnsubscribe,
   handleAppSubscribe,
 } from '../features/window/subscribe.js';
-import { getMonitorId, getAgentId } from '../agents/agent-context.js';
+import { getMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
@@ -222,17 +222,21 @@ export function registerWindowHandlers(
       };
 
       // For iframe windows, capture a screenshot so the agent can see what's rendered.
-      // Skip it for iframe-SDK proxy reads (agentId `iframe:*`, e.g. devtools' viewPreview):
-      // those run via POST /api/verb without a monitor-scoped context, so the capture action's
-      // feedback never round-trips and we'd block the full timeout. The screenshot can't be
-      // delivered through the app-protocol command response in that path anyway — the SDK
-      // returns it as JSON-stringified base64. Return metadata only, promptly, so the calling
-      // app command stays well within its own timeout budget.
-      const isIframeProxy = getAgentId()?.startsWith('iframe:') ?? false;
-      if (win.content.renderer === 'iframe' && !isIframeProxy) {
+      //
+      // This used to be skipped for iframe-SDK reads (agentId `iframe:*`, e.g. devtools'
+      // viewPreview) because such a read carries no monitor of its own, so the capture went
+      // out unaddressed and its feedback never came back — leaving the one tool that builds
+      // a window as the only tool that could not look at it. But the caller's monitor was
+      // never the right one to ask: the window's own monitor is. Address the window by its
+      // resolved, monitor-scoped key and deliver the capture there, exactly as handleAppQuery
+      // does. The image itself already survives the trip — POST /api/verb lifts image blocks
+      // into `envelope.images` and the iframe SDK hands them back (verb-sdk.ts).
+      if (win.content.renderer === 'iframe') {
         const feedback = await actionEmitter.emitActionWithFeedback(
-          { type: 'window.capture', windowId: resolved.windowId },
+          { type: 'window.capture', windowId: win.id },
           5000,
+          undefined,
+          getWindowState().getMonitorForWindow(win.id),
         );
         if (feedback?.success && feedback.imageData) {
           // Omit raw content (compiled HTML blob) — the screenshot is more useful

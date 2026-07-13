@@ -64,6 +64,40 @@ function getMimeType(path: string): string {
   return MIME_MAP[ext] || 'text/plain';
 }
 
+interface CapturedImage {
+  data: string;
+  mimeType: string;
+}
+
+/**
+ * Read the preview window: its metadata, and a screenshot of what it is rendering.
+ *
+ * Reading an iframe window emits a capture whose image the verb layer hands back
+ * alongside the JSON, so `read` resolves to `{ data, images }` rather than the bare
+ * metadata. A window with nothing to capture yet resolves to the metadata alone —
+ * hence both shapes are accepted, and an empty `images` is a real answer ("nothing
+ * painted"), not an error to be swallowed here.
+ */
+async function readPreview(): Promise<{ info: Record<string, unknown>; images: CapturedImage[] }> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+
+  let result: unknown;
+  try {
+    result = await read<unknown>(`yaar://windows/${wid}`);
+  } catch {
+    setPreviewWindowId(null);
+    throw new AppCommandError('Preview window no longer exists.');
+  }
+
+  const wrapped = result as { data?: unknown; images?: CapturedImage[] } | undefined;
+  const hasImages = Array.isArray(wrapped?.images);
+  return {
+    info: ((hasImages ? wrapped?.data : result) ?? {}) as Record<string, unknown>,
+    images: hasImages ? (wrapped?.images ?? []) : [],
+  };
+}
+
 export function registerProtocol() {
   if (!app) return;
 
@@ -608,18 +642,39 @@ export function registerProtocol() {
         },
       }),
       viewPreview: defineCommand({
-        description: 'Read the current preview window state (content, size, position)',
+        description:
+          'Read the preview window: a screenshot of what is actually on screen, plus its ' +
+          'size and position. Look at the picture before theorizing about a rendering bug.',
         params: { type: 'object', properties: {} },
         handler: async () => {
-          const wid = previewWindowId();
-          if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
-          try {
-            const info = await read<Record<string, unknown>>(`yaar://windows/${wid}`);
-            return info;
-          } catch {
-            setPreviewWindowId(null);
-            throw new AppCommandError('Preview window no longer exists.');
+          const { info, images } = await readPreview();
+          // Content blocks pass through to the agent untouched (wrapAppValue), so the
+          // image arrives as an image and not as a wall of base64.
+          return [
+            { type: 'text', text: JSON.stringify(info, null, 2) },
+            ...images.map((img) => ({ type: 'image', data: img.data, mimeType: img.mimeType })),
+          ];
+        },
+      }),
+      previewScreenshot: defineCommand({
+        description:
+          'See the preview — a screenshot of the running app, nothing else. Use it whenever a ' +
+          'question is about pixels ("is it blank?", "did that render?"): looking costs one ' +
+          'call and settles it, where reasoning from source can be confidently wrong.',
+        params: { type: 'object', properties: {} },
+        handler: async () => {
+          const { images } = await readPreview();
+          if (images.length === 0) {
+            throw new AppCommandError(
+              'Preview window returned no screenshot. The iframe may not have painted yet — ' +
+                'give it a moment after preview/compile, then retry.',
+            );
           }
+          return images.map((img) => ({
+            type: 'image',
+            data: img.data,
+            mimeType: img.mimeType,
+          }));
         },
       }),
       previewQuery: defineCommand({

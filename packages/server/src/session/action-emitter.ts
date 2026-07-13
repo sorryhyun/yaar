@@ -240,6 +240,13 @@ class ActionEmitter extends EventEmitter {
     action: OSAction,
     timeoutMs: number = 3000,
     sessionId?: string,
+    /**
+     * Monitor to deliver this action to, when the caller knows it better than the
+     * ambient context does. Reading a window is the case: the window's own monitor is
+     * the one that must render the capture, and it need not be the caller's — an
+     * iframe app (devtools previewing its build) has no monitor of its own to act on.
+     */
+    monitorId?: string,
   ): Promise<RenderingFeedback | null> {
     const requestId = this.generateRequestId();
     // Get current agent ID from context (with Codex fallback) and include in action
@@ -259,7 +266,7 @@ class ActionEmitter extends EventEmitter {
       requestId,
       sessionId,
       agentId,
-      monitorId: this.monitorForAction(action, currentSessionId),
+      monitorId: monitorId ?? this.monitorForAction(action, currentSessionId),
     } as ActionEvent);
 
     return feedbackPromise;
