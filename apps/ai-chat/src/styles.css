@@ -9,9 +9,13 @@
   --grad-blue: linear-gradient(135deg, #1f6feb, #388bfd);
   --grad-avatar: linear-gradient(135deg, #58a6ff, #a371f7);
 
+  /* `position: absolute; inset: 0` rather than `height: 100vh` — the Solid `html`
+     template inserts comment markers between children, and a viewport-height flex
+     chain can collapse under them in some window/frameless configurations. */
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
-  height: 100vh;
   background: var(--yaar-bg);
   font-family: var(--yaar-font);
 }
@@ -68,7 +72,10 @@
 /* ── Message list ── */
 
 .messages-container {
-  flex: 1;
+  flex: 1 1 auto;
+  /* Without min-height:0 a flex child refuses to shrink below its content size,
+     so a long conversation pushes the input area out of view instead of scrolling. */
+  min-height: 0;
   overflow-y: auto;
   padding: 16px;
   display: flex;
@@ -135,6 +142,13 @@
 }
 
 /* ── Bubbles ── */
+
+/* Column holding the bubble + timestamp. Bounded so a long word cannot widen the
+   row and squeeze the bubble to zero width. */
+.message-col {
+  min-width: 0;
+  max-width: 100%;
+}
 
 .message-bubble {
   max-width: 72%;
