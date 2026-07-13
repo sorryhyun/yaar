@@ -1,6 +1,6 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { appStorage, invoke, errMsg, AppCommandError } from '@bundled/yaar';
+import { appStorage, invoke, del, errMsg, AppCommandError } from '@bundled/yaar';
 import {
   compile as devCompile,
   typecheck as devTypecheck,
@@ -184,6 +184,14 @@ export async function deleteProject(id: string): Promise<void> {
     await appStorage.remove(projectPath(id));
   } catch {
     /* best effort */
+  }
+  try {
+    // And the throwaway namespace its previews wrote to (see the preview command).
+    // Nothing else will ever reclaim it — a `preview--*` app is not installed, so it
+    // never appears anywhere an orphan could be noticed.
+    await del(`yaar://apps/preview--${id}/storage/`);
+  } catch {
+    /* best effort — the project may never have been previewed */
   }
   // Remove from tabs
   setOpenTabs(openTabs().filter((t) => t !== id));

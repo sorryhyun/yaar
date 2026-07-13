@@ -629,11 +629,18 @@ export function registerProtocol() {
           // app. Window registration is last-write-wins, so the preview silently replaced the
           // real app's window record (and its appId), severing the real app from its agent.
           const previewId = `devtools-preview-${proj?.id ?? 'scratch'}`;
+          // Give the preview a principal of its own, derived from the project. `self` then
+          // resolves inside it — so appStorage, appDb and app-scoped permissions actually run
+          // before deploy instead of 403'ing — while the storage it reaches is a throwaway
+          // namespace, not the deployed app's live data. The server refuses to route an app
+          // agent to a `preview--*` identity, so this cannot displace the real app either.
+          const previewAppId = proj ? `preview--${proj.id}` : undefined;
           const result = await invoke<{ windowId?: string }>(`yaar://windows/${previewId}`, {
             action: 'create',
             title: `${name} (preview)`,
             renderer: 'iframe',
             content: url,
+            ...(previewAppId ? { appId: previewAppId } : {}),
             ...(permissions ? { permissions } : {}),
           });
           // Trust the id the server actually registered, not the one we asked for.

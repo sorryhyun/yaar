@@ -87,6 +87,37 @@ export function resolveContentUri(uri: string): string | null {
 }
 
 /**
+ * Prefix marking an app identity that belongs to a devtools preview rather than a
+ * deployed app.
+ *
+ * A preview needs a *real* identity — without one, `self` does not resolve, and every
+ * feature touching `appStorage`, `appDb` or app-scoped permissions cannot be run even
+ * once before deploy. But it must not be the *deployed app's* identity: sharing that
+ * would hand unshipped code the live app's storage, and would let the preview window
+ * claim the app's active-window slot, steering commands meant for the running app into
+ * the preview iframe.
+ *
+ * So a preview gets its own principal, derived from the project it was built from. The
+ * app's code is unchanged — it says `self`, never a literal id — but `self` now names a
+ * namespace that is thrown away with the project. Real code path, real permission gate,
+ * no production blast radius.
+ *
+ * The double hyphen keeps this from colliding with a deployed app id, which is slug-like
+ * and would not normally contain one.
+ */
+export const PREVIEW_APP_PREFIX = 'preview--';
+
+/** The preview principal for a devtools project. */
+export function previewAppId(projectId: string): string {
+  return `${PREVIEW_APP_PREFIX}${projectId}`;
+}
+
+/** Whether an app id names a preview rather than a deployed app. */
+export function isPreviewAppId(appId: string | undefined | null): boolean {
+  return typeof appId === 'string' && appId.startsWith(PREVIEW_APP_PREFIX);
+}
+
+/**
  * Extract app ID from a yaar://apps/{appId} URI.
  */
 export function extractAppId(uri: string): string | null {

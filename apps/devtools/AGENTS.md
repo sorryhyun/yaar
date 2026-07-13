@@ -235,10 +235,21 @@ have looked.
 
 **The preview window has its own id** (`devtools-preview-{projectId}`), distinct from the app's.
 Previewing an app while it is running is therefore safe — it will not displace the real app's
-window. But the preview iframe has no app identity: `self` does not resolve inside it, so
-anything reaching for `yaar://apps/self/*` (that is `appStorage`, `appDb`, app-scoped
-permissions) fails in preview and works only once deployed. If a feature depends on those, say
-so plainly rather than claiming it was tested.
+window.
+
+**The preview runs under its own app identity** (`preview--{projectId}`), so `self` resolves
+inside it: `appStorage`, `appDb` and app-scoped permissions all work, against the permissions
+the project's `app.json` declares. Storage-backed features can and should be exercised in the
+preview before you deploy them — "it compiled, and `self` will resolve once it's a real app" is
+an argument, not a test.
+
+Two consequences worth knowing:
+
+- The preview's storage is a **throwaway namespace**, not the deployed app's. Previewing will
+  not show you the live app's data, and cannot corrupt it. The namespace is deleted with the
+  project.
+- The preview gets no app agent — you are the agent for anything happening inside it. Drive it
+  with `previewCommand` / `previewQuery`.
 
 For system config or anything outside the IDE, use `relay(message)` to ask the monitor agent.
 Screenshots of your own preview are no longer among them — take those yourself.

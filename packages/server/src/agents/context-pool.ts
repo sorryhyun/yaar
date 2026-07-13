@@ -24,7 +24,12 @@ import {
 import { AgentPool, type PooledAgent } from './agent-pool.js';
 import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
-import { ServerEventType, type ServerEvent, type UserInteraction } from '@yaar/shared';
+import {
+  ServerEventType,
+  isPreviewAppId,
+  type ServerEvent,
+  type UserInteraction,
+} from '@yaar/shared';
 import type { ProviderType } from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
@@ -430,7 +435,12 @@ export class ContextPool implements PoolContext {
       } else {
         // Check if this window belongs to an app (appId set on window.create)
         const appId = task.windowId ? this.windowState.getAppIdForWindow(task.windowId) : undefined;
-        if (appId && task.windowId) {
+        // A preview window carries an app identity so that `self` resolves inside it, but it
+        // is not the app: devtools is the agent for anything happening in a preview. Routing
+        // it here would spawn a second app agent nobody asked for, and — since this is the
+        // only writer of AppTaskProcessor.activeWindows — would let the preview claim the
+        // active-window slot that cross-app control and direct messages resolve through.
+        if (appId && task.windowId && !isPreviewAppId(appId)) {
           await this.appProcessor.handleAppTask(task, appId);
         } else {
           // Plain window → route to monitor agent with full conversation context
