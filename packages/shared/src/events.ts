@@ -260,7 +260,18 @@ export interface ConnectionStatusEvent {
   type: typeof ServerEventType.CONNECTION_STATUS;
   status: 'connected' | 'disconnected' | 'error';
   provider?: string;
+  /**
+   * The live session's id in the SessionHub. This is the id the client must echo back
+   * — `?sessionId=` on WebSocket rejoin, and the `sessionId` an iframe token is minted
+   * against — so it has to be the hub's key, not the log directory's name.
+   */
   sessionId?: string;
+  /**
+   * The session_logs/ directory name (`YYYY-MM-DD_HH-MM-SS`), which is what the
+   * `/api/sessions/*` history endpoints are keyed by. A different namespace from
+   * `sessionId`: it names a transcript on disk, not a session in the hub.
+   */
+  logSessionId?: string;
   error?: string;
 }
 

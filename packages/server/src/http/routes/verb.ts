@@ -299,16 +299,6 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('URI not accessible to iframe apps', 403);
   }
 
-  // An app's iframe boots on its own clock and its first verbs can land before the
-  // desktop's WebSocket has registered the session (first page load after a server
-  // start) or while it reconnects after an eviction. The session arrives under the
-  // same id moments later, so hold the request briefly instead of failing the app's
-  // first paint — every app's SDK is baked in at compile time, so this has to be
-  // fixed here to reach apps that were compiled before the fix existed.
-  if (tokenEntry?.sessionId && !getSessionHub().get(tokenEntry.sessionId)) {
-    await getSessionHub().waitFor(tokenEntry.sessionId);
-  }
-
   // Resolve `self` → real appId from iframe token
   let resolvedUri = uri;
   if (uri === 'yaar://apps/self' || uri.startsWith('yaar://apps/self/')) {
@@ -337,22 +327,52 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
 
   // Dispatch to ResourceRegistry — run within agent context so that handlers
   // (e.g. installApp) can resolve the session via getSessionId() for permission dialogs.
-  try {
-    const registry = initRegistry();
-    const sessionId = tokenEntry?.sessionId as SessionId | undefined;
+  const registry = initRegistry();
+  const sessionId = tokenEntry?.sessionId as SessionId | undefined;
+  const dispatch = () => {
     const execute = () => registry.execute(verb, resolvedUri, body.payload);
-    const result = sessionId
-      ? await runWithAgentContext(
+    return sessionId
+      ? runWithAgentContext(
           { agentId: `iframe:${tokenEntry?.appId ?? 'unknown'}`, sessionId },
           execute,
         )
-      : await execute();
-    return jsonResponse(toEnvelope(result));
+      : execute();
+  };
+
+  try {
+    return jsonResponse(toEnvelope(await dispatch()));
   } catch (err) {
-    // The app's iframe can outrun (or outlive) its session's WebSocket, so a
-    // session-scoped verb may land while the hub holds no session. That's a wait,
-    // not a failure: say so with a retryable 503 and let the SDK try again.
+    if (err instanceof NoActiveSessionError && sessionId) {
+      // An app's iframe boots on its own clock: a session-scoped verb can land before
+      // the desktop's WebSocket has registered the session (first load after a server
+      // start) or while it reconnects. The session reappears under the same id moments
+      // later, so hold the request and try once more rather than failing the app's
+      // first paint — apps bake their SDK in at compile time, so a client-side retry
+      // alone would never reach apps compiled before it existed.
+      //
+      // Wait *here*, only for a verb that actually asked for the session. Waiting up
+      // front (before dispatch) taxed every verb the missing session had no bearing
+      // on: `yaar://apps` and `yaar://storage` need no session at all, yet Market Apps
+      // paid the full timeout on each one just because its token named an absent id.
+      if (await getSessionHub().waitFor(sessionId)) {
+        try {
+          return jsonResponse(toEnvelope(await dispatch()));
+        } catch (retryErr) {
+          if (!(retryErr instanceof NoActiveSessionError)) {
+            const message = retryErr instanceof Error ? retryErr.message : 'Verb execution failed';
+            return errorResponse(message, 500);
+          }
+        }
+      }
+    }
+    // The session never arrived — the desktop's socket is gone (it stops reconnecting
+    // after a handful of tries) or the session was evicted. Say so as a retryable 503;
+    // the SDK backs off a couple of times in case a reconnect is still in flight.
     if (err instanceof NoActiveSessionError) {
+      console.warn(
+        `[verb] ${verb} ${resolvedUri} from iframe:${tokenEntry?.appId ?? 'unknown'} names ` +
+          `session ${sessionId ?? '(none)'}, which the hub does not hold — is the desktop connected?`,
+      );
       return jsonResponse({ ok: false, error: err.message, retryable: true }, 503);
     }
     const message = err instanceof Error ? err.message : 'Verb execution failed';

@@ -33,7 +33,13 @@ export const IFRAME_VERB_SDK_SCRIPT = `
   // answers those with a retryable 503, and the session reappears under the same id
   // the moment the frontend (re)connects — so wait and try again instead of handing
   // the app an error it would render as "empty".
-  var RETRY_DELAYS_MS = [200, 400, 800, 1600, 3200];
+  //
+  // Keep this short: the server already parks a session-scoped verb until the session
+  // shows up, and only 503s once that wait times out. Each retry therefore pays that
+  // full wait again, so a long ladder here multiplies into tens of seconds of hanging
+  // whenever the session is gone for good (desktop socket closed, session evicted).
+  // Two attempts cover a reconnect still in flight (the frontend retries every 3s).
+  var RETRY_DELAYS_MS = [1000, 3000];
 
   function callVerb(verb, uri, payload, attempt) {
     var body = { verb: verb, uri: uri };

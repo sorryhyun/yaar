@@ -78,6 +78,8 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         status: 'connected',
         provider: getWarmPool().getPreferredProvider() ?? 'claude',
         sessionId: session.sessionId,
+        // Absent until the pool initializes (first message); the client falls back then.
+        logSessionId: session.getPool()?.getLogSessionId() ?? undefined,
       });
 
       // Send snapshot of current windows to new connection
