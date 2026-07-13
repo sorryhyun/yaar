@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeEach } from 'bun:test';
+import { GlobalWindow, type HTMLInputElement, type KeyboardEvent } from 'happy-dom';
 import { IFRAME_IME_GUARD_SCRIPT } from '@yaar/shared';
 
 /**
@@ -7,44 +8,40 @@ import { IFRAME_IME_GUARD_SCRIPT } from '@yaar/shared';
  * pin that behaviour: keydowns belonging to an in-progress IME composition must
  * never reach an app's own handler, while ordinary keys must pass through
  * untouched.
+ *
+ * Each test builds its own window rather than leaning on the ambient DOM
+ * globals, both because the script latches itself onto the window it installs
+ * into (so tests need a fresh one) and because `navigator.platform` is what
+ * decides whether it installs at all — an injected navigator is how we pin the
+ * macOS-only behaviour without mutating a shared global.
  */
 describe('IFRAME_IME_GUARD_SCRIPT', () => {
+  let win: GlobalWindow;
   let input: HTMLInputElement;
   let seen: number[];
-  let platformDescriptor: PropertyDescriptor | undefined;
 
   beforeEach(() => {
-    platformDescriptor = Object.getOwnPropertyDescriptor(navigator, 'platform');
-    Object.defineProperty(navigator, 'platform', {
-      configurable: true,
-      value: 'MacIntel',
-    });
-
-    // The script self-installs once per window; reset the latch between tests.
-    delete (globalThis.window as unknown as Record<string, unknown>).__yaarImeGuardInstalled;
-
+    win = new GlobalWindow();
     seen = [];
-    input = document.createElement('input');
-    document.body.appendChild(input);
+    input = win.document.createElement('input') as HTMLInputElement;
+    win.document.body.appendChild(input);
     // Stand in for an app's own Enter-to-submit handler.
     input.addEventListener('keydown', (e) => seen.push((e as KeyboardEvent).keyCode));
   });
 
-  afterEach(() => {
-    input.remove();
-    if (platformDescriptor) {
-      Object.defineProperty(navigator, 'platform', platformDescriptor);
-    } else {
-      delete (navigator as unknown as Record<string, unknown>).platform;
-    }
-  });
-
-  function install() {
-    new Function(IFRAME_IME_GUARD_SCRIPT).call(globalThis.window);
+  /**
+   * The script reads `window` and `navigator` as free variables; passing them in
+   * as parameters scopes it to this test's window exactly as the iframe's own
+   * globals would.
+   */
+  function install(platform = 'MacIntel') {
+    new Function('window', 'navigator', IFRAME_IME_GUARD_SCRIPT)(win, { platform });
   }
 
   function press(init: { key: string; keyCode: number; isComposing?: boolean }) {
-    input.dispatchEvent(new KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }));
+    input.dispatchEvent(
+      new win.KeyboardEvent('keydown', { ...init, bubbles: true, cancelable: true }),
+    );
   }
 
   it('hides the Chrome commit Enter (isComposing) from app handlers', () => {
@@ -77,14 +74,12 @@ describe('IFRAME_IME_GUARD_SCRIPT', () => {
     install();
     press({ key: 'Enter', keyCode: 13 });
     expect(seen).toEqual([13]);
-    expect((globalThis.window as unknown as Record<string, unknown>).__yaarImeGuardInstalled).toBe(
-      true,
-    );
+    expect((win as unknown as Record<string, unknown>).__yaarImeGuardInstalled).toBe(true);
   });
 
   it('does not preventDefault — the IME still needs the key', () => {
     install();
-    const e = new KeyboardEvent('keydown', {
+    const e = new win.KeyboardEvent('keydown', {
       key: 'Enter',
       keyCode: 229,
       bubbles: true,
@@ -92,5 +87,11 @@ describe('IFRAME_IME_GUARD_SCRIPT', () => {
     });
     input.dispatchEvent(e);
     expect(e.defaultPrevented).toBe(false);
+  });
+
+  it('stays out of the way on Windows, where the commit Enter arrives only once', () => {
+    install('Win32');
+    press({ key: 'Enter', keyCode: 229, isComposing: true });
+    expect(seen).toEqual([229]);
   });
 });

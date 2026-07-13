@@ -5,13 +5,13 @@
 import { useEffect, useCallback, useState, useSyncExternalStore } from 'react';
 import { useDesktopStore, handleAppProtocolRequest, handleVerbSubscriptionUpdate } from '@/store';
 import type { ClientEvent, AppProtocolRequest } from '@/types';
-import { ClientEventType } from '@/types';
+import { ClientEventType, ServerEventType } from '@/types';
 import {
   wsManager,
   MAX_RECONNECT_ATTEMPTS,
-  RECONNECT_DELAY,
   sendEvent,
-  shouldReconnect,
+  openSocket,
+  markAttached,
   dispatchServerEvent,
   generateActionId,
   generateMessageId,
@@ -114,6 +114,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     (event: MessageEvent) => {
       try {
         const message = JSON.parse(event.data);
+        // Attachment — not transport open — is what proves the connection made progress.
+        if (message?.type === ServerEventType.CONNECTION_STATUS && message.status === 'connected') {
+          markAttached(wsManager);
+        }
         dispatchServerEvent(message, {
           applyActions,
           setIsConnecting,
@@ -145,48 +149,28 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   );
 
   const connect = useCallback(() => {
-    if (
-      wsManager.ws?.readyState === WebSocket.OPEN ||
-      wsManager.ws?.readyState === WebSocket.CONNECTING
-    ) {
-      return;
-    }
-
-    setIsConnecting(true);
-    setConnectionStatus('connecting');
-
-    wsManager.ws = new WebSocket(buildWsUrl());
-
-    wsManager.ws.onopen = () => {
-      wsManager.reconnectAttempts = 0;
-      wsManager.notify();
-
-      const activeMonitorId = useDesktopStore.getState().activeMonitorId ?? '0';
-      if (wsManager.ws?.readyState === WebSocket.OPEN) {
+    const socket = openSocket(wsManager, () => new WebSocket(buildWsUrl()), {
+      onOpen: () => {
+        const activeMonitorId = useDesktopStore.getState().activeMonitorId ?? '0';
         sendEvent(wsManager, {
           type: ClientEventType.SUBSCRIBE_MONITOR,
           monitorId: activeMonitorId,
         });
-      }
-    };
+      },
+      onMessage: handleMessage,
+      onClose: () => {
+        setIsConnecting(false);
+        setConnectionStatus('disconnected');
+      },
+      onError: () => {
+        setConnectionStatus('error', 'Connection failed');
+      },
+      reconnect: () => connect(),
+    });
+    if (!socket) return;
 
-    wsManager.ws.onmessage = handleMessage;
-
-    wsManager.ws.onclose = (event) => {
-      setIsConnecting(false);
-      setConnectionStatus('disconnected');
-      wsManager.ws = null;
-      wsManager.notify();
-
-      if (shouldReconnect(event.code, wsManager.reconnectAttempts)) {
-        wsManager.reconnectAttempts++;
-        wsManager.reconnectTimeout = window.setTimeout(connect, RECONNECT_DELAY);
-      }
-    };
-
-    wsManager.ws.onerror = () => {
-      setConnectionStatus('error', 'Connection failed');
-    };
+    setIsConnecting(true);
+    setConnectionStatus('connecting');
   }, [handleMessage, setConnectionStatus]);
 
   const disconnect = useCallback(() => {
@@ -198,10 +182,13 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
     if (wsManager.ws?.readyState === WebSocket.OPEN) {
       wsManager.ws.close(1000, 'User disconnect');
+      // Deregistering here makes the socket's own onclose a no-op (it is no longer the
+      // current socket), so this path owns the teardown state it used to inherit.
       wsManager.ws = null;
       wsManager.notify();
     }
 
+    setIsConnecting(false);
     setConnectionStatus('disconnected');
     clearAllAgents();
   }, []);

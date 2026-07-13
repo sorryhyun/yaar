@@ -154,10 +154,21 @@ export class SessionHub {
     return undefined;
   }
 
+  /**
+   * Drop a session from the hub and tear it down.
+   *
+   * Deregistration happens in `finally`: a `cleanup()` that throws leaves a partially
+   * torn-down LiveSession (listeners removed, requests rejected) and it must not stay
+   * resolvable by id, or the next reconnect reattaches to a half-dead session instead
+   * of getting a fresh one. The cleanup error still propagates to the caller.
+   */
   async remove(sessionId: SessionId): Promise<void> {
     const session = this.sessions.get(sessionId);
-    if (session) {
+    if (!session) return;
+
+    try {
       await session.cleanup();
+    } finally {
       // Clean up reverse agent index for this session
       for (const [aid, sid] of this.agentToSession) {
         if (sid === sessionId) this.agentToSession.delete(aid);

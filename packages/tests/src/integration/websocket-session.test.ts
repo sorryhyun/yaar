@@ -94,6 +94,23 @@ describe('SessionHub session lifecycle', () => {
     expect(hub.get(id)).toBe(session);
   });
 
+  it('removes a session from the hub even when cleanup() throws', async () => {
+    const session = hub.getOrCreate('wedged-session', {});
+    hub.registerAgent('agent-1', 'wedged-session');
+    session.cleanup = () => Promise.reject(new Error('cleanup exploded'));
+
+    // The failure still surfaces to the caller...
+    await expect(hub.remove('wedged-session')).rejects.toThrow('cleanup exploded');
+
+    // ...but a half-torn-down session must not stay resolvable by id.
+    expect(hub.get('wedged-session')).toBeUndefined();
+    expect(hub.findSessionByAgent('agent-1')).toBeUndefined();
+
+    // A reconnect on the same id gets a fresh session, not the broken one.
+    const fresh = hub.getOrCreate('wedged-session', {});
+    expect(fresh).not.toBe(session);
+  });
+
   it('getDefault() returns the first created session', () => {
     const s1 = hub.getOrCreate(null, {});
     hub.getOrCreate(null, {}); // second call returns same session (already has default)
