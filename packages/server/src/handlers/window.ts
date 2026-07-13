@@ -6,7 +6,7 @@
  *   list('yaar://windows/')               → list all windows
  *   invoke('yaar://windows/', ...)        → create window (windowId auto-derived from payload)
  *   read('yaar://windows/{w}')            → view window content/metadata
- *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, message
+ *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, protocol_log, message
  *   delete('yaar://windows/{w}')          → close window
  */
 
@@ -27,6 +27,7 @@ import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
 import { handleManage } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
+import { readLog } from '../features/window/protocol-log.js';
 import {
   handleSubscribe,
   handleUnsubscribe,
@@ -74,7 +75,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, update (requires operation), close, lock, unlock, app_query, app_command, message.',
+      'Invoke actions: create, update (requires operation), close, lock, unlock, app_query, app_command, protocol_log, message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -90,6 +91,7 @@ export function registerWindowHandlers(
             'unlock',
             'app_query',
             'app_command',
+            'protocol_log',
             'message',
             'subscribe',
             'unsubscribe',
@@ -121,6 +123,16 @@ export function registerWindowHandlers(
         command: { type: 'string' },
         params: { type: 'object' },
         stateKey: { type: 'string' },
+        timeoutMs: {
+          type: 'number',
+          description:
+            'app_command only. How long to wait for the app (default 30s, max 180s). Raise it for slow commands like compile or deploy.',
+        },
+        // protocol_log fields
+        limit: {
+          type: 'number',
+          description: 'protocol_log only. Max entries to return, newest last (default 100).',
+        },
         // message fields
         message: {
           type: 'string',
@@ -279,6 +291,14 @@ export function registerWindowHandlers(
           return handleAppQuery(getWindowState(), windowId, p);
         case 'app_command':
           return handleAppCommand(getWindowState(), windowId, p);
+        case 'protocol_log': {
+          // Address by the monitor-scoped key, as app_query/app_command do — the log is
+          // keyed the same way.
+          const win = getWindowState().getWindow(windowId);
+          if (!win) return error(`Window "${windowId}" not found.`);
+          const limit = typeof p.limit === 'number' ? p.limit : undefined;
+          return ok(JSON.stringify(readLog({ windowKey: win.id, limit }), null, 2));
+        }
         case 'message': {
           const appId = getWindowState().getAppIdForWindow(windowId);
           if (!appId) return error(`Window "${windowId}" is not an app window.`);

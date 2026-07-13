@@ -35,6 +35,7 @@ import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
+import { recordEmit } from '../features/window/protocol-log.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -584,6 +585,7 @@ export class LiveSession {
         // indexes subscriptions by that key. Collapsing it to the raw AI-facing id
         // would deliver monitor 1's app events to a subscriber watching monitor 0's
         // copy of the same app, since both windows share the raw id.
+        recordEmit(event.windowId, event.channel, event.payload);
         this.pool?.notifyAppChannel(event.windowId, event.channel, event.payload);
         break;
       }

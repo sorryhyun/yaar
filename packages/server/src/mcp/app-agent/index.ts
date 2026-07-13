@@ -216,6 +216,13 @@ export function registerAppAgentTools(server: McpServer): void {
           .describe(
             'Target another app you are permitted to control (via "controls"). Omit to drive your own app.',
           ),
+        timeoutMs: z
+          .number()
+          .optional()
+          .describe(
+            'How long to wait for the app to respond. Defaults to 30s; raise it (max 180s) for ' +
+              'commands that do real work, like a compile or a deploy.',
+          ),
       },
     },
     async (args) => {
@@ -297,6 +304,7 @@ export function registerAppAgentTools(server: McpServer): void {
         ...(await handleAppCommand(windowState, target.windowId, {
           command: args.command,
           params: args.params,
+          ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
         })),
       };
     },

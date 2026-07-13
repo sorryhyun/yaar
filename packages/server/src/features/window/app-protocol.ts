@@ -2,15 +2,33 @@
  * App protocol logic (app_query and app_command).
  */
 
-import type { AppProtocolRequest } from '@yaar/shared';
+import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
+import { beginRequest, endRequest } from './protocol-log.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
 const MAX_TEXT_BYTES = 400_000;
+
+/**
+ * Reading state is expected to be near-instant, so a short timeout keeps a wedged app
+ * from stalling the agent.
+ */
+const QUERY_TIMEOUT_MS = 5_000;
+
+/**
+ * Commands do real work — devtools' `compile`/`typecheck`/`deploy` shell out and routinely
+ * run past 5s. The old 5s cap fired first and surfaced a slow build as "App did not respond
+ * (timeout)", masking the actual compile error. Callers can raise this per command (see
+ * MAX_COMMAND_TIMEOUT_MS); a wedged app still fails, just not prematurely.
+ */
+const COMMAND_TIMEOUT_MS = 30_000;
+
+/** Ceiling for a caller-supplied command timeout. */
+const MAX_COMMAND_TIMEOUT_MS = 180_000;
 
 /** Truncate text to MAX_TEXT_BYTES, appending a note if truncated. */
 function truncateText(text: string): string {
@@ -105,6 +123,19 @@ async function requireAppReady(
   return null;
 }
 
+/** Send a request to an app, recording both it and its outcome in the protocol log. */
+async function request(
+  windowKey: string,
+  req: AppProtocolRequest,
+  timeoutMs: number,
+): Promise<AppProtocolResponse | null> {
+  const entry = beginRequest(windowKey, req);
+  const started = Date.now();
+  const response = await actionEmitter.emitAppProtocolRequest(windowKey, req, timeoutMs);
+  endRequest(entry, response, Date.now() - started);
+  return response;
+}
+
 /** Handle app_query: query app state or manifest via the app protocol. */
 export async function handleAppQuery(
   windowState: WindowStateRegistry,
@@ -130,7 +161,7 @@ export async function handleAppQuery(
   }
 
   if (stateKey === 'manifest') {
-    const response = await actionEmitter.emitAppProtocolRequest(key, { kind: 'manifest' }, 5000);
+    const response = await request(key, { kind: 'manifest' }, QUERY_TIMEOUT_MS);
     if (!response) return error('App did not respond to manifest request (timeout).');
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
@@ -138,11 +169,7 @@ export async function handleAppQuery(
     return wrapAppValue(response.manifest);
   }
 
-  const response = await actionEmitter.emitAppProtocolRequest(
-    key,
-    { kind: 'query', stateKey },
-    5000,
-  );
+  const response = await request(key, { kind: 'query', stateKey }, QUERY_TIMEOUT_MS);
   if (!response) return error('App did not respond (timeout).');
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
@@ -166,16 +193,26 @@ export async function handleAppCommand(
   const readyErr = await requireAppReady(windowState, key);
   if (readyErr) return readyErr;
 
-  const request: AppProtocolRequest = {
+  const req: AppProtocolRequest = {
     kind: 'command',
     command: payload.command as string,
     params: payload.params as Record<string, unknown> | undefined,
   };
 
-  const response = await actionEmitter.emitAppProtocolRequest(key, request, 5000);
-  if (!response) return error('App did not respond (timeout).');
+  const requested = payload.timeoutMs as number | undefined;
+  const timeoutMs =
+    typeof requested === 'number' && Number.isFinite(requested)
+      ? Math.min(Math.max(requested, 1_000), MAX_COMMAND_TIMEOUT_MS)
+      : COMMAND_TIMEOUT_MS;
+
+  const response = await request(key, req, timeoutMs);
+  if (!response)
+    return error(
+      `App did not respond within ${(timeoutMs / 1000).toFixed(0)}s. If this command is ` +
+        `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`,
+    );
   if (response.kind !== 'command') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
-  windowState.recordAppCommand(key, request);
+  windowState.recordAppCommand(key, req);
   return wrapAppValue(response.result);
 }
