@@ -202,12 +202,14 @@ export class LiveSession {
       requestId: string;
       windowId: string;
       request: AppProtocolRequest;
+      timeoutMs?: number;
     }) => {
       this.broadcast({
         type: ServerEventType.APP_PROTOCOL_REQUEST,
         requestId: data.requestId,
         windowId: data.windowId,
         request: data.request,
+        timeoutMs: data.timeoutMs,
       });
     };
     actionEmitter.on('app-protocol', this.appProtocolListener);

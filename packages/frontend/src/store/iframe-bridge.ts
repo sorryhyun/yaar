@@ -134,6 +134,7 @@ export function handleAppProtocolRequest(
   requestId: string,
   windowId: string,
   request: AppProtocolRequest,
+  timeoutMs?: number,
 ) {
   const state = useDesktopStore.getState();
   const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
@@ -174,7 +175,14 @@ export function handleAppProtocolRequest(
     };
   }
 
-  // Listen for response with timeout
+  // Listen for response, giving the app as long as the server is prepared to wait.
+  //
+  // This timer used to be a fixed 5s, which quietly capped every app command regardless of
+  // the timeout the caller asked for: devtools' compile and deploy shell out and routinely
+  // run longer, and a screenshot's capture leg alone can take 5s. They all came back as
+  // "Timeout waiting for app response" — an error about the app, blamed on the app, caused
+  // by the frontend. Fall back to 5s only when the server names no deadline.
+  const deadlineMs = timeoutMs ?? 5000;
   const timeoutId = setTimeout(() => {
     window.removeEventListener('message', handler);
     useDesktopStore.getState().addPendingAppProtocolResponse({
@@ -182,10 +190,10 @@ export function handleAppProtocolRequest(
       windowId,
       response: {
         kind: request.kind,
-        error: 'Timeout waiting for app response',
+        error: `Timeout waiting for app response (${(deadlineMs / 1000).toFixed(0)}s).`,
       } as AppProtocolResponse,
     });
-  }, 5000);
+  }, deadlineMs);
 
   function handler(e: MessageEvent) {
     if (!e.data?.requestId || e.data.requestId !== requestId) return;

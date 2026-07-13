@@ -153,8 +153,11 @@ describe('handleAppProtocolRequest', () => {
       writable: false,
     });
 
-    // Override setTimeout to invoke the callback immediately (simulates timer expiry)
-    globalThis.setTimeout = ((fn: () => void, _delay?: number) => {
+    // Override setTimeout to invoke the callback immediately (simulates timer expiry),
+    // recording the delay it was asked to wait.
+    const delays: Array<number | undefined> = [];
+    globalThis.setTimeout = ((fn: () => void, delay?: number) => {
+      delays.push(delay);
       fn();
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as typeof globalThis.setTimeout;
@@ -168,6 +171,7 @@ describe('handleAppProtocolRequest', () => {
 
     // Verify postMessage was called
     expect(postMessageSpy).toHaveBeenCalledTimes(1);
+    expect(delays).toEqual([5000]); // no server deadline → the old default
 
     const responses = useDesktopStore.getState().pendingAppProtocolResponses;
     expect(responses).toHaveLength(1);
@@ -176,8 +180,44 @@ describe('handleAppProtocolRequest', () => {
       windowId,
       response: {
         kind: 'command',
-        error: 'Timeout waiting for app response',
+        error: 'Timeout waiting for app response (5s).',
       },
     });
+  });
+
+  it('waits as long as the server says, not a fixed 5s', () => {
+    // The server decides how long a command may take (30s by default, up to 180s for a
+    // compile or deploy). This timer used to be hardcoded at 5s, which silently overrode
+    // that: every slow command failed as "Timeout waiting for app response" — an error
+    // about the app, caused by the frontend. A screenshot alone can spend 5s in capture.
+    const windowId = '0/test-window';
+    const el = document.createElement('div');
+    el.setAttribute('data-window-id', windowId);
+    const iframe = document.createElement('iframe');
+    el.appendChild(iframe);
+    document.body.appendChild(el);
+    useDesktopStore.setState({
+      windows: { [windowId]: { id: windowId } as never },
+      activeMonitorId: '0',
+    });
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage: mock(() => {}) },
+      writable: false,
+    });
+
+    const delays: Array<number | undefined> = [];
+    globalThis.setTimeout = ((_fn: () => void, delay?: number) => {
+      delays.push(delay);
+      return 0 as unknown as ReturnType<typeof setTimeout>;
+    }) as typeof globalThis.setTimeout;
+
+    handleAppProtocolRequest(
+      'req-slow',
+      windowId,
+      { kind: 'command', command: 'compile' },
+      120_000,
+    );
+
+    expect(delays).toEqual([120_000]);
   });
 });

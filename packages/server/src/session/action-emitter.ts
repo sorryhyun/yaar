@@ -509,7 +509,9 @@ class ActionEmitter extends EventEmitter {
       defaultValue: null,
     });
 
-    this.emit('app-protocol', { requestId, windowId, request });
+    // Pass the deadline to the frontend too — it times the postMessage leg itself, and a
+    // shorter fixed timer there would override whatever the caller asked for.
+    this.emit('app-protocol', { requestId, windowId, request, timeoutMs });
 
     return responsePromise;
   }

@@ -98,8 +98,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   }, []);
 
   const handleAppProtocolRequestCb = useCallback(
-    (requestId: string, windowId: string, request: AppProtocolRequest) => {
-      handleAppProtocolRequest(requestId, windowId, request);
+    (requestId: string, windowId: string, request: AppProtocolRequest, timeoutMs?: number) => {
+      handleAppProtocolRequest(requestId, windowId, request, timeoutMs);
     },
     [],
   );

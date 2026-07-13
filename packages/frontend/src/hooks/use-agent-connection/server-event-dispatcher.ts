@@ -49,6 +49,7 @@ export interface ServerEventDispatchHandlers {
     requestId: string,
     windowId: string,
     request: AppProtocolRequest,
+    timeoutMs?: number,
   ) => void;
   handleVerbSubscriptionUpdate: (windowId: string, subscriptionId: string, uri: string) => void;
   restoreCliHistory: (
@@ -315,7 +316,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     }
     case ServerEventType.APP_PROTOCOL_REQUEST: {
       const m = message as AppProtocolRequestEvent;
-      handlers.handleAppProtocolRequest(m.requestId, m.windowId, m.request);
+      handlers.handleAppProtocolRequest(m.requestId, m.windowId, m.request, m.timeoutMs);
       break;
     }
     case ServerEventType.VERB_SUBSCRIPTION_UPDATE: {

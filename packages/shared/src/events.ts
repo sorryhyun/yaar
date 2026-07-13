@@ -372,6 +372,15 @@ export interface AppProtocolRequestEvent {
   requestId: string;
   windowId: string;
   request: AppProtocolRequest;
+  /**
+   * How long the server is prepared to wait for this request.
+   *
+   * The frontend runs its own timer over the postMessage round-trip, and without this it
+   * used a fixed 5s — so the server's timeout was decorative. A command that legitimately
+   * takes longer (devtools' compile, or a screenshot, whose capture alone may take 5s)
+   * came back as "Timeout waiting for app response" no matter what the caller asked for.
+   */
+  timeoutMs?: number;
 }
 
 export interface VerbSubscriptionUpdateEvent {
