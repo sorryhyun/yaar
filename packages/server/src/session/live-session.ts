@@ -186,8 +186,19 @@ export class LiveSession {
         const raw = (action as { windowId?: string }).windowId;
         // Stamp the scoped handle if the action has a raw windowId
         const handle = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
-        const stamped =
-          handle && handle !== raw ? ({ ...action, windowId: handle } as OSAction) : action;
+        // Carry the requestId through, as ToolActionBridge does on the agent path.
+        // An action awaiting feedback is only answerable if the frontend knows which
+        // request to answer: `window.capture` reads the id off the action itself and
+        // skips the capture without one. Dropping it here is why devtools could open a
+        // preview and never screenshot it — the request went out, nothing came back, and
+        // the read timed out into "no screenshot" every time.
+        const patch = {
+          ...(handle && handle !== raw ? { windowId: handle } : {}),
+          ...(event.requestId ? { requestId: event.requestId } : {}),
+        };
+        const stamped = (
+          Object.keys(patch).length > 0 ? { ...action, ...patch } : action
+        ) as OSAction;
         this.broadcast({
           type: ServerEventType.ACTIONS,
           actions: [stamped],
