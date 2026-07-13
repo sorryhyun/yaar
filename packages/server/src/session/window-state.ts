@@ -10,6 +10,7 @@
 
 import type { OSAction, WindowState, AppProtocolRequest } from '@yaar/shared';
 import { applyContentOperation } from '@yaar/shared';
+import { getMonitorId } from '../agents/agent-context.js';
 import { WindowHandleMap } from './window-handle-map.js';
 
 // Re-export WindowState for convenience
@@ -40,14 +41,21 @@ export class WindowStateRegistry {
   /**
    * Resolve a windowId (raw or handle) to its internal map key.
    * Returns the resolved key and the stored WindowState, or undefined.
+   *
+   * Raw IDs are only unique within a monitor (they are derived from the appId), so
+   * a raw lookup is scoped to the caller's monitor — taken from the ambient agent
+   * context, since an agent may only address windows on the monitor it runs on.
+   * Without that scope an agent on monitor 1 asking for "devtools" could resolve
+   * into monitor 0's copy of the app. Outside an agent turn (HTTP, restore) the
+   * handle map falls back to resolving unambiguous raw IDs.
    */
   private resolve(windowId: string): [string, WindowState] | undefined {
     // 1. Exact match (handle or legacy raw key)
     const exact = this.windows.get(windowId);
     if (exact) return [windowId, exact];
 
-    // 2. Resolve via handle map (raw ID → handle)
-    const handle = this.handleMap.resolve(windowId);
+    // 2. Resolve via handle map (raw ID → handle), scoped to the caller's monitor
+    const handle = this.handleMap.resolve(windowId, getMonitorId());
     if (handle) {
       const state = this.windows.get(handle);
       if (state) return [handle, state];

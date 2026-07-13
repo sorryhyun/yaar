@@ -372,6 +372,17 @@ describe('App agents are scoped to their monitor', () => {
     expect(pool.agentPool.getAppAgent('0', 'storage')!.instanceId).toBe(onZero!.instanceId);
   });
 
+  it('findMonitorForAgent reports an app agent’s owning monitor', async () => {
+    // Every MCP request scopes its window lookups by getMonitorId(), which is fed
+    // from here. If app agents were absent, they'd all default to monitor 0 and an
+    // app agent on monitor 1 would look for its own window on monitor 0.
+    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'devtools');
+    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'devtools');
+
+    expect(pool.agentPool.findMonitorForAgent(onOne!.instanceId)).toBe('1');
+    expect(pool.agentPool.findMonitorForAgent(onZero!.instanceId)).toBe('0');
+  });
+
   it('reports the owning monitor on the roster and resolves it back from an instanceId', async () => {
     const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
 

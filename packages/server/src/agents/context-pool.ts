@@ -117,8 +117,14 @@ export class ContextPool implements PoolContext {
     this.agentPool = new AgentPool(sessionId, broadcast, (rawId, monitorId) => {
       // Resolve raw window ID to scoped handle via the handle map.
       // If monitorId is provided, register/resolve; otherwise try lookup.
+      //
+      // The lookup must be scoped to the acting monitor before we fall back to
+      // registering. Raw IDs are derived from the appId, so an unscoped resolve
+      // would hand monitor 1's agent the handle of monitor 0's window of the same
+      // app — its window.create would land on monitor 0's window and every message
+      // after it would drive monitor 0's app agent instead of its own.
       if (monitorId) {
-        const existing = windowState.handleMap.resolve(rawId);
+        const existing = windowState.handleMap.resolve(rawId, monitorId);
         return existing ?? windowState.handleMap.register(rawId, monitorId);
       }
       return windowState.handleMap.resolve(rawId) ?? rawId;

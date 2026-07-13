@@ -556,18 +556,24 @@ export class LiveSession {
 
       case ClientEventType.APP_PROTOCOL_READY: {
         // The frontend reports the monitor-scoped key (e.g. "0/ai-chat", from the window
-        // element's data-window-id). Normalize to the raw AI-facing id ("ai-chat") so the
-        // readiness signal matches what app_query/app_command wait on. waitForAppReady() and
-        // setAppProtocol resolve by the raw id; a scoped key would silently never match,
-        // leaving the window perpetually "not ready" (e.g. devtools preview windows created
-        // via the iframe-SDK proxy, which are stored under their raw id).
-        const rawWindowId = this.windowState.handleMap.getRawWindowId(event.windowId);
-        const wasReady = this.windowState.getWindow(rawWindowId)?.appProtocol ?? false;
-        this.windowState.setAppProtocol(rawWindowId);
-        actionEmitter.notifyAppReady(rawWindowId);
+        // element's data-window-id). Keep that scope: readiness is per window, and the raw
+        // AI-facing id ("ai-chat") names one window *per monitor*, so collapsing to it would
+        // let monitor 0's registration mark monitor 1's window ready — leaving monitor 1's
+        // agent talking to an iframe that never registered. app_query/app_command wait on
+        // the same resolved key (see requireAppReady).
+        //
+        // Windows stored under a bare raw id (devtools preview windows, created via the
+        // iframe-SDK proxy with no monitor) still resolve: getWindow() matches them exactly,
+        // and the fallback below strips a scope they never had.
+        const windowKey =
+          this.windowState.getWindow(event.windowId)?.id ??
+          this.windowState.handleMap.getRawWindowId(event.windowId);
+        const wasReady = this.windowState.getWindow(windowKey)?.appProtocol ?? false;
+        this.windowState.setAppProtocol(windowKey);
+        actionEmitter.notifyAppReady(windowKey);
         // Replay stored commands only on re-registration (reload/remount), not first time
         if (wasReady) {
-          this.replayAppCommands(rawWindowId);
+          this.replayAppCommands(windowKey);
         }
         break;
       }

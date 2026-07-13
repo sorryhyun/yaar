@@ -331,11 +331,25 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // (e.g. installApp) can resolve the session via getSessionId() for permission dialogs.
   const registry = initRegistry();
   const sessionId = tokenEntry?.sessionId as SessionId | undefined;
+  // The calling iframe's own window pins the monitor it acts on. Without it the
+  // context carries no monitor, and everything downstream that scopes by
+  // `getMonitorId()` — window creation, raw window-ID resolution — falls back to
+  // monitor 0: an app launched from monitor 1's dock would open on monitor 0.
+  const callerWindowId = tokenEntry?.windowId;
+  const monitorId =
+    sessionId && callerWindowId
+      ? getSessionHub().get(sessionId)?.windowState.getMonitorForWindow(callerWindowId)
+      : undefined;
   const dispatch = () => {
     const execute = () => registry.execute(verb, resolvedUri, body.payload);
     return sessionId
       ? runWithAgentContext(
-          { agentId: `iframe:${tokenEntry?.appId ?? 'unknown'}`, sessionId },
+          {
+            agentId: `iframe:${tokenEntry?.appId ?? 'unknown'}`,
+            sessionId,
+            monitorId,
+            windowId: callerWindowId,
+          },
           execute,
         )
       : execute();

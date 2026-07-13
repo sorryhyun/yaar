@@ -431,12 +431,18 @@ export class AgentPool {
 
   /**
    * Find the monitorId for a given agent instanceId.
+   *
+   * App agents count: they are keyed by the monitor whose windows they drive, and
+   * callers (notably the MCP request context, which scopes every window lookup by
+   * `getMonitorId()`) must see that monitor. Omitting them here would silently
+   * place every app agent on monitor 0 — an app agent on monitor 1 would then look
+   * for its own window on monitor 0 and not find it.
    */
   findMonitorForAgent(agentId: string): string | undefined {
     for (const [monitorId, agent] of this.monitorAgents) {
       if (agent.instanceId === agentId) return monitorId;
     }
-    return undefined;
+    return this.findAppForAgent(agentId)?.monitorId;
   }
 
   /**
