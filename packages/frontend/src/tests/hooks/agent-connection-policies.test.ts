@@ -50,6 +50,7 @@ function createHandlers() {
     setIsConnecting: mock(() => {}),
     setConnectionStatus: mock(() => {}),
     setSession: mock(() => {}),
+    setAttachment: mock(() => {}),
     checkForPreviousSession: mock(() => {}),
     addDebugEntry: mock(() => {}),
     setAgentActive: mock(() => {}),
@@ -138,7 +139,7 @@ describe('socket lifecycle', () => {
     let scheduledReconnects = 0;
 
     // A server that accepts a socket and immediately drops it, never sending
-    // CONNECTION_STATUS — transport open alone must not refill the retry budget.
+    // SESSION_ATTACHED — transport open alone must not refill the retry budget.
     for (let i = 0; i < MAX_RECONNECT_ATTEMPTS + 2; i++) {
       const fake = createFakeSocket();
       expect(openSocket(wsManager, () => asSocket(fake), handlers)).not.toBeNull();
@@ -168,9 +169,89 @@ describe('socket lifecycle', () => {
     expect(wsManager.reconnectAttempts).toBe(0);
     expect(shouldReconnect(1006, wsManager.reconnectAttempts)).toBe(true);
   });
+
+  it('reports connected only once the socket is bound to a session', () => {
+    const wsManager = createWsManager();
+    const fake = createFakeSocket();
+    openSocket(wsManager, () => asSocket(fake), createSocketHandlers());
+
+    // Transport is up, but the server has not said which session this socket carries.
+    fake.readyState = WebSocket.OPEN;
+    fake.onopen?.(new Event('open'));
+    expect(wsManager.getSnapshot()).toBe(false);
+
+    markAttached(wsManager);
+    expect(wsManager.getSnapshot()).toBe(true);
+
+    // The socket drops: attachment goes with it, and a replacement socket starts unattached.
+    fake.readyState = WebSocket.CLOSED;
+    fake.onclose?.(closeEvent(1006));
+    expect(wsManager.attached).toBe(false);
+    if (wsManager.reconnectTimeout !== null) clearTimeout(wsManager.reconnectTimeout);
+
+    const next = createFakeSocket();
+    openSocket(wsManager, () => asSocket(next), createSocketHandlers());
+    next.readyState = WebSocket.OPEN;
+    next.onopen?.(new Event('open'));
+    expect(wsManager.getSnapshot()).toBe(false);
+  });
 });
 
 describe('server event dispatcher', () => {
+  it('records the session incarnation the join bound us to', () => {
+    const handlers = createHandlers();
+
+    dispatchServerEvent(
+      {
+        type: 'SESSION_ATTACHED',
+        sessionId: 's1',
+        sessionEpoch: 42,
+        connectionId: 'conn-1',
+        recoveryMode: 'attached',
+        provider: 'claude',
+        logSessionId: '2026-07-13_10-00-00',
+      },
+      handlers,
+    );
+
+    expect(handlers.setAttachment).toHaveBeenCalledWith({
+      sessionId: 's1',
+      sessionEpoch: 42,
+      connectionId: 'conn-1',
+      recoveryMode: 'attached',
+      provider: 'claude',
+    });
+    // The history lookup is keyed by the transcript on disk, not the hub id.
+    expect(handlers.checkForPreviousSession).toHaveBeenCalledWith('2026-07-13_10-00-00');
+  });
+
+  it('surfaces a replacement session instead of passing it off as a rejoin', () => {
+    const handlers = createHandlers();
+    const warn = console.warn;
+    const warnings: unknown[] = [];
+    console.warn = (...args: unknown[]) => warnings.push(args[0]);
+
+    try {
+      dispatchServerEvent(
+        {
+          type: 'SESSION_ATTACHED',
+          sessionId: 's1',
+          sessionEpoch: 43,
+          connectionId: 'conn-2',
+          recoveryMode: 'replaced',
+        },
+        handlers,
+      );
+    } finally {
+      console.warn = warn;
+    }
+
+    expect(handlers.setAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({ recoveryMode: 'replaced', sessionEpoch: 43 }),
+    );
+    expect(warnings).toHaveLength(1);
+  });
+
   it('dispatches connection and response events', () => {
     const handlers = createHandlers();
 

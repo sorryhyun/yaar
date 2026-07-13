@@ -17,6 +17,7 @@ export const ServerEventType = {
   ACTIONS: 'ACTIONS',
   AGENT_THINKING: 'AGENT_THINKING',
   AGENT_RESPONSE: 'AGENT_RESPONSE',
+  SESSION_ATTACHED: 'SESSION_ATTACHED',
   CONNECTION_STATUS: 'CONNECTION_STATUS',
   TOOL_PROGRESS: 'TOOL_PROGRESS',
   ERROR: 'ERROR',
@@ -256,6 +257,50 @@ export interface AgentResponseEvent {
   messageId?: string;
 }
 
+/**
+ * What the server did with the session id the client asked for.
+ *
+ * - `attached` — the requested session was still live in the hub; same incarnation,
+ *   same agents, same windows. This is the only mode that means true continuity.
+ * - `restored` — a new incarnation seeded from state the server read off disk at boot.
+ *   Windows come back; provider conversations do not.
+ * - `replaced` — a new, empty incarnation under the requested id, because the old one
+ *   was evicted or never existed in this process. Any local state the client still
+ *   holds for that id is stale.
+ * - `created` — the client asked for nothing and got a brand-new session.
+ */
+export type RecoveryMode = 'attached' | 'restored' | 'replaced' | 'created';
+
+/**
+ * The attachment handshake: sent to a single connection once it is bound to a LiveSession.
+ *
+ * An open WebSocket only means transport exists. This event is what says *which* session
+ * incarnation the transport is bound to, so the client can tell a genuine reattachment
+ * from a replacement wearing the same session id.
+ */
+export interface SessionAttachedEvent {
+  type: typeof ServerEventType.SESSION_ATTACHED;
+  /** The hub's key for this session — what the client echoes back on rejoin. */
+  sessionId: string;
+  /**
+   * Identifies the session *incarnation*, not the id. A session id outlives eviction and
+   * process restarts; the epoch does not. A client that sees the same sessionId with a
+   * different epoch is talking to a different session that merely reuses the name.
+   */
+  sessionEpoch: number;
+  /** This connection's id in the BroadcastCenter — distinct per tab. */
+  connectionId: string;
+  recoveryMode: RecoveryMode;
+  provider?: string;
+  /** See ConnectionStatusEvent.logSessionId — the transcript on disk, a different namespace. */
+  logSessionId?: string;
+}
+
+/**
+ * Provider status. Not an attachment signal — SessionAttachedEvent is what binds a
+ * connection to a session incarnation, and the client must not treat CONNECTION_STATUS
+ * as proof that it happened.
+ */
 export interface ConnectionStatusEvent {
   type: typeof ServerEventType.CONNECTION_STATUS;
   status: 'connected' | 'disconnected' | 'error';
@@ -353,6 +398,7 @@ export type ServerEvent =
   | ActionsEvent
   | AgentThinkingEvent
   | AgentResponseEvent
+  | SessionAttachedEvent
   | ConnectionStatusEvent
   | ToolProgressEvent
   | ErrorEvent

@@ -2,6 +2,7 @@ import type { ClientEvent } from '@/types';
 
 export interface WsManager {
   ws: WebSocket | null;
+  attached: boolean;
   reconnectAttempts: number;
   reconnectTimeout: number | null;
   listeners: Set<() => void>;
@@ -17,12 +18,19 @@ export const MAX_RECONNECT_ATTEMPTS = 5;
 export function createWsManager() {
   const wsManager = {
     ws: null as WebSocket | null,
+    /** Set once the server answers with SESSION_ATTACHED — see markAttached(). */
+    attached: false,
     reconnectAttempts: 0,
     reconnectTimeout: null as number | null,
     listeners: new Set<() => void>(),
 
+    /**
+     * "Connected" means the socket is open *and* the server has bound it to a session.
+     * A socket that opened but never attached carries no session: anything sent over it
+     * reaches a server that does not yet know which conversation it belongs to.
+     */
     getSnapshot() {
-      return this.ws?.readyState === WebSocket.OPEN;
+      return this.ws?.readyState === WebSocket.OPEN && this.attached;
     },
 
     subscribe(listener: () => void) {
@@ -61,14 +69,16 @@ export function shouldReconnect(closeCode: number, reconnectAttempts: number): b
 }
 
 /**
- * The session is attached (server sent CONNECTION_STATUS), so the retry budget resets.
+ * The server answered the join with SESSION_ATTACHED: the socket now carries a session.
  *
- * An open transport is not an attached session: a server that accepts a socket and
- * immediately drops it would otherwise reset the budget on every cycle and reconnect
- * forever. Only a completed handshake counts as progress.
+ * This — not transport open — is what makes the connection usable and what refills the
+ * retry budget. A server that accepts a socket and immediately drops it never gets here,
+ * so it exhausts the budget instead of being retried forever.
  */
 export function markAttached(wsManager: ReturnType<typeof createWsManager>): void {
+  wsManager.attached = true;
   wsManager.reconnectAttempts = 0;
+  wsManager.notify();
 }
 
 export interface SocketHandlers {
@@ -103,6 +113,8 @@ export function openSocket(
 
   const socket = createSocket();
   wsManager.ws = socket;
+  // A new socket has attached to nothing yet, whatever the old one had achieved.
+  wsManager.attached = false;
   const isCurrent = () => wsManager.ws === socket;
 
   socket.onopen = () => {
@@ -119,6 +131,7 @@ export function openSocket(
   socket.onclose = (event) => {
     if (!isCurrent()) return;
     wsManager.ws = null;
+    wsManager.attached = false;
     wsManager.notify();
     handlers.onClose(event);
 

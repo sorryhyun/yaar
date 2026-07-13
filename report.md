@@ -399,8 +399,22 @@ Evidence:
 
 Landed: `SessionHub.remove()` deregisters in a `finally` (F-9); socket callbacks are wired through `openSocket()` and bail unless they belong to the currently registered socket (F-8); the reconnect budget resets on `CONNECTION_STATUS` rather than transport open (F-3, in part). Each has an acceptance test.
 
+### Slice 1: the attachment handshake — done
+
+Target model item 1 ("separate transport connection from session attachment"), which also closes F-4.
+
+The WebSocket join now answers with a distinct `SESSION_ATTACHED` event carrying `sessionId`, `sessionEpoch`, `connectionId`, and `recoveryMode` (`attached` | `restored` | `replaced` | `created`). `CONNECTION_STATUS` is demoted to what it always really was — provider status — and no longer doubles as proof that a socket is bound to a session.
+
+- `sessionEpoch` stamps the *incarnation*, not the id: `SessionHub.attach()` classifies whether the requested id resolved to the live session (`attached`), a new one seeded from boot-time restore state (`restored`), a new empty one under an id this process evicted or never held (`replaced`), or a session the client never asked for (`created`). Eviction is checked before restore state, so a replaced session that happens to come up with boot windows is not reported as a rejoin.
+- The frontend's `isConnected` now requires attachment, not just an open transport, and a socket that drops loses its attachment. `markAttached()` keys off `SESSION_ATTACHED`. A non-`attached` recovery mode is surfaced rather than absorbed.
+- `latestEventCursor` is deliberately absent: there is no retained event log to cursor into (F-1), and a cursor field the server cannot honor would be a false promise. It belongs with the event-log slice.
+
+Verified against a running server: rejoining a live session returns the same epoch and `attached`; an unknown id returns a new epoch and `replaced`; a browser reload rejoins its own session in place.
+
+Acceptance tests cover `attach()` classification, epoch uniqueness across incarnations, the join event's shape, and the frontend's connected-means-attached rule.
+
 ### Next slices
 
-Following the "Suggested implementation order" above: send results without premature input consumption (order item 1), `sessionEpoch` (item 2), replace-state snapshot plus one defined monitor-subscription semantic covering F-7/F-10 (items 3 and 7).
+Following the "Suggested implementation order" above: send results without premature input consumption (order item 1), then the replace-state snapshot plus one defined monitor-subscription semantic covering F-7/F-10 (items 3 and 7). The snapshot slice can now key off `recoveryMode` — a `replaced` or `restored` attachment is exactly the case where the client's local windows must be reconciled rather than merged.
 
-Still open from the findings: F-1 (unrecoverable events), F-2 (silently dropped commands), F-3 (the remaining timing-policy inconsistencies), F-4 (session incarnation), F-5 (provider history loss), F-6 (App Protocol delivery), F-7 and F-10 (monitor subscription semantics).
+Still open from the findings: F-1 (unrecoverable events), F-2 (silently dropped commands), F-3 (the remaining timing-policy inconsistencies), F-5 (provider history loss), F-6 (App Protocol delivery), F-7 and F-10 (monitor subscription semantics).

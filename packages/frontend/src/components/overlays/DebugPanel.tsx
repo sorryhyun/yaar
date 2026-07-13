@@ -17,6 +17,8 @@ function getSummary(entry: DebugEntry): string {
       return truncate(String(data.content || ''), 60);
     case ServerEventType.AGENT_THINKING:
       return truncate(String(data.content || ''), 60);
+    case ServerEventType.SESSION_ATTACHED:
+      return `${data.recoveryMode} — ${data.sessionId} @${data.sessionEpoch}`;
     case ServerEventType.CONNECTION_STATUS:
       return `${data.status}${data.provider ? ` (${data.provider})` : ''}`;
     case ServerEventType.ACTIONS: {

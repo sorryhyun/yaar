@@ -47,6 +47,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     applyActions,
     setConnectionStatus,
     setSession,
+    setAttachment,
     addDebugEntry,
     setAgentActive,
     clearAgent,
@@ -115,7 +116,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       try {
         const message = JSON.parse(event.data);
         // Attachment — not transport open — is what proves the connection made progress.
-        if (message?.type === ServerEventType.CONNECTION_STATUS && message.status === 'connected') {
+        if (message?.type === ServerEventType.SESSION_ATTACHED) {
           markAttached(wsManager);
         }
         dispatchServerEvent(message, {
@@ -123,6 +124,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           setIsConnecting,
           setConnectionStatus,
           setSession,
+          setAttachment,
           checkForPreviousSession,
           addDebugEntry,
           setAgentActive,

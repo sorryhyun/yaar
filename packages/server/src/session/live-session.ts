@@ -18,6 +18,7 @@ import { WindowStateRegistry } from './window-state.js';
 import { LayoutContext } from './layout-context.js';
 import { ReloadCache } from '../reload/cache.js';
 import type { SessionId } from './types.js';
+import { nextSessionEpoch } from './types.js';
 import type { ConnectionId } from './broadcast-center.js';
 import { getBroadcastCenter } from './broadcast-center.js';
 import {
@@ -79,6 +80,12 @@ function subscribeSessionChannels(
 
 export class LiveSession {
   readonly sessionId: SessionId;
+  /**
+   * This incarnation's stamp. Two LiveSessions can carry the same `sessionId` over a
+   * server's lifetime — one evicted, one created later under the id a client asked for —
+   * and only the epoch tells them apart. Sent to the client in SESSION_ATTACHED.
+   */
+  readonly epoch: number = nextSessionEpoch();
   private connections = new Map<ConnectionId, YaarWebSocket>();
 
   // Session-scoped state

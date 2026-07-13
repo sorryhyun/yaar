@@ -111,6 +111,52 @@ describe('SessionHub session lifecycle', () => {
     expect(fresh).not.toBe(session);
   });
 
+  it('tells a rejoin apart from a replacement wearing the same id', async () => {
+    const original = hub.getOrCreate(null, {});
+    const id = original.sessionId;
+
+    // Reconnect while the session is still live: same incarnation, same epoch.
+    const rejoin = hub.attach(id, {});
+    expect(rejoin.recoveryMode).toBe('attached');
+    expect(rejoin.session).toBe(original);
+    expect(rejoin.session.epoch).toBe(original.epoch);
+
+    // The session is evicted, then the client comes back on the same id.
+    await hub.remove(id);
+    const replaced = hub.attach(id, {});
+    expect(replaced.recoveryMode).toBe('replaced');
+    expect(replaced.session).not.toBe(original);
+    expect(replaced.session.sessionId).toBe(id);
+    // Same name, different session — only the epoch says so.
+    expect(replaced.session.epoch).toBeGreaterThan(original.epoch);
+  });
+
+  it('reports a session seeded from boot state as restored, not attached', () => {
+    const restored = hub.attach('from-disk', {
+      restoreActions: [
+        {
+          type: 'window.create',
+          windowId: 'w1',
+          title: 'Notes',
+          bounds: { x: 0, y: 0, w: 400, h: 300 },
+          content: { renderer: 'text', data: '' },
+        },
+      ],
+    });
+    expect(restored.recoveryMode).toBe('restored');
+
+    // Boot state is seeded into whatever session comes up next, so a session we know we
+    // evicted stays a replacement even when windows come back with it.
+    const fresh = hub.getOrCreate(null, {});
+    expect(hub.attach(fresh.sessionId, {}).recoveryMode).toBe('attached');
+  });
+
+  it('reports a connection that asked for nothing as a fresh session', () => {
+    expect(hub.attach(null, {}).recoveryMode).toBe('created');
+    // A second tab with no session id lands on the default session — that is a rejoin.
+    expect(hub.attach(null, {}).recoveryMode).toBe('attached');
+  });
+
   it('getDefault() returns the first created session', () => {
     const s1 = hub.getOrCreate(null, {});
     hub.getOrCreate(null, {}); // second call returns same session (already has default)
@@ -125,8 +171,9 @@ describe('createWsHandlers open()', () => {
     initSessionHub();
   });
 
-  it('registers the connection and sends CONNECTION_STATUS event', async () => {
+  it('answers the join with the session incarnation it bound the socket to', async () => {
     const { createWsHandlers } = await import('@yaar/server/websocket/server');
+    const hub = getSessionHub();
 
     const handlers = createWsHandlers({
       restoreActions: [],
@@ -148,12 +195,41 @@ describe('createWsHandlers open()', () => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await handlers.open(ws as any);
 
-    // Should have sent at least the CONNECTION_STATUS event
+    // The handshake is the first thing on the wire — the client needs the session id
+    // before any window snapshot lands, and it is what puts the UI into "connected".
     expect(ws.sentMessages.length).toBeGreaterThan(0);
     const event = JSON.parse(ws.sentMessages[0]);
-    expect(event.type).toBe('CONNECTION_STATUS');
-    expect(event.status).toBe('connected');
+    expect(event.type).toBe('SESSION_ATTACHED');
+    expect(event.recoveryMode).toBe('created');
+    expect(event.connectionId).toBe('conn-test-1');
     expect(event.sessionId).toBeTruthy();
+    expect(event.sessionEpoch).toBe(hub.get(event.sessionId)!.epoch);
+  });
+
+  it('marks a reconnect after eviction as a replacement', async () => {
+    const { createWsHandlers } = await import('@yaar/server/websocket/server');
+    const hub = getSessionHub();
+    const handlers = createWsHandlers({ restoreActions: [], contextMessages: [] });
+
+    const evicted = hub.getOrCreate('gone-session', {});
+    const oldEpoch = evicted.epoch;
+    await hub.remove('gone-session');
+
+    const ws = createMockWs();
+    (
+      ws as never as {
+        data: { connectionId: string; sessionId: string | null; monitorId: string | null };
+      }
+    ).data = { connectionId: 'conn-test-3', sessionId: 'gone-session', monitorId: null };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await handlers.open(ws as any);
+
+    const event = JSON.parse(ws.sentMessages[0]);
+    expect(event.type).toBe('SESSION_ATTACHED');
+    expect(event.sessionId).toBe('gone-session');
+    expect(event.recoveryMode).toBe('replaced');
+    expect(event.sessionEpoch).toBeGreaterThan(oldEpoch);
   });
 
   it('session exists in hub after open()', async () => {

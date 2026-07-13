@@ -1,4 +1,10 @@
-import type { ServerEvent, OSAction, AppProtocolRequestEvent, AppProtocolRequest } from '@/types';
+import type {
+  ServerEvent,
+  OSAction,
+  AppProtocolRequestEvent,
+  AppProtocolRequest,
+  RecoveryMode,
+} from '@/types';
 import { ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
 
 export interface ServerEventDispatchHandlers {
@@ -9,6 +15,13 @@ export interface ServerEventDispatchHandlers {
     error?: string,
   ) => void;
   setSession: (provider: string, sessionId: string) => void;
+  setAttachment: (attachment: {
+    sessionId: string;
+    sessionEpoch: number;
+    connectionId: string;
+    recoveryMode: RecoveryMode;
+    provider?: string;
+  }) => void;
   checkForPreviousSession: (sessionId: string) => void;
   addDebugEntry: (entry: { direction: 'in'; type: string; data: ServerEvent }) => void;
   setAgentActive: (agentId: string, status: string) => void;
@@ -61,6 +74,7 @@ function extractAgentId(message: ServerEvent): string {
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
   const shouldLog =
     message.type === ServerEventType.ACTIONS ||
+    message.type === ServerEventType.SESSION_ATTACHED ||
     message.type === ServerEventType.CONNECTION_STATUS ||
     message.type === ServerEventType.ERROR ||
     (message.type === ServerEventType.AGENT_RESPONSE &&
@@ -93,6 +107,33 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         })
         .join('; ');
       handlers.addCliEntry({ type: 'action-summary', content: summary, monitorId });
+      break;
+    }
+    case ServerEventType.SESSION_ATTACHED: {
+      // The join completed: this socket now carries a named session incarnation. Until
+      // this arrives the transport is open but bound to nothing, so it is this event —
+      // not the socket's open — that puts the UI into "connected".
+      handlers.setIsConnecting(false);
+      handlers.setAttachment({
+        sessionId: message.sessionId,
+        sessionEpoch: message.sessionEpoch,
+        connectionId: message.connectionId,
+        recoveryMode: message.recoveryMode,
+        provider: message.provider,
+      });
+      if (message.recoveryMode !== 'attached' && message.recoveryMode !== 'created') {
+        // Not the session we left. Local windows, agents, and iframe state describe an
+        // incarnation the server no longer has; the reconnect snapshot only adds windows,
+        // so some of what is on screen is stale. Reconciling it is the next slice's job
+        // (report.md target model item 2) — surface it rather than pretend it is a rejoin.
+        console.warn(
+          `[connection] session ${message.sessionId} came back as "${message.recoveryMode}" ` +
+            `(epoch ${message.sessionEpoch}) — local state may be stale`,
+        );
+      }
+      // sessionId is the hub key (WebSocket rejoin, iframe tokens); logSessionId names the
+      // transcript on disk, which is what /api/sessions is keyed by.
+      handlers.checkForPreviousSession(message.logSessionId ?? message.sessionId);
       break;
     }
     case ServerEventType.CONNECTION_STATUS:
