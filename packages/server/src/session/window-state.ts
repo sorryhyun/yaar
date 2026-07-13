@@ -21,7 +21,7 @@ export type { WindowState } from '@yaar/shared';
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
-  private onWindowCloseCallback?: (windowId: string, appId?: string) => void;
+  private onWindowCloseCallback?: (windowId: string, appId?: string, monitorId?: string) => void;
 
   readonly handleMap: WindowHandleMap;
 
@@ -33,7 +33,7 @@ export class WindowStateRegistry {
    * Set a callback to be invoked when a window is closed.
    * Used to invalidate reload cache entries that depend on the closed window.
    */
-  setOnWindowClose(cb: (windowId: string, appId?: string) => void): void {
+  setOnWindowClose(cb: (windowId: string, appId?: string, monitorId?: string) => void): void {
     this.onWindowCloseCallback = cb;
   }
 
@@ -93,10 +93,13 @@ export class WindowStateRegistry {
       case 'window.close': {
         const key = this.actionKey(action.windowId, monitorId);
         const appId = this.windows.get(key)?.appId;
+        // Read the owner before remove() drops it — the callback needs it to find
+        // the app agent that was driving this window.
+        const owner = this.handleMap.getMonitorId(key) ?? monitorId;
         this.windows.delete(key);
         this.appCommands.delete(key);
         this.handleMap.remove(key);
-        this.onWindowCloseCallback?.(key, appId);
+        this.onWindowCloseCallback?.(key, appId, owner);
         break;
       }
 
@@ -233,6 +236,16 @@ export class WindowStateRegistry {
   getAppIdForWindow(windowId: string): string | undefined {
     const resolved = this.resolve(windowId);
     return resolved ? resolved[1].appId : undefined;
+  }
+
+  /**
+   * The monitor that owns this window, or undefined for legacy/restored windows
+   * whose handle carries no monitor. App agents are keyed by this — a window's
+   * monitor is what decides which monitor's app agent may drive it.
+   */
+  getMonitorForWindow(windowId: string): string | undefined {
+    const resolved = this.resolve(windowId);
+    return resolved ? this.handleMap.getMonitorId(resolved[0]) : undefined;
   }
 
   isAppProtocolWindow(windowId: string): boolean {

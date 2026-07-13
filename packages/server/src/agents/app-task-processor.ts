@@ -18,18 +18,28 @@ import {
 } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
+import { appAgentKey } from './agent-pool.js';
 
 export class AppTaskProcessor {
-  /** Track the most recent windowId for each app (for tool resolution). */
+  /** Track the most recent windowId per `{monitorId}::{appId}` (for tool resolution). */
   private activeWindows = new Map<string, string>();
-  /** Cached agent profiles per appId. */
+  /** Cached agent profiles per appId (a profile depends only on the app). */
   private profiles = new Map<string, AgentProfile>();
 
   constructor(private readonly ctx: PoolContext) {}
 
   /**
+   * The monitor that owns an app agent: the monitor of the window it drives.
+   * A task's own monitorId only says who *sent* it, which for a cross-monitor
+   * direct message is not the monitor the app window lives on.
+   */
+  private ownerMonitor(windowId: string, task?: Task): string {
+    return this.ctx.windowState.getMonitorForWindow(windowId) ?? task?.monitorId ?? '0';
+  }
+
+  /**
    * Handle a task for an app window.
-   * Creates or reuses the app agent, queues if busy.
+   * Creates or reuses the app agent for that app *on that window's monitor*, queues if busy.
    */
   async handleAppTask(task: Task, appId: string): Promise<void> {
     if (!task.windowId) {
@@ -38,17 +48,18 @@ export class AppTaskProcessor {
     }
 
     const windowId = task.windowId;
+    const monitorId = this.ownerMonitor(windowId, task);
 
-    // Update the active window for this app
-    this.activeWindows.set(appId, windowId);
+    // Update the active window for this app on this monitor
+    this.activeWindows.set(appAgentKey(monitorId, appId), windowId);
 
-    const processingKey = `app-${appId}`;
+    const processingKey = `app-${monitorId}-${appId}`;
     const isParallel = !!task.actionId;
 
     // If the app agent is already busy, try to steer (inject mid-turn message).
     // Falls back to queuing if the provider doesn't support steering.
     if (!isParallel && this.ctx.windowQueuePolicy.isProcessing(processingKey)) {
-      const steered = await this.ctx.agentPool.steerAppAgent(appId, task.content);
+      const steered = await this.ctx.agentPool.steerAppAgent(monitorId, appId, task.content);
       if (steered) {
         console.log(
           `[AppTaskProcessor] Steered task ${task.messageId} into running ${appId} agent`,
@@ -58,7 +69,7 @@ export class AppTaskProcessor {
         await this.ctx.sendEvent({
           type: ServerEventType.MESSAGE_ACCEPTED,
           messageId: task.messageId,
-          agentId: `app-${appId}`,
+          agentId: processingKey,
         });
         return;
       }
@@ -79,13 +90,15 @@ export class AppTaskProcessor {
 
     this.ctx.windowQueuePolicy.setProcessing(processingKey, true);
 
+    // Roles keep the `app-{appId}` prefix (principalRole() and hasRolePrefix()
+    // both key off it) and carry the owning monitor after it.
     const agentRole = isParallel
-      ? `app-${appId}-${windowId}/${task.actionId}`
-      : `app-${appId}-${task.messageId}`;
+      ? `app-${appId}-m${monitorId}-${windowId}/${task.actionId}`
+      : `app-${appId}-m${monitorId}-${task.messageId}`;
 
     try {
-      // Get or create persistent app agent
-      const agent = await this.ctx.agentPool.getOrCreateAppAgent(appId);
+      // Get or create the persistent app agent for this app on this monitor
+      const agent = await this.ctx.agentPool.getOrCreateAppAgent(monitorId, appId);
       if (!agent) {
         this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
         console.error(`[AppTaskProcessor] Failed to create app agent for ${appId}`);
@@ -123,7 +136,10 @@ export class AppTaskProcessor {
         prompt: task.content,
         fp,
         windowId,
-        monitorId: task.monitorId,
+        // The turn runs on the window's monitor, not the sender's — this scopes the
+        // window handles the agent's actions resolve against, and the monitor its
+        // `relay` reaches.
+        monitorId,
         // Codex doesn't filter tools per-thread via allowedTools (its per-thread
         // mcp_servers override carries the full active set + agent identity; see
         // CodexProvider.buildMcpScope), so pass undefined and let it use all
@@ -136,11 +152,7 @@ export class AppTaskProcessor {
           appResponseText = text;
         },
         onBeforeRun: async () => {
-          await this.ctx.sharedLogger?.registerAgent(
-            agentRole,
-            `monitor-${task.monitorId ?? '0'}`,
-            windowId,
-          );
+          await this.ctx.sharedLogger?.registerAgent(agentRole, `monitor-${monitorId}`, windowId);
           await this.sendWindowStatus(windowId, agentRole, 'assigned');
           await this.sendWindowStatus(windowId, agentRole, 'active');
         },
@@ -186,38 +198,52 @@ export class AppTaskProcessor {
   }
 
   /**
-   * Get the most recently active windowId for an app.
+   * Get the most recently active windowId for an app on a monitor.
    */
-  getActiveWindowId(appId: string): string | undefined {
-    return this.activeWindows.get(appId);
+  getActiveWindowId(monitorId: string, appId: string): string | undefined {
+    return this.activeWindows.get(appAgentKey(monitorId, appId));
   }
 
   /**
    * Handle a window being closed — interrupt the app agent if it's running for this window,
    * clear queued tasks, and remove active window tracking.
    */
-  async handleWindowClose(windowId: string, appId: string): Promise<void> {
-    const processingKey = `app-${appId}`;
+  async handleWindowClose(windowId: string, appId: string, monitorId?: string): Promise<void> {
+    // The window is already gone from the registry by the time this runs, so the
+    // caller passes the monitor it belonged to.
+    const owner = monitorId ?? this.ownerMonitor(windowId);
+    const key = appAgentKey(owner, appId);
+    const processingKey = `app-${owner}-${appId}`;
 
-    // Clear any queued tasks for this app
+    // Clear any queued tasks for this app on this monitor
     this.ctx.windowQueuePolicy.clearQueue(processingKey);
 
     // Remove active window tracking
-    if (this.activeWindows.get(appId) === windowId) {
-      this.activeWindows.delete(appId);
+    if (this.activeWindows.get(key) === windowId) {
+      this.activeWindows.delete(key);
     }
 
     // Interrupt the app agent if it's currently running
-    const agent = this.ctx.agentPool.getAppAgent(appId);
+    const agent = this.ctx.agentPool.getAppAgent(owner, appId);
     if (agent?.session.isRunning()) {
       console.log(
-        `[AppTaskProcessor] Interrupting app agent for ${appId} (window ${windowId} closed)`,
+        `[AppTaskProcessor] Interrupting app agent for ${appId} on monitor ${owner} (window ${windowId} closed)`,
       );
       await agent.session.interrupt();
     }
 
     // Clear processing state so the agent isn't stuck in "busy" state
     this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
+  }
+
+  /**
+   * Drop the window tracking for one monitor (its app agents are disposed with it).
+   */
+  clearMonitor(monitorId: string): void {
+    const prefix = appAgentKey(monitorId, '');
+    for (const key of this.activeWindows.keys()) {
+      if (key.startsWith(prefix)) this.activeWindows.delete(key);
+    }
   }
 
   /**

@@ -388,9 +388,9 @@ export class LiveSession {
     // Chain window close handlers: reload cache invalidation + pool agent cleanup
     const pool = this.pool;
     const reloadCache = this.reloadCache;
-    this.windowState.setOnWindowClose((wid, appId) => {
+    this.windowState.setOnWindowClose((wid, appId, monitorId) => {
       reloadCache.invalidateForWindow(wid);
-      pool.handleWindowClose(wid, appId);
+      pool.handleWindowClose(wid, appId, monitorId);
       subscriptionRegistry.clearForWindow(wid);
     });
 

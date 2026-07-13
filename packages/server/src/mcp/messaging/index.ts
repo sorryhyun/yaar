@@ -129,11 +129,13 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
       };
     }
     case 'app': {
-      const windowId = pool.getActiveAppWindow(target.id!);
+      // App agents are per-monitor: a sender can only reach the copy of the app
+      // running on its own monitor.
+      const windowId = pool.getActiveAppWindow(senderMonitorId, target.id!);
       if (!windowId) {
         return {
           ok: false,
-          error: `app "${target.id}" has no open window to receive the message.`,
+          error: `app "${target.id}" has no open window on monitor ${senderMonitorId} to receive the message.`,
         };
       }
       pool

@@ -4,7 +4,7 @@
  * Agent types:
  * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
- * - App agents: persistent per-app, handle app protocol communication
+ * - App agents: persistent per (monitor, app), handle app protocol communication
  *
  * Used by ContextPool to decouple agent lifecycle from task orchestration.
  */
@@ -19,6 +19,22 @@ import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { AITransport } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
+
+/**
+ * App agents are scoped to the monitor that owns their windows, so two monitors
+ * running the same app each get their own agent (and neither can see the other's
+ * context). This is the composite key; `::` cannot occur in a monitorId (numeric)
+ * or an appId (a directory name).
+ */
+export function appAgentKey(monitorId: string, appId: string): string {
+  return `${monitorId}::${appId}`;
+}
+const appKey = appAgentKey;
+
+function parseAppKey(key: string): { monitorId: string; appId: string } {
+  const idx = key.indexOf('::');
+  return { monitorId: key.slice(0, idx), appId: key.slice(idx + 2) };
+}
 
 /**
  * Internal pooled agent representation.
@@ -54,7 +70,7 @@ export class AgentPool {
   /** Persistent monitor agents, keyed by monitorId. */
   private monitorAgents = new Map<string, PooledAgent>();
 
-  /** Persistent per-app agents, keyed by appId. */
+  /** Persistent per-app agents, keyed by `{monitorId}::{appId}` (see `appKey`). */
   private appAgents = new Map<string, PooledAgent>();
 
   /** Session agent — lazy singleton for cross-monitor oversight. */
@@ -244,6 +260,9 @@ export class AgentPool {
     const agent = this.monitorAgents.get(monitorId);
     if (!agent) return false;
 
+    // The monitor's app agents die with it — they exist to drive its windows.
+    await this.disposeAppAgentsForMonitor(monitorId);
+
     this.monitorAgents.delete(monitorId);
     this.untrackAgent(agent.instanceId);
     if (agent.session.isRunning()) {
@@ -261,13 +280,17 @@ export class AgentPool {
   // ── App agents ───────────────────────────────────────────────────
 
   /**
-   * Get or create a persistent app agent.
-   * First call for an appId creates a fresh agent; subsequent calls reuse it.
+   * Get or create a persistent app agent for one app on one monitor.
+   * First call for a (monitorId, appId) pair creates a fresh agent; subsequent
+   * calls reuse it. A second monitor opening the same app gets its own agent.
    */
-  async getOrCreateAppAgent(appId: string): Promise<PooledAgent | null> {
-    const existing = this.appAgents.get(appId);
+  async getOrCreateAppAgent(monitorId: string, appId: string): Promise<PooledAgent | null> {
+    const key = appKey(monitorId, appId);
+    const existing = this.appAgents.get(key);
     if (existing) {
-      console.log(`[AgentPool] Reusing app agent for ${appId}: ${existing.instanceId}`);
+      console.log(
+        `[AgentPool] Reusing app agent for ${appId} on monitor ${monitorId}: ${existing.instanceId}`,
+      );
       return existing;
     }
 
@@ -278,23 +301,25 @@ export class AgentPool {
       return null;
     }
 
-    this.appAgents.set(appId, agent);
-    console.log(`[AgentPool] App agent created for ${appId}: ${agent.instanceId}`);
+    this.appAgents.set(key, agent);
+    console.log(
+      `[AgentPool] App agent created for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
+    );
     return agent;
   }
 
   /**
-   * Get the app agent for a given appId (if it exists).
+   * Get the app agent for a given app on a given monitor (if it exists).
    */
-  getAppAgent(appId: string): PooledAgent | undefined {
-    return this.appAgents.get(appId);
+  getAppAgent(monitorId: string, appId: string): PooledAgent | undefined {
+    return this.appAgents.get(appKey(monitorId, appId));
   }
 
   /**
-   * Check if an app agent exists for the given appId.
+   * Check if an app agent exists for the given app on the given monitor.
    */
-  hasAppAgent(appId: string): boolean {
-    return this.appAgents.has(appId);
+  hasAppAgent(monitorId: string, appId: string): boolean {
+    return this.appAgents.has(appKey(monitorId, appId));
   }
 
   /**
@@ -305,20 +330,42 @@ export class AgentPool {
   }
 
   /**
-   * Dispose the app agent for a given appId.
+   * Dispose the app agent for a given app on a given monitor.
    */
-  async disposeAppAgent(appId: string): Promise<void> {
-    const agent = this.appAgents.get(appId);
+  async disposeAppAgent(monitorId: string, appId: string): Promise<void> {
+    const key = appKey(monitorId, appId);
+    const agent = this.appAgents.get(key);
     if (!agent) return;
 
-    this.appAgents.delete(appId);
+    this.appAgents.delete(key);
     this.untrackAgent(agent.instanceId);
     if (agent.session.isRunning()) {
       await agent.session.interrupt();
     }
-    await agent.session.cleanup();
-    getAgentLimiter().release();
-    console.log(`[AgentPool] App agent disposed for ${appId}: ${agent.instanceId}`);
+    try {
+      await agent.session.cleanup();
+    } finally {
+      getAgentLimiter().release();
+    }
+    console.log(
+      `[AgentPool] App agent disposed for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
+    );
+  }
+
+  /**
+   * Dispose every app agent owned by a monitor. App agents belong to the monitor
+   * whose windows they drive, so tearing the monitor down reclaims them — nothing
+   * else would, and leaking them would hold limiter slots for a monitor that's gone.
+   */
+  async disposeAppAgentsForMonitor(monitorId: string): Promise<void> {
+    const appIds = [...this.appAgents.keys()]
+      .map(parseAppKey)
+      .filter((k) => k.monitorId === monitorId)
+      .map((k) => k.appId);
+
+    for (const appId of appIds) {
+      await this.disposeAppAgent(monitorId, appId);
+    }
   }
 
   // ── Session agent ────────────────────────────────────────────────
@@ -393,11 +440,11 @@ export class AgentPool {
   }
 
   /**
-   * Find the appId for a given agent instanceId (app agents only).
+   * Find the app and owning monitor for a given agent instanceId (app agents only).
    */
-  findAppIdForAgent(agentId: string): string | undefined {
-    for (const [appId, agent] of this.appAgents) {
-      if (agent.instanceId === agentId) return appId;
+  findAppForAgent(agentId: string): { monitorId: string; appId: string } | undefined {
+    for (const [key, agent] of this.appAgents) {
+      if (agent.instanceId === agentId) return parseAppKey(key);
     }
     return undefined;
   }
@@ -438,8 +485,8 @@ export class AgentPool {
    * Try to steer an app agent's active turn with additional input.
    * Returns true if steering succeeded, false otherwise.
    */
-  async steerAppAgent(appId: string, content: string): Promise<boolean> {
-    const agent = this.appAgents.get(appId);
+  async steerAppAgent(monitorId: string, appId: string, content: string): Promise<boolean> {
+    const agent = this.appAgents.get(appKey(monitorId, appId));
     if (!agent || !agent.session.isRunning()) return false;
     return agent.session.steer(content);
   }
@@ -531,12 +578,14 @@ export class AgentPool {
         monitorId,
       });
     }
-    for (const [appId, agent] of this.appAgents) {
+    for (const [key, agent] of this.appAgents) {
+      const { monitorId, appId } = parseAppKey(key);
       entries.push({
         id: agent.instanceId,
         type: 'app',
-        label: appId,
+        label: `${appId} (monitor ${monitorId})`,
         busy: isBusy(agent),
+        monitorId,
         appId,
       });
     }

@@ -313,3 +313,74 @@ describe('Multi-monitor lifecycle', () => {
     expect(pool.hasMonitorAgent('99')).toBe(false);
   });
 });
+
+describe('App agents are scoped to their monitor', () => {
+  let pool: InstanceType<typeof ContextPool>;
+
+  beforeEach(async () => {
+    pool = new ContextPool(
+      'test-session' as SessionId,
+      createMockWindowState() as any,
+      createMockReloadCache() as any,
+      mock(() => {}),
+    );
+    await pool.initialize();
+    await pool.createMonitorAgent('1');
+  });
+
+  afterEach(async () => {
+    await pool.cleanup();
+  });
+
+  it('the same app on two monitors gets two distinct agents', async () => {
+    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'storage');
+    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+
+    expect(onZero).not.toBeNull();
+    expect(onOne).not.toBeNull();
+    expect(onOne!.instanceId).not.toBe(onZero!.instanceId);
+    expect(pool.agentPool.getAppAgentCount()).toBe(2);
+  });
+
+  it('reuses one agent per (monitor, app) pair', async () => {
+    const first = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+    const again = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+
+    expect(again!.instanceId).toBe(first!.instanceId);
+    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+  });
+
+  it('a monitor cannot see another monitor’s app agent', async () => {
+    await pool.agentPool.getOrCreateAppAgent('0', 'storage');
+
+    expect(pool.agentPool.hasAppAgent('0', 'storage')).toBe(true);
+    expect(pool.agentPool.hasAppAgent('1', 'storage')).toBe(false);
+    expect(pool.agentPool.getAppAgent('1', 'storage')).toBeUndefined();
+  });
+
+  it('removing a monitor disposes only its own app agents', async () => {
+    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'storage');
+    await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+    await pool.agentPool.getOrCreateAppAgent('1', 'dock');
+    expect(pool.agentPool.getAppAgentCount()).toBe(3);
+
+    await pool.removeMonitorAgent('1');
+
+    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+    expect(pool.agentPool.hasAppAgent('1', 'storage')).toBe(false);
+    expect(pool.agentPool.hasAppAgent('1', 'dock')).toBe(false);
+    expect(pool.agentPool.getAppAgent('0', 'storage')!.instanceId).toBe(onZero!.instanceId);
+  });
+
+  it('reports the owning monitor on the roster and resolves it back from an instanceId', async () => {
+    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+
+    const entry = pool.agentPool.listAgents().find((a) => a.id === onOne!.instanceId);
+    expect(entry).toMatchObject({ type: 'app', appId: 'storage', monitorId: '1' });
+
+    expect(pool.agentPool.findAppForAgent(onOne!.instanceId)).toEqual({
+      monitorId: '1',
+      appId: 'storage',
+    });
+  });
+});

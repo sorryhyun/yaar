@@ -114,12 +114,21 @@ export function registerAppAgentTools(server: McpServer): void {
           `Add "${targetAppId}" to "controls" in ${ownAppId}'s app.json.`,
       };
     }
-    // Resolve a live window for the target: prefer one its app agent has already
-    // touched, else any open window of that app, else launch a fresh one so the
-    // caller doesn't have to open it manually first.
+    // Resolve a live window for the target on the caller's own monitor: prefer one
+    // the target's app agent has already touched, else any open window of that app
+    // on this monitor, else launch a fresh one so the caller doesn't have to open it
+    // manually first. Never reach across monitors — monitor N's apps are not monitor
+    // M's to drive.
+    const monitorId = session.windowState.getMonitorForWindow(ownWindowId) ?? '0';
     let windowId =
-      session.getPool()?.getActiveAppWindow(targetAppId) ??
-      session.windowState.listWindows().find((w) => w.appId === targetAppId)?.id;
+      session.getPool()?.getActiveAppWindow(monitorId, targetAppId) ??
+      session.windowState
+        .listWindows()
+        .find(
+          (w) =>
+            w.appId === targetAppId &&
+            (session.windowState.getMonitorForWindow(w.id) ?? '0') === monitorId,
+        )?.id;
     if (!windowId) {
       windowId = await launchControlledApp(targetAppId);
     }
