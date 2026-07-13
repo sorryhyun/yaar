@@ -51,7 +51,7 @@
 
 .tab:hover {
   color: var(--yaar-text);
-  background: var(--yaar-bg-hover);
+  background: var(--yaar-bg-surface-hover);
 }
 
 .tab.active {
@@ -74,7 +74,7 @@
 
 .tab-close:hover {
   opacity: 1 !important;
-  background: var(--yaar-bg-hover);
+  background: var(--yaar-bg-surface-hover);
 }
 
 /* ── Main area ── */
@@ -110,7 +110,7 @@
 }
 
 .file-tree-item:hover {
-  background: var(--yaar-bg-hover);
+  background: var(--yaar-bg-surface-hover);
 }
 
 .file-tree-item.active {
@@ -382,7 +382,7 @@
 }
 
 .diagnostics-item:hover {
-  background: var(--yaar-bg-hover);
+  background: var(--yaar-bg-surface-hover);
 }
 
 .diagnostics-item.error {

@@ -18,10 +18,12 @@ src/
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
 ├── plugins.ts             # 3 Bun plugins: bundledLibrary, cssFile, solidHtmlSource
 ├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
+├── mount-guard.ts         # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
+├── design-token-guard.ts  # Rejects var(--yaar-*) names that can never resolve
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
 ├── extract-protocol.ts    # Regex-based protocol manifest extraction from source (sees through `defineCommand({...})`)
-├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS (variables + utility classes)
+├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens() (generated token reference)
 ├── build-manifest.ts      # SHA-256 source/app.json hashing for staleness detection
 ├── bundled-types/
 │   └── index.d.ts         # Type declarations for all @bundled/* imports
@@ -36,11 +38,38 @@ src/
 ## Compilation Flow
 
 1. **Entry:** `compileTypeScript(sandboxPath, options)` — expects `src/main.ts`
-2. **Bundle:** `Bun.build()` with 3 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags
-3. **SDK injection:** 8 iframe SDK scripts (capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
-4. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + app `<script type="module">`
-5. **Protocol extraction:** Best-effort regex parse of `.register({...})` for state/command descriptors → `dist/protocol.json`. A descriptor may be wrapped in a single identifier call (`defineCommand({...})`) — the parser steps over it. Anything less literal (spread, computed callee) is skipped, so the command silently vanishes from the manifest.
-6. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
+2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve
+3. **Bundle:** `Bun.build()` with 3 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
+4. **SDK injection:** 8 iframe SDK scripts (capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
+5. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + app `<script type="module">`
+6. **Protocol extraction:** Best-effort regex parse of `.register({...})` for state/command descriptors → `dist/protocol.json`. A descriptor may be wrapped in a single identifier call (`defineCommand({...})`) — the parser steps over it. Anything less literal (spread, computed callee) is skipped, so the command silently vanishes from the manifest.
+7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
+
+## Runtime-Contract Guards
+
+Three defects compile clean, typecheck clean, and then produce a blank or unstyled
+window at runtime. They share one shape: **the app asserts a fact about the runtime
+environment that the compiler owns but never checked.** Each guard closes one, and
+each derives its expectation from the compiler's own output so it cannot drift.
+
+| Guard | Rejects | Why tsc can't |
+|---|---|---|
+| `solid-html-guard.ts` | `html` templates that drop text or throw a stackless `SyntaxError` | the template is parsed at runtime by `new Function` |
+| `mount-guard.ts` | `render(App, document.getElementById('root'))` — any id but `APP_MOUNT_ID` | `getElementById('root')!` is perfectly well-typed |
+| `design-token-guard.ts` | `var(--yaar-space-2)` — a token the compiler never defines | CSS custom properties are untyped strings |
+
+- **Mount:** `APP_MOUNT_ID` is the single source of truth — `generateHtmlWrapper` emits
+  `<div id="${APP_MOUNT_ID}">` and the guard checks against the same constant. Scoped to
+  the *render target* (following one level of variable indirection), not to element
+  lookups in general, so an app querying its own `#canvas` or a `DOMParser` document is
+  untouched.
+- **Tokens:** the known set is parsed out of `YAAR_DESIGN_TOKENS_CSS`. A token the app
+  declares itself is legal, and so is `var(--yaar-x, fallback)` — a fallback is exactly
+  how you opt out. Suggestions rank by *segment overlap* before edit distance, because
+  raw Levenshtein puts `--yaar-bg-hover` closer to `--yaar-border` (5 edits) than to the
+  token actually meant, `--yaar-bg-surface-hover` (8).
+- Guard messages must be **ASCII**: those raised from a Bun plugin pass through an error
+  path that mangles non-ASCII bytes (an em dash arrives as `â`).
 
 ## Bun Plugins (`plugins.ts`)
 
@@ -62,6 +91,17 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 **`typecheckSandbox(path, { bundles })`** — runs the real TypeScript JS entry through Bun and removes ambient declarations for gated SDKs not present in `app.json` `bundles`. Compile and typecheck therefore reject the same unauthorized `@bundled/yaar-*` imports.
 
 ## Bundled Libraries
+
+`getBundledLibraryDetail(name)` backs the agent-facing `describeBundledLibrary`. Beyond the
+real `@bundled/*` modules it serves **pseudo-libraries** — describable but not importable.
+`design-tokens` is one: the tokens ship as injected CSS, so they have no module and no
+`.d.ts`, but an app agent still has to be able to ask what they are. It returns
+`describeDesignTokens()`, generated from `YAAR_DESIGN_TOKENS_CSS`. Before it existed the
+call fell through to `null`, and devtools' `AGENTS.md` was telling agents to make it — so
+the agent asked for the token list, got nothing, and invented Tailwind-shaped names
+(`--yaar-space-2`) that render to nothing. Same list feeds the App Authoring Contract in
+`server/agents/profiles/app-agent.ts`, so what the compiler *rejects* and what it *tells
+agents exists* are generated from one source (asserted by a test).
 
 30+ libraries available via `@bundled/*` — no npm install needed in apps:
 - **UI:** `@bundled/solid-js`, `@bundled/solid-js/web`, `@bundled/solid-js/html`, `@bundled/solid-js/store`

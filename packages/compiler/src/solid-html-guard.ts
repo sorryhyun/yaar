@@ -80,7 +80,9 @@ export function classifyTemplate(statics: readonly string[]): SolidHtmlDefect | 
       kind: 'lone-expression',
       problem:
         'the only top-level node is the expression, so solid emits `.firstChild` with no parent and `new Function` throws a SyntaxError',
-      fix: 'return the accessor directly instead of wrapping it — `() => x` rather than html`${x}` — or give the template markup',
+      // ASCII only: this reaches the user through Bun's plugin error path, which
+      // mangles non-ASCII bytes (an em dash arrives as `â`).
+      fix: 'return the accessor directly instead of wrapping it (`() => x` rather than html`${x}`), or give the template markup',
     };
   }
 

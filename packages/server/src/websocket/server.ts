@@ -53,7 +53,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         sessionLogger: options.sessionLogger,
       };
       const requestedSessionId = ws.data.sessionId;
-      const session = hub.getOrCreate(requestedSessionId, sessionOptions);
+      const { session, recoveryMode } = hub.attach(requestedSessionId, sessionOptions);
       hub.cancelEviction(session.sessionId);
 
       // Update ws.data with the actual session ID (may differ from requested)
@@ -70,14 +70,24 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         broadcastCenter.subscribeToMonitor(connectionId, monitorId);
       }
 
-      console.log(`WebSocket client connected: ${connectionId} → session ${session.sessionId}`);
+      console.log(
+        `WebSocket client connected: ${connectionId} → session ${session.sessionId} ` +
+          `(epoch ${session.epoch}, ${recoveryMode})`,
+      );
 
-      // Send connection status to this connection only
+      // The attachment handshake. An open socket says only that transport exists; this is
+      // what tells the client which session incarnation it is now bound to, and whether
+      // that is the one it left. Sent before the snapshot, because the client needs the
+      // session id in hand (iframe tokens are minted against it) before windows arrive.
       session.sendTo(connectionId, {
-        type: ServerEventType.CONNECTION_STATUS,
-        status: 'connected',
-        provider: getWarmPool().getPreferredProvider() ?? 'claude',
+        type: ServerEventType.SESSION_ATTACHED,
         sessionId: session.sessionId,
+        sessionEpoch: session.epoch,
+        connectionId,
+        recoveryMode,
+        provider: getWarmPool().getPreferredProvider() ?? 'claude',
+        // Absent until the pool initializes (first message); the client falls back then.
+        logSessionId: session.getPool()?.getLogSessionId() ?? undefined,
       });
 
       // Send snapshot of current windows to new connection

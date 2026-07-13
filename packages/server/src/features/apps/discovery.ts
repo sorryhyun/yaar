@@ -107,6 +107,8 @@ export interface AppInfo {
   agentType?: string;
   /** Other apps this app may drive via the `appId` param on describe/query/command. */
   controls?: ControlEntry[];
+  /** Gated `@bundled/yaar-*` SDKs this app may import (`yaar-dev`, `yaar-web`, `yaar-ml`). */
+  bundles?: string[];
 }
 
 /** Build an AppInfo for a single app directory under `root`. */
@@ -155,6 +157,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   let permissions: PermissionEntry[] | undefined;
   let agentType: string | undefined;
   let controls: ControlEntry[] | undefined;
+  let bundles: string[] | undefined;
   try {
     const metaContent = await Bun.file(join(appPath, 'app.json')).text();
     const meta = JSON.parse(metaContent);
@@ -177,6 +180,9 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
     if (typeof meta.agentType === 'string') agentType = meta.agentType;
     if (Array.isArray(meta.controls)) controls = parseControls(meta.controls);
+    if (Array.isArray(meta.bundles)) {
+      bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
+    }
   } catch {
     // No metadata or invalid JSON
   }
@@ -259,6 +265,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     ...(permissions && { permissions }),
     ...(agentType && { agentType }),
     ...(controls && controls.length > 0 && { controls }),
+    ...(bundles && bundles.length > 0 && { bundles }),
   };
 }
 

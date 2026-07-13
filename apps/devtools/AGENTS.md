@@ -90,6 +90,20 @@ src/
 
 If `main.ts` has no `import` statements, add `export {};` at the top so TypeScript treats it as a module.
 
+**Mounting.** The compiled wrapper provides exactly one mount element, `<div id="app">` —
+there is no `#root`. Mount into it directly:
+
+```ts
+import { render } from '@bundled/solid-js/web';
+render(() => App(), document.getElementById('app')!);
+```
+
+Mounting into any other id returns `null`, so the app renders *nothing* — and because
+the wrapper hides an empty mount, you get a blank window rather than an error, while
+typecheck and compile both stay green. The compiler now rejects a wrong render target,
+but don't rely on that: write `#app`. The generated **App Authoring Contract** at the end
+of this prompt is the authority on the mount id.
+
 ## Bundled Libraries
 
 Available via `@bundled/*` imports (no npm install needed). Use `query("bundledLibraries")` to get the live list of available `@bundled/*` imports. Use `command("describeBundledLibrary", { name: "yaar" })` to get detailed type info (methods, interfaces, signatures) for a specific library.
@@ -112,13 +126,23 @@ When creating or editing `app.json` for apps that use these, include the appropr
 
 ## Design Tokens (CSS)
 
-All compiled apps include shared CSS custom properties (`--yaar-*`) and utility classes (`y-*`). No imports needed. Use `command("describeBundledLibrary", { name: "design-tokens" })` to see all available tokens and classes.
+All compiled apps include shared CSS custom properties (`--yaar-*`) and utility classes (`y-*`). No imports needed.
+
+The **App Authoring Contract** section at the end of your system prompt lists every
+token and class that exists, generated from the compiler's own CSS. Trust that list
+over your instincts: the names are *not* Tailwind-shaped (`--yaar-sp-2`, not
+`--yaar-space-2`; `--yaar-bg-surface`, not `--yaar-bg-elevated`). An undefined token
+makes the whole declaration vanish at render time — the app compiles and then looks
+broken. The compiler now rejects undefined tokens, so a build error naming one is
+telling you the truth.
 
 **Rules:**
 - Use `var(--yaar-*)` for all colors, spacing, fonts — never hardcode
 - Use `y-*` utility classes for common patterns (buttons, inputs, modals, toolbars, lists, etc.)
 - Use `y-light` class on root element for light-themed apps
 - Don't reimplement scrollbar, button, modal, toolbar, list-item, or empty-state CSS
+- Need a name that isn't on the list? Declare it in your own `:root`, or give it a
+  fallback: `var(--yaar-custom, #fff)`
 
 ## SDK & Library API
 

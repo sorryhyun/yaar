@@ -5,7 +5,7 @@
  * Uses Bun.build() and Bun.Transpiler for compilation.
  */
 
-import { mkdir, stat } from 'fs/promises';
+import { mkdir, readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import {
   bundledLibraryPluginBun,
@@ -33,6 +33,8 @@ import {
   IFRAME_CONSOLE_CAPTURE_SCRIPT,
 } from '@yaar/shared';
 import { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
+import { scanTokens, formatTokenFindings, type AppSourceFile } from './design-token-guard.js';
+import { APP_MOUNT_ID } from './mount-guard.js';
 
 /**
  * Get the sandbox directory path.
@@ -116,11 +118,11 @@ export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: stri
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
-<style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}#app{height:100%}#app:empty{display:none}body{font-family:'NanumSquareNeo',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}#${APP_MOUNT_ID}{height:100%}#${APP_MOUNT_ID}:empty{display:none}body{font-family:'NanumSquareNeo',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
 <script>${escapeInlineJs(sdkCode)}</script>
 </head>
 <body>
-<div id="app"></div>
+<div id="${APP_MOUNT_ID}"></div>
 <script type="module">
 ${escapeInlineJs(jsCode)}
 </script>
@@ -177,6 +179,28 @@ async function compileWithBun(
   return await output.text();
 }
 
+/** Source extensions that can reference a design token — TS (inline styles) and CSS alike. */
+const TOKEN_SCAN_EXTENSIONS = /\.(tsx?|css)$/;
+
+/**
+ * Read every source file of an app, for checks that need a whole-app view.
+ *
+ * The design token guard is one: an app may declare `--yaar-card-bg` in
+ * `theme.css` and use it in `main.ts`, and a per-file scan would call that
+ * undefined. Reading the directory (rather than following imports) also covers
+ * `.css` files, which the bundler hands to a different loader.
+ */
+async function readAppSources(srcDir: string): Promise<AppSourceFile[]> {
+  const entries = await readdir(srcDir, { recursive: true });
+  const files = entries.filter((rel) => TOKEN_SCAN_EXTENSIONS.test(rel));
+  return Promise.all(
+    files.map(async (rel) => ({
+      path: join('src', rel),
+      text: await Bun.file(join(srcDir, rel)).text(),
+    })),
+  );
+}
+
 /**
  * Extract protocol manifest from src/main.ts or src/protocol.ts.
  */
@@ -220,6 +244,12 @@ export async function compileTypeScript(
   try {
     // Ensure dist directory exists
     await mkdir(distDir, { recursive: true });
+
+    // Reject tokens that can never resolve, before paying for a bundle.
+    // (The mount guard runs inside solidHtmlSourcePlugin, which already has the
+    // parsed source of every reachable file.)
+    const tokenFindings = scanTokens(await readAppSources(join(sandboxPath, 'src')));
+    if (tokenFindings.length > 0) throw new Error(formatTokenFindings(tokenFindings));
 
     // Bundle TypeScript to JavaScript
     const jsCode = await compileWithBun(entryPoint, minify, options.bundles);

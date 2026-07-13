@@ -28,6 +28,7 @@ import type {
   AppProtocolResponse,
   DesktopShortcut,
   WindowBounds,
+  RecoveryMode,
 } from '@yaar/shared';
 
 // Re-export for convenience
@@ -117,11 +118,24 @@ export interface ConnectionSliceState {
   connectionError: string | null;
   providerType: string | null;
   sessionId: string | null;
+  /** Incarnation of `sessionId` this connection is bound to. Null until attached. */
+  sessionEpoch: number | null;
+  /** This tab's connection id on the server. Null until attached. */
+  connectionId: string | null;
+  /** What the server did with the session id we asked for. Null until attached. */
+  recoveryMode: RecoveryMode | null;
 }
 
 export interface ConnectionSliceActions {
   setConnectionStatus: (status: ConnectionStatus, error?: string) => void;
   setSession: (providerType: string, sessionId: string) => void;
+  setAttachment: (attachment: {
+    sessionId: string;
+    sessionEpoch: number;
+    connectionId: string;
+    recoveryMode: RecoveryMode;
+    provider?: string;
+  }) => void;
 }
 
 export type ConnectionSlice = ConnectionSliceState & ConnectionSliceActions;

@@ -17,6 +17,23 @@ export function generateSessionId(): SessionId {
   return `ses-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+let lastEpoch = 0;
+
+/**
+ * Stamp a session incarnation.
+ *
+ * A session id survives eviction and process restarts, so it cannot tell a client whether
+ * the session behind it is the one it was talking to. The epoch can: it is minted per
+ * LiveSession instance and never reused. Wall-clock based so it also increases across a
+ * server restart, but forced upward when the clock repeats, so two incarnations created in
+ * the same millisecond still get distinct epochs.
+ */
+export function nextSessionEpoch(): number {
+  const now = Date.now();
+  lastEpoch = now > lastEpoch ? now : lastEpoch + 1;
+  return lastEpoch;
+}
+
 /**
  * Minimal WebSocket interface decoupling BroadcastCenter/LiveSession from the `ws` package.
  * Both Node `ws.WebSocket` and Bun's `ServerWebSocket` satisfy this interface.

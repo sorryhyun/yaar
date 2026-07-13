@@ -8,7 +8,14 @@
 import { LiveSession, type LiveSessionOptions } from './live-session.js';
 import type { SessionId } from './types.js';
 import { generateSessionId } from './types.js';
+import type { RecoveryMode } from '@yaar/shared';
 import type { AgentRole } from '../agents/agent-context.js';
+
+/** What `attach()` did with the id the client asked for. See RecoveryMode in @yaar/shared. */
+export interface AttachResult {
+  session: LiveSession;
+  recoveryMode: RecoveryMode;
+}
 
 export class SessionHub {
   private sessions = new Map<SessionId, LiveSession>();
@@ -16,6 +23,8 @@ export class SessionHub {
   private evictionTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
   private agentToSession = new Map<string, SessionId>();
   private waiters = new Map<SessionId, Array<(session: LiveSession) => void>>();
+  /** Ids this process has held and lost. A reconnect on one of these is a replacement, not a rejoin. */
+  private evictedIds = new Set<SessionId>();
 
   /**
    * Resolve once `sessionId` is in the hub, or null if it hasn't arrived within
@@ -75,16 +84,20 @@ export class SessionHub {
   }
 
   /**
-   * Get an existing session or create a new one.
-   * If requestedId matches an existing session, returns it.
-   * Otherwise creates a new session with the provided options.
+   * Bind a connection's requested session id to a LiveSession, and say what that binding
+   * actually is: a rejoin of the live session, or a new incarnation wearing the same id.
+   *
+   * `getOrCreate()` returns only the session, which cannot express the difference — the
+   * caller gets a LiveSession either way and has no way to know the agents, windows, and
+   * provider conversations behind it are not the ones the client left. Callers that speak
+   * to a client (the WebSocket join) use this instead and forward `recoveryMode`.
    */
-  getOrCreate(requestedId: string | null, options: LiveSessionOptions): LiveSession {
+  attach(requestedId: string | null, options: LiveSessionOptions): AttachResult {
     // Try to find existing session
     if (requestedId) {
       const existing = this.sessions.get(requestedId);
       if (existing) {
-        return existing;
+        return { session: existing, recoveryMode: 'attached' };
       }
     }
 
@@ -92,9 +105,11 @@ export class SessionHub {
     if (!requestedId && this.defaultSessionId) {
       const existing = this.sessions.get(this.defaultSessionId);
       if (existing) {
-        return existing;
+        return { session: existing, recoveryMode: 'attached' };
       }
     }
+
+    const recoveryMode = this.classifyNewIncarnation(requestedId, options);
 
     // Create new session
     const sessionId = requestedId ?? generateSessionId();
@@ -105,14 +120,45 @@ export class SessionHub {
       this.defaultSessionId = sessionId;
     }
 
-    console.log(`[SessionHub] Created session: ${sessionId}`);
+    console.log(
+      `[SessionHub] Created session: ${sessionId} (epoch ${session.epoch}, ${recoveryMode})`,
+    );
 
     // Release anything parked in waitFor() — typically an app's iframe whose verb
     // call beat its own desktop's WebSocket to the server.
     const waiting = this.waiters.get(sessionId);
     if (waiting) for (const notify of waiting) notify(session);
 
-    return session;
+    return { session, recoveryMode };
+  }
+
+  /**
+   * Why a session id resolved to a session the client has never seen.
+   *
+   * Eviction wins over restore: boot-time restore state is seeded into whatever session is
+   * created next, so a session replaced after eviction can still come up with windows on
+   * screen. Those windows are from the boot transcript, not from the incarnation the client
+   * lost — calling that `restored` would overstate the continuity.
+   */
+  private classifyNewIncarnation(
+    requestedId: string | null,
+    options: LiveSessionOptions,
+  ): RecoveryMode {
+    if (!requestedId) return 'created';
+    if (this.evictedIds.has(requestedId)) return 'replaced';
+
+    const hasRestoredState =
+      (options.restoreActions?.length ?? 0) > 0 || (options.contextMessages?.length ?? 0) > 0;
+    return hasRestoredState ? 'restored' : 'replaced';
+  }
+
+  /**
+   * Get an existing session or create a new one.
+   *
+   * Continuity-blind: prefer `attach()` on any path that reports back to a client.
+   */
+  getOrCreate(requestedId: string | null, options: LiveSessionOptions): LiveSession {
+    return this.attach(requestedId, options).session;
   }
 
   get(sessionId: SessionId): LiveSession | undefined {
@@ -154,15 +200,27 @@ export class SessionHub {
     return undefined;
   }
 
+  /**
+   * Drop a session from the hub and tear it down.
+   *
+   * Deregistration happens in `finally`: a `cleanup()` that throws leaves a partially
+   * torn-down LiveSession (listeners removed, requests rejected) and it must not stay
+   * resolvable by id, or the next reconnect reattaches to a half-dead session instead
+   * of getting a fresh one. The cleanup error still propagates to the caller.
+   */
   async remove(sessionId: SessionId): Promise<void> {
     const session = this.sessions.get(sessionId);
-    if (session) {
+    if (!session) return;
+
+    try {
       await session.cleanup();
+    } finally {
       // Clean up reverse agent index for this session
       for (const [aid, sid] of this.agentToSession) {
         if (sid === sessionId) this.agentToSession.delete(aid);
       }
       this.sessions.delete(sessionId);
+      this.evictedIds.add(sessionId);
       if (this.defaultSessionId === sessionId) {
         this.defaultSessionId = null;
       }

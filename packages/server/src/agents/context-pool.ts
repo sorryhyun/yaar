@@ -61,6 +61,9 @@ const MAX_QUEUE_SIZE = 10;
  * Implements PoolContext so processors can access shared state and policies.
  */
 export class ContextPool implements PoolContext {
+  /** This session's key in the SessionHub — distinct from `logSessionId` below. */
+  private readonly sessionId: SessionId;
+  /** The session_logs/ directory name. Names a transcript on disk, not a live session. */
   private logSessionId: string | null = null;
 
   // ── PoolContext fields (readonly for processors) ───────────────────
@@ -98,6 +101,7 @@ export class ContextPool implements PoolContext {
     restoredContext: ContextMessage[] = [],
     savedThreadIds?: Record<string, string>,
   ) {
+    this.sessionId = sessionId;
     this.broadcastFn = broadcast;
     this.windowState = windowState;
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
@@ -190,11 +194,15 @@ export class ContextPool implements PoolContext {
     }
     this.prewarmMonitorAgent(monitorAgent, '0');
 
+    // Send the hub id as `sessionId` — the client mints iframe tokens and rejoins the
+    // WebSocket with whatever this event carries, and both are keyed by the hub. The
+    // log id rides alongside for the history/restore UI, which is keyed by log dir.
     await this.sendEvent({
       type: ServerEventType.CONNECTION_STATUS,
       status: 'connected',
       provider: provider.name,
-      sessionId: this.logSessionId,
+      sessionId: this.sessionId,
+      logSessionId: this.logSessionId ?? undefined,
     });
 
     return true;
