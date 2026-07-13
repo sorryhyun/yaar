@@ -34,6 +34,15 @@ type ContentBlock = TextContentBlock | ImageContentBlock;
 /** Max time to hold a turn's first message while MCP servers connect. */
 const MCP_CONNECT_WAIT_MS = 5000;
 
+/**
+ * Separator joining a turn's fingerprint fields. NUL cannot occur in a prompt,
+ * tool name, agent id, or model, so no combination of field values can spell a
+ * different combination's fingerprint and wrongly reuse its stream. Written as
+ * an escape on purpose — as a raw byte it is invisible in editors and diffs and
+ * does not survive formatters or copy/paste.
+ */
+const FINGERPRINT_SEP = '\u0000';
+
 /** Push-based async channel feeding the SDK's streaming input. */
 interface InputChannel {
   push(message: unknown): void;
@@ -321,7 +330,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       (options.allowedTools ?? []).join(','),
       options.agentId ?? '',
       options.model ?? '',
-    ].join(' ');
+    ].join(FINGERPRINT_SEP);
   }
 
   /**

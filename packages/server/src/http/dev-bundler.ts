@@ -5,8 +5,8 @@
  * and notifies connected browsers via SSE to reload.
  */
 
-import { join, relative } from 'path';
-import { cpSync, mkdirSync, renameSync, rmSync, watch } from 'fs';
+import { join } from 'path';
+import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch } from 'fs';
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
 import { registerDevReloadHandler } from './server.js';
 
@@ -21,12 +21,9 @@ type SSEController = ReadableStreamDefaultController<Uint8Array>;
 const sseClients = new Set<SSEController>();
 const encoder = new TextEncoder();
 
-let building = false;
-let pendingRebuild = false;
-
 /** Initialize the dev bundler: build frontend, start watcher, register SSE route. */
 export async function initDevBundler(): Promise<void> {
-  await buildFrontend();
+  await scheduleBuild();
   startWatcher();
   registerDevReloadHandler(handleDevReload);
   console.log('[dev] Frontend bundler ready with live reload');
@@ -55,68 +52,90 @@ function handleDevReload(): Response {
   });
 }
 
-/** Resolve @/ path alias and handle CSS url() references. */
-const pathAliasPlugin: import('bun').BunPlugin = {
-  name: 'frontend-resolve',
-  setup(build) {
-    // Resolve @/ imports with proper extension/index resolution
-    build.onResolve({ filter: /^@\// }, async (args) => {
-      const basePath = join(FRONTEND_SRC, args.path.slice(2));
-      return { path: await resolveFile(basePath) };
-    });
+const BUNDLE_WORKER = join(import.meta.dir, 'dev-bundle-worker.ts');
 
-    // Leave absolute URL references in CSS as-is (fonts served from public/)
-    build.onResolve(
-      { filter: /^\/.+\.(otf|ttf|woff|woff2|eot|png|jpg|jpeg|gif|svg|ico|webp)$/ },
-      (args) => ({ path: args.path, external: true }),
-    );
-  },
-};
+/**
+ * Bundle the frontend in a child process and return its output files.
+ *
+ * The bundle deliberately does NOT run here. `Bun.build()` shares Bun's source
+ * cache with the runtime module loader, and under `bun --watch` the two get
+ * cross-wired — the bundler reads a module the server has already imported (zod,
+ * via @yaar/shared) and receives another file's bytes, throwing
+ * `AggregateError: Bundle failed` at impossible positions. A child process
+ * bundles against a cold, private cache, so a rebuild can't be poisoned by
+ * whatever the long-lived server process happens to have loaded.
+ */
+async function runBundleWorker(
+  stageDir: string,
+): Promise<{ js: string[]; css: string[]; total: number }> {
+  const proc = Bun.spawn(['bun', BUNDLE_WORKER, FRONTEND_SRC, stageDir], {
+    cwd: PROJECT_ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
 
-const EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
 
-async function resolveFile(basePath: string): Promise<string> {
-  for (const ext of EXTENSIONS) {
-    if (await Bun.file(basePath + ext).exists()) return basePath + ext;
+  if (exitCode !== 0) {
+    throw new Error(stderr.trim() || `bundle worker exited with code ${exitCode}`);
   }
-  for (const ext of EXTENSIONS) {
-    const indexPath = join(basePath, 'index' + ext);
-    if (await Bun.file(indexPath).exists()) return indexPath;
-  }
-  return basePath;
+  return JSON.parse(stdout) as { js: string[]; css: string[]; total: number };
 }
 
 /**
- * Build the frontend, tolerating transient failures.
- *
- * `Bun.build()` runs in-process, in the same process `bun --watch` uses to hot-
- * reload the server's own modules. When a rebuild fires while the watch loader
- * is mid-reload, Bun's bundler cache can momentarily read the wrong bytes for a
- * module and throw `AggregateError: Bundle failed` (often with a nonsensical
- * position such as `zod/index.js:16`). This is transient — the next build with a
- * quiescent loader succeeds.
+ * Build the frontend, tolerating failures.
  *
  * A dev-only hot-reload rebuild must never take the server down. Since the top-
  * level `unhandledRejection` handler in main.ts triggers a full shutdown, we
- * MUST NOT let this promise reject. Swallow the error, log it, and retry once
- * after a short delay so live reload recovers on its own.
+ * MUST NOT let this promise reject. Swallow the error, log it (the worker's
+ * stderr carries the real syntax/import errors), and retry once so a rebuild
+ * that lost a race with a half-saved file recovers on its own.
+ *
+ * Never call this directly — go through `scheduleBuild()`. Two builds overlapping
+ * would stage into the same directory and delete each other's output mid-build.
  */
-async function buildFrontend(retry = true): Promise<void> {
+async function buildFrontend(retry: boolean): Promise<void> {
   try {
     await buildFrontendInner();
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(
-      `[dev] Frontend rebuild failed (${msg}) — server stays up${retry ? ', retrying…' : ''}`,
+      `[dev] Frontend rebuild failed — server stays up${retry ? ', retrying…' : ''}\n${msg}`,
     );
     rmSync(FRONTEND_STAGE, { recursive: true, force: true });
     if (retry) {
-      // Give bun --watch a moment to settle, then rebuild with a clean cache.
-      setTimeout(() => {
-        void buildFrontend(false);
-      }, 300);
+      // Let a half-written file land, then rebuild.
+      setTimeout(() => scheduleBuild({ retry: false }), 300);
     }
   }
+}
+
+/** The in-flight build, if any, plus whether another was requested during it. */
+let activeBuild: Promise<void> | null = null;
+let rebuildQueued = false;
+
+/**
+ * Run a build, coalescing concurrent requests. A request that arrives mid-build
+ * is collapsed into a single follow-up run rather than starting a second
+ * `Bun.build()` alongside the first.
+ */
+function scheduleBuild({ retry = true }: { retry?: boolean } = {}): Promise<void> {
+  if (activeBuild) {
+    rebuildQueued = true;
+    return activeBuild;
+  }
+  activeBuild = buildFrontend(retry).finally(() => {
+    activeBuild = null;
+    if (rebuildQueued) {
+      rebuildQueued = false;
+      void scheduleBuild();
+    }
+  });
+  return activeBuild;
 }
 async function buildFrontendInner(): Promise<void> {
   const start = performance.now();
@@ -128,38 +147,13 @@ async function buildFrontendInner(): Promise<void> {
   rmSync(stageDir, { recursive: true, force: true });
   mkdirSync(stageDir, { recursive: true });
 
-  const result = await Bun.build({
-    entrypoints: [join(FRONTEND_SRC, 'main.tsx')],
-    outdir: stageDir,
-    target: 'browser',
-    splitting: true,
-    sourcemap: 'linked',
-    naming: '[dir]/[name]-[hash].[ext]',
-    plugins: [pathAliasPlugin],
-  });
-
-  if (!result.success) {
-    console.error('[dev] Frontend build failed:');
-    for (const log of result.logs) {
-      console.error(log);
-    }
-    rmSync(stageDir, { recursive: true, force: true });
-    return;
-  }
+  const { js: jsFiles, css: cssFiles, total } = await runBundleWorker(stageDir);
 
   // Copy public files (fonts)
   cpSync(FRONTEND_PUBLIC, stageDir, { recursive: true });
 
   // Generate index.html with live-reload script. Output URLs are relative to the
-  // dist root, so compute them against stageDir (same layout once swapped).
-  const jsFiles = result.outputs
-    .filter((o) => o.kind === 'entry-point' && o.path.endsWith('.js'))
-    .map((o) => '/' + relative(stageDir, o.path));
-
-  const cssFiles = result.outputs
-    .filter((o) => o.path.endsWith('.css'))
-    .map((o) => '/' + relative(stageDir, o.path));
-
+  // dist root, and the worker already made them so (same layout once swapped).
   const html = generateDevHtml(jsFiles, cssFiles);
   await Bun.write(join(stageDir, 'index.html'), html);
 
@@ -168,7 +162,7 @@ async function buildFrontendInner(): Promise<void> {
   renameSync(stageDir, FRONTEND_DIST);
 
   const elapsed = (performance.now() - start).toFixed(0);
-  console.log(`[dev] Frontend built in ${elapsed}ms (${result.outputs.length} files)`);
+  console.log(`[dev] Frontend built in ${elapsed}ms (${total} files)`);
 
   // Notify SSE clients to reload
   notifyClients();
@@ -213,7 +207,35 @@ function notifyClients(): void {
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+/**
+ * Content fingerprint (size + mtime per file) of the public/ tree.
+ *
+ * Every build copies public/ into the staging dir, and on macOS *reading* a file
+ * bumps its inode metadata, which FSEvents reports as a `change` — so the copy
+ * trips public/'s own watcher and the build re-triggers itself, forever. mtime
+ * and size don't move when a file is merely read, so comparing this fingerprint
+ * tells a real font edit apart from the echo of our own copy.
+ */
+function publicSignature(): string {
+  const names = readdirSync(FRONTEND_PUBLIC, { recursive: true }) as string[];
+  return names
+    .sort()
+    .map((name) => {
+      try {
+        const s = statSync(join(FRONTEND_PUBLIC, name));
+        return `${name}:${s.size}:${s.mtimeMs}`;
+      } catch {
+        return `${name}:gone`;
+      }
+    })
+    .join('|');
+}
+
+let lastPublicSignature = '';
+
 function startWatcher(): void {
+  lastPublicSignature = publicSignature();
+
   watch(FRONTEND_SRC, { recursive: true }, (_event, filename) => {
     if (!filename) return;
     // Skip test files
@@ -221,29 +243,16 @@ function startWatcher(): void {
 
     // Debounce rapid changes (e.g. editor save + format)
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(async () => {
-      if (building) {
-        pendingRebuild = true;
-        return;
-      }
-      building = true;
-      try {
-        await buildFrontend();
-      } finally {
-        building = false;
-        if (pendingRebuild) {
-          pendingRebuild = false;
-          buildFrontend();
-        }
-      }
-    }, 150);
+    debounceTimer = setTimeout(() => void scheduleBuild(), 150);
   });
 
   // Also watch public files (fonts, etc.)
   watch(FRONTEND_PUBLIC, { recursive: true }, () => {
+    const signature = publicSignature();
+    if (signature === lastPublicSignature) return; // our own copy reading public/, not an edit
+    lastPublicSignature = signature;
+
     if (debounceTimer) clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => {
-      if (!building) buildFrontend();
-    }, 150);
+    debounceTimer = setTimeout(() => void scheduleBuild(), 150);
   });
 }
