@@ -99,6 +99,15 @@ export function registerAppProtocol(): void {
             })),
           })),
       },
+      readme: {
+        description: 'The rendered README for the active repo: markdown source, rendered HTML and whether it is missing',
+        handler: () => ({
+          missing: state.readmeMissing,
+          markdown: state.readmeMarkdown,
+          html: state.readmeHtml,
+          length: state.readmeMarkdown.length,
+        }),
+      },
       rateLimit: {
         description: 'GitHub API rate-limit info from the last response',
         handler: () => (state.rateLimit ? { ...state.rateLimit } : null),

@@ -5,7 +5,7 @@ import {
   loadIssues, setIssueFilter, openIssue, closeActiveIssue,
   createIssueAction, commentIssueAction, setIssueStateAction,
 } from '../actions';
-import { renderMarkdown } from '../markdown';
+import { renderRepoMarkdown } from '../markdown';
 import { timeAgo } from '../utils';
 import { labelChips, avatar, loadingBlock, emptyBlock, errorBlock, mdBody } from './common';
 
@@ -115,13 +115,13 @@ function issueDetail() {
         </div>
         ${labelChips(i.labels)}
         ${state.issueDetailLoading && !i.body ? loadingBlock() : html`<div class="y-card comment-card">
-          ${i.body ? mdBody(() => renderMarkdown(i.body)) : html`<span class="y-text-muted">No description provided.</span>`}
+          ${i.body ? mdBody(() => renderRepoMarkdown(i.body)) : html`<span class="y-text-muted">No description provided.</span>`}
         </div>`}
         <div class="comments-hdr y-label">${state.activeIssueComments.length} Comment(s)</div>
         ${state.activeIssueComments.map((c) => html`
           <div class="y-card comment-card">
             <div class="comment-hdr">${avatar(c.user)}<strong>${c.user?.login || ''}</strong><span class="y-text-dim">${timeAgo(c.created_at)}</span></div>
-            ${mdBody(() => renderMarkdown(c.body))}
+            ${mdBody(() => renderRepoMarkdown(c.body))}
           </div>`)}
         <div class="write-box">
           <textarea class="y-input write-area" placeholder=${() => hasToken() ? 'Leave a comment (markdown supported)…' : 'Set a token in Settings to comment'}

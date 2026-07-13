@@ -1,7 +1,7 @@
 import { errMsg, showToast } from '@bundled/yaar';
 import type { Issue, Pull, RepoRef, ContentEntry, AccountRepo } from './types';
 import { state, setState, hasToken } from './store';
-import { renderMarkdown, decodeBase64Utf8 } from './markdown';
+import { renderRepoMarkdown, decodeBase64Utf8 } from './markdown';
 import { writeConfig, ready } from './storage';
 import * as api from './api';
 
@@ -32,9 +32,13 @@ export async function loadOverview(): Promise<void> {
       const readme = await api.fetchReadme();
       if (stale(gen)) return;
       if (readme && readme.encoding === 'base64') {
-        setState('readmeHtml', renderMarkdown(decodeBase64Utf8(readme.content)));
+        const md = decodeBase64Utf8(readme.content);
+        setState('readmeMarkdown', md);
+        // repoInfo is set above, so default_branch is available for path rewriting.
+        setState('readmeHtml', renderRepoMarkdown(md));
         setState('readmeMissing', false);
       } else {
+        setState('readmeMarkdown', '');
         setState('readmeHtml', '');
         setState('readmeMissing', true);
       }
@@ -270,7 +274,9 @@ export async function openFile(entry: ContentEntry): Promise<void> {
       const text = decodeBase64Utf8(file.content);
       setState('fileText', text);
       setState('fileIsMarkdown', isMd);
-      setState('fileHtml', isMd ? renderMarkdown(text) : '');
+      // Resolve the file's own directory so its relative links/images work too.
+      const fileDir = entry.path.split('/').slice(0, -1).join('/');
+      setState('fileHtml', isMd ? renderRepoMarkdown(text, fileDir) : '');
       setState('fileBinary', false);
     } else {
       setState('fileBinary', true);

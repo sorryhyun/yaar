@@ -30,6 +30,14 @@ export function errorBlock(msg: string, onRetry?: () => void) {
   </div>`;
 }
 
+/**
+ * Render pre-sanitized markdown HTML into a div.
+ *
+ * NOTE: must be `innerHTML=${...}`, NOT lit-html's `.innerHTML=${...}`. Solid's
+ * `html` tag does not support the leading-dot property form — it parses `.innerHTML`
+ * as a literal attribute named `.innerhtml` and stringifies the HTML into it, so the
+ * node renders completely empty. That silently blanked every markdown body in the app.
+ */
 export function mdBody(getHtml: () => string) {
-  return html`<div class="md-body" .innerHTML=${getHtml}></div>`;
+  return html`<div class="md-body" innerHTML=${getHtml}></div>`;
 }

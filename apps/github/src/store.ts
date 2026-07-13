@@ -32,6 +32,7 @@ export const [state, setState] = createStore({
   // Overview
   repoInfo: null as Repo | null,
   readmeHtml: '' as string,
+  readmeMarkdown: '' as string,
   readmeMissing: false,
 
   // Issues
