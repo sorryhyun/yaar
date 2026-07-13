@@ -15,6 +15,36 @@ export class SessionHub {
   private defaultSessionId: SessionId | null = null;
   private evictionTimers = new Map<SessionId, ReturnType<typeof setTimeout>>();
   private agentToSession = new Map<string, SessionId>();
+  private waiters = new Map<SessionId, Array<(session: LiveSession) => void>>();
+
+  /**
+   * Resolve once `sessionId` is in the hub, or null if it hasn't arrived within
+   * `timeoutMs`. An iframe app boots on its own clock and can call a session-scoped
+   * verb before the desktop's WebSocket has registered the session (first load after
+   * a server start) or while it is reconnecting after an eviction — the session shows
+   * up under the same id milliseconds later, so callers wait for it rather than
+   * failing the app's first paint. See routes/verb.ts.
+   */
+  waitFor(sessionId: SessionId, timeoutMs = 5_000): Promise<LiveSession | null> {
+    const existing = this.sessions.get(sessionId);
+    if (existing) return Promise.resolve(existing);
+
+    return new Promise((resolve) => {
+      const settle = (session: LiveSession | null) => {
+        clearTimeout(timer);
+        const queue = this.waiters.get(sessionId)?.filter((cb) => cb !== onCreated);
+        if (queue?.length) this.waiters.set(sessionId, queue);
+        else this.waiters.delete(sessionId);
+        resolve(session);
+      };
+      const onCreated = (session: LiveSession) => settle(session);
+      const timer = setTimeout(() => settle(null), timeoutMs);
+
+      const queue = this.waiters.get(sessionId) ?? [];
+      queue.push(onCreated);
+      this.waiters.set(sessionId, queue);
+    });
+  }
 
   scheduleEviction(sessionId: SessionId, delayMs = 60_000): void {
     this.cancelEviction(sessionId);
@@ -76,6 +106,12 @@ export class SessionHub {
     }
 
     console.log(`[SessionHub] Created session: ${sessionId}`);
+
+    // Release anything parked in waitFor() — typically an app's iframe whose verb
+    // call beat its own desktop's WebSocket to the server.
+    const waiting = this.waiters.get(sessionId);
+    if (waiting) for (const notify of waiting) notify(session);
+
     return session;
   }
 

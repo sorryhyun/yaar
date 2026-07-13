@@ -299,6 +299,16 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('URI not accessible to iframe apps', 403);
   }
 
+  // An app's iframe boots on its own clock and its first verbs can land before the
+  // desktop's WebSocket has registered the session (first page load after a server
+  // start) or while it reconnects after an eviction. The session arrives under the
+  // same id moments later, so hold the request briefly instead of failing the app's
+  // first paint — every app's SDK is baked in at compile time, so this has to be
+  // fixed here to reach apps that were compiled before the fix existed.
+  if (tokenEntry?.sessionId && !getSessionHub().get(tokenEntry.sessionId)) {
+    await getSessionHub().waitFor(tokenEntry.sessionId);
+  }
+
   // Resolve `self` → real appId from iframe token
   let resolvedUri = uri;
   if (uri === 'yaar://apps/self' || uri.startsWith('yaar://apps/self/')) {
