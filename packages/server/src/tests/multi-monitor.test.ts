@@ -167,13 +167,12 @@ mock.module('../providers/environment.js', () => ({
   buildEnvironmentSection: mock(async () => ''),
 }));
 
-mock.module('../session/action-emitter.js', () => ({
-  actionEmitter: {
-    onAction: mock(() => mock(() => {})),
-    emitAction: mock(() => {}),
-    resolveFeedback: mock(() => {}),
-  },
-}));
+// The real actionEmitter is used here on purpose. A partial stub of it leaks:
+// mock.module is process-wide and is never restored between files, so every test
+// that ran after this one saw an emitter missing `on`/`off`/`emitActionWithFeedback`,
+// and `new LiveSession()` died on `actionEmitter.on(...)`. Whether that blew up
+// depended on directory order — green on macOS, red on CI's Linux. The emitter is a
+// plain EventEmitter with no side effects worth stubbing; nothing here touches it.
 
 mock.module('../agents/profiles/index.js', () => ({
   DEVELOPER_PROFILE: { id: 'developer', systemPrompt: '', allowedTools: [] },

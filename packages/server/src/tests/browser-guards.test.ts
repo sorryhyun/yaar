@@ -6,7 +6,7 @@
  * the real config (defaults to 8000 in tests), so YAAR's own origin is
  * http://localhost:8000.
  */
-import { mock, describe, it, expect, beforeEach } from 'bun:test';
+import { mock, describe, it, expect, beforeEach, beforeAll, afterAll } from 'bun:test';
 import type { BrowserProvider, BrowserSession } from '../lib/browser/index.js';
 
 // ── Mock domain allowlist ────────────────────────────────────────────────────
@@ -40,16 +40,30 @@ mock.module('../features/config/domains.js', () => ({
   },
 }));
 
-// ── Mock permission dialog ───────────────────────────────────────────────────
+// ── Stub the permission dialog ───────────────────────────────────────────────
+//
+// Deliberately NOT mock.module. That replaces the module process-wide and is never
+// restored between files, so a stub carrying only this one method left every later
+// test file with an emitter missing `on`/`off`/`emitActionWithFeedback` — and
+// `new LiveSession()` died on `actionEmitter.on(...)`. It only stayed green locally
+// because bun runs files in raw directory order, which differs on CI's filesystem.
+// Patch the single method the guards actually call, and put it back afterwards.
+
+const { actionEmitter } = await import('../session/action-emitter.js');
+const { enforceBrowserGuards, isMutatingAction, isYaarOriginUrl } =
+  await import('../features/browser/guards.js');
 
 let dialogConfirms = true;
 const mockDialog = mock(async () => dialogConfirms);
-mock.module('../session/action-emitter.js', () => ({
-  actionEmitter: { showPermissionDialogToSession: mockDialog },
-}));
 
-const { enforceBrowserGuards, isMutatingAction, isYaarOriginUrl } =
-  await import('../features/browser/guards.js');
+type Dialog = typeof actionEmitter.showPermissionDialogToSession;
+beforeAll(() => {
+  actionEmitter.showPermissionDialogToSession = mockDialog as unknown as Dialog;
+});
+afterAll(() => {
+  // Drop the own property so the real prototype method is exposed again.
+  delete (actionEmitter as Partial<typeof actionEmitter>).showPermissionDialogToSession;
+});
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
