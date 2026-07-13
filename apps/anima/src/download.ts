@@ -7,15 +7,23 @@
 // `GET /api/ml-weights/download?dest=…` for progress. Each file is resumable: a
 // partial `.part` is continued with a Range request.
 import { HF_BASE, LOCAL_DIR, resetAssetUrls } from './ml';
+import { BUCKETS, SHARED_DIT_DATA, SHARED_VAE_DATA } from './buckets';
+
+/** One DiT + VAE graph per aspect ratio. These are the ONLY per-ratio cost: the
+ *  weights live in the two shared sidecars below, which every bucket's graph points
+ *  at (share_sidecar.py). ~9.4 MB of graph buys a ratio; 3.9 GB of weights is paid
+ *  once. Sizes are for the progress bar only. */
+const BUCKET_GRAPHS = BUCKETS.flatMap((b) => [
+  { path: `${b.dit}.onnx`, bytes: 9_400_000 },
+  { path: `${b.vae}.onnx`, bytes: 560_000 },
+]);
 
 /** The minimum set `generate()` needs. Sizes are for the progress bar only. */
 export const MANIFEST: { path: string; bytes: number }[] = [
-  // DiT — the `_webgpu` export (fp16 weights / fp32 activations). The plain
-  // `dit_512_fp16` in the same repo returns all-NaN on the WebGPU EP.
-  { path: 'dit_512_fp16_r16.onnx', bytes: 9_445_509 },
-  { path: 'dit_512_fp16_r16.onnx.data', bytes: 3_913_625_600 },
-  { path: 'vae_decoder_512_fp16.onnx', bytes: 553_438 },
-  { path: 'vae_decoder_512_fp16.onnx.data', bytes: 56_053_056 },
+  ...BUCKET_GRAPHS,
+  // The weights, shared by every ratio.
+  { path: SHARED_DIT_DATA, bytes: 3_913_271_296 },
+  { path: SHARED_VAE_DATA, bytes: 56_053_056 },
   // text path (typed prompts)
   { path: 'text_encoder_fp16.onnx', bytes: 3_604_784 },
   { path: 'text_encoder_fp16.onnx.data', bytes: 1_192_421_376 },

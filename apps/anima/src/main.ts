@@ -1,29 +1,25 @@
 // Anima WebGPU toy — in-browser text→image on WebGPU.
 //
 //   ✨ Generate — prompt → embeds → randn latent → ER-SDE 4-step denoise over the
-//                 3.9 GB DiT → per-channel denorm → 56 MB VAE decode → 512² canvas.
-//                 Typed prompts run the in-browser text path (tokenizer.ts +
-//                 text.ts); the golden prompt reuses the precomputed embeds.
+//                 3.9 GB DiT → per-channel denorm → VAE decode → canvas, at the
+//                 selected aspect ratio. Typed prompts run the in-browser text path
+//                 (tokenizer.ts + text.ts); the golden prompt reuses the precomputed
+//                 embeds.
 //
 // Diagnostics have no UI buttons — they're headless-only via window.__anima:
 //   vaeProbe — decode a Python-precomputed latent (plumbing sanity check).
 //   ditGate  — single DiT forward (memory/latency check).
 //   probe    — per-block residual absmax/NaN trace (diagnostic).
 //
-// The DiT model selector, three exports of the same weights:
-//   dit_512_fp16_r16    — residual stream rescaled ×1/16 (folded into patch-embed
-//                         + branch out-projections, exact invariance), so plain
-//                         fp16 activations fit (peak ~1.66e4 < 65504) and graph
-//                         optimizations/fusions stay ENABLED. The fast path.
-//                         See ../krea/scripts/rescale_dit_residual.py.
-//   dit_512_fp16_r16    — fp16 WEIGHTS, fp32 ACTIVATIONS (each weight Cast
-//                         fp16→fp32 per op). Dodges the overflow at the cost of
-//                         fp32 bandwidth + graphOptimizationLevel 'disabled'
-//                         (else ORT constant-folds the casts → 7.8 GB in memory).
-//                         See ../krea/scripts/export_onnx_dit_webgpu.py.
-//   dit_512_fp16        — plain fp16: all-NaN on the WebGPU EP; the residual
-//                         stream legitimately reaches |x|~2.6e5 > 65504 → Inf→NaN.
-//                         Kept for repro.
+// The DiT is `dit_<W>x<H>_fp16_r16`: fp16 with the residual stream rescaled ×1/16
+// (folded into patch-embed + branch out-projections — an exact invariance), which
+// keeps activations inside fp16's 65504 ceiling (peak ~1.66e4) so WebGPU graph
+// optimizations stay ENABLED. See ../krea/scripts/rescale_dit_residual.py.
+//
+// Resolution is baked into a DiT graph at export time (the Cosmos RoPE tables and
+// padding mask constant-fold), so each aspect ratio is its own graph — but NOT its
+// own weights: every ratio's graph is re-pointed at the single 3.9 GB r16 sidecar,
+// so a ratio costs ~9 MB. See buckets.ts and ../krea/scripts/share_sidecar.py.
 import { onMount } from '@bundled/solid-js';
 import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
@@ -46,6 +42,15 @@ import { ErSDEScheduler, makeRng, randn } from './scheduler';
 import { promptEmbeds } from './text';
 import { loadTokenizers, tokenizePrompt } from './tokenizer';
 import { downloadWeights, TOTAL_BYTES } from './download';
+import {
+  BUCKETS,
+  DEFAULT_BUCKET,
+  SHARED_DIT_DATA,
+  SHARED_VAE_DATA,
+  bucketById,
+  latentDims,
+  tokens,
+} from './buckets';
 
 // The prompt that `webgpu/prompt_embeds.f32` was precomputed from. Leaving the box
 // at this exact text lets us skip the 1.46 GB text path and reuse the golden embeds.
@@ -63,8 +68,16 @@ const [busy, setBusy] = createSignal(false);
 const [progress, setProgress] = createSignal<{ label: string; pct: number | null } | null>(null);
 const [status, setStatus] = createSignal('');
 const [hasImage, setHasImage] = createSignal(false);
-// DiT weights variant — see the header comment for what each export is.
-const [ditModel, setDitModel] = createSignal('dit_512_fp16_r16');
+// Aspect ratio. Each bucket is its own DiT/VAE graph (resolution is baked in at
+// export), but every bucket shares the one 3.9 GB weight sidecar — see buckets.ts.
+const [bucketId, setBucketId] = createSignal(DEFAULT_BUCKET.id);
+const bucket = () => bucketById(bucketId());
+
+/** The DiT the diagnostics below (ditGate/ditProbe) run against. The other exports
+ *  the header used to describe — plain fp16 (all-NaN on WebGPU) and the fp32-activation
+ *  `_webgpu` build — were only ever 512² and are no longer published, so r16 is the
+ *  one DiT: every ratio ships exactly one graph. */
+const DIT_512 = DEFAULT_BUCKET.dit;
 
 // Session options per DiT export. The cast-hack exports NEED graph opt disabled
 // (constant folding would materialise the fp32 weights); the rescaled export runs
@@ -198,10 +211,10 @@ async function ditGate() {
       latent[i] = Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * Math.random());
     }
     const t0 = performance.now();
-    await releaseOtherDits(ditModel());
+    await releaseOtherDits(DIT_512);
     // 'url' mode: ORT streams the 3.9 GB sidecar into its wasm heap (no >2 GB JS buffer).
     log('loading DiT via externalData URL mode…');
-    const s = await loadModel(ditModel(), onProg, 'webgpu', 'url', ditSessionOptions(ditModel()));
+    const s = await loadModel(DIT_512, onProg, 'webgpu', 'url', ditSessionOptions(DIT_512));
     log(
       `✅ DiT session created (${((performance.now() - t0) / 1000).toFixed(1)}s) — it FITS. inputs=${s.inputNames}`,
     );
@@ -352,25 +365,39 @@ async function generate(
     seed?: number;
     ditBackend?: 'webgpu' | 'wasm';
     prompt?: string;
+    /** Aspect-ratio bucket id (see buckets.ts). Defaults to the UI selection. */
+    ratio?: string;
     /** Override the per-model graphOptimizationLevel choice (experiments). */
     graphOpt?: string;
   } = {},
 ): Promise<unknown> {
   if (busy()) return { ok: false, error: 'busy' };
   setBusy(true);
-  const model = opts.model ?? ditModel();
+  const bk = opts.ratio ? bucketById(opts.ratio) : bucket();
+  const model = opts.model ?? bk.dit;
   const sd = opts.seed ?? seed();
   const ditBackend = opts.ditBackend ?? 'webgpu';
   const pr = (opts.prompt ?? prompt()).trim();
-  const result: Record<string, unknown> = { model, seed: sd, ditBackend, prompt: pr, ok: false };
+  const result: Record<string, unknown> = {
+    model,
+    ratio: bk.id,
+    size: [bk.W, bk.H],
+    seed: sd,
+    ditBackend,
+    prompt: pr,
+    ok: false,
+  };
   try {
     setStatus('');
     log(`— Generate (DiT: ${model} on ${ditBackend}, seed ${sd}) —`);
+    log(`ratio ${bk.id} → image ${bk.W}×${bk.H}, ${tokens(bk)} attention tokens`);
     log(`prompt: ${JSON.stringify(pr.slice(0, 80))}${pr.length > 80 ? '…' : ''}`);
     phase('Preparing…');
     const cfg = await fetchJSON<LatentStats>('webgpu/latent_stats.json');
     const Z = cfg.z; // 16
-    const L = cfg.size / 8; // 64 latent grid
+    // Latent grid comes from the bucket, NOT cfg.size — cfg is per-channel denorm
+    // stats + sigmas, which are resolution-independent.
+    const { lh, lw } = latentDims(bk);
     // (1,512,1024) encoder_hidden_states
     const golden = !pr || pr === GOLDEN_PROMPT;
     if (!golden) phase('Encoding prompt (text encoder, 1.46 GB)…');
@@ -388,15 +415,22 @@ async function generate(
         (sessOpts.graphOptimizationLevel as string) ?? 'default'
       })…`,
     );
-    const dit = await loadModel(model, onProg, ditBackend, 'url', sessOpts);
+    // Non-square buckets were re-pointed at the canonical sidecar by share_sidecar.py,
+    // so switching ratio costs a ~9 MB graph, not another 3.9 GB. The square bucket is
+    // left to derive `<model>.onnx.data` itself: its variant selector can pick the
+    // un-rescaled exports (plain fp16, the NaN repro), whose weights are NOT the r16
+    // bytes — handing those the shared sidecar would silently load the wrong weights.
+    const ditData = bk.id === DEFAULT_BUCKET.id ? undefined : SHARED_DIT_DATA;
+    const dit = await loadModel(model, onProg, ditBackend, 'url', sessOpts, ditData);
     log(`DiT ready (${((performance.now() - t0) / 1000).toFixed(1)}s). inputs=${dit.inputNames}`);
     const tv = performance.now();
     phase('Loading VAE decoder…');
-    const vae = await loadModel('vae_decoder_512_fp16', onProg, 'webgpu', 'url');
+    const vaeData = bk.id === DEFAULT_BUCKET.id ? undefined : SHARED_VAE_DATA;
+    const vae = await loadModel(bk.vae, onProg, 'webgpu', 'url', {}, vaeData);
     log(`VAE ready (${((performance.now() - tv) / 1000).toFixed(1)}s).`);
 
     const sched = new ErSDEScheduler(cfg.sigmas, sd);
-    const n = Z * 1 * L * L; // 65536
+    const n = Z * 1 * lh * lw;
     const steps: unknown[] = [];
     let latent = randn(new Float32Array(n), makeRng(sd ^ 0x9e3779b9)); // init noise
 
@@ -408,7 +442,7 @@ async function generate(
       });
       const ts = performance.now();
       const out = await run(dit, {
-        latent: new Tensor('float32', latent, [1, Z, 1, L, L]),
+        latent: new Tensor('float32', latent, [1, Z, 1, lh, lw]),
         timestep: new Tensor('float32', new Float32Array([sigma]), [1]),
         encoder_hidden_states: new Tensor('float32', pe, [1, 512, 1024]),
       });
@@ -416,7 +450,9 @@ async function generate(
       const st = stats(noisePred);
       steps.push({ step: i + 1, sigma, npMin: st.min, npMax: st.max, npNan: st.nan });
       if (st.nan > 0) {
-        setStatus(`❌ step ${i + 1}: noise_pred has ${st.nan} NaN — DiT numerics broken on this EP`);
+        setStatus(
+          `❌ step ${i + 1}: noise_pred has ${st.nan} NaN — DiT numerics broken on this EP`,
+        );
         log(`❌ step ${i + 1}: noise_pred has ${st.nan} NaN — DiT numerics broken on this EP.`);
         result.nanAtStep = i + 1;
         result.steps = steps;
@@ -433,7 +469,7 @@ async function generate(
     }
 
     // denorm: latents_4d[c,p] = latent[c,p]*std[c] + mean[c] (temporal dim is 1)
-    const plane = L * L;
+    const plane = lh * lw;
     const denorm = new Float32Array(Z * plane);
     for (let c = 0; c < Z; c++) {
       const m = cfg.latents_mean[c];
@@ -443,7 +479,7 @@ async function generate(
 
     const td = performance.now();
     phase('Decoding image (VAE)…', 100);
-    const dec = await run(vae, { latent: new Tensor('float32', denorm, [1, Z, L, L]) });
+    const dec = await run(vae, { latent: new Tensor('float32', denorm, [1, Z, lh, lw]) });
     const img = dec.image.data as Float32Array;
     const ist = stats(img);
     log(
@@ -451,7 +487,11 @@ async function generate(
         `min=${ist.min.toFixed(2)} max=${ist.max.toFixed(2)} nan=${ist.nan}`,
     );
     if (canvasEl) {
-      canvasEl.getContext('2d')!.putImageData(chwToImageData(img, 512, 512), 0, 0);
+      // Resizing a canvas clears it, so size it before painting (the ratio may have
+      // changed since the last generate).
+      canvasEl.width = bk.W;
+      canvasEl.height = bk.H;
+      canvasEl.getContext('2d')!.putImageData(chwToImageData(img, bk.H, bk.W), 0, 0);
       setHasImage(true);
     }
     const elapsed = (performance.now() - t0) / 1000;
@@ -497,7 +537,7 @@ async function copyImage() {
 
 function saveImage() {
   if (!canvasEl || !hasImage()) return;
-  const name = `anima-seed${seed()}.png`;
+  const name = `anima-${bucket().id}-seed${seed()}.png`;
   const a = document.createElement('a');
   a.href = canvasEl.toDataURL('image/png');
   a.download = name;
@@ -544,23 +584,20 @@ ${prompt()}</textarea
           disabled=${busy}
           onchange=${(e: Event) => {
             const v = (e.target as HTMLSelectElement).value;
-            if (v === ditModel()) return;
-            setDitModel(v);
-            void releaseOtherDits(v); // free the old variant's 3.9 GB immediately
+            if (v === bucketId()) return;
+            setBucketId(v);
+            // A ratio is a different graph, so it's a different session: drop the old
+            // one's 3.9 GB of GPU memory now rather than holding both.
+            void releaseOtherDits(bucketById(v).dit);
           }}
         >
-          <option
-            value="dit_512_fp16_r16"
-            selected=${() => ditModel() === 'dit_512_fp16_r16'}
-          >
-            fp16 weights / fp32 acts ✓
-          </option>
-          <option value="dit_512_fp16_r16" selected=${() => ditModel() === 'dit_512_fp16_r16'}>
-            fp16 rescaled ×1/16 (graph opt on)
-          </option>
-          <option value="dit_512_fp16" selected=${() => ditModel() === 'dit_512_fp16'}>
-            fp16 (NaN on WebGPU)
-          </option>
+          ${() =>
+            BUCKETS.map(
+              (b) =>
+                html`<option value=${b.id} selected=${() => bucketId() === b.id}>
+                  ${b.label}
+                </option>`,
+            )}
         </select>
         <label class="y-label" style="display:flex; gap:4px; align-items:center;"
           >seed
@@ -617,9 +654,11 @@ ${prompt()}</textarea
       <div class="y-flex-col" style="gap: var(--yaar-sp-2); align-items: flex-start;">
         <canvas
           ref=${(el: HTMLCanvasElement) => (canvasEl = el)}
-          width="512"
-          height="512"
-          style="width:512px; height:512px; max-width:100%; background: var(--yaar-bg-surface); border:1px solid var(--yaar-border); border-radius:6px;"
+          width=${() => bucket().W}
+          height=${() => bucket().H}
+          style=${() =>
+            `width:${bucket().W}px; height:${bucket().H}px; max-width:100%; background: var(--yaar-bg-surface); ` +
+            `border:1px solid var(--yaar-border); border-radius:6px;`}
         ></canvas>
         <div class="y-flex" style="gap: var(--yaar-sp-2);">
           <button class="y-btn" disabled=${() => busy() || !hasImage()} onclick=${copyImage}>
@@ -640,7 +679,8 @@ render(() => html`<${App} />`, document.getElementById('app')!);
 // structured JSON results (steps, image stats, PNG dataURL) without clicking the UI.
 (window as unknown as { __anima: unknown }).__anima = {
   ready: true,
-  generate, // ({model?, seed?, prompt?}) => result
+  generate, // ({model?, seed?, prompt?, ratio?}) => result
+  ratios: BUCKETS, // the exportable aspect ratios; pass one's id as `ratio`
   probe: ditProbe, // () => {rows, firstBad}
   vaeProbe, // decode a precomputed latent (plumbing sanity check; no UI button)
   ditGate, // single DiT forward (memory/latency check; no UI button)
