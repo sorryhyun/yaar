@@ -25,8 +25,22 @@ export {
   type SolidHtmlDefectKind,
   type SolidHtmlFinding,
 } from './solid-html-guard.js';
+export {
+  APP_MOUNT_ID,
+  scanMountTargets,
+  formatMountFindings,
+  type MountFinding,
+} from './mount-guard.js';
+export {
+  knownTokens,
+  suggestToken,
+  scanTokens,
+  formatTokenFindings,
+  type AppSourceFile,
+  type TokenFinding,
+} from './design-token-guard.js';
 export { extractProtocolFromSource } from './extract-protocol.js';
-export { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
+export { YAAR_DESIGN_TOKENS_CSS, describeDesignTokens } from './design-tokens.js';
 export {
   isAppStale,
   writeBuildManifest,

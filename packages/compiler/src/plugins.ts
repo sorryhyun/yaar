@@ -10,6 +10,8 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { scanSource, formatFindings } from './solid-html-guard.js';
+import { scanMountTargets, formatMountFindings } from './mount-guard.js';
+import { describeDesignTokens } from './design-tokens.js';
 
 /**
  * Normalize a file path to use forward slashes.
@@ -441,11 +443,20 @@ export function solidHtmlSourcePlugin(): Bun.BunPlugin {
         const text = await Bun.file(filePath).text();
         const rewritten = text.replace(/<\/\$\{([^}]+)\}>/g, '</>');
 
-        if (text.includes('html`')) {
+        // Cheap text gates so the TS parser only runs on files that could match.
+        const mayHaveTemplates = text.includes('html`');
+        const mayMount = text.includes('render(');
+        if (mayHaveTemplates || mayMount) {
           const ts = await loadTs();
           if (ts) {
-            const findings = scanSource(ts, rewritten, filePath);
-            if (findings.length > 0) throw new Error(formatFindings(filePath, findings));
+            if (mayHaveTemplates) {
+              const findings = scanSource(ts, rewritten, filePath);
+              if (findings.length > 0) throw new Error(formatFindings(filePath, findings));
+            }
+            if (mayMount) {
+              const mounts = scanMountTargets(ts, rewritten, filePath);
+              if (mounts.length > 0) throw new Error(formatMountFindings(filePath, mounts));
+            }
           }
         }
 
@@ -480,11 +491,28 @@ function loadDtsContent(): string {
 }
 
 /**
+ * Pseudo-libraries: describable, but not importable.
+ *
+ * The design tokens are injected as CSS, so they have no `@bundled/*` module and
+ * no `.d.ts` block — yet an app agent has to be able to ask what they are. Before
+ * this existed, the app prompt told agents to call
+ * `describeBundledLibrary({ name: 'design-tokens' })`, which fell through to
+ * `null`: the agent asked for the token list, got nothing, and invented plausible
+ * names (`--yaar-space-2`) that silently render to nothing.
+ */
+const PSEUDO_LIBRARIES: Record<string, () => string> = {
+  'design-tokens': describeDesignTokens,
+};
+
+/**
  * Get detailed type information for a specific bundled library.
  * Extracts the `declare module '@bundled/...'` block(s) from the .d.ts file,
  * plus any preceding interface/type declarations that the module references.
  */
 export function getBundledLibraryDetail(name: string): string | null {
+  const pseudo = PSEUDO_LIBRARIES[name];
+  if (pseudo) return pseudo();
+
   if (!(name in BUNDLED_LIBRARIES) && !name.includes('/')) return null;
 
   const content = loadDtsContent();
