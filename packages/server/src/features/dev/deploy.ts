@@ -4,7 +4,12 @@
 
 import { mkdir, cp, readdir, stat, rm, unlink } from 'fs/promises';
 import { join } from 'path';
-import { compileTypeScript, getSandboxPath, extractProtocolFromSource } from '@yaar/compiler';
+import {
+  compileTypeScript,
+  typecheckSandbox,
+  getSandboxPath,
+  extractProtocolFromSource,
+} from '@yaar/compiler';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSkillMd } from './helpers.js';
@@ -75,6 +80,17 @@ async function writeIfChanged(filePath: string, content: string): Promise<void> 
   await Bun.write(filePath, content);
 }
 
+/** The `bundles` an app opted into — gates `@bundled/yaar-*` in both compile and typecheck. */
+async function readBundles(sandboxPath: string): Promise<string[] | undefined> {
+  try {
+    const appMeta = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
+    if (Array.isArray(appMeta.bundles)) return appMeta.bundles;
+  } catch {
+    /* no app.json, or unreadable */
+  }
+  return undefined;
+}
+
 export interface DeployArgs {
   appId: string;
   name?: string;
@@ -84,6 +100,8 @@ export interface DeployArgs {
   skill?: string;
   sourcePath?: string; // Override sandbox path — use this directory as source
   message?: string; // Commit message for this deploy's history snapshot
+  /** Ship without type checking. Escape hatch — the caller is stating they know. */
+  skipTypecheck?: boolean;
 }
 
 export interface DeployResult {
@@ -97,7 +115,7 @@ export async function doDeploy(
   sandboxId: string,
   args: DeployArgs,
 ): Promise<DeployResult | { success: false; error: string }> {
-  const { appId, name, description, icon, keepSource = true, skill } = args;
+  const { appId, name, description, icon, keepSource = true, skill, skipTypecheck } = args;
 
   if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
     return {
@@ -118,6 +136,34 @@ export async function doDeploy(
     return { success: false, error: `Sandbox "${sandboxId}" not found.` };
   }
 
+  // Type-check the source before any of it reaches apps/.
+  //
+  // Bundling does not type check — Bun strips types and builds happily around them — so
+  // "compile succeeded" never meant "this type checks", and nothing between a broken type
+  // and a live app ever said otherwise. The check lived one call earlier, in devtools' own
+  // typecheck button, which a deploy could simply not press. Put it in the deploy itself:
+  // it is the last door, and the only one every caller (devtools, yaar-dev, an agent
+  // driving the verb directly) has to walk through.
+  //
+  // A sandbox with no source (components-only deploy) has nothing to check. Bundled-exe
+  // mode has no tsc, and typecheckSandbox reports success there rather than blocking a
+  // deploy it cannot judge.
+  const hasSource = await stat(join(sandboxPath, 'src'))
+    .then(() => true)
+    .catch(() => false);
+  if (hasSource && !skipTypecheck) {
+    const result = await typecheckSandbox(sandboxPath, { bundles: await readBundles(sandboxPath) });
+    if (!result.success) {
+      const diagnostics = result.diagnostics ?? [];
+      return {
+        success: false,
+        error:
+          `Type check failed — refusing to deploy "${appId}". ` +
+          `Fix these, or pass skipTypecheck to ship anyway:\n${diagnostics.join('\n')}`,
+      };
+    }
+  }
+
   const distIndexPath = join(sandboxPath, 'dist', 'index.html');
   let hasCompiledApp = false;
   let extractedProtocol: Pick<AppManifest, 'state' | 'commands'> | null = null;
@@ -127,17 +173,9 @@ export async function doDeploy(
   } catch {
     try {
       await stat(join(sandboxPath, 'src', 'main.ts'));
-      // Read bundles from app.json if present (gates @bundled/yaar-* imports)
-      let bundles: string[] | undefined;
-      try {
-        const appMeta = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
-        if (Array.isArray(appMeta.bundles)) bundles = appMeta.bundles;
-      } catch {
-        /* no app.json */
-      }
       const compileResult = await compileTypeScript(sandboxPath, {
         title: name ?? toDisplayName(appId),
-        bundles,
+        bundles: await readBundles(sandboxPath),
       });
       if (!compileResult.success) {
         return {

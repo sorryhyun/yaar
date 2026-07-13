@@ -196,7 +196,12 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         return;
       }
       try {
-        var result = registration.commands[cmdName].handler(msg.params);
+        // A command whose params are all optional is normally called with none at all, and
+        // postMessage then delivers no params at all. Handed straight to the handler, the
+        // first property read threw "Cannot read properties of undefined" — an error naming
+        // neither the command nor the app, so it reads like a bug in the app's own code.
+        // No params is an empty bag of params.
+        var result = registration.commands[cmdName].handler(msg.params || {});
         // A command that acts but returns nothing is normal (play, stop, ...). Send
         // null rather than undefined: postMessage drops undefined-valued keys, and the
         // parent bridge reads a response carrying neither result nor error as malformed.

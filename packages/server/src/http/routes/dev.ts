@@ -256,6 +256,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
         description: body.description as string | undefined,
         icon: body.icon as string | undefined,
         message: body.message as string | undefined,
+        skipTypecheck: body.skipTypecheck === true,
       });
       if (!result.success) return jsonResponse(result);
       return jsonResponse({

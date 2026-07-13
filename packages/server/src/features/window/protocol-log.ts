@@ -74,8 +74,15 @@ export function beginRequest(windowKey: string, request: AppProtocolRequest): Pr
         ? request.command
         : undefined;
 
+  // `__console` is not app traffic — it is devtools polling its own console panel, twice a
+  // second, each poll carrying back the whole accumulated buffer. Recorded, it buried the
+  // handful of entries the log exists to show (a command, its result) under dozens of
+  // identical replays of the same logs. Instrumentation must not drown the signal it
+  // instruments, so the poll is watched, not logged.
+  const isConsolePoll = request.kind === 'query' && request.stateKey === '__console';
+
   const entry: ProtocolLogEntry = {
-    seq: nextSeq++,
+    seq: isConsolePoll ? -1 : nextSeq++,
     ts: Date.now(),
     windowKey,
     direction: 'out',
@@ -83,7 +90,8 @@ export function beginRequest(windowKey: string, request: AppProtocolRequest): Pr
     ...(name ? { name } : {}),
     ...(request.kind === 'command' && request.params ? { params: clamp(request.params) } : {}),
   };
-  push(entry);
+  // `endRequest` still completes the entry; it just completes one nobody reads.
+  if (!isConsolePoll) push(entry);
   return entry;
 }
 

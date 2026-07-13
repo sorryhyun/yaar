@@ -78,6 +78,54 @@ interface CapturedImage {
  * hence both shapes are accepted, and an empty `images` is a real answer ("nothing
  * painted"), not an error to be swallowed here.
  */
+/**
+ * Open (or re-open) the preview window on the current build, and return where it landed.
+ *
+ * Re-creating the window remounts the iframe, which is how a preview picks up a new build —
+ * so `compile` calls this too. Shared with the `preview` command rather than duplicated:
+ * the window id, the preview principal and the permissions below are all load-bearing, and
+ * a second copy of them that drifted would be its own bug.
+ */
+async function openPreview(): Promise<{ previewUrl: string; windowId: string }> {
+  const url = previewUrl();
+  if (!url) throw new AppCommandError('No compiled output. Run compile first.');
+  const proj = activeProject();
+  const name = proj?.name ?? 'Preview';
+  // Read project's app.json to get declared permissions for the preview iframe
+  let permissions: string[] | undefined;
+  if (proj) {
+    const appJson = await appStorage.readJsonOr<{ permissions?: string[] } | null>(
+      `projects/${proj.id}/app.json`,
+      null,
+    );
+    if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
+  }
+  // Address the window by an explicit, namespaced id. Left to the server, the id is
+  // derived by slugging the title — and the title is the project name, so previewing a
+  // clone of `ai-chat` produced the window id `ai-chat`, colliding with the *running*
+  // app. Window registration is last-write-wins, so the preview silently replaced the
+  // real app's window record (and its appId), severing the real app from its agent.
+  const previewId = `devtools-preview-${proj?.id ?? 'scratch'}`;
+  // Give the preview a principal of its own, derived from the project. `self` then
+  // resolves inside it — so appStorage, appDb and app-scoped permissions actually run
+  // before deploy instead of 403'ing — while the storage it reaches is a throwaway
+  // namespace, not the deployed app's live data. The server refuses to route an app
+  // agent to a `preview--*` identity, so this cannot displace the real app either.
+  const previewAppId = proj ? `preview--${proj.id}` : undefined;
+  const result = await invoke<{ windowId?: string }>(`yaar://windows/${previewId}`, {
+    action: 'create',
+    title: `${name} (preview)`,
+    renderer: 'iframe',
+    content: url,
+    ...(previewAppId ? { appId: previewAppId } : {}),
+    ...(permissions ? { permissions } : {}),
+  });
+  // Trust the id the server actually registered, not the one we asked for.
+  const windowId = result?.windowId ?? previewId;
+  setPreviewWindowId(windowId);
+  return { previewUrl: url, windowId };
+}
+
 async function readPreview(): Promise<{ info: Record<string, unknown>; images: CapturedImage[] }> {
   const wid = previewWindowId();
   if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
@@ -447,8 +495,9 @@ export function registerProtocol() {
       }),
       compile: defineCommand({
         description:
-          'Type check and compile the active project. Returns type diagnostics alongside the ' +
-          'build result — no separate typecheck call needed. Slow: pass timeoutMs (e.g. 60000).',
+          'Type check and compile the active project, and refresh the preview window if one is ' +
+          'open. `status` is success only when the code both builds and type checks. Slow: ' +
+          'pass timeoutMs (e.g. 60000).',
         params: {
           type: 'object',
           properties: {
@@ -465,13 +514,35 @@ export function registerProtocol() {
           const skip = p.skipTypecheck === true;
           if (!skip) await typecheck();
           await compile();
-          const status = compileStatus();
+          const built = compileStatus() === 'success';
           const errors = compileErrors();
           const diags = skip ? [] : diagnostics();
+          const typeErrors = diags.filter((d) => d.severity === 'error').length;
+
+          // A bundle that built around two type errors used to come back `status: "success"`
+          // with a previewUrl — the one word the caller reads, saying the one thing that
+          // wasn't true. Bun strips types and builds happily through them, so "it built" and
+          // "it type checks" are separate facts and both get reported: `built` for the
+          // bundle, `status` for the code. Deploy enforces the same line.
+          const status = built && typeErrors === 0 ? 'success' : 'error';
+
+          // Refresh an open preview onto the build we just made. Left alone, it went on
+          // showing the previous one — so a screenshot taken to confirm a fix showed the
+          // code from before the fix, and agreed with you. Re-opening remounts the iframe,
+          // which resets app state: a new build is a new app.
+          let previewRefreshed = false;
+          if (built && previewWindowId()) {
+            await openPreview();
+            previewRefreshed = true;
+          }
+
           return {
             status,
+            built,
             previewUrl: previewUrl(),
-            ...(status === 'error' && errors.length > 0 ? { errors } : {}),
+            ...(previewRefreshed ? { previewRefreshed } : {}),
+            ...(typeErrors > 0 ? { typeErrors } : {}),
+            ...(!built && errors.length > 0 ? { errors } : {}),
             ...(diags.length > 0 ? { diagnostics: diags } : {}),
           };
         },
@@ -505,7 +576,9 @@ export function registerProtocol() {
         },
       }),
       deploy: defineCommand({
-        description: 'Deploy to apps/. Snapshots the previous version first — see gitRestore.',
+        description:
+          'Deploy to apps/. Type checks first and refuses to ship type errors. Snapshots the ' +
+          'previous version first — see gitRestore.',
         params: {
           type: 'object',
           properties: {
@@ -517,18 +590,22 @@ export function registerProtocol() {
               type: 'string',
               description: 'Commit message for this deploy, e.g. "add dark mode toggle"',
             },
+            skipTypecheck: {
+              type: 'boolean',
+              description: 'Ship despite type errors. Say so on purpose.',
+            },
           },
           required: ['appId'],
         },
-        handler: async (p) => {
+        handler: async (p) =>
           await deploy({
             appId: String(p.appId),
             name: p.name ? String(p.name) : undefined,
             icon: p.icon ? String(p.icon) : undefined,
             description: p.description ? String(p.description) : undefined,
             message: p.message ? String(p.message) : undefined,
-          });
-        },
+            skipTypecheck: p.skipTypecheck === true,
+          }),
       }),
       gitHistory: defineCommand({
         description:
@@ -609,44 +686,7 @@ export function registerProtocol() {
       preview: defineCommand({
         description: 'Open preview window for the compiled app',
         params: { type: 'object', properties: {} },
-        handler: async () => {
-          const url = previewUrl();
-          if (!url) throw new AppCommandError('No compiled output. Run compile first.');
-          const proj = activeProject();
-          const name = proj?.name ?? 'Preview';
-          // Read project's app.json to get declared permissions for the preview iframe
-          let permissions: string[] | undefined;
-          if (proj) {
-            const appJson = await appStorage.readJsonOr<{ permissions?: string[] } | null>(
-              `projects/${proj.id}/app.json`,
-              null,
-            );
-            if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
-          }
-          // Address the window by an explicit, namespaced id. Left to the server, the id is
-          // derived by slugging the title — and the title is the project name, so previewing a
-          // clone of `ai-chat` produced the window id `ai-chat`, colliding with the *running*
-          // app. Window registration is last-write-wins, so the preview silently replaced the
-          // real app's window record (and its appId), severing the real app from its agent.
-          const previewId = `devtools-preview-${proj?.id ?? 'scratch'}`;
-          // Give the preview a principal of its own, derived from the project. `self` then
-          // resolves inside it — so appStorage, appDb and app-scoped permissions actually run
-          // before deploy instead of 403'ing — while the storage it reaches is a throwaway
-          // namespace, not the deployed app's live data. The server refuses to route an app
-          // agent to a `preview--*` identity, so this cannot displace the real app either.
-          const previewAppId = proj ? `preview--${proj.id}` : undefined;
-          const result = await invoke<{ windowId?: string }>(`yaar://windows/${previewId}`, {
-            action: 'create',
-            title: `${name} (preview)`,
-            renderer: 'iframe',
-            content: url,
-            ...(previewAppId ? { appId: previewAppId } : {}),
-            ...(permissions ? { permissions } : {}),
-          });
-          // Trust the id the server actually registered, not the one we asked for.
-          setPreviewWindowId(result?.windowId ?? previewId);
-          return { previewUrl: url, windowId: result?.windowId ?? previewId };
-        },
+        handler: async () => await openPreview(),
       }),
       viewPreview: defineCommand({
         description:

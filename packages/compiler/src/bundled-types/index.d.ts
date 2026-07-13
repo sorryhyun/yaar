@@ -490,6 +490,11 @@ interface YaarDevDeployOpts {
   permissions?: string[];
   /** Commit message for the history snapshot this deploy records. */
   message?: string;
+  /**
+   * Ship without type checking. Deploy type checks first and refuses on errors —
+   * this states you know, and want it anyway.
+   */
+  skipTypecheck?: boolean;
 }
 
 interface YaarDevDeployResult {

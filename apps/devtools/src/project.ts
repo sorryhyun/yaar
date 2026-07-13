@@ -379,27 +379,41 @@ export async function typecheck(): Promise<void> {
   }
 }
 
+/**
+ * Deploy the active project, or throw saying why not.
+ *
+ * A failed deploy used to be written to the status bar and then swallowed — the caller got
+ * back the same `undefined` a successful one returns. An agent, which cannot read the status
+ * bar, was told nothing and moved on believing it had shipped. The server refusing to deploy
+ * type-broken code only helps if the refusal reaches whoever asked.
+ */
 export async function deploy(opts: {
   appId: string;
   name?: string;
   icon?: string;
   description?: string;
   message?: string;
-}): Promise<void> {
+  skipTypecheck?: boolean;
+}): Promise<{ appId: string; name: string }> {
   const proj = activeProject();
-  if (!proj) return;
+  if (!proj) throw new AppCommandError('No active project. Open or create one first.');
   setStatusText('Deploying...');
+  let result: Awaited<ReturnType<typeof devDeploy>>;
   try {
     // Permissions and other metadata are read from sandbox's app.json by the server
-    const result = await devDeploy(projectPath(proj.id), opts);
-    if (result.success) {
-      setStatusText(`Deployed as "${result.name ?? opts.appId}"`);
-    } else {
-      setStatusText(`Deploy failed: ${result.error ?? 'Unknown'}`);
-    }
+    result = await devDeploy(projectPath(proj.id), opts);
   } catch (err) {
     setStatusText(`Deploy failed: ${errMsg(err)}`);
+    throw new AppCommandError(`Deploy failed: ${errMsg(err)}`);
   }
+  if (!result.success) {
+    const reason = result.error ?? 'Unknown error';
+    setStatusText(`Deploy failed: ${reason}`);
+    throw new AppCommandError(`Deploy failed: ${reason}`);
+  }
+  const name = result.name ?? opts.appId;
+  setStatusText(`Deployed as "${name}"`);
+  return { appId: result.appId ?? opts.appId, name };
 }
 
 // ── Version history ──

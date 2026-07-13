@@ -100,6 +100,30 @@ describe('protocol log', () => {
     expect(String(logged.params).length).toBeLessThan(3_000);
   });
 
+  it('does not record devtools polling its own console', () => {
+    // The console panel polls __console twice a second and each reply carries the whole
+    // accumulated buffer back. Logged, those replays buried the two entries the log was
+    // opened to read — and evicted real traffic on the way, since the buffer is finite.
+    for (let i = 0; i < 20; i++) {
+      const poll = beginRequest('0/devtools-preview-1', { kind: 'query', stateKey: '__console' });
+      endRequest(poll, { kind: 'query', data: [{ level: 'log', args: ['noise'] }] }, 2);
+    }
+    const cmd = beginRequest('0/devtools-preview-1', { kind: 'command', command: 'increment' });
+    endRequest(cmd, { kind: 'command', result: { count: 1 } }, 5);
+
+    const log = readLog({ windowKey: '0/devtools-preview-1' });
+    expect(log).toHaveLength(1);
+    expect(log[0].name).toBe('increment');
+  });
+
+  it('still records an ordinary query', () => {
+    // Only the console poll is filtered — a state query is exactly the traffic the log is for.
+    const entry = beginRequest('0/ai-chat', { kind: 'query', stateKey: 'messages' });
+    endRequest(entry, { kind: 'query', data: [] }, 3);
+
+    expect(readLog({ windowKey: '0/ai-chat' })).toHaveLength(1);
+  });
+
   it('evicts oldest entries rather than growing without bound', () => {
     for (let i = 0; i < 600; i++) recordEmit('0/ai-chat', 'tick', { i });
 
