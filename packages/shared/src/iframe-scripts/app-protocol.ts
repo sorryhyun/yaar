@@ -197,13 +197,17 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       }
       try {
         var result = registration.commands[cmdName].handler(msg.params);
+        // A command that acts but returns nothing is normal (play, stop, ...). Send
+        // null rather than undefined: postMessage drops undefined-valued keys, and the
+        // parent bridge reads a response carrying neither result nor error as malformed.
+        var asResult = function(data) { return data === undefined ? null : data; };
         // Handle async handlers
         if (result && typeof result.then === 'function') {
           result.then(function(data) {
             window.parent.postMessage({
               type: 'yaar:app-command-response',
               requestId: requestId,
-              result: data
+              result: asResult(data)
             }, '*');
           }).catch(function(err) {
             window.parent.postMessage({
@@ -217,7 +221,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           window.parent.postMessage({
             type: 'yaar:app-command-response',
             requestId: requestId,
-            result: result
+            result: asResult(result)
           }, '*');
         }
       } catch (err) {

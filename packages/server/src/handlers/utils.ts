@@ -11,11 +11,26 @@ import type { ContextPool } from '../agents/context-pool.js';
 import { MIME_TYPES } from '../config.js';
 import { extname } from 'path';
 
+/**
+ * Thrown when the caller names a session the hub doesn't hold. This is transient,
+ * not fatal: an iframe app boots with a token minted for a session whose WebSocket
+ * has yet to connect (or was evicted 60s after its last one closed), and the session
+ * reappears under the same id as soon as the frontend (re)connects. Callers that
+ * turn verbs into HTTP — see routes/verb.ts — surface it as a retryable 503 rather
+ * than a 500.
+ */
+export class NoActiveSessionError extends Error {
+  constructor() {
+    super('No active session — connect via WebSocket first.');
+    this.name = 'NoActiveSessionError';
+  }
+}
+
 /** Get the active LiveSession (from agent context or default). */
 export function getActiveSession(): LiveSession {
   const sid = getSessionId();
   const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-  if (!session) throw new Error('No active session — connect via WebSocket first.');
+  if (!session) throw new NoActiveSessionError();
   return session;
 }
 

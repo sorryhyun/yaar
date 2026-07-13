@@ -27,15 +27,31 @@ export const IFRAME_VERB_SDK_SCRIPT = `
     return h;
   }
 
-  function callVerb(verb, uri, payload) {
+  // An app's iframe boots on its own clock: it can fire session-scoped verbs before
+  // the desktop's WebSocket has registered the session (first load after a server
+  // start), or after the session was evicted while the socket was down. The server
+  // answers those with a retryable 503, and the session reappears under the same id
+  // the moment the frontend (re)connects — so wait and try again instead of handing
+  // the app an error it would render as "empty".
+  var RETRY_DELAYS_MS = [200, 400, 800, 1600, 3200];
+
+  function callVerb(verb, uri, payload, attempt) {
     var body = { verb: verb, uri: uri };
     if (payload !== undefined) body.payload = payload;
+    attempt = attempt || 0;
     return fetch('/api/verb', {
       method: 'POST',
       headers: tokenHeaders(),
       body: JSON.stringify(body)
     }).then(function(res) {
       return res.json().then(function(envelope) {
+        if (res.status === 503 && envelope.retryable && attempt < RETRY_DELAYS_MS.length) {
+          return new Promise(function(resolve) {
+            setTimeout(resolve, RETRY_DELAYS_MS[attempt]);
+          }).then(function() {
+            return callVerb(verb, uri, payload, attempt + 1);
+          });
+        }
         if (!res.ok) throw new Error(envelope.error || 'Verb call failed');
         if (!envelope.ok) throw new Error(envelope.error || 'Verb error');
         if (envelope.images) return { data: envelope.data, images: envelope.images };

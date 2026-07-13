@@ -14,6 +14,7 @@ import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { initRegistry } from '../../handlers/index.js';
+import { NoActiveSessionError } from '../../handlers/utils.js';
 import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { validateIframeToken } from '../iframe-tokens.js';
 import { subscriptionRegistry } from '../subscriptions.js';
@@ -338,6 +339,12 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       : await execute();
     return jsonResponse(toEnvelope(result));
   } catch (err) {
+    // The app's iframe can outrun (or outlive) its session's WebSocket, so a
+    // session-scoped verb may land while the hub holds no session. That's a wait,
+    // not a failure: say so with a retryable 503 and let the SDK try again.
+    if (err instanceof NoActiveSessionError) {
+      return jsonResponse({ ok: false, error: err.message, retryable: true }, 503);
+    }
     const message = err instanceof Error ? err.message : 'Verb execution failed';
     return errorResponse(message, 500);
   }
