@@ -43,6 +43,7 @@ import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { recordEmit } from '../features/window/protocol-log.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
+import { dbg as dbgLine } from './action-emitter.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
 import type { SessionLogger } from '../logging/index.js';
 import {
@@ -786,6 +787,9 @@ export class LiveSession {
           this.windowState.getWindow(event.windowId)?.id ??
           this.windowState.handleMap.getRawWindowId(event.windowId);
         const wasReady = this.windowState.getWindow(windowKey)?.appProtocol ?? false;
+        dbgLine(
+          `READY event.windowId=${event.windowId} → key=${windowKey} session=${this.sessionId}`,
+        );
         this.windowState.setAppProtocol(windowKey);
         actionEmitter.notifyAppReady(windowKey);
         // Replay stored commands only on re-registration (reload/remount), not first time

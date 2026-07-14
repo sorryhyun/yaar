@@ -28,6 +28,16 @@ import {
   type PermissionDecision,
 } from '../storage/permissions.js';
 import { PendingStore, type PendingOutcome } from './pending-store.js';
+import { appendFileSync } from 'node:fs';
+
+/** TEMPORARY debug trace — remove. */
+export function dbg(line: string): void {
+  try {
+    appendFileSync('/tmp/yaar-dbg.log', `${new Date().toISOString()} ${line}\n`);
+  } catch {
+    /* ignore */
+  }
+}
 
 /**
  * Action event data.
@@ -593,6 +603,10 @@ class ActionEmitter extends EventEmitter {
       sessionId: currentSessionId,
     });
 
+    dbg(
+      `emitAppProtocolRequest ${requestId} window=${windowId} timeoutMs=${timeoutMs} session=${currentSessionId}`,
+    );
+
     // Pass the deadline to the frontend too — it times the postMessage leg itself, and a
     // shorter fixed timer there would override whatever the caller asked for.
     this.emit('app-protocol', { requestId, windowId, request, timeoutMs });
@@ -605,7 +619,9 @@ class ActionEmitter extends EventEmitter {
    * Called by the session when it receives an APP_PROTOCOL_RESPONSE from the frontend.
    */
   resolveAppProtocolResponse(requestId: string, response: AppProtocolResponse): boolean {
-    return this.pendingAppRequests.resolve(requestId, response).resolved;
+    const resolved = this.pendingAppRequests.resolve(requestId, response).resolved;
+    dbg(`resolveAppProtocolResponse ${requestId} → resolved=${resolved}`);
+    return resolved;
   }
 
   /**

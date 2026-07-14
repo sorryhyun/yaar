@@ -8,6 +8,7 @@
 import type { ServerWebSocket } from 'bun';
 import type { LiveSessionOptions } from '../session/live-session.js';
 import { getSessionHub } from '../session/session-hub.js';
+import { dbg } from '../session/action-emitter.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
 import {
@@ -175,6 +176,9 @@ async function routeOne(ws: ServerWebSocket<WsData>, data: string | Buffer): Pro
   let event: ClientEvent | undefined;
   try {
     event = JSON.parse(typeof data === 'string' ? data : data.toString()) as ClientEvent;
+    if (String(event?.type).startsWith('APP_PROTOCOL')) {
+      dbg(`routeOne got ${event.type} session=${sessionId} conn=${connectionId}`);
+    }
     const session = getSessionHub().get(sessionId!);
     if (!session) {
       // The session was evicted out from under this socket. Silence here read to the user

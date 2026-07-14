@@ -6,7 +6,7 @@ import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, error } from '../../handlers/utils.js';
-import { actionEmitter } from '../../session/action-emitter.js';
+import { actionEmitter, dbg } from '../../session/action-emitter.js';
 import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { beginRequest, endRequest } from './protocol-log.js';
@@ -117,6 +117,12 @@ async function requireAppReady(
   windowKey: string,
 ): Promise<VerbResult | null> {
   const win = windowState.getWindow(windowKey);
+  dbg(
+    `requireAppReady key=${windowKey} winFound=${!!win} appProtocol=${win?.appProtocol} allWindows=${windowState
+      .listWindows()
+      .map((w) => w.id)
+      .join(',')}`,
+  );
   if (win && !win.appProtocol) {
     const ready = await actionEmitter.waitForAppReady(windowKey, 5000);
     if (!ready) return error('App did not register with the App Protocol (timeout).');
