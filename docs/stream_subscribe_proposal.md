@@ -1,7 +1,7 @@
 # Proposal: Stream Subscriptions (Push-with-Payload Channels)
 
 **Status:** Draft for review
-**Sibling of:** [`app_events_subscribe_proposal.md`](./app_events_subscribe_proposal.md) — that one adds **app → agent** push. This one adds **server/agent → app (and agent → agent)** *streaming* push.
+**Builds on:** the app-event channel system (`app.register({events})` / `app.emit()` / `app_subscribe`), which shipped and closed the **app → agent** quadrant. This one adds **server/agent → app (and agent → agent)** *streaming* push. Its design record lived in `app_events_subscribe_proposal.md`, removed once implemented; the code is `WindowSubscriptionPolicy`, `ContextPool.notifyAppChannel`, and `features/window/subscribe.ts`.
 
 ---
 
@@ -11,7 +11,7 @@ YAAR has two reactive edges today, and both are **discrete, single-shot**:
 
 | Direction | Mechanism | Payload? |
 |---|---|---|
-| app → agent | `app.emit(channel, payload)` (app_events, Phases 1–3 landed) | yes, one shot |
+| app → agent | `app.emit(channel, payload)` (app event channels, landed) | yes, one shot |
 | server → app | `yaar.subscribe(uri, cb)` (`http/subscriptions.ts`) | **no — just a ping** |
 
 `subscribe()` is a change *notification*: the callback receives a URI string and the app must re-`read()` the whole resource (`verb-sdk.ts:65`, `subscriptions.ts:111`). That is a fine model for "the agent roster changed, refetch it" — which is exactly what `process-explorer` does (`apps/process-explorer/src/data.ts:162`).

@@ -26,6 +26,7 @@ import {
   ClientEventType,
   DEFAULT_MONITOR_ID,
   MAX_MONITORS,
+  BRIDGE_APP_ID,
   type ClientEvent,
   type ServerEvent,
   type OSAction,
@@ -160,6 +161,9 @@ export class LiveSession {
   private appProtocolListener: ((...args: any[]) => void) | null = null;
   // Session-scoped channel listeners (approval-request, user-prompt)
   private unsubscribeSessionChannels: (() => void) | null = null;
+  // Unsolicited frames from the YAAR Bridge extension (real-browser dialogs / navigations)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  private bridgeEventListener: ((...args: any[]) => void) | null = null;
 
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
@@ -259,6 +263,14 @@ export class LiveSession {
     };
     actionEmitter.on('app-protocol', this.appProtocolListener);
 
+    // The real browser reporting something nobody asked for (a native dialog fired, a driven tab
+    // navigated). The frame arrives on a process-global socket with no session on it, so every
+    // LiveSession hears it and decides for itself whether it has a window that cares.
+    this.bridgeEventListener = (data: { channel: string; payload: unknown }) => {
+      this.routeBridgeEvent(data.channel, data.payload);
+    };
+    actionEmitter.on('bridge-event', this.bridgeEventListener);
+
     // Subscribe to session-scoped event channels (approval requests, user prompts, verb subscriptions)
     this.unsubscribeSessionChannels = subscribeSessionChannels(
       sessionId,
@@ -305,6 +317,28 @@ export class LiveSession {
 
   getConnectionCount(): number {
     return this.connections.size;
+  }
+
+  /**
+   * Deliver an unsolicited real-browser event to this session's Real Browser windows.
+   *
+   * This is the server-side twin of the `APP_EVENT` client frame: both land on
+   * `ContextPool.notifyAppChannel`, so channel subscriptions, debounce, the per-window rate cap and
+   * the `<app:event>` framing are shared. The event does *not* detour through the iframe to be
+   * re-emitted via `app.emit()` — it already arrives in canonical form, the iframe would add nothing
+   * but two hops, and a window mid-reload would silently drop it.
+   *
+   * A session with no Real Browser window open is not an error: the channels are declared on that
+   * window, so with no window there is nobody who could have subscribed. Drop it.
+   */
+  private routeBridgeEvent(channel: string, payload: unknown): void {
+    const pool = this.pool;
+    if (!pool) return;
+
+    for (const window of this.windowState.listWindows()) {
+      if (window.appId !== BRIDGE_APP_ID) continue;
+      pool.notifyAppChannel(window.id, channel, payload);
+    }
   }
 
   // ── Event broadcasting ──────────────────────────────────────────────
@@ -1014,6 +1048,10 @@ export class LiveSession {
     if (this.appProtocolListener) {
       actionEmitter.off('app-protocol', this.appProtocolListener);
       this.appProtocolListener = null;
+    }
+    if (this.bridgeEventListener) {
+      actionEmitter.off('bridge-event', this.bridgeEventListener);
+      this.bridgeEventListener = null;
     }
     if (this.unsubscribeSessionChannels) {
       this.unsubscribeSessionChannels();

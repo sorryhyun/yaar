@@ -4,7 +4,8 @@
  * Allows agents (monitor or app) to subscribe to:
  *  - **window changes** — content/interaction/close/… on a specific window, and
  *  - **app event channels** — declarative `app.emit(channel, payload)` pushes from
- *    an iframe app (see docs/app_events_subscribe_proposal.md).
+ *    an iframe app, and the server-side equivalent the YAAR Bridge raises for the
+ *    real browser (a native dialog fired on a driven tab, a driven tab navigated).
  *
  * Both share the same registry, indexes, debounce, and close-teardown; only the
  * event key (a `WindowChangeEvent` enum vs. an arbitrary channel string) and the

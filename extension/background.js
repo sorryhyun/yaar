@@ -9,6 +9,12 @@
  * `command-result`) and `activity` (paint a transient cursor/tracking overlay on a tab so the user
  * sees YAAR touching their browser). All policy/consent stays server-side; this is just glue.
  *
+ * T4 (React): it also *originates* frames — `event` — for the two things a driven tab does that no
+ * command asked about: firing a native dialog, and finishing a navigation. Everything else here is
+ * request/response, which meant a page that alerted mid-automation just blocked the tab and YAAR saw
+ * a timeout. These land on the `browser-user` app's declared event channels. Only tabs YAAR has
+ * driven are watched — see `drivenTabs`.
+ *
  * MV3 note: an active WebSocket keeps the service worker alive (Chrome >= 116). A chrome.alarms
  * heartbeat covers the sleep/wake edges — on wake, if the socket is gone, we reconnect.
  *
@@ -17,14 +23,26 @@
 
 const PORT = 8000; // TODO(Slice: productization): make configurable via the extension popup.
 const BRIDGE_URL = `ws://localhost:${PORT}/bridge`;
-const PROTOCOL_VERSION = 4;
+const PROTOCOL_VERSION = 5;
 const CONTENT_MAX_CHARS = 100000; // fallback cap when the server doesn't send maxChars
+const DIALOG_MAX_CHARS = 500; // page-authored text reaching the agent — keep it short
 
 let socket = null;
 let reconnectDelayMs = 1000; // grows to a cap on repeated failures
 const MAX_RECONNECT_MS = 30000;
 const TABS_DEBOUNCE_MS = 150;
 let tabsDebounceTimer = null;
+
+/**
+ * Tabs YAAR has driven this session (click/type/scroll/navigate). Only these get the dialog hook,
+ * and only these report `navigated` — a tab the user is merely browsing is none of YAAR's business,
+ * and patching its `alert` would change what the user sees on a page YAAR was never asked to touch.
+ */
+const drivenTabs = new Set();
+const DRIVE_ACTIONS = new Set(['click', 'type', 'scroll', 'navigate']);
+
+/** Last URL reported per tab — `onUpdated` fires repeatedly, but a navigation happened once. */
+const lastUrlByTab = new Map();
 
 function log(...args) {
   console.log('[yaar-bridge]', ...args);
@@ -115,10 +133,150 @@ function scheduleTabsUpdate() {
   }, TABS_DEBOUNCE_MS);
 }
 
+// ── T4 React: watch a driven tab for things nobody asked for (dialogs, navigations) ──
+
+/**
+ * Install the dialog hook on a tab. Idempotent per document (each injected half sets its own guard
+ * flag), so calling it before every drive command and again after every load is cheap.
+ *
+ * Two halves, because a MAIN-world script can see the page's `window.alert` but has no `chrome.*`,
+ * and an isolated-world script is the reverse. The MAIN half patches the dialog functions and
+ * `postMessage`s what it saw; the ISOLATED half listens and relays to this worker. The relay goes in
+ * first — otherwise a dialog firing between the two injections would shout into an empty room.
+ *
+ * A page load wipes the MAIN-world patch, which is why `onUpdated` re-installs it below.
+ */
+async function ensureDialogHook(tabId) {
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, func: yaarDialogRelay });
+    await chrome.scripting.executeScript({ target: { tabId }, world: 'MAIN', func: yaarDialogHook });
+  } catch {
+    // Restricted page (chrome://, Web Store, PDF viewer, …) — nothing to hook, and nothing to do
+    // about it. The drive command itself will fail with its own clear error if it can't run either.
+  }
+}
+
+/**
+ * Runs IN the target page's MAIN world (injected via chrome.scripting). Must be fully
+ * self-contained — no closure references.
+ *
+ * Replaces the native dialog functions so a page that alerts mid-automation reports what it said
+ * instead of hard-blocking the tab (which is what YAAR sees today: an opaque command timeout, with
+ * the real message trapped behind a modal nobody can dismiss).
+ *
+ * This does change what the page does, so it is deliberately confined to tabs YAAR is driving, and
+ * it never swallows the message silently: an on-page banner shows the user what was intercepted.
+ * `confirm` returns false and `prompt` returns null — the cautious answer, since the agent is not
+ * here to click OK and a page should not get a yes it never earned.
+ */
+function yaarDialogHook() {
+  if (window.__yaar_dialog_hooked__) return;
+  window.__yaar_dialog_hooked__ = true;
+
+  const banner = (kind, text) => {
+    try {
+      if (!document.documentElement) return;
+      const ID = '__yaar_dialog_note__';
+      let el = document.getElementById(ID);
+      if (!el) {
+        el = document.createElement('div');
+        el.id = ID;
+        el.style.cssText = [
+          'position:fixed',
+          'top:16px',
+          'left:50%',
+          'transform:translateX(-50%)',
+          'z-index:2147483647',
+          'max-width:min(560px,90vw)',
+          'padding:10px 14px',
+          'border-radius:10px',
+          'font:500 13px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif',
+          'color:#fff',
+          'background:rgba(18,18,26,0.94)',
+          'box-shadow:0 6px 24px rgba(0,0,0,0.35)',
+          'pointer-events:none',
+        ].join(';');
+        document.documentElement.appendChild(el);
+      }
+      el.textContent = `YAAR intercepted a ${kind}: ${text}`;
+      clearTimeout(window.__yaar_dialog_timer__);
+      window.__yaar_dialog_timer__ = setTimeout(() => el.remove(), 4000);
+    } catch {
+      // Cosmetic — never let the banner break the interception itself.
+    }
+  };
+
+  const report = (kind, message, defaultValue) => {
+    const text = message == null ? '' : String(message);
+    banner(kind, text);
+    try {
+      window.postMessage(
+        {
+          __yaar_dialog__: true,
+          kind,
+          message: text,
+          defaultValue: defaultValue == null ? undefined : String(defaultValue),
+        },
+        '*',
+      );
+    } catch {
+      // A page can break structured clone in exotic ways; losing the report beats throwing
+      // inside the page's own alert() call and corrupting its control flow.
+    }
+  };
+
+  window.alert = function (message) {
+    report('alert', message);
+  };
+  window.confirm = function (message) {
+    report('confirm', message);
+    return false;
+  };
+  window.prompt = function (message, defaultValue) {
+    report('prompt', message, defaultValue);
+    return null;
+  };
+}
+
+/**
+ * Runs IN the target page's isolated world (injected via chrome.scripting). Must be fully
+ * self-contained. Relays what the MAIN-world hook saw back to this worker.
+ *
+ * The channel is an in-page `postMessage`, which the page itself could also send — so treat what
+ * arrives as page-authored text, not as proof a dialog fired. That is the same trust level as
+ * `extract`ed page content, which the agent already reads; the cap below bounds the blast radius.
+ */
+function yaarDialogRelay() {
+  if (window.__yaar_dialog_relay__) return;
+  window.__yaar_dialog_relay__ = true;
+
+  window.addEventListener('message', (ev) => {
+    if (ev.source !== window) return;
+    const d = ev.data;
+    if (!d || d.__yaar_dialog__ !== true) return;
+    try {
+      chrome.runtime.sendMessage({
+        type: 'yaar-dialog',
+        kind: d.kind === 'confirm' || d.kind === 'prompt' ? d.kind : 'alert',
+        message: String(d.message == null ? '' : d.message).slice(0, 500),
+        defaultValue: d.defaultValue == null ? undefined : String(d.defaultValue).slice(0, 200),
+      });
+    } catch {
+      // Worker asleep or extension reloading — the dialog is already intercepted either way.
+    }
+  });
+}
+
 // ── T2 Manage: execute inbound tab commands, reply with a correlated result ──
 async function handleCommand(cmd) {
   const { requestId, action, tabId } = cmd;
   try {
+    // Driving a tab is what earns it a dialog hook: from here on, anything it alerts is something
+    // YAAR provoked and needs to hear about.
+    if (DRIVE_ACTIONS.has(action) && typeof tabId === 'number') {
+      drivenTabs.add(tabId);
+      await ensureDialogHook(tabId);
+    }
     let data;
     switch (action) {
       case 'focus': {
@@ -533,6 +691,57 @@ chrome.tabs.onRemoved.addListener(onTabEvent);
 chrome.tabs.onUpdated.addListener(onTabEvent);
 chrome.tabs.onActivated.addListener(onTabEvent);
 chrome.tabs.onMoved.addListener(onTabEvent);
+
+// ── T4 React: a driven tab loaded a new page → re-arm the hook, tell the server it moved ──
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!drivenTabs.has(tabId)) return;
+
+  // A load wipes the MAIN-world patch. Re-install as early as the new document will accept it
+  // ('loading'), and again once it is settled ('complete') in case the early attempt raced the
+  // navigation commit and patched the outgoing document. Both are idempotent.
+  if (changeInfo.status === 'loading' || changeInfo.status === 'complete') {
+    void ensureDialogHook(tabId);
+  }
+  if (changeInfo.status !== 'complete') return;
+
+  const url = (tab && tab.url) || '';
+  if (!url || lastUrlByTab.get(tabId) === url) return; // onUpdated is chatty; a navigation is not
+  lastUrlByTab.set(tabId, url);
+  send({
+    type: 'event',
+    channel: 'navigated',
+    payload: { tabId, url, title: (tab && tab.title) || '' },
+  });
+  log(`event navigated → tab ${tabId} ${url}`);
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  drivenTabs.delete(tabId);
+  lastUrlByTab.delete(tabId);
+});
+
+// ── T4 React: the in-page relay reporting an intercepted dialog ──
+chrome.runtime.onMessage.addListener((msg, sender) => {
+  if (!msg || msg.type !== 'yaar-dialog') return;
+  const tab = sender && sender.tab;
+  const tabId = tab && tab.id;
+  // Only tabs YAAR drives may report. A page can forge the in-page postMessage the relay listens
+  // on, so this is what stops any random background tab from injecting text into an agent's context.
+  if (tabId == null || !drivenTabs.has(tabId)) return;
+
+  send({
+    type: 'event',
+    channel: 'dialog',
+    payload: {
+      kind: msg.kind,
+      message: String(msg.message || '').slice(0, DIALOG_MAX_CHARS),
+      ...(msg.defaultValue === undefined ? {} : { defaultValue: msg.defaultValue }),
+      tabId,
+      url: tab.url || '',
+    },
+  });
+  log(`event dialog → tab ${tabId} (${msg.kind})`);
+});
 
 // ── Heartbeat: on SW wake, ensure the socket is alive ──
 chrome.alarms.create('yaar-bridge-heartbeat', { periodInMinutes: 0.5 });

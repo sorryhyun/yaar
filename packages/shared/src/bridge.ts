@@ -18,12 +18,18 @@
  * `screenshot` captures the visible tab as a PNG (content-consent-gated like `extract`). These make
  * the Real Browser app a full driving surface, not just an observe/manage one — still fully
  * app-mediated (never a raw `yaar://browser` verb). See `docs/extension_bridge_proposal.md`.
+ * Slice 6 adds T4 (React): the `event` frame, the first thing the extension sends *unprompted* —
+ * a native dialog fired on a driven tab, or a driven tab navigated. Until this, the bridge was
+ * strictly pull (handshake / snapshot / reply-to-command), so a page that alerted mid-automation
+ * simply blocked the tab and the agent learned of it only as an opaque command timeout. These
+ * frames land on the `browser-user` app's declared event channels, which agents reach via
+ * `app_subscribe` — the same delivery path an in-iframe `app.emit()` uses.
  */
 
 import { z } from 'zod';
 
 /** Bumped whenever the message shape changes. Server warns on read mismatch, refuses commands. */
-export const BRIDGE_PROTOCOL_VERSION = 4;
+export const BRIDGE_PROTOCOL_VERSION = 5;
 
 /**
  * Minimum extension protocol version that can execute T2 commands (focus/close/group/move).
@@ -174,11 +180,51 @@ export const bridgeActivitySchema = z.object({
 });
 export type BridgeActivity = z.infer<typeof bridgeActivitySchema>;
 
+// ── T4 (React): unsolicited event frames flow extension → server ──
+
+/**
+ * The channels the extension may push *unprompted*, mirroring the `events` the `browser-user` app
+ * declares in its App Protocol registration. Every other extension→server frame is either a
+ * handshake, a state snapshot, or a reply to a command the server asked for; these are the only
+ * frames the real browser originates on its own.
+ *
+ * Constraining this to an enum (rather than a free `string`) is what keeps the surface honest: an
+ * extension cannot invent a channel no agent could have discovered from the app's manifest.
+ */
+export const bridgeEventChannelSchema = z.enum(['dialog', 'navigated']);
+export type BridgeEventChannel = z.infer<typeof bridgeEventChannelSchema>;
+
+/**
+ * The app whose windows a bridge `event` is delivered to. The bridge has no session and no window
+ * of its own; `browser-user` is the app that fronts the real browser, so its windows are where the
+ * channels above are declared and where agents subscribe. Named here, once, so the server does not
+ * scatter the literal through its routing.
+ */
+export const BRIDGE_APP_ID = 'browser-user';
+
+/**
+ * Something happened in the real browser that no agent asked for: a native dialog fired on a driven
+ * tab, or a driven tab finished loading a new URL. The server forwards these to subscribers of the
+ * matching `browser-user` channel (`app_subscribe`), waking or buffering the agent.
+ *
+ * `payload` is page-authored data in the `dialog` case — treat it as untrusted text, the same way
+ * `extract`ed page content is treated. The extension caps its length before it ever leaves the tab.
+ */
+export const bridgeEventSchema = z.object({
+  type: z.literal('event'),
+  channel: bridgeEventChannelSchema,
+  payload: z
+    .record(z.string(), z.unknown())
+    .describe('Channel-specific data; see the app manifest'),
+});
+export type BridgeEvent = z.infer<typeof bridgeEventSchema>;
+
 /** Any inbound frame from the extension (extension → server). */
 export const bridgeMessageSchema = z.discriminatedUnion('type', [
   bridgeHelloSchema,
   bridgeTabsSchema,
   bridgeCommandResultSchema,
+  bridgeEventSchema,
 ]);
 export type BridgeMessage = z.infer<typeof bridgeMessageSchema>;
 

@@ -15,6 +15,7 @@ import type { ServerWebSocket } from 'bun';
 import type { WsData } from './server.js';
 import { bridgeMessageSchema, BRIDGE_PROTOCOL_VERSION } from '@yaar/shared';
 import { getBridgeHub } from '../features/browser/bridge.js';
+import { actionEmitter } from '../session/action-emitter.js';
 
 export function handleBridgeOpen(ws: ServerWebSocket<WsData>): void {
   console.log(`[bridge] extension connected: ${ws.data.connectionId}`);
@@ -60,6 +61,14 @@ export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | 
     }
     case 'command-result': {
       hub.resolveCommand(msg);
+      return;
+    }
+    case 'event': {
+      // T4: the extension speaking unprompted. There is exactly one real browser but possibly many
+      // live sessions, and the hub is deliberately state-only ("does not push change
+      // notifications"), so this fans out through `actionEmitter` — each LiveSession picks it up and
+      // delivers it to its own `browser-user` windows. See LiveSession.routeBridgeEvent.
+      actionEmitter.emit('bridge-event', { channel: msg.channel, payload: msg.payload });
       return;
     }
   }

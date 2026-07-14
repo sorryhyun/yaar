@@ -195,7 +195,8 @@ export interface AppProtocolReadyEvent {
 /**
  * Client → Server: an app emitted on a declared event channel (`app.emit(...)`).
  * The server matches subscribers and either wakes the subscribing agent or
- * buffers the event into its next turn. See docs/app_events_subscribe_proposal.md.
+ * buffers the event into its next turn. Its server-side twin is the YAAR Bridge
+ * `event` frame (see `bridge.ts`), which lands on the same delivery path.
  */
 export interface AppEventEvent {
   type: typeof ClientEventType.APP_EVENT;
