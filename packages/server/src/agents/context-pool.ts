@@ -30,7 +30,7 @@ import {
   type ServerEvent,
   type UserInteraction,
 } from '@yaar/shared';
-import type { ProviderType } from '../providers/types.js';
+import type { AITransport, ProviderType } from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
@@ -98,6 +98,13 @@ export class ContextPool implements PoolContext {
   private monitorProcessor: MonitorTaskProcessor;
   private appProcessor: AppTaskProcessor;
 
+  /**
+   * Where this pool gets its providers. Defaults to the global warm pool; the loopback
+   * harness injects a scripted transport here instead of stubbing the factory module
+   * process-wide. See `AgentPool.acquireProvider`.
+   */
+  private readonly acquireProvider: () => Promise<AITransport | null>;
+
   constructor(
     sessionId: SessionId,
     windowState: WindowStateRegistry,
@@ -105,9 +112,11 @@ export class ContextPool implements PoolContext {
     broadcast: (event: ServerEvent) => void,
     restoredContext: ContextMessage[] = [],
     savedThreadIds?: Record<string, string>,
+    acquireProvider?: () => Promise<AITransport | null>,
   ) {
     this.sessionId = sessionId;
     this.broadcastFn = broadcast;
+    this.acquireProvider = acquireProvider ?? acquireWarmProvider;
     this.windowState = windowState;
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.savedThreadIds = savedThreadIds;
@@ -119,21 +128,26 @@ export class ContextPool implements PoolContext {
         `[ContextPool] Restored ${restoredContext.length} context messages from previous session`,
       );
     }
-    this.agentPool = new AgentPool(sessionId, broadcast, (rawId, monitorId) => {
-      // Resolve raw window ID to scoped handle via the handle map.
-      // If monitorId is provided, register/resolve; otherwise try lookup.
-      //
-      // The lookup must be scoped to the acting monitor before we fall back to
-      // registering. Raw IDs are derived from the appId, so an unscoped resolve
-      // would hand monitor 1's agent the handle of monitor 0's window of the same
-      // app — its window.create would land on monitor 0's window and every message
-      // after it would drive monitor 0's app agent instead of its own.
-      if (monitorId) {
-        const existing = windowState.handleMap.resolve(rawId, monitorId);
-        return existing ?? windowState.handleMap.register(rawId, monitorId);
-      }
-      return windowState.handleMap.resolve(rawId) ?? rawId;
-    });
+    this.agentPool = new AgentPool(
+      sessionId,
+      broadcast,
+      (rawId, monitorId) => {
+        // Resolve raw window ID to scoped handle via the handle map.
+        // If monitorId is provided, register/resolve; otherwise try lookup.
+        //
+        // The lookup must be scoped to the acting monitor before we fall back to
+        // registering. Raw IDs are derived from the appId, so an unscoped resolve
+        // would hand monitor 1's agent the handle of monitor 0's window of the same
+        // app — its window.create would land on monitor 0's window and every message
+        // after it would drive monitor 0's app agent instead of its own.
+        if (monitorId) {
+          const existing = windowState.handleMap.resolve(rawId, monitorId);
+          return existing ?? windowState.handleMap.register(rawId, monitorId);
+        }
+        return windowState.handleMap.resolve(rawId) ?? rawId;
+      },
+      this.acquireProvider,
+    );
 
     // Create processors
     this.monitorProcessor = new MonitorTaskProcessor(this);
@@ -175,7 +189,7 @@ export class ContextPool implements PoolContext {
   // ── Initialization ─────────────────────────────────────────────────
 
   async initialize(existingLogger?: SessionLogger): Promise<boolean> {
-    const provider = await acquireWarmProvider();
+    const provider = await this.acquireProvider();
     if (!provider) {
       await this.sendEvent({
         type: ServerEventType.ERROR,
@@ -222,7 +236,7 @@ export class ContextPool implements PoolContext {
   // ── Monitor lifecycle ──────────────────────────────────────────────
 
   async createMonitorAgent(monitorId: string): Promise<boolean> {
-    const provider = await acquireWarmProvider();
+    const provider = await this.acquireProvider();
     if (!provider) {
       await this.sendEvent({
         type: ServerEventType.ERROR,
@@ -831,7 +845,7 @@ export class ContextPool implements PoolContext {
 
     // Re-create fresh main agents for ALL previously active monitors
     for (const monitorId of activeMonitorIds) {
-      const provider = await acquireWarmProvider();
+      const provider = await this.acquireProvider();
       if (provider) {
         const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
         if (agent) {

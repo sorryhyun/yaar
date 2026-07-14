@@ -15,6 +15,15 @@ import { resolveWindowKey } from './helpers';
 import { useDesktopStore } from './desktop';
 
 /**
+ * How long past the server's own deadline the relay keeps listening for a reply.
+ *
+ * Only ever used to unhook a listener, never to declare a timeout — so it is generous on
+ * purpose: an app whose reply is merely slow should still be heard, and the server has
+ * already spoken for itself by then.
+ */
+const LISTENER_GRACE_MS = 5_000;
+
+/**
  * Get the target origin for postMessage to an iframe.
  * srcdoc/about:blank iframes have a "null" origin, requiring '*'.
  */
@@ -29,10 +38,56 @@ function getIframeTargetOrigin(iframe: HTMLIFrameElement): string {
 }
 
 /**
+ * Windows whose iframe has announced `yaar:app-ready` — i.e. called `app.register()`.
+ *
+ * The server tracks App Protocol readiness in its own WindowStateRegistry, fed by this
+ * handshake, which each iframe performs exactly once at registration. The session survives
+ * a server restart; that one-shot handshake does not, so a restarted server knew of the
+ * window but not that its app was ready, and every app_query/app_command against it failed
+ * with "App did not register with the App Protocol (timeout)" until the tab was reloaded.
+ *
+ * The desktop witnessed the registration and the iframe is still mounted, so it can simply
+ * say it again on reattach — no round trip into the iframes needed. See
+ * `resendAppProtocolReady`.
+ */
+const registeredAppWindows = new Set<string>();
+
+/**
+ * Re-announce App Protocol readiness for every still-mounted app iframe.
+ *
+ * Called on reattach (see `flushPending` in useAgentConnection). The server side is
+ * idempotent — `setAppProtocol` + `notifyAppReady` — so re-announcing a window the server
+ * already knows about is a no-op, and re-announcing one it forgot is the whole point.
+ */
+export function resendAppProtocolReady() {
+  for (const windowId of registeredAppWindows) {
+    // Only speak for iframes that are actually still on screen. A window closed while the
+    // socket was down would otherwise be announced as ready to a server that has no such
+    // window — harmless, but it is a claim we cannot currently witness.
+    const el = document.querySelector(
+      `[${WINDOW_ID_DATA_ATTR}="${windowId}"]`,
+    ) as HTMLElement | null;
+    if (!el?.querySelector('iframe')) {
+      registeredAppWindows.delete(windowId);
+      continue;
+    }
+    console.debug(`[AppProtocol] Re-announcing readiness for ${windowId}`);
+    sendEvent(wsManager, {
+      type: ClientEventType.APP_PROTOCOL_READY,
+      windowId,
+      // The iframe is the same one that registered; it did not remount and has not lost
+      // anything, so the server must not replay its commands at it. See AppProtocolReadyEvent.
+      reannounce: true,
+    });
+  }
+}
+
+/**
  * Fire-and-forget: notify an iframe app that its window is about to close.
  * Must be called BEFORE the window element is removed from the DOM.
  */
 export function notifyIframeClose(windowId: string) {
+  registeredAppWindows.delete(windowId);
   const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${windowId}"]`) as HTMLElement | null;
   const iframe = el?.querySelector('iframe') as HTMLIFrameElement | null;
   if (iframe?.contentWindow) {
@@ -127,8 +182,37 @@ export async function captureWindow(windowId: string, requestId: string) {
 }
 
 /**
+ * Send an App Protocol reply straight down the socket.
+ *
+ * This is an RPC answer to a server that is already sitting on a deadline for it, so
+ * buffering it in the Zustand pending queue buys nothing and can cost everything: a reply
+ * that misses its deadline is a corpse, and the server can only report it as the app
+ * timing out. (Same reasoning that moved `yaar:app-ready` to a direct send below.) The
+ * queue remains only as a fallback for a socket that is down — the server has almost
+ * certainly given up by the time it comes back, but a late reply that is logged beats a
+ * dropped one.
+ */
+function sendAppProtocolResponse(
+  requestId: string,
+  windowId: string,
+  response: AppProtocolResponse,
+) {
+  console.debug(`[AppProtocol] ← reply ${requestId} (${response.kind})`, response);
+  const sent = sendEvent(wsManager, {
+    type: ClientEventType.APP_PROTOCOL_RESPONSE,
+    requestId,
+    windowId,
+    response,
+  });
+  if (!sent) {
+    console.debug(`[AppProtocol] socket down, queueing reply ${requestId}`);
+    useDesktopStore.getState().addPendingAppProtocolResponse({ requestId, windowId, response });
+  }
+}
+
+/**
  * Handle an App Protocol request by forwarding it to the target iframe via postMessage,
- * then collecting the response and pushing it as pending feedback.
+ * then sending the app's response back over the socket.
  */
 export function handleAppProtocolRequest(
   requestId: string,
@@ -136,27 +220,26 @@ export function handleAppProtocolRequest(
   request: AppProtocolRequest,
   timeoutMs?: number,
 ) {
+  console.debug(`[AppProtocol] → request ${requestId} (${request.kind}) for ${windowId}`, request);
   const state = useDesktopStore.getState();
   const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
   const key = resolveWindowKey(state.windows, windowId, monitorId);
 
   const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
   if (!el) {
-    useDesktopStore.getState().addPendingAppProtocolResponse({
-      requestId,
-      windowId,
-      response: { kind: request.kind, error: 'Window element not found' } as AppProtocolResponse,
-    });
+    sendAppProtocolResponse(requestId, windowId, {
+      kind: request.kind,
+      error: 'Window element not found',
+    } as AppProtocolResponse);
     return;
   }
 
   const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
   if (!iframe?.contentWindow) {
-    useDesktopStore.getState().addPendingAppProtocolResponse({
-      requestId,
-      windowId,
-      response: { kind: request.kind, error: 'No iframe found in window' } as AppProtocolResponse,
-    });
+    sendAppProtocolResponse(requestId, windowId, {
+      kind: request.kind,
+      error: 'No iframe found in window',
+    } as AppProtocolResponse);
     return;
   }
 
@@ -175,25 +258,22 @@ export function handleAppProtocolRequest(
     };
   }
 
-  // Listen for response, giving the app as long as the server is prepared to wait.
-  //
-  // This timer used to be a fixed 5s, which quietly capped every app command regardless of
-  // the timeout the caller asked for: devtools' compile and deploy shell out and routinely
-  // run longer, and a screenshot's capture leg alone can take 5s. They all came back as
-  // "Timeout waiting for app response" — an error about the app, blamed on the app, caused
-  // by the frontend. Fall back to 5s only when the server names no deadline.
+  // The server's PendingStore deadline is the only timeout that counts. This timer used to
+  // race it with a clock of its own, manufacturing a second, indistinguishable "Timeout
+  // waiting for app response" string — and being the leg most exposed to Chrome's hidden-tab
+  // throttling, it was routinely the one that fired *late*: a 5s timer landing at ~11s, well
+  // past a deadline the server had already given up on, so the reply arrived as a corpse and
+  // the app got blamed for it. It no longer produces a response at all. It exists only to
+  // unhook the listener (and say so), a grace period past the server's deadline so a reply
+  // still in flight is never cut off by us.
   const deadlineMs = timeoutMs ?? 5000;
   const timeoutId = setTimeout(() => {
     window.removeEventListener('message', handler);
-    useDesktopStore.getState().addPendingAppProtocolResponse({
-      requestId,
-      windowId,
-      response: {
-        kind: request.kind,
-        error: `Timeout waiting for app response (${(deadlineMs / 1000).toFixed(0)}s).`,
-      } as AppProtocolResponse,
-    });
-  }, deadlineMs);
+    console.debug(
+      `[AppProtocol] no reply for ${requestId} within ${(deadlineMs / 1000).toFixed(0)}s ` +
+        `(+grace); the app never answered. The server's own deadline governs.`,
+    );
+  }, deadlineMs + LISTENER_GRACE_MS);
 
   function handler(e: MessageEvent) {
     if (!e.data?.requestId || e.data.requestId !== requestId) return;
@@ -208,6 +288,7 @@ export function handleAppProtocolRequest(
       return;
     }
 
+    console.debug(`[AppProtocol] reply received from iframe for ${requestId} (${msg.type})`);
     clearTimeout(timeoutId);
     window.removeEventListener('message', handler);
 
@@ -235,11 +316,12 @@ export function handleAppProtocolRequest(
       } as AppProtocolResponse;
     }
 
-    useDesktopStore.getState().addPendingAppProtocolResponse({ requestId, windowId, response });
+    sendAppProtocolResponse(requestId, windowId, response);
   }
 
   window.addEventListener('message', handler);
   iframe.contentWindow.postMessage(msg, getIframeTargetOrigin(iframe));
+  console.debug(`[AppProtocol] postMessage sent to iframe for ${requestId} (${msg.type})`);
 }
 
 /**
@@ -296,12 +378,14 @@ export function consumeIframeDragSource() {
 export function initIframeMessageHandlers() {
   iframeMessages.on('yaar:app-ready', (ctx) => {
     if (!ctx.source) return;
+    const { windowId } = ctx.source;
+    // Remember it: the iframe performs this handshake exactly once, but the server may
+    // need to hear it more than once (see resendAppProtocolReady).
+    registeredAppWindows.add(windowId);
+    console.debug(`[AppProtocol] app registered: ${windowId}`);
     // Send APP_PROTOCOL_READY immediately over WebSocket, bypassing the
     // Zustand pending queue to eliminate the subscription-drain latency.
-    sendEvent(wsManager, {
-      type: ClientEventType.APP_PROTOCOL_READY,
-      windowId: ctx.source.windowId,
-    });
+    sendEvent(wsManager, { type: ClientEventType.APP_PROTOCOL_READY, windowId });
   });
 
   iframeMessages.on('yaar:app-interaction', (ctx) => {

@@ -6,27 +6,20 @@ import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, error } from '../../handlers/utils.js';
-import { actionEmitter, dbg } from '../../session/action-emitter.js';
+import { actionEmitter } from '../../session/action-emitter.js';
 import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
+import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { beginRequest, endRequest } from './protocol-log.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
 const MAX_TEXT_BYTES = 400_000;
 
-/**
- * Reading state is expected to be near-instant, so a short timeout keeps a wedged app
- * from stalling the agent.
- */
-const QUERY_TIMEOUT_MS = 5_000;
-
-/**
- * Commands do real work — devtools' `compile`/`typecheck`/`deploy` shell out and routinely
- * run past 5s. The old 5s cap fired first and surfaced a slow build as "App did not respond
- * (timeout)", masking the actual compile error. Callers can raise this per command (see
- * MAX_COMMAND_TIMEOUT_MS); a wedged app still fails, just not prematurely.
- */
-const COMMAND_TIMEOUT_MS = 30_000;
+// The deadlines this file waits on — `deadlines.appQueryMs` (reading state is near-instant),
+// `deadlines.appCommandMs` (commands do real work: devtools' compile/deploy shells out), and
+// `deadlines.appCommandMinMs` (the floor under a caller's own timeout) — live in config.ts,
+// so a liveness test can shrink them to tens of milliseconds. Read at call time, never
+// captured into a module constant.
 
 /** Ceiling for a caller-supplied command timeout. Must fit inside MAX_REQUEST_DEADLINE_MS. */
 export const MAX_COMMAND_TIMEOUT_MS = 180_000;
@@ -117,14 +110,8 @@ async function requireAppReady(
   windowKey: string,
 ): Promise<VerbResult | null> {
   const win = windowState.getWindow(windowKey);
-  dbg(
-    `requireAppReady key=${windowKey} winFound=${!!win} appProtocol=${win?.appProtocol} allWindows=${windowState
-      .listWindows()
-      .map((w) => w.id)
-      .join(',')}`,
-  );
   if (win && !win.appProtocol) {
-    const ready = await actionEmitter.waitForAppReady(windowKey, 5000);
+    const ready = await actionEmitter.waitForAppReady(windowKey, deadlines.appReadyMs);
     if (!ready) return error('App did not register with the App Protocol (timeout).');
   }
   return null;
@@ -175,7 +162,7 @@ export async function handleAppQuery(
   }
 
   if (stateKey === 'manifest') {
-    const outcome = await request(key, { kind: 'manifest' }, QUERY_TIMEOUT_MS);
+    const outcome = await request(key, { kind: 'manifest' }, deadlines.appQueryMs);
     if (!outcome.ok) return error(noAnswer(outcome, 'manifest request'));
     const response = outcome.value;
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
@@ -184,7 +171,7 @@ export async function handleAppQuery(
     return wrapAppValue(response.manifest);
   }
 
-  const outcome = await request(key, { kind: 'query', stateKey }, QUERY_TIMEOUT_MS);
+  const outcome = await request(key, { kind: 'query', stateKey }, deadlines.appQueryMs);
   if (!outcome.ok) return error(noAnswer(outcome, `query "${stateKey}"`));
   const response = outcome.value;
   if (response.kind !== 'query') return error('Unexpected response kind.');
@@ -218,8 +205,8 @@ export async function handleAppCommand(
   const requested = payload.timeoutMs as number | undefined;
   const timeoutMs =
     typeof requested === 'number' && Number.isFinite(requested)
-      ? Math.min(Math.max(requested, 1_000), MAX_COMMAND_TIMEOUT_MS)
-      : COMMAND_TIMEOUT_MS;
+      ? Math.min(Math.max(requested, deadlines.appCommandMinMs), MAX_COMMAND_TIMEOUT_MS)
+      : deadlines.appCommandMs;
 
   const outcome = await request(key, req, timeoutMs);
   if (!outcome.ok) {

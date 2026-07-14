@@ -55,6 +55,44 @@ export const ClientEventType = {
   RESYNC: 'RESYNC',
 } as const;
 
+/**
+ * The frames that *answer* something the server is already blocked on.
+ *
+ * Every one of these resolves a wait held open inside an agent turn — a `PendingStore`
+ * entry keyed by `requestId`/`dialogId`/`promptId`, or the app-ready registration a
+ * `command` is parked on. The server sends the question and the client answers it on the
+ * same socket, which means the answer arrives *behind the frame that is waiting for it*
+ * in that connection's queue. So it must overtake: the turn cannot finish until the
+ * answer is read, and the answer cannot be read until the turn finishes. That cycle is
+ * what made every app command fail with "App did not respond" about an app that had
+ * answered in milliseconds. Order against other frames costs these nothing — each is
+ * keyed by its own id and nothing downstream reads them as a sequence.
+ *
+ * This list lives here, next to the event types themselves, because it is not the
+ * socket's private knowledge: the socket bypasses the queue for them, `routeMessage`
+ * resolves them, and the loopback tests assert one liveness row per entry. A new
+ * server→client wait that is not added here is a deadlock waiting to happen — and the
+ * table in `loopback-answer-waits.test.ts` iterates this list precisely so that
+ * forgetting shows up as a red test rather than as a wedged app.
+ */
+export const ANSWER_EVENT_TYPES = [
+  ClientEventType.APP_PROTOCOL_RESPONSE, // → PendingStore (app query/command)
+  ClientEventType.APP_PROTOCOL_READY, // → waitForAppReady, awaited inside a turn
+  ClientEventType.RENDERING_FEEDBACK, // → PendingStore (emitActionWithFeedback)
+  ClientEventType.DIALOG_FEEDBACK, // → PendingStore (confirm/permission dialogs)
+  ClientEventType.USER_PROMPT_RESPONSE, // → PendingStore (user prompts)
+] as const;
+
+/** A client frame that answers a pending server-side wait. See ANSWER_EVENT_TYPES. */
+export type AnswerEventType = (typeof ANSWER_EVENT_TYPES)[number];
+
+const ANSWER_EVENTS: ReadonlySet<string> = new Set<string>(ANSWER_EVENT_TYPES);
+
+/** Does this frame answer a wait the server is holding open? See ANSWER_EVENT_TYPES. */
+export function isAnswerEvent(type: string): boolean {
+  return ANSWER_EVENTS.has(type);
+}
+
 // ============ Client → Server Events ============
 
 export interface UserInteraction {
@@ -190,6 +228,18 @@ export interface AppProtocolResponseEvent {
 export interface AppProtocolReadyEvent {
   type: typeof ClientEventType.APP_PROTOCOL_READY;
   windowId: string;
+  /**
+   * The desktop is repeating a registration it already witnessed (on reattach), not
+   * reporting a fresh one from the iframe.
+   *
+   * Readiness lives only in the server's memory, so a restarted server has the window but
+   * not the fact that its app registered, and refuses every app_query/app_command against
+   * it forever. The desktop re-announces to repair that. But the iframe never remounted —
+   * it still holds all the state it had — so this must *not* be mistaken for the
+   * reload/remount case, whose whole point is that the app came back empty and its commands
+   * need replaying. Replaying them at an app that never forgot them applies them twice.
+   */
+  reannounce?: boolean;
 }
 
 /**

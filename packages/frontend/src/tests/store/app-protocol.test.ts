@@ -1,11 +1,21 @@
 /**
- * Tests for handleAppProtocolRequest — forwards App Protocol requests
- * from the server to the target iframe via postMessage, collects responses,
- * and pushes them into the store.
+ * Tests for the App Protocol relay — the frontend leg between the server (WebSocket) and
+ * an app's iframe (postMessage).
+ *
+ * Two contracts are load-bearing here, and both were once broken:
+ *
+ * 1. A reply goes **straight down the socket**, not into the Zustand pending queue. The
+ *    server is sitting on a deadline for it; a buffered reply that lands after that
+ *    deadline is a corpse, and the agent is told the app never answered.
+ * 2. The relay **does not manufacture timeouts**. It used to run a clock of its own
+ *    alongside the server's, and — being the leg exposed to Chrome's background-tab
+ *    throttling — routinely fired it *late*, producing a reply that said "timeout" long
+ *    after the server had already concluded the same thing on its own.
  */
 import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
-import { handleAppProtocolRequest, useDesktopStore } from '@/store';
+import { handleAppProtocolRequest, resendAppProtocolReady, useDesktopStore } from '@/store';
 import { toWindowKey } from '@/store/helpers';
+import { wsManager } from '@/hooks/use-agent-connection/transport-manager';
 import type { AppProtocolRequest } from '@yaar/shared';
 
 const MONITOR_ID = '0';
@@ -27,6 +37,16 @@ function resetStore() {
   });
 }
 
+/** Put an open socket under the relay and record what it sends. */
+function openSocket(): { sent: Record<string, unknown>[] } {
+  const sent: Record<string, unknown>[] = [];
+  wsManager.ws = {
+    readyState: WebSocket.OPEN,
+    send: (data: string) => sent.push(JSON.parse(data)),
+  } as unknown as WebSocket;
+  return { sent };
+}
+
 /** Create a DOM element that looks like a rendered window containing an iframe. */
 function createWindowElement(windowId: string): {
   container: HTMLDivElement;
@@ -43,118 +63,128 @@ function createWindowElement(windowId: string): {
   return { container, iframe };
 }
 
+/** Give the iframe a contentWindow whose postMessage we can observe. */
+function stubContentWindow(iframe: HTMLIFrameElement, postMessage = mock(() => {})) {
+  Object.defineProperty(iframe, 'contentWindow', {
+    value: { postMessage },
+    writable: false,
+  });
+  return postMessage;
+}
+
+/** Dispatch a reply as if it came from the iframe. */
+function replyFromIframe(iframe: HTMLIFrameElement, data: Record<string, unknown>) {
+  const event = new window.MessageEvent('message', { data });
+  // happy-dom's MessageEvent constructor doesn't accept `source` in the init dict.
+  Object.defineProperty(event, 'source', { value: iframe.contentWindow, writable: false });
+  window.dispatchEvent(event);
+}
+
 describe('handleAppProtocolRequest', () => {
   let originalSetTimeout: typeof globalThis.setTimeout;
 
   beforeEach(() => {
     resetStore();
     originalSetTimeout = globalThis.setTimeout;
-    // Clean up any leftover DOM nodes from prior tests
+    wsManager.ws = null;
     document.body.innerHTML = '';
   });
 
   afterEach(() => {
     globalThis.setTimeout = originalSetTimeout;
+    wsManager.ws = null;
     document.body.innerHTML = '';
   });
 
-  it('pushes an error response when the window DOM element is missing', () => {
-    const request: AppProtocolRequest = { kind: 'manifest' };
+  it('sends the reply straight down the socket, never through the pending queue', () => {
+    const { sent } = openSocket();
+    const windowId = 'win-app';
+    const { iframe } = createWindowElement(windowId);
+    const postMessage = stubContentWindow(iframe);
 
-    handleAppProtocolRequest('req-missing', 'nonexistent-window', request);
+    const request: AppProtocolRequest = { kind: 'manifest' };
+    handleAppProtocolRequest('req-1', windowId, request);
+
+    expect(postMessage).toHaveBeenCalledWith(
+      { type: 'yaar:app-manifest-request', requestId: 'req-1' },
+      '*',
+    );
+
+    const manifest = { appId: 'test', name: 'Test App', state: {}, commands: {} };
+    replyFromIframe(iframe, {
+      type: 'yaar:app-manifest-response',
+      requestId: 'req-1',
+      manifest,
+    });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      type: 'APP_PROTOCOL_RESPONSE',
+      requestId: 'req-1',
+      windowId,
+      response: { kind: 'manifest', manifest },
+    });
+    // The queue is the fallback for a dead socket, and this socket is alive.
+    expect(useDesktopStore.getState().pendingAppProtocolResponses).toHaveLength(0);
+  });
+
+  it('falls back to the pending queue only when the socket is down', () => {
+    const windowId = 'win-offline';
+    const { iframe } = createWindowElement(windowId);
+    stubContentWindow(iframe);
+
+    handleAppProtocolRequest('req-offline', windowId, { kind: 'query', stateKey: 'items' });
+    replyFromIframe(iframe, {
+      type: 'yaar:app-query-response',
+      requestId: 'req-offline',
+      data: { items: [] },
+    });
 
     const responses = useDesktopStore.getState().pendingAppProtocolResponses;
     expect(responses).toHaveLength(1);
     expect(responses[0]).toMatchObject({
+      requestId: 'req-offline',
+      windowId,
+      response: { kind: 'query', data: { items: [] } },
+    });
+  });
+
+  it('reports a missing window element as an error, immediately', () => {
+    const { sent } = openSocket();
+
+    handleAppProtocolRequest('req-missing', 'nonexistent-window', { kind: 'manifest' });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      type: 'APP_PROTOCOL_RESPONSE',
       requestId: 'req-missing',
       windowId: 'nonexistent-window',
       response: { kind: 'manifest', error: 'Window element not found' },
     });
   });
 
-  it('pushes an error response when the window element has no iframe', () => {
+  it('reports a window with no iframe as an error, immediately', () => {
+    const { sent } = openSocket();
     const windowId = 'win-no-iframe';
-    const key = toWindowKey(MONITOR_ID, windowId);
-
-    // Create DOM element without an iframe
     const container = document.createElement('div');
-    container.setAttribute('data-window-id', key);
+    container.setAttribute('data-window-id', toWindowKey(MONITOR_ID, windowId));
     document.body.appendChild(container);
 
-    const request: AppProtocolRequest = { kind: 'query', stateKey: 'items' };
+    handleAppProtocolRequest('req-no-iframe', windowId, { kind: 'query', stateKey: 'items' });
 
-    handleAppProtocolRequest('req-no-iframe', windowId, request);
-
-    const responses = useDesktopStore.getState().pendingAppProtocolResponses;
-    expect(responses).toHaveLength(1);
-    expect(responses[0]).toMatchObject({
-      requestId: 'req-no-iframe',
-      windowId,
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
       response: { kind: 'query', error: 'No iframe found in window' },
     });
   });
 
-  it('posts a message to the iframe and collects the response on successful roundtrip', () => {
-    const windowId = 'win-app';
-    const { iframe } = createWindowElement(windowId);
-
-    // Mock postMessage on the iframe's contentWindow
-    const postMessageSpy = mock(() => {});
-    Object.defineProperty(iframe, 'contentWindow', {
-      value: { postMessage: postMessageSpy },
-      writable: false,
-    });
-
-    const request: AppProtocolRequest = { kind: 'manifest' };
-    handleAppProtocolRequest('req-1', windowId, request);
-
-    // Verify postMessage was called with the right payload
-    expect(postMessageSpy).toHaveBeenCalledWith(
-      { type: 'yaar:app-manifest-request', requestId: 'req-1' },
-      '*',
-    );
-
-    // Simulate the iframe responding via a MessageEvent on the window.
-    // Use window.MessageEvent so happy-dom recognises it as its own Event subclass.
-    const responseEvent = new window.MessageEvent('message', {
-      data: {
-        type: 'yaar:app-manifest-response',
-        requestId: 'req-1',
-        manifest: { appId: 'test', name: 'Test App', state: {}, commands: {} },
-      },
-    });
-    // happy-dom's MessageEvent constructor doesn't accept source in init dict,
-    // so we set it via defineProperty
-    Object.defineProperty(responseEvent, 'source', {
-      value: iframe.contentWindow,
-      writable: false,
-    });
-    window.dispatchEvent(responseEvent);
-
-    const responses = useDesktopStore.getState().pendingAppProtocolResponses;
-    expect(responses).toHaveLength(1);
-    expect(responses[0]).toMatchObject({
-      requestId: 'req-1',
-      windowId,
-      response: {
-        kind: 'manifest',
-        manifest: { appId: 'test', name: 'Test App', state: {}, commands: {} },
-      },
-    });
-  });
-
-  it('pushes a timeout error when the iframe does not respond within 5000ms', () => {
+  it('manufactures no response when the app stays silent — the server owns the deadline', () => {
+    const { sent } = openSocket();
     const windowId = 'win-slow';
     const { iframe } = createWindowElement(windowId);
+    stubContentWindow(iframe);
 
-    const postMessageSpy = mock(() => {});
-    Object.defineProperty(iframe, 'contentWindow', {
-      value: { postMessage: postMessageSpy },
-      writable: false,
-    });
-
-    // Override setTimeout to invoke the callback immediately (simulates timer expiry),
-    // recording the delay it was asked to wait.
+    // Fire every timer the moment it is set, i.e. simulate the relay's clock expiring.
     const delays: Array<number | undefined> = [];
     globalThis.setTimeout = ((fn: () => void, delay?: number) => {
       delays.push(delay);
@@ -162,34 +192,16 @@ describe('handleAppProtocolRequest', () => {
       return 0 as unknown as ReturnType<typeof setTimeout>;
     }) as typeof globalThis.setTimeout;
 
-    const request: AppProtocolRequest = {
-      kind: 'command',
-      command: 'doSomething',
-      params: { x: 1 },
-    };
-    handleAppProtocolRequest('req-timeout', windowId, request);
+    handleAppProtocolRequest('req-timeout', windowId, { kind: 'command', command: 'doSomething' });
 
-    // Verify postMessage was called
-    expect(postMessageSpy).toHaveBeenCalledTimes(1);
-    expect(delays).toEqual([5000]); // no server deadline → the old default
-
-    const responses = useDesktopStore.getState().pendingAppProtocolResponses;
-    expect(responses).toHaveLength(1);
-    expect(responses[0]).toMatchObject({
-      requestId: 'req-timeout',
-      windowId,
-      response: {
-        kind: 'command',
-        error: 'Timeout waiting for app response (5s).',
-      },
-    });
+    // The relay's timer only unhooks the listener. It says nothing to the server: a
+    // "Timeout waiting for app response" invented here is a second, indistinguishable
+    // verdict racing the server's own, and this one is the one that gets throttled.
+    expect(sent).toHaveLength(0);
+    expect(useDesktopStore.getState().pendingAppProtocolResponses).toHaveLength(0);
   });
 
-  it('waits as long as the server says, not a fixed 5s', () => {
-    // The server decides how long a command may take (30s by default, up to 180s for a
-    // compile or deploy). This timer used to be hardcoded at 5s, which silently overrode
-    // that: every slow command failed as "Timeout waiting for app response" — an error
-    // about the app, caused by the frontend. A screenshot alone can spend 5s in capture.
+  it('outlives the server deadline before unhooking, so a slow reply is never cut off', () => {
     const windowId = '0/test-window';
     const el = document.createElement('div');
     el.setAttribute('data-window-id', windowId);
@@ -200,10 +212,7 @@ describe('handleAppProtocolRequest', () => {
       windows: { [windowId]: { id: windowId } as never },
       activeMonitorId: '0',
     });
-    Object.defineProperty(iframe, 'contentWindow', {
-      value: { postMessage: mock(() => {}) },
-      writable: false,
-    });
+    stubContentWindow(iframe);
 
     const delays: Array<number | undefined> = [];
     globalThis.setTimeout = ((_fn: () => void, delay?: number) => {
@@ -218,6 +227,82 @@ describe('handleAppProtocolRequest', () => {
       120_000,
     );
 
-    expect(delays).toEqual([120_000]);
+    // The server said 120s. We stop listening strictly *after* that, never before — a
+    // relay that unhooks first turns a slow app into a silent one.
+    expect(delays).toHaveLength(1);
+    expect(delays[0]!).toBeGreaterThan(120_000);
+  });
+});
+
+describe('resendAppProtocolReady', () => {
+  // No initIframeMessageHandlers() here: store/desktop.ts calls it at module load, so the
+  // `yaar:app-ready` handler is already on the router. Calling it again would register a
+  // *second* handler (the router keys on function identity) and every registration would
+  // be announced twice.
+
+  beforeEach(() => {
+    resetStore();
+    wsManager.ws = null;
+    document.body.innerHTML = '';
+  });
+
+  afterEach(() => {
+    wsManager.ws = null;
+    document.body.innerHTML = '';
+  });
+
+  /** Announce `yaar:app-ready` from a mounted iframe, as the injected SDK does at register(). */
+  function announceReady(iframe: HTMLIFrameElement) {
+    const event = new window.MessageEvent('message', { data: { type: 'yaar:app-ready' } });
+    Object.defineProperty(event, 'source', { value: iframe.contentWindow, writable: false });
+    window.dispatchEvent(event);
+  }
+
+  it('re-announces readiness for still-mounted apps, flagged as a re-announce', () => {
+    const windowId = 'win-ready';
+    const key = toWindowKey(MONITOR_ID, windowId);
+    const { iframe } = createWindowElement(windowId);
+    // The router resolves the source iframe by walking up to [data-window-id], so the
+    // contentWindow must be the identity it matches on.
+    const fakeWindow = { postMessage: mock(() => {}) };
+    Object.defineProperty(iframe, 'contentWindow', { value: fakeWindow, writable: false });
+
+    const { sent } = openSocket();
+    announceReady(iframe);
+    // The registration itself is announced (unflagged — the iframe really did just register).
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ type: 'APP_PROTOCOL_READY', windowId: key });
+    expect(sent[0].reannounce).toBeUndefined();
+
+    // Reattach: the server may have forgotten (restart), the iframe has not.
+    resendAppProtocolReady();
+
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({
+      type: 'APP_PROTOCOL_READY',
+      windowId: key,
+      // Not a fresh registration: the iframe never remounted, so its commands must not be
+      // replayed at it.
+      reannounce: true,
+    });
+  });
+
+  it('says nothing for an app whose window is gone', () => {
+    const windowId = 'win-closed';
+    const { container, iframe } = createWindowElement(windowId);
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage: mock(() => {}) },
+      writable: false,
+    });
+
+    const { sent } = openSocket();
+    announceReady(iframe);
+    expect(sent).toHaveLength(1);
+
+    container.remove();
+    resendAppProtocolReady();
+
+    // We only vouch for iframes we can still see.
+    expect(sent).toHaveLength(1);
   });
 });

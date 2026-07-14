@@ -39,11 +39,11 @@ import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { getWarmPool } from '../providers/warm-pool.js';
+import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { recordEmit } from '../features/window/protocol-log.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
-import { dbg as dbgLine } from './action-emitter.js';
 import { refreshIframeTokens } from '../logging/window-restore.js';
 import type { SessionLogger } from '../logging/index.js';
 import {
@@ -58,6 +58,8 @@ export interface LiveSessionOptions {
   contextMessages?: ContextMessage[];
   savedThreadIds?: Record<string, string>;
   sessionLogger?: SessionLogger;
+  /** Provider seam, defaulting to the global warm pool. See `ContextPool.acquireProvider`. */
+  acquireProvider?: () => Promise<AITransport | null>;
 }
 
 /**
@@ -166,10 +168,14 @@ export class LiveSession {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private bridgeEventListener: ((...args: any[]) => void) | null = null;
 
+  /** Provider seam, handed to the ContextPool when it is created. */
+  private readonly acquireProvider?: () => Promise<AITransport | null>;
+
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
     this.restoredContext = options.contextMessages ?? [];
     this.savedThreadIds = options.savedThreadIds;
+    this.acquireProvider = options.acquireProvider;
 
     this.windowState = new WindowStateRegistry();
     this.layoutContext = new LayoutContext(this.windowState, this.windowState.handleMap);
@@ -531,6 +537,7 @@ export class LiveSession {
       this.broadcast.bind(this),
       this.restoredContext,
       this.savedThreadIds,
+      this.acquireProvider,
     );
 
     // Chain window close handlers: reload cache invalidation + pool agent cleanup
@@ -787,13 +794,12 @@ export class LiveSession {
           this.windowState.getWindow(event.windowId)?.id ??
           this.windowState.handleMap.getRawWindowId(event.windowId);
         const wasReady = this.windowState.getWindow(windowKey)?.appProtocol ?? false;
-        dbgLine(
-          `READY event.windowId=${event.windowId} → key=${windowKey} session=${this.sessionId}`,
-        );
         this.windowState.setAppProtocol(windowKey);
         actionEmitter.notifyAppReady(windowKey);
-        // Replay stored commands only on re-registration (reload/remount), not first time
-        if (wasReady) {
+        // Replay stored commands only on re-registration (reload/remount), not first time —
+        // and never on a re-announce, where the desktop is repeating a registration it
+        // already witnessed and the iframe never remounted (see AppProtocolReadyEvent).
+        if (wasReady && !event.reannounce) {
           this.replayAppCommands(windowKey);
         }
         break;

@@ -3,7 +3,12 @@
  * Uses a singleton pattern to share the WebSocket across all components.
  */
 import { useEffect, useCallback, useState, useSyncExternalStore } from 'react';
-import { useDesktopStore, handleAppProtocolRequest, handleVerbSubscriptionUpdate } from '@/store';
+import {
+  useDesktopStore,
+  handleAppProtocolRequest,
+  handleVerbSubscriptionUpdate,
+  resendAppProtocolReady,
+} from '@/store';
 import type { ClientEvent, AppProtocolRequest } from '@/types';
 import { ClientEventType, ServerEventType } from '@/types';
 import {
@@ -145,8 +150,19 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
   }, [send]);
 
+  /**
+   * Say everything the server may have missed while we were apart.
+   *
+   * That includes what our iframes already told us but only ever told the server once: App
+   * Protocol readiness lives in the server's memory, and a restarted server has a session,
+   * a monitor and a window but no idea the app inside it ever registered — so it refuses
+   * every app_query/app_command against that window, permanently, until the tab is
+   * reloaded. We witnessed the registration and the iframe is still mounted; re-announcing
+   * is cheap and idempotent server-side.
+   */
   const flushPending = useCallback(() => {
     drainPendingQueues({ send, addCliEntry });
+    resendAppProtocolReady();
     flushOutbox();
   }, [send, flushOutbox, addCliEntry]);
 

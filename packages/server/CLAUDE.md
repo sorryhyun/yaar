@@ -7,7 +7,40 @@ TypeScript WebSocket server with pluggable AI providers.
 ```bash
 bun run dev                    # Start server with Bun (--watch)
 bun run build                  # Build for production
+bun run test                   # Unit suite, then the loopback suite, then integration
 ```
+
+## Tests
+
+`bun run test` runs three **separate Bun processes**, and the split is load-bearing:
+
+1. `src/tests` — unit/component tests (`--path-ignore-patterns='**/loopback/**'`).
+2. `src/tests/loopback` — the loopback integration harness (see `tests/loopback/harness/`).
+3. `src/integration`.
+
+The loopback harness runs the real stack end to end — `createWsHandlers` → `SessionHub` →
+`LiveSession` → `ContextPool` → `AgentSession` → `actionEmitter` → `PendingStore` — with
+exactly two fakes: the browser (`FakeClient`, whose frames go through the real `message()`
+handler) and the model (`ScriptedProvider`, whose turn is a script that `await`s a real tool
+between yields). It exists because the deadlock that broke every app command lived *between*
+units — a turn awaiting a client reply that was queued behind the frame that started the turn —
+and a test that mocks either side cannot see it.
+
+That is also why it needs its own process. `mock.module` is process-global, has no teardown,
+and **`mock.restore()` cannot undo it once the real module has been loaded**. Five files in
+`src/tests` replace `AgentSession` with a stub whose `handleMessage` resolves instantly; in a
+shared process, that stub would hollow the harness out and every loopback test would pass while
+proving nothing. Two rules follow:
+
+- **Never add `mock.module` under `src/tests/loopback/`.** The harness substitutes through real
+  seams instead: the provider via `ContextPool`'s `acquireProvider`, the logger via the
+  `sessionLogger` option, the deadlines via `setDeadlinesForTest()` (`config.ts`), the config
+  dir via `YAAR_CONFIG`.
+- **A `mock.module` in `src/tests` must be safe to leak** — stub the *whole* surface of what you
+  replace, since the next file to run inherits it (see the note in `ws-head-of-line.test.ts`).
+
+Server→client waits (`ANSWER_EVENT_TYPES` in `@yaar/shared`) each get a loopback row: a wait the
+client can only answer over a socket the server is holding is a deadlock waiting to happen.
 
 ## Environment Variables
 

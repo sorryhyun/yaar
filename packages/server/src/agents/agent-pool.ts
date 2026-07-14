@@ -99,14 +99,27 @@ export class AgentPool {
   /** All agent instanceIds for O(1) lookup. */
   private agentIds = new Set<string>();
 
+  /**
+   * Where this pool's agents get their providers. Defaults to the global warm pool.
+   *
+   * A seam, not a setting: it is the one thing a test must replace to run a real agent
+   * turn, and replacing it by name (`mock.module('../providers/factory.js')`) is
+   * process-global in Bun and never restored — so one file's stub silently answers
+   * another file's `acquireWarmProvider()` for the rest of the run. Injecting it makes
+   * the substitution scoped to the pool that asked for it.
+   */
+  private readonly acquireProvider: () => Promise<AITransport | null>;
+
   constructor(
     sessionId: SessionId,
     broadcast: (event: ServerEvent) => void,
     resolveWindowHandle?: (rawId: string, monitorId?: string) => string,
+    acquireProvider?: () => Promise<AITransport | null>,
   ) {
     this.sessionId = sessionId;
     this.broadcastFn = broadcast;
     this.resolveWindowHandle = resolveWindowHandle ?? ((id) => id);
+    this.acquireProvider = acquireProvider ?? acquireWarmProvider;
   }
 
   setLogger(logger: SessionLogger): void {
@@ -198,7 +211,7 @@ export class AgentPool {
    * The caller is responsible for calling disposeEphemeral() after the task.
    */
   async createEphemeral(): Promise<PooledAgent | null> {
-    const provider = await acquireWarmProvider();
+    const provider = await this.acquireProvider();
     const agent = await this.createAgentCore(provider ?? undefined);
     if (!agent) {
       if (provider) await provider.dispose();
@@ -311,7 +324,7 @@ export class AgentPool {
       return existing;
     }
 
-    const provider = await acquireWarmProvider();
+    const provider = await this.acquireProvider();
     const agent = await this.createAgentCore(provider ?? undefined);
     if (!agent) {
       if (provider) await provider.dispose();
@@ -393,7 +406,7 @@ export class AgentPool {
   async createSessionAgent(): Promise<PooledAgent | null> {
     if (this.sessionAgent) return this.sessionAgent;
 
-    const provider = await acquireWarmProvider();
+    const provider = await this.acquireProvider();
     const agent = await this.createAgentCore(provider ?? undefined);
     if (!agent) {
       if (provider) await provider.dispose();

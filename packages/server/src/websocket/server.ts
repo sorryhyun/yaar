@@ -8,15 +8,16 @@
 import type { ServerWebSocket } from 'bun';
 import type { LiveSessionOptions } from '../session/live-session.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { dbg } from '../session/action-emitter.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
 import {
   ServerEventType,
+  isAnswerEvent,
   type ClientEvent,
   type OSAction,
   type CliRestoreEntry,
 } from '@yaar/shared';
+import type { AITransport } from '../providers/types.js';
 import type { ContextMessage } from '../agents/context.js';
 import type { SessionLogger } from '../logging/session-logger.js';
 import { checkWsAuth } from '../http/auth.js';
@@ -28,6 +29,12 @@ export interface WebSocketServerOptions {
   savedThreadIds?: Record<string, string>;
   cliEntries?: CliRestoreEntry[];
   sessionLogger?: SessionLogger;
+  /**
+   * Where this server's sessions get their AI providers. Defaults to the global warm pool.
+   * Injected by the loopback test harness so a turn can be a script instead of a CLI —
+   * see `tests/harness/scripted-provider.ts`.
+   */
+  acquireProvider?: () => Promise<AITransport | null>;
 }
 
 export interface WsData {
@@ -64,6 +71,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         contextMessages: options.contextMessages,
         savedThreadIds: options.savedThreadIds,
         sessionLogger: options.sessionLogger,
+        acquireProvider: options.acquireProvider,
       };
       const requestedSessionId = ws.data.sessionId;
       const { session, recoveryMode } = hub.attach(requestedSessionId, sessionOptions);
@@ -137,8 +145,23 @@ export function createWsHandlers(options: WebSocketServerOptions) {
 
     message(ws: ServerWebSocket<WsData>, data: string | Buffer) {
       if (ws.data.kind === 'bridge') return handleBridgeMessage(ws, data);
+
+      let event: ClientEvent | undefined;
+      try {
+        event = JSON.parse(typeof data === 'string' ? data : data.toString()) as ClientEvent;
+      } catch {
+        // Leave it undefined; routeOne reports the parse failure back to the client.
+      }
+
+      // An answer jumps the queue. See ANSWER_EVENT_TYPES in @yaar/shared: it is not merely
+      // allowed to overtake the frame in front of it, it *must*, because that frame is what
+      // is waiting for it.
+      if (event && isAnswerEvent(event.type)) {
+        return routeOne(ws, event);
+      }
+
       // One at a time, in the order they arrived. See WsData.queue.
-      ws.data.queue = (ws.data.queue ?? Promise.resolve()).then(() => routeOne(ws, data));
+      ws.data.queue = (ws.data.queue ?? Promise.resolve()).then(() => routeOne(ws, event));
       return ws.data.queue;
     },
 
@@ -171,14 +194,16 @@ export function createWsHandlers(options: WebSocketServerOptions) {
  * "queued" for a message that had already died. The id is right here in the event; the
  * error now carries it back.
  */
-async function routeOne(ws: ServerWebSocket<WsData>, data: string | Buffer): Promise<void> {
+async function routeOne(
+  ws: ServerWebSocket<WsData>,
+  event: ClientEvent | undefined,
+): Promise<void> {
   const { connectionId, sessionId } = ws.data;
-  let event: ClientEvent | undefined;
+  if (!event) {
+    sendError(ws, 'Failed to process message: not valid JSON');
+    return;
+  }
   try {
-    event = JSON.parse(typeof data === 'string' ? data : data.toString()) as ClientEvent;
-    if (String(event?.type).startsWith('APP_PROTOCOL')) {
-      dbg(`routeOne got ${event.type} session=${sessionId} conn=${connectionId}`);
-    }
     const session = getSessionHub().get(sessionId!);
     if (!session) {
       // The session was evicted out from under this socket. Silence here read to the user

@@ -21,23 +21,13 @@ import {
   type UserPromptInputField,
 } from '@yaar/shared';
 import { getAgentId, getMonitorId, getSessionId } from '../agents/agent-context.js';
-import { clampDeadline, MAX_REQUEST_DEADLINE_MS } from '../config.js';
+import { clampDeadline, deadlines } from '../config.js';
 import {
   checkPermission,
   savePermission,
   type PermissionDecision,
 } from '../storage/permissions.js';
 import { PendingStore, type PendingOutcome } from './pending-store.js';
-import { appendFileSync } from 'node:fs';
-
-/** TEMPORARY debug trace — remove. */
-export function dbg(line: string): void {
-  try {
-    appendFileSync('/tmp/yaar-dbg.log', `${new Date().toISOString()} ${line}\n`);
-  } catch {
-    /* ignore */
-  }
-}
 
 /**
  * Action event data.
@@ -113,13 +103,36 @@ export interface AppProtocolRequestData {
 const EXPIRED_DIALOG_GRACE_MS = 5 * 60_000;
 
 /**
+ * How long an expired app protocol request is remembered, so that a reply arriving after
+ * its deadline can be reported as *late* rather than merely unknown. See
+ * `resolveAppProtocolResponse`.
+ */
+const EXPIRED_APP_REQUEST_GRACE_MS = 5 * 60_000;
+
+/** What an in-flight app protocol request was, kept so a late reply can be named. */
+interface AppRequestMeta {
+  windowId: string;
+  kind: AppProtocolRequest['kind'];
+  startedAt: number;
+  timeoutMs: number;
+}
+
+/**
  * Global action emitter instance.
  */
 class ActionEmitter extends EventEmitter {
   private pendingRequests = new PendingStore<RenderingFeedback>();
   private pendingDialogs = new PendingStore<boolean, PermissionOptions | undefined>();
   private pendingUserPrompts = new PendingStore<UserPromptResult>();
-  private pendingAppRequests = new PendingStore<AppProtocolResponse>();
+  private pendingAppRequests = new PendingStore<AppProtocolResponse, AppRequestMeta>();
+  /**
+   * App protocol requests whose deadline passed, kept just long enough to recognize a reply
+   * that arrives afterwards. A late reply used to be dropped in silence — which is exactly
+   * why a frontend relay timer firing six seconds past its own deadline stayed invisible
+   * for so long: the agent was told "the app did not respond", and nothing anywhere said
+   * that the app *had* responded, merely too late to matter.
+   */
+  private expiredAppRequests = new Map<string, AppRequestMeta>();
   /**
    * Dialogs whose deadline passed, kept so a click that lands just after expiry is not
    * thrown away. The window is small (the dialog is off the screen by then) but real —
@@ -267,7 +280,7 @@ class ActionEmitter extends EventEmitter {
    */
   async emitActionWithFeedback(
     action: OSAction,
-    timeoutMs: number = 3000,
+    timeoutMs?: number,
     sessionId?: string,
     /**
      * Monitor to deliver this action to, when the caller knows it better than the
@@ -284,7 +297,7 @@ class ActionEmitter extends EventEmitter {
 
     const currentSessionId = sessionId ?? getSessionId();
     const feedbackPromise = this.pendingRequests.create(requestId, {
-      timeoutMs: clampDeadline(timeoutMs),
+      timeoutMs: clampDeadline(timeoutMs ?? deadlines.renderFeedbackMs),
       sessionId: currentSessionId,
     });
 
@@ -365,14 +378,14 @@ class ActionEmitter extends EventEmitter {
     message: string,
     confirmText: string = 'Yes',
     cancelText: string = 'No',
-    timeoutMs: number = 60000, // 1 minute default timeout
+    timeoutMs?: number,
   ): Promise<boolean> {
     const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
     const agentId = getAgentId();
     const currentSessionId = getSessionId();
 
     const dialogPromise = this.pendingDialogs.create(dialogId, {
-      timeoutMs: clampDeadline(timeoutMs),
+      timeoutMs: clampDeadline(timeoutMs ?? deadlines.dialogMs),
       sessionId: currentSessionId,
       meta: undefined,
       onExpire: (id) => this.expireDialog(id, currentSessionId, undefined),
@@ -410,7 +423,7 @@ class ActionEmitter extends EventEmitter {
     context?: string,
     confirmText: string = 'Allow',
     cancelText: string = 'Deny',
-    timeoutMs: number = 60000,
+    timeoutMs?: number,
   ): Promise<boolean> {
     const sessionId = getSessionId();
     if (!sessionId) {
@@ -486,7 +499,7 @@ class ActionEmitter extends EventEmitter {
     const currentSessionId = getSessionId();
     // The old default was 300s — 45s past the transport's idle timeout, so the request
     // this prompt is holding open died before the prompt could ever report expiring.
-    const timeoutMs = clampDeadline(opts.timeoutMs ?? MAX_REQUEST_DEADLINE_MS);
+    const timeoutMs = clampDeadline(opts.timeoutMs ?? deadlines.userPromptMs);
 
     const promptPromise = this.pendingUserPrompts.create(promptId, {
       timeoutMs,
@@ -565,14 +578,14 @@ class ActionEmitter extends EventEmitter {
    * Wait for an iframe app to register with the App Protocol.
    * Resolves true if the app is already ready or becomes ready within the timeout.
    */
-  waitForAppReady(windowId: string, timeoutMs: number = 5000): Promise<boolean> {
+  waitForAppReady(windowId: string, timeoutMs?: number): Promise<boolean> {
     if (this.readyWindows.has(windowId)) return Promise.resolve(true);
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
         this.off('app-ready', handler);
         resolve(false);
-      }, timeoutMs);
+      }, timeoutMs ?? deadlines.appReadyMs);
 
       const handler = (readyWindowId: string) => {
         if (readyWindowId === windowId) {
@@ -593,35 +606,73 @@ class ActionEmitter extends EventEmitter {
   async emitAppProtocolRequest(
     windowId: string,
     request: AppProtocolRequest,
-    timeoutMs: number = 5000,
+    timeoutMs?: number,
   ): Promise<PendingOutcome<AppProtocolResponse>> {
     const requestId = this.generateRequestId();
     const currentSessionId = getSessionId();
+    const deadlineMs = clampDeadline(timeoutMs ?? deadlines.appQueryMs);
+    const meta: AppRequestMeta = {
+      windowId,
+      kind: request.kind,
+      startedAt: Date.now(),
+      timeoutMs: deadlineMs,
+    };
 
     const responsePromise = this.pendingAppRequests.create(requestId, {
-      timeoutMs: clampDeadline(timeoutMs),
+      timeoutMs: deadlineMs,
       sessionId: currentSessionId,
+      meta,
+      onExpire: (id, expiredMeta) => {
+        this.pruneExpiredAppRequests();
+        this.expiredAppRequests.set(id, expiredMeta);
+      },
     });
 
-    dbg(
-      `emitAppProtocolRequest ${requestId} window=${windowId} timeoutMs=${timeoutMs} session=${currentSessionId}`,
-    );
-
-    // Pass the deadline to the frontend too — it times the postMessage leg itself, and a
-    // shorter fixed timer there would override whatever the caller asked for.
-    this.emit('app-protocol', { requestId, windowId, request, timeoutMs });
+    // Pass the deadline to the frontend too — it relays the postMessage leg and needs to
+    // know how long we are prepared to wait. It no longer times the leg itself: this
+    // deadline is the only one.
+    this.emit('app-protocol', { requestId, windowId, request, timeoutMs: deadlineMs });
 
     return responsePromise;
+  }
+
+  /** Forget app requests that expired too long ago for any reply to still be in flight. */
+  private pruneExpiredAppRequests(): void {
+    const cutoff = Date.now() - EXPIRED_APP_REQUEST_GRACE_MS;
+    for (const [id, meta] of this.expiredAppRequests) {
+      if (meta.startedAt + meta.timeoutMs < cutoff) this.expiredAppRequests.delete(id);
+    }
   }
 
   /**
    * Resolve a pending app protocol request with a response from the iframe.
    * Called by the session when it receives an APP_PROTOCOL_RESPONSE from the frontend.
+   *
+   * A reply for an id we no longer hold cannot be un-timed-out — the agent has already been
+   * told the app said nothing. But it is *said out loud* now, with the latency that made it
+   * useless, because a silent drop here is what made a whole class of relay bugs present as
+   * "the app is broken" three layers away.
    */
   resolveAppProtocolResponse(requestId: string, response: AppProtocolResponse): boolean {
-    const resolved = this.pendingAppRequests.resolve(requestId, response).resolved;
-    dbg(`resolveAppProtocolResponse ${requestId} → resolved=${resolved}`);
-    return resolved;
+    const { resolved } = this.pendingAppRequests.resolve(requestId, response);
+    if (resolved) return true;
+
+    const expired = this.expiredAppRequests.get(requestId);
+    if (expired) {
+      this.expiredAppRequests.delete(requestId);
+      const latency = Date.now() - expired.startedAt;
+      console.warn(
+        `[AppProtocol] Late reply for ${requestId} (${expired.kind} on ${expired.windowId}): ` +
+          `arrived after ${latency}ms, ${latency - expired.timeoutMs}ms past its ${expired.timeoutMs}ms ` +
+          `deadline. The agent was already told the app did not respond.`,
+      );
+    } else {
+      console.warn(
+        `[AppProtocol] Reply for unknown request ${requestId} (${response.kind}) — no pending ` +
+          `entry, and none expired recently. Duplicate reply, or a request from a dead session.`,
+      );
+    }
+    return false;
   }
 
   /**
@@ -640,7 +691,7 @@ class ActionEmitter extends EventEmitter {
     context?: string,
     confirmText: string = 'Allow',
     cancelText: string = 'Deny',
-    timeoutMs: number = 60000,
+    timeoutMs?: number,
   ): Promise<boolean> {
     // Check for saved permission first
     const savedDecision = await checkPermission(toolName, context);
@@ -656,7 +707,7 @@ class ActionEmitter extends EventEmitter {
     };
 
     const dialogPromise = this.pendingDialogs.create(dialogId, {
-      timeoutMs: clampDeadline(timeoutMs),
+      timeoutMs: clampDeadline(timeoutMs ?? deadlines.dialogMs),
       sessionId,
       meta: permissionOptions,
       onExpire: (id, meta) => this.expireDialog(id, sessionId, meta),
