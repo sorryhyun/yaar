@@ -19,15 +19,22 @@ export const applyDialogAction = createApplyAction<
     timestamp: number;
     permissionOptions?: PermissionOptions;
   }
->('dialogs', 'dialog.confirm', (action: DialogConfirmAction) => ({
-  id: action.id,
-  title: action.title,
-  message: action.message,
-  confirmText: action.confirmText ?? 'Yes',
-  cancelText: action.cancelText ?? 'No',
-  timestamp: Date.now(),
-  permissionOptions: action.permissionOptions,
-}));
+>(
+  'dialogs',
+  'dialog.confirm',
+  (action: DialogConfirmAction) => ({
+    id: action.id,
+    title: action.title,
+    message: action.message,
+    confirmText: action.confirmText ?? 'Yes',
+    cancelText: action.cancelText ?? 'No',
+    timestamp: Date.now(),
+    permissionOptions: action.permissionOptions,
+  }),
+  // The server stopped waiting for an answer, so the dialog stops asking for one. Without
+  // this the buttons stayed on screen wired to a request that had already been denied.
+  'dialog.close',
+);
 
 export const createDialogsSlice: SliceCreator<DialogsSlice> = (set, _get) => ({
   dialogs: {},

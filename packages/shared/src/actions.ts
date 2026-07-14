@@ -216,6 +216,21 @@ export interface DialogConfirmAction {
   permissionOptions?: PermissionOptions;
 }
 
+/**
+ * Take a dialog off the screen without an answer.
+ *
+ * A confirm dialog has a deadline the user cannot see. When it passes, the server
+ * stops listening and the tool that asked is told "denied" — but the dialog itself
+ * used to stay up, still offering buttons wired to a request that no longer exists.
+ * Whoever clicked one was answering nobody.
+ */
+export interface DialogCloseAction {
+  type: 'dialog.close';
+  id: string;
+  /** Why it left the screen. `timeout` — the server stopped waiting for an answer. */
+  reason?: 'timeout';
+}
+
 // ============ User Prompt Actions ============
 
 export interface UserPromptOption {
@@ -332,7 +347,7 @@ export type NotificationAction = NotificationShowAction | NotificationDismissAct
 
 export type ToastAction = ToastShowAction | ToastDismissAction;
 
-export type DialogAction = DialogConfirmAction;
+export type DialogAction = DialogConfirmAction | DialogCloseAction;
 
 export type UserPromptAction = UserPromptShowAction | UserPromptDismissAction;
 

@@ -11,20 +11,23 @@ import {
   ServerEventType,
   type OSAction,
   type DialogConfirmAction,
+  type DialogCloseAction,
   type PermissionOptions,
   type AppProtocolRequest,
   type AppProtocolResponse,
   type UserPromptShowAction,
+  type UserPromptDismissAction,
   type UserPromptOption,
   type UserPromptInputField,
 } from '@yaar/shared';
 import { getAgentId, getMonitorId, getSessionId } from '../agents/agent-context.js';
+import { clampDeadline, MAX_REQUEST_DEADLINE_MS } from '../config.js';
 import {
   checkPermission,
   savePermission,
   type PermissionDecision,
 } from '../storage/permissions.js';
-import { PendingStore } from './pending-store.js';
+import { PendingStore, type PendingOutcome } from './pending-store.js';
 
 /**
  * Action event data.
@@ -72,11 +75,18 @@ export interface UserPromptFeedback {
 
 /**
  * Resolved user prompt result returned to tool handlers.
+ *
+ * `dismissed` with `timedOut` is not the same event as `dismissed` alone: one is the user
+ * saying no, the other is the user never seeing the question — or seeing it and thinking.
+ * A tool that reports the second as the first tells the agent the user declined something
+ * they were never asked.
  */
 export interface UserPromptResult {
   selectedValues?: string[];
   text?: string;
   dismissed: boolean;
+  /** The deadline passed with no answer, and the prompt was withdrawn from the screen. */
+  timedOut?: boolean;
 }
 
 /**
@@ -88,13 +98,28 @@ export interface AppProtocolRequestData {
 }
 
 /**
+ * How long an expired dialog is remembered so a click already on its way still counts.
+ */
+const EXPIRED_DIALOG_GRACE_MS = 5 * 60_000;
+
+/**
  * Global action emitter instance.
  */
 class ActionEmitter extends EventEmitter {
-  private pendingRequests = new PendingStore<RenderingFeedback | null>();
+  private pendingRequests = new PendingStore<RenderingFeedback>();
   private pendingDialogs = new PendingStore<boolean, PermissionOptions | undefined>();
   private pendingUserPrompts = new PendingStore<UserPromptResult>();
-  private pendingAppRequests = new PendingStore<AppProtocolResponse | null>();
+  private pendingAppRequests = new PendingStore<AppProtocolResponse>();
+  /**
+   * Dialogs whose deadline passed, kept so a click that lands just after expiry is not
+   * thrown away. The window is small (the dialog is off the screen by then) but real —
+   * and the thing being thrown away was the user's *"don't ask me again"*, which is a
+   * durable decision, not an answer to one request. See resolveDialogFeedback.
+   */
+  private expiredDialogs = new Map<
+    string,
+    { permissionOptions?: PermissionOptions; expiredAt: number }
+  >();
   private readyWindows = new Set<string>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
@@ -223,9 +248,12 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
-   * Emit an OS Action and wait for feedback from frontend.
-   * Used for iframe rendering where we want to know if it succeeded.
-   * Automatically includes the current agent's ID from context.
+   * Emit an OS Action and wait for feedback from the frontend.
+   *
+   * The outcome distinguishes "the frontend answered" from "the frontend said nothing in
+   * time", because those mean different things to different callers and only the caller
+   * knows which: a lock veto that never arrives means *proceed*, an iframe that never
+   * reports means *do not tell the agent it rendered*. Both used to arrive here as `null`.
    */
   async emitActionWithFeedback(
     action: OSAction,
@@ -238,7 +266,7 @@ class ActionEmitter extends EventEmitter {
      * iframe app (devtools previewing its build) has no monitor of its own to act on.
      */
     monitorId?: string,
-  ): Promise<RenderingFeedback | null> {
+  ): Promise<PendingOutcome<RenderingFeedback>> {
     const requestId = this.generateRequestId();
     // Get current agent ID from context (with Codex fallback) and include in action
     const agentId = this.resolveAgentId();
@@ -246,9 +274,8 @@ class ActionEmitter extends EventEmitter {
 
     const currentSessionId = sessionId ?? getSessionId();
     const feedbackPromise = this.pendingRequests.create(requestId, {
-      timeoutMs,
+      timeoutMs: clampDeadline(timeoutMs),
       sessionId: currentSessionId,
-      defaultValue: null,
     });
 
     // Emit action with request ID, agentId from context, and monitorId
@@ -272,7 +299,56 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * Deliver an action to a whole session, from outside any agent turn.
+   *
+   * An expiry fires on a timer, so there is no AsyncLocalStorage context to stamp a
+   * monitor from — and a dialog belongs to the session anyway, not to one monitor. The
+   * dedicated channel reaches `LiveSession.broadcast()` (see the listeners in
+   * live-session.ts); emitting on `'action'` instead would only reach a session with a
+   * live ToolActionBridge subscription, which by expiry time there may not be.
+   */
+  private emitSessionAction(sessionId: string | undefined, action: OSAction): void {
+    if (!sessionId) {
+      this.emit('action', { action, sessionId: undefined, agentId: 'system' } as ActionEvent);
+      return;
+    }
+    this.emit('session-action', {
+      sessionId,
+      event: { type: ServerEventType.ACTIONS, actions: [action], agentId: 'system' },
+    });
+  }
+
+  /** Drop dialogs that expired long enough ago that no click can still be in flight. */
+  private pruneExpiredDialogs(): void {
+    const cutoff = Date.now() - EXPIRED_DIALOG_GRACE_MS;
+    for (const [id, entry] of this.expiredDialogs) {
+      if (entry.expiredAt < cutoff) this.expiredDialogs.delete(id);
+    }
+  }
+
+  /**
+   * A dialog's deadline passed: take it off the screen and remember that it was asked.
+   *
+   * The tool that asked has already been told "denied" by then. Leaving the dialog up
+   * leaves the user a live-looking question wired to nothing.
+   */
+  private expireDialog(
+    dialogId: string,
+    sessionId: string | undefined,
+    permissionOptions: PermissionOptions | undefined,
+  ): void {
+    this.pruneExpiredDialogs();
+    this.expiredDialogs.set(dialogId, { permissionOptions, expiredAt: Date.now() });
+    const close: DialogCloseAction = { type: 'dialog.close', id: dialogId, reason: 'timeout' };
+    this.emitSessionAction(sessionId, close as OSAction);
+  }
+
+  /**
    * Show a confirmation dialog and wait for user response.
+   *
+   * An unanswered dialog is a denial — but it is now an *explicit* one: the deadline
+   * passes, the dialog leaves the screen, and this returns false because nobody said yes,
+   * not because false was lying around as a default.
    */
   async showConfirmDialog(
     title: string,
@@ -286,10 +362,10 @@ class ActionEmitter extends EventEmitter {
     const currentSessionId = getSessionId();
 
     const dialogPromise = this.pendingDialogs.create(dialogId, {
-      timeoutMs,
+      timeoutMs: clampDeadline(timeoutMs),
       sessionId: currentSessionId,
-      defaultValue: false,
       meta: undefined,
+      onExpire: (id) => this.expireDialog(id, currentSessionId, undefined),
     });
 
     const action: DialogConfirmAction = {
@@ -307,7 +383,8 @@ class ActionEmitter extends EventEmitter {
       agentId,
     } as ActionEvent);
 
-    return dialogPromise;
+    const outcome = await dialogPromise;
+    return outcome.ok ? outcome.value : false;
   }
 
   /**
@@ -344,15 +421,23 @@ class ActionEmitter extends EventEmitter {
 
   /**
    * Resolve a pending dialog with feedback.
+   *
+   * Returns false when the answer arrived for a dialog that had already expired — the
+   * request it was answering is long gone and cannot be un-denied. But *"remember my
+   * choice"* is not an answer to that request: it is a standing instruction about every
+   * future one, and it is saved either way. Dropping it (as this did, along with the
+   * whole late click) meant a user who ticked "always allow" a moment too late got asked
+   * again, forever, with no sign that their choice had gone anywhere.
    */
   async resolveDialogFeedback(feedback: DialogFeedback): Promise<boolean> {
-    const { resolved, meta: permissionOptions } = this.pendingDialogs.resolve(
-      feedback.dialogId,
-      feedback.confirmed,
-    );
+    const { resolved, meta } = this.pendingDialogs.resolve(feedback.dialogId, feedback.confirmed);
+
+    const expired = resolved ? undefined : this.expiredDialogs.get(feedback.dialogId);
+    if (expired) this.expiredDialogs.delete(feedback.dialogId);
+    const permissionOptions = resolved ? meta : expired?.permissionOptions;
 
     // Save permission if user chose to remember (business logic stays here, not in PendingStore)
-    if (resolved && permissionOptions && feedback.rememberChoice) {
+    if (permissionOptions && feedback.rememberChoice) {
       const { toolName, context } = permissionOptions;
       let decision: PermissionDecision = 'ask';
 
@@ -389,12 +474,18 @@ class ActionEmitter extends EventEmitter {
     const promptId = `prompt-${Date.now()}-${++this.requestCounter}`;
     const agentId = getAgentId();
     const currentSessionId = getSessionId();
-    const timeoutMs = opts.timeoutMs ?? 300000; // 5 minutes default
+    // The old default was 300s — 45s past the transport's idle timeout, so the request
+    // this prompt is holding open died before the prompt could ever report expiring.
+    const timeoutMs = clampDeadline(opts.timeoutMs ?? MAX_REQUEST_DEADLINE_MS);
 
     const promptPromise = this.pendingUserPrompts.create(promptId, {
       timeoutMs,
       sessionId: currentSessionId,
-      defaultValue: { dismissed: true },
+      onExpire: (id) =>
+        this.emitSessionAction(currentSessionId, {
+          type: 'user.prompt.dismiss',
+          id,
+        } as UserPromptDismissAction as OSAction),
     });
 
     const action: UserPromptShowAction = {
@@ -427,7 +518,10 @@ class ActionEmitter extends EventEmitter {
       } as ActionEvent);
     }
 
-    return promptPromise;
+    const outcome = await promptPromise;
+    if (outcome.ok) return outcome.value;
+    // Nobody answered. Say that, rather than reporting it as the user declining.
+    return { dismissed: true, timedOut: outcome.reason === 'timeout' };
   }
 
   /**
@@ -484,20 +578,19 @@ class ActionEmitter extends EventEmitter {
 
   /**
    * Send an app protocol request to an iframe app and wait for its response.
-   * Returns null if the app does not respond within the timeout.
+   * The outcome is `ok: false` if the app does not answer within the deadline.
    */
   async emitAppProtocolRequest(
     windowId: string,
     request: AppProtocolRequest,
     timeoutMs: number = 5000,
-  ): Promise<AppProtocolResponse | null> {
+  ): Promise<PendingOutcome<AppProtocolResponse>> {
     const requestId = this.generateRequestId();
     const currentSessionId = getSessionId();
 
     const responsePromise = this.pendingAppRequests.create(requestId, {
-      timeoutMs,
+      timeoutMs: clampDeadline(timeoutMs),
       sessionId: currentSessionId,
-      defaultValue: null,
     });
 
     // Pass the deadline to the frontend too — it times the postMessage leg itself, and a
@@ -547,10 +640,10 @@ class ActionEmitter extends EventEmitter {
     };
 
     const dialogPromise = this.pendingDialogs.create(dialogId, {
-      timeoutMs,
+      timeoutMs: clampDeadline(timeoutMs),
       sessionId,
-      defaultValue: false,
       meta: permissionOptions,
+      onExpire: (id, meta) => this.expireDialog(id, sessionId, meta),
     });
 
     // Emit through the event system so LiveSession.broadcast() handles delivery
@@ -569,19 +662,20 @@ class ActionEmitter extends EventEmitter {
       },
     });
 
-    return dialogPromise;
+    const outcome = await dialogPromise;
+    return outcome.ok ? outcome.value : false;
   }
 
   /**
-   * Force-clear all pending requests, dialogs, and app protocol requests
-   * belonging to a session. Rejects promises so awaiting tools unblock
-   * immediately instead of waiting for their individual timeouts.
+   * Force-clear all pending requests, dialogs, and app protocol requests belonging to a
+   * session. Each settles as `cancelled` so an awaiting tool unblocks immediately instead
+   * of waiting out its own deadline against a session that no longer exists.
    */
   clearPendingForSession(sessionId: string): void {
-    this.pendingRequests.clearForSession(sessionId, null);
-    this.pendingDialogs.clearForSession(sessionId, false);
-    this.pendingUserPrompts.clearForSession(sessionId, { dismissed: true });
-    this.pendingAppRequests.clearForSession(sessionId, null as unknown as AppProtocolResponse);
+    this.pendingRequests.clearForSession(sessionId);
+    this.pendingDialogs.clearForSession(sessionId);
+    this.pendingUserPrompts.clearForSession(sessionId);
+    this.pendingAppRequests.clearForSession(sessionId);
   }
 
   /**

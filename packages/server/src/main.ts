@@ -7,7 +7,7 @@
 import { createFetchHandler } from './http/index.js';
 import { createWsHandlers, type WsData } from './websocket/index.js';
 import { initializeSubsystems, initWarmProviders, shutdown, printBanner } from './lifecycle.js';
-import { IS_REMOTE, getPort, setPort } from './config.js';
+import { IS_REMOTE, getPort, setPort, TRANSPORT_IDLE_TIMEOUT_S } from './config.js';
 
 const MAX_PORT_ATTEMPTS = 20;
 
@@ -28,7 +28,9 @@ async function startup() {
       server = Bun.serve<WsData>({
         port,
         hostname,
-        idleTimeout: 255, // seconds; default 10 is too short for MCP tool calls and SSE streams
+        // The outer bound on every server-side deadline (see MAX_REQUEST_DEADLINE_MS).
+        // Bun's default of 10s is far too short for MCP tool calls and SSE streams.
+        idleTimeout: TRANSPORT_IDLE_TIMEOUT_S,
         fetch,
         websocket,
       });

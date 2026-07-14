@@ -22,6 +22,9 @@ import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
 import { formatWindowRef, deriveWindowId, getAppMetaOverrides } from './helpers.js';
 
+/** How long an iframe window gets to report that its content rendered. */
+const IFRAME_RENDER_TIMEOUT_MS = 2_000;
+
 /**
  * Name the `yaar://` URI of an iframe's own document, when storage is what serves it.
  *
@@ -212,16 +215,38 @@ export async function handleCreate(
   };
 
   if (renderer === 'iframe') {
-    const feedback = await actionEmitter.emitActionWithFeedback(osAction, 2000);
-    if (feedback && !feedback.success) {
-      const isNotFound = feedback.error?.toLowerCase().includes('not found');
+    const outcome = await actionEmitter.emitActionWithFeedback(osAction, IFRAME_RENDER_TIMEOUT_MS);
+
+    if (outcome.ok && !outcome.value.success) {
+      const { error: reason } = outcome.value;
+      const isNotFound = reason?.toLowerCase().includes('not found');
       const hint = isNotFound
         ? ' If this is an app, use load_skill to learn how to use it.'
         : ' The site likely blocks embedding.';
-      return error(`Failed to embed iframe in window "${actualId}": ${feedback.error}.${hint}`);
+      return error(`Failed to embed iframe in window "${actualId}": ${reason}.${hint}`);
     }
+
+    // The deadline passed with the iframe still silent. The window is on the desktop —
+    // the create action was delivered and applied — but nothing has said the content
+    // inside it loaded, and this used to be reported as "created ... with embedded
+    // iframe", the same words as a confirmed render. It is neither a failure (a slow
+    // site is still loading) nor a success (a wedged one never will), and the agent is
+    // the one who has to decide what to do about that, so tell it which it got.
+    if (!outcome.ok) {
+      return okJson({
+        windowId: actualId,
+        renderConfirmed: false,
+        message:
+          `Created window "${formatWindowRef(actualId)}", but its iframe did not confirm ` +
+          `rendering within ${IFRAME_RENDER_TIMEOUT_MS / 1000}s (${outcome.reason}). It may still ` +
+          `be loading, or may have failed silently — read ${formatWindowRef(actualId)} to see it ` +
+          `before telling the user it is ready. Do not create the window again.`,
+      });
+    }
+
     return okJson({
       windowId: actualId,
+      renderConfirmed: true,
       message: `Created window "${formatWindowRef(actualId)}" with embedded iframe`,
     });
   }

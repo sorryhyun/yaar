@@ -11,7 +11,7 @@ Supersedes: `report.md` (deleted; its diagnosis and slice log are carried forwar
 | Slice 1 | F-4 — attachment handshake | **Landed** (`feat(recovery): make session attachment a step of its own`) |
 | Slice 2 | F-19, F-20, F-21 — access chokepoint | **Landed** |
 | Slice 3 | F-7, F-10, F-11…F-14 — monitor identity | **Landed** |
-| Slice 4 | F-15, F-16, F-17 — deadline semantics | Open |
+| Slice 4 | F-15, F-16, F-17 — deadline semantics | **Landed** |
 | Slice 5 | F-2, F-18 — failure surfacing and delivery | Open |
 | Slice 6 | F-1 — authoritative resync | Open |
 | Slice 7 | F-5, F-6 — provider and app-protocol continuity | Open |
@@ -27,6 +27,14 @@ Supersedes: `report.md` (deleted; its diagnosis and slice log are carried forwar
 **Landed in Slice 3:** the monitor of a window-scoped event is derived from its window and the monitor of a user-scoped event comes from its connection — and there is no third source. `LiveSession.activeMonitorId` is gone (a session has N connections, so a session-global "current monitor" was last-writer-wins between tabs); a connection holds exactly one `BroadcastCenter` subscription, replace-on-set, and an empty one now means *no* monitor-scoped events rather than *all* of them. `ContextPool.handleTask` derives the monitor for a plain window from `WindowStateRegistry`, as `AppTaskProcessor` already did. Every `?? '0'` is deleted: `requireMonitorId()` and `ActionEmitter.resolveWindowMonitor()` throw instead. The session agent reports the monitor of the turn it is running, so the MCP registry and the emitter can no longer disagree about where its window went. The monitor **list** moved to `LiveSession`: the server mints ids (`ADD_MONITOR`) and broadcasts them (`MONITORS`), and the frontend renders that instead of a per-tab counter that had two tabs colliding on one monitor `"1"`.
 
 One thing the acceptance tests forced into the open: a connection that has not named its monitor now receives nothing, so `monitorId` had to ride on the WebSocket URL. Otherwise everything an agent emitted between attach and the client's first `SUBSCRIBE_MONITOR` would be dropped — and a reconnect into a live session is exactly when there is something to miss.
+
+**Landed in Slice 4:** `PendingStore` has no `defaultValue`. An entry settles as `{ok: true, value}`, `{ok: false, reason: 'timeout'}`, or `{ok: false, reason: 'cancelled'}` (the session went away), and every caller now says in code what a missed deadline means for it. The two that were lying: `window.create` reported an iframe that never answered as a rendered window, and now reports `renderConfirmed: false` naming the uncertainty — the window is on the desktop, but nothing said its content loaded, and that is neither success nor failure; and `askUser`/`requestUserInput` reported a prompt nobody answered as one the user *dismissed*, which is a claim about a user who was not there. The one place silence still means success is `emitActionChecked` (close, updateContent): the frontend answers those only to *veto* them, so no answer is no objection — that is now written down at the call site, because it is indistinguishable from the bug otherwise.
+
+Deadlines are derived from one budget (`MAX_REQUEST_DEADLINE_MS`, 240s) that sits strictly inside the transport's (`TRANSPORT_IDLE_TIMEOUT_S`, 255s — Bun's maximum, so the outer bound cannot be raised to meet the inner ones; the inner ones had to come down). A user prompt (300s) and an external MCP call (300s) both used to outlive the connection holding them open, so their expiry could not be reported even to itself.
+
+`dialog.close` is a new OS action. Server-side expiry now reaches the screen: an unanswered dialog is still a denial, but it stops asking. And a click that lands just after expiry is no longer dropped whole — the *request* it answered is gone (`resolveDialogFeedback` returns false, and the user is told so with a toast), but "remember my choice" is a standing decision about every future request, not that one, and it is saved.
+
+**Verified:** `packages/server/src/tests/deadline-semantics.test.ts` (15 tests, one `describe` per finding, including the wire path — the close is delivered to a connected socket through `LiveSession.broadcast()`, not merely emitted) and `packages/frontend/src/tests/store/dialog-expiry.test.ts` (the close removes the dialog from the store). Driven against a live server for the happy path: an agent opening an app gets `renderConfirmed: true` once the tab answers. **Not fully verified end-to-end:** a live run with a deliberately silent tab still reported `renderConfirmed: true`, and the reason was not run to ground (most likely a second client on the session answering the same request). The branch itself is pinned by unit test; the live path is not.
 
 Two mappings had to be made explicit to get Slice 2 right, and both are load-bearing:
 - `/api/storage/apps/{id}/x` and `yaar://apps/{id}/storage/x` are the *same file*. Only the second is what an app holds a permission for (`yaar://apps/self/storage/` is auto-granted), so `storageUriFor()` canonicalizes the HTTP path into it. Mapping to the flat `yaar://storage/apps/{id}/x` instead would have denied every app its own storage — and made a `yaar://storage/` grant silently mean *every other app's secrets*.
@@ -98,7 +106,7 @@ The verb layer's model (declared `permissions[]`, `self` resolution, the `sessio
 **F-10 — routing semantics flip on the first subscription.**
 `publishToMonitor()` treats an empty `subscribedMonitors` as "receive everything" (`broadcast-center.ts:116`). A connection changes routing mode the moment its first `SUBSCRIBE_MONITOR` lands, and combined with F-7 the set never returns to a state with defined meaning.
 
-### Open — deadline semantics (High)
+### Closed — deadline semantics (High) — *Slice 4*
 
 **F-15 — every timeout resolves to a default, so failure is indistinguishable from success.**
 `PendingStore.create()` never rejects — on expiry it calls `resolve(opts.defaultValue)` (`session/pending-store.ts:33-35`). All four pending maps inherit this. At the call site, `features/window/helpers.ts:80` checks `if (feedback && !feedback.success)` — so a 3-second rendering-feedback timeout (2s on `window.create`, `features/window/create.ts:190`) reads as **success**, and the agent believes a window rendered that may not exist.
@@ -169,13 +177,15 @@ Written first, red, then implemented against: `packages/server/src/tests/monitor
 
 Two tests in `window-handle-scope.test.ts` were **deleted**, not repaired: they asserted that an unstamped window action lands on the session's active monitor, and failing that on monitor 0. That is the bug, and it was pinned by a passing test.
 
-### Slice 4 — deadlines fail loudly (F-15, F-16, F-17)
+### Slice 4 — deadlines fail loudly (F-15, F-16, F-17) — **Landed**
 
-1. `PendingStore` returns `{ok: true, value} | {ok: false, reason: 'timeout' | 'cancelled'}`. No caller can read a timeout as success. Fix `helpers.ts:80` and `create.ts:190` accordingly — a rendering-feedback timeout is not a rendered window.
-2. Derive every inner deadline from one budget strictly below the transport limit, and raise `idleTimeout` or lower the 300s prompts so the outer bound is always the larger (F-16).
-3. Add a `dialog.close` / prompt-dismiss action so server-side expiry reaches the UI, and have `PendingStore.resolve()` on an unknown id tell the frontend so rather than dropping it (F-17).
+1. ✅ `PendingStore` returns `{ok: true, value} | {ok: false, reason: 'timeout' | 'cancelled'}`. No caller can read a timeout as success. `create.ts` reports an unconfirmed render as unconfirmed; `helpers.ts` states, rather than assumes, that close/update are veto-only and silence is consent.
+2. ✅ Every inner deadline derives from `MAX_REQUEST_DEADLINE_MS` (240s), strictly below `TRANSPORT_IDLE_TIMEOUT_S` (255s). `idleTimeout` could not be raised — 255s is Bun's maximum — so the 300s prompt and the 300s external-MCP call came down instead (F-16).
+3. ✅ `dialog.close` (new action) and `user.prompt.dismiss` (already in the schema, never emitted) carry server-side expiry to the UI, on a session-scoped channel because a timer callback has no monitor to stamp. A late click reports itself rather than vanishing, and its remembered choice is still saved (F-17).
 
-Acceptance: a window that fails to render is reported to the agent as failed, not as success; no inner deadline exceeds the transport idle timeout; an expired dialog disappears from the screen and a late click is not silently swallowed.
+Acceptance: a window whose iframe never reports is no longer announced as rendered; no inner deadline exceeds the transport idle timeout; an expired dialog disappears from the screen and a late click is not silently swallowed.
+
+One thing the work forced into the open: **"the frontend said nothing" is not one event, it is two.** For `window.close` it means *no lock objection* — silence is the frontend's way of consenting, and reading it as failure would break every close. For `window.create` it means *the iframe never rendered*. Both arrived as the same `null`, and the fix is not a single rule for timeouts but a demand that each call site name which of the two it is looking at.
 
 ### Slice 5 — every dropped message is visible (F-18, F-2)
 
@@ -221,5 +231,5 @@ Acceptance: an app iframe that omits its token, spoofs `Referer`, or reaches for
 8. App subscriptions are re-established or explicitly invalidated.
 9. Stale socket callbacks cannot overwrite a newer connection. *(Landed, Slice 0)*
 10. Multi-tab and multi-monitor routing is deterministic, with no monitor fallback anywhere in the code. *(Landed, Slice 3)*
-11. A timeout is never observable as a success.
+11. A timeout is never observable as a success. *(Landed, Slice 4)*
 12. No `/api/*` route reaches a resource the caller's declared permissions do not cover. *(Landed, Slice 2 — for any caller that presents its identity. Closing it for a caller that hides it needs Slice 9.)*

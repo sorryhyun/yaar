@@ -35,6 +35,7 @@ import {
 } from '../features/window/subscribe.js';
 import { requireMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
+import { valueOf } from '../session/pending-store.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -232,12 +233,13 @@ export function registerWindowHandlers(
       // does. The image itself already survives the trip — POST /api/verb lifts image blocks
       // into `envelope.images` and the iframe SDK hands them back (verb-sdk.ts).
       if (win.content.renderer === 'iframe') {
-        const feedback = await actionEmitter.emitActionWithFeedback(
+        const outcome = await actionEmitter.emitActionWithFeedback(
           { type: 'window.capture', windowId: win.id },
           5000,
           undefined,
           getWindowState().getMonitorForWindow(win.id),
         );
+        const feedback = valueOf(outcome);
         if (feedback?.success && feedback.imageData) {
           // Omit raw content (compiled HTML blob) — the screenshot is more useful
           const { content: _content, ...infoWithoutContent } = windowInfo;

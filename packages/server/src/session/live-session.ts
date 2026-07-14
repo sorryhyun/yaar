@@ -241,6 +241,10 @@ export class LiveSession {
       [
         'approval-request',
         'user-prompt',
+        // Actions the server sends on its own behalf, outside any agent turn — a dialog
+        // whose deadline passed being taken off the screen. There is no monitor context
+        // on a timer callback, and a dialog is session-scoped anyway.
+        'session-action',
         'verb-subscription',
         'desktop-shortcut',
         'browser-action',
@@ -296,6 +300,29 @@ export class LiveSession {
     } else {
       bc.publishToSession(this.sessionId, event);
     }
+  }
+
+  /**
+   * Tell the user that the thing they just answered had already stopped listening.
+   *
+   * A dialog or prompt whose deadline passed is taken off the screen, but a click can
+   * already be in flight when it goes — and the server has no id to match it to any more.
+   * That click used to be dropped without a word, which reads, from the user's side, as
+   * the system ignoring them.
+   */
+  private notifyTooLate(message: string): void {
+    this.broadcast({
+      type: ServerEventType.ACTIONS,
+      actions: [
+        {
+          type: 'toast.show',
+          id: `too-late-${Date.now()}`,
+          message,
+          variant: 'warning',
+        },
+      ],
+      agentId: 'system',
+    } as ServerEvent);
   }
 
   /**
@@ -588,13 +615,25 @@ export class LiveSession {
         });
         break;
 
-      case ClientEventType.DIALOG_FEEDBACK:
-        actionEmitter.resolveDialogFeedback({
+      case ClientEventType.DIALOG_FEEDBACK: {
+        const resolved = await actionEmitter.resolveDialogFeedback({
           dialogId: event.dialogId,
           confirmed: event.confirmed,
           rememberChoice: event.rememberChoice,
         });
+        // The answer arrived for a dialog whose deadline had already passed. The request
+        // it was answering is gone — that cannot be undone — but the user is owed the
+        // fact, instead of a click that lands on nothing. A remembered choice, unlike the
+        // answer, still counts, and resolveDialogFeedback has already saved it.
+        if (!resolved) {
+          this.notifyTooLate(
+            event.rememberChoice && event.rememberChoice !== 'once'
+              ? 'That request timed out before you answered, so it was denied. Your choice was saved and will apply next time.'
+              : 'That request timed out before you answered, so it was denied.',
+          );
+        }
         break;
+      }
 
       case ClientEventType.APP_PROTOCOL_RESPONSE:
         actionEmitter.resolveAppProtocolResponse(event.requestId, event.response);
@@ -642,14 +681,22 @@ export class LiveSession {
         );
         break;
 
-      case ClientEventType.USER_PROMPT_RESPONSE:
-        actionEmitter.resolveUserPromptFeedback({
+      case ClientEventType.USER_PROMPT_RESPONSE: {
+        const resolved = actionEmitter.resolveUserPromptFeedback({
           promptId: event.promptId,
           selectedValues: event.selectedValues,
           text: event.text,
           dismissed: event.dismissed,
         });
+        // Answered after the agent stopped waiting. Silently dropping it left the user
+        // believing they had replied.
+        if (!resolved && !event.dismissed) {
+          this.notifyTooLate(
+            'That prompt expired before you answered, so your answer was not sent.',
+          );
+        }
         break;
+      }
 
       case ClientEventType.USER_INTERACTION: {
         const logger = this.getSessionLogger();

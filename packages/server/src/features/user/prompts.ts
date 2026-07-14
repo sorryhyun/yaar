@@ -6,6 +6,15 @@
 
 import { actionEmitter } from '../../session/action-emitter.js';
 
+/**
+ * A prompt nobody answered is not a prompt the user turned down. Both used to arrive here
+ * as `dismissed`, so an agent that asked a question while the user was away was told they
+ * had declined to answer it — and would act on a refusal that never happened.
+ */
+const EXPIRED_ERROR =
+  'The prompt expired with no answer and was withdrawn from the screen. The user did not ' +
+  'decline — they never answered. Ask again if you still need it, or proceed without it.';
+
 export interface AskUserPayload {
   title: string;
   message: string;
@@ -49,6 +58,9 @@ export async function askUser(payload: AskUserPayload): Promise<PromptResult> {
     allowDismiss: true,
   });
 
+  if (result.timedOut) {
+    return { success: false, error: EXPIRED_ERROR };
+  }
   if (result.dismissed) {
     return { success: false, error: 'User dismissed the prompt without answering.' };
   }
@@ -78,6 +90,9 @@ export async function requestUserInput(payload: RequestUserInputPayload): Promis
     allowDismiss: true,
   });
 
+  if (result.timedOut) {
+    return { success: false, error: EXPIRED_ERROR };
+  }
   if (result.dismissed) {
     return { success: false, error: 'User dismissed the request without responding.' };
   }

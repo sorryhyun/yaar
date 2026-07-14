@@ -9,6 +9,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import { MAX_REQUEST_DEADLINE_MS } from '../../config.js';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
 import type {
   McpServerConfig,
@@ -24,8 +25,13 @@ const CONNECT_TIMEOUT_MS = 30_000;
  * slow tools like image generators (e.g. anima routinely takes 60s+ per image).
  * We give tool calls a generous ceiling and reset the clock whenever the server
  * reports progress, so a genuinely-working tool is never aborted mid-flight.
+ *
+ * The ceiling is the shared request budget, not a number picked here: this call is made
+ * while an inbound MCP request is held open, and it used to sit at 300s — past the
+ * transport's own idle timeout, so the connection waiting for the answer was already
+ * closed 45s before this timer could fire.
  */
-const CALL_TIMEOUT_MS = 300_000;
+const CALL_TIMEOUT_MS = MAX_REQUEST_DEADLINE_MS;
 const CONFIG_FILE = 'mcp-servers.json';
 
 class McpClientManager {

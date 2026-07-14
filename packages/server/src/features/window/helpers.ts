@@ -71,13 +71,27 @@ export function getAppMetaOverrides(
   };
 }
 
-/** Emit an action and return an error result if feedback indicates failure. */
+/**
+ * Emit an action the frontend only answers in order to *refuse* it, and return an error
+ * result if it does.
+ *
+ * This is a veto, not an acknowledgement: closing or updating a window succeeds locally
+ * the moment the action is applied, and the frontend pushes feedback only when it will
+ * not apply it — the window is locked by another agent. So silence within the deadline
+ * genuinely means "no objection", and that is the one place in this codebase where a
+ * timeout may be read as success.
+ *
+ * It is spelled out here because it is indistinguishable, at the call site, from the bug
+ * this slice removes: `emitActionWithFeedback` used to answer both "no veto" and "the
+ * iframe never rendered" with the same `null`, and `window.create` read that null as a
+ * window it had successfully put on the screen.
+ */
 export async function emitActionChecked(
   osAction: Parameters<typeof actionEmitter.emitActionWithFeedback>[0],
   timeout: number,
   errorMsg: string,
 ): Promise<VerbResult | null> {
-  const feedback = await actionEmitter.emitActionWithFeedback(osAction, timeout);
-  if (feedback && !feedback.success) return error(errorMsg);
+  const outcome = await actionEmitter.emitActionWithFeedback(osAction, timeout);
+  if (outcome.ok && !outcome.value.success) return error(errorMsg);
   return null;
 }

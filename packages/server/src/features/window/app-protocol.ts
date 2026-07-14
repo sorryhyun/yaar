@@ -7,6 +7,7 @@ import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
+import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { beginRequest, endRequest } from './protocol-log.js';
 
@@ -27,8 +28,8 @@ const QUERY_TIMEOUT_MS = 5_000;
  */
 const COMMAND_TIMEOUT_MS = 30_000;
 
-/** Ceiling for a caller-supplied command timeout. */
-const MAX_COMMAND_TIMEOUT_MS = 180_000;
+/** Ceiling for a caller-supplied command timeout. Must fit inside MAX_REQUEST_DEADLINE_MS. */
+export const MAX_COMMAND_TIMEOUT_MS = 180_000;
 
 /** Truncate text to MAX_TEXT_BYTES, appending a note if truncated. */
 function truncateText(text: string): string {
@@ -128,12 +129,19 @@ async function request(
   windowKey: string,
   req: AppProtocolRequest,
   timeoutMs: number,
-): Promise<AppProtocolResponse | null> {
+): Promise<PendingOutcome<AppProtocolResponse>> {
   const entry = beginRequest(windowKey, req);
   const started = Date.now();
-  const response = await actionEmitter.emitAppProtocolRequest(windowKey, req, timeoutMs);
-  endRequest(entry, response, Date.now() - started);
-  return response;
+  const outcome = await actionEmitter.emitAppProtocolRequest(windowKey, req, timeoutMs);
+  endRequest(entry, valueOf(outcome) ?? null, Date.now() - started);
+  return outcome;
+}
+
+/** The message an agent sees when an app never answered. */
+function noAnswer(outcome: { ok: false; reason: 'timeout' | 'cancelled' }, what: string): string {
+  return outcome.reason === 'cancelled'
+    ? `The session ended before the app answered the ${what}.`
+    : `App did not respond to the ${what} (timeout).`;
 }
 
 /** Handle app_query: query app state or manifest via the app protocol. */
@@ -161,16 +169,18 @@ export async function handleAppQuery(
   }
 
   if (stateKey === 'manifest') {
-    const response = await request(key, { kind: 'manifest' }, QUERY_TIMEOUT_MS);
-    if (!response) return error('App did not respond to manifest request (timeout).');
+    const outcome = await request(key, { kind: 'manifest' }, QUERY_TIMEOUT_MS);
+    if (!outcome.ok) return error(noAnswer(outcome, 'manifest request'));
+    const response = outcome.value;
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
     if (response.manifest) enrichManifestWithUris(response.manifest, win.id, windowState.handleMap);
     return wrapAppValue(response.manifest);
   }
 
-  const response = await request(key, { kind: 'query', stateKey }, QUERY_TIMEOUT_MS);
-  if (!response) return error('App did not respond (timeout).');
+  const outcome = await request(key, { kind: 'query', stateKey }, QUERY_TIMEOUT_MS);
+  if (!outcome.ok) return error(noAnswer(outcome, `query "${stateKey}"`));
+  const response = outcome.value;
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
   return wrapAppValue(response.data);
@@ -205,12 +215,16 @@ export async function handleAppCommand(
       ? Math.min(Math.max(requested, 1_000), MAX_COMMAND_TIMEOUT_MS)
       : COMMAND_TIMEOUT_MS;
 
-  const response = await request(key, req, timeoutMs);
-  if (!response)
+  const outcome = await request(key, req, timeoutMs);
+  if (!outcome.ok) {
+    if (outcome.reason === 'cancelled')
+      return error('The session ended before the app answered the command.');
     return error(
       `App did not respond within ${(timeoutMs / 1000).toFixed(0)}s. If this command is ` +
         `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`,
     );
+  }
+  const response = outcome.value;
   if (response.kind !== 'command') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
   windowState.recordAppCommand(key, req);

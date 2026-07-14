@@ -161,6 +161,36 @@ export const IS_DEV = !IS_REMOTE && !IS_BUNDLED_EXE;
 /** Marketplace base URL. */
 export const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 
+// ── Deadlines ────────────────────────────────────────────────────────
+//
+// One budget, and every inner deadline is derived from it.
+//
+// A tool call that waits on the user or on an app holds an HTTP request open the whole
+// time it waits, and the transport has a deadline of its own: Bun closes a connection
+// idle for longer than `idleTimeout`, whose maximum is 255s. Deadlines were previously
+// chosen per call site, and two of them (a user prompt, an external MCP call) sat at
+// 300s — *past* the transport's. The connection died 45s before the inner timer fired,
+// so the result was written to a socket nobody was reading, and the timer kept ticking
+// against a request that no longer existed. An inner deadline that outlives its
+// transport cannot report anything, not even its own expiry.
+//
+// So: the transport bound is the outer one, and every deadline that holds a request
+// open fits strictly inside it, leaving room to serialize and flush the answer.
+
+/** `Bun.serve`'s idle timeout, in seconds. 255 is the protocol maximum — a ceiling, not a choice. */
+export const TRANSPORT_IDLE_TIMEOUT_S = 255;
+
+/**
+ * The longest a server-side deadline may hold an inbound request open.
+ * Strictly below the transport bound, so expiry always reaches the caller.
+ */
+export const MAX_REQUEST_DEADLINE_MS = 240_000;
+
+/** Clamp a caller-supplied deadline into the budget. */
+export function clampDeadline(timeoutMs: number): number {
+  return Math.min(Math.max(timeoutMs, 0), MAX_REQUEST_DEADLINE_MS);
+}
+
 // ── Monitor budget limits ────────────────────────────────────────────
 export const MONITOR_MAX_CONCURRENT = getEnvInt('MONITOR_MAX_CONCURRENT', 2);
 export const MONITOR_MAX_ACTIONS_PER_MIN = getEnvInt('MONITOR_MAX_ACTIONS_PER_MIN', 30);
