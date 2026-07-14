@@ -53,6 +53,11 @@ export interface IframeTokenOptions {
   systemApp?: boolean;
   /** Gated SDKs from app.json `bundles`. See TokenEntry.bundles. */
   bundles?: string[];
+  /**
+   * The `yaar://` URI of the document this iframe was told to render, if it is
+   * one storage serves. Auto-granted `read`. See generateAppIframeToken.
+   */
+  documentUri?: string;
 }
 
 /**
@@ -91,7 +96,7 @@ export function generateIframeToken(
 export async function generateAppIframeToken(
   windowId: string,
   sessionId: string,
-  { appId, permissions: explicitPermissions, monitorId }: IframeTokenOptions = {},
+  { appId, permissions: explicitPermissions, monitorId, documentUri }: IframeTokenOptions = {},
 ): Promise<string> {
   const { getAppMeta } = await import('../features/apps/discovery.js');
   const appMeta = appId ? await getAppMeta(appId) : null;
@@ -107,6 +112,23 @@ export async function generateAppIframeToken(
     if (!hasStoragePerm) {
       permissions = [...permissions, selfStorageUri];
     }
+  }
+
+  // An iframe may always read the document it was told to render. The window's
+  // content URL is chosen by the server, not the iframe, and the browser fetches
+  // it under this very token — so without this the gate can deny a window the one
+  // file it exists to display. It did: devtools previews are served out of
+  // *devtools'* storage (`/api/storage/apps/devtools/projects/{id}/dist/…`) while
+  // the preview window runs under a `preview--{id}` principal of its own, which
+  // holds no permission there. Every preview 403'd on its own document.
+  //
+  // Narrow on purpose: this exact file, `read` only. It grants no prefix, so it
+  // cannot become a foothold in the storage namespace that happens to host it.
+  if (
+    documentUri &&
+    !permissions.some((p) => (typeof p === 'string' ? p : p.uri) === documentUri)
+  ) {
+    permissions = [...permissions, { uri: documentUri, verbs: ['read'] }];
   }
 
   // systemApp and bundles come from the app's own manifest, never from the caller —

@@ -243,17 +243,29 @@ export function storageUriFor(principal: Principal, path: string): string | Resp
     p = p.replace('apps/self', `apps/${principal.appId}`);
   }
 
+  const uri = storageUriForPath(p);
+  if (!uri) return errorResponse('Invalid path', 403);
+  return uri;
+}
+
+/**
+ * The bare path → URI mapping, with no principal to resolve `self` against.
+ *
+ * Callers that already hold a concrete path (no `self` to expand) name the URI
+ * through this rather than rebuilding the mapping — a second copy that drifted
+ * would hand out permissions for one URI while the gate checked another.
+ * Returns null for a traversing path, which names no resource.
+ */
+export function storageUriForPath(path: string): string | null {
   // Traversal would let `apps/{me}/../{other}/secrets.json` name another app's
   // storage while presenting as this app's own URI.
-  if (p.split('/').includes('..')) {
-    return errorResponse('Invalid path', 403);
-  }
+  if (path.split('/').includes('..')) return null;
 
-  const appScoped = p.match(/^apps\/([^/]+)(?:\/(.*))?$/);
+  const appScoped = path.match(/^apps\/([^/]+)(?:\/(.*))?$/);
   if (appScoped) {
     const [, appId, rest] = appScoped;
     return `yaar://apps/${appId}/storage${rest ? `/${rest}` : ''}`;
   }
 
-  return `yaar://storage${p ? `/${p}` : ''}`;
+  return `yaar://storage${path ? `/${path}` : ''}`;
 }

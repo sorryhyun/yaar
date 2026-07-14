@@ -16,9 +16,33 @@ import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../handlers/uri-resolve.js';
 import { generateAppIframeToken } from '../../http/iframe-tokens.js';
+import { storageUriForPath } from '../../http/access.js';
+import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
 import { formatWindowRef, deriveWindowId, getAppMetaOverrides } from './helpers.js';
+
+/**
+ * Name the `yaar://` URI of an iframe's own document, when storage is what serves it.
+ *
+ * The browser fetches this URL under the window's iframe token, so it passes through
+ * the same gate as any other storage read — and it is parsed here the same way the
+ * gate parses it (`parseContentPath` over a decoded pathname), so the URI granted is
+ * the URI checked. Returns undefined for content storage does not serve — an external
+ * site, or a bundled app under `/api/apps/`, which is not permission-gated at all.
+ */
+function storageDocumentUri(data: unknown): string | undefined {
+  if (typeof data !== 'string') return undefined;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(data.split('?')[0]);
+  } catch {
+    return undefined; // malformed escape — names no file
+  }
+  const parsed = parseContentPath(decoded);
+  if (parsed?.authority !== 'storage') return undefined;
+  return storageUriForPath(parsed.path) ?? undefined;
+}
 
 /** Cascade offset per window (px). */
 const CASCADE_STEP = 32;
@@ -181,6 +205,7 @@ export async function handleCreate(
             // the create action below. Left to be derived later from the window id, it
             // is ambiguous whenever the app is open on more than one monitor.
             monitorId: actionEmitter.resolveWindowMonitor(),
+            documentUri: storageDocumentUri(data),
           }),
         }
       : {}),
