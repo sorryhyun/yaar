@@ -27,7 +27,34 @@
 // (measured: adaLN Split→Unsqueeze→broadcast in the anima DiT comes back ~10× too
 // large per block → residual overflow → all-NaN). The native EP does not share
 // that allocator. Both flavors load their artifacts from /api/ml-runtime/.
-import * as ort from 'onnxruntime-web/webgpu';
+//
+// ORT is imported at RUNTIME from its own same-origin URL, not bundled into the
+// app — see `ORT_URL` below. The type-only import is erased, so no copy of ORT
+// ends up in the app bundle.
+import type * as Ort from 'onnxruntime-web/webgpu';
+
+/**
+ * ORT must be a real script at a real URL, because `env.wasm.proxy` needs one.
+ *
+ * In proxy mode ORT runs the session on a worker it spawns from *its own script
+ * source URL* (`import.meta.url`) — the bundle re-enters itself as
+ * `ort-wasm-proxy-worker`. The compiler inlines the app into a
+ * `<script type="module">` inside its HTML, so a bundled-in ORT sees
+ * `import.meta.url` = the app's HTML page, and `new Worker(<that>, {type:'module'})`
+ * would try to parse HTML as a module and fail. Loading ORT from
+ * `/api/ml-runtime/` (the same route that already serves its `.wasm`, and which
+ * serves `.mjs` as `application/javascript`) gives it a script URL it can spawn
+ * itself from, and lets `wasmPaths` resolve alongside it.
+ */
+const ORT_URL = '/api/ml-runtime/ort.webgpu.bundle.min.mjs';
+
+// The specifier has to be opaque to Bun's bundler: a literal `import(ORT_URL)`
+// gets resolved at build time (and fails — it's a server route, not a module on
+// disk). Going through `Function` keeps it a runtime import. No CSP problem: app
+// iframes are served with `connect-src 'self'` only, no `script-src`.
+const importModule = new Function('u', 'return import(u)') as (u: string) => Promise<typeof Ort>;
+
+const ort = await importModule(ORT_URL);
 
 /**
  * The app's iframe token, for the weight routes.
@@ -53,6 +80,20 @@ ort.env.wasm.wasmPaths = '/api/ml-runtime/';
 // is unavailable, so multithreaded wasm cannot run. Pin to a single thread; the
 // WebGPU EP does not need threads anyway.
 ort.env.wasm.numThreads = 1;
+// Run the session on a worker instead of the calling thread.
+//
+// This is not a nicety, it is what keeps the desktop alive. App iframes are
+// same-origin and unsandboxed, so an app shares the event loop with the whole
+// YAAR UI. `InferenceSession.create` is one long *synchronous* wasm call —
+// graph parse, external-data copy into the wasm heap, weight upload to the GPU —
+// and awaiting it does not yield, because there is nothing to yield to. Loading
+// a multi-GB model on this thread freezes the taskbar, the palette, and every
+// other window for as long as it takes. On a worker, the main thread only ever
+// waits on a postMessage.
+//
+// Two things proxy mode does not support, both of which the SDK stays clear of:
+// `preferredOutputLocation` (session option) and GPU-resident input tensors.
+ort.env.wasm.proxy = true;
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -351,8 +392,12 @@ async function createSession(
   extra?: Record<string, unknown>,
 ): Promise<ort.InferenceSession> {
   const providers = await resolveProviders(backend);
+  // `create` transfers the model buffer to the worker in proxy mode, which detaches
+  // it here — so each attempt needs its own copy, or the wasm fallback below would
+  // hand ORT an empty model. The graph proto is small (weights ride in externalData).
+  const modelBytes = () => (ort.env.wasm.proxy ? bytes.slice() : bytes);
   try {
-    return await ort.InferenceSession.create(bytes, {
+    return await ort.InferenceSession.create(modelBytes(), {
       executionProviders: providers,
       ...extra,
     });
@@ -371,7 +416,10 @@ async function createSession(
       }
       // Auto mode: fall back to the CPU wasm backend on any WebGPU failure.
       if (backend === 'auto') {
-        return ort.InferenceSession.create(bytes, { executionProviders: ['wasm'], ...extra });
+        return ort.InferenceSession.create(modelBytes(), {
+          executionProviders: ['wasm'],
+          ...extra,
+        });
       }
     }
     throw err;
@@ -411,13 +459,40 @@ export async function session(
   return createSession(bytes, backend, opts.sessionOptions);
 }
 
+/**
+ * Feed the worker its own copy of each input.
+ *
+ * In proxy mode ORT posts the inputs with their buffers in the *transfer* list, so
+ * `run` detaches every array the caller passed in: a second `run` over the same
+ * Float32Array sees `length 0` and the Tensor constructor rejects it
+ * ("size(65536) does not match data length(0)"). Callers reasonably expect what
+ * non-proxy mode did — that an input survives being run — and reusing a buffer
+ * across denoising steps is the normal shape of a diffusion loop. So hand ORT a
+ * copy and let it transfer that.
+ *
+ * The copy costs one memcpy per input per run (a few MB for a diffusion step —
+ * noise next to the inference itself). GPU-resident inputs are not copied: proxy
+ * mode rejects them outright, and `run` throws before we get here.
+ */
+function copyFeeds(feeds: Record<string, ort.Tensor>): Record<string, ort.Tensor> {
+  const out: Record<string, ort.Tensor> = {};
+  for (const [name, t] of Object.entries(feeds)) {
+    const data = t.data as { slice?: () => unknown };
+    out[name] =
+      t.location === 'cpu' && typeof data?.slice === 'function'
+        ? new ort.Tensor(t.type, data.slice() as never, t.dims as number[])
+        : t;
+  }
+  return out;
+}
+
 /** Run inference. `feeds` maps input names to Tensors; returns the output map. */
 export function run(
   s: ort.InferenceSession,
   feeds: Record<string, ort.Tensor>,
   options?: ort.InferenceSession.RunOptions,
 ): Promise<ort.InferenceSession.OnnxValueMapType> {
-  return s.run(feeds, options);
+  return s.run(ort.env.wasm.proxy ? copyFeeds(feeds) : feeds, options);
 }
 
 /** Release a session's native resources. Also clears it from the URL memo. */

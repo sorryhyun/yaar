@@ -15,10 +15,11 @@ import { join } from 'path';
  * Staleness is otherwise judged from an app's own src/ and app.json, so a change to
  * something the compiler *injects* — the design tokens, or an SDK script out of
  * @yaar/shared/iframe-scripts — leaves every hash identical and reaches no existing
- * dist/. Bumping is how such a change gets picked up. ('3': form controls inherit
- * font-family, which browsers do not do by default.)
+ * dist/. Bumping is how such a change gets picked up. ('5': the yaar-ml shim loads
+ * onnxruntime from /api/ml-runtime/ and runs it on a worker, so any app that bundled
+ * the old main-thread copy has to be rebuilt.)
  */
-export const COMPILER_VERSION = '3';
+export const COMPILER_VERSION = '5';
 
 export interface BuildManifest {
   sourceHash: string;
