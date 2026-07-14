@@ -181,6 +181,8 @@ Acceptance: a submitted command is either acknowledged or visibly still unsent; 
 
 Make the reconnect snapshot a **replace-state** snapshot, not an additive one, keyed off Slice 1's `recoveryMode` — `replaced` and `restored` are exactly the cases where the client's local state must be reconciled rather than merged. Cover agents, dialogs, prompts, notifications, message status, subscriptions, and app readiness, not just windows. Stale client-only windows must be removed. An event log with cursors comes only if the replace-state snapshot proves insufficient.
 
+**Partially landed** (`lib/iframeTokenRefresh.ts`): the one piece of stale local state that was actively breaking apps — iframe tokens. They live in the dead process's memory, so after a restart every window the client kept on screen presents a token nothing can validate and every `/api/verb` from it answers 403 for the life of the tab. On a non-`attached` recovery the client now re-mints a token per iframe window it still holds. It is a repair of one field, not the reconciliation this slice describes: stale client-only windows, agents, dialogs, and message status are still merged rather than replaced.
+
 ### Slice 7 — provider and app-protocol continuity (F-5, F-6)
 
 Model provider state explicitly (`connected` / `reconnecting` / `resumed` / `restarted` / `history-lost` / `failed`). A fallback to a fresh Claude conversation or Codex thread must never be presented as ordinary continuation. Separate app-protocol *request delivery* from *command-state replay*; give iframes an attachment lifecycle that re-establishes token generation, readiness, subscriptions, and pending requests.

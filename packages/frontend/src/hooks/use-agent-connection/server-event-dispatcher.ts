@@ -23,6 +23,8 @@ export interface ServerEventDispatchHandlers {
     provider?: string;
   }) => void;
   checkForPreviousSession: (sessionId: string) => void;
+  /** Re-mint iframe tokens after reattaching to a session incarnation we did not leave. */
+  refreshStaleIframeTokens: (sessionId: string) => void;
   addDebugEntry: (entry: { direction: 'in'; type: string; data: ServerEvent }) => void;
   setAgentActive: (agentId: string, status: string) => void;
   clearAgent: (agentId: string) => void;
@@ -131,6 +133,9 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
           `[connection] session ${message.sessionId} came back as "${message.recoveryMode}" ` +
             `(epoch ${message.sessionEpoch}) — local state may be stale`,
         );
+        // The iframe tokens our windows hold were minted by a process that is gone, so
+        // every verb call they make now 403s. Mint them again against the live session.
+        handlers.refreshStaleIframeTokens(message.sessionId);
       }
       // sessionId is the hub key (WebSocket rejoin, iframe tokens); logSessionId names the
       // transcript on disk, which is what /api/sessions is keyed by.

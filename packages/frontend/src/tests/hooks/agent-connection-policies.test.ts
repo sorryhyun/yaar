@@ -52,6 +52,7 @@ function createHandlers() {
     setSession: mock(() => {}),
     setAttachment: mock(() => {}),
     checkForPreviousSession: mock(() => {}),
+    refreshStaleIframeTokens: mock(() => {}),
     addDebugEntry: mock(() => {}),
     setAgentActive: mock(() => {}),
     clearAgent: mock(() => {}),
@@ -250,6 +251,26 @@ describe('server event dispatcher', () => {
       expect.objectContaining({ recoveryMode: 'replaced', sessionEpoch: 43 }),
     );
     expect(warnings).toHaveLength(1);
+    // The tokens our iframes hold were minted by a process that is gone — every verb call
+    // they make now answers 403. A replacement is exactly when they must be minted again.
+    expect(handlers.refreshStaleIframeTokens).toHaveBeenCalledWith('s1');
+  });
+
+  it('leaves iframe tokens alone when the join is a real rejoin', () => {
+    const handlers = createHandlers();
+
+    dispatchServerEvent(
+      {
+        type: 'SESSION_ATTACHED',
+        sessionId: 's1',
+        sessionEpoch: 42,
+        connectionId: 'conn-3',
+        recoveryMode: 'attached',
+      },
+      handlers,
+    );
+
+    expect(handlers.refreshStaleIframeTokens).not.toHaveBeenCalled();
   });
 
   it('dispatches connection and response events', () => {

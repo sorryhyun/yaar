@@ -21,6 +21,7 @@ import {
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
 // Window IDs in the store are opaque handles — send as-is to server.
 import { captureMonitorScreenshot } from '@/lib/captureMonitorScreenshot';
+import { refreshStaleIframeTokens } from '@/lib/iframeTokenRefresh';
 
 let sessionCheckDone = false;
 
@@ -126,6 +127,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           setSession,
           setAttachment,
           checkForPreviousSession,
+          refreshStaleIframeTokens,
           addDebugEntry,
           setAgentActive,
           clearAgent,

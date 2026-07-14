@@ -379,6 +379,14 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       applyWindowAction(state as DesktopStore, action);
     }),
 
+  // Guarded on `expected` so a token that the reconnect snapshot already refreshed is not
+  // clobbered by a re-mint that was in flight for the dead one.
+  replaceIframeToken: (windowId, expected, token) =>
+    set((state) => {
+      const win = state.windows[windowId];
+      if (win && win.iframeToken === expected) win.iframeToken = token;
+    }),
+
   userFocusWindow: (windowId) =>
     set((state) => {
       const win = state.windows[windowId];

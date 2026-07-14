@@ -65,6 +65,8 @@ export interface WindowsSliceActions {
   userSnapWindow: (windowId: string, bounds: WindowBounds) => void;
   handleWindowAction: (action: WindowAction) => void;
   queueBoundsUpdate: (windowId: string, action?: 'window.move' | 'window.resize') => void;
+  /** Swap a window's iframe token, but only if it still carries the one we expected. */
+  replaceIframeToken: (windowId: string, expected: string, token: string) => void;
 }
 
 export type WindowsSlice = WindowsSliceState & WindowsSliceActions;
