@@ -50,37 +50,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   );
   const [isConnecting, setIsConnecting] = useState(false);
 
-  const {
-    applyActions,
-    setConnectionStatus,
-    setSession,
-    setAttachment,
-    addDebugEntry,
-    setAgentActive,
-    clearAgent,
-    clearAllAgents,
-    consumeDrawing,
-    consumeAttachedImages,
-    registerWindowAgent,
-    updateWindowAgentStatus,
-    setRestorePrompt,
-    setMonitors,
-    updateCliStreaming,
-    finalizeCliStreaming,
-    addCliEntry,
-    restoreCliHistory,
-    incrementSubagentCount,
-    decrementSubagentCount,
-    trackMessage,
-    acceptMessage,
-    queueMessage,
-    failMessage,
-    clearAllMessageStatuses,
-    enqueueOutbox,
-    settleOutbox,
-    applySnapshot,
-  } = useDesktopStore.getState();
-
   const checkForPreviousSession = useCallback(async (currentSessionId: string) => {
     if (sessionCheckDone) return;
     sessionCheckDone = true;
@@ -99,7 +68,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
 
       if (previousSessions.length > 0) {
         const lastSession = previousSessions[0];
-        setRestorePrompt({
+        useDesktopStore.getState().setRestorePrompt({
           sessionId: lastSession.sessionId,
           sessionDate: lastSession.metadata?.createdAt || new Date().toISOString(),
         });
@@ -133,7 +102,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
    */
   const send = useCallback((event: ClientEvent): boolean => {
     if (!sendEvent(wsManager, event)) return false;
-    addDebugEntry({ direction: 'out', type: event.type, data: event });
+    useDesktopStore.getState().addDebugEntry({ direction: 'out', type: event.type, data: event });
     return true;
   }, []);
 
@@ -161,10 +130,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
    * is cheap and idempotent server-side.
    */
   const flushPending = useCallback(() => {
-    drainPendingQueues({ send, addCliEntry });
+    drainPendingQueues({ send, addCliEntry: useDesktopStore.getState().addCliEntry });
     resendAppProtocolReady();
     flushOutbox();
-  }, [send, flushOutbox, addCliEntry]);
+  }, [send, flushOutbox]);
 
   const resync = useCallback(() => {
     send({ type: ClientEventType.RESYNC });
@@ -178,42 +147,49 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         if (message?.type === ServerEventType.SESSION_ATTACHED) {
           markAttached(wsManager);
         }
+        const store = useDesktopStore.getState();
         dispatchServerEvent(message, {
-          applyActions,
+          applyActions: store.applyActions,
           setIsConnecting,
-          setConnectionStatus,
-          setSession,
-          setAttachment,
+          setConnectionStatus: store.setConnectionStatus,
+          setSession: store.setSession,
+          setAttachment: store.setAttachment,
           checkForPreviousSession,
-          setMonitors,
+          setMonitors: store.setMonitors,
           refreshStaleIframeTokens,
-          addDebugEntry,
-          setAgentActive,
-          clearAgent,
-          registerWindowAgent,
-          updateWindowAgentStatus,
-          updateCliStreaming,
-          finalizeCliStreaming,
-          addCliEntry,
+          addDebugEntry: store.addDebugEntry,
+          setAgentActive: store.setAgentActive,
+          clearAgent: store.clearAgent,
+          registerWindowAgent: store.registerWindowAgent,
+          updateWindowAgentStatus: store.updateWindowAgentStatus,
+          updateCliStreaming: store.updateCliStreaming,
+          finalizeCliStreaming: store.finalizeCliStreaming,
+          addCliEntry: store.addCliEntry,
           handleAppProtocolRequest: handleAppProtocolRequestCb,
           handleVerbSubscriptionUpdate: handleVerbSubscriptionUpdateCb,
-          restoreCliHistory,
-          acceptMessage,
-          queueMessage,
-          failMessage,
-          settleOutbox,
-          clearAllMessageStatuses,
-          applySnapshot,
+          restoreCliHistory: store.restoreCliHistory,
+          acceptMessage: store.acceptMessage,
+          queueMessage: store.queueMessage,
+          failMessage: store.failMessage,
+          settleOutbox: store.settleOutbox,
+          clearAllMessageStatuses: store.clearAllMessageStatuses,
+          applySnapshot: store.applySnapshot,
           flushPending,
           resync,
-          incrementSubagentCount,
-          decrementSubagentCount,
+          incrementSubagentCount: store.incrementSubagentCount,
+          decrementSubagentCount: store.decrementSubagentCount,
         });
       } catch (e) {
         console.error('Failed to parse message:', e);
       }
     },
-    [checkForPreviousSession, handleAppProtocolRequestCb, handleVerbSubscriptionUpdateCb],
+    [
+      checkForPreviousSession,
+      handleAppProtocolRequestCb,
+      handleVerbSubscriptionUpdateCb,
+      flushPending,
+      resync,
+    ],
   );
 
   const connect = useCallback(() => {
@@ -228,23 +204,23 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       onMessage: handleMessage,
       onClose: () => {
         setIsConnecting(false);
-        setConnectionStatus('disconnected');
+        useDesktopStore.getState().setConnectionStatus('disconnected');
         // The socket dropped under us. Whatever those agents were doing, we are no longer
         // hearing about it — and the spinner they drive used to run until the tab was
         // reloaded, because only the *explicit* disconnect() path cleared them. If they are
         // still alive, the snapshot on reattach says so and puts them back.
-        clearAllAgents();
+        useDesktopStore.getState().clearAllAgents();
       },
       onError: () => {
-        setConnectionStatus('error', 'Connection failed');
+        useDesktopStore.getState().setConnectionStatus('error', 'Connection failed');
       },
       reconnect: () => connect(),
     });
     if (!socket) return;
 
     setIsConnecting(true);
-    setConnectionStatus('connecting');
-  }, [handleMessage, setConnectionStatus]);
+    useDesktopStore.getState().setConnectionStatus('connecting');
+  }, [handleMessage]);
 
   const disconnect = useCallback(() => {
     if (wsManager.reconnectTimeout) {
@@ -262,8 +238,9 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     }
 
     setIsConnecting(false);
-    setConnectionStatus('disconnected');
-    clearAllAgents();
+    const store = useDesktopStore.getState();
+    store.setConnectionStatus('disconnected');
+    store.clearAllAgents();
   }, []);
 
   const sendMessage = useCallback(
@@ -276,16 +253,17 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         screenshotDataUrl = await captureMonitorScreenshot();
       }
 
-      const drawing = consumeDrawing();
-      const images = consumeAttachedImages();
+      const store = useDesktopStore.getState();
+      const drawing = store.consumeDrawing();
+      const images = store.consumeAttachedImages();
       const messageId = generateMessageId();
-      const monitorId = useDesktopStore.getState().activeMonitorId;
+      const monitorId = store.activeMonitorId;
       // CLI-panel "act as me" toggle — route to the session agent (the user's
       // deputy) only while the CLI panel is open; the main palette stays on the
       // monitor agent. See docs/session_agent_browser_design.md §6.
-      const { cliMode, cliTarget } = useDesktopStore.getState();
+      const { cliMode, cliTarget } = store;
       const target = cliMode && cliTarget === 'session' ? 'session' : undefined;
-      addCliEntry({ type: 'user', content, monitorId });
+      store.addCliEntry({ type: 'user', content, monitorId });
 
       const interactions: Array<{ type: 'draw'; timestamp: number; imageData: string }> = [];
       // Prefer the composite screenshot; fall back to raw strokes
@@ -312,8 +290,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       // user asked for something that was never asked. The outbox is what holds them: the
       // message stays there, attachments and all, until the server acks it, and is resent
       // on reconnect.
-      enqueueOutbox(messageId, event);
-      trackMessage(messageId, send(event) ? 'sent' : 'unsent');
+      store.enqueueOutbox(messageId, event);
+      store.trackMessage(messageId, send(event) ? 'sent' : 'unsent');
     },
     [send],
   );
@@ -321,7 +299,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const sendWindowMessage = useCallback(
     (windowId: string, content: string) => {
       const messageId = generateMessageId();
-      trackMessage(messageId);
+      useDesktopStore.getState().trackMessage(messageId);
       send({
         type: ClientEventType.WINDOW_MESSAGE,
         messageId,
@@ -414,7 +392,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  usePendingEventDrainer({ send, sendComponentAction, addCliEntry });
+  usePendingEventDrainer({
+    send,
+    sendComponentAction,
+    addCliEntry: useDesktopStore.getState().addCliEntry,
+  });
   useMonitorSync();
 
   return {
