@@ -20,10 +20,11 @@
 // padding mask constant-fold), so each aspect ratio is its own graph — but NOT its
 // own weights: every ratio's graph is re-pointed at the single 3.9 GB r16 sidecar,
 // so a ratio costs ~9 MB. See buckets.ts and ../krea/scripts/share_sidecar.py.
-import { onMount } from '@bundled/solid-js';
+import { onCleanup, onMount } from '@bundled/solid-js';
 import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import './styles.css';
 import {
   capabilities,
   loadModel,
@@ -68,6 +69,9 @@ const [busy, setBusy] = createSignal(false);
 const [progress, setProgress] = createSignal<{ label: string; pct: number | null } | null>(null);
 const [status, setStatus] = createSignal('');
 const [hasImage, setHasImage] = createSignal(false);
+// The rarely-touched controls (ratio / seed / download / clear cache) live behind this
+// popover so the narrow default window keeps prompt + Generate as the only chrome.
+const [showOptions, setShowOptions] = createSignal(false);
 // Aspect ratio. Each bucket is its own DiT/VAE graph (resolution is baked in at
 // export), but every bucket shares the one 3.9 GB weight sidecar — see buckets.ts.
 const [bucketId, setBucketId] = createSignal(DEFAULT_BUCKET.id);
@@ -546,6 +550,16 @@ function saveImage() {
 }
 
 function App() {
+  let optionsEl: HTMLDivElement | undefined;
+  // Close the Options popover on any click outside it (including on the canvas).
+  const onDocClick = (e: MouseEvent) => {
+    if (!showOptions()) return;
+    if (optionsEl && e.target instanceof Node && optionsEl.contains(e.target)) return;
+    setShowOptions(false);
+  };
+  document.addEventListener('click', onDocClick);
+  onCleanup(() => document.removeEventListener('click', onDocClick));
+
   onMount(async () => {
     const c = await capabilities();
     setCaps(
@@ -555,16 +569,15 @@ function App() {
     );
   });
   return html`
-    <div class="y-app" style="padding: var(--yaar-sp-4); gap: var(--yaar-sp-3); overflow: auto;">
+    <div class="y-app anima-root">
       <div>
-        <h2 style="margin:0">🌸 Anima — WebGPU probe</h2>
-        <div class="y-label" style="margin-top:4px">${caps}</div>
+        <h2 style="margin:0; font-size: var(--yaar-text-lg);">🌸 Anima — WebGPU probe</h2>
+        <div class="y-label" style="margin-top:2px">${caps}</div>
       </div>
       <textarea
-        class="y-input"
-        rows="3"
+        class="y-input anima-prompt"
+        rows="2"
         placeholder="Describe the image…"
-        style="width:100%; min-height:4.5em; resize:vertical; font-family:inherit; line-height:1.4;"
         oninput=${(e: Event) => setPrompt((e.target as HTMLTextAreaElement).value)}
       >
 ${prompt()}</textarea
@@ -579,48 +592,61 @@ ${prompt()}</textarea
         <button class="y-btn y-btn-primary" disabled=${busy} onclick=${() => generate()}>
           ✨ Generate image
         </button>
-        <select
-          class="y-select"
-          disabled=${busy}
-          onchange=${(e: Event) => {
-            const v = (e.target as HTMLSelectElement).value;
-            if (v === bucketId()) return;
-            setBucketId(v);
-            // A ratio is a different graph, so it's a different session: drop the old
-            // one's 3.9 GB of GPU memory now rather than holding both.
-            void releaseOtherDits(bucketById(v).dit);
-          }}
-        >
-          ${() =>
-            BUCKETS.map(
-              (b) =>
-                html`<option value=${b.id} selected=${() => bucketId() === b.id}>
-                  ${b.label}
-                </option>`,
-            )}
-        </select>
-        <label class="y-label" style="display:flex; gap:4px; align-items:center;"
-          >seed
-          <input
-            class="y-input"
-            type="number"
-            style="width:70px"
-            value=${seed}
-            onchange=${(e: Event) => setSeed(Number((e.target as HTMLInputElement).value) | 0)}
-          />
-        </label>
-      </div>
-      <div class="y-flex" style="gap: var(--yaar-sp-2); flex-wrap: wrap; align-items: center;">
-        <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${downloadModels}>
-          ⬇ Download weights (${gb(TOTAL_BYTES)})
-        </button>
-        <button
-          class="y-btn y-btn-ghost"
-          disabled=${busy}
-          onclick=${() => clearWeightCache().then(() => setStatus('🧹 weight cache cleared'))}
-        >
-          clear cache
-        </button>
+        <div class="anima-options" ref=${(el: HTMLDivElement) => (optionsEl = el)}>
+          <button
+            class="y-btn y-btn-ghost"
+            title="Options — aspect ratio, seed, weights"
+            onclick=${() => setShowOptions((v) => !v)}
+          >
+            ⚙ Options
+          </button>
+          <div class="anima-popover" style=${() => `display:${showOptions() ? 'flex' : 'none'};`}>
+            <label class="anima-row">
+              <span class="y-label">ratio</span>
+              <select
+                class="y-select"
+                disabled=${busy}
+                onchange=${(e: Event) => {
+                  const v = (e.target as HTMLSelectElement).value;
+                  if (v === bucketId()) return;
+                  setBucketId(v);
+                  // A ratio is a different graph, so it's a different session: drop the old
+                  // one's 3.9 GB of GPU memory now rather than holding both.
+                  void releaseOtherDits(bucketById(v).dit);
+                }}
+              >
+                ${() =>
+                  BUCKETS.map(
+                    (b) =>
+                      html`<option value=${b.id} selected=${() => bucketId() === b.id}>
+                        ${b.label}
+                      </option>`,
+                  )}
+              </select>
+            </label>
+            <label class="anima-row">
+              <span class="y-label">seed</span>
+              <input
+                class="y-input"
+                type="number"
+                style="width:90px"
+                value=${seed}
+                onchange=${(e: Event) => setSeed(Number((e.target as HTMLInputElement).value) | 0)}
+              />
+            </label>
+            <div class="y-divider"></div>
+            <button class="y-btn y-btn-ghost" disabled=${busy} onclick=${downloadModels}>
+              ⬇ Download weights (${gb(TOTAL_BYTES)})
+            </button>
+            <button
+              class="y-btn y-btn-ghost"
+              disabled=${busy}
+              onclick=${() => clearWeightCache().then(() => setStatus('🧹 weight cache cleared'))}
+            >
+              🧹 Clear cache
+            </button>
+          </div>
+        </div>
       </div>
       <div style=${() => `display:${progress() ? 'block' : 'none'};`}>
         <div
@@ -651,7 +677,7 @@ ${prompt()}</textarea
         </div>
       </div>
       <div class="y-label" style=${() => `display:${status() ? 'block' : 'none'};`}>${status}</div>
-      <div class="y-flex-col" style="gap: var(--yaar-sp-2); align-items: flex-start;">
+      <div class="anima-canvas-wrap">
         <canvas
           ref=${(el: HTMLCanvasElement) => (canvasEl = el)}
           width=${() => bucket().W}
@@ -660,12 +686,22 @@ ${prompt()}</textarea
             `width:${bucket().W}px; height:${bucket().H}px; max-width:100%; background: var(--yaar-bg-surface); ` +
             `border:1px solid var(--yaar-border); border-radius:6px;`}
         ></canvas>
-        <div class="y-flex" style="gap: var(--yaar-sp-2);">
-          <button class="y-btn" disabled=${() => busy() || !hasImage()} onclick=${copyImage}>
-            📋 Copy image
+        <div class="anima-img-actions" style=${() => `display:${hasImage() ? 'flex' : 'none'};`}>
+          <button
+            class="anima-icon-btn"
+            title="Copy image to clipboard"
+            disabled=${() => busy() || !hasImage()}
+            onclick=${copyImage}
+          >
+            📋
           </button>
-          <button class="y-btn" disabled=${() => busy() || !hasImage()} onclick=${saveImage}>
-            💾 Save PNG
+          <button
+            class="anima-icon-btn"
+            title="Save PNG"
+            disabled=${() => busy() || !hasImage()}
+            onclick=${saveImage}
+          >
+            💾
           </button>
         </div>
       </div>

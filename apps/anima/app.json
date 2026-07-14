@@ -5,8 +5,12 @@
   "run": "dist/index.html",
   "createShortcut": true,
   "capture": "dom",
-  "bundles": ["yaar-ml"],
-  "permissions": ["yaar://storage/"],
+  "bundles": [
+    "yaar-ml"
+  ],
+  "permissions": [
+    "yaar://storage/"
+  ],
   "version": "0.1.0",
   "author": "YAAR"
 }
