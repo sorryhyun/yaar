@@ -6,9 +6,7 @@
  */
 
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
-import { extractDomain, isDomainAllowed, addAllowedDomain } from '../../features/config/domains.js';
-import { actionEmitter } from '../../session/action-emitter.js';
-import { getSessionHub } from '../../session/session-hub.js';
+import { ensureDomainAllowed } from './domain-gate.js';
 import { getCookieHeader, captureResponseCookies } from './cookie-jar.js';
 
 export const MAX_RESPONSE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -43,49 +41,9 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
   // Validate URL scheme, format, and block internal networks (SSRF protection)
   validateUrl(url);
 
-  // Check domain allowlist — show permission dialog if sessionId is available
-  const domain = extractDomain(url);
-  if (!(await isDomainAllowed(domain))) {
-    const hub = getSessionHub();
-
-    // Resolve a valid LiveSession sessionId.
-    // The caller may pass a stale/restored sessionId that doesn't match
-    // any current LiveSession, so we validate against the SessionHub and
-    // fall back to the default session.
-    let sessionId: string | undefined;
-
-    // 1. Caller-provided sessionId — validate it's a live session
-    if (options?.sessionId && hub.get(options.sessionId)) {
-      sessionId = options.sessionId;
-    }
-
-    // 2. Default session (fallback for stale/mismatched IDs)
-    if (!sessionId) {
-      sessionId = hub.getDefault()?.sessionId;
-    }
-
-    if (!sessionId) {
-      throw new FetchDomainError(
-        `Domain "${domain}" is not in the allowed list. Add it to curl_allowed_domains.yaml.`,
-      );
-    }
-
-    // Show permission dialog to the user via WebSocket
-    const confirmed = await actionEmitter.showPermissionDialogToSession(
-      sessionId,
-      'Allow Domain Access',
-      `An app wants to make HTTP requests to "${domain}".\n\nDo you want to allow this domain?`,
-      'http_domain',
-      domain,
-    );
-
-    if (!confirmed) {
-      throw new FetchDomainError(`User denied access to domain "${domain}".`);
-    }
-
-    // User approved — add domain to allowlist
-    await addAllowedDomain(domain);
-  }
+  // Check domain allowlist — prompts the user when the domain is unknown
+  const denial = await ensureDomainAllowed(url, { sessionId: options?.sessionId });
+  if (denial) throw new FetchDomainError(denial.message);
 
   // Make the proxied request
   let timeoutHandle: ReturnType<typeof setTimeout> | undefined;

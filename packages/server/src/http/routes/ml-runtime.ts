@@ -23,7 +23,8 @@ import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
 import { requireBundle, resolvePrincipal } from '../access.js';
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
 import { downloadToFile } from '../../lib/download/chunked.js';
-import { extractDomain, isDomainAllowed } from '../../features/config/domains.js';
+import { ensureDomainAllowed } from '../../features/http/domain-gate.js';
+import { extractDomain } from '../../features/config/domains.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -138,15 +139,13 @@ async function proxyWeights(req: Request, url: URL): Promise<Response> {
     return errorResponse(err instanceof Error ? err.message : 'Invalid URL', 400);
   }
 
-  // Domain allowlist — do not silently exfiltrate to arbitrary hosts.
-  const domain = extractDomain(target);
-  if (!(await isDomainAllowed(domain))) {
-    return errorResponse(
-      `Domain "${domain}" is not allowed. Add it to config/curl_allowed_domains.yaml ` +
-        `(or set allow_all_domains: true) to download weights from it.`,
-      403,
-    );
-  }
+  // Domain allowlist — do not silently exfiltrate to arbitrary hosts. An unknown domain
+  // is a question for the user, not a 403: on a fresh install the allowlist is empty, and
+  // refusing outright left the app dead with no way to consent.
+  const denial = await ensureDomainAllowed(target, {
+    purpose: `An app wants to load model weights from "${extractDomain(target)}".`,
+  });
+  if (denial) return errorResponse(denial.message, 403);
 
   // Forward Range so browsers can resume/segment large downloads.
   const range = req.headers.get('range');
@@ -235,10 +234,15 @@ async function startDownload(req: Request): Promise<Response> {
   } catch (err) {
     return errorResponse(err instanceof Error ? err.message : 'Invalid URL', 400);
   }
-  const domain = extractDomain(target);
-  if (!(await isDomainAllowed(domain))) {
-    return errorResponse(`Domain "${domain}" is not allowed`, 403);
-  }
+  // Ask before refusing. This is the route a model download actually travels, and the
+  // very first thing a fresh install does with it is name a domain nobody has approved.
+  const denial = await ensureDomainAllowed(target, {
+    purpose:
+      `An app wants to download model weights from "${extractDomain(target)}" ` +
+      `to this machine's storage.`,
+  });
+  if (denial) return errorResponse(denial.message, 403);
+
   const r = resolveWritableDest(dest);
   if ('error' in r) return r.error;
 
