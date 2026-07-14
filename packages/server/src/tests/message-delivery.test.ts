@@ -276,7 +276,20 @@ describe('F-2 — the outbox can retry safely', () => {
   });
 });
 
-/** How many turns the monitor agent has actually been asked to run. */
+/**
+ * How many turns the monitor agent was asked to run — counted off the `AgentSession` stub
+ * this file installs.
+ *
+ * Good enough for the one thing it is used for below (a duplicate `messageId` must not run
+ * twice), and it must not be trusted with more than that. The stub's `handleMessage` resolves
+ * instantly, so there is no turn here in any real sense: a message that was *dropped* and a
+ * message that was *reordered* both leave this count looking perfect. What the count cannot
+ * see is exactly what the queue is for.
+ *
+ * The load-bearing version is `tests/loopback/loopback-message-loss.test.ts` (S4), which
+ * counts what the real provider was actually handed — every prompt, in the order the turns
+ * started, with one turn held open so the others have to queue behind it.
+ */
 function turnCount(session: InstanceType<typeof LiveSession>): number {
   const pool = session.getPool();
   const agent = pool?.agentPool.getMonitorAgent('0');

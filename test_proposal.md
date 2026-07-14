@@ -5,18 +5,31 @@ every test we must have, the harness they need, the small production seams that 
 requires, and the existing tests that must be deleted or rewritten because they test copies,
 mocks, or their own constants.
 
-> **Status: P0 and P1 are shipped, and the gate passes for both.** The seams (§1), the
-> harness (§2), S1 (§3.1), the answer-wait table and its tripwire (§3.2), the ordering
-> scenarios (§3.3) and the message-loss scenarios (§3.4) are in
-> `packages/server/src/tests/loopback/` — 16 tests, ~350ms. The mutation check now
-> discriminates across the whole suite: deleting the answer-frame bypass turns **all five
-> S2 rows red, each with its own wait's signature** (see §3.2), while S3's ordering rows and
-> all of S4 stay green — they test the queue, not the bypass. P2–P3 are untouched. Three
-> things in this document were **wrong about reality** and are corrected in place — the
-> harness directory (§2), the liveness helpers (§2.1), and §3.2's assumption that liveness
-> alone could carry a row (§6.4). §6 records what building it turned up, including a live
-> order-dependent failure in the existing suite and a **cross-session leak in production**
-> (§6.5).
+> **Status: P0–P3 are shipped.** The seams (§1), the harness (§2) and every scenario S1–S7
+> live in `packages/server/src/tests/loopback/` — **31 tests, ~1.7s** in their own Bun
+> process — with the frontend half (F-1…F-4) in
+> `packages/frontend/src/tests/store/app-protocol.test.ts`. The §4 deletions are done: the
+> hand-written `TestableAppProtocolEmitter` is gone and its file now tests the real
+> `actionEmitter` (§6.6). Whole gate: **438 server tests, 67 frontend, typecheck and lint
+> clean.**
+>
+> Every scenario has been shown to go **red** against a deliberate mutation of the code it
+> guards — that is the only evidence a test is worth anything, and §6.8 records the four
+> mutations and which rows each one killed. The most useful thing that came out of it: **S6
+> is a second, independent detector of the original deadlock** (delete the answer-frame
+> bypass and all three slow-app rows go red), while S5 and S7 correctly stay green, because
+> they are about timeouts and the deadlock is not.
+>
+> The only thing deliberately **not** built is §3.9, the real-Chromium e2e smoke — the
+> reasoning is in §3.9 and it is a recommendation, not an omission.
+>
+> **Five things in this document were wrong about reality** and are corrected in place: the
+> harness directory (§2), the liveness helpers (§2.1), §3.2's assumption that liveness alone
+> could carry a row (§6.4), §3.8's assumption that the frontend had none of F-1…F-4 (§6.7),
+> and §4's claim about `toHaveBeenCalled()` (§6.7). §6 records what building it turned up,
+> including a live order-dependent failure in the existing suite (§6.1), a **cross-session
+> leak in production** (§6.5), and a second cross-file leak — this one in the *frontend*
+> tests — that the new drain test tripped over on its first full-suite run (§6.7).
 
 ## 0. Findings: why the 460 tests missed the deadlock (verified, not assumed)
 
@@ -280,75 +293,137 @@ vacuously green.
 This file is what makes it *safe* to ever stop awaiting the whole turn in `routeOne` — if
 that refactor drops or reorders a message, this is the red light.
 
-### 3.5 `loopback-dead-client.test.ts` — Scenario 5, a dead client doesn't wedge the server
+### 3.5 `loopback-dead-client.test.ts` — Scenario 5, a dead client doesn't wedge the server ✅
 
-Responder deliberately silent; deadlines at ~50ms.
+Built as the **mirror of the S2 table**: the same five waits, and no responder anywhere in
+the file. That absence *is* the dead client. Deadlines at 80ms (50 proved too tight to
+distinguish from `expectStillPending`'s own macrotask flush on a loaded CI box).
 
-- `expectStillPending(turn)` just before the deadline; turn settles at the deadline
-  (`expectSettlesWithin(deadline + slack)`);
-- the tool step received the *truthful* message (`App did not respond within …`, or for the
-  prompt row `{dismissed: true, timedOut: true}` — "never saw it", not "declined");
-- the **next** `USER_MESSAGE` on the same socket completes normally — the queue survived.
+Per row: `expectStillPending(turn)` once the question is on the wire, then the turn settles
+on its own inside its budget, then — the row's real assertion — the tool received the
+*truthful* message. Each is chosen to be **unmistakable for an answer**: an app that never
+registers and an app that registers and then says nothing get *different* sentences (one is
+worth retrying, the other is not); a starved capture is `ok: false, reason: 'timeout'`, not a
+rendered window; a dialog is `false`; a prompt is `{dismissed: true, timedOut: true}` — "never
+saw it", deliberately distinct from "declined". Plus: the **next** `USER_MESSAGE` on the same
+socket runs normally — a dead client costs one turn, not the connection.
 
-### 3.6 `loopback-slow-app.test.ts` — Scenario 6, slow is not broken
+One note on the assertions: the command timeout is matched by *shape*
+(`/^App did not respond within \d+s\b/` + "retry with a larger timeoutMs"), not by re-typing
+production's format string into the test. A test that spells the sentence out is asserting a
+constant it declared itself, and would go on passing if the message were reworded into
+something useless — the §4 rule, applied to §4's own file.
+
+### 3.6 `loopback-slow-app.test.ts` — Scenario 6, slow is not broken ✅
 
 Server deadline 300ms; responder answers at 150ms — slower than "instant" (the regime the
 old frontend 5s relay timer punished) but inside the server's deadline. The turn gets the
-real answer, no timeout string anywhere. (The frontend half of this scenario is F-3 below —
-the relay must no longer own a clock.)
+real answer, and **no timeout string is anywhere near it**
+(`expect(text).not.toMatch(/did not respond|did not register|timeout/i)`). Two assertions
+beyond that: the round trip really *waited* (`elapsed >= 150ms` — otherwise the test would
+still pass if the server answered itself the instant it asked, which is the exact shape of a
+second clock speaking for an app that is still thinking), and the deadline the server put on
+the wire is the one it is actually keeping (a relay cannot honour a deadline it was never
+told). A third row proves a caller's own `timeoutMs` survives, against a *default* short
+enough to have timed the command out.
 
-### 3.7 `late-reply.test.ts` — Scenario 7, late is reported, never silent
+**This file turned out to be a second, independent detector of the original deadlock** —
+delete the answer-frame bypass and all three rows go red, because a reply queued behind the
+turn is exactly a reply that misses its deadline. S1 and S6 now fail for the same bug by two
+different routes.
 
-Runs against the real `actionEmitter` (no full loopback needed) plus one loopback variant:
+### 3.7 `loopback-late-reply.test.ts` — Scenario 7, late is reported, never silent ✅
 
-- deadline 30ms, reply at 60ms: turn already ended with the timeout message; `console.warn`
-  spy captured `[AppProtocol] Late reply … arrived after Xms, Yms past its deadline`
-  (`action-emitter.ts:664`) — the latency is in the log;
-- reply for a never-issued `requestId`: the "unknown request" warn branch;
-- reply within the 5-minute grace after expiry vs. after pruning: remembered vs. unknown.
+Real `actionEmitter` for the first three, one full-loopback variant for the fourth (it lives
+in `loopback/` rather than `src/tests/` so that no other file's `mock.module` can reach it):
 
-### 3.8 Frontend counterparts — `packages/frontend/src/tests/store/app-protocol-relay.test.ts`
+- deadline 30ms, reply at 60ms: the turn already ended with the timeout message, and the
+  `console.warn` spy captured `[AppProtocol] Late reply … arrived after Xms, Yms past its
+  30ms deadline`. **The latency is the finding** — a reply 3ms late is a slow app; a reply
+  arriving *exactly one deadline* late, every time, from an app that answered instantly, is a
+  queue holding it. Those two are indistinguishable in the agent's transcript and obvious in
+  this log line, which is the entire reason the log line exists;
+- reply for a never-issued `requestId` → the "unknown request" branch, and explicitly *not*
+  the late one (nothing was waiting, so there is no latency to report and no app to
+  exonerate);
+- **remembered vs. pruned**: the expired request is held for a 5-minute grace window and then
+  forgotten. Tested with `setSystemTime` (Bun can move `Date` even though it cannot fake
+  `setTimeout`, and the prune reads `Date.now()`), so the same reply is *late* inside the
+  window and *unknown* after it. A test that only ever looked inside the window would pass
+  just as well if the map grew forever — which is the leak this codebase has already shipped
+  once (§6.5);
+- the loopback variant: the late reply lands on a live socket the server is no longer
+  holding, is logged as late, and **costs the connection nothing** — the next `USER_MESSAGE`
+  still runs.
+
+### 3.8 Frontend counterparts — `packages/frontend/src/tests/store/app-protocol.test.ts` ✅
 
 The acceptance criterion says reverting *either* half of the fix must go red. The server
 harness plays the client itself, so it cannot see a frontend regression; the frontend half
-needs its own fast tests (extending the already-touched `app-protocol.test.ts`):
+needs its own fast tests.
 
-- **F-1 (mutation target for the second half):** on `APP_PROTOCOL_REQUEST` → iframe reply,
-  the store calls `sendEvent` with `APP_PROTOCOL_RESPONSE` **synchronously/directly**, not
-  via the Zustand pending queue. Reverting `sendAppProtocolResponse` to queueing goes red
-  here in milliseconds.
-- **F-2:** socket down → the reply lands in `pendingAppProtocolResponses` (fallback kept)
-  and is drained on reconnect.
-- **F-3:** the relay **never fabricates a timeout response**. Let its
-  `timeoutMs + LISTENER_GRACE_MS` timer fire: no `APP_PROTOCOL_RESPONSE` frame is produced,
-  the listener is merely unhooked. And the timer is armed with the *server-provided*
-  `timeoutMs`, not a private constant.
-- **F-4:** `yaar:app-ready` is a direct send; `resendAppProtocolReady` on reattach sends
-  `reannounce: true` and skips unmounted windows.
+**Three of the four already existed** — written alongside the fix itself, in
+`app-protocol.test.ts` rather than the new `app-protocol-relay.test.ts` this document
+invented. P2's frontend work was therefore one leg, not four. Naming what was already there
+(rather than adding a second file that would have shadowed it) is the point of §4's rule
+about tests that test copies:
 
-### 3.9 Optional (P3): one real end-to-end smoke
+- **F-1 (mutation target for the second half):** ✅ *"sends the reply straight down the
+  socket, never through the pending queue"*. Reverting `sendAppProtocolResponse` to queueing
+  goes red here in milliseconds.
+- **F-2:** ✅ fallback existed (*"falls back to the pending queue only when the socket is
+  down"*); the **drain half was missing and is new** — *"drains the queued reply when the
+  socket comes back"*. A queue that fills and never empties is not a fallback, it is a leak
+  that also loses the reply. Verified red against a drainer that skips the app-protocol queue.
+- **F-3:** ✅ *"manufactures no response when the app stays silent — the server owns the
+  deadline"* and *"outlives the server deadline before unhooking"* (the timer is armed with
+  the **server-provided** `timeoutMs`, not a private constant).
+- **F-4:** ✅ `yaar:app-ready` is a direct send (unflagged), and `resendAppProtocolReady`
+  re-announces with `reannounce: true` and skips unmounted windows.
 
-The only test that exercises both halves at once with zero fakes: launch the real server
-(`make claude-dev` topology, scripted provider substituted via env), drive a real Chromium
-at the real frontend, open a trivial protocol app, issue one command, assert the round trip
-beats the deadline. Expensive and flaky-prone — run nightly or pre-release, not per-commit.
-The per-commit guarantee is S1 + F-1 in combination.
+### 3.9 Optional (P3): one real end-to-end smoke — **not built, deliberately**
 
-## 4. Tests to delete, rewrite, or demote
+Everything else in this document is built. This one is a recommendation against, and it is
+worth stating the reasoning rather than leaving it as an open checkbox someone ticks later
+out of tidiness.
 
-- **Delete** `TestableAppProtocolEmitter` and rewrite
-  `action-emitter-app-protocol.test.ts` against the real `actionEmitter`
-  (`app-protocol-resolve.test.ts` already proves this is possible; `runWithAgentContext`
-  handles the AsyncLocalStorage objection). A test of a hand-copy is worse than no test —
-  it is green *because* it can't see production.
-- **Demote** `ws-head-of-line.test.ts` to what it is: a fast unit test of queue *policy*
-  (keep it — it's cheap and precise) — but it is not the deadlock's regression test and its
-  header comment should say the loopback S1 is. Its fake session means it would stay green
-  if `routeMessage` itself regressed.
-- **Audit and replace** every `expect(mockHandleMessage).toHaveBeenCalled()`-style assertion
-  in routing tests with an assertion on what the scripted provider actually received, as
-  the harness makes that possible (`message-delivery.test.ts` turn-count assertions migrate
-  naturally).
+What it would add over what now exists: nothing that is *load-bearing*. Its unique claim is
+"both halves, zero fakes, one process" — but S1 already proves the server half against a
+client that answers on the real socket, F-1 proves the frontend half against a real store and
+a real `postMessage` relay, and the two mutation checks (delete the server bypass → S1+S6
+red; revert the relay to queueing → F-1 red) are precisely the acceptance criterion this
+scenario was invented to satisfy. What it would add instead is a real Chromium, a real
+provider process, and a real port — i.e. three new ways to be red for reasons that have
+nothing to do with the app protocol, on a test whose whole value is being trusted when it is
+red. A flaky guard rail gets muted, and a muted guard rail is worse than an absent one,
+because the suite still looks like it covers this.
+
+If it is ever built, it belongs on a nightly, and it should assert **latency**, not
+correctness — the one thing the loopback cannot see is a real browser being slow (a throttled
+background tab, a 60Hz raf, a real postMessage hop), and that is a *number* worth watching
+over time, not a boolean worth blocking a commit on.
+
+## 4. Tests to delete, rewrite, or demote ✅
+
+- **Deleted.** `TestableAppProtocolEmitter` is gone; `action-emitter-app-protocol.test.ts`
+  now tests the real `actionEmitter` (17 tests). The AsyncLocalStorage objection was never
+  real — `runWithAgentContext` supplies the context, exactly as the MCP HTTP handler does in
+  production. See §6.6: the copy was not merely stale, it *was* the §6.5 bug, and it could
+  never have found it.
+- **Demoted.** `ws-head-of-line.test.ts` keeps its tests (cheap, precise, a real statement of
+  queue *policy*) and its header now says plainly what it is not: its session is a stub, so it
+  would stay green if `routeMessage` regressed, and it stayed green through the entire life of
+  the bug it appears to be about. The regression test is the loopback S1, and the header names
+  it.
+- **Audited — and the claim above was wrong.** There is no
+  `expect(mockHandleMessage).toHaveBeenCalled()` anywhere in the routing tests. What exists is
+  `handleMessage.mock.calls.length` (`message-delivery.test.ts`), which is a *count*, and a
+  count is strictly better than `toHaveBeenCalled()` — it catches a doubled message. It still
+  cannot catch a dropped or reordered one, because the stub it counts resolves instantly and
+  there is no turn to drop or reorder. So it is kept (it is the fast check for the duplicate-
+  `messageId` case) and **annotated with what it cannot see**, pointing at loopback S4, which
+  counts what the real provider was actually handed. Rewriting it to use the harness would
+  have bought nothing S4 does not already prove.
 - **Rule, enforced in review:** a test that mocks `SessionHub`, `LiveSession`, or
   `ContextPool` may not claim to test message routing; a test may not assert a timeout
   constant its own mock defined; a new `PendingStore` use without a §3.2 table row does not
@@ -363,8 +438,8 @@ The per-commit guarantee is S1 + F-1 in combination.
 |---|---|---|---|
 | **P0** | Seams §1.1–1.3 → harness §2 (fake client, scripted provider, boot/dispose, liveness helpers) → **S1** → run the mutation check | The deadlock class is covered; acceptance criterion met | ✅ **done** — gate passes (red in 644ms) |
 | **P1** | S2 table (all five waits + tripwire guard), S3 ordering, S4 message loss | Every current wait covered; queue fix proven both directions; un-awaiting the turn becomes a safe future refactor | ✅ **done** — 16 loopback tests; mutation reds all 5 rows, leaves the queue rows green |
-| **P2** | S5 dead client, S6 slow app, S7 late reply, F-1…F-4 frontend | Failure modes and the frontend half covered | open |
-| **P3** | §4 deletions/rewrites; optional §3.9 e2e smoke | Sandbagging tests removed; no green-by-copy remains | open |
+| **P2** | S5 dead client, S6 slow app, S7 late reply, F-2 frontend drain (F-1/F-3/F-4 already existed — §6.7) | Failure modes and the frontend half covered | ✅ **done** — 31 loopback tests; S6 reds under the deadlock mutation too |
+| **P3** | §4 deletions/rewrites; §3.9 e2e smoke **recommended against** (§3.9) | Sandbagging tests removed; no green-by-copy remains | ✅ **done** — the hand-copy is gone and its replacement reds 6× under a re-introduced §6.5 |
 
 P0 was the gate: if the mutation check (revert the `ANSWER_EVENTS` bypass → S1 red in < 1s)
 did not pass, stop and make the harness real before writing any further scenario — a harness
@@ -462,3 +537,77 @@ between tests, because there is no longer global state to scrub.
 
 Worth naming for the same reason as §6.1: the state that broke the test was global,
 unowned, and invisible to every unit test, because a unit test never has a second session.
+
+### 6.6 The hand-copy was not stale — it *was* the bug
+
+`action-emitter-app-protocol.test.ts` defined a `TestableAppProtocolEmitter`, a
+re-implementation of the emitter's app-protocol methods, written "to avoid AsyncLocalStorage
+and other server dependencies", and asserted against that. Ten tests, green forever, and
+§0.4 already knew they were worthless. What was not appreciated until they were deleted is
+*how* worthless:
+
+- the copy modelled readiness as **one process-wide `Set<windowId>` with no session in the
+  key** — which is precisely the production bug §6.5 found. The copy could not have caught
+  it. The copy *was* it, faithfully, in a file whose job was to catch it;
+- it still resolved a timed-out request to `null`, a shape production had abandoned for
+  `PendingOutcome` — so it was simultaneously green about behaviour production no longer had;
+- it imported the production emitter **zero times**. Not "a little decoupled": there was no
+  path from any assertion in that file to any line of shipped code.
+
+The replacement tests the real emitter, and most of it is about the thing the copy could not
+express at all — that readiness is scoped to a session, that a closed window forgets, that a
+wait which cannot name its session **fails closed**. The proof it is real: re-introduce the
+§6.5 leak (make `isAppReady` search every session's set) and **6 of the 17 go red**. The old
+file, under the same mutation, cannot go red — it never sees the code.
+
+This is the strongest available argument for the §4 rule. A test of a copy does not merely
+fail to catch bugs; it *reproduces* them, and then reports that they are not there.
+
+### 6.7 Two more things this document was wrong about, and a leak in the frontend tests
+
+**§3.8 assumed the frontend had none of F-1…F-4.** Three of the four already existed, written
+alongside the fix, in `app-protocol.test.ts` — the file this document proposed to *extend*
+while also proposing a new `app-protocol-relay.test.ts` to hold the same tests. Building the
+second file would have produced two files asserting the same contract, which is how a suite
+starts telling itself things twice and believing them twice. The real gap was one leg: the
+queued reply was proven to *enter* the fallback queue and never proven to *leave* it. That is
+now F-2's second test.
+
+**§4 misquoted the routing tests.** They do not assert `toHaveBeenCalled()`; they count
+`mock.calls.length`. The criticism survives the correction (a count against an instant stub
+cannot see a dropped or reordered message) but the quote did not, and it was reproduced
+verbatim in the S4 file's header, where it has been fixed. A document that mis-describes the
+code it is auditing is doing a smaller version of what it is auditing the code for.
+
+**And the new drain test found a leak — in the frontend suite this time.** It passed alone
+and failed in the full run, reading *two* frames where it expected one. The second frame was
+another file's: the Zustand store is a module singleton shared by every test file in the Bun
+process, `drainPendingQueues` empties all six outbound queues at once, and each test file
+resets only the slice it happens to care about — so `feedback-slice.test.ts` left an item in
+`pendingFeedback`, and the drain test flushed it and counted it as its own. Same family as
+§6.1 (a suite green because of the order it ran in), a different runtime, and found the same
+way: by a new test changing the shape of the process and setting off a mine that was already
+armed. Fixed on both sides — the file now resets every queue it will look at, and the
+assertion filters to the frames it is actually about.
+
+### 6.8 The mutations, and which rows died
+
+No test in this document is trusted because it is green. Each was made to go **red** against
+a deliberate break in the code it claims to guard, and the *pattern* of reds is as
+informative as the reds:
+
+| Mutation | Goes red | Stays green — correctly |
+|---|---|---|
+| Delete the `isAnswerEvent` bypass (**the original deadlock**) | **S1** (2/3), **S6** (3/3) | S5, S7 — they are about timeouts, and the deadlock does not change what a timeout does |
+| `handleAppCommand` ignores the caller's `timeoutMs` | S6's caller-timeout row (1/3) | S6's other rows — they do not pass one |
+| A late reply is dropped in silence (no expired-request memory) | **S7** (3/4) | S7's unknown-request row — a reply nobody asked for was never late |
+| An unanswered prompt loses `timedOut` | S5's prompt row (1/6) | S5's other rows — a different wait, a different truth |
+| Readiness forgets the session (**re-introduce §6.5**) | 6/17 of the rewritten emitter tests | — |
+| The drainer skips the app-protocol queue | F-2's drain test | — |
+
+The first row is the one worth keeping. **S6 was not designed to catch the deadlock** — it
+was designed to prove that a merely-slow app is not reported as a broken one. It catches the
+deadlock anyway, because under the deadlock a reply *is* late, which is what makes the two
+bugs the same bug seen from two ends. That is the sign the harness is measuring the system
+rather than the test author's expectations of it: it found a connection that was not put
+there on purpose.

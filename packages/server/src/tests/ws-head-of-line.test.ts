@@ -15,6 +15,19 @@
  *
  * The rule these tests encode: **frames that answer a pending server-side wait overtake the
  * queue; everything else keeps its order.**
+ *
+ * **This is a unit test of queue *policy*, and it is not the deadlock's regression test.**
+ * Worth being blunt about, because it looks like one. Its session is a stub that records
+ * event types: no `LiveSession`, no `ContextPool`, no turn. So it would stay green if
+ * `routeMessage` itself regressed, and it stayed green through the entire life of the bug it
+ * appears to be about — the bug was never in this queue, it was in the composition of this
+ * queue with a turn that waits for a frame *behind* the one it is holding. Nothing that mocks
+ * one side of that seam can see it.
+ *
+ * The regression test is `tests/loopback/loopback-app-protocol.test.ts` (S1), which runs the
+ * real stack and answers on the real socket. Keep this file — it is cheap and it pins the
+ * policy precisely — but if you are changing the answer-frame bypass, that is the file that
+ * has to go red.
  */
 import { mock, describe, it, expect, beforeEach } from 'bun:test';
 import type { ServerWebSocket } from 'bun';

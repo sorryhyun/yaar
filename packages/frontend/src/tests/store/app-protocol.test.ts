@@ -16,6 +16,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { handleAppProtocolRequest, resendAppProtocolReady, useDesktopStore } from '@/store';
 import { toWindowKey } from '@/store/helpers';
 import { wsManager } from '@/hooks/use-agent-connection/transport-manager';
+import { drainPendingQueues } from '@/hooks/use-agent-connection/usePendingEventDrainer';
 import type { AppProtocolRequest } from '@yaar/shared';
 
 const MONITOR_ID = '0';
@@ -33,7 +34,17 @@ function resetStore() {
     providerType: null,
     sessionId: null,
     activeMonitorId: MONITOR_ID,
+    // *Every* outbound queue, not just this file's own. The store is a module singleton
+    // shared by every test file in the Bun process, and `drainPendingQueues` empties all six
+    // queues at once — so a stray item another file left in `pendingFeedback` becomes a frame
+    // on this file's socket, and the drain test below reads it as its own. Reset what you
+    // will be looking at.
+    pendingFeedback: [],
     pendingAppProtocolResponses: [],
+    pendingAppInteractions: [],
+    pendingAppEvents: [],
+    pendingInteractions: [],
+    pendingGestureMessages: [],
   });
 }
 
@@ -147,6 +158,51 @@ describe('handleAppProtocolRequest', () => {
       windowId,
       response: { kind: 'query', data: { items: [] } },
     });
+  });
+
+  it('drains the queued reply when the socket comes back', () => {
+    const windowId = 'win-reconnect';
+    const { iframe } = createWindowElement(windowId);
+    stubContentWindow(iframe);
+
+    // Socket down: the reply has nowhere to go but the queue.
+    handleAppProtocolRequest('req-drain', windowId, { kind: 'command', command: 'save' });
+    replyFromIframe(iframe, {
+      type: 'yaar:app-command-response',
+      requestId: 'req-drain',
+      result: 'saved',
+    });
+    expect(useDesktopStore.getState().pendingAppProtocolResponses).toHaveLength(1);
+
+    // Socket back. The reconnect is not a store change — the queue filled while the socket
+    // was down and has sat unchanged since — so nothing wakes the subscriber and the attach
+    // handler must drain by hand. A queue that fills and never empties is not a fallback,
+    // it is a leak that also loses the reply.
+    const { sent } = openSocket();
+    const send = (event: unknown) => {
+      (wsManager.ws as WebSocket).send(JSON.stringify(event));
+    };
+    drainPendingQueues({ send: send as never, addCliEntry: (() => {}) as never });
+
+    // Filtered to the frames this test is about: `drainPendingQueues` empties all six of the
+    // store's outbound queues, and the other five are not this test's business.
+    const replies = sent.filter((e) => e.type === 'APP_PROTOCOL_RESPONSE');
+    expect(replies).toHaveLength(1);
+    expect(replies[0]).toMatchObject({
+      type: 'APP_PROTOCOL_RESPONSE',
+      requestId: 'req-drain',
+      windowId,
+      response: { kind: 'command', result: 'saved' },
+    });
+    // Consumed, not copied: a drain that leaves the item behind re-sends it on every
+    // subsequent reconnect, and the server answers each one with "unknown request".
+    expect(useDesktopStore.getState().pendingAppProtocolResponses).toHaveLength(0);
+
+    // The server has almost certainly given up by now — its deadline did not pause while the
+    // socket was down. This reply is expected to land as a *late* one and be logged as such
+    // (`resolveAppProtocolResponse`, server-side S7). That is the point: a late reply that is
+    // reported beats a reply that is silently dropped, because only one of them tells you the
+    // app was working.
   });
 
   it('reports a missing window element as an error, immediately', () => {

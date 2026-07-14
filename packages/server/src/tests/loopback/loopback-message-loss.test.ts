@@ -8,12 +8,14 @@
  * await is quietly providing: that every message runs, that it runs once, and that messages
  * from one client run in the order they were sent.
  *
- * Nothing was watching. The existing routing tests assert `expect(mockHandleMessage).
- * toHaveBeenCalled()` against a stub that resolves instantly — under which a dropped
- * message, a doubled message and a reordered message all look identical to a correct one.
- * Here the evidence is what the *provider* was actually handed: `registry.turns` is the
- * prompt of every turn any agent in the session really ran, in the order they started. That
- * is "the user's message got handled", rather than "a mock got poked".
+ * Nothing was watching. The closest the existing routing tests come is
+ * `handleMessage.mock.calls.length` (`message-delivery.test.ts`) — a count, taken against a
+ * stub that resolves instantly. A count catches a *doubled* message and nothing else: under a
+ * stub that never actually runs, a message that was dropped and a message that was reordered
+ * are both invisible, because there is no turn to drop or reorder. Here the evidence is what
+ * the *provider* was really handed: `registry.turns` is the prompt of every turn any agent in
+ * the session actually ran, in the order they started. That is "the user's message got
+ * handled", rather than "a mock got poked".
  *
  * If a future change to `routeOne` drops or reorders a message, this is the red light.
  */
