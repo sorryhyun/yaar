@@ -547,6 +547,9 @@ export class LiveSession {
       reloadCache.invalidateForWindow(wid);
       pool.handleWindowClose(wid, appId, monitorId);
       subscriptionRegistry.clearForWindow(wid);
+      // The iframe that registered is gone. Reopening the app under the same key mounts a
+      // new document, which must register again before anything is commanded to it.
+      actionEmitter.forgetAppReady(this.sessionId, wid);
     });
 
     // Pass the session-owned logger (if already created by early user interactions)
@@ -795,7 +798,10 @@ export class LiveSession {
           this.windowState.handleMap.getRawWindowId(event.windowId);
         const wasReady = this.windowState.getWindow(windowKey)?.appProtocol ?? false;
         this.windowState.setAppProtocol(windowKey);
-        actionEmitter.notifyAppReady(windowKey);
+        // Readiness is this session's fact about this session's iframe — a second browser
+        // showing the same app on the same monitor has the same window key and a document
+        // that has said nothing.
+        actionEmitter.notifyAppReady(this.sessionId, windowKey);
         // Replay stored commands only on re-registration (reload/remount), not first time —
         // and never on a re-announce, where the desktop is repeating a registration it
         // already witnessed and the iframe never remounted (see AppProtocolReadyEvent).

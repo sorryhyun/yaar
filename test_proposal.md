@@ -422,23 +422,43 @@ denies by default, the user's own text from a prompt that reports `{dismissed: t
 This is §0's finding restated one level up: a deadlock *produces an output*, so any
 assertion that accepts an output accepts the deadlock. See the fourth column in §3.2.
 
-### 6.5 A production bug, found by the second test that used the harness
+### 6.5 A production bug, found by the second test that used the harness — and fixed ✅
 
 The `APP_PROTOCOL_READY` row failed on arrival — the command it was supposed to unblock
-timed out. The cause was not the test. `ActionEmitter.readyWindows`
-(`action-emitter.ts:146`) is a process-global `Set` keyed by window key (`"0/ai-chat"`),
-with **no session in the key and no removal, ever**. The first row to register that app
-leaves the key in the set; every session afterwards — a different `LiveSession`, a
-different browser, a different user — finds `waitForAppReady` returning `true` for an
-iframe that has never spoken, and `requireAppReady` stops being a wait.
+timed out. The cause was not the test. `ActionEmitter.readyWindows` was a process-global
+`Set` keyed by window key (`"0/ai-chat"`), with **no session in the key and no removal,
+ever**. The first row to register that app left the key in the set; every session
+afterwards — a different `LiveSession`, a different browser, a different user — found
+`waitForAppReady` returning `true` for an iframe that had never spoken, and
+`requireAppReady` stopped being a wait.
 
-In the product this means a new session's first `command` to a freshly-opened app can be
-sent before that app's iframe has registered, and is then covered only by the command's own
-deadline (i.e. it surfaces as "App did not respond" — the exact symptom this whole document
-is about, from a second cause). Impact is mild and the fix is not a test's business, so P1
-took the narrow half: `resetReadyWindowsForTest()`, called by the harness at `boot` and
-`dispose`, plus a comment at the declaration naming the leak. **The real fix is
-session-scoped readiness keys, and it is not done.**
+In the product that meant a new session's first `command` to a freshly-opened app could be
+sent before that app's iframe had registered, covered only by the command's own deadline —
+surfacing as "App did not respond", the exact symptom this whole document is about, from a
+second and entirely unrelated cause. The set also never forgot a closed window, so a
+desktop open for a day accumulated one entry per window it had ever shown.
+
+**Fixed.** Readiness is now a `Map<sessionId, Set<windowKey>>`; `notifyAppReady`,
+`isAppReady` and `waitForAppReady` all take the session, and the internal `'app-ready'`
+event carries `{sessionId, windowId}` so a registration in session A cannot wake a waiter in
+session B. Entries are dropped when the session goes (`clearPendingForSession`, reached from
+`SessionHub.remove`) and when the window closes (`forgetAppReady`, on `LiveSession`'s
+window-close callback — reopening a window under the same key mounts a *new* document, and a
+surviving registration would tell its first command the app was already listening: the same
+defect at a smaller radius). A caller with no resolvable session now **fails closed** — an
+`undefined` session matches no `'app-ready'` event, so the wait times out rather than
+falsely proceeding, which is the safe direction for a check whose whole job is to wait.
+
+The proof is `loopback-app-ready-scope.test.ts` (S5): register an app, throw the session
+away, boot a second session, and assert the wait comes back. It asserts that **no
+`APP_PROTOCOL_REQUEST` is on the wire while the turn is parked** — under the leak the
+request is already sent, which is the defect made visible *before* any deadline expires and
+without relying on liveness (a starved wait ends too, at its deadline). Verified red on the
+old code, green on the new.
+
+`resetReadyWindowsForTest()` — the test-only seam P1 added to paper over this — is **gone**,
+which is the tell that the fix is real: the harness no longer needs to scrub global state
+between tests, because there is no longer global state to scrub.
 
 Worth naming for the same reason as §6.1: the state that broke the test was global,
 unowned, and invisible to every unit test, because a unit test never has a second session.

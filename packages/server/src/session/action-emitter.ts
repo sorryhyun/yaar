@@ -118,6 +118,16 @@ interface AppRequestMeta {
 }
 
 /**
+ * One iframe, in one session, saying "I am listening". Both halves are the key: the window
+ * key alone names a *place* on a desktop, and two browsers looking at the same YAAR have
+ * the same places. See `readyWindows`.
+ */
+interface AppReadyEvent {
+  sessionId: string;
+  windowId: string;
+}
+
+/**
  * Global action emitter instance.
  */
 class ActionEmitter extends EventEmitter {
@@ -143,7 +153,22 @@ class ActionEmitter extends EventEmitter {
     string,
     { permissionOptions?: PermissionOptions; expiredAt: number }
   >();
-  private readyWindows = new Set<string>();
+  /**
+   * Which iframes have registered with the App Protocol — per session, per window key.
+   *
+   * The window key ("0/ai-chat") names a window on a monitor, and *every* session has a
+   * monitor 0. Keyed by that alone (as this was) the set is a claim about the process, not
+   * about anyone's browser: the first session to open an app made that key ready forever,
+   * so the next session's `waitForAppReady` returned true for an iframe that had never
+   * spoken, `requireAppReady` stopped being a wait, and the first command went out to an
+   * iframe not yet listening — reaching the agent as "App did not respond".
+   *
+   * So the session is in the key, and the whole entry is dropped when the session goes
+   * (`clearPendingForSession`) or the window closes (`forgetAppReady`). Nothing ever left
+   * the old set, either: a desktop open for a day accumulated one entry per window it had
+   * ever shown.
+   */
+  private readyWindows = new Map<string, Set<string>>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
   private currentAgentId: string | undefined;
@@ -559,47 +584,59 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
-   * Notify that an iframe app has registered with the App Protocol.
-   * Resolves any pending waitForAppReady() calls for this window.
+   * Notify that an iframe app in `sessionId` has registered with the App Protocol.
+   * Resolves any pending waitForAppReady() calls for that session's window.
    */
-  notifyAppReady(windowId: string): void {
-    this.readyWindows.add(windowId);
-    this.emit('app-ready', windowId);
+  notifyAppReady(sessionId: string, windowId: string): void {
+    let windows = this.readyWindows.get(sessionId);
+    if (!windows) {
+      windows = new Set();
+      this.readyWindows.set(sessionId, windows);
+    }
+    windows.add(windowId);
+    this.emit('app-ready', { sessionId, windowId } as AppReadyEvent);
   }
 
   /**
-   * Check if an app has already signaled readiness.
+   * Check if an app has already signaled readiness *in this session*.
    */
-  isAppReady(windowId: string): boolean {
-    return this.readyWindows.has(windowId);
+  isAppReady(sessionId: string, windowId: string): boolean {
+    return this.readyWindows.get(sessionId)?.has(windowId) ?? false;
   }
 
   /**
-   * Forget every app-protocol registration. **Tests only** — see the caveat below.
+   * Forget one window's registration — it closed.
    *
-   * `readyWindows` is process-global and keyed by window key ("0/ai-chat"), not by session,
-   * and nothing ever removes from it. So the first session to register an app makes that
-   * key "already ready" for every session that follows: `waitForAppReady` returns true for
-   * an iframe that has never spoken, and `requireAppReady` stops being a wait. In the
-   * product the request's own deadline still covers that (the command goes out early, and
-   * times out if nobody is listening yet) — in a test it is fatal, because the second test
-   * to seed the same app id never enters the wait it exists to prove, and passes or fails
-   * on the state its predecessor left behind.
-   *
-   * The loopback harness resets this between tests (`boot`/`dispose`). Cross-session
-   * readiness is a production defect in its own right and wants session-scoped keys, not
-   * this method.
+   * A window key is reused: close "ai-chat" and open it again and the key is the same, but
+   * the iframe behind it is a new document that has not registered. A registration that
+   * outlived its window would tell the next one's first command that the app is already
+   * listening. This is the same defect as the cross-session one, at a smaller radius.
    */
-  resetReadyWindowsForTest(): void {
-    this.readyWindows.clear();
+  forgetAppReady(sessionId: string, windowId: string): void {
+    const windows = this.readyWindows.get(sessionId);
+    if (!windows) return;
+    windows.delete(windowId);
+    if (windows.size === 0) this.readyWindows.delete(sessionId);
   }
 
   /**
-   * Wait for an iframe app to register with the App Protocol.
-   * Resolves true if the app is already ready or becomes ready within the timeout.
+   * Wait for an iframe app to register with the App Protocol, in the caller's session.
+   * Resolves true if that session's app is already ready or becomes ready within the timeout.
+   *
+   * `sessionId` is required and not defaulted: a wait that cannot name whose iframe it is
+   * waiting for is the bug. An undefined session matches no registration (they all carry
+   * one), so it waits out its deadline rather than borrowing another session's answer —
+   * but it is also unreachable in practice, since the window registry the caller checked
+   * before waiting was itself resolved from a session.
    */
-  waitForAppReady(windowId: string, timeoutMs?: number): Promise<boolean> {
-    if (this.readyWindows.has(windowId)) return Promise.resolve(true);
+  waitForAppReady(
+    sessionId: string | undefined,
+    windowId: string,
+    timeoutMs?: number,
+  ): Promise<boolean> {
+    if (sessionId !== undefined && this.isAppReady(sessionId, windowId)) {
+      return Promise.resolve(true);
+    }
 
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
@@ -607,8 +644,8 @@ class ActionEmitter extends EventEmitter {
         resolve(false);
       }, timeoutMs ?? deadlines.appReadyMs);
 
-      const handler = (readyWindowId: string) => {
-        if (readyWindowId === windowId) {
+      const handler = (ready: AppReadyEvent) => {
+        if (ready.sessionId === sessionId && ready.windowId === windowId) {
           clearTimeout(timeout);
           this.off('app-ready', handler);
           resolve(true);
@@ -757,12 +794,17 @@ class ActionEmitter extends EventEmitter {
    * Force-clear all pending requests, dialogs, and app protocol requests belonging to a
    * session. Each settles as `cancelled` so an awaiting tool unblocks immediately instead
    * of waiting out its own deadline against a session that no longer exists.
+   *
+   * The session's app-protocol registrations go with them: they were claims about iframes
+   * in *this* browser, and the browser is gone. Left behind, they would answer the next
+   * session's `waitForAppReady` on behalf of a document that no longer exists.
    */
   clearPendingForSession(sessionId: string): void {
     this.pendingRequests.clearForSession(sessionId);
     this.pendingDialogs.clearForSession(sessionId);
     this.pendingUserPrompts.clearForSession(sessionId);
     this.pendingAppRequests.clearForSession(sessionId);
+    this.readyWindows.delete(sessionId);
   }
 
   /**

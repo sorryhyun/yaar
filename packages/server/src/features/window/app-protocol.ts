@@ -8,6 +8,9 @@ import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
+import { getSessionId } from '../../agents/agent-context.js';
+import { getSessionHub } from '../../session/session-hub.js';
+import type { SessionId } from '../../session/types.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { beginRequest, endRequest } from './protocol-log.js';
@@ -98,12 +101,31 @@ function wrapAppValue(value: unknown): VerbResult {
 }
 
 /**
+ * The session this call belongs to.
+ *
+ * Resolved exactly the way the `WindowStateRegistry` handed to these functions was —
+ * agent context first (`getWindowState()` in mcp/server.ts and handlers/index.ts), the
+ * default session as the fallback for a call made outside a turn. Anything else would name
+ * a *different* session than the one whose window state gates the readiness check, and the
+ * two halves of that check must agree about whose desktop they are talking about.
+ */
+function callerSessionId(): SessionId | undefined {
+  return getSessionId() ?? getSessionHub().getDefault()?.sessionId;
+}
+
+/**
  * Ensure app protocol is ready, waiting if needed. Returns error on timeout.
  *
  * `windowKey` must be the resolved window key (`win.id`), not the raw AI-facing id.
- * Readiness is tracked per window, and a raw id names one window per *monitor* — the
- * same app open on two monitors shares a raw id, so a raw key would let one monitor's
- * registration mark the other's window ready (and vice versa).
+ * Readiness is tracked per session *and* per window: a raw id names one window per
+ * monitor (so the same app on two monitors would share a key), and a window key names one
+ * window per *session* (so two browsers on the same YAAR would share one). Both scopes are
+ * needed — the second one is why a fresh session used to find an app "already ready" that
+ * had never registered in it, and send its first command into an iframe that was not
+ * listening.
+ *
+ * The fast path stays fast: a window this session has already seen register carries
+ * `appProtocol` in its own registry, so a re-entrant command never re-enters the wait.
  */
 async function requireAppReady(
   windowState: WindowStateRegistry,
@@ -111,7 +133,11 @@ async function requireAppReady(
 ): Promise<VerbResult | null> {
   const win = windowState.getWindow(windowKey);
   if (win && !win.appProtocol) {
-    const ready = await actionEmitter.waitForAppReady(windowKey, deadlines.appReadyMs);
+    const ready = await actionEmitter.waitForAppReady(
+      callerSessionId(),
+      windowKey,
+      deadlines.appReadyMs,
+    );
     if (!ready) return error('App did not register with the App Protocol (timeout).');
   }
   return null;

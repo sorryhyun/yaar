@@ -113,12 +113,13 @@ export async function boot(
   opts: { deadlines?: Partial<Deadlines>; monitorId?: string } = {},
 ): Promise<Harness> {
   resetBroadcastCenter();
-  // App-protocol readiness is a process-global Set keyed by window key ("0/ai-chat"), with
-  // no session in the key and no removal — so without this, the *second* test to seed the
-  // same app id inherits "already ready" from the first, `waitForAppReady` returns true for
-  // an iframe that never registered, and the row written to prove that wait never enters
-  // it. Clear it at both ends: on the way in, so a foreign file cannot poison this one.
-  actionEmitter.resetReadyWindowsForTest();
+  // No app-protocol readiness reset here, deliberately. It used to be needed: readiness was
+  // a process-global Set keyed by window key ("0/ai-chat"), with no session in the key and
+  // no removal, so the *second* test to seed the same app id inherited "already ready" from
+  // the first and never entered the wait it was written to prove. Readiness is now keyed by
+  // session and dropped when the session is (`clearPendingForSession`), so each `boot()` —
+  // which mints a fresh session id — starts with no registrations, and `dispose()` leaves
+  // none behind. A test that needs the wait gets the wait.
   const restoreDeadlines = setDeadlinesForTest({ ...HARNESS_DEADLINES, ...opts.deadlines });
 
   // The reload cache writes itself to `{configDir}/reload-cache/{sessionId}.json`. Point it
@@ -199,9 +200,10 @@ export async function boot(
         await c.close();
         getBroadcastCenter().unsubscribe(c.data.connectionId);
       }
+      // `remove()` → `LiveSession.cleanup()` → `clearPendingForSession`, which is also what
+      // drops this session's app-protocol registrations. Nothing survives it.
       await getSessionHub().remove(sessionId);
       resetBroadcastCenter();
-      actionEmitter.resetReadyWindowsForTest();
       restoreDeadlines();
       if (previousConfigDir === undefined) delete process.env.YAAR_CONFIG;
       else process.env.YAAR_CONFIG = previousConfigDir;
