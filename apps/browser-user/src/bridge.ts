@@ -8,6 +8,12 @@
  *
  * Every request carries the iframe token (`window.__YAAR_TOKEN__`) in the
  * `X-Iframe-Token` header, exactly like the Browser app posts to `/api/browser`.
+ *
+ * app.json therefore declares `"bundles": ["yaar-web"]` even though nothing here imports that SDK.
+ * `bundles` does double duty: it is the compiler's gate on *importing* a gated SDK, and it is the
+ * capability the server checks (`requireBundle`) on the doors those SDKs open — and `/api/bridge` is
+ * one of them. We need the second without the first. Deleting the declaration because no import
+ * matches it 403s this app out of the endpoint it exists to call.
  */
 
 /** A single real browser tab as reported by the Bridge. */
