@@ -575,6 +575,26 @@ class ActionEmitter extends EventEmitter {
   }
 
   /**
+   * Forget every app-protocol registration. **Tests only** — see the caveat below.
+   *
+   * `readyWindows` is process-global and keyed by window key ("0/ai-chat"), not by session,
+   * and nothing ever removes from it. So the first session to register an app makes that
+   * key "already ready" for every session that follows: `waitForAppReady` returns true for
+   * an iframe that has never spoken, and `requireAppReady` stops being a wait. In the
+   * product the request's own deadline still covers that (the command goes out early, and
+   * times out if nobody is listening yet) — in a test it is fatal, because the second test
+   * to seed the same app id never enters the wait it exists to prove, and passes or fails
+   * on the state its predecessor left behind.
+   *
+   * The loopback harness resets this between tests (`boot`/`dispose`). Cross-session
+   * readiness is a production defect in its own right and wants session-scoped keys, not
+   * this method.
+   */
+  resetReadyWindowsForTest(): void {
+    this.readyWindows.clear();
+  }
+
+  /**
    * Wait for an iframe app to register with the App Protocol.
    * Resolves true if the app is already ready or becomes ready within the timeout.
    */

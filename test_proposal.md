@@ -5,13 +5,18 @@ every test we must have, the harness they need, the small production seams that 
 requires, and the existing tests that must be deleted or rewritten because they test copies,
 mocks, or their own constants.
 
-> **Status: P0 is shipped and its gate passes.** The seams (§1), the harness (§2) and S1
-> (§3.1) are in `packages/server/src/tests/loopback/`, and the mutation check is green:
-> deleting the answer-frame bypass turns S1 red in **644ms**, with the bug's own signature
-> ("App did not respond" from an app that answered). P1–P3 are untouched. Two things in
-> this document were **wrong about reality** and are corrected in place — the harness
-> directory (§2) and the liveness helpers (§2.1); §6 records what building it turned up,
-> including a live order-dependent failure in the existing suite.
+> **Status: P0 and P1 are shipped, and the gate passes for both.** The seams (§1), the
+> harness (§2), S1 (§3.1), the answer-wait table and its tripwire (§3.2), the ordering
+> scenarios (§3.3) and the message-loss scenarios (§3.4) are in
+> `packages/server/src/tests/loopback/` — 16 tests, ~350ms. The mutation check now
+> discriminates across the whole suite: deleting the answer-frame bypass turns **all five
+> S2 rows red, each with its own wait's signature** (see §3.2), while S3's ordering rows and
+> all of S4 stay green — they test the queue, not the bypass. P2–P3 are untouched. Three
+> things in this document were **wrong about reality** and are corrected in place — the
+> harness directory (§2), the liveness helpers (§2.1), and §3.2's assumption that liveness
+> alone could carry a row (§6.4). §6 records what building it turned up, including a live
+> order-dependent failure in the existing suite and a **cross-session leak in production**
+> (§6.5).
 
 ## 0. Findings: why the 460 tests missed the deadlock (verified, not assumed)
 
@@ -218,29 +223,41 @@ doesn't, the harness is lying and must be fixed before anything else is built on
 **Verified:** red in 644ms, with the bug's own signature — the tool step receives *"App did
 not respond within 0s"* from an app that answered at once. Green again on restore.
 
-### 3.2 `loopback-answer-waits.test.ts` — Scenario 2, one row per server→client wait
+### 3.2 `loopback-answer-waits.test.ts` — Scenario 2, one row per server→client wait ✅
 
 Table-driven over the shared `ANSWER_EVENT_TYPES` (§1.1). Each row provides: a scripted
 turn step that blocks on that wait, and the client frame that answers it.
 
-| Row | Turn blocks in | Client answers with |
-|---|---|---|
-| `APP_PROTOCOL_RESPONSE` | `handleAppCommand` / `handleAppQuery` | `APP_PROTOCOL_RESPONSE` (same `requestId`) |
-| `APP_PROTOCOL_READY` | `requireAppReady` on a not-yet-registered window | `APP_PROTOCOL_READY`, then the command reply |
-| `RENDERING_FEEDBACK` | `emitActionWithFeedback` (window capture path) | `RENDERING_FEEDBACK` (same `requestId`) |
-| `DIALOG_FEEDBACK` | `showPermissionDialogToSession` | `DIALOG_FEEDBACK` (same `dialogId`) |
-| `USER_PROMPT_RESPONSE` | `showUserPrompt` | `USER_PROMPT_RESPONSE` (same `promptId`) |
+| Row | Turn blocks in | Client answers with | Starved, it reports |
+|---|---|---|---|
+| `APP_PROTOCOL_RESPONSE` | `handleAppCommand` / `handleAppQuery` | `APP_PROTOCOL_RESPONSE` (same `requestId`) | "App did not respond within 0s" |
+| `APP_PROTOCOL_READY` | `requireAppReady` on a not-yet-registered window | `APP_PROTOCOL_READY`, then the command reply | "App did not register with the App Protocol" |
+| `RENDERING_FEEDBACK` | `emitActionWithFeedback` (window capture path) | `RENDERING_FEEDBACK` (same `requestId`) | `ok: false` — nothing rendered |
+| `DIALOG_FEEDBACK` | `showPermissionDialogToSession` | `DIALOG_FEEDBACK` (same `dialogId`) | `false` — denied by default |
+| `USER_PROMPT_RESPONSE` | `showUserPrompt` | `USER_PROMPT_RESPONSE` (same `promptId`) | `{dismissed: true}` |
 
 Per row: `expectStillPending(turn)` before the answer (the wait is real), then answer
 through `deliver()`, then `expectSettlesWithin(turn, budget)` and assert the turn saw the
 *answer's value* (the dialog's `confirmed`, the prompt's text — not just "it finished").
 
+**The fourth column is why the value assertion is the load-bearing one**, and the document
+was wrong to imply liveness could carry a row alone. Every one of these waits *ends* at its
+deadline whether or not the answer arrives — under harness deadlines (150ms) that is fast
+enough to look healthy, so `expectSettlesWithin` passes on a deadlocked turn. What cannot
+survive the deadlock is the *value*: each row is answered with something the timeout path
+cannot produce (a dialog nobody answers is `false`, not `true`). Confirmed by the mutation
+check: with the bypass deleted, all five rows go red on the value, none on the budget.
+
 Plus one static guard in the same file: every `ClientEventType` whose `routeMessage` case
 calls a `PendingStore.resolve*` or `notifyAppReady` must be in `ANSWER_EVENT_TYPES`. The
 table iterates the shared list, so **a future wait added without a row fails this file** —
-that is the "deadlock waiting to happen" tripwire the request asks for.
+that is the "deadlock waiting to happen" tripwire the request asks for. It scans
+`live-session.ts` for `actionEmitter.resolve*`/`notifyAppReady` inside a `case
+ClientEventType.X:` body, and asserts the count it finds equals `ANSWER_EVENT_TYPES.length`
+— so a scan that has stopped seeing the code it scans fails too, rather than going
+vacuously green.
 
-### 3.3 `loopback-ordering.test.ts` — Scenario 3, the fix didn't trade one bug for another
+### 3.3 `loopback-ordering.test.ts` — Scenario 3, the fix didn't trade one bug for another ✅
 
 - Turn from frame A held open (scripted step parks on a test-controlled gate);
   `deliver(RESYNC)`; `expectStillPending(snapshotFrame)` — RESYNC must **not** overtake.
@@ -250,7 +267,7 @@ that is the "deadlock waiting to happen" tripwire the request asks for.
 - Two ordinary frames + one answer frame interleaved: the answer overtakes, the two
   ordinary frames keep their mutual order.
 
-### 3.4 `loopback-message-loss.test.ts` — Scenario 4, the guard rail for un-awaiting
+### 3.4 `loopback-message-loss.test.ts` — Scenario 4, the guard rail for un-awaiting ✅
 
 - Send M1…M5 (M1's turn briefly held): assert 5 turns, exactly once each, in order — the
   scripted provider records the prompts it was handed, which *is* "the user's message got
@@ -345,7 +362,7 @@ The per-commit guarantee is S1 + F-1 in combination.
 | Phase | Work | Yields | Status |
 |---|---|---|---|
 | **P0** | Seams §1.1–1.3 → harness §2 (fake client, scripted provider, boot/dispose, liveness helpers) → **S1** → run the mutation check | The deadlock class is covered; acceptance criterion met | ✅ **done** — gate passes (red in 644ms) |
-| **P1** | S2 table (all five waits + tripwire guard), S3 ordering, S4 message loss | Every current wait covered; queue fix proven both directions; un-awaiting the turn becomes a safe future refactor | open |
+| **P1** | S2 table (all five waits + tripwire guard), S3 ordering, S4 message loss | Every current wait covered; queue fix proven both directions; un-awaiting the turn becomes a safe future refactor | ✅ **done** — 16 loopback tests; mutation reds all 5 rows, leaves the queue rows green |
 | **P2** | S5 dead client, S6 slow app, S7 late reply, F-1…F-4 frontend | Failure modes and the frontend half covered | open |
 | **P3** | §4 deletions/rewrites; optional §3.9 e2e smoke | Sandbagging tests removed; no green-by-copy remains | open |
 
@@ -388,3 +405,40 @@ Two fakes, no module mocks, and one `SessionLogger` double. The feared entanglem
 section all run for real off the repo's own `apps/`. The one sharp edge is that a *partial*
 logger double throws inside the turn, which surfaces as the turn failing — i.e. it looks
 exactly like the bug under test. Stub it whole.
+
+P1 added exactly two things to it: a `deferred()` gate (so a test can park a turn where it
+wants it, and be *told* when the turn reaches its wait rather than guessing with a timer),
+and an optional predicate on `waitForFrame` (two of the five waits ask their question inside
+an `ACTIONS` frame, and "the first ACTIONS frame" is not reliably the question).
+
+### 6.4 The row that could not be carried by liveness
+
+S2's five rows were specified as "block, answer, assert it finished". Four of them would
+have passed *without the fix*. A starved wait does not hang — it ends at its deadline, and
+the harness deadline is 150ms, which is indistinguishable from healthy at a 1 000ms budget.
+The liveness assertion is real but it is not the discriminator; the discriminator is that
+each row is answered with a value its timeout path cannot invent (`true` from a dialog that
+denies by default, the user's own text from a prompt that reports `{dismissed: true}`).
+This is §0's finding restated one level up: a deadlock *produces an output*, so any
+assertion that accepts an output accepts the deadlock. See the fourth column in §3.2.
+
+### 6.5 A production bug, found by the second test that used the harness
+
+The `APP_PROTOCOL_READY` row failed on arrival — the command it was supposed to unblock
+timed out. The cause was not the test. `ActionEmitter.readyWindows`
+(`action-emitter.ts:146`) is a process-global `Set` keyed by window key (`"0/ai-chat"`),
+with **no session in the key and no removal, ever**. The first row to register that app
+leaves the key in the set; every session afterwards — a different `LiveSession`, a
+different browser, a different user — finds `waitForAppReady` returning `true` for an
+iframe that has never spoken, and `requireAppReady` stops being a wait.
+
+In the product this means a new session's first `command` to a freshly-opened app can be
+sent before that app's iframe has registered, and is then covered only by the command's own
+deadline (i.e. it surfaces as "App did not respond" — the exact symptom this whole document
+is about, from a second cause). Impact is mild and the fix is not a test's business, so P1
+took the narrow half: `resetReadyWindowsForTest()`, called by the harness at `boot` and
+`dispose`, plus a comment at the declaration naming the leak. **The real fix is
+session-scoped readiness keys, and it is not done.**
+
+Worth naming for the same reason as §6.1: the state that broke the test was global,
+unowned, and invisible to every unit test, because a unit test never has a second session.

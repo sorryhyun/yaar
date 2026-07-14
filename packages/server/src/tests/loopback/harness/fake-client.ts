@@ -104,12 +104,24 @@ export class FakeClient {
    * cannot get that from a fixed number of event-loop turns: a turn does real work before
    * it reaches its tool (a system prompt to assemble, an app profile to read off disk), so
    * "flush once and look" races the server rather than observing it. Wait for the frame.
+   *
+   * `match` narrows to the frame a test actually means. Two of the five server→client
+   * waits (`window.capture`'s render feedback, and a user prompt) ask their question
+   * inside an `ACTIONS` frame rather than a type of their own, and a session sends
+   * `ACTIONS` for plenty of other reasons — so "the first ACTIONS frame" is not the
+   * question, it merely often happens to be.
    */
-  waitForFrame<T extends ServerEvent['type']>(type: T): Promise<Extract<ServerEvent, { type: T }>> {
-    const already = this.framesOf(type)[0];
+  waitForFrame<T extends ServerEvent['type']>(
+    type: T,
+    match?: (frame: Extract<ServerEvent, { type: T }>) => boolean,
+  ): Promise<Extract<ServerEvent, { type: T }>> {
+    // `?? true` and not `|| true`: a matcher that says *no* must be believed.
+    const already = this.framesOf(type).find((frame) => match?.(frame) ?? true);
     if (already) return Promise.resolve(already);
     return new Promise((resolve) => {
-      this.onFrame(type, (frame) => resolve(frame));
+      this.onFrame(type, (frame) => {
+        if (match?.(frame) ?? true) resolve(frame);
+      });
     });
   }
 

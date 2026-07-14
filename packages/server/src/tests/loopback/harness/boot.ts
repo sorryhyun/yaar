@@ -113,6 +113,12 @@ export async function boot(
   opts: { deadlines?: Partial<Deadlines>; monitorId?: string } = {},
 ): Promise<Harness> {
   resetBroadcastCenter();
+  // App-protocol readiness is a process-global Set keyed by window key ("0/ai-chat"), with
+  // no session in the key and no removal — so without this, the *second* test to seed the
+  // same app id inherits "already ready" from the first, `waitForAppReady` returns true for
+  // an iframe that never registered, and the row written to prove that wait never enters
+  // it. Clear it at both ends: on the way in, so a foreign file cannot poison this one.
+  actionEmitter.resetReadyWindowsForTest();
   const restoreDeadlines = setDeadlinesForTest({ ...HARNESS_DEADLINES, ...opts.deadlines });
 
   // The reload cache writes itself to `{configDir}/reload-cache/{sessionId}.json`. Point it
@@ -195,6 +201,7 @@ export async function boot(
       }
       await getSessionHub().remove(sessionId);
       resetBroadcastCenter();
+      actionEmitter.resetReadyWindowsForTest();
       restoreDeadlines();
       if (previousConfigDir === undefined) delete process.env.YAAR_CONFIG;
       else process.env.YAAR_CONFIG = previousConfigDir;
