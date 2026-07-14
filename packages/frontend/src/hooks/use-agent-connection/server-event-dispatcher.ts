@@ -4,6 +4,7 @@ import type {
   AppProtocolRequestEvent,
   AppProtocolRequest,
   RecoveryMode,
+  ActiveAgentSnapshot,
 } from '@/types';
 import { ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
 
@@ -67,7 +68,14 @@ export interface ServerEventDispatchHandlers {
   ) => void;
   acceptMessage: (messageId: string, agentId: string) => void;
   queueMessage: (messageId: string, position: number) => void;
+  failMessage: (messageId: string, error: string) => void;
+  settleOutbox: (messageId: string) => void;
   clearAllMessageStatuses: () => void;
+  applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => void;
+  /** Send everything buffered while the socket was down (interactions, outbox). */
+  flushPending: () => void;
+  /** Ask the server for authoritative state, once the flush is on the wire. */
+  resync: () => void;
   incrementSubagentCount: (agentId: string) => void;
   decrementSubagentCount: (agentId: string) => void;
 }
@@ -127,23 +135,28 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         provider: message.provider,
       });
       if (message.recoveryMode !== 'attached' && message.recoveryMode !== 'created') {
-        // Not the session we left. Local windows, agents, and iframe state describe an
-        // incarnation the server no longer has; the reconnect snapshot only adds windows,
-        // so some of what is on screen is stale. Reconciling it is the next slice's job
-        // (report.md target model item 2) — surface it rather than pretend it is a rejoin.
-        console.warn(
-          `[connection] session ${message.sessionId} came back as "${message.recoveryMode}" ` +
-            `(epoch ${message.sessionEpoch}) — local state may be stale`,
-        );
-        // The iframe tokens our windows hold were minted by a process that is gone, so
-        // every verb call they make now 403s. Mint them again against the live session.
+        // Not the session we left. The iframe tokens our windows hold were minted by a
+        // process that is gone, so every verb call they make now 403s. Mint them again
+        // against the live session. (Everything *else* that is stale — closed windows still
+        // on screen, spinners for finished agents — is fixed by the resync below, which
+        // replaces local state with the server's rather than merging into it.)
         handlers.refreshStaleIframeTokens(message.sessionId);
       }
+      // Say what we did while we were away, then ask what is actually there. The order is
+      // the contract: the snapshot that comes back is authoritative and will delete
+      // anything it does not mention, so the window the user opened during the outage has
+      // to reach the server *before* the server is asked to describe itself.
+      handlers.flushPending();
+      handlers.resync();
       // sessionId is the hub key (WebSocket rejoin, iframe tokens); logSessionId names the
       // transcript on disk, which is what /api/sessions is keyed by.
       handlers.checkForPreviousSession(message.logSessionId ?? message.sessionId);
       break;
     }
+    case ServerEventType.SNAPSHOT:
+      // Authoritative. Replaces; does not merge. See `applySnapshot` in store/desktop.ts.
+      handlers.applySnapshot(message.actions, message.agents);
+      break;
     case ServerEventType.CONNECTION_STATUS:
       handlers.setIsConnecting(false);
       handlers.setConnectionStatus(
@@ -294,6 +307,13 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       const monitorId = (message as { monitorId?: string }).monitorId;
       handlers.setConnectionStatus('error', message.error);
       handlers.addCliEntry({ type: 'error', content: message.error, monitorId });
+      // An error that names a message is that message's obituary: it will not run. Mark it
+      // failed and stop holding it for redelivery — resending a message the server has
+      // already refused just gets it refused again.
+      if (message.messageId) {
+        handlers.failMessage(message.messageId, message.error);
+        handlers.settleOutbox(message.messageId);
+      }
       break;
     }
     case ServerEventType.WINDOW_AGENT_STATUS: {
@@ -341,11 +361,16 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       handlers.setMonitors(m.monitors, m.focus);
       break;
     }
+    // The two acks. Either one means the server has taken responsibility for the message,
+    // so the outbox can let go of it — that, and nothing about the socket's state, is what
+    // "delivered" means.
     case ServerEventType.MESSAGE_ACCEPTED:
       handlers.acceptMessage(message.messageId, message.agentId);
+      handlers.settleOutbox(message.messageId);
       break;
     case ServerEventType.MESSAGE_QUEUED:
       handlers.queueMessage(message.messageId, message.position);
+      handlers.settleOutbox(message.messageId);
       break;
   }
 }

@@ -222,8 +222,17 @@ export class AppTaskProcessor {
     const key = appAgentKey(owner, appId);
     const processingKey = `app-${owner}-${appId}`;
 
-    // Clear any queued tasks for this app on this monitor
-    this.ctx.windowQueuePolicy.clearQueue(processingKey);
+    // Clear any queued tasks for this app on this monitor. Each is a click or message the
+    // user made in a window that has since closed — it will not run, and saying so is the
+    // difference between a cancelled action and one that appears to still be pending.
+    for (const { task } of this.ctx.windowQueuePolicy.clearQueue(processingKey)) {
+      await this.ctx.sendEvent({
+        type: ServerEventType.ERROR,
+        error: `Message dropped: window ${windowId} was closed before it ran.`,
+        messageId: task.messageId,
+        ...(owner ? { monitorId: owner } : {}),
+      });
+    }
 
     // Remove active window tracking
     if (this.activeWindows.get(key) === windowId) {

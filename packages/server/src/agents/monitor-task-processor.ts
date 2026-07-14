@@ -61,6 +61,8 @@ export class MonitorTaskProcessor {
         await this.ctx.sendEvent({
           type: ServerEventType.ERROR,
           error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Monitor is suspended.`,
+          messageId: task.messageId,
+          monitorId,
         });
         return;
       }
@@ -92,6 +94,8 @@ export class MonitorTaskProcessor {
         await this.ctx.sendEvent({
           type: ServerEventType.ERROR,
           error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
+          messageId: task.messageId,
+          monitorId,
         });
         return;
       }
@@ -148,6 +152,8 @@ export class MonitorTaskProcessor {
       await this.ctx.sendEvent({
         type: ServerEventType.ERROR,
         error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
+        messageId: task.messageId,
+        monitorId,
       });
       return;
     }

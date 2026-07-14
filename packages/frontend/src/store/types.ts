@@ -29,6 +29,8 @@ import type {
   DesktopShortcut,
   WindowBounds,
   RecoveryMode,
+  ClientEvent,
+  ActiveAgentSnapshot,
 } from '@yaar/shared';
 
 // Re-export for convenience
@@ -370,9 +372,16 @@ export interface MonitorSliceActions {
 export type MonitorSlice = MonitorSliceState & MonitorSliceActions;
 
 export interface MessageStatus {
-  status: 'sent' | 'accepted' | 'queued';
+  /**
+   * - `unsent` — the socket was not open; it sits in the outbox awaiting a retry.
+   * - `sent` — it went out; the server has not answered yet.
+   * - `queued` / `accepted` — the server has it.
+   * - `failed` — the server named this message and said it will not run.
+   */
+  status: 'unsent' | 'sent' | 'accepted' | 'queued' | 'failed';
   agentId?: string;
   position?: number;
+  error?: string;
   timestamp: number;
 }
 
@@ -381,14 +390,37 @@ export interface MessageStatusSliceState {
 }
 
 export interface MessageStatusSliceActions {
-  trackMessage: (messageId: string) => void;
+  trackMessage: (messageId: string, status?: MessageStatus['status']) => void;
   acceptMessage: (messageId: string, agentId: string) => void;
   queueMessage: (messageId: string, position: number) => void;
+  failMessage: (messageId: string, error: string) => void;
   clearMessageStatus: (messageId: string) => void;
   clearAllMessageStatuses: () => void;
 }
 
 export type MessageStatusSlice = MessageStatusSliceState & MessageStatusSliceActions;
+
+// ============ Outbox ============
+
+/** A command held until the server acknowledges it. See `slices/outboxSlice.ts`. */
+export interface OutboxEntry {
+  messageId: string;
+  event: ClientEvent;
+  queuedAt: number;
+}
+
+export interface OutboxSliceState {
+  outbox: OutboxEntry[];
+}
+
+export interface OutboxSliceActions {
+  enqueueOutbox: (messageId: string, event: ClientEvent) => void;
+  settleOutbox: (messageId: string) => void;
+  pendingOutbox: () => OutboxEntry[];
+  clearOutbox: () => void;
+}
+
+export type OutboxSlice = OutboxSliceState & OutboxSliceActions;
 
 // ============ Combined Store Type ============
 
@@ -409,7 +441,8 @@ export type DesktopStore = WindowsSlice &
   ImageAttachSlice &
   CliSlice &
   MonitorSlice &
-  MessageStatusSlice & {
+  MessageStatusSlice &
+  OutboxSlice & {
     appBadges: Record<string, number>;
     appsVersion: number;
     shortcuts: DesktopShortcut[];
@@ -417,6 +450,11 @@ export type DesktopStore = WindowsSlice &
     bumpAppsVersion: () => void;
     applyAction: (action: OSAction) => void;
     applyActions: (actions: OSAction[]) => void;
+    /**
+     * Converge on the server's answer to "what is actually here" — including, crucially,
+     * what is *not*. See `applySnapshot` in `desktop.ts`.
+     */
+    applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => void;
     resetDesktop: () => void;
     clearDesktop: () => void;
   };

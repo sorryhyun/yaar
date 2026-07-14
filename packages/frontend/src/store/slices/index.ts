@@ -19,3 +19,4 @@ export { createImageAttachSlice } from './imageAttachSlice';
 export { createCliSlice } from './cliSlice';
 export { createMonitorSlice } from './monitorSlice';
 export { createMessageStatusSlice } from './messageStatusSlice';
+export { createOutboxSlice } from './outboxSlice';

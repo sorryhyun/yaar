@@ -12,8 +12,8 @@ Supersedes: `report.md` (deleted; its diagnosis and slice log are carried forwar
 | Slice 2 | F-19, F-20, F-21 — access chokepoint | **Landed** |
 | Slice 3 | F-7, F-10, F-11…F-14 — monitor identity | **Landed** |
 | Slice 4 | F-15, F-16, F-17 — deadline semantics | **Landed** |
-| Slice 5 | F-2, F-18 — failure surfacing and delivery | Open |
-| Slice 6 | F-1 — authoritative resync | Open |
+| Slice 5 | F-2, F-18 — failure surfacing and delivery | **Landed** |
+| Slice 6 | F-1 — authoritative resync | **Landed** |
 | Slice 7 | F-5, F-6 — provider and app-protocol continuity | Open |
 | Slice 8 | F-3 remainder, F-22 — timing policy and timer hygiene | Open |
 | Slice 9 | F-23 — app iframes get an origin of their own | Open (**new**, uncovered by Slice 2) |
@@ -31,6 +31,14 @@ One thing the acceptance tests forced into the open: a connection that has not n
 **Landed in Slice 4:** `PendingStore` has no `defaultValue`. An entry settles as `{ok: true, value}`, `{ok: false, reason: 'timeout'}`, or `{ok: false, reason: 'cancelled'}` (the session went away), and every caller now says in code what a missed deadline means for it. The two that were lying: `window.create` reported an iframe that never answered as a rendered window, and now reports `renderConfirmed: false` naming the uncertainty — the window is on the desktop, but nothing said its content loaded, and that is neither success nor failure; and `askUser`/`requestUserInput` reported a prompt nobody answered as one the user *dismissed*, which is a claim about a user who was not there. The one place silence still means success is `emitActionChecked` (close, updateContent): the frontend answers those only to *veto* them, so no answer is no objection — that is now written down at the call site, because it is indistinguishable from the bug otherwise.
 
 Deadlines are derived from one budget (`MAX_REQUEST_DEADLINE_MS`, 240s) that sits strictly inside the transport's (`TRANSPORT_IDLE_TIMEOUT_S`, 255s — Bun's maximum, so the outer bound cannot be raised to meet the inner ones; the inner ones had to come down). A user prompt (300s) and an external MCP call (300s) both used to outlive the connection holding them open, so their expiry could not be reported even to itself.
+
+**Landed in Slice 5:** `ErrorEvent` carries the `messageId` it is about, and every path that drops a user message now names it: the unknown/absent monitor guards, a pool that failed to initialize, the three queue-full branches, a reset or a removed monitor clearing its queues (`MonitorQueuePolicy.clear()` and `WindowQueuePolicy.clear()` return the tasks they discard rather than swallowing them), and an app window closed with work still queued. The `console.error`-and-drop in the WebSocket message handler — the outermost catch, and the one that swallowed the 30s budget timeout — answers the socket instead, with the id parsed straight off the event it failed on. On the client, message status is driven by terminal events rather than a lazily-evaluated 10s TTL (a chip could sit on "queued" forever for a message that had already died), `activeAgents` is cleared on an *involuntary* disconnect and not only on the explicit one, and `send()` returns whether it delivered. F-2's fix is an **outbox**: `sendMessage` builds the event, puts it in the outbox, *then* sends — so a closed socket can no longer eat a command whose drawing and images have already been consumed out of the store. It is held until `MESSAGE_ACCEPTED`/`MESSAGE_QUEUED` (the server has it) or an `ERROR` naming it (the server refused it), resent on reconnect, and the server dedups by id (`LiveSession.acceptedMessageIds`) so a retry is acked rather than run twice.
+
+**Landed in Slice 6:** the reconnect snapshot is a **replace-state** snapshot, and it is *pulled*, not pushed. The client sends `RESYNC` once it has flushed what it was holding (buffered interactions, outbox), and the server answers with `SNAPSHOT` — windows, plus the notifications, dialogs, and prompts still on screen (a new `SurfaceRegistry`, fed from `LiveSession.broadcast()`, the single gateway every server→client event already goes through, so it cannot drift from what was actually sent), plus the agents actually still running. `applySnapshot` replaces rather than merges: what the snapshot does not name is deleted. That closes the cases a merge structurally could not — a window an agent closed during the outage stayed on screen, a spinner for a finished agent ran until the tab was reloaded, an expired dialog kept offering its buttons.
+
+The order is the whole contract, and it forced a second fix: `message()` in the WebSocket handler is async and Bun does not await one call before making the next, so two frames from the same socket could interleave. That was survivable while every message was independent, but not with `RESYNC`, whose meaning is *"you have now heard everything I did while I was away"* — a snapshot built while the buffered `window.create` in front of it was still awaiting `getAppMeta` would omit that window, and the client, trusting the snapshot, would delete the very window the user had just opened. Messages from one connection are now serialized against each other (`WsData.queue`).
+
+Deliberately not covered: message status is not in the snapshot (the outbox is the client's own truth about what it sent, and the acks rebuild status), and toasts are not in the `SurfaceRegistry` (they expire in seconds and nobody is waiting on an answer — re-showing a stale one is noise, not recovery).
 
 `dialog.close` is a new OS action. Server-side expiry now reaches the screen: an unanswered dialog is still a denial, but it stops asking. And a click that lands just after expiry is no longer dropped whole — the *request* it answered is gone (`resolveDialogFeedback` returns false, and the user is told so with a toast), but "remember my choice" is a standing decision about every future request, not that one, and it is saved.
 
@@ -187,15 +195,15 @@ Acceptance: a window whose iframe never reports is no longer announced as render
 
 One thing the work forced into the open: **"the frontend said nothing" is not one event, it is two.** For `window.close` it means *no lock objection* — silence is the frontend's way of consenting, and reading it as failure would break every close. For `window.create` it means *the iframe never rendered*. Both arrived as the same `null`, and the fix is not a single rule for timeouts but a demand that each call site name which of the two it is looking at.
 
-### Slice 5 — every dropped message is visible (F-18, F-2)
+### Slice 5 — every dropped message is visible (F-18, F-2) — **Landed**
 
 1. One rule: **any path that drops a user message emits `ERROR` carrying that `messageId`.** Budget rejection, monitor cap, queue full, and pool reset all currently violate it.
 2. Drive message status off terminal events, not a lazily-evaluated TTL; clear `activeAgents` on involuntary disconnect, not only on explicit `disconnect()`.
 3. `send()` returns a delivery result. A frontend outbox holds commands that require delivery until acknowledged; the server dedups by message id so a reconnect retry is safe. Do not consume the drawing or attached images until the send is acknowledged (F-2).
 
-Acceptance: a submitted command is either acknowledged or visibly still unsent; a throttled or capped message produces a visible error rather than a chip stuck on "queued"; a socket drop mid-turn does not leave a spinner running forever.
+Acceptance: a submitted command is either acknowledged or visibly still unsent; a throttled or capped message produces a visible error rather than a chip stuck on "queued"; a socket drop mid-turn does not leave a spinner running forever. Pinned by `packages/server/src/tests/message-delivery.test.ts` and `packages/frontend/src/tests/store/resync.test.ts`.
 
-### Slice 6 — authoritative resync (F-1)
+### Slice 6 — authoritative resync (F-1) — **Landed**
 
 Make the reconnect snapshot a **replace-state** snapshot, not an additive one, keyed off Slice 1's `recoveryMode` — `replaced` and `restored` are exactly the cases where the client's local state must be reconciled rather than merged. Cover agents, dialogs, prompts, notifications, message status, subscriptions, and app readiness, not just windows. Stale client-only windows must be removed. An event log with cursors comes only if the replace-state snapshot proves insufficient.
 

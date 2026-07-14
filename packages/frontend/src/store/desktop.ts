@@ -19,6 +19,8 @@ import type {
   DesktopRemoveShortcutAction,
   DesktopUpdateShortcutAction,
   DesktopUpdateSettingsAction,
+  WindowCreateAction,
+  ActiveAgentSnapshot,
 } from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 // Import all slice creators
@@ -41,10 +43,13 @@ import {
   createMonitorSlice,
   createUserPromptsSlice,
   createMessageStatusSlice,
+  createOutboxSlice,
 } from './slices';
 
 // Import pure mutation functions for batched action processing
 import { applyWindowAction } from './slices/windowsSlice';
+import { toWindowKey } from './helpers';
+import { notifyIframeClose } from './iframe-bridge';
 import { applyNotificationAction } from './slices/notificationsSlice';
 import { applyToastAction } from './slices/toastsSlice';
 import { applyDialogAction } from './slices/dialogsSlice';
@@ -79,6 +84,7 @@ export const useDesktopStore = create<DesktopStore>()(
     ...createCliSlice(...a),
     ...createMonitorSlice(...a),
     ...createMessageStatusSlice(...a),
+    ...createOutboxSlice(...a),
 
     // Desktop-level state
     appBadges: {} as Record<string, number>,
@@ -214,6 +220,82 @@ export const useDesktopStore = create<DesktopStore>()(
       for (const action of asyncActions) {
         useDesktopStore.getState().applyAction(action);
       }
+    },
+
+    /**
+     * Converge on the server's answer to "what is here" — including what is *not*.
+     *
+     * The reconnect path used to re-send `window.create` for every live window and let the
+     * client merge them in. Merging can only ever *add*, so everything that happened during
+     * the gap in the other direction was invisible: a window an agent closed while the
+     * socket was down stayed on screen, clickable, wired to a window the server had already
+     * forgotten; a spinner for an agent that finished mid-outage ran until the tab was
+     * reloaded; a dialog that expired unanswered still offered its buttons.
+     *
+     * So the snapshot is authoritative and this *replaces*. Every surface it covers —
+     * windows, notifications, dialogs, prompts, running agents — is rebuilt from it, and
+     * anything the server did not name is gone. The surfaces are re-materialized by running
+     * their creating actions through the ordinary reducer, so a restored window is built by
+     * exactly the same code as a live one and cannot drift from it.
+     *
+     * Message status is the one thing deliberately not replaced: the client's outbox knows
+     * what it sent, and resending rebuilds status from the acks that come back. See
+     * `slices/outboxSlice.ts`.
+     */
+    applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => {
+      const [set] = a;
+
+      // The windows the server still has. A snapshot always names windows by their scoped
+      // handle ("0/notes"); the fallback mirrors applyWindowAction for anything that isn't.
+      const liveWindowKeys = new Set(
+        actions
+          .filter((action): action is WindowCreateAction => action.type === 'window.create')
+          .map((action) => {
+            const rawId = action.windowId;
+            if (rawId.includes('/')) return rawId;
+            const monitorId =
+              (action as { monitorId?: string }).monitorId ??
+              useDesktopStore.getState().activeMonitorId ??
+              DEFAULT_MONITOR_ID;
+            return toWindowKey(monitorId, rawId);
+          }),
+      );
+
+      // Drop what the server does not have, before rebuilding what it does.
+      const stale = Object.keys(useDesktopStore.getState().windows).filter(
+        (key) => !liveWindowKeys.has(key),
+      );
+      for (const key of stale) notifyIframeClose(key);
+
+      set((state) => {
+        for (const key of stale) {
+          delete state.windows[key];
+          delete state.queuedActions[key];
+        }
+        state.zOrder = state.zOrder.filter((id) => !stale.includes(id));
+        if (state.focusedWindowId && stale.includes(state.focusedWindowId)) {
+          state.focusedWindowId = state.zOrder[state.zOrder.length - 1] ?? null;
+        }
+
+        // Surfaces the snapshot is authoritative for: emptied here, refilled below from the
+        // snapshot's own actions. A dialog answered during the gap does not come back.
+        state.notifications = {};
+        state.dialogs = {};
+        state.userPrompts = {};
+
+        // Who is actually still working. This is the spinner that used to run forever.
+        state.activeAgents = {};
+        for (const agent of agents) {
+          state.activeAgents[agent.agentId] = {
+            id: agent.agentId,
+            status: agent.status,
+            startedAt: Date.now(),
+            subagentCount: 0,
+          };
+        }
+      });
+
+      useDesktopStore.getState().applyActions(actions);
     },
 
     resetDesktop: () => {

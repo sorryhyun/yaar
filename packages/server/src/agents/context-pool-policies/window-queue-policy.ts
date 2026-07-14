@@ -32,8 +32,11 @@ export class WindowQueuePolicy {
     return queue?.shift();
   }
 
-  clearQueue(key: string): void {
+  /** Drop one key's queued tasks and hand them back. See MonitorQueuePolicy.clear(). */
+  clearQueue(key: string): WindowQueuedTask[] {
+    const dropped = this.queues.get(key) ?? [];
     this.queues.delete(key);
+    return dropped;
   }
 
   getQueueSize(key: string): number {
@@ -48,8 +51,11 @@ export class WindowQueuePolicy {
     return sizes;
   }
 
-  clear(): void {
+  /** Drop every key's queued tasks and hand them back. See MonitorQueuePolicy.clear(). */
+  clear(): WindowQueuedTask[] {
+    const dropped = [...this.queues.values()].flat();
     this.processingKeys.clear();
     this.queues.clear();
+    return dropped;
   }
 }

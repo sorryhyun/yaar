@@ -16,6 +16,7 @@ import {
   generateActionId,
   generateMessageId,
   usePendingEventDrainer,
+  drainPendingQueues,
   useMonitorSync,
 } from './use-agent-connection';
 import { apiFetch, buildWsUrl as buildWsUrlFromApi } from '@/lib/api';
@@ -68,7 +69,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     trackMessage,
     acceptMessage,
     queueMessage,
+    failMessage,
     clearAllMessageStatuses,
+    enqueueOutbox,
+    settleOutbox,
+    applySnapshot,
   } = useDesktopStore.getState();
 
   const checkForPreviousSession = useCallback(async (currentSessionId: string) => {
@@ -113,6 +118,42 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     [],
   );
 
+  /**
+   * Put an event on the wire, and say whether it got there.
+   *
+   * The return value is the whole point. This used to return nothing and swallow a closed
+   * socket with a `console.warn`, so every caller was structurally incapable of noticing
+   * that the thing it had just "sent" was never sent — including the one that had already
+   * consumed the user's drawing to build it.
+   */
+  const send = useCallback((event: ClientEvent): boolean => {
+    if (!sendEvent(wsManager, event)) return false;
+    addDebugEntry({ direction: 'out', type: event.type, data: event });
+    return true;
+  }, []);
+
+  /**
+   * Resend everything the server has not acknowledged.
+   *
+   * Safe to call repeatedly: the server dedups by message id, so a message that did land
+   * before the socket died is acked a second time rather than run a second time.
+   */
+  const flushOutbox = useCallback(() => {
+    const store = useDesktopStore.getState();
+    for (const entry of store.pendingOutbox()) {
+      if (send(entry.event)) store.trackMessage(entry.messageId, 'sent');
+    }
+  }, [send]);
+
+  const flushPending = useCallback(() => {
+    drainPendingQueues({ send, addCliEntry });
+    flushOutbox();
+  }, [send, flushOutbox, addCliEntry]);
+
+  const resync = useCallback(() => {
+    send({ type: ClientEventType.RESYNC });
+  }, [send]);
+
   const handleMessage = useCallback(
     (event: MessageEvent) => {
       try {
@@ -143,7 +184,12 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           restoreCliHistory,
           acceptMessage,
           queueMessage,
+          failMessage,
+          settleOutbox,
           clearAllMessageStatuses,
+          applySnapshot,
+          flushPending,
+          resync,
           incrementSubagentCount,
           decrementSubagentCount,
         });
@@ -167,6 +213,11 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       onClose: () => {
         setIsConnecting(false);
         setConnectionStatus('disconnected');
+        // The socket dropped under us. Whatever those agents were doing, we are no longer
+        // hearing about it — and the spinner they drive used to run until the tab was
+        // reloaded, because only the *explicit* disconnect() path cleared them. If they are
+        // still alive, the snapshot on reattach says so and puts them back.
+        clearAllAgents();
       },
       onError: () => {
         setConnectionStatus('error', 'Connection failed');
@@ -199,18 +250,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     clearAllAgents();
   }, []);
 
-  const send = useCallback((event: ClientEvent) => {
-    if (sendEvent(wsManager, event)) {
-      addDebugEntry({
-        direction: 'out',
-        type: event.type,
-        data: event,
-      });
-    } else {
-      console.warn('WebSocket not connected, cannot send:', event);
-    }
-  }, []);
-
   const sendMessage = useCallback(
     async (content: string) => {
       // Capture full monitor screenshot (with drawing strokes composited)
@@ -230,7 +269,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       // monitor agent. See docs/session_agent_browser_design.md §6.
       const { cliMode, cliTarget } = useDesktopStore.getState();
       const target = cliMode && cliTarget === 'session' ? 'session' : undefined;
-      trackMessage(messageId);
       addCliEntry({ type: 'user', content, monitorId });
 
       const interactions: Array<{ type: 'draw'; timestamp: number; imageData: string }> = [];
@@ -243,14 +281,23 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
         interactions.push({ type: 'draw', timestamp: Date.now(), imageData: img });
       }
 
-      send({
+      const event: ClientEvent = {
         type: ClientEventType.USER_MESSAGE,
         messageId,
         content,
         monitorId,
         interactions: interactions.length > 0 ? interactions : undefined,
         target,
-      });
+      };
+
+      // Into the outbox *before* the wire. The drawing and the images have already been
+      // consumed out of the store to build this event — if the send fails and nothing is
+      // holding the event, they are gone for good, and the CLI panel is left claiming the
+      // user asked for something that was never asked. The outbox is what holds them: the
+      // message stays there, attachments and all, until the server acks it, and is resent
+      // on reconnect.
+      enqueueOutbox(messageId, event);
+      trackMessage(messageId, send(event) ? 'sent' : 'unsent');
     },
     [send],
   );

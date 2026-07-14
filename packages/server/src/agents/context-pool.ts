@@ -21,7 +21,7 @@ import {
   claudeModelToCodex,
   getMonitorTurnOptions,
 } from './profiles/index.js';
-import { AgentPool, type PooledAgent } from './agent-pool.js';
+import { AgentPool, type PooledAgent, type AgentEntry } from './agent-pool.js';
 import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import {
@@ -272,6 +272,11 @@ export class ContextPool implements PoolContext {
     return this.agentPool.getMonitorAgentIds();
   }
 
+  /** Every live agent, for the reconnect snapshot's "who is actually still running". */
+  listAgents(): AgentEntry[] {
+    return this.agentPool.listAgents();
+  }
+
   getLogSessionId(): string | null {
     return this.logSessionId;
   }
@@ -279,7 +284,10 @@ export class ContextPool implements PoolContext {
   async removeMonitorAgent(monitorId: string): Promise<void> {
     const queue = this.monitorQueues.get(monitorId);
     if (queue) {
-      queue.clear();
+      this.reportDropped(
+        queue.clear().map((i) => i.task),
+        `monitor ${monitorId} was removed`,
+      );
       this.monitorQueues.delete(monitorId);
     }
 
@@ -338,6 +346,7 @@ export class ContextPool implements PoolContext {
   async handleSessionTask(task: Task): Promise<void> {
     if (this.resetting) {
       console.log(`[ContextPool] Rejecting session task ${task.messageId} — pool is resetting`);
+      this.reportDropped([task], 'the agent pool is resetting');
       return;
     }
 
@@ -435,11 +444,32 @@ export class ContextPool implements PoolContext {
     });
   }
 
+  /**
+   * Tell the client about work it asked for that will not be done.
+   *
+   * The rule this enforces: **any path that drops a user message emits an ERROR naming
+   * that message.** Every drop site here had the id in hand and threw it away — a reset
+   * cleared the queues, a monitor was removed, an app window closed — and the message
+   * ceased to exist without anything on the user's screen changing. Their command had
+   * simply not happened, and the only clue was a chip still reading "queued".
+   */
+  private reportDropped(tasks: Task[], reason: string): void {
+    for (const task of tasks) {
+      void this.sendEvent({
+        type: ServerEventType.ERROR,
+        error: `Message dropped: ${reason}.`,
+        messageId: task.messageId,
+        ...(task.monitorId ? { monitorId: task.monitorId } : {}),
+      });
+    }
+  }
+
   // ── Task routing (delegates to processors) ─────────────────────────
 
   async handleTask(task: Task): Promise<void> {
     if (this.resetting) {
       console.log(`[ContextPool] Rejecting task ${task.messageId} — pool is resetting`);
+      this.reportDropped([task], 'the agent pool is resetting');
       return;
     }
 
@@ -712,10 +742,13 @@ export class ContextPool implements PoolContext {
    */
   private async teardown(options?: { closeWindows?: boolean }): Promise<void> {
     const closeWindows = options?.closeWindows ?? true;
-    // 1. Clear queues so no new tasks start from dequeue
-    this.monitorQueues.forEach((q) => q.clear());
+    // 1. Clear queues so no new tasks start from dequeue. Everything in them is a message
+    //    the user sent and is still waiting on; say that it is not coming.
+    const dropped: Task[] = [];
+    this.monitorQueues.forEach((q) => dropped.push(...q.clear().map((i) => i.task)));
     this.monitorQueues.clear();
-    this.windowQueuePolicy.clear();
+    dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
+    this.reportDropped(dropped, 'the agent pool was reset');
 
     // 2. Reject blocked limiter/budget waiters so they unblock and exit
     getAgentLimiter().clearWaiting(new Error('Pool resetting'));

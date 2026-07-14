@@ -67,7 +67,12 @@ function createHandlers() {
     restoreCliHistory: mock(() => {}),
     acceptMessage: mock(() => {}),
     queueMessage: mock(() => {}),
+    failMessage: mock(() => {}),
+    settleOutbox: mock(() => {}),
     clearAllMessageStatuses: mock(() => {}),
+    applySnapshot: mock(() => {}),
+    flushPending: mock(() => {}),
+    resync: mock(() => {}),
     incrementSubagentCount: mock(() => {}),
     decrementSubagentCount: mock(() => {}),
   };
@@ -227,34 +232,35 @@ describe('server event dispatcher', () => {
     expect(handlers.checkForPreviousSession).toHaveBeenCalledWith('2026-07-13_10-00-00');
   });
 
-  it('surfaces a replacement session instead of passing it off as a rejoin', () => {
+  it('reconciles a replacement session instead of passing it off as a rejoin', () => {
     const handlers = createHandlers();
-    const warn = console.warn;
-    const warnings: unknown[] = [];
-    console.warn = (...args: unknown[]) => warnings.push(args[0]);
 
-    try {
-      dispatchServerEvent(
-        {
-          type: 'SESSION_ATTACHED',
-          sessionId: 's1',
-          sessionEpoch: 43,
-          connectionId: 'conn-2',
-          recoveryMode: 'replaced',
-        },
-        handlers,
-      );
-    } finally {
-      console.warn = warn;
-    }
+    dispatchServerEvent(
+      {
+        type: 'SESSION_ATTACHED',
+        sessionId: 's1',
+        sessionEpoch: 43,
+        connectionId: 'conn-2',
+        recoveryMode: 'replaced',
+      },
+      handlers,
+    );
 
     expect(handlers.setAttachment).toHaveBeenCalledWith(
       expect.objectContaining({ recoveryMode: 'replaced', sessionEpoch: 43 }),
     );
-    expect(warnings).toHaveLength(1);
     // The tokens our iframes hold were minted by a process that is gone — every verb call
     // they make now answers 403. A replacement is exactly when they must be minted again.
     expect(handlers.refreshStaleIframeTokens).toHaveBeenCalledWith('s1');
+    // This used to be a console.warn saying local state "may be stale" — an admission, not
+    // a fix. Now the client says what it did while it was away and asks what is really
+    // there, in that order: a snapshot built before the flush lands would report the user's
+    // own buffered window as one that does not exist.
+    expect(handlers.flushPending).toHaveBeenCalled();
+    expect(handlers.resync).toHaveBeenCalled();
+    expect(handlers.flushPending.mock.invocationCallOrder[0]).toBeLessThan(
+      handlers.resync.mock.invocationCallOrder[0],
+    );
   });
 
   it('leaves iframe tokens alone when the join is a real rejoin', () => {

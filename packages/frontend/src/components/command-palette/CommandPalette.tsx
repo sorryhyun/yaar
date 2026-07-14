@@ -12,6 +12,22 @@ import { apiFetch, isRemoteMode } from '@/lib/api';
 import { isComposingKey } from '@/lib/ime';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
 
+function statusClass(status: MessageStatus['status']): string {
+  if (status === 'failed') return styles.messageStatusFailed;
+  if (status === 'unsent') return styles.messageStatusUnsent;
+  if (status === 'queued') return styles.messageStatusQueued;
+  return styles.messageStatusAccepted;
+}
+
+function statusLabel(status: MessageStatus): string {
+  if (status.status === 'failed') return status.error ?? 'Message failed';
+  // Not "sending". It is not on its way — it is sitting in the outbox waiting for a
+  // connection, and it will go out by itself when one comes back.
+  if (status.status === 'unsent') return 'Not sent — waiting to reconnect';
+  if (status.status === 'queued') return `Queued (position ${status.position})`;
+  return 'Accepted';
+}
+
 function readFilesAsDataUrls(files: File[]): Promise<string[]> {
   return Promise.all(
     files
@@ -85,16 +101,22 @@ export function CommandPalette() {
     textareaRef.current?.focus();
   }, []);
 
-  // Derive the most relevant active status to display
+  // Derive the most relevant active status to display.
+  //
+  // Failure outranks everything: a message that will not run is the one thing the user has
+  // to know about, and it used to be the one thing they could not see — the chip stayed on
+  // "queued" for a message the server had already dropped. `unsent` ranks next: it is a
+  // command still sitting in the outbox because the socket was down.
   const activeStatus = useMemo((): MessageStatus | null => {
     const entries = Object.values(messageStatuses);
     if (entries.length === 0) return null;
-    // Prioritize queued over accepted over sent
-    const queued = entries.find((e) => e.status === 'queued');
-    if (queued) return queued;
-    const accepted = entries.find((e) => e.status === 'accepted');
-    if (accepted) return accepted;
-    return null; // Don't show 'sent' — avoid flicker for fast responses
+    return (
+      entries.find((e) => e.status === 'failed') ??
+      entries.find((e) => e.status === 'unsent') ??
+      entries.find((e) => e.status === 'queued') ??
+      entries.find((e) => e.status === 'accepted') ??
+      null // Don't show 'sent' — avoid flicker for fast responses
+    );
   }, [messageStatuses]);
 
   const handlePaste = useCallback(
@@ -503,17 +525,7 @@ export function CommandPalette() {
           </div>
         </div>
         {activeStatus && (
-          <div
-            className={
-              activeStatus.status === 'queued'
-                ? styles.messageStatusQueued
-                : styles.messageStatusAccepted
-            }
-          >
-            {activeStatus.status === 'queued'
-              ? `Queued (position ${activeStatus.position})`
-              : 'Accepted'}
-          </div>
+          <div className={statusClass(activeStatus.status)}>{statusLabel(activeStatus)}</div>
         )}
         {/* Fixed slot for minimized window tabs */}
         <div className={styles.taskbarSlot}>

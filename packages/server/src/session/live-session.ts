@@ -31,7 +31,9 @@ import {
   type OSAction,
   type MonitorInfo,
   type AppProtocolRequest,
+  type ActiveAgentSnapshot,
 } from '@yaar/shared';
+import { SurfaceRegistry } from './surface-state.js';
 import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
@@ -115,6 +117,29 @@ export class LiveSession {
    * So the server mints the ids and broadcasts the list.
    */
   private monitors: MonitorInfo[] = [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1' }];
+
+  /**
+   * The notifications, dialogs, and prompts currently on the user's screen. Windows have
+   * `windowState`; this is the same idea for everything else the snapshot has to be able
+   * to name. See `surface-state.ts`.
+   */
+  private readonly surfaces = new SurfaceRegistry();
+
+  /**
+   * User messages this session has already taken responsibility for.
+   *
+   * The client keeps an outbox and resends anything it never got an ack for — which is the
+   * only way a command typed into a dropping socket survives at all. But "no ack" and "not
+   * delivered" are different: the message may have arrived and been queued a moment before
+   * the socket died. Without this set, the resend would run it a second time, and the user
+   * would watch the agent do their bidding twice.
+   *
+   * Bounded, because a session can outlive any number of messages and nothing here is
+   * worth a leak. An id evicted from the tail is one from thousands of messages ago; its
+   * outbox entry was acked and dropped long before.
+   */
+  private readonly acceptedMessageIds = new Set<string>();
+  private static readonly MAX_TRACKED_MESSAGE_IDS = 500;
 
   // Restored state
   private restoredContext: ContextMessage[];
@@ -293,6 +318,13 @@ export class LiveSession {
    * from outside LiveSession are not allowed.
    */
   broadcast(event: ServerEvent): void {
+    // Mirror the surfaces the client is being told to show. This is the only gateway they
+    // travel through, so recording here is what makes the snapshot able to say "this
+    // dialog is still up" — and, just as importantly, "this one is not".
+    if (event.type === ServerEventType.ACTIONS) {
+      for (const action of event.actions) this.surfaces.record(action);
+    }
+
     const monitorId = (event as { monitorId?: string }).monitorId;
     const bc = getBroadcastCenter();
     if (monitorId) {
@@ -300,6 +332,27 @@ export class LiveSession {
     } else {
       bc.publishToSession(this.sessionId, event);
     }
+  }
+
+  /**
+   * Everything this session currently holds — and, by omission, everything it does not.
+   *
+   * Built on demand, when the client asks (`RESYNC`), rather than pushed at attach. The
+   * client asks only after flushing what *it* was holding, so by the time this runs the
+   * registries have heard about the window the user opened while the socket was down. A
+   * snapshot taken any earlier would report that window as nonexistent and the client,
+   * treating this as authoritative, would dutifully delete it.
+   */
+  async buildSnapshot(): Promise<{ actions: OSAction[]; agents: ActiveAgentSnapshot[] }> {
+    const windows = await this.generateSnapshot();
+    const agents = (this.pool?.listAgents() ?? [])
+      .filter((a) => a.busy)
+      .map((a) => ({
+        agentId: a.id,
+        status: a.label,
+        ...(a.monitorId ? { monitorId: a.monitorId } : {}),
+      }));
+    return { actions: [...windows, ...this.surfaces.snapshot()], agents };
   }
 
   /**
@@ -461,6 +514,21 @@ export class LiveSession {
     return success;
   }
 
+  /** Send the authoritative state of this session to one connection. */
+  private async sendSnapshot(connectionId: ConnectionId): Promise<void> {
+    const { actions, agents } = await this.buildSnapshot();
+    this.sendTo(connectionId, { type: ServerEventType.SNAPSHOT, actions, agents });
+  }
+
+  /** Record a message id as taken, evicting the oldest once the set is full. */
+  private rememberMessageId(messageId: string): void {
+    if (this.acceptedMessageIds.size >= LiveSession.MAX_TRACKED_MESSAGE_IDS) {
+      const oldest = this.acceptedMessageIds.values().next().value;
+      if (oldest !== undefined) this.acceptedMessageIds.delete(oldest);
+    }
+    this.acceptedMessageIds.add(messageId);
+  }
+
   // ── Message routing ─────────────────────────────────────────────────
 
   /**
@@ -477,12 +545,24 @@ export class LiveSession {
     ) {
       const success = await this.ensureInitialized();
       if (!success) {
+        // The message is dead, and the client is holding an id for it. Saying so is the
+        // whole point: this used to console.error and return, and the chip on the user's
+        // screen sat at "queued" for a message that was never going to run.
         console.error(`[LiveSession ${this.sessionId}] Failed to initialize pool`);
+        this.sendTo(connectionId, {
+          type: ServerEventType.ERROR,
+          error: 'Message dropped: the agent pool could not be initialized.',
+          messageId: (event as { messageId?: string }).messageId,
+        });
         return;
       }
     }
 
     switch (event.type) {
+      case ClientEventType.RESYNC:
+        await this.sendSnapshot(connectionId);
+        break;
+
       case ClientEventType.USER_MESSAGE: {
         // A user message's monitor comes from the connection that sent it. The client
         // always knows which monitor it is on, so `?? '0'` only ever fired when
@@ -494,6 +574,7 @@ export class LiveSession {
             type: ServerEventType.ERROR,
             error:
               'Message rejected: no monitor. A user message must name the monitor it came from.',
+            messageId: event.messageId,
           });
           break;
         }
@@ -501,9 +582,23 @@ export class LiveSession {
           this.sendTo(connectionId, {
             type: ServerEventType.ERROR,
             error: `Message rejected: monitor ${monitorId} does not exist in this session.`,
+            messageId: event.messageId,
+            monitorId,
           });
           break;
         }
+        // A resend from the client's outbox for a message we already took. Ack it again so
+        // the outbox lets go, and do not run it twice.
+        if (this.acceptedMessageIds.has(event.messageId)) {
+          this.sendTo(connectionId, {
+            type: ServerEventType.MESSAGE_ACCEPTED,
+            messageId: event.messageId,
+            agentId: 'duplicate',
+          });
+          break;
+        }
+        this.rememberMessageId(event.messageId);
+
         // "Act as me" target (CLI-panel toggle): route to the session agent — the
         // user's deputy, the one principal that can drive the real browser.
         if (event.target === 'session') {
@@ -616,6 +711,9 @@ export class LiveSession {
         break;
 
       case ClientEventType.DIALOG_FEEDBACK: {
+        // Answered, so it is no longer on the screen — and must not be put back on it by
+        // the next snapshot.
+        this.surfaces.answered(event.dialogId);
         const resolved = await actionEmitter.resolveDialogFeedback({
           dialogId: event.dialogId,
           confirmed: event.confirmed,
@@ -682,6 +780,7 @@ export class LiveSession {
         break;
 
       case ClientEventType.USER_PROMPT_RESPONSE: {
+        this.surfaces.answered(event.promptId);
         const resolved = actionEmitter.resolveUserPromptFeedback({
           promptId: event.promptId,
           selectedValues: event.selectedValues,

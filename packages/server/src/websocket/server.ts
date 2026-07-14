@@ -35,6 +35,18 @@ export interface WsData {
   connectionId: string;
   sessionId: string | null;
   monitorId: string | null;
+  /**
+   * Serializes this connection's messages against each other.
+   *
+   * `message()` is async, and Bun does not wait for one call to finish before making the
+   * next — so two frames from the same socket ran concurrently and could land out of
+   * order. That was survivable while every message was independent. It stops being
+   * survivable with `RESYNC`, whose entire contract is *"you have now heard everything I
+   * did while I was away"*: if the buffered `window.create` in front of it is still
+   * awaiting `getAppMeta` when the snapshot is built, the snapshot omits that window and
+   * the client — trusting it — deletes it. Order was always the intent; now it is enforced.
+   */
+  queue?: Promise<void>;
 }
 
 export function createWsHandlers(options: WebSocketServerOptions) {
@@ -99,11 +111,11 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         monitors: session.getMonitors(),
       });
 
-      // Send snapshot of current windows to new connection
-      const snapshotActions = await session.generateSnapshot();
-      if (snapshotActions.length > 0) {
-        session.sendTo(connectionId, { type: ServerEventType.ACTIONS, actions: snapshotActions });
-      }
+      // No snapshot is pushed here. The client asks for one (`RESYNC`) once it has flushed
+      // what it was holding — the interactions it buffered while the socket was down, the
+      // messages in its outbox — because only then is the server's state a complete answer.
+      // Pushing it here, as this used to, meant racing the client's own flush and reporting
+      // a window the user had just opened as one that does not exist.
 
       // Send CLI history restore entries (only once, then clear)
       if (options.cliEntries && options.cliEntries.length > 0) {
@@ -122,19 +134,11 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       }
     },
 
-    async message(ws: ServerWebSocket<WsData>, data: string | Buffer) {
+    message(ws: ServerWebSocket<WsData>, data: string | Buffer) {
       if (ws.data.kind === 'bridge') return handleBridgeMessage(ws, data);
-      const { connectionId, sessionId } = ws.data;
-      try {
-        const event = JSON.parse(typeof data === 'string' ? data : data.toString()) as ClientEvent;
-        const hub = getSessionHub();
-        const session = hub.get(sessionId!);
-        if (session) {
-          await session.routeMessage(event, connectionId);
-        }
-      } catch (err) {
-        console.error('Failed to process message:', err);
-      }
+      // One at a time, in the order they arrived. See WsData.queue.
+      ws.data.queue = (ws.data.queue ?? Promise.resolve()).then(() => routeOne(ws, data));
+      return ws.data.queue;
     },
 
     close(ws: ServerWebSocket<WsData>) {
@@ -154,6 +158,53 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       // Session stays alive for reconnection; evicted after timeout if no one reconnects
     },
   };
+}
+
+/**
+ * Route one client frame, and make sure that whatever happens to it, the client hears.
+ *
+ * This is the outermost catch for the whole message path — a budget slot that never freed,
+ * a monitor that could not be resolved, a pool mid-reset. Every one of those throws
+ * carried a `messageId` up through the stack, and this frame used to `console.error` it
+ * into the server's own logs and return, leaving the user watching a chip that said
+ * "queued" for a message that had already died. The id is right here in the event; the
+ * error now carries it back.
+ */
+async function routeOne(ws: ServerWebSocket<WsData>, data: string | Buffer): Promise<void> {
+  const { connectionId, sessionId } = ws.data;
+  let event: ClientEvent | undefined;
+  try {
+    event = JSON.parse(typeof data === 'string' ? data : data.toString()) as ClientEvent;
+    const session = getSessionHub().get(sessionId!);
+    if (!session) {
+      // The session was evicted out from under this socket. Silence here read to the user
+      // as a command that simply never happened.
+      sendError(ws, 'Message dropped: this session is no longer live. Reload to reconnect.', event);
+      return;
+    }
+    await session.routeMessage(event, connectionId);
+  } catch (err) {
+    console.error('Failed to process message:', err);
+    sendError(ws, err instanceof Error ? err.message : 'Failed to process message', event);
+  }
+}
+
+/** Report a failure back over the socket, naming the message it killed when there is one. */
+function sendError(ws: ServerWebSocket<WsData>, error: string, event?: ClientEvent): void {
+  const messageId = (event as { messageId?: string } | undefined)?.messageId;
+  const monitorId = (event as { monitorId?: string } | undefined)?.monitorId;
+  try {
+    ws.send(
+      JSON.stringify({
+        type: ServerEventType.ERROR,
+        error,
+        ...(messageId ? { messageId } : {}),
+        ...(monitorId ? { monitorId } : {}),
+      }),
+    );
+  } catch {
+    // The socket is gone too. Nothing left to tell.
+  }
 }
 
 /**

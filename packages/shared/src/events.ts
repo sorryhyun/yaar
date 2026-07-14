@@ -29,6 +29,7 @@ export const ServerEventType = {
   VERB_SUBSCRIPTION_UPDATE: 'VERB_SUBSCRIPTION_UPDATE',
   CLI_RESTORE: 'CLI_RESTORE',
   MONITORS: 'MONITORS',
+  SNAPSHOT: 'SNAPSHOT',
 } as const;
 
 /** Client → Server event type discriminants. */
@@ -51,6 +52,7 @@ export const ClientEventType = {
   SUBSCRIBE_MONITOR: 'SUBSCRIBE_MONITOR',
   ADD_MONITOR: 'ADD_MONITOR',
   REMOVE_MONITOR: 'REMOVE_MONITOR',
+  RESYNC: 'RESYNC',
 } as const;
 
 // ============ Client → Server Events ============
@@ -225,6 +227,23 @@ export interface RemoveMonitorEvent {
   monitorId: string;
 }
 
+/**
+ * "Tell me what is actually there."
+ *
+ * The client sends this once it has flushed everything it was holding — the interactions
+ * it buffered while the socket was down, the messages in its outbox — and is ready to be
+ * overwritten. The server answers with a `SNAPSHOT`, which is authoritative: whatever is
+ * not in it does not exist.
+ *
+ * It comes from the client, after the flush, rather than being pushed at attach time,
+ * because the server is only authoritative once it has heard everything the client did
+ * while it was away. A snapshot built before the client's buffered `window.create`
+ * reached the registry would delete the very window it is reporting.
+ */
+export interface ResyncEvent {
+  type: typeof ClientEventType.RESYNC;
+}
+
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
@@ -243,7 +262,8 @@ export type ClientEvent =
   | AppEventEvent
   | SubscribeMonitorEvent
   | AddMonitorEvent
-  | RemoveMonitorEvent;
+  | RemoveMonitorEvent
+  | ResyncEvent;
 
 // ============ Server → Client Events ============
 
@@ -348,6 +368,16 @@ export interface ErrorEvent {
   error: string;
   agentId?: string;
   monitorId?: string;
+  /**
+   * The user message this error is *about*, when it is about one.
+   *
+   * Every path that drops a message — a budget timeout, a full queue, an unknown monitor,
+   * a pool reset — has the id in scope, and none of them used to send it. The client was
+   * left holding a `messageId` whose chip said "queued" and a disembodied error string it
+   * could not connect to it, so the chip stayed queued forever. An error that kills a
+   * message names it.
+   */
+  messageId?: string;
 }
 
 export interface WindowAgentStatusEvent {
@@ -435,8 +465,42 @@ export interface MonitorsEvent {
   focus?: string;
 }
 
+/** An agent the server considers to be running right now. */
+export interface ActiveAgentSnapshot {
+  agentId: string;
+  status: string;
+  monitorId?: string;
+}
+
+/**
+ * Everything the server currently holds for this session — and, by omission, everything
+ * it does not.
+ *
+ * This is a **replace-state** snapshot, not an additive one. The old reconnect path
+ * re-sent `window.create` for each live window and left the client to merge, which meant
+ * a window an agent closed while the socket was down stayed on screen forever, and a
+ * spinner for an agent that had long since finished ran until the tab was reloaded. The
+ * client applies this by *replacing* each surface it covers: any window, notification,
+ * dialog, prompt, or active agent not named here is gone.
+ *
+ * `actions` re-materializes the live surfaces as the actions that would have created them
+ * (`window.create`, `notification.show`, `dialog.confirm`, `user.prompt.show`), so the
+ * client renders them through the same reducer as live traffic rather than a parallel
+ * "restore" path that drifts.
+ *
+ * What is deliberately *not* here: message status. The client's outbox is the truth about
+ * what it sent, and it resends on reconnect (the server dedups by message id), so status
+ * is rebuilt from the acks that come back rather than guessed at here.
+ */
+export interface SnapshotEvent {
+  type: typeof ServerEventType.SNAPSHOT;
+  actions: OSAction[];
+  agents: ActiveAgentSnapshot[];
+}
+
 export type ServerEvent =
   | ActionsEvent
+  | SnapshotEvent
   | AgentThinkingEvent
   | AgentResponseEvent
   | SessionAttachedEvent

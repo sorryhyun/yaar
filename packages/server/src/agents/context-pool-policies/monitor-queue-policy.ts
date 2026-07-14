@@ -46,9 +46,19 @@ export class MonitorQueuePolicy {
     return this.queue.length;
   }
 
-  clear(): void {
+  /**
+   * Drop every queued task and hand them back.
+   *
+   * The tasks are returned rather than swallowed because each one is a message the user
+   * sent and the client is still showing as "queued (position 3)". Clearing the queue on a
+   * reset used to delete them where nobody could see it, and that chip never moved again.
+   * A caller that discards work now has the work in its hands, and no excuse not to say so.
+   */
+  clear(): QueuedTask[] {
+    const dropped = this.queue;
     this.queue = [];
     this.processing = false;
+    return dropped;
   }
 
   beginProcessing(): boolean {
