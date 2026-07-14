@@ -57,6 +57,28 @@ export function getMonitorId(): string | undefined {
   return agentContext.getStore()?.monitorId;
 }
 
+/**
+ * The monitor of whoever is running — required.
+ *
+ * `getMonitorId() ?? '0'` appeared at nine call sites, each one a place that needed to
+ * know which desktop it was acting on and settled for a guess. They did not agree: a
+ * session-agent turn resolved to '0' here while its emitted events were stamped with the
+ * session's "active" monitor, so the window it opened was registered on one monitor and
+ * delivered to another. Every agent turn now carries its monitor, and every iframe verb
+ * call carries the monitor of the window that made it, so there is nothing left for the
+ * default to cover except a bug.
+ */
+export function requireMonitorId(): string {
+  const monitorId = agentContext.getStore()?.monitorId;
+  if (!monitorId) {
+    throw new Error(
+      'No monitor in context. Anything that acts on a monitor must run inside an agent ' +
+        'turn or an iframe verb call, both of which carry one.',
+    );
+  }
+  return monitorId;
+}
+
 export function getWindowId(): string | undefined {
   return agentContext.getStore()?.windowId;
 }

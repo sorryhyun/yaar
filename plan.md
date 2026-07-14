@@ -10,7 +10,7 @@ Supersedes: `report.md` (deleted; its diagnosis and slice log are carried forwar
 | Slice 0 | F-8, F-9, part of F-3 | **Landed** |
 | Slice 1 | F-4 — attachment handshake | **Landed** (`feat(recovery): make session attachment a step of its own`) |
 | Slice 2 | F-19, F-20, F-21 — access chokepoint | **Landed** |
-| Slice 3 | F-7, F-10, F-11…F-14 — monitor identity | Open |
+| Slice 3 | F-7, F-10, F-11…F-14 — monitor identity | **Landed** |
 | Slice 4 | F-15, F-16, F-17 — deadline semantics | Open |
 | Slice 5 | F-2, F-18 — failure surfacing and delivery | Open |
 | Slice 6 | F-1 — authoritative resync | Open |
@@ -24,7 +24,11 @@ Supersedes: `report.md` (deleted; its diagnosis and slice log are carried forwar
 
 **Landed in Slice 2:** `http/access.ts` is now the single chokepoint. A request resolves to a `Principal` (`host` | `app`) and every route that reaches a real resource names the `yaar://` URI and verb it is about to perform and asks `requirePermission` — the same check `/api/verb` already used, now shared rather than duplicated. `isStaticAsset` is a path test (nothing under `/api/` or `/mcp/` is ever static), so the extension bypass is gone. The MCP principal is a per-agent token bound server-side (`mcp/agent-tokens.ts`); `x-agent-id` is deleted, so an agent can no longer name itself the session agent. `bundles` is enforced at the HTTP door (`/api/dev/*` → `yaar-dev`, `/api/browser` + `/api/bridge` → `yaar-web`, `/api/ml-weights*` → `yaar-ml`), not just at compile time. `POST /api/iframe-token` — a mint-any-app's-token oracle — is host-only, as are `pick-directory`, `remote-info`, and `agents/stats`. An invalid or expired iframe token is now refused instead of being promoted to `host`.
 
-Two mappings had to be made explicit to get this right, and both are load-bearing:
+**Landed in Slice 3:** the monitor of a window-scoped event is derived from its window and the monitor of a user-scoped event comes from its connection — and there is no third source. `LiveSession.activeMonitorId` is gone (a session has N connections, so a session-global "current monitor" was last-writer-wins between tabs); a connection holds exactly one `BroadcastCenter` subscription, replace-on-set, and an empty one now means *no* monitor-scoped events rather than *all* of them. `ContextPool.handleTask` derives the monitor for a plain window from `WindowStateRegistry`, as `AppTaskProcessor` already did. Every `?? '0'` is deleted: `requireMonitorId()` and `ActionEmitter.resolveWindowMonitor()` throw instead. The session agent reports the monitor of the turn it is running, so the MCP registry and the emitter can no longer disagree about where its window went. The monitor **list** moved to `LiveSession`: the server mints ids (`ADD_MONITOR`) and broadcasts them (`MONITORS`), and the frontend renders that instead of a per-tab counter that had two tabs colliding on one monitor `"1"`.
+
+One thing the acceptance tests forced into the open: a connection that has not named its monitor now receives nothing, so `monitorId` had to ride on the WebSocket URL. Otherwise everything an agent emitted between attach and the client's first `SUBSCRIBE_MONITOR` would be dropped — and a reconnect into a live session is exactly when there is something to miss.
+
+Two mappings had to be made explicit to get Slice 2 right, and both are load-bearing:
 - `/api/storage/apps/{id}/x` and `yaar://apps/{id}/storage/x` are the *same file*. Only the second is what an app holds a permission for (`yaar://apps/self/storage/` is auto-granted), so `storageUriFor()` canonicalizes the HTTP path into it. Mapping to the flat `yaar://storage/apps/{id}/x` instead would have denied every app its own storage — and made a `yaar://storage/` grant silently mean *every other app's secrets*.
 - `self` is resolved on **both** sides of the match — the requested URI and the declared permissions — because app.json speaks `yaar://apps/self/storage/` while a URI derived from an HTTP path speaks `yaar://apps/notes/storage/x`. Matching them literally denies an app its own storage. (A test caught exactly this.)
 
@@ -74,7 +78,7 @@ The verb layer's model (declared `permissions[]`, `self` resolution, the `sessio
 **F-21 — the MCP principal is self-asserted.**
 `mcp/server.ts:174-183` derives `agentId` — and therefore `role`, and therefore the `session-principal` gate — from an `x-agent-id` **request header**, behind a single process-wide bearer token shared by every agent. Any agent can claim to be the session agent. `MCP_SKIP_AUTH=1` (used by `make dev`) removes even the shared token. Separately, `bundles` gating is compile-time only (`compiler/src/plugins.ts:180`); the doors it nominally fences (`/api/dev/*`, `/api/browser`, `/api/bridge`) accept any iframe token, so a hand-written `fetch` gets the surface without declaring the bundle.
 
-### Open — monitor identity (High)
+### Closed — monitor identity (High) — *Slice 3*
 
 **F-11 — window-scoped events carry no `monitorId`.**
 `WindowMessageEvent` and `ComponentActionEvent` have no `monitorId` field in the schema (`packages/shared/src/events.ts:105-110,142-151`). `ContextPool.handleTask` re-types a plain (non-app) window task to `'monitor'` without deriving the monitor from the window (`agents/context-pool.ts:447`), so it falls to `?? '0'` (`agents/monitor-task-processor.ts:24`). **Clicking a button in a plain window on monitor 1 runs on monitor 0's agent**, streams into monitor 0's CLI, and any window it opens lands on monitor 0. The app-window path derives this correctly (`app-task-processor.ts:36`); the plain-window path does not.
@@ -149,17 +153,21 @@ Acceptance — verified against a live server, and as tests in `packages/tests/s
 
 **Not closed:** confinement holds against network callers, cross-session reads, and any app that plays by the rules — but a *hostile* app can still present as the host, because it shares the desktop's origin. See F-23 / Slice 9.
 
-### Slice 3 — monitor is derived, never defaulted (F-7, F-10, F-11…F-14)
+### Slice 3 — monitor is derived, never defaulted (F-7, F-10, F-11…F-14) — **Landed**
 
 The rule: **for window-scoped events the monitor comes from the window; for user-scoped events it comes from the connection. There is no fallback.**
 
-1. Delete `LiveSession.activeMonitorId`. A session-global "current monitor" is a category error when a session has N connections.
-2. Give each connection exactly one subscribed monitor, replace-on-set. Delete the `Set`, the append-only `subscribeToMonitor`, and the "empty set means everything" branch in `publishToMonitor` (F-7, F-10).
-3. Derive the monitor for `WINDOW_MESSAGE` / `COMPONENT_ACTION` from the window, as `AppTaskProcessor` already does — including on the plain-window path in `handleTask` (F-11).
-4. Delete every `?? '0'` and every `?? activeMonitorId`. A task or action that cannot resolve a monitor is a bug; make it throw rather than guess (F-12). Give the session agent an explicit monitor on each turn instead of two disagreeing fallbacks.
-5. Move `monitors[]` to `LiveSession` and broadcast it on change; the frontend renders server state rather than minting its own (F-14). This removes the client-side counter, the two-tab id collision, and the orphaned-window case on reconnect.
+1. ✅ Delete `LiveSession.activeMonitorId`. A session-global "current monitor" is a category error when a session has N connections.
+2. ✅ Give each connection exactly one subscribed monitor, replace-on-set. Delete the `Set`, the append-only `subscribeToMonitor`, and the "empty set means everything" branch in `publishToMonitor` (F-7, F-10).
+3. ✅ Derive the monitor for `WINDOW_MESSAGE` / `COMPONENT_ACTION` from the window, as `AppTaskProcessor` already does — including on the plain-window path in `handleTask` (F-11).
+4. ✅ Delete every `?? '0'` and every `?? activeMonitorId`. A task or action that cannot resolve a monitor is a bug; make it throw rather than guess (F-12). Give the session agent an explicit monitor on each turn instead of two disagreeing fallbacks.
+5. ✅ Move `monitors[]` to `LiveSession` and broadcast it on change; the frontend renders server state rather than minting its own (F-14). This removes the client-side counter, the two-tab id collision, and the orphaned-window case on reconnect.
 
 Acceptance: clicking a component in a plain window on monitor 1 runs on monitor 1's agent and renders there; two tabs in one session on different monitors do not steal each other's actions; a deleted monitor stops delivering events; a second tab sees monitors created by the first.
+
+Written first, red, then implemented against: `packages/server/src/tests/monitor-identity.test.ts` (15 tests, one `describe` per finding), plus `packages/tests/src/integration/monitor-routing.test.ts` for the one assertion that cannot run in the server package — `uri-resolve.test.ts` stubs `agent-context` with `getMonitorId: () => '0'`, and Bun's `mock.module` is process-wide and never restored, so "no monitor in context" is not expressible there.
+
+Two tests in `window-handle-scope.test.ts` were **deleted**, not repaired: they asserted that an unstamped window action lands on the session's active monitor, and failing that on monitor 0. That is the bug, and it was pinned by a passing test.
 
 ### Slice 4 — deadlines fail loudly (F-15, F-16, F-17)
 
@@ -212,6 +220,6 @@ Acceptance: an app iframe that omits its token, spoofs `Referer`, or reaches for
 7. Provider history loss is visible and never reported as a successful resume.
 8. App subscriptions are re-established or explicitly invalidated.
 9. Stale socket callbacks cannot overwrite a newer connection. *(Landed, Slice 0)*
-10. Multi-tab and multi-monitor routing is deterministic, with no monitor fallback anywhere in the code.
+10. Multi-tab and multi-monitor routing is deterministic, with no monitor fallback anywhere in the code. *(Landed, Slice 3)*
 11. A timeout is never observable as a success.
 12. No `/api/*` route reaches a resource the caller's declared permissions do not cover. *(Landed, Slice 2 — for any caller that presents its identity. Closing it for a caller that hides it needs Slice 9.)*

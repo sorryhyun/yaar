@@ -28,6 +28,7 @@ export const ServerEventType = {
   APP_PROTOCOL_REQUEST: 'APP_PROTOCOL_REQUEST',
   VERB_SUBSCRIPTION_UPDATE: 'VERB_SUBSCRIPTION_UPDATE',
   CLI_RESTORE: 'CLI_RESTORE',
+  MONITORS: 'MONITORS',
 } as const;
 
 /** Client → Server event type discriminants. */
@@ -48,6 +49,7 @@ export const ClientEventType = {
   APP_PROTOCOL_READY: 'APP_PROTOCOL_READY',
   APP_EVENT: 'APP_EVENT',
   SUBSCRIBE_MONITOR: 'SUBSCRIBE_MONITOR',
+  ADD_MONITOR: 'ADD_MONITOR',
   REMOVE_MONITOR: 'REMOVE_MONITOR',
 } as const;
 
@@ -208,6 +210,16 @@ export interface SubscribeMonitorEvent {
   viewport?: { w: number; h: number };
 }
 
+/**
+ * Ask the session to create a monitor. The **server** mints the id — two tabs
+ * each minting from their own counter is how they collided on one server-side
+ * monitor and then could not see each other's. The answer comes back as a
+ * `MONITORS` event with `focus` set for the tab that asked.
+ */
+export interface AddMonitorEvent {
+  type: typeof ClientEventType.ADD_MONITOR;
+}
+
 export interface RemoveMonitorEvent {
   type: typeof ClientEventType.REMOVE_MONITOR;
   monitorId: string;
@@ -230,6 +242,7 @@ export type ClientEvent =
   | AppProtocolReadyEvent
   | AppEventEvent
   | SubscribeMonitorEvent
+  | AddMonitorEvent
   | RemoveMonitorEvent;
 
 // ============ Server → Client Events ============
@@ -403,6 +416,25 @@ export interface CliRestoreEvent {
   entries: CliRestoreEntry[];
 }
 
+/** A virtual desktop. Owned by the session, not by a tab. */
+export interface MonitorInfo {
+  id: string;
+  label: string;
+}
+
+/**
+ * The session's monitor list — authoritative, replacing whatever the client holds.
+ *
+ * Sent on attach and on every change. `focus` is set only for the connection whose
+ * ADD_MONITOR produced this list: it is that tab's answer to "which id did I get?",
+ * and it is why the id can be minted server-side without a request/response pairing.
+ */
+export interface MonitorsEvent {
+  type: typeof ServerEventType.MONITORS;
+  monitors: MonitorInfo[];
+  focus?: string;
+}
+
 export type ServerEvent =
   | ActionsEvent
   | AgentThinkingEvent
@@ -417,4 +449,5 @@ export type ServerEvent =
   | ApprovalRequestEvent
   | AppProtocolRequestEvent
   | VerbSubscriptionUpdateEvent
-  | CliRestoreEvent;
+  | CliRestoreEvent
+  | MonitorsEvent;

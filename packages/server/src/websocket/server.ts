@@ -64,7 +64,9 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       session.addConnection(connectionId, ws);
       broadcastCenter.subscribe(connectionId, ws, session.sessionId);
 
-      // Auto-subscribe to monitor if specified in query params
+      // Auto-subscribe to monitor if specified in query params. A connection that names
+      // no monitor receives no monitor-scoped events until it sends SUBSCRIBE_MONITOR —
+      // the frontend does so on mount.
       const monitorId = ws.data.monitorId;
       if (monitorId) {
         broadcastCenter.subscribeToMonitor(connectionId, monitorId);
@@ -88,6 +90,13 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         provider: getWarmPool().getPreferredProvider() ?? 'claude',
         // Absent until the pool initializes (first message); the client falls back then.
         logSessionId: session.getPool()?.getLogSessionId() ?? undefined,
+      });
+
+      // The session's monitors, before its windows — a window arrives on a monitor, and a
+      // reconnecting tab that had never heard of that monitor could not render it.
+      session.sendTo(connectionId, {
+        type: ServerEventType.MONITORS,
+        monitors: session.getMonitors(),
       });
 
       // Send snapshot of current windows to new connection

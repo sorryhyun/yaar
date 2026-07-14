@@ -71,22 +71,41 @@ Monitors enable parallel, independent AI workflows. A user can run a long backgr
 
 Monitors use numeric IDs like `0`, `1`, etc. The default monitor is always `0` ("Desktop 1"). Window URIs use the `yaar://monitors/{id}/{windowId}` format — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
 
-### Frontend
+### Who owns what
 
-Monitors are managed in `monitorSlice.ts`:
+**The session owns the monitor list; a connection owns which monitor it is looking at.**
+
+`LiveSession.monitors` is authoritative. The server mints the ids (`ADD_MONITOR` → lowest
+unused integer) and broadcasts the list (`MONITORS`) on attach and on every change; the
+frontend renders it. It used to be per-tab state minted from a per-tab counter, so two tabs
+each made a monitor `"1"`, collided on one server-side agent, and neither saw the other's.
+
+`activeMonitorId` lives only in the frontend store, one per tab, and is mirrored server-side
+as the connection's single `BroadcastCenter` subscription (replace-on-set). The server has no
+session-wide "active monitor" — a session has N connections, so one such field is a category
+error, and it was last-writer-wins between tabs.
 
 ```typescript
 interface Monitor {
-  id: string;        // "0"
-  label: string;     // "Desktop 1"
-  createdAt: number;
+  id: string;        // "0"          — minted by the server
+  label: string;     // "Monitor 1"
+  createdAt: number; // client-side only
 }
 ```
 
 - **Taskbar tabs** — when more than one monitor exists, tabs appear on the left side of the taskbar
 - **Keyboard** — `Ctrl+1` through `Ctrl+9` to switch monitors
-- **Window filtering** — `selectVisibleWindows` filters by `activeMonitorId`
-- **Removal** — deleting a monitor deletes all its windows
+- **Window filtering** — `selectVisibleWindows` filters by the tab's `activeMonitorId`
+- **Create / remove** — the store asks the server (`ADD_MONITOR` / `REMOVE_MONITOR`) and applies the `MONITORS` answer; removing a monitor drops its agent, detaches its subscribers, and deletes its windows
+
+### There is no monitor fallback
+
+For a **window-scoped** event (`WINDOW_MESSAGE`, `COMPONENT_ACTION`, any `window.*` action)
+the monitor comes from the window — `WindowStateRegistry.getMonitorForWindow`. For a
+**user-scoped** event it comes from the connection that sent it. Nothing defaults to `'0'`:
+a task or action whose monitor cannot be resolved throws (`requireMonitorId`,
+`ActionEmitter.resolveWindowMonitor`). Guessing is what made a click in a window on monitor 1
+run on monitor 0's agent and open its windows there. See `plan.md` (Slice 3, F-7/F-10..F-14).
 
 ### Server
 

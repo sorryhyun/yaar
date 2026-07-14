@@ -22,7 +22,9 @@ export const DEFAULT_VIEWPORT_WIDTH = 1280;
 export const DEFAULT_VIEWPORT_HEIGHT = 720;
 
 /** Maximum number of virtual monitors (desktops) allowed per session. */
-export const MAX_MONITORS = 4;
+// The server mints monitor ids and enforces the cap; the frontend only hides the
+// "add monitor" button at it. One number, in @yaar/shared.
+export { MAX_MONITORS } from '@yaar/shared';
 
 /** CSS class added to `<html>` during a window drag to suppress text selection. */
 export const DRAGGING_CSS_CLASS = 'yaar-dragging';

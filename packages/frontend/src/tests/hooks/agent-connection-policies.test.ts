@@ -52,6 +52,7 @@ function createHandlers() {
     setSession: mock(() => {}),
     setAttachment: mock(() => {}),
     checkForPreviousSession: mock(() => {}),
+    setMonitors: mock(() => {}),
     refreshStaleIframeTokens: mock(() => {}),
     addDebugEntry: mock(() => {}),
     setAgentActive: mock(() => {}),

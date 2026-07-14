@@ -58,6 +58,7 @@ mock.module('../agents/agent-context.js', () => ({
   getCurrentConnectionId: () => undefined,
   getSessionId: () => undefined,
   getMonitorId: () => '0',
+  requireMonitorId: () => '0',
   getWindowId: () => undefined,
   getAgentRole: () => undefined,
   principalRole: () => 'monitor',

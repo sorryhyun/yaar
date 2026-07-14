@@ -14,7 +14,7 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
 import { ok, okJsonResource, okLinks, error, getActiveSession } from './utils.js';
-import { getSessionId, getMonitorId } from '../agents/agent-context.js';
+import { getSessionId, requireMonitorId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { getHeadlessBrowser } from '../lib/browser/index.js';
 import {
@@ -183,7 +183,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
 
       const monitors = listMonitors(session, pool);
       return okJsonResource('yaar://session/monitors', {
-        currentMonitorId: getMonitorId() ?? '0',
+        currentMonitorId: requireMonitorId(),
         monitors,
       });
     },

@@ -17,7 +17,15 @@ export type ConnectionId = string;
 interface ConnectionEntry {
   ws: YaarWebSocket;
   sessionId: SessionId;
-  subscribedMonitors: Set<string>;
+  /**
+   * The one monitor this connection is looking at, or undefined before it has said.
+   *
+   * A Set here was the bug: subscribing only ever added, nothing ever removed, and a
+   * connection that switched monitors kept receiving the old one's events forever —
+   * including a monitor it had *deleted*, whose windows the frontend then re-created.
+   * A tab looks at one monitor at a time, so this holds one monitor.
+   */
+  monitorId?: string;
 }
 
 export class BroadcastCenter {
@@ -27,7 +35,7 @@ export class BroadcastCenter {
    * Register a WebSocket connection with its session.
    */
   subscribe(connectionId: ConnectionId, ws: YaarWebSocket, sessionId: SessionId): void {
-    this.connections.set(connectionId, { ws, sessionId, subscribedMonitors: new Set() });
+    this.connections.set(connectionId, { ws, sessionId });
     console.log(`[BroadcastCenter] Connection subscribed: ${connectionId} (session: ${sessionId})`);
   }
 
@@ -40,17 +48,37 @@ export class BroadcastCenter {
   }
 
   /**
-   * Subscribe a connection to a specific monitor.
-   * Connections with subscriptions only receive monitor-scoped events for subscribed monitors.
-   * Connections with no subscriptions receive all events (backward compat).
+   * Point a connection at a monitor, replacing whatever it was looking at.
+   *
+   * A connection receives monitor-scoped events for exactly this monitor and no
+   * other. Until it has been called, the connection receives none: "no monitor" is
+   * not "every monitor", it is a connection that has not yet said where it is.
    */
   subscribeToMonitor(connectionId: ConnectionId, monitorId: string): void {
     const entry = this.connections.get(connectionId);
     if (entry) {
-      entry.subscribedMonitors.add(monitorId);
+      entry.monitorId = monitorId;
       console.log(
         `[BroadcastCenter] Connection ${connectionId} subscribed to monitor ${monitorId}`,
       );
+    }
+  }
+
+  /**
+   * Detach every connection in a session that is watching a now-deleted monitor.
+   *
+   * Without this, REMOVE_MONITOR tore down the agent and left the subscription —
+   * so a deleted monitor kept delivering, and the frontend faithfully re-created
+   * the windows of a desktop the user had just closed.
+   */
+  unsubscribeMonitor(sessionId: SessionId, monitorId: string): void {
+    for (const [connectionId, entry] of this.connections) {
+      if (entry.sessionId === sessionId && entry.monitorId === monitorId) {
+        entry.monitorId = undefined;
+        console.log(
+          `[BroadcastCenter] Connection ${connectionId} detached from removed monitor ${monitorId}`,
+        );
+      }
     }
   }
 
@@ -103,23 +131,23 @@ export class BroadcastCenter {
   }
 
   /**
-   * Publish an event to connections in a session that are subscribed to a specific monitor.
-   * Connections with empty subscribedMonitors receive all events (backward compat).
+   * Publish an event to the connections in a session that are watching this monitor.
    * Returns the number of connections that received the event.
    */
   publishToMonitor(sessionId: SessionId, monitorId: string, event: ServerEvent): number {
     let count = 0;
     const data = JSON.stringify(event);
     for (const [, entry] of this.connections) {
-      if (entry.sessionId === sessionId && entry.ws.readyState === WS_OPEN) {
-        // Send if: no subscriptions (backward compat) OR subscribed to this monitor
-        if (entry.subscribedMonitors.size === 0 || entry.subscribedMonitors.has(monitorId)) {
-          try {
-            entry.ws.send(data);
-            count++;
-          } catch (err) {
-            console.error(`[BroadcastCenter] Failed to send monitor event:`, err);
-          }
+      if (
+        entry.sessionId === sessionId &&
+        entry.monitorId === monitorId &&
+        entry.ws.readyState === WS_OPEN
+      ) {
+        try {
+          entry.ws.send(data);
+          count++;
+        } catch (err) {
+          console.error(`[BroadcastCenter] Failed to send monitor event:`, err);
         }
       }
     }

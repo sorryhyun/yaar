@@ -32,6 +32,9 @@ async function broadcastFromIframe(action: OSAction): Promise<OSAction[]> {
   const session = new LiveSession(SESSION);
   const bc = getBroadcastCenter();
   bc.subscribe('conn-1', fakeSocket(events), SESSION);
+  // A connection receives monitor-scoped events for the monitor it says it is on, and
+  // for no other. A real tab says so as it connects (?monitorId= / SUBSCRIBE_MONITOR).
+  bc.subscribeToMonitor('conn-1', '0');
   try {
     await runWithAgentContext(
       { agentId: 'iframe:devtools', sessionId: SESSION, monitorId: '0' },

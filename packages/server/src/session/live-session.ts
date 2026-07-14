@@ -25,9 +25,11 @@ import {
   ServerEventType,
   ClientEventType,
   DEFAULT_MONITOR_ID,
+  MAX_MONITORS,
   type ClientEvent,
   type ServerEvent,
   type OSAction,
+  type MonitorInfo,
   type AppProtocolRequest,
 } from '@yaar/shared';
 import type { YaarWebSocket } from './types.js';
@@ -99,13 +101,20 @@ export class LiveSession {
   readonly reloadCache: ReloadCache;
 
   /**
-   * The monitor the user is currently looking at, tracked from SUBSCRIBE_MONITOR.
+   * The session's monitors — the virtual desktops, and the authoritative list of them.
    *
-   * Read by ActionEmitter.resolveWindowMonitor() to place a window action that
-   * arrives with no monitor of its own (an app's iframe calling a verb, say).
-   * Before this, server and frontend each guessed at that case and disagreed.
+   * There is deliberately no `activeMonitorId` beside this. A session has N connections;
+   * "the monitor the user is looking at" is a property of a *connection*, and collapsing
+   * it to one field per session made it last-writer-wins: two tabs on different monitors,
+   * and tab B's subscribe silently retargeted tab A's monitor-less actions. Where the
+   * user is looking now lives where it always belonged — in the connection, held by the
+   * BroadcastCenter — and nothing is monitor-less any more, so nothing needs to ask.
+   *
+   * The list itself was client state, minted from a per-tab counter: two tabs each made
+   * a monitor "1", collided on one server-side agent, and neither could see the other's.
+   * So the server mints the ids and broadcasts the list.
    */
-  activeMonitorId: string = DEFAULT_MONITOR_ID;
+  private monitors: MonitorInfo[] = [{ id: DEFAULT_MONITOR_ID, label: 'Monitor 1' }];
 
   // Restored state
   private restoredContext: ContextMessage[];
@@ -448,7 +457,26 @@ export class LiveSession {
 
     switch (event.type) {
       case ClientEventType.USER_MESSAGE: {
-        const monitorId = event.monitorId ?? '0';
+        // A user message's monitor comes from the connection that sent it. The client
+        // always knows which monitor it is on, so `?? '0'` only ever fired when
+        // something upstream had lost it — and then answered with the wrong monitor
+        // rather than saying so.
+        const monitorId = event.monitorId;
+        if (!monitorId) {
+          this.sendTo(connectionId, {
+            type: ServerEventType.ERROR,
+            error:
+              'Message rejected: no monitor. A user message must name the monitor it came from.',
+          });
+          break;
+        }
+        if (!this.monitors.some((m) => m.id === monitorId)) {
+          this.sendTo(connectionId, {
+            type: ServerEventType.ERROR,
+            error: `Message rejected: monitor ${monitorId} does not exist in this session.`,
+          });
+          break;
+        }
         // "Act as me" target (CLI-panel toggle): route to the session agent — the
         // user's deputy, the one principal that can drive the real browser.
         if (event.target === 'session') {
@@ -461,14 +489,8 @@ export class LiveSession {
           });
           break;
         }
-        // Auto-create monitor agent if needed (max 4 monitors)
-        if (monitorId !== '0' && this.pool && !this.pool.hasMonitorAgent(monitorId)) {
-          if (this.pool.getMonitorAgentCount() >= 4) {
-            console.warn(
-              `[LiveSession ${this.sessionId}] Monitor limit reached (4), ignoring ${monitorId}`,
-            );
-            break;
-          }
+        // The monitor exists (checked above); its agent is created on first use.
+        if (this.pool && !this.pool.hasMonitorAgent(monitorId)) {
           await this.pool.createMonitorAgent(monitorId);
         }
         await this.pool?.handleTask({
@@ -651,7 +673,13 @@ export class LiveSession {
                   windowStyle: appMeta?.windowStyle,
                   appId: interaction.appId,
                 };
-                this.windowState.handleAction(createAction, interaction.monitorId ?? '0');
+                // Reading a log, not routing a message: an interaction recorded before
+                // monitors were stamped genuinely has no monitor, and the alternative to
+                // placing it on the default desktop is dropping the user's window.
+                this.windowState.handleAction(
+                  createAction,
+                  interaction.monitorId ?? DEFAULT_MONITOR_ID,
+                );
                 logger?.logAction(createAction);
               }
               break;
@@ -715,24 +743,86 @@ export class LiveSession {
       }
 
       case ClientEventType.SUBSCRIBE_MONITOR:
+        // Where this *connection* is looking. Replaces whatever it was looking at
+        // before — a tab watches one monitor at a time.
         getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
-        this.activeMonitorId = event.monitorId;
         if (event.viewport) {
           this.layoutContext.setViewport(event.monitorId, event.viewport);
         }
         break;
 
-      case ClientEventType.REMOVE_MONITOR:
-        if (this.pool) {
-          this.pool.removeMonitorAgent(event.monitorId).catch((err) => {
-            console.error(
-              `[LiveSession ${this.sessionId}] Failed to remove monitor agent for ${event.monitorId}:`,
-              err,
-            );
+      case ClientEventType.ADD_MONITOR: {
+        const monitor = this.addMonitor();
+        if (!monitor) {
+          this.sendTo(connectionId, {
+            type: ServerEventType.ERROR,
+            error: `Monitor limit reached (${MAX_MONITORS}).`,
           });
+          break;
         }
+        // Everyone gets the new list; only the tab that asked is told to go there.
+        this.broadcast({ type: ServerEventType.MONITORS, monitors: this.getMonitors() });
+        this.sendTo(connectionId, {
+          type: ServerEventType.MONITORS,
+          monitors: this.getMonitors(),
+          focus: monitor.id,
+        });
+        break;
+      }
+
+      case ClientEventType.REMOVE_MONITOR:
+        this.removeMonitor(event.monitorId);
         break;
     }
+  }
+
+  // ── Monitors ────────────────────────────────────────────────────────
+
+  /** The session's monitors. Authoritative — the client renders this, it does not mint it. */
+  getMonitors(): MonitorInfo[] {
+    return this.monitors.map((m) => ({ ...m }));
+  }
+
+  /**
+   * Mint a monitor, or null if the session is full.
+   *
+   * The id is the lowest non-negative integer not in use, so a session that has churned
+   * monitors reuses the gaps rather than counting forever — and, unlike a per-tab
+   * counter, two tabs asking at once get two different monitors.
+   */
+  private addMonitor(): MonitorInfo | null {
+    if (this.monitors.length >= MAX_MONITORS) return null;
+    const taken = new Set(this.monitors.map((m) => m.id));
+    let n = 0;
+    while (taken.has(String(n))) n++;
+    const monitor: MonitorInfo = { id: String(n), label: `Monitor ${n + 1}` };
+    this.monitors.push(monitor);
+    return monitor;
+  }
+
+  /**
+   * Delete a monitor: its agent, its subscribers, and its place in the list.
+   *
+   * Removing the agent used to be the whole of it — the connections watching the monitor
+   * stayed subscribed, so a deleted desktop kept delivering events and the frontend
+   * dutifully re-created its windows. Detaching the subscribers is what makes the
+   * deletion mean anything.
+   */
+  private removeMonitor(monitorId: string): void {
+    if (monitorId === DEFAULT_MONITOR_ID) return; // the session always has monitor 0
+    if (!this.monitors.some((m) => m.id === monitorId)) return;
+
+    this.monitors = this.monitors.filter((m) => m.id !== monitorId);
+    getBroadcastCenter().unsubscribeMonitor(this.sessionId, monitorId);
+
+    this.pool?.removeMonitorAgent(monitorId).catch((err) => {
+      console.error(
+        `[LiveSession ${this.sessionId}] Failed to remove monitor agent for ${monitorId}:`,
+        err,
+      );
+    });
+
+    this.broadcast({ type: ServerEventType.MONITORS, monitors: this.getMonitors() });
   }
 
   // ── App protocol replay ─────────────────────────────────────────────

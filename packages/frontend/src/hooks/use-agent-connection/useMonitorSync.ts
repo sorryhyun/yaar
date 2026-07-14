@@ -9,10 +9,14 @@ function getViewport(): { w: number; h: number } {
 }
 
 /**
- * Keeps the server in sync with monitor changes:
+ * Tells the server which monitor this connection is looking at.
  * - Sends SUBSCRIBE_MONITOR when the active monitor changes (includes viewport)
- * - Sends REMOVE_MONITOR when a monitor is deleted
  * - Reports viewport resize to server
+ *
+ * It no longer announces monitor *creation or deletion* by diffing the local list: the
+ * list is the server's now, and the store asks for changes directly (ADD_MONITOR /
+ * REMOVE_MONITOR). Diffing a list the server itself just sent us would echo every
+ * change back at it — including another tab's.
  */
 export function useMonitorSync() {
   // Report viewport on resize (debounced)
@@ -40,8 +44,6 @@ export function useMonitorSync() {
 
   useEffect(() => {
     let previousMonitorId = useDesktopStore.getState().activeMonitorId;
-    let previousMonitors = useDesktopStore.getState().monitors;
-    let previousMonitorIds = new Set(previousMonitors.map((m) => m.id));
 
     const unsubscribe = useDesktopStore.subscribe((state) => {
       if (state.activeMonitorId !== previousMonitorId) {
@@ -53,20 +55,6 @@ export function useMonitorSync() {
             viewport: getViewport(),
           });
         }
-      }
-
-      // Only rebuild the Set when the monitors array reference changes
-      if (state.monitors !== previousMonitors) {
-        previousMonitors = state.monitors;
-        const currentMonitorIds = new Set(state.monitors.map((m) => m.id));
-        if (wsManager.ws?.readyState === WebSocket.OPEN) {
-          for (const id of previousMonitorIds) {
-            if (!currentMonitorIds.has(id)) {
-              sendEvent(wsManager, { type: ClientEventType.REMOVE_MONITOR, monitorId: id });
-            }
-          }
-        }
-        previousMonitorIds = currentMonitorIds;
       }
     });
 

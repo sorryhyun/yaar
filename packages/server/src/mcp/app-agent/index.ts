@@ -119,15 +119,20 @@ export function registerAppAgentTools(server: McpServer): void {
     // on this monitor, else launch a fresh one so the caller doesn't have to open it
     // manually first. Never reach across monitors — monitor N's apps are not monitor
     // M's to drive.
-    const monitorId = session.windowState.getMonitorForWindow(ownWindowId) ?? '0';
+    const monitorId = session.windowState.getMonitorForWindow(ownWindowId);
+    if (!monitorId) {
+      return {
+        ok: false,
+        error: `could not resolve the monitor of your own window (${ownWindowId}); cannot target another app.`,
+      };
+    }
     let windowId =
       session.getPool()?.getActiveAppWindow(monitorId, targetAppId) ??
       session.windowState
         .listWindows()
         .find(
           (w) =>
-            w.appId === targetAppId &&
-            (session.windowState.getMonitorForWindow(w.id) ?? '0') === monitorId,
+            w.appId === targetAppId && session.windowState.getMonitorForWindow(w.id) === monitorId,
         )?.id;
     if (!windowId) {
       windowId = await launchControlledApp(targetAppId);

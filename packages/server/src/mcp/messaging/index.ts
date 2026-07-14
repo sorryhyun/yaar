@@ -27,7 +27,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import {
   getSessionId,
-  getMonitorId,
+  requireMonitorId,
   getWindowId,
   getAgentRole,
 } from '../../agents/agent-context.js';
@@ -78,7 +78,7 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
 
   // ── Sender identity + authority ──
   const role = getAgentRole(); // 'session' | 'monitor' | 'app' | undefined
-  const senderMonitorId = getMonitorId() ?? '0';
+  const senderMonitorId = requireMonitorId();
   const senderWindowId = getWindowId();
   const senderAppId = senderWindowId
     ? session.windowState.getAppIdForWindow(senderWindowId)

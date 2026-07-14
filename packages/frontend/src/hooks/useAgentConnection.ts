@@ -27,7 +27,7 @@ let sessionCheckDone = false;
 
 function buildWsUrl(): string {
   const state = useDesktopStore.getState();
-  return buildWsUrlFromApi(state.sessionId);
+  return buildWsUrlFromApi(state.sessionId, state.activeMonitorId);
 }
 
 interface UseAgentConnectionOptions {
@@ -58,6 +58,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     registerWindowAgent,
     updateWindowAgentStatus,
     setRestorePrompt,
+    setMonitors,
     updateCliStreaming,
     finalizeCliStreaming,
     addCliEntry,
@@ -127,6 +128,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           setSession,
           setAttachment,
           checkForPreviousSession,
+          setMonitors,
           refreshStaleIframeTokens,
           addDebugEntry,
           setAgentActive,
@@ -155,7 +157,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   const connect = useCallback(() => {
     const socket = openSocket(wsManager, () => new WebSocket(buildWsUrl()), {
       onOpen: () => {
-        const activeMonitorId = useDesktopStore.getState().activeMonitorId ?? '0';
+        const activeMonitorId = useDesktopStore.getState().activeMonitorId;
         sendEvent(wsManager, {
           type: ClientEventType.SUBSCRIBE_MONITOR,
           monitorId: activeMonitorId,

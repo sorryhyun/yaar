@@ -34,7 +34,14 @@ export class AppTaskProcessor {
    * direct message is not the monitor the app window lives on.
    */
   private ownerMonitor(windowId: string, task?: Task): string {
-    return this.ctx.windowState.getMonitorForWindow(windowId) ?? task?.monitorId ?? '0';
+    const monitorId = this.ctx.windowState.getMonitorForWindow(windowId) ?? task?.monitorId;
+    if (!monitorId) {
+      throw new Error(
+        `Cannot route app task for window ${windowId}: no monitor. The window is not ` +
+          `registered and the task names no monitor of its own.`,
+      );
+    }
+    return monitorId;
   }
 
   /**

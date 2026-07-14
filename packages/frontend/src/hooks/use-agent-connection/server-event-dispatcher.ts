@@ -23,6 +23,8 @@ export interface ServerEventDispatchHandlers {
     provider?: string;
   }) => void;
   checkForPreviousSession: (sessionId: string) => void;
+  /** Apply the session's authoritative monitor list; `focus` answers this tab's ADD_MONITOR. */
+  setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
   /** Re-mint iframe tokens after reattaching to a session incarnation we did not leave. */
   refreshStaleIframeTokens: (sessionId: string) => void;
   addDebugEntry: (entry: { direction: 'in'; type: string; data: ServerEvent }) => void;
@@ -332,6 +334,11 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     case ServerEventType.CLI_RESTORE: {
       const { entries } = message as { entries: Parameters<typeof handlers.restoreCliHistory>[0] };
       handlers.restoreCliHistory(entries);
+      break;
+    }
+    case ServerEventType.MONITORS: {
+      const m = message as { monitors: { id: string; label: string }[]; focus?: string };
+      handlers.setMonitors(m.monitors, m.focus);
       break;
     }
     case ServerEventType.MESSAGE_ACCEPTED:

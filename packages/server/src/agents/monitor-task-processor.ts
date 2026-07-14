@@ -14,6 +14,26 @@ import { monitorSource } from './context.js';
 
 const MAX_QUEUE_SIZE = 10;
 
+/**
+ * The monitor a task runs on. Required.
+ *
+ * This was `task.monitorId ?? '0'`, repeated at four call sites. Every one of them was
+ * reached by tasks that genuinely knew their monitor and by tasks that had lost it, and
+ * the default made those two indistinguishable — a user message from monitor 1 and a
+ * click in a window on monitor 1 both arrived on monitor 0's agent, and nothing said so.
+ * A task without a monitor is a routing bug upstream; it must be loud where it is made,
+ * not quietly rehomed here.
+ */
+function monitorOf(task: Task): string {
+  if (!task.monitorId) {
+    throw new Error(
+      `Task ${task.messageId} has no monitor. A monitor task's monitor comes from the ` +
+        `connection (user messages) or from its window (window messages) — never from a default.`,
+    );
+  }
+  return task.monitorId;
+}
+
 export class MonitorTaskProcessor {
   constructor(private readonly ctx: PoolContext) {}
 
@@ -21,7 +41,7 @@ export class MonitorTaskProcessor {
    * Route a monitor task: to the monitor agent if idle, or to an ephemeral agent.
    */
   async queueMonitorTask(task: Task): Promise<void> {
-    const monitorId = task.monitorId ?? '0';
+    const monitorId = monitorOf(task);
 
     // Acquire budget slot for background monitors (blocks until available)
     await this.ctx.budgetPolicy.acquireTaskSlot(monitorId);
@@ -149,7 +169,7 @@ export class MonitorTaskProcessor {
    * Drains callback queue before processing.
    */
   async processMonitorTask(agent: PooledAgent, task: Task): Promise<void> {
-    const monitorId = task.monitorId ?? '0';
+    const monitorId = monitorOf(task);
     const monitorRole = `monitor-${monitorId}-${task.messageId}`;
 
     agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
@@ -199,7 +219,7 @@ export class MonitorTaskProcessor {
    * Pushes a callback when done, then disposes the agent.
    */
   async processEphemeralTask(agent: PooledAgent, task: Task): Promise<void> {
-    const monitorId = task.monitorId ?? '0';
+    const monitorId = monitorOf(task);
     const ephemeralRole = `ephemeral-${monitorId}-${task.messageId}`;
 
     agent.session.setOutputCallback(

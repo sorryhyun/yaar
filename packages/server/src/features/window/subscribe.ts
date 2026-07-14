@@ -7,7 +7,7 @@
 
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { okJson, error } from '../../handlers/utils.js';
-import { getAgentId, getMonitorId } from '../../agents/agent-context.js';
+import { getAgentId, requireMonitorId } from '../../agents/agent-context.js';
 import { getActivePool } from '../../handlers/utils.js';
 import { WINDOW_CHANGE_EVENTS, type WindowChangeEvent } from '@yaar/shared';
 import { requireWindowExists } from './helpers.js';
@@ -26,7 +26,7 @@ export function handleSubscribe(
   if (!pool) return error('Session not initialized.');
 
   const agentId = getAgentId();
-  const monitorId = getMonitorId() ?? '0';
+  const monitorId = requireMonitorId();
   if (!agentId) return error('No agent context — subscribe must be called from an agent.');
 
   // Determine subscriber type and key from agentId pattern
@@ -91,7 +91,7 @@ export function handleAppSubscribe(
   if (!pool) return error('Session not initialized.');
 
   const agentId = getAgentId();
-  const monitorId = getMonitorId() ?? '0';
+  const monitorId = requireMonitorId();
   if (!agentId) return error('No agent context — app_subscribe must be called from an agent.');
 
   // Monitor agent only for now (app-agent subscribe is a later add).

@@ -76,6 +76,23 @@ export class AgentPool {
   /** Session agent — lazy singleton for cross-monitor oversight. */
   private sessionAgent: PooledAgent | null = null;
 
+  /**
+   * The monitor the session agent is running its current turn on.
+   *
+   * The session agent lives in no monitor collection, so `findMonitorForAgent` used to
+   * answer `undefined` for it — and the MCP request context, which scopes every window
+   * lookup by that answer, fell to monitor 0, while the emitter stamped the outbound
+   * event with the session's "active" monitor. One turn, two monitors: the window was
+   * registered on one and delivered to the other. It runs on a monitor like every other
+   * agent — the one the user spoke from — so it says which, for the length of the turn.
+   */
+  private sessionAgentMonitorId: string | undefined;
+
+  /** Pin the session agent to the monitor of the turn it is about to run. */
+  setSessionAgentMonitor(monitorId: string | undefined): void {
+    this.sessionAgentMonitorId = monitorId;
+  }
+
   /** Ephemeral agents currently in-flight (disposed after task). */
   private ephemeralAgents = new Set<PooledAgent>();
 
@@ -442,6 +459,7 @@ export class AgentPool {
     for (const [monitorId, agent] of this.monitorAgents) {
       if (agent.instanceId === agentId) return monitorId;
     }
+    if (this.sessionAgent?.instanceId === agentId) return this.sessionAgentMonitorId;
     return this.findAppForAgent(agentId)?.monitorId;
   }
 

@@ -358,8 +358,12 @@ export interface MonitorSliceState {
 }
 
 export interface MonitorSliceActions {
-  createMonitor: () => string;
+  /** Ask the server for a new monitor; it mints the id and answers with MONITORS. */
+  createMonitor: () => void;
+  /** Ask the server to delete a monitor; the list comes back on MONITORS. */
   removeMonitor: (id: string) => void;
+  /** Apply the session's authoritative monitor list. `focus` switches this tab to it. */
+  setMonitors: (monitors: { id: string; label: string }[], focus?: string) => void;
   switchMonitor: (id: string) => void;
 }
 

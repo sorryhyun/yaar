@@ -11,7 +11,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri, ResolvedSession } from './uri-resolve.js';
-import { getAgentId, getMonitorId } from '../agents/agent-context.js';
+import { getAgentId, requireMonitorId } from '../agents/agent-context.js';
 import { ok, okJson, okJsonResource, error, getActivePool, requireAction } from './utils.js';
 import { executeSessionAction } from '../features/agents/session-actions.js';
 import { relayToMonitor } from '../features/agents/relay.js';
@@ -166,7 +166,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         if (!pool) return error('Agent pool not initialized.');
 
         const agentId = getAgentId() ?? 'unknown';
-        const monitorId = getMonitorId() ?? '0';
+        const monitorId = requireMonitorId();
         const messageId = relayToMonitor(pool, agentId, monitorId, payload!.message as string);
 
         return ok(`Relayed to monitor agent (messageId: ${messageId}).`);
@@ -201,7 +201,9 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         .filter((a) => a.type === 'app' && (a.id === resolved.id || a.appId === resolved.id));
       if (appAgents.length > 0) {
         for (const a of appAgents) {
-          await pool.agentPool.disposeAppAgent(a.monitorId ?? '0', a.appId!);
+          // An app agent is keyed by (monitor, app); the roster always carries both.
+          if (!a.monitorId) continue;
+          await pool.agentPool.disposeAppAgent(a.monitorId, a.appId!);
         }
         const names = appAgents.map((a) => `"${a.appId}" (monitor ${a.monitorId})`).join(', ');
         return ok(`App agent${appAgents.length > 1 ? 's' : ''} disposed: ${names}.`);

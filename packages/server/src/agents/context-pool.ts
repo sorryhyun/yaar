@@ -341,6 +341,17 @@ export class ContextPool implements PoolContext {
       return;
     }
 
+    // The session agent is the user's deputy, so its monitor is the user's — it comes
+    // from the connection that spoke, and arrives on the task. `?? '0'` here meant a
+    // deputy invoked from monitor 1 quietly did its work on monitor 0.
+    const monitorId = task.monitorId;
+    if (!monitorId) {
+      throw new Error(
+        `Cannot run session task ${task.messageId}: no monitor. A user-scoped task takes ` +
+          `its monitor from the connection that sent it.`,
+      );
+    }
+
     this.inflightEnter();
     try {
       const agent = await this.getOrCreateSessionAgent();
@@ -352,7 +363,11 @@ export class ContextPool implements PoolContext {
         return;
       }
 
-      const monitorId = task.monitorId ?? '0';
+      // Pin before the turn: the MCP requests this turn makes resolve their monitor by
+      // asking the pool which monitor this agent is on. The pin outlives the turn — an
+      // idle deputy's monitor is the one it last acted on, which is the only honest answer.
+      this.agentPool.setSessionAgentMonitor(monitorId);
+
       const source = monitorSource(monitorId);
       const role = `session-${task.messageId}`;
 
@@ -443,13 +458,44 @@ export class ContextPool implements PoolContext {
         if (appId && task.windowId && !isPreviewAppId(appId)) {
           await this.appProcessor.handleAppTask(task, appId);
         } else {
-          // Plain window → route to monitor agent with full conversation context
-          await this.monitorProcessor.queueMonitorTask({ ...task, type: 'monitor' });
+          // Plain window → the monitor agent, on the window's OWN monitor.
+          //
+          // WINDOW_MESSAGE and COMPONENT_ACTION carry no monitorId — the client sends a
+          // windowId, and the window is what knows where it lives. Re-typing the task to
+          // 'monitor' without deriving that left it to `?? '0'` downstream: a click in a
+          // window on monitor 1 ran on monitor 0's agent, streamed into monitor 0's CLI,
+          // and opened its windows there. AppTaskProcessor has always asked the registry;
+          // this path just didn't.
+          await this.monitorProcessor.queueMonitorTask({
+            ...task,
+            type: 'monitor',
+            monitorId: this.monitorForWindowTask(task),
+          });
         }
       }
     } finally {
       this.inflightExit();
     }
+  }
+
+  /**
+   * The monitor a window-scoped task runs on: the one its window is on.
+   *
+   * There is no fallback. A task naming a window the registry does not know cannot be
+   * placed, and placing it on monitor 0 — which is what `?? '0'` did — is not a
+   * recovery, it is the bug with the evidence removed.
+   */
+  private monitorForWindowTask(task: Task): string {
+    const monitorId = task.windowId
+      ? this.windowState.getMonitorForWindow(task.windowId)
+      : undefined;
+    if (!monitorId) {
+      throw new Error(
+        `Cannot route task ${task.messageId}: no monitor for window ${task.windowId ?? '(none)'}. ` +
+          `A window-scoped task must name a window the session knows.`,
+      );
+    }
+    return monitorId;
   }
 
   /**
@@ -619,7 +665,10 @@ export class ContextPool implements PoolContext {
     // the same app running on another monitor is a different agent.
     const appId = this.windowState.getAppIdForWindow(windowId);
     if (appId) {
-      const monitorId = this.windowState.getMonitorForWindow(windowId) ?? '0';
+      const monitorId = this.windowState.getMonitorForWindow(windowId);
+      // No monitor means no such window, and no window means no agent driving it.
+      // Asking about monitor 0 instead would report the wrong monitor's agent as busy.
+      if (!monitorId) return false;
       return this.agentPool.hasRolePrefix(`app-${appId}-m${monitorId}`);
     }
     // Plain windows are handled by the monitor agent, so check for monitor agent activity

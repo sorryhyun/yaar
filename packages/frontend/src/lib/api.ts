@@ -78,7 +78,14 @@ export function apiFetch(path: string, init?: RequestInit): Promise<Response> {
  * In local mode, uses current host.
  * In remote mode, uses remote server URL with token param.
  */
-export function buildWsUrl(sessionId?: string | null): string {
+/**
+ * `monitorId` rides on the URL so the server can point the connection at its monitor at
+ * attach time. A connection with no monitor receives no monitor-scoped events — so
+ * without this, everything an agent emitted between attach and our first
+ * SUBSCRIBE_MONITOR would be dropped, which for a reconnect into a live session is
+ * exactly the moment there is something to miss.
+ */
+export function buildWsUrl(sessionId?: string | null, monitorId?: string | null): string {
   const conn = getRemoteConnection();
 
   let base: string;
@@ -94,6 +101,7 @@ export function buildWsUrl(sessionId?: string | null): string {
 
   const url = new URL(base);
   if (sessionId) url.searchParams.set('sessionId', sessionId);
+  if (monitorId) url.searchParams.set('monitorId', monitorId);
   if (conn) url.searchParams.set('token', conn.token);
   return url.toString();
 }

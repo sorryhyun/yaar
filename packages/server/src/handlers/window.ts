@@ -33,7 +33,7 @@ import {
   handleUnsubscribe,
   handleAppSubscribe,
 } from '../features/window/subscribe.js';
-import { getMonitorId } from '../agents/agent-context.js';
+import { requireMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
@@ -181,7 +181,7 @@ export function registerWindowHandlers(
         const pool = session.getPool();
         if (!pool) return error('Session not initialized.');
 
-        const monitorId = getMonitorId() ?? '0';
+        const monitorId = requireMonitorId();
         const stats = pool.getStats();
         const monitorHandles = new Set(getWindowState().handleMap.listByMonitor(monitorId));
         const windows = getWindowState()
@@ -314,7 +314,7 @@ export function registerWindowHandlers(
           if (!pool) return error('Session not initialized.');
 
           const messageId = `agent-msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-          const monitorId = getMonitorId() ?? '0';
+          const monitorId = requireMonitorId();
           const taggedContent = `<monitor:${monitorId}>\n${p.message as string}\n</monitor:${monitorId}>`;
           const hook = p.hook === 'response' ? ('response' as const) : undefined;
           pool
