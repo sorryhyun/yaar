@@ -8,10 +8,10 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^22.10.0",
+    "@types/node": "catalog:",
     "@yaar/server": "workspace:*",
     "@yaar/shared": "workspace:*",
-    "bun-types": "^1.2.15",
+    "bun-types": "catalog:",
     "mitata": "^1.0.34"
   }
 }

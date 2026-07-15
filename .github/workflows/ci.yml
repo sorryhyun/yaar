@@ -37,3 +37,9 @@ jobs:
       # Run `bun run check:docs:strict` when stale-source warnings should also fail.
       - name: Check doc freshness
         run: bun run check:docs
+
+      # Regenerates docs/reference/openapi.yaml from the route files' PUBLIC_ENDPOINTS
+      # and fails if it differs from the committed spec. The pre-commit hook keeps this
+      # in sync automatically; this catches commits made with --no-verify.
+      - name: Check OpenAPI spec is in sync
+        run: bun run check:openapi

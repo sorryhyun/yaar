@@ -273,7 +273,7 @@ paths:
                 type: object
   /api/verb/subscribe:
     post:
-      summary: 'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId? }`.'
+      summary: 'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId?, mode?: "change" | "stream", kinds?: string[] }`. `mode: "stream"` pushes typed frames with payloads instead of bare change pings.'
       responses:
         '200':
           description: JSON
