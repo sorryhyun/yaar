@@ -27,6 +27,70 @@ declare module '@bundled/solid-js/store' {
 // CSS module imports
 declare module '*.css' {}
 
+// Static-asset imports — inlined as base64 `data:` URIs by the `dataurl` loaders
+// in compile.ts (ASSET_LOADERS). Each default export is the data-URI string,
+// usable directly in `<img src>`, CSS `url()`, `fetch()`, `new Audio()`, etc.
+declare module '*.png' {
+  const src: string;
+  export default src;
+}
+declare module '*.jpg' {
+  const src: string;
+  export default src;
+}
+declare module '*.jpeg' {
+  const src: string;
+  export default src;
+}
+declare module '*.gif' {
+  const src: string;
+  export default src;
+}
+declare module '*.svg' {
+  const src: string;
+  export default src;
+}
+declare module '*.webp' {
+  const src: string;
+  export default src;
+}
+declare module '*.avif' {
+  const src: string;
+  export default src;
+}
+declare module '*.ico' {
+  const src: string;
+  export default src;
+}
+declare module '*.woff' {
+  const src: string;
+  export default src;
+}
+declare module '*.woff2' {
+  const src: string;
+  export default src;
+}
+declare module '*.ttf' {
+  const src: string;
+  export default src;
+}
+declare module '*.otf' {
+  const src: string;
+  export default src;
+}
+declare module '*.wasm' {
+  const src: string;
+  export default src;
+}
+declare module '*.mp3' {
+  const src: string;
+  export default src;
+}
+declare module '*.wav' {
+  const src: string;
+  export default src;
+}
+
 // ── Utilities ───────────────────────────────────────────────────────────────
 
 declare module '@bundled/uuid' {

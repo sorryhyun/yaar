@@ -10,6 +10,7 @@ import { join } from 'path';
 import {
   bundledLibraryPluginBun,
   cssFilePlugin,
+  assetDataUrlPlugin,
   solidHtmlSourcePlugin,
   toForwardSlash,
 } from './plugins.js';
@@ -65,6 +66,9 @@ export function getSandboxPath(sandboxId: string): string {
   }
   return join(getSandboxDir(), sandboxId);
 }
+
+/** Soft ceiling for a compiled app's single HTML file before we warn (5MB). */
+const LARGE_BUNDLE_WARN_BYTES = 5_000_000;
 
 /**
  * Minified SDK scripts cache. Populated lazily on first compile.
@@ -158,7 +162,12 @@ async function compileWithBun(
     // Resolve with { success: false, logs } instead of throwing, so errors
     // keep their file/line/column positions (the catch path loses them).
     throw: false,
-    plugins: [bundledLibraryPluginBun(bundles), cssFilePlugin(), solidHtmlSourcePlugin()],
+    plugins: [
+      bundledLibraryPluginBun(bundles),
+      cssFilePlugin(),
+      assetDataUrlPlugin(),
+      solidHtmlSourcePlugin(),
+    ],
   });
 
   if (!result.success) {
@@ -259,6 +268,19 @@ export async function compileTypeScript(
 
     // Generate HTML wrapper with embedded JavaScript
     const htmlContent = generateHtmlWrapper(jsCode, title, sdkCode);
+
+    // A YAAR app compiles to one self-contained HTML the frontend loads into an
+    // iframe; `dataurl`-inlined assets (fonts, images, wasm) land here at +33%
+    // over their raw size. Warn past a soft ceiling so a heavyweight asset shows
+    // up at build time rather than as a sluggish window.
+    const bundleBytes = Buffer.byteLength(htmlContent, 'utf8');
+    if (bundleBytes > LARGE_BUNDLE_WARN_BYTES) {
+      console.warn(
+        `[compiler] Large app bundle: ${(bundleBytes / 1_000_000).toFixed(1)}MB for ${title}. ` +
+          `Imported binary assets are base64-inlined (~33% overhead); consider fetching large ` +
+          `media at runtime instead of importing it.`,
+      );
+    }
 
     // Write to dist/index.html
     await Bun.write(outputPath, htmlContent);

@@ -402,6 +402,67 @@ export function cssFilePlugin(): Bun.BunPlugin {
 }
 
 /**
+ * Static-asset extensions inlined as base64 `data:` URIs, mapped to their MIME
+ * type. A YAAR app compiles to a single self-contained HTML file, so an imported
+ * binary can't ship as a sibling file — it has to be baked into the bundle.
+ */
+export const ASSET_MIME_TYPES: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.webp': 'image/webp',
+  '.avif': 'image/avif',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.wasm': 'application/wasm',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+};
+
+const ASSET_FILTER = new RegExp(
+  `\\.(${Object.keys(ASSET_MIME_TYPES)
+    .map((ext) => ext.slice(1))
+    .join('|')})$`,
+  'i',
+);
+
+/**
+ * Bun plugin that inlines imported binary assets as base64 `data:` URIs.
+ *
+ * `import logo from './logo.png'` resolves the default export to a data-URI
+ * string usable in `<img src>`, CSS `url()`, `fetch()`, `new Audio()`, etc.
+ *
+ * Why a plugin and not `Bun.build({ loader: { '.png': 'dataurl' } })`: the
+ * `dataurl`/`base64` loader values are silently a no-op in Bun's *programmatic*
+ * bundler (1.3.14) — they emit an empty string. Inlining only works through the
+ * HTML-entrypoint pipeline, which YAAR doesn't use (its wrapper is synthesized
+ * with ordered SDK injection). Bun's default loader for these extensions is
+ * `file`, which emits a *sibling* asset the single-HTML output would drop. This
+ * `onLoad` hook reads the bytes and returns them inline, so nothing escapes the
+ * one file.
+ */
+export function assetDataUrlPlugin(): Bun.BunPlugin {
+  return {
+    name: 'asset-dataurl-loader',
+    setup(build: Bun.PluginBuilder) {
+      build.onLoad({ filter: ASSET_FILTER }, async (args: Bun.OnLoadArgs) => {
+        const dot = args.path.lastIndexOf('.');
+        const ext = args.path.slice(dot).toLowerCase();
+        const mime = ASSET_MIME_TYPES[ext] ?? 'application/octet-stream';
+        const bytes = await Bun.file(toForwardSlash(args.path)).arrayBuffer();
+        const url = `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`;
+        return { contents: `export default ${JSON.stringify(url)};`, loader: 'js' };
+      });
+    },
+  };
+}
+
+/**
  * Bun plugin that validates and rewrites solid-js/html source in one file read.
  *
  * `</${Show}>` produces an extra expression that the html runtime parser never
