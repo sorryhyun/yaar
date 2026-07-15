@@ -2,7 +2,7 @@
  * Generate OpenAPI 3.1 YAML spec from all route files' PUBLIC_ENDPOINTS.
  *
  * Usage: bun run scripts/generate-openapi.ts
- * Output: docs/openapi.yaml
+ * Output: docs/reference/openapi.yaml
  */
 
 import { writeFileSync } from 'fs';
@@ -128,6 +128,6 @@ function generateSpec(): string {
 }
 
 const spec = generateSpec();
-const outPath = join(import.meta.dir, '..', 'docs', 'openapi.yaml');
+const outPath = join(import.meta.dir, '..', 'docs', 'reference', 'openapi.yaml');
 writeFileSync(outPath, spec, 'utf-8');
 console.log(`OpenAPI spec written to ${outPath} (${ALL_ENDPOINTS.length} endpoints)`);

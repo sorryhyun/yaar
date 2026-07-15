@@ -4,7 +4,7 @@ Hooks are event-driven config entries that fire actions on specific triggers. Th
 
 ## Storage
 
-Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (or `yaar://config/hooks/{id}` for individual hooks). This file is git-ignored and managed either manually or through verb tools (`invoke`, `read`, `delete` on `yaar://config/hooks`). See [URI-Based Resource Addressing](./verbalized-with-uri.md).
+Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (or `yaar://config/hooks/{id}` for individual hooks). This file is git-ignored and managed either manually or through verb tools (`invoke`, `read`, `delete` on `yaar://config/hooks`). See [URI-Based Resource Addressing](../architecture/verbalized-with-uri.md).
 
 ## Event Types
 
@@ -62,7 +62,7 @@ Filters match against the verb tool context. All filter fields are optional — 
 
 ## Example: App-Dev Progress Tracking
 
-An example config at `docs/example_hooks.json` demonstrates toasts that track app development:
+An example config at `docs/guides/example_hooks.json` demonstrates toasts that track app development:
 
 | Stage | Filter | Status |
 |-------|--------|--------|
@@ -76,7 +76,7 @@ An example config at `docs/example_hooks.json` demonstrates toasts that track ap
 Copy the example config to the active hooks file:
 
 ```bash
-cp docs/example_hooks.json config/hooks.json
+cp docs/guides/example_hooks.json config/hooks.json
 ```
 
 Then start the server with `make dev`. When the AI uses app-dev tools, toasts will appear automatically.

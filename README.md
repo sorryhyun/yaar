@@ -12,7 +12,7 @@
 > **Y**ou **A**re **A**bsolutely **R**ight — AI가 다음에 무엇을 보여주고 할지 스스로 결정하는 리액티브 AI 인터페이스.
 
 
-![YAAR Desktop](./docs/image.png)
+![YAAR Desktop](./docs/assets/image.png)
 
 MCP 도구, 스킬, 플러그인, A2A까지 — 시스템 프롬프트 8K 토큰 안에서 전부 동작합니다. 앱을 만들고, 데이터를 시각화하고, 외부 서비스와 연동합니다.
 
@@ -242,7 +242,7 @@ YAAR Market에서 바로 설치할 수 있는 번들 앱:
 | 📄 Recent Papers | 학술 논문 브라우저 |
 | 🕐 Dock | 시계, 날씨, 알림 패널 |
 
-직접 앱을 개발할 수도 있습니다. 번들 라이브러리(lodash, anime.js, Konva, Solid.js 등)를 npm 설치 없이 사용 가능하며, 격리된 샌드박스에서 코드가 실행됩니다. 빌드된 앱은 **하나의 HTML 파일로 번들링**되어 어디서든 독립 실행 가능합니다. 자세한 내용은 [앱 개발 가이드](./docs/app-development.md)를 참고하세요.
+직접 앱을 개발할 수도 있습니다. 번들 라이브러리(lodash, anime.js, Konva, Solid.js 등)를 npm 설치 없이 사용 가능하며, 격리된 샌드박스에서 코드가 실행됩니다. 빌드된 앱은 **하나의 HTML 파일로 번들링**되어 어디서든 독립 실행 가능합니다. 자세한 내용은 [앱 개발 가이드](./docs/guides/app-development.md)를 참고하세요.
 
 
 ### 멀티 모니터 & 세션
@@ -252,12 +252,12 @@ YAAR Market에서 바로 설치할 수 있는 번들 앱:
 
 ### 원격 접속
 
-`make claude` 또는 `make codex`로 실행하면 원격 모드가 자동 활성화됩니다. 터미널에 QR 코드가 표시되며, 핸드폰으로 스캔하면 토큰 인증까지 자동으로 처리되어 바로 접속됩니다. SSH 터널링을 통해 외부 네트워크에서도 사용 가능합니다. 자세한 내용은 [원격 접속 가이드](./docs/remote_mode.md)를 참고하세요.
+`make claude` 또는 `make codex`로 실행하면 원격 모드가 자동 활성화됩니다. 터미널에 QR 코드가 표시되며, 핸드폰으로 스캔하면 토큰 인증까지 자동으로 처리되어 바로 접속됩니다. SSH 터널링을 통해 외부 네트워크에서도 사용 가능합니다. 자세한 내용은 [원격 접속 가이드](./docs/guides/remote_mode.md)를 참고하세요.
 
 
 ### Hooks
 
-`config/hooks.json`으로 이벤트 기반 자동화를 설정할 수 있습니다. 특정 이벤트 발생 시 자동으로 액션을 실행합니다. 자세한 내용은 [Hooks 가이드](./docs/hooks.md)를 참고하세요.
+`config/hooks.json`으로 이벤트 기반 자동화를 설정할 수 있습니다. 특정 이벤트 발생 시 자동으로 액션을 실행합니다. 자세한 내용은 [Hooks 가이드](./docs/guides/hooks.md)를 참고하세요.
 
 
 ## 보안
@@ -285,6 +285,6 @@ yaar/
 │   └── frontend/      # React 프론트엔드
 ```
 
-YAAR의 구조는 전통적인 OS 아키텍처로도 해석될 수 있습니다. `LiveSession`은 커널, 에이전트는 프로세스, MCP 도구는 시스템 콜, `storage/`는 파일시스템에 대응됩니다. 자세한 매핑은 [OS Architecture Map](./docs/os_architecture.md)을 참고하세요.
+YAAR의 구조는 전통적인 OS 아키텍처로도 해석될 수 있습니다. `LiveSession`은 커널, 에이전트는 프로세스, MCP 도구는 시스템 콜, `storage/`는 파일시스템에 대응됩니다. 자세한 매핑은 [OS Architecture Map](./docs/architecture/os_architecture.md)을 참고하세요.
 
 개발 관련 상세 내용은 [CLAUDE.md](./CLAUDE.md)를 참고하세요.

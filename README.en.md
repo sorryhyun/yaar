@@ -11,7 +11,7 @@
 
 > **Y**ou **A**re **A**bsolutely **R**ight — a reactive AI interface where the AI decides what to show and do next.
 
-![YAAR Desktop](./docs/image.png)
+![YAAR Desktop](./docs/assets/image.png)
 
 MCP tools, skills, plugins, and A2A — all within an 8K-token system prompt. Build apps, visualize data, and connect to external services.
 
@@ -255,7 +255,7 @@ Bundled apps available from YAAR Market:
 | 📄 Recent Papers | Academic paper browser |
 | 🕐 Dock | Clock, weather, and notification panel |
 
-You can also develop your own apps. Bundled libraries (lodash, anime.js, Konva, Solid.js, etc.) are available without npm install, and code runs in an isolated sandbox. Built apps are **bundled into a single HTML file** that runs independently anywhere. See the [App Development Guide](./docs/app-development.md) for details.
+You can also develop your own apps. Bundled libraries (lodash, anime.js, Konva, Solid.js, etc.) are available without npm install, and code runs in an isolated sandbox. Built apps are **bundled into a single HTML file** that runs independently anywhere. See the [App Development Guide](./docs/guides/app-development.md) for details.
 
 
 ### Multi-Monitor & Sessions
@@ -265,12 +265,12 @@ Create multiple **virtual desktops (monitors)** to organize your work. Each moni
 
 ### Remote Access
 
-Running with `make claude` or `make codex` automatically enables remote mode. A QR code is printed to the terminal — scan it with your phone for automatic token authentication and instant connection. SSH tunneling allows access from external networks. See the [Remote Access Guide](./docs/remote_mode.md) for details.
+Running with `make claude` or `make codex` automatically enables remote mode. A QR code is printed to the terminal — scan it with your phone for automatic token authentication and instant connection. SSH tunneling allows access from external networks. See the [Remote Access Guide](./docs/guides/remote_mode.md) for details.
 
 
 ### Hooks
 
-Set up event-driven automation with `config/hooks.json`. Automatically execute actions when specific events occur. See the [Hooks Guide](./docs/hooks.md) for details.
+Set up event-driven automation with `config/hooks.json`. Automatically execute actions when specific events occur. See the [Hooks Guide](./docs/guides/hooks.md) for details.
 
 
 ## Security
@@ -298,6 +298,6 @@ yaar/
 │   └── frontend/      # React frontend
 ```
 
-YAAR's architecture can be interpreted through traditional OS concepts. `LiveSession` maps to the kernel, agents to processes, MCP tools to syscalls, and `storage/` to the filesystem. See the [OS Architecture Map](./docs/os_architecture.md) for the full mapping.
+YAAR's architecture can be interpreted through traditional OS concepts. `LiveSession` maps to the kernel, agents to processes, MCP tools to syscalls, and `storage/` to the filesystem. See the [OS Architecture Map](./docs/architecture/os_architecture.md) for the full mapping.
 
 See [CLAUDE.md](./CLAUDE.md) for development details.

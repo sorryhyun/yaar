@@ -2,7 +2,7 @@
 
 In YAAR, you tell the AI what to build and it creates the app. TypeScript authoring, compilation, preview, and desktop deployment are all handled by the AI through the devtools app.
 
-> [한국어 버전](ko/app-development.md)
+> [한국어 버전](../ko/app-development.md)
 
 ## Development Flow
 
@@ -139,7 +139,7 @@ Some `@bundled/*` SDKs require explicit opt-in via the `"bundles"` field in `app
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()`, etc. | `"yaar-web"` |
 | ML runtime | `@bundled/yaar-ml` | In-browser model inference (WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
 
-See [`docs/yaar_ml_runtime.md`](./yaar_ml_runtime.md) for the ML runtime's capabilities, memory limits, and "what fits" guidance.
+See [`docs/guides/yaar_ml_runtime.md`](./yaar_ml_runtime.md) for the ML runtime's capabilities, memory limits, and "what fits" guidance.
 
 ### Per-app version history
 
@@ -427,7 +427,7 @@ make it skip the command and silently drop it from `dist/protocol.json`.
 
 ### Talking Back to the Agent
 
-`app.register()` is how the agent reads *you*. These three APIs are how you reach the agent. See [`docs/app_protocol_reference.md`](./app_protocol_reference.md) for full signatures.
+`app.register()` is how the agent reads *you*. These three APIs are how you reach the agent. See [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md) for full signatures.
 
 **`app.sendInteraction(description)`** — push a free-form message to the agent, typically after a user action inside the iframe. Takes a string, or an object with `instructions` and `toMonitor` (route to the monitor agent instead of this window's app agent) plus arbitrary payload fields.
 
@@ -588,7 +588,7 @@ delete('yaar://apps/my-app/storage/data.json')
 ## App-Scoped Database (`appDb`)
 
 For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`
-(design: [`docs/sqlite.md`](./sqlite.md)). Unlike `appStorage`, it supports queries,
+(design: [`docs/guides/sqlite.md`](./sqlite.md)). Unlike `appStorage`, it supports queries,
 counting, pagination, and full-text search server-side — no more load-all-JSON-and-filter.
 Binary blobs and simple single files should stay on `appStorage`; the two coexist.
 

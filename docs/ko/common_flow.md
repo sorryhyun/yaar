@@ -46,7 +46,7 @@
 - **생성**: 모니터당 하나. 기본 모니터(`0`)는 풀 초기화 시 워밍된 프로바이더로 생성되고, 추가 모니터는 필요 시 자동 생성 (최대 4개)
 - **세션**: 메시지 간에 동일한 프로바이더 세션을 재개하여 전체 대화 이력을 유지
 - **정규 ID**: `main-{monitorId}`
-- **URI**: `yaar://agents/{instanceId}` — [URI 기반 리소스 주소 지정](../verbalized-with-uri.md) 참조
+- **URI**: `yaar://agents/{instanceId}` — [URI 기반 리소스 주소 지정](../architecture/verbalized-with-uri.md) 참조
 - **도구**: 윈도우, 알림, 스토리지 읽기/목록, 메모리, 스킬, 설정 훅, 캐시 재사용, Task (위임)
 
 ### 2. 임시(Ephemeral) 에이전트
@@ -67,7 +67,7 @@
 - **컨텍스트**: 첫 인터랙션 시 앱 스킬과 매니페스트로 부트스트랩되고, 이후 인터랙션은 프로바이더 세션 연속성 사용
 - **범위**: 앱의 `appId`로 스코핑 — 같은 앱의 모든 윈도우가 하나의 에이전트를 공유
 - **정규 ID**: `app-{appId}`
-- **URI**: `yaar://agents/{instanceId}` — [URI 기반 리소스 주소 지정](../verbalized-with-uri.md) 참조
+- **URI**: `yaar://agents/{instanceId}` — [URI 기반 리소스 주소 지정](../architecture/verbalized-with-uri.md) 참조
 
 ### 4. 태스크 에이전트
 

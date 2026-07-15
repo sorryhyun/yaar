@@ -56,7 +56,7 @@ src/
 `useAgentConnection` hook — singleton WebSocket with auto-reconnect (exponential backoff). Reconnects with `?sessionId=X` (rejoin) and `?token=X` (remote auth).
 - Decomposed into `hooks/use-agent-connection/`: `transport-manager`, `server-event-dispatcher`, `outbound-command-helpers`, `usePendingEventDrainer`, `useMonitorSync`
 - `usePendingEventDrainer` drains store queues (feedback, app protocol responses, interactions) over WS
-- `useMonitorSync` sends `SUBSCRIBE_MONITOR` (which monitor *this connection* is on) on active-monitor change and on viewport resize. It does **not** announce monitor creation/deletion: the monitor list is server state, so `monitorSlice` asks for changes directly (`ADD_MONITOR` / `REMOVE_MONITOR`) and applies the server's `MONITORS` answer. See `docs/monitor_and_windows_guide.md`.
+- `useMonitorSync` sends `SUBSCRIBE_MONITOR` (which monitor *this connection* is on) on active-monitor change and on viewport resize. It does **not** announce monitor creation/deletion: the monitor list is server state, so `monitorSlice` asks for changes directly (`ADD_MONITOR` / `REMOVE_MONITOR`) and applies the server's `MONITORS` answer. See `docs/architecture/monitor_and_windows_guide.md`.
 - Event types defined in `@yaar/shared` — grep `events.ts` for schemas
 
 ## Content Renderers

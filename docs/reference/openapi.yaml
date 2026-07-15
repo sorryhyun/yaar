@@ -136,9 +136,9 @@ paths:
             application/json:
               schema:
                 type: object
-  /api/dev/typecheck:
+  /api/dev/git-checkpoint:
     post:
-      summary: Typecheck a project
+      summary: "Snapshot an app's current state"
       responses:
         '200':
           description: json
@@ -146,21 +146,42 @@ paths:
             application/json:
               schema:
                 type: object
-  /api/domains:
-    get:
-      summary: Get allowed domain settings
+  /api/dev/git-diff:
+    post:
+      summary: Diff an app against a snapshot or the host repo
       responses:
         '200':
-          description: '`{ allowAllDomains: boolean, domains: string[] }`'
+          description: json
           content:
             application/json:
               schema:
                 type: object
-    patch:
-      summary: Update domain settings
+  /api/dev/git-history:
+    post:
+      summary: "List an app's version history"
       responses:
         '200':
-          description: '`{ allowAllDomains: boolean, domains: string[] }`'
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dev/git-restore:
+    post:
+      summary: Roll an app back to an earlier commit
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/dev/typecheck:
+    post:
+      summary: Typecheck a project
+      responses:
+        '200':
+          description: json
           content:
             application/json:
               schema:
@@ -192,118 +213,6 @@ paths:
       responses:
         '200':
           description: image/png
-          content:
-            application/json:
-              schema:
-                type: object
-  /api/sessions:
-    get:
-      summary: List all saved sessions
-      responses:
-        '200':
-          description: '`{ sessions: SessionInfo[] }`'
-          content:
-            application/json:
-              schema:
-                type: object
-  /api/sessions/{id}/messages:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Get session messages for replay
-      responses:
-        '200':
-          description: '`{ messages: SessionMessage[] }`'
-          content:
-            application/json:
-              schema:
-                type: object
-  /api/sessions/{id}/restore:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-    post:
-      summary: Restore session with window actions and context
-      responses:
-        '200':
-          description: '`{ actions: OSAction[], contextMessages: Message[] }`'
-          content:
-            application/json:
-              schema:
-                type: object
-  /api/sessions/{id}/transcript:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-    get:
-      summary: Get session transcript
-      responses:
-        '200':
-          description: '`{ transcript: string }`'
-          content:
-            application/json:
-              schema:
-                type: object
-  /api/settings:
-    patch:
-      summary: Update user settings
-      responses:
-        '200':
-          description: '`Settings`'
-          content:
-            application/json:
-              schema:
-                type: object
-  /api/shortcuts:
-    get:
-      summary: List desktop shortcuts
-      responses:
-        '200':
-          description: '`{ shortcuts: DesktopShortcut[] }`'
-          content:
-            application/json:
-              schema:
-                type: object
-    post:
-      summary: Create a desktop shortcut
-      responses:
-        '200':
-          description: '`{ shortcut: DesktopShortcut }`'
-          content:
-            application/json:
-              schema:
-                type: object
-  /api/shortcuts/{id}:
-    parameters:
-      - name: id
-        in: path
-        required: true
-        schema:
-          type: string
-    patch:
-      summary: Update a desktop shortcut
-      responses:
-        '200':
-          description: '`{ shortcut: DesktopShortcut }`'
-          content:
-            application/json:
-              schema:
-                type: object
-    delete:
-      summary: Delete a desktop shortcut
-      responses:
-        '200':
-          description: '`{ ok: true }`'
           content:
             application/json:
               schema:

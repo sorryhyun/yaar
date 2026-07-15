@@ -2,7 +2,7 @@
 
 YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, 컴파일, 프리뷰, 바탕화면 배포까지 모두 AI가 devtools 앱을 통해 처리합니다.
 
-> [English version](../app-development.md)
+> [English version](../guides/app-development.md)
 
 ## 개발 흐름
 

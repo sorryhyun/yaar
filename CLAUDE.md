@@ -12,7 +12,7 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 
 **SDKs:**
 - **Claude:** Uses `@anthropic-ai/claude-agent-sdk` for programmatic Claude access. See [Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) for API documentation.
-- **Codex:** Uses `codex app-server` for JSON-RPC communication. See [docs/codex_protocol.md](./docs/codex_protocol.md) for protocol details.
+- **Codex:** Uses `codex app-server` for JSON-RPC communication. See [docs/reference/codex_protocol.md](./docs/reference/codex_protocol.md) for protocol details.
 
 ## Commands
 
@@ -52,7 +52,7 @@ bun run build:exe:bundle:macos   # Build macOS executable
 - `PORT` - Server port (default: 8000)
 - `MAX_AGENTS` - Global agent limit (default: 10)
 - `MCP_SKIP_AUTH` - Skip MCP authentication for local development
-- `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/remote_mode.md`
+- `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/guides/remote_mode.md`
 - `CLAUDE_CODE_PATH` - Absolute path to the `claude` binary. Overrides discovery (bundled exe → `~/.local/bin/claude` → `PATH`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - Inherited by the spawned `claude` CLI for non-interactive auth (alternative to `claude login`).
 
@@ -156,7 +156,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
 ### Key Architectural Concepts
 
 1. **AI-driven UI**: No pre-built screens. The AI generates all UI via OS Actions (JSON commands).
-2. **Session → Monitor → Window**: Three nested abstractions. Sessions own the conversation state and survive disconnections. Monitors are virtual desktops within a session, each with its own monitor agent. Windows are AI-generated UI surfaces within a monitor. See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for details.
+2. **Session → Monitor → Window**: Three nested abstractions. Sessions own the conversation state and survive disconnections. Monitors are virtual desktops within a session, each with its own monitor agent. Windows are AI-generated UI surfaces within a monitor. See [`docs/architecture/monitor_and_windows_guide.md`](./docs/architecture/monitor_and_windows_guide.md) for details.
 3. **ContextPool**: Unified task orchestration — main messages processed sequentially per monitor, app window messages via AppTaskProcessor. Uses `ContextTape` for hierarchical message history by source.
 4. **Pluggable providers**: `AITransport` interface with factory pattern. Claude uses Agent SDK; Codex uses JSON-RPC over WebSocket (each provider gets its own connection). Dynamic imports keep SDK dependencies lazy.
 5. **Warm Pool**: Providers pre-initialized at startup for instant first response. Auto-replenishes.
@@ -168,7 +168,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
     - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
     - `context-pool-policies/` — `MonitorQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `MonitorBudgetPolicy`, `WindowSubscriptionPolicy` (handle task queuing, prompt assembly, monitor rate limits, and window change notifications)
 
-See [`docs/os_architecture.md`](./docs/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/monitor_and_windows_guide.md`](./docs/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/claude_codex.md` for provider behavioral differences. See `docs/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/remote_mode.md` for network access.
+See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/architecture/monitor_and_windows_guide.md`](./docs/architecture/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/architecture/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/architecture/claude_codex.md` for provider behavioral differences. See `docs/guides/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/guides/remote_mode.md` for network access.
 
 ### Server Subsystems
 
@@ -212,7 +212,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 
 ## Apps System
 
-Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata, `SKILL.md` for AI context, `protocol.json` for agent-iframe communication. See [`docs/app-development.md`](./docs/app-development.md) for full URI verbs reference and [`docs/app_protocol_reference.md`](./docs/app_protocol_reference.md) for protocol details.
+Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata, `SKILL.md` for AI context, `protocol.json` for agent-iframe communication. See [`docs/guides/app-development.md`](./docs/guides/app-development.md) for full URI verbs reference and [`docs/reference/app_protocol_reference.md`](./docs/reference/app_protocol_reference.md) for protocol details.
 
 ### App Agent Architecture
 
@@ -237,7 +237,7 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 - **Audio**: `@bundled/tone`
 - **Parsing**: `@bundled/marked`, `@bundled/prismjs`, `@bundled/mammoth`
 - **YAAR SDK**: `@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, `appDb` (SQLite collections), etc.
-- **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy, plus per-app version history: gitHistory/gitDiff/gitRestore/gitCheckpoint), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/yaar_ml_runtime.md`](./docs/yaar_ml_runtime.md))
+- **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy, plus per-app version history: gitHistory/gitDiff/gitRestore/gitCheckpoint), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/guides/yaar_ml_runtime.md`](./docs/guides/yaar_ml_runtime.md))
 
 The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.
 

@@ -101,7 +101,7 @@ Domain allowlisting moved to verb layer: `invoke('yaar://config/domains', { doma
 
 Tools execute inside `AsyncLocalStorage` context so `getAgentId()` routes actions to the correct agent. Results flow back through the `ActionEmitter` → `BroadcastCenter` → WebSocket pipeline.
 
-See [`os_actions_reference.md`](./os_actions_reference.md) for the full action schema.
+See [`os_actions_reference.md`](../reference/os_actions_reference.md) for the full action schema.
 
 ---
 
@@ -186,7 +186,7 @@ Four IPC mechanisms:
 
 **`InteractionTimeline`** (`agents/interaction-timeline.ts`) — Unified chronological log of user UI interactions and AI action summaries. Drained into `<timeline>` XML by `ContextAssemblyPolicy` and prepended to the next monitor agent prompt. Deduplicates redundant events (e.g., focus before resize).
 
-**App Protocol** — Bidirectional agent↔iframe communication for apps with `"appProtocol": true`. Commands sent via `emitAppProtocolRequest()`, responses resolved via `resolveAppProtocolResponse()`. See [`app_protocol_reference.md`](./app_protocol_reference.md).
+**App Protocol** — Bidirectional agent↔iframe communication for apps with `"appProtocol": true`. Commands sent via `emitAppProtocolRequest()`, responses resolved via `resolveAppProtocolResponse()`. See [`app_protocol_reference.md`](../reference/app_protocol_reference.md).
 
 ---
 

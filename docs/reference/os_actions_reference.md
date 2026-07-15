@@ -199,7 +199,7 @@ Async operation. For iframes, uses a three-tier strategy: (1) iframe self-captur
 
 ## Notification Actions
 
-Notifications are addressable as `yaar://user/notifications/{id}` — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
+Notifications are addressable as `yaar://user/notifications/{id}` — see [URI-Based Resource Addressing](../architecture/verbalized-with-uri.md).
 
 ### `notification.show`
 
@@ -482,7 +482,7 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 
 ## User Prompt Actions
 
-User prompts are addressable as `yaar://user/prompts/{id}` — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
+User prompts are addressable as `yaar://user/prompts/{id}` — see [URI-Based Resource Addressing](../architecture/verbalized-with-uri.md).
 
 ### `user.prompt.show`
 

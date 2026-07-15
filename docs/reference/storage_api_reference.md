@@ -417,7 +417,7 @@ Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `s
 
 ## Configuration Storage
 
-Separate from user storage, configuration files live in `config/` (override with `YAAR_CONFIG`). Configuration is addressable via `yaar://config/{section}` URIs — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
+Separate from user storage, configuration files live in `config/` (override with `YAAR_CONFIG`). Configuration is addressable via `yaar://config/{section}` URIs — see [URI-Based Resource Addressing](../architecture/verbalized-with-uri.md).
 
 ### Settings
 
