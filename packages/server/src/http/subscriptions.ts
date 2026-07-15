@@ -34,6 +34,45 @@ export interface Subscription {
 const MAX_FRAME_PAYLOAD_CHARS = 4096;
 
 /**
+ * Kinds whose frames carry an incremental `{ delta: string }` and may be merged.
+ *
+ * The agent token firehose emits `text` and `thinking` frame-per-token; a slow
+ * iframe cannot keep up with that, so we fold the deltas that arrive inside one
+ * {@link COALESCE_MS} tick into a single frame. Merging is *lossless* (the deltas
+ * concatenate), so unlike a drop it does not create a `seq` gap — the merged
+ * frame burns exactly one `seq`. Discrete kinds (`tool`, `progress`, `done`,
+ * `error`) are never merged; they deliver immediately.
+ */
+const COALESCABLE_KINDS = new Set(['text', 'thinking']);
+
+/** Coalescing tick — deltas arriving within this window merge into one frame. */
+const COALESCE_MS = 60;
+
+/**
+ * Early-flush bound for a coalescing buffer. Merging keeps the buffer to one
+ * string per kind, but a runaway producer could still grow that string without
+ * limit between ticks; flushing at this size is the "never buffer unboundedly
+ * for a slow iframe" guard, done losslessly (flush, not drop).
+ */
+const MAX_COALESCE_CHARS = 8192;
+
+/** Per-subscription coalescing state: pending merged delta per coalescable kind. */
+interface CoalesceState {
+  /** kind → { source uri, accumulated delta } awaiting the next flush. */
+  pending: Map<string, { uri: string; delta: string }>;
+  timer: ReturnType<typeof setTimeout> | null;
+}
+
+/** Extract a string `delta` from a coalescable frame's payload, if present. */
+function deltaOf(data: unknown): string | null {
+  if (data && typeof data === 'object' && 'delta' in data) {
+    const d = (data as { delta: unknown }).delta;
+    if (typeof d === 'string') return d;
+  }
+  return null;
+}
+
+/**
  * Bound a frame payload. A stream is a firehose pointed at a possibly-slow
  * iframe, so an oversized payload is truncated to a marker rather than shipped.
  */
@@ -56,6 +95,8 @@ class SubscriptionRegistry {
   private uriIndex = new Map<string, Set<string>>();
   private windowIndex = new Map<string, Set<string>>();
   private sessionIndex = new Map<string, Set<string>>();
+  /** Stream-only coalescing buffers, keyed by subscription id. */
+  private coalescing = new Map<string, CoalesceState>();
 
   subscribe(
     token: string,
@@ -84,6 +125,14 @@ class SubscriptionRegistry {
     this.removeFromIndex(this.uriIndex, sub.uri, id);
     this.removeFromIndex(this.windowIndex, sub.windowId, id);
     this.removeFromIndex(this.sessionIndex, sub.sessionId, id);
+
+    // Drop any pending coalesced frames — the subscriber is gone; a timer that
+    // fired now would emit to a dead subscription and leak the handle.
+    const co = this.coalescing.get(id);
+    if (co) {
+      if (co.timer) clearTimeout(co.timer);
+      this.coalescing.delete(id);
+    }
 
     return true;
   }
@@ -179,23 +228,82 @@ class SubscriptionRegistry {
       if (sub.mode !== 'stream') continue;
       if (sessionId && sub.sessionId !== sessionId) continue;
       if (sub.kinds && !sub.kinds.includes(kind)) continue;
-      const frame: StreamFrame = {
-        uri,
-        seq: ++sub.seq,
-        kind,
-        data: capPayload(data),
-        ts: Date.now(),
-      };
-      actionEmitter.emit('verb-subscription', {
-        sessionId: sub.sessionId,
-        event: {
-          type: ServerEventType.STREAM_FRAME,
-          windowId: sub.windowId,
-          subscriptionId: sub.id,
-          frame,
-        },
-      });
+      this.enqueueFrame(sub, uri, kind, data);
     }
+  }
+
+  /**
+   * Route one frame for a matched subscription: merge `text`/`thinking` deltas on
+   * a tick (Guard 1), deliver everything else immediately. A discrete frame first
+   * flushes any pending deltas so the consumer never sees a `tool` frame jump
+   * ahead of the `text` that preceded it.
+   */
+  private enqueueFrame(sub: Subscription, uri: string, kind: string, data: unknown): void {
+    const delta = COALESCABLE_KINDS.has(kind) ? deltaOf(data) : null;
+    if (delta === null) {
+      this.flushCoalesced(sub); // preserve ordering: pending deltas go out first
+      this.deliverFrame(sub, uri, kind, data);
+      return;
+    }
+
+    let co = this.coalescing.get(sub.id);
+    if (!co) {
+      co = { pending: new Map(), timer: null };
+      this.coalescing.set(sub.id, co);
+    }
+    const prev = co.pending.get(kind);
+    const merged = (prev?.delta ?? '') + delta;
+    co.pending.set(kind, { uri, delta: merged });
+
+    // Bound the buffer losslessly: a merged delta past the cap flushes now rather
+    // than growing until the tick.
+    if (merged.length >= MAX_COALESCE_CHARS) {
+      this.flushCoalesced(sub);
+      return;
+    }
+    if (!co.timer) {
+      co.timer = setTimeout(() => this.flushCoalesced(sub), COALESCE_MS);
+    }
+  }
+
+  /** Emit every pending coalesced delta for a subscription as one frame per kind. */
+  private flushCoalesced(sub: Subscription): void {
+    const co = this.coalescing.get(sub.id);
+    if (!co) return;
+    if (co.timer) {
+      clearTimeout(co.timer);
+      co.timer = null;
+    }
+    const pending = co.pending;
+    co.pending = new Map();
+    // The subscription may have been torn down between schedule and fire.
+    if (!this.subscriptions.has(sub.id)) {
+      this.coalescing.delete(sub.id);
+      return;
+    }
+    for (const [kind, { uri, delta }] of pending) {
+      this.deliverFrame(sub, uri, kind, { delta });
+    }
+  }
+
+  /** Assign the next `seq`, cap the payload, and emit the frame to its subscriber. */
+  private deliverFrame(sub: Subscription, uri: string, kind: string, data: unknown): void {
+    const frame: StreamFrame = {
+      uri,
+      seq: ++sub.seq,
+      kind,
+      data: capPayload(data),
+      ts: Date.now(),
+    };
+    actionEmitter.emit('verb-subscription', {
+      sessionId: sub.sessionId,
+      event: {
+        type: ServerEventType.STREAM_FRAME,
+        windowId: sub.windowId,
+        subscriptionId: sub.id,
+        frame,
+      },
+    });
   }
 
   private addToIndex(index: Map<string, Set<string>>, key: string, id: string): void {

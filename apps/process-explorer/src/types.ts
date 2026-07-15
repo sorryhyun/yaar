@@ -22,6 +22,22 @@ export interface AgentEntry {
   appId?: string;
 }
 
+/**
+ * Live activity for one agent, folded from its `yaar://agents/{id}/stream` feed.
+ *
+ * The roster (`yaar://session/agents`) tells us an agent is *busy*; the stream
+ * tells us *what* — the tool it is running and a tail of the text it is emitting.
+ * Kept small on purpose: a glance, not a transcript.
+ */
+export interface AgentActivity {
+  /** The current/last tool call: display name + status. */
+  tool?: { name: string; status: string };
+  /** Tail of the assistant text streamed this turn (capped). */
+  text?: string;
+  /** True once a `done` frame lands; cleared when the next turn starts streaming. */
+  done?: boolean;
+}
+
 export interface WindowInfo {
   id: string;
   uri: string;

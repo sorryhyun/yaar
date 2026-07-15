@@ -1,8 +1,17 @@
 export {};
 
-import { createSignal, createMemo, onCleanup } from '@bundled/solid-js';
-import { list, invoke, del, subscribe, showToast } from '@bundled/yaar';
-import type { AgentStats, AgentEntry, WindowInfo, InstalledApp, AppProcess, TabId } from './types';
+import { createSignal, createMemo, createEffect, onCleanup } from '@bundled/solid-js';
+import { createStore } from '@bundled/solid-js/store';
+import { list, invoke, del, subscribe, stream, showToast, type StreamFrame } from '@bundled/yaar';
+import type {
+  AgentStats,
+  AgentEntry,
+  AgentActivity,
+  WindowInfo,
+  InstalledApp,
+  AppProcess,
+  TabId,
+} from './types';
 
 // ── Signals ──────────────────────────────────────────────────
 
@@ -13,6 +22,13 @@ const [lastRefresh, setLastRefresh] = createSignal<Date | null>(null);
 const [activeTab, setActiveTab] = createSignal<TabId>('agents');
 
 export { agentStats, windows, installedApps, lastRefresh, activeTab };
+
+/**
+ * Live per-agent activity, keyed by agent id, folded from each agent's stream.
+ * A fine-grained store so a frame for one agent re-renders only that row.
+ */
+const [agentActivity, setAgentActivity] = createStore<Record<string, AgentActivity>>({});
+export { agentActivity };
 
 export function selectTab(tab: TabId) {
   setActiveTab(tab);
@@ -184,6 +200,84 @@ export function startWatching() {
 
   watch('yaar://session/agents', fetchAgents);
   watch('yaar://windows', fetchWindows);
+
+  // Live activity: subscribe to each agent's stream, reconciling as the roster
+  // changes. The subscription set is derived from agentList(), so an agent that
+  // appears gets a stream and one that disappears has it torn down.
+  createEffect(() => reconcileStreams(agentList()));
+  onCleanup(() => {
+    for (const stop of streamStops.values()) stop();
+    streamStops.clear();
+  });
+}
+
+// ── Live agent streams ───────────────────────────────────────
+
+/** Longest tail of streamed assistant text we keep per agent. */
+const TEXT_TAIL_CHARS = 200;
+
+/** Active stream unsubscribers, keyed by agent id. */
+const streamStops = new Map<string, () => void>();
+
+/** Fold one frame from agent `id`'s stream into its live activity. */
+function onAgentFrame(id: string, frame: StreamFrame) {
+  const data = (frame.data ?? {}) as { delta?: string; toolName?: string; status?: string };
+  switch (frame.kind) {
+    case 'tool':
+      setAgentActivity(id, (prev) => ({
+        ...prev,
+        tool: { name: data.toolName ?? 'tool', status: data.status ?? 'running' },
+        done: false,
+      }));
+      break;
+    case 'text':
+      setAgentActivity(id, (prev) => ({
+        ...prev,
+        text: ((prev?.text ?? '') + (data.delta ?? '')).slice(-TEXT_TAIL_CHARS),
+        done: false,
+      }));
+      break;
+    case 'done':
+      setAgentActivity(id, (prev) => ({ ...prev, done: true }));
+      break;
+  }
+}
+
+/**
+ * Reconcile the set of live streams against the current roster. Subscribes to any
+ * non-session agent we aren't already watching, and drops streams for agents that
+ * are gone. The session agent's stream is shielded server-side (it would 403), so
+ * we never ask for it.
+ */
+function reconcileStreams(agents: AgentEntry[]) {
+  const live = new Set<string>();
+  for (const agent of agents) {
+    if (agent.type === 'session') continue;
+    live.add(agent.id);
+    if (streamStops.has(agent.id)) continue;
+
+    // Reserve the slot synchronously so a second reconcile before the async
+    // subscribe resolves doesn't open a duplicate.
+    streamStops.set(agent.id, () => {});
+    stream(`yaar://agents/${agent.id}/stream`, (frame) => onAgentFrame(agent.id, frame), {
+      kinds: ['text', 'tool', 'done'],
+    })
+      .then((stop) => {
+        // Torn down (agent vanished) before the subscription landed — drop it.
+        if (streamStops.has(agent.id)) streamStops.set(agent.id, stop);
+        else stop();
+      })
+      .catch(() => {
+        streamStops.delete(agent.id);
+      });
+  }
+
+  for (const [id, stop] of streamStops) {
+    if (live.has(id)) continue;
+    stop();
+    streamStops.delete(id);
+    setAgentActivity(id, undefined!);
+  }
 }
 
 // ── Actions ──────────────────────────────────────────────────

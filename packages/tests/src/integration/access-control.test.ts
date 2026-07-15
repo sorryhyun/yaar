@@ -83,6 +83,7 @@ describe('requirePermission', () => {
     permissions: ['yaar://apps/self/storage/'],
     systemApp: false,
     bundles: [],
+    streams: [],
     token: 't',
   };
 
@@ -141,6 +142,7 @@ describe('requireHost / requireBundle', () => {
     permissions: [],
     systemApp: false,
     bundles: ['yaar-web'],
+    streams: [],
     token: 't',
   };
 

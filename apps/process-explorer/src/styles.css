@@ -151,6 +151,33 @@
   text-overflow: ellipsis;
 }
 
+/*
+ * Live activity line, folded from the agent's stream. Sits under the meta line;
+ * the tool name reads as a code-ish accent, the text tail as muted body.
+ */
+.process-activity {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.activity-tool {
+  flex-shrink: 0;
+  max-width: 55%;
+  font-family: var(--yaar-font-mono, ui-monospace, monospace);
+  color: var(--yaar-accent);
+}
+
+.activity-text {
+  min-width: 0;
+  color: var(--yaar-text-muted);
+}
+
 .process-actions {
   display: flex;
   gap: var(--yaar-sp-1);

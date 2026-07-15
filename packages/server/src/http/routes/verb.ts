@@ -16,8 +16,15 @@ import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError } from '../../handlers/utils.js';
 import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
-import { requireBundle, requirePermission, resolvePrincipal, type Principal } from '../access.js';
+import {
+  requireBundle,
+  requirePermission,
+  requireStream,
+  resolvePrincipal,
+  type Principal,
+} from '../access.js';
 import { subscriptionRegistry } from '../subscriptions.js';
+import { parseAgentStreamUri } from '../../streams/agent-stream.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
 import { compactVerbPayload, shouldLogVerb } from '../../lib/format-verb-log.js';
@@ -194,12 +201,24 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         ? body.kinds.filter((k): k is string => typeof k === 'string')
         : undefined;
 
-      // Streaming `yaar://dev/*` (long-running verb progress) rides the yaar-dev
-      // door, not an app.json read permission — the same gate the /api/dev verbs
-      // that *produce* those frames sit behind. Everything else — including a plain
-      // change ping, which is still a subscription to the resource's state — goes
-      // through the same read gate as reading it.
-      if (mode === 'stream' && body.uri.startsWith('yaar://dev/')) {
+      // Streaming a sensitive source is gated on the capability that *produces* it,
+      // not a plain `read` permission on the resource. `yaar://agents/{id}/stream`
+      // is a live transcript, so it takes the bundled-only `streams:["agents"]`
+      // declaration — and the session agent's own stream is shielded outright, since
+      // it is the tier that drives the user's real browser. `yaar://dev/*` progress
+      // rides the yaar-dev door (the same gate its producer sits behind). Everything
+      // else — including a plain change ping, still a subscription to the resource's
+      // state — goes through the same read gate as reading it.
+      const agentStreamId = mode === 'stream' ? parseAgentStreamUri(body.uri) : null;
+      if (agentStreamId) {
+        const pool = getSessionHub().get(principal.sessionId)?.getPool();
+        const sessionAgentId = pool?.agentPool.getSessionAgent()?.instanceId;
+        if (sessionAgentId && sessionAgentId === agentStreamId) {
+          return errorResponse('The session agent stream is not subscribable by apps', 403);
+        }
+        const denied = requireStream(principal, 'agents');
+        if (denied) return denied;
+      } else if (mode === 'stream' && body.uri.startsWith('yaar://dev/')) {
         const denied = requireBundle(principal, 'yaar-dev');
         if (denied) return denied;
       } else {

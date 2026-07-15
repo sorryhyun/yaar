@@ -97,6 +97,59 @@ describe('stream subscriptions', () => {
     expect(data.preview?.length).toBe(4096);
   });
 
+  const tick = (ms = 90) => new Promise((r) => setTimeout(r, ms));
+
+  it('coalesces text deltas within a tick into one merged frame', async () => {
+    streamSub();
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: 'Hel' }, sessionId);
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: 'lo ' }, sessionId);
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: 'world' }, sessionId);
+
+    // Nothing delivered synchronously — the deltas are still buffered.
+    expect(captured).toHaveLength(0);
+
+    await tick();
+    // One frame, deltas merged losslessly, burning exactly one seq (no false gap).
+    expect(captured).toHaveLength(1);
+    expect(captured[0].event.frame).toMatchObject({
+      seq: 1,
+      kind: 'text',
+      data: { delta: 'Hello world' },
+    });
+  });
+
+  it('flushes pending text before a discrete frame so order is preserved', async () => {
+    streamSub();
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: 'thinking...' }, sessionId);
+    // A discrete frame arrives before the coalesce tick — the text must go out first.
+    subscriptionRegistry.publishFrame(
+      uri,
+      'tool',
+      { toolName: 'read', status: 'running' },
+      sessionId,
+    );
+
+    expect(captured.map((c) => c.event.frame?.kind)).toEqual(['text', 'tool']);
+    expect(captured[0].event.frame?.data).toMatchObject({ delta: 'thinking...' });
+    // seq stays monotonic across the flush + the discrete frame.
+    expect(captured.map((c) => c.event.frame?.seq)).toEqual([1, 2]);
+
+    await tick();
+    // No late duplicate of the already-flushed text.
+    expect(captured).toHaveLength(2);
+  });
+
+  it('drops pending coalesced frames on unsubscribe', async () => {
+    const id = streamSub();
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: 'half a sentence' }, sessionId);
+    subscriptionRegistry.unsubscribe(id);
+    subIds.splice(subIds.indexOf(id), 1);
+
+    await tick();
+    // The buffered delta never fires after teardown.
+    expect(captured).toHaveLength(0);
+  });
+
   it('keeps the two modes from crossing wires', () => {
     // A change sub next to a stream sub on the same URI.
     const changeId = subscriptionRegistry.subscribe('tok', 'win-1', sessionId, uri, 'change');

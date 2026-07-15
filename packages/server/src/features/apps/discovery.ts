@@ -311,6 +311,7 @@ export async function getAppMeta(appId: string): Promise<{
   controls?: ControlEntry[];
   systemApp?: boolean;
   bundles?: string[];
+  streams?: string[];
 } | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
@@ -330,6 +331,7 @@ export async function getAppMeta(appId: string): Promise<{
       controls?: ControlEntry[];
       systemApp?: boolean;
       bundles?: string[];
+      streams?: string[];
     } = {};
     if (meta.messaging === 'all') result.messaging = 'all';
     // Only bundled apps may be `system` (see readAppInfo) — an installed app
@@ -353,6 +355,15 @@ export async function getAppMeta(appId: string): Promise<{
     if (Array.isArray(meta.bundles)) {
       const bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
       if (bundles.length > 0) result.bundles = bundles;
+    }
+    // Streamable capabilities the app declared (e.g. "agents" → may subscribe to
+    // `yaar://agents/{id}/stream`). Bundled-only, mirroring `controls`: an agent
+    // transcript is sensitive, so a marketplace app can't self-grant a live tap by
+    // shipping the declaration. Carried onto the iframe token so the subscribe gate
+    // (verb.ts) checks it at runtime, not just at compile time. See access.ts.
+    if (Array.isArray(meta.streams) && resolveAppSource(appId) === 'bundled') {
+      const streams = meta.streams.filter((s: unknown): s is string => typeof s === 'string');
+      if (streams.length > 0) result.streams = streams;
     }
     // Check for dist/protocol.json to determine appProtocol support
     try {

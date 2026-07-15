@@ -1,6 +1,6 @@
 # Proposal: Stream Subscriptions (Push-with-Payload Channels)
 
-**Status:** Phase 1 shipped — Phases 2–4 pending (Phase 2 blocked on the access-tier decision below).
+**Status:** Phases 1–2 shipped — Phases 3–4 pending. The access-tier decision below was resolved to **(b)+(c)**.
 **Builds on:** the app-event channel system (`app.register({events})` / `app.emit()` / `app_subscribe`), which shipped and closed the **app → agent** quadrant. This one adds **server/agent → app (and agent → agent)** *streaming* push. Its design record lived in `app_events_subscribe_proposal.md`, removed once implemented; the code is `WindowSubscriptionPolicy`, `ContextPool.notifyAppChannel`, and `features/window/subscribe.ts`.
 
 **Shipped (Phase 1):** the frame envelope + transport + app SDK, plus one real source (deploy progress). See the "Change inventory" below for the file-by-file record of what landed versus what remains. The design prose (Model / Transport / Guards / Access control) is kept as the record for the still-pending agent-side phases.
@@ -158,6 +158,8 @@ The access-tier system (`ResourceRegistry.execute()` + `access: 'session-princip
 
 **Recommend (b) + (c) together**: bundled-app declaration for the capability, session-principal for the session agent's own stream. That keeps `process-explorer` working without handing an arbitrary marketplace app a live tap on everything the user types.
 
+**Resolved: (b)+(c) shipped in Phase 2.** An app declares `"streams": ["agents"]` in its (bundled-only) app.json; the declaration rides the iframe token (`discovery.getAppMeta` → `iframe-tokens` → `access.AppPrincipal.streams`) and is enforced by `requireStream()` in the `/api/verb/subscribe` route. The session agent's own stream is shielded there outright (a `403`, resolved against the live pool's `getSessionAgent().instanceId`).
+
 ---
 
 ## Change inventory
@@ -182,25 +184,35 @@ The access-tier system (`ResourceRegistry.execute()` + `access: 'session-princip
 **Compiler** (`packages/compiler`)
 - `shims/yaar.ts` + `bundled-types/index.d.ts` — export `stream(uri, onFrame, opts?)` + `StreamFrame`.
 
+### Shipped (Phase 2)
+
+**Server** (`packages/server`)
+- `agents/session-policies/stream-to-event-mapper.ts` — one `emitStreamFrame(...)` call per case (`text`/`thinking` deltas, `tool`, `done`, `error`); additive, the `sendEvent` path is untouched. `instanceId` + `liveSessionId` threaded from `AgentSession`.
+- `streams/agent-stream.ts` (new) — `buildAgentStreamUri`/`parseAgentStreamUri` for `yaar://agents/{instanceId}/stream` (keyed by the roster's `AgentEntry.id`).
+- `http/subscriptions.ts` — the coalescer (Guard 1: `text`/`thinking` merge on a 60ms tick, lossless → one `seq`) + early-flush bound (Guard 2, done as flush-not-drop since merging is lossless); discrete frames flush pending deltas first, then deliver immediately; teardown clears pending on unsubscribe.
+- `features/apps/discovery.ts` + `http/iframe-tokens.ts` + `http/access.ts` — `streams` capability (bundled-only) rides the iframe token; `requireStream()` gate.
+- `http/routes/verb.ts` — subscribe gate: session-agent stream shielded (403), rest requires `streams:["agents"]`.
+- `tests/` — `agent-stream-source.test.ts`, `agent-stream-access.test.ts`, coalescing cases in `stream-subscriptions.test.ts`.
+
+**Consumer**
+- `apps/process-explorer` — declares `streams:["agents"]`; reconciles a `stream()` per non-session agent as the roster changes; folds frames into an `agentActivity` store; renders a live tool/text line per agent row.
+
 ### Remaining
 
 **Server** (`packages/server`)
-1. `agents/session-policies/stream-to-event-mapper.ts` — one `streamHub.publish(...)` call per case (additive; the existing `sendEvent` path is untouched). *(Phase 2)*
-2. `http/subscriptions.ts` — the deferred coalescer + bounded drop-oldest queue (Guards 1–2), before any high-rate source lands. *(Phase 2)*
-3. `streams/` — the stream-source registry (agent stream, app-channel fan-out). *(Phase 2 / 4)*
-4. `agents/context-pool-policies/window-subscription-policy.ts` — accept stream sources as subscribable channels (mostly free after the app_events generalization). *(Phase 3)*
-5. `handlers/agents.ts` — `subscribe_stream` / `unsubscribe_stream` actions; advertise streamability in `describe`. *(Phase 3)*
+1. `streams/` — a URI-pattern → attach-function source *registry* (earns its keep once a pull-style source or app-channel fan-out lands). *(Phase 4)*
+2. `agents/context-pool-policies/window-subscription-policy.ts` — accept stream sources as subscribable channels (mostly free after the app_events generalization). *(Phase 3)*
+3. `handlers/agents.ts` — `subscribe_stream` / `unsubscribe_stream` actions; advertise streamability in `describe`. *(Phase 3)*
 
 **Consumers**
-6. `apps/process-explorer` — live tool/text per agent instead of busy/idle. *(Phase 2)*
-7. `apps/devtools` — a live deploy-progress bar consuming the Phase 1 `yaar://dev/deploy/{appId}` frames; (later) a CLI-panel app.
+4. `apps/devtools` — a live deploy-progress bar consuming the Phase 1 `yaar://dev/deploy/{appId}` frames; (later) a CLI-panel app.
 
 ---
 
 ## Phasing
 
 - **Phase 1 — Envelope + transport. ✅ Shipped.** `mode:'stream'` on the registry, `STREAM_FRAME` event, frontend hop, `yaar.stream()` SDK, and one real source (deploy progress via `yaar://dev/deploy/{appId}`) to prove the pipe without touching agent auth. `seq` + payload cap + kind filter landed; coalescing + drop-oldest deferred to Phase 2 (the deploy source doesn't need them).
-- **Phase 2 — Agent stream source.** `streamHub.publish` in `StreamToEventMapper`, plus the deferred coalescing + drop-oldest queue (Guards 1–2, now required by the token firehose), access gate (b)+(c). Consumer: `process-explorer` live view. **Blocked on the access-tier decision below.**
+- **Phase 2 — Agent stream source. ✅ Shipped.** `emitStreamFrame` in `StreamToEventMapper`, coalescing (Guard 1) + early-flush bound (Guard 2), access gate (b)+(c). Consumer: `process-explorer` live view.
 - **Phase 3 — Agent-side stream subscriptions.** `subscribe_stream` in `buffer` mode, reusing `WindowSubscriptionPolicy` + `InteractionTimeline`. Unlocks agent-watching-agent.
 - **Phase 4 — App-channel fan-out.** `yaar://windows/{id}/events/{channel}` streams `app.emit()` to app subscribers, completing the app_events matrix.
 

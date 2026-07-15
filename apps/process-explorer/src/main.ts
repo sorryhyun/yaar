@@ -7,6 +7,7 @@ import type { AgentEntry, WindowInfo, AppProcess } from './types';
 import {
   agentStats,
   agentList,
+  agentActivity,
   windows,
   appProcesses,
   lastRefresh,
@@ -87,6 +88,14 @@ function AgentRow(props: { agent: AgentEntry }) {
     return 'dot dot-ok';
   };
 
+  // Live activity, folded from the agent's stream. Tool line + a tail of text.
+  const act = () => agentActivity[a().id];
+  const toolText = () => {
+    const t = act()?.tool;
+    return t ? `${t.name} · ${t.status}` : '';
+  };
+  const bodyText = () => act()?.text ?? '';
+
   return html`
     <div class="process-row">
       <div class="process-info">
@@ -97,6 +106,16 @@ function AgentRow(props: { agent: AgentEntry }) {
             <span style=${() => `color: ${typeBadge(a().type)}`}>${() => a().type}</span>
             <span>${() => (a().busy ? 'busy' : 'idle')}</span>
           </div>
+          <${Show} when=${() => toolText() || bodyText()}>
+            <div class="process-activity">
+              <${Show} when=${toolText}>
+                <span class="activity-tool y-truncate">${toolText}</span>
+              </>
+              <${Show} when=${bodyText}>
+                <span class="activity-text y-truncate">${bodyText}</span>
+              </>
+            </div>
+          </>
         </div>
       </div>
       <div class="process-actions">

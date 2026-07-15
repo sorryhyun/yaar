@@ -6,6 +6,8 @@ import { formatToolDisplay } from '../../mcp/server.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getToolUseHooks, type ToolUseContext } from '../../features/config/hooks.js';
 import { VERB_TOOL_NAMES } from '../../handlers/index.js';
+import { publishFrame } from '../../streams/stream-hub.js';
+import { buildAgentStreamUri, type AgentStreamKind } from '../../streams/agent-stream.js';
 
 export interface StreamMappingState {
   responseText: string;
@@ -30,7 +32,22 @@ export class StreamToEventMapper {
     private readonly onSessionId?: (sessionId: string) => Promise<void>,
     private readonly monitorId?: string,
     private readonly onOutput?: (bytes: number) => void,
+    /** Agent instance id — keys this agent's `yaar://agents/{id}/stream` feed. */
+    private readonly agentInstanceId?: string,
+    /** Session the frames belong to — scopes them so session A can't read B. */
+    private readonly streamSessionId?: string,
   ) {}
+
+  /**
+   * Publish one frame onto this agent's `yaar://agents/{id}/stream` feed, for any
+   * app (or agent) that subscribed. Additive: the `sendEvent` path above is the
+   * frontend CLI panel and is untouched. A no-op when we lack the id/session to
+   * name and scope the feed (e.g. an ephemeral agent).
+   */
+  private emitStreamFrame(kind: AgentStreamKind, data: unknown): void {
+    if (!this.agentInstanceId || !this.streamSessionId) return;
+    publishFrame(buildAgentStreamUri(this.agentInstanceId), kind, data, this.streamSessionId);
+  }
 
   async map(message: StreamMessage): Promise<void> {
     // Flush pending thinking before processing non-thinking messages
@@ -54,6 +71,9 @@ export class StreamToEventMapper {
             monitorId: this.monitorId,
             messageId: this.state.currentMessageId ?? undefined,
           });
+          // Stream subscribers get the *delta*, not the running accumulation —
+          // the registry coalesces these on a tick.
+          this.emitStreamFrame('text', { delta: message.content });
         }
         break;
 
@@ -61,6 +81,7 @@ export class StreamToEventMapper {
         if (message.content) {
           this.state.thinkingText += message.content;
           this.thinkingDirty = true;
+          this.emitStreamFrame('thinking', { delta: message.content });
 
           // Throttle: emit AGENT_THINKING at most once per 200ms
           const now = Date.now();
@@ -102,6 +123,11 @@ export class StreamToEventMapper {
           toolInput: displayInput,
           agentId: this.role,
           monitorId: this.monitorId,
+        });
+        this.emitStreamFrame('tool', {
+          toolName: displayName,
+          status: 'running',
+          input: displayInput,
         });
         this.logger?.logToolUse(
           message.toolName ?? 'unknown',
@@ -146,13 +172,18 @@ export class StreamToEventMapper {
 
       case 'tool_result': {
         const isError = message.isError === true;
+        const resultToolName = formatToolDisplay(message.toolName ?? 'tool');
         await this.sendEvent({
           type: ServerEventType.TOOL_PROGRESS,
-          toolName: formatToolDisplay(message.toolName ?? 'tool'),
+          toolName: resultToolName,
           status: isError ? 'error' : 'complete',
           message: message.content,
           agentId: this.role,
           monitorId: this.monitorId,
+        });
+        this.emitStreamFrame('tool', {
+          toolName: resultToolName,
+          status: isError ? 'error' : 'complete',
         });
         if (isError) {
           console.warn(
@@ -219,6 +250,7 @@ export class StreamToEventMapper {
           monitorId: this.monitorId,
           messageId: this.state.currentMessageId ?? undefined,
         });
+        this.emitStreamFrame('done', {});
         break;
 
       case 'error':
@@ -228,6 +260,7 @@ export class StreamToEventMapper {
           agentId: this.role,
           monitorId: this.monitorId,
         });
+        this.emitStreamFrame('error', { error: message.error ?? 'Unknown error' });
         break;
 
       default:

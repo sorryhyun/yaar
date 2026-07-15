@@ -8,6 +8,7 @@
     "yaar://windows/",
     { "uri": "yaar://apps/", "verbs": ["list"] }
   ],
+  "streams": ["agents"],
   "version": "1.1.0",
   "author": "YAAR",
   "kind": "system"

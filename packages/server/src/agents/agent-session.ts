@@ -401,6 +401,8 @@ export class AgentSession {
         },
         options.monitorId,
         this.onOutput ?? undefined,
+        stableAgentId,
+        this.liveSessionId,
       );
 
       console.log(

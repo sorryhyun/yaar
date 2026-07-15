@@ -61,6 +61,8 @@ interface AppPrincipal {
   systemApp: boolean;
   /** Gated SDKs declared in app.json `bundles` (yaar-dev / yaar-web / yaar-ml). */
   bundles: string[];
+  /** Streamable capabilities declared in app.json `streams` (e.g. `agents`). */
+  streams: string[];
   /** The raw token, for callers that need to key subscriptions by it. */
   token: string;
 }
@@ -109,6 +111,7 @@ export function resolvePrincipal(req: Request, url: URL): Principal | Response {
     permissions: entry.permissions ?? NO_PERMISSIONS,
     systemApp: entry.systemApp ?? false,
     bundles: entry.bundles ?? [],
+    streams: entry.streams ?? [],
     token,
   };
 }
@@ -214,6 +217,24 @@ export function requireBundle(principal: Principal, bundle: string): Response | 
   if (principal.bundles.includes(bundle)) return null;
   return errorResponse(
     `"${bundle}" must be declared in app.json "bundles" to use this endpoint`,
+    403,
+  );
+}
+
+/**
+ * Require that an app declared a streamable capability in its app.json `streams`.
+ *
+ * Opening a `mode:'stream'` subscription to a sensitive source — an agent's live
+ * transcript at `yaar://agents/{id}/stream` — is more than reading a resource, so
+ * it is gated on an explicit, bundled-only declaration rather than a `read`
+ * permission. `streams` is only ever populated on the token for bundled apps
+ * (getAppMeta enforces that), so membership here is also a bundled-app check.
+ */
+export function requireStream(principal: Principal, capability: string): Response | null {
+  if (principal.kind === 'host') return null;
+  if (principal.streams.includes(capability)) return null;
+  return errorResponse(
+    `"${capability}" must be declared in app.json "streams" to stream this source`,
     403,
   );
 }

@@ -38,6 +38,14 @@ interface TokenEntry {
    * they check this list themselves — see requireBundle() in access.ts.
    */
   bundles?: string[];
+  /**
+   * Streamable capabilities the app declared in app.json `streams` (e.g. `agents`).
+   *
+   * Bundled-only (getAppMeta gates it), and checked by the `/api/verb/subscribe`
+   * gate before opening a `mode:'stream'` subscription to a sensitive source like
+   * `yaar://agents/{id}/stream`. See requireStream() in access.ts.
+   */
+  streams?: string[];
   createdAt: number;
   timer: ReturnType<typeof setTimeout>;
 }
@@ -53,6 +61,8 @@ export interface IframeTokenOptions {
   systemApp?: boolean;
   /** Gated SDKs from app.json `bundles`. See TokenEntry.bundles. */
   bundles?: string[];
+  /** Streamable capabilities from app.json `streams`. See TokenEntry.streams. */
+  streams?: string[];
   /**
    * The `yaar://` URI of the document this iframe was told to render, if it is
    * one storage serves. Auto-granted `read`. See generateAppIframeToken.
@@ -67,7 +77,7 @@ export interface IframeTokenOptions {
 export function generateIframeToken(
   windowId: string,
   sessionId: string,
-  { appId, permissions, monitorId, systemApp, bundles }: IframeTokenOptions = {},
+  { appId, permissions, monitorId, systemApp, bundles, streams }: IframeTokenOptions = {},
 ): string {
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
@@ -83,6 +93,7 @@ export function generateIframeToken(
     permissions,
     systemApp,
     bundles,
+    streams,
     createdAt: Date.now(),
     timer,
   });
@@ -131,15 +142,16 @@ export async function generateAppIframeToken(
     permissions = [...permissions, { uri: documentUri, verbs: ['read'] }];
   }
 
-  // systemApp and bundles come from the app's own manifest, never from the caller —
-  // they are the app's declared identity, not a property of the request that mints
-  // the token.
+  // systemApp, bundles and streams come from the app's own manifest, never from the
+  // caller — they are the app's declared identity, not a property of the request
+  // that mints the token.
   return generateIframeToken(windowId, sessionId, {
     appId,
     permissions,
     monitorId,
     systemApp: appMeta?.systemApp,
     bundles: appMeta?.bundles,
+    streams: appMeta?.streams,
   });
 }
 
