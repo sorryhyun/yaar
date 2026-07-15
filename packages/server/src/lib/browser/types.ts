@@ -34,8 +34,6 @@ export interface AdoptedTab {
  *
  * Both produce `BrowserSession` instances, which already abstract a single CDP
  * target — so the session layer is shared verbatim across providers.
- *
- * See docs/browser_substrate_proposal.md.
  */
 export interface BrowserProvider {
   /**

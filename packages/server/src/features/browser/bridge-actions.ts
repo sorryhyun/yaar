@@ -7,7 +7,7 @@
  * (iframe-token auth); monitor agents reach it only by driving that app through the App Protocol
  * (`app_command`/`app_query`). There is deliberately no `yaar://browser` verb namespace — control
  * of the user's real browser is app-mediated, so it is always visible as a window and never a raw,
- * silently-callable agent capability. See `0607plan.md` (Slice 4).
+ * silently-callable agent capability.
  */
 
 import { BRIDGE_CONTENT_MAX_CHARS } from '@yaar/shared';

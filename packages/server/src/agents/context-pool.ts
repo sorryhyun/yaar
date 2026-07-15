@@ -355,7 +355,7 @@ export class ContextPool implements PoolContext {
    * Wakes the lazy session-agent singleton (born on first use) and runs a turn
    * with a `session-*` role — the principal tier that unlocks `yaar://session/*`,
    * including `yaar://session/browser` (the user's real browser). Triggered by
-   * the CLI-panel "Session" target toggle. See docs/session_agent_browser_design.md §6.
+   * the CLI-panel "Session" target toggle.
    */
   async handleSessionTask(task: Task): Promise<void> {
     if (this.resetting) {

@@ -9,7 +9,6 @@
  *
  * Phase 2 (dev / power-user): opt in with `YAAR_BROWSER_PROVIDER=local`. The
  * companion-extension productization and full auto-selection come later.
- * See docs/browser_substrate_proposal.md.
  *
  * It reuses every bit of CDP/session plumbing from `CdpBrowserProvider`; the
  * only differences are:

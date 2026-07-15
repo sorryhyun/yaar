@@ -81,7 +81,7 @@ export interface ResourceHandler {
    * Optional access requirement. When set to 'session-principal', only the
    * session agent (the user's deputy) may invoke any verb on this resource;
    * all other callers receive a 403-style error. Enforced centrally in
-   * ResourceRegistry.execute(). See docs/session_agent_browser_design.md.
+   * ResourceRegistry.execute().
    */
   access?: 'session-principal';
 

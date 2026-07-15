@@ -155,7 +155,7 @@ export class BrowserSession extends EventEmitter {
    * Flag whether an agent is actively driving this tab and emit a status
    * 'updated' event (without bumping `version`, so it doesn't trigger a content
    * reload — it's purely the "agent is driving this tab" indicator). Used by the
-   * local-browser consent layer; see docs/browser_substrate_proposal.md.
+   * local-browser consent layer.
    */
   setDriving(on: boolean): void {
     if (this.driving === on) return;

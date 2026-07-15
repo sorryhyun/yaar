@@ -260,7 +260,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       const monitorId = store.activeMonitorId;
       // CLI-panel "act as me" toggle — route to the session agent (the user's
       // deputy) only while the CLI panel is open; the main palette stays on the
-      // monitor agent. See docs/session_agent_browser_design.md §6.
+      // monitor agent.
       const { cliMode, cliTarget } = store;
       const target = cliMode && cliTarget === 'session' ? 'session' : undefined;
       store.addCliEntry({ type: 'user', content, monitorId });

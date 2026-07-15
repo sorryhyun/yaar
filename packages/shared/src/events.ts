@@ -138,8 +138,7 @@ export interface UserMessageEvent {
    *  - `'monitor'` — the monitor agent (sandbox browsing only). Today's behavior.
    *  - `'session'` — the session agent, the user's deputy, which can drive the
    *    user's real browser via `yaar://session/browser`.
-   * Set from the CLI-panel Monitor/Session toggle. See
-   * docs/session_agent_browser_design.md §6.
+   * Set from the CLI-panel Monitor/Session toggle.
    */
   target?: 'monitor' | 'session';
 }

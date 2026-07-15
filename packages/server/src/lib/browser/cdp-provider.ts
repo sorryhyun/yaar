@@ -14,7 +14,7 @@
  *  - availability (`isAvailable`).
  *
  * `HeadlessServerBrowser` launches a private Chrome; `LocalUserBrowser` attaches
- * to the user's already-running one. See docs/browser_substrate_proposal.md.
+ * to the user's already-running one.
  */
 
 import { BrowserSession, type BrowserSessionOptions } from './session.js';

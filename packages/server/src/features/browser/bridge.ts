@@ -4,7 +4,7 @@
  * The `/bridge` WebSocket handlers (websocket/bridge-handlers.ts) WRITE this state; the
  * `/api/bridge` dispatch layer (`features/browser/bridge-actions.ts`, driven by the `browser-user`
  * app) READS it. It is deliberately NOT a `BrowserProvider` — it traffics in tab metadata + a
- * correlated command socket, not CDP sessions. See `0607plan.md`.
+ * correlated command socket, not CDP sessions.
  *
  * The `browser-user` app polls `/api/bridge` for the live feed, so the hub holds state only — it
  * does not push change notifications.

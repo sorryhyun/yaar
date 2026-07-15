@@ -5,9 +5,6 @@ making real tabs part of the YAAR OS. It dials *outward* to `ws://localhost:8000
 to relaunch, no debug flag, no second profile. If YAAR isn't running, it idles at zero cost and
 keeps retrying.
 
-Spec: [`../docs/extension_bridge_proposal.md`](../docs/extension_bridge_proposal.md).
-Build plan: [`../0607plan.md`](../0607plan.md).
-
 ## Status: Slice 5 — T3 Drive (protocol v4)
 
 The extension **feeds** tabs (T1 Observe), **manages** them (T2 Manage), and now **reads and drives**

@@ -13,7 +13,7 @@ import type { SessionId } from '../session/types.js';
 /**
  * Principal tier of an agent — the identity that access control is keyed on.
  * Only the session agent acts as the user's deputy; monitor/app agents are
- * sandboxed workers. See docs/session_agent_browser_design.md.
+ * sandboxed workers.
  */
 export type AgentRole = 'session' | 'monitor' | 'app';
 

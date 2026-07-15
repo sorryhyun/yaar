@@ -6,12 +6,6 @@ adds the cheapest possible awareness: a **read-only presence feed** built entire
 OS already exposes, requiring **zero browser setup** — no extension, no relaunch, no debug flag, no
 new profile.
 
-> Companion doc: [`extension_bridge_proposal.md`](./extension_bridge_proposal.md) is the *rich* tier
-> (in-page events, tab management, eventual actuation) via a companion extension. The two proposals
-> share one URI surface (`yaar://browser/*`); this one is the floor, that one is the ceiling.
-> Parents: [`browser_substrate_proposal.md`](./browser_substrate_proposal.md) (mechanism),
-> [`session_agent_browser_design.md`](./session_agent_browser_design.md) (principals).
-
 ---
 
 ## 1. Why a third way is needed at all
@@ -101,7 +95,7 @@ features/browser/presence.ts
 
 ### 3a. Access model — extraction, not exception
 
-[`session_agent_browser_design.md`](./session_agent_browser_design.md) Q3 established the rule:
+The session-agent browser design established the rule:
 *"widen it by extraction, never by exception."* This namespace is that rule applied. We do **not**
 open `yaar://session/browser` to lower tiers; we mint a **separate, read-only** namespace,
 `yaar://browser/presence*`, with its own (weaker) gate:

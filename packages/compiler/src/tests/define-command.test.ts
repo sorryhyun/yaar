@@ -17,8 +17,8 @@ import { join, resolve } from 'path';
  * than its node-shebang bin script, so the suite does not require a node install.
  */
 
-const BUNDLED_TYPES = resolve(import.meta.dir, 'bundled-types');
-const TSC_JS = resolve(import.meta.dir, '../node_modules/typescript/lib/tsc.js');
+const BUNDLED_TYPES = resolve(import.meta.dir, '../bundled-types');
+const TSC_JS = resolve(import.meta.dir, '../../node_modules/typescript/lib/tsc.js');
 
 let sandbox: string;
 

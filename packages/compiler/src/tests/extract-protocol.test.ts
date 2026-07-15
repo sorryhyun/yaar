@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { extractProtocolFromSource } from './extract-protocol.js';
+import { extractProtocolFromSource } from '../extract-protocol.js';
 
 /**
  * The manifest that reaches the agent is built twice from the same source: once

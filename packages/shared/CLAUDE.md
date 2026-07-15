@@ -28,7 +28,7 @@ See `src/events.ts` for full Client→Server and Server→Client event types.
 `UserMessageEvent` carries an optional `target?: 'monitor' | 'session'` (default `'monitor'`): set
 to `'session'` by the CLI-panel toggle to route the message to the session agent (the user's
 deputy, which can drive the real browser via `yaar://session/browser`) instead of the monitor
-agent. See `docs/session_agent_browser_design.md` §6.
+agent.
 
 ## Component DSL
 

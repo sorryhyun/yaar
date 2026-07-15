@@ -14,7 +14,7 @@
  * exist (definitely wrong).
  *
  * Usage:
- *   bun run scripts/check-doc-freshness.ts            # check all docs/**/*.md
+ *   bun run scripts/check-doc-freshness.ts            # check every markdown file under docs/
  *   bun run scripts/check-doc-freshness.ts docs/x.md  # check specific docs
  *   bun run scripts/check-doc-freshness.ts --quiet     # only print problems
  *   bun run scripts/check-doc-freshness.ts --strict    # fail on stale sources too

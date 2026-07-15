@@ -4,8 +4,7 @@
  * `getHeadlessBrowser()` (the `/api/browser` sandbox) and `getLocalBrowser()`
  * (the `yaar://session/browser` real-Chrome door) must be *distinct* singletons
  * bound to different identities, so the user's real browser can't leak out the
- * sandbox door regardless of `YAAR_BROWSER_PROVIDER`. See
- * docs/session_agent_browser_design.md §5.
+ * sandbox door regardless of `YAAR_BROWSER_PROVIDER`.
  */
 import { describe, it, expect, afterEach } from 'bun:test';
 import {

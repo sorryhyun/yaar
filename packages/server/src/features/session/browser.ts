@@ -8,7 +8,7 @@
  *
  * This module just picks the right provider instance and runs the *same* action
  * layer used by `/api/browser`, with the Phase-3 consent + driving guards
- * applied. See docs/session_agent_browser_design.md §5.
+ * applied.
  */
 
 import type { VerbResult } from '../../handlers/uri-registry.js';

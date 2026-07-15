@@ -7,7 +7,7 @@
  *
  * Slice 1 covers T1 (Observe): `hello` + `tabs` (extension → server).
  * Slice 2 adds T2 (Manage): `command` + `activity` (server → extension) and `command-result`
- * (extension → server). See `0607plan.md` and `docs/extension_bridge_proposal.md`.
+ * (extension → server).
  * Slice 3 adds T3-lite content read: the `extract` command action returns the target tab's page
  * text (via `chrome.scripting`), carried back in `command-result.data`. This is the first frame
  * that crosses the tab-metadata boundary, so it is gated by a distinct per-origin content consent
@@ -17,7 +17,7 @@
  * via injection, or a tab-URL update for `navigate`) and share the tab-control consent gate; and
  * `screenshot` captures the visible tab as a PNG (content-consent-gated like `extract`). These make
  * the Real Browser app a full driving surface, not just an observe/manage one — still fully
- * app-mediated (never a raw `yaar://browser` verb). See `docs/extension_bridge_proposal.md`.
+ * app-mediated (never a raw `yaar://browser` verb).
  * Slice 6 adds T4 (React): the `event` frame, the first thing the extension sends *unprompted* —
  * a native dialog fired on a driven tab, or a driven tab navigated. Until this, the bridge was
  * strictly pull (handshake / snapshot / reply-to-command), so a page that alerted mid-automation

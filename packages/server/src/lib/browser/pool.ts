@@ -7,7 +7,7 @@
  *
  * Uses the system Chrome/Edge — no bundled browser binary needed. This is the
  * default provider and the correct one for headless / cloud / no-display /
- * Claude-in-Claude / eval runs. See docs/browser_substrate_proposal.md.
+ * Claude-in-Claude / eval runs.
  *
  * (Formerly `BrowserPool` — that name is kept as an alias for back-compat.)
  *
@@ -116,7 +116,7 @@ export type BrowserPool = HeadlessServerBrowser;
  *
  * The boundary is identity, not environment: lower agents physically reach a
  * *different instance*, so the user's real browser can't leak out the sandbox
- * door. See docs/session_agent_browser_design.md §5.
+ * door.
  */
 let headlessProvider: HeadlessServerBrowser | undefined;
 let localProvider: LocalUserBrowser | undefined;

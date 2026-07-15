@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
-import { APP_MOUNT_ID, scanMountTargets } from './mount-guard.js';
+import { APP_MOUNT_ID, scanMountTargets } from '../mount-guard.js';
 
 const scan = (source: string) => scanMountTargets(ts, source, 'src/main.ts');
 

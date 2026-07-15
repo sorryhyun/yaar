@@ -54,7 +54,7 @@ Agents are processes. `AgentPool` manages their lifecycle.
 | **App** | Daemon | Persistent per app (session lifetime) | `appId` | `yaar://agents/{instanceId}` |
 | **Ephemeral** | One-shot process | Disposed after single task | (none — tracked in a Set) | `yaar://agents/{instanceId}` |
 
-Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers. See `docs/session_agent_browser_design.md`.
+Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers.
 
 Monitor agents can spawn **task subagents** via the `Task` tool (like `fork()`). Subagent profiles are defined in `profiles.ts`: `default`, `web`, `code`, `app`.
 

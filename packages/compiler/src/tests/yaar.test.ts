@@ -52,7 +52,7 @@ process.on('exit', () => {
   console.error = originalError;
 });
 
-const { appStorage, createPersistedSignal } = await import('./yaar.ts');
+const { appStorage, createPersistedSignal } = await import('../shims/yaar.js');
 
 /** Lets microtask-scheduled saves (`void trySave(...)`) settle. */
 const tick = () => new Promise((r) => setTimeout(r, 0));

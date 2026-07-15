@@ -319,7 +319,7 @@ export interface CliSliceState {
    * Routing target for typed messages, chosen from the CLI-panel toggle:
    *  - `'monitor'` (default) — the monitor agent, sandbox browsing only.
    *  - `'session'` — the session agent ("act as me"), which can drive the
-   *    user's real browser. See docs/session_agent_browser_design.md §6.
+   *    user's real browser.
    */
   cliTarget: 'monitor' | 'session';
 }

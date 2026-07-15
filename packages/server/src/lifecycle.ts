@@ -47,7 +47,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: IS_BUNDLED_EXE });
 
   // Wire central URI access control: session-principal handlers are reachable
-  // only by the session agent (see docs/session_agent_browser_design.md §4a).
+  // only by the session agent.
   // Wired here (a non-cyclic boot module) rather than in handlers/index — a
   // named import of agent-context's getters from inside the handlers/agents
   // import cycle mis-links under Bun's module loader.

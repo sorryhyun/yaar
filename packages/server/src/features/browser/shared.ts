@@ -11,8 +11,7 @@ import type { BrowserProvider, BrowserSession, PageState } from '../../lib/brows
  *
  * The provider is passed in (not the global singleton) so the same action
  * layer can be driven against either door — headless (`/api/browser`) or the
- * user's real Chrome (`yaar://session/browser`). See
- * docs/session_agent_browser_design.md.
+ * user's real Chrome (`yaar://session/browser`).
  */
 export function resolveSession(pool: BrowserProvider, browserId?: string): BrowserSession {
   if (browserId !== undefined) {

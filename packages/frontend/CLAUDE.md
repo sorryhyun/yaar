@@ -49,7 +49,7 @@ src/
 
 ## CLI Panel
 
-`Shift+Tab` toggles `cliMode` (`store/slices/cliSlice.ts`), rendering `CliPanel` — a tmux-style grid of `TerminalPane`s streaming each monitor's agent. The panel also carries a **Monitor / Session ("act as me")** target toggle (`cliTarget` in the cli slice): `'session'` routes typed messages to the session agent — the user's deputy that can drive the real browser via `yaar://session/browser`. `sendMessage` (in `useAgentConnection`) attaches `target: 'session'` to `USER_MESSAGE` only while the CLI panel is open and the toggle is set; the main command palette always stays on the monitor agent. See `docs/session_agent_browser_design.md` §6.
+`Shift+Tab` toggles `cliMode` (`store/slices/cliSlice.ts`), rendering `CliPanel` — a tmux-style grid of `TerminalPane`s streaming each monitor's agent. The panel also carries a **Monitor / Session ("act as me")** target toggle (`cliTarget` in the cli slice): `'session'` routes typed messages to the session agent — the user's deputy that can drive the real browser via `yaar://session/browser`. `sendMessage` (in `useAgentConnection`) attaches `target: 'session'` to `USER_MESSAGE` only while the CLI panel is open and the toggle is set; the main command palette always stays on the monitor agent.
 
 ## WebSocket Connection
 

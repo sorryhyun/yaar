@@ -2,7 +2,7 @@
  * Phase 3 consent + self-target guards for browser automation.
  *
  * Two protections layered in front of `POST /api/browser`, both centred on the
- * substrate-collapse insight from docs/browser_substrate_proposal.md: once the
+ * substrate-collapse insight: once the
  * user's browser is the substrate, YAAR's own tab is *one more addressed target*,
  * not a thing to wall off — so self-reference is allowed but never silent.
  *
@@ -168,7 +168,7 @@ export async function enforceBrowserGuards(opts: {
  *  2. **Per-origin consent** — the same allowlist + dialog that gates outbound navigation.
  *
  * `focus` and `track` are not mutations (see `MUTATING_TAB_ACTIONS`), so they sail through — a
- * bare `{ ok: true }`, no dialog. See `0607plan.md` §2.2 and docs/extension_bridge_proposal.md §3.
+ * bare `{ ok: true }`, no dialog.
  */
 export async function enforceTabControlGuard(opts: {
   tab: { url: string; isSelf?: boolean };

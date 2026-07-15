@@ -2,14 +2,14 @@ import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, relative, resolve } from 'path';
-import { initCompiler } from './config.js';
-import { typecheckSandbox } from './typecheck.js';
+import { initCompiler } from '../config.js';
+import { typecheckSandbox } from '../typecheck.js';
 
 setDefaultTimeout(15_000);
 
 beforeAll(() => {
   initCompiler({
-    projectRoot: resolve(import.meta.dir, '../../..'),
+    projectRoot: resolve(import.meta.dir, '../../../..'),
     isBundledExe: false,
   });
 });

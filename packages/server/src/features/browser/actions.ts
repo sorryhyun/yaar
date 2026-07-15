@@ -552,9 +552,6 @@ export async function handleRemoveAnnotations(
  * the user's real Chrome for `yaar://session/browser`) plus the parsed action
  * payload. Consent / self-target guards and the "driving" indicator are applied
  * by the caller around this switch (see `runGuardedBrowserAction`).
- *
- * See docs/session_agent_browser_design.md §5 ("one shared action layer, two
- * doors bound to two instances").
  */
 export async function runBrowserAction(
   pool: BrowserProvider,

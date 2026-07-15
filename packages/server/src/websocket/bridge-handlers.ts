@@ -6,7 +6,7 @@
  * which backs the `/api/bridge` surface (driven by the `browser-user` app). T1 (Observe) reads
  * `hello`/`tabs`; T2 (Manage)
  * additionally correlates `command-result` frames back to in-flight `sendCommand` calls. Still no
- * page-content access — that boundary is T3. See `0607plan.md`.
+ * page-content access — that boundary is T3.
  *
  * Dispatched from `createWsHandlers` in `server.ts` when `ws.data.kind === 'bridge'`.
  */
