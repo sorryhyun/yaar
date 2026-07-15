@@ -10,6 +10,42 @@ const LOG_FLUSH_MS = 200;
 const METADATA_FLUSH_MS = 300;
 
 /**
+ * Revive JSON that has been stringified into a string field so it lands in the
+ * log as real JSON instead of an escaped blob. A string that parses to an object
+ * or array is replaced by the parsed value; everything else (plain text, numbers,
+ * quoted primitives) is left untouched. Walks objects/arrays recursively so
+ * nested stringified payloads (e.g. a tool input's `content`) are revived too.
+ */
+export function reviveJson(value: unknown): unknown {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    const looksLikeJson =
+      (trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+      (trimmed.startsWith('[') && trimmed.endsWith(']'));
+    if (looksLikeJson) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object') return parsed;
+      } catch {
+        // Not valid JSON — keep the original string.
+      }
+    }
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(reviveJson);
+  }
+  if (value && typeof value === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, v] of Object.entries(value)) {
+      out[key] = reviveJson(v);
+    }
+    return out;
+  }
+  return value;
+}
+
+/**
  * Generate a unique session ID based on timestamp.
  */
 function generateSessionId(): string {
@@ -256,7 +292,11 @@ export class SessionLogger {
     toolUseId: string | undefined,
     agentId?: string,
   ): void {
-    this.appendEntry('tool_use', agentId, { toolName, toolInput, toolUseId });
+    this.appendEntry('tool_use', agentId, {
+      toolName,
+      toolInput: reviveJson(toolInput),
+      toolUseId,
+    });
   }
 
   logToolResult(
@@ -274,7 +314,12 @@ export class SessionLogger {
       this.sessionInfo.metadata.failureCount = (this.sessionInfo.metadata.failureCount ?? 0) + 1;
       this.scheduleMetadataSave();
     }
-    this.appendEntry('tool_result', agentId, { toolName, content, toolUseId, ...meta });
+    this.appendEntry('tool_result', agentId, {
+      toolName,
+      content: reviveJson(content),
+      toolUseId,
+      ...meta,
+    });
   }
 
   logAction(action: OSAction, agentId?: string): void {

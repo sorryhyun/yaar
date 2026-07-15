@@ -29,7 +29,9 @@ export interface ParsedMessage {
   agentId: string | null;
   parentAgentId: string | null;
   source?: ContextSource;
-  content?: string;
+  // Natural-language messages (user/assistant/thinking) are strings; tool_result
+  // content may be revived JSON (object/array) — see reviveJson in session-logger.
+  content?: unknown;
   action?: OSAction;
   toolName?: string;
   toolInput?: unknown;

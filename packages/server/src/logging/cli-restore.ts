@@ -35,7 +35,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
 
     switch (msg.type) {
       case 'user':
-        if (msg.content) {
+        if (typeof msg.content === 'string') {
           entries.push({
             type: 'user',
             content: msg.content,
@@ -47,7 +47,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
         break;
 
       case 'assistant':
-        if (msg.content) {
+        if (typeof msg.content === 'string') {
           entries.push({
             type: 'response',
             content: msg.content,
@@ -59,7 +59,7 @@ export function getCliRestoreEntries(messages: ParsedMessage[]): CliRestoreEntry
         break;
 
       case 'thinking':
-        if (msg.content) {
+        if (typeof msg.content === 'string') {
           entries.push({
             type: 'thinking',
             content: msg.content,

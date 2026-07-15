@@ -19,7 +19,7 @@ export const FULL_RESTORE_POLICY: ContextRestorePolicy = {
 };
 
 function toContextMessage(msg: ParsedMessage): ContextMessage | null {
-  if ((msg.type !== 'user' && msg.type !== 'assistant') || !msg.content) {
+  if ((msg.type !== 'user' && msg.type !== 'assistant') || typeof msg.content !== 'string') {
     return null;
   }
 

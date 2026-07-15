@@ -99,9 +99,16 @@ export async function readSessionTranscript(sessionId: string): Promise<string |
           `### Tool: ${msg.toolName} (${ts})\n\n\`\`\`json\n${JSON.stringify(msg.toolInput, null, 2)}\n\`\`\`\n`,
         );
         break;
-      case 'tool_result':
-        lines.push(`### Result: ${msg.toolName} (${ts})\n\n${msg.content ?? ''}\n`);
+      case 'tool_result': {
+        const body =
+          typeof msg.content === 'string'
+            ? msg.content
+            : msg.content != null
+              ? JSON.stringify(msg.content, null, 2)
+              : '';
+        lines.push(`### Result: ${msg.toolName} (${ts})\n\n${body}\n`);
         break;
+      }
       case 'action':
         lines.push(`### Action: ${msg.action?.type} (${ts})\n`);
         break;
