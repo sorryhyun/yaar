@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 YAAR is a reactive AI interface where the AI decides what to show and do next. Instead of pre-built screens, users type into an always-ready input field and the AI creates UI dynamically through "OS Actions" (JSON commands that open windows, show notifications, etc.).
 
 **Prerequisites:**
-- Bun >= 1.1 (runtime and package manager)
+- Bun >= 1.3 (runtime and package manager)
 - Claude CLI installed and authenticated (`npm install -g @anthropic-ai/claude-code && claude login`)
 
 **SDKs:**

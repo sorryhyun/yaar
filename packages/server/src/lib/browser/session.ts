@@ -34,7 +34,36 @@ const DESKTOP_HEIGHT = 800;
 const MOBILE_WIDTH = 390;
 const MOBILE_HEIGHT = 844;
 const SCREENSHOT_QUALITY = 95;
+/**
+ * Long-edge cap for model-bound screenshots. Anthropic downsizes images past
+ * ~1568px before the model sees them, so a tall full-page capture sent at native
+ * size just spends tokens on pixels that get thrown away. Magnified `clip`
+ * captures are exempt — they're taken at 4x on purpose.
+ */
+const MODEL_SCREENSHOT_MAX_EDGE = 1568;
 const TEXT_SNIPPET_LENGTH = 500;
+
+/**
+ * Cap a model-bound screenshot's long edge, re-encoding as WebP via `Bun.Image`
+ * off the main thread. Screenshots already within the cap pass through untouched
+ * (no re-encode, no quality loss). If `Bun.Image` is unavailable or throws, the
+ * original — already WebP — buffer is a safe fallback.
+ */
+async function downscaleForModel(webp: Buffer): Promise<Buffer> {
+  try {
+    const { width, height } = await new Bun.Image(webp).metadata();
+    if (Math.max(width, height) <= MODEL_SCREENSHOT_MAX_EDGE) return webp;
+    return await new Bun.Image(webp)
+      .resize(MODEL_SCREENSHOT_MAX_EDGE, MODEL_SCREENSHOT_MAX_EDGE, {
+        fit: 'inside',
+        withoutEnlargement: true,
+      })
+      .webp({ quality: SCREENSHOT_QUALITY })
+      .buffer();
+  } catch {
+    return webp;
+  }
+}
 
 const DESKTOP_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36';
@@ -677,9 +706,10 @@ export class BrowserSession extends EventEmitter {
   }): Promise<Buffer> {
     this.touch();
     if (opts?.clip) {
+      // Magnified region: keep the full 4x detail, don't cap it back down.
       return this.takeScreenshot({ ...opts.clip, scale: 4 });
     }
-    return this.takeScreenshot();
+    return downscaleForModel(await this.takeScreenshot());
   }
 
   /** Evaluate arbitrary JS expression in the page and return the result. */
