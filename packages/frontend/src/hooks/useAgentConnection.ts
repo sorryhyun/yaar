@@ -7,9 +7,10 @@ import {
   useDesktopStore,
   handleAppProtocolRequest,
   handleVerbSubscriptionUpdate,
+  handleStreamFrame,
   resendAppProtocolReady,
 } from '@/store';
-import type { ClientEvent, AppProtocolRequest } from '@/types';
+import type { ClientEvent, AppProtocolRequest, StreamFrame } from '@/types';
 import { ClientEventType, ServerEventType } from '@/types';
 import {
   wsManager,
@@ -92,6 +93,13 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     [],
   );
 
+  const handleStreamFrameCb = useCallback(
+    (windowId: string, subscriptionId: string, frame: StreamFrame) => {
+      handleStreamFrame(windowId, subscriptionId, frame);
+    },
+    [],
+  );
+
   /**
    * Put an event on the wire, and say whether it got there.
    *
@@ -167,6 +175,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           addCliEntry: store.addCliEntry,
           handleAppProtocolRequest: handleAppProtocolRequestCb,
           handleVerbSubscriptionUpdate: handleVerbSubscriptionUpdateCb,
+          handleStreamFrame: handleStreamFrameCb,
           restoreCliHistory: store.restoreCliHistory,
           acceptMessage: store.acceptMessage,
           queueMessage: store.queueMessage,
@@ -187,6 +196,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       checkForPreviousSession,
       handleAppProtocolRequestCb,
       handleVerbSubscriptionUpdateCb,
+      handleStreamFrameCb,
       flushPending,
       resync,
     ],

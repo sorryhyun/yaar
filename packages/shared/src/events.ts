@@ -27,6 +27,7 @@ export const ServerEventType = {
   APPROVAL_REQUEST: 'APPROVAL_REQUEST',
   APP_PROTOCOL_REQUEST: 'APP_PROTOCOL_REQUEST',
   VERB_SUBSCRIPTION_UPDATE: 'VERB_SUBSCRIPTION_UPDATE',
+  STREAM_FRAME: 'STREAM_FRAME',
   CLI_RESTORE: 'CLI_RESTORE',
   MONITORS: 'MONITORS',
   SNAPSHOT: 'SNAPSHOT',
@@ -483,6 +484,36 @@ export interface VerbSubscriptionUpdateEvent {
   uri: string;
 }
 
+/**
+ * One frame of a stream subscription (`mode: 'stream'`).
+ *
+ * Where {@link VerbSubscriptionUpdateEvent} is a bare change ping — "this URI's
+ * state moved, re-`read()` it" — a stream carries the payload with it. `seq` is
+ * monotonic per subscription, so a consumer that sees it jump (8 → 12) *knows*
+ * frames were dropped rather than silently rendering a hole. `kind` is
+ * source-defined (`'text' | 'thinking' | 'tool' | 'progress' | 'event' | 'done'`
+ * …) so a new stream source needs no shared-package change.
+ */
+export interface StreamFrame {
+  /** Source URI (may be more specific than the subscribed prefix). */
+  uri: string;
+  /** Monotonic per subscription — a gap means frames were dropped. */
+  seq: number;
+  /** Source-defined frame type. */
+  kind: string;
+  /** Source-defined JSON payload, size-capped server-side. */
+  data: unknown;
+  /** Server timestamp (ms). */
+  ts: number;
+}
+
+export interface StreamFrameEvent {
+  type: typeof ServerEventType.STREAM_FRAME;
+  windowId: string;
+  subscriptionId: string;
+  frame: StreamFrame;
+}
+
 export interface CliRestoreEntry {
   type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary';
   content: string;
@@ -563,5 +594,6 @@ export type ServerEvent =
   | ApprovalRequestEvent
   | AppProtocolRequestEvent
   | VerbSubscriptionUpdateEvent
+  | StreamFrameEvent
   | CliRestoreEvent
   | MonitorsEvent;

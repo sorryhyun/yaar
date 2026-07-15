@@ -16,7 +16,7 @@ import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError } from '../../handlers/utils.js';
 import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
-import { requirePermission, resolvePrincipal, type Principal } from '../access.js';
+import { requireBundle, requirePermission, resolvePrincipal, type Principal } from '../access.js';
 import { subscriptionRegistry } from '../subscriptions.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
@@ -36,7 +36,7 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     path: '/api/verb/subscribe',
     response: 'JSON',
     description:
-      'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId? }`.',
+      'Subscribe/unsubscribe to reactive verb URI updates. Body: `{ uri, action: "subscribe" | "unsubscribe", subscriptionId?, mode?: "change" | "stream", kinds?: string[] }`. `mode: "stream"` pushes typed frames with payloads instead of bare change pings.',
   },
 ];
 
@@ -52,6 +52,10 @@ interface SubscribeRequest {
   uri?: string;
   action?: 'subscribe' | 'unsubscribe';
   subscriptionId?: string;
+  /** `'change'` (default) = bare ping; `'stream'` = typed frames with payloads. */
+  mode?: 'change' | 'stream';
+  /** Stream-only: narrow delivery to these frame kinds. */
+  kinds?: string[];
 }
 
 /**
@@ -185,10 +189,23 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         return errorResponse('Missing or invalid "uri" field', 400);
       }
 
-      // A subscription that only fires change pings is still a subscription to the
-      // resource's state, so it goes through the same gate as reading it.
-      const denied = requirePermission(principal, body.uri, 'read');
-      if (denied) return denied;
+      const mode = body.mode === 'stream' ? 'stream' : 'change';
+      const kinds = Array.isArray(body.kinds)
+        ? body.kinds.filter((k): k is string => typeof k === 'string')
+        : undefined;
+
+      // Streaming `yaar://dev/*` (long-running verb progress) rides the yaar-dev
+      // door, not an app.json read permission — the same gate the /api/dev verbs
+      // that *produce* those frames sit behind. Everything else — including a plain
+      // change ping, which is still a subscription to the resource's state — goes
+      // through the same read gate as reading it.
+      if (mode === 'stream' && body.uri.startsWith('yaar://dev/')) {
+        const denied = requireBundle(principal, 'yaar-dev');
+        if (denied) return denied;
+      } else {
+        const denied = requirePermission(principal, body.uri, 'read');
+        if (denied) return denied;
+      }
 
       // Resolve `self` → real appId so notifyChange() (which fires with real
       // appId URIs) reaches subscriptions made from inside the app's iframe.
@@ -208,6 +225,8 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         principal.windowId,
         principal.sessionId,
         subscribeUri,
+        mode,
+        kinds,
       );
       return jsonResponse({ subscriptionId });
     }

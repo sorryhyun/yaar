@@ -64,6 +64,7 @@ function createHandlers() {
     addCliEntry: mock(() => {}),
     handleAppProtocolRequest: mock(() => {}),
     handleVerbSubscriptionUpdate: mock(() => {}),
+    handleStreamFrame: mock(() => {}),
     restoreCliHistory: mock(() => {}),
     acceptMessage: mock(() => {}),
     queueMessage: mock(() => {}),

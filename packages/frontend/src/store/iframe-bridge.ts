@@ -4,7 +4,12 @@
  * Covers: window capture (direct WS send), App Protocol relay, verb subscription
  * forwarding, iframe message routing, windows SDK handler, and notification broadcasting.
  */
-import type { AppProtocolPostMessage, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
+import type {
+  AppProtocolPostMessage,
+  AppProtocolRequest,
+  AppProtocolResponse,
+  StreamFrame,
+} from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { ClientEventType } from '@/types';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
@@ -349,6 +354,37 @@ export function handleVerbSubscriptionUpdate(
       type: 'yaar:subscription-update',
       subscriptionId,
       uri,
+    },
+    getIframeTargetOrigin(iframe),
+  );
+}
+
+/**
+ * Deliver one stream frame to the subscribing iframe.
+ *
+ * Mirror of {@link handleVerbSubscriptionUpdate} — same window resolution — but
+ * carries the whole frame payload instead of a bare change ping.
+ */
+export function handleStreamFrame(
+  windowId: string,
+  subscriptionId: string,
+  frame: StreamFrame,
+): void {
+  const state = useDesktopStore.getState();
+  const monitorId = state.activeMonitorId ?? DEFAULT_MONITOR_ID;
+  const key = resolveWindowKey(state.windows, windowId, monitorId);
+
+  const el = document.querySelector(`[${WINDOW_ID_DATA_ATTR}="${key}"]`) as HTMLElement | null;
+  if (!el) return;
+
+  const iframe = el.querySelector('iframe') as HTMLIFrameElement | null;
+  if (!iframe?.contentWindow) return;
+
+  iframe.contentWindow.postMessage(
+    {
+      type: 'yaar:stream-frame',
+      subscriptionId,
+      frame,
     },
     getIframeTargetOrigin(iframe),
   );

@@ -77,19 +77,35 @@ export const IFRAME_VERB_SDK_SCRIPT = `
   var __yaarSubCounter = 0;
 
   window.addEventListener('message', function(e) {
-    if (!e.data || e.data.type !== 'yaar:subscription-update') return;
-    var id = e.data.subscriptionId;
-    if (__yaarSubs[id]) {
-      try { __yaarSubs[id](e.data.uri); } catch(err) {}
+    if (!e.data) return;
+    // Change ping: callback gets the URI string, app re-reads the resource.
+    if (e.data.type === 'yaar:subscription-update') {
+      var id = e.data.subscriptionId;
+      if (__yaarSubs[id]) {
+        try { __yaarSubs[id](e.data.uri); } catch(err) {}
+      }
+      return;
+    }
+    // Stream frame: callback gets the whole frame ({ uri, seq, kind, data, ts }).
+    if (e.data.type === 'yaar:stream-frame') {
+      var sid = e.data.subscriptionId;
+      if (__yaarSubs[sid]) {
+        try { __yaarSubs[sid](e.data.frame); } catch(err) {}
+      }
+      return;
     }
   });
 
-  window.yaar.subscribe = function(uri, callback) {
+  // Register a subscription and route its server-assigned id to a callback.
+  // \`body\` carries the mode ('change' for subscribe, 'stream' for stream).
+  function openSubscription(uri, callback, body) {
     var headers = tokenHeaders();
+    body.uri = uri;
+    body.action = 'subscribe';
     return fetch('/api/verb/subscribe', {
       method: 'POST',
       headers: headers,
-      body: JSON.stringify({ uri: uri, action: 'subscribe' })
+      body: JSON.stringify(body)
     }).then(function(res) {
       return res.json();
     }).then(function(data) {
@@ -105,6 +121,19 @@ export const IFRAME_VERB_SDK_SCRIPT = `
         }).then(function() {});
       };
     });
+  }
+
+  window.yaar.subscribe = function(uri, callback) {
+    return openSubscription(uri, callback, { mode: 'change' });
+  };
+
+  // Stream a URI: same endpoint and unsubscriber shape as subscribe(), but the
+  // server pushes typed frames with payloads instead of bare change pings.
+  // opts.kinds narrows delivery to the listed frame kinds.
+  window.yaar.stream = function(uri, onFrame, opts) {
+    var body = { mode: 'stream' };
+    if (opts && Array.isArray(opts.kinds)) body.kinds = opts.kinds;
+    return openSubscription(uri, onFrame, body);
   };
 
   window.yaar.fetch = function(url, options) {

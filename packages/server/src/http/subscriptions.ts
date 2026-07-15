@@ -6,8 +6,16 @@
  * and emits events via actionEmitter when changes are detected.
  */
 
-import { ServerEventType } from '@yaar/shared';
+import { ServerEventType, type StreamFrame } from '@yaar/shared';
 import { actionEmitter } from '../session/action-emitter.js';
+
+/**
+ * A subscription is either a change *ping* (`'change'` — the callback gets a URI
+ * string and re-reads) or a *stream* (`'stream'` — the server pushes typed
+ * {@link StreamFrame}s with payloads). The two share this registry and the
+ * `/api/verb/subscribe` endpoint; only the delivery differs.
+ */
+export type SubscriptionMode = 'change' | 'stream';
 
 export interface Subscription {
   id: string;
@@ -15,6 +23,30 @@ export interface Subscription {
   windowId: string;
   sessionId: string;
   uri: string;
+  mode: SubscriptionMode;
+  /** Stream-only: deliver only frames whose `kind` is listed. Undefined = all. */
+  kinds?: string[];
+  /** Stream-only: monotonic frame counter; a gap the consumer sees means a drop. */
+  seq: number;
+}
+
+/** Payload cap for a single stream frame (matches the app_events 4KB cap). */
+const MAX_FRAME_PAYLOAD_CHARS = 4096;
+
+/**
+ * Bound a frame payload. A stream is a firehose pointed at a possibly-slow
+ * iframe, so an oversized payload is truncated to a marker rather than shipped.
+ */
+function capPayload(data: unknown): unknown {
+  let json: string;
+  try {
+    json = JSON.stringify(data);
+  } catch {
+    return { truncated: true, reason: 'unserializable' };
+  }
+  if (json === undefined) return data; // e.g. a bare `undefined`
+  if (json.length <= MAX_FRAME_PAYLOAD_CHARS) return data;
+  return { truncated: true, chars: json.length, preview: json.slice(0, MAX_FRAME_PAYLOAD_CHARS) };
 }
 
 let counter = 0;
@@ -25,9 +57,16 @@ class SubscriptionRegistry {
   private windowIndex = new Map<string, Set<string>>();
   private sessionIndex = new Map<string, Set<string>>();
 
-  subscribe(token: string, windowId: string, sessionId: string, uri: string): string {
+  subscribe(
+    token: string,
+    windowId: string,
+    sessionId: string,
+    uri: string,
+    mode: SubscriptionMode = 'change',
+    kinds?: string[],
+  ): string {
     const id = `sub-${Date.now()}-${++counter}`;
-    const sub: Subscription = { id, token, windowId, sessionId, uri };
+    const sub: Subscription = { id, token, windowId, sessionId, uri, mode, kinds, seq: 0 };
     this.subscriptions.set(id, sub);
 
     this.addToIndex(this.uriIndex, uri, id);
@@ -111,6 +150,7 @@ class SubscriptionRegistry {
   notifyChange(uri: string, sessionId?: string): void {
     const subscribers = this.getSubscribers(uri);
     for (const sub of subscribers) {
+      if (sub.mode !== 'change') continue; // stream subs receive frames, not pings
       if (sessionId && sub.sessionId !== sessionId) continue;
       actionEmitter.emit('verb-subscription', {
         sessionId: sub.sessionId,
@@ -119,6 +159,40 @@ class SubscriptionRegistry {
           windowId: sub.windowId,
           subscriptionId: sub.id,
           uri,
+        },
+      });
+    }
+  }
+
+  /**
+   * Push a typed frame to every stream subscriber watching `uri` (or a parent
+   * prefix of it). Mirrors {@link notifyChange} but carries a payload: per-sub
+   * `seq` is bumped, the payload is size-capped, and a `kinds` filter drops
+   * frames the subscriber didn't ask for.
+   *
+   * `sessionId` scopes the frame to one session — pass it for per-session
+   * sources (agents, windows, dev jobs) so session A's frames don't leak to B.
+   */
+  publishFrame(uri: string, kind: string, data: unknown, sessionId?: string): void {
+    const subscribers = this.getSubscribers(uri);
+    for (const sub of subscribers) {
+      if (sub.mode !== 'stream') continue;
+      if (sessionId && sub.sessionId !== sessionId) continue;
+      if (sub.kinds && !sub.kinds.includes(kind)) continue;
+      const frame: StreamFrame = {
+        uri,
+        seq: ++sub.seq,
+        kind,
+        data: capPayload(data),
+        ts: Date.now(),
+      };
+      actionEmitter.emit('verb-subscription', {
+        sessionId: sub.sessionId,
+        event: {
+          type: ServerEventType.STREAM_FRAME,
+          windowId: sub.windowId,
+          subscriptionId: sub.id,
+          frame,
         },
       });
     }

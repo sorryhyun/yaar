@@ -3,6 +3,7 @@ export { useDesktopStore } from './desktop';
 export {
   handleAppProtocolRequest,
   handleVerbSubscriptionUpdate,
+  handleStreamFrame,
   resendAppProtocolReady,
   tryIframeSelfCapture,
   getIframeDragSource,

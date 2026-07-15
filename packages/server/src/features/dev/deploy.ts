@@ -11,6 +11,7 @@ import {
   extractProtocolFromSource,
 } from '@yaar/compiler';
 import { actionEmitter } from '../../session/action-emitter.js';
+import { publishFrame } from '../../streams/stream-hub.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName, generateSkillMd } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
@@ -102,6 +103,13 @@ export interface DeployArgs {
   message?: string; // Commit message for this deploy's history snapshot
   /** Ship without type checking. Escape hatch — the caller is stating they know. */
   skipTypecheck?: boolean;
+  /**
+   * Session to scope deploy-progress stream frames to. When set, `doDeploy`
+   * pushes `progress`/`done`/`error` frames to `yaar://dev/deploy/{appId}` for
+   * any app streaming that URI (e.g. devtools' live deploy bar). Omit for
+   * callers with no session (tests, CLI).
+   */
+  sessionId?: string;
 }
 
 export interface DeployResult {
@@ -117,6 +125,13 @@ export async function doDeploy(
 ): Promise<DeployResult | { success: false; error: string }> {
   const { appId, name, description, icon, keepSource = true, skill, skipTypecheck } = args;
 
+  // Deploy-progress stream. Frames go to any app streaming this URI; a no-op
+  // when no one is subscribed (or no sessionId was passed).
+  const deployUri = `yaar://dev/deploy/${appId}`;
+  const emit = (kind: 'progress' | 'done' | 'error', data: Record<string, unknown>): void => {
+    if (args.sessionId) publishFrame(deployUri, kind, { appId, ...data }, args.sessionId);
+  };
+
   if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
     return {
       success: false,
@@ -124,6 +139,8 @@ export async function doDeploy(
         'Invalid app ID. Use lowercase letters, numbers, and hyphens. Must start with a letter.',
     };
   }
+
+  emit('progress', { step: 'start', message: `Deploying ${appId}…` });
 
   const sandboxPath = args.sourcePath ?? getSandboxPath(sandboxId);
   // Update an existing app in place; newly deployed apps go to the bundled
@@ -152,15 +169,15 @@ export async function doDeploy(
     .then(() => true)
     .catch(() => false);
   if (hasSource && !skipTypecheck) {
+    emit('progress', { step: 'typecheck', message: 'Type checking…' });
     const result = await typecheckSandbox(sandboxPath, { bundles: await readBundles(sandboxPath) });
     if (!result.success) {
       const diagnostics = result.diagnostics ?? [];
-      return {
-        success: false,
-        error:
-          `Type check failed — refusing to deploy "${appId}". ` +
-          `Fix these, or pass skipTypecheck to ship anyway:\n${diagnostics.join('\n')}`,
-      };
+      const error =
+        `Type check failed — refusing to deploy "${appId}". ` +
+        `Fix these, or pass skipTypecheck to ship anyway:\n${diagnostics.join('\n')}`;
+      emit('error', { step: 'typecheck', error, diagnostics });
+      return { success: false, error };
     }
   }
 
@@ -173,15 +190,15 @@ export async function doDeploy(
   } catch {
     try {
       await stat(join(sandboxPath, 'src', 'main.ts'));
+      emit('progress', { step: 'compile', message: 'Compiling…' });
       const compileResult = await compileTypeScript(sandboxPath, {
         title: name ?? toDisplayName(appId),
         bundles: await readBundles(sandboxPath),
       });
       if (!compileResult.success) {
-        return {
-          success: false,
-          error: `Auto-compile failed:\n${compileResult.errors?.join('\n') ?? 'Unknown error'}`,
-        };
+        const error = `Auto-compile failed:\n${compileResult.errors?.join('\n') ?? 'Unknown error'}`;
+        emit('error', { step: 'compile', error });
+        return { success: false, error };
       }
       hasCompiledApp = true;
     } catch {
@@ -256,6 +273,8 @@ export async function doDeploy(
   // recoverable via `restoreApp()`. No-ops for an app being created for the
   // first time (nothing on disk to snapshot yet).
   await snapshotApp(appId, `checkpoint: before deploy of ${appId}`);
+
+  emit('progress', { step: 'write', message: 'Writing files…' });
 
   try {
     await mkdir(appPath, { recursive: true });
@@ -376,9 +395,13 @@ export async function doDeploy(
     // rolls back to.
     await snapshotApp(appId, args.message?.trim() || `deploy: ${appId}`);
 
+    emit('done', { name: finalName, icon: finalIcon });
+
     return { success: true, appId, name: finalName, icon: finalIcon };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, error: `Failed to deploy app: ${msg}` };
+    const error = `Failed to deploy app: ${msg}`;
+    emit('error', { step: 'write', error });
+    return { success: false, error };
   }
 }

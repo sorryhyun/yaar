@@ -54,6 +54,31 @@ export async function subscribe(uri: string, callback: (uri: string) => void): P
   return y.subscribe(uri, callback);
 }
 
+/**
+ * One frame of a stream subscription. `seq` is monotonic per subscription — a gap
+ * means frames were dropped; `kind` is source-defined.
+ */
+export interface StreamFrame {
+  uri: string;
+  seq: number;
+  kind: string;
+  data: unknown;
+  ts: number;
+}
+
+/**
+ * Stream a yaar:// URI: like {@link subscribe}, but the server pushes typed frames
+ * with payloads instead of bare change pings. `opts.kinds` narrows delivery to the
+ * listed frame kinds. Returns an unsubscribe thunk.
+ */
+export async function stream(
+  uri: string,
+  onFrame: (frame: StreamFrame) => void,
+  opts?: { kinds?: string[] },
+): Promise<() => void> {
+  return y.stream(uri, onFrame, opts);
+}
+
 // ── App-scoped storage ──────────────────────────────────────────
 
 function appStorageUri(path: string): string {

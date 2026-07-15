@@ -5,6 +5,8 @@ import type {
   AppProtocolRequest,
   RecoveryMode,
   ActiveAgentSnapshot,
+  StreamFrame,
+  StreamFrameEvent,
 } from '@/types';
 import { ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
 
@@ -57,6 +59,7 @@ export interface ServerEventDispatchHandlers {
     timeoutMs?: number,
   ) => void;
   handleVerbSubscriptionUpdate: (windowId: string, subscriptionId: string, uri: string) => void;
+  handleStreamFrame: (windowId: string, subscriptionId: string, frame: StreamFrame) => void;
   restoreCliHistory: (
     entries: {
       type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary';
@@ -349,6 +352,11 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     case ServerEventType.VERB_SUBSCRIPTION_UPDATE: {
       const m = message as { windowId: string; subscriptionId: string; uri: string };
       handlers.handleVerbSubscriptionUpdate(m.windowId, m.subscriptionId, m.uri);
+      break;
+    }
+    case ServerEventType.STREAM_FRAME: {
+      const m = message as StreamFrameEvent;
+      handlers.handleStreamFrame(m.windowId, m.subscriptionId, m.frame);
       break;
     }
     case ServerEventType.CLI_RESTORE: {

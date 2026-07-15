@@ -1,7 +1,9 @@
 # Proposal: Stream Subscriptions (Push-with-Payload Channels)
 
-**Status:** Draft for review
+**Status:** Phase 1 shipped — Phases 2–4 pending (Phase 2 blocked on the access-tier decision below).
 **Builds on:** the app-event channel system (`app.register({events})` / `app.emit()` / `app_subscribe`), which shipped and closed the **app → agent** quadrant. This one adds **server/agent → app (and agent → agent)** *streaming* push. Its design record lived in `app_events_subscribe_proposal.md`, removed once implemented; the code is `WindowSubscriptionPolicy`, `ContextPool.notifyAppChannel`, and `features/window/subscribe.ts`.
+
+**Shipped (Phase 1):** the frame envelope + transport + app SDK, plus one real source (deploy progress). See the "Change inventory" below for the file-by-file record of what landed versus what remains. The design prose (Model / Transport / Guards / Access control) is kept as the record for the still-pending agent-side phases.
 
 ---
 
@@ -160,39 +162,49 @@ The access-tier system (`ResourceRegistry.execute()` + `access: 'session-princip
 
 ## Change inventory
 
+### Shipped (Phase 1)
+
 **Shared** (`packages/shared`)
-1. `events.ts` — `ServerEventType.STREAM_FRAME` + `StreamFrameEvent { windowId, subscriptionId, frame }`.
-2. `iframe-scripts/verb-sdk.ts` — handle `yaar:stream-frame`; pass `mode`/`kinds` through `subscribe`.
+- `events.ts` — `ServerEventType.STREAM_FRAME` + `StreamFrame` / `StreamFrameEvent { windowId, subscriptionId, frame }`.
+- `iframe-scripts/verb-sdk.ts` — `window.yaar.stream(uri, onFrame, {kinds})`; handles `yaar:stream-frame`; passes `mode`/`kinds` through the subscribe endpoint.
 
 **Server** (`packages/server`)
-3. `http/subscriptions.ts` — `mode: 'change' | 'stream'`, `kinds?`, per-sub `seq`, coalescer + bounded queue, `publishFrame(uri, frame, sessionId)`.
-4. `http/routes/verb.ts` — accept `mode`/`kinds` on `/api/verb/subscribe`; enforce the access gate above.
-5. **`streams/` (new)** — stream-source registry + `streamHub`. Sources: agent stream, app-channel fan-out, verb progress.
-6. `agents/session-policies/stream-to-event-mapper.ts` — one `streamHub.publish(...)` call per case (additive; the existing `sendEvent` path is untouched).
-7. `agents/context-pool-policies/window-subscription-policy.ts` — accept stream sources as subscribable channels (mostly free after the app_events generalization).
-8. `handlers/agents.ts` — `subscribe_stream` / `unsubscribe_stream` actions; advertise streamability in `describe`.
+- `http/subscriptions.ts` — `mode: 'change' | 'stream'`, `kinds?`, per-sub `seq`, 4KB `capPayload`, `publishFrame(uri, kind, data, sessionId)`. `notifyChange` skips stream subs so the modes never cross wires. **Deferred:** coalescer + bounded drop-oldest queue (Guards 1–2) — unneeded for the single low-rate deploy source, mandatory before the Phase 2 agent stream.
+- `http/routes/verb.ts` — accepts `mode`/`kinds` on `/api/verb/subscribe`; `yaar://dev/*` streams ride the `yaar-dev` bundle gate, everything else keeps the `read` gate.
+- **`streams/stream-hub.ts` (new)** — `publishFrame` producer seam. **Deferred:** the URI-pattern → attach-function source *registry* (belongs here once there's more than one source).
+- `features/dev/deploy.ts` + `http/routes/dev.ts` — the Phase 1 source: `doDeploy` emits `progress`/`done`/`error` frames to `yaar://dev/deploy/{appId}`; the route passes `principal.sessionId`.
+- `tests/stream-subscriptions.test.ts` — transport-core guarantees (seq, kind filter, session scope, cap, mode isolation).
 
 **Frontend** (`packages/frontend`)
-9. `use-agent-connection/server-event-dispatcher.ts` — `STREAM_FRAME` → `handleStreamFrame`.
-10. `store/iframe-bridge.ts` — `postMessage('yaar:stream-frame')` (mirror of `:259`).
+- `use-agent-connection/server-event-dispatcher.ts` — `STREAM_FRAME` → `handleStreamFrame`.
+- `store/iframe-bridge.ts` — `handleStreamFrame` posts `yaar:stream-frame` (mirror of the ping path).
 
 **Compiler** (`packages/compiler`)
-11. `shims/yaar.ts` + `bundled-types/` — export `stream(uri, onFrame, opts?)`.
+- `shims/yaar.ts` + `bundled-types/index.d.ts` — export `stream(uri, onFrame, opts?)` + `StreamFrame`.
+
+### Remaining
+
+**Server** (`packages/server`)
+1. `agents/session-policies/stream-to-event-mapper.ts` — one `streamHub.publish(...)` call per case (additive; the existing `sendEvent` path is untouched). *(Phase 2)*
+2. `http/subscriptions.ts` — the deferred coalescer + bounded drop-oldest queue (Guards 1–2), before any high-rate source lands. *(Phase 2)*
+3. `streams/` — the stream-source registry (agent stream, app-channel fan-out). *(Phase 2 / 4)*
+4. `agents/context-pool-policies/window-subscription-policy.ts` — accept stream sources as subscribable channels (mostly free after the app_events generalization). *(Phase 3)*
+5. `handlers/agents.ts` — `subscribe_stream` / `unsubscribe_stream` actions; advertise streamability in `describe`. *(Phase 3)*
 
 **Consumers**
-12. `apps/process-explorer` — live tool/text per agent instead of busy/idle.
-13. (later) a CLI-panel app; `apps/devtools` progress frames.
+6. `apps/process-explorer` — live tool/text per agent instead of busy/idle. *(Phase 2)*
+7. `apps/devtools` — a live deploy-progress bar consuming the Phase 1 `yaar://dev/deploy/{appId}` frames; (later) a CLI-panel app.
 
 ---
 
 ## Phasing
 
-- **Phase 1 — Envelope + transport.** `mode:'stream'` on the registry, `STREAM_FRAME` event, frontend hop, `yaar.stream()` SDK. Ship with **one** trivial source (verb progress from `compile`) to prove the pipe without touching auth.
-- **Phase 2 — Agent stream source.** `streamHub.publish` in `StreamToEventMapper`, coalescing + drop-oldest + `seq`, access gate (b)+(c). Consumer: `process-explorer` live view.
+- **Phase 1 — Envelope + transport. ✅ Shipped.** `mode:'stream'` on the registry, `STREAM_FRAME` event, frontend hop, `yaar.stream()` SDK, and one real source (deploy progress via `yaar://dev/deploy/{appId}`) to prove the pipe without touching agent auth. `seq` + payload cap + kind filter landed; coalescing + drop-oldest deferred to Phase 2 (the deploy source doesn't need them).
+- **Phase 2 — Agent stream source.** `streamHub.publish` in `StreamToEventMapper`, plus the deferred coalescing + drop-oldest queue (Guards 1–2, now required by the token firehose), access gate (b)+(c). Consumer: `process-explorer` live view. **Blocked on the access-tier decision below.**
 - **Phase 3 — Agent-side stream subscriptions.** `subscribe_stream` in `buffer` mode, reusing `WindowSubscriptionPolicy` + `InteractionTimeline`. Unlocks agent-watching-agent.
 - **Phase 4 — App-channel fan-out.** `yaar://windows/{id}/events/{channel}` streams `app.emit()` to app subscribers, completing the app_events matrix.
 
-Phases 1 and 2 are independently useful; Phase 3 is the one with real footgun potential and should not ship before the buffer-mode default is enforced.
+Phase 2 is independently useful; Phase 3 is the one with real footgun potential and should not ship before the buffer-mode default is enforced.
 
 ---
 
