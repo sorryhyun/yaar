@@ -14,7 +14,7 @@ import {
   updateShortcut,
 } from '../../storage/shortcuts.js';
 import type { DesktopShortcut } from '@yaar/shared';
-import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { genId } from '../../lib/ids.js';
 import { requirePermission, resolvePrincipal } from '../access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
@@ -73,14 +73,8 @@ export async function handleShortcutRoutes(req: Request, url: URL): Promise<Resp
   // Create shortcut
   if (url.pathname === '/api/shortcuts' && req.method === 'POST') {
     try {
-      const body = await req.text();
-      if (!body.trim()) return errorResponse('Empty body', 400);
-      let data: Record<string, unknown>;
-      try {
-        data = JSON.parse(body);
-      } catch {
-        return errorResponse('Invalid JSON', 400);
-      }
+      const data = await parseJsonBody<Record<string, unknown>>(req);
+      if (data instanceof Response) return data;
       if (!data.label || !data.icon || (!data.target && !data.skill)) {
         return errorResponse('Shortcuts require label, icon, and target (or skill) fields', 400);
       }
@@ -109,14 +103,8 @@ export async function handleShortcutRoutes(req: Request, url: URL): Promise<Resp
 
     if (req.method === 'PATCH') {
       try {
-        const body = await req.text();
-        if (!body.trim()) return errorResponse('Empty body', 400);
-        let updates: Record<string, unknown>;
-        try {
-          updates = JSON.parse(body);
-        } catch {
-          return errorResponse('Invalid JSON', 400);
-        }
+        const updates = await parseJsonBody<Record<string, unknown>>(req);
+        if (updates instanceof Response) return updates;
         const updated = await updateShortcut(shortcutId, updates);
         if (!updated) return errorResponse('Shortcut not found', 404);
         return jsonResponse({ shortcut: updated });

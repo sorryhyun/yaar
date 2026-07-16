@@ -7,7 +7,7 @@ import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
 import { getAgentLimiter } from '../../agents/index.js';
 import { listApps } from '../../features/apps/discovery.js';
 import { getBroadcastCenter } from '../../session/broadcast-center.js';
-import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { readSettings } from '../../storage/settings.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
@@ -115,21 +115,23 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
   // it is a privilege-escalation oracle: any app mints itself a bundled system app's
   // token and walks into yaar://session/*.
   if (url.pathname === '/api/iframe-token' && req.method === 'POST') {
+    const body = await parseJsonBody<{
+      windowId?: string;
+      sessionId?: string;
+      appId?: string;
+      monitorId?: string;
+    }>(req);
+    if (body instanceof Response) return body;
+
+    const { windowId, sessionId, appId, monitorId } = body;
+    if (!windowId || !sessionId) {
+      return errorResponse('windowId and sessionId are required', 400);
+    }
     try {
-      const body = await req.json();
-      const { windowId, sessionId, appId, monitorId } = body as {
-        windowId?: string;
-        sessionId?: string;
-        appId?: string;
-        monitorId?: string;
-      };
-      if (!windowId || !sessionId) {
-        return errorResponse('windowId and sessionId are required', 400);
-      }
       const token = await generateAppIframeToken(windowId, sessionId, { appId, monitorId });
       return jsonResponse({ token });
     } catch {
-      return errorResponse('Invalid request body', 400);
+      return errorResponse('Failed to generate iframe token');
     }
   }
 

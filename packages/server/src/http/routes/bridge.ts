@@ -10,10 +10,8 @@
  * control of the user's real browser is deliberately app-mediated. See `features/browser/bridge-actions.ts`.
  */
 
-import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
-import { errorResponse, jsonResponse } from '../utils.js';
-import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
+import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
@@ -49,14 +47,8 @@ export async function handleBridgeRoutes(req: Request, url: URL): Promise<Respon
   const auth = requireAuth(req, url);
   if (auth instanceof Response) return auth;
 
-  let body: Record<string, unknown>;
-  try {
-    const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-    body = JSON.parse(buf.toString('utf-8'));
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) return errorResponse('Request body too large', 413);
-    return errorResponse('Invalid JSON body', 400);
-  }
+  const body = await parseJsonBody<Record<string, unknown>>(req);
+  if (body instanceof Response) return body;
 
   const action = body.action as string;
   if (!action) return errorResponse('"action" is required', 400);

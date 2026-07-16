@@ -17,7 +17,7 @@ import {
   getContextRestoreMessages,
 } from '../../logging/index.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
-import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { requireHost, requirePermission, resolvePrincipal } from '../access.js';
 
 /**
@@ -91,16 +91,11 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
     const denied = requireHost(principal);
     if (denied) return denied;
     try {
-      let policy: ContextRestorePolicy | undefined;
-      const body = await req.text();
-      if (body.trim()) {
-        try {
-          const parsed = JSON.parse(body) as { policy?: ContextRestorePolicy };
-          policy = parsed.policy;
-        } catch {
-          return errorResponse('Invalid JSON body', 400);
-        }
-      }
+      const parsed = await parseJsonBody<{ policy?: ContextRestorePolicy }>(req, {
+        allowEmpty: true,
+      });
+      if (parsed instanceof Response) return parsed;
+      const policy: ContextRestorePolicy | undefined = parsed?.policy;
 
       const messagesJsonl = await readSessionMessages(sessionId);
       if (messagesJsonl === null) {

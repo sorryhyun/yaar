@@ -15,9 +15,8 @@
 
 import { join } from 'path';
 import { stat } from 'fs/promises';
-import { MAX_UPLOAD_SIZE, PROJECT_ROOT } from '../../config.js';
-import { errorResponse, jsonResponse } from '../utils.js';
-import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
+import { PROJECT_ROOT } from '../../config.js';
+import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundle, resolvePrincipal } from '../access.js';
 import { resolveAppSource } from '../../features/apps/roots.js';
 import type { EndpointMeta } from '../utils.js';
@@ -149,14 +148,8 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   const callerAppId = principal.appId;
 
   // Body
-  let body: Record<string, unknown>;
-  try {
-    const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-    body = JSON.parse(buf.toString('utf-8'));
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) return errorResponse('Request body too large', 413);
-    return errorResponse('Invalid JSON body', 400);
-  }
+  const body = await parseJsonBody<Record<string, unknown>>(req);
+  if (body instanceof Response) return body;
 
   // Git actions address an *app*, not a sandbox project path — they branch out
   // before the path resolution the compile/typecheck/deploy actions need.
