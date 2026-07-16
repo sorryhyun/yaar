@@ -43,15 +43,24 @@ that simply omits a token, while `/api/browser`, `/api/bridge`, `/api/dev/*` all
 Either that is intended (host is the user) or it is a hole — it should not be settled by a
 refactor.
 
-### 3.3 `createPersistedStore<T>` for `storage/` (~60–80 lines)
-- [ ] Add `createPersistedStore<T>(filename, defaultValue)` exposing
-      `read() / write() / update()` with cache + parse-with-fallback + mkdir/persist baked in.
-- [ ] Migrate `storage/permissions.ts:48-74` and `storage/mounts.ts:28-55` (near line-for-line
-      identical today), then `storage/settings.ts:61-82` and `storage/shortcuts.ts:11-23`.
-- [ ] Move the `_setMountsForTest`-style cache resets onto the store (one test hook, not four).
-- [ ] Also: extract `buildAppShortcut(app)` — the shortcut literal is built identically in
-      `storage/shortcuts.ts:62-69` and `:117-125`, with a third variant in
-      `http/routes/shortcuts.ts:86-97`.
+### 3.3 `createPersistedStore<T>` for `storage/` — **partially descoped**
+- [x] Added `createPersistedStore<T>(filename, createDefault)` in `storage/persisted-store.ts`
+      exposing `read() / write() / update() / peek() / _setForTest()`. `createDefault` is a
+      factory, not a value: the default is cached and handed to callers that mutate it in
+      place, so a shared constant would be corrupted by the first write.
+- [x] Migrated `storage/permissions.ts` and `storage/mounts.ts` — the near-identical pair.
+- [x] ~~then `storage/settings.ts` and `storage/shortcuts.ts`~~ — **not migrated, on purpose.**
+      They read through `configRead` on *every* call and have no cache. Putting them on the
+      store would add one, and `config/settings.json` is a file the user edits by hand — the
+      edit would be invisible until restart. (`providers/get-forced-provider.ts:24` also reads
+      that file directly, expecting it fresh.) Same six steps, different contract. `configRead`
+      also binds `CONFIG_DIR` at module load where the store resolves it per call.
+- [x] ~~one test hook, not four~~ — **there is exactly one** (`_setMountsForTest`), not four.
+      It now delegates to `store._setForTest`.
+- [x] Extracted `buildAppShortcut(app)` — shared by `ensureAppShortcut` and `syncAppShortcuts`.
+      The `http/routes/shortcuts.ts` "third variant" is **not** the same literal: it builds a
+      *user-supplied* shortcut (osActions, skill, folderId, generated id) from request data,
+      not an app shortcut. Left alone.
 
 ### 3.4 `defineActions()` — declarative action routers for verb handlers
 - [ ] Helper that takes `{ actionName: { handler, description? } }` and produces

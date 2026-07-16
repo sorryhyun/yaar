@@ -5,9 +5,7 @@
  * Decisions are persisted to config/permissions.json.
  */
 
-import { mkdir } from 'fs/promises';
-import { join, dirname } from 'path';
-import { getConfigDir } from './storage-manager.js';
+import { createPersistedStore } from './persisted-store.js';
 
 /**
  * Permission decision types.
@@ -32,46 +30,13 @@ interface PermissionsFile {
 }
 
 /**
- * Get the path to the permissions file.
- */
-function getPermissionsPath(): string {
-  return join(getConfigDir(), 'permissions.json');
-}
-
-/**
  * Generate a key for the permissions map.
  */
 function getPermissionKey(toolName: string, context?: string): string {
   return context ? `${toolName}:${context}` : toolName;
 }
 
-let cachedPermissions: PermissionsFile | null = null;
-
-/**
- * Load permissions from disk (cached after first read).
- */
-async function loadPermissions(): Promise<PermissionsFile> {
-  if (cachedPermissions) return cachedPermissions;
-
-  try {
-    const content = await Bun.file(getPermissionsPath()).text();
-    cachedPermissions = JSON.parse(content) as PermissionsFile;
-  } catch {
-    // File doesn't exist or is invalid, return empty
-    cachedPermissions = {};
-  }
-  return cachedPermissions;
-}
-
-/**
- * Save permissions to disk and update cache.
- */
-async function savePermissions(permissions: PermissionsFile): Promise<void> {
-  const filePath = getPermissionsPath();
-  await mkdir(dirname(filePath), { recursive: true });
-  await Bun.write(filePath, JSON.stringify(permissions, null, 2));
-  cachedPermissions = permissions;
-}
+const store = createPersistedStore<PermissionsFile>('permissions.json', () => ({}));
 
 /**
  * Check if there's a saved permission for a tool.
@@ -84,7 +49,7 @@ export async function checkPermission(
   toolName: string,
   context?: string
 ): Promise<PermissionDecision | null> {
-  const permissions = await loadPermissions();
+  const permissions = await store.read();
 
   // First check for context-specific permission
   if (context) {
@@ -117,16 +82,14 @@ export async function savePermission(
   decision: PermissionDecision,
   context?: string
 ): Promise<void> {
-  const permissions = await loadPermissions();
   const key = getPermissionKey(toolName, context);
-
-  permissions[key] = {
-    decision,
-    timestamp: new Date().toISOString(),
-    ...(context && { context }),
-  };
-
-  await savePermissions(permissions);
+  await store.update((permissions) => {
+    permissions[key] = {
+      decision,
+      timestamp: new Date().toISOString(),
+      ...(context && { context }),
+    };
+  });
 }
 
 /**
@@ -139,17 +102,15 @@ export async function clearPermission(
   toolName: string,
   context?: string
 ): Promise<void> {
-  const permissions = await loadPermissions();
   const key = getPermissionKey(toolName, context);
-
-  delete permissions[key];
-
-  await savePermissions(permissions);
+  await store.update((permissions) => {
+    delete permissions[key];
+  });
 }
 
 /**
  * Clear all saved permissions.
  */
 export async function clearAllPermissions(): Promise<void> {
-  await savePermissions({});
+  await store.write({});
 }

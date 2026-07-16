@@ -5,9 +5,9 @@
  * pattern from storage-manager.ts.
  */
 
-import { mkdir, stat } from 'fs/promises';
-import { join, dirname, normalize, relative, isAbsolute } from 'path';
-import { getConfigDir } from './storage-manager.js';
+import { stat } from 'fs/promises';
+import { join, normalize, relative, isAbsolute } from 'path';
+import { createPersistedStore } from './persisted-store.js';
 import { STORAGE_DIR } from '../config.js';
 
 export interface MountEntry {
@@ -25,33 +25,13 @@ export interface ResolvedPath {
 const ALIAS_RE = /^[a-z][a-z0-9-]{0,49}$/;
 const RESERVED_ALIASES = new Set(['temp', 'files', 'credentials', 'mounts']);
 
-let cachedMounts: MountEntry[] | null = null;
-
-function getMountsPath(): string {
-  return join(getConfigDir(), 'mounts.json');
-}
+const store = createPersistedStore<MountEntry[]>('mounts.json', () => []);
 
 /**
  * Load mounts from config/mounts.json (cached after first read).
  */
 export async function loadMounts(): Promise<MountEntry[]> {
-  if (cachedMounts) return cachedMounts;
-
-  try {
-    const content = await Bun.file(getMountsPath()).text();
-    cachedMounts = JSON.parse(content) as MountEntry[];
-  } catch {
-    cachedMounts = [];
-  }
-
-  return cachedMounts;
-}
-
-async function persistMounts(mounts: MountEntry[]): Promise<void> {
-  const filePath = getMountsPath();
-  await mkdir(dirname(filePath), { recursive: true });
-  await Bun.write(filePath, JSON.stringify(mounts, null, 2));
-  cachedMounts = mounts;
+  return store.read();
 }
 
 function validateAlias(alias: string): string | null {
@@ -102,14 +82,20 @@ export async function addMount(
   if (pathError) return pathError;
 
   const normalizedHostPath = normalize(hostPath);
-  const mounts = await loadMounts();
+  const mounts = await store.read();
 
   if (mounts.some((m) => m.alias === alias)) {
     return `Mount alias "${alias}" already exists`;
   }
 
-  mounts.push({ alias, hostPath: normalizedHostPath, readOnly, createdAt: new Date().toISOString() });
-  await persistMounts(mounts);
+  await store.update((current) => {
+    current.push({
+      alias,
+      hostPath: normalizedHostPath,
+      readOnly,
+      createdAt: new Date().toISOString(),
+    });
+  });
   return null;
 }
 
@@ -117,12 +103,13 @@ export async function addMount(
  * Remove a mount by alias. Returns null on success, error string on failure.
  */
 export async function removeMount(alias: string): Promise<string | null> {
-  const mounts = await loadMounts();
+  const mounts = await store.read();
   const idx = mounts.findIndex((m) => m.alias === alias);
   if (idx === -1) return `Mount alias "${alias}" not found`;
 
-  mounts.splice(idx, 1);
-  await persistMounts(mounts);
+  await store.update((current) => {
+    current.splice(idx, 1);
+  });
   return null;
 }
 
@@ -140,8 +127,9 @@ export function resolveMountPath(storagePath: string): ResolvedPath | null {
   const alias = slashIdx === -1 ? rest : rest.slice(0, slashIdx);
   const subPath = slashIdx === -1 ? '' : rest.slice(slashIdx + 1);
 
-  if (!cachedMounts) return null;
-  const mount = cachedMounts.find((m) => m.alias === alias);
+  // Synchronous by contract (callers are on hot storage paths), so this reads the
+  // cache rather than loading: an unloaded store resolves nothing.
+  const mount = store.peek()?.find((m) => m.alias === alias);
   if (!mount) return null;
 
   // Resolve the sub-path against the host directory
@@ -158,6 +146,4 @@ export function resolveMountPath(storagePath: string): ResolvedPath | null {
  * Override the cached mounts for testing. Pass null to reset.
  * @internal — only for use in test files.
  */
-export function _setMountsForTest(mounts: MountEntry[] | null): void {
-  cachedMounts = mounts;
-}
+export const _setMountsForTest = store._setForTest;
