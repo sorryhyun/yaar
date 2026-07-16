@@ -12,7 +12,7 @@
 
 import { errMessage } from '../../lib/errors.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
-import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
+import { requireBundledApp } from '../access.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runBridgeAction } from '../../features/browser/bridge-actions.js';
@@ -32,19 +32,10 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
  * companion extension. It was gated on "holds some valid iframe token" — any app,
  * declared or not. It is `yaar-web` surface, so it is held to the same declaration.
  */
-function requireAuth(req: Request, url: URL): Principal | Response {
-  const principal = resolvePrincipal(req, url);
-  if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
-  const denied = requireBundle(principal, 'yaar-web');
-  if (denied) return denied;
-  return principal;
-}
-
 export async function handleBridgeRoutes(req: Request, url: URL): Promise<Response | null> {
   if (url.pathname !== '/api/bridge' || req.method !== 'POST') return null;
 
-  const auth = requireAuth(req, url);
+  const auth = requireBundledApp(req, url, 'yaar-web');
   if (auth instanceof Response) return auth;
 
   const body = await parseJsonBody<Record<string, unknown>>(req);

@@ -17,7 +17,7 @@ import { join } from 'path';
 import { stat } from 'fs/promises';
 import { PROJECT_ROOT } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
-import { requireBundle, resolvePrincipal } from '../access.js';
+import { requireBundledApp } from '../access.js';
 import { resolveAppSource } from '../../features/apps/roots.js';
 import type { EndpointMeta } from '../utils.js';
 
@@ -138,14 +138,13 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   // compiler already refuses to bundle that SDK unless app.json declares it, but the
   // compiler only sees the app's *source*. A hand-written fetch() never went near it,
   // so the door checks the declaration itself.
-  const principal = resolvePrincipal(req, url);
+  const principal = requireBundledApp(req, url, 'yaar-dev');
   if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app' || !principal.appId) {
-    return errorResponse('Invalid or missing iframe token', 403);
-  }
-  const bundleDenied = requireBundle(principal, 'yaar-dev');
-  if (bundleDenied) return bundleDenied;
+  // A plain (non-app) iframe window has no appId, and every action below addresses
+  // an app. It cannot reach here anyway — an appId-less token carries no bundles —
+  // but the actions need the narrowing.
   const callerAppId = principal.appId;
+  if (!callerAppId) return errorResponse('Invalid or missing iframe token', 403);
 
   // Body
   const body = await parseJsonBody<Record<string, unknown>>(req);

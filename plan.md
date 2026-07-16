@@ -22,12 +22,26 @@ Ordered into phases by risk. Each phase is independently landable; run
 - [ ] Replace the "small body" variant: `settings.ts:46-56, 94-104`,
       `shortcuts.ts:74-82, 111-119`, `sessions.ts:95-103`.
 
-### 3.2 Generic auth prelude for routes
-- [ ] Promote `browser.ts`'s local `requireWeb()` pattern to a shared helper in
-      `http/access.ts`, e.g. `resolveAndAuthorize(req, url, { uri, verb } | { bundle })`
-      returning `Principal | Response`.
-- [ ] Replace the ~20 copies of "resolvePrincipal → instanceof Response check →
-      requirePermission/requireBundle → denied check" across `http/routes/*`.
+### 3.2 Generic auth prelude for routes — **descoped after survey**
+- [x] Promoted `browser.ts`'s `requireWeb()` to `requireBundledApp(req, url, bundle)` in
+      `http/access.ts`, returning `AppPrincipal | Response`.
+- [x] Migrated the three sites that share that shape: `browser.ts` (which re-ran the whole
+      prelude, including a fresh `resolvePrincipal`, 5× per request), `bridge.ts`, `dev.ts`.
+- [x] ~~Replace the ~20 copies~~ — **the audit was wrong: there are 11 `resolvePrincipal`
+      sites, not ~20, and only two clusters share a shape** (3× app+bundle, 2× computed
+      uri+verb). The other 6 are genuinely different: `files.ts` threads the principal as a
+      data dependency, `verb.ts` branches three ways on a request-supplied URI, `sessions.ts`
+      mixes two gate functions across 4 branches, `api.ts`/`ml-runtime.ts` gate conditionally
+      on path. A `resolveAndAuthorize(req, url, {uri,verb}|{bundle})` union covering those
+      would be a worse abstraction than the four small gates already there. The remaining
+      2-site cluster (`settings.ts`/`shortcuts.ts`) is 4 lines each — not worth a helper.
+
+**Surfaced, deliberately not fixed here (behavior change, needs a decision):**
+`ml-runtime.ts:75` is the only `requireBundle` door with no `principal.kind !== 'app'` check.
+`requireBundle` returns `null` for `host`, so `/api/ml-weights*` is reachable by any caller
+that simply omits a token, while `/api/browser`, `/api/bridge`, `/api/dev/*` all refuse one.
+Either that is intended (host is the user) or it is a hole — it should not be settled by a
+refactor.
 
 ### 3.3 `createPersistedStore<T>` for `storage/` (~60–80 lines)
 - [ ] Add `createPersistedStore<T>(filename, defaultValue)` exposing

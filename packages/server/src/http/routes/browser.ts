@@ -10,7 +10,7 @@
 
 import { errMessage } from '../../lib/errors.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
-import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
+import { requireBundledApp, type AppPrincipal } from '../access.js';
 import { getHeadlessBrowser } from '../../lib/browser/index.js';
 import {
   enforceBrowserGuards,
@@ -101,14 +101,8 @@ function verbResultToResponse(result: {
  * Screenshots load as `<img src>` and events over `EventSource`; neither can set a
  * header, so those two carry the token as `?__yaar_token=` (see resolvePrincipal).
  */
-function requireWeb(req: Request, url: URL): Principal | Response {
-  const principal = resolvePrincipal(req, url);
-  if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
-  const denied = requireBundle(principal, 'yaar-web');
-  if (denied) return denied;
-  return principal;
-}
+const requireWeb = (req: Request, url: URL): AppPrincipal | Response =>
+  requireBundledApp(req, url, 'yaar-web');
 
 export async function handleBrowserRoutes(req: Request, url: URL): Promise<Response | null> {
   if (!url.pathname.startsWith('/api/browser')) return null;
