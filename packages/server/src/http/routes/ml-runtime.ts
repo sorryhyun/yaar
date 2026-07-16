@@ -16,9 +16,9 @@
  * - `GET /api/ml-weights/download?dest=<path>` — progress for the above.
  */
 
-import { join, basename, extname } from 'path';
+import { basename, extname } from 'path';
 import { stat } from 'fs/promises';
-import { getMlRuntimeDir, MIME_TYPES } from '../../config.js';
+import { getMlRuntimeArtifact, MIME_TYPES } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { requireBundle, resolvePrincipal } from '../access.js';
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
@@ -95,14 +95,16 @@ async function serveRuntimeArtifact(req: Request, url: URL): Promise<Response> {
   if (req.method !== 'GET' && req.method !== 'HEAD')
     return errorResponse('Method not allowed', 405);
 
-  const dir = getMlRuntimeDir();
-  if (!dir) return errorResponse('ML runtime not available', 404);
-
   // Take only the final path segment and validate it — no directory traversal.
   const name = basename(decodeURIComponent(url.pathname.slice('/api/ml-runtime/'.length)));
   if (!ML_RUNTIME_FILE.test(name)) return errorResponse('Invalid runtime file', 400);
 
-  const file = Bun.file(join(dir, name));
+  // Resolve per artifact, not per directory: a bundled exe carries these inside itself
+  // and has no directory to point at.
+  const path = getMlRuntimeArtifact(name);
+  if (!path) return errorResponse('ML runtime not available', 404);
+
+  const file = Bun.file(path);
   if (!(await file.exists())) return errorResponse('Not found', 404);
 
   const ext = extname(name).toLowerCase();
