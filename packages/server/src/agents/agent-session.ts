@@ -463,34 +463,6 @@ export class AgentSession {
     this.provider?.interrupt();
   }
 
-  handleRenderingFeedback(
-    requestId: string,
-    windowId: string,
-    renderer: string,
-    success: boolean,
-    error?: string,
-    url?: string,
-    locked?: boolean,
-    imageData?: string,
-  ): void {
-    const resolved = actionEmitter.resolveFeedback({
-      requestId,
-      windowId,
-      renderer,
-      success,
-      error,
-      url,
-      locked,
-      imageData,
-    });
-
-    if (resolved) {
-      console.log('[Rendering Feedback] Resolved:', { requestId, success, locked });
-    } else {
-      console.log('[Rendering Feedback] No pending request:', { requestId });
-    }
-  }
-
   async setProvider(providerType: ProviderType): Promise<void> {
     await this.providerLifecycle.setProvider(providerType);
   }

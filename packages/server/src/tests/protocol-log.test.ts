@@ -49,7 +49,7 @@ describe('protocol log', () => {
 
   it('records an app error rather than treating it as a result', () => {
     const entry = beginRequest('0/ai-chat', { kind: 'command', command: 'boom' });
-    endRequest(entry, { kind: 'command', error: 'no such command' }, 3);
+    endRequest(entry, { kind: 'command', result: undefined, error: 'no such command' }, 3);
 
     const [logged] = readLog({ windowKey: '0/ai-chat' });
     expect(logged.error).toBe('no such command');

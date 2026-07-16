@@ -151,18 +151,23 @@ Ordered into phases by risk. Each phase is independently landable; run
 Each was found while doing a phase, and deliberately left out of it — all are deletions or
 test-infra changes that a "no behavior changes" refactor shouldn't smuggle in.
 
-- [ ] **Dead export: `AppServerEvents`** (`providers/codex/app-server.ts`). Referenced nowhere,
+- [x] **Dead export: `AppServerEvents`** (`providers/codex/app-server.ts`). Referenced nowhere,
       and since 1.2 it duplicates the merged interface's channel declarations — two places to
       edit when a channel changes. Delete it.
-- [ ] **Dead method: `AgentSession.handleRenderingFeedback`** (8 params). Zero call sites; the
+- [x] **Dead method: `AgentSession.handleRenderingFeedback`** (8 params). Zero call sites; the
       live path is `live-session.ts:746` → `actionEmitter.resolveFeedback({...})` directly. Its
       body is a positional-to-object adapter over `RenderingFeedback`, which
-      `session/action-emitter.ts:46` already exports. Delete rather than convert — but it's
-      public surface on a widely-imported class, so confirm no app/test reaches it.
-- [ ] **CI never typechecks `packages/server/src/tests`** — `tsconfig.build.json` excludes it,
-      and the `typecheck` script uses that config. Currently zero errors hide there (verified
-      against HEAD), so this is cheap to close now and gets more expensive with every drift.
-      Either add a `typecheck:tests` script or stop excluding `src/tests`.
+      `session/action-emitter.ts:46` already exports. Deleted — confirmed no app/test reached it.
+- [x] **CI never typechecks `packages/server/src/tests`** — `tsconfig.build.json` excludes it,
+      and the `typecheck` script used that config. Closed by pointing `typecheck` at
+      `tsconfig.json` (which includes `src/tests`); `build` still uses `tsconfig.build.json`, so
+      tests stay out of `dist`.
+      ⚠️ The audit's "currently zero errors hide there" was **wrong** — 5 errors were hiding, and
+      they reproduce on `master` (verified in a clean worktree), so they predate this branch.
+      All five were tests constructing incomplete protocol literals; fixed test-side, since the
+      types match what the wire actually carries (`iframe-bridge.ts:315` always sets `result`,
+      undefined or not). `bridge-events.test.ts` reaches into the private
+      `LiveSession.ensureInitialized` — cast at the call site rather than widening the class.
 - [ ] **`isError` on app-agent/messaging is now live** (1.4). Failures surface as error rows in
       the CLI panel and are flagged as errors to the model
       (`stream-to-event-mapper.ts:174`). Worth one manual smoke check that nothing downstream
