@@ -49,3 +49,42 @@ export async function handleManage(
     }
   }
 }
+
+/**
+ * Handle window geometry actions (move, resize).
+ *
+ * Fire-and-forget like lock/unlock: every emitted action is folded back into the
+ * server-side window registry by the `onAction` listener in LiveSession, so the bounds
+ * stay in sync without waiting on frontend feedback. A window locked by another agent is
+ * refused, matching close/lock.
+ */
+export async function handleGeometry(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  action: 'move' | 'resize',
+  payload: Record<string, unknown>,
+): Promise<VerbResult> {
+  const existsErr = requireWindowExists(windowState, windowId);
+  if (existsErr) return existsErr;
+
+  const lockedBy = windowState.isLockedByOther(windowId, getAgentId());
+  if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
+
+  if (action === 'resize') {
+    const w = payload.width;
+    const h = payload.height;
+    if (typeof w !== 'number' || typeof h !== 'number' || w <= 0 || h <= 0) {
+      return error('"width" and "height" (positive numbers) are required for the resize action.');
+    }
+    actionEmitter.emitAction({ type: 'window.resize', windowId, w, h } satisfies OSAction);
+    return ok(`Resized window "${formatWindowRef(windowId)}" to ${w}×${h}.`);
+  }
+
+  const x = payload.x;
+  const y = payload.y;
+  if (typeof x !== 'number' || typeof y !== 'number') {
+    return error('"x" and "y" (numbers) are required for the move action.');
+  }
+  actionEmitter.emitAction({ type: 'window.move', windowId, x, y } satisfies OSAction);
+  return ok(`Moved window "${formatWindowRef(windowId)}" to (${x}, ${y}).`);
+}

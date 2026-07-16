@@ -25,7 +25,7 @@ import {
 import { formatWindowFlags } from '../features/window/helpers.js';
 import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
-import { handleManage } from '../features/window/manage.js';
+import { handleManage, handleGeometry } from '../features/window/manage.js';
 import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
 import { readLog } from '../features/window/protocol-log.js';
 import {
@@ -76,7 +76,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, update (requires operation), close, lock, unlock, app_query, app_command, protocol_log, message.',
+      'Invoke actions: create, update (requires operation), close, lock, unlock, move (x, y), resize (width, height), app_query, app_command, protocol_log, message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -90,6 +90,8 @@ export function registerWindowHandlers(
             'close',
             'lock',
             'unlock',
+            'move',
+            'resize',
             'app_query',
             'app_command',
             'protocol_log',
@@ -293,6 +295,10 @@ export function registerWindowHandlers(
           return handleManage(getWindowState(), windowId, 'lock');
         case 'unlock':
           return handleManage(getWindowState(), windowId, 'unlock');
+        case 'move':
+          return handleGeometry(getWindowState(), windowId, 'move', p);
+        case 'resize':
+          return handleGeometry(getWindowState(), windowId, 'resize', p);
         case 'app_query':
           return handleAppQuery(getWindowState(), windowId, p);
         case 'app_command':

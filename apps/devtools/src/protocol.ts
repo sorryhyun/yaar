@@ -768,6 +768,35 @@ export function registerProtocol() {
           }
         },
       }),
+      resizePreview: defineCommand({
+        description:
+          'Resize the preview window to width × height pixels. Use this to give a preview more ' +
+          'room (e.g. testing a wide layout) instead of relaying the request to the monitor. ' +
+          'Unlike re-running preview, this does not remount the iframe, so preview state is kept.',
+        params: {
+          type: 'object',
+          properties: {
+            width: { type: 'number', description: 'New width in pixels' },
+            height: { type: 'number', description: 'New height in pixels' },
+          },
+          required: ['width', 'height'],
+        },
+        handler: async (p) => {
+          const wid = previewWindowId();
+          if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+          const width = Number(p.width);
+          const height = Number(p.height);
+          if (!(width > 0) || !(height > 0)) {
+            throw new AppCommandError('width and height must be positive numbers.');
+          }
+          try {
+            return await invoke(`yaar://windows/${wid}`, { action: 'resize', width, height });
+          } catch {
+            setPreviewWindowId(null);
+            throw new AppCommandError('Preview window no longer exists. Run preview first.');
+          }
+        },
+      }),
       describeUri: defineCommand({
         description:
           'Describe a yaar:// URI — returns supported verbs, description, and invoke schema',
