@@ -31,6 +31,14 @@ interface TextContentBlock {
 
 type ContentBlock = TextContentBlock | ImageContentBlock;
 
+/** Inputs to the SDK options builder for one turn. */
+interface SDKOptionsRequest {
+  /** Session id to resume (undefined = fresh conversation). */
+  resumeSession?: string;
+  /** The turn's transport options — supplies prompt/model/agent/tool identity. */
+  options: TransportOptions;
+}
+
 /** Max time to hold a turn's first message while MCP servers connect. */
 const MCP_CONNECT_WAIT_MS = 5000;
 
@@ -121,12 +129,9 @@ export class ClaudeSessionProvider extends BaseTransport {
   /**
    * Get SDK options for queries.
    */
-  private getSDKOptions(
-    resumeSession?: string,
-    systemPrompt?: string,
-    agentId?: string,
-    allowedTools?: string[],
-  ): SDKOptions {
+  private getSDKOptions({ resumeSession, options }: SDKOptionsRequest): SDKOptions {
+    const { systemPrompt, agentId, allowedTools } = options;
+
     // Authorization is transport auth (this process is one YAAR spawned). X-Agent-Token
     // is the principal: a credential minted for this agent alone, which the server maps
     // back to its id. The agent id itself is never sent — asserting it in a header is
@@ -192,7 +197,9 @@ export class ClaudeSessionProvider extends BaseTransport {
       executable: 'bun',
       ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
       systemPrompt: systemPrompt ?? this.systemPrompt,
-      model: 'claude-sonnet-4-6',
+      // `||`, not `??`: an empty model string falls back to the default, as it
+      // did when callers patched the model in with `if (options.model)`.
+      model: options.model || 'claude-sonnet-4-6',
       resume: resumeSession,
       cwd: getStorageDir(),
       tools: builtinTools,
@@ -361,15 +368,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       await this.closePersistentSession();
     }
     if (!this.persistentSession) {
-      const sdkOptions = this.getSDKOptions(
-        resumeSession,
-        options.systemPrompt,
-        options.agentId,
-        options.allowedTools,
-      );
-      if (options.model) {
-        sdkOptions.model = options.model;
-      }
+      const sdkOptions = this.getSDKOptions({ resumeSession, options });
       this.openPersistentSession(sdkOptions, fingerprint, resumeSession);
     }
 
@@ -482,15 +481,7 @@ export class ClaudeSessionProvider extends BaseTransport {
   async prewarm(options: TransportOptions): Promise<void> {
     if (this.persistentSession) return;
     const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
-    const sdkOptions = this.getSDKOptions(
-      resumeSession,
-      options.systemPrompt,
-      options.agentId,
-      options.allowedTools,
-    );
-    if (options.model) {
-      sdkOptions.model = options.model;
-    }
+    const sdkOptions = this.getSDKOptions({ resumeSession, options });
     this.openPersistentSession(sdkOptions, this.turnFingerprint(options), resumeSession);
     await this.persistentSession!.mcpReady;
     console.log('[ClaudeSessionProvider] Prewarmed persistent stream (MCP connected)');
@@ -516,15 +507,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     resumeSession: string,
     options: TransportOptions,
   ): AsyncIterable<StreamMessage> {
-    const sdkOptions = this.getSDKOptions(
-      resumeSession,
-      options.systemPrompt,
-      options.agentId,
-      options.allowedTools,
-    );
-    if (options.model) {
-      sdkOptions.model = options.model;
-    }
+    const sdkOptions = this.getSDKOptions({ resumeSession, options });
     sdkOptions.forkSession = true;
 
     // Hold the user message until MCP servers connect (see openPersistentSession).

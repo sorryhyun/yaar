@@ -3,7 +3,8 @@
  */
 
 import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
-import type { VerbResult } from '../../handlers/uri-registry.js';
+import type { ContentBlock, VerbResult } from '../../handlers/uri-registry.js';
+import { isContentBlocks } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, error, getActiveSessionId } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -29,35 +30,6 @@ function truncateText(text: string): string {
   if (text.length <= MAX_TEXT_BYTES) return text;
   return (
     text.slice(0, MAX_TEXT_BYTES) + `\n... (truncated, ${(text.length / 1024).toFixed(0)}KB total)`
-  );
-}
-
-type ContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'image'; data: string; mimeType: string }
-  | {
-      type: 'resource';
-      resource:
-        | { uri: string; text: string; mimeType?: string }
-        | { uri: string; blob: string; mimeType?: string };
-    }
-  | { type: 'resource_link'; uri: string; name: string; description?: string; mimeType?: string };
-
-/** Check if a value is an array of MCP content blocks. */
-function isContentBlocks(value: unknown): value is ContentBlock[] {
-  if (!Array.isArray(value) || value.length === 0) return false;
-  return value.every(
-    (item) =>
-      item &&
-      typeof item === 'object' &&
-      (((item as Record<string, unknown>).type === 'text' &&
-        typeof (item as Record<string, unknown>).text === 'string') ||
-        ((item as Record<string, unknown>).type === 'image' &&
-          typeof (item as Record<string, unknown>).data === 'string') ||
-        ((item as Record<string, unknown>).type === 'resource' &&
-          typeof (item as Record<string, unknown>).resource === 'object') ||
-        ((item as Record<string, unknown>).type === 'resource_link' &&
-          typeof (item as Record<string, unknown>).uri === 'string')),
   );
 }
 

@@ -379,15 +379,15 @@ export class AgentSession {
         currentMessageId: this.currentMessageId,
       };
 
-      const mapper = new StreamToEventMapper(
+      const mapper = new StreamToEventMapper({
         role,
-        this.provider.name,
-        streamState,
-        this.sendEvent.bind(this),
-        this.sessionLogger,
-        options.source,
+        providerName: this.provider.name,
+        state: streamState,
+        sendEvent: this.sendEvent.bind(this),
+        logger: this.sessionLogger,
+        source: options.source,
         onContextMessage,
-        async (sessionId: string) => {
+        onSessionId: async (sessionId: string) => {
           // onSessionId callback - update session ID and log thread
           // Update internal provider session ID for session resumption/forking.
           // The log session ID (sent to frontend) is managed by ContextPool.
@@ -401,11 +401,11 @@ export class AgentSession {
             }
           }
         },
-        options.monitorId,
-        this.onOutput ?? undefined,
-        stableAgentId,
-        this.liveSessionId,
-      );
+        monitorId: options.monitorId,
+        onOutput: this.onOutput ?? undefined,
+        agentInstanceId: stableAgentId,
+        streamSessionId: this.liveSessionId,
+      });
 
       console.log(
         `[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`,

@@ -9,48 +9,6 @@ Ordered into phases by risk. Each phase is independently landable; run
 
 ---
 
-## Phase 2 — Named types & options objects ("dataclasses")
-
-### 2.1 Options object for `StreamToEventMapper` (13 positional params)
-- [ ] `agents/session-policies/stream-to-event-mapper.ts:24-39` — replace the 13 positional
-      constructor params with a single `StreamMapperOptions` interface.
-- [ ] Update the one call site (`agents/agent-session.ts:380-406`, currently a 26-line
-      positional invocation).
-- [ ] While there: consider the same for `AgentSession`'s 7-param constructor and
-      `handleRenderingFeedback`'s 8 params — same file, same pattern.
-
-### 2.2 Options object for `getSDKOptions` + fold in the model override
-- [ ] `providers/claude/session-provider.ts:124-129` — change
-      `getSDKOptions(resumeSession?, systemPrompt?, agentId?, allowedTools?)` to take
-      `{ resumeSession?, options: TransportOptions }`.
-- [ ] Fold the `if (options.model) sdkOptions.model = options.model` patch (currently
-      repeated at all 3 call sites: lines 363-373, 484-494, 519-528) into the builder.
-
-### 2.3 Name the stats shapes
-- [ ] Add `AgentPoolStats`, `MonitorBudgetStats`, and
-      `PoolStats = AgentPoolStats & { ... }` to `agents/pool-types.ts`.
-- [ ] `agents/context-pool.ts:722-749` currently re-declares `AgentPool.getStats()`'s fields
-      inline — return `PoolStats` instead. Gives `/api/agents/stats` a named contract.
-
-### 2.4 Share small duplicated shapes
-- [ ] `QueuedTask` (`{ task: Task; timestamp: number }`) is declared identically in
-      `agents/context-pool-policies/monitor-queue-policy.ts:3-6` and
-      `window-queue-policy.ts:3-6` — export once from `pool-types.ts`.
-- [ ] Export `ContentBlock` + `isContentBlocks` from `handlers/uri-registry.ts` (canonical
-      `VerbResult` union, lines 46-54); delete the local redeclarations in
-      `features/window/app-protocol.ts:38-65` and `handlers/mcp-gateway.ts:47-48`.
-
-### 2.5 Typed event channels for `actionEmitter`
-- [ ] Define `SessionScopedEvent { sessionId: string; event: ServerEvent }` and a typed
-      channel map (`'verb-subscription'`, `'app-protocol'`, `'bridge-event'`, ...) over a
-      thin typed-emitter wrapper.
-- [ ] Replaces the inline envelope shapes at `http/subscriptions.ts:204-213, 298-306`,
-      `session/live-session.ts:76, 257-262, 276`, `websocket/bridge-handlers.ts:71`.
-- [ ] Payoff: channel/payload mismatches become compile errors instead of silently dropped
-      events (CLAUDE.md explicitly warns this path "silently fails" when bypassed).
-
----
-
 ## Phase 3 — Shared helpers for repeated scaffolding
 
 ### 3.1 `parseJsonBody<T>()` for HTTP routes (~11 sites, ~80–100 lines)
@@ -187,6 +145,28 @@ Ordered into phases by risk. Each phase is independently landable; run
       the existing `parseConfigUri`/`parseSessionUri` — centralizes the `..`-traversal guards.
 
 ---
+
+## Follow-ups surfaced by phases 1–2 (not in the original audit)
+
+Each was found while doing a phase, and deliberately left out of it — all are deletions or
+test-infra changes that a "no behavior changes" refactor shouldn't smuggle in.
+
+- [ ] **Dead export: `AppServerEvents`** (`providers/codex/app-server.ts`). Referenced nowhere,
+      and since 1.2 it duplicates the merged interface's channel declarations — two places to
+      edit when a channel changes. Delete it.
+- [ ] **Dead method: `AgentSession.handleRenderingFeedback`** (8 params). Zero call sites; the
+      live path is `live-session.ts:746` → `actionEmitter.resolveFeedback({...})` directly. Its
+      body is a positional-to-object adapter over `RenderingFeedback`, which
+      `session/action-emitter.ts:46` already exports. Delete rather than convert — but it's
+      public surface on a widely-imported class, so confirm no app/test reaches it.
+- [ ] **CI never typechecks `packages/server/src/tests`** — `tsconfig.build.json` excludes it,
+      and the `typecheck` script uses that config. Currently zero errors hide there (verified
+      against HEAD), so this is cheap to close now and gets more expensive with every drift.
+      Either add a `typecheck:tests` script or stop excluding `src/tests`.
+- [ ] **`isError` on app-agent/messaging is now live** (1.4). Failures surface as error rows in
+      the CLI panel and are flagged as errors to the model
+      (`stream-to-event-mapper.ts:174`). Worth one manual smoke check that nothing downstream
+      over-reacts to a routine failure.
 
 ## Explicitly NOT doing
 

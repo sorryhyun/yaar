@@ -1,9 +1,4 @@
-import type { Task } from '../pool-types.js';
-
-export interface QueuedTask {
-  task: Task;
-  timestamp: number;
-}
+import type { QueuedTask, Task } from '../pool-types.js';
 
 export class MonitorQueuePolicy {
   private readonly maxQueueSize: number;

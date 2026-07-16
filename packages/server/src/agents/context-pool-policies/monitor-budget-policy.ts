@@ -14,6 +14,7 @@ import {
   MONITOR_MAX_ACTIONS_PER_MIN,
   MONITOR_MAX_OUTPUT_PER_MIN,
 } from '../../config.js';
+import type { MonitorBudgetStats } from '../pool-types.js';
 
 const PRIMARY_MONITOR = '0';
 const WINDOW_MS = 60_000; // 1-minute sliding window
@@ -151,12 +152,7 @@ export class MonitorBudgetPolicy {
 
   // ── Stats / Cleanup ──────────────────────────────────────────────────
 
-  getStats(): {
-    runningSlots: number;
-    maxConcurrent: number;
-    waitingCount: number;
-    monitors: Record<string, { actionsInWindow: number; outputInWindow: number }>;
-  } {
+  getStats(): MonitorBudgetStats {
     const monitors: Record<string, { actionsInWindow: number; outputInWindow: number }> = {};
     for (const [id, bucket] of this.buckets) {
       this.pruneOld(bucket.actions);

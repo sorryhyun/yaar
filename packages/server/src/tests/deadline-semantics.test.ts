@@ -18,6 +18,7 @@ import { checkPermission, clearPermission } from '../storage/permissions.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { PendingStore } from '../session/pending-store.js';
 import { actionEmitter, type UserPromptResult } from '../session/action-emitter.js';
+import type { SessionScopedEvent } from '../session/emitter-channels.js';
 import { LiveSession } from '../session/live-session.js';
 import { getBroadcastCenter } from '../session/broadcast-center.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
@@ -29,9 +30,9 @@ import { MAX_REQUEST_DEADLINE_MS, TRANSPORT_IDLE_TIMEOUT_S, clampDeadline } from
 
 /** Collect the actions the emitter sends to a whole session (dialog closes, prompt dismissals). */
 function collectSessionActions(sink: OSAction[]): () => void {
-  const handler = (data: { sessionId: string; event: ServerEvent }) => {
-    const actions = (data.event as unknown as { actions?: OSAction[] }).actions ?? [];
-    sink.push(...actions);
+  const handler = (data: SessionScopedEvent) => {
+    if (data.event.type !== ServerEventType.ACTIONS) return;
+    sink.push(...data.event.actions);
   };
   actionEmitter.on('session-action', handler);
   return () => actionEmitter.off('session-action', handler);
@@ -335,8 +336,8 @@ describe('F-17 — an expired dialog leaves the screen', () => {
   async function expiredPermissionDialog(sessionId: string, toolName: string): Promise<string> {
     const shown: OSAction[] = [];
     const seen: string[] = [];
-    const onApproval = (data: { event: { dialogId?: string } }) => {
-      if (data.event.dialogId) seen.push(data.event.dialogId);
+    const onApproval = (data: SessionScopedEvent) => {
+      if (data.event.type === ServerEventType.APPROVAL_REQUEST) seen.push(data.event.dialogId);
     };
     actionEmitter.on('approval-request', onApproval);
     const stopClose = collectSessionActions(shown);
