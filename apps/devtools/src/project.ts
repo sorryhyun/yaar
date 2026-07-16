@@ -134,7 +134,7 @@ export async function createProject(name: string): Promise<string> {
   const id = Date.now().toString();
   await appStorage.save(
     projectPath(id, 'src/main.ts'),
-    `export {};\nimport { createSignal } from '@bundled/solid-js';\nimport html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\nimport './styles.css';\n\nconst App = () => html\`\n  <div class="y-app y-p-3">\n    <h1>Hello, ${name}!</h1>\n  </div>\`\n;\n\nrender(App, document.getElementById('app')!);\n`,
+    `import { createSignal } from '@bundled/solid-js';\nimport html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\nimport './styles.css';\n\nconst App = () => {\n  const [count, setCount] = createSignal(0);\n  return html\`\n    <div class="y-app y-p-3">\n      <h1>Hello, ${name}!</h1>\n      <button class="y-btn y-btn-primary" onClick=\${() => setCount(count() + 1)}>\n        Clicked \${count} times\n      </button>\n    </div>\`;\n};\n\nrender(App, document.getElementById('app')!);\n`,
   );
   await appStorage.save(projectPath(id, 'src/styles.css'), `#app { height: 100%; }\n`);
   await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ name }, null, 2));
