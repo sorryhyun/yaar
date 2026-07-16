@@ -32,6 +32,22 @@ export function checkHttpAuth(req: Request, url: URL): Response | null {
   // MCP endpoints have their own bearer token auth — exempt from remote auth
   if (url.pathname.startsWith('/mcp/')) return null;
 
+  // onnxruntime-web's own .mjs/.wasm artifacts. onnxruntime fetches these itself, from
+  // the URL it was handed in `ort.env.wasm.wasmPaths`, and there is no hook to attach a
+  // token to those requests — so a gate here does not protect them, it just means
+  // `@bundled/yaar-ml` cannot work at all in REMOTE mode. Every bundled exe is REMOTE
+  // (IS_REMOTE || IS_BUNDLED_EXE), which made that *every installed build*: ORT's import
+  // 401'd and the app rendered a blank window.
+  //
+  // Safe to open, and narrowly: this prefix reaches one route that serves inert,
+  // publicly-published onnxruntime artifacts out of a fixed directory, `basename()`d and
+  // name-checked (`ML_RUNTIME_FILE`) so it cannot be walked. It holds nothing of the
+  // user's. This is NOT the extension-based hole isStaticAsset describes below — the
+  // credential here is the *route*, not a suffix the caller chose, and it deliberately
+  // stops short of `/api/ml-weights*`, which proxies caller-named URLs and writes to
+  // disk (that one stays gated on the yaar-ml bundle).
+  if (url.pathname.startsWith('/api/ml-runtime/')) return null;
+
   // Static frontend assets must load without auth so the client-side JS
   // can read the #remote=<token> hash fragment and attach it to API/WS calls.
   if (isStaticAsset(url.pathname)) return null;
