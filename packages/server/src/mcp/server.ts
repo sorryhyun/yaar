@@ -12,7 +12,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
-import { runWithAgentContext, getSessionId } from '../agents/agent-context.js';
+import { runWithAgentContext } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { SYSTEM_TOOL_NAMES } from './system/index.js';
@@ -22,6 +22,7 @@ import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
 import { resolveAgentToken } from './agent-tokens.js';
 import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
+import { getActiveSession } from '../handlers/utils.js';
 import { registerAppAgentTools } from './app-agent/index.js';
 import { registerMessagingTools, MESSAGING_TOOL_NAMES } from './messaging/index.js';
 
@@ -92,18 +93,8 @@ export function getMcpToken(): string {
 async function createServerForName(name: McpServerName): Promise<McpServer> {
   const server = new McpServer({ name, version: '1.0.0' }, { capabilities: { tools: {} } });
 
-  const getWindowState = (): WindowStateRegistry => {
-    const sid = getSessionId();
-    const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-    if (!session) throw new Error('No active session — connect via WebSocket first.');
-    return session.windowState;
-  };
-  const getReloadCache = (): ReloadCache => {
-    const sid = getSessionId();
-    const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-    if (!session) throw new Error('No active session — connect via WebSocket first.');
-    return session.reloadCache;
-  };
+  const getWindowState = (): WindowStateRegistry => getActiveSession().windowState;
+  const getReloadCache = (): ReloadCache => getActiveSession().reloadCache;
 
   switch (name) {
     case 'system':

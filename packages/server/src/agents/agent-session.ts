@@ -19,6 +19,8 @@ import type { ConnectionId } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';
 import { configRead } from '../storage/storage-manager.js';
+import { genId } from '../lib/ids.js';
+import { errMessage } from '../lib/errors.js';
 import { buildEnvironmentSection } from '../providers/environment.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
 import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
@@ -138,7 +140,7 @@ export class AgentSession {
     this.liveSessionId = liveSessionId ?? connectionId;
     this.broadcastFn = broadcast ?? (() => {});
     this.sessionId = sessionId ?? null;
-    this.instanceId = instanceId ?? `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    this.instanceId = instanceId ?? genId('agent');
     this.sessionLogger = sharedLogger ?? null;
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -429,7 +431,7 @@ export class AgentSession {
       console.error(`[AgentSession] ${role} error:`, err);
       await this.sendEvent({
         type: ServerEventType.ERROR,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMessage(err),
       });
     } finally {
       // Always notify frontend that this agent is done.

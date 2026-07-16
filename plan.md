@@ -9,50 +9,6 @@ Ordered into phases by risk. Each phase is independently landable; run
 
 ---
 
-## Phase 1 — Pure deletions & drop-in replacements (zero risk)
-
-### 1.1 Delete the dead Codex stdio client (~290 lines)
-- [ ] Delete `providers/codex/jsonrpc-client.ts` — `JsonRpcClient` is never instantiated
-      (verified by grep); everything uses `jsonrpc-ws-client.ts`.
-- [ ] Remove the `JsonRpcClient` / `JsonRpcClientOptions` re-exports from `providers/codex/index.ts:7`.
-- [ ] Delete the unused type guards in `providers/codex/types.ts:143-176`
-      (`isErrorResponse`, `isServerRequest`, `isNotification`, `isResponse`).
-
-### 1.2 Replace hand-rolled listener arrays with `EventEmitter` (~150 lines)
-- [ ] `providers/codex/app-server.ts:111-114, 466-544` — extend Node's `EventEmitter`,
-      delete the parallel listener arrays and manual `on`/`off`/`removeAllListeners`/fan-out.
-- [ ] `providers/codex/jsonrpc-ws-client.ts:84-88, 298-360` — same treatment.
-- [ ] Keep the typed method signatures as thin overloads so call sites don't change.
-
-### 1.3 Micro-utils (many call sites, mechanical)
-- [ ] `genId(prefix: string): string` — one implementation of
-      `` `${prefix}-${Date.now()}-${Math.random()...}` ``. Replace 5–6 copies:
-      `mcp/messaging/index.ts:114`, `mcp/app-agent/index.ts:390`, `handlers/window.ts:324`,
-      `features/agents/relay.ts:22`, `features/config/shortcuts.ts:95`, `handlers/mcp-gateway.ts:52`.
-- [ ] `errMessage(err: unknown): string` — replaces the 17 occurrences of
-      `err instanceof Error ? err.message : String(err)` across `features/dev/*`,
-      `features/browser/*`, `handlers/apps.ts`, `mcp/external/client-manager.ts`, etc.
-- [ ] Suggested home: `lib/ids.ts` / `lib/errors.ts` (or one `lib/misc.ts` — keep it tiny).
-
-### 1.4 Use the existing result builders inside `mcp/*`
-- [ ] `handlers/utils.ts` already exports `ok`, `okJson`, `error`, `okWithImages`, `okResource`,
-      `okLinks`. Import them in `mcp/app-agent/index.ts` (delete local `errText`, lines 80-82),
-      `mcp/messaging/index.ts`, and other `mcp/*` tools hand-rolling
-      `{ content: [{ type: 'text', ... }] }` (~30 inline literals).
-- [ ] This standardizes the `isError: true` flag (currently applied by the verb layer but
-      omitted by app-agent, which prepends `Error:` instead).
-
-### 1.5 Reuse the canonical session resolver
-- [ ] `handlers/utils.ts:30-35` (`getActiveSession`/`getActivePool`) is the canonical
-      "resolve active session" helper. Replace the re-implementations in:
-      `mcp/server.ts:95-106` (×2), `mcp/app-agent/index.ts:72-78`, `mcp/messaging/index.ts:66-69`,
-      `features/window/app-protocol.ts:112-114`, `features/browser/actions.ts:21-26`,
-      `features/session/browser.ts:57-59` (verbatim duplicate of the previous one).
-- [ ] If import direction is awkward (handlers → features), move the helpers to a neutral
-      module (e.g. `session/active-session.ts`) and re-export from `handlers/utils.ts`.
-
----
-
 ## Phase 2 — Named types & options objects ("dataclasses")
 
 ### 2.1 Options object for `StreamToEventMapper` (13 positional params)

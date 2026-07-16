@@ -139,37 +139,3 @@ export type JsonRpcMessage =
   | JsonRpcErrorResponse
   | JsonRpcNotification
   | JsonRpcServerRequest;
-
-// ============================================================================
-// Helper Types
-// ============================================================================
-
-/**
- * Check if a JSON-RPC message is an error response.
- */
-export function isErrorResponse(message: JsonRpcMessage): message is JsonRpcErrorResponse {
-  return 'error' in message;
-}
-
-/**
- * Check if a JSON-RPC message is a server-initiated request (has both id and method).
- */
-export function isServerRequest(message: JsonRpcMessage): message is JsonRpcServerRequest {
-  return 'id' in message && message.id !== undefined && 'method' in message;
-}
-
-/**
- * Check if a JSON-RPC message is a notification (no id).
- */
-export function isNotification(message: JsonRpcMessage): message is JsonRpcNotification {
-  return !('id' in message) || message.id === undefined;
-}
-
-/**
- * Check if a JSON-RPC message is a response (has id, no method).
- */
-export function isResponse(
-  message: JsonRpcMessage,
-): message is JsonRpcResponse | JsonRpcErrorResponse {
-  return 'id' in message && message.id !== undefined && !('method' in message);
-}

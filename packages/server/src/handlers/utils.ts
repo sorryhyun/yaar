@@ -7,6 +7,7 @@ import type { ResolvedUri } from './uri-resolve.js';
 import { getSessionId } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import type { LiveSession } from '../session/live-session.js';
+import type { SessionId } from '../session/types.js';
 import type { ContextPool } from '../agents/context-pool.js';
 import { MIME_TYPES } from '../config.js';
 import { extname } from 'path';
@@ -32,6 +33,18 @@ export function getActiveSession(): LiveSession {
   const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
   if (!session) throw new NoActiveSessionError();
   return session;
+}
+
+/**
+ * Resolve the id of the session a call belongs to — agent context first, the default
+ * session as the fallback for a call made outside a turn.
+ *
+ * Deliberately *not* `getActiveSession().sessionId`: this answers "whose session is this
+ * call for?" without requiring the hub to still hold that session, and never throws.
+ * Callers that need the live session itself should use `getActiveSession()`.
+ */
+export function getActiveSessionId(): SessionId | undefined {
+  return getSessionId() ?? getSessionHub().getDefault()?.sessionId;
 }
 
 /** Get the ContextPool from the active session. */

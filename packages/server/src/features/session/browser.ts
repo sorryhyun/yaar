@@ -12,7 +12,7 @@
  */
 
 import type { VerbResult } from '../../handlers/uri-registry.js';
-import { error } from '../../handlers/utils.js';
+import { error, getActiveSessionId } from '../../handlers/utils.js';
 import {
   getLocalBrowser,
   getHeadlessBrowser,
@@ -20,8 +20,6 @@ import {
   type BrowserProvider,
 } from '../../lib/browser/index.js';
 import { runGuardedBrowserAction, handleListTabs } from '../browser/actions.js';
-import { getSessionId } from '../../agents/agent-context.js';
-import { getSessionHub } from '../../session/session-hub.js';
 
 /**
  * Resolve the provider behind the session door.
@@ -52,10 +50,6 @@ async function resolveSessionProvider(): Promise<
     };
   }
   return { ok: true, provider: local };
-}
-
-function resolveSessionId(): string | undefined {
-  return getSessionId() ?? getSessionHub().getDefault()?.sessionId;
 }
 
 /**
@@ -96,7 +90,7 @@ export async function sessionBrowserInvoke(payload?: Record<string, unknown>): P
     resolved.provider,
     action,
     payload ?? {},
-    resolveSessionId(),
+    getActiveSessionId(),
     /* allowSelfTarget */ true,
   );
 }

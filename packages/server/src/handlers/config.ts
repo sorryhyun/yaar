@@ -253,11 +253,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload)
-        return {
-          content: [{ type: 'text', text: 'Payload required for settings update.' }],
-          isError: true,
-        };
+      if (!payload) return error('Payload required for settings update.');
       return handleSetSettings(payload);
     },
   });
@@ -283,11 +279,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload)
-        return {
-          content: [{ type: 'text', text: 'Payload required to create a hook.' }],
-          isError: true,
-        };
+      if (!payload) return error('Payload required to create a hook.');
       return handleSetHook(payload);
     },
   });
@@ -303,15 +295,13 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       const hookId = resolved.id;
       const hooks = data.hooks as Array<{ id: string }>;
       const hook = hookId ? hooks.find((h) => h.id === hookId) : null;
-      if (!hook)
-        return { content: [{ type: 'text', text: `Hook "${hookId}" not found.` }], isError: true };
+      if (!hook) return error(`Hook "${hookId}" not found.`);
       return okJsonResource(resolved.sourceUri, hook);
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
-      if (!resolved.id)
-        return { content: [{ type: 'text', text: 'Hook ID required.' }], isError: true };
+      if (!resolved.id) return error('Hook ID required.');
       return handleRemoveHook(resolved.id);
     },
   });
@@ -337,8 +327,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload)
-        return { content: [{ type: 'text', text: 'Payload required.' }], isError: true };
+      if (!payload) return error('Payload required.');
       return handleSetShortcut(payload);
     },
   });
@@ -349,8 +338,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
-      if (!resolved.id)
-        return { content: [{ type: 'text', text: 'Shortcut ID required.' }], isError: true };
+      if (!resolved.id) return error('Shortcut ID required.');
       return handleRemoveShortcut(resolved.id);
     },
   });
@@ -375,8 +363,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload)
-        return { content: [{ type: 'text', text: 'Payload required.' }], isError: true };
+      if (!payload) return error('Payload required.');
       return handleSetMount(payload);
     },
   });
@@ -387,8 +374,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
-      if (!resolved.id)
-        return { content: [{ type: 'text', text: 'Mount alias required.' }], isError: true };
+      if (!resolved.id) return error('Mount alias required.');
       return handleRemoveMount(resolved.id);
     },
   });
@@ -412,8 +398,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload)
-        return { content: [{ type: 'text', text: 'Payload required.' }], isError: true };
+      if (!payload) return error('Payload required.');
       return handleSetApp(payload);
     },
   });
@@ -430,16 +415,14 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
-      if (!resolved.id)
-        return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
+      if (!resolved.id) return error('App ID required.');
       const data = await handleGetApp(resolved.id);
       return okJsonResource(resolved.sourceUri, data);
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
       assertUri(resolved, 'config');
-      if (!resolved.id)
-        return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
+      if (!resolved.id) return error('App ID required.');
       // Wrap payload so handleSetApp sees { appId, config }
       const content = { appId: resolved.id, config: payload ?? {} };
       return handleSetApp(content);
@@ -447,8 +430,7 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
-      if (!resolved.id)
-        return { content: [{ type: 'text', text: 'App ID required.' }], isError: true };
+      if (!resolved.id) return error('App ID required.');
       return handleRemoveApp(resolved.id);
     },
   });

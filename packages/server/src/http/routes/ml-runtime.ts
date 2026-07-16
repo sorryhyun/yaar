@@ -22,6 +22,7 @@ import { getMlRuntimeDir, MIME_TYPES } from '../../config.js';
 import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
 import { requireBundle, resolvePrincipal } from '../access.js';
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
+import { errMessage } from '../../lib/errors.js';
 import { downloadToFile } from '../../lib/download/chunked.js';
 import { ensureDomainAllowed } from '../../features/http/domain-gate.js';
 import { extractDomain } from '../../features/config/domains.js';
@@ -156,10 +157,7 @@ async function proxyWeights(req: Request, url: URL): Promise<Response> {
   try {
     upstream = await safeFetch(target, { method: 'GET', headers: upstreamHeaders });
   } catch (err) {
-    return errorResponse(
-      `Failed to fetch weights: ${err instanceof Error ? err.message : String(err)}`,
-      502,
-    );
+    return errorResponse(`Failed to fetch weights: ${errMessage(err)}`, 502);
   }
 
   if (!upstream.ok && upstream.status !== 206) {
@@ -262,7 +260,7 @@ async function startDownload(req: Request): Promise<Response> {
   // for a multi-GB transfer.
   void runDownload(target, r.abs, job).catch((err) => {
     job.state = 'error';
-    job.error = err instanceof Error ? err.message : String(err);
+    job.error = errMessage(err);
   });
   return jsonResponse({ dest, ...job });
 }

@@ -5,6 +5,7 @@
 import { z } from 'zod';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
+import { genId } from '../../lib/ids.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import {
   readShortcuts,
@@ -92,7 +93,7 @@ export async function handleSetShortcut(content: Record<string, unknown>) {
     return error('Shortcuts require label, icon, and target (URI) fields to create.');
   }
   const shortcut: DesktopShortcut = {
-    id: `shortcut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: genId('shortcut', 6),
     label: data.label!,
     icon: data.icon!,
     iconType: data.iconType,

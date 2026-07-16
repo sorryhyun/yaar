@@ -3,6 +3,7 @@
  */
 
 import type { OSAction, SessionId } from '@yaar/shared';
+import { genId } from '../lib/ids.js';
 
 // Re-export from shared for backward compatibility
 export type { SessionId } from '@yaar/shared';
@@ -14,7 +15,7 @@ export interface SessionSnapshot {
 
 /** Generate a unique session ID. */
 export function generateSessionId(): SessionId {
-  return `ses-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return genId('ses', 7);
 }
 
 let lastEpoch = 0;

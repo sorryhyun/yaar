@@ -8,6 +8,7 @@
  */
 
 import type { AITransport, StreamMessage, TransportOptions, ProviderType } from './types.js';
+import { errMessage } from '../lib/errors.js';
 
 /**
  * Successful CLI probes, keyed by command line. A binary that answered
@@ -75,7 +76,7 @@ export abstract class BaseTransport implements AITransport {
   protected createErrorMessage(error: unknown): StreamMessage {
     return {
       type: 'error',
-      error: error instanceof Error ? error.message : String(error),
+      error: errMessage(error),
     };
   }
 

@@ -13,6 +13,7 @@ import { getSessionId } from '../../agents/agent-context.js';
 import { listApps } from './discovery.js';
 import { INSTALL_ROOT, resolveAppDir } from './roots.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
+import { errMessage } from '../../lib/errors.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { readSettings } from '../../storage/settings.js';
@@ -114,9 +115,7 @@ export async function installApp(appId: string): Promise<VerbResult> {
     }
   } catch (err: unknown) {
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
-    return error(
-      `Failed to extract app archive: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    return error(`Failed to extract app archive: ${errMessage(err)}`);
   } finally {
     await unlink(tmpFile).catch(() => {});
   }

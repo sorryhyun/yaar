@@ -11,6 +11,7 @@
  */
 
 import { MAX_UPLOAD_SIZE } from '../../config.js';
+import { errMessage } from '../../lib/errors.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
@@ -75,9 +76,6 @@ export async function handleBridgeRoutes(req: Request, url: URL): Promise<Respon
     }
     return jsonResponse({ ok: true, data: result.data });
   } catch (err) {
-    return jsonResponse(
-      { ok: false, error: `Bridge error: ${err instanceof Error ? err.message : String(err)}` },
-      500,
-    );
+    return jsonResponse({ ok: false, error: `Bridge error: ${errMessage(err)}` }, 500);
   }
 }

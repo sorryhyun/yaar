@@ -38,6 +38,7 @@ import { SurfaceRegistry } from './surface-state.js';
 import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
 import { getConfigDir } from '../storage/storage-manager.js';
+import { genId } from '../lib/ids.js';
 import { getWarmPool } from '../providers/warm-pool.js';
 import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
@@ -474,7 +475,7 @@ export class LiveSession {
       const hooks = await getHooksByEvent('launch');
       for (const hook of hooks) {
         if (hook.action.type === 'interaction') {
-          const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const messageId = genId(`hook-${hook.id}`);
           await this.routeMessage(
             { type: ClientEventType.USER_MESSAGE, content: hook.action.payload, messageId },
             connectionId,
@@ -696,8 +697,7 @@ export class LiveSession {
 
         await this.pool?.handleTask({
           type: 'app',
-          messageId:
-            event.actionId ?? `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          messageId: event.actionId ?? genId('component'),
           windowId: event.windowId,
           content,
           actionId: event.actionId,

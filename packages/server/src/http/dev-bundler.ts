@@ -8,6 +8,7 @@
 import { join } from 'path';
 import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch } from 'fs';
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
+import { errMessage } from '../lib/errors.js';
 import { registerDevReloadHandler } from './server.js';
 
 const FRONTEND_ROOT = join(PROJECT_ROOT, 'packages', 'frontend');
@@ -102,7 +103,7 @@ async function buildFrontend(retry: boolean): Promise<void> {
   try {
     await buildFrontendInner();
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errMessage(err);
     console.error(
       `[dev] Frontend rebuild failed — server stays up${retry ? ', retrying…' : ''}\n${msg}`,
     );

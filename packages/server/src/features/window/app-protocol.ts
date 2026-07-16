@@ -5,12 +5,9 @@
 import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
-import { ok, error } from '../../handlers/utils.js';
+import { ok, error, getActiveSessionId } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
-import { getSessionId } from '../../agents/agent-context.js';
-import { getSessionHub } from '../../session/session-hub.js';
-import type { SessionId } from '../../session/types.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { beginRequest, endRequest } from './protocol-log.js';
@@ -101,19 +98,6 @@ function wrapAppValue(value: unknown): VerbResult {
 }
 
 /**
- * The session this call belongs to.
- *
- * Resolved exactly the way the `WindowStateRegistry` handed to these functions was —
- * agent context first (`getWindowState()` in mcp/server.ts and handlers/index.ts), the
- * default session as the fallback for a call made outside a turn. Anything else would name
- * a *different* session than the one whose window state gates the readiness check, and the
- * two halves of that check must agree about whose desktop they are talking about.
- */
-function callerSessionId(): SessionId | undefined {
-  return getSessionId() ?? getSessionHub().getDefault()?.sessionId;
-}
-
-/**
  * Ensure app protocol is ready, waiting if needed. Returns error on timeout.
  *
  * `windowKey` must be the resolved window key (`win.id`), not the raw AI-facing id.
@@ -133,8 +117,12 @@ async function requireAppReady(
 ): Promise<VerbResult | null> {
   const win = windowState.getWindow(windowKey);
   if (win && !win.appProtocol) {
+    // The session named here must be the one the `windowState` above came from —
+    // `getActiveSessionId()` resolves it the same way (`getWindowState()` in mcp/server.ts
+    // and handlers/index.ts do): agent context first, default session outside a turn.
+    // Anything else would gate the readiness check on a *different* session's desktop.
     const ready = await actionEmitter.waitForAppReady(
-      callerSessionId(),
+      getActiveSessionId(),
       windowKey,
       deadlines.appReadyMs,
     );

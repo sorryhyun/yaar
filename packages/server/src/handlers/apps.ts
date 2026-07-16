@@ -43,6 +43,7 @@ import {
   mimeFromPath,
 } from './utils.js';
 import { resolvePath } from '../storage/storage-manager.js';
+import { errMessage } from '../lib/errors.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { listApps } from '../features/apps/discovery.js';
@@ -238,7 +239,7 @@ async function handleDbVerb(
         );
     }
   } catch (err) {
-    return error(err instanceof Error ? err.message : String(err));
+    return error(errMessage(err));
   }
 }
 

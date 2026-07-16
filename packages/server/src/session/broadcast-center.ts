@@ -11,6 +11,7 @@
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from './types.js';
 import { type YaarWebSocket, WS_OPEN } from './types.js';
+import { genId } from '../lib/ids.js';
 
 export type ConnectionId = string;
 
@@ -218,5 +219,5 @@ export function resetBroadcastCenter(): void {
  * Generate a unique connection ID.
  */
 export function generateConnectionId(): ConnectionId {
-  return `conn-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+  return genId('conn', 7);
 }

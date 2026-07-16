@@ -15,6 +15,7 @@ import {
 } from '../../storage/shortcuts.js';
 import type { DesktopShortcut } from '@yaar/shared';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { genId } from '../../lib/ids.js';
 import { requirePermission, resolvePrincipal } from '../access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 
@@ -84,8 +85,7 @@ export async function handleShortcutRoutes(req: Request, url: URL): Promise<Resp
         return errorResponse('Shortcuts require label, icon, and target (or skill) fields', 400);
       }
       const shortcut: DesktopShortcut = {
-        id:
-          (data.id as string) || `shortcut-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        id: (data.id as string) || genId('shortcut', 6),
         label: data.label as string,
         icon: data.icon as string,
         iconType: data.iconType as 'emoji' | 'image' | undefined,

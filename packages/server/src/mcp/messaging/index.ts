@@ -25,13 +25,10 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
-import {
-  getSessionId,
-  requireMonitorId,
-  getWindowId,
-  getAgentRole,
-} from '../../agents/agent-context.js';
-import { getSessionHub } from '../../session/session-hub.js';
+import { requireMonitorId, getWindowId, getAgentRole } from '../../agents/agent-context.js';
+import { getActiveSession, ok, error } from '../../handlers/utils.js';
+import type { LiveSession } from '../../session/live-session.js';
+import { genId } from '../../lib/ids.js';
 import { getAppMeta } from '../../features/apps/discovery.js';
 import { showNotification } from '../../features/user/notifications.js';
 
@@ -62,11 +59,14 @@ function parseTarget(to: string): Target | null {
 type RouteResult = { ok: true; text: string } | { ok: false; error: string };
 
 async function routeDirectMessage(to: string, message: string): Promise<RouteResult> {
-  const sessionId = getSessionId();
-  if (!sessionId) return { ok: false, error: 'no active session.' };
-  const session = getSessionHub().get(sessionId);
-  const pool = session?.getPool();
-  if (!pool || !session) return { ok: false, error: 'no active pool.' };
+  let session: LiveSession;
+  try {
+    session = getActiveSession();
+  } catch {
+    return { ok: false, error: 'no active session.' };
+  }
+  const pool = session.getPool();
+  if (!pool) return { ok: false, error: 'no active pool.' };
 
   const target = parseTarget(to);
   if (!target) {
@@ -111,7 +111,7 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
   }
 
   const wrap = (content: string) => `<from:${senderLabel}>\n${content}\n</from:${senderLabel}>`;
-  const messageId = `dm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const messageId = genId('dm');
 
   switch (target.kind) {
     case 'user': {
@@ -199,11 +199,9 @@ export function registerMessagingTools(server: McpServer): void {
     },
     async (args) => {
       const result = await routeDirectMessage(args.to, args.message);
-      if (!result.ok) {
-        return { content: [{ type: 'text', text: `Error: ${result.error}` }] };
-      }
+      if (!result.ok) return error(result.error);
       const suffix = args.end_turn ? ' Your turn is complete.' : ' You may continue working.';
-      return { content: [{ type: 'text', text: result.text + suffix }] };
+      return ok(result.text + suffix);
     },
   );
 }

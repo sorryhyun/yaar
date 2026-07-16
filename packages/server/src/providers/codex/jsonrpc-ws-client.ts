@@ -16,6 +16,7 @@
  * (node:http-based) in Bun builds to bypass this.
  */
 
+import { EventEmitter } from 'node:events';
 import NodeWebSocket from 'ws';
 import { RawWebSocket } from './raw-ws.js';
 import type {
@@ -68,26 +69,56 @@ interface PendingRequest {
   timeoutId?: ReturnType<typeof setTimeout>;
 }
 
+/** No-op 'error' subscriber; see the JsonRpcWsClient constructor. */
+const NOOP = (): void => {};
+
 /**
  * WebSocket-based JSON-RPC client for communicating with codex app-server.
  *
  * Based on the CDPClient pattern but with three-way message discrimination
  * (response vs server-request vs notification).
  */
-export class JsonRpcWsClient {
+/* eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging --
+   Standard typed-EventEmitter idiom: these overloads only narrow the on/off/emit
+   already implemented by the EventEmitter base, so nothing is left unimplemented. */
+export interface JsonRpcWsClient {
+  on(event: 'notification', listener: (method: string, params: unknown) => void): this;
+  on(
+    event: 'server_request',
+    listener: (id: number, method: string, params: unknown) => void,
+  ): this;
+  on(event: 'error', listener: (error: Error) => void): this;
+  on(event: 'close', listener: () => void): this;
+  off(event: 'notification', listener: (method: string, params: unknown) => void): this;
+  off(
+    event: 'server_request',
+    listener: (id: number, method: string, params: unknown) => void,
+  ): this;
+  off(event: 'error', listener: (error: Error) => void): this;
+  off(event: 'close', listener: () => void): this;
+  emit(event: 'notification', method: string, params: unknown): boolean;
+  emit(event: 'server_request', id: number, method: string, params: unknown): boolean;
+  emit(event: 'error', error: Error): boolean;
+  emit(event: 'close'): boolean;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging -- see above
+export class JsonRpcWsClient extends EventEmitter {
   private ws: WsLike;
   private nextId = 1;
   private pendingRequests = new Map<number, PendingRequest>();
   private readonly requestTimeout: number;
   private closed = false;
 
-  // Event listeners (manual, no EventEmitter base for smaller footprint)
-  private notificationListeners: Array<(method: string, params: unknown) => void> = [];
-  private serverRequestListeners: Array<(id: number, method: string, params: unknown) => void> = [];
-  private errorListeners: Array<(error: Error) => void> = [];
-  private closeListeners: Array<() => void> = [];
-
   private constructor(ws: WsLike, options: JsonRpcWsClientOptions = {}) {
+    super();
+    // EventEmitter *throws* on an 'error' event with no listener, whereas the
+    // hand-rolled fan-out this replaced dropped it silently — and connections
+    // handed out by createConnection() never subscribe to 'error'. Keep the old
+    // semantics with a permanent no-op subscriber (see removeAllListeners).
+    this.on('error', NOOP);
+    // The previous listener arrays had no cap; opt out of the 10-listener warning.
+    this.setMaxListeners(0);
     this.ws = ws;
     this.requestTimeout = options.requestTimeout ?? 30000;
 
@@ -104,7 +135,7 @@ export class JsonRpcWsClient {
     ws.on('close', () => {
       this.closed = true;
       this.rejectAll('WebSocket connection closed');
-      for (const listener of this.closeListeners) listener();
+      this.emit('close');
     });
 
     ws.on('error', (err: Error) => {
@@ -295,67 +326,13 @@ export class JsonRpcWsClient {
     return this.pendingRequests.size;
   }
 
-  // ── Event Emitter API ────────────────────────────────────────────────
-
-  on(event: 'notification', listener: (method: string, params: unknown) => void): this;
-  on(
-    event: 'server_request',
-    listener: (id: number, method: string, params: unknown) => void,
-  ): this;
-  on(event: 'error', listener: (error: Error) => void): this;
-  on(event: 'close', listener: () => void): this;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on(event: string, listener: (...args: any[]) => void): this {
-    switch (event) {
-      case 'notification':
-        this.notificationListeners.push(listener as (method: string, params: unknown) => void);
-        break;
-      case 'server_request':
-        this.serverRequestListeners.push(
-          listener as (id: number, method: string, params: unknown) => void,
-        );
-        break;
-      case 'error':
-        this.errorListeners.push(listener as (error: Error) => void);
-        break;
-      case 'close':
-        this.closeListeners.push(listener as () => void);
-        break;
-    }
-    return this;
-  }
-
-  off(event: 'notification', listener: (method: string, params: unknown) => void): this;
-  off(
-    event: 'server_request',
-    listener: (id: number, method: string, params: unknown) => void,
-  ): this;
-  off(event: 'error', listener: (error: Error) => void): this;
-  off(event: 'close', listener: () => void): this;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  off(event: string, listener: (...args: any[]) => void): this {
-    switch (event) {
-      case 'notification':
-        this.notificationListeners = this.notificationListeners.filter((l) => l !== listener);
-        break;
-      case 'server_request':
-        this.serverRequestListeners = this.serverRequestListeners.filter((l) => l !== listener);
-        break;
-      case 'error':
-        this.errorListeners = this.errorListeners.filter((l) => l !== listener);
-        break;
-      case 'close':
-        this.closeListeners = this.closeListeners.filter((l) => l !== listener);
-        break;
-    }
-    return this;
-  }
-
-  removeAllListeners(): this {
-    this.notificationListeners = [];
-    this.serverRequestListeners = [];
-    this.errorListeners = [];
-    this.closeListeners = [];
+  /**
+   * Drop subscribers, but keep the 'error' guard so an unhandled socket error
+   * still can't throw.
+   */
+  removeAllListeners(event?: string | symbol): this {
+    super.removeAllListeners(event);
+    if (event === undefined || event === 'error') this.on('error', NOOP);
     return this;
   }
 
@@ -374,9 +351,7 @@ export class JsonRpcWsClient {
       // Server-initiated request: has both id and method
       if ('method' in message && typeof (message as { method?: string }).method === 'string') {
         const req = message as { id: number; method: string; params?: unknown };
-        for (const listener of this.serverRequestListeners) {
-          listener(req.id, req.method, req.params);
-        }
+        this.emit('server_request', req.id, req.method, req.params);
         return;
       }
 
@@ -401,16 +376,12 @@ export class JsonRpcWsClient {
     } else {
       // Notification
       const notification = message as JsonRpcNotification;
-      for (const listener of this.notificationListeners) {
-        listener(notification.method, notification.params);
-      }
+      this.emit('notification', notification.method, notification.params);
     }
   }
 
   private emitError(error: Error): void {
-    for (const listener of this.errorListeners) {
-      listener(error);
-    }
+    this.emit('error', error);
   }
 
   private rejectAll(reason: string): void {

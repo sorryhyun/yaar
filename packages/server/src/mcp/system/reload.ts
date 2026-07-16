@@ -8,6 +8,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { ok } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
+import { errMessage } from '../../lib/errors.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import type { ReloadCache } from '../../reload/cache.js';
@@ -79,9 +80,7 @@ export function registerReloadTools(
         return ok(`Replayed ${entry.actions.length} actions from cache "${entry.label}".`);
       } catch (err) {
         cache.markFailed(entry.id);
-        return ok(
-          `Cache replay failed: ${err instanceof Error ? err.message : String(err)}. Proceed manually.`,
-        );
+        return ok(`Cache replay failed: ${errMessage(err)}. Proceed manually.`);
       }
     },
   );
