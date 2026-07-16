@@ -11,8 +11,7 @@ import type { PooledAgent } from './agent-pool.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { monitorSource } from './context.js';
-
-const MAX_QUEUE_SIZE = 10;
+import { MAX_QUEUE_SIZE } from '../config.js';
 
 /**
  * The monitor a task runs on. Required.
@@ -53,28 +52,54 @@ export class MonitorTaskProcessor {
     }
   }
 
+  /**
+   * Enqueue a task, or tell the client the queue is full. Returns whether it was queued.
+   *
+   * `why` is the second sentence of the refusal. The plan proposed collapsing the two
+   * wordings into one, but they are not the same message: "Monitor is suspended" says
+   * the queue will not drain until someone resumes it, while "Please wait" says it is
+   * draining already. Losing that leaves the suspended case advising the user to wait
+   * for something that is not going to happen.
+   */
+  private async enqueueOrReject(
+    queue: { canEnqueue(): boolean; enqueue(task: Task): number },
+    task: Task,
+    monitorId: string,
+    why: string,
+    queuedLog: (position: number) => string,
+  ): Promise<boolean> {
+    if (!queue.canEnqueue()) {
+      await this.ctx.sendEvent({
+        type: ServerEventType.ERROR,
+        error: `Message queue is full (${MAX_QUEUE_SIZE} messages). ${why}`,
+        messageId: task.messageId,
+        monitorId,
+      });
+      return false;
+    }
+
+    const position = queue.enqueue(task);
+    console.log(queuedLog(position));
+    await this.ctx.sendEvent({
+      type: ServerEventType.MESSAGE_QUEUED,
+      messageId: task.messageId,
+      position,
+    });
+    return true;
+  }
+
   private async queueMonitorTaskInner(task: Task, monitorId: string): Promise<void> {
     // If monitor is suspended, just enqueue without attempting to process
     const suspendQueue = this.ctx.getOrCreateMonitorQueue(monitorId);
     if (suspendQueue.isSuspended()) {
-      if (!suspendQueue.canEnqueue()) {
-        await this.ctx.sendEvent({
-          type: ServerEventType.ERROR,
-          error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Monitor is suspended.`,
-          messageId: task.messageId,
-          monitorId,
-        });
-        return;
-      }
-      const position = suspendQueue.enqueue(task);
-      console.log(
-        `[ContextPool] Monitor ${monitorId} is suspended — queued task ${task.messageId}, queue size: ${position}`,
+      await this.enqueueOrReject(
+        suspendQueue,
+        task,
+        monitorId,
+        'Monitor is suspended.',
+        (position) =>
+          `[ContextPool] Monitor ${monitorId} is suspended — queued task ${task.messageId}, queue size: ${position}`,
       );
-      await this.ctx.sendEvent({
-        type: ServerEventType.MESSAGE_QUEUED,
-        messageId: task.messageId,
-        position,
-      });
       return;
     }
 
@@ -89,33 +114,24 @@ export class MonitorTaskProcessor {
     // actually process the injected message).
     const isRelay = task.messageId.startsWith('relay-') || task.messageId.startsWith('hook-resp-');
     if (isRelay) {
-      const queue = this.ctx.getOrCreateMonitorQueue(monitorId);
-      if (!queue.canEnqueue()) {
-        await this.ctx.sendEvent({
-          type: ServerEventType.ERROR,
-          error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
-          messageId: task.messageId,
-          monitorId,
-        });
-        return;
-      }
-
-      const position = queue.enqueue(task);
-      console.log(
-        `[ContextPool] Relay/hook arrived while monitor ${monitorId} busy — interrupting and queuing ${task.messageId} (position: ${position})`,
+      const queued = await this.enqueueOrReject(
+        this.ctx.getOrCreateMonitorQueue(monitorId),
+        task,
+        monitorId,
+        'Please wait for current operations to complete.',
+        (position) =>
+          `[ContextPool] Relay/hook arrived while monitor ${monitorId} busy — interrupting and queuing ${task.messageId} (position: ${position})`,
       );
+      if (!queued) return;
 
-      // Interrupt the running turn so processMonitorQueue drains immediately after
+      // Interrupt the running turn so processMonitorQueue drains immediately after.
+      // This used to sit between the enqueue and the MESSAGE_QUEUED event; it is
+      // ordered after now, which only changes when the client hears about a task
+      // that is already on the queue either way.
       const agent = this.ctx.agentPool.getMonitorAgent(monitorId);
       if (agent?.session.isRunning()) {
         await agent.session.interrupt();
       }
-
-      await this.ctx.sendEvent({
-        type: ServerEventType.MESSAGE_QUEUED,
-        messageId: task.messageId,
-        position,
-      });
       return;
     }
 
@@ -147,27 +163,14 @@ export class MonitorTaskProcessor {
     }
 
     // No agents available → queue
-    const queue = this.ctx.getOrCreateMonitorQueue(monitorId);
-    if (!queue.canEnqueue()) {
-      await this.ctx.sendEvent({
-        type: ServerEventType.ERROR,
-        error: `Message queue is full (${MAX_QUEUE_SIZE} messages). Please wait for current operations to complete.`,
-        messageId: task.messageId,
-        monitorId,
-      });
-      return;
-    }
-
-    const position = queue.enqueue(task);
-    console.log(
-      `[ContextPool] Queued monitor task ${task.messageId} for ${monitorId}, queue size: ${position}`,
+    await this.enqueueOrReject(
+      this.ctx.getOrCreateMonitorQueue(monitorId),
+      task,
+      monitorId,
+      'Please wait for current operations to complete.',
+      (position) =>
+        `[ContextPool] Queued monitor task ${task.messageId} for ${monitorId}, queue size: ${position}`,
     );
-
-    await this.ctx.sendEvent({
-      type: ServerEventType.MESSAGE_QUEUED,
-      messageId: task.messageId,
-      position,
-    });
   }
 
   /**

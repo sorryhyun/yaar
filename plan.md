@@ -75,13 +75,18 @@ refactor.
       are missing from its enum.
 
 ### 3.5 Queue-full handling shared by task processors
-- [ ] `enqueueOrReject(ctx, queue, task, monitorId): boolean` — emits either the
-      queue-full `ERROR` or `MESSAGE_QUEUED` with position.
-- [ ] Replaces ~4 copies: `agents/monitor-task-processor.ts:61-78, 93-119, 150-170`,
-      `agents/app-task-processor.ts:84-95`. The two error strings already differ slightly —
-      pick one.
-- [ ] `MAX_QUEUE_SIZE = 10` is declared in both `monitor-task-processor.ts` and
-      `context-pool.ts` — single-source it.
+- [x] `enqueueOrReject(queue, task, monitorId, why, queuedLog): boolean` — emits either the
+      queue-full `ERROR` or `MESSAGE_QUEUED` with position. Private to `MonitorTaskProcessor`.
+- [x] Replaces the **3** copies in `agents/monitor-task-processor.ts`.
+      ~~`agents/app-task-processor.ts:84-95`~~ is **not a fourth copy**: it enqueues via
+      `windowQueuePolicy` (a different policy, different signature) and has **no cap and no
+      queue-full check at all** — it only ever emits the `MESSAGE_QUEUED` half. Whether the
+      window queue *should* be bounded is a real question, but it is not a dedup.
+- [x] ~~The two error strings differ — pick one~~ — **kept both, as a parameter.** They are
+      not the same message: "Monitor is suspended" says the queue will not drain until
+      someone resumes it; "Please wait" says it is draining already. Collapsing them tells a
+      user with a suspended monitor to wait for something that will not happen.
+- [x] `MAX_QUEUE_SIZE = 10` single-sourced to `config.ts`, next to the other monitor limits.
 
 ---
 
