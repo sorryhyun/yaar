@@ -10,6 +10,7 @@ import { existsSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
+import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
 import type { Subprocess } from 'bun';
 
 import { createServer } from 'net';
@@ -159,25 +160,12 @@ export async function launchChrome(chromePath: string): Promise<ChromeInstance> 
     '--disable-dev-shm-usage',
     // WebGPU is off by default in Linux Chrome (it needs the Vulkan backend,
     // which is soft-blocklisted there), so yaar-ml inference in the sandbox
-    // fails with "Failed to get GPU adapter". Opt in explicitly — this is the
-    // flag set Chrome's docs recommend for WebGPU under headless. Linux-only:
-    // Windows/macOS enable WebGPU by default, and --use-angle=vulkan would
-    // break macOS (no Vulkan) and downgrade Windows (D3D11 is the default).
-    //
-    // vulkan_enable_f16_on_nvidia: Dawn withholds shader-f16 on all NVIDIA
-    // Vulkan adapters pending CTS failures (crbug.com/42251215) even when the
-    // driver advertises full fp16 support — which is why fp16 models work on
-    // Windows (D3D12) and macOS (Metal) but not here. The toggle lifts that
-    // hold; it is consulted only for NVIDIA, so it's a no-op elsewhere.
-    ...(process.platform === 'linux'
-      ? [
-          '--enable-unsafe-webgpu',
-          '--enable-features=Vulkan',
-          '--use-angle=vulkan',
-          '--disable-vulkan-surface',
-          '--enable-dawn-features=vulkan_enable_f16_on_nvidia',
-        ]
-      : []),
+    // fails with "Failed to get GPU adapter". Opt in explicitly — the headless
+    // set, which adds --use-angle=vulkan/--disable-vulkan-surface to what a
+    // visible window gets. Linux-only: Windows/macOS enable WebGPU by default,
+    // and --use-angle=vulkan would break macOS (no Vulkan) and downgrade
+    // Windows (D3D11 is the default). See webgpu-flags.ts for the rest.
+    ...(process.platform === 'linux' ? LINUX_WEBGPU_FLAGS_HEADLESS : []),
     // New headless still creates a real (hidden) browser window. When the
     // server runs elevated on Windows, Chrome de-elevates by relaunching
     // itself (--do-not-de-elevate) and the relaunched instance can show that

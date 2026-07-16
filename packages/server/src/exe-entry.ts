@@ -16,6 +16,7 @@ import { ready } from './main.js';
 
 import { getRemoteToken } from './http/auth.js';
 import { getPort } from './config.js';
+import { LINUX_WEBGPU_FLAGS } from './lib/browser/webgpu-flags.js';
 import { hideConsole } from './hide-console.js';
 
 /**
@@ -103,6 +104,12 @@ function openAppWindow() {
       '--disable-default-apps',
       '--disable-features=TranslateUI',
       '--no-first-run',
+      // Without these, `yaar` and `make claude-dev` disagree about whether WebGPU
+      // exists — same machine, same GPU, same app — because dev.sh passes them and
+      // this launcher did not. Linux only; see webgpu-flags.ts. The visible-window
+      // set: the headless pool's extra flags would disable the surface this window
+      // presents through.
+      ...(currentPlatform === 'linux' ? LINUX_WEBGPU_FLAGS : []),
     ];
 
     console.log(`Opening app window: ${chromium} ${args.join(' ')}`);
