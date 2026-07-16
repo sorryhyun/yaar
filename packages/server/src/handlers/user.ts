@@ -14,6 +14,7 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { ok, error, assertUri, requireAction } from './utils.js';
+import { defineActions } from './define-actions.js';
 import { showNotification, dismissNotification } from '../features/user/notifications.js';
 import { askUser, requestUserInput } from '../features/user/prompts.js';
 
@@ -62,6 +63,29 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
   });
 
   // ── yaar://user/prompts — ask/request user interaction ──
+  const promptActions = defineActions<Record<string, unknown>>({
+    ask: async (p) => {
+      const result = await askUser({
+        title: p.title as string,
+        message: p.message as string,
+        options: p.options as Array<{ value: string; label: string; description?: string }>,
+        multiSelect: p.multiSelect as boolean | undefined,
+        allowText: p.allowText as boolean | undefined,
+      });
+      return result.success ? ok(result.result!) : error(result.error!);
+    },
+    request: async (p) => {
+      const result = await requestUserInput({
+        title: p.title as string,
+        message: p.message as string,
+        inputLabel: p.inputLabel as string | undefined,
+        inputPlaceholder: p.inputPlaceholder as string | undefined,
+        multiline: p.multiline as boolean | undefined,
+      });
+      return result.success ? ok(result.text!) : error(result.error!);
+    },
+  });
+
   registry.register('yaar://user/prompts', {
     description:
       'User prompts. Invoke with action "ask" for multiple-choice questions, or "request" for freeform text input.',
@@ -70,7 +94,7 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
       type: 'object',
       required: ['action', 'title', 'message'],
       properties: {
-        action: { type: 'string', enum: ['ask', 'request'] },
+        action: promptActions.schema,
         title: { type: 'string' },
         message: { type: 'string' },
         // ask fields
@@ -100,31 +124,7 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
       if (!payload!.title || !payload!.message) return error('"title" and "message" are required.');
 
       const p = payload!;
-      const action = p.action as string;
-
-      if (action === 'ask') {
-        const result = await askUser({
-          title: p.title as string,
-          message: p.message as string,
-          options: p.options as Array<{ value: string; label: string; description?: string }>,
-          multiSelect: p.multiSelect as boolean | undefined,
-          allowText: p.allowText as boolean | undefined,
-        });
-        return result.success ? ok(result.result!) : error(result.error!);
-      }
-
-      if (action === 'request') {
-        const result = await requestUserInput({
-          title: p.title as string,
-          message: p.message as string,
-          inputLabel: p.inputLabel as string | undefined,
-          inputPlaceholder: p.inputPlaceholder as string | undefined,
-          multiline: p.multiline as boolean | undefined,
-        });
-        return result.success ? ok(result.text!) : error(result.error!);
-      }
-
-      return error(`Unknown action "${action}". Use "ask" or "request".`);
+      return promptActions.dispatch(p.action as string, p);
     },
   });
 }

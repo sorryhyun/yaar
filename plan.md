@@ -62,17 +62,42 @@ refactor.
       *user-supplied* shortcut (osActions, skill, folderId, generated id) from request data,
       not an app shortcut. Left alone.
 
-### 3.4 `defineActions()` — declarative action routers for verb handlers
-- [ ] Helper that takes `{ actionName: { handler, description? } }` and produces
-      (a) the JSON-Schema `action.enum` generated from the keys, and
-      (b) an `invoke(payload)` doing `requireAction` + dispatch + standardized
-      "Unknown action" error.
-- [ ] Migrate: `handlers/window.ts` (15-value enum at 81-174 vs switch at 267-353 — the
-      worst drift risk), `handlers/agents.ts:69-84 + 113-176`, `handlers/apps.ts:405-469`,
-      `handlers/session.ts`, `handlers/user.ts:97-128`, `handlers/config.ts`,
-      `mcp/app-agent/index.ts:240-292`.
-- [ ] Known existing drift to fix while migrating: app-agent's `storage:*` sub-commands
-      are missing from its enum.
+### 3.4 `defineActions()` — **heavily descoped after survey**
+- [x] Added `handlers/define-actions.ts`: an action table that derives its own JSON-Schema
+      `enum` from its keys, plus `dispatch()` with a refusal that names the real actions.
+      Entries are thunks closing over their own context — there is no uniform
+      `(payload) => …` signature, because there cannot be (see below).
+- [x] Migrated `handlers/window.ts` (15 actions) and `handlers/user.ts` (2). Verified the
+      derived enums are byte-for-byte identical to the hand-written ones they replaced.
+
+**The audit was wrong about nearly every premise here:**
+- `window.ts`, called "the worst drift risk", was **clean** — 15/15, same order. Migrated
+  anyway: it is the largest enum, so it is where drift would be most expensive.
+- `mcp/app-agent/index.ts` has **no enum** — `command` is `z.string()`, an open namespace
+  where `storage:*` is intercepted by prefix. So "storage:* missing from its enum" describes
+  a thing that does not exist. Nothing to migrate.
+- `handlers/config.ts` has **no action enum and no dispatch switch at all**. It branches on
+  field presence. Worse, `config/hooks`'s schema declares `action: { type: 'object' }` — a
+  hook's payload, not a verb — so a dispatcher reading `payload.action` as a key would
+  silently misfire. Not migrated.
+- `handlers/session.ts`: `yaar://session` has one action; `session/monitors/*` passes the
+  action through as data; `session/browser`'s 21-value enum has its switch two indirections
+  away in `features/browser/actions.ts`, shared with `POST /api/browser`. Not migrated.
+- **A universal dispatcher is not possible.** Four of seven sites key on *(URI shape,
+  action)*, not action alone, and the cases need incompatible context — `handleUnsubscribe(p)`
+  vs `handleManage(registry, windowId, 'close')` vs `storageWrite(appStoragePath(appId,
+  path), content)`. Per-case context resolvers would make it a table of closures, not an
+  abstraction. Only the duplicated *list* was worth removing.
+
+**Real drift found, NOT fixed here (all are behavior changes):**
+- `handlers/apps.ts` db: `update` is in the enum but the collection switch cannot reach it
+  (it lives in the `if (docId)` branch) → advertised, then refused as unknown.
+- `handlers/apps.ts` app-ops: `grep` is dispatched but **undeclared** (invisible to the
+  model); `write` is declared but has no app-level branch (only `/storage/`).
+- `handlers/agents.ts`: `audit`/`coordinate`/`query` are reachable only when
+  `resolved.id === 'session'`; on any other agent they fall through to
+  `Unknown action` — a valid action reported as nonexistent rather than mis-aimed. Not
+  migrated: single-sourcing here would either change that message or encode the bug.
 
 ### 3.5 Queue-full handling shared by task processors
 - [x] `enqueueOrReject(queue, task, monitorId, why, queuedLog): boolean` — emits either the
