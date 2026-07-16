@@ -106,10 +106,12 @@ export const MAX_UPLOAD_SIZE = 50 * 1024 * 1024; // 50MB
  * served to app iframes at `/api/ml-runtime/` for the @bundled/yaar-ml SDK.
  *
  * - Environment override: `YAAR_ML_RUNTIME_DIR`
- * - Bundled exe: `./ml-runtime/` alongside the executable (shipped at build time)
+ * - Bundled exe: `./ml-runtime/` alongside the executable, if the user put one there
  * - Development: resolved from the installed `onnxruntime-web` package's `dist/`
  *
- * Returns `null` when the runtime can't be located (route then 404s cleanly).
+ * A bundled exe normally has no such directory — it carries the artifacts *inside*
+ * itself (see `getMlRuntimeArtifact`). Prefer that function; this one is the
+ * on-disk half and returns `null` when there is no directory to serve from.
  */
 let _mlRuntimeDir: string | null | undefined;
 export function getMlRuntimeDir(): string | null {
@@ -139,6 +141,38 @@ export function getMlRuntimeDir(): string | null {
   }
   _mlRuntimeDir = null;
   return _mlRuntimeDir;
+}
+
+/**
+ * Resolve one onnxruntime-web artifact by file name to a path `Bun.file()` can read.
+ *
+ * A standalone exe has no `node_modules` and nothing beside it on disk, so the build
+ * embeds the artifacts into the binary (`build-exe-bundle.js`) and hands their
+ * `/$bunfs/` paths over on `globalThis.__YAAR_ML_RUNTIME`, exactly as it does for the
+ * frontend. Shipping them as a side-car directory instead would break the moment the
+ * binary was moved somewhere else.
+ *
+ * An explicit `YAAR_ML_RUNTIME_DIR` wins over the embedded copy so a newer/patched
+ * onnxruntime can be pointed at without a rebuild.
+ *
+ * `name` must already be validated by the caller — this does no traversal checking.
+ * Returns `null` when the artifact can't be located (route then 404s cleanly).
+ */
+export function getMlRuntimeArtifact(name: string): string | null {
+  // Read the override here rather than via getMlRuntimeDir(), which memoizes on first
+  // call: routing through it would make the answer depend on whether anything had
+  // asked before the variable was read.
+  const override = process.env.YAAR_ML_RUNTIME_DIR;
+  if (override) return join(override, name);
+
+  const embedded = (globalThis as Record<string, unknown>).__YAAR_ML_RUNTIME as
+    | Record<string, string>
+    | undefined;
+  const hit = embedded?.[name];
+  if (hit) return hit;
+
+  const dir = getMlRuntimeDir();
+  return dir ? join(dir, name) : null;
 }
 
 const DEFAULT_PORT = getEnvInt('PORT', 8000);
