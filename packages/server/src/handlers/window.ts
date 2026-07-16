@@ -37,6 +37,7 @@ import { requireMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { genId } from '../lib/ids.js';
 import { valueOf } from '../session/pending-store.js';
+import { defineActions } from './define-actions.js';
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -72,6 +73,62 @@ export function registerWindowHandlers(
   };
   registry.register('yaar://windows', listHandler);
 
+  // The 15 window actions. The `enum` the model sees is derived from these keys
+  // (see invokeSchema below), so a case cannot exist undeclared and a declaration
+  // cannot exist without a case.
+  const windowActions = defineActions<{ windowId: string; p: Record<string, unknown> }>({
+    create: ({ windowId, p }) => handleCreate(windowId, p),
+    update: ({ windowId, p }) => handleUpdate(getWindowState(), windowId, p),
+    close: ({ windowId }) => handleManage(getWindowState(), windowId, 'close'),
+    lock: ({ windowId }) => handleManage(getWindowState(), windowId, 'lock'),
+    unlock: ({ windowId }) => handleManage(getWindowState(), windowId, 'unlock'),
+    move: ({ windowId, p }) => handleGeometry(getWindowState(), windowId, 'move', p),
+    resize: ({ windowId, p }) => handleGeometry(getWindowState(), windowId, 'resize', p),
+    app_query: ({ windowId, p }) => handleAppQuery(getWindowState(), windowId, p),
+    app_command: ({ windowId, p }) => handleAppCommand(getWindowState(), windowId, p),
+    protocol_log: ({ windowId, p }) => {
+      // Address by the monitor-scoped key, as app_query/app_command do — the log is
+      // keyed the same way.
+      const win = getWindowState().getWindow(windowId);
+      if (!win) return error(`Window "${windowId}" not found.`);
+      const limit = typeof p.limit === 'number' ? p.limit : undefined;
+      return ok(JSON.stringify(readLog({ windowKey: win.id, limit }), null, 2));
+    },
+    message: ({ windowId, p }) => {
+      const appId = getWindowState().getAppIdForWindow(windowId);
+      if (!appId) return error(`Window "${windowId}" is not an app window.`);
+      if (typeof p.message !== 'string' || !p.message)
+        return error('"message" (string) is required for message action.');
+
+      const session = getActiveSession();
+      const pool = session.getPool();
+      if (!pool) return error('Session not initialized.');
+
+      const messageId = genId('agent-msg');
+      const monitorId = requireMonitorId();
+      const taggedContent = `<monitor:${monitorId}>\n${p.message}\n</monitor:${monitorId}>`;
+      const hook = p.hook === 'response' ? ('response' as const) : undefined;
+      pool
+        .handleTask({
+          type: 'app',
+          messageId,
+          windowId,
+          content: taggedContent,
+          monitorId,
+          hook,
+        })
+        .catch((err: unknown) => console.error('[window.message] Failed:', err));
+
+      return ok(
+        `Message sent to app "${appId}" via window "${windowId}" (messageId: ${messageId}).`,
+      );
+    },
+    subscribe: ({ windowId, p }) => handleSubscribe(getWindowState(), windowId, p),
+    unsubscribe: ({ p }) => handleUnsubscribe(p),
+    app_subscribe: ({ windowId, p }) => handleAppSubscribe(getWindowState(), windowId, p),
+    app_unsubscribe: ({ p }) => handleUnsubscribe(p),
+  });
+
   // ── yaar://windows/{windowId} — window operations ──
   const windowHandler: ResourceHandler = {
     description:
@@ -83,26 +140,7 @@ export function registerWindowHandlers(
       type: 'object',
       required: ['action'],
       properties: {
-        action: {
-          type: 'string',
-          enum: [
-            'create',
-            'update',
-            'close',
-            'lock',
-            'unlock',
-            'move',
-            'resize',
-            'app_query',
-            'app_command',
-            'protocol_log',
-            'message',
-            'subscribe',
-            'unsubscribe',
-            'app_subscribe',
-            'app_unsubscribe',
-          ],
-        },
+        action: windowActions.schema,
         // create fields
         title: { type: 'string' },
         renderer: {
@@ -283,75 +321,7 @@ export function registerWindowHandlers(
       }
 
       assertUri(resolved, 'window');
-      const windowId = resolved.windowId;
-
-      switch (action) {
-        case 'create':
-          return handleCreate(windowId, p);
-        case 'update':
-          return handleUpdate(getWindowState(), windowId, p);
-        case 'close':
-          return handleManage(getWindowState(), windowId, 'close');
-        case 'lock':
-          return handleManage(getWindowState(), windowId, 'lock');
-        case 'unlock':
-          return handleManage(getWindowState(), windowId, 'unlock');
-        case 'move':
-          return handleGeometry(getWindowState(), windowId, 'move', p);
-        case 'resize':
-          return handleGeometry(getWindowState(), windowId, 'resize', p);
-        case 'app_query':
-          return handleAppQuery(getWindowState(), windowId, p);
-        case 'app_command':
-          return handleAppCommand(getWindowState(), windowId, p);
-        case 'protocol_log': {
-          // Address by the monitor-scoped key, as app_query/app_command do — the log is
-          // keyed the same way.
-          const win = getWindowState().getWindow(windowId);
-          if (!win) return error(`Window "${windowId}" not found.`);
-          const limit = typeof p.limit === 'number' ? p.limit : undefined;
-          return ok(JSON.stringify(readLog({ windowKey: win.id, limit }), null, 2));
-        }
-        case 'message': {
-          const appId = getWindowState().getAppIdForWindow(windowId);
-          if (!appId) return error(`Window "${windowId}" is not an app window.`);
-          if (typeof p.message !== 'string' || !p.message)
-            return error('"message" (string) is required for message action.');
-
-          const session = getActiveSession();
-          const pool = session.getPool();
-          if (!pool) return error('Session not initialized.');
-
-          const messageId = genId('agent-msg');
-          const monitorId = requireMonitorId();
-          const taggedContent = `<monitor:${monitorId}>\n${p.message as string}\n</monitor:${monitorId}>`;
-          const hook = p.hook === 'response' ? ('response' as const) : undefined;
-          pool
-            .handleTask({
-              type: 'app',
-              messageId,
-              windowId,
-              content: taggedContent,
-              monitorId,
-              hook,
-            })
-            .catch((err: unknown) => console.error('[window.message] Failed:', err));
-
-          return ok(
-            `Message sent to app "${appId}" via window "${windowId}" (messageId: ${messageId}).`,
-          );
-        }
-        case 'subscribe':
-          return handleSubscribe(getWindowState(), windowId, p);
-        case 'unsubscribe':
-          return handleUnsubscribe(p);
-        case 'app_subscribe':
-          return handleAppSubscribe(getWindowState(), windowId, p);
-        case 'app_unsubscribe':
-          return handleUnsubscribe(p);
-        default:
-          return error(`Unknown action "${action}".`);
-      }
+      return windowActions.dispatch(action, { windowId: resolved.windowId, p });
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {

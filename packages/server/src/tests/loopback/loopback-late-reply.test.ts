@@ -76,7 +76,11 @@ const reply: AppProtocolResponse = { kind: 'command', result: 'I answered, just 
 describe('S7 — the emitter says a late reply out loud', () => {
   it('names it as late, with the latency that made it useless', async () => {
     const capture = captureRequestId();
-    const pending = actionEmitter.emitAppProtocolRequest(WINDOW, { kind: 'command' }, 30);
+    const pending = actionEmitter.emitAppProtocolRequest(
+      WINDOW,
+      { kind: 'command', command: 'noop' },
+      30,
+    );
     const requestId = capture.get();
     capture.stop();
 
@@ -116,7 +120,11 @@ describe('S7 — the emitter says a late reply out loud', () => {
 
   it('remembers an expired request for the grace window, and forgets it after', async () => {
     const first = captureRequestId();
-    const expired = actionEmitter.emitAppProtocolRequest(WINDOW, { kind: 'command' }, 30);
+    const expired = actionEmitter.emitAppProtocolRequest(
+      WINDOW,
+      { kind: 'command', command: 'noop' },
+      30,
+    );
     const staleId = first.get();
     first.stop();
     await expectSettlesWithin(expired, 1000, 'the request that will be forgotten');
@@ -131,7 +139,11 @@ describe('S7 — the emitter says a late reply out loud', () => {
     // Pruning is opportunistic: it happens when the *next* request expires. So this second
     // request is not scaffolding, it is the event that does the forgetting.
     const second = captureRequestId();
-    const next = actionEmitter.emitAppProtocolRequest(WINDOW, { kind: 'query' }, 30);
+    const next = actionEmitter.emitAppProtocolRequest(
+      WINDOW,
+      { kind: 'query', stateKey: 'noop' },
+      30,
+    );
     const freshId = second.get();
     second.stop();
     await expectSettlesWithin(next, 1000, 'the request that triggers the prune');

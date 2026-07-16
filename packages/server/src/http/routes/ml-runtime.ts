@@ -19,7 +19,7 @@
 import { join, basename, extname } from 'path';
 import { stat } from 'fs/promises';
 import { getMlRuntimeDir, MIME_TYPES } from '../../config.js';
-import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
+import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { requireBundle, resolvePrincipal } from '../access.js';
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
 import { errMessage } from '../../lib/errors.js';
@@ -218,12 +218,8 @@ async function fileSize(path: string): Promise<number> {
 }
 
 async function startDownload(req: Request): Promise<Response> {
-  let body: { url?: string; dest?: string };
-  try {
-    body = (await req.json()) as typeof body;
-  } catch {
-    return errorResponse('Invalid JSON body', 400);
-  }
+  const body = await parseJsonBody<{ url?: string; dest?: string }>(req);
+  if (body instanceof Response) return body;
   const target = body.url ?? '';
   const dest = body.dest ?? '';
 

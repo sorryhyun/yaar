@@ -10,11 +10,9 @@
  * control of the user's real browser is deliberately app-mediated. See `features/browser/bridge-actions.ts`.
  */
 
-import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
-import { errorResponse, jsonResponse } from '../utils.js';
-import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
-import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
+import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
+import { requireBundledApp } from '../access.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { runBridgeAction } from '../../features/browser/bridge-actions.js';
@@ -34,29 +32,14 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
  * companion extension. It was gated on "holds some valid iframe token" — any app,
  * declared or not. It is `yaar-web` surface, so it is held to the same declaration.
  */
-function requireAuth(req: Request, url: URL): Principal | Response {
-  const principal = resolvePrincipal(req, url);
-  if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
-  const denied = requireBundle(principal, 'yaar-web');
-  if (denied) return denied;
-  return principal;
-}
-
 export async function handleBridgeRoutes(req: Request, url: URL): Promise<Response | null> {
   if (url.pathname !== '/api/bridge' || req.method !== 'POST') return null;
 
-  const auth = requireAuth(req, url);
+  const auth = requireBundledApp(req, url, 'yaar-web');
   if (auth instanceof Response) return auth;
 
-  let body: Record<string, unknown>;
-  try {
-    const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-    body = JSON.parse(buf.toString('utf-8'));
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) return errorResponse('Request body too large', 413);
-    return errorResponse('Invalid JSON body', 400);
-  }
+  const body = await parseJsonBody<Record<string, unknown>>(req);
+  if (body instanceof Response) return body;
 
   const action = body.action as string;
   if (!action) return errorResponse('"action" is required', 400);

@@ -55,10 +55,10 @@ import { MonitorTaskProcessor } from './monitor-task-processor.js';
 import { AppTaskProcessor } from './app-task-processor.js';
 import type { PoolContext, PoolStats, Task } from './pool-types.js';
 
+import { MAX_QUEUE_SIZE } from '../config.js';
+
 // Re-export Task for barrel compatibility
 export type { Task } from './pool-types.js';
-
-const MAX_QUEUE_SIZE = 10;
 
 /**
  * ContextPool manages task orchestration with a persistent monitor agent,

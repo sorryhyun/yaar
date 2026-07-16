@@ -198,7 +198,7 @@ describe('a real-browser event reaches a subscribed agent', () => {
   beforeEach(async () => {
     resetBroadcastCenter();
     session = new LiveSession(SESSION);
-    await session.ensureInitialized();
+    await (session as unknown as { ensureInitialized: () => Promise<boolean> }).ensureInitialized();
 
     const pool = session.getPool()!;
     // Deliver tasks into an array instead of running an agent turn.

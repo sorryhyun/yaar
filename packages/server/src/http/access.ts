@@ -49,7 +49,7 @@ interface HostPrincipal {
 }
 
 /** An iframe app, confined to the permissions its app.json declares. */
-interface AppPrincipal {
+export interface AppPrincipal {
   kind: 'app';
   /** Absent for a plain (non-app) iframe window — it gets no permissions at all. */
   appId?: string;
@@ -219,6 +219,30 @@ export function requireBundle(principal: Principal, bundle: string): Response | 
     `"${bundle}" must be declared in app.json "bundles" to use this endpoint`,
     403,
   );
+}
+
+/**
+ * The full prelude for a gated-SDK door: resolve the caller, insist it is a real
+ * app, and require the bundle.
+ *
+ * The `kind !== 'app'` step is the load-bearing one and the reason this is a
+ * helper rather than a bare `requireBundle` call. `requireBundle` returns `null`
+ * for a `host` principal — correct on its own terms, since the host is the user —
+ * so a door that calls it *without* first pinning the caller to an app is open to
+ * anyone who simply omits a token. `/api/browser`, `/api/bridge` and `/api/dev/*`
+ * each rewrote this sequence by hand; `browser.ts` re-ran it (and re-resolved the
+ * principal) five times per request.
+ *
+ * Returns the `AppPrincipal` so callers can read `appId`/`sessionId` off it
+ * without re-narrowing.
+ */
+export function requireBundledApp(req: Request, url: URL, bundle: string): AppPrincipal | Response {
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
+  const denied = requireBundle(principal, bundle);
+  if (denied) return denied;
+  return principal;
 }
 
 /**

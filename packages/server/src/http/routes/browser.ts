@@ -8,11 +8,9 @@
  * All routes require iframe token auth (X-Iframe-Token header).
  */
 
-import { MAX_UPLOAD_SIZE } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
-import { errorResponse, jsonResponse } from '../utils.js';
-import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
-import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
+import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
+import { requireBundledApp, type AppPrincipal } from '../access.js';
 import { getHeadlessBrowser } from '../../lib/browser/index.js';
 import {
   enforceBrowserGuards,
@@ -103,14 +101,8 @@ function verbResultToResponse(result: {
  * Screenshots load as `<img src>` and events over `EventSource`; neither can set a
  * header, so those two carry the token as `?__yaar_token=` (see resolvePrincipal).
  */
-function requireWeb(req: Request, url: URL): Principal | Response {
-  const principal = resolvePrincipal(req, url);
-  if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
-  const denied = requireBundle(principal, 'yaar-web');
-  if (denied) return denied;
-  return principal;
-}
+const requireWeb = (req: Request, url: URL): AppPrincipal | Response =>
+  requireBundledApp(req, url, 'yaar-web');
 
 export async function handleBrowserRoutes(req: Request, url: URL): Promise<Response | null> {
   if (!url.pathname.startsWith('/api/browser')) return null;
@@ -260,14 +252,8 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
 
-    let body: Record<string, unknown>;
-    try {
-      const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-      body = JSON.parse(buf.toString('utf-8'));
-    } catch (err) {
-      if (err instanceof BodyTooLargeError) return errorResponse('Request body too large', 413);
-      return errorResponse('Invalid JSON body', 400);
-    }
+    const body = await parseJsonBody<Record<string, unknown>>(req);
+    if (body instanceof Response) return body;
 
     const action = body.action as string;
     if (!action) return errorResponse('"action" is required', 400);

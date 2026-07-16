@@ -5,9 +5,7 @@
  * which delegates to performFetch() for SSRF protection and domain allowlist.
  */
 
-import { MAX_UPLOAD_SIZE } from '../../config.js';
-import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
-import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
+import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import {
   performFetch,
   FetchDomainError,
@@ -33,22 +31,14 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
   }
 
   // Parse request body
-  let body: {
+  const body = await parseJsonBody<{
     url?: string;
     method?: string;
     headers?: Record<string, string>;
     body?: string;
     sessionId?: string;
-  };
-  try {
-    const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-    body = JSON.parse(buf.toString('utf-8'));
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) {
-      return errorResponse('Request body too large', 413);
-    }
-    return errorResponse('Invalid JSON body', 400);
-  }
+  }>(req);
+  if (body instanceof Response) return body;
 
   const targetUrl = body.url;
   if (!targetUrl || typeof targetUrl !== 'string') {

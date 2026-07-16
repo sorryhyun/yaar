@@ -8,6 +8,23 @@ import { buildYaarUri, extractAppId } from '@yaar/shared';
 
 const SHORTCUTS_FILE = 'shortcuts.json';
 
+/** An app's auto-created desktop shortcut. `ensureAppShortcut` and `syncAppShortcuts` must agree. */
+function buildAppShortcut(app: {
+  id: string;
+  name: string;
+  icon?: string;
+  iconType?: 'emoji' | 'image';
+}): DesktopShortcut {
+  return {
+    id: `app-${app.id}`,
+    label: app.name,
+    icon: app.icon || '📦',
+    ...(app.iconType && { iconType: app.iconType }),
+    target: buildYaarUri('apps', app.id),
+    createdAt: Date.now(),
+  };
+}
+
 export async function readShortcuts(): Promise<DesktopShortcut[]> {
   const result = await configRead(SHORTCUTS_FILE);
   if (!result.success || !result.content) return [];
@@ -56,17 +73,9 @@ export async function ensureAppShortcut(app: {
   iconType?: 'emoji' | 'image';
 }): Promise<DesktopShortcut> {
   const shortcuts = await readShortcuts();
-  const shortcutId = `app-${app.id}`;
-  const existing = shortcuts.find((s) => s.id === shortcutId);
+  const existing = shortcuts.find((s) => s.id === `app-${app.id}`);
   if (existing) return existing;
-  const shortcut: DesktopShortcut = {
-    id: shortcutId,
-    label: app.name,
-    icon: app.icon || '📦',
-    ...(app.iconType && { iconType: app.iconType }),
-    target: buildYaarUri('apps', app.id),
-    createdAt: Date.now(),
-  };
+  const shortcut = buildAppShortcut(app);
   shortcuts.push(shortcut);
   await writeShortcuts(shortcuts);
   return shortcut;
@@ -113,16 +122,8 @@ export async function syncAppShortcuts(
   // Auto-create shortcuts only for apps that opt in
   for (const app of apps) {
     if (!autoShortcutAppIds.has(app.id)) continue;
-    const shortcutId = `app-${app.id}`;
-    if (!result.some((s) => s.id === shortcutId)) {
-      result.push({
-        id: shortcutId,
-        label: app.name,
-        icon: app.icon || '📦',
-        ...(app.iconType && { iconType: app.iconType }),
-        target: buildYaarUri('apps', app.id),
-        createdAt: Date.now(),
-      });
+    if (!result.some((s) => s.id === `app-${app.id}`)) {
+      result.push(buildAppShortcut(app));
       changed = true;
     }
   }

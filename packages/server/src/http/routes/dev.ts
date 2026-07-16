@@ -15,10 +15,9 @@
 
 import { join } from 'path';
 import { stat } from 'fs/promises';
-import { MAX_UPLOAD_SIZE, PROJECT_ROOT } from '../../config.js';
-import { errorResponse, jsonResponse } from '../utils.js';
-import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
-import { requireBundle, resolvePrincipal } from '../access.js';
+import { PROJECT_ROOT } from '../../config.js';
+import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
+import { requireBundledApp } from '../access.js';
 import { resolveAppSource } from '../../features/apps/roots.js';
 import type { EndpointMeta } from '../utils.js';
 
@@ -139,24 +138,17 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   // compiler already refuses to bundle that SDK unless app.json declares it, but the
   // compiler only sees the app's *source*. A hand-written fetch() never went near it,
   // so the door checks the declaration itself.
-  const principal = resolvePrincipal(req, url);
+  const principal = requireBundledApp(req, url, 'yaar-dev');
   if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app' || !principal.appId) {
-    return errorResponse('Invalid or missing iframe token', 403);
-  }
-  const bundleDenied = requireBundle(principal, 'yaar-dev');
-  if (bundleDenied) return bundleDenied;
+  // A plain (non-app) iframe window has no appId, and every action below addresses
+  // an app. It cannot reach here anyway — an appId-less token carries no bundles —
+  // but the actions need the narrowing.
   const callerAppId = principal.appId;
+  if (!callerAppId) return errorResponse('Invalid or missing iframe token', 403);
 
   // Body
-  let body: Record<string, unknown>;
-  try {
-    const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-    body = JSON.parse(buf.toString('utf-8'));
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) return errorResponse('Request body too large', 413);
-    return errorResponse('Invalid JSON body', 400);
-  }
+  const body = await parseJsonBody<Record<string, unknown>>(req);
+  if (body instanceof Response) return body;
 
   // Git actions address an *app*, not a sandbox project path — they branch out
   // before the path resolution the compile/typecheck/deploy actions need.

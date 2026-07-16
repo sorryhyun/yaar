@@ -48,18 +48,6 @@ export interface AppServerConfig {
 }
 
 /**
- * Events emitted by the AppServer.
- */
-export interface AppServerEvents {
-  /** Emitted when a notification is received from the control client */
-  notification: (method: string, params: unknown) => void;
-  /** Emitted when the server process exits */
-  exit: (code: number | null, signal: string | null) => void;
-  /** Emitted when an error occurs */
-  error: (error: Error) => void;
-}
-
-/**
  * Resolve `setsid`, used to launch the app-server as its own
  * process-group / session leader. When available, the whole codex process tree
  * (app-server + any grandchildren it spawns — model runners, MCP servers, turn

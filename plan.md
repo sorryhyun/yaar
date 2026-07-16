@@ -22,43 +22,96 @@ Ordered into phases by risk. Each phase is independently landable; run
 - [ ] Replace the "small body" variant: `settings.ts:46-56, 94-104`,
       `shortcuts.ts:74-82, 111-119`, `sessions.ts:95-103`.
 
-### 3.2 Generic auth prelude for routes
-- [ ] Promote `browser.ts`'s local `requireWeb()` pattern to a shared helper in
-      `http/access.ts`, e.g. `resolveAndAuthorize(req, url, { uri, verb } | { bundle })`
-      returning `Principal | Response`.
-- [ ] Replace the ~20 copies of "resolvePrincipal → instanceof Response check →
-      requirePermission/requireBundle → denied check" across `http/routes/*`.
+### 3.2 Generic auth prelude for routes — **descoped after survey**
+- [x] Promoted `browser.ts`'s `requireWeb()` to `requireBundledApp(req, url, bundle)` in
+      `http/access.ts`, returning `AppPrincipal | Response`.
+- [x] Migrated the three sites that share that shape: `browser.ts` (which re-ran the whole
+      prelude, including a fresh `resolvePrincipal`, 5× per request), `bridge.ts`, `dev.ts`.
+- [x] ~~Replace the ~20 copies~~ — **the audit was wrong: there are 11 `resolvePrincipal`
+      sites, not ~20, and only two clusters share a shape** (3× app+bundle, 2× computed
+      uri+verb). The other 6 are genuinely different: `files.ts` threads the principal as a
+      data dependency, `verb.ts` branches three ways on a request-supplied URI, `sessions.ts`
+      mixes two gate functions across 4 branches, `api.ts`/`ml-runtime.ts` gate conditionally
+      on path. A `resolveAndAuthorize(req, url, {uri,verb}|{bundle})` union covering those
+      would be a worse abstraction than the four small gates already there. The remaining
+      2-site cluster (`settings.ts`/`shortcuts.ts`) is 4 lines each — not worth a helper.
 
-### 3.3 `createPersistedStore<T>` for `storage/` (~60–80 lines)
-- [ ] Add `createPersistedStore<T>(filename, defaultValue)` exposing
-      `read() / write() / update()` with cache + parse-with-fallback + mkdir/persist baked in.
-- [ ] Migrate `storage/permissions.ts:48-74` and `storage/mounts.ts:28-55` (near line-for-line
-      identical today), then `storage/settings.ts:61-82` and `storage/shortcuts.ts:11-23`.
-- [ ] Move the `_setMountsForTest`-style cache resets onto the store (one test hook, not four).
-- [ ] Also: extract `buildAppShortcut(app)` — the shortcut literal is built identically in
-      `storage/shortcuts.ts:62-69` and `:117-125`, with a third variant in
-      `http/routes/shortcuts.ts:86-97`.
+**Surfaced, deliberately not fixed here (behavior change, needs a decision):**
+`ml-runtime.ts:75` is the only `requireBundle` door with no `principal.kind !== 'app'` check.
+`requireBundle` returns `null` for `host`, so `/api/ml-weights*` is reachable by any caller
+that simply omits a token, while `/api/browser`, `/api/bridge`, `/api/dev/*` all refuse one.
+Either that is intended (host is the user) or it is a hole — it should not be settled by a
+refactor.
 
-### 3.4 `defineActions()` — declarative action routers for verb handlers
-- [ ] Helper that takes `{ actionName: { handler, description? } }` and produces
-      (a) the JSON-Schema `action.enum` generated from the keys, and
-      (b) an `invoke(payload)` doing `requireAction` + dispatch + standardized
-      "Unknown action" error.
-- [ ] Migrate: `handlers/window.ts` (15-value enum at 81-174 vs switch at 267-353 — the
-      worst drift risk), `handlers/agents.ts:69-84 + 113-176`, `handlers/apps.ts:405-469`,
-      `handlers/session.ts`, `handlers/user.ts:97-128`, `handlers/config.ts`,
-      `mcp/app-agent/index.ts:240-292`.
-- [ ] Known existing drift to fix while migrating: app-agent's `storage:*` sub-commands
-      are missing from its enum.
+### 3.3 `createPersistedStore<T>` for `storage/` — **partially descoped**
+- [x] Added `createPersistedStore<T>(filename, createDefault)` in `storage/persisted-store.ts`
+      exposing `read() / write() / update() / peek() / _setForTest()`. `createDefault` is a
+      factory, not a value: the default is cached and handed to callers that mutate it in
+      place, so a shared constant would be corrupted by the first write.
+- [x] Migrated `storage/permissions.ts` and `storage/mounts.ts` — the near-identical pair.
+- [x] ~~then `storage/settings.ts` and `storage/shortcuts.ts`~~ — **not migrated, on purpose.**
+      They read through `configRead` on *every* call and have no cache. Putting them on the
+      store would add one, and `config/settings.json` is a file the user edits by hand — the
+      edit would be invisible until restart. (`providers/get-forced-provider.ts:24` also reads
+      that file directly, expecting it fresh.) Same six steps, different contract. `configRead`
+      also binds `CONFIG_DIR` at module load where the store resolves it per call.
+- [x] ~~one test hook, not four~~ — **there is exactly one** (`_setMountsForTest`), not four.
+      It now delegates to `store._setForTest`.
+- [x] Extracted `buildAppShortcut(app)` — shared by `ensureAppShortcut` and `syncAppShortcuts`.
+      The `http/routes/shortcuts.ts` "third variant" is **not** the same literal: it builds a
+      *user-supplied* shortcut (osActions, skill, folderId, generated id) from request data,
+      not an app shortcut. Left alone.
+
+### 3.4 `defineActions()` — **heavily descoped after survey**
+- [x] Added `handlers/define-actions.ts`: an action table that derives its own JSON-Schema
+      `enum` from its keys, plus `dispatch()` with a refusal that names the real actions.
+      Entries are thunks closing over their own context — there is no uniform
+      `(payload) => …` signature, because there cannot be (see below).
+- [x] Migrated `handlers/window.ts` (15 actions) and `handlers/user.ts` (2). Verified the
+      derived enums are byte-for-byte identical to the hand-written ones they replaced.
+
+**The audit was wrong about nearly every premise here:**
+- `window.ts`, called "the worst drift risk", was **clean** — 15/15, same order. Migrated
+  anyway: it is the largest enum, so it is where drift would be most expensive.
+- `mcp/app-agent/index.ts` has **no enum** — `command` is `z.string()`, an open namespace
+  where `storage:*` is intercepted by prefix. So "storage:* missing from its enum" describes
+  a thing that does not exist. Nothing to migrate.
+- `handlers/config.ts` has **no action enum and no dispatch switch at all**. It branches on
+  field presence. Worse, `config/hooks`'s schema declares `action: { type: 'object' }` — a
+  hook's payload, not a verb — so a dispatcher reading `payload.action` as a key would
+  silently misfire. Not migrated.
+- `handlers/session.ts`: `yaar://session` has one action; `session/monitors/*` passes the
+  action through as data; `session/browser`'s 21-value enum has its switch two indirections
+  away in `features/browser/actions.ts`, shared with `POST /api/browser`. Not migrated.
+- **A universal dispatcher is not possible.** Four of seven sites key on *(URI shape,
+  action)*, not action alone, and the cases need incompatible context — `handleUnsubscribe(p)`
+  vs `handleManage(registry, windowId, 'close')` vs `storageWrite(appStoragePath(appId,
+  path), content)`. Per-case context resolvers would make it a table of closures, not an
+  abstraction. Only the duplicated *list* was worth removing.
+
+**Real drift found, NOT fixed here (all are behavior changes):**
+- `handlers/apps.ts` db: `update` is in the enum but the collection switch cannot reach it
+  (it lives in the `if (docId)` branch) → advertised, then refused as unknown.
+- `handlers/apps.ts` app-ops: `grep` is dispatched but **undeclared** (invisible to the
+  model); `write` is declared but has no app-level branch (only `/storage/`).
+- `handlers/agents.ts`: `audit`/`coordinate`/`query` are reachable only when
+  `resolved.id === 'session'`; on any other agent they fall through to
+  `Unknown action` — a valid action reported as nonexistent rather than mis-aimed. Not
+  migrated: single-sourcing here would either change that message or encode the bug.
 
 ### 3.5 Queue-full handling shared by task processors
-- [ ] `enqueueOrReject(ctx, queue, task, monitorId): boolean` — emits either the
-      queue-full `ERROR` or `MESSAGE_QUEUED` with position.
-- [ ] Replaces ~4 copies: `agents/monitor-task-processor.ts:61-78, 93-119, 150-170`,
-      `agents/app-task-processor.ts:84-95`. The two error strings already differ slightly —
-      pick one.
-- [ ] `MAX_QUEUE_SIZE = 10` is declared in both `monitor-task-processor.ts` and
-      `context-pool.ts` — single-source it.
+- [x] `enqueueOrReject(queue, task, monitorId, why, queuedLog): boolean` — emits either the
+      queue-full `ERROR` or `MESSAGE_QUEUED` with position. Private to `MonitorTaskProcessor`.
+- [x] Replaces the **3** copies in `agents/monitor-task-processor.ts`.
+      ~~`agents/app-task-processor.ts:84-95`~~ is **not a fourth copy**: it enqueues via
+      `windowQueuePolicy` (a different policy, different signature) and has **no cap and no
+      queue-full check at all** — it only ever emits the `MESSAGE_QUEUED` half. Whether the
+      window queue *should* be bounded is a real question, but it is not a dedup.
+- [x] ~~The two error strings differ — pick one~~ — **kept both, as a parameter.** They are
+      not the same message: "Monitor is suspended" says the queue will not drain until
+      someone resumes it; "Please wait" says it is draining already. Collapsing them tells a
+      user with a suspended monitor to wait for something that will not happen.
+- [x] `MAX_QUEUE_SIZE = 10` single-sourced to `config.ts`, next to the other monitor limits.
 
 ---
 
@@ -151,18 +204,23 @@ Ordered into phases by risk. Each phase is independently landable; run
 Each was found while doing a phase, and deliberately left out of it — all are deletions or
 test-infra changes that a "no behavior changes" refactor shouldn't smuggle in.
 
-- [ ] **Dead export: `AppServerEvents`** (`providers/codex/app-server.ts`). Referenced nowhere,
+- [x] **Dead export: `AppServerEvents`** (`providers/codex/app-server.ts`). Referenced nowhere,
       and since 1.2 it duplicates the merged interface's channel declarations — two places to
       edit when a channel changes. Delete it.
-- [ ] **Dead method: `AgentSession.handleRenderingFeedback`** (8 params). Zero call sites; the
+- [x] **Dead method: `AgentSession.handleRenderingFeedback`** (8 params). Zero call sites; the
       live path is `live-session.ts:746` → `actionEmitter.resolveFeedback({...})` directly. Its
       body is a positional-to-object adapter over `RenderingFeedback`, which
-      `session/action-emitter.ts:46` already exports. Delete rather than convert — but it's
-      public surface on a widely-imported class, so confirm no app/test reaches it.
-- [ ] **CI never typechecks `packages/server/src/tests`** — `tsconfig.build.json` excludes it,
-      and the `typecheck` script uses that config. Currently zero errors hide there (verified
-      against HEAD), so this is cheap to close now and gets more expensive with every drift.
-      Either add a `typecheck:tests` script or stop excluding `src/tests`.
+      `session/action-emitter.ts:46` already exports. Deleted — confirmed no app/test reached it.
+- [x] **CI never typechecks `packages/server/src/tests`** — `tsconfig.build.json` excludes it,
+      and the `typecheck` script used that config. Closed by pointing `typecheck` at
+      `tsconfig.json` (which includes `src/tests`); `build` still uses `tsconfig.build.json`, so
+      tests stay out of `dist`.
+      ⚠️ The audit's "currently zero errors hide there" was **wrong** — 5 errors were hiding, and
+      they reproduce on `master` (verified in a clean worktree), so they predate this branch.
+      All five were tests constructing incomplete protocol literals; fixed test-side, since the
+      types match what the wire actually carries (`iframe-bridge.ts:315` always sets `result`,
+      undefined or not). `bridge-events.test.ts` reaches into the private
+      `LiveSession.ensureInitialized` — cast at the call site rather than widening the class.
 - [ ] **`isError` on app-agent/messaging is now live** (1.4). Failures surface as error rows in
       the CLI panel and are flagged as errors to the model
       (`stream-to-event-mapper.ts:174`). Worth one manual smoke check that nothing downstream

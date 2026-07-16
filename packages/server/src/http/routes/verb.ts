@@ -10,9 +10,7 @@
  * Iframe token auth is reused (X-Iframe-Token header).
  */
 
-import { MAX_UPLOAD_SIZE } from '../../config.js';
-import { errorResponse, jsonResponse, type EndpointMeta } from '../utils.js';
-import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
+import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError } from '../../handlers/utils.js';
 import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
@@ -166,16 +164,8 @@ function toEnvelope(result: VerbResult): Record<string, unknown> {
 export async function handleVerbRoutes(req: Request, url: URL): Promise<Response | null> {
   // ── Subscribe/unsubscribe endpoint ──
   if (url.pathname === '/api/verb/subscribe' && req.method === 'POST') {
-    let body: SubscribeRequest;
-    try {
-      const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-      body = JSON.parse(buf.toString('utf-8'));
-    } catch (err) {
-      if (err instanceof BodyTooLargeError) {
-        return errorResponse('Request body too large', 413);
-      }
-      return errorResponse('Invalid JSON body', 400);
-    }
+    const body = await parseJsonBody<SubscribeRequest>(req);
+    if (body instanceof Response) return body;
 
     const principal = resolvePrincipal(req, url);
     if (principal instanceof Response) return principal;
@@ -258,16 +248,8 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return null;
   }
 
-  let body: VerbRequest;
-  try {
-    const buf = await readBodyWithLimit(req, MAX_UPLOAD_SIZE);
-    body = JSON.parse(buf.toString('utf-8'));
-  } catch (err) {
-    if (err instanceof BodyTooLargeError) {
-      return errorResponse('Request body too large', 413);
-    }
-    return errorResponse('Invalid JSON body', 400);
-  }
+  const body = await parseJsonBody<VerbRequest>(req);
+  if (body instanceof Response) return body;
 
   // Validate verb
   const verb = body.verb as Verb;

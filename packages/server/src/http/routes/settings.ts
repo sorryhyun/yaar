@@ -13,7 +13,7 @@ import {
   isAllDomainsAllowed,
   setAllowAllDomains,
 } from '../../features/config/domains.js';
-import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
+import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { requirePermission, resolvePrincipal } from '../access.js';
 
 /**
@@ -44,16 +44,8 @@ export async function handleSettingsRoutes(req: Request, url: URL): Promise<Resp
   // Update settings
   if (url.pathname === '/api/settings' && req.method === 'PATCH') {
     try {
-      const body = await req.text();
-      if (!body.trim()) {
-        return errorResponse('Empty body', 400);
-      }
-      let partial: Record<string, unknown>;
-      try {
-        partial = JSON.parse(body);
-      } catch {
-        return errorResponse('Invalid JSON', 400);
-      }
+      const partial = await parseJsonBody<Record<string, unknown>>(req);
+      if (partial instanceof Response) return partial;
 
       // Check if provider is changing (requires warm pool restart)
       const providerChanging =
@@ -92,16 +84,8 @@ export async function handleSettingsRoutes(req: Request, url: URL): Promise<Resp
   // Update domain settings
   if (url.pathname === '/api/domains' && req.method === 'PATCH') {
     try {
-      const body = await req.text();
-      if (!body.trim()) {
-        return errorResponse('Empty body', 400);
-      }
-      let partial: { allowAllDomains?: boolean };
-      try {
-        partial = JSON.parse(body);
-      } catch {
-        return errorResponse('Invalid JSON', 400);
-      }
+      const partial = await parseJsonBody<{ allowAllDomains?: boolean }>(req);
+      if (partial instanceof Response) return partial;
       if (typeof partial.allowAllDomains === 'boolean') {
         await setAllowAllDomains(partial.allowAllDomains);
       }
