@@ -1,5 +1,5 @@
 import { app, defineCommand } from '@bundled/yaar';
-import { messages, isWaiting, finishWithMessage, isTurnAnswered } from './store';
+import { messages, isWaiting, finishWithMessage, isTurnAnswered, resetChat } from './store';
 import { makeMessage } from './helpers';
 
 /** Registration is idempotent: a re-mount must not produce a second listener. */
@@ -82,6 +82,21 @@ export function registerProtocol(): void {
           }
           finishWithMessage(makeMessage('assistant', p.content, 'error'), p.replyTo);
           return { added: true, turn: p.replyTo ?? null };
+        },
+      }),
+      resetChat: defineCommand({
+        description:
+          'Clear the entire conversation and return it to the initial state — empties the ' +
+          'messages array (leaving only the welcome message), clears the waiting flag, and drops ' +
+          'answered-turn history. Use this to start a fresh conversation.',
+        aliases: ['clearMessages', 'clearChat', 'newChat'],
+        params: {
+          type: 'object',
+          properties: {},
+        },
+        handler: () => {
+          resetChat();
+          return { reset: true };
         },
       }),
     },

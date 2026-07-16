@@ -11,6 +11,7 @@ import {
   setInputValue,
   beginTurn,
   initStore,
+  resetChat,
 } from './store';
 import { registerProtocol } from './protocol';
 import { formatTime } from './helpers';
@@ -53,12 +54,14 @@ function sendMessage(): void {
       msgId,
       instructions:
         'Reply to the user message above. Call app_command addMessage EXACTLY ONCE with your full ' +
-        `response, and include replyTo: "${msgId}" in its params. ` +
-        'Do NOT call addMessage more than once and do NOT send any extra confirmation, ' +
-        'acknowledgement, or "done" message afterwards — a single addMessage call fully completes ' +
-        'this turn. If addMessage reports that the turn was already answered, STOP: the reply is ' +
-        'already on screen and re-sending it will not change that. ' +
-        'Your plain-text response is ignored by the chat UI; only addMessage renders a bubble.',
+        `response, and include replyTo: "${msgId}" in its params. Do NOT call addMessage more than ` +
+        'once. If addMessage reports that the turn was already answered, STOP: the reply is already ' +
+        'on screen and re-sending it will not change that. ' +
+        'Your addMessage content is the only thing the user sees; any plain text you write is ' +
+        'ignored by the chat UI. But after the addMessage call you MUST close the turn with one ' +
+        'short plain-text line such as "Sent." — a turn that ends with no text at all is treated ' +
+        'as producing no visible output and triggers a spurious retry, so this closing line is ' +
+        'required even though it is not displayed.',
     });
   } finally {
     sending = false;
@@ -72,6 +75,14 @@ function handleKeyDown(e: KeyboardEvent): void {
     e.preventDefault();
     sendMessage();
   }
+}
+
+function handleReset(): void {
+  // Simple guard against clearing an already-empty conversation.
+  if (messages().length <= 1 && !isWaiting()) return;
+  // Confirm before discarding history — a reset is destructive.
+  if (!window.confirm('현재 대화를 모두 지우고 새 대화를 시작할까요?')) return;
+  resetChat();
 }
 
 function handleInput(e: Event): void {
@@ -123,6 +134,7 @@ const ChatHeader = () => html`
         온라인
       </div>
     </div>
+    <button class="reset-btn" onClick=${handleReset} title="새 대화 시작">🗑️</button>
   </div>
 `;
 

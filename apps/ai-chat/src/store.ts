@@ -8,12 +8,8 @@ const STORE_PATH = 'chat.json';
 /** How often to re-read conversation state written by another instance. */
 const SYNC_MS = 1500;
 
-const WELCOME = makeMessage(
-  'assistant',
-  '안녕하세요! 저는 AI 어시스턴트입니다. 무엇이든 물어보세요 😊',
-  'done',
-  'welcome',
-);
+const WELCOME_TEXT = '안녕하세요! 저는 AI 어시스턴트입니다. 무엇이든 물어보세요 😊';
+const WELCOME = makeMessage('assistant', WELCOME_TEXT, 'done', 'welcome');
 
 export const [messages, setMessages] = createSignal<ChatMessage[]>([WELCOME]);
 export const [isWaiting, setIsWaiting] = createSignal(false);
@@ -44,6 +40,14 @@ const answeredTurns = new Set<string>();
 let lastWritten = '';
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 
+/**
+ * Generation of the conversation this instance currently holds. Bumped on reset.
+ * A remote snapshot with a higher generation supersedes ours wholesale (that is
+ * how a clear survives the add-only merge); one with a lower generation is a
+ * pre-reset straggler and is ignored so it cannot resurrect cleared messages.
+ */
+let clearedAt = 0;
+
 /** Messages worth persisting — the typing placeholder is transient UI, not history. */
 function durable(list: ChatMessage[]): ChatMessage[] {
   return list.filter((m) => m.id !== TYPING_INDICATOR_ID && m.status !== 'loading');
@@ -53,6 +57,7 @@ async function persistNow(): Promise<void> {
   const payload: PersistedState = {
     messages: durable(messages()),
     answeredTurns: [...answeredTurns],
+    clearedAt,
   };
   const json = JSON.stringify(payload);
   // Skip no-op writes so polling instances don't ping-pong writes at each other.
@@ -71,6 +76,29 @@ export function schedulePersist(): void {
 
 /** Fold state written by another instance into this one. Id-keyed, so idempotent. */
 function mergeRemote(remote: PersistedState): void {
+  const remoteGen = remote.clearedAt ?? 0;
+
+  // A newer generation is an authoritative snapshot (someone reset more recently
+  // than we know about). Adopt it wholesale — replace, don't add-merge — so the
+  // clear actually takes effect instead of the add-only path re-growing history.
+  if (remoteGen > clearedAt) {
+    clearedAt = remoteGen;
+    answeredTurns.clear();
+    for (const t of remote.answeredTurns ?? []) answeredTurns.add(t);
+    const settled = (remote.messages ?? []).slice().sort((a, b) => a.timestamp - b.timestamp);
+    setMessages(
+      settled.length ? settled : [makeMessage('assistant', WELCOME_TEXT, 'done', 'welcome')],
+    );
+    setIsWaiting(false);
+    return;
+  }
+
+  // An older generation is a pre-reset straggler: a poll that read storage before
+  // our own reset flushed. Ignoring it is what stops cleared messages from coming
+  // back — without this guard the add-merge below would resurrect them.
+  if (remoteGen < clearedAt) return;
+
+  // Same generation — the original id-keyed additive merge.
   for (const t of remote.answeredTurns ?? []) answeredTurns.add(t);
 
   const incomingAll = remote.messages ?? [];
@@ -140,6 +168,33 @@ export function beginTurn(text: string, msgId: string): void {
   setIsWaiting(true);
   setInputValue('');
   schedulePersist();
+}
+
+/**
+ * Reset the conversation back to its initial state: only the welcome message,
+ * no pending turn, no answered-turn history. This is the single authoritative
+ * clear path — the reset button and the resetChat protocol command both call it.
+ *
+ * answeredTurns is cleared too: once the visible history is gone, the old turn
+ * ids are meaningless, and keeping them would only risk dropping a future reply
+ * that happened to reuse an id.
+ */
+export function resetChat(): void {
+  // Bump the generation first: this is what makes the clear authoritative. Any
+  // poll still holding the old history now carries a lower generation and is
+  // ignored by mergeRemote, so it can no longer add the messages back.
+  clearedAt = Date.now();
+  answeredTurns.clear();
+  setMessages([makeMessage('assistant', WELCOME_TEXT, 'done', 'welcome')]);
+  setIsWaiting(false);
+  setInputValue('');
+
+  // Flush immediately rather than through the 250ms debounce: a destructive clear
+  // must reach storage before the next poll (1500ms) can read stale state, and it
+  // must win the no-op guard by carrying the new generation. Cancel any pending
+  // debounced write so it cannot fire afterwards with a half-updated snapshot.
+  if (saveTimer) clearTimeout(saveTimer);
+  void persistNow();
 }
 
 /**
