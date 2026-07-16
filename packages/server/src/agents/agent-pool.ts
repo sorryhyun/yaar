@@ -19,6 +19,7 @@ import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { AITransport } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
+import type { AgentPoolStats } from './pool-types.js';
 
 /**
  * App agents are scoped to the monitor that owns their windows, so two monitors
@@ -642,15 +643,7 @@ export class AgentPool {
   /**
    * Get pool statistics.
    */
-  getStats(): {
-    totalAgents: number;
-    idleAgents: number;
-    busyAgents: number;
-    monitorAgents: number;
-    appAgents: number;
-    ephemeralAgents: number;
-    sessionAgent: boolean;
-  } {
+  getStats(): AgentPoolStats {
     let total = 0;
     let idle = 0;
     let busy = 0;

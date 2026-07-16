@@ -20,6 +20,7 @@ import {
   type UserPromptOption,
   type UserPromptInputField,
 } from '@yaar/shared';
+import type { ActionEmitterChannels, ActionEvent, AppReadyEvent } from './emitter-channels.js';
 import { getAgentId, getMonitorId, getSessionId } from '../agents/agent-context.js';
 import { clampDeadline, deadlines } from '../config.js';
 import {
@@ -30,15 +31,16 @@ import {
 import { PendingStore, type PendingOutcome } from './pending-store.js';
 
 /**
- * Action event data.
+ * The channel payloads live in `emitter-channels.ts` alongside the map that says which
+ * channel carries which. Re-exported here because this module is where consumers have
+ * always imported `ActionEvent` from.
  */
-export interface ActionEvent {
-  action: OSAction;
-  requestId?: string;
-  sessionId?: string;
-  agentId?: string;
-  monitorId?: string;
-}
+export type {
+  ActionEvent,
+  AppProtocolRequestData,
+  AppReadyEvent,
+  SessionScopedEvent,
+} from './emitter-channels.js';
 
 /**
  * Rendering feedback from frontend.
@@ -90,14 +92,6 @@ export interface UserPromptResult {
 }
 
 /**
- * Data emitted for an app protocol request.
- */
-export interface AppProtocolRequestData {
-  windowId: string;
-  request: AppProtocolRequest;
-}
-
-/**
  * How long an expired dialog is remembered so a click already on its way still counts.
  */
 const EXPIRED_DIALOG_GRACE_MS = 5 * 60_000;
@@ -118,19 +112,12 @@ interface AppRequestMeta {
 }
 
 /**
- * One iframe, in one session, saying "I am listening". Both halves are the key: the window
- * key alone names a *place* on a desktop, and two browsers looking at the same YAAR have
- * the same places. See `readyWindows`.
- */
-interface AppReadyEvent {
-  sessionId: string;
-  windowId: string;
-}
-
-/**
  * Global action emitter instance.
+ *
+ * Typed by {@link ActionEmitterChannels}: the channel names and payloads it accepts are
+ * the ones listed there, checked at compile time. See that module for why.
  */
-class ActionEmitter extends EventEmitter {
+class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   private pendingRequests = new PendingStore<RenderingFeedback>();
   private pendingDialogs = new PendingStore<boolean, PermissionOptions | undefined>();
   private pendingUserPrompts = new PendingStore<UserPromptResult>();

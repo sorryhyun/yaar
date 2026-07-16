@@ -1,8 +1,10 @@
 /**
  * Shared types and interface for ContextPool processors.
  *
- * - `Task` — moved here to break circular imports between context-pool <-> policies.
+ * - `Task` / `QueuedTask` — moved here to break circular imports between context-pool <-> policies.
  * - `PoolContext` — the contract that MonitorTaskProcessor and AppTaskProcessor depend on.
+ * - `AgentPoolStats` / `MonitorBudgetStats` / `PoolStats` — the stats contract read by
+ *   `yaar://agents`, `yaar://windows/`, and `yaar://` (session read).
  */
 
 import type { ServerEvent, UserInteraction } from '@yaar/shared';
@@ -35,6 +37,49 @@ export interface Task {
   /** One-shot hook: notify the originating agent when this task completes. */
   hook?: 'response';
 }
+
+/**
+ * A task waiting in a queue policy, stamped with when it was enqueued.
+ */
+export interface QueuedTask {
+  task: Task;
+  timestamp: number;
+}
+
+/**
+ * Agent counts, as reported by `AgentPool.getStats()`.
+ */
+export interface AgentPoolStats {
+  totalAgents: number;
+  idleAgents: number;
+  busyAgents: number;
+  monitorAgents: number;
+  appAgents: number;
+  ephemeralAgents: number;
+  sessionAgent: boolean;
+}
+
+/**
+ * Background-monitor budget usage, as reported by `MonitorBudgetPolicy.getStats()`.
+ */
+export interface MonitorBudgetStats {
+  runningSlots: number;
+  maxConcurrent: number;
+  waitingCount: number;
+  monitors: Record<string, { actionsInWindow: number; outputInWindow: number }>;
+}
+
+/**
+ * The full pool snapshot returned by `ContextPool.getStats()` — agent counts
+ * plus queue/context/budget gauges.
+ */
+export type PoolStats = AgentPoolStats & {
+  monitorQueueSize: number;
+  windowQueueSizes: Record<string, number>;
+  contextTapeSize: number;
+  timelineSize: number;
+  monitorBudget: MonitorBudgetStats;
+};
 
 /**
  * The contract processors depend on — implemented by ContextPool.

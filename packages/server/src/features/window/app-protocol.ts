@@ -3,14 +3,12 @@
  */
 
 import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
-import type { VerbResult } from '../../handlers/uri-registry.js';
+import type { ContentBlock, VerbResult } from '../../handlers/uri-registry.js';
+import { isContentBlocks } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
-import { ok, error } from '../../handlers/utils.js';
+import { ok, error, getActiveSessionId } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
-import { getSessionId } from '../../agents/agent-context.js';
-import { getSessionHub } from '../../session/session-hub.js';
-import type { SessionId } from '../../session/types.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { beginRequest, endRequest } from './protocol-log.js';
@@ -32,35 +30,6 @@ function truncateText(text: string): string {
   if (text.length <= MAX_TEXT_BYTES) return text;
   return (
     text.slice(0, MAX_TEXT_BYTES) + `\n... (truncated, ${(text.length / 1024).toFixed(0)}KB total)`
-  );
-}
-
-type ContentBlock =
-  | { type: 'text'; text: string }
-  | { type: 'image'; data: string; mimeType: string }
-  | {
-      type: 'resource';
-      resource:
-        | { uri: string; text: string; mimeType?: string }
-        | { uri: string; blob: string; mimeType?: string };
-    }
-  | { type: 'resource_link'; uri: string; name: string; description?: string; mimeType?: string };
-
-/** Check if a value is an array of MCP content blocks. */
-function isContentBlocks(value: unknown): value is ContentBlock[] {
-  if (!Array.isArray(value) || value.length === 0) return false;
-  return value.every(
-    (item) =>
-      item &&
-      typeof item === 'object' &&
-      (((item as Record<string, unknown>).type === 'text' &&
-        typeof (item as Record<string, unknown>).text === 'string') ||
-        ((item as Record<string, unknown>).type === 'image' &&
-          typeof (item as Record<string, unknown>).data === 'string') ||
-        ((item as Record<string, unknown>).type === 'resource' &&
-          typeof (item as Record<string, unknown>).resource === 'object') ||
-        ((item as Record<string, unknown>).type === 'resource_link' &&
-          typeof (item as Record<string, unknown>).uri === 'string')),
   );
 }
 
@@ -101,19 +70,6 @@ function wrapAppValue(value: unknown): VerbResult {
 }
 
 /**
- * The session this call belongs to.
- *
- * Resolved exactly the way the `WindowStateRegistry` handed to these functions was —
- * agent context first (`getWindowState()` in mcp/server.ts and handlers/index.ts), the
- * default session as the fallback for a call made outside a turn. Anything else would name
- * a *different* session than the one whose window state gates the readiness check, and the
- * two halves of that check must agree about whose desktop they are talking about.
- */
-function callerSessionId(): SessionId | undefined {
-  return getSessionId() ?? getSessionHub().getDefault()?.sessionId;
-}
-
-/**
  * Ensure app protocol is ready, waiting if needed. Returns error on timeout.
  *
  * `windowKey` must be the resolved window key (`win.id`), not the raw AI-facing id.
@@ -133,8 +89,12 @@ async function requireAppReady(
 ): Promise<VerbResult | null> {
   const win = windowState.getWindow(windowKey);
   if (win && !win.appProtocol) {
+    // The session named here must be the one the `windowState` above came from —
+    // `getActiveSessionId()` resolves it the same way (`getWindowState()` in mcp/server.ts
+    // and handlers/index.ts do): agent context first, default session outside a turn.
+    // Anything else would gate the readiness check on a *different* session's desktop.
     const ready = await actionEmitter.waitForAppReady(
-      callerSessionId(),
+      getActiveSessionId(),
       windowKey,
       deadlines.appReadyMs,
     );

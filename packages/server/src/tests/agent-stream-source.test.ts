@@ -10,16 +10,23 @@
  * `done`.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { ServerEventType, type StreamFrame } from '@yaar/shared';
+import { ServerEventType, type ServerEvent, type StreamFrame } from '@yaar/shared';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { actionEmitter } from '../session/action-emitter.js';
+import type { SessionScopedEvent } from '../session/emitter-channels.js';
 import { StreamToEventMapper } from '../agents/session-policies/stream-to-event-mapper.js';
 import type { StreamMessage } from '../providers/types.js';
 import type { ContextSource } from '../agents/context.js';
 
+/** The two events `'verb-subscription'` carries: a stream frame, or a change ping. */
+type SubscriptionEvent = Extract<
+  ServerEvent,
+  { type: typeof ServerEventType.STREAM_FRAME | typeof ServerEventType.VERB_SUBSCRIPTION_UPDATE }
+>;
+
 interface Captured {
   sessionId: string;
-  event: { type: string; subscriptionId: string; frame?: StreamFrame };
+  event: SubscriptionEvent;
 }
 
 describe('agent stream source (StreamToEventMapper)', () => {
@@ -27,7 +34,9 @@ describe('agent stream source (StreamToEventMapper)', () => {
   const sessionId = 'ses-source-test';
   const uri = `yaar://agents/${instanceId}/stream`;
   let captured: Captured[];
-  const listener = (e: Captured) => captured.push(e);
+  // The channel's payload is the whole `ServerEvent` union; narrow once here rather than
+  // at every assertion, since these two are all the registry ever publishes on it.
+  const listener = (e: SessionScopedEvent) => captured.push(e as Captured);
   const subIds: string[] = [];
 
   beforeEach(() => {
@@ -41,23 +50,24 @@ describe('agent stream source (StreamToEventMapper)', () => {
 
   function makeMapper() {
     const state = { responseText: '', thinkingText: '', currentMessageId: null };
-    return new StreamToEventMapper(
-      'monitor', // role
-      'test-provider',
+    return new StreamToEventMapper({
+      role: 'monitor',
+      providerName: 'test-provider',
       state,
-      async () => {}, // sendEvent — the untouched frontend path
-      null, // logger
-      'yaar://monitors/0' as ContextSource,
-      undefined, // onContextMessage
-      undefined, // onSessionId
-      '0', // monitorId
-      undefined, // onOutput
-      instanceId, // agentInstanceId → the stream URI
-      sessionId, // streamSessionId → scope
-    );
+      sendEvent: async () => {}, // the untouched frontend path
+      logger: null,
+      source: 'yaar://monitors/0' as ContextSource,
+      monitorId: '0',
+      agentInstanceId: instanceId, // → the stream URI
+      streamSessionId: sessionId, // → scope
+    });
   }
 
-  const frames = () => captured.map((c) => c.event.frame).filter(Boolean) as StreamFrame[];
+  // Only STREAM_FRAME carries a frame; a change ping has no payload at all.
+  const frames = (): StreamFrame[] =>
+    captured
+      .map((c) => (c.event.type === ServerEventType.STREAM_FRAME ? c.event.frame : undefined))
+      .filter((f): f is StreamFrame => f !== undefined);
   const tick = (ms = 90) => new Promise((r) => setTimeout(r, ms));
 
   it('publishes tool, coalesced text and done frames onto the agent stream URI', async () => {
@@ -94,14 +104,14 @@ describe('agent stream source (StreamToEventMapper)', () => {
     subIds.push(subId);
     // A mapper missing the stream id/session (e.g. an ephemeral agent) is a no-op source.
     const state = { responseText: '', thinkingText: '', currentMessageId: null };
-    const mapper = new StreamToEventMapper(
-      'ephemeral',
-      'test-provider',
+    const mapper = new StreamToEventMapper({
+      role: 'ephemeral',
+      providerName: 'test-provider',
       state,
-      async () => {},
-      null,
-      'yaar://monitors/0' as ContextSource,
-    );
+      sendEvent: async () => {},
+      logger: null,
+      source: 'yaar://monitors/0' as ContextSource,
+    });
     await mapper.map({ type: 'text', content: 'hi' } as StreamMessage);
     await tick();
     expect(captured).toHaveLength(0);

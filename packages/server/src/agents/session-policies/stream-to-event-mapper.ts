@@ -15,28 +15,56 @@ export interface StreamMappingState {
   currentMessageId: string | null;
 }
 
+export interface StreamMapperOptions {
+  role: string;
+  providerName: string;
+  state: StreamMappingState;
+  sendEvent: (event: ServerEvent) => Promise<void>;
+  logger: SessionLogger | null;
+  source: ContextSource;
+  onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
+  onSessionId?: (sessionId: string) => Promise<void>;
+  monitorId?: string;
+  onOutput?: (bytes: number) => void;
+  /** Agent instance id — keys this agent's `yaar://agents/{id}/stream` feed. */
+  agentInstanceId?: string;
+  /** Session the frames belong to — scopes them so session A can't read B. */
+  streamSessionId?: string;
+}
+
 export class StreamToEventMapper {
   private lastThinkingEmitTime = 0;
   private lastFlushedThinkingLength = 0;
   private thinkingDirty = false;
   private toolStartTimes = new Map<string, { toolName: string; startTime: number }>();
 
-  constructor(
-    private readonly role: string,
-    private readonly providerName: string,
-    private readonly state: StreamMappingState,
-    private readonly sendEvent: (event: ServerEvent) => Promise<void>,
-    private readonly logger: SessionLogger | null,
-    private readonly source: ContextSource,
-    private readonly onContextMessage?: (role: 'user' | 'assistant', content: string) => void,
-    private readonly onSessionId?: (sessionId: string) => Promise<void>,
-    private readonly monitorId?: string,
-    private readonly onOutput?: (bytes: number) => void,
-    /** Agent instance id — keys this agent's `yaar://agents/{id}/stream` feed. */
-    private readonly agentInstanceId?: string,
-    /** Session the frames belong to — scopes them so session A can't read B. */
-    private readonly streamSessionId?: string,
-  ) {}
+  private readonly role: string;
+  private readonly providerName: string;
+  private readonly state: StreamMappingState;
+  private readonly sendEvent: (event: ServerEvent) => Promise<void>;
+  private readonly logger: SessionLogger | null;
+  private readonly source: ContextSource;
+  private readonly onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
+  private readonly onSessionId?: (sessionId: string) => Promise<void>;
+  private readonly monitorId?: string;
+  private readonly onOutput?: (bytes: number) => void;
+  private readonly agentInstanceId?: string;
+  private readonly streamSessionId?: string;
+
+  constructor(options: StreamMapperOptions) {
+    this.role = options.role;
+    this.providerName = options.providerName;
+    this.state = options.state;
+    this.sendEvent = options.sendEvent;
+    this.logger = options.logger;
+    this.source = options.source;
+    this.onContextMessage = options.onContextMessage;
+    this.onSessionId = options.onSessionId;
+    this.monitorId = options.monitorId;
+    this.onOutput = options.onOutput;
+    this.agentInstanceId = options.agentInstanceId;
+    this.streamSessionId = options.streamSessionId;
+  }
 
   /**
    * Publish one frame onto this agent's `yaar://agents/{id}/stream` feed, for any

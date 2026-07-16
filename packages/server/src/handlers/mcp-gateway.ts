@@ -14,6 +14,7 @@ import { ok, okJson, error } from './utils.js';
 import { getMcpClientManager } from '../mcp/external/index.js';
 import type { McpServerConfig } from '../mcp/external/types.js';
 import { storageWrite } from '../storage/index.js';
+import { genStamp } from '../lib/ids.js';
 
 /** File extension for a persisted image, derived from its MIME type. */
 const IMAGE_EXT: Record<string, string> = {
@@ -49,7 +50,7 @@ async function persistImageBlocks(
   const images = content.filter((c) => c.type === 'image' && c.data);
   if (images.length === 0) return [];
 
-  const stamp = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  const stamp = genStamp(6);
   const saved: string[] = [];
 
   for (let i = 0; i < images.length; i++) {

@@ -31,13 +31,19 @@ import {
   type ServerEvent,
   type OSAction,
   type MonitorInfo,
-  type AppProtocolRequest,
   type ActiveAgentSnapshot,
 } from '@yaar/shared';
 import { SurfaceRegistry } from './surface-state.js';
 import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
+import type {
+  AppProtocolRequestData,
+  BridgeEvent,
+  SessionScopedChannel,
+  SessionScopedEvent,
+} from './emitter-channels.js';
 import { getConfigDir } from '../storage/storage-manager.js';
+import { genId } from '../lib/ids.js';
 import { getWarmPool } from '../providers/warm-pool.js';
 import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
@@ -66,24 +72,31 @@ export interface LiveSessionOptions {
  * Subscribe to session-scoped emitter channels that filter by sessionId
  * and forward matching events to a broadcast function.
  *
+ * The channels are constrained to those whose payload is a `SessionScopedEvent`
+ * (see `emitter-channels.ts`), so a channel that carries some other envelope cannot be
+ * listed here and silently never match — this handler reads `data.sessionId`, and on a
+ * channel that has none, every event would be dropped without a word.
+ *
  * Returns a cleanup function that removes all listeners at once.
  */
 function subscribeSessionChannels(
   sessionId: SessionId,
   broadcast: (event: ServerEvent) => void,
-  channels: string[],
+  channels: readonly SessionScopedChannel[],
 ): () => void {
-  const handler = (data: { sessionId: string; event: ServerEvent }) => {
+  const handler = (data: SessionScopedEvent) => {
     if (data.sessionId === sessionId) {
       broadcast(data.event);
     }
   };
   for (const ch of channels) {
-    actionEmitter.on(ch, handler);
+    // Explicit type argument: inference from a union of channel names lands on `never`,
+    // since the map's key parameter appears on both sides of the listener's lookup.
+    actionEmitter.on<SessionScopedChannel>(ch, handler);
   }
   return () => {
     for (const ch of channels) {
-      actionEmitter.off(ch, handler);
+      actionEmitter.off<SessionScopedChannel>(ch, handler);
     }
   };
 }
@@ -160,13 +173,11 @@ export class LiveSession {
   // Action listener for window state tracking
   private unsubscribeAction: (() => void) | null = null;
   // App protocol listener for iframe communication
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private appProtocolListener: ((...args: any[]) => void) | null = null;
+  private appProtocolListener: ((data: AppProtocolRequestData) => void) | null = null;
   // Session-scoped channel listeners (approval-request, user-prompt)
   private unsubscribeSessionChannels: (() => void) | null = null;
   // Unsolicited frames from the YAAR Bridge extension (real-browser dialogs / navigations)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private bridgeEventListener: ((...args: any[]) => void) | null = null;
+  private bridgeEventListener: ((data: BridgeEvent) => void) | null = null;
 
   /** Provider seam, handed to the ContextPool when it is created. */
   private readonly acquireProvider?: () => Promise<AITransport | null>;
@@ -254,12 +265,7 @@ export class LiveSession {
     });
 
     // Subscribe to app protocol requests from tools
-    this.appProtocolListener = (data: {
-      requestId: string;
-      windowId: string;
-      request: AppProtocolRequest;
-      timeoutMs?: number;
-    }) => {
+    this.appProtocolListener = (data: AppProtocolRequestData) => {
       this.broadcast({
         type: ServerEventType.APP_PROTOCOL_REQUEST,
         requestId: data.requestId,
@@ -273,7 +279,7 @@ export class LiveSession {
     // The real browser reporting something nobody asked for (a native dialog fired, a driven tab
     // navigated). The frame arrives on a process-global socket with no session on it, so every
     // LiveSession hears it and decides for itself whether it has a window that cares.
-    this.bridgeEventListener = (data: { channel: string; payload: unknown }) => {
+    this.bridgeEventListener = (data: BridgeEvent) => {
       this.routeBridgeEvent(data.channel, data.payload);
     };
     actionEmitter.on('bridge-event', this.bridgeEventListener);
@@ -474,7 +480,7 @@ export class LiveSession {
       const hooks = await getHooksByEvent('launch');
       for (const hook of hooks) {
         if (hook.action.type === 'interaction') {
-          const messageId = `hook-${hook.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+          const messageId = genId(`hook-${hook.id}`);
           await this.routeMessage(
             { type: ClientEventType.USER_MESSAGE, content: hook.action.payload, messageId },
             connectionId,
@@ -696,8 +702,7 @@ export class LiveSession {
 
         await this.pool?.handleTask({
           type: 'app',
-          messageId:
-            event.actionId ?? `component-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          messageId: event.actionId ?? genId('component'),
           windowId: event.windowId,
           content,
           actionId: event.actionId,

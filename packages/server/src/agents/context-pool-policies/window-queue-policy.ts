@@ -1,13 +1,8 @@
-import type { Task } from '../pool-types.js';
-
-export interface WindowQueuedTask {
-  task: Task;
-  timestamp: number;
-}
+import type { QueuedTask, Task } from '../pool-types.js';
 
 export class WindowQueuePolicy {
   private processingKeys = new Map<string, boolean>();
-  private queues = new Map<string, WindowQueuedTask[]>();
+  private queues = new Map<string, QueuedTask[]>();
 
   isProcessing(key: string): boolean {
     return this.processingKeys.get(key) === true;
@@ -27,13 +22,13 @@ export class WindowQueuePolicy {
     return queue.length;
   }
 
-  dequeue(key: string): WindowQueuedTask | undefined {
+  dequeue(key: string): QueuedTask | undefined {
     const queue = this.queues.get(key);
     return queue?.shift();
   }
 
   /** Drop one key's queued tasks and hand them back. See MonitorQueuePolicy.clear(). */
-  clearQueue(key: string): WindowQueuedTask[] {
+  clearQueue(key: string): QueuedTask[] {
     const dropped = this.queues.get(key) ?? [];
     this.queues.delete(key);
     return dropped;
@@ -52,7 +47,7 @@ export class WindowQueuePolicy {
   }
 
   /** Drop every key's queued tasks and hand them back. See MonitorQueuePolicy.clear(). */
-  clear(): WindowQueuedTask[] {
+  clear(): QueuedTask[] {
     const dropped = [...this.queues.values()].flat();
     this.processingKeys.clear();
     this.queues.clear();

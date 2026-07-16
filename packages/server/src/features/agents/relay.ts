@@ -5,6 +5,7 @@
  */
 
 import type { ContextPool } from '../../agents/context-pool.js';
+import { genId } from '../../lib/ids.js';
 
 /**
  * Relay a message from the current agent to the monitor agent.
@@ -19,7 +20,7 @@ export function relayToMonitor(
   monitorId: string,
   message: string,
 ): string {
-  const messageId = `relay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+  const messageId = genId('relay');
   const content = `<relay from="${agentId}">\n${message}\n</relay>`;
 
   pool

@@ -19,10 +19,10 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
 import { handleCreate } from '../../features/window/create.js';
-import { getWindowId, getSessionId, getMonitorId } from '../../agents/agent-context.js';
-import { getSessionHub } from '../../session/session-hub.js';
-import type { LiveSession } from '../../session/live-session.js';
+import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
+import { getActiveSession, getActivePool, ok, okJson, error } from '../../handlers/utils.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
+import { genId } from '../../lib/ids.js';
 import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
 import {
   storageRead,
@@ -69,17 +69,7 @@ async function launchControlledApp(appId: string): Promise<string | undefined> {
 }
 
 export function registerAppAgentTools(server: McpServer): void {
-  const getSession = (): LiveSession => {
-    const sid = getSessionId();
-    const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-    if (!session) throw new Error('No active session.');
-    return session;
-  };
-  const getWindowState = (): WindowStateRegistry => getSession().windowState;
-
-  const errText = (text: string) => ({
-    content: [{ type: 'text' as const, text: `Error: ${text}` }],
-  });
+  const getWindowState = (): WindowStateRegistry => getActiveSession().windowState;
 
   /**
    * Resolve which window a query/command should target.
@@ -94,7 +84,7 @@ export function registerAppAgentTools(server: McpServer): void {
     | { ok: true; windowId: string; ownAppId?: string; foreign: boolean; entry?: ControlEntry }
     | { ok: false; error: string }
   > => {
-    const session = getSession();
+    const session = getActiveSession();
     const ownAppId = getAppId(session.windowState, ownWindowId);
     if (!targetAppId || targetAppId === ownAppId) {
       return { ok: true, windowId: ownWindowId, ownAppId, foreign: false };
@@ -167,30 +157,30 @@ export function registerAppAgentTools(server: McpServer): void {
     },
     async (args) => {
       const windowId = getWindowId();
-      if (!windowId) return errText('no active window context.');
+      if (!windowId) return error('no active window context.');
 
       const windowState = getWindowState();
 
       // Intercept storage reads — storage is app-scoped, so only your own app.
       if (args.stateKey?.startsWith('storage/') || args.stateKey === 'storage') {
         if (args.appId)
-          return errText("storage is app-scoped; you cannot read another app's storage.");
+          return error("storage is app-scoped; you cannot read another app's storage.");
         const appId = getAppId(windowState, windowId);
-        if (!appId) return errText('could not resolve appId for this window.');
+        if (!appId) return error('could not resolve appId for this window.');
         const relativePath =
           args.stateKey === 'storage' ? '' : args.stateKey.slice('storage/'.length);
         if (!relativePath) {
           // List root storage
           const result = await storageList(appStoragePath(appId, ''));
-          return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+          return okJson(result);
         }
         const result = await storageRead(appStoragePath(appId, relativePath));
-        if (!result.success) return errText(result.error ?? 'read failed.');
-        return { content: [{ type: 'text', text: result.content ?? '' }] };
+        if (!result.success) return error(result.error ?? 'read failed.');
+        return ok(result.content ?? '');
       }
 
       const target = await resolveTarget(windowId, args.appId);
-      if (!target.ok) return errText(target.error);
+      if (!target.ok) return error(target.error);
 
       return {
         ...(await handleAppQuery(windowState, target.windowId, {
@@ -232,16 +222,16 @@ export function registerAppAgentTools(server: McpServer): void {
     },
     async (args) => {
       const windowId = getWindowId();
-      if (!windowId) return errText('no active window context.');
+      if (!windowId) return error('no active window context.');
 
       const windowState = getWindowState();
 
       // Intercept storage commands — storage is app-scoped, so only your own app.
       if (args.command.startsWith('storage:')) {
         if (args.appId)
-          return errText("storage is app-scoped; you cannot modify another app's storage.");
+          return error("storage is app-scoped; you cannot modify another app's storage.");
         const appId = getAppId(windowState, windowId);
-        if (!appId) return errText('could not resolve appId for this window.');
+        if (!appId) return error('could not resolve appId for this window.');
         const subCommand = args.command.slice('storage:'.length);
         const path = (args.params?.path as string) ?? '';
 
@@ -249,57 +239,37 @@ export function registerAppAgentTools(server: McpServer): void {
           case 'write': {
             const content = args.params?.content;
             if (typeof content !== 'string') {
-              return {
-                content: [
-                  {
-                    type: 'text',
-                    text: 'Error: "content" (string) is required for storage:write.',
-                  },
-                ],
-              };
+              return error('"content" (string) is required for storage:write.');
             }
             const result = await storageWrite(appStoragePath(appId, path), content);
-            if (!result.success) {
-              return { content: [{ type: 'text', text: `Error: ${result.error}` }] };
-            }
-            return { content: [{ type: 'text', text: `Written to ${path}` }] };
+            if (!result.success) return error(result.error ?? 'write failed.');
+            return ok(`Written to ${path}`);
           }
           case 'delete': {
-            if (!path) {
-              return {
-                content: [{ type: 'text', text: 'Error: "path" is required for storage:delete.' }],
-              };
-            }
+            if (!path) return error('"path" is required for storage:delete.');
             const result = await storageDelete(appStoragePath(appId, path));
-            if (!result.success) {
-              return { content: [{ type: 'text', text: `Error: ${result.error}` }] };
-            }
-            return { content: [{ type: 'text', text: `Deleted ${path}` }] };
+            if (!result.success) return error(result.error ?? 'delete failed.');
+            return ok(`Deleted ${path}`);
           }
           case 'list': {
             const result = await storageList(appStoragePath(appId, path));
-            return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+            return okJson(result);
           }
           default:
-            return {
-              content: [
-                {
-                  type: 'text',
-                  text: `Unknown storage command: ${subCommand}. Use storage:write, storage:delete, or storage:list.`,
-                },
-              ],
-            };
+            return error(
+              `Unknown storage command: ${subCommand}. Use storage:write, storage:delete, or storage:list.`,
+            );
         }
       }
 
       const target = await resolveTarget(windowId, args.appId);
-      if (!target.ok) return errText(target.error);
+      if (!target.ok) return error(target.error);
       if (
         target.foreign &&
         target.entry?.commands &&
         !target.entry.commands.includes(args.command)
       ) {
-        return errText(
+        return error(
           `app "${target.ownAppId}" is not permitted to run "${args.command}" on "${args.appId}". ` +
             `Permitted commands: ${target.entry.commands.join(', ')}.`,
         );
@@ -334,16 +304,16 @@ export function registerAppAgentTools(server: McpServer): void {
     },
     async (args) => {
       const windowId = getWindowId();
-      if (!windowId) return errText('no active window context.');
+      if (!windowId) return error('no active window context.');
       const ownAppId = getAppId(getWindowState(), windowId);
       const targetAppId = args.appId ?? ownAppId;
-      if (!targetAppId) return errText('could not resolve appId.');
+      if (!targetAppId) return error('could not resolve appId.');
 
       // Describing a foreign app requires "controls" permission.
       if (args.appId && args.appId !== ownAppId) {
         const meta = ownAppId ? await getAppMeta(ownAppId) : null;
         if (!meta?.controls?.some((c) => c.appId === args.appId)) {
-          return errText(
+          return error(
             `app "${ownAppId ?? '?'}" is not permitted to describe "${args.appId}". ` +
               `Add it to "controls" in app.json.`,
           );
@@ -352,16 +322,9 @@ export function registerAppAgentTools(server: McpServer): void {
 
       const apps = await listApps();
       const app = apps.find((a) => a.id === targetAppId);
-      if (!app) return errText(`app "${targetAppId}" not found.`);
-      if (!app.protocol) return errText(`app "${targetAppId}" exposes no protocol.`);
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({ appId: app.id, name: app.name, ...app.protocol }, null, 2),
-          },
-        ],
-      };
+      if (!app) return error(`app "${targetAppId}" not found.`);
+      if (!app.protocol) return error(`app "${targetAppId}" exposes no protocol.`);
+      return okJson({ appId: app.id, name: app.name, ...app.protocol });
     },
   );
 
@@ -376,18 +339,10 @@ export function registerAppAgentTools(server: McpServer): void {
       },
     },
     async (args) => {
-      const sessionId = getSessionId();
-      if (!sessionId) {
-        return { content: [{ type: 'text', text: 'Error: no active session.' }] };
-      }
+      const pool = getActivePool();
+      if (!pool) return error('no active pool.');
 
-      const session = getSessionHub().get(sessionId);
-      const pool = session?.getPool();
-      if (!pool) {
-        return { content: [{ type: 'text', text: 'Error: no active pool.' }] };
-      }
-
-      const messageId = `relay-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const messageId = genId('relay');
       pool
         .handleTask({
           type: 'monitor',
@@ -399,9 +354,7 @@ export function registerAppAgentTools(server: McpServer): void {
           console.error('[AppAgent] Relay error:', err);
         });
 
-      return {
-        content: [{ type: 'text', text: 'Message relayed to monitor agent.' }],
-      };
+      return ok('Message relayed to monitor agent.');
     },
   );
 }

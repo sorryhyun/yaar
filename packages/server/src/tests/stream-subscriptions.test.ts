@@ -10,26 +10,38 @@
  * gets a frame.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
-import { ServerEventType, type StreamFrame } from '@yaar/shared';
+import { ServerEventType, type ServerEvent, type StreamFrame } from '@yaar/shared';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { actionEmitter } from '../session/action-emitter.js';
+import type { SessionScopedEvent } from '../session/emitter-channels.js';
+
+/** The two events `'verb-subscription'` carries: a stream frame, or a change ping. */
+type SubscriptionEvent = Extract<
+  ServerEvent,
+  { type: typeof ServerEventType.STREAM_FRAME | typeof ServerEventType.VERB_SUBSCRIPTION_UPDATE }
+>;
 
 interface Captured {
   sessionId: string;
-  event: {
-    type: string;
-    windowId: string;
-    subscriptionId: string;
-    frame?: StreamFrame;
-    uri?: string;
-  };
+  event: SubscriptionEvent;
 }
+
+/**
+ * The frame on a captured event, or undefined if it was a change ping.
+ *
+ * Only `STREAM_FRAME` carries one — a ping has no payload at all. Reaching for `.frame`
+ * on the union is what the old local `{ frame?: StreamFrame }` shape quietly allowed.
+ */
+const frameOf = (c: Captured): StreamFrame | undefined =>
+  c.event.type === ServerEventType.STREAM_FRAME ? c.event.frame : undefined;
 
 describe('stream subscriptions', () => {
   const uri = 'yaar://dev/deploy/demo';
   const sessionId = 'ses-stream-test';
   let captured: Captured[];
-  const listener = (e: Captured) => captured.push(e);
+  // The channel's payload is the whole `ServerEvent` union; narrow once here rather than
+  // at every assertion, since these two are all the registry ever publishes on it.
+  const listener = (e: SessionScopedEvent) => captured.push(e as Captured);
   const subIds: string[] = [];
 
   beforeEach(() => {
@@ -57,15 +69,15 @@ describe('stream subscriptions', () => {
     const [first, second] = captured;
     expect(first.event.type).toBe(ServerEventType.STREAM_FRAME);
     expect(first.event.subscriptionId).toBe(id);
-    expect(first.event.frame).toMatchObject({
+    expect(frameOf(first)).toMatchObject({
       uri,
       seq: 1,
       kind: 'progress',
       data: { step: 'compile' },
     });
-    expect(typeof first.event.frame?.ts).toBe('number');
+    expect(typeof frameOf(first)?.ts).toBe('number');
     // seq is monotonic per subscription — a gap the consumer sees means a drop.
-    expect(second.event.frame).toMatchObject({ seq: 2, kind: 'done' });
+    expect(frameOf(second)).toMatchObject({ seq: 2, kind: 'done' });
   });
 
   it('honors the kinds filter — a progress-only sub never sees text frames', () => {
@@ -73,9 +85,9 @@ describe('stream subscriptions', () => {
     subscriptionRegistry.publishFrame(uri, 'progress', {}, sessionId);
     subscriptionRegistry.publishFrame(uri, 'done', {}, sessionId);
 
-    expect(captured.map((c) => c.event.frame?.kind)).toEqual(['done']);
+    expect(captured.map((c) => frameOf(c)?.kind)).toEqual(['done']);
     // A filtered-out frame does not burn a seq the consumer can never see.
-    expect(captured[0].event.frame?.seq).toBe(1);
+    expect(frameOf(captured[0])?.seq).toBe(1);
   });
 
   it('scopes frames to the publishing session', () => {
@@ -92,7 +104,7 @@ describe('stream subscriptions', () => {
     const big = 'x'.repeat(5000);
     subscriptionRegistry.publishFrame(uri, 'progress', { blob: big }, sessionId);
 
-    const data = captured[0].event.frame?.data as { truncated?: boolean; preview?: string };
+    const data = frameOf(captured[0])?.data as { truncated?: boolean; preview?: string };
     expect(data.truncated).toBe(true);
     expect(data.preview?.length).toBe(4096);
   });
@@ -111,7 +123,7 @@ describe('stream subscriptions', () => {
     await tick();
     // One frame, deltas merged losslessly, burning exactly one seq (no false gap).
     expect(captured).toHaveLength(1);
-    expect(captured[0].event.frame).toMatchObject({
+    expect(frameOf(captured[0])).toMatchObject({
       seq: 1,
       kind: 'text',
       data: { delta: 'Hello world' },
@@ -129,10 +141,10 @@ describe('stream subscriptions', () => {
       sessionId,
     );
 
-    expect(captured.map((c) => c.event.frame?.kind)).toEqual(['text', 'tool']);
-    expect(captured[0].event.frame?.data).toMatchObject({ delta: 'thinking...' });
+    expect(captured.map((c) => frameOf(c)?.kind)).toEqual(['text', 'tool']);
+    expect(frameOf(captured[0])?.data).toMatchObject({ delta: 'thinking...' });
     // seq stays monotonic across the flush + the discrete frame.
-    expect(captured.map((c) => c.event.frame?.seq)).toEqual([1, 2]);
+    expect(captured.map((c) => frameOf(c)?.seq)).toEqual([1, 2]);
 
     await tick();
     // No late duplicate of the already-flushed text.

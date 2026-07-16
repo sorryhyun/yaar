@@ -7,23 +7,15 @@
 
 import type { BrowserProvider } from '../../lib/browser/index.js';
 import type { VerbResult } from '../../handlers/uri-registry.js';
-import { ok, okJson, okWithImages, error } from '../../handlers/utils.js';
+import { ok, okJson, okWithImages, error, getActiveSessionId } from '../../handlers/utils.js';
 import { resolveSession, formatPageState, findMainContent } from './shared.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { isDomainAllowed, extractDomain, addAllowedDomain } from '../config/domains.js';
 import { isYaarOriginUrl, enforceBrowserGuards, isMutatingAction } from './guards.js';
-import { getAgentId, getSessionId } from '../../agents/agent-context.js';
-import { getSessionHub } from '../../session/session-hub.js';
+import { getAgentId } from '../../agents/agent-context.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
 
 type Payload = Record<string, unknown>;
-
-/** Resolve session ID from agent context, falling back to the default session. */
-function resolveSessionId(): string | undefined {
-  const id = getSessionId();
-  if (id) return id;
-  return getSessionHub().getDefault()?.sessionId;
-}
 
 /**
  * Emit a window action via the session-scoped 'browser-action' channel.
@@ -31,7 +23,7 @@ function resolveSessionId(): string | undefined {
  * HTTP routes (no active agent turn / ToolActionBridge).
  */
 function emitBrowserWindowAction(action: OSAction, sessionId?: string): void {
-  const sid = sessionId ?? resolveSessionId();
+  const sid = sessionId ?? getActiveSessionId();
   if (!sid) return;
   // Only emit via session channel when there's no agent context —
   // during agent turns, ToolActionBridge already handles broadcast.
@@ -69,7 +61,7 @@ export async function handleCreate(
 
   if (p.visible !== false) {
     const isMobile = session.mobile;
-    const sessionId = resolveSessionId();
+    const sessionId = getActiveSessionId();
     const windowAction = {
       type: 'window.create' as const,
       windowId,
@@ -133,7 +125,7 @@ export async function handleOpen(
   if (!domain) return error('Invalid URL');
   if (!(await isDomainAllowed(domain))) {
     // Try to show permission dialog instead of returning a static error
-    const sessionId = resolveSessionId();
+    const sessionId = getActiveSessionId();
     if (!sessionId) {
       return error(
         `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
@@ -175,7 +167,7 @@ export async function handleOpen(
   );
   if (p.visible !== false && !existing) {
     const isMobile = session.mobile;
-    const sessionId = resolveSessionId();
+    const sessionId = getActiveSessionId();
     const windowAction = {
       type: 'window.create' as const,
       windowId,
@@ -272,7 +264,7 @@ export async function handleNavigate(
     const domain = extractDomain(url);
     if (!domain) return error('Invalid URL');
     if (!(await isDomainAllowed(domain))) {
-      const sessionId = resolveSessionId();
+      const sessionId = getActiveSessionId();
       if (!sessionId) {
         return error(
           `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,

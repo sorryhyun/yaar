@@ -12,6 +12,7 @@
  */
 
 import type { Subprocess } from 'bun';
+import { EventEmitter } from 'node:events';
 import { existsSync } from 'fs';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
@@ -68,6 +69,9 @@ export interface AppServerEvents {
  * platforms where it isn't installed (e.g. stock macOS) — there we fall back to
  * single-PID kill. Cached after the first probe.
  */
+/** No-op 'error' subscriber; see the AppServer constructor. */
+const NOOP = (): void => {};
+
 let setsidPathCache: string | null | undefined;
 function getSetsidPath(): string | null {
   if (setsidPathCache === undefined) {
@@ -92,7 +96,23 @@ function getSetsidPath(): string | null {
  * await server.stop();
  * ```
  */
-export class AppServer {
+/* eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging --
+   Standard typed-EventEmitter idiom: these overloads only narrow the on/off/emit
+   already implemented by the EventEmitter base, so nothing is left unimplemented. */
+export interface AppServer {
+  on(event: 'notification', listener: (method: string, params: unknown) => void): this;
+  on(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
+  on(event: 'error', listener: (error: Error) => void): this;
+  off(event: 'notification', listener: (method: string, params: unknown) => void): this;
+  off(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
+  off(event: 'error', listener: (error: Error) => void): this;
+  emit(event: 'notification', method: string, params: unknown): boolean;
+  emit(event: 'exit', code: number | null, signal: string | null): boolean;
+  emit(event: 'error', error: Error): boolean;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-unsafe-declaration-merging -- see above
+export class AppServer extends EventEmitter {
   private process: Subprocess | null = null;
   /**
    * True when `process` was launched via `setsid` and is therefore the leader
@@ -108,14 +128,26 @@ export class AppServer {
   // Capabilities received from initialize handshake
   private initializeResult: InitializeResponse | null = null;
 
-  // Event listeners
-  private notificationListeners: Array<(method: string, params: unknown) => void> = [];
-  private exitListeners: Array<(code: number | null, signal: string | null) => void> = [];
-  private errorListeners: Array<(error: Error) => void> = [];
-
   constructor(config: AppServerConfig = {}) {
+    super();
+    // EventEmitter *throws* on an 'error' event with no listener, whereas the
+    // hand-rolled fan-out this replaced dropped it silently. Keep the old
+    // semantics with a permanent no-op subscriber (see removeAllListeners).
+    this.on('error', NOOP);
+    // The previous listener arrays had no cap; opt out of the 10-listener warning.
+    this.setMaxListeners(0);
     this.config = config;
     this.wsPort = getCodexWsPort();
+  }
+
+  /**
+   * Drop subscribers, but keep the 'error' guard so an unhandled provider error
+   * still can't throw.
+   */
+  removeAllListeners(event?: string | symbol): this {
+    super.removeAllListeners(event);
+    if (event === undefined || event === 'error') this.on('error', NOOP);
+    return this;
   }
 
   /** Shared initialize params for all connections. */
@@ -306,9 +338,7 @@ export class AppServer {
       this.controlClient?.close();
       this.controlClient = null;
 
-      for (const listener of this.exitListeners) {
-        listener(code, null);
-      }
+      this.emit('exit', code, null);
     });
   }
 
@@ -324,15 +354,11 @@ export class AppServer {
 
     // Forward notifications from control client (used for account/login/completed)
     this.controlClient.on('notification', (method: string, params: unknown) => {
-      for (const listener of this.notificationListeners) {
-        listener(method, params);
-      }
+      this.emit('notification', method, params);
     });
 
     this.controlClient.on('error', (err: Error) => {
-      for (const listener of this.errorListeners) {
-        listener(err);
-      }
+      this.emit('error', err);
     });
 
     console.log(`[codex] Control client connected`);
@@ -492,54 +518,5 @@ export class AppServer {
       'account/login/cancel',
       params,
     );
-  }
-
-  // ============================================================================
-  // Event Emitter API
-  // ============================================================================
-
-  on(event: 'notification', listener: (method: string, params: unknown) => void): this;
-  on(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
-  on(event: 'error', listener: (error: Error) => void): this;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  on(event: string, listener: (...args: any[]) => void): this {
-    switch (event) {
-      case 'notification':
-        this.notificationListeners.push(listener as (method: string, params: unknown) => void);
-        break;
-      case 'exit':
-        this.exitListeners.push(listener as (code: number | null, signal: string | null) => void);
-        break;
-      case 'error':
-        this.errorListeners.push(listener as (error: Error) => void);
-        break;
-    }
-    return this;
-  }
-
-  off(event: 'notification', listener: (method: string, params: unknown) => void): this;
-  off(event: 'exit', listener: (code: number | null, signal: string | null) => void): this;
-  off(event: 'error', listener: (error: Error) => void): this;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  off(event: string, listener: (...args: any[]) => void): this {
-    switch (event) {
-      case 'notification':
-        this.notificationListeners = this.notificationListeners.filter((l) => l !== listener);
-        break;
-      case 'exit':
-        this.exitListeners = this.exitListeners.filter((l) => l !== listener);
-        break;
-      case 'error':
-        this.errorListeners = this.errorListeners.filter((l) => l !== listener);
-        break;
-    }
-    return this;
-  }
-
-  removeAllListeners(): this {
-    this.notificationListeners = [];
-    this.exitListeners = [];
-    this.errorListeners = [];
-    return this;
   }
 }

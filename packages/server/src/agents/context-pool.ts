@@ -34,6 +34,7 @@ import type { AITransport, ProviderType } from '../providers/types.js';
 import { createSession, SessionLogger } from '../logging/index.js';
 import type { SessionId } from '../session/types.js';
 import { getAgentLimiter } from './limiter.js';
+import { genId } from '../lib/ids.js';
 import { acquireWarmProvider, getWarmPool } from '../providers/factory.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
@@ -52,7 +53,7 @@ const APP_EVENT_RATE_LIMIT = 20;
 const APP_EVENT_RATE_WINDOW_MS = 1000;
 import { MonitorTaskProcessor } from './monitor-task-processor.js';
 import { AppTaskProcessor } from './app-task-processor.js';
-import type { PoolContext, Task } from './pool-types.js';
+import type { PoolContext, PoolStats, Task } from './pool-types.js';
 
 // Re-export Task for barrel compatibility
 export type { Task } from './pool-types.js';
@@ -175,7 +176,7 @@ export class ContextPool implements PoolContext {
     monitorId: string,
     responseText: string,
   ): void {
-    const messageId = `hook-resp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const messageId = genId('hook-resp');
     this.handleTask({
       type: 'monitor',
       messageId,
@@ -719,20 +720,7 @@ export class ContextPool implements PoolContext {
     return false;
   }
 
-  getStats(): {
-    totalAgents: number;
-    idleAgents: number;
-    busyAgents: number;
-    monitorQueueSize: number;
-    windowQueueSizes: Record<string, number>;
-    contextTapeSize: number;
-    timelineSize: number;
-    monitorAgents: number;
-    appAgents: number;
-    ephemeralAgents: number;
-    sessionAgent: boolean;
-    monitorBudget: ReturnType<MonitorBudgetPolicy['getStats']>;
-  } {
+  getStats(): PoolStats {
     const poolStats = this.agentPool.getStats();
     const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
     return {

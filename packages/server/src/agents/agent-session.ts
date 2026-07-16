@@ -19,6 +19,8 @@ import type { ConnectionId } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';
 import { configRead } from '../storage/storage-manager.js';
+import { genId } from '../lib/ids.js';
+import { errMessage } from '../lib/errors.js';
 import { buildEnvironmentSection } from '../providers/environment.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
 import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
@@ -138,7 +140,7 @@ export class AgentSession {
     this.liveSessionId = liveSessionId ?? connectionId;
     this.broadcastFn = broadcast ?? (() => {});
     this.sessionId = sessionId ?? null;
-    this.instanceId = instanceId ?? `agent-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    this.instanceId = instanceId ?? genId('agent');
     this.sessionLogger = sharedLogger ?? null;
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
@@ -377,15 +379,15 @@ export class AgentSession {
         currentMessageId: this.currentMessageId,
       };
 
-      const mapper = new StreamToEventMapper(
+      const mapper = new StreamToEventMapper({
         role,
-        this.provider.name,
-        streamState,
-        this.sendEvent.bind(this),
-        this.sessionLogger,
-        options.source,
+        providerName: this.provider.name,
+        state: streamState,
+        sendEvent: this.sendEvent.bind(this),
+        logger: this.sessionLogger,
+        source: options.source,
         onContextMessage,
-        async (sessionId: string) => {
+        onSessionId: async (sessionId: string) => {
           // onSessionId callback - update session ID and log thread
           // Update internal provider session ID for session resumption/forking.
           // The log session ID (sent to frontend) is managed by ContextPool.
@@ -399,11 +401,11 @@ export class AgentSession {
             }
           }
         },
-        options.monitorId,
-        this.onOutput ?? undefined,
-        stableAgentId,
-        this.liveSessionId,
-      );
+        monitorId: options.monitorId,
+        onOutput: this.onOutput ?? undefined,
+        agentInstanceId: stableAgentId,
+        streamSessionId: this.liveSessionId,
+      });
 
       console.log(
         `[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`,
@@ -429,7 +431,7 @@ export class AgentSession {
       console.error(`[AgentSession] ${role} error:`, err);
       await this.sendEvent({
         type: ServerEventType.ERROR,
-        error: err instanceof Error ? err.message : String(err),
+        error: errMessage(err),
       });
     } finally {
       // Always notify frontend that this agent is done.

@@ -9,6 +9,7 @@
  */
 
 import { MAX_UPLOAD_SIZE } from '../../config.js';
+import { errMessage } from '../../lib/errors.js';
 import { errorResponse, jsonResponse } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
 import { requireBundle, resolvePrincipal, type Principal } from '../access.js';
@@ -292,10 +293,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
       const result = await runBrowserAction(pool, action, browserId, body);
       return verbResultToResponse(result);
     } catch (err) {
-      return jsonResponse(
-        { ok: false, error: `Browser error: ${err instanceof Error ? err.message : String(err)}` },
-        500,
-      );
+      return jsonResponse({ ok: false, error: `Browser error: ${errMessage(err)}` }, 500);
     } finally {
       if (driving) guardedSession!.setDriving(false);
     }
