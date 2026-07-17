@@ -125,7 +125,8 @@ describe('Emitted actions carry the acting monitor', () => {
   // between tabs — and monitor 0 was never an answer, only a place to put the problem.
   // A window action with no monitor now throws; that assertion lives in
   // packages/tests/src/integration/monitor-routing.test.ts, where `agent-context` is not
-  // stubbed process-wide and so an empty context is really empty (see plan.md, F-12/F-13).
+  // stubbed process-wide and so an empty context is really empty. The fallbacks this
+  // replaced are catalogued in monitor-identity.test.ts.
 
   it('delivers a capture to the target window’s monitor, not the caller’s', async () => {
     // Reading a window screenshots it, and only the monitor that *holds* the window can

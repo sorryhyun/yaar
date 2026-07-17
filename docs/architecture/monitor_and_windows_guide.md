@@ -105,7 +105,8 @@ the monitor comes from the window — `WindowStateRegistry.getMonitorForWindow`.
 **user-scoped** event it comes from the connection that sent it. Nothing defaults to `'0'`:
 a task or action whose monitor cannot be resolved throws (`requireMonitorId`,
 `ActionEmitter.resolveWindowMonitor`). Guessing is what made a click in a window on monitor 1
-run on monitor 0's agent and open its windows there. See `plan.md` (Slice 3, F-7/F-10..F-14).
+run on monitor 0's agent and open its windows there. The findings behind the rule, and the
+tests that pin it, are in `packages/server/src/tests/monitor-identity.test.ts`.
 
 ### Server
 

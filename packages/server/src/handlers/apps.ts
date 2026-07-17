@@ -70,11 +70,35 @@ import { getAppDatabase, type DbFilter, type DbFindOptions } from '../db/index.j
  * `mcp/app-agent/index.ts`.
  *
  * The leading-slash strip is a no-op on this side: `parseAppStoragePath` runs
- * `validateRelativePath`, which rejects a leading "/" outright. It is what the
- * app-agent door does with its own unvalidated input.
+ * `validateRelativePath`, which rejects a leading "/" outright. It is what
+ * `scopedAppStoragePath` does with the app-agent door's raw tool argument.
+ *
+ * This function does not guard traversal — the path it is handed must already be
+ * confined. Callers holding a raw, caller-supplied path want `scopedAppStoragePath`.
  */
 export function appStoragePath(appId: string, relativePath: string): string {
   return `apps/${appId}/${relativePath.replace(/^\//, '')}`;
+}
+
+/**
+ * `appStoragePath` plus the traversal guard, for callers whose path arrives unvalidated.
+ * Returns null when the path would leave `apps/{appId}/`.
+ *
+ * The verbs door validates in `parseAppStoragePath`, because a URI carries its own appId
+ * and the check belongs with the parse. The app-agent door has no URI and no parse step —
+ * it takes the appId from the caller's window and the path straight off a tool argument —
+ * so its guard lives here, next to the layout it protects. Without it, `storageRead`'s
+ * only containment is `STORAGE_DIR`, and `apps/notes/../devtools/secrets.json` normalizes
+ * to a path that is still inside `STORAGE_DIR` and therefore allowed.
+ *
+ * A leading "/" is stripped rather than rejected: the app-agent door has always accepted
+ * one, it cannot escape the subtree, and this fix is meant to close the traversal only.
+ * That is the one place the two doors' path rules differ.
+ */
+export function scopedAppStoragePath(appId: string, relativePath: string): string | null {
+  const cleaned = relativePath.replace(/^\/+/, '');
+  if (validateRelativePath(cleaned)) return null;
+  return appStoragePath(appId, cleaned);
 }
 
 /**

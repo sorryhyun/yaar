@@ -1,8 +1,9 @@
 /**
- * Slice 3 acceptance — "monitor is derived, never defaulted" (plan.md).
+ * Acceptance for "monitor is derived, never defaulted".
  *
- * Written red, against the behavior Slice 3 specifies rather than the behavior that
- * existed; now green. Each one names the finding it closes:
+ * Written red, against the specified behavior rather than the behavior that existed;
+ * now green. Each one names the finding it closes — this list is the only surviving
+ * index of these F-numbers, so keep the descriptions with them:
  *
  *   F-7  monitor subscriptions accumulate instead of switching
  *   F-10 routing semantics flip on the first subscription

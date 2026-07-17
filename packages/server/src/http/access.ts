@@ -24,7 +24,8 @@
  * same-origin content (local apps), don't sandbox - it's trusted"). A *hostile*
  * app can therefore decline to send its token and be resolved as `host`, spoof
  * `Referer`, or reach `window.parent` directly. No header-based principal can
- * close that; it needs an origin boundary. Tracked as F-23 in plan.md.
+ * close that; it needs an origin boundary. The full gap — the three escapes, the
+ * fix, and what the fix costs the frontend — is in docs/architecture/known_gaps.md.
  *
  * What this module does buy, today: a network caller cannot reach these routes
  * at all (auth.ts), an app that behaves like an app is confined to what it

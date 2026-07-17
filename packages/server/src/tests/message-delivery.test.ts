@@ -1,8 +1,8 @@
 /**
- * Slice 5 + Slice 6 acceptance — "every dropped message is visible" and "authoritative
- * resync" (plan.md).
+ * Acceptance for "every dropped message is visible" and "authoritative resync".
  *
- * The findings these close:
+ * The findings these close — this list is the only surviving index of these F-numbers,
+ * so keep the descriptions with them:
  *
  *   F-18 dropped work is invisible — a budget timeout, a full queue, an unknown monitor,
  *        or a pool reset killed a user's message and told nobody, leaving the chip on

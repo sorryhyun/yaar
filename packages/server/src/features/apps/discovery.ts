@@ -379,17 +379,27 @@ export async function getAppMeta(appId: string): Promise<{
 }
 
 /**
- * Load SKILL.md for a specific app.
+ * Read one of an app's markdown docs, or null if the app or the doc is absent.
+ *
+ * All three docs are optional by design — absence is the common case, not an error — so a
+ * missing file and an unresolvable appId are the same `null` to every caller.
  */
-export async function loadAppSkill(appId: string): Promise<string | null> {
+async function loadAppDoc(appId: string, filename: string): Promise<string | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
   try {
-    const content = await Bun.file(join(appDir, 'SKILL.md')).text();
-    return content;
+    return await Bun.file(join(appDir, filename)).text();
   } catch {
     return null;
   }
+}
+
+/**
+ * Load SKILL.md for a specific app.
+ * When present, its content is appended to the generic app agent system prompt.
+ */
+export function loadAppSkill(appId: string): Promise<string | null> {
+  return loadAppDoc(appId, 'SKILL.md');
 }
 
 /**
@@ -397,15 +407,8 @@ export async function loadAppSkill(appId: string): Promise<string | null> {
  * When present, its content is injected into the monitor agent's system prompt
  * so the orchestrator knows when/how to use the app.
  */
-export async function loadAppHint(appId: string): Promise<string | null> {
-  const appDir = resolveAppDir(appId);
-  if (!appDir) return null;
-  try {
-    const content = await Bun.file(join(appDir, 'HINT.md')).text();
-    return content;
-  } catch {
-    return null;
-  }
+export function loadAppHint(appId: string): Promise<string | null> {
+  return loadAppDoc(appId, 'HINT.md');
 }
 
 /**
@@ -438,13 +441,6 @@ export async function loadAllAppHints(): Promise<{ appId: string; hint: string }
  * Load AGENTS.md for a specific app.
  * When present, this replaces the generic app agent system prompt.
  */
-export async function loadAppAgentDoc(appId: string): Promise<string | null> {
-  const appDir = resolveAppDir(appId);
-  if (!appDir) return null;
-  try {
-    const content = await Bun.file(join(appDir, 'AGENTS.md')).text();
-    return content;
-  } catch {
-    return null;
-  }
+export function loadAppAgentDoc(appId: string): Promise<string | null> {
+  return loadAppDoc(appId, 'AGENTS.md');
 }

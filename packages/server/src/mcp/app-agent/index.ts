@@ -29,14 +29,9 @@
  *   - grep / base64 `encoding` exist only on the verbs door.
  *   - the two doors' required-path checks and error wordings differ throughout.
  *
- * Only the on-disk layout is genuinely common, so only that is shared: `appStoragePath`.
- *
- * KNOWN GAP (unfixed, deliberately — a fix is a behavior change, not a refactor): this door
- * has no `..` guard. `handlers/apps.ts` runs `validateRelativePath` before building a path;
- * `storageRead`/`storageWrite` only confine to STORAGE_DIR, not to the app's own subtree. So
- * `query(stateKey: "storage/../other-app/secrets.json")` escapes this app's storage, which
- * contradicts what the app-agent prompt promises ("Storage is scoped to this app — you cannot
- * access other apps' storage"). Fix wants its own reviewed change.
+ * Only the on-disk layout is genuinely common, so only that is shared: `scopedAppStoragePath`
+ * (`appStoragePath` + the `..` guard this door's raw tool arguments need — the verbs door
+ * validates earlier, in `parseAppStoragePath`).
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -45,7 +40,7 @@ import { handleAppQuery, handleAppCommand } from '../../features/window/app-prot
 import { handleCreate } from '../../features/window/create.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
 import { getActiveSession, getActivePool, ok, okJson, error } from '../../handlers/utils.js';
-import { appStoragePath } from '../../handlers/apps.js';
+import { scopedAppStoragePath } from '../../handlers/apps.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '../../lib/ids.js';
 import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
@@ -62,6 +57,14 @@ export const APP_TOOL_NAMES = [
   'mcp__app__relay',
   'mcp__app__describe',
 ] as const;
+
+/**
+ * Rejection for a storage path that leaves this app's subtree. Worded as the prompt's own
+ * promise ("Storage is scoped to this app") so the model reads it as the rule, not a bug.
+ */
+const STORAGE_PATH_ERROR =
+  'invalid storage path. Storage is scoped to this app — paths are relative to your own ' +
+  'storage root and may not contain "..".';
 
 /** Resolve the appId for the current window context. */
 function getAppId(windowState: WindowStateRegistry, windowId: string): string | undefined {
@@ -188,12 +191,14 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!appId) return error('could not resolve appId for this window.');
         const relativePath =
           args.stateKey === 'storage' ? '' : args.stateKey.slice('storage/'.length);
+        const scoped = scopedAppStoragePath(appId, relativePath);
+        if (!scoped) return error(STORAGE_PATH_ERROR);
         if (!relativePath) {
           // List root storage
-          const result = await storageList(appStoragePath(appId, ''));
+          const result = await storageList(scoped);
           return okJson(result);
         }
-        const result = await storageRead(appStoragePath(appId, relativePath));
+        const result = await storageRead(scoped);
         if (!result.success) return error(result.error ?? 'read failed.');
         return ok(result.content ?? '');
       }
@@ -253,6 +258,8 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!appId) return error('could not resolve appId for this window.');
         const subCommand = args.command.slice('storage:'.length);
         const path = (args.params?.path as string) ?? '';
+        const scoped = scopedAppStoragePath(appId, path);
+        if (!scoped) return error(STORAGE_PATH_ERROR);
 
         switch (subCommand) {
           case 'write': {
@@ -260,18 +267,18 @@ export function registerAppAgentTools(server: McpServer): void {
             if (typeof content !== 'string') {
               return error('"content" (string) is required for storage:write.');
             }
-            const result = await storageWrite(appStoragePath(appId, path), content);
+            const result = await storageWrite(scoped, content);
             if (!result.success) return error(result.error ?? 'write failed.');
             return ok(`Written to ${path}`);
           }
           case 'delete': {
             if (!path) return error('"path" is required for storage:delete.');
-            const result = await storageDelete(appStoragePath(appId, path));
+            const result = await storageDelete(scoped);
             if (!result.success) return error(result.error ?? 'delete failed.');
             return ok(`Deleted ${path}`);
           }
           case 'list': {
-            const result = await storageList(appStoragePath(appId, path));
+            const result = await storageList(scoped);
             return okJson(result);
           }
           default:

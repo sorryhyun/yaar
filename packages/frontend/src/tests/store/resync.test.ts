@@ -1,6 +1,7 @@
 /**
- * Slice 6 acceptance — the reconnect snapshot replaces state, it does not merge into it
- * (plan.md, F-1). Plus the Slice 5 outbox (F-2): a command survives a closed socket.
+ * Acceptance for "the reconnect snapshot replaces state, it does not merge into it" (F-1),
+ * plus the outbox (F-2): a command survives a closed socket. Both findings are described in
+ * packages/server/src/tests/message-delivery.test.ts, the server side of the same rules.
  *
  * The bug these pin: `applyActions` can only ever *add*. Every reconnect ran the server's
  * windows through it and called that a resync — so anything that happened in the other
