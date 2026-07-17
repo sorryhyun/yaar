@@ -5,7 +5,7 @@
  *
  *   list('yaar://apps')                              → list all installed apps
  *   read('yaar://apps/{appId}')                      → load SKILL.md
- *   invoke('yaar://apps/{appId}', { action, ... })   → set_badge
+ *   invoke('yaar://apps/{appId}', { action, ... })   → set_badge | install | publish | clone
  *   delete('yaar://apps/{appId}')                    → uninstall app
  *
  * App-scoped storage (Phase 2):
@@ -332,7 +332,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   // ── yaar://apps/{appId} — per-app operations + app-scoped storage/db ──
   registry.register('yaar://apps/*', {
     description:
-      'A specific app. Read to load its SKILL.md, invoke to set_badge/install, delete to uninstall. ' +
+      'A specific app. Read to load its SKILL.md, invoke to set_badge/install/publish, delete to uninstall. ' +
       'Sub-path /storage/{path} provides app-scoped file storage. ' +
       'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search).',
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
@@ -342,9 +342,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       properties: {
         action: {
           type: 'string',
-          enum: ['set_badge', 'install', 'write', 'clone'],
+          enum: ['set_badge', 'install', 'publish', 'write', 'clone'],
           description:
-            'set_badge for app badge, install from marketplace, write for app storage, clone for source cloning',
+            'set_badge for app badge, install from marketplace, publish to marketplace, ' +
+            'write for app storage, clone for source cloning',
         },
         count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
         content: { type: 'string', description: 'File content (for write)' },
@@ -499,6 +500,19 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       if (payload.action === 'install') {
         const { installApp } = await import('../features/apps/install.js');
         return installApp(appId);
+      }
+
+      if (payload.action === 'publish') {
+        const { publishApp } = await import('../features/apps/publish.js');
+        const result = await publishApp(appId);
+        if (!result.success) return error(result.error!);
+        return okJson({
+          published: true,
+          appId,
+          commit: result.commit,
+          files: result.files,
+          message: result.message,
+        });
       }
 
       if (payload.action === 'clone') {
