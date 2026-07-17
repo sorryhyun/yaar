@@ -21,6 +21,7 @@ import { prepareWsData, type WsData } from '../websocket/server.js';
 import { generateConnectionId } from '../session/broadcast-center.js';
 import {
   handleApiRoutes,
+  handleAuthRoutes,
   handleBridgeRoutes,
   handleBrowserRoutes,
   handleDevRoutes,
@@ -35,6 +36,7 @@ import {
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
+import { PUBLIC_ENDPOINTS as AUTH_PUBLIC } from './routes/auth.js';
 import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from './routes/bridge.js';
 import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from './routes/browser.js';
 import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from './routes/dev.js';
@@ -59,6 +61,7 @@ interface PublicRoute {
 function buildPublicRoutes(): PublicRoute[] {
   const all = [
     ...API_PUBLIC,
+    ...AUTH_PUBLIC,
     ...BRIDGE_PUBLIC,
     ...BROWSER_PUBLIC,
     ...DEV_PUBLIC,
@@ -220,6 +223,9 @@ export function createFetchHandler() {
     // Route dispatch — short-circuit on first match
     const apiResponse = await handleApiRoutes(req, url);
     if (apiResponse) return withCors(apiResponse, corsHeaders);
+
+    const googleAuthResponse = await handleAuthRoutes(req, url);
+    if (googleAuthResponse) return withCors(googleAuthResponse, corsHeaders);
 
     const shortcutResponse = await handleShortcutRoutes(req, url);
     if (shortcutResponse) return withCors(shortcutResponse, corsHeaders);

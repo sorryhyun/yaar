@@ -48,6 +48,18 @@ export function checkHttpAuth(req: Request, url: URL): Response | null {
   // disk (that one stays gated on the yaar-ml bundle).
   if (url.pathname.startsWith('/api/ml-runtime/')) return null;
 
+  // Google's OAuth redirect. It arrives as a top-level browser navigation driven by
+  // accounts.google.com, which knows nothing of YAAR's remote token and cannot be made
+  // to attach one — so a gate here would not protect the callback, it would mean Google
+  // login could never complete in REMOTE mode (which is every bundled exe).
+  //
+  // The credential is the `state` parameter, and it is a real one: server-minted from
+  // 32 random bytes per login, matched against an in-memory pending map, and deleted on
+  // first use, so a replayed or guessed callback is refused by google-auth.ts. Nothing
+  // here is served from a caller-named path, and a bare GET with no valid state does
+  // nothing but render an error page.
+  if (url.pathname === '/api/auth/google/callback') return null;
+
   // Static frontend assets must load without auth so the client-side JS
   // can read the #remote=<token> hash fragment and attach it to API/WS calls.
   if (isStaticAsset(url.pathname)) return null;
