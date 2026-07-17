@@ -70,6 +70,71 @@ function mlHeaders(): Record<string, string> {
   return token ? { 'X-Iframe-Token': token } : {};
 }
 
+/**
+ * Put the REMOTE-mode token on a same-origin URL that ORT will fetch *itself*.
+ *
+ * This is the same shape as the /api/ml-runtime/ bug, one hop further on. In REMOTE
+ * mode — which every bundled exe is (`IS_REMOTE = REMOTE === '1' || IS_BUNDLED_EXE`)
+ * — `/api/storage/*` demands the remote token, and an app's own `fetch` only passes
+ * because the browser sends the iframe's URL (which carries `?token=`) as `Referer`.
+ * Nothing ORT fetches gets that Referer: `env.wasm.proxy` above moves session
+ * creation onto a worker spawned from the *ORT script*, so an `externalData` URL is
+ * fetched with `/api/ml-runtime/ort…mjs` as its Referer — no token — and 401s.
+ *
+ * The app never sees it coming: it resolves the URL with a `fetch` of its own (main
+ * thread, Referer carries the token → 200), so the file demonstrably exists, and then
+ * ORT reports it as unloadable. Installed builds only; dev has no gate to fail.
+ *
+ * The URL is the only channel ORT leaves open — there is no hook to add a header to
+ * these requests — so the token rides in the query string, exactly as `resolveAssetUrl`
+ * does for the iframe URL itself. Only same-origin URLs are touched: this token is
+ * YAAR's, and must not leak to another host.
+ */
+function authorizeOrtUrl(u: string): string {
+  let token: string | null = null;
+  try {
+    token = new URLSearchParams(location.search).get('token');
+  } catch {
+    return u;
+  }
+  if (!token) return u; // not REMOTE, or no token to carry — nothing to add
+  try {
+    const url = new URL(u, location.href);
+    if (url.origin !== location.origin) return u;
+    if (!url.searchParams.has('token')) url.searchParams.set('token', token);
+    return url.href;
+  } catch {
+    return u;
+  }
+}
+
+/**
+ * Rewrite the `externalData` URLs ORT fetches itself so they carry the token.
+ *
+ * Only a string `data` is a URL — `Blob`/`Uint8Array` are bytes the app already
+ * loaded on a thread whose Referer worked. The bare-string entry form
+ * (`externalData: ['weights.data']`) is deliberately left alone: there the one string
+ * is both the fetch URL *and* the `location` recorded in the `.onnx`, so appending a
+ * query would break the match that binds the sidecar to the graph. The object form
+ * ({@link ort.InferenceSession.SessionOptions.externalData}'s `{ path, data }`) keeps
+ * the two separate, which is why it is the form that can be fixed.
+ */
+function authorizeExternalData(
+  extra?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const entries = extra?.externalData;
+  if (!Array.isArray(entries)) return extra;
+  return {
+    ...extra,
+    externalData: entries.map((e) => {
+      const data = (e as { data?: unknown } | null)?.data;
+      return e && typeof e === 'object' && typeof data === 'string'
+        ? { ...e, data: authorizeOrtUrl(data) }
+        : e;
+    }),
+  };
+}
+
 // ── Runtime configuration (runs once on import) ──────────────────────────────
 
 // ORT loads its `.wasm` binaries at runtime from this same-origin static route
@@ -382,16 +447,24 @@ async function resolveProviders(backend: Backend): Promise<string[]> {
 }
 
 function looksLikeMemoryError(err: unknown): boolean {
-  const msg = String((err as Error)?.message ?? err ?? '');
+  // Strip URLs before matching. ORT names the failing URL in its message, and YAAR
+  // serves weights from `/api/storage/…` — which matched `storage` below and reported
+  // a plain 401 on the sidecar as "This model is too big for your GPU (max single
+  // buffer ~2047 MB)". Every word of that was wrong, and it sent people hunting for a
+  // smaller model to fix an auth failure. A URL describes *what* was being loaded, and
+  // is never evidence of *why* it failed.
+  const msg = String((err as Error)?.message ?? err ?? '').replace(/\bhttps?:\/\/\S+/gi, '');
   return /buffer|storage|size|memory|out of memory|oom|exceed/i.test(msg);
 }
 
 async function createSession(
   bytes: Uint8Array,
   backend: Backend,
-  extra?: Record<string, unknown>,
+  rawExtra?: Record<string, unknown>,
 ): Promise<ort.InferenceSession> {
   const providers = await resolveProviders(backend);
+  // ORT fetches these URLs from its own worker, where the Referer carries no token.
+  const extra = authorizeExternalData(rawExtra);
   // `create` transfers the model buffer to the worker in proxy mode, which detaches
   // it here — so each attempt needs its own copy, or the wasm fallback below would
   // hand ORT an empty model. The graph proto is small (weights ride in externalData).

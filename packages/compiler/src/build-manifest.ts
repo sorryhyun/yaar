@@ -17,9 +17,11 @@ import { join } from 'path';
  * @yaar/shared/iframe-scripts — leaves every hash identical and reaches no existing
  * dist/. Bumping is how such a change gets picked up. ('5': the yaar-ml shim loads
  * onnxruntime from /api/ml-runtime/ and runs it on a worker, so any app that bundled
- * the old main-thread copy has to be rebuilt.)
+ * the old main-thread copy has to be rebuilt. '6': that worker is also why the shim
+ * now has to put the REMOTE token on the externalData URLs ORT fetches itself —
+ * without a rebuild, every installed build still ships the copy that 401s.)
  */
-export const COMPILER_VERSION = '5';
+export const COMPILER_VERSION = '6';
 
 export interface BuildManifest {
   sourceHash: string;
