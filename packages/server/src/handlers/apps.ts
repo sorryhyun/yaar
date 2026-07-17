@@ -59,6 +59,48 @@ import { uninstallApp } from '../features/apps/install.js';
 import { getAppDatabase, type DbFilter, type DbFindOptions } from '../db/index.js';
 
 /**
+ * The on-disk home of an app's scoped storage: `storage/apps/{appId}/{path}`.
+ *
+ * Single-sourced because two different doors reach the same files with different
+ * keys: this one takes the appId from the URI (the caller names it, and the access
+ * chokepoint / URI registry has already decided whether they may), while
+ * `mcp/app-agent` takes it from the caller's own window context (the appId cannot
+ * be named, so it cannot be forged). The layouts must not drift apart; the
+ * dispatch around them is deliberately not shared — see the divergence note in
+ * `mcp/app-agent/index.ts`.
+ *
+ * The leading-slash strip is a no-op on this side: `parseAppStoragePath` runs
+ * `validateRelativePath`, which rejects a leading "/" outright. It is what the
+ * app-agent door does with its own unvalidated input.
+ */
+export function appStoragePath(appId: string, relativePath: string): string {
+  return `apps/${appId}/${relativePath.replace(/^\//, '')}`;
+}
+
+/**
+ * List an app-storage directory as resource links.
+ *
+ * `read` on a bare `/storage` root and `list` on any storage path produced this
+ * same block verbatim; the only thing that ever differed was the local variable
+ * names.
+ */
+async function storageListLinks(appId: string, prefixedPath: string): Promise<VerbResult> {
+  const result = await storageList(prefixedPath);
+  if (!result.success) return error(result.error!);
+  return okLinks(
+    (result.entries ?? []).map((e) => {
+      const relPath = e.path.replace(`apps/${appId}/`, '');
+      return {
+        uri: `yaar://apps/${appId}/storage/${relPath}`,
+        name: relPath || e.path,
+        description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
+        mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
+      };
+    }),
+  );
+}
+
+/**
  * Parse `yaar://apps/{appId}/storage/{path}` → { appId, path } or null.
  * Rejects paths containing `..` segments to prevent cross-app traversal.
  */
@@ -323,23 +365,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       // ── App storage sub-path ──
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {
-        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+        const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
         if (!storagePath.path) {
           // Bare storage root → redirect to list
-          const listResult = await storageList(prefixedPath);
-          if (!listResult.success) return error(listResult.error!);
-          const readEntries = listResult.entries ?? [];
-          return okLinks(
-            readEntries.map((e) => {
-              const relPath = e.path.replace(`apps/${storagePath.appId}/`, '');
-              return {
-                uri: `yaar://apps/${storagePath.appId}/storage/${relPath}`,
-                name: relPath || e.path,
-                description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
-                mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
-              };
-            }),
-          );
+          return storageListLinks(storagePath.appId, prefixedPath);
         }
         const result = await storageRead(prefixedPath);
         if (!result.success) return error(result.error!);
@@ -379,20 +408,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       // ── App storage sub-path ──
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {
-        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
-        const result = await storageList(prefixedPath);
-        if (!result.success) return error(result.error!);
-        const entries = result.entries ?? [];
-        return okLinks(
-          entries.map((e) => {
-            const relPath = e.path.replace(`apps/${storagePath.appId}/`, '');
-            return {
-              uri: `yaar://apps/${storagePath.appId}/storage/${relPath}`,
-              name: relPath || e.path,
-              description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
-              mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
-            };
-          }),
+        return storageListLinks(
+          storagePath.appId,
+          appStoragePath(storagePath.appId, storagePath.path),
         );
       }
 
@@ -416,7 +434,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         if (payload.action === 'grep') {
           if (typeof payload.pattern !== 'string')
             return error('"pattern" (string) is required for grep.');
-          const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+          const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
           const result = await storageGrep(
             prefixedPath,
             payload.pattern,
@@ -431,7 +449,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
         if (typeof payload.content !== 'string')
           return error('"content" (string) is required for write.');
 
-        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+        const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
         const content =
           payload.encoding === 'base64' ? Buffer.from(payload.content, 'base64') : payload.content;
         const result = await storageWrite(prefixedPath, content);
@@ -478,7 +496,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const storagePath = parseAppStoragePath(resolved.sourceUri);
       if (storagePath) {
         if (!storagePath.path) return error('Provide a file path to delete.');
-        const prefixedPath = `apps/${storagePath.appId}/${storagePath.path}`;
+        const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
         const result = await storageDelete(prefixedPath);
         if (!result.success) return error(result.error!);
         subscriptionRegistry.notifyChange(resolved.sourceUri);

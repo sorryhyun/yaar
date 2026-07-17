@@ -34,6 +34,151 @@ function mcpToolName(server?: string, tool?: string): string {
   return tool ?? 'mcp_tool';
 }
 
+// ============================================================================
+// Item mappers
+//
+// An item reaches the mapper two ways: inside `item/started` / `item/completed`
+// (where the item's own `type` selects the mapper) and as a dedicated
+// `item/{kind}/{phase}` notification (where the method name does). Both spell
+// the same StreamMessage, so both call the same mapper. These take the item as
+// `Partial<…> | undefined` because the sub-event params are the item itself and
+// carry no guarantee of any field — including `type`, which is why the sub-event
+// cases cannot be routed through the type switch.
+// ============================================================================
+
+function mapMcpToolCallStarted(item: Partial<McpToolCallItem> | undefined): StreamMessage {
+  return {
+    type: 'tool_use',
+    toolName: mcpToolName(item?.server, item?.tool),
+    toolInput: item?.arguments,
+  };
+}
+
+function mapMcpToolCallCompleted(item: Partial<McpToolCallItem> | undefined): StreamMessage {
+  if (item?.error) {
+    return {
+      type: 'tool_result',
+      toolName: mcpToolName(item?.server, item?.tool),
+      content: `Error: ${item.error.message}`,
+    };
+  }
+  return {
+    type: 'tool_result',
+    toolName: mcpToolName(item?.server, item?.tool),
+    content: formatMcpResult(item),
+  };
+}
+
+function mapCommandExecutionStarted(
+  item: Partial<CommandExecutionItem> | undefined,
+): StreamMessage {
+  return {
+    type: 'tool_use',
+    toolName: 'command',
+    toolInput: { command: item?.command },
+  };
+}
+
+function mapCommandExecutionCompleted(
+  item: Partial<CommandExecutionItem> | undefined,
+): StreamMessage {
+  return {
+    type: 'tool_result',
+    toolName: 'command',
+    content: formatCommandResult(item),
+  };
+}
+
+/** Map the item carried by an `item/started` notification. */
+function mapItemStarted(p: ItemStartedNotification): StreamMessage | null {
+  const item = p.item;
+  switch (item?.type) {
+    case 'mcpToolCall':
+      return mapMcpToolCallStarted(item);
+    case 'commandExecution':
+      return mapCommandExecutionStarted(item);
+    case 'webSearch':
+      return {
+        type: 'tool_use',
+        toolName: 'web_search',
+        toolUseId: item.id,
+      };
+    case 'collabAgentToolCall':
+      return {
+        type: 'tool_use',
+        toolName: `collab:${item.tool}`,
+        toolUseId: item.id,
+        toolInput: { prompt: item.prompt, agents: item.receiverThreadIds },
+      };
+    default:
+      console.debug(
+        `[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
+      );
+      return null;
+  }
+}
+
+/** Map the item carried by an `item/completed` notification. */
+function mapItemCompleted(p: ItemCompletedNotification): StreamMessage | null {
+  const item = p.item;
+  switch (item?.type) {
+    case 'mcpToolCall':
+      return mapMcpToolCallCompleted(item);
+    case 'commandExecution':
+      return mapCommandExecutionCompleted(item);
+    case 'webSearch':
+      return {
+        type: 'tool_result',
+        toolName: 'web_search',
+        toolUseId: item.id,
+        content: formatWebSearchResult(item),
+      };
+    case 'collabAgentToolCall':
+      return {
+        type: 'tool_result',
+        toolName: `collab:${item.tool}`,
+        toolUseId: item.id,
+        content: formatCollabResult(item as CollabAgentToolCallItem),
+      };
+    default:
+      console.debug(
+        `[codex] item/completed: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
+      );
+      return null;
+  }
+}
+
+/** Noisy codex internal events, skipped without a debug log. */
+const IGNORED_PREFIXES = ['codex/event/', 'fuzzyFileSearch/'];
+
+const IGNORED_METHODS = new Set([
+  'thread/tokenUsage/updated',
+  'thread/compacted',
+  'account/rateLimits/updated',
+  'account/updated',
+  'account/login/completed',
+  'app/list/updated',
+  'model/rerouted',
+  'turn/plan/updated',
+  'turn/diff/updated',
+  'item/fileChange/outputDelta',
+  'item/commandExecution/outputDelta',
+  'item/commandExecution/terminalInteraction',
+  'item/mcpToolCall/progress',
+  'item/reasoning/summaryTextDelta',
+  'item/reasoning/summaryPartAdded',
+  'item/plan/delta',
+  'item/autoApprovalReview/started',
+  'item/autoApprovalReview/completed',
+  'rawResponseItem/completed',
+]);
+
+function isIgnoredNotification(method: string): boolean {
+  return (
+    IGNORED_PREFIXES.some((prefix) => method.startsWith(prefix)) || IGNORED_METHODS.has(method)
+  );
+}
+
 /**
  * Map a JSON-RPC notification to a StreamMessage.
  * Returns null for notifications that should be skipped.
@@ -102,138 +247,31 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     // Item lifecycle events (covers MCP, commands, file changes, etc.)
     // ========================================================================
 
-    case 'item/started': {
-      const p = params as ItemStartedNotification;
-      const item = p.item;
-      switch (item?.type) {
-        case 'mcpToolCall':
-          return {
-            type: 'tool_use',
-            toolName: mcpToolName(item.server, item.tool),
-            toolInput: item.arguments,
-          };
-        case 'commandExecution':
-          return {
-            type: 'tool_use',
-            toolName: 'command',
-            toolInput: { command: item.command },
-          };
-        case 'webSearch':
-          return {
-            type: 'tool_use',
-            toolName: 'web_search',
-            toolUseId: item.id,
-          };
-        case 'collabAgentToolCall':
-          return {
-            type: 'tool_use',
-            toolName: `collab:${item.tool}`,
-            toolUseId: item.id,
-            toolInput: { prompt: item.prompt, agents: item.receiverThreadIds },
-          };
-        default:
-          console.debug(
-            `[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
-          );
-          return null;
-      }
-    }
+    case 'item/started':
+      return mapItemStarted(params as ItemStartedNotification);
 
-    case 'item/completed': {
-      const p = params as ItemCompletedNotification;
-      const item = p.item;
-      switch (item?.type) {
-        case 'mcpToolCall':
-          if (item.error) {
-            return {
-              type: 'tool_result',
-              toolName: mcpToolName(item.server, item.tool),
-              content: `Error: ${item.error.message}`,
-            };
-          }
-          return {
-            type: 'tool_result',
-            toolName: mcpToolName(item.server, item.tool),
-            content: formatMcpResult(item),
-          };
-        case 'commandExecution':
-          return {
-            type: 'tool_result',
-            toolName: 'command',
-            content: formatCommandResult(item),
-          };
-        case 'webSearch':
-          return {
-            type: 'tool_result',
-            toolName: 'web_search',
-            toolUseId: item.id,
-            content: formatWebSearchResult(item),
-          };
-        case 'collabAgentToolCall':
-          return {
-            type: 'tool_result',
-            toolName: `collab:${item.tool}`,
-            toolUseId: item.id,
-            content: formatCollabResult(item as CollabAgentToolCallItem),
-          };
-        default:
-          console.debug(
-            `[codex] item/completed: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
-          );
-          return null;
-      }
-    }
+    case 'item/completed':
+      return mapItemCompleted(params as ItemCompletedNotification);
 
     // ========================================================================
     // MCP tool call sub-events (also handled via item/started + item/completed)
     // ========================================================================
 
-    case 'item/mcpToolCall/started': {
-      const item = params as Partial<McpToolCallItem> | undefined;
-      return {
-        type: 'tool_use',
-        toolName: mcpToolName(item?.server, item?.tool),
-        toolInput: item?.arguments,
-      };
-    }
+    case 'item/mcpToolCall/started':
+      return mapMcpToolCallStarted(params as Partial<McpToolCallItem> | undefined);
 
-    case 'item/mcpToolCall/completed': {
-      const item = params as Partial<McpToolCallItem> | undefined;
-      if (item?.error) {
-        return {
-          type: 'tool_result',
-          toolName: mcpToolName(item?.server, item?.tool),
-          content: `Error: ${item.error.message}`,
-        };
-      }
-      return {
-        type: 'tool_result',
-        toolName: mcpToolName(item?.server, item?.tool),
-        content: formatMcpResult(item),
-      };
-    }
+    case 'item/mcpToolCall/completed':
+      return mapMcpToolCallCompleted(params as Partial<McpToolCallItem> | undefined);
 
     // ========================================================================
     // Command execution sub-events
     // ========================================================================
 
-    case 'item/commandExecution/started': {
-      const item = params as Partial<CommandExecutionItem> | undefined;
-      return {
-        type: 'tool_use',
-        toolName: 'command',
-        toolInput: { command: item?.command },
-      };
-    }
+    case 'item/commandExecution/started':
+      return mapCommandExecutionStarted(params as Partial<CommandExecutionItem> | undefined);
 
-    case 'item/commandExecution/completed': {
-      const item = params as Partial<CommandExecutionItem> | undefined;
-      return {
-        type: 'tool_result',
-        toolName: 'command',
-        content: formatCommandResult(item),
-      };
-    }
+    case 'item/commandExecution/completed':
+      return mapCommandExecutionCompleted(params as Partial<CommandExecutionItem> | undefined);
 
     // ========================================================================
     // Error events
@@ -251,29 +289,7 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
 
     default:
       // Skip noisy codex internal events
-      if (
-        method.startsWith('codex/event/') ||
-        method.startsWith('fuzzyFileSearch/') ||
-        method === 'thread/tokenUsage/updated' ||
-        method === 'thread/compacted' ||
-        method === 'account/rateLimits/updated' ||
-        method === 'account/updated' ||
-        method === 'account/login/completed' ||
-        method === 'app/list/updated' ||
-        method === 'model/rerouted' ||
-        method === 'turn/plan/updated' ||
-        method === 'turn/diff/updated' ||
-        method === 'item/fileChange/outputDelta' ||
-        method === 'item/commandExecution/outputDelta' ||
-        method === 'item/commandExecution/terminalInteraction' ||
-        method === 'item/mcpToolCall/progress' ||
-        method === 'item/reasoning/summaryTextDelta' ||
-        method === 'item/reasoning/summaryPartAdded' ||
-        method === 'item/plan/delta' ||
-        method === 'item/autoApprovalReview/started' ||
-        method === 'item/autoApprovalReview/completed' ||
-        method === 'rawResponseItem/completed'
-      ) {
+      if (isIgnoredNotification(method)) {
         return null;
       }
       // Log truly unknown events for debugging

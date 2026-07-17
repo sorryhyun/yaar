@@ -10,8 +10,10 @@
  */
 
 import type { AITransport, ProviderType } from './types.js';
+import type { CodexProvider } from './codex/provider.js';
 import { AppServer } from './codex/app-server.js';
 import { getForcedProvider } from './get-forced-provider.js';
+import { PROVIDER_PREFERENCE, instantiateProvider } from './instantiate.js';
 
 /**
  * Configuration for the warm pool.
@@ -67,7 +69,9 @@ class ProviderWarmPool {
 
     // Determine which provider to use
     const forcedProvider = getForcedProvider();
-    const providerTypes: ProviderType[] = forcedProvider ? [forcedProvider] : ['claude', 'codex'];
+    const providerTypes: readonly ProviderType[] = forcedProvider
+      ? [forcedProvider]
+      : PROVIDER_PREFERENCE;
 
     // Find first available provider and warm it up
     for (const providerType of providerTypes) {
@@ -103,22 +107,17 @@ class ProviderWarmPool {
    */
   private async createWarmProvider(providerType: ProviderType): Promise<AITransport | null> {
     try {
-      let provider: AITransport;
-
-      if (providerType === 'claude') {
-        // Use session provider for Claude (supports warmup)
-        const { ClaudeSessionProvider } = await import('./claude/index.js');
-        provider = new ClaudeSessionProvider();
-      } else {
-        // Ensure shared AppServer exists and is running
+      // Ensure shared AppServer exists and is running before Codex is built.
+      // It may still be null afterwards (auth failure) — warmup() refuses it.
+      if (providerType === 'codex') {
         await this.ensureCodexAppServer();
+      }
 
-        const { CodexProvider } = await import('./codex/index.js');
-        const codexProvider = new CodexProvider(this.sharedCodexAppServer!);
-        provider = codexProvider;
+      const provider = await instantiateProvider(providerType, this.sharedCodexAppServer);
 
+      if (providerType === 'codex') {
         // Establish dedicated WS connection before availability check
-        const warmed = await codexProvider.warmup();
+        const warmed = await (provider as CodexProvider).warmup();
         if (!warmed) {
           await provider.dispose();
           return null;

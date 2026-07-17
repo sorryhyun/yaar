@@ -28,6 +28,36 @@ async function probeCli(cmd: string, args: string[]): Promise<boolean> {
   });
 }
 
+/**
+ * Check whether a CLI tool is available, caching the answer per boot.
+ *
+ * The probe must never be synchronous: the MCP servers it gates are HTTP
+ * endpoints served by this same process, so blocking here stalls the very
+ * server the spawned CLI is about to connect to.
+ *
+ * Exported for callers with no transport instance to hand (the factory's
+ * availability checkers), so every provider's probe shares one cache.
+ *
+ * @param spawnArgs - The command and any prefix args (e.g. from getClaudeSpawnArgs()).
+ *                    '--version' is appended automatically.
+ */
+export async function isCliAvailable(...spawnArgs: string[]): Promise<boolean> {
+  const [cmd, ...args] = spawnArgs;
+  if (!cmd) return false;
+
+  const key = spawnArgs.join('\0');
+  const cached = cliProbes.get(key);
+  if (cached) return cached;
+
+  const probe = probeCli(cmd, args);
+  cliProbes.set(key, probe);
+  if (!(await probe)) {
+    cliProbes.delete(key);
+    return false;
+  }
+  return true;
+}
+
 export abstract class BaseTransport implements AITransport {
   abstract readonly name: string;
   abstract readonly providerType: ProviderType;
@@ -100,27 +130,10 @@ export abstract class BaseTransport implements AITransport {
    * Helper to check if a CLI tool is available.
    * Useful for transports that depend on external CLI tools.
    *
-   * The probe must never be synchronous: the MCP servers it gates are HTTP
-   * endpoints served by this same process, so blocking here stalls the very
-   * server the spawned CLI is about to connect to.
-   *
    * @param spawnArgs - The command and any prefix args (e.g. from getClaudeSpawnArgs()).
    *                    '--version' is appended automatically.
    */
   protected async isCliAvailable(...spawnArgs: string[]): Promise<boolean> {
-    const [cmd, ...args] = spawnArgs;
-    if (!cmd) return false;
-
-    const key = spawnArgs.join('\0');
-    const cached = cliProbes.get(key);
-    if (cached) return cached;
-
-    const probe = probeCli(cmd, args);
-    cliProbes.set(key, probe);
-    if (!(await probe)) {
-      cliProbes.delete(key);
-      return false;
-    }
-    return true;
+    return isCliAvailable(...spawnArgs);
   }
 }

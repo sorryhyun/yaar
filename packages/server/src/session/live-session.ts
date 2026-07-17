@@ -36,12 +36,13 @@ import {
 import { SurfaceRegistry } from './surface-state.js';
 import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
-import type {
-  AppProtocolRequestData,
-  BridgeEvent,
-  SessionScopedChannel,
-  SessionScopedEvent,
-} from './emitter-channels.js';
+import type { ActionEvent, AppProtocolRequestData } from './emitter-channels.js';
+import { SessionEmitterBridge } from './session-emitter-bridge.js';
+import {
+  ClientEventRouter,
+  type ClientEventOf,
+  type ClientEventRoutes,
+} from './client-event-router.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { genId } from '../lib/ids.js';
 import { getWarmPool } from '../providers/warm-pool.js';
@@ -66,39 +67,6 @@ export interface LiveSessionOptions {
   sessionLogger?: SessionLogger;
   /** Provider seam, defaulting to the global warm pool. See `ContextPool.acquireProvider`. */
   acquireProvider?: () => Promise<AITransport | null>;
-}
-
-/**
- * Subscribe to session-scoped emitter channels that filter by sessionId
- * and forward matching events to a broadcast function.
- *
- * The channels are constrained to those whose payload is a `SessionScopedEvent`
- * (see `emitter-channels.ts`), so a channel that carries some other envelope cannot be
- * listed here and silently never match — this handler reads `data.sessionId`, and on a
- * channel that has none, every event would be dropped without a word.
- *
- * Returns a cleanup function that removes all listeners at once.
- */
-function subscribeSessionChannels(
-  sessionId: SessionId,
-  broadcast: (event: ServerEvent) => void,
-  channels: readonly SessionScopedChannel[],
-): () => void {
-  const handler = (data: SessionScopedEvent) => {
-    if (data.sessionId === sessionId) {
-      broadcast(data.event);
-    }
-  };
-  for (const ch of channels) {
-    // Explicit type argument: inference from a union of channel names lands on `never`,
-    // since the map's key parameter appears on both sides of the listener's lookup.
-    actionEmitter.on<SessionScopedChannel>(ch, handler);
-  }
-  return () => {
-    for (const ch of channels) {
-      actionEmitter.off<SessionScopedChannel>(ch, handler);
-    }
-  };
 }
 
 export class LiveSession {
@@ -170,14 +138,11 @@ export class LiveSession {
   // pool is initialized (i.e., before the user sends their first message).
   private sessionLogger: SessionLogger | null = null;
 
-  // Action listener for window state tracking
-  private unsubscribeAction: (() => void) | null = null;
-  // App protocol listener for iframe communication
-  private appProtocolListener: ((data: AppProtocolRequestData) => void) | null = null;
-  // Session-scoped channel listeners (approval-request, user-prompt)
-  private unsubscribeSessionChannels: (() => void) | null = null;
-  // Unsolicited frames from the YAAR Bridge extension (real-browser dialogs / navigations)
-  private bridgeEventListener: ((data: BridgeEvent) => void) | null = null;
+  /** Everything this session hears from the global `actionEmitter`. Detached in cleanup(). */
+  private readonly emitterBridge: SessionEmitterBridge;
+
+  /** The client frames this session answers. See `client-event-router.ts`. */
+  private readonly router = new ClientEventRouter(this.buildRoutes());
 
   /** Provider seam, handed to the ContextPool when it is created. */
   private readonly acquireProvider?: () => Promise<AITransport | null>;
@@ -201,105 +166,95 @@ export class LiveSession {
       this.windowState.restoreFromActions(options.restoreActions);
     }
 
-    // Subscribe to action emitter for window state tracking and budget recording.
-    // All actions emitted by agents in this session will be tracked.
-    this.unsubscribeAction = actionEmitter.onAction((event) => {
-      this.windowState.handleAction(event.action, event.monitorId);
-      // Record action against the monitor's budget (if monitorId present)
-      if (event.monitorId && this.pool) {
-        this.pool.recordMonitorAction(event.monitorId);
-      }
-      // Wake iframe apps subscribed to yaar://windows (see http/subscriptions.ts).
-      // The window is gone by now for window.close, so resolve() falls back to the
-      // raw id — subscribers on the `yaar://windows` prefix match either form.
-      if (event.action.type.startsWith('window.')) {
-        const rawId = (event.action as { windowId?: string }).windowId;
-        if (rawId) {
-          const handle = this.windowState.handleMap.resolve(rawId) ?? rawId;
-          subscriptionRegistry.notifyChange(`yaar://windows/${handle}`, this.sessionId);
-        }
-      }
-      // Notify window subscribers of state changes
-      if (this.pool) {
-        const changeEvent = mapActionToSubscriptionEvent(event.action);
-        if (changeEvent) {
-          const windowId = (event.action as { windowId?: string }).windowId;
-          if (windowId) {
-            this.pool.notifyWindowSubscribers(
-              windowId,
-              changeEvent,
-              summarizeAction(event.action, changeEvent),
-              normalizeAgentKey(event.agentId),
-            );
-          }
-        }
-      }
-      // Actions from non-agent contexts (iframe verb proxy, HTTP routes) have no
-      // ToolActionBridge to broadcast them to the frontend. Detect these by checking
-      // if the agentId starts with "iframe:" and broadcast directly.
-      if (event.agentId?.startsWith('iframe:')) {
-        const action = event.action;
-        const raw = (action as { windowId?: string }).windowId;
-        // Stamp the scoped handle if the action has a raw windowId
-        const handle = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
-        // Carry the requestId through, as ToolActionBridge does on the agent path.
-        // An action awaiting feedback is only answerable if the frontend knows which
-        // request to answer: `window.capture` reads the id off the action itself and
-        // skips the capture without one. Dropping it here is why devtools could open a
-        // preview and never screenshot it — the request went out, nothing came back, and
-        // the read timed out into "no screenshot" every time.
-        const patch = {
-          ...(handle && handle !== raw ? { windowId: handle } : {}),
-          ...(event.requestId ? { requestId: event.requestId } : {}),
-        };
-        const stamped = (
-          Object.keys(patch).length > 0 ? { ...action, ...patch } : action
-        ) as OSAction;
-        this.broadcast({
-          type: ServerEventType.ACTIONS,
-          actions: [stamped],
-          monitorId: event.monitorId,
-        });
-        this.sessionLogger?.logAction(stamped);
-      }
+    // Everything this session hears from the process-global emitter: actions (window state
+    // tracking + budget recording), app protocol requests, and unsolicited real-browser
+    // frames. Attached and detached as one unit — see `session-emitter-bridge.ts`.
+    this.emitterBridge = new SessionEmitterBridge(sessionId, {
+      onAction: (event) => this.handleEmittedAction(event),
+      onAppProtocolRequest: (data) => this.handleAppProtocolRequest(data),
+      // The real browser reporting something nobody asked for (a native dialog fired, a tab
+      // being driven navigated). The frame arrives on a process-global socket with no session
+      // on it, so every LiveSession hears it and decides for itself whether it has a window
+      // that cares.
+      onBridgeEvent: (data) => this.routeBridgeEvent(data.channel, data.payload),
+      broadcast: (event) => this.broadcast(event),
     });
+  }
 
-    // Subscribe to app protocol requests from tools
-    this.appProtocolListener = (data: AppProtocolRequestData) => {
+  /**
+   * An OS Action emitted by a tool anywhere in this session: track it in window state,
+   * bill it to its monitor's budget, and wake whoever is watching that window.
+   */
+  private handleEmittedAction(event: ActionEvent): void {
+    this.windowState.handleAction(event.action, event.monitorId);
+    // Record action against the monitor's budget (if monitorId present)
+    if (event.monitorId && this.pool) {
+      this.pool.recordMonitorAction(event.monitorId);
+    }
+    // Wake iframe apps subscribed to yaar://windows (see http/subscriptions.ts).
+    // The window is gone by now for window.close, so resolve() falls back to the
+    // raw id — subscribers on the `yaar://windows` prefix match either form.
+    if (event.action.type.startsWith('window.')) {
+      const rawId = (event.action as { windowId?: string }).windowId;
+      if (rawId) {
+        const handle = this.windowState.handleMap.resolve(rawId) ?? rawId;
+        subscriptionRegistry.notifyChange(`yaar://windows/${handle}`, this.sessionId);
+      }
+    }
+    // Notify window subscribers of state changes
+    if (this.pool) {
+      const changeEvent = mapActionToSubscriptionEvent(event.action);
+      if (changeEvent) {
+        const windowId = (event.action as { windowId?: string }).windowId;
+        if (windowId) {
+          this.pool.notifyWindowSubscribers(
+            windowId,
+            changeEvent,
+            summarizeAction(event.action, changeEvent),
+            normalizeAgentKey(event.agentId),
+          );
+        }
+      }
+    }
+    // Actions from non-agent contexts (iframe verb proxy, HTTP routes) have no
+    // ToolActionBridge to broadcast them to the frontend. Detect these by checking
+    // if the agentId starts with "iframe:" and broadcast directly.
+    if (event.agentId?.startsWith('iframe:')) {
+      const action = event.action;
+      const raw = (action as { windowId?: string }).windowId;
+      // Stamp the scoped handle if the action has a raw windowId
+      const handle = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
+      // Carry the requestId through, as ToolActionBridge does on the agent path.
+      // An action awaiting feedback is only answerable if the frontend knows which
+      // request to answer: `window.capture` reads the id off the action itself and
+      // skips the capture without one. Dropping it here is why devtools could open a
+      // preview and never screenshot it — the request went out, nothing came back, and
+      // the read timed out into "no screenshot" every time.
+      const patch = {
+        ...(handle && handle !== raw ? { windowId: handle } : {}),
+        ...(event.requestId ? { requestId: event.requestId } : {}),
+      };
+      const stamped = (
+        Object.keys(patch).length > 0 ? { ...action, ...patch } : action
+      ) as OSAction;
       this.broadcast({
-        type: ServerEventType.APP_PROTOCOL_REQUEST,
-        requestId: data.requestId,
-        windowId: data.windowId,
-        request: data.request,
-        timeoutMs: data.timeoutMs,
+        type: ServerEventType.ACTIONS,
+        actions: [stamped],
+        monitorId: event.monitorId,
       });
-    };
-    actionEmitter.on('app-protocol', this.appProtocolListener);
+      this.sessionLogger?.logAction(stamped);
+    }
+  }
 
-    // The real browser reporting something nobody asked for (a native dialog fired, a driven tab
-    // navigated). The frame arrives on a process-global socket with no session on it, so every
-    // LiveSession hears it and decides for itself whether it has a window that cares.
-    this.bridgeEventListener = (data: BridgeEvent) => {
-      this.routeBridgeEvent(data.channel, data.payload);
-    };
-    actionEmitter.on('bridge-event', this.bridgeEventListener);
-
-    // Subscribe to session-scoped event channels (approval requests, user prompts, verb subscriptions)
-    this.unsubscribeSessionChannels = subscribeSessionChannels(
-      sessionId,
-      this.broadcast.bind(this),
-      [
-        'approval-request',
-        'user-prompt',
-        // Actions the server sends on its own behalf, outside any agent turn — a dialog
-        // whose deadline passed being taken off the screen. There is no monitor context
-        // on a timer callback, and a dialog is session-scoped anyway.
-        'session-action',
-        'verb-subscription',
-        'desktop-shortcut',
-        'browser-action',
-      ],
-    );
+  /** A tool asking an iframe app something — relayed to the frontend that hosts it. */
+  private handleAppProtocolRequest(data: AppProtocolRequestData): void {
+    this.broadcast({
+      type: ServerEventType.APP_PROTOCOL_REQUEST,
+      requestId: data.requestId,
+      windowId: data.windowId,
+      request: data.request,
+      timeoutMs: data.timeoutMs,
+    });
   }
 
   // ── Connection management ───────────────────────────────────────────
@@ -609,372 +564,349 @@ export class LiveSession {
       }
     }
 
-    switch (event.type) {
-      case ClientEventType.RESYNC:
-        await this.sendSnapshot(connectionId);
-        break;
+    await this.router.dispatch(event, connectionId);
+  }
 
-      case ClientEventType.USER_MESSAGE: {
-        // A user message's monitor comes from the connection that sent it. The client
-        // always knows which monitor it is on, so `?? '0'` only ever fired when
-        // something upstream had lost it — and then answered with the wrong monitor
-        // rather than saying so.
-        const monitorId = event.monitorId;
-        if (!monitorId) {
-          this.sendTo(connectionId, {
-            type: ServerEventType.ERROR,
-            error:
-              'Message rejected: no monitor. A user message must name the monitor it came from.',
-            messageId: event.messageId,
-          });
-          break;
-        }
-        if (!this.monitors.some((m) => m.id === monitorId)) {
-          this.sendTo(connectionId, {
-            type: ServerEventType.ERROR,
-            error: `Message rejected: monitor ${monitorId} does not exist in this session.`,
-            messageId: event.messageId,
-            monitorId,
-          });
-          break;
-        }
-        // A resend from the client's outbox for a message we already took. Ack it again so
-        // the outbox lets go, and do not run it twice.
-        if (this.acceptedMessageIds.has(event.messageId)) {
-          this.sendTo(connectionId, {
-            type: ServerEventType.MESSAGE_ACCEPTED,
-            messageId: event.messageId,
-            agentId: 'duplicate',
-          });
-          break;
-        }
-        this.rememberMessageId(event.messageId);
+  /**
+   * Every client frame this session answers, and the method that answers it.
+   *
+   * The table is the point: a frame's presence here is the whole statement that the server
+   * handles it, and `ClientEventRoutes` is total, so a new frame type in `@yaar/shared`
+   * cannot be added without one. A frame that is *not* a `ClientEvent` (malformed, or from
+   * a newer client) still falls through the router untouched, as it did before.
+   */
+  private buildRoutes(): ClientEventRoutes {
+    return {
+      [ClientEventType.RESYNC]: (_event, connectionId) => this.sendSnapshot(connectionId),
+      [ClientEventType.USER_MESSAGE]: (event, connectionId) =>
+        this.handleUserMessage(event, connectionId),
+      [ClientEventType.WINDOW_MESSAGE]: (event) => this.handleWindowMessage(event),
+      [ClientEventType.COMPONENT_ACTION]: (event) => this.handleComponentAction(event),
+      [ClientEventType.INTERRUPT]: () => this.pool?.interruptAll(),
+      [ClientEventType.RESET]: (_event, connectionId) => this.handleReset(connectionId),
+      [ClientEventType.INTERRUPT_AGENT]: (event) => this.pool?.interruptAgent(event.agentId),
+      [ClientEventType.SET_PROVIDER]: (event) =>
+        this.pool?.getPrimaryAgent()?.setProvider(event.provider),
+      [ClientEventType.RENDERING_FEEDBACK]: (event) => this.handleRenderingFeedback(event),
+      [ClientEventType.DIALOG_FEEDBACK]: (event) => this.handleDialogFeedback(event),
+      [ClientEventType.APP_PROTOCOL_RESPONSE]: (event) =>
+        actionEmitter.resolveAppProtocolResponse(event.requestId, event.response),
+      [ClientEventType.APP_PROTOCOL_READY]: (event) => this.handleAppProtocolReady(event),
+      [ClientEventType.APP_EVENT]: (event) => this.handleAppEvent(event),
+      [ClientEventType.TOAST_ACTION]: (event) => this.handleToastAction(event),
+      [ClientEventType.USER_PROMPT_RESPONSE]: (event) => this.handleUserPromptResponse(event),
+      [ClientEventType.USER_INTERACTION]: (event) => this.handleUserInteraction(event),
+      [ClientEventType.SUBSCRIBE_MONITOR]: (event, connectionId) =>
+        this.handleSubscribeMonitor(event, connectionId),
+      [ClientEventType.ADD_MONITOR]: (_event, connectionId) => this.handleAddMonitor(connectionId),
+      [ClientEventType.REMOVE_MONITOR]: (event) => this.removeMonitor(event.monitorId),
+    };
+  }
 
-        // "Act as me" target (CLI-panel toggle): route to the session agent — the
-        // user's deputy, the one principal that can drive the real browser.
-        if (event.target === 'session') {
-          await this.pool?.handleSessionTask({
-            type: 'session',
-            messageId: event.messageId,
-            content: event.content,
-            interactions: event.interactions,
-            monitorId,
-          });
-          break;
-        }
-        // The monitor exists (checked above); its agent is created on first use.
-        if (this.pool && !this.pool.hasMonitorAgent(monitorId)) {
-          await this.pool.createMonitorAgent(monitorId);
-        }
-        await this.pool?.handleTask({
-          type: 'monitor',
-          messageId: event.messageId,
-          content: event.content,
-          interactions: event.interactions,
-          monitorId,
-        });
-        break;
-      }
-
-      case ClientEventType.WINDOW_MESSAGE:
-        await this.pool?.handleTask({
-          type: 'app',
-          messageId: event.messageId,
-          windowId: event.windowId,
-          content: event.content,
-        });
-        break;
-
-      case ClientEventType.COMPONENT_ACTION: {
-        const windowContext = event.windowTitle
-          ? `in window "${event.windowTitle}"`
-          : `in window ${event.windowId}`;
-
-        let content = `<ui:click>button "${event.action}" ${windowContext}</ui:click>`;
-
-        if (event.componentPath && event.componentPath.length > 0) {
-          content += `\nComponent path: ${event.componentPath.join(' → ')}`;
-        }
-
-        if (event.formData && event.formId) {
-          content += `\n\nForm data (${event.formId}):\n${JSON.stringify(event.formData, null, 2)}`;
-        }
-
-        await this.pool?.handleTask({
-          type: 'app',
-          messageId: event.actionId ?? genId('component'),
-          windowId: event.windowId,
-          content,
-          actionId: event.actionId,
-        });
-        // Notify other agents subscribed to this window's interactions
-        this.pool?.notifyWindowSubscribers(
-          event.windowId,
-          'interaction',
-          `User clicked "${event.action}" ${windowContext}`,
-          undefined, // no source agent — this is a user interaction
-        );
-        break;
-      }
-
-      case ClientEventType.INTERRUPT:
-        await this.pool?.interruptAll();
-        break;
-
-      case ClientEventType.RESET:
-        if (this.pool) {
-          await this.pool.reset();
-        } else {
-          // Pool not yet initialized — still flush stale warm-pool providers
-          // and clear restored state so the next pool init starts fresh
-          console.log('[LiveSession] Reset before pool init — flushing warm-pool providers');
-          this.restoredContext = [];
-          this.savedThreadIds = undefined;
-          await getWarmPool().resetCodexProviders();
-        }
-        // Re-execute launch hooks (e.g., reopen dock)
-        this.launchHooksExecuted = false;
-        await this.executeLaunchHooks(connectionId);
-        break;
-
-      case ClientEventType.INTERRUPT_AGENT:
-        await this.pool?.interruptAgent(event.agentId);
-        break;
-
-      case ClientEventType.SET_PROVIDER:
-        await this.pool?.getPrimaryAgent()?.setProvider(event.provider);
-        break;
-
-      case ClientEventType.RENDERING_FEEDBACK:
-        // Resolve directly via actionEmitter — the pending request is global (keyed by requestId),
-        // so routing through a specific agent is unnecessary and fragile.
-        actionEmitter.resolveFeedback({
-          requestId: event.requestId,
-          windowId: event.windowId,
-          renderer: event.renderer,
-          success: event.success,
-          error: event.error,
-          url: event.url,
-          locked: event.locked,
-          imageData: event.imageData,
-        });
-        break;
-
-      case ClientEventType.DIALOG_FEEDBACK: {
-        // Answered, so it is no longer on the screen — and must not be put back on it by
-        // the next snapshot.
-        this.surfaces.answered(event.dialogId);
-        const resolved = await actionEmitter.resolveDialogFeedback({
-          dialogId: event.dialogId,
-          confirmed: event.confirmed,
-          rememberChoice: event.rememberChoice,
-        });
-        // The answer arrived for a dialog whose deadline had already passed. The request
-        // it was answering is gone — that cannot be undone — but the user is owed the
-        // fact, instead of a click that lands on nothing. A remembered choice, unlike the
-        // answer, still counts, and resolveDialogFeedback has already saved it.
-        if (!resolved) {
-          this.notifyTooLate(
-            event.rememberChoice && event.rememberChoice !== 'once'
-              ? 'That request timed out before you answered, so it was denied. Your choice was saved and will apply next time.'
-              : 'That request timed out before you answered, so it was denied.',
-          );
-        }
-        break;
-      }
-
-      case ClientEventType.APP_PROTOCOL_RESPONSE:
-        actionEmitter.resolveAppProtocolResponse(event.requestId, event.response);
-        break;
-
-      case ClientEventType.APP_PROTOCOL_READY: {
-        // The frontend reports the monitor-scoped key (e.g. "0/ai-chat", from the window
-        // element's data-window-id). Keep that scope: readiness is per window, and the raw
-        // AI-facing id ("ai-chat") names one window *per monitor*, so collapsing to it would
-        // let monitor 0's registration mark monitor 1's window ready — leaving monitor 1's
-        // agent talking to an iframe that never registered. app_query/app_command wait on
-        // the same resolved key (see requireAppReady).
-        //
-        // Windows stored under a bare raw id (devtools preview windows, created via the
-        // iframe-SDK proxy with no monitor) still resolve: getWindow() matches them exactly,
-        // and the fallback below strips a scope they never had.
-        const windowKey =
-          this.windowState.getWindow(event.windowId)?.id ??
-          this.windowState.handleMap.getRawWindowId(event.windowId);
-        const wasReady = this.windowState.getWindow(windowKey)?.appProtocol ?? false;
-        this.windowState.setAppProtocol(windowKey);
-        // Readiness is this session's fact about this session's iframe — a second browser
-        // showing the same app on the same monitor has the same window key and a document
-        // that has said nothing.
-        actionEmitter.notifyAppReady(this.sessionId, windowKey);
-        // Replay stored commands only on re-registration (reload/remount), not first time —
-        // and never on a re-announce, where the desktop is repeating a registration it
-        // already witnessed and the iframe never remounted (see AppProtocolReadyEvent).
-        if (wasReady && !event.reannounce) {
-          this.replayAppCommands(windowKey);
-        }
-        break;
-      }
-
-      case ClientEventType.APP_EVENT: {
-        // An app emitted on a declared channel. Pass the monitor-scoped window key
-        // (from the iframe element's data-window-id) through as-is — ContextPool
-        // indexes subscriptions by that key. Collapsing it to the raw AI-facing id
-        // would deliver monitor 1's app events to a subscriber watching monitor 0's
-        // copy of the same app, since both windows share the raw id.
-        recordEmit(event.windowId, event.channel, event.payload);
-        this.pool?.notifyAppChannel(event.windowId, event.channel, event.payload);
-        break;
-      }
-
-      case ClientEventType.TOAST_ACTION:
-        this.reloadCache.markFailed(event.eventId);
-        console.log(
-          `[LiveSession] Reload cache entry "${event.eventId}" reported as failed by user`,
-        );
-        break;
-
-      case ClientEventType.USER_PROMPT_RESPONSE: {
-        this.surfaces.answered(event.promptId);
-        const resolved = actionEmitter.resolveUserPromptFeedback({
-          promptId: event.promptId,
-          selectedValues: event.selectedValues,
-          text: event.text,
-          dismissed: event.dismissed,
-        });
-        // Answered after the agent stopped waiting. Silently dropping it left the user
-        // believing they had replied.
-        if (!resolved && !event.dismissed) {
-          this.notifyTooLate(
-            'That prompt expired before you answered, so your answer was not sent.',
-          );
-        }
-        break;
-      }
-
-      case ClientEventType.USER_INTERACTION: {
-        const logger = this.getSessionLogger();
-
-        for (const interaction of event.interactions) {
-          logger?.logInteraction(interaction);
-
-          switch (interaction.type) {
-            case 'window.create':
-              if (interaction.windowId && interaction.content && interaction.bounds) {
-                const appMeta = interaction.appId ? await getAppMeta(interaction.appId) : null;
-                const createAction = {
-                  type: 'window.create' as const,
-                  windowId: interaction.windowId,
-                  title: interaction.windowTitle ?? interaction.windowId,
-                  bounds: interaction.bounds,
-                  content: interaction.content,
-                  variant: appMeta?.variant,
-                  dockEdge: appMeta?.dockEdge,
-                  frameless: appMeta?.frameless,
-                  windowStyle: appMeta?.windowStyle,
-                  appId: interaction.appId,
-                };
-                // Reading a log, not routing a message: an interaction recorded before
-                // monitors were stamped genuinely has no monitor, and the alternative to
-                // placing it on the default desktop is dropping the user's window.
-                this.windowState.handleAction(
-                  createAction,
-                  interaction.monitorId ?? DEFAULT_MONITOR_ID,
-                );
-                logger?.logAction(createAction);
-              }
-              break;
-            case 'window.close':
-              if (interaction.windowId) {
-                this.windowState.handleAction({
-                  type: 'window.close',
-                  windowId: interaction.windowId,
-                });
-                // Close all browser sessions (including stale ones) when any browser window is
-                // closed — both the headless sandbox and the user's real-Chrome (session) door.
-                if (interaction.windowId.startsWith('browser-')) {
-                  getHeadlessBrowser()
-                    .closeAll()
-                    .catch(() => {});
-                  getLocalBrowser()
-                    .closeAll()
-                    .catch(() => {});
-                }
-              }
-              break;
-            case 'window.move':
-            case 'window.resize':
-              if (interaction.windowId && interaction.bounds) {
-                const b = interaction.bounds;
-                const moveAction = {
-                  type: 'window.move' as const,
-                  windowId: interaction.windowId,
-                  x: b.x,
-                  y: b.y,
-                };
-                const resizeAction = {
-                  type: 'window.resize' as const,
-                  windowId: interaction.windowId,
-                  w: b.w,
-                  h: b.h,
-                };
-                this.windowState.handleAction(moveAction);
-                this.windowState.handleAction(resizeAction);
-              }
-              break;
-          }
-        }
-
-        // If all windows are now closed, also close any hidden browser sessions
-        // (e.g. sessions created with visible: false that have no window)
-        if (
-          event.interactions.some((i) => i.type === 'window.close') &&
-          this.windowState.listWindows().length === 0
-        ) {
-          getHeadlessBrowser()
-            .closeAll()
-            .catch(() => {});
-          getLocalBrowser()
-            .closeAll()
-            .catch(() => {});
-        }
-
-        this.pool?.pushUserInteractions(event.interactions);
-        break;
-      }
-
-      case ClientEventType.SUBSCRIBE_MONITOR:
-        // Where this *connection* is looking. Replaces whatever it was looking at
-        // before — a tab watches one monitor at a time.
-        getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
-        if (event.viewport) {
-          this.layoutContext.setViewport(event.monitorId, event.viewport);
-        }
-        break;
-
-      case ClientEventType.ADD_MONITOR: {
-        const monitor = this.addMonitor();
-        if (!monitor) {
-          this.sendTo(connectionId, {
-            type: ServerEventType.ERROR,
-            error: `Monitor limit reached (${MAX_MONITORS}).`,
-          });
-          break;
-        }
-        // Everyone gets the new list; only the tab that asked is told to go there.
-        this.broadcast({ type: ServerEventType.MONITORS, monitors: this.getMonitors() });
-        this.sendTo(connectionId, {
-          type: ServerEventType.MONITORS,
-          monitors: this.getMonitors(),
-          focus: monitor.id,
-        });
-        break;
-      }
-
-      case ClientEventType.REMOVE_MONITOR:
-        this.removeMonitor(event.monitorId);
-        break;
+  private async handleUserMessage(
+    event: ClientEventOf<typeof ClientEventType.USER_MESSAGE>,
+    connectionId: ConnectionId,
+  ): Promise<void> {
+    // A user message's monitor comes from the connection that sent it. The client
+    // always knows which monitor it is on, so `?? '0'` only ever fired when
+    // something upstream had lost it — and then answered with the wrong monitor
+    // rather than saying so.
+    const monitorId = event.monitorId;
+    if (!monitorId) {
+      this.sendTo(connectionId, {
+        type: ServerEventType.ERROR,
+        error: 'Message rejected: no monitor. A user message must name the monitor it came from.',
+        messageId: event.messageId,
+      });
+      return;
     }
+    if (!this.monitors.some((m) => m.id === monitorId)) {
+      this.sendTo(connectionId, {
+        type: ServerEventType.ERROR,
+        error: `Message rejected: monitor ${monitorId} does not exist in this session.`,
+        messageId: event.messageId,
+        monitorId,
+      });
+      return;
+    }
+    // A resend from the client's outbox for a message we already took. Ack it again so
+    // the outbox lets go, and do not run it twice.
+    if (this.acceptedMessageIds.has(event.messageId)) {
+      this.sendTo(connectionId, {
+        type: ServerEventType.MESSAGE_ACCEPTED,
+        messageId: event.messageId,
+        agentId: 'duplicate',
+      });
+      return;
+    }
+    this.rememberMessageId(event.messageId);
+
+    // "Act as me" target (CLI-panel toggle): route to the session agent — the
+    // user's deputy, the one principal that can drive the real browser.
+    if (event.target === 'session') {
+      await this.pool?.handleSessionTask({
+        type: 'session',
+        messageId: event.messageId,
+        content: event.content,
+        interactions: event.interactions,
+        monitorId,
+      });
+      return;
+    }
+    // The monitor exists (checked above); its agent is created on first use.
+    if (this.pool && !this.pool.hasMonitorAgent(monitorId)) {
+      await this.pool.createMonitorAgent(monitorId);
+    }
+    await this.pool?.handleTask({
+      type: 'monitor',
+      messageId: event.messageId,
+      content: event.content,
+      interactions: event.interactions,
+      monitorId,
+    });
+  }
+
+  private async handleWindowMessage(
+    event: ClientEventOf<typeof ClientEventType.WINDOW_MESSAGE>,
+  ): Promise<void> {
+    await this.pool?.handleTask({
+      type: 'app',
+      messageId: event.messageId,
+      windowId: event.windowId,
+      content: event.content,
+    });
+  }
+
+  private async handleComponentAction(
+    event: ClientEventOf<typeof ClientEventType.COMPONENT_ACTION>,
+  ): Promise<void> {
+    const windowContext = event.windowTitle
+      ? `in window "${event.windowTitle}"`
+      : `in window ${event.windowId}`;
+
+    let content = `<ui:click>button "${event.action}" ${windowContext}</ui:click>`;
+
+    if (event.componentPath && event.componentPath.length > 0) {
+      content += `\nComponent path: ${event.componentPath.join(' → ')}`;
+    }
+
+    if (event.formData && event.formId) {
+      content += `\n\nForm data (${event.formId}):\n${JSON.stringify(event.formData, null, 2)}`;
+    }
+
+    await this.pool?.handleTask({
+      type: 'app',
+      messageId: event.actionId ?? genId('component'),
+      windowId: event.windowId,
+      content,
+      actionId: event.actionId,
+    });
+    // Notify other agents subscribed to this window's interactions
+    this.pool?.notifyWindowSubscribers(
+      event.windowId,
+      'interaction',
+      `User clicked "${event.action}" ${windowContext}`,
+      undefined, // no source agent — this is a user interaction
+    );
+  }
+
+  private async handleReset(connectionId: ConnectionId): Promise<void> {
+    if (this.pool) {
+      await this.pool.reset();
+    } else {
+      // Pool not yet initialized — still flush stale warm-pool providers
+      // and clear restored state so the next pool init starts fresh
+      console.log('[LiveSession] Reset before pool init — flushing warm-pool providers');
+      this.restoredContext = [];
+      this.savedThreadIds = undefined;
+      await getWarmPool().resetCodexProviders();
+    }
+    // Re-execute launch hooks (e.g., reopen dock)
+    this.launchHooksExecuted = false;
+    await this.executeLaunchHooks(connectionId);
+  }
+
+  private handleRenderingFeedback(
+    event: ClientEventOf<typeof ClientEventType.RENDERING_FEEDBACK>,
+  ): void {
+    // Resolve directly via actionEmitter — the pending request is global (keyed by requestId),
+    // so routing through a specific agent is unnecessary and fragile.
+    actionEmitter.resolveFeedback({
+      requestId: event.requestId,
+      windowId: event.windowId,
+      renderer: event.renderer,
+      success: event.success,
+      error: event.error,
+      url: event.url,
+      locked: event.locked,
+      imageData: event.imageData,
+    });
+  }
+
+  private async handleDialogFeedback(
+    event: ClientEventOf<typeof ClientEventType.DIALOG_FEEDBACK>,
+  ): Promise<void> {
+    // Answered, so it is no longer on the screen — and must not be put back on it by
+    // the next snapshot.
+    this.surfaces.answered(event.dialogId);
+    const resolved = await actionEmitter.resolveDialogFeedback({
+      dialogId: event.dialogId,
+      confirmed: event.confirmed,
+      rememberChoice: event.rememberChoice,
+    });
+    // The answer arrived for a dialog whose deadline had already passed. The request
+    // it was answering is gone — that cannot be undone — but the user is owed the
+    // fact, instead of a click that lands on nothing. A remembered choice, unlike the
+    // answer, still counts, and resolveDialogFeedback has already saved it.
+    if (!resolved) {
+      this.notifyTooLate(
+        event.rememberChoice && event.rememberChoice !== 'once'
+          ? 'That request timed out before you answered, so it was denied. Your choice was saved and will apply next time.'
+          : 'That request timed out before you answered, so it was denied.',
+      );
+    }
+  }
+
+  private handleAppProtocolReady(
+    event: ClientEventOf<typeof ClientEventType.APP_PROTOCOL_READY>,
+  ): void {
+    // The frontend reports the monitor-scoped key (e.g. "0/ai-chat", from the window
+    // element's data-window-id). Keep that scope: readiness is per window, and the raw
+    // AI-facing id ("ai-chat") names one window *per monitor*, so collapsing to it would
+    // let monitor 0's registration mark monitor 1's window ready — leaving monitor 1's
+    // agent talking to an iframe that never registered. app_query/app_command wait on
+    // the same resolved key (see requireAppReady).
+    //
+    // Windows stored under a bare raw id (devtools preview windows, created via the
+    // iframe-SDK proxy with no monitor) still resolve: getWindow() matches them exactly,
+    // and the fallback below strips a scope they never had.
+    const windowKey =
+      this.windowState.getWindow(event.windowId)?.id ??
+      this.windowState.handleMap.getRawWindowId(event.windowId);
+    const wasReady = this.windowState.getWindow(windowKey)?.appProtocol ?? false;
+    this.windowState.setAppProtocol(windowKey);
+    // Readiness is this session's fact about this session's iframe — a second browser
+    // showing the same app on the same monitor has the same window key and a document
+    // that has said nothing.
+    actionEmitter.notifyAppReady(this.sessionId, windowKey);
+    // Replay stored commands only on re-registration (reload/remount), not first time —
+    // and never on a re-announce, where the desktop is repeating a registration it
+    // already witnessed and the iframe never remounted (see AppProtocolReadyEvent).
+    if (wasReady && !event.reannounce) {
+      this.replayAppCommands(windowKey);
+    }
+  }
+
+  private handleAppEvent(event: ClientEventOf<typeof ClientEventType.APP_EVENT>): void {
+    // An app emitted on a declared channel. Pass the monitor-scoped window key
+    // (from the iframe element's data-window-id) through as-is — ContextPool
+    // indexes subscriptions by that key. Collapsing it to the raw AI-facing id
+    // would deliver monitor 1's app events to a subscriber watching monitor 0's
+    // copy of the same app, since both windows share the raw id.
+    recordEmit(event.windowId, event.channel, event.payload);
+    this.pool?.notifyAppChannel(event.windowId, event.channel, event.payload);
+  }
+
+  private handleToastAction(event: ClientEventOf<typeof ClientEventType.TOAST_ACTION>): void {
+    this.reloadCache.markFailed(event.eventId);
+    console.log(`[LiveSession] Reload cache entry "${event.eventId}" reported as failed by user`);
+  }
+
+  private handleUserPromptResponse(
+    event: ClientEventOf<typeof ClientEventType.USER_PROMPT_RESPONSE>,
+  ): void {
+    this.surfaces.answered(event.promptId);
+    const resolved = actionEmitter.resolveUserPromptFeedback({
+      promptId: event.promptId,
+      selectedValues: event.selectedValues,
+      text: event.text,
+      dismissed: event.dismissed,
+    });
+    // Answered after the agent stopped waiting. Silently dropping it left the user
+    // believing they had replied.
+    if (!resolved && !event.dismissed) {
+      this.notifyTooLate('That prompt expired before you answered, so your answer was not sent.');
+    }
+  }
+
+  /**
+   * Windows the *user* moved, closed or opened. The registry decides what each interaction
+   * means for window state (see `WindowStateRegistry.applyUserInteraction`); what is left
+   * here is what is not window state — the log, and the browser sessions a closed browser
+   * window owns.
+   */
+  private async handleUserInteraction(
+    event: ClientEventOf<typeof ClientEventType.USER_INTERACTION>,
+  ): Promise<void> {
+    const logger = this.getSessionLogger();
+
+    for (const interaction of event.interactions) {
+      logger?.logInteraction(interaction);
+
+      const applied = await this.windowState.applyUserInteraction(interaction, getAppMeta);
+
+      // Only a window the user *made* is worth replaying from the log — a move or a close
+      // is already implied by the window's absence or its bounds at snapshot time.
+      if (interaction.type === 'window.create') {
+        for (const action of applied) logger?.logAction(action);
+      }
+      // Close all browser sessions (including stale ones) when any browser window is
+      // closed — both the headless sandbox and the user's real-Chrome (session) door.
+      if (interaction.type === 'window.close' && interaction.windowId?.startsWith('browser-')) {
+        getHeadlessBrowser()
+          .closeAll()
+          .catch(() => {});
+        getLocalBrowser()
+          .closeAll()
+          .catch(() => {});
+      }
+    }
+
+    // If all windows are now closed, also close any hidden browser sessions
+    // (e.g. sessions created with visible: false that have no window)
+    if (
+      event.interactions.some((i) => i.type === 'window.close') &&
+      this.windowState.listWindows().length === 0
+    ) {
+      getHeadlessBrowser()
+        .closeAll()
+        .catch(() => {});
+      getLocalBrowser()
+        .closeAll()
+        .catch(() => {});
+    }
+
+    this.pool?.pushUserInteractions(event.interactions);
+  }
+
+  private handleSubscribeMonitor(
+    event: ClientEventOf<typeof ClientEventType.SUBSCRIBE_MONITOR>,
+    connectionId: ConnectionId,
+  ): void {
+    // Where this *connection* is looking. Replaces whatever it was looking at
+    // before — a tab watches one monitor at a time.
+    getBroadcastCenter().subscribeToMonitor(connectionId, event.monitorId);
+    if (event.viewport) {
+      this.layoutContext.setViewport(event.monitorId, event.viewport);
+    }
+  }
+
+  private handleAddMonitor(connectionId: ConnectionId): void {
+    const monitor = this.addMonitor();
+    if (!monitor) {
+      this.sendTo(connectionId, {
+        type: ServerEventType.ERROR,
+        error: `Monitor limit reached (${MAX_MONITORS}).`,
+      });
+      return;
+    }
+    // Everyone gets the new list; only the tab that asked is told to go there.
+    this.broadcast({ type: ServerEventType.MONITORS, monitors: this.getMonitors() });
+    this.sendTo(connectionId, {
+      type: ServerEventType.MONITORS,
+      monitors: this.getMonitors(),
+      focus: monitor.id,
+    });
   }
 
   // ── Monitors ────────────────────────────────────────────────────────
@@ -1062,22 +994,7 @@ export class LiveSession {
   // ── Cleanup ─────────────────────────────────────────────────────────
 
   async cleanup(): Promise<void> {
-    if (this.unsubscribeAction) {
-      this.unsubscribeAction();
-      this.unsubscribeAction = null;
-    }
-    if (this.appProtocolListener) {
-      actionEmitter.off('app-protocol', this.appProtocolListener);
-      this.appProtocolListener = null;
-    }
-    if (this.bridgeEventListener) {
-      actionEmitter.off('bridge-event', this.bridgeEventListener);
-      this.bridgeEventListener = null;
-    }
-    if (this.unsubscribeSessionChannels) {
-      this.unsubscribeSessionChannels();
-      this.unsubscribeSessionChannels = null;
-    }
+    this.emitterBridge.detach();
 
     // Force-clear any pending requests/dialogs/app-requests for this session
     // so awaiting tools unblock immediately instead of waiting for timeouts.

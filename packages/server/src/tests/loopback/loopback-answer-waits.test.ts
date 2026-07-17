@@ -305,8 +305,14 @@ describe('S2 — the tripwire: the next wait fails this file rather than the pro
   it('every wait that routeMessage resolves is declared in ANSWER_EVENT_TYPES', () => {
     const source = readFileSync(join(import.meta.dir, '../../session/live-session.ts'), 'utf8');
 
-    // Each chunk is one `case ClientEventType.X:` body, running to the next case.
-    const chunks = source.split(/case ClientEventType\./).slice(1);
+    // Each chunk starts at a mention of a `ClientEventType` member and runs to the next
+    // one. That covers both places a frame is named now that `routeMessage` dispatches
+    // through a table instead of a switch: the route row (`[ClientEventType.X]: ...`), for
+    // a frame answered inline, and the handler's signature
+    // (`ClientEventOf<typeof ClientEventType.X>`), for one answered in a method. A resolve
+    // that lands in neither chunk is attributed to whichever frame precedes it, which is
+    // wrong — and wrong loudly, via the count guard below, rather than quietly.
+    const chunks = source.split(/ClientEventType\./).slice(1);
     const resolvesAWait = /actionEmitter\.(resolve[A-Z]\w*|notifyAppReady)\s*\(/;
 
     const waits = new Set<string>();
