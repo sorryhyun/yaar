@@ -145,6 +145,65 @@ export class AgentPool {
     notifyAgentsChanged(this.sessionId);
   }
 
+  // ── Iteration ────────────────────────────────────────────────────────
+
+  /**
+   * Every live agent, exactly once, in the order every caller here reads them:
+   * session → monitor → app → ephemeral. `listAgents()` and `getStats()` expose
+   * that order, so it is part of the contract, not an implementation detail.
+   *
+   * The single traversal is the point: a new agent tier is added here and every
+   * roster, lookup, and teardown below sees it. They used to walk the four
+   * collections by hand, and a tier missed in one of them is a silent bug.
+   */
+  private *allAgents(): Iterable<{
+    agent: PooledAgent;
+    type: AgentEntry['type'];
+    monitorId?: string;
+    appId?: string;
+  }> {
+    if (this.sessionAgent) yield { agent: this.sessionAgent, type: 'session' };
+    for (const [monitorId, agent] of this.monitorAgents) {
+      yield { agent, type: 'monitor', monitorId };
+    }
+    for (const [key, agent] of this.appAgents) {
+      yield { agent, type: 'app', ...parseAppKey(key) };
+    }
+    for (const agent of this.ephemeralAgents) yield { agent, type: 'ephemeral' };
+  }
+
+  /** An agent is busy while its provider is streaming or a role is assigned to it. */
+  private isBusy(agent: PooledAgent): boolean {
+    return agent.session.isRunning() || agent.currentRole !== null;
+  }
+
+  // ── Agent disposal ───────────────────────────────────────────────────
+
+  /**
+   * Tear one agent down, after its owner has already removed it from whichever
+   * collection held it. `label` is the log line's subject ("Session agent disposed").
+   *
+   * `interruptIfRunning` is false for exactly one caller — `disposeEphemeral`, which
+   * runs after its one task has finished and never interrupted. Cleanup is allowed to
+   * throw through to the caller; the limiter slot is released either way.
+   */
+  private async disposeAgent(
+    agent: PooledAgent,
+    label: string,
+    { interruptIfRunning = true }: { interruptIfRunning?: boolean } = {},
+  ): Promise<void> {
+    this.untrackAgent(agent.instanceId);
+    if (interruptIfRunning && agent.session.isRunning()) {
+      await agent.session.interrupt();
+    }
+    try {
+      await agent.session.cleanup();
+    } finally {
+      getAgentLimiter().release();
+    }
+    console.log(`[AgentPool] ${label}: ${agent.instanceId}`);
+  }
+
   // ── Agent creation ───────────────────────────────────────────────────
 
   /**
@@ -228,13 +287,7 @@ export class AgentPool {
    */
   async disposeEphemeral(agent: PooledAgent): Promise<void> {
     this.ephemeralAgents.delete(agent);
-    this.untrackAgent(agent.instanceId);
-    try {
-      await agent.session.cleanup();
-    } finally {
-      getAgentLimiter().release();
-    }
-    console.log(`[AgentPool] Ephemeral agent disposed: ${agent.instanceId}`);
+    await this.disposeAgent(agent, 'Ephemeral agent disposed', { interruptIfRunning: false });
   }
 
   // ── Monitor agent ─────────────────────────────────────────────────────
@@ -252,7 +305,7 @@ export class AgentPool {
   isMonitorAgentBusy(monitorId = '0'): boolean {
     const agent = this.monitorAgents.get(monitorId);
     if (!agent) return true; // no monitor agent = effectively busy
-    return agent.session.isRunning() || agent.currentRole !== null;
+    return this.isBusy(agent);
   }
 
   /**
@@ -295,16 +348,7 @@ export class AgentPool {
     await this.disposeAppAgentsForMonitor(monitorId);
 
     this.monitorAgents.delete(monitorId);
-    this.untrackAgent(agent.instanceId);
-    if (agent.session.isRunning()) {
-      await agent.session.interrupt();
-    }
-    try {
-      await agent.session.cleanup();
-    } finally {
-      getAgentLimiter().release();
-    }
-    console.log(`[AgentPool] Monitor agent removed for ${monitorId}: ${agent.instanceId}`);
+    await this.disposeAgent(agent, `Monitor agent removed for ${monitorId}`);
     return true;
   }
 
@@ -369,18 +413,7 @@ export class AgentPool {
     if (!agent) return;
 
     this.appAgents.delete(key);
-    this.untrackAgent(agent.instanceId);
-    if (agent.session.isRunning()) {
-      await agent.session.interrupt();
-    }
-    try {
-      await agent.session.cleanup();
-    } finally {
-      getAgentLimiter().release();
-    }
-    console.log(
-      `[AgentPool] App agent disposed for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
-    );
+    await this.disposeAgent(agent, `App agent disposed for ${appId} on monitor ${monitorId}`);
   }
 
   /**
@@ -441,16 +474,7 @@ export class AgentPool {
     if (!agent) return;
 
     this.sessionAgent = null;
-    this.untrackAgent(agent.instanceId);
-    if (agent.session.isRunning()) {
-      await agent.session.interrupt();
-    }
-    try {
-      await agent.session.cleanup();
-    } finally {
-      getAgentLimiter().release();
-    }
-    console.log(`[AgentPool] Session agent disposed: ${agent.instanceId}`);
+    await this.disposeAgent(agent, 'Session agent disposed');
   }
 
   /**
@@ -470,11 +494,13 @@ export class AgentPool {
    * for its own window on monitor 0 and not find it.
    */
   findMonitorForAgent(agentId: string): string | undefined {
-    for (const [monitorId, agent] of this.monitorAgents) {
-      if (agent.instanceId === agentId) return monitorId;
+    for (const { agent, type, monitorId } of this.allAgents()) {
+      if (agent.instanceId !== agentId) continue;
+      // The session agent lives in no monitor collection; it borrows the monitor of
+      // the turn it is running. Ephemerals have none, and answer undefined.
+      return type === 'session' ? this.sessionAgentMonitorId : monitorId;
     }
-    if (this.sessionAgent?.instanceId === agentId) return this.sessionAgentMonitorId;
-    return this.findAppForAgent(agentId)?.monitorId;
+    return undefined;
   }
 
   /**
@@ -494,15 +520,10 @@ export class AgentPool {
    * (treated as non-session by access control).
    */
   getRoleForAgent(agentId: string): AgentRole | undefined {
-    if (this.sessionAgent?.instanceId === agentId) return 'session';
-    for (const agent of this.monitorAgents.values()) {
-      if (agent.instanceId === agentId) return 'monitor';
-    }
-    for (const agent of this.appAgents.values()) {
-      if (agent.instanceId === agentId) return 'app';
-    }
-    for (const agent of this.ephemeralAgents) {
-      if (agent.instanceId === agentId) return 'monitor';
+    for (const { agent, type } of this.allAgents()) {
+      if (agent.instanceId !== agentId) continue;
+      // Ephemerals are unprivileged workers spawned by a monitor turn — same tier.
+      return type === 'ephemeral' ? 'monitor' : type;
     }
     return undefined;
   }
@@ -535,14 +556,7 @@ export class AgentPool {
    * Interrupt all running agents (monitor, app, ephemeral).
    */
   async interruptAll(): Promise<void> {
-    if (this.sessionAgent) await this.sessionAgent.session.interrupt();
-    for (const agent of this.monitorAgents.values()) {
-      await agent.session.interrupt();
-    }
-    for (const agent of this.appAgents.values()) {
-      await agent.session.interrupt();
-    }
-    for (const agent of this.ephemeralAgents) {
+    for (const { agent } of this.allAgents()) {
       await agent.session.interrupt();
     }
   }
@@ -553,17 +567,8 @@ export class AgentPool {
    * `listAgents()` reports, which is stable across turns.
    */
   async interruptByIdOrRole(idOrRole: string): Promise<boolean> {
-    const matches = (agent: PooledAgent) =>
-      agent.currentRole === idOrRole || agent.instanceId === idOrRole;
-
-    const candidates: PooledAgent[] = [];
-    if (this.sessionAgent) candidates.push(this.sessionAgent);
-    candidates.push(...this.monitorAgents.values());
-    candidates.push(...this.appAgents.values());
-    candidates.push(...this.ephemeralAgents);
-
-    for (const agent of candidates) {
-      if (matches(agent)) {
+    for (const { agent } of this.allAgents()) {
+      if (agent.currentRole === idOrRole || agent.instanceId === idOrRole) {
         await agent.session.interrupt();
         return true;
       }
@@ -575,14 +580,7 @@ export class AgentPool {
    * Check if any agent has a role starting with the given prefix.
    */
   hasRolePrefix(prefix: string): boolean {
-    if (this.sessionAgent?.currentRole?.startsWith(prefix)) return true;
-    for (const agent of this.monitorAgents.values()) {
-      if (agent.currentRole?.startsWith(prefix)) return true;
-    }
-    for (const agent of this.appAgents.values()) {
-      if (agent.currentRole?.startsWith(prefix)) return true;
-    }
-    for (const agent of this.ephemeralAgents) {
+    for (const { agent } of this.allAgents()) {
       if (agent.currentRole?.startsWith(prefix)) return true;
     }
     return false;
@@ -597,43 +595,30 @@ export class AgentPool {
    */
   listAgents(): AgentEntry[] {
     const entries: AgentEntry[] = [];
-    const isBusy = (agent: PooledAgent) => agent.session.isRunning() || agent.currentRole !== null;
-
-    if (this.sessionAgent) {
-      entries.push({
-        id: this.sessionAgent.instanceId,
-        type: 'session',
-        label: 'session',
-        busy: isBusy(this.sessionAgent),
-      });
-    }
-    for (const [monitorId, agent] of this.monitorAgents) {
-      entries.push({
-        id: agent.instanceId,
-        type: 'monitor',
-        label: `monitor ${monitorId}`,
-        busy: isBusy(agent),
-        monitorId,
-      });
-    }
-    for (const [key, agent] of this.appAgents) {
-      const { monitorId, appId } = parseAppKey(key);
-      entries.push({
-        id: agent.instanceId,
-        type: 'app',
-        label: `${appId} (monitor ${monitorId})`,
-        busy: isBusy(agent),
-        monitorId,
-        appId,
-      });
-    }
-    for (const agent of this.ephemeralAgents) {
-      entries.push({
-        id: agent.instanceId,
-        type: 'ephemeral',
-        label: agent.currentRole ?? 'ephemeral',
-        busy: isBusy(agent),
-      });
+    for (const { agent, type, monitorId, appId } of this.allAgents()) {
+      const id = agent.instanceId;
+      const busy = this.isBusy(agent);
+      switch (type) {
+        case 'session':
+          entries.push({ id, type, label: 'session', busy });
+          break;
+        case 'monitor':
+          entries.push({ id, type, label: `monitor ${monitorId}`, busy, monitorId });
+          break;
+        case 'app':
+          entries.push({
+            id,
+            type,
+            label: `${appId} (monitor ${monitorId})`,
+            busy,
+            monitorId,
+            appId,
+          });
+          break;
+        case 'ephemeral':
+          entries.push({ id, type, label: agent.currentRole ?? 'ephemeral', busy });
+          break;
+      }
     }
     return entries;
   }
@@ -648,19 +633,11 @@ export class AgentPool {
     let idle = 0;
     let busy = 0;
 
-    const countAgent = (agent: PooledAgent) => {
+    for (const { agent } of this.allAgents()) {
       total++;
-      if (agent.session.isRunning() || agent.currentRole !== null) {
-        busy++;
-      } else {
-        idle++;
-      }
-    };
-
-    if (this.sessionAgent) countAgent(this.sessionAgent);
-    for (const agent of this.monitorAgents.values()) countAgent(agent);
-    for (const agent of this.appAgents.values()) countAgent(agent);
-    for (const agent of this.ephemeralAgents) countAgent(agent);
+      if (this.isBusy(agent)) busy++;
+      else idle++;
+    }
 
     return {
       totalAgents: total,
@@ -680,12 +657,8 @@ export class AgentPool {
    */
   async cleanup(): Promise<void> {
     const limiter = getAgentLimiter();
-    const allAgents: PooledAgent[] = [];
-
-    if (this.sessionAgent) allAgents.push(this.sessionAgent);
-    for (const agent of this.monitorAgents.values()) allAgents.push(agent);
-    for (const agent of this.appAgents.values()) allAgents.push(agent);
-    for (const agent of this.ephemeralAgents) allAgents.push(agent);
+    // Snapshot before the first await: the two phases must walk the same roster.
+    const allAgents = [...this.allAgents()].map((e) => e.agent);
 
     // Phase 1: interrupt all running agents
     for (const agent of allAgents) {

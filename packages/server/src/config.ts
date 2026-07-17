@@ -3,7 +3,7 @@
  */
 
 import { join, dirname } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 
 /** Read an integer from an environment variable with a default. */
@@ -26,6 +26,60 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 export const PROJECT_ROOT = IS_BUNDLED_EXE
   ? dirname(process.execPath)
   : join(__dirname, '..', '..', '..');
+
+/**
+ * Load `PROJECT_ROOT/.env` into `process.env`.
+ *
+ * Bun auto-loads `.env` from the *current working directory*, and the server is never
+ * started from the repo root: `scripts/dev.sh` runs `bun run --filter @yaar/server dev`,
+ * whose cwd is `packages/server/`. So the root `.env` — the one file the README and
+ * CLAUDE.md tell you to put credentials in — was silently never read, and every var in
+ * it read back as undefined. Anchoring to PROJECT_ROOT instead of cwd fixes that for
+ * every consumer at once, and gets the bundled exe a `.env` next to the executable for
+ * free (PROJECT_ROOT is the exe's own directory there).
+ *
+ * The real environment always wins: `PORT=9000 make claude-dev` and a test's YAAR_CONFIG
+ * must not lose to a stale file on disk. That also keeps this a no-op in CI.
+ *
+ * Deliberately a small parser rather than a dependency: `KEY=VALUE`, `#` comments,
+ * optional `export ` prefix, optional surrounding quotes. Values are taken literally
+ * to the end of the line — no inline-comment stripping, since a `#` inside an
+ * unquoted secret is far likelier than a trailing comment on a credential.
+ */
+function loadRootEnv(): void {
+  const envPath = join(PROJECT_ROOT, '.env');
+  if (!existsSync(envPath)) return;
+
+  let contents: string;
+  try {
+    contents = readFileSync(envPath, 'utf-8');
+  } catch {
+    return; // Unreadable .env is not worth crashing the server over.
+  }
+
+  for (const rawLine of contents.split('\n')) {
+    const line = rawLine.trim();
+    if (line === '' || line.startsWith('#')) continue;
+
+    const eq = line.indexOf('=');
+    if (eq === -1) continue;
+
+    const key = line
+      .slice(0, eq)
+      .replace(/^export\s+/, '')
+      .trim();
+    if (key === '' || process.env[key] !== undefined) continue;
+
+    let value = line.slice(eq + 1).trim();
+    const quote = value[0];
+    if ((quote === '"' || quote === "'") && value.endsWith(quote) && value.length > 1) {
+      value = value.slice(1, -1);
+    }
+    process.env[key] = value;
+  }
+}
+
+loadRootEnv();
 
 /**
  * Get the storage directory path.
@@ -194,6 +248,22 @@ export const IS_DEV = !IS_REMOTE && !IS_BUNDLED_EXE;
 
 /** Marketplace base URL. */
 export const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
+
+/**
+ * Google OAuth client — the publisher identity YAAR presents to the marketplace.
+ *
+ * Must be a **Desktop app** client. Only that client type accepts a loopback
+ * redirect on an arbitrary port, and the port here is not fixed: `setPort()`
+ * moves it whenever 8000 is taken. A Web client would have to pre-register every
+ * possible `http://127.0.0.1:<port>/...` and would reject the rest.
+ *
+ * The secret is required even though the flow uses PKCE — Google's token endpoint
+ * demands it for Desktop clients. It is not confidential (it ships inside every
+ * installed copy of an app that uses it, and Google documents it as such); PKCE,
+ * not the secret, is what binds the code to this process.
+ */
+export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
+export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
 
 // ── Deadlines ────────────────────────────────────────────────────────
 //

@@ -52,4 +52,6 @@ apps/*/credentials.json
 !.claude/agents/
 !.claude/settings.json
 !.claude/agent-memory/
-claude
+# Root-only: a downloaded `claude` binary. Must not be bare — a bare `claude`
+# matches any path component, which silently hides src/providers/claude/.
+/claude

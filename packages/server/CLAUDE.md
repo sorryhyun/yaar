@@ -226,6 +226,6 @@ This is the same check `POST /api/verb` runs, shared rather than duplicated — 
 - `storageUriFor()` — maps an HTTP storage path to the URI that names the same file. `/api/storage/apps/{id}/x` **is** `yaar://apps/{id}/storage/x`; only that spelling is what an app holds a permission for. `self` is resolved on both sides of the match (app.json says `apps/self`, a URI from a path says `apps/notes`).
 - Tokens for subresources that cannot set a header (`<img src>`, `EventSource`) ride as `?__yaar_token=`.
 
-**Known gap (F-23):** app iframes are same-origin and unsandboxed, so a *hostile* app can omit its token and be resolved as `host`. The gate binds network callers, cross-session reads, and well-behaved apps; closing it against malicious app code needs an origin boundary, not another header. See `plan.md`.
+**Known gap:** app iframes are same-origin and unsandboxed, so a *hostile* app can omit its token and be resolved as `host`. The gate binds network callers, cross-session reads, and well-behaved apps; closing it against malicious app code needs an origin boundary, not another header. See [`docs/architecture/known_gaps.md`](../../docs/architecture/known_gaps.md).
 
 **MCP principal:** each agent gets a token minted by `mcp/agent-tokens.ts` and bound to its id server-side; providers send it as `X-Agent-Token`. The shared bearer token (`getMcpToken()`) is transport auth only and says nothing about *which* agent is calling. There is deliberately no `x-agent-id` header — an agent that can name a principal can become it.

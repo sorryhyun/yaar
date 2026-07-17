@@ -7,6 +7,8 @@
 import type { AITransport, ProviderType, ProviderInfo } from './types.js';
 import { getWarmPool } from './warm-pool.js';
 import { getForcedProvider } from './get-forced-provider.js';
+import { PROVIDER_PREFERENCE, instantiateProvider } from './instantiate.js';
+import { isCliAvailable } from './base-transport.js';
 
 /**
  * Registry of available providers with metadata.
@@ -28,18 +30,12 @@ export const providerRegistry: Record<ProviderType, ProviderInfo> = {
 };
 
 /**
- * Preference order for auto-selecting providers (claude first).
- */
-const PROVIDER_PREFERENCE: ProviderType[] = ['claude', 'codex'];
-
-/**
  * Lightweight availability checkers per provider.
  * These don't instantiate full providers — just check prerequisites.
  */
 const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
   claude: async () => {
-    const { ClaudeSessionProvider } = await import('./claude/index.js');
-    const p = new ClaudeSessionProvider();
+    const p = await instantiateProvider('claude');
     try {
       return await p.isAvailable();
     } finally {
@@ -51,10 +47,10 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
     // Passive check only — must NOT block with login (called by GET /api/providers)
     try {
       const { getCodexSpawnArgs } = await import('../config.js');
-      const result = Bun.spawnSync([...getCodexSpawnArgs(), '--version'], {
-        stdio: ['ignore', 'ignore', 'ignore'],
-      });
-      if (result.exitCode !== 0) return false;
+      // Shares the per-boot probe cache with the providers' own checks, and
+      // never blocks the event loop — this process serves the MCP endpoints
+      // the CLI it is probing will connect back to.
+      if (!(await isCliAvailable(...getCodexSpawnArgs()))) return false;
     } catch {
       return false;
     }
@@ -86,17 +82,14 @@ export async function getAvailableProviders(): Promise<ProviderType[]> {
  * Claude: creates directly. Codex: uses warm pool (AppServer required).
  */
 export async function createProvider(providerType: ProviderType): Promise<AITransport> {
-  if (providerType === 'claude') {
-    const { ClaudeSessionProvider } = await import('./claude/index.js');
-    return new ClaudeSessionProvider();
-  }
   if (providerType === 'codex') {
-    // Codex providers must go through the warm pool (which owns the AppServer)
+    // Codex providers must go through the warm pool (which owns the AppServer),
+    // so this is the one construction the shared helper can't do for us.
     const provider = await getWarmPool().acquire();
     if (!provider) throw new Error('Failed to create Codex provider');
     return provider;
   }
-  throw new Error(`Unknown provider: ${providerType}`);
+  return instantiateProvider(providerType);
 }
 
 /**

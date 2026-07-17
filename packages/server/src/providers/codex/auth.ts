@@ -8,7 +8,8 @@
 
 import { existsSync, unlinkSync } from 'fs';
 import { join } from 'path';
-import { homedir, platform } from 'os';
+import { homedir } from 'os';
+import { openUrl } from '../../lib/open-url.js';
 import type { AppServer } from './app-server.js';
 import type { AccountLoginCompletedNotification } from './types.js';
 
@@ -35,23 +36,6 @@ export function invalidateCodexAuth(): void {
     }
   } catch (err) {
     console.error('[codex] Failed to remove auth.json:', err);
-  }
-}
-
-/**
- * Open a URL in the user's default browser (cross-platform).
- */
-function openUrl(url: string): void {
-  const p = platform();
-  if (p === 'win32') {
-    // Use rundll32 to avoid cmd.exe treating & as a command separator
-    Bun.spawn(['rundll32', 'url.dll,FileProtocolHandler', url], {
-      stdio: ['ignore', 'ignore', 'ignore'],
-    });
-  } else if (p === 'darwin') {
-    Bun.spawn(['open', url], { stdio: ['ignore', 'ignore', 'ignore'] });
-  } else {
-    Bun.spawn(['xdg-open', url], { stdio: ['ignore', 'ignore', 'ignore'] });
   }
 }
 

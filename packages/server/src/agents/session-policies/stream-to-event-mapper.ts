@@ -15,6 +15,30 @@ export interface StreamMappingState {
   currentMessageId: string | null;
 }
 
+/**
+ * Tool-error classification table — **first match wins, so the order is load-bearing**.
+ * The substring sets overlap (a "Validation Error" contains both `Validation` and
+ * `Error`), so reordering rows silently reclassifies errors. Append new rows above
+ * the catch-all `Error` row only if they must win over it.
+ */
+const ERROR_CATEGORY_RULES: readonly (readonly [
+  substrings: readonly string[],
+  category: string,
+])[] = [
+  [['URI not found', 'No handler'], 'uri_not_found'],
+  [['not supported', 'Unknown verb'], 'verb_not_supported'],
+  [['Validation', 'Invalid'], 'validation'],
+  [['Error'], 'handler_error'],
+];
+
+/** Classify a tool error message into a coarse category for logging/metrics. */
+function classifyToolError(content: string): string {
+  for (const [substrings, category] of ERROR_CATEGORY_RULES) {
+    if (substrings.some((s) => content.includes(s))) return category;
+  }
+  return 'unknown';
+}
+
 export interface StreamMapperOptions {
   role: string;
   providerName: string;
@@ -225,29 +249,8 @@ export class StreamToEventMapper {
           if (startEntry) {
             const durationMs = Date.now() - startEntry.startTime;
             this.toolStartTimes.delete(message.toolUseId);
-            let errorCategory: string | undefined;
-            if (isError && message.content) {
-              if (
-                message.content.includes('URI not found') ||
-                message.content.includes('No handler')
-              ) {
-                errorCategory = 'uri_not_found';
-              } else if (
-                message.content.includes('not supported') ||
-                message.content.includes('Unknown verb')
-              ) {
-                errorCategory = 'verb_not_supported';
-              } else if (
-                message.content.includes('Validation') ||
-                message.content.includes('Invalid')
-              ) {
-                errorCategory = 'validation';
-              } else if (message.content.includes('Error')) {
-                errorCategory = 'handler_error';
-              } else {
-                errorCategory = 'unknown';
-              }
-            }
+            const errorCategory =
+              isError && message.content ? classifyToolError(message.content) : undefined;
             meta = { durationMs, ...(isError ? { isError, errorCategory } : {}) };
           }
         }

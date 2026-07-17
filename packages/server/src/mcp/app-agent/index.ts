@@ -13,6 +13,25 @@
  * Cross-app control: describe/query/command take an optional `appId`. Omitting it (or passing
  * your own id) targets your own window — no permission needed. Passing another app's id targets
  * that app, gated by the caller's app.json `controls` list (and, for command, its command list).
+ *
+ * ── Why the storage dispatch below is NOT shared with `handlers/apps.ts` ──
+ *
+ * They look like the same code and are not. `handlers/apps.ts` serves the *verbs* door, where
+ * the caller names the appId in the URI and the access chokepoint decides whether they may;
+ * this file serves app agents, whose only tools are the four below (see APP_AGENT_TOOL_NAMES)
+ * and whose appId is taken from their own window and therefore cannot be named or forged.
+ * Different key, different threat model — and every leaf differs accordingly:
+ *
+ *   - shape:  this door returns raw text/JSON to a model (`ok`/`okJson`); the verbs door
+ *             returns resource links, embedded resources with MIME, and base64 image/binary
+ *             content items (`okLinks`/`okResource`/`okWithImages`).
+ *   - notify: the verbs door calls `subscriptionRegistry.notifyChange`; this one does not.
+ *   - grep / base64 `encoding` exist only on the verbs door.
+ *   - the two doors' required-path checks and error wordings differ throughout.
+ *
+ * Only the on-disk layout is genuinely common, so only that is shared: `scopedAppStoragePath`
+ * (`appStoragePath` + the `..` guard this door's raw tool arguments need — the verbs door
+ * validates earlier, in `parseAppStoragePath`).
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -21,6 +40,7 @@ import { handleAppQuery, handleAppCommand } from '../../features/window/app-prot
 import { handleCreate } from '../../features/window/create.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
 import { getActiveSession, getActivePool, ok, okJson, error } from '../../handlers/utils.js';
+import { scopedAppStoragePath } from '../../handlers/apps.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '../../lib/ids.js';
 import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
@@ -38,15 +58,17 @@ export const APP_TOOL_NAMES = [
   'mcp__app__describe',
 ] as const;
 
+/**
+ * Rejection for a storage path that leaves this app's subtree. Worded as the prompt's own
+ * promise ("Storage is scoped to this app") so the model reads it as the rule, not a bug.
+ */
+const STORAGE_PATH_ERROR =
+  'invalid storage path. Storage is scoped to this app — paths are relative to your own ' +
+  'storage root and may not contain "..".';
+
 /** Resolve the appId for the current window context. */
 function getAppId(windowState: WindowStateRegistry, windowId: string): string | undefined {
   return windowState.getAppIdForWindow(windowId);
-}
-
-/** Convert an app-relative path to the app-scoped storage path. */
-function appStoragePath(appId: string, relativePath: string): string {
-  const clean = relativePath.replace(/^\//, '');
-  return `apps/${appId}/${clean}`;
 }
 
 /**
@@ -169,12 +191,14 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!appId) return error('could not resolve appId for this window.');
         const relativePath =
           args.stateKey === 'storage' ? '' : args.stateKey.slice('storage/'.length);
+        const scoped = scopedAppStoragePath(appId, relativePath);
+        if (!scoped) return error(STORAGE_PATH_ERROR);
         if (!relativePath) {
           // List root storage
-          const result = await storageList(appStoragePath(appId, ''));
+          const result = await storageList(scoped);
           return okJson(result);
         }
-        const result = await storageRead(appStoragePath(appId, relativePath));
+        const result = await storageRead(scoped);
         if (!result.success) return error(result.error ?? 'read failed.');
         return ok(result.content ?? '');
       }
@@ -234,6 +258,8 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!appId) return error('could not resolve appId for this window.');
         const subCommand = args.command.slice('storage:'.length);
         const path = (args.params?.path as string) ?? '';
+        const scoped = scopedAppStoragePath(appId, path);
+        if (!scoped) return error(STORAGE_PATH_ERROR);
 
         switch (subCommand) {
           case 'write': {
@@ -241,18 +267,18 @@ export function registerAppAgentTools(server: McpServer): void {
             if (typeof content !== 'string') {
               return error('"content" (string) is required for storage:write.');
             }
-            const result = await storageWrite(appStoragePath(appId, path), content);
+            const result = await storageWrite(scoped, content);
             if (!result.success) return error(result.error ?? 'write failed.');
             return ok(`Written to ${path}`);
           }
           case 'delete': {
             if (!path) return error('"path" is required for storage:delete.');
-            const result = await storageDelete(appStoragePath(appId, path));
+            const result = await storageDelete(scoped);
             if (!result.success) return error(result.error ?? 'delete failed.');
             return ok(`Deleted ${path}`);
           }
           case 'list': {
-            const result = await storageList(appStoragePath(appId, path));
+            const result = await storageList(scoped);
             return okJson(result);
           }
           default:
@@ -328,7 +354,19 @@ export function registerAppAgentTools(server: McpServer): void {
     },
   );
 
-  // relay — hand off to the monitor agent
+  // relay — hand off to the monitor agent.
+  //
+  // Not routed through `mcp/messaging`'s direct_message despite that file's header calling
+  // itself a generalization of this tool: it is not a superset of this path, it is a
+  // different one. `to: "monitor"` wraps the content in `<from:app:{id}>` attribution tags
+  // before enqueueing it — this tool sends the message verbatim, so delegating would change
+  // what the monitor agent's model actually reads. It also stamps a `dm` messageId (vs
+  // `relay`) and returns different text to the caller's model. Sharing the 4 enqueue lines
+  // under a `{ wrap, prefix }` flag would cost more than it saves.
+  //
+  // The real dedup here is deleting `relay` in favour of direct_message(to: "monitor",
+  // end_turn: true) — but that removes a tool from the app agent's toolset and changes the
+  // monitor's input, so it belongs in its own change, not a refactor.
   server.registerTool(
     'relay',
     {

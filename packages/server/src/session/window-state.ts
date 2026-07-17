@@ -8,13 +8,25 @@
  * never constructs composite keys directly.
  */
 
-import type { OSAction, WindowState, AppProtocolRequest } from '@yaar/shared';
-import { applyContentOperation } from '@yaar/shared';
+import type { OSAction, WindowState, AppProtocolRequest, UserInteraction } from '@yaar/shared';
+import { applyContentOperation, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { getMonitorId } from '../agents/agent-context.js';
 import { WindowHandleMap } from './window-handle-map.js';
 
 // Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
+
+/**
+ * The window-shaping half of an app's manifest — the fields a `window.create` for that
+ * app inherits. Narrower than what app discovery returns on purpose: this module has no
+ * business knowing about permissions or bundles.
+ */
+export interface AppWindowMeta {
+  variant?: WindowState['variant'];
+  dockEdge?: WindowState['dockEdge'];
+  frameless?: boolean;
+  windowStyle?: Record<string, string | number>;
+}
 
 /**
  * Window state registry for one connection/session.
@@ -90,11 +102,32 @@ export class WindowStateRegistry {
     return rawId;
   }
 
-  handleAction(action: OSAction, monitorId?: string): void {
-    const now = Date.now();
+  /**
+   * Resolve a window action's target and hand it to `fn`, if the window still exists.
+   *
+   * Seven of the nine window actions have this shape — resolve the key, drop the action if
+   * the window is gone, mutate, stamp `updatedAt`. (`create` and `close` do not: one has no
+   * window to resolve yet, the other has none left to stamp.) The stamp is why this is a
+   * method and not seven copies: it is the one line that has nothing to do with what the
+   * caller came to change, which is exactly the line a new case forgets, and a window that
+   * changed while claiming it did not is a window whose watchers are never told.
+   */
+  private mutateWindow(
+    rawId: string,
+    monitorId: string | undefined,
+    fn: (win: WindowState) => void,
+  ): void {
+    const key = this.actionKey(rawId, monitorId);
+    const win = this.windows.get(key);
+    if (!win) return;
+    fn(win);
+    win.updatedAt = Date.now();
+  }
 
+  handleAction(action: OSAction, monitorId?: string): void {
     switch (action.type) {
       case 'window.create': {
+        const now = Date.now();
         const key = this.actionKey(action.windowId, monitorId);
         this.windows.set(key, {
           id: key,
@@ -127,82 +160,127 @@ export class WindowStateRegistry {
         break;
       }
 
-      case 'window.setTitle': {
-        const key = this.actionKey(action.windowId, monitorId);
-        const win = this.windows.get(key);
-        if (win) {
+      case 'window.setTitle':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
           win.title = action.title;
-          win.updatedAt = now;
-        }
+        });
         break;
-      }
 
-      case 'window.setContent': {
-        const key = this.actionKey(action.windowId, monitorId);
-        const win = this.windows.get(key);
-        if (win) {
+      case 'window.setContent':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
           win.content = { ...action.content };
-          win.updatedAt = now;
-        }
+        });
         break;
-      }
 
-      case 'window.updateContent': {
-        const key = this.actionKey(action.windowId, monitorId);
-        const win = this.windows.get(key);
-        if (win) {
+      case 'window.updateContent':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
           win.content.data = applyContentOperation(win.content.data ?? '', action.operation);
           if (action.renderer) {
             win.content.renderer = action.renderer;
           }
-          win.updatedAt = now;
-        }
+        });
         break;
-      }
 
-      case 'window.move': {
-        const key = this.actionKey(action.windowId, monitorId);
-        const win = this.windows.get(key);
-        if (win) {
+      case 'window.move':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
           win.bounds.x = action.x;
           win.bounds.y = action.y;
-          win.updatedAt = now;
-        }
+        });
         break;
-      }
 
-      case 'window.resize': {
-        const key = this.actionKey(action.windowId, monitorId);
-        const win = this.windows.get(key);
-        if (win) {
+      case 'window.resize':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
           win.bounds.w = action.w;
           win.bounds.h = action.h;
-          win.updatedAt = now;
-        }
+        });
         break;
-      }
 
-      case 'window.lock': {
-        const key = this.actionKey(action.windowId, monitorId);
-        const win = this.windows.get(key);
-        if (win) {
+      case 'window.lock':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
           win.locked = true;
           win.lockedBy = action.agentId;
-          win.updatedAt = now;
-        }
+        });
         break;
-      }
 
-      case 'window.unlock': {
-        const key = this.actionKey(action.windowId, monitorId);
-        const win = this.windows.get(key);
-        if (win) {
+      case 'window.unlock':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
           win.locked = false;
           win.lockedBy = undefined;
-          win.updatedAt = now;
-        }
+        });
         break;
+    }
+  }
+
+  /**
+   * Apply an interaction the *user* performed on a window, and return the actions it
+   * amounted to.
+   *
+   * This translation belongs here rather than in the caller because all of it is window
+   * state: the shape of a user-made `window.create`, the fact that a drag-resize is a
+   * move *and* a resize, and the monitor a monitor-less interaction lands on. What is not
+   * window state stays with the caller — logging, and the browser sessions that a closed
+   * browser window happens to own.
+   *
+   * `loadAppMeta` is injected rather than imported: it is consulted only for a create that
+   * names an app, and a window registry has no business reaching into app discovery.
+   */
+  async applyUserInteraction(
+    interaction: UserInteraction,
+    loadAppMeta: (appId: string) => Promise<AppWindowMeta | null>,
+  ): Promise<OSAction[]> {
+    switch (interaction.type) {
+      case 'window.create': {
+        if (!interaction.windowId || !interaction.content || !interaction.bounds) return [];
+        const appMeta = interaction.appId ? await loadAppMeta(interaction.appId) : null;
+        const createAction: OSAction = {
+          type: 'window.create',
+          windowId: interaction.windowId,
+          title: interaction.windowTitle ?? interaction.windowId,
+          bounds: interaction.bounds,
+          content: interaction.content,
+          variant: appMeta?.variant,
+          dockEdge: appMeta?.dockEdge,
+          frameless: appMeta?.frameless,
+          windowStyle: appMeta?.windowStyle,
+          appId: interaction.appId,
+        };
+        // Reading a log, not routing a message: an interaction recorded before
+        // monitors were stamped genuinely has no monitor, and the alternative to
+        // placing it on the default desktop is dropping the user's window.
+        this.handleAction(createAction, interaction.monitorId ?? DEFAULT_MONITOR_ID);
+        return [createAction];
       }
+
+      case 'window.close': {
+        if (!interaction.windowId) return [];
+        const closeAction: OSAction = { type: 'window.close', windowId: interaction.windowId };
+        this.handleAction(closeAction);
+        return [closeAction];
+      }
+
+      case 'window.move':
+      case 'window.resize': {
+        if (!interaction.windowId || !interaction.bounds) return [];
+        const b = interaction.bounds;
+        const moveAction: OSAction = {
+          type: 'window.move',
+          windowId: interaction.windowId,
+          x: b.x,
+          y: b.y,
+        };
+        const resizeAction: OSAction = {
+          type: 'window.resize',
+          windowId: interaction.windowId,
+          w: b.w,
+          h: b.h,
+        };
+        this.handleAction(moveAction);
+        this.handleAction(resizeAction);
+        return [moveAction, resizeAction];
+      }
+
+      default:
+        return [];
     }
   }
 
@@ -210,9 +288,18 @@ export class WindowStateRegistry {
     return Array.from(this.windows.values());
   }
 
+  /**
+   * The live state of a window, by handle or raw id, or undefined if there is no such
+   * window on the caller's monitor. The object is the registry's own — mutating it
+   * mutates the window (see `setAppProtocol`), so callers that only ask a question
+   * should only read.
+   */
+  getState(windowId: string): WindowState | undefined {
+    return this.resolve(windowId)?.[1];
+  }
+
   getWindow(windowId: string): WindowState | undefined {
-    const resolved = this.resolve(windowId);
-    return resolved ? resolved[1] : undefined;
+    return this.getState(windowId);
   }
 
   recordAppCommand(windowId: string, request: AppProtocolRequest): void {
@@ -233,15 +320,15 @@ export class WindowStateRegistry {
   }
 
   setAppProtocol(windowId: string): void {
-    const resolved = this.resolve(windowId);
-    if (resolved) {
-      resolved[1].appProtocol = true;
-      resolved[1].updatedAt = Date.now();
+    const win = this.getState(windowId);
+    if (win) {
+      win.appProtocol = true;
+      win.updatedAt = Date.now();
     }
   }
 
   hasWindow(windowId: string): boolean {
-    return this.resolve(windowId) !== undefined;
+    return this.getState(windowId) !== undefined;
   }
 
   /**
@@ -249,17 +336,15 @@ export class WindowStateRegistry {
    * Returns the locking agent's ID if locked by someone else, or null if not locked / locked by the same agent.
    */
   isLockedByOther(windowId: string, agentId?: string): string | null {
-    const resolved = this.resolve(windowId);
-    if (!resolved) return null;
-    const win = resolved[1];
+    const win = this.getState(windowId);
+    if (!win) return null;
     if (!win.locked) return null;
     if (agentId && win.lockedBy === agentId) return null;
     return win.lockedBy ?? 'unknown';
   }
 
   getAppIdForWindow(windowId: string): string | undefined {
-    const resolved = this.resolve(windowId);
-    return resolved ? resolved[1].appId : undefined;
+    return this.getState(windowId)?.appId;
   }
 
   /**
@@ -273,9 +358,9 @@ export class WindowStateRegistry {
   }
 
   isAppProtocolWindow(windowId: string): boolean {
-    const resolved = this.resolve(windowId);
-    if (!resolved) return false;
-    return resolved[1].appProtocol === true && !!resolved[1].appId;
+    const win = this.getState(windowId);
+    if (!win) return false;
+    return win.appProtocol === true && !!win.appId;
   }
 
   clear(): void {

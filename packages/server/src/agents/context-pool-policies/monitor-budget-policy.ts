@@ -55,7 +55,7 @@ export class MonitorBudgetPolicy {
    * Returns immediately for the primary monitor.
    */
   async acquireTaskSlot(monitorId: string): Promise<void> {
-    if (monitorId === PRIMARY_MONITOR) return;
+    if (!this.isThrottled(monitorId)) return;
     if (this.runningCount < this.maxConcurrent) {
       this.runningCount++;
       return;
@@ -86,7 +86,7 @@ export class MonitorBudgetPolicy {
    * Always returns true for the primary monitor.
    */
   tryAcquireTaskSlot(monitorId: string): boolean {
-    if (monitorId === PRIMARY_MONITOR) return true;
+    if (!this.isThrottled(monitorId)) return true;
     if (this.runningCount < this.maxConcurrent) {
       this.runningCount++;
       return true;
@@ -98,7 +98,7 @@ export class MonitorBudgetPolicy {
    * Release a task slot after a background monitor task completes.
    */
   releaseTaskSlot(monitorId: string): void {
-    if (monitorId === PRIMARY_MONITOR) return;
+    if (!this.isThrottled(monitorId)) return;
     this.runningCount = Math.max(0, this.runningCount - 1);
     const next = this.waiters.shift();
     if (next) next.resolve();
@@ -111,7 +111,7 @@ export class MonitorBudgetPolicy {
    * Always returns true for the primary monitor.
    */
   checkActionBudget(monitorId: string): boolean {
-    if (monitorId === PRIMARY_MONITOR) return true;
+    if (!this.isThrottled(monitorId)) return true;
     const bucket = this.getBucket(monitorId);
     this.pruneOld(bucket.actions);
     const total = bucket.actions.length;
@@ -122,7 +122,7 @@ export class MonitorBudgetPolicy {
    * Record an OS action for a monitor.
    */
   recordAction(monitorId: string): void {
-    if (monitorId === PRIMARY_MONITOR) return;
+    if (!this.isThrottled(monitorId)) return;
     const bucket = this.getBucket(monitorId);
     bucket.actions.push({ timestamp: Date.now(), value: 1 });
   }
@@ -134,7 +134,7 @@ export class MonitorBudgetPolicy {
    * Always returns true for the primary monitor.
    */
   checkOutputBudget(monitorId: string): boolean {
-    if (monitorId === PRIMARY_MONITOR) return true;
+    if (!this.isThrottled(monitorId)) return true;
     const bucket = this.getBucket(monitorId);
     this.pruneOld(bucket.output);
     const total = bucket.output.reduce((sum, e) => sum + e.value, 0);
@@ -145,7 +145,7 @@ export class MonitorBudgetPolicy {
    * Record output bytes for a monitor.
    */
   recordOutput(monitorId: string, bytes: number): void {
-    if (monitorId === PRIMARY_MONITOR) return;
+    if (!this.isThrottled(monitorId)) return;
     const bucket = this.getBucket(monitorId);
     bucket.output.push({ timestamp: Date.now(), value: bytes });
   }
@@ -189,6 +189,16 @@ export class MonitorBudgetPolicy {
   }
 
   // ── Internals ────────────────────────────────────────────────────────
+
+  /**
+   * Whether this monitor is subject to any budget at all. The primary monitor
+   * (`0`) is the user's foreground desktop and is never throttled — every public
+   * method short-circuits on this, each returning its own "unlimited" answer
+   * (`void` for the record/release side, `true` for the check/acquire side).
+   */
+  private isThrottled(monitorId: string): boolean {
+    return monitorId !== PRIMARY_MONITOR;
+  }
 
   private getBucket(monitorId: string): MonitorBucket {
     let bucket = this.buckets.get(monitorId);

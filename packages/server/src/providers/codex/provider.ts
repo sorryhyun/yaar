@@ -19,8 +19,7 @@ import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
 import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getActiveServers, getAgentToken } from '../../mcp/index.js';
-import { getPort } from '../../config.js';
+import { buildMcpServerSet } from '../mcp-servers.js';
 import type {
   ThreadStartParams,
   ThreadStartResponse,
@@ -417,19 +416,21 @@ export class CodexProvider extends BaseTransport {
   } | null {
     if (!agentId) return null;
 
-    const namespaces = getActiveServers();
+    // No filter: expose the FULL active server set, same as the process-level config.
+    const { servers: endpoints, agentToken } = buildMcpServerSet(agentId);
     const servers: McpServerOverride = {};
-    for (const ns of namespaces) {
-      servers[ns] = {
-        url: `http://127.0.0.1:${getPort()}/mcp/${ns}`,
+    for (const { name, url } of endpoints) {
+      servers[name] = {
+        url,
         bearer_token_env_var: 'YAAR_MCP_TOKEN',
-        http_headers: { 'x-agent-token': getAgentToken(agentId) },
+        http_headers: { 'x-agent-token': agentToken! },
       };
     }
     // agentId is stable for a given provider instance, so this signature is
     // constant across that agent's turns → no needless thread churn. Including
     // it still forces a fresh thread if the provider is ever rebound to another
     // agent, keeping the header correct.
+    const namespaces = endpoints.map(({ name }) => name);
     return { servers, signature: `${agentId}:${[...namespaces].sort().join(',')}` };
   }
 

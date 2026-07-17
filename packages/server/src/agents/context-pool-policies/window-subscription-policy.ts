@@ -63,6 +63,11 @@ export function frameAppEvent(windowId: string, channel: string, payload: unknow
   return `<app:event window="${windowId}" channel="${channel}">\n${body}\n</app:event>`;
 }
 
+/** Frame a window-change event for prompt injection. Counterpart to `frameAppEvent`. */
+function frameWindowChange(sub: WindowSubscription, event: WindowChangeEvent, summary: string) {
+  return `<window:change windowId="${sub.targetWindowId}" event="${event}" subscriptionId="${sub.id}">\n${summary}\n</window:change>`;
+}
+
 export class WindowSubscriptionPolicy {
   private subscriptions = new Map<string, WindowSubscription>();
   /** targetWindowId → Set<subscriptionId> */
@@ -85,9 +90,8 @@ export class WindowSubscriptionPolicy {
     events: WindowChangeEvent[];
     debounceMs?: number;
   }): string {
-    const id = `wsub-${Date.now()}-${++counter}`;
-    const sub: WindowSubscription = {
-      id,
+    return this.registerSubscription({
+      id: `wsub-${Date.now()}-${++counter}`,
       kind: 'window',
       subscriberAgentKey: opts.subscriberAgentKey,
       subscriberType: opts.subscriberType,
@@ -96,13 +100,7 @@ export class WindowSubscriptionPolicy {
       targetWindowId: opts.targetWindowId,
       events: new Set(opts.events),
       debounceMs: opts.debounceMs ?? DEFAULT_DEBOUNCE_MS,
-    };
-
-    this.subscriptions.set(id, sub);
-    this.addToIndex(this.targetIndex, opts.targetWindowId, id);
-    this.addToIndex(this.agentIndex, opts.subscriberAgentKey, id);
-
-    return id;
+    });
   }
 
   /** Subscribe an agent to an app's declared event channels. */
@@ -116,9 +114,8 @@ export class WindowSubscriptionPolicy {
     mode?: SubscriptionMode;
     debounceMs?: number;
   }): string {
-    const id = `csub-${Date.now()}-${++counter}`;
-    const sub: WindowSubscription = {
-      id,
+    return this.registerSubscription({
+      id: `csub-${Date.now()}-${++counter}`,
       kind: 'channel',
       subscriberAgentKey: opts.subscriberAgentKey,
       subscriberType: opts.subscriberType,
@@ -128,13 +125,15 @@ export class WindowSubscriptionPolicy {
       channels: new Set(opts.channels),
       mode: opts.mode ?? 'wake',
       debounceMs: opts.debounceMs ?? DEFAULT_DEBOUNCE_MS,
-    };
+    });
+  }
 
-    this.subscriptions.set(id, sub);
-    this.addToIndex(this.targetIndex, opts.targetWindowId, id);
-    this.addToIndex(this.agentIndex, opts.subscriberAgentKey, id);
-
-    return id;
+  /** Store a built subscription and wire both indexes. Returns its id. */
+  private registerSubscription(sub: WindowSubscription): string {
+    this.subscriptions.set(sub.id, sub);
+    this.addToIndex(this.targetIndex, sub.targetWindowId, sub.id);
+    this.addToIndex(this.agentIndex, sub.subscriberAgentKey, sub.id);
+    return sub.id;
   }
 
   unsubscribe(id: string): boolean {
@@ -178,16 +177,17 @@ export class WindowSubscriptionPolicy {
       if (sourceAgentKey && sub.subscriberAgentKey === sourceAgentKey) continue;
 
       this.cancelPending(sub.id);
+      const framed = frameWindowChange(sub, event, summary);
 
       if (event === 'close') {
         // Close events are delivered immediately (no debounce — window is gone)
-        deliverTask(this.buildTask(sub, event, summary));
+        deliverTask(this.buildNotifyTask(sub, 'sub-notify', framed));
         continue;
       }
 
       const timer = setTimeout(() => {
         this.pending.delete(sub.id);
-        deliverTask(this.buildTask(sub, event, summary));
+        deliverTask(this.buildNotifyTask(sub, 'sub-notify', framed));
       }, sub.debounceMs);
 
       this.pending.set(sub.id, timer);
@@ -231,7 +231,7 @@ export class WindowSubscriptionPolicy {
       this.cancelPending(key);
       const timer = setTimeout(() => {
         this.pending.delete(key);
-        deliverTask(this.buildChannelTask(sub, framed));
+        deliverTask(this.buildNotifyTask(sub, 'app-event', framed));
       }, sub.debounceMs);
       this.pending.set(key, timer);
     }
@@ -275,22 +275,18 @@ export class WindowSubscriptionPolicy {
     this.agentIndex.clear();
   }
 
-  private buildTask(sub: WindowSubscription, event: WindowChangeEvent, summary: string): Task {
+  /**
+   * Build the task delivered to a subscriber. `prefix` namespaces the messageId
+   * per notification kind (`sub-notify` for window changes, `app-event` for
+   * channels); `content` is already framed by the caller. Called at *delivery*
+   * time, so the `Date.now()` stamp reflects when the task was handed over.
+   */
+  private buildNotifyTask(sub: WindowSubscription, prefix: string, content: string): Task {
     return {
       type: sub.subscriberType,
-      messageId: `sub-notify-${sub.id}-${Date.now()}`,
+      messageId: `${prefix}-${sub.id}-${Date.now()}`,
       windowId: sub.subscriberWindowId,
-      content: `<window:change windowId="${sub.targetWindowId}" event="${event}" subscriptionId="${sub.id}">\n${summary}\n</window:change>`,
-      monitorId: sub.subscriberMonitorId,
-    };
-  }
-
-  private buildChannelTask(sub: WindowSubscription, framedContent: string): Task {
-    return {
-      type: sub.subscriberType,
-      messageId: `app-event-${sub.id}-${Date.now()}`,
-      windowId: sub.subscriberWindowId,
-      content: framedContent,
+      content,
       monitorId: sub.subscriberMonitorId,
     };
   }

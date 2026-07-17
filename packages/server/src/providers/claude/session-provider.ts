@@ -9,9 +9,10 @@ import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/cla
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage } from './message-mapper.js';
-import { getToolNames, getMcpToken, getActiveServers, getAgentToken } from '../../mcp/index.js';
+import { createInputChannel, type InputChannel } from './input-channel.js';
+import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { getStorageDir, getClaudeSpawnArgs, resolveClaudeBinPath, getPort } from '../../config.js';
+import { getClaudeSpawnArgs } from '../../config.js';
 import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
 
@@ -31,13 +32,8 @@ interface TextContentBlock {
 
 type ContentBlock = TextContentBlock | ImageContentBlock;
 
-/** Inputs to the SDK options builder for one turn. */
-interface SDKOptionsRequest {
-  /** Session id to resume (undefined = fresh conversation). */
-  resumeSession?: string;
-  /** The turn's transport options — supplies prompt/model/agent/tool identity. */
-  options: TransportOptions;
-}
+/** The turn-supplied half of an SDK options request; the provider fills the rest. */
+type TurnOptionsRequest = Omit<SDKOptionsRequest, 'defaultSystemPrompt' | 'abortController'>;
 
 /** Max time to hold a turn's first message while MCP servers connect. */
 const MCP_CONNECT_WAIT_MS = 5000;
@@ -51,40 +47,13 @@ const MCP_CONNECT_WAIT_MS = 5000;
  */
 const FINGERPRINT_SEP = '\u0000';
 
-/** Push-based async channel feeding the SDK's streaming input. */
-interface InputChannel {
-  push(message: unknown): void;
-  close(): void;
-  iterable: AsyncGenerator<unknown>;
-}
-
-function createInputChannel(): InputChannel {
-  const buffer: unknown[] = [];
-  let notify: (() => void) | null = null;
-  let closed = false;
-  async function* iterate(): AsyncGenerator<unknown> {
-    for (;;) {
-      while (buffer.length === 0 && !closed) {
-        await new Promise<void>((resolve) => {
-          notify = resolve;
-        });
-        notify = null;
-      }
-      if (buffer.length === 0) return;
-      yield buffer.shift();
-    }
-  }
-  return {
-    push(message) {
-      buffer.push(message);
-      notify?.();
-    },
-    close() {
-      closed = true;
-      notify?.();
-    },
-    iterable: iterate(),
-  };
+/**
+ * A turn hit a `resume` the CLI no longer knows — the logged thread was pruned,
+ * or the id came from another machine. Both turn paths retry without resume;
+ * they differ in what they must tear down first, so only the test is shared.
+ */
+function isStaleSessionError(mapped: StreamMessage): boolean {
+  return mapped.type === 'error' && !!mapped.error?.includes('No conversation found');
 }
 
 /**
@@ -127,102 +96,28 @@ export class ClaudeSessionProvider extends BaseTransport {
   }
 
   /**
-   * Get SDK options for queries.
+   * Get SDK options for queries. Binds a fresh abort controller to the process
+   * the resulting options will spawn (see sdk-options.ts for the options).
    */
-  private getSDKOptions({ resumeSession, options }: SDKOptionsRequest): SDKOptions {
-    const { systemPrompt, agentId, allowedTools } = options;
-
-    // Authorization is transport auth (this process is one YAAR spawned). X-Agent-Token
-    // is the principal: a credential minted for this agent alone, which the server maps
-    // back to its id. The agent id itself is never sent — asserting it in a header is
-    // what let any agent claim to be the session agent.
-    const mcpHeaders: Record<string, string> = {
-      Authorization: `Bearer ${getMcpToken()}`,
-    };
-    if (agentId) {
-      mcpHeaders['X-Agent-Token'] = getAgentToken(agentId);
-    }
-
-    // Only enable builtin tools if allowedTools includes them (or is unfiltered)
-    const effectiveAllowed = allowedTools ?? getToolNames();
-    const builtinTools: SDKOptions['tools'] = [];
-    if (!allowedTools || allowedTools.includes('WebSearch')) {
-      builtinTools.push('WebSearch');
-    }
-
-    // Build MCP server configs — only include servers needed by allowedTools.
-    // This prevents the 'app' MCP server from being connected for monitor agents.
-    const neededServers = new Set<string>();
-    for (const tool of effectiveAllowed) {
-      const m = tool.match(/^mcp__(\w+)__/);
-      if (m) neededServers.add(m[1]);
-    }
-    const mcpServerConfigs = Object.fromEntries(
-      getActiveServers()
-        .filter((name) => neededServers.has(name))
-        .map((name: string) => [
-          name,
-          {
-            type: 'http' as const,
-            url: `http://127.0.0.1:${getPort()}/mcp/${name}`,
-            headers: mcpHeaders,
-          },
-        ]),
-    );
-    if (!allowedTools || allowedTools.includes('Task')) {
-      builtinTools.push('Task');
-    }
-
-    const claudeBin = resolveClaudeBinPath();
-
-    // When YAAR runs inside another Claude Code harness (e.g. cloud sandbox),
-    // the parent leaks vars that bind the child to parent-only resources (FDs,
-    // session IDs, host-managed mode). Strip them so the spawned CLI starts clean.
-    const cleanEnv = { ...process.env };
-    for (const k of [
-      'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
-      'CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR',
-      'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
-      'CLAUDE_CODE_SESSION_ID',
-      'CLAUDE_CODE_REMOTE_SESSION_ID',
-      'CLAUDE_CODE_CONTAINER_ID',
-      'CLAUDE_CODE_REMOTE',
-      'CLAUDECODE',
-    ]) {
-      delete cleanEnv[k];
-    }
-
-    return {
+  private getSDKOptions({ resumeSession, options }: TurnOptionsRequest): SDKOptions {
+    return buildSDKOptions({
+      resumeSession,
+      options,
+      defaultSystemPrompt: this.systemPrompt,
       abortController: this.createAbortController(),
-      executable: 'bun',
-      ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
-      systemPrompt: systemPrompt ?? this.systemPrompt,
-      // `||`, not `??`: an empty model string falls back to the default, as it
-      // did when callers patched the model in with `if (options.model)`.
-      model: options.model || 'claude-sonnet-4-6',
-      resume: resumeSession,
-      cwd: getStorageDir(),
-      tools: builtinTools,
-      allowedTools: effectiveAllowed,
-      // YAAR provides no LSP integration, but the spawned `claude` CLI ships an
-      // `LSP` tool by default and agents reach for it. Strip it from context so
-      // they don't waste turns calling a tool that can't do anything here.
-      disallowedTools: ['LSP'],
-      mcpServers: mcpServerConfigs,
-      includePartialMessages: true,
-      permissionMode: 'bypassPermissions',
-      allowDangerouslySkipPermissions: true,
-      env: {
-        ...cleanEnv,
-        MAX_MCP_OUTPUT_TOKENS: '131072',
-        CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: '1',
-        CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
-        ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
-        CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1',
-        CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1',
-        CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: '1'
-      },
-    };
+    });
+  }
+
+  /**
+   * Adopt the session id the SDK reports, unless the caller pinned one — a
+   * pinned id is the conversation we were told to speak into, not one to learn.
+   */
+  private captureSessionId(msg: unknown, options: TransportOptions): void {
+    if (msg && typeof msg === 'object' && 'session_id' in msg && msg.session_id) {
+      if (!options.sessionId) {
+        this.sessionId = msg.session_id as string;
+      }
+    }
   }
 
   getSessionId(): string | null {
@@ -401,21 +296,13 @@ export class ClaudeSessionProvider extends BaseTransport {
         messageCount++;
         if (session.abortController.signal.aborted) break;
 
-        if ('session_id' in msg && msg.session_id) {
-          if (!options.sessionId) {
-            this.sessionId = msg.session_id;
-          }
-        }
+        this.captureSessionId(msg, options);
 
         const mapped = mapClaudeMessage(msg);
         if (!mapped) continue;
 
         // Detect stale session error and retry without resume
-        if (
-          mapped.type === 'error' &&
-          resumeSession &&
-          mapped.error?.includes('No conversation found')
-        ) {
+        if (resumeSession && isStaleSessionError(mapped)) {
           console.warn(
             `[ClaudeSessionProvider] Stale session ${resumeSession}, retrying without resume`,
           );
@@ -534,16 +421,12 @@ export class ClaudeSessionProvider extends BaseTransport {
         messageCount++;
         if (this.isAborted()) break;
 
-        if ('session_id' in msg && msg.session_id) {
-          if (!options.sessionId) {
-            this.sessionId = msg.session_id;
-          }
-        }
+        this.captureSessionId(msg, options);
 
         const mapped = mapClaudeMessage(msg);
         if (mapped) {
           // Detect stale session error and retry without resume
-          if (mapped.type === 'error' && mapped.error?.includes('No conversation found')) {
+          if (isStaleSessionError(mapped)) {
             console.warn(
               `[ClaudeSessionProvider] Stale session ${resumeSession}, retrying without resume`,
             );
