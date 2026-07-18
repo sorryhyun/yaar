@@ -43,6 +43,12 @@ export const image = _image;
 export const [status, setStatus] = createSignal('Open an image to start editing.');
 /** The saved-image library, refreshed after every save or delete. */
 export const [storageFiles, setStorageFiles] = createSignal<StorageFile[]>([]);
+/**
+ * Whether the library modal is showing. Lives in the store rather than in the
+ * component so the protocol can open and close it — that is what makes the
+ * modal verifiable from outside the app, e.g. open it, then screenshot.
+ */
+export const [libraryOpen, setLibraryOpen] = createSignal(false);
 /** Bumped on every doc change so the canvas effect re-runs even for in-place edits. */
 export const [revision, setRevision] = createSignal(0);
 

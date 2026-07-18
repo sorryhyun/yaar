@@ -15,8 +15,10 @@ import {
   openImage,
   openStoragePath,
   redoEdit,
+  libraryOpen,
   refreshStorageFiles,
   saveToStorage,
+  setLibraryOpen,
   selectAll,
   setContiguous,
   setTolerance,
@@ -97,6 +99,11 @@ export function registerProtocol(): void {
           const d = doc();
           return d ? selectionSummary(d) : null;
         },
+      },
+      libraryOpen: {
+        description:
+          'Whether the library modal is currently showing. Pair with the `setLibraryOpen` command to open the modal and then verify it visually.',
+        handler: () => libraryOpen(),
       },
       library: {
         description:
@@ -495,6 +502,23 @@ export function registerProtocol(): void {
             p.quality ?? 0.92,
           );
           return { ...file, ...outputSize(requireDoc()) };
+        },
+      }),
+
+      setLibraryOpen: defineCommand({
+        description:
+          'Show or hide the library modal. Opening also refreshes the listing. Exposed so the UI can be driven and screenshotted without a real click.',
+        params: {
+          type: 'object',
+          properties: {
+            open: { type: 'boolean', description: 'Omit to toggle.' },
+          },
+        },
+        handler: async (p) => {
+          const next = p.open == null ? !libraryOpen() : !!p.open;
+          setLibraryOpen(next);
+          if (next) await refreshStorageFiles();
+          return { open: libraryOpen(), files: storageFiles().length };
         },
       }),
 

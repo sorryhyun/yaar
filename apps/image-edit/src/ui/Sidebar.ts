@@ -1,4 +1,4 @@
-import { For, Show } from '@bundled/solid-js';
+import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { DEFAULT_FILTERS, outputSize } from '../core/doc';
 import {
@@ -11,8 +11,6 @@ import {
   drawSize,
   eraser,
   hasSelection,
-  openStoragePath,
-  refreshStorageFiles,
   selectAll,
   selectMode,
   setBrushSize,
@@ -22,11 +20,9 @@ import {
   setEraser,
   setSelectMode,
   setTolerance,
-  storageFiles,
   tolerance,
-  type StorageFile,
 } from '../store';
-import { cropToSelection, hasDoc, removeFile, removeSelection, setFilter } from './actions';
+import { cropToSelection, hasDoc, removeSelection, setFilter } from './actions';
 import { FILTER_CONTROLS, SELECT_MODES } from './constants';
 
 // Library thumbnails deliberately omit loading="lazy": inside the app iframe
@@ -215,42 +211,6 @@ export function Sidebar() {
         >
           Clear drawing
         </button>
-      </div>
-
-      <div class="section">
-        <div class="library-head">
-          <span class="y-label">Library</span>
-          <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => refreshStorageFiles()}>
-            Refresh
-          </button>
-        </div>
-        <${Show}
-          when=${() => storageFiles().length > 0}
-          fallback=${() =>
-            html`<div class="y-text-xs y-text-muted">
-              No saved images yet. Use “Save to storage”.
-            </div>`}
-        >
-          <div class="library-grid">
-            <${For} each=${storageFiles}>
-              ${(file: StorageFile) => html`
-                <div class="lib-item">
-                  <button
-                    class="lib-thumb"
-                    title=${file.name}
-                    onClick=${() => openStoragePath(file.path)}
-                  >
-                    <img src=${file.url} alt=${file.name} />
-                    <span class="y-truncate lib-name">${file.name}</span>
-                  </button>
-                  <button class="lib-del" title="Delete" onClick=${() => removeFile(file)}>
-                    ×
-                  </button>
-                </div>
-              `}
-            <//>
-          </div>
-        <//>
       </div>
 
       <div class="section section-tight">

@@ -12,6 +12,7 @@ import {
 } from '../store';
 import { activeTool, doExport, doSaveToStorage, hasDoc } from './actions';
 import { HISTORY_ICONS, TOOLS, TRANSFORMS } from './constants';
+import { openLibrary } from './LibraryModal';
 
 export function Toolbar() {
   return html`
@@ -116,6 +117,13 @@ export function Toolbar() {
           onClick=${() => dispatch({ type: 'reset' })}
         >
           Reset
+        </button>
+        <button
+          class="y-btn y-btn-sm"
+          title="Browse images saved in app storage"
+          onClick=${() => openLibrary()}
+        >
+          Library
         </button>
         <div class="tb-split">
           <button

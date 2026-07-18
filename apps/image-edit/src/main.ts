@@ -9,6 +9,7 @@ import { registerProtocol } from './protocol';
 import { doc, hasSelection, image, refreshStorageFiles, revision, status, tool } from './store';
 import { hasDoc } from './ui/actions';
 import { createPointerHandlers } from './ui/pointer';
+import { LibraryModal } from './ui/LibraryModal';
 import { Sidebar } from './ui/Sidebar';
 import { Toolbar } from './ui/Toolbar';
 
@@ -154,6 +155,8 @@ function App() {
       </div>
 
       <div class="statusbar y-text-xs y-text-muted">${status}</div>
+
+      <${LibraryModal} />
     </div>
   `;
 }

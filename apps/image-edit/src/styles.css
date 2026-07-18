@@ -135,17 +135,87 @@
   flex-direction: column;
   gap: var(--yaar-sp-2);
 }
-.library-head {
+/* Library modal. The overlay is fixed to the viewport and centres its child
+   with flex, so the panel is centred regardless of where the trigger button
+   sits or how the toolbar is laid out. */
+.lib-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--yaar-sp-4);
+  background: rgba(0, 0, 0, 0.6);
+}
+
+.lib-modal {
+  width: min(720px, 90vw);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-lg);
+  box-shadow: var(--yaar-shadow-lg);
+}
+
+.lib-modal-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-3) var(--yaar-sp-4);
+  border-bottom: 1px solid var(--yaar-border);
 }
 
-.library-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.lib-modal-title {
+  font-size: var(--yaar-text-lg);
+  font-weight: 600;
+  color: var(--yaar-text);
+}
+
+.lib-modal-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+}
+
+.lib-close {
+  font-size: var(--yaar-text-lg);
+  line-height: 1;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+}
+
+.lib-modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--yaar-sp-4);
+}
+
+.lib-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-10) var(--yaar-sp-4);
+  text-align: center;
+}
+
+.lib-empty-icon {
+  font-size: 32px;
+  opacity: 0.6;
+}
+
+/* auto-fill rather than a fixed column count: tiles keep a sane minimum width
+   and the row fills out evenly at any modal width. */
+.lib-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--yaar-sp-3);
+  align-content: start;
 }
 
 .lib-item {
@@ -169,15 +239,16 @@
 }
 .lib-thumb img {
   width: 100%;
-  height: 56px;
+  height: 104px;
   object-fit: cover;
   border-radius: var(--yaar-radius);
   display: block;
   background: var(--yaar-bg);
 }
 .lib-name {
-  font-size: 10px;
+  font-size: var(--yaar-text-xs);
   color: var(--yaar-text-muted);
+  padding: 0 2px 2px;
 }
 
 /* Delete affordance stays hidden until the tile is hovered, so the grid reads
