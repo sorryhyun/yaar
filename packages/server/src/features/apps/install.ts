@@ -19,6 +19,7 @@ import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js
 import { readSettings } from '../../storage/settings.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/access.js';
+import { buildTarExtractInvocation } from './archive.js';
 
 /**
  * Broadcast a desktop action through the session-scoped 'desktop-shortcut' channel
@@ -92,22 +93,18 @@ export async function installApp(appId: string): Promise<VerbResult> {
   // Extract to a staging directory first so we can inspect permissions before finalizing
   const tmpDir = join(PROJECT_ROOT, 'storage', '.tmp');
   await mkdir(tmpDir, { recursive: true });
-  const tmpFile = join(tmpDir, `${appId}.tar.gz`);
-  const stagingDir = join(tmpDir, `staging-${appId}`);
+  const tmpFileName = `${appId}.tar.gz`;
+  const stagingDirName = `staging-${appId}`;
+  const tmpFile = join(tmpDir, tmpFileName);
+  const stagingDir = join(tmpDir, stagingDirName);
 
   const buffer = Buffer.from(await res.arrayBuffer());
   await Bun.write(tmpFile, buffer);
 
   await mkdir(stagingDir, { recursive: true });
   try {
-    const tarProc = Bun.spawnSync([
-      'tar',
-      'xzf',
-      tmpFile,
-      '--strip-components=1',
-      '-C',
-      stagingDir,
-    ]);
+    const tarInvocation = buildTarExtractInvocation(tmpDir, tmpFileName, stagingDirName);
+    const tarProc = Bun.spawnSync(tarInvocation.argv, { cwd: tarInvocation.cwd });
     if (tarProc.exitCode !== 0) {
       throw new Error(
         tarProc.stderr.toString().trim() || `tar exited with code ${tarProc.exitCode}`,
