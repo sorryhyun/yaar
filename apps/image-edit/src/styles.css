@@ -7,16 +7,100 @@
 .toolbar {
   flex-wrap: wrap;
   gap: var(--yaar-sp-1);
+  row-gap: var(--yaar-sp-2);
   align-items: center;
 }
 .toolbar .sep {
   width: 1px;
   align-self: stretch;
+  min-height: 20px;
   margin: 0 var(--yaar-sp-1);
   background: var(--yaar-border);
 }
 .toolbar .spacer {
   margin-left: auto;
+}
+
+/* Groups wrap as units, so a narrow window never splits Undo from Redo. */
+.tb-group {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  flex-shrink: 0;
+}
+
+/* The tool picker is one segmented control, not four buttons that happen to sit
+   together — the shared border is what says "pick exactly one of these". */
+.tb-seg {
+  gap: 0;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  overflow: hidden;
+}
+.tb-seg-btn {
+  border: 0;
+  background: transparent;
+  color: var(--yaar-text-muted);
+  font: inherit;
+  font-size: var(--yaar-text-sm);
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  cursor: pointer;
+  transition:
+    background var(--yaar-ease),
+    color var(--yaar-ease);
+}
+.tb-seg-btn + .tb-seg-btn {
+  border-left: 1px solid var(--yaar-border);
+}
+.tb-seg-btn:hover:not(:disabled) {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+.tb-seg-btn.is-active {
+  background: var(--yaar-accent-emphasis);
+  color: #fff;
+}
+.tb-seg-btn.is-active:hover:not(:disabled) {
+  background: var(--yaar-accent-emphasis-hover);
+}
+.tb-seg-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Icon-only: six labelled transform buttons were most of the toolbar's width. */
+.tb-icon {
+  min-width: 28px;
+  padding-left: var(--yaar-sp-1);
+  padding-right: var(--yaar-sp-1);
+  justify-content: center;
+  font-size: var(--yaar-text-lg);
+  line-height: 1;
+}
+
+/* Export: primary action joined to its format alternative. */
+.tb-split {
+  display: flex;
+  align-items: center;
+}
+.tb-split > .y-btn {
+  border-radius: 0;
+}
+.tb-split > .y-btn:first-child {
+  border-top-left-radius: var(--yaar-radius);
+  border-bottom-left-radius: var(--yaar-radius);
+}
+.tb-split > .y-btn:last-child {
+  margin-left: -1px;
+  border-top-right-radius: var(--yaar-radius);
+  border-bottom-right-radius: var(--yaar-radius);
+}
+
+/* Once the bar wraps, a right-aligned group reads as detached. */
+@media (max-width: 760px) {
+  .toolbar .spacer {
+    margin-left: 0;
+  }
 }
 
 /* A styled label wrapping a hidden file input — <input type=file> can't be themed. */
@@ -208,8 +292,48 @@
   padding-right: var(--yaar-sp-1);
 }
 
-.btn-grid {
+/* Selection actions, laid out like the toolbar's transform group: square
+   icon buttons packed onto as few rows as the sidebar width allows. The label
+   lives in title/aria-label, so nothing is lost by dropping the visible text. */
+.icon-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--yaar-sp-1);
+}
+.icon-btn {
+  width: 32px;
+  height: 28px;
+  padding: 0;
+  justify-content: center;
+  align-items: center;
+  font-size: var(--yaar-text-lg);
+  line-height: 1;
+}
+
+/* Label, slider and value on one row rather than three stacked lines. The
+   slider keeps the flexible column so it stays wide enough to drag. */
+.filter-row {
   display: grid;
+  grid-template-columns: 54px 1fr 26px;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  font-size: 11px;
+}
+.filter-row input[type='range'] {
+  width: 100%;
+  min-width: 0;
+  accent-color: var(--yaar-accent);
+}
+.filter-label {
+  color: var(--yaar-text-muted);
+}
+.filter-value {
+  text-align: right;
+  color: var(--yaar-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-tight {
   gap: var(--yaar-sp-1);
 }
 

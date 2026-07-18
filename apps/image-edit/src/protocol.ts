@@ -368,7 +368,8 @@ export function registerProtocol(): void {
       }),
 
       cropToSelection: defineCommand({
-        description: 'Crop to the bounding box of the current selection.',
+        description:
+          'Crop to the bounding box of the current selection AND make every pixel outside the selection mask transparent. This is the one-step way to isolate a non-rectangular subject: magicWand or lasso the subject, call cropToSelection, then export as PNG. jpeg has no alpha channel and flattens the transparency onto white.',
         params: { type: 'object', properties: {} },
         handler: () => {
           if (!requireDoc().selection) throw new Error('Nothing is selected. Call `magicWand` first.');

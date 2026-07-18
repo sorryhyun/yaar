@@ -209,7 +209,22 @@ export function applyCommand(doc: Doc, cmd: Command): Doc {
       if (!doc.selection) return doc;
       const bounds = maskBounds(doc.selection);
       if (!bounds) return doc;
-      return { ...doc, crop: clampRect(bounds, doc), resize: null };
+      // Crop to the bounding box AND clear everything outside the mask itself.
+      // A wand or lasso selection is almost never rectangular, so the bounding
+      // box alone leaves the unselected corners fully opaque — the user asked to
+      // isolate a subject and got the subject plus a rectangle of background.
+      // Reusing `removed` rather than baking pixels keeps this undoable and lets
+      // the existing destination-out compositing carry the alpha through every
+      // later rotate, flip, resize and filter.
+      const outside = invertMask(doc.selection);
+      return {
+        ...doc,
+        crop: clampRect(bounds, doc),
+        resize: null,
+        removed: outside.count > 0 ? unionMask(doc.removed, outside) : doc.removed,
+        // Ants tracing the region we just cropped to read as "nothing happened".
+        selection: null,
+      };
     }
 
     case 'removeSelection': {

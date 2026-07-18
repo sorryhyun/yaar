@@ -79,6 +79,30 @@ const MIME: Record<ExportFormat, string> = {
   webp: 'image/webp',
 };
 
+/**
+ * JPEG has no alpha channel, and left to itself the encoder composites
+ * transparent pixels onto BLACK — so a crop-to-selection cutout exports as a
+ * subject on a black silhouette. Flatten onto white first, which is what "save
+ * this as a JPEG" means to a user. PNG and WebP keep their alpha untouched.
+ */
+function flattenOntoWhite(src: HTMLCanvasElement): HTMLCanvasElement {
+  const out = document.createElement('canvas');
+  out.width = src.width;
+  out.height = src.height;
+  const ctx = out.getContext('2d');
+  if (!ctx) return src;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, out.width, out.height);
+  ctx.drawImage(src, 0, 0);
+  return out;
+}
+
+/** The canvas an export should encode — flattened only for formats without alpha. */
+function exportCanvas(doc: Doc, img: CanvasImageSource, format: ExportFormat): HTMLCanvasElement {
+  const canvas = renderFull(doc, img);
+  return format === 'jpeg' ? flattenOntoWhite(canvas) : canvas;
+}
+
 /** Full-resolution export as a data URL. */
 export function exportDataUrl(
   doc: Doc,
@@ -86,8 +110,7 @@ export function exportDataUrl(
   format: ExportFormat,
   quality = 0.92,
 ): string {
-  const canvas = renderFull(doc, img);
-  return canvas.toDataURL(MIME[format], quality);
+  return exportCanvas(doc, img, format).toDataURL(MIME[format], quality);
 }
 
 /** Full-resolution export as a Blob (preferred for downloads — no base64 bloat). */
@@ -97,7 +120,7 @@ export function exportBlob(
   format: ExportFormat,
   quality = 0.92,
 ): Promise<Blob | null> {
-  const canvas = renderFull(doc, img);
+  const canvas = exportCanvas(doc, img, format);
   return new Promise((resolve) => canvas.toBlob(resolve, MIME[format], quality));
 }
 
