@@ -63,19 +63,24 @@ export function marketCard(app: DisplayApp) {
         ${() => {
           const installed = app.installed || hasInstalled(app.id);
           if (installed && isSystem(app.id)) {
-            return html`<span class="installed-badge">✓ Built-in</span>`;
+            return html`<span class="installed-badge" title="Built-in app" aria-label="Built-in"
+              >✅</span
+            >`;
           }
           if (installed) {
             return html`
-              <span class="installed-badge">✓ Installed</span>
-              ${publishButton(app)}
-              <button
-                class="y-btn y-btn-sm y-btn-danger uninstall-btn"
-                disabled=${() => loading()}
-                onClick=${() => void uninstallApp(app)}
-              >
-                Uninstall
-              </button>
+              <span class="installed-badge" title="Installed" aria-label="Installed">✅</span>
+              <div class="action-group">
+                ${publishButton(app)}
+                <button
+                  class="y-btn y-btn-sm y-btn-danger uninstall-btn"
+                  title="Uninstall"
+                  disabled=${() => loading()}
+                  onClick=${() => void uninstallApp(app)}
+                >
+                  Uninstall
+                </button>
+              </div>
             `;
           }
           return html`
