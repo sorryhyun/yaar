@@ -22,9 +22,12 @@ import { join } from 'path';
  * without a rebuild, every installed build still ships the copy that 401s. '7': the
  * design tokens gained the y-modal-title/msg/actions classes the new showAlert/
  * showConfirm/showPrompt dialogs render with — an old build calling them would get
- * unstyled markup.)
+ * unstyled markup.) '8': the dark palette moved to GitHub Dark Dimmed and
+ * .y-btn-primary now fills with the new --yaar-accent-emphasis token — an old
+ * build keeps the near-black canvas and paints its primary button with a token
+ * its baked-in CSS never defines.
  */
-export const COMPILER_VERSION = '7';
+export const COMPILER_VERSION = '8';
 
 export interface BuildManifest {
   sourceHash: string;

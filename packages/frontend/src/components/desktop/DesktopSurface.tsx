@@ -134,8 +134,13 @@ export function DesktopSurface() {
   useEffect(() => {
     const preset = resolveAccent(accentColor);
     if (preset) {
-      document.documentElement.style.setProperty('--color-accent', preset.color);
-      document.documentElement.style.setProperty('--color-accent-hover', preset.hover);
+      const root = document.documentElement.style;
+      root.setProperty('--color-accent', preset.color);
+      root.setProperty('--color-accent-hover', preset.hover);
+      // Filled buttons paint the emphasis pair, so it has to follow the preset too —
+      // otherwise picking "pink" tints links but leaves every primary button blue.
+      root.setProperty('--color-accent-emphasis', preset.emphasis);
+      root.setProperty('--color-accent-emphasis-hover', preset.emphasisHover);
     }
   }, [accentColor]);
 

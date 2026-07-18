@@ -9,26 +9,41 @@
  * shell CSS modules and app styles consume `var(--*)`; TS code imports from here.
  */
 
-/** Core dark palette (default theme). */
+/**
+ * Core dark palette (default theme) — GitHub **Dark Dimmed** (Primer `dark_dimmed`).
+ * Every value is a literal step from that scale, not hand-tuned: the grays are
+ * gray-9…gray-0, the hues blue-2/3, green-3, red-3/4, yellow-3.
+ *
+ * The `*Emphasis` entries are Primer's `*.emphasis` roles: a **fill under white
+ * text**. They are deliberately darker than the matching `accent`/`error` hue,
+ * which is an `*.fg` role — a text/link/border color that fails contrast as a
+ * fill. Never swap the two.
+ */
 export const PALETTE_DARK = {
-  bg: '#0f1117',
-  bgInset: '#0a0c10',
-  bgSurface: '#161b22',
-  bgSurfaceHover: '#1c2129',
-  text: '#e6edf3',
-  textSubtle: '#c9d1d9',
-  textMuted: '#8b949e',
-  textDim: '#6e7681',
-  accent: '#58a6ff',
-  accentHover: '#79c0ff',
-  border: '#30363d',
-  borderMuted: '#21262d',
-  borderHover: '#3d444d',
-  borderStrong: '#484f58',
-  success: '#3fb950',
-  error: '#f85149',
-  errorHover: '#ff7b72',
-  warning: '#d29922',
+  bg: '#22272e',
+  bgInset: '#1c2128',
+  bgSurface: '#2d333b',
+  bgSurfaceHover: '#373e47',
+  text: '#cdd9e5',
+  textSubtle: '#adbac7',
+  textMuted: '#768390',
+  textDim: '#636e7b',
+  accent: '#539bf5',
+  accentHover: '#6cb6ff',
+  accentEmphasis: '#316dca',
+  accentEmphasisHover: '#4184e4',
+  border: '#444c56',
+  borderMuted: '#373e47',
+  borderHover: '#545d68',
+  borderStrong: '#636e7b',
+  success: '#57ab5a',
+  successEmphasis: '#347d39',
+  successEmphasisHover: '#46954a',
+  error: '#e5534b',
+  errorHover: '#f47067',
+  dangerEmphasis: '#c93c37',
+  dangerEmphasisHover: '#e5534b',
+  warning: '#c69026',
 } as const;
 
 /** Light palette — powers the app-side `.y-light` class and the shell light theme. */
@@ -43,13 +58,19 @@ export const PALETTE_LIGHT = {
   textDim: '#8b949e',
   accent: '#0969da',
   accentHover: '#0550ae',
+  accentEmphasis: '#0969da',
+  accentEmphasisHover: '#0860ca',
   border: '#d0d7de',
   borderMuted: '#d8dee4',
   borderHover: '#afb8c1',
   borderStrong: '#8c959f',
   success: '#1a7f37',
+  successEmphasis: '#1f883d',
+  successEmphasisHover: '#1a7f37',
   error: '#cf222e',
   errorHover: '#a40e26',
+  dangerEmphasis: '#cf222e',
+  dangerEmphasisHover: '#a40e26',
   warning: '#9a6700',
 } as const;
 
@@ -58,14 +79,56 @@ export const PALETTE_LIGHT = {
  * settings — never rename them; only values may change.
  */
 export const ACCENT_PRESETS_DATA = [
-  { key: 'blue', color: '#58a6ff', hover: '#79c0ff' },
-  { key: 'lavender', color: '#a5b4fc', hover: '#c7d2fe' },
-  { key: 'mauve', color: '#bc8cff', hover: '#d2a8ff' },
-  { key: 'pink', color: '#f778ba', hover: '#ff9bce' },
-  { key: 'peach', color: '#ffa657', hover: '#ffc680' },
-  { key: 'yellow', color: '#e3b341', hover: '#f0d060' },
-  { key: 'green', color: '#3fb950', hover: '#56d364' },
-  { key: 'red', color: '#f85149', hover: '#ff7b72' },
+  {
+    key: 'blue',
+    color: '#539bf5',
+    hover: '#6cb6ff',
+    emphasis: '#316dca',
+    emphasisHover: '#4184e4',
+  },
+  {
+    key: 'lavender',
+    color: '#a5b4fc',
+    hover: '#c7d2fe',
+    emphasis: '#5155c4',
+    emphasisHover: '#666bd6',
+  },
+  {
+    key: 'mauve',
+    color: '#bc8cff',
+    hover: '#d2a8ff',
+    emphasis: '#8256d0',
+    emphasisHover: '#986ee2',
+  },
+  {
+    key: 'pink',
+    color: '#f778ba',
+    hover: '#ff9bce',
+    emphasis: '#bf3989',
+    emphasisHover: '#d14b9a',
+  },
+  {
+    key: 'peach',
+    color: '#ffa657',
+    hover: '#ffc680',
+    emphasis: '#ae5622',
+    emphasisHover: '#cc6b2c',
+  },
+  {
+    key: 'yellow',
+    color: '#e3b341',
+    hover: '#f0d060',
+    emphasis: '#8c6708',
+    emphasisHover: '#a97f10',
+  },
+  {
+    key: 'green',
+    color: '#3fb950',
+    hover: '#56d364',
+    emphasis: '#347d39',
+    emphasisHover: '#46954a',
+  },
+  { key: 'red', color: '#f85149', hover: '#ff7b72', emphasis: '#c93c37', emphasisHover: '#e5534b' },
 ] as const;
 
 /** Spacing scale, 4px base. The app layer exposes a subset; the shell all steps. */
@@ -121,12 +184,15 @@ export const Z_INDEX = {
 /**
  * Alpha overlay tiers — the "glass" model for hover washes and translucent
  * chrome (dock). Deliberately alpha, unlike borders which are opaque tokens.
+ *
+ * The white tiers are one step stronger than the GitHub-dark original: on the
+ * brighter Dimmed canvas a 5% white wash is very nearly invisible.
  */
 export const OVERLAYS = {
-  light: 'rgba(255,255,255,0.05)',
-  medium: 'rgba(255,255,255,0.08)',
-  strong: 'rgba(255,255,255,0.1)',
-  hover: 'rgba(255,255,255,0.15)',
+  light: 'rgba(255,255,255,0.06)',
+  medium: 'rgba(255,255,255,0.1)',
+  strong: 'rgba(255,255,255,0.13)',
+  hover: 'rgba(255,255,255,0.18)',
   dark: 'rgba(0,0,0,0.2)',
   darkMedium: 'rgba(0,0,0,0.3)',
   darkStrong: 'rgba(0,0,0,0.4)',

@@ -34,12 +34,12 @@
 }
 
 .buttonPrimary {
-  background: var(--color-primary);
+  background: var(--color-accent-emphasis);
   color: white;
 }
 
 .buttonPrimary:hover {
-  background: var(--color-primary-hover);
+  background: var(--color-accent-emphasis-hover);
 }
 
 .buttonSecondary {
@@ -61,12 +61,12 @@
 }
 
 .buttonDanger {
-  background: var(--color-danger);
+  background: var(--color-danger-emphasis);
   color: white;
 }
 
 .buttonDanger:hover {
-  background: var(--color-danger-hover);
+  background: var(--color-danger-emphasis-hover);
 }
 
 .buttonDisabled {

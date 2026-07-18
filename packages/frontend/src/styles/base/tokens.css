@@ -12,33 +12,44 @@
 
 :root {
   /* === Surfaces === */
-  --color-base: #0f1117;
-  --color-mantle: #0a0c10;
-  --color-surface: #161b22;
-  --color-surface-hover: #1c2129;
-  --color-overlay: #30363d;
+  --color-base: #22272e;
+  --color-mantle: #1c2128;
+  --color-surface: #2d333b;
+  --color-surface-hover: #373e47;
+  --color-overlay: #444c56;
 
   /* Text tiers */
-  --color-text: #e6edf3;
-  --color-subtext: #c9d1d9;
-  --color-subtext-muted: #8b949e;
-  --color-muted: #6e7681;
+  --color-text: #cdd9e5;
+  --color-subtext: #adbac7;
+  --color-subtext-muted: #768390;
+  --color-muted: #636e7b;
   --color-text-muted: var(--color-subtext-muted);
 
   /* === Semantics — the only color names shell CSS may use ===
      `--color-accent` is also written at runtime by the accent-preset picker
      (DesktopSurface), so it must hold a real value, not a var() indirection. */
   --color-bg: var(--color-base);
-  --color-accent: #58a6ff;
-  --color-accent-hover: #79c0ff;
+  --color-accent: #539bf5;
+  --color-accent-hover: #6cb6ff;
   --color-primary: var(--color-accent);
   --color-primary-hover: var(--color-accent-hover);
   --color-info: var(--color-accent);
-  --color-success: #3fb950;
-  --color-success-dim: rgba(63,185,80,0.3);
-  --color-danger: #f85149;
-  --color-danger-hover: #ff7b72;
-  --color-warning: #d29922;
+  --color-success: #57ab5a;
+  --color-success-dim: rgba(87,171,90,0.3);
+  --color-danger: #e5534b;
+  --color-danger-hover: #f47067;
+  --color-warning: #c69026;
+
+  /* Emphasis fills — solid backgrounds under white text. The plain hues above
+     are text/link colors and fail contrast as fills; use these for filled
+     buttons only. The accent pair is re-derived at runtime by the accent-preset
+     picker so filled buttons follow the chosen accent. */
+  --color-accent-emphasis: #316dca;
+  --color-accent-emphasis-hover: #4184e4;
+  --color-success-emphasis: #347d39;
+  --color-success-emphasis-hover: #46954a;
+  --color-danger-emphasis: #c93c37;
+  --color-danger-emphasis-hover: #e5534b;
 
   /* Decorative hues — no semantic meaning, never stand in for a semantic above */
   --hue-lavender: #a5b4fc;
@@ -73,10 +84,10 @@
   --shadow-2xl: 0 16px 48px rgba(0,0,0,0.5);
 
   /* === Borders (opaque color tokens + shorthands) === */
-  --color-border: #30363d;
-  --color-border-muted: #21262d;
-  --color-border-hover: #3d444d;
-  --color-border-strong: #484f58;
+  --color-border: #444c56;
+  --color-border-muted: #373e47;
+  --color-border-hover: #545d68;
+  --color-border-strong: #636e7b;
   --border-subtle: 1px solid var(--color-border);
   --border-muted: 1px solid var(--color-border-muted);
   --border-hover: 1px solid var(--color-border-hover);
@@ -111,19 +122,19 @@
   --opacity-hover: 0.95;
 
   /* === Background Overlays (alpha "glass" tier) === */
-  --bg-overlay-light: rgba(255,255,255,0.05);
-  --bg-overlay-medium: rgba(255,255,255,0.08);
-  --bg-overlay-strong: rgba(255,255,255,0.1);
-  --bg-overlay-hover: rgba(255,255,255,0.15);
+  --bg-overlay-light: rgba(255,255,255,0.06);
+  --bg-overlay-medium: rgba(255,255,255,0.1);
+  --bg-overlay-strong: rgba(255,255,255,0.13);
+  --bg-overlay-hover: rgba(255,255,255,0.18);
   --bg-dark-overlay: rgba(0,0,0,0.2);
   --bg-dark-overlay-medium: rgba(0,0,0,0.3);
   --bg-dark-overlay-strong: rgba(0,0,0,0.4);
   --bg-modal-backdrop: rgba(0,0,0,0.6);
 
   /* Glass surfaces — translucent chrome floating over the wallpaper */
-  --bg-glass: rgba(15,17,23,0.8);
-  --bg-glass-strong: rgba(15,17,23,0.95);
-  --bg-glass-inset: rgba(10,12,16,0.92);
+  --bg-glass: rgba(34,39,46,0.8);
+  --bg-glass-strong: rgba(34,39,46,0.95);
+  --bg-glass-inset: rgba(28,33,40,0.92);
 
   color-scheme: dark;
 }
@@ -150,6 +161,13 @@
   --color-danger: #cf222e;
   --color-danger-hover: #a40e26;
   --color-warning: #9a6700;
+
+  --color-accent-emphasis: #0969da;
+  --color-accent-emphasis-hover: #0860ca;
+  --color-success-emphasis: #1f883d;
+  --color-success-emphasis-hover: #1a7f37;
+  --color-danger-emphasis: #cf222e;
+  --color-danger-emphasis-hover: #a40e26;
 
   --color-border: #d0d7de;
   --color-border-muted: #d8dee4;

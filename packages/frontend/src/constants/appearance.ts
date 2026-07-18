@@ -50,6 +50,9 @@ export interface AccentPreset {
   key: string;
   color: string;
   hover: string;
+  /** Darker fill for white-text buttons — see the `*Emphasis` note in tokens.ts. */
+  emphasis: string;
+  emphasisHover: string;
 }
 
 /** Sourced from the canonical token data so picker colors and hovers cannot drift. */

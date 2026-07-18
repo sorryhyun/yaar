@@ -73,6 +73,17 @@ ${FONT_FACE_CSS}
   --color-danger-hover: ${D.errorHover};
   --color-warning: ${D.warning};
 
+  /* Emphasis fills — solid backgrounds under white text. The plain hues above
+     are text/link colors and fail contrast as fills; use these for filled
+     buttons only. The accent pair is re-derived at runtime by the accent-preset
+     picker so filled buttons follow the chosen accent. */
+  --color-accent-emphasis: ${D.accentEmphasis};
+  --color-accent-emphasis-hover: ${D.accentEmphasisHover};
+  --color-success-emphasis: ${D.successEmphasis};
+  --color-success-emphasis-hover: ${D.successEmphasisHover};
+  --color-danger-emphasis: ${D.dangerEmphasis};
+  --color-danger-emphasis-hover: ${D.dangerEmphasisHover};
+
   /* Decorative hues — no semantic meaning, never stand in for a semantic above */
   --hue-lavender: ${accent('lavender').color};
   --hue-peach: ${accent('peach').color};
@@ -177,6 +188,13 @@ ${Object.entries(SPACING)
   --color-danger: ${L.error};
   --color-danger-hover: ${L.errorHover};
   --color-warning: ${L.warning};
+
+  --color-accent-emphasis: ${L.accentEmphasis};
+  --color-accent-emphasis-hover: ${L.accentEmphasisHover};
+  --color-success-emphasis: ${L.successEmphasis};
+  --color-success-emphasis-hover: ${L.successEmphasisHover};
+  --color-danger-emphasis: ${L.dangerEmphasis};
+  --color-danger-emphasis-hover: ${L.dangerEmphasisHover};
 
   --color-border: ${L.border};
   --color-border-muted: ${L.borderMuted};
