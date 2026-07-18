@@ -52,3 +52,4 @@ export {
   isBareWindowsAuthority,
   expandBraceUri,
 } from './yaar-uri.js';
+export * from './design/index.js';

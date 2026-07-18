@@ -109,8 +109,8 @@
   padding: 8px 24px;
   border-radius: var(--radius-lg);
   border: none;
-  background: var(--color-accent, #89b4fa);
-  color: #fff;
+  background: var(--color-accent);
+  color: #fff; /* intentional: text on accent-colored button */
   font-size: var(--text-md);
   font-weight: 500;
   font-family: var(--font-sans);

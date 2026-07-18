@@ -1,4 +1,5 @@
 /** Preset data for wallpapers, accent colors, and icon sizes. */
+import { ACCENT_PRESETS_DATA } from '@yaar/shared';
 
 export interface WallpaperPreset {
   key: string;
@@ -6,36 +7,37 @@ export interface WallpaperPreset {
   css: string;
 }
 
+/** Gradient artwork, tuned to sit behind the GitHub-dark shell (base #0f1117). */
 export const WALLPAPER_PRESETS: WallpaperPreset[] = [
   {
     key: 'dark-blue',
     label: 'Dark Blue',
-    css: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%)',
+    css: 'linear-gradient(135deg, #0d1117 0%, #101a2e 50%, #0f2a52 100%)',
   },
   {
     key: 'midnight',
     label: 'Midnight',
-    css: 'linear-gradient(135deg, #1e1b2e 0%, #2d1b4e 50%, #1a1040 100%)',
+    css: 'linear-gradient(135deg, #10101c 0%, #1d1533 50%, #150e33 100%)',
   },
   {
     key: 'aurora',
     label: 'Aurora',
-    css: 'linear-gradient(135deg, #1a2e1e 0%, #162e2a 50%, #0f3434 100%)',
+    css: 'linear-gradient(135deg, #0d1512 0%, #0f2420 50%, #0c2b2b 100%)',
   },
   {
     key: 'ember',
     label: 'Ember',
-    css: 'linear-gradient(135deg, #2e1a1a 0%, #3e2116 50%, #402010 100%)',
+    css: 'linear-gradient(135deg, #1a100c 0%, #2a160e 50%, #331a0a 100%)',
   },
   {
     key: 'ocean',
     label: 'Ocean',
-    css: 'linear-gradient(135deg, #0a1628 0%, #0d2137 50%, #0a2a4a 100%)',
+    css: 'linear-gradient(135deg, #0a1220 0%, #0c1e33 50%, #0a2947 100%)',
   },
   {
     key: 'moss',
     label: 'Moss',
-    css: 'linear-gradient(135deg, #1a2418 0%, #1e2e1a 50%, #243018 100%)',
+    css: 'linear-gradient(135deg, #0f150c 0%, #14200f 50%, #1a260e 100%)',
   },
 ];
 
@@ -50,16 +52,8 @@ export interface AccentPreset {
   hover: string;
 }
 
-export const ACCENT_PRESETS: AccentPreset[] = [
-  { key: 'blue', color: '#89b4fa', hover: '#a8c8fc' },
-  { key: 'lavender', color: '#b4befe', hover: '#c8d0fe' },
-  { key: 'mauve', color: '#cba6f7', hover: '#d9bef9' },
-  { key: 'pink', color: '#f5c2e7', hover: '#f8d4ee' },
-  { key: 'peach', color: '#fab387', hover: '#fcc5a3' },
-  { key: 'yellow', color: '#f9e2af', hover: '#fbebc5' },
-  { key: 'green', color: '#a6e3a1', hover: '#bdeab9' },
-  { key: 'red', color: '#f38ba8', hover: '#f6a5bc' },
-];
+/** Sourced from the canonical token data so picker colors and hovers cannot drift. */
+export const ACCENT_PRESETS: AccentPreset[] = ACCENT_PRESETS_DATA.map((p) => ({ ...p }));
 
 export function resolveAccent(key: string): AccentPreset | undefined {
   return ACCENT_PRESETS.find((p) => p.key === key);

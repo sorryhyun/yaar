@@ -35,11 +35,11 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  border: 1.5px solid rgba(234, 179, 8, 0.6);
+  border: 1.5px solid color-mix(in srgb, var(--color-warning) 60%, transparent);
   opacity: 0.7;
   animation: agentGlow 2s ease-in-out infinite;
   pointer-events: none;
-  z-index: 9999;
+  z-index: var(--z-modal);
 }
 
 .frame[data-focused='true'][data-agent-active='true'] {
@@ -238,14 +238,14 @@
 .dropOverlay {
   position: absolute;
   inset: 0;
-  background: rgba(59, 130, 246, 0.08);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
   z-index: 2;
   border-radius: inherit;
 }
 
 /* Selection action floating input */
 .selectionActionInput {
-  z-index: 99999;
+  z-index: var(--z-cursor);
 }
 
 .selectionInput {
@@ -262,10 +262,10 @@
 }
 
 .selectionInput:focus {
-  border-color: rgba(59, 130, 246, 0.6);
+  border-color: color-mix(in srgb, var(--color-accent) 60%, transparent);
   box-shadow:
     var(--shadow-xl),
-    0 0 0 2px rgba(59, 130, 246, 0.2);
+    0 0 0 2px color-mix(in srgb, var(--color-accent) 20%, transparent);
 }
 
 .selectionInput::placeholder {
@@ -274,7 +274,7 @@
 
 /* ============ Widget variant ============ */
 .frame[data-variant='widget'] {
-  background: rgba(30, 30, 46, 0.8);
+  background: var(--bg-glass);
   backdrop-filter: blur(12px);
   border: none;
   border-radius: var(--radius-lg);
@@ -293,7 +293,7 @@
   height: 20px;
   border: none;
   border-radius: var(--radius-sm);
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg-dark-overlay-strong);
   color: var(--color-subtext-muted);
   font-size: 14px;
   cursor: pointer;
@@ -347,7 +347,7 @@
 /* ============ Panel variant ============ */
 .frame[data-variant='panel'] {
   border-radius: 0;
-  background: rgba(24, 24, 37, 0.92);
+  background: var(--bg-glass-inset);
   backdrop-filter: blur(16px);
   border: none;
   box-shadow: 0 0 20px rgba(0, 0, 0, 0.4);

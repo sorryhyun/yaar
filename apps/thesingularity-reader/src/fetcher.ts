@@ -519,7 +519,7 @@ function extractContentFromDoc(doc: Document, post: Post): string {
   //    body-less post (e.g. a title-only question). Do NOT fall through to the
   //    heuristic scan, which would scrape the page's settings/nav chrome.
   if (knownEmptyEl) {
-    return '<p style="color:#8b949e">(본문 없음)</p>';
+    return '<p style="color:var(--yaar-text-muted)">(본문 없음)</p>';
   }
 
   // 3. No known container matched at all — the markup is unfamiliar. Resort to
@@ -531,7 +531,7 @@ function extractContentFromDoc(doc: Document, post: Post): string {
   }
 
   const safeUrl = post.url.replace(/"/g, '&quot;');
-  return `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
+  return `<p style="color:var(--yaar-text-muted)">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
 }
 
 /** Referer DC's hotlink protection accepts (mobile gallery origin). */
@@ -791,7 +791,7 @@ export async function fetchPostDetail(
   }
   if (!content) {
     const safeUrl = post.url.replace(/"/g, '&quot;');
-    content = `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
+    content = `<p style="color:var(--yaar-text-muted)">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
   }
 
   return { content, comments: browser.comments };

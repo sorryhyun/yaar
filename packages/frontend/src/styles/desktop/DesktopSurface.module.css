@@ -21,7 +21,7 @@
   padding: 6px var(--space-4);
   background: var(--bg-dark-overlay-strong);
   border-radius: var(--radius-full);
-  color: #fff;
+  color: var(--color-text);
   font-size: var(--text-lg);
   backdrop-filter: blur(10px);
   z-index: var(--z-modal);
@@ -32,21 +32,21 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: #666;
+  background: var(--color-muted);
 }
 
 .statusDot[data-status='connected'] {
-  background: #4ade80;
-  box-shadow: 0 0 8px #4ade80;
+  background: var(--color-success);
+  box-shadow: 0 0 8px var(--color-success);
 }
 
 .statusDot[data-status='connecting'] {
-  background: #fbbf24;
+  background: var(--color-warning);
   animation: pulse 1s infinite;
 }
 
 .statusDot[data-status='error'] {
-  background: #f87171;
+  background: var(--color-danger);
 }
 
 .statusText {
@@ -87,7 +87,7 @@
   font-weight: 500;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
-  background: rgba(137, 180, 250, 0.15);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
 }
 
 .agentIndicatorButton {
@@ -114,7 +114,7 @@
   transform: translateX(-50%);
   min-width: 300px;
   max-width: 400px;
-  background: rgba(30, 30, 46, 0.95);
+  background: var(--bg-glass-strong);
   border: var(--border-subtle);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
@@ -203,7 +203,7 @@
   font-weight: 500;
   color: var(--color-text);
   background: var(--bg-overlay-strong);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--bg-overlay-hover);
   border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -257,8 +257,8 @@
 }
 
 .desktopIconSelected {
-  background: rgba(0, 120, 215, 0.35);
-  outline: 1.5px solid rgba(0, 120, 215, 0.8);
+  background: color-mix(in srgb, var(--color-accent) 35%, transparent);
+  outline: 1.5px solid color-mix(in srgb, var(--color-accent) 80%, transparent);
 }
 
 .iconImage {
@@ -286,19 +286,19 @@
   min-width: 18px;
   height: 18px;
   padding: 0 5px;
-  background: #ef4444;
-  color: #fff;
-  font-size: 11px;
+  background: var(--color-danger);
+  color: #fff; /* intentional: text on danger-colored badge */
+  font-size: var(--text-xs);
   font-weight: 700;
   line-height: 18px;
   text-align: center;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
   pointer-events: none;
 }
 
 .iconLabel {
-  color: #fff;
+  color: var(--color-text);
   font-size: var(--text-base);
   font-weight: 500;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
@@ -312,8 +312,8 @@
   content: '';
   position: absolute;
   inset: 0;
-  border: 2px dashed rgba(59, 130, 246, 0.6);
-  background: rgba(59, 130, 246, 0.05);
+  border: 2px dashed color-mix(in srgb, var(--color-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 5%, transparent);
   pointer-events: none;
   z-index: 1;
   border-radius: 4px;
@@ -356,8 +356,8 @@
 /* Rubber-band selection rectangle */
 .selectionRect {
   position: fixed;
-  background: rgba(0, 120, 215, 0.18);
-  border: 1px solid rgba(0, 120, 215, 0.7);
+  background: color-mix(in srgb, var(--color-accent) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 70%, transparent);
   pointer-events: none;
   z-index: 1;
 }
@@ -414,12 +414,12 @@
   height: 18px;
   padding: 0 5px;
   background: rgba(255, 255, 255, 0.25);
-  color: #fff;
-  font-size: 11px;
+  color: var(--color-text);
+  font-size: var(--text-xs);
   font-weight: 700;
   line-height: 18px;
   text-align: center;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
   pointer-events: none;
 }
@@ -433,10 +433,10 @@
   padding: 6px;
   margin-top: 2px;
   border-radius: var(--radius-lg);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-overlay-medium);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  animation: folderExpandIn 0.2s ease-out;
+  border: 1px solid var(--bg-overlay-strong);
+  animation: folderExpandIn var(--transition-normal);
 }
 
 .folderChildIcon {

@@ -7,8 +7,8 @@
   align-items: center;
   gap: var(--space-4);
   padding: 10px var(--space-5);
-  background: rgba(137, 180, 250, 0.15);
-  border: 1px solid rgba(137, 180, 250, 0.3);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-accent) 30%, transparent);
   border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
   z-index: var(--z-panel);
@@ -42,7 +42,7 @@
 }
 
 .restoreButton:hover:not(:disabled) {
-  background: #a6c8ff;
+  background: var(--color-accent-hover);
 }
 
 .restoreButton:disabled {

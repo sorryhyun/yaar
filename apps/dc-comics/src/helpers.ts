@@ -139,8 +139,8 @@ export function processImages(htmlStr: string, eagerCount = 2): string {
           "var s=document.createElement('span');" +
           "s.textContent='[이미지 로드 실패]';" +
           "s.style.cssText='display:inline-block;padding:4px 8px;" +
-          'background:var(--yaar-bg-surface,#2a2a2a);border-radius:4px;' +
-          "font-size:0.8em;color:var(--yaar-text-muted,#888);margin:2px';" +
+          'background:var(--yaar-bg-surface);border-radius:4px;' +
+          "font-size:0.8em;color:var(--yaar-text-muted);margin:2px';" +
           'this.replaceWith(s)',
       );
     }

@@ -32,6 +32,7 @@ import {
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
   IFRAME_WINDOWS_SDK_SCRIPT,
   IFRAME_CONSOLE_CAPTURE_SCRIPT,
+  FONT_SANS,
 } from '@yaar/shared';
 import { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
 import { scanTokens, formatTokenFindings, type AppSourceFile } from './design-token-guard.js';
@@ -122,7 +123,7 @@ export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: stri
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
-<style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}#${APP_MOUNT_ID}{height:100%}#${APP_MOUNT_ID}:empty{display:none}body{font-family:'NanumSquareNeo',system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif}</style>
+<style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}#${APP_MOUNT_ID}{height:100%}#${APP_MOUNT_ID}:empty{display:none}body{font-family:${FONT_SANS}}</style>
 <script>${escapeInlineJs(sdkCode)}</script>
 </head>
 <body>

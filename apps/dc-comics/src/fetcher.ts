@@ -224,7 +224,7 @@ function extractContentFromDoc(doc: Document, post: Post): string {
     if (textContent.length > 20) return el.innerHTML.trim();
   }
   const safeUrl = post.url.replace(/"/g, '&quot;');
-  return `<p style="color:#8b949e">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
+  return `<p style="color:var(--yaar-text-muted)">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;
 }
 
 export async function fetchPostDetail(

@@ -1,8 +1,8 @@
 /**
- * Design Tokens
+ * Design Tokens — GENERATED FILE, DO NOT EDIT.
  *
- * CSS custom properties for consistent theming across the application.
- * Based on Catppuccin Mocha palette.
+ * Source of truth: packages/shared/src/design/tokens.ts (GitHub-dark palette).
+ * Regenerate with: bun scripts/gen-design-tokens.ts
  */
 
 @font-face {
@@ -12,7 +12,6 @@
   font-style: normal;
   font-display: swap;
 }
-
 @font-face {
   font-family: 'NanumSquareNeo';
   src: url('/NanumSquareNeoOTF-Rg.otf') format('opentype');
@@ -20,7 +19,6 @@
   font-style: normal;
   font-display: swap;
 }
-
 @font-face {
   font-family: 'NanumSquareNeo';
   src: url('/NanumSquareNeoOTF-Bd.otf') format('opentype');
@@ -28,7 +26,6 @@
   font-style: normal;
   font-display: swap;
 }
-
 @font-face {
   font-family: 'NanumSquareNeo';
   src: url('/NanumSquareNeoOTF-Eb.otf') format('opentype');
@@ -38,33 +35,37 @@
 }
 
 :root {
-  /* === Catppuccin Mocha Colors === */
-  --color-base: #1e1e2e;
-  --color-mantle: #181825;
-  --color-surface: #313244;
-  --color-surface-hover: #45475a;
-  --color-overlay: #585b70;
+  /* === Surfaces === */
+  --color-base: #0f1117;
+  --color-mantle: #0a0c10;
+  --color-surface: #161b22;
+  --color-surface-hover: #1c2129;
+  --color-overlay: #30363d;
 
-  /* Text colors */
-  --color-text: #cdd6f4;
-  --color-subtext: #bac2de;
-  --color-subtext-muted: #a6adc8;
-  --color-muted: #6c7086;
+  /* Text tiers */
+  --color-text: #e6edf3;
+  --color-subtext: #c9d1d9;
+  --color-subtext-muted: #8b949e;
+  --color-muted: #6e7681;
+  --color-text-muted: var(--color-subtext-muted);
 
-  /* Accent colors */
-  --color-blue: #89b4fa;
-  --color-blue-hover: #b4befe;
-  --color-lavender: #b4befe;
-  --color-green: #a6e3a1;
-  --color-green-dim: rgba(166, 227, 161, 0.3);
-  --color-red: #f38ba8;
-  --color-red-hover: #f5a3b5;
-  --color-yellow: #f9e2af;
-  --color-peach: #fab387;
-  --color-pink: #f5c2e7;
-  --color-mauve: #cba6f7;
+  /* Accent hues */
+  --color-blue: #58a6ff;
+  --color-blue-hover: #79c0ff;
+  --color-lavender: #a5b4fc;
+  --color-green: #3fb950;
+  --color-green-dim: rgba(63, 185, 80, 0.3);
+  --color-red: #f85149;
+  --color-red-hover: #ff7b72;
+  --color-yellow: #d29922;
+  --color-peach: #ffa657;
+  --color-pink: #f778ba;
+  --color-mauve: #bc8cff;
 
-  /* Semantic aliases */
+  /* Semantic aliases — style with these, not the hues above */
+  --color-bg: var(--color-base);
+  --color-accent: var(--color-blue);
+  --color-accent-hover: var(--color-blue-hover);
   --color-primary: var(--color-blue);
   --color-primary-hover: var(--color-blue-hover);
   --color-success: var(--color-green);
@@ -73,13 +74,13 @@
   --color-warning: var(--color-yellow);
   --color-info: var(--color-blue);
 
-  /* Button colors (Tailwind-like, used in renderers) */
-  --color-btn-primary: #3b82f6;
-  --color-btn-primary-hover: #2563eb;
-  --color-btn-danger: #ef4444;
-  --color-btn-danger-hover: #dc2626;
-  --color-btn-success: #22c55e;
-  --color-btn-warning: #eab308;
+  /* Button aliases (legacy names used by the component-DSL renderers) */
+  --color-btn-primary: var(--color-primary);
+  --color-btn-primary-hover: var(--color-primary-hover);
+  --color-btn-danger: var(--color-danger);
+  --color-btn-danger-hover: var(--color-danger-hover);
+  --color-btn-success: var(--color-success);
+  --color-btn-warning: var(--color-warning);
 
   /* === Spacing Scale === */
   --space-1: 4px;
@@ -96,22 +97,26 @@
   --radius-xs: 3px;
   --radius-sm: 4px;
   --radius-md: 6px;
-  --radius-lg: 8px;
+  --radius-lg: 10px;
   --radius-xl: 12px;
   --radius-full: 9999px;
 
   /* === Shadows === */
-  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
   --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.5);
   --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.5);
 
-  /* === Borders === */
-  --border-subtle: 1px solid rgba(255, 255, 255, 0.1);
-  --border-muted: 1px solid rgba(255, 255, 255, 0.08);
-  --border-hover: 1px solid rgba(255, 255, 255, 0.15);
-  --border-strong: 1px solid rgba(255, 255, 255, 0.2);
+  /* === Borders (opaque color tokens + shorthands) === */
+  --color-border: #30363d;
+  --color-border-muted: #21262d;
+  --color-border-hover: #3d444d;
+  --color-border-strong: #484f58;
+  --border-subtle: 1px solid var(--color-border);
+  --border-muted: 1px solid var(--color-border-muted);
+  --border-hover: 1px solid var(--color-border-hover);
+  --border-strong: 1px solid var(--color-border-strong);
 
   /* === Transitions === */
   --transition-fast: 0.15s ease;
@@ -119,17 +124,18 @@
   --transition-slow: 0.3s ease;
 
   /* === Typography === */
-  --font-mono: 'SF Mono', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-  --font-sans: 'NanumSquareNeo', system-ui, -apple-system, sans-serif;
+  --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
+  --font-sans:
+    'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  /* Font sizes */
-  --text-xs: 10px;
-  --text-sm: 11px;
-  --text-base: 12px;
+  /* Font sizes — legacy 8-step names collapsed onto the canonical 5-step ramp */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
   --text-md: 13px;
-  --text-lg: 14px;
+  --text-lg: 15px;
   --text-xl: 15px;
-  --text-2xl: 16px;
+  --text-2xl: 18px;
   --text-3xl: 18px;
 
   /* === Z-Index Scale === */
@@ -144,7 +150,7 @@
   --opacity-disabled: 0.5;
   --opacity-hover: 0.95;
 
-  /* === Background Overlays === */
+  /* === Background Overlays (alpha "glass" tier) === */
   --bg-overlay-light: rgba(255, 255, 255, 0.05);
   --bg-overlay-medium: rgba(255, 255, 255, 0.08);
   --bg-overlay-strong: rgba(255, 255, 255, 0.1);
@@ -153,4 +159,58 @@
   --bg-dark-overlay-medium: rgba(0, 0, 0, 0.3);
   --bg-dark-overlay-strong: rgba(0, 0, 0, 0.4);
   --bg-modal-backdrop: rgba(0, 0, 0, 0.6);
+
+  /* Glass surfaces — translucent chrome floating over the wallpaper */
+  --bg-glass: rgba(15, 17, 23, 0.8);
+  --bg-glass-strong: rgba(15, 17, 23, 0.95);
+  --bg-glass-inset: rgba(10, 12, 16, 0.92);
+
+  color-scheme: dark;
+}
+
+/* Light theme — toggled via the `theme` setting (settingsSlice sets data-theme).
+   Only raw values are overridden; every alias (`--color-accent`, `--color-btn-*`,
+   `--border-*`) follows automatically through var(). */
+:root[data-theme='light'] {
+  --color-base: #f8f9fa;
+  --color-mantle: #eff1f3;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f0f1f3;
+  --color-overlay: #d0d7de;
+
+  --color-text: #1f2328;
+  --color-subtext: #424a53;
+  --color-subtext-muted: #656d76;
+  --color-muted: #8b949e;
+
+  --color-blue: #0969da;
+  --color-blue-hover: #0550ae;
+  --color-green: #1a7f37;
+  --color-green-dim: rgba(26, 127, 55, 0.3);
+  --color-red: #cf222e;
+  --color-red-hover: #a40e26;
+  --color-yellow: #9a6700;
+
+  --color-border: #d0d7de;
+  --color-border-muted: #d8dee4;
+  --color-border-hover: #afb8c1;
+  --color-border-strong: #8c959f;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
+  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.18);
+  --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.18);
+
+  /* Glass and overlay washes invert: white-alpha reads as nothing on a light bg */
+  --bg-overlay-light: rgba(0, 0, 0, 0.04);
+  --bg-overlay-medium: rgba(0, 0, 0, 0.06);
+  --bg-overlay-strong: rgba(0, 0, 0, 0.08);
+  --bg-overlay-hover: rgba(0, 0, 0, 0.12);
+  --bg-modal-backdrop: rgba(0, 0, 0, 0.4);
+  --bg-glass: rgba(248, 249, 250, 0.8);
+  --bg-glass-strong: rgba(248, 249, 250, 0.95);
+  --bg-glass-inset: rgba(239, 241, 243, 0.92);
+
+  color-scheme: light;
 }

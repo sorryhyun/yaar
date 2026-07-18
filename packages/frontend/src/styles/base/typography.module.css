@@ -43,11 +43,11 @@
 
 /* ============ Text Colors ============ */
 .textColorDefault {
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
 }
 
 .textColorMuted {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-subtext-muted);
 }
 
 .textColorAccent {
@@ -133,10 +133,10 @@
 }
 
 .markdown blockquote {
-  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  border-left: 3px solid var(--color-border-strong);
   margin: 0.5em 0;
   padding: 0.25em 1em;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-subtext);
 }
 
 .markdown table {
@@ -159,7 +159,7 @@
 }
 
 .markdown tr:hover td {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-overlay-light);
 }
 
 .markdown a {

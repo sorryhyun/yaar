@@ -58,11 +58,11 @@
 
 .option:hover {
   background: var(--bg-overlay-light);
-  border-color: rgba(255, 255, 255, 0.15);
+  border-color: var(--bg-overlay-hover);
 }
 
 .option[data-selected='true'] {
-  background: rgba(137, 180, 250, 0.1);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
   border-color: var(--color-blue);
 }
 

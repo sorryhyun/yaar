@@ -6,10 +6,18 @@ import { parseJson, capitalize, onInputHandler, onChangeHandler } from '../helpe
 
 const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize'];
 
+// Accent-picker swatch colors — content, not theming: each swatch must show its
+// own fixed preset color, so var(--yaar-accent) (the *current* accent) cannot be
+// used here. Some values coincide with design tokens, noted inline.
 const ACCENT_COLORS: Record<string, string> = {
-  blue: '#58a6ff', lavender: '#b392f0', mauve: '#d2a8ff',
-  pink: '#f778ba', peach: '#ffa28b', yellow: '#e3b341',
-  green: '#3fb950', red: '#f85149',
+  blue: '#58a6ff', // == default --yaar-accent
+  lavender: '#b392f0',
+  mauve: '#d2a8ff',
+  pink: '#f778ba',
+  peach: '#ffa28b',
+  yellow: '#e3b341',
+  green: '#3fb950', // == --yaar-success
+  red: '#f85149', // == --yaar-error
 };
 
 const WALLPAPER_LABELS: Record<string, string> = {

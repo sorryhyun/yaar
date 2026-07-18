@@ -23,8 +23,8 @@
   align-items: center;
   gap: 4px;
   padding: 4px 6px 4px 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--bg-overlay-light);
+  border: 1px solid var(--bg-overlay-strong);
   border-radius: var(--radius-md);
   color: var(--color-muted);
   font-size: var(--text-sm);
@@ -34,12 +34,12 @@
 }
 
 .monitorTab:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-overlay-strong);
   color: var(--color-text);
 }
 
 .monitorTabActive {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--bg-overlay-hover);
   border-color: rgba(255, 255, 255, 0.25);
   color: var(--color-text);
   font-weight: 500;
@@ -52,7 +52,7 @@
   width: 14px;
   height: 14px;
   border-radius: var(--radius-sm);
-  font-size: 10px;
+  font-size: var(--text-xs);
   line-height: 1;
   opacity: 0;
   transition: all var(--transition-fast);
@@ -65,7 +65,7 @@
 .monitorClose:hover {
   opacity: 1 !important;
   background: var(--color-red);
-  color: #fff;
+  color: var(--color-text);
 }
 
 /* Window tabs section */
@@ -128,7 +128,7 @@
   border: none;
   border-radius: var(--radius-sm);
   color: var(--color-muted);
-  font-size: 12px;
+  font-size: var(--text-sm);
   line-height: 1;
   cursor: pointer;
   opacity: 0;
@@ -141,7 +141,7 @@
 
 .tabClose:hover {
   background: var(--color-red);
-  color: #fff;
+  color: var(--color-text);
 }
 
 /* New monitor button */
@@ -153,11 +153,11 @@
   height: 28px;
   flex-shrink: 0;
   margin-left: auto;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: var(--bg-overlay-light);
+  border: 1px solid var(--bg-overlay-hover);
   border-radius: var(--radius-md);
   color: var(--color-muted);
-  font-size: 14px;
+  font-size: var(--text-lg);
   font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);

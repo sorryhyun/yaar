@@ -5,9 +5,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg, #0a0a0f);
-  z-index: 99999;
-  animation: fadeIn 0.3s ease-out;
+  background: var(--color-bg);
+  z-index: var(--z-cursor);
+  animation: fadeIn var(--transition-slow);
 }
 
 .overlay[data-fading='true'] {
@@ -16,17 +16,17 @@
 }
 
 .title {
-  font-size: 1.5rem;
+  font-size: var(--text-3xl);
   font-weight: 600;
-  color: var(--color-text, #e0e0f0);
+  color: var(--color-text);
   letter-spacing: 0.05em;
   margin-bottom: 1rem;
-  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  font-family: var(--font-sans);
 }
 
 .status {
-  font-size: 0.85rem;
-  color: var(--color-text-muted, #888898);
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
   animation: pulse 2s ease-in-out infinite;
-  font-family: var(--font-sans, system-ui, -apple-system, sans-serif);
+  font-family: var(--font-sans);
 }

@@ -44,6 +44,7 @@ export function DesktopSurface() {
   const wallpaper = useDesktopStore((s) => s.wallpaper);
   const accentColor = useDesktopStore((s) => s.accentColor);
   const iconSize = useDesktopStore((s) => s.iconSize);
+  const theme = useDesktopStore((s) => s.theme);
   const { sendMessage, sendComponentAction, sendToastAction, interruptAgent, interrupt } =
     useAgentConnection({ autoConnect: false });
 
@@ -137,6 +138,11 @@ export function DesktopSurface() {
       document.documentElement.style.setProperty('--color-blue-hover', preset.hover);
     }
   }, [accentColor]);
+
+  // Apply theme — tokens.css keys its light overrides off :root[data-theme='light']
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+  }, [theme]);
 
   const handleBackgroundClick = useCallback(
     (e: React.MouseEvent) => {

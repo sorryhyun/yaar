@@ -1,9 +1,9 @@
 .preview {
   position: fixed;
   pointer-events: none;
-  z-index: 99990;
-  background: rgba(137, 180, 250, 0.15);
-  border: 2px solid rgba(137, 180, 250, 0.5);
+  z-index: calc(var(--z-cursor) - 9);
+  background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  border: 2px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
   border-radius: var(--radius-lg);
-  animation: snapIn 150ms ease-out;
+  animation: snapIn var(--transition-fast);
 }

@@ -3,6 +3,7 @@
  */
 import { useEffect, useState } from 'react';
 import QRCode from 'qrcode';
+import { PALETTE_DARK } from '@yaar/shared';
 import { apiFetch } from '@/lib/api';
 import styles from '@/styles/overlays/QrCodeModal.module.css';
 
@@ -28,7 +29,7 @@ export function QrCodeModal({ onClose }: { onClose: () => void }) {
           QRCode.toDataURL(data.connectUrl, {
             width: 240,
             margin: 2,
-            color: { dark: '#cdd6f4', light: '#1e1e2e' },
+            color: { dark: PALETTE_DARK.text, light: PALETTE_DARK.bg },
           }).then(setQrDataUrl);
         }
       })

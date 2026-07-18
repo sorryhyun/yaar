@@ -1,14 +1,4 @@
-:root {
-  --yaar-bg: #f8f9fa;
-  --yaar-bg-surface: #ffffff;
-  --yaar-bg-surface-hover: #f0f1f3;
-  --yaar-text: #1f2328;
-  --yaar-text-muted: #656d76;
-  --yaar-text-dim: #8b949e;
-  --yaar-border: #d0d7de;
-  --yaar-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
-  --yaar-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
+/* Light theme comes from the compiler-injected .y-light class (applied to <body> in main.ts). */
 body {
   margin: 0;
   background: var(--yaar-bg);

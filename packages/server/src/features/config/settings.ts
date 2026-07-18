@@ -18,6 +18,7 @@ export const settingsContentSchema = z.object({
   wallpaper: z.string().optional(),
   accentColor: z.string().optional(),
   iconSize: z.enum(['small', 'medium', 'large']).optional(),
+  theme: z.enum(['dark', 'light']).optional(),
 });
 
 export async function handleSetSettings(content: Record<string, unknown>) {
@@ -35,6 +36,7 @@ export async function handleSetSettings(content: Record<string, unknown>) {
   if (result.data.wallpaper !== undefined) partial.wallpaper = result.data.wallpaper;
   if (result.data.accentColor !== undefined) partial.accentColor = result.data.accentColor;
   if (result.data.iconSize !== undefined) partial.iconSize = result.data.iconSize;
+  if (result.data.theme !== undefined) partial.theme = result.data.theme;
 
   const settings = await updateSettings(partial);
 
@@ -52,6 +54,7 @@ export async function handleSetSettings(content: Record<string, unknown>) {
     'wallpaper',
     'accentColor',
     'iconSize',
+    'theme',
   ];
   const changedSettings: DesktopUpdateSettingsAction['settings'] = {};
   for (const key of settingsKeys) {

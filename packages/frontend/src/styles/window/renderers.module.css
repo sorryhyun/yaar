@@ -35,7 +35,7 @@
 }
 
 .table tr:hover td {
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-overlay-light);
 }
 
 /* ============ HTML ============ */
@@ -67,7 +67,7 @@
   justify-content: center;
   gap: var(--space-3);
   background: var(--bg-modal-backdrop);
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--color-subtext);
   font-size: var(--text-md);
   z-index: 1;
   pointer-events: none;
@@ -76,8 +76,8 @@
 .iframeLoadingSpinner {
   width: 24px;
   height: 24px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: rgba(255, 255, 255, 0.8);
+  border: 2px solid var(--color-border-strong);
+  border-top-color: var(--color-subtext);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -91,7 +91,7 @@
   justify-content: center;
   gap: var(--space-2);
   background: var(--bg-dark-overlay-strong);
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-subtext);
   text-align: center;
   padding: var(--space-6);
 }
@@ -104,12 +104,12 @@
 .iframeErrorTitle {
   font-size: var(--text-xl);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
 }
 
 .iframeErrorMessage {
   font-size: var(--text-base);
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--color-subtext-muted);
   max-width: 300px;
 }
 
@@ -118,7 +118,7 @@
   padding: var(--space-2) var(--space-4);
   background: var(--bg-overlay-strong);
   border-radius: var(--radius-md);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
   text-decoration: none;
   font-size: var(--text-md);
   transition: background var(--transition-fast);

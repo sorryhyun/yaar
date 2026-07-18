@@ -44,7 +44,7 @@
 
 .buttonSecondary {
   background: var(--bg-overlay-strong);
-  color: rgba(255, 255, 255, 0.9);
+  color: var(--color-text);
 }
 
 .buttonSecondary:hover {
@@ -53,7 +53,7 @@
 
 .buttonGhost {
   background: transparent;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-subtext);
 }
 
 .buttonGhost:hover {
@@ -120,7 +120,7 @@
 .formLabel {
   font-size: var(--text-md);
   font-weight: 500;
-  color: rgba(255, 255, 255, 0.8);
+  color: var(--color-subtext);
 }
 
 /* ============ Input Controls ============ */
@@ -128,19 +128,21 @@
 .formTextarea,
 .formSelect {
   background: var(--bg-dark-overlay);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid var(--bg-overlay-hover);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
   font-size: var(--text-lg);
-  color: rgba(255, 255, 255, 0.95);
-  transition: border-color var(--transition-fast), background var(--transition-fast);
+  color: var(--color-text);
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast);
   width: 100%;
   box-sizing: border-box;
 }
 
 .formInput::placeholder,
 .formTextarea::placeholder {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--color-muted);
 }
 
 .formInput:focus,
@@ -173,6 +175,6 @@
 }
 
 .formSelect option {
-  background: #1a1a2e;
-  color: rgba(255, 255, 255, 0.95);
+  background: var(--color-surface);
+  color: var(--color-text);
 }

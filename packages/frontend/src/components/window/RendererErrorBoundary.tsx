@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { PALETTE_DARK } from '@yaar/shared';
 
 interface Props {
   children: ReactNode;
@@ -26,7 +27,7 @@ export class RendererErrorBoundary extends Component<Props, State> {
         <div
           style={{
             padding: '16px',
-            color: '#e53e3e',
+            color: PALETTE_DARK.error,
             fontFamily: 'monospace',
             fontSize: '13px',
           }}

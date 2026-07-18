@@ -322,6 +322,7 @@ export interface DesktopUpdateSettingsAction {
     wallpaper?: string;
     accentColor?: string;
     iconSize?: 'small' | 'medium' | 'large';
+    theme?: 'dark' | 'light';
   };
 }
 

@@ -88,6 +88,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
           if (data.wallpaper) appearance.wallpaper = data.wallpaper;
           if (data.accentColor) appearance.accentColor = data.accentColor;
           if (data.iconSize) appearance.iconSize = data.iconSize;
+          if (data.theme) appearance.theme = data.theme;
           if (Object.keys(appearance).length > 0) {
             useDesktopStore.getState().applyServerSettings(appearance);
           }

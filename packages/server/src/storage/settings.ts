@@ -12,6 +12,7 @@ export interface Settings {
   wallpaper: string;
   accentColor: string;
   iconSize: 'small' | 'medium' | 'large';
+  theme: 'dark' | 'light';
   allowAllApps: boolean;
 }
 
@@ -23,6 +24,7 @@ const DEFAULTS: Settings = {
   wallpaper: 'dark-blue',
   accentColor: 'blue',
   iconSize: 'medium',
+  theme: 'dark',
   allowAllApps: true,
 };
 

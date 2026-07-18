@@ -46,7 +46,7 @@
 
 .actionButton:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-overlay-strong);
 }
 
 .toast[data-variant='success'] {

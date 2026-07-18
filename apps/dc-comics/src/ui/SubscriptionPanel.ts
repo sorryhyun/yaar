@@ -94,7 +94,7 @@ export function SubscriptionPanel() {
               <div class="y-empty">
                 <div class="y-empty-icon">📢</div>
                 <p>시리즈 구독 없음</p>
-                <p style="font-size:12px;margin-top:4px">글 상세 보기에서 + 구독 버튜을 눌러주세요</p>
+                <p class="y-text-sm" style="margin-top:var(--yaar-sp-1)">글 상세 보기에서 + 구독 버튜을 눌러주세요</p>
               </div>`
             : null}
           <div class="sub-list">

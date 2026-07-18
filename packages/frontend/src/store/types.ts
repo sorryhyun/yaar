@@ -203,6 +203,7 @@ export interface SettingsSliceState {
   wallpaper: string;
   accentColor: string;
   iconSize: 'small' | 'medium' | 'large';
+  theme: 'dark' | 'light';
 }
 
 export interface SettingsSliceActions {
@@ -213,6 +214,7 @@ export interface SettingsSliceActions {
   setWallpaper: (value: string) => void;
   setAccentColor: (key: string) => void;
   setIconSize: (size: 'small' | 'medium' | 'large') => void;
+  setTheme: (theme: 'dark' | 'light') => void;
 }
 
 export type SettingsSlice = SettingsSliceState & SettingsSliceActions;

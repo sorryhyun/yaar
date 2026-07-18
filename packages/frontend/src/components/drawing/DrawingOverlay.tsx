@@ -14,6 +14,7 @@
  * captured at send time via captureMonitorScreenshot().
  */
 import { useRef, useState, useEffect, useCallback } from 'react';
+import { PALETTE_DARK, alpha } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { registerDrawingCanvas } from '@/lib/captureMonitorScreenshot';
@@ -107,7 +108,7 @@ export function DrawingOverlay() {
     ctx.beginPath();
     ctx.moveTo(from.x, from.y);
     ctx.lineTo(to.x, to.y);
-    ctx.strokeStyle = 'rgba(255, 50, 30, 0.9)';
+    ctx.strokeStyle = alpha(PALETTE_DARK.error, 0.9);
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
@@ -185,7 +186,7 @@ export function DrawingOverlay() {
       if (ctx) {
         ctx.beginPath();
         ctx.arc(point.x, point.y, 2, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 50, 30, 0.9)';
+        ctx.fillStyle = alpha(PALETTE_DARK.error, 0.9);
         ctx.fill();
         setHasStrokes(true);
       }

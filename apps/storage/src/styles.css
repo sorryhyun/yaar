@@ -128,7 +128,7 @@
     color: var(--yaar-text-muted);
   }
   .file-actions button:hover { background: var(--yaar-border); color: var(--yaar-text); }
-  .file-actions button.danger:hover { color: var(--yaar-error, #f85149); }
+  .file-actions button.danger:hover { color: var(--yaar-error); }
   .empty {
     flex: 1;
     font-size: 14px;

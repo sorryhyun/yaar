@@ -5,6 +5,11 @@ import { render } from '@bundled/solid-js/web';
 import { invoke, list, errMsg, appStorage } from '@bundled/yaar';
 import './styles.css';
 
+// Light-themed app: use the shipped .y-light token overrides (injected by the
+// compiler) instead of hand-copied :root values. Applied to <body> so body
+// background/text styles pick up the light palette too.
+document.body.classList.add('y-light');
+
 type Mode = 'viewer' | 'export';
 
 type StorageEntry = {

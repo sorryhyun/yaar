@@ -4,30 +4,30 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-bg, #0a0a0f);
-  z-index: 9999;
+  background: var(--color-bg);
+  z-index: var(--z-modal);
 }
 
 .card {
   width: 100%;
   max-width: 400px;
   padding: 2rem;
-  background: var(--color-surface, #141420);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 12px;
+  background: var(--color-surface);
+  border: var(--border-subtle);
+  border-radius: var(--radius-xl);
 }
 
 .title {
   margin: 0 0 0.25rem;
-  font-size: 1.25rem;
+  font-size: var(--text-2xl);
   font-weight: 600;
-  color: var(--color-text, #e0e0f0);
+  color: var(--color-text);
 }
 
 .subtitle {
   margin: 0 0 1.5rem;
-  font-size: 0.85rem;
-  color: var(--color-text-muted, #888898);
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
 }
 
 .form {
@@ -40,49 +40,49 @@
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.8rem;
-  color: var(--color-text-muted, #888898);
+  font-size: var(--text-base);
+  color: var(--color-text-muted);
 }
 
 .input {
   padding: 0.6rem 0.75rem;
-  background: var(--color-bg, #0a0a0f);
-  border: 1px solid var(--color-border, #2a2a3a);
-  border-radius: 6px;
-  color: var(--color-text, #e0e0f0);
-  font-size: 0.9rem;
+  background: var(--color-bg);
+  border: var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--text-lg);
   font-family: inherit;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color var(--transition-fast);
 }
 
 .input:focus {
-  border-color: var(--color-accent, #6366f1);
+  border-color: var(--color-accent);
 }
 
 .input::placeholder {
-  color: var(--color-text-muted, #555568);
+  color: var(--color-text-muted);
 }
 
 .error {
   padding: 0.5rem 0.75rem;
-  background: rgba(239, 68, 68, 0.1);
-  border: 1px solid rgba(239, 68, 68, 0.3);
-  border-radius: 6px;
-  color: #ef4444;
-  font-size: 0.8rem;
+  background: color-mix(in srgb, var(--color-danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-danger) 30%, transparent);
+  border-radius: var(--radius-md);
+  color: var(--color-danger);
+  font-size: var(--text-base);
 }
 
 .button {
   padding: 0.65rem 1rem;
-  background: var(--color-accent, #6366f1);
+  background: var(--color-accent);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: white;
-  font-size: 0.9rem;
+  font-size: var(--text-lg);
   font-weight: 500;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity var(--transition-fast);
 }
 
 .button:hover:not(:disabled) {
@@ -90,6 +90,6 @@
 }
 
 .button:disabled {
-  opacity: 0.5;
+  opacity: var(--opacity-disabled);
   cursor: not-allowed;
 }

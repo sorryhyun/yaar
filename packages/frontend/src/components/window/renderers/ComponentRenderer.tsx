@@ -14,6 +14,16 @@ import type {
   InputComponent,
   SelectComponent,
 } from '@yaar/shared';
+import {
+  GAP_VALUES,
+  SIZE_VALUES,
+  BUTTON_VARIANTS,
+  TEXT_VARIANTS,
+  TEXT_COLORS,
+  TEXT_ALIGNMENTS,
+  BADGE_VARIANTS,
+  PROGRESS_VARIANTS,
+} from '@yaar/shared';
 import { useFormContext, useFormField, type FormValue } from '@/contexts/FormContext';
 import { useWindowCallbacks } from '@/contexts/WindowCallbackContext';
 import { resolveAssetUrl } from '@/lib/api';
@@ -33,15 +43,6 @@ function normalizeEnum<T extends string>(
   }
   return defaultValue;
 }
-
-const GAP_VALUES = ['none', 'sm', 'md', 'lg'] as const;
-const BUTTON_VARIANT_VALUES = ['primary', 'secondary', 'ghost', 'danger'] as const;
-const BUTTON_SIZE_VALUES = ['sm', 'md', 'lg'] as const;
-const TEXT_VARIANT_VALUES = ['body', 'heading', 'subheading', 'caption', 'code'] as const;
-const TEXT_COLOR_VALUES = ['default', 'muted', 'accent', 'success', 'warning', 'error'] as const;
-const TEXT_ALIGN_VALUES = ['left', 'center', 'right'] as const;
-const BADGE_VARIANT_VALUES = ['default', 'success', 'warning', 'error', 'info'] as const;
-const PROGRESS_VARIANT_VALUES = ['default', 'success', 'warning', 'error'] as const;
 
 // ============ Layout Helpers ============
 
@@ -178,8 +179,8 @@ function ButtonRenderer({
     isProcessing,
   ]);
 
-  const variant = normalizeEnum(node.variant, BUTTON_VARIANT_VALUES, 'secondary');
-  const size = normalizeEnum(node.size, BUTTON_SIZE_VALUES, 'md');
+  const variant = normalizeEnum(node.variant, BUTTON_VARIANTS, 'secondary');
+  const size = normalizeEnum(node.size, SIZE_VALUES, 'md');
   const disabled = node.disabled || isProcessing;
 
   const className = [
@@ -200,9 +201,9 @@ function ButtonRenderer({
 }
 
 function TextRenderer({ node }: { node: TextComponent }) {
-  const variant = normalizeEnum(node.variant, TEXT_VARIANT_VALUES, 'body');
-  const color = normalizeEnum(node.color, TEXT_COLOR_VALUES, 'default');
-  const align = normalizeEnum(node.textAlign, TEXT_ALIGN_VALUES, 'left');
+  const variant = normalizeEnum(node.variant, TEXT_VARIANTS, 'body');
+  const color = normalizeEnum(node.color, TEXT_COLORS, 'default');
+  const align = normalizeEnum(node.textAlign, TEXT_ALIGNMENTS, 'left');
 
   const className = [
     typographyStyles.text,
@@ -217,7 +218,7 @@ function TextRenderer({ node }: { node: TextComponent }) {
 }
 
 function BadgeRenderer({ node }: { node: BadgeComponent }) {
-  const variant = normalizeEnum(node.variant, BADGE_VARIANT_VALUES, 'default');
+  const variant = normalizeEnum(node.variant, BADGE_VARIANTS, 'default');
 
   const className = [
     componentStyles.badge,
@@ -230,7 +231,7 @@ function BadgeRenderer({ node }: { node: BadgeComponent }) {
 }
 
 function ProgressRenderer({ node }: { node: ProgressComponent }) {
-  const variant = normalizeEnum(node.variant, PROGRESS_VARIANT_VALUES, 'default');
+  const variant = normalizeEnum(node.variant, PROGRESS_VARIANTS, 'default');
   const value = Math.max(0, Math.min(100, typeof node.value === 'number' ? node.value : 0));
 
   const className = [

@@ -15,6 +15,7 @@ interface PersistedSettings {
   wallpaper: string;
   accentColor: string;
   iconSize: IconSizeKey;
+  theme: 'dark' | 'light';
 }
 
 function loadSettings(): PersistedSettings {
@@ -28,6 +29,7 @@ function loadSettings(): PersistedSettings {
         wallpaper: parsed.wallpaper ?? 'dark-blue',
         accentColor: parsed.accentColor ?? 'blue',
         iconSize: parsed.iconSize ?? 'medium',
+        theme: parsed.theme === 'light' ? 'light' : 'dark',
       };
     }
   } catch {
@@ -39,6 +41,7 @@ function loadSettings(): PersistedSettings {
     wallpaper: 'dark-blue',
     accentColor: 'blue',
     iconSize: 'medium',
+    theme: 'dark',
   };
 }
 
@@ -57,6 +60,7 @@ function getAllSettings(
     wallpaper: string;
     accentColor: string;
     iconSize: IconSizeKey;
+    theme: 'dark' | 'light';
   },
 ): PersistedSettings {
   const s = get();
@@ -66,6 +70,7 @@ function getAllSettings(
     wallpaper: s.wallpaper,
     accentColor: s.accentColor,
     iconSize: s.iconSize,
+    theme: s.theme,
   };
 }
 
@@ -77,6 +82,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
   wallpaper: initial.wallpaper,
   accentColor: initial.accentColor,
   iconSize: initial.iconSize,
+  theme: initial.theme,
 
   setUserName: (name) =>
     set((state) => {
@@ -112,6 +118,7 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       if (settings.wallpaper !== undefined) state.wallpaper = settings.wallpaper;
       if (settings.accentColor !== undefined) state.accentColor = settings.accentColor;
       if (settings.iconSize !== undefined) state.iconSize = settings.iconSize;
+      if (settings.theme !== undefined) state.theme = settings.theme;
       saveSettings({ ...getAllSettings(get), ...settings } as PersistedSettings);
     });
     if (settings.language !== undefined) {
@@ -140,6 +147,18 @@ export const createSettingsSlice: SliceCreator<SettingsSlice> = (set, get) => ({
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accentColor: key }),
+    }).catch(() => {});
+  },
+
+  setTheme: (theme) => {
+    set((state) => {
+      state.theme = theme;
+      saveSettings({ ...getAllSettings(get), theme });
+    });
+    apiFetch('/api/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ theme }),
     }).catch(() => {});
   },
 

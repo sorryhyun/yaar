@@ -95,7 +95,7 @@
   padding: var(--space-2) 10px;
   border-left: 3px solid transparent;
   cursor: pointer;
-  transition: background 0.1s ease;
+  transition: background var(--transition-fast);
 }
 
 .entry:hover {
@@ -143,22 +143,22 @@
 
 .type[data-category='window'] {
   color: var(--color-blue);
-  background: rgba(137, 180, 250, 0.1);
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .type[data-category='notification'] {
   color: var(--color-peach);
-  background: rgba(250, 179, 135, 0.1);
+  background: color-mix(in srgb, var(--color-peach) 10%, transparent);
 }
 
 .type[data-category='toast'] {
   color: var(--color-green);
-  background: rgba(166, 227, 161, 0.1);
+  background: color-mix(in srgb, var(--color-success) 10%, transparent);
 }
 
 .type[data-category='dialog'] {
   color: var(--color-mauve);
-  background: rgba(203, 166, 247, 0.1);
+  background: color-mix(in srgb, var(--color-mauve) 10%, transparent);
 }
 
 .type[data-category='unknown'] {

@@ -5,10 +5,62 @@
 
 import { z } from 'zod';
 
+// ============ Canonical Enum Values ============
+// Single source of truth for the DSL enum value lists. The Zod schemas below derive from
+// these arrays (via z.enum), and the hand-written component types are bound to them via
+// `satisfies` checks. The frontend ComponentRenderer imports these instead of re-declaring.
+
+export const GAP_VALUES = ['none', 'sm', 'md', 'lg'] as const;
+export const SIZE_VALUES = ['sm', 'md', 'lg'] as const;
+export const BUTTON_VARIANTS = [
+  'primary',
+  'secondary',
+  'ghost',
+  'danger',
+] as const satisfies readonly NonNullable<ButtonComponent['variant']>[];
+export const INPUT_VARIANTS = [
+  'text',
+  'email',
+  'password',
+  'number',
+  'url',
+] as const satisfies readonly NonNullable<InputComponent['variant']>[];
+export const TEXT_VARIANTS = [
+  'body',
+  'heading',
+  'subheading',
+  'caption',
+  'code',
+] as const satisfies readonly NonNullable<TextComponent['variant']>[];
+export const TEXT_COLORS = [
+  'default',
+  'muted',
+  'accent',
+  'success',
+  'warning',
+  'error',
+] as const satisfies readonly NonNullable<TextComponent['color']>[];
+export const TEXT_ALIGNMENTS = ['left', 'center', 'right'] as const satisfies readonly NonNullable<
+  TextComponent['textAlign']
+>[];
+export const BADGE_VARIANTS = [
+  'default',
+  'success',
+  'warning',
+  'error',
+  'info',
+] as const satisfies readonly NonNullable<BadgeComponent['variant']>[];
+export const PROGRESS_VARIANTS = [
+  'default',
+  'success',
+  'warning',
+  'error',
+] as const satisfies readonly NonNullable<ProgressComponent['variant']>[];
+
 // ============ Shared Enums ============
 
-const gapEnum = z.enum(['none', 'sm', 'md', 'lg']);
-const sizeEnum = z.enum(['sm', 'md', 'lg']);
+const gapEnum = z.enum(GAP_VALUES);
+const sizeEnum = z.enum(SIZE_VALUES);
 
 // ============ Component Types (leaf only) ============
 
@@ -49,22 +101,19 @@ const baseFields = {
     .string()
     .optional()
     .describe(
-      'button: primary|secondary|ghost|danger, ' +
-        'input: text|email|password|number|url, ' +
-        'text: body|heading|subheading|caption|code, ' +
-        'badge: default|success|warning|error|info, ' +
-        'progress: default|success|warning|error',
+      `button: ${BUTTON_VARIANTS.join('|')}, ` +
+        `input: ${INPUT_VARIANTS.join('|')}, ` +
+        `text: ${TEXT_VARIANTS.join('|')}, ` +
+        `badge: ${BADGE_VARIANTS.join('|')}, ` +
+        `progress: ${PROGRESS_VARIANTS.join('|')}`,
     ),
 
   // === Size ===
   size: sizeEnum.optional().describe('button: Size'),
 
   // === Text-specific props ===
-  color: z
-    .enum(['default', 'muted', 'accent', 'success', 'warning', 'error'])
-    .optional()
-    .describe('text: Text color'),
-  textAlign: z.enum(['left', 'center', 'right']).optional().describe('text: Text alignment'),
+  color: z.enum(TEXT_COLORS).optional().describe('text: Text color'),
+  textAlign: z.enum(TEXT_ALIGNMENTS).optional().describe('text: Text alignment'),
 
   // === Progress props ===
   value: z.number().min(0).max(100).optional().describe('progress: Required value 0-100'),
