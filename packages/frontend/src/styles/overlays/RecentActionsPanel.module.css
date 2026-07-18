@@ -32,7 +32,7 @@
 
 .title {
   flex: 1;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   font-weight: 500;
   color: var(--color-text);
   white-space: nowrap;
@@ -69,7 +69,7 @@
 }
 
 .controlBtn[data-action='close']:hover {
-  background: var(--color-red);
+  background: var(--color-danger);
   color: var(--color-base);
 }
 
@@ -104,19 +104,19 @@
 
 /* Category colors */
 .entry[data-category='window'] {
-  border-left-color: var(--color-blue);
+  border-left-color: var(--color-accent);
 }
 
 .entry[data-category='notification'] {
-  border-left-color: var(--color-peach);
+  border-left-color: var(--hue-peach);
 }
 
 .entry[data-category='toast'] {
-  border-left-color: var(--color-green);
+  border-left-color: var(--color-success);
 }
 
 .entry[data-category='dialog'] {
-  border-left-color: var(--color-mauve);
+  border-left-color: var(--hue-mauve);
 }
 
 .entry[data-category='unknown'] {
@@ -142,23 +142,23 @@
 }
 
 .type[data-category='window'] {
-  color: var(--color-blue);
+  color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .type[data-category='notification'] {
-  color: var(--color-peach);
-  background: color-mix(in srgb, var(--color-peach) 10%, transparent);
+  color: var(--hue-peach);
+  background: color-mix(in srgb, var(--hue-peach) 10%, transparent);
 }
 
 .type[data-category='toast'] {
-  color: var(--color-green);
+  color: var(--color-success);
   background: color-mix(in srgb, var(--color-success) 10%, transparent);
 }
 
 .type[data-category='dialog'] {
-  color: var(--color-mauve);
-  background: color-mix(in srgb, var(--color-mauve) 10%, transparent);
+  color: var(--hue-mauve);
+  background: color-mix(in srgb, var(--hue-mauve) 10%, transparent);
 }
 
 .type[data-category='unknown'] {

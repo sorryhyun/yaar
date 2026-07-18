@@ -30,13 +30,13 @@
 }
 
 .cardTitle {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--color-text);
 }
 
 .cardSubtitle {
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-subtext-muted);
   margin-top: 2px;
 }
@@ -70,22 +70,22 @@
 
 .badgeSuccess {
   background: color-mix(in srgb, var(--color-success) 20%, transparent);
-  color: var(--color-btn-success);
+  color: var(--color-success);
 }
 
 .badgeWarning {
   background: color-mix(in srgb, var(--color-warning) 20%, transparent);
-  color: var(--color-btn-warning);
+  color: var(--color-warning);
 }
 
 .badgeError {
   background: color-mix(in srgb, var(--color-danger) 20%, transparent);
-  color: var(--color-btn-danger);
+  color: var(--color-danger);
 }
 
 .badgeInfo {
   background: color-mix(in srgb, var(--color-primary) 20%, transparent);
-  color: var(--color-btn-primary);
+  color: var(--color-primary);
 }
 
 /* ============ Progress ============ */
@@ -114,19 +114,19 @@
 }
 
 .progressDefault .progressBar {
-  background: var(--color-btn-primary);
+  background: var(--color-primary);
 }
 
 .progressSuccess .progressBar {
-  background: var(--color-btn-success);
+  background: var(--color-success);
 }
 
 .progressWarning .progressBar {
-  background: var(--color-btn-warning);
+  background: var(--color-warning);
 }
 
 .progressError .progressBar {
-  background: var(--color-btn-danger);
+  background: var(--color-danger);
 }
 
 .progressValue {
@@ -144,22 +144,22 @@
 
 .alertInfo {
   background: color-mix(in srgb, var(--color-primary) 10%, transparent);
-  border-left-color: var(--color-btn-primary);
+  border-left-color: var(--color-primary);
 }
 
 .alertSuccess {
   background: color-mix(in srgb, var(--color-success) 10%, transparent);
-  border-left-color: var(--color-btn-success);
+  border-left-color: var(--color-success);
 }
 
 .alertWarning {
   background: color-mix(in srgb, var(--color-warning) 10%, transparent);
-  border-left-color: var(--color-btn-warning);
+  border-left-color: var(--color-warning);
 }
 
 .alertError {
   background: color-mix(in srgb, var(--color-danger) 10%, transparent);
-  border-left-color: var(--color-btn-danger);
+  border-left-color: var(--color-danger);
 }
 
 .alertTitle {
@@ -169,7 +169,7 @@
 }
 
 .alertMessage {
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-subtext);
 }
 

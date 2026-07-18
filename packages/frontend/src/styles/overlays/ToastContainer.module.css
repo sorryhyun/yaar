@@ -50,17 +50,17 @@
 }
 
 .toast[data-variant='success'] {
-  border-left: 3px solid var(--color-green);
+  border-left: 3px solid var(--color-success);
 }
 
 .toast[data-variant='error'] {
-  border-left: 3px solid var(--color-red);
+  border-left: 3px solid var(--color-danger);
 }
 
 .toast[data-variant='warning'] {
-  border-left: 3px solid var(--color-yellow);
+  border-left: 3px solid var(--color-warning);
 }
 
 .toast[data-variant='info'] {
-  border-left: 3px solid var(--color-blue);
+  border-left: 3px solid var(--color-accent);
 }

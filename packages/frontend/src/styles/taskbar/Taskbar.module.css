@@ -64,7 +64,7 @@
 
 .monitorClose:hover {
   opacity: 1 !important;
-  background: var(--color-red);
+  background: var(--color-danger);
   color: var(--color-text);
 }
 
@@ -140,7 +140,7 @@
 }
 
 .tabClose:hover {
-  background: var(--color-red);
+  background: var(--color-danger);
   color: var(--color-text);
 }
 

@@ -53,7 +53,7 @@
 
 .sendButton {
   padding: var(--space-2) var(--space-5);
-  background: var(--color-blue);
+  background: var(--color-accent);
   color: var(--color-base);
   border: none;
   border-radius: var(--radius-lg);
@@ -64,7 +64,7 @@
 }
 
 .sendButton:hover:not(:disabled) {
-  background: var(--color-lavender);
+  background: var(--hue-lavender);
 }
 
 .sendButton:disabled {
@@ -101,8 +101,8 @@
 }
 
 .qrButton[data-active='true'] {
-  color: var(--color-blue);
-  border-color: var(--color-blue);
+  color: var(--color-accent);
+  border-color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
@@ -171,9 +171,9 @@
 }
 
 .pencilButton[data-active='true'] {
-  color: var(--color-peach);
-  border-color: var(--color-peach);
-  background: color-mix(in srgb, var(--color-peach) 12%, transparent);
+  color: var(--hue-peach);
+  border-color: var(--hue-peach);
+  background: color-mix(in srgb, var(--hue-peach) 12%, transparent);
 }
 
 /* Folder attach button */
@@ -204,7 +204,7 @@
   gap: var(--space-2);
   padding: var(--space-1) 10px;
   background: color-mix(in srgb, var(--color-success) 10%, transparent);
-  border: 1px solid var(--color-green-dim);
+  border: 1px solid var(--color-success-dim);
   border-radius: var(--radius-md);
   margin-left: var(--space-1);
 }
@@ -218,15 +218,15 @@
 .spinner {
   width: var(--space-3);
   height: var(--space-3);
-  border: 2px solid var(--color-green-dim);
-  border-top-color: var(--color-green);
+  border: 2px solid var(--color-success-dim);
+  border-top-color: var(--color-success);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .spinnerLabel {
   font-size: var(--text-sm);
-  color: var(--color-green);
+  color: var(--color-success);
   font-weight: 500;
   max-width: 140px;
   overflow: hidden;
@@ -336,7 +336,7 @@
 }
 
 .clearAllImages:hover {
-  color: var(--color-blue);
+  color: var(--color-accent);
 }
 
 /* Message status indicators */
@@ -364,11 +364,11 @@
 }
 
 .messageStatusFailed {
-  color: var(--color-red);
+  color: var(--color-danger);
 }
 
 .messageStatusAccepted {
-  color: var(--color-green);
+  color: var(--color-success);
   animation:
     statusFadeIn var(--transition-fast),
     statusFadeOut 1.5s ease-in 0.5s forwards;
@@ -410,7 +410,7 @@
 }
 
 .mentionAppId {
-  color: var(--color-blue);
+  color: var(--color-accent);
   font-weight: 500;
   font-size: var(--text-sm);
 }
@@ -425,7 +425,7 @@
 
 /* Drop target feedback */
 .inputWrapper[data-dragover='true'] {
-  border-color: var(--color-blue);
+  border-color: var(--color-accent);
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent),
     var(--shadow-lg);

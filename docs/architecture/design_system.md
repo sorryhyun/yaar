@@ -32,15 +32,17 @@ To change the visual language: edit `packages/shared/src/design/tokens.ts`, run
   text tiers, spacing, radius, shadows, and the type ramp mean the same thing and
   render the same value in shell chrome and app content. Only background *tint*
   may deliberately differ per surface.
-- **Type ramp is 5 canonical steps** (`xs/sm/base/lg/xl`). The shell's legacy
-  8-step names still exist as aliases; adjacent legacy names may share a value on
-  purpose. Don't add steps — pick the nearest.
+- **Type ramp is 5 canonical steps** (`xs/sm/base/lg/xl`) — the only step names
+  that exist. Don't add steps — pick the nearest.
 - **Borders are opaque color tokens.** The alpha white/black overlays
   (`--bg-overlay-*`, `--bg-dark-overlay-*`) are the **glass tier** — hover washes,
   scrims, translucent chrome — not a border mechanism.
 - **The component DSL paints with semantic tokens.** `variant: "success"` in a
-  JSON component and `--yaar-success` in an app resolve to the same hue. The
-  legacy `--color-btn-*` names survive only as aliases of the semantics.
+  JSON component and `--yaar-success` in an app resolve to the same hue.
+- **Shell CSS names colors semantically only** — `--color-accent`,
+  `--color-success`, `--color-danger`, `--color-warning`, and the deliberately
+  non-semantic `--hue-*` decoratives. There are no raw hue names
+  (`--color-blue`) or `--color-btn-*` aliases; a hue name in shell CSS is a bug.
 - **Light theme comes from the same data.** `PALETTE_LIGHT` powers the app-side
   `.y-light` class and the shell light theme; neither is hand-maintained.
 

@@ -69,21 +69,21 @@
 .agentSpinner {
   width: 12px;
   height: 12px;
-  border: 2px solid var(--color-green-dim);
-  border-top-color: var(--color-green);
+  border: 2px solid var(--color-success-dim);
+  border-top-color: var(--color-success);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
 
 .agentStatus {
-  font-size: var(--text-md);
-  color: var(--color-green);
+  font-size: var(--text-base);
+  color: var(--color-success);
   font-weight: 500;
 }
 
 .subagentBadge {
   font-size: var(--text-sm);
-  color: var(--color-blue);
+  color: var(--color-accent);
   font-weight: 500;
   padding: 1px 6px;
   border-radius: var(--radius-sm);
@@ -140,7 +140,7 @@
   font-size: var(--text-sm);
   font-weight: 500;
   color: var(--color-base);
-  background: var(--color-red);
+  background: var(--color-danger);
   border: none;
   border-radius: var(--radius-sm);
   cursor: pointer;
@@ -148,7 +148,7 @@
 }
 
 .stopAllButton:hover {
-  background: var(--color-red-hover);
+  background: var(--color-danger-hover);
 }
 
 .agentPanelList {
@@ -183,12 +183,12 @@
 
 .agentPanelStatus {
   font-size: var(--text-sm);
-  color: var(--color-green);
+  color: var(--color-success);
 }
 
 .agentPanelSubagents {
   font-size: var(--text-sm);
-  color: var(--color-blue);
+  color: var(--color-accent);
   font-weight: 500;
 }
 
@@ -210,9 +210,9 @@
 }
 
 .stopAgentButton:hover {
-  background: var(--color-red);
+  background: var(--color-danger);
   color: var(--color-base);
-  border-color: var(--color-red);
+  border-color: var(--color-danger);
 }
 
 /* Desktop Icons */

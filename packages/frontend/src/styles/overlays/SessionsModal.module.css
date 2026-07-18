@@ -29,7 +29,7 @@
 }
 
 .title {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--color-text);
   margin: 0;
@@ -66,7 +66,7 @@
 }
 
 .error {
-  color: var(--color-red);
+  color: var(--color-danger);
 }
 
 .sessionList {
@@ -112,13 +112,13 @@
 
 .sessionId {
   font-family: monospace;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-text);
 }
 
 .provider {
   font-size: var(--text-sm);
-  color: var(--color-blue);
+  color: var(--color-accent);
   background: color-mix(in srgb, var(--color-accent) 15%, transparent);
   padding: 2px var(--space-2);
   border-radius: var(--radius-sm);
@@ -171,7 +171,7 @@
   margin: 0;
   padding: var(--space-4);
   font-family: inherit;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   line-height: 1.6;
   color: var(--color-subtext);
   white-space: pre-wrap;

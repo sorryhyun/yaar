@@ -2,8 +2,8 @@
   position: fixed;
   width: var(--space-3);
   height: var(--space-3);
-  border: 2px solid var(--color-green-dim);
-  border-top-color: var(--color-green);
+  border: 2px solid var(--color-success-dim);
+  border-top-color: var(--color-success);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
   pointer-events: none;

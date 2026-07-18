@@ -13,7 +13,7 @@
 .gear {
   width: var(--space-12);
   height: var(--space-12);
-  color: var(--color-blue);
+  color: var(--color-accent);
   animation: spin 2s linear infinite;
 }
 
@@ -30,6 +30,6 @@
   font-size: var(--text-base);
   font-weight: 500;
   color: var(--color-base);
-  background: var(--color-yellow);
+  background: var(--color-warning);
   border-radius: var(--radius-xl);
 }

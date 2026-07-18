@@ -22,7 +22,7 @@
 }
 
 .title {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--color-text);
   margin-bottom: var(--space-3);
@@ -63,14 +63,14 @@
 
 .option[data-selected='true'] {
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  border-color: var(--color-blue);
+  border-color: var(--color-accent);
 }
 
 .optionRadio {
   width: var(--space-4);
   height: var(--space-4);
   margin-top: 2px;
-  accent-color: var(--color-blue);
+  accent-color: var(--color-accent);
   cursor: pointer;
   flex-shrink: 0;
 }
@@ -100,7 +100,7 @@
 
 .inputLabel {
   display: block;
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-subtext);
   margin-bottom: var(--space-2);
   font-weight: 500;
@@ -123,7 +123,7 @@
 
 .textInput:focus,
 .textArea:focus {
-  border-color: var(--color-blue);
+  border-color: var(--color-accent);
 }
 
 .textArea {
@@ -161,12 +161,12 @@
 }
 
 .submitButton {
-  background: var(--color-blue);
+  background: var(--color-accent);
   color: var(--color-base);
 }
 
 .submitButton:hover {
-  background: var(--color-lavender);
+  background: var(--hue-lavender);
 }
 
 .submitButton:disabled {

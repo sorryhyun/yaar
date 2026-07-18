@@ -134,8 +134,8 @@ export function DesktopSurface() {
   useEffect(() => {
     const preset = resolveAccent(accentColor);
     if (preset) {
-      document.documentElement.style.setProperty('--color-blue', preset.color);
-      document.documentElement.style.setProperty('--color-blue-hover', preset.hover);
+      document.documentElement.style.setProperty('--color-accent', preset.color);
+      document.documentElement.style.setProperty('--color-accent-hover', preset.hover);
     }
   }, [accentColor]);
 

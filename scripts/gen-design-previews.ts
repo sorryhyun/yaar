@@ -97,7 +97,7 @@ const shellBody = `
       <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-success)"></span>
       <span style="font-size:var(--text-base);color:var(--color-subtext);margin-left:var(--space-2)">Window title</span>
     </div>
-    <div style="padding:var(--space-4);color:var(--color-subtext);font-size:var(--text-md)">AI-generated window content</div>
+    <div style="padding:var(--space-4);color:var(--color-subtext);font-size:var(--text-base)">AI-generated window content</div>
   </div>
 </div>`;
 

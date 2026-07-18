@@ -22,7 +22,7 @@
 }
 
 .title {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--color-text);
   margin-bottom: var(--space-3);
@@ -41,7 +41,7 @@
   align-items: center;
   gap: var(--space-2);
   margin-bottom: var(--space-5);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-subtext-muted);
   cursor: pointer;
   user-select: none;
@@ -50,7 +50,7 @@
 .rememberChoice input[type='checkbox'] {
   width: var(--space-4);
   height: var(--space-4);
-  accent-color: var(--color-blue);
+  accent-color: var(--color-accent);
   cursor: pointer;
 }
 
@@ -87,12 +87,12 @@
 }
 
 .confirmButton {
-  background: var(--color-blue);
+  background: var(--color-accent);
   color: var(--color-base);
 }
 
 .confirmButton:hover {
-  background: var(--color-lavender);
+  background: var(--hue-lavender);
 }
 
 .cancelButton:active,

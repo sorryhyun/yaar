@@ -28,7 +28,7 @@
 }
 
 .title {
-  font-size: var(--text-2xl);
+  font-size: var(--text-xl);
   font-weight: 600;
   color: var(--color-text);
   margin: 0;
@@ -60,7 +60,7 @@
 .loading,
 .notRemote {
   color: var(--color-muted);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   text-align: center;
   padding: var(--space-4) 0;
 }
@@ -77,7 +77,7 @@
 }
 
 .subtitle {
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-subtext);
   text-align: center;
 }
@@ -111,7 +111,7 @@
   border: none;
   background: var(--color-accent);
   color: #fff; /* intentional: text on accent-colored button */
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   font-weight: 500;
   font-family: var(--font-sans);
   cursor: pointer;

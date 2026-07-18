@@ -25,38 +25,26 @@
   --color-muted: #6e7681;
   --color-text-muted: var(--color-subtext-muted);
 
-  /* Accent hues */
-  --color-blue: #58a6ff;
-  --color-blue-hover: #79c0ff;
-  --color-lavender: #a5b4fc;
-  --color-green: #3fb950;
-  --color-green-dim: rgba(63,185,80,0.3);
-  --color-red: #f85149;
-  --color-red-hover: #ff7b72;
-  --color-yellow: #d29922;
-  --color-peach: #ffa657;
-  --color-pink: #f778ba;
-  --color-mauve: #bc8cff;
-
-  /* Semantic aliases — style with these, not the hues above */
+  /* === Semantics — the only color names shell CSS may use ===
+     `--color-accent` is also written at runtime by the accent-preset picker
+     (DesktopSurface), so it must hold a real value, not a var() indirection. */
   --color-bg: var(--color-base);
-  --color-accent: var(--color-blue);
-  --color-accent-hover: var(--color-blue-hover);
-  --color-primary: var(--color-blue);
-  --color-primary-hover: var(--color-blue-hover);
-  --color-success: var(--color-green);
-  --color-danger: var(--color-red);
-  --color-danger-hover: var(--color-red-hover);
-  --color-warning: var(--color-yellow);
-  --color-info: var(--color-blue);
+  --color-accent: #58a6ff;
+  --color-accent-hover: #79c0ff;
+  --color-primary: var(--color-accent);
+  --color-primary-hover: var(--color-accent-hover);
+  --color-info: var(--color-accent);
+  --color-success: #3fb950;
+  --color-success-dim: rgba(63,185,80,0.3);
+  --color-danger: #f85149;
+  --color-danger-hover: #ff7b72;
+  --color-warning: #d29922;
 
-  /* Button aliases (legacy names used by the component-DSL renderers) */
-  --color-btn-primary: var(--color-primary);
-  --color-btn-primary-hover: var(--color-primary-hover);
-  --color-btn-danger: var(--color-danger);
-  --color-btn-danger-hover: var(--color-danger-hover);
-  --color-btn-success: var(--color-success);
-  --color-btn-warning: var(--color-warning);
+  /* Decorative hues — no semantic meaning, never stand in for a semantic above */
+  --hue-lavender: #a5b4fc;
+  --hue-peach: #ffa657;
+  --hue-pink: #f778ba;
+  --hue-mauve: #bc8cff;
 
   /* === Spacing Scale === */
   --space-1: 4px;
@@ -103,15 +91,12 @@
   --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
   --font-sans: 'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
-  /* Font sizes — legacy 8-step names collapsed onto the canonical 5-step ramp */
+  /* Font sizes — canonical 5-step ramp */
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
-  --text-md: 13px;
   --text-lg: 15px;
-  --text-xl: 15px;
-  --text-2xl: 18px;
-  --text-3xl: 18px;
+  --text-xl: 18px;
 
   /* === Z-Index Scale === */
   --z-window: 9000;
@@ -144,7 +129,7 @@
 }
 
 /* Light theme — toggled via the `theme` setting (settingsSlice sets data-theme).
-   Only raw values are overridden; every alias (`--color-accent`, `--color-btn-*`,
+   Only raw values are overridden; every alias (`--color-primary`, `--color-info`,
    `--border-*`) follows automatically through var(). */
 :root[data-theme='light'] {
   --color-base: #f8f9fa;
@@ -158,13 +143,13 @@
   --color-subtext-muted: #656d76;
   --color-muted: #8b949e;
 
-  --color-blue: #0969da;
-  --color-blue-hover: #0550ae;
-  --color-green: #1a7f37;
-  --color-green-dim: rgba(26,127,55,0.3);
-  --color-red: #cf222e;
-  --color-red-hover: #a40e26;
-  --color-yellow: #9a6700;
+  --color-accent: #0969da;
+  --color-accent-hover: #0550ae;
+  --color-success: #1a7f37;
+  --color-success-dim: rgba(26,127,55,0.3);
+  --color-danger: #cf222e;
+  --color-danger-hover: #a40e26;
+  --color-warning: #9a6700;
 
   --color-border: #d0d7de;
   --color-border-muted: #d8dee4;

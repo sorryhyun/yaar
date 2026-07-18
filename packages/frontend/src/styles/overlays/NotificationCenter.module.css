@@ -26,7 +26,7 @@
 }
 
 .title {
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   font-weight: 600;
   color: var(--color-text);
 }
@@ -35,7 +35,7 @@
   border: none;
   background: transparent;
   color: var(--color-muted);
-  font-size: var(--text-3xl);
+  font-size: var(--text-xl);
   cursor: pointer;
   padding: 0 var(--space-1);
 }
@@ -46,7 +46,7 @@
 
 .body {
   padding: var(--space-3);
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-subtext-muted);
   line-height: 1.4;
 }

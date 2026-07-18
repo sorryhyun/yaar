@@ -16,7 +16,7 @@
 }
 
 .message {
-  font-size: var(--text-md);
+  font-size: var(--text-base);
   color: var(--color-text);
 }
 
@@ -36,7 +36,7 @@
 }
 
 .restoreButton {
-  background: var(--color-blue);
+  background: var(--color-accent);
   color: var(--color-base);
   border: none;
 }

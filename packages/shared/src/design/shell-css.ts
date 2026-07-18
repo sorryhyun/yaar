@@ -4,10 +4,10 @@
  * The emitted file is checked in but GENERATED — regenerate with
  * `bun scripts/gen-design-tokens.ts`; a frontend test asserts it is in sync.
  *
- * Legacy `--color-*` / `--space-*` / `--text-*` names are kept as aliases of the
- * canonical values so existing CSS modules keep working. The legacy 8-step type
- * ramp collapses onto the canonical 5-step ramp (some adjacent names now share a
- * value on purpose).
+ * Shell CSS addresses color only through the semantic names emitted here
+ * (`--color-accent`, `--color-danger`, …) plus the explicitly decorative
+ * `--hue-*` namespace. A raw hue name (`--color-blue`) or a legacy type step
+ * (`--text-md`, `--text-2xl`) appearing in shell CSS is by definition a bug.
  */
 import {
   PALETTE_DARK as D,
@@ -58,38 +58,26 @@ ${FONT_FACE_CSS}
   --color-muted: ${D.textDim};
   --color-text-muted: var(--color-subtext-muted);
 
-  /* Accent hues */
-  --color-blue: ${D.accent};
-  --color-blue-hover: ${D.accentHover};
-  --color-lavender: ${accent('lavender').color};
-  --color-green: ${D.success};
-  --color-green-dim: ${alpha(D.success, 0.3)};
-  --color-red: ${D.error};
-  --color-red-hover: ${D.errorHover};
-  --color-yellow: ${D.warning};
-  --color-peach: ${accent('peach').color};
-  --color-pink: ${accent('pink').color};
-  --color-mauve: ${accent('mauve').color};
-
-  /* Semantic aliases — style with these, not the hues above */
+  /* === Semantics — the only color names shell CSS may use ===
+     \`--color-accent\` is also written at runtime by the accent-preset picker
+     (DesktopSurface), so it must hold a real value, not a var() indirection. */
   --color-bg: var(--color-base);
-  --color-accent: var(--color-blue);
-  --color-accent-hover: var(--color-blue-hover);
-  --color-primary: var(--color-blue);
-  --color-primary-hover: var(--color-blue-hover);
-  --color-success: var(--color-green);
-  --color-danger: var(--color-red);
-  --color-danger-hover: var(--color-red-hover);
-  --color-warning: var(--color-yellow);
-  --color-info: var(--color-blue);
+  --color-accent: ${D.accent};
+  --color-accent-hover: ${D.accentHover};
+  --color-primary: var(--color-accent);
+  --color-primary-hover: var(--color-accent-hover);
+  --color-info: var(--color-accent);
+  --color-success: ${D.success};
+  --color-success-dim: ${alpha(D.success, 0.3)};
+  --color-danger: ${D.error};
+  --color-danger-hover: ${D.errorHover};
+  --color-warning: ${D.warning};
 
-  /* Button aliases (legacy names used by the component-DSL renderers) */
-  --color-btn-primary: var(--color-primary);
-  --color-btn-primary-hover: var(--color-primary-hover);
-  --color-btn-danger: var(--color-danger);
-  --color-btn-danger-hover: var(--color-danger-hover);
-  --color-btn-success: var(--color-success);
-  --color-btn-warning: var(--color-warning);
+  /* Decorative hues — no semantic meaning, never stand in for a semantic above */
+  --hue-lavender: ${accent('lavender').color};
+  --hue-peach: ${accent('peach').color};
+  --hue-pink: ${accent('pink').color};
+  --hue-mauve: ${accent('mauve').color};
 
   /* === Spacing Scale === */
 ${Object.entries(SPACING)
@@ -130,15 +118,12 @@ ${Object.entries(SPACING)
   --font-mono: ${FONT_MONO};
   --font-sans: ${FONT_SANS};
 
-  /* Font sizes — legacy 8-step names collapsed onto the canonical 5-step ramp */
+  /* Font sizes — canonical 5-step ramp */
   --text-xs: ${TYPE_SCALE.xs}px;
   --text-sm: ${TYPE_SCALE.sm}px;
   --text-base: ${TYPE_SCALE.base}px;
-  --text-md: ${TYPE_SCALE.base}px;
   --text-lg: ${TYPE_SCALE.lg}px;
-  --text-xl: ${TYPE_SCALE.lg}px;
-  --text-2xl: ${TYPE_SCALE.xl}px;
-  --text-3xl: ${TYPE_SCALE.xl}px;
+  --text-xl: ${TYPE_SCALE.xl}px;
 
   /* === Z-Index Scale === */
   --z-window: ${Z_INDEX.window};
@@ -171,7 +156,7 @@ ${Object.entries(SPACING)
 }
 
 /* Light theme — toggled via the \`theme\` setting (settingsSlice sets data-theme).
-   Only raw values are overridden; every alias (\`--color-accent\`, \`--color-btn-*\`,
+   Only raw values are overridden; every alias (\`--color-primary\`, \`--color-info\`,
    \`--border-*\`) follows automatically through var(). */
 :root[data-theme='light'] {
   --color-base: ${L.bg};
@@ -185,13 +170,13 @@ ${Object.entries(SPACING)
   --color-subtext-muted: ${L.textMuted};
   --color-muted: ${L.textDim};
 
-  --color-blue: ${L.accent};
-  --color-blue-hover: ${L.accentHover};
-  --color-green: ${L.success};
-  --color-green-dim: ${alpha(L.success, 0.3)};
-  --color-red: ${L.error};
-  --color-red-hover: ${L.errorHover};
-  --color-yellow: ${L.warning};
+  --color-accent: ${L.accent};
+  --color-accent-hover: ${L.accentHover};
+  --color-success: ${L.success};
+  --color-success-dim: ${alpha(L.success, 0.3)};
+  --color-danger: ${L.error};
+  --color-danger-hover: ${L.errorHover};
+  --color-warning: ${L.warning};
 
   --color-border: ${L.border};
   --color-border-muted: ${L.borderMuted};
