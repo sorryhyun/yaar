@@ -23,7 +23,12 @@ import { storageUriForPath } from '../../http/access.js';
 import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
-import { formatWindowRef, deriveWindowId, getAppMetaOverrides } from './helpers.js';
+import {
+  formatWindowRef,
+  deriveWindowId,
+  allocateWindowId,
+  getAppMetaOverrides,
+} from './helpers.js';
 
 /** How long an iframe window gets to report that its content rendered. */
 const IFRAME_RENDER_TIMEOUT_MS = 2_000;
@@ -111,7 +116,25 @@ export async function handleCreate(
     payload.name as string | undefined,
     title,
   );
-  const actualId = windowId || derivedId;
+
+  // A create must never take a live window's id — the frontend would overwrite the
+  // window in place. The two collision cases mean different things, so they end
+  // differently: an id we *derived* from the title/appId is our own guess, and the
+  // caller asked for a new window, so step to the next free one. An id the caller
+  // *named* is a claim about which window it means; silently redirecting it would
+  // leave the agent updating a window it never sees, so say so instead.
+  const sid = getSessionId();
+  const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
+  let actualId = windowId || derivedId;
+  if (session?.windowState.hasWindow(actualId)) {
+    if (windowId) {
+      return error(
+        `Window "${formatWindowRef(actualId)}" already exists. Use action "update" to change ` +
+          `its content, "close" it first, or create with a different id.`,
+      );
+    }
+    actualId = allocateWindowId(session.windowState, actualId);
+  }
 
   // Component renderer: content is a ComponentLayout object or loaded from jsonfile
   if (renderer === 'component') {

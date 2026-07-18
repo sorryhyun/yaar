@@ -58,10 +58,15 @@ export class BroadcastCenter {
   subscribeToMonitor(connectionId: ConnectionId, monitorId: string): void {
     const entry = this.connections.get(connectionId);
     if (entry) {
+      // Only a *change* is worth a line — clients re-assert their current monitor
+      // often enough that logging every call drowns the console.
+      const changed = entry.monitorId !== monitorId;
       entry.monitorId = monitorId;
-      console.log(
-        `[BroadcastCenter] Connection ${connectionId} subscribed to monitor ${monitorId}`,
-      );
+      if (changed) {
+        console.log(
+          `[BroadcastCenter] Connection ${connectionId} subscribed to monitor ${monitorId}`,
+        );
+      }
     }
   }
 

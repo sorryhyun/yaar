@@ -25,6 +25,26 @@ export function deriveWindowId(appId?: string, name?: string, title?: string): s
   return slug || `win-${Date.now().toString(36)}`;
 }
 
+/**
+ * Find a free window id, given one that may already be taken.
+ *
+ * A derived id is a slug of the title (or the appId), so two creates that merely
+ * *look alike* — two "Generated Image Preview" windows — collide. Assigning the
+ * collision to the same id let the second create destroy the first: the store
+ * does `windows[key] = window`, so the earlier window vanished without even the
+ * close path running. Stepping to `{id}-2` opens a second window instead.
+ *
+ * Bounded: after 99 the id carries a timestamp rather than looping forever.
+ */
+export function allocateWindowId(windowState: WindowStateRegistry, desired: string): string {
+  if (!windowState.hasWindow(desired)) return desired;
+  for (let n = 2; n <= 99; n++) {
+    const candidate = `${desired}-${n}`;
+    if (!windowState.hasWindow(candidate)) return candidate;
+  }
+  return `${desired}-${Date.now().toString(36)}`;
+}
+
 /** Check that a window exists, returning an error result if not. */
 export function requireWindowExists(
   windowState: WindowStateRegistry,

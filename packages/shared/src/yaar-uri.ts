@@ -59,9 +59,16 @@ export function isYaarUri(uri: string): boolean {
 /**
  * Resolve a yaar:// URI to an API path.
  *
- *   yaar://apps/{appId}           → /api/apps/{appId}/dist/index.html
- *   yaar://apps/{appId}/{subpath} → /api/apps/{appId}/{subpath}
- *   yaar://storage/{path}         → /api/storage/{path}
+ *   yaar://apps/{appId}                  → /api/apps/{appId}/dist/index.html
+ *   yaar://apps/{appId}/storage/{path}   → /api/storage/apps/{appId}/{path}
+ *   yaar://apps/{appId}/{subpath}        → /api/apps/{appId}/{subpath}
+ *   yaar://storage/{path}                → /api/storage/{path}
+ *
+ * App-scoped storage is the one case where the URI and the HTTP path disagree:
+ * the files live under the shared storage tree at `storage/apps/{appId}/…`, so
+ * they are served by `/api/storage/…` (which runs the permission gate), not by
+ * `/api/apps/…` (which serves an app's own source/dist directory). Resolving it
+ * the naive way yields a 404 — e.g. an `<img>` pointing at a generated PNG.
  */
 export function resolveContentUri(uri: string): string | null {
   const parsed = parseYaarUri(uri);
@@ -70,6 +77,12 @@ export function resolveContentUri(uri: string): string | null {
     case 'apps': {
       const slashIdx = parsed.path.indexOf('/');
       if (slashIdx === -1) return `/api/apps/${parsed.path}/dist/index.html`;
+      const appId = parsed.path.slice(0, slashIdx);
+      const rest = parsed.path.slice(slashIdx + 1);
+      if (rest === 'storage' || rest.startsWith('storage/')) {
+        const filePath = rest.slice('storage'.length).replace(/^\//, '');
+        return `/api/storage/apps/${appId}${filePath ? `/${filePath}` : ''}`;
+      }
       return `/api/apps/${parsed.path}`;
     }
     case 'storage':

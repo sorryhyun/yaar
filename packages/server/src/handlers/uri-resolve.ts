@@ -95,6 +95,22 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
       const slashIdx = parsed.path.indexOf('/');
       const appId = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
       const subpath = slashIdx === -1 ? 'dist/index.html' : parsed.path.slice(slashIdx + 1);
+
+      // App-scoped storage is not part of the app directory — it lives in the shared
+      // storage tree (storage/apps/{appId}/…), which apiPath already points at.
+      if (subpath === 'storage' || subpath.startsWith('storage/')) {
+        const rel = apiPath.slice('/api/storage/'.length);
+        const resolved = resolvePath(rel);
+        if (!resolved) return null;
+        return {
+          kind: 'storage',
+          absolutePath: resolved.absolutePath,
+          readOnly: resolved.readOnly,
+          sourceUri: uri,
+          apiPath,
+        };
+      }
+
       const base = resolveAppDir(appId) ?? join(APPS_DIR, appId);
       const absolutePath = safePath(base, subpath);
       if (!absolutePath) return null;

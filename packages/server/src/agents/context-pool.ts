@@ -93,7 +93,10 @@ export class ContextPool implements PoolContext {
   private inflightCount = 0;
   private inflightResolve: (() => void) | null = null;
   /** Per-window app-event rate tracking: windowId → { count, windowStart }. */
-  private appEventRate = new Map<string, { count: number; windowStart: number }>();
+  private appEventRate = new Map<
+    string,
+    { count: number; windowStart: number; warned?: boolean }
+  >();
 
   // ── Processors ────────────────────────────────────────────────────
   private monitorProcessor: MonitorTaskProcessor;
@@ -610,9 +613,15 @@ export class ContextPool implements PoolContext {
   ): void {
     const key = this.windowKey(windowId);
     if (this.isAppEventRateLimited(key)) {
-      console.warn(
-        `[ContextPool] App event rate limit hit for window "${key}" (channel "${channel}") — dropped.`,
-      );
+      // A chatty app trips the limit on nearly every emit; warning per drop buries
+      // everything else in the log. One line per rate window says the same thing.
+      const entry = this.appEventRate.get(key);
+      if (entry && !entry.warned) {
+        entry.warned = true;
+        console.warn(
+          `[ContextPool] App event rate limit hit for window "${key}" (channel "${channel}") — dropping until the window resets.`,
+        );
+      }
       return;
     }
 

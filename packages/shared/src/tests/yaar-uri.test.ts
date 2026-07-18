@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'bun:test';
-import { parseYaarUri, parseBareWindowUri, isBareWindowsAuthority } from '../yaar-uri.js';
+import {
+  parseYaarUri,
+  parseBareWindowUri,
+  isBareWindowsAuthority,
+  resolveContentUri,
+} from '../yaar-uri.js';
 
 // ============ Window URIs (yaar://windows/) ============
 
@@ -105,5 +110,30 @@ describe('parseYaarUri with session', () => {
 
   it('returns null for removed monitors authority', () => {
     expect(parseYaarUri('yaar://monitors/0/win-id')).toBeNull();
+  });
+});
+
+describe('resolveContentUri', () => {
+  it('resolves app-scoped storage to the shared storage route', () => {
+    // The files live at storage/apps/{appId}/…, served by /api/storage — not by
+    // /api/apps, which serves the app's own source/dist directory.
+    expect(resolveContentUri('yaar://apps/anima/storage/generated/x.png')).toBe(
+      '/api/storage/apps/anima/generated/x.png',
+    );
+    expect(resolveContentUri('yaar://apps/anima/storage')).toBe('/api/storage/apps/anima');
+  });
+
+  it('resolves an app root to its built entry point', () => {
+    expect(resolveContentUri('yaar://apps/anima')).toBe('/api/apps/anima/dist/index.html');
+  });
+
+  it('resolves other app subpaths to the app static route', () => {
+    expect(resolveContentUri('yaar://apps/anima/dist/index.html')).toBe(
+      '/api/apps/anima/dist/index.html',
+    );
+  });
+
+  it('resolves shared storage URIs unchanged', () => {
+    expect(resolveContentUri('yaar://storage/notes/a.md')).toBe('/api/storage/notes/a.md');
   });
 });
