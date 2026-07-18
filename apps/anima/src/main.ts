@@ -43,6 +43,8 @@ import { ErSDEScheduler, makeRng, randn } from './scheduler';
 import { promptEmbeds } from './text';
 import { loadTokenizers, tokenizePrompt } from './tokenizer';
 import { downloadWeights, TOTAL_BYTES } from './download';
+import { app as yaarApp } from '@bundled/yaar';
+import { registerProtocol, type GenerationResult } from './protocol';
 import {
   BUCKETS,
   DEFAULT_BUCKET,
@@ -69,6 +71,7 @@ const [busy, setBusy] = createSignal(false);
 const [progress, setProgress] = createSignal<{ label: string; pct: number | null } | null>(null);
 const [status, setStatus] = createSignal('');
 const [hasImage, setHasImage] = createSignal(false);
+const [lastResult, setLastResult] = createSignal<GenerationResult | null>(null);
 // The rarely-touched controls (ratio / seed / download / clear cache) live behind this
 // popover so the narrow default window keeps prompt + Generate as the only chrome.
 const [showOptions, setShowOptions] = createSignal(false);
@@ -116,10 +119,12 @@ function onProg(p: Progress) {
   const name = p.file.split('/').pop() ?? p.file;
   if (p.cached) {
     setProgress({ label: `${name} (cached)`, pct: 100 });
+    yaarApp?.emit('progress', { label: `${name} (cached)`, pct: 100, busy: busy() });
     return log(`  ${p.file}: cached (${mb(p.loaded)})`);
   }
   const pct = Math.floor(p.ratio * 100);
   setProgress({ label: `Loading ${name}`, pct: p.total ? pct : null });
+  yaarApp?.emit('progress', { label: `Loading ${name}`, pct: p.total ? pct : null, busy: busy() });
   if (pct !== _lastPct && pct % 5 === 0) {
     _lastPct = pct;
     log(`  ${p.file}: ${pct}% (${mb(p.loaded)}${p.total ? ' / ' + mb(p.total) : ''})`);
@@ -561,6 +566,20 @@ function App() {
   onCleanup(() => document.removeEventListener('click', onDocClick));
 
   onMount(async () => {
+    registerProtocol({
+      getStatus: status,
+      getBusy: busy,
+      getProgress: progress,
+      getLastResult: lastResult,
+      setLastResult,
+      setPrompt,
+      setSeed,
+      setRatio: setBucketId,
+      getCapabilities: caps,
+      buckets: BUCKETS,
+      generate,
+      canvasBlob,
+    });
     const c = await capabilities();
     setCaps(
       c.webgpu
