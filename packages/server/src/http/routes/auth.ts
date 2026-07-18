@@ -5,26 +5,84 @@
  * POST /api/auth/google/login     — open the browser at Google's consent screen
  * GET  /api/auth/google/callback  — Google's redirect target (browser-facing HTML)
  * POST /api/auth/google/logout    — forget the local session
+ * GET  /api/auth/google/me        — { email, apps } from the marketplace (server-side)
+ *
+ * ── Who may call these ──
+ *
+ * The desktop host, and **bundled `kind: "system"` apps** (in practice market-apps,
+ * which owns the sign-in UI). Every other app is refused. Two reasons an ordinary
+ * app must not reach these:
+ *
+ *   - `login` pops a *real* Google consent screen — a convincing phishing surface
+ *     if any app could summon it.
+ *   - the publisher credential these routes stand in front of is machine-wide, not
+ *     scoped to one app.
+ *
+ * `systemApp` is derived from the app's own manifest and cannot be self-granted
+ * (discovery.ts downgrades `kind: "system"` on anything not bundled), so it is a
+ * real trust boundary — the same one `yaar://session/*` uses. The routes are on the
+ * iframe allowlist (below) so a system app's `fetch()` reaches them; the per-request
+ * `systemApp` check is what keeps every other app out.
+ *
+ * `callback` is deliberately *not* here: it is a top-level browser navigation from
+ * Google (no iframe token, no consent to gate), already exempted from remote-token
+ * auth in `auth.ts`, and its credential is the single-use `state`.
  */
-
 import {
   beginLogin,
   completeLogin,
   getAuthStatus,
   signOut,
 } from '../../features/market/google-auth.js';
+import { fetchMe } from '../../features/market/marketplace.js';
+import { resolvePrincipal } from '../access.js';
 import { jsonResponse, errorResponse, type EndpointMeta } from '../utils.js';
 import { errMessage } from '../../lib/errors.js';
 
+export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
+  {
+    method: 'GET',
+    path: '/api/auth/google/status',
+    response: 'JSON',
+    description: 'Google sign-in status (host + bundled system apps only).',
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/google/login',
+    response: 'JSON',
+    description: 'Start Google sign-in — opens the consent screen (host + system apps only).',
+  },
+  {
+    method: 'POST',
+    path: '/api/auth/google/logout',
+    response: 'JSON',
+    description: 'Forget the local Google session (host + system apps only).',
+  },
+  {
+    method: 'GET',
+    path: '/api/auth/google/me',
+    response: 'JSON',
+    description:
+      'The publisher identity + owned app ids from the marketplace (host + system apps only).',
+  },
+];
+
 /**
- * Empty on purpose — this is the desktop's identity, not an app resource.
+ * Restrict a route to the desktop host and bundled system apps.
  *
- * An app that could POST /api/auth/google/login could pop a consent screen at a
- * user who never asked for one, and one that could read the callback would hold
- * the publisher credential for every app on the machine. Off the iframe allowlist
- * entirely, so `server.ts` refuses any caller bearing an iframe token.
+ * The host presents no iframe token; a system app presents one whose `systemApp`
+ * flag came from its manifest. Any other app — or an invalid token — is refused.
  */
-export const PUBLIC_ENDPOINTS: EndpointMeta[] = [];
+function requireHostOrSystemApp(req: Request, url: URL): Response | null {
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal; // invalid/expired token → 403
+  if (principal.kind === 'host') return null;
+  if (principal.systemApp) return null;
+  return errorResponse(
+    'Google sign-in is available only to the desktop and bundled system apps.',
+    403,
+  );
+}
 
 /** Minimal browser-facing page — this is the one route a human actually looks at. */
 function callbackPage(title: string, message: string, ok: boolean): Response {
@@ -62,6 +120,8 @@ export async function handleAuthRoutes(req: Request, url: URL): Promise<Response
   if (!url.pathname.startsWith('/api/auth/google/')) return null;
 
   if (url.pathname === '/api/auth/google/status' && req.method === 'GET') {
+    const denied = requireHostOrSystemApp(req, url);
+    if (denied) return denied;
     try {
       return jsonResponse(await getAuthStatus());
     } catch (err) {
@@ -69,7 +129,19 @@ export async function handleAuthRoutes(req: Request, url: URL): Promise<Response
     }
   }
 
+  if (url.pathname === '/api/auth/google/me' && req.method === 'GET') {
+    const denied = requireHostOrSystemApp(req, url);
+    if (denied) return denied;
+    try {
+      return jsonResponse(await fetchMe());
+    } catch (err) {
+      return errorResponse(errMessage(err));
+    }
+  }
+
   if (url.pathname === '/api/auth/google/login' && req.method === 'POST') {
+    const denied = requireHostOrSystemApp(req, url);
+    if (denied) return denied;
     try {
       return jsonResponse(await beginLogin());
     } catch (err) {
@@ -103,6 +175,8 @@ export async function handleAuthRoutes(req: Request, url: URL): Promise<Response
   }
 
   if (url.pathname === '/api/auth/google/logout' && req.method === 'POST') {
+    const denied = requireHostOrSystemApp(req, url);
+    if (denied) return denied;
     await signOut();
     return jsonResponse({ signedIn: false });
   }

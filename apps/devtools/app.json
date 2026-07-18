@@ -21,5 +21,6 @@
   ],
   "run": "dist/index.html",
   "version": "1.0.0",
-  "author": "YAAR"
+  "author": "YAAR",
+  "kind": "system"
 }

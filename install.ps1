@@ -52,6 +52,19 @@ Move-Item -Force $TmpFile $Dest
 Write-Host ""
 Write-Host "Installed to: $Dest"
 
+# Bundled apps — the exe reads them from apps\ next to the binary, so extract the
+# (platform-independent) apps archive into $InstallDir. Non-fatal on failure.
+$AppsUrl = "https://github.com/$Repo/releases/download/$Version/yaar-apps.tar.gz"
+$AppsTmp = Join-Path ([System.IO.Path]::GetTempPath()) "yaar-apps.tar.gz"
+try {
+    Invoke-WebRequest -Uri $AppsUrl -OutFile $AppsTmp -UseBasicParsing
+    tar -xzf $AppsTmp -C $InstallDir
+    Remove-Item -Force $AppsTmp -ErrorAction SilentlyContinue
+    Write-Host "Installed bundled apps to: $(Join-Path $InstallDir 'apps')"
+} catch {
+    Write-Host "Could not download bundled apps ($AppsUrl); YAAR will start with no apps."
+}
+
 # Check PATH
 $UserPath = [Environment]::GetEnvironmentVariable("Path", "User")
 if ($UserPath -notlike "*$InstallDir*") {

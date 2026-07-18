@@ -59,6 +59,7 @@
     "build:exe": "bun run build:exe:prepare && bun run build:exe:libs && bun run build:exe:bundle",
     "build:exe:prepare": "bun run --filter '*' build",
     "build:exe:libs": "bun scripts/prebundle-libs.js",
+    "build:apps": "bun scripts/build-apps.ts",
     "build:exe:bundle": "bun scripts/build-exe-bundle.js --target windows",
     "build:exe:bundle:linux": "bun scripts/build-exe-bundle.js --target linux",
     "build:exe:bundle:macos": "bun scripts/build-exe-bundle.js --target macos",
