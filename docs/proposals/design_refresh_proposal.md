@@ -180,6 +180,46 @@ Adopt GitHub's stack: canvas lowest, elevated panels on surface.
 This is the single highest-impact change for perceived brightness: it lifts the surfaces
 users actually read by two tiers, and compounds with Part A.
 
+### A + B post-landing review (2026-07-18, via `make design-preview`)
+
+Re-verified against source and the generated preview cards, no app run required:
+
+- **Part A values match the table exactly** in `tokens.ts` — all 18 palette entries plus
+  the three emphasis pairs. Measured contrast reproduces the claimed numbers: primary
+  5.03, danger 5.02, success 5.07 (old primary 2.53), body text 8.89 on the window
+  surface and 10.48 on canvas.
+- **Part B matches its description** in `WindowFrame.module.css`: `.frame` paints
+  `--color-surface` with the inset `outline` + `outline-offset: -1px`, and `.titleBar`
+  shares that surface with a `1px --color-border-muted` bottom border, `box-sizing:
+  border-box` holding 36px, title in `--color-text` at weight 500.
+- Two values land just under WCAG AA for normal text and are worth a look when Part C/D
+  touch them: `--color-text-muted` on surface is **3.29**, and the accent link colour is
+  **4.47** (AA needs 4.5). Both are fine for large or secondary text; neither is a
+  regression from Part A (each improved), but neither reaches AA either.
+
+Two harness bugs found and fixed during this review, both in
+`scripts/gen-design-previews.ts`:
+
+1. The light-theme card never received the `y-light` class — `page()` accepted a `light`
+   flag and the writer read it back through a `(c as { light?: boolean })` cast, but no
+   card ever set it. The cast silenced the type error that would have caught it, so the
+   card rendered dark while claiming to demonstrate the light palette. `cards` now has an
+   explicit element type and the cast is gone.
+2. The window-chrome mock still encoded the **pre-Part-B** elevation (body on
+   `--color-base` inside a `--color-mantle` desktop) — the exact inversion Part B fixed.
+   Updated to mirror the shipped frame.
+
+Bug 2 exposed the harness's real limit: it loaded only the token generators, so it
+previewed token *values* but no shell CSS at all — meaning Parts C and D would have been
+invisible in it. Addressed in the same pass by injecting the four shell CSS modules
+verbatim and adding a Component DSL card, which reproduces findings 3 and 5 directly.
+Card markup stays hand-written, so structural changes (window chrome, grid layout,
+placement) still need the running app.
+
+Note for Part C: finding 5's cause is grid, not the badge rule. `.badge` is correctly
+`display: inline-flex`, but a grid item is blockified and stretched by the default
+`justify-self: stretch` — so the fix belongs on the item, as the part already proposes.
+
 ## Part C — Component DSL restyle
 
 The component renderer is the AI's primary UI-building surface and currently its worst-looking one.
@@ -247,7 +287,7 @@ Each step lands independently; screenshots before/after per step.
 5. **F** — icons + placement.
 6. **G** — escape hatches + grandfathered-app conformance; update the exception registry in
    `docs/architecture/design_system.md`.
-7. Regenerate design previews (`scripts/gen-design-previews.ts`).
+7. Regenerate design previews (`make design`; review with `make design-preview`).
 
 ## Open questions
 

@@ -8,7 +8,7 @@
  * via Claude Code's DesignSync tool (see docs/architecture/design_system.md);
  * dist/design-previews/cards.json carries the card metadata for registration.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { buildAppTokensCss } from '../packages/shared/src/design/app-css.ts';
 import { buildShellTokensCss } from '../packages/shared/src/design/shell-css.ts';
@@ -21,6 +21,32 @@ const stripFonts = (s: string) => s.replace(/@font-face\s*\{[^}]*\}/g, '');
 const appCss = stripFonts(buildAppTokensCss());
 const shellCss = stripFonts(buildShellTokensCss());
 
+/**
+ * Shell CSS modules, injected verbatim so cards preview the REAL shell styling and
+ * not a re-implementation of it. The token generators above emit only custom
+ * properties; everything the shell actually paints (component renderer, prose,
+ * form controls) lives in these modules, so without them Parts C/D of the design
+ * refresh would be invisible here.
+ *
+ * Safe because these are plain CSS with literal class names — the hashing that
+ * makes them "modules" happens at bundle time, not in the source. Verified: no
+ * `composes`/`:global`/`@value`, no class-name collisions between the four files
+ * or against the app CSS. If that ever changes, this concatenation is what breaks.
+ *
+ * Card markup is still hand-written, so DOM structure can drift from the real
+ * components even while the CSS stays honest. Structural changes (grid layout,
+ * window placement) must be verified in the running app.
+ */
+const SHELL_MODULES = [
+  'packages/frontend/src/styles/base/typography.module.css',
+  'packages/frontend/src/styles/base/components.module.css',
+  'packages/frontend/src/styles/base/forms.module.css',
+  'packages/frontend/src/styles/window/renderers.module.css',
+];
+const shellModuleCss = SHELL_MODULES.map((p) =>
+  readFileSync(join(import.meta.dir, '..', p), 'utf8'),
+).join('\n');
+
 function page(opts: { group: string; title: string; body: string; light?: boolean }): string {
   const { group, title, body, light } = opts;
   return `<!-- @dsCard group="${group}" -->
@@ -32,6 +58,7 @@ function page(opts: { group: string; title: string; body: string; light?: boolea
 <style>
 ${shellCss}
 ${appCss}
+${shellModuleCss}
 html,body{margin:0;height:100%}
 body{background:var(--yaar-bg);color:var(--yaar-text);font-family:var(--yaar-font);font-size:var(--yaar-text-base);line-height:1.5}
 .demo{padding:var(--yaar-sp-4);display:flex;flex-direction:column;gap:var(--yaar-sp-4)}
@@ -88,14 +115,14 @@ const shellBody = `
 <div class="demo-row">${['--color-base', '--color-mantle', '--color-surface', '--color-text', '--color-accent', '--color-success', '--color-danger', '--color-warning'].map(swatch).join('')}</div>
 <span class="y-label">Glass tier (alpha overlays — hover washes, dock, scrims)</span>
 <div class="demo-row">${['--bg-overlay-light', '--bg-overlay-medium', '--bg-overlay-strong', '--bg-overlay-hover'].map(swatch).join('')}</div>
-<span class="y-label">Window chrome mock</span>
-<div style="background:var(--color-mantle);border-radius:var(--radius-lg);padding:var(--space-4)">
-  <div style="background:var(--color-base);border:var(--border-subtle);border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;max-width:420px">
-    <div style="display:flex;align-items:center;gap:var(--space-2);padding:var(--space-2) var(--space-3);background:var(--color-surface);border-bottom:var(--border-muted)">
+<span class="y-label">Window chrome mock — elevation: desktop on base, window on surface</span>
+<div style="background:var(--color-base);border-radius:var(--radius-lg);padding:var(--space-4)">
+  <div style="background:var(--color-surface);outline:1px solid var(--color-border);outline-offset:-1px;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;max-width:420px">
+    <div style="display:flex;align-items:center;gap:var(--space-2);height:36px;box-sizing:border-box;padding:0 var(--space-3);background:var(--color-surface);border-bottom:1px solid var(--color-border-muted)">
       <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-danger)"></span>
       <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-warning)"></span>
       <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-success)"></span>
-      <span style="font-size:var(--text-base);color:var(--color-subtext);margin-left:var(--space-2)">Window title</span>
+      <span style="font-size:var(--text-base);font-weight:500;color:var(--color-text);margin-left:var(--space-2)">Window title</span>
     </div>
     <div style="padding:var(--space-4);color:var(--color-subtext);font-size:var(--text-base)">AI-generated window content</div>
   </div>
@@ -222,6 +249,48 @@ const feedbackBody = `
   <div class="y-modal-actions"><button class="y-btn">Cancel</button><button class="y-btn y-btn-danger">Delete</button></div>
 </div>`;
 
+/**
+ * Component DSL — the AI's primary UI-building surface, rendered with the real
+ * shell module CSS. Class names and structure mirror ComponentRenderer.tsx
+ * (componentRoot > inline-styled grid > text/button/badge/progress); the grid is
+ * inline-styled there too, so `display:grid` here is faithful, not a stand-in.
+ * Part C of the design refresh edits exactly these rules.
+ */
+const componentDslBody = `
+<span class="y-label">Text variants (finding 3: .text is monospace by default)</span>
+<div class="componentRoot" style="display:grid;grid-template-columns:1fr;gap:var(--space-3)">
+  <span class="text textHeading">Heading variant</span>
+  <span class="text textSubheading">Subheading variant</span>
+  <span class="text textBody">Body variant — the default agent-emitted text.</span>
+  <span class="text">Plain .text — inherits --font-mono</span>
+</div>
+<span class="y-label">Buttons &amp; inputs in a 2-col grid</span>
+<div class="componentRoot" style="display:grid;grid-template-columns:repeat(2, 1fr);gap:var(--space-3)">
+  <button class="button">Primary action</button>
+  <button class="button buttonDisabled" disabled>Disabled</button>
+  <div class="formField">
+    <label class="formLabel">Label</label>
+    <input class="formInput" placeholder="Input placeholder">
+  </div>
+  <div class="formField">
+    <label class="formLabel">Select</label>
+    <select class="formSelect"><option>Option</option></select>
+  </div>
+</div>
+<span class="y-label">Badges &amp; progress (finding 5: badges stretch to the grid cell)</span>
+<div class="componentRoot" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:var(--space-3)">
+  <span class="badge badgeDefault">Default</span>
+  <span class="badge badgeSuccess">Success</span>
+  <span class="badge badgeError">Error</span>
+</div>
+<div class="componentRoot" style="display:grid;grid-template-columns:1fr;gap:var(--space-3)">
+  <div class="progress">
+    <div class="progressLabel">Progress</div>
+    <div class="progressTrack"><div class="progressBar" style="width:60%"></div></div>
+    <div class="progressValue">60%</div>
+  </div>
+</div>`;
+
 const lightBody = `
 <span class="y-label">Light theme — .y-light, generated from PALETTE_LIGHT</span>
 <div class="demo-row">
@@ -235,7 +304,15 @@ const lightBody = `
   <div class="y-text-sm y-text-muted">Same tokens, remapped from the same source data.</div>
 </div>`;
 
-const cards = [
+const cards: Array<{
+  file: string;
+  group: string;
+  title: string;
+  body: string;
+  w: number;
+  h: number;
+  light?: boolean;
+}> = [
   {
     file: 'direction.html',
     group: 'Direction',
@@ -257,6 +334,7 @@ const cards = [
     group: 'Colors',
     title: 'Light theme (.y-light)',
     body: lightBody,
+    light: true,
     w: 520,
     h: 300,
   },
@@ -310,6 +388,14 @@ const cards = [
     h: 340,
   },
   {
+    file: 'component-dsl.html',
+    group: 'OS Shell',
+    title: 'Component DSL (shell renderer)',
+    body: componentDslBody,
+    w: 560,
+    h: 620,
+  },
+  {
     file: 'feedback.html',
     group: 'Feedback',
     title: 'Spinners, toasts, empty, modal',
@@ -322,7 +408,7 @@ const cards = [
 for (const c of cards) {
   writeFileSync(
     join(OUT, 'previews', c.file),
-    page({ group: c.group, title: c.title, body: c.body, light: (c as { light?: boolean }).light }),
+    page({ group: c.group, title: c.title, body: c.body, light: c.light }),
   );
 }
 

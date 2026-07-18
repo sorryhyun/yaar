@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types
+.PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types design design-preview
 
 # GNU make on Windows runs recipes with cmd.exe by default, which can't parse
 # the POSIX `VAR=1 ./script.sh` lines below. Route recipes through Git Bash
@@ -9,6 +9,7 @@ endif
 
 # Codex CLI binary (override with: make codex-types CODEX_BIN=./my-codex)
 CODEX_BIN ?= codex
+DESIGN_PREVIEW_PORT ?= 4321
 
 # Run both server and frontend (auto-select provider)
 dev:
@@ -89,6 +90,18 @@ bench:
 # Post-processes imports to add .js extensions required by ESM resolution
 codex-types:
 	bun scripts/generate-codex-types.js $(CODEX_BIN)
+
+# Regenerate design tokens + browsable preview cards from packages/shared/src/design.
+# Both generators read the real token module, so previews cannot drift from what ships.
+design:
+	bun scripts/gen-design-tokens.ts
+	bun scripts/gen-design-previews.ts
+
+# Serve the generated preview cards for visual review — no server, no `make dev`.
+# file:// is blocked by browser automation, so review over http.
+design-preview: design
+	@echo "Design previews on http://127.0.0.1:$(DESIGN_PREVIEW_PORT)/previews/ (Ctrl-C to stop)"
+	bun x --bun serve dist/design-previews -p $(DESIGN_PREVIEW_PORT)
 
 # Build standalone executables (yaar-{claude,codex}.exe with bundled-libs embedded)
 build-exe: codex-types
