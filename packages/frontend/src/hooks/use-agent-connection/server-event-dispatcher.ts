@@ -204,6 +204,13 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       const status = (message as { status?: string }).status;
       const toolInput = (message as { toolInput?: unknown }).toolInput;
       const monitorId = (message as { monitorId?: string }).monitorId;
+      // A tool call ends the current text/thinking block. Flush it into `cliHistory`
+      // *before* appending the tool entry so the two land in true chronological order —
+      // otherwise the live text sits in `cliStreaming`, which TerminalPane renders after
+      // all of history, and every tool appears to precede everything the agent said.
+      if (status === 'running') {
+        handlers.finalizeCliStreaming(agentId);
+      }
       // Track subagent lifecycle (exact match for start/end, startsWith for progress)
       const isSubagent =
         toolName === SUBAGENT_TOOL_NAME || toolName.startsWith(`${SUBAGENT_TOOL_NAME}:`);

@@ -62,6 +62,20 @@ export class StreamToEventMapper {
   private thinkingDirty = false;
   private toolStartTimes = new Map<string, { toolName: string; startTime: number }>();
 
+  /**
+   * Text emitted since the last tool call — the *current* block, not the turn.
+   *
+   * `state.responseText` stays cumulative because `complete` logs it and feeds it to
+   * context as the turn's single assistant message. But AGENT_RESPONSE is a live feed:
+   * if it carried the running accumulation, the CLI panel could not tell "the text
+   * before tool 1" from "the text after tool 2" — they arrive as one ever-growing
+   * string — and every text block would collapse into one entry rendered after all
+   * the tools. Resetting at each `tool_use` makes each block addressable.
+   */
+  private blockText = '';
+  /** Offset into `state.thinkingText` where the current block starts — same reason. */
+  private blockThinkingStart = 0;
+
   private readonly role: string;
   private readonly providerName: string;
   private readonly state: StreamMappingState;
@@ -115,9 +129,10 @@ export class StreamToEventMapper {
         if (message.content) {
           this.onOutput?.(message.content.length);
           this.state.responseText += message.content;
+          this.blockText += message.content;
           await this.sendEvent({
             type: ServerEventType.AGENT_RESPONSE,
-            content: this.state.responseText,
+            content: this.blockText,
             isComplete: false,
             agentId: this.role,
             monitorId: this.monitorId,
@@ -141,7 +156,7 @@ export class StreamToEventMapper {
             this.lastThinkingEmitTime = now;
             await this.sendEvent({
               type: ServerEventType.AGENT_THINKING,
-              content: this.state.thinkingText,
+              content: this.state.thinkingText.slice(this.blockThinkingStart),
               agentId: this.role,
               monitorId: this.monitorId,
             });
@@ -151,6 +166,12 @@ export class StreamToEventMapper {
         break;
 
       case 'tool_use': {
+        // Close the current text/thinking block: whatever the agent says next is a new
+        // one, and the client renders it after this tool rather than merged with what
+        // came before.
+        this.blockText = '';
+        this.blockThinkingStart = this.state.thinkingText.length;
+
         const rawName = message.toolName ?? 'unknown';
         let displayName = formatToolDisplay(rawName);
         let displayInput = message.toolInput;
@@ -311,10 +332,10 @@ export class StreamToEventMapper {
   private async flushThinking(): Promise<void> {
     if (!this.thinkingDirty) return;
 
-    // Emit final thinking event with full accumulated text
+    // Emit final thinking event with this block's accumulated text
     await this.sendEvent({
       type: ServerEventType.AGENT_THINKING,
-      content: this.state.thinkingText,
+      content: this.state.thinkingText.slice(this.blockThinkingStart),
       agentId: this.role,
       monitorId: this.monitorId,
     });
