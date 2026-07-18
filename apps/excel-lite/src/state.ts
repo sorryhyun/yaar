@@ -288,7 +288,7 @@ export function tryImportWorkbook(text: string, errorMessage = 'Invalid JSON') {
     importWorkbook(parsed);
     return true;
   } catch {
-    alert(errorMessage);
+    showToast(errorMessage, 'error');
     return false;
   }
 }

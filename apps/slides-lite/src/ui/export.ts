@@ -1,3 +1,4 @@
+import { showToast } from '@bundled/yaar';
 import { getDeck } from '../store';
 import { parseAspectRatio } from '../aspect-ratio';
 import { escapeHtml } from '../markdown';
@@ -25,6 +26,6 @@ export function exportPdf() {
     <script>window.onload=()=>window.print();<\/script>
   </body></html>`;
   const w = window.open('', '_blank');
-  if (!w) { alert('Popup blocked. Please allow popups to export PDF.'); return; }
+  if (!w) { showToast('Popup blocked. Please allow popups to export PDF.', 'error'); return; }
   w.document.open(); w.document.write(htmlStr); w.document.close();
 }

@@ -12,25 +12,69 @@ import { beforeEach, describe, expect, test } from 'bun:test';
  * happy-dom.
  */
 
-interface ToastEl {
+interface FakeEl {
+  tag: string;
   className: string;
   textContent: string;
+  value: string;
+  placeholder: string;
+  style: Record<string, string>;
+  children: FakeEl[];
+  onclick: ((e: unknown) => void) | null;
+  appendChild(c: FakeEl): FakeEl;
+  setAttribute(name: string, value: string): void;
+  addEventListener(type: string, fn: (e: unknown) => void): void;
+  focus(): void;
+  select(): void;
+  remove(): void;
+  classList: { add(c: string): void; remove(c: string): void };
+  listeners: Record<string, ((e: unknown) => void)[]>;
 }
 
-const toasts: ToastEl[] = [];
+type ToastEl = FakeEl;
+
+const toasts: FakeEl[] = [];
 const errors: string[] = [];
+const docListeners: Record<string, ((e: unknown) => void)[]> = {};
 
 let invokeImpl: (uri: string, payload: unknown) => Promise<unknown> = async () => ({});
 
+function makeEl(tag: string): FakeEl {
+  const el: FakeEl = {
+    tag,
+    className: '',
+    textContent: '',
+    value: '',
+    placeholder: '',
+    style: {},
+    children: [],
+    onclick: null,
+    listeners: {},
+    appendChild: (c) => (el.children.push(c), c),
+    setAttribute: () => {},
+    addEventListener: (type, fn) => void (el.listeners[type] ??= []).push(fn),
+    focus: () => {},
+    select: () => {},
+    remove: () => {
+      const i = toasts.indexOf(el);
+      if (i >= 0) toasts.splice(i, 1);
+    },
+    classList: { add: () => {}, remove: () => {} },
+  };
+  return el;
+}
+
 (globalThis as any).document = {
-  body: { appendChild: (el: ToastEl) => void toasts.push(el) },
-  createElement: (): ToastEl & Record<string, unknown> =>
-    ({
-      className: '',
-      textContent: '',
-      classList: { add: () => {}, remove: () => {} },
-      remove: () => {},
-    }) as any,
+  body: { appendChild: (el: FakeEl) => void toasts.push(el) },
+  createElement: (tag = 'div') => makeEl(tag),
+  addEventListener: (type: string, fn: (e: unknown) => void) =>
+    void (docListeners[type] ??= []).push(fn),
+  removeEventListener: (type: string, fn: (e: unknown) => void) => {
+    const arr = docListeners[type] ?? [];
+    const i = arr.indexOf(fn);
+    if (i >= 0) arr.splice(i, 1);
+  },
+  activeElement: null,
 };
 (globalThis as any).requestAnimationFrame = (cb: () => void) => {
   cb();
@@ -52,7 +96,8 @@ process.on('exit', () => {
   console.error = originalError;
 });
 
-const { appStorage, createPersistedSignal } = await import('../shims/yaar.js');
+const { appStorage, createPersistedSignal, showAlert, showConfirm, showPrompt } =
+  await import('../shims/yaar.js');
 
 /** Lets microtask-scheduled saves (`void trySave(...)`) settle. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -165,5 +210,114 @@ describe('createPersistedSignal', () => {
     await tick();
     expect(seen).toEqual(['quota exceeded']);
     expect(toasts).toBeEmpty();
+  });
+});
+
+/**
+ * The dialog helpers replace native alert/confirm/prompt, whose defining bug is
+ * that they block the page. What matters is the promise contract: which button
+ * resolves to what, that Escape/backdrop mean cancel, and that a closed dialog
+ * leaves neither DOM nor keydown listeners behind.
+ */
+
+const overlay = () => toasts.find((el) => el.className === 'y-overlay');
+
+function flatten(el: FakeEl): FakeEl[] {
+  return [el, ...el.children.flatMap(flatten)];
+}
+
+function buttons(): FakeEl[] {
+  const o = overlay();
+  return o ? flatten(o).filter((el) => el.tag === 'button') : [];
+}
+
+const okButton = () => buttons().find((b) => /y-btn-(primary|danger)/.test(b.className));
+const cancelButton = () => buttons().find((b) => b.className === 'y-btn');
+const inputField = () => {
+  const o = overlay();
+  return o ? flatten(o).find((el) => el.tag === 'input') : undefined;
+};
+
+const pressKey = (key: string, target?: unknown) => {
+  for (const fn of [...(docListeners['keydown'] ?? [])]) {
+    fn({ key, target, preventDefault: () => {}, stopPropagation: () => {} });
+  }
+};
+
+describe('dialogs', () => {
+  beforeEach(() => {
+    toasts.length = 0;
+    docListeners['keydown'] = [];
+  });
+
+  test('showConfirm resolves true on OK and removes the dialog', async () => {
+    const p = showConfirm('Sure?');
+    expect(overlay()).toBeDefined();
+    okButton()!.onclick!({});
+    expect(await p).toBe(true);
+    expect(overlay()).toBeUndefined();
+    expect(docListeners['keydown']).toBeEmpty();
+  });
+
+  test('showConfirm resolves false on Cancel', async () => {
+    const p = showConfirm('Sure?');
+    cancelButton()!.onclick!({});
+    expect(await p).toBe(false);
+  });
+
+  test('showConfirm resolves false on Escape', async () => {
+    const p = showConfirm('Sure?');
+    pressKey('Escape');
+    expect(await p).toBe(false);
+    expect(overlay()).toBeUndefined();
+  });
+
+  test('showConfirm resolves false on backdrop click', async () => {
+    const p = showConfirm('Sure?');
+    const o = overlay()!;
+    for (const fn of o.listeners['mousedown'] ?? []) fn({ target: o });
+    expect(await p).toBe(false);
+  });
+
+  test('danger styles the OK button as y-btn-danger with a custom label', async () => {
+    const p = showConfirm('Delete "a.txt"?', { danger: true, okLabel: 'Delete' });
+    const ok = okButton()!;
+    expect(ok.className).toContain('y-btn-danger');
+    expect(ok.textContent).toBe('Delete');
+    ok.onclick!({});
+    await p;
+  });
+
+  test('showAlert has no cancel button and resolves on OK', async () => {
+    const p = showAlert('Done.', { title: 'Export' });
+    expect(cancelButton()).toBeUndefined();
+    expect(flatten(overlay()!).some((el) => el.className === 'y-modal-title')).toBe(true);
+    okButton()!.onclick!({});
+    await p;
+    expect(overlay()).toBeUndefined();
+  });
+
+  test('showPrompt resolves the typed value on OK', async () => {
+    const p = showPrompt('Name:', { initial: 'Untitled' });
+    const field = inputField()!;
+    expect(field.value).toBe('Untitled');
+    field.value = 'My doc';
+    okButton()!.onclick!({});
+    expect(await p).toBe('My doc');
+  });
+
+  test('showPrompt resolves the value on Enter in the field', async () => {
+    const p = showPrompt('Name:');
+    const field = inputField()!;
+    field.value = 'quick';
+    pressKey('Enter', field);
+    expect(await p).toBe('quick');
+  });
+
+  test('showPrompt resolves null on cancel, even with text entered', async () => {
+    const p = showPrompt('Name:');
+    inputField()!.value = 'discarded';
+    cancelButton()!.onclick!({});
+    expect(await p).toBeNull();
   });
 });

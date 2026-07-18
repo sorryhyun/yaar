@@ -1,4 +1,5 @@
 import html from '@bundled/solid-js/html';
+import { showToast, showPrompt } from '@bundled/yaar';
 import {
   chartPanelOpen,
   refs,
@@ -27,12 +28,12 @@ async function copyToClipboard() {
     await navigator.clipboard.writeText(serializeWorkbook());
     setIoStatus('Workbook JSON copied to clipboard.');
   } catch {
-    alert('Clipboard access failed. Use Save Store instead.');
+    showToast('Clipboard access failed. Use Save Store instead.', 'error');
   }
 }
 
-function pasteFromClipboard() {
-  const text = prompt(
+async function pasteFromClipboard() {
+  const text = await showPrompt(
     'Paste JSON: { cells: {...}, styles: {...} } (legacy cell map also supported)',
   );
   if (!text) return;

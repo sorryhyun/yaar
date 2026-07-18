@@ -765,6 +765,43 @@ declare module '@bundled/yaar' {
   /** Show a toast notification using the built-in `y-toast` CSS classes. Auto-dismisses after `ms` (default 3000). */
   export function showToast(msg: string, type?: 'info' | 'success' | 'error', ms?: number): void;
 
+  /** Options for the modal dialog helpers (showAlert / showConfirm / showPrompt). */
+  export interface DialogOptions {
+    /** Bold heading above the message. */
+    title?: string;
+    /** Label for the confirming button (default "OK"). */
+    okLabel?: string;
+    /** Label for the cancel button (default "Cancel"). */
+    cancelLabel?: string;
+    /** Style the confirming button as destructive (`y-btn-danger`). */
+    danger?: boolean;
+  }
+
+  /**
+   * Show a modal alert styled with the built-in `y-modal` classes. Resolves when
+   * dismissed. Use instead of native `alert()`, which blocks the whole page.
+   */
+  export function showAlert(
+    msg: string,
+    opts?: Pick<DialogOptions, 'title' | 'okLabel'>,
+  ): Promise<void>;
+
+  /**
+   * Show a modal confirm dialog. Resolves `true` on OK, `false` on
+   * Cancel/Escape/backdrop click. Use instead of native `confirm()`.
+   * Pass `danger: true` for destructive actions.
+   */
+  export function showConfirm(msg: string, opts?: DialogOptions): Promise<boolean>;
+
+  /**
+   * Show a modal prompt with a text input. Resolves the entered string on OK,
+   * or `null` on Cancel/Escape. Use instead of native `prompt()`.
+   */
+  export function showPrompt(
+    msg: string,
+    opts?: DialogOptions & { placeholder?: string; initial?: string },
+  ): Promise<string | null>;
+
   /**
    * Run an async function with loading/error state management.
    * Sets loading to true, runs fn, catches errors via onError, and clears loading in finally.

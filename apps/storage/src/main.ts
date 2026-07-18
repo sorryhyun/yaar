@@ -10,7 +10,7 @@ import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
 import { navigate, selectFile, closePreview } from './navigation';
 import { registerProtocol } from './protocol';
-import { storage, showToast } from '@bundled/yaar';
+import { storage, showToast, showConfirm } from '@bundled/yaar';
 
 // ── Upload ───────────────────────────────────────────────────────────────────────
 
@@ -117,7 +117,7 @@ const App = () => html`
                     <//>
                     <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
                       e.stopPropagation();
-                      if (!confirm(`Delete "${name}"?`)) return;
+                      if (!(await showConfirm(`Delete "${name}"?`, { danger: true, okLabel: 'Delete' }))) return;
                       try {
                         await storage.remove(entry.path);
                         navigate(state.currentPath);

@@ -1,5 +1,6 @@
 import { createSignal, createEffect, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
+import { showConfirm } from '@bundled/yaar';
 import { state } from '../store';
 import { CommentSection } from './CommentSection';
 import { subscribeSeries, unsubscribeSeries } from '../actions';
@@ -48,7 +49,7 @@ function SubscribeButton(props: { link: SeriesLink }) {
     try {
       if (isSub()) {
         const s = subObj();
-        if (s && confirm(`'${s.title}' 구독을 취소하시겠습니까?`)) {
+        if (s && (await showConfirm(`'${s.title}' 구독을 취소하시겠습니까?`, { danger: true }))) {
           await unsubscribeSeries(s.id);
         }
       } else {

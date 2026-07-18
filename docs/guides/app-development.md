@@ -204,7 +204,7 @@ Common mistakes to avoid when building apps:
 - **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `invoke('yaar://http', { url, method?, headers?, body? })` and relay data via App Protocol.
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `withLoading`, `wait` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`.
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
 
 ### Right Pattern for External Service Integration
 
@@ -575,6 +575,29 @@ throw new AppCommandError('No document open');
 ```
 
 `debounce` / `throttle` come from `@bundled/lodash` — don't hand-roll them.
+
+### Dialog helpers
+
+Never use native `alert()` / `confirm()` / `prompt()` — they look foreign, block the whole
+page, and freeze any agent driving the browser. `@bundled/yaar` ships promise-based
+replacements styled with the built-in `y-modal` classes (Escape cancels, Enter confirms,
+backdrop click dismisses):
+
+```typescript
+import { showAlert, showConfirm, showPrompt } from '@bundled/yaar';
+
+await showAlert('Export finished.', { title: 'Export' });
+
+if (await showConfirm(`Delete "${name}"?`, { danger: true, okLabel: 'Delete' })) {
+  await remove(name);
+}
+
+const title = await showPrompt('New document name:', { initial: 'Untitled' });
+if (title !== null) create(title);
+```
+
+For custom modals beyond these, compose the same classes yourself: `y-overlay` >
+`y-modal` > `y-modal-title` / `y-modal-msg` / `y-modal-actions`.
 
 ### From Agent (MCP Tools)
 

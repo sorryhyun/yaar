@@ -181,7 +181,7 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 - **iframe에서 서버 기능을 복제하지 마세요** — 인증이 필요한 외부 API를 호출해야 하면, AI 에이전트가 `invoke('yaar://http', { url, method?, headers?, body? })`로 HTTP 호출을 처리하고 App Protocol로 데이터를 전달해야 합니다.
 - **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
 - **저장 실패를 삼키지 마세요** — `appStorage.save()` 를 `catch { /* ignore */ }` 로 감싸면 UI는 "저장됨"이라고 표시한 채 데이터가 조용히 사라집니다. `appStorage.trySave()` 를 쓰고 그 결과에 따라 성공 UI를 표시하세요. [저장 실패를 삼키지 마세요](#저장-실패를-삼키지-마세요) 참고.
-- **SDK 헬퍼를 다시 구현하지 마세요** — `errMsg`, `showToast`, `withLoading`, `wait` 는 `@bundled/yaar` 가, `debounce` 는 `@bundled/lodash` 가 제공합니다.
+- **SDK 헬퍼를 다시 구현하지 마세요** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` 는 `@bundled/yaar` 가, `debounce` 는 `@bundled/lodash` 가 제공합니다. 네이티브 `alert()`/`confirm()`/`prompt()` 는 페이지(그리고 브라우저를 조작 중인 에이전트)를 블로킹하므로 쓰지 마세요.
 
 ### 외부 서비스 연동의 올바른 패턴
 
@@ -436,6 +436,29 @@ throw new AppCommandError('열린 문서가 없습니다');
 ```
 
 `debounce` / `throttle` 은 `@bundled/lodash` 에서 가져오세요 — 직접 만들지 마세요.
+
+### 다이얼로그 헬퍼
+
+네이티브 `alert()` / `confirm()` / `prompt()` 는 절대 쓰지 마세요 — 디자인이 이질적이고,
+페이지 전체를 블로킹하며, 브라우저를 조작 중인 에이전트까지 멈춥니다. `@bundled/yaar` 가
+내장 `y-modal` 클래스로 스타일된 프로미스 기반 대체를 제공합니다 (Escape 취소, Enter 확인,
+배경 클릭으로 닫힘):
+
+```typescript
+import { showAlert, showConfirm, showPrompt } from '@bundled/yaar';
+
+await showAlert('내보내기 완료.', { title: '내보내기' });
+
+if (await showConfirm(`"${name}" 을(를) 삭제할까요?`, { danger: true, okLabel: '삭제' })) {
+  await remove(name);
+}
+
+const title = await showPrompt('새 문서 이름:', { initial: '제목 없음' });
+if (title !== null) create(title);
+```
+
+이보다 복잡한 커스텀 모달은 같은 클래스를 직접 조합하세요: `y-overlay` >
+`y-modal` > `y-modal-title` / `y-modal-msg` / `y-modal-actions`.
 
 ### 에이전트에서 (MCP 도구)
 

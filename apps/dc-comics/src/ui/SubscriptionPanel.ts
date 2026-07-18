@@ -1,5 +1,6 @@
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
+import { showConfirm } from '@bundled/yaar';
 import { state, setState } from '../store';
 import { openSubDetail, closeSubDetail, refreshAllSubs, unsubscribeSeries, selectPost } from '../actions';
 import type { Subscription, SeriesPost } from '../types';
@@ -63,9 +64,9 @@ function SubItem(props: { sub: Subscription }) {
         <span>${() => props.sub.gallId}</span>
         <button
           class="subscribe-btn subscribe-btn-active"
-          onclick=${(e: Event) => {
+          onclick=${async (e: Event) => {
             e.stopPropagation();
-            if (confirm(`'${props.sub.title}' 구독을 취소하시겠습니까?`)) {
+            if (await showConfirm(`'${props.sub.title}' 구독을 취소하시겠습니까?`, { danger: true })) {
               unsubscribeSeries(props.sub.id);
             }
           }}

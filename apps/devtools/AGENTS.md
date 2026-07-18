@@ -157,7 +157,7 @@ telling you the truth.
 Use `command("describeBundledLibrary", { name })` to look up methods, interfaces, and signatures for any `@bundled/*` library before writing code. Key libraries:
 
 - **`solid-js`** — Reactive UI (`createSignal`, `html`, `render`). Prefer `import './styles.css'` over inline styles.
-- **`yaar`** — SDK utilities (`showToast`, `errMsg`, `withLoading`, `onShortcut`, `appStorage`, `createPersistedSignal`) and Verb API (`read`, `list`, `invoke`, `describe`, `del`, `subscribe`). **Always use SDK helpers instead of hand-rolling** (e.g. `showToast` over custom toast HTML, `errMsg` over `err instanceof Error` checks).
+- **`yaar`** — SDK utilities (`showToast`, `showAlert`, `showConfirm`, `showPrompt`, `errMsg`, `withLoading`, `onShortcut`, `appStorage`, `createPersistedSignal`) and Verb API (`read`, `list`, `invoke`, `describe`, `del`, `subscribe`). **Always use SDK helpers instead of hand-rolling** (e.g. `showToast` over custom toast HTML, `showConfirm` over native `confirm()` — native dialogs block the page and any agent driving it, `errMsg` over `err instanceof Error` checks).
 - **`yaar-dev`** / **`yaar-web`** — Gated SDKs (see above).
 
 ### App Protocol
