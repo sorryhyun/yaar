@@ -40,7 +40,7 @@ function cssFiles(dir: string): string[] {
 }
 
 describe('shell style guard', () => {
-  const files = cssFiles(STYLES_DIR).filter((f) => !f.replaceAll('\\', '/').endsWith(GENERATED));
+  const files = cssFiles(STYLES_DIR).filter((f) => !f.replace(/\\/g, '/').endsWith(GENERATED));
 
   test('found the style modules', () => {
     expect(files.length).toBeGreaterThan(10);

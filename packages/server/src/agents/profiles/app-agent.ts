@@ -48,7 +48,10 @@ const AGENT_TYPE_MODELS: Record<string, string> = {
 };
 
 function resolveAgentModel(agentType?: string): string | undefined {
-  if (!agentType) return undefined;
+  // App agents default to the Sonnet capability tier. Keep that default explicit
+  // so Codex can translate it to Terra instead of omitting `model` from
+  // thread/start and inheriting the shared app-server's Sol default.
+  if (!agentType) return AGENT_TYPE_MODELS.sonnet;
   return AGENT_TYPE_MODELS[agentType] ?? agentType; // allow full model ID as fallback
 }
 

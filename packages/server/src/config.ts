@@ -475,7 +475,7 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   // Disable shell tool and apply_patch (apps use clone-revise-compile-deploy flow)
   args.push('-c', 'features.shell_tool=false');
   args.push('-c', 'features.apply_patch_freeform=false');
-  args.push('-c', 'features.multi_agent=true');
+  args.push('-c', 'features.multi_agent=false');
   args.push('-c', 'features.personality=false');
   args.push('-c', 'features.fast_mode=false');
   args.push('-c', 'features.skill_mcp_dependency_install=false');
@@ -485,8 +485,10 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   // every thread. That cross-project history is irrelevant noise for YAAR's
   // short-lived, app-scoped agents.
   args.push('-c', 'features.memories=false');
-  // Enable native collaboration/subagent system for task delegation
-  args.push('-c', 'features.collaboration_modes=true');
+  args.push('-c', 'features.apps=false');
+  args.push('-c', 'features.remote_plugin=false');
+  args.push('-c', 'include_permissions_instructions=false');
+  args.push('-c', 'skills.include_instructions=false');
 
   // Configure YAAR MCP servers
   for (const ns of mcpNamespaces) {
@@ -501,9 +503,7 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   // Model behavior
   args.push(
     '-c',
-    'model_reasoning_effort=medium',
-    '-c',
-    'personality=none',
+    'model_reasoning_effort=high',
     '-c',
     'sandbox_mode=danger-full-access',
     '-c',
