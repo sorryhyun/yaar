@@ -1,0 +1,69 @@
+// ── Network + host verb helpers ──────────────────────────────────────────
+//
+// The I/O boundary: talking to the marketplace domain (apiGet), to YAAR's own
+// origin for publisher auth (yaarGet / yaarPost), and to the host via the apps
+// verb (install / delete / list). Everything here returns plain data; loading
+// state and status text are the caller's concern (see actions.ts).
+
+import { del, invoke, list } from '@bundled/yaar';
+import { parseInstalledAny } from './parsers.js';
+import { apiBase } from './store.js';
+import type { InstalledApp } from './types.js';
+
+// ── Marketplace domain ───────────────────────────────────────────────
+
+export async function apiGet<T>(path: string): Promise<T> {
+  const base = apiBase();
+  if (!base) throw new Error('No domain configured. Set a domain first.');
+  const res = await fetch(`${base}${path}`, { method: 'GET' });
+  if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
+  return res.json() as Promise<T>;
+}
+
+// ── Host verbs (yaar://apps/) ──────────────────────────────────────────
+
+/** Install an app via yaar://apps/{appId}. Requires yaar://apps/ permission. */
+export async function hostInstall(app: { id: string }): Promise<void> {
+  await invoke('yaar://apps/' + app.id, { action: 'install' });
+}
+
+/** Delete an app via yaar://apps/{appId}. Requires yaar://apps/ permission. */
+export async function hostDelete(app: { id: string }): Promise<void> {
+  await del('yaar://apps/' + app.id);
+}
+
+/** Fetch installed apps via yaar://apps list verb. Requires yaar://apps/ permission. */
+export async function hostListInstalled(): Promise<InstalledApp[]> {
+  const result = await list('yaar://apps');
+  return parseInstalledAny(result);
+}
+
+/** Publish a locally installed app to the marketplace via the apps verb. */
+export async function hostPublish(app: { id: string }): Promise<{ message?: string }> {
+  return (await invoke('yaar://apps/' + app.id, { action: 'publish' })) as { message?: string };
+}
+
+// ── Publisher auth (YAAR's own origin, relative paths) ─────────────────────────
+//
+// These hit YAAR's *own* origin (relative paths), not the marketplace domain — the
+// fetch proxy attaches this app's iframe token automatically, and the server only
+// answers because market-apps is a bundled system app. `login` opens a real Google
+// consent screen, which is why the routes are closed to ordinary apps.
+
+export async function yaarGet<T>(path: string): Promise<T> {
+  const res = await fetch(path, { method: 'GET' });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `GET ${path} failed (${res.status})`);
+  }
+  return res.json() as Promise<T>;
+}
+
+export async function yaarPost<T>(path: string): Promise<T> {
+  const res = await fetch(path, { method: 'POST' });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `POST ${path} failed (${res.status})`);
+  }
+  return res.json() as Promise<T>;
+}

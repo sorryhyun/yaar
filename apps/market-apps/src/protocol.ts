@@ -19,10 +19,9 @@ import {
   setDomain,
   setStatus,
   touch,
-  refreshData,
-  type ListedApp,
-  type InstalledApp,
-} from './main.js';
+} from './store.js';
+import { refreshData } from './actions.js';
+import type { ListedApp, InstalledApp } from './types.js';
 
 if (app) {
   app.register({
