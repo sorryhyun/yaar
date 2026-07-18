@@ -93,6 +93,20 @@ main() {
   echo ""
   echo "Installed to: $dest"
 
+  # Bundled apps — the exe reads them from apps/ next to the binary, so extract
+  # the (platform-independent) apps archive into INSTALL_DIR. Non-fatal on
+  # failure: YAAR still runs, just with no bundled apps until they are added.
+  local apps_url="https://github.com/${REPO}/releases/download/${version}/yaar-apps.tar.gz"
+  local apps_tmp
+  apps_tmp=$(mktemp)
+  if curl -fSL --progress-bar -o "$apps_tmp" "$apps_url"; then
+    tar -xzf "$apps_tmp" -C "$INSTALL_DIR"
+    echo "Installed bundled apps to: ${INSTALL_DIR}/apps"
+  else
+    echo "⚠  Could not download bundled apps ($apps_url) — YAAR will start with no apps." >&2
+  fi
+  rm -f "$apps_tmp"
+
   # Check PATH
   if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_DIR"; then
     echo ""

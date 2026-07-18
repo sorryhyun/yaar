@@ -27,6 +27,17 @@ jobs:
       - name: Prebundle libraries
         run: bun run build:exe:libs
 
+      # apps/ is NOT embedded in the binary — the exe reads it from
+      # dirname(execPath)/apps at runtime. Compile every bundled app and ship the
+      # folder as one platform-independent archive (apps are just HTML/JS, so a
+      # single archive serves all platforms). install.sh/install.ps1 extract it
+      # next to the binary.
+      - name: Compile bundled apps
+        run: bun run build:apps
+
+      - name: Package bundled apps
+        run: tar -czf dist/yaar-apps.tar.gz apps
+
       - name: Build Windows x64
         run: |
           bun scripts/build-exe-bundle.js --target windows --arch x64
@@ -77,6 +88,7 @@ jobs:
             dist/yaar-linux-arm64 \
             dist/yaar-macos-x64 \
             dist/yaar-macos-arm64 \
+            dist/yaar-apps.tar.gz \
             install.sh \
             install.ps1 \
             --clobber
