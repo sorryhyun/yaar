@@ -10,6 +10,30 @@ import type { Doc } from './doc';
 
 const LIMIT = 100;
 
+/**
+ * Docs are normally tiny, but a selection mask is one byte per source pixel —
+ * ~12MB for a 12MP photo. Masks are shared by reference between history entries
+ * that didn't change them, so this over-counts; it is a safety valve against a
+ * session of many distinct selections, not an accounting system.
+ */
+const MASK_BYTE_BUDGET = 192 * 1024 * 1024;
+
+function maskBytes(doc: Doc): number {
+  return (doc.selection?.data.length ?? 0) + (doc.removed?.data.length ?? 0);
+}
+
+/** Drop the oldest entries until the retained masks fit the budget. */
+function trim(past: Doc[]): Doc[] {
+  let total = 0;
+  for (const doc of past) total += maskBytes(doc);
+  let start = 0;
+  while (start < past.length - 1 && total > MASK_BYTE_BUDGET) {
+    total -= maskBytes(past[start]);
+    start++;
+  }
+  return start ? past.slice(start) : past;
+}
+
 export type History = {
   past: Doc[];
   future: Doc[];
@@ -23,7 +47,7 @@ export function createHistory(): History {
 export function push(history: History, prev: Doc): History {
   const past = [...history.past, prev];
   if (past.length > LIMIT) past.shift();
-  return { past, future: [] };
+  return { past: trim(past), future: [] };
 }
 
 export function undo(history: History, current: Doc): { history: History; doc: Doc } | null {

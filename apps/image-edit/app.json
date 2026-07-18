@@ -1,10 +1,13 @@
 {
   "icon": "🎨",
   "name": "Image Edit",
-  "description": "Crop, rotate, flip, resize, and filter images, then export at full resolution",
+  "description": "Crop, rotate, flip, resize, filter, magic-wand select and draw on images, then export at full resolution",
   "run": "dist/index.html",
   "capture": "dom",
-  "permissions": ["yaar://apps/self/storage/", "yaar://storage/"],
-  "version": "1.0.0",
+  "permissions": [
+    "yaar://apps/self/storage/",
+    "yaar://storage/"
+  ],
+  "version": "1.1.0",
   "author": "YAAR"
 }

@@ -181,8 +181,53 @@
     8px -8px,
     -8px 0;
 }
-.canvas.cropping {
+.canvas.active-tool {
   cursor: crosshair;
+}
+
+/* Selection visualisation. Sits exactly over the canvas content box — offset by
+   the canvas's 1px border — and never takes the pointer, so every gesture still
+   lands on the canvas underneath. */
+.overlay {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  display: block;
+  pointer-events: none;
+}
+
+/* Segmented control: adjacent buttons sharing one row. */
+.seg {
+  display: flex;
+  gap: var(--yaar-sp-1);
+}
+.seg > button {
+  flex: 1;
+  min-width: 0;
+  padding-left: var(--yaar-sp-1);
+  padding-right: var(--yaar-sp-1);
+}
+
+.btn-grid {
+  display: grid;
+  gap: var(--yaar-sp-1);
+}
+
+.draw-row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.color-input {
+  width: 40px;
+  height: 26px;
+  padding: 2px;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg-surface);
+  cursor: pointer;
 }
 
 .crop-rect {

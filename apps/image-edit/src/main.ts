@@ -4,29 +4,52 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { DEFAULT_FILTERS, outputSize, type Filters } from './core/doc';
-import { dragToSourceRect } from './core/geometry';
+import { canvasToSource, dragToSourceRect, sourceToCanvasScale } from './core/geometry';
+import { cloneMask, createMask, recount, stampDisc, stampLine, type Mask } from './core/mask';
+import { ANIMATE_PIXEL_LIMIT, renderSelectionOverlay } from './core/overlay';
 import { fitScale, renderToCanvas, type ExportFormat } from './core/render';
 import { registerProtocol } from './protocol';
-import { showConfirm, showPrompt } from '@bundled/yaar';
+import { errMsg, showConfirm, showPrompt } from '@bundled/yaar';
 import {
+  brushSize,
   canRedo,
   canUndo,
+  clearSelection,
+  contiguous,
   deleteStorageFile,
   dispatch,
   doc,
   downloadExport,
+  drawColor,
+  drawSize,
+  eraser,
+  hasSelection,
   image,
+  magicWandAt,
   openLocalFile,
   openStoragePath,
   redoEdit,
   refreshStorageFiles,
   revision,
   saveToStorage,
+  selectAll,
+  selectMode,
+  setBrushSize,
+  setContiguous,
+  setDrawColor,
+  setDrawSize,
+  setEraser,
+  setSelectMode,
   setStatus,
+  setTolerance,
+  setTool,
   status,
   storageFiles,
+  tolerance,
+  tool,
   undoEdit,
   type StorageFile,
+  type Tool,
 } from './store';
 
 const FILTER_CONTROLS: Array<{
@@ -42,11 +65,24 @@ const FILTER_CONTROLS: Array<{
   { key: 'blur', label: 'Blur', min: 0, max: 20, step: 0.1 },
 ];
 
+const TOOLS: Array<{ id: Tool; label: string }> = [
+  { id: 'crop', label: 'Crop' },
+  { id: 'wand', label: 'Wand' },
+  { id: 'lasso', label: 'Lasso' },
+  { id: 'draw', label: 'Draw' },
+];
+
+const SELECT_MODES: Array<{ id: 'replace' | 'add' | 'subtract'; label: string }> = [
+  { id: 'replace', label: 'New' },
+  { id: 'add', label: 'Add' },
+  { id: 'subtract', label: 'Subtract' },
+];
+
 function App() {
   let canvasRef: HTMLCanvasElement | undefined;
+  let overlayRef: HTMLCanvasElement | undefined;
   let paneRef: HTMLDivElement | undefined;
 
-  const [cropMode, setCropMode] = createSignal(false);
   const [dragRect, setDragRect] = createSignal<{
     x: number;
     y: number;
@@ -55,8 +91,17 @@ function App() {
   } | null>(null);
   const [paneSize, setPaneSize] = createSignal({ w: 0, h: 0 });
   const [scale, setScale] = createSignal(1);
+  const [antPhase, setAntPhase] = createSignal(0);
+  const [dragging, setDragging] = createSignal(false);
+  const [liveTick, setLiveTick] = createSignal(0);
 
-  // Track the pane so the preview refits when the window resizes.
+  // The scratch mask a lasso drag mutates in place. Kept out of the Doc until
+  // the pointer lifts, so one drag is one undo step rather than one per frame.
+  let workMask: Mask | null = null;
+  let strokePoints: Array<{ x: number; y: number }> | null = null;
+  let lastCanvasPt: { x: number; y: number } | null = null;
+  let dragStart: { x: number; y: number } | null = null;
+
   onMount(() => {
     if (!paneRef) return;
     const observer = new ResizeObserver(() => {
@@ -67,10 +112,20 @@ function App() {
     onCleanup(() => observer.disconnect());
   });
 
-  // Populate the library up front — an empty panel with a Refresh button reads
-  // as "no saved images" whether or not that is true.
   onMount(() => {
     void refreshStorageFiles();
+  });
+
+  // Marching ants. Paused mid-drag, because the overlay is also where the live
+  // brush stroke is painted and a repaint would wipe it.
+  onMount(() => {
+    const id = setInterval(() => {
+      if (dragging() || !hasSelection()) return;
+      const c = canvasRef;
+      if (c && c.width * c.height > ANIMATE_PIXEL_LIMIT) return;
+      setAntPhase((p) => (p + 1) % 8);
+    }, 180);
+    onCleanup(() => clearInterval(id));
   });
 
   // The preview. Same renderer as export, just at fit scale.
@@ -86,6 +141,24 @@ function App() {
     renderToCanvas(canvasRef, d, img, s);
   });
 
+  // The selection overlay, sized to match the preview canvas exactly.
+  createEffect(() => {
+    revision();
+    antPhase();
+    liveTick();
+    paneSize();
+    scale();
+    const d = doc();
+    const ov = overlayRef;
+    const c = canvasRef;
+    if (!ov || !c || !d) return;
+    if (ov.width !== c.width || ov.height !== c.height) {
+      ov.width = c.width;
+      ov.height = c.height;
+    }
+    renderSelectionOverlay(ov, d, workMask ?? d.selection, antPhase());
+  });
+
   function canvasPoint(e: PointerEvent): { x: number; y: number } {
     const rect = canvasRef!.getBoundingClientRect();
     // Client px -> canvas backing-store px.
@@ -95,49 +168,166 @@ function App() {
     };
   }
 
-  let dragStart: { x: number; y: number } | null = null;
+  function toSource(p: { x: number; y: number }): { x: number; y: number } {
+    return canvasToSource(doc()!, canvasRef!.width, canvasRef!.height, p.x, p.y);
+  }
+
+  /**
+   * Canvas px per source px. Brush sizes are authored in on-screen pixels and
+   * converted through this, so a 12px brush looks 12px wide whatever the zoom —
+   * while the stored stroke stays in source space and exports at full res.
+   */
+  function sourceScale(): number {
+    return sourceToCanvasScale(doc()!, canvasRef!.width, canvasRef!.height) || 1;
+  }
+
+  function paintLive(from: { x: number; y: number }, to: { x: number; y: number }) {
+    const r = brushSize() / 2 / sourceScale();
+    stampLine(workMask!, from.x, from.y, to.x, to.y, r, selectMode() === 'subtract' ? 0 : 1);
+    setLiveTick((n) => n + 1);
+  }
+
+  /** Live brush feedback, drawn straight onto the overlay in canvas space. */
+  function strokeLive(a: { x: number; y: number }, b: { x: number; y: number }) {
+    const ctx = overlayRef?.getContext('2d');
+    if (!ctx) return;
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(1, drawSize());
+    ctx.strokeStyle = eraser() ? 'rgba(255,255,255,0.55)' : drawColor();
+    ctx.beginPath();
+    ctx.moveTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.stroke();
+    ctx.restore();
+  }
 
   function onPointerDown(e: PointerEvent) {
-    if (!cropMode() || !doc() || !canvasRef) return;
-    dragStart = canvasPoint(e);
-    setDragRect({ x: dragStart.x, y: dragStart.y, w: 0, h: 0 });
+    const d = doc();
+    const t = tool();
+    if (!d || !canvasRef || t === 'none') return;
     canvasRef.setPointerCapture(e.pointerId);
+    const p = canvasPoint(e);
+    const s = toSource(p);
+
+    if (t === 'crop') {
+      dragStart = p;
+      setDragRect({ x: p.x, y: p.y, w: 0, h: 0 });
+      return;
+    }
+
+    if (t === 'wand') {
+      try {
+        magicWandAt(s.x, s.y);
+      } catch (err) {
+        setStatus(errMsg(err));
+      }
+      return;
+    }
+
+    if (t === 'lasso') {
+      setDragging(true);
+      // Subtract starts from the current selection; add and replace both build
+      // up from it too, so a replace-mode drag is additive within one stroke.
+      workMask = d.selection ? cloneMask(d.selection) : createMask(d.base.w, d.base.h);
+      if (selectMode() === 'replace' && d.selection) workMask.data.fill(0);
+      stampDisc(workMask, s.x, s.y, brushSize() / 2 / sourceScale(), selectMode() === 'subtract' ? 0 : 1);
+      lastCanvasPt = p;
+      setLiveTick((n) => n + 1);
+      return;
+    }
+
+    if (t === 'draw') {
+      setDragging(true);
+      strokePoints = [s];
+      lastCanvasPt = p;
+      strokeLive(p, p);
+    }
   }
 
   function onPointerMove(e: PointerEvent) {
-    if (!dragStart || !canvasRef) return;
+    const t = tool();
+    if (!canvasRef || !doc()) return;
     const p = canvasPoint(e);
-    setDragRect({
-      x: Math.min(dragStart.x, p.x),
-      y: Math.min(dragStart.y, p.y),
-      w: Math.abs(p.x - dragStart.x),
-      h: Math.abs(p.y - dragStart.y),
-    });
+
+    if (t === 'crop' && dragStart) {
+      setDragRect({
+        x: Math.min(dragStart.x, p.x),
+        y: Math.min(dragStart.y, p.y),
+        w: Math.abs(p.x - dragStart.x),
+        h: Math.abs(p.y - dragStart.y),
+      });
+      return;
+    }
+
+    if (t === 'lasso' && workMask && lastCanvasPt) {
+      paintLive(toSource(lastCanvasPt), toSource(p));
+      lastCanvasPt = p;
+      return;
+    }
+
+    if (t === 'draw' && strokePoints && lastCanvasPt) {
+      strokePoints.push(toSource(p));
+      strokeLive(lastCanvasPt, p);
+      lastCanvasPt = p;
+    }
   }
 
   function onPointerUp(e: PointerEvent) {
-    if (!dragStart || !canvasRef) return;
-    const end = canvasPoint(e);
-    const start = dragStart;
-    dragStart = null;
-    setDragRect(null);
-    canvasRef.releasePointerCapture(e.pointerId);
-
-    // Ignore an accidental click — a few pixels is not a crop.
-    if (Math.abs(end.x - start.x) < 4 || Math.abs(end.y - start.y) < 4) return;
-
     const d = doc();
-    if (!d) return;
-    const rect = dragToSourceRect(d, canvasRef.width, canvasRef.height, start, end);
-    dispatch({ type: 'crop', rect });
-    setCropMode(false);
+    const t = tool();
+    if (!canvasRef || !d) return;
+    canvasRef.releasePointerCapture(e.pointerId);
+    const p = canvasPoint(e);
+
+    if (t === 'crop' && dragStart) {
+      const start = dragStart;
+      dragStart = null;
+      setDragRect(null);
+      // Ignore an accidental click — a few pixels is not a crop.
+      if (Math.abs(p.x - start.x) < 4 || Math.abs(p.y - start.y) < 4) return;
+      dispatch({ type: 'crop', rect: dragToSourceRect(d, canvasRef.width, canvasRef.height, start, p) });
+      setTool('none');
+      return;
+    }
+
+    if (t === 'lasso' && workMask) {
+      const finished = recount(workMask);
+      workMask = null;
+      lastCanvasPt = null;
+      setDragging(false);
+      dispatch({ type: 'setSelection', mask: finished });
+      setStatus(
+        finished.count
+          ? `Selection: ${finished.count.toLocaleString()} px`
+          : 'Selection cleared.',
+      );
+      return;
+    }
+
+    if (t === 'draw' && strokePoints) {
+      const points = strokePoints;
+      strokePoints = null;
+      lastCanvasPt = null;
+      setDragging(false);
+      dispatch({
+        type: 'draw',
+        stroke: {
+          color: drawColor(),
+          size: Math.max(1, drawSize() / sourceScale()),
+          erase: eraser(),
+          points,
+        },
+      });
+    }
   }
 
   async function doExport(format: ExportFormat) {
     try {
       await downloadExport(format);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Export failed.');
+      setStatus(errMsg(e));
     }
   }
 
@@ -150,7 +340,7 @@ function App() {
     try {
       await saveToStorage('png', name);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Save failed.');
+      setStatus(errMsg(e));
     }
   }
 
@@ -159,7 +349,7 @@ function App() {
     try {
       await deleteStorageFile(file.path);
     } catch (e) {
-      setStatus(e instanceof Error ? e.message : 'Delete failed.');
+      setStatus(errMsg(e));
     }
   }
 
@@ -167,7 +357,13 @@ function App() {
     dispatch({ type: 'filter', values: { [key]: value } });
   }
 
+  function removeSelection() {
+    dispatch({ type: 'removeSelection' });
+    setStatus('Selection removed — export as PNG to keep the transparency.');
+  }
+
   const hasDoc = () => doc() != null;
+  const activeTool = (id: Tool) => tool() === id;
 
   // Library thumbnails deliberately omit loading="lazy": inside the app iframe
   // the intersection check never fires, so lazy images stay blank forever.
@@ -190,6 +386,27 @@ function App() {
         </label>
         <button class="y-btn y-btn-sm" disabled=${() => !hasDoc()} onClick=${doSaveToStorage}>
           Save to storage
+        </button>
+
+        <span class="sep"></span>
+
+        <${For} each=${TOOLS}>
+          ${(t: (typeof TOOLS)[number]) => html`
+            <button
+              class=${() => `y-btn y-btn-sm ${activeTool(t.id) ? 'y-btn-primary' : ''}`}
+              disabled=${() => !hasDoc()}
+              onClick=${() => setTool(activeTool(t.id) ? 'none' : t.id)}
+            >
+              ${t.label}
+            </button>
+          `}
+        <//>
+        <button
+          class="y-btn y-btn-sm"
+          disabled=${() => !doc()?.crop}
+          onClick=${() => dispatch({ type: 'uncrop' })}
+        >
+          Uncrop
         </button>
 
         <span class="sep"></span>
@@ -225,23 +442,6 @@ function App() {
 
         <span class="sep"></span>
 
-        <button
-          class=${() => `y-btn y-btn-sm ${cropMode() ? 'y-btn-primary' : ''}`}
-          disabled=${() => !hasDoc()}
-          onClick=${() => setCropMode(!cropMode())}
-        >
-          Crop
-        </button>
-        <button
-          class="y-btn y-btn-sm"
-          disabled=${() => !doc()?.crop}
-          onClick=${() => dispatch({ type: 'uncrop' })}
-        >
-          Uncrop
-        </button>
-
-        <span class="sep"></span>
-
         <button class="y-btn y-btn-sm" disabled=${() => !canUndo()} onClick=${() => undoEdit()}>
           Undo
         </button>
@@ -265,17 +465,164 @@ function App() {
         >
           Export PNG
         </button>
-        <button
-          class="y-btn y-btn-sm"
-          disabled=${() => !hasDoc()}
-          onClick=${() => doExport('jpeg')}
-        >
+        <button class="y-btn y-btn-sm" disabled=${() => !hasDoc()} onClick=${() => doExport('jpeg')}>
           JPEG
         </button>
       </div>
 
       <div class="main">
         <aside class="sidebar y-scroll">
+          <div class="section">
+            <div class="y-label">Selection</div>
+
+            <div class="control">
+              <div class="control-head">
+                <span>Tolerance</span>
+                <span class="y-text-muted">${() => tolerance()}</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="128"
+                step="1"
+                disabled=${() => !hasDoc()}
+                value=${() => tolerance()}
+                oninput=${(e: Event) => setTolerance(Number((e.target as HTMLInputElement).value))}
+              />
+            </div>
+
+            <div class="seg">
+              <button
+                class=${() => `y-btn y-btn-sm ${contiguous() ? 'y-btn-primary' : ''}`}
+                onClick=${() => setContiguous(true)}
+              >
+                Contiguous
+              </button>
+              <button
+                class=${() => `y-btn y-btn-sm ${!contiguous() ? 'y-btn-primary' : ''}`}
+                onClick=${() => setContiguous(false)}
+              >
+                Global
+              </button>
+            </div>
+
+            <div class="seg">
+              <${For} each=${SELECT_MODES}>
+                ${(m: (typeof SELECT_MODES)[number]) => html`
+                  <button
+                    class=${() => `y-btn y-btn-sm ${selectMode() === m.id ? 'y-btn-primary' : ''}`}
+                    onClick=${() => setSelectMode(m.id)}
+                  >
+                    ${m.label}
+                  </button>
+                `}
+              <//>
+            </div>
+
+            <div class="control">
+              <div class="control-head">
+                <span>Lasso brush</span>
+                <span class="y-text-muted">${() => brushSize()}px</span>
+              </div>
+              <input
+                type="range"
+                min="2"
+                max="120"
+                step="1"
+                disabled=${() => !hasDoc()}
+                value=${() => brushSize()}
+                oninput=${(e: Event) => setBrushSize(Number((e.target as HTMLInputElement).value))}
+              />
+            </div>
+
+            <div class="btn-grid">
+              <button
+                class="y-btn y-btn-sm"
+                disabled=${() => !hasSelection()}
+                onClick=${() => dispatch({ type: 'cropToSelection' })}
+              >
+                Crop to selection
+              </button>
+              <button
+                class="y-btn y-btn-sm"
+                disabled=${() => !hasSelection()}
+                onClick=${removeSelection}
+              >
+                Remove selection
+              </button>
+              <button
+                class="y-btn y-btn-sm"
+                disabled=${() => !hasDoc()}
+                onClick=${() => dispatch({ type: 'invertSelection' })}
+              >
+                Invert selection
+              </button>
+              <button class="y-btn y-btn-sm" disabled=${() => !hasDoc()} onClick=${() => selectAll()}>
+                Select all
+              </button>
+              <button
+                class="y-btn y-btn-sm y-btn-ghost"
+                disabled=${() => !hasSelection()}
+                onClick=${() => clearSelection()}
+              >
+                Clear selection
+              </button>
+              <button
+                class="y-btn y-btn-sm y-btn-ghost"
+                disabled=${() => !doc()?.removed}
+                onClick=${() => dispatch({ type: 'restoreRemoved' })}
+              >
+                Restore removed
+              </button>
+            </div>
+
+            <div class="y-text-xs y-text-muted">
+              Wand clicks a colour; Lasso drags a free shape. Remove exports transparent as PNG.
+            </div>
+          </div>
+
+          <div class="section">
+            <div class="y-label">Draw</div>
+            <div class="draw-row">
+              <input
+                type="color"
+                class="color-input"
+                disabled=${() => !hasDoc()}
+                value=${() => drawColor()}
+                oninput=${(e: Event) => setDrawColor((e.target as HTMLInputElement).value)}
+              />
+              <button
+                class=${() => `y-btn y-btn-sm ${eraser() ? 'y-btn-primary' : ''}`}
+                disabled=${() => !hasDoc()}
+                onClick=${() => setEraser(!eraser())}
+              >
+                Eraser
+              </button>
+            </div>
+            <div class="control">
+              <div class="control-head">
+                <span>Brush size</span>
+                <span class="y-text-muted">${() => drawSize()}px</span>
+              </div>
+              <input
+                type="range"
+                min="1"
+                max="120"
+                step="1"
+                disabled=${() => !hasDoc()}
+                value=${() => drawSize()}
+                oninput=${(e: Event) => setDrawSize(Number((e.target as HTMLInputElement).value))}
+              />
+            </div>
+            <button
+              class="y-btn y-btn-sm y-btn-ghost"
+              disabled=${() => !doc()?.strokes.length}
+              onClick=${() => dispatch({ type: 'clearStrokes' })}
+            >
+              Clear drawing
+            </button>
+          </div>
+
           <div class="section">
             <div class="library-head">
               <span class="y-label">Library</span>
@@ -392,7 +739,7 @@ function App() {
             <div class="canvas-wrap">
               <canvas
                 ref=${(el: HTMLCanvasElement) => (canvasRef = el)}
-                class=${() => `canvas ${cropMode() ? 'cropping' : ''}`}
+                class=${() => `canvas ${tool() !== 'none' ? 'active-tool' : ''}`}
                 style=${() => {
                   const d = doc();
                   if (!d) return '';
@@ -402,6 +749,16 @@ function App() {
                 onpointerdown=${onPointerDown}
                 onpointermove=${onPointerMove}
                 onpointerup=${onPointerUp}
+              ></canvas>
+              <canvas
+                ref=${(el: HTMLCanvasElement) => (overlayRef = el)}
+                class="overlay"
+                style=${() => {
+                  const d = doc();
+                  if (!d) return 'display:none';
+                  const out = outputSize(d);
+                  return `width:${Math.round(out.w * scale())}px;height:${Math.round(out.h * scale())}px`;
+                }}
               ></canvas>
               <${Show} when=${dragRect}>
                 <div

@@ -44,6 +44,48 @@ export function canvasToSource(
   };
 }
 
+/**
+ * Source image pixel -> canvas pixel. The exact inverse of `canvasToSource`,
+ * with the same steps run forwards: map, flip, rotate, translate.
+ *
+ * Used to preview a brush stroke on the overlay while the pointer is still
+ * down. The committed stroke is stored in source space and replayed by the
+ * renderer, so this only has to agree with the render transform for the
+ * duration of one drag.
+ */
+export function sourceToCanvas(
+  doc: Doc,
+  cw: number,
+  ch: number,
+  x: number,
+  y: number,
+): { x: number; y: number } {
+  const { dw, dh } = destBox(doc, cw, ch);
+  const src = sourceRect(doc);
+
+  let px = (x - src.x) * (dw / src.w) - dw / 2;
+  let py = (y - src.y) * (dh / src.h) - dh / 2;
+
+  if (doc.flipX) px = -px;
+  if (doc.flipY) py = -py;
+
+  const theta = (doc.rotate * Math.PI) / 180;
+  const cos = Math.cos(theta);
+  const sin = Math.sin(theta);
+  [px, py] = [px * cos - py * sin, px * sin + py * cos];
+
+  return { x: px + cw / 2, y: py + ch / 2 };
+}
+
+/** How many canvas pixels one source pixel spans — for brush width on screen. */
+export function sourceToCanvasScale(doc: Doc, cw: number, ch: number): number {
+  const { dw, dh } = destBox(doc, cw, ch);
+  const src = sourceRect(doc);
+  // Average the axes: a non-uniform resize makes them differ, and a round brush
+  // has to pick one number.
+  return (dw / src.w + dh / src.h) / 2;
+}
+
 /** Two canvas-space corners -> a normalized source-space rect. */
 export function dragToSourceRect(
   doc: Doc,

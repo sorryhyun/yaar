@@ -7,6 +7,7 @@
  * the disagreement only shows up in the downloaded file.
  */
 
+import { sourceLayer } from './compose';
 import { outputSize, sourceRect, type Doc, type Filters } from './doc';
 
 /** Canvas 2D filter string. `blur` scales with the render scale so preview matches export. */
@@ -39,6 +40,9 @@ export function renderToCanvas(
   if (!ctx) return;
 
   const src = sourceRect(doc);
+  // Cutouts and brush strokes are composited at source resolution first, so
+  // every transform below applies to them exactly as it does to the photo.
+  const layer = sourceLayer(doc, img);
 
   ctx.clearRect(0, 0, cw, ch);
   ctx.save();
@@ -56,7 +60,7 @@ export function renderToCanvas(
   let dh = ch;
   if (doc.rotate === 90 || doc.rotate === 270) [dw, dh] = [dh, dw];
 
-  ctx.drawImage(img, src.x, src.y, src.w, src.h, -dw / 2, -dh / 2, dw, dh);
+  ctx.drawImage(layer, src.x, src.y, src.w, src.h, -dw / 2, -dh / 2, dw, dh);
   ctx.restore();
 }
 

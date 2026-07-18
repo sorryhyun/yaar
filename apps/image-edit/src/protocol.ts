@@ -1,22 +1,30 @@
 import { app, defineCommand } from '@bundled/yaar';
 import { outputSize, sourceRect, type Doc } from './core/doc';
+import { maskBounds } from './core/mask';
 import type { ExportFormat } from './core/render';
 import {
   canRedo,
   canUndo,
+  clearSelection,
   deleteStorageFile,
   dispatch,
   doc,
   downloadExport,
   exportAsDataUrl,
+  magicWandAt,
   openImage,
   openStoragePath,
   redoEdit,
   refreshStorageFiles,
   saveToStorage,
+  selectAll,
+  setContiguous,
+  setTolerance,
+  setTool,
   status,
   storageFiles,
   undoEdit,
+  type Tool,
 } from './store';
 
 const FORMATS = ['png', 'jpeg', 'webp'] as const;
@@ -39,6 +47,23 @@ function docSummary(d: Doc) {
     flipY: d.flipY,
     resize: d.resize,
     filters: d.filters,
+    selection: selectionSummary(d),
+    hasCutout: d.removed != null,
+    strokes: d.strokes.length,
+  };
+}
+
+/**
+ * Selection reported as a count and a bounding box, never as the mask itself —
+ * a megapixel byte array is useless to an agent and would dominate every
+ * response. The bounding box is what `cropToSelection` would use.
+ */
+function selectionSummary(d: Doc) {
+  if (!d.selection) return null;
+  return {
+    pixels: d.selection.count,
+    percent: Number(((d.selection.count / (d.base.w * d.base.h)) * 100).toFixed(2)),
+    bounds: maskBounds(d.selection),
   };
 }
 
@@ -64,6 +89,14 @@ export function registerProtocol(): void {
       status: {
         description: 'Current status bar text.',
         handler: () => status(),
+      },
+      selection: {
+        description:
+          'The active selection as { pixels, percent, bounds } in source coordinates, or null. Use after `magicWand` to check whether the tolerance caught the right region before committing to `removeSelection`.',
+        handler: () => {
+          const d = doc();
+          return d ? selectionSummary(d) : null;
+        },
       },
       library: {
         description:
@@ -275,6 +308,151 @@ export function registerProtocol(): void {
         handler: () => {
           const d = redoEdit();
           return d ? docSummary(d) : { ok: false, reason: 'Nothing to redo.' };
+        },
+      }),
+
+      magicWand: defineCommand({
+        description:
+          'Select pixels similar in colour to the one at (x, y), in SOURCE image coordinates. Raise tolerance to catch more shades. contiguous=true (default) takes only the connected region touching that point; false takes every matching pixel in the image. Returns the resulting selection so you can check the size before acting on it.',
+        params: {
+          type: 'object',
+          properties: {
+            x: { type: 'number' },
+            y: { type: 'number' },
+            tolerance: { type: 'number', description: '0-128 colour distance. Default 32.' },
+            contiguous: { type: 'boolean' },
+            mode: {
+              type: 'string',
+              enum: ['replace', 'add', 'subtract'],
+              description: 'How to combine with the existing selection. Default replace.',
+            },
+          },
+          required: ['x', 'y'],
+        },
+        handler: (p) => {
+          requireDoc();
+          if (p.tolerance != null) setTolerance(p.tolerance);
+          if (p.contiguous != null) setContiguous(p.contiguous);
+          magicWandAt(p.x, p.y, {
+            tolerance: p.tolerance,
+            contiguous: p.contiguous,
+            mode: p.mode,
+          });
+          return docSummary(requireDoc());
+        },
+      }),
+
+      selectAll: defineCommand({
+        description: 'Select every pixel. Useful as a base for subtractive selection.',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          selectAll();
+          return docSummary(requireDoc());
+        },
+      }),
+
+      clearSelection: defineCommand({
+        description: 'Deselect everything. Does not undo a removal.',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          clearSelection();
+          return docSummary(requireDoc());
+        },
+      }),
+
+      invertSelection: defineCommand({
+        description:
+          'Swap selected and unselected. With nothing selected this selects everything. Use after selecting a background to isolate the subject.',
+        params: { type: 'object', properties: {} },
+        handler: () => docSummary(dispatch({ type: 'invertSelection' })),
+      }),
+
+      cropToSelection: defineCommand({
+        description: 'Crop to the bounding box of the current selection.',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          if (!requireDoc().selection) throw new Error('Nothing is selected. Call `magicWand` first.');
+          return docSummary(dispatch({ type: 'cropToSelection' }));
+        },
+      }),
+
+      removeSelection: defineCommand({
+        description:
+          'Make the selected pixels transparent and clear the selection. To isolate a subject: magicWand on the background, then removeSelection, then export as PNG — jpeg has no alpha channel and would fill the hole with black.',
+        params: { type: 'object', properties: {} },
+        handler: () => {
+          if (!requireDoc().selection) throw new Error('Nothing is selected. Call `magicWand` first.');
+          return docSummary(dispatch({ type: 'removeSelection' }));
+        },
+      }),
+
+      restoreRemoved: defineCommand({
+        description: 'Bring back every pixel removed by `removeSelection`.',
+        params: { type: 'object', properties: {} },
+        handler: () => docSummary(dispatch({ type: 'restoreRemoved' })),
+      }),
+
+      draw: defineCommand({
+        description:
+          'Paint a brush stroke through a list of points in SOURCE image coordinates. size is the brush diameter in source pixels. erase=true punches through to transparency instead of painting. A single point draws a dot.',
+        params: {
+          type: 'object',
+          properties: {
+            points: {
+              type: 'array',
+              description: 'Ordered [{x, y}, ...] in source pixels.',
+              items: {
+                type: 'object',
+                properties: { x: { type: 'number' }, y: { type: 'number' } },
+                required: ['x', 'y'],
+              },
+            },
+            color: { type: 'string', description: 'Any CSS colour. Default #e5534b.' },
+            size: { type: 'number', description: 'Diameter in source pixels. Default 12.' },
+            erase: { type: 'boolean' },
+          },
+          required: ['points'],
+        },
+        handler: (p) => {
+          requireDoc();
+          const points = (p.points ?? []).filter(
+            (pt: { x: number; y: number }) =>
+              typeof pt?.x === 'number' && typeof pt?.y === 'number',
+          );
+          if (!points.length) throw new Error('Provide at least one point.');
+          return docSummary(
+            dispatch({
+              type: 'draw',
+              stroke: {
+                color: p.color ?? '#e5534b',
+                size: Math.max(1, p.size ?? 12),
+                erase: p.erase ?? false,
+                points,
+              },
+            }),
+          );
+        },
+      }),
+
+      clearDrawing: defineCommand({
+        description: 'Discard every brush stroke, leaving other edits in place.',
+        params: { type: 'object', properties: {} },
+        handler: () => docSummary(dispatch({ type: 'clearStrokes' })),
+      }),
+
+      setTool: defineCommand({
+        description:
+          'Switch the active pointer tool so the user can carry on by hand. none disables dragging on the canvas.',
+        params: {
+          type: 'object',
+          properties: {
+            tool: { type: 'string', enum: ['none', 'crop', 'wand', 'lasso', 'draw'] },
+          },
+          required: ['tool'],
+        },
+        handler: (p) => {
+          setTool(p.tool as Tool);
+          return { tool: p.tool };
         },
       }),
 

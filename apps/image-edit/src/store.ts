@@ -8,7 +8,9 @@ import {
   type Command,
   type Doc,
 } from './core/doc';
+import { baseImageData, resetLayerCache } from './core/compose';
 import { createHistory, push, redo, undo, type History } from './core/history';
+import { combineMask, floodSelect, fullMask, type CombineMode, type Mask } from './core/mask';
 import { exportBlob, exportDataUrl, type ExportFormat } from './core/render';
 
 export const IMAGE_EXT_REGEX = /\.(png|jpe?g|gif|webp|bmp)$/i;
@@ -47,6 +49,94 @@ export const [revision, setRevision] = createSignal(0);
 export const canUndo = () => history().past.length > 0;
 export const canRedo = () => history().future.length > 0;
 
+/* ---------------------------------------------------------------- tools --- */
+
+export type Tool = 'none' | 'crop' | 'wand' | 'lasso' | 'draw';
+
+/**
+ * Tool settings live here rather than in the component so the protocol can read
+ * and set them too — an agent asked to "select the background" needs the same
+ * tolerance the user sees, not a private copy.
+ */
+export const [tool, setTool] = createSignal<Tool>('none');
+export const [tolerance, setTolerance] = createSignal(32);
+export const [contiguous, setContiguous] = createSignal(true);
+export const [selectMode, setSelectMode] = createSignal<CombineMode>('replace');
+export const [brushSize, setBrushSize] = createSignal(24);
+export const [drawColor, setDrawColor] = createSignal('#e5534b');
+export const [drawSize, setDrawSize] = createSignal(12);
+export const [eraser, setEraser] = createSignal(false);
+
+export const selection = (): Mask | null => doc()?.selection ?? null;
+export const hasSelection = (): boolean => (doc()?.selection?.count ?? 0) > 0;
+
+/**
+ * A cross-origin image taints the canvas and `getImageData` throws. Translate
+ * it — the raw SecurityError says nothing about what the user should do.
+ */
+function pixelError(e: unknown): Error {
+  if (e instanceof DOMException && e.name === 'SecurityError') {
+    return new Error(
+      'Cannot read pixels: the image came from another origin that did not allow reuse. ' +
+        'Save it to storage first, then open it from there.',
+    );
+  }
+  return e instanceof Error ? e : new Error('Could not read image pixels.');
+}
+
+/** Source pixels for the wand, or a helpful error. */
+export function sourcePixels(): ImageData {
+  const d = doc();
+  const img = image();
+  if (!d || !img) throw new Error('No image is open.');
+  try {
+    return baseImageData(d, img);
+  } catch (e) {
+    throw pixelError(e);
+  }
+}
+
+/**
+ * Magic wand at a point in SOURCE coordinates. Combines with the existing
+ * selection according to `selectMode`, so shift-style add/subtract and the
+ * protocol `mode` parameter go through one path.
+ */
+export function magicWandAt(
+  x: number,
+  y: number,
+  opts: { tolerance?: number; contiguous?: boolean; mode?: CombineMode } = {},
+): Mask | null {
+  const d = doc();
+  if (!d) throw new Error('No image is open.');
+
+  const tol = opts.tolerance ?? tolerance();
+  const contig = opts.contiguous ?? contiguous();
+  const mode = opts.mode ?? selectMode();
+
+  const found = floodSelect(sourcePixels(), x, y, tol, contig);
+  const merged = combineMask(d.selection, found, mode);
+  dispatch({ type: 'setSelection', mask: merged });
+
+  const pct = ((merged.count / (d.base.w * d.base.h)) * 100).toFixed(1);
+  setStatus(
+    merged.count
+      ? `Selected ${merged.count.toLocaleString()} px (${pct}%) · tolerance ${tol} · ${contig ? 'contiguous' : 'global'}`
+      : 'Nothing matched — try a higher tolerance.',
+  );
+  return merged.count ? merged : null;
+}
+
+export function selectAll(): void {
+  const d = doc();
+  if (!d) throw new Error('No image is open.');
+  dispatch({ type: 'setSelection', mask: fullMask(d.base.w, d.base.h) });
+}
+
+export function clearSelection(): void {
+  if (!doc()) return;
+  dispatch({ type: 'setSelection', mask: null });
+}
+
 function baseName(path: string): string {
   return path.split('/').pop() || path;
 }
@@ -72,6 +162,9 @@ function loadImageElement(src: string): Promise<HTMLImageElement> {
  */
 export async function openImage(src: string, name: string): Promise<Doc> {
   const img = await loadImageElement(src);
+  // Drop the previous image's composited layer and pixel cache before the new
+  // doc lands, so a stale bitmap can't be sampled and can be collected.
+  resetLayerCache();
   const next = createDoc({
     src,
     name,
