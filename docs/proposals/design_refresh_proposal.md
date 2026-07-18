@@ -1,6 +1,6 @@
 # Proposal: Design Refresh — Brighter Dark Theme & Shell Polish
 
-**Status:** Draft
+**Status:** In progress — Part 0 landed (`60352548`), Parts A + B landed (`a547cd94`). C–G outstanding.
 **Scope:** `packages/shared/src/design/` (token values, new tokens), `packages/frontend` (window frame, content renderers, desktop, command palette), `apps/*` escape-hatch retune
 
 ## Summary
@@ -41,7 +41,10 @@ What already works: the maximized GitHub app (sidebar, stat cards, badges) is co
 clean; shadows, radii, and the status pill are fine. The weak surfaces are precisely the
 ones the token system doesn't yet govern: shell chrome and the component renderer.
 
-## Part 0 — Pre-refactor cleanup: collapse the legacy aliases
+**Status:** findings 1, 2, and 4 are fixed by Parts A + B. 3, 5, 6 remain (Part C), 7
+(Part D), 8 (Part E), 9 and 10 (Part F) — all still reproduce on the post-A+B desktop.
+
+## Part 0 — Pre-refactor cleanup: collapse the legacy aliases ✅ landed (`60352548`)
 
 Before changing any value, make every consumer go through the semantic names. This shrinks
 the blast radius of Parts A–C to `tokens.ts` + generators, and makes drift greppable
@@ -63,7 +66,21 @@ Then delete the dead aliases from `buildShellTokensCss()` and regenerate. Mechan
 behavior-preserving (every alias resolves to what it aliased), verified by the sync test
 plus a screenshot diff of the desktop.
 
-## Part A — Palette lift: GitHub Dark Dimmed
+**As landed** — 26 files, all 12 dead names deleted. Notes for anyone reading the diff:
+
+- `--color-accent` had to become a **real value** rather than `var(--color-blue)`: the
+  accent-preset picker (`DesktopSurface.tsx`) writes it at runtime, and the name it used
+  to write to no longer exists. `--color-primary`/`--color-info` follow through `var()`.
+- `--text-xl` changed meaning (15px → the canonical 18px step), so the three prior
+  `--text-xl` usages moved to `--text-lg` in the same pass. Values preserved.
+- `--color-blue` mapped uniformly to `--color-accent`; the `--color-info` split the table
+  suggests was deferred, since both resolve identically until Part A gives them distinct
+  values — a judgment better made when it's observable.
+- Verified in-browser rather than only by test: all 12 dead names undefined, every
+  semantic computing to its original hex, and the preset override still cascading to
+  `--color-primary`/`--color-info`.
+
+## Part A — Palette lift: GitHub Dark Dimmed ✅ landed (`a547cd94`)
 
 Swap `PALETTE_DARK` to Primer dark-dimmed values. Every hex below is from Primer's
 `dark_dimmed` scale, not hand-tuned:
@@ -112,7 +129,36 @@ Secondary adjustments in the same pass:
   preset *keys* are persisted — values may be retuned later, keys never change.
 - `PALETTE_LIGHT` is untouched except for gaining the three emphasis tokens.
 
-## Part B — Elevation model: windows are cards, not holes
+**As landed** — measured contrast for white text on each fill (WCAG AA needs 4.5):
+
+| Fill | Before | After |
+|---|---|---|
+| primary button | **2.53** | **5.03** |
+| danger button | — | 5.02 |
+| success | — | 5.07 |
+
+Two things the proposal didn't anticipate:
+
+- **Every accent preset needed its own emphasis pair**, not just the three palette
+  tokens. Filled buttons paint the emphasis token now, and the preset picker only wrote
+  `--color-accent` — so a static emphasis would have silently broken the picker, tinting
+  links but leaving every primary button blue. `ACCENT_PRESETS_DATA` gained
+  `emphasis`/`emphasisHover` per key (all ≥ 5.0:1 on white) and `DesktopSurface` writes
+  all four properties. Preset keys unchanged, so persisted settings are unaffected.
+- **`COMPILER_VERSION` 7 → 8 is mandatory.** Apps bake the design tokens in at compile
+  time and `isAppStale()` judges staleness from app source + `app.json` alone, so a token
+  change reaches no existing `dist/`. Without the bump every installed app keeps the
+  near-black canvas and paints `.y-btn-primary` with a token its baked-in CSS never
+  defines. Caught by inspecting a live app iframe still reporting `--yaar-bg: #0f1117`.
+  **Any future part that touches `tokens.ts` or `app-css.ts` needs the same bump.**
+
+Also worth recording: the preset picker writes *inline* styles on `documentElement`, so a
+chosen accent shadows the light-theme rule for `--color-accent{,-emphasis}`. That is
+pre-existing behavior (presets are deliberately theme-independent), not a Part A
+regression — but it means light-theme accent values in `tokens.css` are only ever seen
+when no preset override is active.
+
+## Part B — Elevation model: windows are cards, not holes ✅ landed (`a547cd94`)
 
 Adopt GitHub's stack: canvas lowest, elevated panels on surface.
 
@@ -120,8 +166,13 @@ Adopt GitHub's stack: canvas lowest, elevated panels on surface.
 - Titlebar: `--color-mantle` → same surface as the body, separated by a
   `1px solid --color-border-muted` bottom border (GitHub overlay-header idiom), title in
   `--color-text` (not muted).
-- Window frame gains a `1px solid --color-border` outline so edges survive on bright
-  wallpaper areas too.
+- Window frame gains a `1px solid --color-border` edge so it survives on bright
+  wallpaper areas too. **As landed this is an inset `outline`, not a `border`**: `.frame`
+  is absolutely positioned from stored width/height and there is no `box-sizing:
+  border-box` reset, so a real border would grow every window by 2px and desync the
+  drag/resize math. `outline` + `outline-offset: -1px` is identical visually and
+  layout-free. (The titlebar's new bottom border is fine because it got an explicit
+  `box-sizing: border-box` to hold its 36px height.)
 - Desktop/wallpaper stays on `base`/`bgInset` — it becomes the darkest layer, as it should be.
 - App iframes are unaffected (they fill the content area with their own `--yaar-bg`); only
   shell-rendered windows (markdown/text/table/component) change.
@@ -182,12 +233,15 @@ pass after Part A:
 
 Each step lands independently; screenshots before/after per step.
 
-0. **Part 0 cleanup** — alias migration, delete dead names, regenerate. Pure refactor,
+0. ✅ **Part 0 cleanup** — alias migration, delete dead names, regenerate. Pure refactor,
    pixel-identical by construction; everything after it edits only semantic names.
-1. **A + B together** (they are one perceived change): edit `tokens.ts`, add emphasis
+1. ✅ **A + B together** (they are one perceived change): edit `tokens.ts`, add emphasis
    tokens to both palettes and both generators, `bun scripts/gen-design-tokens.ts`,
-   window-frame CSS. Sync test (`tests/design/tokens-sync.test.ts`) guards the pipeline.
-2. **C** — component renderer restyle.
+   window-frame CSS, bump `COMPILER_VERSION`. The sync test
+   (`packages/frontend/src/tests/design/tokens-sync.test.ts` — not `tests/design/`)
+   guards the pipeline.
+2. **C** — component renderer restyle. Findings 5 and 6 are both plainly visible in the
+   post-A+B desktop, so this is the next-highest-value step.
 3. **D** — typography ramp.
 4. **E** — command palette.
 5. **F** — icons + placement.
@@ -197,12 +251,20 @@ Each step lands independently; screenshots before/after per step.
 
 ## Open questions
 
-1. **Text brightness**: proposal keeps text punchy (`#cdd9e5`) rather than Dimmed's softer
-   default (`#adbac7`). Full-Dimmed is lower-contrast/calmer; decide on screen.
-2. **Non-blue accent presets** (lavender/mauve/pink/…): retune for the lighter canvas now,
-   or leave until someone complains? Keys are stable either way.
+1. ~~**Text brightness**~~ — **resolved**: shipped punchy (`#cdd9e5`), which measures
+   8.89:1 on the new window surface. Still trivially reversible in `tokens.ts` if it reads
+   harsh in daily use; nothing else depends on the choice.
+2. **Non-blue accent presets** — **partly resolved**: each preset now carries an
+   `emphasis` pair tuned for white-text contrast, so filled buttons are handled. The
+   *base* `color`/`hover` hues are still the old GitHub-dark values on a lighter canvas
+   and may want a retune. Keys are stable either way.
 3. **Default window size/cascade** (Part F) touches window-creation defaults the AI also
    controls via OS Actions — confirm the server-side defaults are the right place to fix.
+4. **New:** should the token pipeline fail loudly when `tokens.ts` changes without a
+   `COMPILER_VERSION` bump? The coupling is currently only a comment in
+   `build-manifest.ts`, and the failure mode is silent and easy to miss — apps look
+   subtly stale rather than broken. A test hashing `YAAR_DESIGN_TOKENS_CSS` against a
+   value pinned to the compiler version would close it.
 
 ## Out of scope
 
