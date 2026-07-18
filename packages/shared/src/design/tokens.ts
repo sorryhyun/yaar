@@ -10,9 +10,20 @@
  */
 
 /**
- * Core dark palette (default theme) — GitHub **Dark Dimmed** (Primer `dark_dimmed`).
- * Every value is a literal step from that scale, not hand-tuned: the grays are
- * gray-9…gray-0, the hues blue-2/3, green-3, red-3/4, yellow-3.
+ * Core dark palette (default theme) — GitHub dark, drawn from both Primer scales.
+ * Every value is a literal step from one of them, never hand-tuned or interpolated:
+ * the hues are blue-2/3, green-3, red-3/4, yellow-3 from `dark_dimmed`.
+ *
+ * The two gray ladders are pulled apart on purpose, to widen contrast:
+ *   - Foreground sits one step *brighter* than `dark_dimmed`'s `fg.*` roles, with
+ *     `text` at Primer gray-0 (top of the scale). YAAR's surfaces are dense with
+ *     small text, and the dimmed defaults read as ambient rather than readable.
+ *   - Surfaces come from Primer `dark`'s `canvas.*` roles instead of `dark_dimmed`'s,
+ *     with the two lower rungs (`bgSurface`/`bgSurfaceHover`) still on the dimmed
+ *     scale — so window bodies read as deeper than the chrome layered over them.
+ *
+ * `borderHover`/`borderStrong` deliberately did NOT shift with the surfaces — they
+ * are the edges that must stay legible, and they gain contrast from the darker fills.
  *
  * The `*Emphasis` entries are Primer's `*.emphasis` roles: a **fill under white
  * text**. They are deliberately darker than the matching `accent`/`error` hue,
@@ -20,20 +31,20 @@
  * fill. Never swap the two.
  */
 export const PALETTE_DARK = {
-  bg: '#22272e',
-  bgInset: '#1c2128',
-  bgSurface: '#2d333b',
-  bgSurfaceHover: '#373e47',
-  text: '#cdd9e5',
-  textSubtle: '#adbac7',
-  textMuted: '#768390',
-  textDim: '#636e7b',
+  bg: '#161b22',
+  bgInset: '#0d1117',
+  bgSurface: '#1c2128',
+  bgSurfaceHover: '#22272e',
+  text: '#f0f6fc',
+  textSubtle: '#cdd9e5',
+  textMuted: '#adbac7',
+  textDim: '#8b98a5',
   accent: '#539bf5',
   accentHover: '#6cb6ff',
   accentEmphasis: '#316dca',
   accentEmphasisHover: '#4184e4',
-  border: '#444c56',
-  borderMuted: '#373e47',
+  border: '#373e47',
+  borderMuted: '#2d333b',
   borderHover: '#545d68',
   borderStrong: '#636e7b',
   success: '#57ab5a',

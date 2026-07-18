@@ -27,7 +27,7 @@ import { join } from 'path';
  * build keeps the near-black canvas and paints its primary button with a token
  * its baked-in CSS never defines.
  */
-export const COMPILER_VERSION = '8';
+export const COMPILER_VERSION = '9';
 
 export interface BuildManifest {
   sourceHash: string;

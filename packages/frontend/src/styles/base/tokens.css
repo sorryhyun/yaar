@@ -12,17 +12,17 @@
 
 :root {
   /* === Surfaces === */
-  --color-base: #22272e;
-  --color-mantle: #1c2128;
-  --color-surface: #2d333b;
-  --color-surface-hover: #373e47;
-  --color-overlay: #444c56;
+  --color-base: #161b22;
+  --color-mantle: #0d1117;
+  --color-surface: #1c2128;
+  --color-surface-hover: #22272e;
+  --color-overlay: #373e47;
 
   /* Text tiers */
-  --color-text: #cdd9e5;
-  --color-subtext: #adbac7;
-  --color-subtext-muted: #768390;
-  --color-muted: #636e7b;
+  --color-text: #f0f6fc;
+  --color-subtext: #cdd9e5;
+  --color-subtext-muted: #adbac7;
+  --color-muted: #8b98a5;
   --color-text-muted: var(--color-subtext-muted);
 
   /* === Semantics — the only color names shell CSS may use ===
@@ -84,8 +84,8 @@
   --shadow-2xl: 0 16px 48px rgba(0,0,0,0.5);
 
   /* === Borders (opaque color tokens + shorthands) === */
-  --color-border: #444c56;
-  --color-border-muted: #373e47;
+  --color-border: #373e47;
+  --color-border-muted: #2d333b;
   --color-border-hover: #545d68;
   --color-border-strong: #636e7b;
   --border-subtle: 1px solid var(--color-border);
@@ -132,9 +132,9 @@
   --bg-modal-backdrop: rgba(0,0,0,0.6);
 
   /* Glass surfaces — translucent chrome floating over the wallpaper */
-  --bg-glass: rgba(34,39,46,0.8);
-  --bg-glass-strong: rgba(34,39,46,0.95);
-  --bg-glass-inset: rgba(28,33,40,0.92);
+  --bg-glass: rgba(22,27,34,0.8);
+  --bg-glass-strong: rgba(22,27,34,0.95);
+  --bg-glass-inset: rgba(13,17,23,0.92);
 
   color-scheme: dark;
 }
