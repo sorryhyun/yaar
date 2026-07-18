@@ -50,6 +50,32 @@ body {
   white-space: nowrap;
 }
 
+/* ── Account bar ─────────────────────────────────────────────────────────── */
+
+.account-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+
+.account-info {
+  font-size: 13px;
+  color: var(--yaar-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-bar .y-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
 /* ── Filter bar ──────────────────────────────────────────────────────────── */
 
 .filter-bar {
@@ -155,6 +181,11 @@ body {
   color: var(--yaar-success);
   white-space: nowrap;
   padding: 2px 0;
+}
+
+/* Publish / Update button — accent outline */
+.publish-btn {
+  font-size: 13px;
 }
 
 /* Uninstall button — muted danger style */

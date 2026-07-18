@@ -26,6 +26,29 @@ export type InstalledApp = {
   kind?: string;
 };
 
+/** A card in the list — a marketplace app, an installed app, or both. */
+export type DisplayApp = ListedApp & {
+  kind?: string;
+  /** Installed locally but not (yet) on the marketplace — publishable, not installable. */
+  notPublished?: boolean;
+};
+
+/**
+ * Publisher sign-in state, mirrored from the server's Google auth + the
+ * marketplace's GET /api/me. The ID token never reaches this iframe — the server
+ * makes the marketplace call and hands back only the email and owned app ids.
+ */
+export type Account = {
+  /** GOOGLE_CLIENT_ID/SECRET are set on the server — sign-in is even possible. */
+  configured: boolean;
+  signedIn: boolean;
+  email: string | null;
+  /** A consent screen is open in the browser and has not come back yet. */
+  pending: boolean;
+  /** App ids this publisher owns, from the marketplace. */
+  ownedApps: string[];
+};
+
 type ApiPayload = {
   apps?: ListedApp[];
   marketApps?: ListedApp[];
@@ -47,6 +70,16 @@ export const [lastUpdated, setLastUpdated] = createSignal('');
 export const [loading, setLoading] = createSignal(false);
 export const [apiBase, setApiBase] = createSignal('');
 export const [hideInstalled, setHideInstalled] = createSignal(false);
+
+const SIGNED_OUT_ACCOUNT: Account = {
+  configured: false,
+  signedIn: false,
+  email: null,
+  pending: false,
+  ownedApps: [],
+};
+export const [account, setAccount] = createSignal<Account>(SIGNED_OUT_ACCOUNT);
+export const [authBusy, setAuthBusy] = createSignal(false);
 
 // ── Pure helper functions ────────────────────────────────────────────────────
 
@@ -178,10 +211,28 @@ export function setDomain(nextDomain: string): void {
   setStatus(d ? `Domain set: ${d}` : 'Domain cleared');
 }
 
+/**
+ * The full card list: every marketplace app, plus apps installed locally that the
+ * marketplace has never seen. The latter are what a developer publishes for the
+ * first time — without them the UI could show sign-in but never a first Publish.
+ */
+function displayApps(): DisplayApp[] {
+  const market = marketApps();
+  const marketIds = new Set(market.map((m) => normalizeId(m.id)));
+  const marketMapped: DisplayApp[] = market.map((m) => ({
+    ...m,
+    installed: m.installed || hasInstalled(m.id),
+  }));
+  const installedOnly: DisplayApp[] = installedApps()
+    .filter((a) => !marketIds.has(normalizeId(a.id)))
+    .map((a) => ({ id: a.id, name: a.name, kind: a.kind, installed: true, notPublished: true }));
+  return [...marketMapped, ...installedOnly];
+}
+
 /** Apps visible after applying the Hide Installed filter. */
-function visibleApps(): ListedApp[] {
-  const apps = marketApps();
-  return hideInstalled() ? apps.filter((a) => !a.installed && !hasInstalled(a.id)) : apps;
+function visibleApps(): DisplayApp[] {
+  const apps = displayApps();
+  return hideInstalled() ? apps.filter((a) => !a.installed) : apps;
 }
 
 // ── Async action runner ──────────────────────────────────────────────────────
@@ -233,6 +284,136 @@ async function hostDelete(app: { id: string }): Promise<void> {
 async function hostListInstalled(): Promise<InstalledApp[]> {
   const result = await list('yaar://apps');
   return parseInstalledAny(result);
+}
+
+// ── Account / publisher sign-in ────────────────────────────────────────────────
+//
+// These hit YAAR's *own* origin (relative paths), not the marketplace domain — the
+// fetch proxy attaches this app's iframe token automatically, and the server only
+// answers because market-apps is a bundled system app. `login` opens a real Google
+// consent screen, which is why the routes are closed to ordinary apps.
+
+async function yaarGet<T>(path: string): Promise<T> {
+  const res = await fetch(path, { method: 'GET' });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `GET ${path} failed (${res.status})`);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function yaarPost<T>(path: string): Promise<T> {
+  const res = await fetch(path, { method: 'POST' });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error || `POST ${path} failed (${res.status})`);
+  }
+  return res.json() as Promise<T>;
+}
+
+/** Pull sign-in status + owned apps from the server into the `account` signal. */
+export async function refreshAccount(): Promise<void> {
+  try {
+    const status = await yaarGet<{
+      configured: boolean;
+      signedIn: boolean;
+      email: string | null;
+      pending: boolean;
+    }>('/api/auth/google/status');
+
+    let ownedApps: string[] = [];
+    let email = status.email;
+    if (status.signedIn) {
+      // Best-effort: the marketplace may be unreachable — keep the local status either way.
+      try {
+        const me = await yaarGet<{ email: string | null; apps: string[] }>('/api/auth/google/me');
+        ownedApps = Array.isArray(me.apps) ? me.apps : [];
+        email = me.email ?? status.email;
+      } catch {
+        /* keep local status; owned apps unknown */
+      }
+    }
+
+    setAccount({
+      configured: status.configured,
+      signedIn: status.signedIn,
+      email,
+      pending: status.pending,
+      ownedApps,
+    });
+  } catch {
+    // Not a system app, or the route is unavailable — leave the signed-out default.
+    setAccount(SIGNED_OUT_ACCOUNT);
+  }
+}
+
+/**
+ * Start Google sign-in, then poll status until the browser round-trip finishes.
+ *
+ * Sign-in is a human gesture (agents publish against the already-signed-in
+ * identity, they don't summon consent), so it lives on a button here and reports
+ * back by polling rather than by holding the request open across the consent screen.
+ */
+export async function signIn(): Promise<void> {
+  if (authBusy()) return;
+  setAuthBusy(true);
+  try {
+    await yaarPost<{ authUrl: string }>('/api/auth/google/login');
+    setStatus('Complete sign-in in the browser window that just opened…', false);
+
+    for (let i = 0; i < 150; i++) {
+      // ~5 min ceiling at 2s
+      await new Promise((r) => setTimeout(r, 2000));
+      await refreshAccount();
+      const a = account();
+      if (a.signedIn) {
+        setStatus(`Signed in as ${a.email}`);
+        return;
+      }
+      if (!a.pending) break; // the pending login was cancelled or swept
+    }
+    if (!account().signedIn) setStatus('Sign-in did not complete. Try again.');
+  } catch (err: unknown) {
+    setStatus(`Sign-in failed: ${errMsg(err)}`);
+  } finally {
+    setAuthBusy(false);
+  }
+}
+
+export async function signOut(): Promise<void> {
+  if (authBusy()) return;
+  setAuthBusy(true);
+  try {
+    await yaarPost('/api/auth/google/logout');
+    await refreshAccount();
+    setStatus('Signed out');
+  } catch (err: unknown) {
+    setStatus(`Sign-out failed: ${errMsg(err)}`);
+  } finally {
+    setAuthBusy(false);
+  }
+}
+
+/** Whether the signed-in publisher owns this app id (per the marketplace). */
+function ownsApp(appId: string): boolean {
+  const target = normalizeId(appId);
+  return account().ownedApps.some((id) => normalizeId(id) === target);
+}
+
+/** Publish a locally installed app to the marketplace via the apps verb. */
+async function publishApp(app: { id: string; name: string }): Promise<void> {
+  await runAction(
+    `Publishing ${app.name}…`,
+    async () => {
+      const result = (await invoke('yaar://apps/' + app.id, { action: 'publish' })) as {
+        message?: string;
+      };
+      setStatus(result?.message || `Published ${app.name}`);
+      // Ownership may have just been claimed — refresh so the badge reflects it.
+      await refreshAccount();
+    },
+    'Publish failed',
+  );
 }
 
 // ── Business logic ───────────────────────────────────────────────────────────
@@ -289,11 +470,27 @@ async function uninstallApp(app: { id: string; name: string }): Promise<void> {
 
 // ── UI components ─────────────────────────────────────────────────────────────
 
-/** Render a single marketplace app card with Install / Uninstall actions. */
-function marketCard(app: ListedApp) {
-  const subtitle = [app.description, app.version ? `v${app.version}` : '', app.author || '']
-    .filter(Boolean)
-    .join(' \u2022 ');
+/** Publish/Update button for an installed, non-system app \u2014 only when signed in. */
+function publishButton(app: DisplayApp) {
+  if (isSystem(app.id) || !account().signedIn) return '';
+  return html`
+    <button
+      class="y-btn y-btn-sm publish-btn"
+      disabled=${() => loading()}
+      onClick=${() => void publishApp(app)}
+    >
+      ${() => (ownsApp(app.id) ? 'Update' : 'Publish')}
+    </button>
+  `;
+}
+
+/** Render a single app card with Install / Publish / Uninstall actions. */
+function marketCard(app: DisplayApp) {
+  const subtitle = app.notPublished
+    ? 'Installed locally \u2022 not on marketplace'
+    : [app.description, app.version ? `v${app.version}` : '', app.author || '']
+        .filter(Boolean)
+        .join(' \u2022 ');
 
   return html`
     <div class="y-card app-card">
@@ -310,9 +507,10 @@ function marketCard(app: ListedApp) {
           if (installed) {
             return html`
               <span class="installed-badge">✓ Installed</span>
+              ${publishButton(app)}
               <button
                 class="y-btn y-btn-sm y-btn-danger uninstall-btn"
-                disabled=${loading()}
+                disabled=${() => loading()}
                 onClick=${() => void uninstallApp(app)}
               >
                 Uninstall
@@ -322,7 +520,7 @@ function marketCard(app: ListedApp) {
           return html`
             <button
               class="y-btn y-btn-sm y-btn-primary"
-              disabled=${loading()}
+              disabled=${() => loading()}
               onClick=${() => void installApp(app)}
             >
               Install
@@ -330,6 +528,50 @@ function marketCard(app: ListedApp) {
           `;
         }}
       </div>
+    </div>
+  `;
+}
+
+/** The publisher sign-in bar between the header and the filter row. */
+function accountBar() {
+  return html`
+    <div class="account-bar y-surface">
+      ${() => {
+        const a = account();
+        if (!a.configured) {
+          return html`<span class="account-info y-text-muted"
+            >Google sign-in isn't configured on this server — set GOOGLE_CLIENT_ID/SECRET to
+            publish.</span
+          >`;
+        }
+        if (a.signedIn) {
+          const owned = a.ownedApps.length;
+          return html`
+            <span class="account-info"
+              >Signed in as <strong>${a.email}</strong>${owned
+                ? html`<span class="y-text-muted"> • ${owned} owned</span>`
+                : ''}</span
+            >
+            <button
+              class="y-btn y-btn-sm y-btn-ghost"
+              disabled=${() => authBusy()}
+              onClick=${() => void signOut()}
+            >
+              Sign out
+            </button>
+          `;
+        }
+        return html`
+          <span class="account-info y-text-muted">Not signed in — sign in to publish apps.</span>
+          <button
+            class="y-btn y-btn-sm y-btn-primary"
+            disabled=${() => authBusy()}
+            onClick=${() => void signIn()}
+          >
+            ${() => (authBusy() ? 'Signing in…' : 'Sign in with Google')}
+          </button>
+        `;
+      }}
     </div>
   `;
 }
@@ -359,6 +601,9 @@ render(
         </button>
       </div>
 
+      <!-- Publisher sign-in -->
+      ${accountBar()}
+
       <!-- Filter bar -->
       <div class="filter-bar y-surface">
         <label class="filter-toggle">
@@ -371,7 +616,7 @@ render(
         </label>
         <span class="filter-count y-text-muted">
           ${() => {
-            const total = marketApps().length;
+            const total = displayApps().length;
             const visible = visibleApps().length;
             const installed = installedApps().length;
             if (!total) return 'No apps loaded';
@@ -387,7 +632,7 @@ render(
         ${() => {
           const apps = visibleApps();
           if (!apps.length) {
-            const msg = marketApps().length
+            const msg = displayApps().length
               ? 'All apps are already installed.'
               : 'No marketplace apps loaded.';
             return html`<div class="empty-msg y-text-muted">${msg}</div>`;
@@ -420,6 +665,9 @@ onMount(async () => {
 
   if (!domain) domain = DEFAULT_MARKET_DOMAIN;
   setApiBase(domain);
+
+  // Publisher sign-in is independent of the marketplace domain — load it either way.
+  void refreshAccount();
 
   if (domain) {
     void refreshData();

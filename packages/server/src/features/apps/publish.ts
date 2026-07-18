@@ -80,7 +80,7 @@ export async function publishApp(appId: string): Promise<PublishResult> {
   if (!idToken) {
     return {
       success: false,
-      error: 'Not signed in to Google. Sign in first to publish (yaar://market/account).',
+      error: 'Not signed in to Google. Open the Market Apps window and sign in to publish.',
     };
   }
 
