@@ -3,7 +3,7 @@
  * Separate file to avoid circular dependencies between index.ts and profile files.
  */
 
-import { SYSTEM_TOOL_NAMES } from '../../mcp/system/index.js';
+import { SYSTEM_TOOL_NAMES } from '../../mcp/system/tool-names.js';
 
 export interface AgentProfile {
   id: string;

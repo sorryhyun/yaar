@@ -11,6 +11,7 @@ import type { AgentProfile } from './types.js';
 import { APP_AGENT_TOOL_NAMES } from './types.js';
 import { loadAppSkill, loadAppAgentDoc, listApps } from '../../features/apps/discovery.js';
 import { APP_MOUNT_ID, describeDesignTokens } from '@yaar/compiler';
+import { resolveAgentModel } from './model-tiers.js';
 
 /**
  * The parts of the app-authoring contract the compiler owns, stated by the compiler.
@@ -38,21 +39,6 @@ wrapper hides an empty mount. The compiler rejects a wrong render target.
 ### Design tokens
 ${describeDesignTokens()}
 `;
-}
-
-/** Map short agentType names to full model identifiers. */
-const AGENT_TYPE_MODELS: Record<string, string> = {
-  haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-6',
-  opus: 'claude-opus-4-8',
-};
-
-function resolveAgentModel(agentType?: string): string | undefined {
-  // App agents default to the Sonnet capability tier. Keep that default explicit
-  // so Codex can translate it to Terra instead of omitting `model` from
-  // thread/start and inheriting the shared app-server's Sol default.
-  if (!agentType) return AGENT_TYPE_MODELS.sonnet;
-  return AGENT_TYPE_MODELS[agentType] ?? agentType; // allow full model ID as fallback
 }
 
 /**

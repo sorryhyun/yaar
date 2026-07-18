@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { buildAppAgentProfile, claudeModelToCodex } from '../agents/profiles/index.js';
+// Import the concrete modules rather than the `profiles/index.js` barrel — the
+// barrel is what four other files stub with `mock.module`, and depending on it
+// here is what made this file's result depend on the runner's isolation.
+import { buildAppAgentProfile } from '../agents/profiles/app-agent.js';
+import { claudeModelToCodex } from '../agents/profiles/model-tiers.js';
 
 describe('app agent model selection', () => {
   it('defaults apps without agentType to Sonnet/Terra', async () => {

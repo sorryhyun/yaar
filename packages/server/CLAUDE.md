@@ -12,11 +12,29 @@ bun run test                   # Unit suite, then the loopback suite, then integ
 
 ## Tests
 
-`bun run test` runs three **separate Bun processes**, and the split is load-bearing:
+`bun run test` runs three suites in **separate Bun processes**, and the split is load-bearing:
 
-1. `src/tests` — unit/component tests (`--path-ignore-patterns='**/loopback/**'`).
+1. `src/tests` — unit/component tests, via `scripts/run-unit-tests.ts`.
 2. `src/tests/loopback` — the loopback integration harness (see `tests/loopback/harness/`).
 3. `src/integration`.
+
+**The unit suite is itself partitioned by process.** `scripts/run-unit-tests.ts` reads every
+file under `src/tests` and asks one question: does it call `mock.module`? Files that do get a
+process each; everything else shares one `--parallel` process. The isolated processes run
+concurrently with one another, so the wall-clock is close to a single shared run.
+
+The partition is computed from source on every run — there is no list to maintain. Add a
+`mock.module` to a file and it is isolated automatically; remove the last one and it rejoins
+the shared process. Prose *mentioning* `mock.module` doesn't count (comment lines are stripped
+before the match), which is why the loopback harness's long explanation of why it avoids mocks
+doesn't isolate anything.
+
+This exists because `--parallel` runs files concurrently **in one process**, and `mock.module`
+is process-global with no teardown. A stub is therefore visible to every concurrently-running
+file that imports the same specifier, and which one wins is a race rather than an order. That
+race shipped a red CI: four files stub `agents/profiles/index.js` with a `buildAppAgentProfile`
+returning no `model`, and `app-agent-model.test.ts` — which asserts on the real one — passed
+locally and failed in CI on identical code.
 
 The loopback harness runs the real stack end to end — `createWsHandlers` → `SessionHub` →
 `LiveSession` → `ContextPool` → `AgentSession` → `actionEmitter` → `PendingStore` — with
@@ -36,8 +54,11 @@ proving nothing. Two rules follow:
   seams instead: the provider via `ContextPool`'s `acquireProvider`, the logger via the
   `sessionLogger` option, the deadlines via `setDeadlinesForTest()` (`config.ts`), the config
   dir via `YAAR_CONFIG`.
-- **A `mock.module` in `src/tests` must be safe to leak** — stub the *whole* surface of what you
-  replace, since the next file to run inherits it (see the note in `ws-head-of-line.test.ts`).
+- **Assert against the narrowest module that holds the behavior.** A test that stubs the
+  `profiles/index.js` barrel stubs everything the barrel re-exports; a test that asserts on real
+  behavior should import the concrete module (`profiles/model-tiers.js`), not the barrel. The
+  per-file isolation above makes leaks impossible rather than merely unlikely, but a test whose
+  subject is one function reads better pointed at that function anyway.
 
 Server→client waits (`ANSWER_EVENT_TYPES` in `@yaar/shared`) each get a loopback row: a wait the
 client can only answer over a socket the server is holding is a deadlock waiting to happen.

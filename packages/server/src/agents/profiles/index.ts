@@ -6,7 +6,8 @@
 
 import type { AgentProfile } from './types.js';
 import { VERB_TOOL_NAMES, MESSAGING_TOOL_NAMES } from './types.js';
-import { SYSTEM_TOOL_NAMES } from '../../mcp/system/index.js';
+import { SYSTEM_TOOL_NAMES } from '../../mcp/system/tool-names.js';
+import { claudeModelToCodex } from './model-tiers.js';
 
 // Re-export types and constants
 export type { AgentProfile } from './types.js';
@@ -46,13 +47,9 @@ export function getDeveloperAllowedTools(): string[] {
   return [...DEVELOPER_PROFILE.allowedTools];
 }
 
-/** Map Claude capability tiers to their Codex equivalents. */
-export function claudeModelToCodex(model?: string): string | undefined {
-  if (!model) return undefined;
-  if (model.includes('opus')) return 'gpt-5.6-sol';
-  if (model.includes('sonnet')) return 'gpt-5.6-terra';
-  return undefined;
-}
+// Model capability tiers live in their own module (see model-tiers.ts) and are
+// re-exported here so existing consumers keep importing from the barrel.
+export { AGENT_TYPE_MODELS, resolveAgentModel, claudeModelToCodex } from './model-tiers.js';
 
 /**
  * Model + tool set a monitor agent's turns run with. Single source for the
