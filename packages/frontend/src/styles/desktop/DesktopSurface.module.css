@@ -261,22 +261,35 @@
   outline: 1.5px solid color-mix(in srgb, var(--color-accent) 80%, transparent);
 }
 
-.iconImage {
-  font-size: var(--icon-size, 48px);
-  line-height: 1;
+/* Uniform tile for both art kinds. Emoji were sized by font-size (a glyph advance,
+   ~1.15-1.2x em, line-height driven) while images got a hard WxH box with
+   `object-fit: contain` letterboxing non-square art — so the two rendered at
+   visibly different mass side by side. Both now fill the same square box. */
+.iconImage,
+.iconImg {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: var(--icon-size, 48px);
+  height: var(--icon-size, 48px);
   filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
 }
 
+.iconImage {
+  /* Glyph sized below the box so emoji optically match the padded image tile. */
+  font-size: calc(var(--icon-size, 48px) * 0.78);
+  line-height: 1;
+}
+
 .iconImg {
-  width: var(--icon-size, 48px);
-  height: var(--icon-size, 48px);
   object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  padding: 2px;
 }
 
 .iconWrapper {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
 }
 
 .badge {
@@ -297,14 +310,29 @@
   pointer-events: none;
 }
 
+/* Labels used only `word-wrap: break-word` against a tight 80px box, which chops
+   any word that doesn't fit ("Configurati/ons") and — because it has no CJK rule —
+   broke Korean at arbitrary syllables ("DC 만화 갤러/리").
+   The pair matters: `keep-all` stops the CJK syllable break (Korean now wraps at
+   eojeol boundaries), while `overflow-wrap: break-word` is kept as the last-resort
+   fallback so a single overlong Latin word still wraps to line 2 instead of being
+   clipped by the 2-line clamp. Dropping the fallback silently truncated
+   "Configuration" to "Configuratio" with no ellipsis. */
 .iconLabel {
   color: var(--color-text);
   font-size: var(--text-base);
   font-weight: 500;
+  line-height: 1.35;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  max-width: var(--icon-label-max-width, 80px);
+  width: var(--icon-label-max-width, 96px);
   text-align: center;
-  word-wrap: break-word;
+  word-break: keep-all;
+  overflow-wrap: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 /* Image drag-over visual feedback */

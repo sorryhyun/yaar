@@ -9,8 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
-import { extractAppId } from '@yaar/shared';
+import { extractAppId, WINDOW_PLACEMENT, cascadeWindowBounds } from '@yaar/shared';
 import { toWindowKey } from '@/store/helpers'; // Used for user-initiated window creation
+import { DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT } from '@/constants/layout';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 /** App info from /api/apps endpoint */
@@ -147,14 +148,24 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
             // Request iframe token from server so verb SDK can resolve `self`
             const openWindow = (iframeToken?: string) => {
               const content = { renderer: 'iframe' as const, data: app.run! };
-              const w = app.defaultWidth ?? 500;
-              const h = app.defaultHeight ?? 400;
+              const w = app.defaultWidth ?? WINDOW_PLACEMENT.defaultWidth;
+              const h = app.defaultHeight ?? WINDOW_PLACEMENT.defaultHeight;
+              // Icon-launched windows used a hardcoded (100, 100) with no cascade, so
+              // every app opened from the desktop landed on the same spot and buried
+              // the last one. Same policy as the server's AI path now.
+              const openOnMonitor = Object.values(store.windows).filter(
+                (win) => win.monitorId === monitorId,
+              ).length;
+              const bounds = cascadeWindowBounds(openOnMonitor, w, h, {
+                w: globalThis.innerWidth || DEFAULT_VIEWPORT_WIDTH,
+                h: globalThis.innerHeight || DEFAULT_VIEWPORT_HEIGHT,
+              });
               store.applyActions([
                 {
                   type: 'window.create',
                   windowId: app.id,
                   title: app.name,
-                  bounds: { x: 100, y: 100, w, h },
+                  bounds,
                   content,
                   appId: app.id,
                   ...(iframeToken ? { iframeToken } : {}),
@@ -173,7 +184,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
                     windowId: app.id,
                     windowTitle: app.name,
                     monitorId,
-                    bounds: { x: 100, y: 100, w, h },
+                    bounds,
                     content,
                     appId: app.id,
                   },

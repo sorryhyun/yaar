@@ -16,6 +16,7 @@ import { exportContent } from '@/lib/exportContent';
 import { useDragWindow } from '@/hooks/useDragWindow';
 import { useResizeWindow } from '@/hooks/useResizeWindow';
 import { useWindowDrop } from '@/hooks/useWindowDrop';
+import { COMMAND_PALETTE_HEIGHT } from '@/constants/layout';
 import styles from '@/styles/window/WindowFrame.module.css';
 
 interface WindowFrameProps {
@@ -178,7 +179,10 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       top: 0,
       left: 0,
       width: '100%',
-      height: '100%',
+      // Reserve the palette's footprint. Previously `100%`, so a maximized window
+      // ran full-bleed underneath the palette — the palette only won visually
+      // because its z-index outranks the window's, hiding content behind it.
+      height: `calc(100% - ${COMMAND_PALETTE_HEIGHT}px)`,
       zIndex: zIndex + 100,
     };
   } else if (isWidget) {

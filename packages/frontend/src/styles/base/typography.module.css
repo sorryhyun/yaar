@@ -7,7 +7,7 @@
 /* ============ Plain Text ============ */
 .text {
   margin: 0;
-  font-family: var(--font-mono);
+  font-family: var(--font-sans);
   font-size: var(--text-base);
   line-height: 1.5;
   white-space: pre-wrap;
@@ -15,18 +15,23 @@
 }
 
 /* ============ Text Variants ============ */
+/* Mirrors the markdown ramp above: heading = h1, subheading = h2, body = prose.
+   Previously subheading and body were both --text-lg, so the two variants were
+   visually identical apart from weight. */
 .textBody {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
 }
 
 .textHeading {
   font-size: var(--text-xl);
   font-weight: 600;
+  line-height: 1.3;
 }
 
 .textSubheading {
   font-size: var(--text-lg);
-  font-weight: 500;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .textCaption {
@@ -80,26 +85,81 @@
 }
 
 /* ============ Markdown Prose ============ */
+/* In-window prose is capped at the token ramp: a window is a note, not a blog
+   page, so nothing may exceed --text-xl (18px). Heading sizes are absolute
+   tokens rather than `em` — `em` compounded off the container and pushed h1 to
+   22.5px, above the top of the ramp. h4-h6 previously had no rules at all and
+   fell through to UA defaults, which rendered h5/h6 *smaller* than body text. */
 .markdown {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   line-height: 1.6;
 }
 
 .markdown h1 {
-  font-size: 1.5em;
-  margin: 0 0 0.5em;
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.3;
+  margin: 0 0 0.4em;
   border-bottom: var(--border-subtle);
   padding-bottom: 0.3em;
 }
 
 .markdown h2 {
-  font-size: 1.3em;
-  margin: 1em 0 0.5em;
+  font-size: var(--text-lg);
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 1.2em 0 0.4em;
 }
 
 .markdown h3 {
-  font-size: 1.1em;
-  margin: 1em 0 0.5em;
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1.2em 0 0.3em;
+}
+
+/* h4-h6 bottom out at body size and differentiate by weight/color instead of
+   scale, so deep documents stay readable. */
+.markdown h4,
+.markdown h5,
+.markdown h6 {
+  font-size: var(--text-base);
+  font-weight: 600;
+  line-height: 1.4;
+  margin: 1em 0 0.3em;
+  color: var(--color-subtext);
+}
+
+.markdown h5,
+.markdown h6 {
+  color: var(--color-subtext-muted);
+}
+
+/* Prose rhythm. A global reset zeroes margin/padding on every element, and the
+   markdown block never restored either — so paragraphs ran together with no gap
+   and `list-style: disc` painted its markers in the zero-width padding box, i.e.
+   outside the visible area. Lists looked bullet-less; they were only clipped. */
+.markdown p {
+  margin: 0 0 0.75em;
+}
+
+.markdown p:last-child {
+  margin-bottom: 0;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 0 0 0.75em;
+  padding-left: 1.5em;
+}
+
+.markdown li {
+  margin: 0.15em 0;
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0.15em 0 0;
 }
 
 .markdown code {
@@ -112,6 +172,7 @@
 
 .markdown pre {
   background: var(--bg-dark-overlay);
+  margin: 0 0 0.75em;
   padding: var(--space-3);
   border-radius: var(--radius-md);
   overflow-x: auto;

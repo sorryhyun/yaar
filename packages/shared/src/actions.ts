@@ -39,6 +39,54 @@ export interface WindowBounds {
   h: number;
 }
 
+/**
+ * Default placement policy for a new window.
+ *
+ * Two independent paths create windows — the server's `handleCreate` (the AI path)
+ * and the frontend's desktop-icon click — so these live here rather than being
+ * declared twice and drifting. Both cascade from a centered origin: the first
+ * window on a monitor lands mid-viewport and each next one steps down-right.
+ */
+export const WINDOW_PLACEMENT = {
+  /** Fallback size when neither the caller nor app.json specifies one. */
+  defaultWidth: 640,
+  defaultHeight: 480,
+  /** Diagonal offset between consecutively opened windows. */
+  cascadeStep: 28,
+  /** Offset at which the cascade wraps back to the origin. */
+  cascadeMax: 280,
+  /** Origin used when the monitor's viewport is not known yet. */
+  fallbackOrigin: 100,
+  /** Bottom viewport space reserved for the command palette. */
+  paletteInset: 104,
+} as const;
+
+/**
+ * Cascade a new window from a centered origin, clamped to stay fully on screen.
+ * `viewport` may be omitted when it hasn't been reported yet, in which case the
+ * flat fallback origin is used.
+ */
+export function cascadeWindowBounds(
+  index: number,
+  w: number,
+  h: number,
+  viewport?: { w: number; h: number },
+): WindowBounds {
+  const P = WINDOW_PLACEMENT;
+  const step = (index * P.cascadeStep) % P.cascadeMax;
+  if (!viewport) return { x: P.fallbackOrigin + step, y: P.fallbackOrigin + step, w, h };
+
+  const usableH = viewport.h - P.paletteInset;
+  const originX = Math.max(0, Math.round((viewport.w - w) / 2) - P.cascadeMax / 2);
+  const originY = Math.max(0, Math.round((usableH - h) / 2) - P.cascadeMax / 2);
+  return {
+    x: Math.max(0, Math.min(originX + step, viewport.w - w)),
+    y: Math.max(0, Math.min(originY + step, usableH - h)),
+    w,
+    h,
+  };
+}
+
 export interface WindowContent {
   renderer: string; // 'markdown', 'table', 'html', 'text', 'iframe'
   data: unknown;

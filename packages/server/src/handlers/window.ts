@@ -148,10 +148,20 @@ export function registerWindowHandlers(
           enum: ['markdown', 'html', 'text', 'table', 'iframe', 'component'],
         },
         content: {},
-        x: { type: 'number' },
-        y: { type: 'number' },
-        width: { type: 'number' },
-        height: { type: 'number' },
+        x: {
+          type: 'number',
+          description:
+            'Optional. Omit both x and y (the normal case) to get centered, cascaded placement that avoids burying existing windows. Only set these to position a window deliberately.',
+        },
+        y: { type: 'number', description: 'Optional. See x — omit unless positioning on purpose.' },
+        width: {
+          type: 'number',
+          description: 'Optional. Defaults to 640, or the app’s declared defaultWidth.',
+        },
+        height: {
+          type: 'number',
+          description: 'Optional. Defaults to 480, or the app’s declared defaultHeight.',
+        },
         minimized: { type: 'boolean' },
         jsonfile: { type: 'string' },
         // update fields

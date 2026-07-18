@@ -19,16 +19,21 @@
   gap: var(--space-2);
 }
 
+/* One bar, one surface. The icon cluster, textarea, and Send all live inside this
+   single glass container — previously the icons were a sibling row of individually
+   bordered-and-shadowed 40px tiles, so the palette read as detached fragments. */
 .inputWrapper {
   position: relative;
   flex: 1;
   display: flex;
-  gap: var(--space-2);
-  background: var(--color-base);
+  align-items: flex-end;
+  gap: var(--space-1);
+  background: var(--bg-glass);
+  backdrop-filter: blur(12px);
   border-radius: var(--radius-xl);
   padding: var(--space-2);
   box-shadow: var(--shadow-lg);
-  border: var(--border-subtle);
+  border: 1px solid var(--color-border);
 }
 
 .input {
@@ -72,129 +77,58 @@
   cursor: not-allowed;
 }
 
-/* Action buttons (gear + reset) */
+/* Icon cluster — now a child of .inputWrapper rather than its sibling. */
 .actionButtons {
   display: flex;
-  gap: 4px;
+  gap: 2px;
   align-items: center;
+  flex-shrink: 0;
 }
 
-/* QR code button (remote mode only) */
-.qrButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: var(--color-base);
-  border: var(--border-subtle);
-  border-radius: var(--radius-lg);
-  color: var(--color-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-lg);
-}
-
-.qrButton:hover {
-  color: var(--color-text);
-  background: var(--bg-overlay-medium);
-}
-
-.qrButton[data-active='true'] {
-  color: var(--color-accent);
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-}
-
-/* Reset button */
-.resetButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: rgba(235, 160, 172, 0.08);
-  border: 1px solid rgba(235, 160, 172, 0.2);
-  border-radius: var(--radius-lg);
-  color: var(--color-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-lg);
-}
-
-.resetButton:hover {
-  color: rgb(235, 160, 172);
-  background: rgba(235, 160, 172, 0.15);
-  border-color: rgba(235, 160, 172, 0.4);
-}
-
-.closeAllButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: rgba(235, 160, 172, 0.08);
-  border: 1px solid rgba(235, 160, 172, 0.2);
-  border-radius: var(--radius-lg);
-  color: var(--color-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-lg);
-}
-
-.closeAllButton:hover {
-  color: rgb(235, 160, 172);
-  background: rgba(235, 160, 172, 0.15);
-  border-color: rgba(235, 160, 172, 0.4);
-}
-
-/* Pencil draw button */
-.pencilButton {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: var(--color-base);
-  border: var(--border-subtle);
-  border-radius: var(--radius-lg);
-  color: var(--color-muted);
-  cursor: pointer;
-  transition: all var(--transition-fast);
-  box-shadow: var(--shadow-lg);
-}
-
-.pencilButton:hover {
-  color: var(--color-text);
-  background: var(--bg-overlay-medium);
-}
-
-.pencilButton[data-active='true'] {
-  color: var(--hue-peach);
-  border-color: var(--hue-peach);
-  background: color-mix(in srgb, var(--hue-peach) 12%, transparent);
-}
-
-/* Folder attach button */
+/* Shared icon-button base. These five rules were previously duplicated verbatim
+   (40px tile + own background + border + shadow). Inside the unified bar they are
+   flat ghost buttons: the bar supplies the surface, so a tile of their own would
+   re-fragment exactly what Part E merges. */
+.qrButton,
+.resetButton,
+.closeAllButton,
+.pencilButton,
 .folderButton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  background: var(--color-base);
-  border: var(--border-subtle);
-  border-radius: var(--radius-lg);
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
   color: var(--color-muted);
   cursor: pointer;
   transition: all var(--transition-fast);
-  box-shadow: var(--shadow-lg);
 }
 
+.qrButton:hover,
+.pencilButton:hover,
 .folderButton:hover {
   color: var(--color-text);
   background: var(--bg-overlay-medium);
+}
+
+/* Destructive pair — quiet until hovered, then they declare themselves. */
+.resetButton:hover,
+.closeAllButton:hover {
+  color: var(--color-danger);
+  background: color-mix(in srgb, var(--color-danger) 12%, transparent);
+}
+
+.qrButton[data-active='true'] {
+  color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.pencilButton[data-active='true'] {
+  color: var(--hue-peach);
+  background: color-mix(in srgb, var(--hue-peach) 12%, transparent);
 }
 
 /* Spinner box for active agents */

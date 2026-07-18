@@ -57,6 +57,9 @@
 .badge {
   display: inline-flex;
   align-items: center;
+  /* Grid items are stretched by default; keep pills shrink-wrapped to their label. */
+  justify-self: start;
+  align-self: center;
   padding: 2px var(--space-2);
   border-radius: var(--radius-xl);
   font-size: var(--text-base);
@@ -86,6 +89,20 @@
 .badgeInfo {
   background: color-mix(in srgb, var(--color-primary) 20%, transparent);
   color: var(--color-primary);
+}
+
+/* ============ Unsupported Component Placeholder ============ */
+.unsupported {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  align-self: center;
+  padding: 2px var(--space-2);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  color: var(--color-subtext-muted);
 }
 
 /* ============ Progress ============ */

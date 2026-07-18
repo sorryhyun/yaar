@@ -10,8 +10,10 @@
  */
 
 /* ============ Component Renderer Root ============ */
+/* --text-base matches .markdown, so a component window and a prose window read
+   at the same body size (see the in-window ramp note in typography.module.css). */
 .componentRoot {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   line-height: 1.5;
 }
 
@@ -40,7 +42,7 @@
 
 /* ============ HTML ============ */
 .html {
-  font-size: var(--text-lg);
+  font-size: var(--text-base);
   line-height: 1.6;
 }
 

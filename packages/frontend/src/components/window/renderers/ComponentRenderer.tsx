@@ -130,7 +130,11 @@ function LeafRenderer({ node, onAction }: LeafRendererProps) {
     case 'select':
       return <SelectRenderer node={node} />;
     default:
-      return <span>[Unknown component type]</span>;
+      return (
+        <span className={componentStyles.unsupported}>
+          unsupported: {String((node as { type?: unknown }).type ?? 'unknown')}
+        </span>
+      );
   }
 }
 

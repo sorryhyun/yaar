@@ -1,10 +1,21 @@
 /** Layout constants shared across window management, drag, and monitor logic. */
+import { WINDOW_PLACEMENT } from '@yaar/shared';
 
 /** Height of a window's title bar in pixels. */
 export const TITLEBAR_HEIGHT = 36;
 
 /** Height of the taskbar in pixels. */
 export const TASKBAR_HEIGHT = 36;
+
+/**
+ * Vertical space the command palette occupies at the bottom of the viewport:
+ * the minimized-tab slot (36) + the input bar (~56) + its bottom margin (12).
+ *
+ * Maximized windows subtract this so their content never sits under the palette.
+ * Re-exported from `@yaar/shared` rather than redeclared: the server's window
+ * placement reserves the same strip when centering, and two copies would drift.
+ */
+export const COMMAND_PALETTE_HEIGHT = WINDOW_PLACEMENT.paletteInset;
 
 /** Vertical offset to place the cursor in the middle of the title bar on unsnap/restore. */
 export const TITLEBAR_CENTER_OFFSET = TITLEBAR_HEIGHT / 2;

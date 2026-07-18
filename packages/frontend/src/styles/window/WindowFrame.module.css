@@ -1,13 +1,17 @@
-/* Elevation: windows are cards that sit ABOVE the wallpaper, so they paint the
-   surface tier while the desktop keeps base/inset. The edge is an inset outline
-   rather than a border because .frame is absolutely positioned from stored
-   width/height with no border-box reset — a real border would grow every window
-   by 2px and desync the drag/resize math. */
+/* Elevation: windows are cards that sit ABOVE the wallpaper. They paint the
+   `base` tier (canvas.default) while the desktop drops to `mantle` (canvas.inset),
+   so the card-above-canvas gap Part B established is preserved while both layers
+   sit a rung deeper than the desaturated `surface` gray. Matching `base` also
+   means shell-rendered windows and app iframes (which paint --yaar-bg = base)
+   read as the same material. The edge is an inset outline rather than a border
+   because .frame is absolutely positioned from stored width/height with no
+   border-box reset — a real border would grow every window by 2px and desync the
+   drag/resize math. */
 .frame {
   position: absolute;
   display: flex;
   flex-direction: column;
-  background: var(--color-surface);
+  background: var(--color-base);
   border-radius: var(--radius-lg);
   outline: 1px solid var(--color-border);
   outline-offset: -1px;
@@ -73,7 +77,7 @@
   padding: 0 var(--space-3);
   /* Same surface as the body — the titlebar reads as part of the card, separated
      by a hairline rather than by a darker fill (GitHub overlay-header idiom). */
-  background: var(--color-surface);
+  background: var(--color-base);
   border-bottom: 1px solid var(--color-border-muted);
   cursor: move;
   user-select: none;

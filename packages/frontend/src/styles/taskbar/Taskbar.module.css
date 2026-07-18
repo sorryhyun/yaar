@@ -145,6 +145,11 @@
 }
 
 /* New monitor button */
+/* This is "create new monitor", not a CLI/expand toggle — the design audit read it
+   as an orphaned `>` chevron precisely because a lone bordered chip floating on an
+   otherwise empty row gives no clue what it does. It now uses a "+" glyph and the
+   same flat ghost treatment as the command-palette icon cluster, so it reads as a
+   taskbar affordance rather than a detached fragment. */
 .newMonitorButton {
   display: flex;
   align-items: center;
@@ -153,18 +158,18 @@
   height: 28px;
   flex-shrink: 0;
   margin-left: auto;
-  background: var(--bg-overlay-light);
-  border: 1px solid var(--bg-overlay-hover);
+  background: transparent;
+  border: 1px solid transparent;
   border-radius: var(--radius-md);
   color: var(--color-muted);
   font-size: var(--text-lg);
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .newMonitorButton:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--bg-overlay-medium);
   color: var(--color-text);
-  border-color: rgba(255, 255, 255, 0.25);
 }

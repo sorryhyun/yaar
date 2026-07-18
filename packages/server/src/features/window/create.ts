@@ -6,8 +6,11 @@ import { join } from 'path';
 import {
   type OSAction,
   type ComponentLayout,
+  type WindowBounds,
   componentLayoutSchema,
   extractAppId,
+  WINDOW_PLACEMENT,
+  cascadeWindowBounds,
 } from '@yaar/shared';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { okJson, error, validateRelativePath } from '../../handlers/utils.js';
@@ -47,22 +50,49 @@ function storageDocumentUri(data: unknown): string | undefined {
   return storageUriForPath(parsed.path) ?? undefined;
 }
 
-/** Cascade offset per window (px). */
-const CASCADE_STEP = 32;
-/** Maximum cascade offset before wrapping back to origin. */
-const CASCADE_MAX = 320;
-
 /**
- * Compute cascade offset for default window positions.
- * Returns { x, y } offset based on existing window count in the session.
+ * Single source of truth for a new window's bounds.
+ *
+ * Size resolves explicit → app.json → 640x480. Position cascades from a centered
+ * origin, so the first window on a monitor lands in the middle of the viewport and
+ * each subsequent one steps down-right instead of burying its predecessor.
+ *
+ * Three things this fixes over the previous inline logic:
+ *  - **Per-axis cascade.** The old gate was `x == null && y == null` while the
+ *    fallbacks were per-axis, so a caller supplying only `x` got cascade `{0,0}`
+ *    and `y` pinned to exactly 100 — every such window stacked.
+ *  - **Monitor-scoped count.** `getWindowCount()` counted every window in the
+ *    session across all monitors and never decremented on close, so the offset
+ *    tracked session history rather than what is actually on screen.
+ *  - **Clamped to the viewport**, so a deep cascade can't push a window off-screen
+ *    (the frontend clamp runs after x is fixed and silently narrows w instead).
  */
-function getCascadeOffset(): { x: number; y: number } {
+function resolveDefaultBounds(
+  payload: Record<string, unknown>,
+  appMeta: { defaultWidth?: number; defaultHeight?: number } | null,
+): WindowBounds {
+  const w = (payload.width as number) ?? appMeta?.defaultWidth ?? WINDOW_PLACEMENT.defaultWidth;
+  const h = (payload.height as number) ?? appMeta?.defaultHeight ?? WINDOW_PLACEMENT.defaultHeight;
+
+  const explicitX = payload.x as number | undefined;
+  const explicitY = payload.y as number | undefined;
+  if (explicitX != null && explicitY != null) return { x: explicitX, y: explicitY, w, h };
+
   const sid = getSessionId();
   const session = sid ? getSessionHub().get(sid) : getSessionHub().getDefault();
-  if (!session) return { x: 0, y: 0 };
-  const count = session.windowState.getWindowCount();
-  const offset = (count * CASCADE_STEP) % CASCADE_MAX;
-  return { x: offset, y: offset };
+  const monitorId = actionEmitter.resolveWindowMonitor();
+
+  let count = 0;
+  let viewport: { w: number; h: number } | undefined;
+  if (session) {
+    viewport = session.layoutContext.getViewport(monitorId);
+    count = session.windowState
+      .listWindows()
+      .filter((win) => session.windowState.getMonitorForWindow(win.id) === monitorId).length;
+  }
+
+  const cascaded = cascadeWindowBounds(count, w, h, viewport);
+  return { x: explicitX ?? cascaded.x, y: explicitY ?? cascaded.y, w, h };
 }
 
 /** Handle window creation (both component and non-component renderers). */
@@ -82,9 +112,6 @@ export async function handleCreate(
     title,
   );
   const actualId = windowId || derivedId;
-
-  // Cascade offset: when no explicit position, offset based on existing window count
-  const cascade = payload.x == null && payload.y == null ? getCascadeOffset() : { x: 0, y: 0 };
 
   // Component renderer: content is a ComponentLayout object or loaded from jsonfile
   if (renderer === 'component') {
@@ -141,12 +168,7 @@ export async function handleCreate(
       type: 'window.create',
       windowId: actualId,
       title,
-      bounds: {
-        x: (payload.x as number) ?? 100 + cascade.x,
-        y: (payload.y as number) ?? 100 + cascade.y,
-        w: (payload.width as number) ?? appMeta?.defaultWidth ?? 500,
-        h: (payload.height as number) ?? appMeta?.defaultHeight ?? 400,
-      },
+      bounds: resolveDefaultBounds(payload, appMeta),
       content: { renderer: 'component', data: layoutData },
       ...getAppMetaOverrides(appMeta),
       ...(componentAppId ? { appId: componentAppId } : {}),
@@ -187,12 +209,7 @@ export async function handleCreate(
     type: 'window.create',
     windowId: actualId,
     title,
-    bounds: {
-      x: (payload.x as number) ?? 100 + cascade.x,
-      y: (payload.y as number) ?? 100 + cascade.y,
-      w: (payload.width as number) ?? appMeta?.defaultWidth ?? 500,
-      h: (payload.height as number) ?? appMeta?.defaultHeight ?? 400,
-    },
+    bounds: resolveDefaultBounds(payload, appMeta),
     content: { renderer, data },
     ...getAppMetaOverrides(appMeta),
     ...(appId ? { appId } : {}),

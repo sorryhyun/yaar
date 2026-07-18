@@ -115,10 +115,10 @@ const shellBody = `
 <div class="demo-row">${['--color-base', '--color-mantle', '--color-surface', '--color-text', '--color-accent', '--color-success', '--color-danger', '--color-warning'].map(swatch).join('')}</div>
 <span class="y-label">Glass tier (alpha overlays — hover washes, dock, scrims)</span>
 <div class="demo-row">${['--bg-overlay-light', '--bg-overlay-medium', '--bg-overlay-strong', '--bg-overlay-hover'].map(swatch).join('')}</div>
-<span class="y-label">Window chrome mock — elevation: desktop on base, window on surface</span>
-<div style="background:var(--color-base);border-radius:var(--radius-lg);padding:var(--space-4)">
-  <div style="background:var(--color-surface);outline:1px solid var(--color-border);outline-offset:-1px;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;max-width:420px">
-    <div style="display:flex;align-items:center;gap:var(--space-2);height:36px;box-sizing:border-box;padding:0 var(--space-3);background:var(--color-surface);border-bottom:1px solid var(--color-border-muted)">
+<span class="y-label">Window chrome mock — elevation: desktop on mantle, window on base</span>
+<div style="background:var(--color-mantle);border-radius:var(--radius-lg);padding:var(--space-4)">
+  <div style="background:var(--color-base);outline:1px solid var(--color-border);outline-offset:-1px;border-radius:var(--radius-lg);box-shadow:var(--shadow-lg);overflow:hidden;max-width:420px">
+    <div style="display:flex;align-items:center;gap:var(--space-2);height:36px;box-sizing:border-box;padding:0 var(--space-3);background:var(--color-base);border-bottom:1px solid var(--color-border-muted)">
       <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-danger)"></span>
       <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-warning)"></span>
       <span style="width:10px;height:10px;border-radius:var(--radius-full);background:var(--color-success)"></span>
@@ -257,17 +257,20 @@ const feedbackBody = `
  * Part C of the design refresh edits exactly these rules.
  */
 const componentDslBody = `
-<span class="y-label">Text variants (finding 3: .text is monospace by default)</span>
+<span class="y-label">Text variants (finding 3 fixed: .text is sans; only code stays mono)</span>
 <div class="componentRoot" style="display:grid;grid-template-columns:1fr;gap:var(--space-3)">
   <span class="text textHeading">Heading variant</span>
   <span class="text textSubheading">Subheading variant</span>
   <span class="text textBody">Body variant — the default agent-emitted text.</span>
-  <span class="text">Plain .text — inherits --font-mono</span>
+  <span class="text">Plain .text — inherits --font-sans</span>
+  <span class="text textCode">variant: "code" — still --font-mono</span>
 </div>
 <span class="y-label">Buttons &amp; inputs in a 2-col grid</span>
 <div class="componentRoot" style="display:grid;grid-template-columns:repeat(2, 1fr);gap:var(--space-3)">
-  <button class="button">Primary action</button>
-  <button class="button buttonDisabled" disabled>Disabled</button>
+  <button class="button buttonPrimary buttonSizeMd">Primary action</button>
+  <button class="button buttonSecondary buttonSizeMd">Secondary</button>
+  <button class="button buttonGhost buttonSizeMd">Ghost</button>
+  <button class="button buttonDanger buttonSizeMd">Danger</button>
   <div class="formField">
     <label class="formLabel">Label</label>
     <input class="formInput" placeholder="Input placeholder">
@@ -277,11 +280,16 @@ const componentDslBody = `
     <select class="formSelect"><option>Option</option></select>
   </div>
 </div>
-<span class="y-label">Badges &amp; progress (finding 5: badges stretch to the grid cell)</span>
+<span class="y-label">Badges (finding 5 fixed: justify-self keeps pills shrink-wrapped)</span>
 <div class="componentRoot" style="display:grid;grid-template-columns:repeat(3, 1fr);gap:var(--space-3)">
   <span class="badge badgeDefault">Default</span>
   <span class="badge badgeSuccess">Success</span>
   <span class="badge badgeError">Error</span>
+</div>
+<span class="y-label">Unknown component (finding 6 fixed: named placeholder, not raw text)</span>
+<div class="componentRoot" style="display:grid;grid-template-columns:repeat(2, 1fr);gap:var(--space-3)">
+  <span class="unsupported">unsupported: gauge</span>
+  <span class="text textBody">…renders beside normal content without wrecking it.</span>
 </div>
 <div class="componentRoot" style="display:grid;grid-template-columns:1fr;gap:var(--space-3)">
   <div class="progress">

@@ -92,7 +92,7 @@ export function Taskbar() {
           onClick={() => createMonitor()}
           title="Create new monitor"
         >
-          &gt;
+          +
         </button>
       )}
     </div>
