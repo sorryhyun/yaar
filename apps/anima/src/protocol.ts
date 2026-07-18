@@ -1,5 +1,6 @@
-import { app, defineCommand, errMsg, storage } from '@bundled/yaar';
+import { app, defineCommand, errMsg } from '@bundled/yaar';
 import type { Bucket } from './buckets';
+import { listSavedImages } from './appfiles';
 
 export type GenerationOptions = {
   prompt: string;
@@ -27,13 +28,9 @@ export type ProtocolDeps = {
   setRatio: (value: string) => void;
   getCapabilities: () => string;
   buckets: Bucket[];
+  /** Runs the pipeline *and* persists the PNG; returns the storage-stamped result. */
   generate: (options: GenerationOptions) => Promise<unknown>;
-  canvasBlob: () => Promise<Blob>;
 };
-
-function safePart(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'image';
-}
 
 export function registerProtocol(deps: ProtocolDeps): void {
   if (!app) return;
@@ -69,6 +66,17 @@ export function registerProtocol(deps: ProtocolDeps): void {
       lastResult: {
         description: 'Stable result from the most recent generation, including storagePath/storageUrl or a fallback dataUrl',
         handler: () => deps.getLastResult(),
+      },
+      savedImages: {
+        description:
+          'Previously generated images held in app storage (yaar://apps/anima/storage/generated/), newest first',
+        handler: async () => {
+          try {
+            return await listSavedImages();
+          } catch {
+            return [];
+          }
+        },
       },
       options: {
         description: 'Safe generation options supported by the generate command',
@@ -108,36 +116,14 @@ export function registerProtocol(deps: ProtocolDeps): void {
           deps.setRatio(ratio);
 
           try {
-            const raw = (await deps.generate({ prompt, seed, ratio })) as GenerationResult;
-            if (!raw.ok) {
-              deps.setLastResult(raw);
-              app.emit('generationError', { error: raw.error ?? 'Generation failed', prompt, seed, ratio });
-              return raw;
+            // `deps.generate` is the single funnel for every generation — it paints the
+            // canvas, writes the PNG into app storage, and stamps storagePath/storageUrl
+            // onto the result. Saving here too would write the image twice.
+            const result = (await deps.generate({ prompt, seed, ratio })) as GenerationResult;
+            if (!result.ok) {
+              app.emit('generationError', { error: result.error ?? 'Generation failed', prompt, seed, ratio });
+              return result;
             }
-
-            const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-            const path = `anima/generated/${stamp}-${safePart(ratio)}-seed${seed}.png`;
-            let saved = false;
-            let saveError: string | undefined;
-            try {
-              const response = await storage.save(path, await deps.canvasBlob());
-              saved = response.ok;
-              if (!saved) saveError = 'storage.save returned ok=false';
-            } catch (error) {
-              saveError = errMsg(error);
-            }
-
-            const result: GenerationResult = {
-              ...raw,
-              dataUrl: saved ? undefined : raw.dataUrl,
-              storagePath: saved ? path : undefined,
-              storageUrl: saved ? storage.url(path) : undefined,
-              mimeType: 'image/png',
-              saved,
-              saveError,
-              completedAt: new Date().toISOString(),
-            };
-            deps.setLastResult(result);
             app.emit('generated', result);
             return result;
           } catch (error) {
