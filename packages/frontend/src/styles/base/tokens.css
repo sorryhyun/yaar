@@ -5,34 +5,10 @@
  * Regenerate with: bun scripts/gen-design-tokens.ts
  */
 
-@font-face {
-  font-family: 'NanumSquareNeo';
-  src: url('/NanumSquareNeoOTF-Lt.otf') format('opentype');
-  font-weight: 300;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'NanumSquareNeo';
-  src: url('/NanumSquareNeoOTF-Rg.otf') format('opentype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'NanumSquareNeo';
-  src: url('/NanumSquareNeoOTF-Bd.otf') format('opentype');
-  font-weight: 700;
-  font-style: normal;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'NanumSquareNeo';
-  src: url('/NanumSquareNeoOTF-Eb.otf') format('opentype');
-  font-weight: 800;
-  font-style: normal;
-  font-display: swap;
-}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Lt.otf') format('opentype');font-weight:300;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Rg.otf') format('opentype');font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Bd.otf') format('opentype');font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Eb.otf') format('opentype');font-weight:800;font-style:normal;font-display:swap}
 
 :root {
   /* === Surfaces === */
@@ -54,7 +30,7 @@
   --color-blue-hover: #79c0ff;
   --color-lavender: #a5b4fc;
   --color-green: #3fb950;
-  --color-green-dim: rgba(63, 185, 80, 0.3);
+  --color-green-dim: rgba(63,185,80,0.3);
   --color-red: #f85149;
   --color-red-hover: #ff7b72;
   --color-yellow: #d29922;
@@ -102,11 +78,11 @@
   --radius-full: 9999px;
 
   /* === Shadows === */
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
-  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.5);
-  --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.5);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+  --shadow-xl: 0 12px 48px rgba(0,0,0,0.5);
+  --shadow-2xl: 0 16px 48px rgba(0,0,0,0.5);
 
   /* === Borders (opaque color tokens + shorthands) === */
   --color-border: #30363d;
@@ -125,8 +101,7 @@
 
   /* === Typography === */
   --font-mono: 'SF Mono', SFMono-Regular, ui-monospace, Menlo, Consolas, monospace;
-  --font-sans:
-    'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-sans: 'NanumSquareNeo', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 
   /* Font sizes — legacy 8-step names collapsed onto the canonical 5-step ramp */
   --text-xs: 11px;
@@ -151,19 +126,19 @@
   --opacity-hover: 0.95;
 
   /* === Background Overlays (alpha "glass" tier) === */
-  --bg-overlay-light: rgba(255, 255, 255, 0.05);
-  --bg-overlay-medium: rgba(255, 255, 255, 0.08);
-  --bg-overlay-strong: rgba(255, 255, 255, 0.1);
-  --bg-overlay-hover: rgba(255, 255, 255, 0.15);
-  --bg-dark-overlay: rgba(0, 0, 0, 0.2);
-  --bg-dark-overlay-medium: rgba(0, 0, 0, 0.3);
-  --bg-dark-overlay-strong: rgba(0, 0, 0, 0.4);
-  --bg-modal-backdrop: rgba(0, 0, 0, 0.6);
+  --bg-overlay-light: rgba(255,255,255,0.05);
+  --bg-overlay-medium: rgba(255,255,255,0.08);
+  --bg-overlay-strong: rgba(255,255,255,0.1);
+  --bg-overlay-hover: rgba(255,255,255,0.15);
+  --bg-dark-overlay: rgba(0,0,0,0.2);
+  --bg-dark-overlay-medium: rgba(0,0,0,0.3);
+  --bg-dark-overlay-strong: rgba(0,0,0,0.4);
+  --bg-modal-backdrop: rgba(0,0,0,0.6);
 
   /* Glass surfaces — translucent chrome floating over the wallpaper */
-  --bg-glass: rgba(15, 17, 23, 0.8);
-  --bg-glass-strong: rgba(15, 17, 23, 0.95);
-  --bg-glass-inset: rgba(10, 12, 16, 0.92);
+  --bg-glass: rgba(15,17,23,0.8);
+  --bg-glass-strong: rgba(15,17,23,0.95);
+  --bg-glass-inset: rgba(10,12,16,0.92);
 
   color-scheme: dark;
 }
@@ -186,7 +161,7 @@
   --color-blue: #0969da;
   --color-blue-hover: #0550ae;
   --color-green: #1a7f37;
-  --color-green-dim: rgba(26, 127, 55, 0.3);
+  --color-green-dim: rgba(26,127,55,0.3);
   --color-red: #cf222e;
   --color-red-hover: #a40e26;
   --color-yellow: #9a6700;
@@ -196,21 +171,21 @@
   --color-border-hover: #afb8c1;
   --color-border-strong: #8c959f;
 
-  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
-  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.15);
-  --shadow-xl: 0 12px 48px rgba(0, 0, 0, 0.18);
-  --shadow-2xl: 0 16px 48px rgba(0, 0, 0, 0.18);
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.08);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.1);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.15);
+  --shadow-xl: 0 12px 48px rgba(0,0,0,0.18);
+  --shadow-2xl: 0 16px 48px rgba(0,0,0,0.18);
 
   /* Glass and overlay washes invert: white-alpha reads as nothing on a light bg */
-  --bg-overlay-light: rgba(0, 0, 0, 0.04);
-  --bg-overlay-medium: rgba(0, 0, 0, 0.06);
-  --bg-overlay-strong: rgba(0, 0, 0, 0.08);
-  --bg-overlay-hover: rgba(0, 0, 0, 0.12);
-  --bg-modal-backdrop: rgba(0, 0, 0, 0.4);
-  --bg-glass: rgba(248, 249, 250, 0.8);
-  --bg-glass-strong: rgba(248, 249, 250, 0.95);
-  --bg-glass-inset: rgba(239, 241, 243, 0.92);
+  --bg-overlay-light: rgba(0,0,0,0.04);
+  --bg-overlay-medium: rgba(0,0,0,0.06);
+  --bg-overlay-strong: rgba(0,0,0,0.08);
+  --bg-overlay-hover: rgba(0,0,0,0.12);
+  --bg-modal-backdrop: rgba(0,0,0,0.4);
+  --bg-glass: rgba(248,249,250,0.8);
+  --bg-glass-strong: rgba(248,249,250,0.95);
+  --bg-glass-inset: rgba(239,241,243,0.92);
 
   color-scheme: light;
 }

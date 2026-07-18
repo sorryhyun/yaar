@@ -7,3 +7,4 @@ packages/server/src/lib/bundled-types/
 storage/
 config/
 packages/server/src/providers/codex/generated/
+packages/frontend/src/styles/base/tokens.css

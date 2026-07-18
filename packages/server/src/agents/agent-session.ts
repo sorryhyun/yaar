@@ -18,14 +18,13 @@ import { notifyAgentsChanged } from '../http/subscriptions.js';
 import type { ConnectionId } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
 import type { ContextSource } from './context.js';
-import { configRead } from '../storage/storage-manager.js';
 import { genId } from '../lib/ids.js';
 import { errMessage } from '../lib/errors.js';
-import { buildEnvironmentSection } from '../providers/environment.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
 import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
 import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
 import { runInAgentContext, principalRole } from './agent-context.js';
+import { assembleSystemPromptForRole } from './system-prompt.js';
 
 /**
  * Options for handling a message with dynamic role assignment.
@@ -59,45 +58,6 @@ export interface HandleMessageOptions {
   model?: string;
   /** Window ID for app agent tool resolution (set in AsyncLocalStorage context) */
   windowId?: string;
-}
-
-/**
- * Build a scope context section so the agent knows its place in the hierarchy.
- * - Monitor agents: scoped to a monitor, use bare window IDs
- * - Window agents: scoped to a specific window within a monitor
- *
- * Session agents (`session-*`) and app agents (`app-*`) carry a full profile
- * system prompt that already defines their identity, so they get no generic
- * scope section — appending the monitor scope here would otherwise tell them
- * "You are the monitor agent" and clobber their actual role.
- */
-function buildScopeSection(role: string, monitorId?: string): string {
-  // Window agent: role is "window-{windowId}" or "window-{windowId}/{actionId}"
-  const windowMatch = role.match(/^window-(.+?)(?:\/|$)/);
-  if (windowMatch) {
-    const windowId = windowMatch[1];
-    return `\n\n## Scope\nYou are a **window agent** for \`${windowId}\`. Your actions are limited to this window. Use \`yaar://windows/${windowId}\` to address it.`;
-  }
-
-  // Profile-driven agents define their own identity — no generic scope.
-  if (role.startsWith('session-') || role.startsWith('app-')) {
-    return '';
-  }
-
-  // Monitor/ephemeral agent with monitorId
-  if (monitorId) {
-    return `\n\n## Scope\nYou are the **monitor agent** for \`${monitorId}\`. Use \`yaar://windows/\` URIs to create and manage windows (e.g. \`yaar://windows/my-window\`). The monitor is assigned automatically.`;
-  }
-
-  return '';
-}
-
-async function loadMemory(): Promise<string> {
-  const result = await configRead('memory.md');
-  if (!result.success || !result.content?.trim()) {
-    return '';
-  }
-  return `\n\n## Memory\nThe following notes were saved by you from previous sessions:\n${result.content.trim()}`;
 }
 
 export class AgentSession {
@@ -269,12 +229,8 @@ export class AgentSession {
     monitorId?: string,
     systemPromptOverride?: string,
   ): Promise<string> {
-    const [memory, environment] = await Promise.all([
-      loadMemory(),
-      buildEnvironmentSection(this.provider!.providerType),
-    ]);
     const basePrompt = systemPromptOverride ?? this.provider!.systemPrompt;
-    return basePrompt + buildScopeSection(role, monitorId) + environment + memory;
+    return assembleSystemPromptForRole(basePrompt, role, this.provider!.providerType, monitorId);
   }
 
   /**
