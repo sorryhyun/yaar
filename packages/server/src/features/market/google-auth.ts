@@ -14,15 +14,25 @@
  *
  * ID tokens live an hour. The refresh token is what survives that, so it is the
  * one thing persisted; ID tokens are minted on demand and cached in memory only.
+ *
+ * **Why the token exchange goes through the marketplace.** Google's token endpoint
+ * requires `client_secret` for a Desktop client, and YAAR has nowhere to keep one:
+ * it is open source and installed on user machines, so anything shipped here is
+ * public, and a live `GOCSPX-` value in the repo is reported to Google as a leak by
+ * GitHub's scanner. So YAAR does the half it can do safely — open the consent
+ * screen, hold the PKCE verifier, receive the code — and posts the code to
+ * `MARKET_URL/api/auth/exchange`, which adds the secret and calls Google. Same for
+ * the hourly refresh. Only tokens come back. Nothing is weakened by the detour:
+ * PKCE binds the code to this process, and the marketplace was always the party
+ * these ID tokens were being minted for.
  */
 
 import { join, dirname } from 'path';
 import { mkdir, readFile, writeFile, unlink, chmod } from 'fs/promises';
-import { getConfigDir, getPort, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } from '../../config.js';
+import { getConfigDir, getPort, GOOGLE_CLIENT_ID, MARKET_URL } from '../../config.js';
 import { openUrl } from '../../lib/open-url.js';
 
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
-const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 
 /** Identity only. Publishing authorizes against the email, not a Google API scope. */
 const SCOPES = 'openid email';
@@ -57,7 +67,10 @@ let credentialsLoaded = false;
 let cachedIdToken: { token: string; expiresAt: number } | null = null;
 
 export interface AuthStatus {
-  /** False when GOOGLE_CLIENT_ID/SECRET are absent — login cannot even be attempted. */
+  /**
+   * False only when someone has explicitly blanked GOOGLE_CLIENT_ID/SECRET in the
+   * environment — the baked-in defaults mean this is true on a stock install.
+   */
   configured: boolean;
   signedIn: boolean;
   email: string | null;
@@ -70,8 +83,51 @@ function credentialsPath(): string {
 }
 
 export function isConfigured(): boolean {
-  return GOOGLE_CLIENT_ID !== '' && GOOGLE_CLIENT_SECRET !== '';
+  return GOOGLE_CLIENT_ID !== '';
 }
+
+/**
+ * POST to one of the marketplace's token routes.
+ *
+ * The marketplace holds the client secret; these routes are the only way to reach
+ * Google's token endpoint from here. A 401 means the grant is dead (revoked,
+ * expired, already spent) and the caller should force a re-login; anything else is
+ * transient or a bug.
+ */
+async function marketTokenRequest(
+  path: '/api/auth/exchange' | '/api/auth/refresh',
+  payload: Record<string, string>,
+): Promise<{ id_token: string; refresh_token?: string; expires_in?: number }> {
+  let res: Response;
+  try {
+    res = await fetch(`${MARKET_URL}${path}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new Error(
+      `Could not reach the marketplace to complete Google sign-in: ${(err as Error).message}`,
+    );
+  }
+
+  const body = (await res.json().catch(() => ({}))) as {
+    id_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    detail?: string;
+  };
+
+  if (!res.ok || !body.id_token) {
+    const detail = body.detail ?? `HTTP ${res.status}`;
+    if (res.status === 401) throw new ExpiredGrantError(detail);
+    throw new Error(`Google token request failed: ${detail}`);
+  }
+  return body as { id_token: string; refresh_token?: string; expires_in?: number };
+}
+
+/** The grant is gone for good — the only recovery is a fresh consent. */
+class ExpiredGrantError extends Error {}
 
 function redirectUri(): string {
   // 127.0.0.1, not localhost: Google matches loopback redirects by literal host,
@@ -151,8 +207,9 @@ function sweepPendingLogins(): void {
 export async function beginLogin(): Promise<{ authUrl: string }> {
   if (!isConfigured()) {
     throw new Error(
-      'Google OAuth is not configured. Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env ' +
-        '(the client must be of type "Desktop app").',
+      'Google OAuth is not configured. YAAR ships a working client id, so this means ' +
+        'GOOGLE_CLIENT_ID is set to an empty value in the environment. Unset it to use the ' +
+        'default, or set it to a client of type "Desktop app" whose secret your marketplace holds.',
     );
   }
   sweepPendingLogins();
@@ -196,32 +253,11 @@ export async function completeLogin(code: string, state: string): Promise<{ emai
   if (!pending) throw new Error('Unknown or expired login state.');
   pendingLogins.delete(state);
 
-  const res = await fetch(TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      code,
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      redirect_uri: pending.redirectUri,
-      grant_type: 'authorization_code',
-      code_verifier: pending.verifier,
-    }),
+  const body = await marketTokenRequest('/api/auth/exchange', {
+    code,
+    code_verifier: pending.verifier,
+    redirect_uri: pending.redirectUri,
   });
-
-  const body = (await res.json()) as {
-    id_token?: string;
-    refresh_token?: string;
-    expires_in?: number;
-    error?: string;
-    error_description?: string;
-  };
-
-  if (!res.ok || !body.id_token) {
-    throw new Error(
-      `Token exchange failed (${res.status}): ${body.error_description ?? body.error ?? 'unknown error'}`,
-    );
-  }
 
   const claims = readIdTokenClaims(body.id_token);
   if (!claims.email) throw new Error('ID token carried no email claim.');
@@ -261,34 +297,17 @@ export async function getIdToken(): Promise<string | null> {
     return cachedIdToken.token;
   }
 
-  const res = await fetch(TOKEN_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
-      client_id: GOOGLE_CLIENT_ID,
-      client_secret: GOOGLE_CLIENT_SECRET,
-      refresh_token: creds.refreshToken,
-      grant_type: 'refresh_token',
-    }),
-  });
-
-  const body = (await res.json()) as {
-    id_token?: string;
-    expires_in?: number;
-    error?: string;
-    error_description?: string;
-  };
-
-  if (!res.ok || !body.id_token) {
-    // invalid_grant means the refresh token is revoked or expired for good —
-    // keeping it would just fail every hour, so drop it and force a re-login.
-    if (body.error === 'invalid_grant') {
+  let body: { id_token: string; expires_in?: number };
+  try {
+    body = await marketTokenRequest('/api/auth/refresh', { refresh_token: creds.refreshToken });
+  } catch (err) {
+    // A dead grant would fail identically every hour from here on, so drop the
+    // stored token and make the next call surface a sign-in prompt instead.
+    if (err instanceof ExpiredGrantError) {
       await clearCredentials();
       throw new Error('Google session expired. Sign in again.');
     }
-    throw new Error(
-      `Token refresh failed (${res.status}): ${body.error_description ?? body.error ?? 'unknown error'}`,
-    );
+    throw err;
   }
 
   cachedIdToken = {

@@ -101,8 +101,8 @@ export function accountBar() {
         const a = account();
         if (!a.configured) {
           return html`<span class="account-info y-text-muted"
-            >Google sign-in isn't configured on this server — set GOOGLE_CLIENT_ID/SECRET to
-            publish.</span
+            >Google sign-in is disabled on this server — GOOGLE_CLIENT_ID is set to an empty value
+            in the environment.</span
           >`;
         }
         if (a.signedIn) {

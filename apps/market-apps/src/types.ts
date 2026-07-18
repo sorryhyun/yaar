@@ -31,7 +31,10 @@ export type DisplayApp = ListedApp & {
  * makes the marketplace call and hands back only the email and owned app ids.
  */
 export type Account = {
-  /** GOOGLE_CLIENT_ID/SECRET are set on the server — sign-in is even possible. */
+  /**
+   * Sign-in is possible at all. True on a stock install — YAAR bakes in its own
+   * OAuth client id — and false only when GOOGLE_CLIENT_ID is explicitly blanked.
+   */
   configured: boolean;
   signedIn: boolean;
   email: string | null;

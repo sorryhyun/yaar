@@ -257,13 +257,29 @@ export const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.a
  * moves it whenever 8000 is taken. A Web client would have to pre-register every
  * possible `http://127.0.0.1:<port>/...` and would reject the rest.
  *
- * The secret is required even though the flow uses PKCE — Google's token endpoint
- * demands it for Desktop clients. It is not confidential (it ships inside every
- * installed copy of an app that uses it, and Google documents it as such); PKCE,
- * not the secret, is what binds the code to this process.
+ * Baked in rather than asked for. This is YAAR's identity, not the user's — every
+ * install presents the same client, and *who is signing in* is proven by the ID
+ * token Google signs, which the marketplace verifies against Google's public keys
+ * (`aud == GOOGLE_CLIENT_ID`, `email_verified`). A client id is public by
+ * construction: it rides in every authorization URL, visible in the address bar.
+ * Requiring each user to register their own Cloud project bought nothing and put
+ * console busywork in front of publishing.
+ *
+ * **There is deliberately no client secret here.** Google's token endpoint demands
+ * one for Desktop clients, but an open-source app installed on user machines has
+ * nowhere to keep it — and a live `GOCSPX-` value in a public repo is reported to
+ * Google as a leak by GitHub's scanner. So YAAR never holds one: it runs the
+ * authorization step, then hands the code to the marketplace, which adds the secret
+ * and calls Google (`features/market/google-auth.ts`). PKCE, not the secret, is what
+ * binds a code to this process.
+ *
+ * Overridable by env for self-hosters running their own marketplace. If you change
+ * it, change `GOOGLE_CLIENT_ID` on the marketplace deploy too — it is the `aud`
+ * every ID token is checked against, and the two must match.
  */
-export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? '';
-export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? '';
+export const GOOGLE_CLIENT_ID =
+  process.env.GOOGLE_CLIENT_ID ??
+  '901803685747-rlve6phohc7lerkm1ivjufff8dm2anai.apps.googleusercontent.com';
 
 // ── Deadlines ────────────────────────────────────────────────────────
 //
