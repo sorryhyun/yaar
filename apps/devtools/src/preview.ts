@@ -1,0 +1,110 @@
+export {};
+import { appStorage, invoke, read, AppCommandError } from '@bundled/yaar';
+import { activeProject, previewUrl, previewWindowId, setPreviewWindowId } from './project';
+
+// Preview window mechanics: how it is opened and how pixels are read back out.
+//
+// Only the helpers live here, not the preview *commands*. The app protocol
+// manifest is produced by statically reading the `commands` object literal in
+// protocol.ts, so a command reached via a spread (`...previewCommands`) compiles
+// and runs fine but vanishes from the manifest — leaving agents unable to see it.
+// Command definitions therefore stay inline in protocol.ts; the bodies they call
+// are what gets factored out.
+
+export interface CapturedImage {
+  data: string;
+  mimeType: string;
+}
+
+/**
+ * Open (or re-open) the preview window on the current build, and return where it landed.
+ *
+ * Re-creating the window remounts the iframe, which is how a preview picks up a new build —
+ * so `compile` calls this too. Shared with the `preview` command rather than duplicated:
+ * the window id, the preview principal and the permissions below are all load-bearing, and
+ * a second copy of them that drifted would be its own bug.
+ */
+export async function openPreview(): Promise<{ previewUrl: string; windowId: string }> {
+  const url = previewUrl();
+  if (!url) throw new AppCommandError('No compiled output. Run compile first.');
+  const proj = activeProject();
+  const name = proj?.name ?? 'Preview';
+  // Read project's app.json to get declared permissions for the preview iframe
+  let permissions: string[] | undefined;
+  if (proj) {
+    const appJson = await appStorage.readJsonOr<{ permissions?: string[] } | null>(
+      `projects/${proj.id}/app.json`,
+      null,
+    );
+    if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
+  }
+  // Address the window by an explicit, namespaced id. Left to the server, the id is
+  // derived by slugging the title — and the title is the project name, so previewing a
+  // clone of `ai-chat` produced the window id `ai-chat`, colliding with the *running*
+  // app. Window registration is last-write-wins, so the preview silently replaced the
+  // real app's window record (and its appId), severing the real app from its agent.
+  const previewId = `devtools-preview-${proj?.id ?? 'scratch'}`;
+  // Give the preview a principal of its own, derived from the project. `self` then
+  // resolves inside it — so appStorage, appDb and app-scoped permissions actually run
+  // before deploy instead of 403'ing — while the storage it reaches is a throwaway
+  // namespace, not the deployed app's live data. The server refuses to route an app
+  // agent to a `preview--*` identity, so this cannot displace the real app either.
+  const previewAppId = proj ? `preview--${proj.id}` : undefined;
+  // Close before create, unconditionally. `create` on an id that already exists is a
+  // hard error server-side (features/window/create.ts) — not a replace — so the create
+  // below would throw and take the whole `compile` command down with it, reported as
+  // "compile failing" even though the build succeeded. Gating this on previewWindowId()
+  // is not enough: that signal is set only here and cleared only in two catch blocks,
+  // and nothing subscribes to window close, so it goes stale in both directions. Asking
+  // the server to close is the only thing that knows the truth. A close that fails
+  // because there was nothing there is the expected case, not an error.
+  try {
+    await invoke(`yaar://windows/${previewId}`, { action: 'close' });
+  } catch {
+    /* no such window — that is the normal first-open path */
+  }
+  const result = await invoke<{ windowId?: string }>(`yaar://windows/${previewId}`, {
+    action: 'create',
+    title: `${name} (preview)`,
+    renderer: 'iframe',
+    content: url,
+    ...(previewAppId ? { appId: previewAppId } : {}),
+    ...(permissions ? { permissions } : {}),
+  });
+  // Trust the id the server actually registered, not the one we asked for.
+  const windowId = result?.windowId ?? previewId;
+  setPreviewWindowId(windowId);
+  return { previewUrl: url, windowId };
+}
+
+/**
+ * Read the preview window: its metadata, and a screenshot of what it is rendering.
+ *
+ * Reading an iframe window emits a capture whose image the verb layer hands back
+ * alongside the JSON, so `read` resolves to `{ data, images }` rather than the bare
+ * metadata. A window with nothing to capture yet resolves to the metadata alone —
+ * hence both shapes are accepted, and an empty `images` is a real answer ("nothing
+ * painted"), not an error to be swallowed here.
+ */
+export async function readPreview(): Promise<{
+  info: Record<string, unknown>;
+  images: CapturedImage[];
+}> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+
+  let result: unknown;
+  try {
+    result = await read<unknown>(`yaar://windows/${wid}`);
+  } catch {
+    setPreviewWindowId(null);
+    throw new AppCommandError('Preview window no longer exists.');
+  }
+
+  const wrapped = result as { data?: unknown; images?: CapturedImage[] } | undefined;
+  const hasImages = Array.isArray(wrapped?.images);
+  return {
+    info: ((hasImages ? wrapped?.data : result) ?? {}) as Record<string, unknown>,
+    images: hasImages ? (wrapped?.images ?? []) : [],
+  };
+}
