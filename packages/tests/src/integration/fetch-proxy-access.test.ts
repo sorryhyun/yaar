@@ -12,9 +12,20 @@
  * RFC 2606 reserves as permanently non-resolvable, so no test touches a real host.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, mock } from 'bun:test';
 import { generateIframeToken } from '@yaar/server/http/iframe-tokens';
 import { makeRequest } from '../helpers/fetch-harness.js';
+
+// The subject here is the *principal* gate. Downstream of it sits the domain
+// allowlist gate, which reads git-ignored config and, on a miss, raises a
+// permission dialog and waits for a user — so an admitted request's fate would
+// depend on whatever config/ the machine happens to carry (locally it sails
+// through on `allow_all_domains: true`; in CI it hangs on a dialog nobody can
+// answer). Pin that gate open so admitted requests proceed straight to the
+// transport in every environment.
+mock.module('@yaar/server/features/http/domain-gate', () => ({
+  ensureDomainAllowed: async () => null,
+}));
 
 const TARGET = 'https://example.invalid/data.json';
 
