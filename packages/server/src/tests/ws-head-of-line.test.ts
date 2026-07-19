@@ -178,6 +178,33 @@ describe('WebSocket head-of-line blocking', () => {
     await settle();
   });
 
+  it('lets control frames overtake a turn they have no ordering relationship with', async () => {
+    const ws = createWs();
+    send(ws, { type: 'USER_MESSAGE', messageId: 'm1', content: 'hi', monitorId: '0' });
+    await settle();
+
+    // None of these enter ContextPool's queues — they touch the monitor list, this
+    // connection's subscription, or an agent's cancel signal. Behind the turn they were
+    // useless: the `+` button appeared dead for the length of the model's reply, and an
+    // INTERRUPT could not arrive until the turn it cancels had already finished.
+    send(ws, { type: 'ADD_MONITOR' });
+    send(ws, { type: 'SUBSCRIBE_MONITOR', monitorId: '1' });
+    send(ws, { type: 'INTERRUPT' });
+    send(ws, { type: 'REMOVE_MONITOR', monitorId: '1' });
+    await settle();
+
+    expect(routed).toEqual([
+      'USER_MESSAGE',
+      'ADD_MONITOR',
+      'SUBSCRIBE_MONITOR',
+      'INTERRUPT',
+      'REMOVE_MONITOR',
+    ]);
+
+    releaseTurn();
+    await settle();
+  });
+
   it('still serializes ordinary frames — RESYNC does not overtake the work before it', async () => {
     const ws = createWs();
 

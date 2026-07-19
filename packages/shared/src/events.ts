@@ -94,6 +94,48 @@ export function isAnswerEvent(type: string): boolean {
   return ANSWER_EVENTS.has(type);
 }
 
+/**
+ * The frames that control the session rather than talk to it.
+ *
+ * These overtake the connection queue for a different reason than ANSWER_EVENT_TYPES:
+ * not because something is blocked on them, but because they have no ordering
+ * relationship with the frames in front of them and the frames in front of them can
+ * take a very long time. `routeOne` awaits `routeMessage`, and a `USER_MESSAGE` that
+ * finds its monitor agent idle is processed *inline* — so that frame holds the head of
+ * the queue for the entire streaming turn. Everything behind it waits out the turn.
+ *
+ * That made the `+` monitor button feel dead for seconds at a time: adding a monitor is
+ * a synchronous push onto `LiveSession.monitors`, but it was queued behind a model that
+ * was still thinking. Interrupt was worse than slow — an `INTERRUPT` parked behind the
+ * turn it means to cancel cannot arrive until that turn has already finished.
+ *
+ * The safety argument is per-entry, not general: each handler here touches only
+ * session/connection-level state (the monitor list, this connection's subscription, an
+ * agent's cancel signal) and never enters `ContextPool`'s task queues, so no frame it
+ * overtakes reads its effect as a sequence. They stay ordered *among themselves* because
+ * their handlers are synchronous and `message()` dispatches them in arrival order.
+ *
+ * Deliberately absent: `RESYNC`, whose entire contract is "you have now heard everything
+ * I said before this" — it is the one frame whose meaning *is* its position in the queue.
+ */
+export const CONTROL_EVENT_TYPES = [
+  ClientEventType.ADD_MONITOR, // → LiveSession.monitors.push
+  ClientEventType.REMOVE_MONITOR, // → LiveSession.monitors.filter
+  ClientEventType.SUBSCRIBE_MONITOR, // → BroadcastCenter, per-connection
+  ClientEventType.INTERRUPT, // → cancels the very turn that would block it
+  ClientEventType.INTERRUPT_AGENT, // → same, scoped to one agent
+] as const;
+
+/** A client frame that controls the session and carries no queue ordering. */
+export type ControlEventType = (typeof CONTROL_EVENT_TYPES)[number];
+
+const CONTROL_EVENTS: ReadonlySet<string> = new Set<string>(CONTROL_EVENT_TYPES);
+
+/** Does this frame control the session rather than queue behind it? See CONTROL_EVENT_TYPES. */
+export function isControlEvent(type: string): boolean {
+  return CONTROL_EVENTS.has(type);
+}
+
 // ============ Client → Server Events ============
 
 export interface UserInteraction {

@@ -13,6 +13,7 @@ import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-c
 import {
   ServerEventType,
   isAnswerEvent,
+  isControlEvent,
   type ClientEvent,
   type OSAction,
   type CliRestoreEntry,
@@ -153,10 +154,15 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         // Leave it undefined; routeOne reports the parse failure back to the client.
       }
 
-      // An answer jumps the queue. See ANSWER_EVENT_TYPES in @yaar/shared: it is not merely
-      // allowed to overtake the frame in front of it, it *must*, because that frame is what
-      // is waiting for it.
-      if (event && isAnswerEvent(event.type)) {
+      // Two kinds of frame jump the queue, for two different reasons.
+      //
+      // An answer *must* overtake the frame in front of it, because that frame is what is
+      // waiting for it (ANSWER_EVENT_TYPES in @yaar/shared).
+      //
+      // A control frame *may* overtake, because it has no ordering relationship with what
+      // it passes and what it passes can be a whole streaming turn — a `USER_MESSAGE`
+      // processed inline holds this queue until the model stops (CONTROL_EVENT_TYPES).
+      if (event && (isAnswerEvent(event.type) || isControlEvent(event.type))) {
         return routeOne(ws, event);
       }
 
