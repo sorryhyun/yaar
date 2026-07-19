@@ -1,30 +1,23 @@
 # Devtools
 
-IDE for building and deploying YAAR apps. Manages projects in app storage, provides file editing, compilation, type checking, and deployment.
+IDE for building and deploying YAAR apps. Manages projects in app storage; provides file editing, type checking, compilation, preview and versioned deployment.
+
+Note: devtools ships an `AGENTS.md`, which takes priority over this file for its own agent. This is the short description other agents see via `yaar://apps/devtools`.
 
 ## Workflow
 
-1. Open devtools window if not already open
-2. Create a project: `command("createProject", { name: "my-app" })`
-3. Write files: `command("writeFile", { path: "src/main.ts", content: "..." })`
-4. Write styles: `command("writeFile", { path: "src/styles.css", content: "..." })`
-5. Type check: `command("typecheck")`
-6. Compile: `command("compile")`
-7. Deploy: `command("deploy", { appId: "my-app", name: "My App", icon: "✅" })`
+1. Open the devtools window if not already open
+2. `command("createProject", { name: "my-app" })` — or `command("cloneApp", { appId })` to edit an existing app
+3. `command("writeFile", { path: "src/main.ts", content: "..." })` — entry point is always `src/main.ts`
+4. `command("compile", {}, { timeoutMs: 60000 })` — type checks *and* builds; no separate `typecheck` needed
+5. `command("preview")` then `command("previewScreenshot")` — verify it actually renders
+6. `command("deploy", { appId: "my-app", name: "My App", icon: "✅", message: "what changed" })`
+7. `command("deleteProject", { id })` — clean up, especially clones
 
-## Reading Files
+## Notes
 
-- **Single file**: `command("readFile", { path: "src/main.ts" })`
-- **Multiple files at once**: `command("readFile", { path: ["src/main.ts", "src/store.ts", "src/types.ts"] })`
-- **Line range**: `command("readFile", { path: "src/main.ts", startLine: 10, endLine: 50 })`
-- **Read + open in editor**: `command("readFile", { path: "src/main.ts", openInEditor: true })`
-- **`openFile`** opens file(s) in editor tabs; supports `files[]` array: `command("openFile", { files: ["src/a.ts", "src/b.ts"] })`
-- `query("openFile")` returns the currently active editor tab content with line numbers
-
-## Important
-
-- Read `yaar://skills/app_dev` before writing any app code — it has bundled libraries, design tokens, and anti-patterns
-- Entry point is always `src/main.ts`
-- Split code across files (protocol.ts, styles.css, helpers.ts, etc.)
-- Check diagnostics after typecheck/compile and fix errors before deploying
-- Use `query("project")` to see current project state, `query("openFile")` to see open file
+- File commands only see the **active project's sandbox** — they return empty if no project is open
+- Read `yaar://skills/app_dev` before writing app code — bundled libraries, design tokens, anti-patterns
+- Split code across files (`protocol.ts`, `styles.css`, `helpers.ts`, …)
+- Check `query("diagnostics")` and fix errors before deploying
+- Deploys are versioned — a bad one rolls back with `command("gitRestore", { appId, ref: "HEAD~1" })`

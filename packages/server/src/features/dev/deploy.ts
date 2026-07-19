@@ -331,6 +331,16 @@ export async function doDeploy(
       // No HINT.md in sandbox
     }
 
+    // Copy AGENTS.md from sandbox if it exists (full custom app-agent prompt).
+    // `cloneApp` pulls it into the sandbox, so a deploy that skipped it would
+    // silently discard every edit the user made to the app agent's prompt.
+    try {
+      const agentsContent = await Bun.file(join(sandboxPath, 'AGENTS.md')).text();
+      await writeIfChanged(join(appPath, 'AGENTS.md'), agentsContent);
+    } catch {
+      // No AGENTS.md in sandbox
+    }
+
     // Sandbox app.json is the source of truth for all metadata (permissions, variant, etc.)
     // Deploy args only override name/icon/description for convenience.
     const metadata: Record<string, unknown> = { ...existingMeta, ...sandboxMeta };
