@@ -12,7 +12,7 @@ import {
   clearHighlights,
 } from './state';
 import { saveWorkbookToStorage, openWorkbookFromStorage } from './io-utils';
-import { createToolbar } from './ui/toolbar';
+import { createToolbar, createHeader, createStatusBar } from './ui/toolbar';
 import { createChartPanel, createStatsPanel } from './ui/chart-panel';
 import { createGrid, buildSheet, applyFill } from './ui/grid';
 import { registerAppProtocol } from './protocol';
@@ -20,11 +20,15 @@ import { onShortcut } from '@bundled/yaar';
 
 // ── Mount ─────────────────────────────────────────────────────
 render(() => html`
-  <div class="wrap y-light">
+  <div class="app-shell">
+    ${createHeader()}
     ${createToolbar()}
-    ${createChartPanel()}
-    ${createStatsPanel()}
-    ${createGrid()}
+    <div class="wrap">
+      ${createChartPanel()}
+      ${createStatsPanel()}
+      ${createGrid()}
+    </div>
+    ${createStatusBar()}
   </div>
 `, document.getElementById('app')!);
 

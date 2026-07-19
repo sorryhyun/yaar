@@ -11,7 +11,6 @@ import {
 } from './state';
 import { getStyleForRef, normalizeStyle } from './style-utils';
 import { rangeRect, refsInRect } from './ref-utils';
-import type { CellStyle } from './types';
 
 export function registerAppProtocol() {
   if (!app) return;

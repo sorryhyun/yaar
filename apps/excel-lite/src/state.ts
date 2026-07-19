@@ -37,6 +37,8 @@ export const refs = {
   storagePathInput: null as HTMLInputElement | null,
   chartTypeSel: null as HTMLSelectElement | null,
   chartCanvas: null as HTMLCanvasElement | null,
+  statusStats: null as HTMLDivElement | null,
+  statusBadge: null as HTMLDivElement | null,
 };
 
 export const mutable = {
@@ -111,6 +113,7 @@ export function setIoStatus(message: string, isError = false) {
   const timeStr = format(new Date(), 'HH:mm:ss');
   const type = isError ? 'error' : 'success';
   showToast(`[${timeStr}] ${message}`, type);
+  setStatusBadge(message);
 }
 
 export function storagePath() {
@@ -150,11 +153,27 @@ export function updateToolbarState() {
   refs.boldBtn?.classList.toggle('active', !!style.bold);
   refs.italicBtn?.classList.toggle('active', !!style.italic);
   refs.underlineBtn?.classList.toggle('active', !!style.underline);
-  if (refs.fontSizeSel) refs.fontSizeSel.value = String(style.fontSize);
-  if (refs.textColor) refs.textColor.value = style.color || '#e6edf3';
+  if (refs.fontSizeSel) setSelectValue(refs.fontSizeSel, String(style.fontSize));
+  if (refs.textColor) setInputValue(refs.textColor, style.color || '#e6edf3');
   if (refs.bgColor)
-    refs.bgColor.value = style.bg === 'transparent' ? '#161b22' : style.bg || '#161b22';
-  if (refs.alignSel) refs.alignSel.value = style.align;
+    setInputValue(refs.bgColor, style.bg === 'transparent' ? '#161b22' : style.bg || '#161b22');
+  if (refs.alignSel) setSelectValue(refs.alignSel, style.align);
+}
+
+/* Form state lives in DOM *properties*, which are not serialized by
+   DOM-based capture (app.json capture:"dom"). Mirror to attributes so
+   screenshots and agent captures show the real toolbar state. */
+function setInputValue(el: HTMLInputElement, value: string) {
+  el.value = value;
+  el.setAttribute('value', value);
+}
+
+function setSelectValue(el: HTMLSelectElement, value: string) {
+  el.value = value;
+  for (const opt of Array.from(el.options)) {
+    if (opt.value === value) opt.setAttribute('selected', '');
+    else opt.removeAttribute('selected');
+  }
 }
 
 export function updateSelectionUI() {
@@ -182,6 +201,48 @@ export function updateSelectionUI() {
     refs.formulaInput.value = getRaw(mutable.selected);
   }
   updateToolbarState();
+  updateStatusBar();
+}
+
+/** Status bar: selection address plus live count/sum/avg over the range. */
+export function updateStatusBar() {
+  if (!refs.statusStats) return;
+
+  const rect = rangeRect(mutable.selectionStart, mutable.selectionEnd);
+  const allRefs = refsInRect(rect);
+  const label =
+    mutable.selectionStart === mutable.selectionEnd
+      ? mutable.selected
+      : `${mutable.selectionStart}:${mutable.selectionEnd}`;
+
+  let filled = 0;
+  let numeric = 0;
+  let sum = 0;
+  for (const ref of allRefs) {
+    const shown = formulaEngine.display(ref).trim();
+    if (!shown) continue;
+    filled++;
+    const n = Number.parseFloat(shown);
+    if (Number.isFinite(n) && String(n) === shown) {
+      numeric++;
+      sum += n;
+    }
+  }
+
+  const parts = [`${label}`, `${allRefs.length} cells`, `${filled} filled`];
+  if (numeric > 0) {
+    const avg = sum / numeric;
+    parts.push(`Sum ${trimNum(sum)}`, `Avg ${trimNum(avg)}`);
+  }
+  refs.statusStats.textContent = parts.join('  ·  ');
+}
+
+function trimNum(n: number): string {
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 1e6) / 1e6);
+}
+
+export function setStatusBadge(text: string) {
+  if (refs.statusBadge) refs.statusBadge.textContent = text;
 }
 
 export function setSelection(start: string, end: string, active = false) {
@@ -195,7 +256,14 @@ export function refreshCell(ref: string) {
   const input = inputs.get(ref);
   if (!input) return;
 
-  if (mutable.editingRef !== ref) input.value = formulaEngine.display(ref);
+  if (mutable.editingRef !== ref) {
+    const shown = formulaEngine.display(ref);
+    input.value = shown;
+    // Mirror to the attribute so DOM-serialized captures (app.json capture:"dom")
+    // and screenshots reflect cell contents; .value alone is a property only.
+    if (shown) input.setAttribute('value', shown);
+    else input.removeAttribute('value');
+  }
 
   const style = getStyleForRef(styles, ref);
   input.style.fontWeight = style.bold ? '700' : '400';

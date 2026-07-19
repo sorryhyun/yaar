@@ -6,12 +6,20 @@
   "capture": "dom",
   "fileAssociations": [
     {
-      "extensions": ["xlsx", "xls", "csv"],
+      "extensions": [
+        "xlsx",
+        "xls",
+        "csv"
+      ],
       "command": "openFile",
       "paramKey": "fileContent"
     }
   ],
-  "permissions": ["yaar://storage/", "yaar://apps/self/storage/", "yaar://http"],
+  "permissions": [
+    "yaar://storage/",
+    "yaar://apps/self/storage/",
+    "yaar://http"
+  ],
   "version": "1.0.0",
   "author": "YAAR"
 }
