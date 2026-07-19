@@ -1,5 +1,6 @@
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
+import { errMsg } from '@bundled/yaar';
 import type { Section } from './types';
 import { state, setState, hasToken, showToast } from './store';
 import { bootstrapStorage } from './storage';
@@ -34,7 +35,7 @@ async function switchTypedRepo(): Promise<void> {
     await setRepoAction(pickerOwnerEl?.value || '', pickerNameEl?.value || '');
     closeRepoPicker();
   } catch (e) {
-    showToast(e instanceof Error ? e.message : String(e), 'error');
+    showToast(errMsg(e), 'error');
   }
 }
 

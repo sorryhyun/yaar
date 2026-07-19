@@ -3,7 +3,8 @@ import { getDeck, setDeck, deckVer, activeIndexVer, dirty, saveFailed, lastSaved
 import { newDeck, newSlide, isFontSize, FONT_SIZES } from '../deck-utils';
 import { THEMES } from '../theme';
 import { parseAspectRatio, RATIO_PRESETS, type RatioPreset } from '../aspect-ratio';
-import { uuid, formatDistanceToNow } from '../utils';
+import { v4 as uuidv4 } from '@bundled/uuid';
+import { formatDistanceToNow } from '@bundled/date-fns';
 import { startPresent } from './present';
 import { exportPdf } from './export';
 import type { ThemeId } from '../types';
@@ -31,7 +32,7 @@ export function createTopbar() {
       <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
         const deck = getDeck();
         const s = activeSlide();
-        deck.slides.splice(deck.activeIndex + 1, 0, { ...s, id: uuid(), title: `${s.title} (copy)` });
+        deck.slides.splice(deck.activeIndex + 1, 0, { ...s, id: uuidv4(), title: `${s.title} (copy)` });
         deck.activeIndex += 1;
         markDirty(); bumpDeck(); bumpActiveIndex();
       }}>Duplicate</button>
@@ -49,7 +50,7 @@ export function createTopbar() {
           ? 'Not saved'
           : dirty()
             ? 'Saving…'
-            : `Saved ${formatDistanceToNow(lastSavedAt(), { addSuffix: true })}`}
+            : `Saved ${formatDistanceToNow(new Date(lastSavedAt()), { addSuffix: true })}`}
       </span>
     </div>
   `;

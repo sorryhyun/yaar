@@ -1,3 +1,5 @@
+import { v4 as uuidv4 } from '@bundled/uuid';
+
 // ---- Utility Functions ----
 
 export function stripHtml(html: string): string {
@@ -39,7 +41,10 @@ export function escapeHtml(str: string): string {
 }
 
 export function generateFeedId(): string {
-  return `feed_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  // The `feed_` prefix is retained deliberately: feed ids are embedded verbatim in
+  // article ids (`${feed.id}_${djb2Hash(raw)}` in fetcher.ts) and coexist with the
+  // `src_` ids minted by storage.ts, so the prefix keeps the two origins legible.
+  return `feed_${uuidv4()}`;
 }
 
 export function extractDomainName(url: string): string {

@@ -199,7 +199,7 @@ export async function selectPost(post: Post): Promise<void> {
     cacheSet(post.id, content, browser.comments);
   } catch (e: unknown) {
     if (version !== fetchVersion) return;
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     if (!state.postContent) {
       setState(
         'postContent',

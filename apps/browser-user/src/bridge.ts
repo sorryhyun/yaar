@@ -16,6 +16,8 @@
  * matches it 403s this app out of the endpoint it exists to call.
  */
 
+import { errMsg } from '@bundled/yaar';
+
 /** A single real browser tab as reported by the Bridge. */
 export interface Tab {
   id: number;
@@ -98,7 +100,7 @@ async function bridgePost<T>(body: BridgeRequest): Promise<BridgeEnvelope<T>> {
     });
     return (await res.json()) as BridgeEnvelope<T>;
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    return { ok: false, error: errMsg(err) };
   }
 }
 

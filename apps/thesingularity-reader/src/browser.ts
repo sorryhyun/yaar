@@ -5,6 +5,7 @@
  *   MAIN_TAB ('main')       — gallery list view + login flow (owns DC cookies)
  *   POST_TAB ('post')        — single reusable post detail view (cookies synced from main)
  */
+import { errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 
 /** The primary tab: gallery list + login */
@@ -90,7 +91,7 @@ export async function syncCookiesToTab(targetTabId: string): Promise<void> {
       });
       okCount++;
     } catch (e) {
-      console.warn(`[syncCookiesToTab] setCookie failed for "${c.name}":`, e instanceof Error ? e.message : e);
+      console.warn(`[syncCookiesToTab] setCookie failed for "${c.name}":`, errMsg(e));
     }
   }
   console.log(`[syncCookiesToTab] synced ${okCount}/${cookies.length} cookies to "${targetTabId}"`);

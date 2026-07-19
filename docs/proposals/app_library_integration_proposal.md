@@ -1,6 +1,6 @@
 # Proposal: App Library Integration and Boundary Consolidation
 
-**Status:** Draft — Phase 1 (safe rich-HTML boundary) is implemented and removed from this document; phase numbering below is unchanged so existing references still resolve. **Phase 2 is fully implemented**, including 2.4. One follow-up it surfaced — the cookie jar has no app-facing lifecycle — is recorded below and is not yet addressed.
+**Status:** Draft — **Phases 1, 2, and 3 are implemented and removed from this document.** Phase numbering below is unchanged so existing references still resolve. Phases 4–5 and the formula-engine decision are open.
 **Scope:** `apps/`, `packages/compiler`, `packages/shared`, `packages/server`, and app-development guidance
 **Primary objective:** reduce repeated boundary code in bundled apps by standardizing safe HTML, HTTP, validation, persistence, and browser-session helpers without turning the app runtime into a general-purpose framework
 
@@ -8,47 +8,38 @@
 
 YAAR already gives apps a strong common foundation: Solid, app-scoped storage and DB APIs, protocol schema inference, proxied HTTP, and a curated `@bundled/*` library catalog. The remaining repetition is concentrated where apps cross a trust or runtime boundary:
 
-- cross-origin HTTP has both a transparent `fetch()` proxy and raw `invoke('yaar://http')` clients with independently declared response envelopes;
 - external JSON is frequently asserted into application types rather than validated;
-- older apps still reimplement helpers already exported by `@bundled/yaar`, Lodash, UUID, and date-fns;
 - two browser-backed DCInside apps carry nearly identical managed-tab and remote-image code;
 - Excel maintains a substantial formula evaluator whose most capable replacement carries a licensing decision.
 
-This proposal addresses those seams in dependency order:
+The remaining phases address those seams in dependency order:
 
-2. make the existing cross-origin `fetch()` proxy permission-equivalent to the verb path, then standardize app HTTP on the normal `Response` API;
-3. complete the migration to helpers that are already bundled;
 4. expose Zod for external and persisted-data validation;
 5. extract only the generic browser-session behavior shared by multiple apps;
 6. defer formula-engine replacement pending an explicit license and bundle-size decision.
 
-(Phase 1 — expose DOMPurify and establish one safe rich-content boundary — is done.)
+### Completed phases
+
+- **Phase 1 — safe rich-content boundary.** DOMPurify exposed as `@bundled/dompurify`; every untrusted-HTML sink routed through it.
+- **Phase 2 — one HTTP contract.** `POST /api/fetch` sits behind the app-principal gate; `httpFetch` is exported from `@bundled/yaar` and is the single documented cross-origin contract. The four app-local response-envelope copies are gone. `yaar://http` accepts `delete` to clear the calling principal's cookie jar.
+- **Phase 3 — existing-helper migration.** `wait`/`errMsg`/`defineCommand`/`appStorage`/lodash `debounce`/`@bundled/uuid`/`@bundled/date-fns` adopted where semantics matched. Direct `localStorage` in apps is zero. `scripts/check-apps.ts` (`bun run check:apps`) enforces the guardrails.
+
+## Carried-forward constraints
+
+Findings from the completed phases that later phases depend on. These are not history; violating them reintroduces a fixed bug.
+
+- **DOMPurify does not close the `style`-attribute gap.** It does not CSS-parse attribute values, so `style` passes through verbatim. Phase 4's schema work must not assume a sanitizer has vetted anything beyond markup structure.
+- **Template-rendered apps are not the injection risk surface; string-assembled markup is.** Apps rendering through Solid's tagged templates build DOM nodes rather than parsing markup.
+- **A sweep of `apps/` does not enumerate the callers of an iframe-injected script.** `IframeRenderer.tsx` injects the fetch proxy into plain AI-generated iframe windows too, which mint a token with no `appId`. Any gate keyed on app identity must decide what plain windows do.
+- **Single-pass call-site inventories are leads, not conclusions.** Phase 2's audit reported `mcp-manager` as having no live call site; it had one. Phase 3's audit counted five hand-typed handlers; there were seven.
+- **A schema can typecheck perfectly and still be invisible to agents.** The static protocol extractor parses `params` as a *literal block* and cannot resolve an identifier reference, so hoisting a schema to a shared const silently drops `params` from the manifest. Verify protocol changes against `extractProtocolWithDiagnostics`, not just `tsc`.
+- **A hand-typed handler parameter usually indicates a lossy schema**, not a lazy author — and the schema is what agents read. Fix the schema; the annotation then disappears on its own. `YaarInferSchema` supports `enum` → union and `additionalProperties` → `Record`; `anyOf`/`oneOf`/`$ref` fall back to `unknown`, which is the sanctioned annotate-and-suppress case.
+- **Naive source-stripping breaks every static rule on Solid apps.** Blanking whole template literals hides real violations, because Solid apps put nearly all logic inside `html` tagged templates. Blank only template *text* segments and scan `${...}` interpolations as live code. Regex literals (`.replace(/"/g, …)`) must not be read as opening quotes.
+- **`AgentContext` is rebuilt field by field in `runWithAgentContext`.** A new field must be added in *both* places or it is silently dropped.
+- **Both app-development guides are parity-enforced.** Any phase that adds a `@bundled/*` entry must update `docs/guides/app-development.md` and `docs/ko/app-development.md`.
+- **Deterministic content hashes must not become random identifiers.** `rss-reader` derives article ids from a djb2 hash of link/title; randomizing them would mark every article unread on each refresh.
 
 ## Current evidence
-
-### HTTP has two overlapping client contracts
-
-Compiled apps receive `IFRAME_FETCH_PROXY_SCRIPT`, which replaces cross-origin `window.fetch` and converts the proxy result back into a standard `Response`. The proxy path supplies the iframe token and uses an app-scoped cookie jar.
-
-At the same time, `github`, `mcp-manager`, `dc-comics`, and `thesingularity-reader` call `invoke('yaar://http')` and each locally model their own subset of the proxy envelope: `mcp-manager` the full `{ ok, status, headers, body }`, `github` `{ ok, status, data, raw }`, `dc-comics` `{ ok, data }`, `thesingularity-reader` `{ ok, status, body }` — four shapes for one upstream contract. Binary responses add another local base64-decoding shape.
-
-The paths are not yet permission-equivalent:
-
-- `POST /api/verb` resolves an app principal and applies `requirePermission(..., 'yaar://http', 'invoke')`;
-- `POST /api/fetch` validates an iframe token when present and enforces the domain gate, but does not currently apply the app's declared `yaar://http` permission;
-- the proxy path has the cookie-jar identity that the verb handler currently lacks.
-
-The client API should not be standardized until that authorization difference is closed.
-
-### Existing helpers are only partially adopted
-
-Concrete remaining cases include:
-
-- local sleep/settle promises instead of `wait()`;
-- repeated thrown-value formatting instead of `errMsg()`;
-- direct `localStorage` persistence in `thesingularity-reader` despite `createPersistedSignal()` and app storage being available;
-- five protocol handlers with separately written parameter annotations rather than `defineCommand()` inference;
-- local UUID, relative-time, and debounce implementations where equivalent bundled helpers already exist.
 
 ### Runtime data is often asserted rather than validated
 
@@ -71,12 +62,10 @@ The domain selectors and authenticated workflows differ enough that the whole ap
 
 ## Goals
 
-1. App HTTP calls use one standard `Response` contract with identical permissions, domain prompts, cookies, redirects, timeouts, and binary behavior.
-2. Existing SDK helpers replace local equivalents where semantics match.
-3. External and persisted data is validated at the boundary without requiring schemas for internal application state.
-4. Generic browser-session behavior is shared without moving site-specific scraping into the platform SDK.
-5. New bundled libraries remain opt-in and tree-shakeable; an app that does not use a feature should not pay for it.
-6. Existing app protocol manifests, storage formats, and visible behavior remain compatible unless a migration explicitly versions them.
+1. External and persisted data is validated at the boundary without requiring schemas for internal application state.
+2. Generic browser-session behavior is shared without moving site-specific scraping into the platform SDK.
+3. New bundled libraries remain opt-in and tree-shakeable; an app that does not use a feature should not pay for it.
+4. Existing app protocol manifests, storage formats, and visible behavior remain compatible unless a migration explicitly versions them.
 
 ## Non-goals
 
@@ -87,199 +76,6 @@ The domain selectors and authenticated workflows differ enough that the whole ap
 - Moving DCInside selectors, authentication flows, or gallery parsing into a generic YAAR SDK.
 - Adopting a GPLv3 or proprietary formula engine implicitly.
 - Optimizing for source line count without measuring bundle size and runtime behavior.
-
-## Phase 2: converge HTTP semantics and publish one client
-
-**Implemented (2026-07-19), except 2.4.** What landed, and the one correction the
-implementation forced:
-
-- `POST /api/fetch` now resolves a principal and refuses a missing or expired token
-  (`http/routes/proxy.ts`). Session and cookie-jar identity come from the validated
-  token only — the body's `sessionId` and the `Referer` are no longer trusted, which
-  also closes a smaller hole the audit missed: a caller could name *someone else's*
-  session and raise a domain-approval dialog there.
-- **Correction — the permission gate is scoped to app principals.** The audit's claim
-  that "only the injected fetch-proxy script" posts to `/api/fetch` is true but
-  incomplete: `IframeRenderer.tsx` injects that same script into **plain
-  AI-generated iframe windows**, which mint a token with no `appId` and therefore an
-  empty permission list. Enforcing `requirePermission` on them would deny cross-origin
-  fetch to something that has no `app.json` to declare `yaar://http` in. So the gate
-  applies when `principal.appId` is set; plain windows still pass SSRF validation and
-  the domain allowlist, which are the actual network gate. Generalize the lesson: a
-  sweep of `apps/` does not enumerate the callers of an iframe-injected script.
-- The manifest sweep's prediction held exactly — `market-apps` was the sole app-side
-  breakage, and now declares `yaar://http`.
-- `redirect: 'manual'` was the one advanced behavior the proxy could not represent
-  (2.3). It is now forwarded by the iframe script and accepted by the route rather
-  than silently downgraded. No app uses it today; it was added so `httpFetch` could be
-  called canonical honestly. `redirect: 'error'` remains unrepresentable and documented
-  as falling back to `'follow'`.
-- `httpFetch` is exported from `@bundled/yaar` (shim + `.d.ts`), documented in both the
-  English and Korean guides, and proven end-to-end: the `recent-papers` canary compiles
-  to an inlined `window.fetch(…)` call inside a bundle carrying the proxy script.
-- `packages/tests/src/integration/fetch-proxy-access.test.ts` covers the gate. It had
-  no coverage at all before.
-
-**2.4 is done** — `github`, `mcp-manager`, `dc-comics`, and `thesingularity-reader` all
-use `httpFetch`, and `grep -rn 'yaar://http' apps/*/src` is now empty. Two corrections
-the migration produced:
-
-- The audit reported `mcp-manager` as having "no live call site". It has one
-  (`src/main.ts:69`), behind the most complete of the four envelope copies. Treat
-  single-pass call-site inventories as leads, not conclusions.
-- `mcp-manager` read `initRes.headers['mcp-session-id']` — a lowercase-exact lookup
-  that worked only because `performFetch` happens to lowercase envelope header keys.
-  On real `Headers` it is case-insensitive, so a server replying `Mcp-Session-Id` now
-  works where it previously produced a sessionless follow-up. That latent bug was
-  invisible precisely *because* the app had re-typed the envelope.
-
-### Resolved: the cookie jar's logout door
-
-`yaar://http` now accepts `delete`, which clears the calling principal's jar
-(`handlers/http.ts`). `thesingularity-reader`'s `logoutFromDC()` calls `del('yaar://http')`
-alongside its existing `clearSession()`. The key is derived from the caller's own agent
-context and never from a payload, so an app can only clear its own jar.
-
-This needed one supporting change: `AgentContext` gained an `appId` field. The verb route
-previously encoded the app only as the display string `agentId: 'iframe:{appId}'`, and a
-handler keying an app-scoped resource must not parse that back out. Note
-`runWithAgentContext` rebuilds the context field by field, so a new `AgentContext` field
-has to be added in *both* places or it is silently dropped — which is exactly what
-happened on the first attempt here, and the tests caught it.
-
-The original write-up of this gap is kept below, since it explains why the door exists.
-
-### Background: the cookie jar had no app-facing lifecycle
-
-Migrating an app from the verb path to the proxy path *gains* it a cookie jar — the verb
-path (`handlers/http.ts`) still passes no `cookieJarKey`. That asymmetry is deliberate
-and was left standing, but it exposes a gap worth its own change:
-
-`clearJar` (`features/http/cookie-jar.ts:98`) is only ever called from token lifecycle —
-expiry and revocation (`http/iframe-tokens.ts:85,167,181`). **There is no app-facing way
-to clear the jar.** For `thesingularity-reader`, whose `logoutFromDC()` clears only the
-`appStorage` session, this means DCInside cookies accumulated server-side survive logout
-until the token's 24-hour TTL. The app *appears* logged out (`checkLoginStatus` gates on
-the stored `dcPaPP` and correctly returns false) and its authenticated writes go through
-the browser rather than HTTP, so this is a privacy leak rather than a security hole — but
-"log out" not clearing server-held session cookies is wrong regardless of severity.
-
-Note also that the merge at `features/http/fetch.ts:87` is naive concatenation with no
-dedup by cookie name, so an app sending its own `Cookie` header can produce duplicate
-names; the app's value sorts first, which is why `checkLoginStatus` still behaves.
-
-Any app with a login that uses `httpFetch` needs a jar-clear door. (Resolved above, via
-the `delete` verb — there turned out to be no existing server-side logout path to hang it
-on: `revokeIframeToken` has no callers, and `/api/auth/google/logout` is marketplace auth,
-unrelated to app cookie jars.)
-
-### 2.1 Put `/api/fetch` behind the app-principal gate
-
-Before recommending the patched fetch path, change `POST /api/fetch` to:
-
-- require a valid iframe token for iframe-originated requests;
-- resolve the request with `resolvePrincipal()`;
-- call `requirePermission(principal, 'yaar://http', 'invoke')`;
-- derive session and cookie-jar identity only from the validated principal;
-- reject a stale or missing app token rather than treating the request as an unrestricted host request.
-
-Requiring the token is compatible with the current callers: nothing in the frontend or host calls `POST /api/fetch` directly — only the injected fetch-proxy script does — so the route can become app-only without breaking any desktop flow. Host-side HTTP remains available through the existing agent/verb path. The public iframe route should be an app door, like `POST /api/verb`.
-
-**Manifest sweep before enforcement.** Turning on `requirePermission` breaks any app that uses the transparent proxy today without declaring `yaar://http`. At the time of writing that set is exactly one app: Market Apps fetches its marketplace catalog cross-origin (`market-apps/src/api.ts`) with no `yaar://http` in its `app.json` (Anima's dynamic-URL fetches are all same-origin and unaffected). Before enforcement:
-
-1. sweep every app for cross-origin `fetch()` and `invoke('yaar://http')` use and reconcile `app.json` permissions — starting with `market-apps`;
-2. optionally run the gate in log-only mode for one release to catch dynamic URLs the sweep missed;
-3. only then reject unpermitted requests.
-
-This does not close the broader same-origin iframe trust gap documented elsewhere. It does make the intended token-bearing app path internally consistent.
-
-### 2.2 Expose a typed `httpFetch`
-
-Export a small helper from `@bundled/yaar`:
-
-```ts
-export function httpFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  return window.fetch(input, init);
-}
-```
-
-The helper is intentionally thin. Its value is a named, documented contract:
-
-- cross-origin calls use YAAR's SSRF-protected, allowlisted proxy;
-- relative and same-origin calls retain normal fetch behavior and the iframe token;
-- app manifests require `yaar://http` for proxied calls;
-- responses use standard `Response`, `Headers`, `json()`, `text()`, `blob()`, and `arrayBuffer()` APIs.
-
-Keep raw `invoke('yaar://http')` for agent code and advanced verb consumers during migration. Deprecate `window.yaar.fetch` once no app relies on it; it should not remain a second undocumented client.
-
-### 2.3 Preserve advanced behavior
-
-The canonical path must cover or explicitly reject:
-
-- app-scoped cookie jars;
-- manual versus followed redirects;
-- binary responses;
-- upstream response headers;
-- the existing 10 MB body cap and 30-second server timeout;
-- domain-approval prompts scoped to the correct session.
-
-If `Request.redirect = 'manual'` cannot be represented through the proxy yet, add it deliberately instead of silently changing behavior.
-
-### 2.4 Migrate app clients
-
-Start with one low-risk JSON consumer such as `recent-papers` or `dock`. Then migrate:
-
-- GitHub's `RawHttp` wrapper;
-- MCP Manager's `HttpResult` wrapper while preserving JSON-RPC/SSE parsing;
-- DCInside HTML and image fetches;
-- remaining cross-origin direct calls.
-
-The HTTP client normalizes transport only. Service-specific pagination, rate limits, JSON-RPC parsing, and response normalization remain in their apps.
-
-### Phase 2 acceptance tests
-
-- an app without `yaar://http` receives 403 from the proxy route;
-- every app that used the transparent proxy before enforcement (notably Market Apps) has a reconciled manifest and still functions;
-- a permitted app receives a normal `Response` for text, JSON, and binary fixtures;
-- cookies are isolated by session and app;
-- domain denial, timeout, oversized response, redirect, and upstream error behavior are covered;
-- GitHub rate-limit headers and MCP session headers remain readable;
-- no app-local duplicate of the YAAR proxy response envelope remains after migration.
-
-## Phase 3: finish the existing-helper migration
-
-| Repeated pattern | Existing replacement | Initial targets |
-|---|---|---|
-| `new Promise(resolve => setTimeout(resolve, ms))` | `wait(ms)` | Anima, Browser User, Market Apps, The Singularity Reader |
-| ad hoc thrown-value formatting | `errMsg(error)` | Anima, Browser User, GitHub bootstrap, Search, Process Explorer, MCP Manager, The Singularity Reader |
-| manual loading `try/catch/finally` | `withLoading()` | Configurations and single-operation loading flows where return semantics match |
-| manual save timer | Lodash `debounce()` with `flush()`/`cancel()` | Devtools editor |
-| local UUID fallback | `@bundled/uuid` | Slides Lite, RSS feed creation |
-| hand-written relative time | `date-fns/formatDistanceToNow` | Slides Lite; RSS only if its compact wording is not intentional |
-| direct `localStorage` | `createPersistedSignal()` or `appStorage` | The Singularity Reader `hideSpammer` setting |
-| schema plus separately typed handler | `defineCommand()` | Image Viewer, Excel Lite, Devtools, Market Apps |
-
-Do not force a helper where behavior differs. A debounce migration must preserve explicit-save flushing and dirty-state behavior; `createPersistedSignal` is not a substitute for multi-file or transactional storage; deterministic content hashes must not become random UUIDs.
-
-### 3.1 Add static guardrails
-
-Add an app-focused check for high-confidence anti-patterns:
-
-- `localStorage` and `sessionStorage` under `apps/*/src`;
-- native `alert`, `confirm`, and `prompt`;
-- obvious promise-based sleep wrappers;
-- manually typed command handlers whose literal schema can infer the type;
-- `marked.parse()` results reaching `innerHTML` without an adjacent sanitizer.
-
-The rich-HTML rule may begin as advisory because regex cannot prove full dataflow. Storage APIs and native dialogs can become hard failures, but only after a one-time sweep confirms the existing-use count is zero — an unknown legitimate use blocking unrelated deploys is worse than a week of advisory warnings. Start every rule advisory; promote to hard once its violation count reaches zero.
-
-### Phase 3 acceptance tests
-
-- explicit saves flush pending debounced work;
-- app teardown cancels timers and debounced calls;
-- persisted settings survive restart and failed writes are surfaced;
-- static and runtime protocol manifests remain equal;
-- helper migrations do not alter user-facing date or identifier semantics unintentionally.
 
 ## Phase 4: expose Zod for boundary validation
 
@@ -364,45 +160,40 @@ HyperFormula is a credible technical option, not a dependency to slip into a cle
 
 Retain the current engine until that decision. In the meantime, add focused tests around nested calls, quoted strings, ranges, circular references, and formula shifting. These tests should include adversarial formula fixtures, not only behavior snapshots: the evaluator's final step is a `new Function(...)` call guarded by a numeric-charset regex, so the regex is the entire boundary between formula input and dynamic evaluation and deserves direct negative tests.
 
+## Open follow-ups from completed phases
+
+- **`no-native-dialogs` is still advisory**, with two violations: `devtools/src/main.ts:64` and `video-editor-lite/src/editor/edit-mode.ts:288`. The latter is not a simple text prompt — it renders a numbered list of up to 12 paths, parses the reply as either an index or a raw path, and distinguishes cancel (`null`) from empty string. A `showPrompt()` migration must preserve that distinction; the list-in-a-textbox pattern exists only to work around `window.prompt`'s single-line limit, so a real picker is the better fix. Promote the rule to ERROR once both are gone.
+- **`marked-to-innerhtml` stays advisory at zero violations**, deliberately: regex cannot prove dataflow, so a hard failure would assert a guarantee the check does not provide. Zero violations is not the only precondition for promotion — provability is the other.
+- **`rss-reader/src/fetcher.ts:24`** is `item.link || item.title || Math.random().toString()`, feeding a content hash. A feed item with neither link nor title gets a fresh id every fetch and can never stay marked read. Pre-existing; not fixed.
+- **The verb path still passes no `cookieJarKey`**, so `invoke('yaar://http')` and the proxy path differ in cookie identity. Deliberate, but worth revisiting if a third caller appears.
+- **`redirect: 'error'`** remains unrepresentable through the proxy and falls back to `'follow'`.
+
 ## Change inventory
 
 ### Compiler and dependencies
 
 - `package.json` — catalog/compiler dependencies for the selected Zod entry.
 - `packages/compiler/src/plugins.ts` — bundled-library mappings.
-- `packages/compiler/src/bundled-types/index.d.ts` — Zod module and `httpFetch` types.
-- `packages/compiler/src/shims/yaar.ts` — `httpFetch` export and documentation.
+- `packages/compiler/src/bundled-types/index.d.ts` — Zod module types.
 - `scripts/prebundle-libs.js` and compiler tests — executable and browser resolution coverage.
-
-### Server and shared runtime
-
-- `packages/server/src/http/routes/proxy.ts` — principal and permission enforcement.
-- `packages/server/src/features/http/fetch.ts` — only if redirect or response semantics need extension.
-- `packages/shared/src/iframe-scripts/fetch-proxy.ts` — canonical proxy behavior and deprecation path for duplicate clients.
-- HTTP route/access tests — denied permission, token identity, cookies, binary bodies, limits, and errors.
 
 ### Apps
 
-- `github`, `mcp-manager`, `dc-comics`, `thesingularity-reader`, plus simple canary consumers — HTTP convergence.
-- `market-apps/app.json` (and any other manifest the pre-enforcement sweep surfaces) — `yaar://http` permission reconciliation.
 - `recent-papers`, `rss-reader`, selected GitHub/auth and persisted-config paths — boundary schemas.
-- Anima, Browser User, Market Apps, The Singularity Reader, Devtools, Slides Lite, Image Viewer, and Excel Lite — existing-helper cleanup.
+- `dc-comics`, `thesingularity-reader` — managed-tab extraction.
 
 ### Documentation and checks
 
-- `docs/guides/app-development.md` and `docs/ko/app-development.md` — bundled libraries and canonical HTTP.
-- `apps/devtools/AGENTS.md` — authoring guidance for Zod and `httpFetch`.
+- `docs/guides/app-development.md` and `docs/ko/app-development.md` — bundled libraries (parity-enforced).
+- `apps/devtools/AGENTS.md` — authoring guidance for Zod.
 - `scripts/check-doc-freshness.ts` — preserve bundled-library list parity.
-- a new or existing app anti-pattern check — high-confidence guardrails.
+- `scripts/check-apps.ts` — promote guardrail rules as their violation counts reach zero.
 
 ## Rollout order
 
-1. Sweep app manifests for undeclared transparent-proxy use (Market Apps first), then secure `/api/fetch` and add permission/cookie tests before publishing `httpFetch` as canonical.
-2. Migrate one simple HTTP consumer as a canary, then the raw-envelope clients.
-3. Land the existing-helper sweep in app-sized changes.
-4. Add Zod catalog support and pilot it in Recent Papers.
-5. Reassess the browser-app duplication after HTML and HTTP convergence; extract only what still repeats.
-6. Open a separate formula-engine decision only if Excel's evaluator becomes a product constraint.
+1. Add Zod catalog support and pilot it in Recent Papers.
+2. Reassess the browser-app duplication after HTML and HTTP convergence; extract only what still repeats.
+3. Open a separate formula-engine decision only if Excel's evaluator becomes a product constraint.
 
 ## Required validation
 
@@ -412,6 +203,7 @@ Each phase keeps the normal repository baseline green:
 - `bun run test`;
 - `bun run build:apps`;
 - `bun run check:docs`;
+- `bun run check:apps`;
 - executable library prebundling for changes to `BUNDLED_LIBRARIES`;
 - targeted app preview/runtime checks for every migrated app;
 - before/after `dist/index.html` sizes for every new bundled dependency.
@@ -420,13 +212,12 @@ Security-sensitive HTML and HTTP changes additionally require adversarial fixtur
 
 ## Success criteria
 
-- compiled apps have one documented cross-origin HTTP contract with permission parity;
-- raw YAAR HTTP response interfaces disappear from app code except for genuine upstream protocols;
-- direct `localStorage` use in apps is zero;
-- hand-written sleep/error/UUID/relative-time/debounce helpers remain only where their semantics differ from the bundled helper;
 - external JSON entering reactive state has a schema at the unstable boundary;
 - static and runtime protocol manifests continue to agree;
-- non-consuming app output does not materially grow from optional catalog additions.
+- non-consuming app output does not materially grow from optional catalog additions;
+- generic browser-session behavior is shared without moving DCInside parsing into the SDK.
+
+Already met by the completed phases, and to be kept met: compiled apps have one documented cross-origin HTTP contract with permission parity; raw YAAR HTTP response interfaces appear in app code only for genuine upstream protocols; direct `localStorage` use in apps is zero; hand-written sleep/error/UUID/relative-time/debounce helpers remain only where their semantics differ from the bundled helper.
 
 ## References
 
@@ -437,10 +228,4 @@ Security-sensitive HTML and HTTP changes additionally require adversarial fixtur
 
 This proposal is based on static inspection of the current checkout and existing compiled app artifacts. No runtime benchmark, adversarial HTML test suite, dependency-size experiment, or app rerun was performed as part of the audit that produced it. Those checks are explicit acceptance work above rather than implied evidence.
 
-A code-level fact-check pass (2026-07-19) verified the claims above against the checkout. It confirmed the `/api/verb` vs `/api/fetch` permission asymmetry, the SDK helper inventory, and the DCInside helper duplication. It also produced the corrections now folded in: the four raw-HTTP envelope shapes are distinct subsets rather than one shared shape, and Market Apps uses the transparent proxy without declaring `yaar://http` (hence the pre-enforcement manifest sweep).
-
-Implementing Phase 1 settled three things worth carrying into the later phases:
-
-- **The Korean guide is now parity-enforced.** `check-doc-freshness.ts` covers `docs/ko/app-development.md`, which had already drifted by six libraries. Any phase that adds a `@bundled/*` entry must update both guides.
-- **A repo-wide sweep found the sink inventory was incomplete.** The proposal listed seven rich-HTML apps; `recent-papers` was an eighth. The other ~24 apps have zero injection sinks because they render through Solid's tagged templates, which build DOM nodes rather than parsing markup. Assume the same for future audits: template-rendered apps are not the risk surface, string-assembled markup is.
-- **One claim above was wrong and is corrected here:** DOMPurify does *not* close the `style`-attribute gap. It does not CSS-parse attribute values, so `style` passes through verbatim. The listed `<svg>`/`<math>` mXSS, `formaction`, and `xlink:href` gaps do close. Phase 4's schema work should not assume a sanitizer has vetted anything beyond markup structure.
+A code-level fact-check pass (2026-07-19) verified the original claims against the checkout, confirming the SDK helper inventory and the DCInside helper duplication. The corrections that implementation produced are folded into "Carried-forward constraints" above.

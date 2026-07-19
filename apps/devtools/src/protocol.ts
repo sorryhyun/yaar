@@ -254,7 +254,7 @@ export function registerProtocol() {
           return { opened: paths };
         },
       }),
-      readFile: {
+      readFile: defineCommand({
         description:
           'Read one or more files and return their contents with line numbers. Does NOT change the editor open state. ' +
           'Use `path` (string) for a single file or `path` (array) for multiple files. ' +
@@ -275,7 +275,7 @@ export function registerProtocol() {
           },
           required: ['path'],
         },
-        handler: async (p: Record<string, unknown>) => {
+        handler: async (p) => {
           const rawPath = p.path;
           const paths: string[] = Array.isArray(rawPath) ? rawPath.map(String) : [String(rawPath)];
           const opts = {
@@ -298,7 +298,7 @@ export function registerProtocol() {
             },
           }));
         },
-      },
+      }),
       writeFile: defineCommand({
         description: 'Write content to a file. Objects are serialized as pretty-printed JSON.',
         params: {

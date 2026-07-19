@@ -1,5 +1,6 @@
 // The two icon buttons overlaying the canvas: copy the PNG to the clipboard, or
 // download it. Both read pixels straight off the canvas.
+import { errMsg } from '@bundled/yaar';
 import { bucket, canvas, hasImage, seed, setStatus } from '../state';
 import { canvasBlob } from '../utils/canvas';
 
@@ -11,7 +12,7 @@ export async function copyImage(): Promise<void> {
     await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
     setStatus('📋 image copied to clipboard');
   } catch (e) {
-    setStatus('❌ copy failed: ' + (e instanceof Error ? e.message : String(e)));
+    setStatus('❌ copy failed: ' + errMsg(e));
   }
 }
 

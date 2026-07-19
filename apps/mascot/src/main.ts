@@ -284,7 +284,7 @@ if (app) {
           properties: { x: { type: 'number' }, y: { type: 'number' } },
           required: ['x', 'y'],
         },
-        handler: (p: { x: number; y: number }) => {
+        handler: (p) => {
           stopWalk();
           if (dizzyTimer) clearTimeout(dizzyTimer);
           walkTarget = { x: p.x, y: p.y };
@@ -301,7 +301,7 @@ if (app) {
           properties: { text: { type: 'string' } },
           required: ['text'],
         },
-        handler: (p: { text: string }) => {
+        handler: (p) => {
           say(String(p.text).slice(0, 40));
           return { ok: true };
         },

@@ -12,7 +12,7 @@
  * app restarts. checkLoginStatus() verifies via HTTP GET against a known
  * authenticated page.
  */
-import { httpFetch, appStorage, del, errMsg } from '@bundled/yaar';
+import { httpFetch, appStorage, del, errMsg, wait } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import { openOrNavigate, isTabInitialized, syncCookiesToTab, MAIN_TAB, DC_COOKIE_URLS } from './browser';
 import type { Post } from './types';
@@ -161,7 +161,7 @@ export async function loginToDC(
 
     return { ok: true };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     return { ok: false, error: `브라우저 로그인 오류: ${msg}` };
   }
 }
@@ -232,7 +232,7 @@ export async function applySessionCookiesToTab(browserId: string): Promise<numbe
       await web.setCookie({ browserId, name, value, domain: '.dcinside.com', path: '/' });
       okCount++;
     } catch (e) {
-      console.warn(`[applySessionCookiesToTab] setCookie failed for "${name}":`, e instanceof Error ? e.message : e);
+      console.warn(`[applySessionCookiesToTab] setCookie failed for "${name}":`, errMsg(e));
     }
   }
   console.log(`[applySessionCookiesToTab] applied ${okCount}/${pairs.length} cookies to "${browserId}"`);
@@ -375,7 +375,7 @@ export async function postCommentToDC(
     step = 'confirm';
     let cleared = false;
     for (let i = 0; i < 24; i++) {
-      await new Promise((r) => setTimeout(r, 300));
+      await wait(300);
       const r = (await web
         .evaluate({
           browserId,
@@ -404,7 +404,7 @@ export async function postCommentToDC(
 
     return { ok: true };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     // Surface exactly which browser step failed (the /api/browser 500 source).
     console.error(`[postCommentToDC] step="${step}" failed:`, msg, e);
     return { ok: false, error: `댓글 작성 실패 (단계: ${step}): ${msg}` };
@@ -629,7 +629,7 @@ export async function postNewPostToDC(
     step = 'confirm';
     let postNum: string | undefined;
     for (let i = 0; i < 30; i++) {
-      await new Promise((r) => setTimeout(r, 400));
+      await wait(400);
       const href = await readLocationHref(browserId);
       if (!href) continue;
       const m = href.match(POST_DETAIL_RE);
@@ -657,7 +657,7 @@ export async function postNewPostToDC(
 
     return { ok: true, postNum };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     console.error(`[postNewPostToDC] step="${step}" failed:`, msg, e);
     return { ok: false, error: `게시물 작성 실패 (단계: ${step}): ${msg}` };
   }

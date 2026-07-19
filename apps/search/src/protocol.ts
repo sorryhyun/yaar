@@ -1,5 +1,5 @@
 export {};
-import { app, defineCommand, invoke, del, storage } from '@bundled/yaar';
+import { app, defineCommand, invoke, del, storage, errMsg } from '@bundled/yaar';
 import { state, setState } from './store';
 import type { SearchResult } from './types';
 
@@ -22,7 +22,7 @@ export async function performSearch(pattern: string, glob?: string, scope?: stri
     const suffix = result.truncated ? ' (truncated to 100)' : '';
     setState('statusText', `${count} match${count !== 1 ? 'es' : ''}${suffix}`);
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     setState('matches', []);
     setState('statusText', `Error: ${msg}`);
   } finally {
@@ -71,7 +71,7 @@ export async function cloneApp(appId: string, destPath?: string) {
     setState('statusText', `Cloned ${appId}: ${written} files → storage/${dest}/`);
     return { success: true, filesWritten: written, destPath: dest };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     setState('statusText', `Clone error: ${msg}`);
     return { success: false, error: msg };
   }
@@ -85,7 +85,7 @@ export async function removeClone(appId: string, destPath?: string) {
     setState('statusText', `Removed storage/${dest}/`);
     return { success: true, path: dest };
   } catch (e: unknown) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     setState('statusText', `Remove error: ${msg}`);
     return { success: false, error: msg };
   }

@@ -3,6 +3,7 @@
 //   ditGate  — single DiT forward (memory/latency check).
 //   ditProbe — per-block residual absmax/NaN trace (diagnostic).
 // Plus downloadModels, which is UI-reachable from the Options popover.
+import { errMsg } from '@bundled/yaar';
 import { capabilities, loadModel, run, Tensor, fetchF32, chwToImageData } from '../ml';
 import { makeRng, randn } from '../scheduler';
 import { downloadWeights, TOTAL_BYTES } from '../download';
@@ -37,7 +38,7 @@ export async function vaeProbe(): Promise<void> {
     }
     log('✅ VAE probe done — compare canvas to golden_512_fp16_seed0.png');
   } catch (e) {
-    log('❌ ' + (e instanceof Error ? e.message : String(e)));
+    log('❌ ' + errMsg(e));
   } finally {
     setBusy(false);
     setProgress(null);
@@ -82,7 +83,7 @@ export async function ditGate(): Promise<void> {
         `min=${st.min.toFixed(3)} max=${st.max.toFixed(3)} mean=${st.mean.toFixed(3)} nan=${st.nan}`,
     );
   } catch (e) {
-    log('❌ ' + (e instanceof Error ? e.message : String(e)));
+    log('❌ ' + errMsg(e));
   } finally {
     setBusy(false);
     setProgress(null);
@@ -154,7 +155,7 @@ export async function ditProbe(
     log(firstBad >= 0 ? `✅ first bad block: LayerNorm ${firstBad}` : '✅ no bad block found');
     return { model, firstBad, noisePred, blocks };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     log('❌ ' + msg);
     return { error: msg };
   } finally {
@@ -191,7 +192,7 @@ export async function downloadModels(): Promise<unknown> {
     log(`✅ weights on disk (${elapsed.toFixed(0)}s) — now loading locally`);
     return { ok: true, elapsed };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     setStatus('❌ ' + msg);
     log('❌ ' + msg);
     return { ok: false, error: msg };

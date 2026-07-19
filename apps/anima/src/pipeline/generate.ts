@@ -7,6 +7,7 @@
 // padding mask constant-fold), so each aspect ratio is its own graph — but NOT its
 // own weights: every ratio's graph is re-pointed at the single 3.9 GB r16 sidecar,
 // so a ratio costs ~9 MB. See buckets.ts and ../krea/scripts/share_sidecar.py.
+import { errMsg } from '@bundled/yaar';
 import { loadModel, run, Tensor, fetchF32, fetchJSON, chwToImageData } from '../ml';
 import { ErSDEScheduler, makeRng, randn } from '../scheduler';
 import { promptEmbeds } from '../text';
@@ -73,7 +74,7 @@ async function persistToAppStorage(
     result.dataUrl = undefined;
   } catch (e) {
     result.saved = false;
-    result.saveError = e instanceof Error ? e.message : String(e);
+    result.saveError = errMsg(e);
   }
   result.mimeType = 'image/png';
   result.completedAt = new Date().toISOString();
@@ -219,7 +220,7 @@ export async function generate(opts: GenerateOptions = {}): Promise<unknown> {
     setLastResult(result as GenerationResult);
     return result;
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
+    const msg = errMsg(e);
     setStatus('❌ ' + msg);
     log('❌ ' + msg);
     result.error = msg;

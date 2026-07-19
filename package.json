@@ -66,6 +66,8 @@
     "build:exe:bundle:macos": "bun scripts/build-exe-bundle.js --target macos",
     "generate:openapi": "bun run scripts/generate-openapi.ts && prettier --write docs/reference/openapi.yaml",
     "check:openapi": "bun run generate:openapi && git diff --exit-code -- docs/reference/openapi.yaml",
+    "check:apps": "bun run scripts/check-apps.ts",
+    "check:apps:strict": "bun run scripts/check-apps.ts --strict",
     "check:docs": "bun run scripts/check-doc-freshness.ts",
     "check:docs:strict": "bun run scripts/check-doc-freshness.ts --strict",
     "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,js,jsx}\" \"*.json\"",

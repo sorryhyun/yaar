@@ -1,6 +1,7 @@
 export {};
-import { createSignal, createEffect, Show } from '@bundled/solid-js';
+import { createSignal, createEffect, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
+import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
 import { openFilePath, openFileContent, writeFile } from './project';
 
@@ -58,7 +59,7 @@ function escapeHtml(s: string): string {
 const [isDirty, setIsDirty] = createSignal(false);
 const [localContent, setLocalContent] = createSignal<string>('');
 const [highlightedHtml, setHighlightedHtml] = createSignal('');
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const SAVE_DELAY_MS = 1000;
 
 function currentContent(): string {
   const content = openFileContent() ?? '';
@@ -73,24 +74,30 @@ createEffect(() => {
   setHighlightedHtml(highlight(code, lang));
 });
 
-function scheduleSave() {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    const path = openFilePath();
-    if (path && isDirty()) {
-      writeFile(path, localContent());
-      setIsDirty(false);
-    }
-  }, 1000);
-}
-
-function saveNow() {
-  if (saveTimer) clearTimeout(saveTimer);
+// The actual write. Guarded by the dirty flag, so it is a no-op when there is
+// nothing pending — which makes it safe to call after a flush().
+function performSave() {
   const path = openFilePath();
   if (path && isDirty()) {
     writeFile(path, localContent());
     setIsDirty(false);
   }
+}
+
+const debouncedSave = debounce(performSave, SAVE_DELAY_MS);
+
+// Each keystroke re-arms the timer; lodash does the clear/re-schedule internally.
+function scheduleSave() {
+  debouncedSave();
+}
+
+// Explicit save (Ctrl/Cmd+S): flush any pending autosave so the edit that armed
+// the timer is written now rather than discarded. flush() is a no-op when no
+// call is pending, so performSave() covers the "dirty but unscheduled" case
+// without risking a double write (flush clears the dirty flag first).
+function saveNow() {
+  debouncedSave.flush();
+  performSave();
 }
 
 function syncScroll(e: Event) {
@@ -103,6 +110,13 @@ function syncScroll(e: Event) {
 }
 
 export function Editor() {
+  // Teardown: write out any pending edit, then guarantee no timer outlives the
+  // component. flush() already clears the pending call; cancel() is defensive.
+  onCleanup(() => {
+    debouncedSave.flush();
+    debouncedSave.cancel();
+  });
+
   return html`
     <div class="editor">
       <${Show}

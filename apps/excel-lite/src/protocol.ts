@@ -58,15 +58,32 @@ export function registerAppProtocol() {
           return { count: Object.keys(p.cells).length };
         },
       }),
-      setStyles: {
+      setStyles: defineCommand({
         description:
           'Set styles for one or more cells. Params: { styles: { [ref]: Partial<CellStyle> } }',
         params: {
           type: 'object',
-          properties: { styles: { type: 'object' } },
+          properties: {
+            styles: {
+              type: 'object',
+              description: 'Map of cell ref (e.g. "A1") to a partial style patch.',
+              additionalProperties: {
+                type: 'object',
+                properties: {
+                  bold: { type: 'boolean' },
+                  italic: { type: 'boolean' },
+                  underline: { type: 'boolean' },
+                  fontSize: { type: 'number' },
+                  color: { type: 'string' },
+                  bg: { type: 'string' },
+                  align: { type: 'string', enum: ['left', 'center', 'right'] },
+                },
+              },
+            },
+          },
           required: ['styles'],
         },
-        handler: (p: { styles: Record<string, Partial<CellStyle>> }) => {
+        handler: (p) => {
           pushHistory();
           for (const [ref, patch] of Object.entries(p.styles)) {
             const upper = ref.toUpperCase();
@@ -78,7 +95,7 @@ export function registerAppProtocol() {
           refreshAll();
           scheduleAutosave();
         },
-      },
+      }),
       selectCell: defineCommand({
         description:
           'Select a cell or range. Params: { ref: string } or { start: string, end: string }',

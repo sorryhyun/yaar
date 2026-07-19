@@ -1,7 +1,7 @@
 import { normalizeAspectRatio } from './aspect-ratio';
 import { isThemeId } from './theme';
 import type { Deck, FontSize, Slide, SlideLayout } from './types';
-import { uuid } from './utils';
+import { v4 as uuidv4 } from '@bundled/uuid';
 
 // Single source of truth for valid enum values — consumed by isSlideLayout,
 // isFontSize, and UI select lists to avoid repeating literal arrays.
@@ -9,7 +9,7 @@ export const SLIDE_LAYOUTS: SlideLayout[] = ['title-body', 'title-image', 'secti
 export const FONT_SIZES: FontSize[] = ['sm', 'md', 'lg', 'xl'];
 
 export function newSlide(layout: SlideLayout = 'title-body'): Slide {
-  return { id: uuid(), layout, title: 'New Slide', body: '', imageUrl: '', notes: '' };
+  return { id: uuidv4(), layout, title: 'New Slide', body: '', imageUrl: '', notes: '' };
 }
 
 export function newDeck(): Deck {
@@ -34,7 +34,7 @@ export function isFontSize(value: unknown): value is FontSize {
 export function normalizeSlideInput(raw: Partial<Slide> | null | undefined): Slide {
   const source = raw ?? {};
   const slide: Slide = {
-    id: source.id || uuid(),
+    id: source.id || uuidv4(),
     layout: isSlideLayout(source.layout) ? source.layout : 'title-body',
     title: source.title || '',
     body: source.body || '',

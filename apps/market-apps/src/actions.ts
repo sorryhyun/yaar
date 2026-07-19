@@ -5,7 +5,7 @@
 // sign-in flow. Each wraps its I/O in runAction for uniform loading + error
 // handling so the components stay declarative.
 
-import { errMsg } from '@bundled/yaar';
+import { errMsg, wait } from '@bundled/yaar';
 import { SIGNED_OUT_ACCOUNT } from './constants.js';
 import {
   apiGet,
@@ -174,7 +174,7 @@ export async function signIn(): Promise<void> {
 
     for (let i = 0; i < 150; i++) {
       // ~5 min ceiling at 2s
-      await new Promise((r) => setTimeout(r, 2000));
+      await wait(2000);
       await refreshAccount();
       const a = account();
       if (a.signedIn) {

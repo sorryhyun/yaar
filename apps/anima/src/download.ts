@@ -6,6 +6,7 @@
 // `POST /api/ml-weights/download` has the *server* stream HF → disk, and we poll
 // `GET /api/ml-weights/download?dest=…` for progress. Each file is resumable: a
 // partial `.part` is continued with a Range request.
+import { wait } from '@bundled/yaar';
 import { HF_BASE, LOCAL_DIR, resetAssetUrls } from './ml';
 import { BUCKETS, SHARED_DIT_DATA, SHARED_VAE_DATA } from './buckets';
 
@@ -83,8 +84,6 @@ async function poll(path: string): Promise<JobStatus> {
   return res.json();
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 /** Download every manifest entry that isn't already on disk, one file at a time.
  *  Each file is itself fetched over parallel Range requests server-side, which
  *  already saturates the CDN edge — overlapping whole files on top of that only
@@ -107,7 +106,7 @@ export async function downloadWeights(onProgress?: (p: DownloadProgress) => void
     let status = await post(path);
     emit(status);
     while (status.state === 'downloading') {
-      await sleep(500);
+      await wait(500);
       status = await poll(path);
       emit(status);
     }

@@ -13,7 +13,7 @@
  * (tab-control consent for click/type/scroll/navigate, content-read for extract/screenshot) — the
  * user's "Allow use" button pre-grants both, so a granted tab drives without further prompts.
  */
-import { app, defineCommand } from '@bundled/yaar';
+import { app, defineCommand, errMsg, wait } from '@bundled/yaar';
 import { tabs, connected, activeTab, pollOnce } from './store';
 import * as bridge from './bridge';
 
@@ -43,7 +43,6 @@ function shotToBlocks(shot: bridge.ScreenshotData, caption: string): Block[] {
 
 /** How long to let the page settle (paint + async DOM updates) before a post-action screenshot. */
 const SETTLE_MS = 400;
-const settle = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
 /**
  * Run a drive verb, then — when the caller passes `screenshot: true` — snapshot the tab so the agent
@@ -59,13 +58,12 @@ async function withOptionalShot(
   if (!wantShot) return driveResult;
   const summary =
     typeof driveResult === 'string' ? driveResult : JSON.stringify(driveResult ?? { ok: true });
-  await settle(SETTLE_MS);
+  await wait(SETTLE_MS);
   try {
     return shotToBlocks(await unwrap(bridge.screenshot(tabId)), summary);
   } catch (e) {
-    const why = e instanceof Error ? e.message : String(e);
     return [
-      { type: 'text', text: `${summary}\n(screenshot unavailable: ${why})` },
+      { type: 'text', text: `${summary}\n(screenshot unavailable: ${errMsg(e)})` },
     ] satisfies Block[];
   }
 }

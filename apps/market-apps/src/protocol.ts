@@ -82,28 +82,51 @@ if (app) {
           return { marketCount: marketApps().length, installedCount: installedApps().length };
         },
       }),
-      setData: {
+      setData: defineCommand({
         description: 'Set marketplace and installed data manually',
         params: {
           type: 'object',
           properties: {
-            marketApps: { type: 'array', items: { type: 'object' } },
-            installedApps: { type: 'array', items: { type: 'object' } },
+            marketApps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  description: { type: 'string' },
+                  version: { type: 'string' },
+                  author: { type: 'string' },
+                  icon: { type: 'string' },
+                  installed: { type: 'boolean' },
+                },
+                required: ['id', 'name'],
+              },
+            },
+            installedApps: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  id: { type: 'string' },
+                  name: { type: 'string' },
+                  hasSkill: { type: 'boolean' },
+                  kind: { type: 'string' },
+                },
+                required: ['id', 'name'],
+              },
+            },
             status: { type: 'string' },
           },
         },
-        handler: (p: {
-          marketApps?: ListedApp[];
-          installedApps?: InstalledApp[];
-          status?: string;
-        }) => {
+        handler: (p) => {
           if (p.marketApps) setMarketApps(p.marketApps);
           if (p.installedApps) setInstalledApps(p.installedApps);
           if (p.status) setStatus(p.status);
           else touch();
           return { marketCount: marketApps().length, installedCount: installedApps().length };
         },
-      },
+      }),
       setStatus: defineCommand({
         description: 'Update status line',
         params: {

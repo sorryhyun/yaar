@@ -20,19 +20,14 @@ type AppApi = {
   register: (manifest: unknown) => void;
 };
 
-/** Shared JSON Schema for an array of raw image input objects */
-const IMAGE_ITEMS_SCHEMA = {
-  type: 'array',
-  items: {
-    type: 'object',
-    properties: {
-      name: { type: 'string' },
-      path: { type: 'string' },
-      url: { type: 'string' },
-      dataUrl: { type: 'string' },
-    },
-  },
-};
+/**
+ * JSON Schema for an array of raw image input objects.
+ *
+ * Deliberately inlined at both call sites rather than hoisted to a shared const:
+ * the static protocol extractor parses `params` as a literal block and cannot
+ * resolve an identifier reference, so hoisting silently drops `params` from the
+ * manifest agents read. Keep these two copies in sync with `RawImageInput`.
+ */
 
 /** Normalize, load, and return a result for a batch of raw image inputs */
 function processImages(inputs: RawImageInput[], replace: boolean) {
@@ -60,24 +55,50 @@ export function setupProtocol(appApi: AppApi): void {
       },
     },
     commands: {
-      setImages: {
+      setImages: defineCommand({
         description: 'Replace images with a new set. Accepts URL/dataUrl/path+url.',
         params: {
           type: 'object',
-          properties: { images: IMAGE_ITEMS_SCHEMA },
+          properties: {
+            images: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  path: { type: 'string' },
+                  url: { type: 'string' },
+                  dataUrl: { type: 'string' },
+                },
+              },
+            },
+          },
           required: ['images'],
         },
-        handler: (p: { images: RawImageInput[] }) => processImages(p.images, true),
-      },
-      addImages: {
+        handler: (p) => processImages(p.images, true),
+      }),
+      addImages: defineCommand({
         description: 'Append images to the current set.',
         params: {
           type: 'object',
-          properties: { images: IMAGE_ITEMS_SCHEMA },
+          properties: {
+            images: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  name: { type: 'string' },
+                  path: { type: 'string' },
+                  url: { type: 'string' },
+                  dataUrl: { type: 'string' },
+                },
+              },
+            },
+          },
           required: ['images'],
         },
-        handler: (p: { images: RawImageInput[] }) => processImages(p.images, false),
-      },
+        handler: (p) => processImages(p.images, false),
+      }),
       openStoragePaths: defineCommand({
         description: 'Load multiple storage file paths at once.',
         params: {
