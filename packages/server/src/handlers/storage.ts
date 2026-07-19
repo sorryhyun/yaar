@@ -20,6 +20,7 @@ import {
 } from '../storage/index.js';
 import { ok, okJson, okWithImages, okResource, okLinks, error } from './utils.js';
 import { prependNote, applyEdit, applyReadOptions, mimeFromPath } from './utils.js';
+import { copyStorageBytes, decodeWriteContent } from './storage-bytes.js';
 
 // ── Helpers ──
 
@@ -41,16 +42,34 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://storage/*', {
     description:
       'Persistent storage file. Read to view contents, list to browse directory, ' +
-      'invoke with action "write" or "edit" to modify, delete to remove.',
+      'invoke with action "write", "copy" or "edit" to modify, delete to remove. ' +
+      'Reserved prefixes: "media/" (artifacts shared between apps — publish here to hand ' +
+      'an image to another app), "temp/" (scratch, safe to prune), "files/" (user documents), ' +
+      'and "apps/{id}/" (an app\'s private storage — also spelled yaar://apps/{id}/storage/). ' +
+      'To move a file, prefer action "copy" over reading it and writing it back: copy moves ' +
+      'the bytes server-side, a read/write round-trip drags them through the conversation.',
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['write', 'edit', 'grep'] },
+        action: { type: 'string', enum: ['write', 'copy', 'edit', 'grep'] },
         pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
         glob: { type: 'string', description: 'Glob pattern to filter files (grep)' },
         content: { type: 'string', description: 'File content (for write)' },
+        encoding: {
+          type: 'string',
+          enum: ['base64'],
+          description:
+            'Set to "base64" when "content" is base64-encoded binary (images, PDFs). ' +
+            'Omit for text. Writing binary without it stores the base64 text itself.',
+        },
+        from: {
+          type: 'string',
+          description:
+            'Source yaar:// storage URI to copy bytes from (copy). Either spelling works: ' +
+            'yaar://storage/… or yaar://apps/{id}/storage/…',
+        },
         old_string: { type: 'string', description: 'Text to find (edit string mode)' },
         new_string: { type: 'string', description: 'Replacement text (edit)' },
         start_line: {
@@ -146,11 +165,20 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
 
       if (action === 'write') {
         if (!path) return error('Cannot write to storage root. Provide a file path.');
-        if (typeof payload.content !== 'string')
-          return error('"content" (string) is required for write.');
-        const result = await storageWrite(path, payload.content);
+        const decoded = decodeWriteContent(payload);
+        if ('error' in decoded) return error(decoded.error);
+        const result = await storageWrite(path, decoded.content);
         if (!result.success) return error(result.error!);
         return ok(`Written to yaar://storage/${path}`);
+      }
+
+      if (action === 'copy') {
+        if (!path) return error('Cannot copy onto the storage root. Provide a destination path.');
+        if (typeof payload.from !== 'string')
+          return error('"from" (a yaar:// storage URI) is required for copy.');
+        const copied = await copyStorageBytes(payload.from, path);
+        if ('error' in copied) return error(copied.error);
+        return ok(`Copied ${payload.from} → yaar://storage/${path} (${copied.bytes} bytes)`);
       }
 
       if (action === 'edit') {
@@ -174,7 +202,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         return okJson({ matches: result.matches, truncated: result.truncated });
       }
 
-      return error(`Unknown action "${action}". Use "write", "edit", or "grep".`);
+      return error(`Unknown action "${action}". Use "write", "copy", "edit", or "grep".`);
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {

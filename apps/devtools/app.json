@@ -14,7 +14,7 @@
     "search"
   ],
   "permissions": [
-    "yaar://storage/",
+    "yaar://storage/media/",
     "yaar://apps/",
     "yaar://http",
     "yaar://windows/"

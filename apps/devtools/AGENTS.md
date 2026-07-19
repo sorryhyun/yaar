@@ -209,7 +209,23 @@ The bundler inlines the bytes into `dist/index.html`, so no request is made at r
 
 **Use storage only for genuinely dynamic files** — uploads, generated output, anything that changes without a recompile. A sprite, icon, font or sound versioned with the source belongs in the bundle.
 
-**Size:** base64 costs ~33% over raw bytes; the compiler warns past 5MB total. A few hundred KB of sprites is fine; a video is not — stream that.
+**Size:** base64 costs ~33% over raw bytes; the compiler warns past 5MB total. A few hundred KB of sprites is fine; a video is not — stream that. Past ~1MB for a single asset, prefer deploying the file into the app's **own** storage and fetching it at runtime — not from `media/`, which is a staging area the user may prune, and which the deployed app holds no permission for.
+
+### Assets the user made in another app
+
+When the user says *"use the dragon image I generated in anima"* or *"the logo I edited"*, the image is almost certainly in the shared media tree. Two commands cover it:
+
+```
+listMedia()                                   // what has been published, by producer
+listMedia({ prefix: "anima" })                // just one producer
+importAsset({ from: "anima/dragon.png" })     // → src/assets/dragon.webp + the import line
+```
+
+`importAsset` re-encodes raster images to WebP by default (roughly halves the bundle cost) and returns the exact `import` line to add. Pass `recompress: false` for SVG, animated GIF, or anything that must stay byte-identical. Then add the import and compile — the asset is inlined like any other, so everything in the section above applies unchanged.
+
+**If `listMedia` comes back empty,** the image exists but was never published — app storage is private to the app that owns it, and this is not a dead end. Say so and offer the two recoveries: ask the user to publish it from the producing app (anima and image-edit both have a `publish` command), or `relay` to the monitor agent, which can reach both trees and copy the file into `media/` for you.
+
+**Never ask another app for the bytes.** `exportDataUrl` and anything shaped like it returns a several-hundred-KB base64 string through the conversation. Publishing and importing moves the same bytes server-side, and costs two cheap calls.
 
 ## App Protocol & Verb API
 

@@ -1,8 +1,11 @@
-// The two icon buttons overlaying the canvas: copy the PNG to the clipboard, or
-// download it. Both read pixels straight off the canvas.
+// The icon buttons overlaying the canvas: copy the PNG to the clipboard, download
+// it, or publish it to the shared media tree. The first two read pixels straight off
+// the canvas; publish works from the already-saved file, so it costs nothing to
+// re-encode.
 import { errMsg } from '@bundled/yaar';
 import { bucket, canvas, hasImage, seed, setStatus } from '../state';
 import { canvasBlob } from '../utils/canvas';
+import { publishImage } from '../publish';
 
 export async function copyImage(): Promise<void> {
   const canvasEl = canvas();
@@ -13,6 +16,22 @@ export async function copyImage(): Promise<void> {
     setStatus('📋 image copied to clipboard');
   } catch (e) {
     setStatus('❌ copy failed: ' + errMsg(e));
+  }
+}
+
+/**
+ * Publish the newest generation to `media/anima/`, where other apps can reach it.
+ *
+ * Deliberately the most recent saved image rather than the canvas: publishing copies
+ * a file that already exists on disk, so the bytes never round-trip through here.
+ */
+export async function publishToMedia(): Promise<void> {
+  if (!hasImage()) return;
+  try {
+    const { name } = await publishImage();
+    setStatus(`🌍 published ${name} to shared media`);
+  } catch (e) {
+    setStatus('❌ publish failed: ' + errMsg(e));
   }
 }
 

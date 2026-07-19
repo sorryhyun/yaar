@@ -8,7 +8,7 @@
     "yaar-ml"
   ],
   "permissions": [
-    "yaar://storage/",
+    "yaar://storage/media/",
     "yaar://apps/self/storage/"
   ],
   "version": "0.1.0",

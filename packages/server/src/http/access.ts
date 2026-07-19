@@ -159,6 +159,38 @@ function resolveSelf(uri: string, appId?: string): string {
   return uri;
 }
 
+/**
+ * Rewrite the flat spelling of an app's storage to the namespaced one.
+ *
+ * `yaar://storage/apps/notes/todo.json` and `yaar://apps/notes/storage/todo.json`
+ * are the same file — `storage/apps/{id}/` is a plain subtree of the flat root, not
+ * a separate volume. Only the second spelling is the one permissions are written
+ * against, so without this rewrite `isUriAllowed` is plain prefix matching and an
+ * app declaring `yaar://storage/` holds a permission for *every other app's*
+ * storage: credentials, databases, project sources.
+ *
+ * `/api/storage/*` already avoided that by naming its URI through `storageUriFor`
+ * (see its docstring), but `/api/verb` took the URI from the request body verbatim.
+ * Doing the rewrite here rather than at each door means every caller of
+ * `requirePermission` gets it, and the two spellings can never disagree.
+ *
+ * Returns the URI unchanged when it does not name flat storage, and `null` for a
+ * traversing path — which names no resource and must not be matched against
+ * anything.
+ */
+function canonicalStorageUri(uri: string): string | null {
+  if (uri !== 'yaar://storage' && !uri.startsWith('yaar://storage/')) return uri;
+
+  // A trailing slash is what makes a permission entry a *prefix* (uriMatches), so it
+  // has to survive the round trip. `storageUriForPath` names a concrete resource and
+  // drops it.
+  const trailing = uri.endsWith('/') ? '/' : '';
+  const path = uri.slice('yaar://storage'.length).replace(/^\//, '').replace(/\/$/, '');
+
+  const rewritten = storageUriForPath(path);
+  return rewritten === null ? null : rewritten + trailing;
+}
+
 // ── The gates ───────────────────────────────────────────────────────────────
 
 /**
@@ -178,12 +210,19 @@ export function requirePermission(principal: Principal, uri: string, verb: Verb)
     return errorResponse('yaar://session/* is restricted to the session agent', 403);
   }
 
-  const target = resolveSelf(uri, principal.appId);
-  const granted = principal.permissions.map((entry) =>
-    typeof entry === 'string'
-      ? resolveSelf(entry, principal.appId)
-      : { ...entry, uri: resolveSelf(entry.uri, principal.appId) },
-  );
+  // Canonicalize both sides, as with `self` below: an app.json may spell a grant
+  // either way, and a URI from a request body certainly may.
+  const canonical = canonicalStorageUri(uri);
+  if (canonical === null) return errorResponse(`Not permitted: ${verb} ${uri}`, 403);
+
+  const target = resolveSelf(canonical, principal.appId);
+  const granted = principal.permissions.flatMap((entry) => {
+    const raw = typeof entry === 'string' ? entry : entry.uri;
+    const rewritten = canonicalStorageUri(raw);
+    if (rewritten === null) return [];
+    const resolved = resolveSelf(rewritten, principal.appId);
+    return [typeof entry === 'string' ? resolved : { ...entry, uri: resolved }];
+  });
 
   if (verb !== 'describe' && !isUriAllowed(target, verb, granted)) {
     return errorResponse(`Not permitted: ${verb} ${uri}`, 403);

@@ -6,6 +6,7 @@ import {
   downloadExport,
   exportAsDataUrl,
   libraryOpen,
+  publishToMedia,
   refreshStorageFiles,
   saveToStorage,
   setLibraryOpen,
@@ -85,9 +86,39 @@ export const ioCommands = {
     },
   }),
 
+  publish: defineCommand({
+    description:
+      'Render at full resolution and publish to the shared media tree ' +
+      '(yaar://storage/media/image-edit/), where other apps can reach it — e.g. so devtools ' +
+      'can import it as an asset for an app it is building. This is the right way to hand ' +
+      'an image to another app: the bytes are written once and copied server-side, never ' +
+      'passed around as a string. Returns the shared URI.',
+    params: {
+      type: 'object',
+      properties: {
+        format: { type: 'string', enum: FORMATS },
+        name: {
+          type: 'string',
+          description: 'File name without extension. Defaults to "<original>-edited".',
+        },
+        quality: { type: 'number', description: '0-1, for jpeg and webp' },
+      },
+    },
+    handler: async (p) => {
+      const published = await publishToMedia(
+        (p.format ?? 'png') as ExportFormat,
+        p.name,
+        p.quality ?? 0.92,
+      );
+      return { ...published, ...outputSize(requireDoc()) };
+    },
+  }),
+
   exportDataUrl: defineCommand({
     description:
-      'Render at full resolution and return a base64 data URL instead of downloading. Use when the result must be passed to another app; the string can be large.',
+      'DEPRECATED — prefer `publish`, which hands the image to another app without the ' +
+      'bytes passing through the caller. Renders at full resolution and returns a base64 ' +
+      'data URL; the string can be several hundred KB.',
     params: {
       type: 'object',
       properties: {

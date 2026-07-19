@@ -6,6 +6,7 @@ import {
   dispatch,
   doc,
   downloadExport,
+  publishToMedia,
   saveToStorage,
   setStatus,
   tool,
@@ -38,6 +39,24 @@ export async function doSaveToStorage() {
   }
 }
 
+/**
+ * Save, then copy into `media/image-edit/` so other apps can use the result — the
+ * gesture behind "publish the logo so devtools can use it".
+ */
+export async function doPublish() {
+  const d = doc();
+  if (!d) return;
+  const suggested = `${d.base.name.replace(/\.[^.]+$/, '')}-edited`;
+  const name = await showPrompt('Publish to shared media as:', { initial: suggested });
+  if (name == null) return;
+  try {
+    const { name: published } = await publishToMedia('png', name);
+    setStatus(`Published ${published} — other apps can now use it.`);
+  } catch (e) {
+    setStatus(errMsg(e));
+  }
+}
+
 export async function removeFile(file: StorageFile) {
   if (!(await showConfirm(`Delete “${file.name}” from storage?`))) return;
   try {
@@ -58,5 +77,7 @@ export function removeSelection() {
 
 export function cropToSelection() {
   dispatch({ type: 'cropToSelection' });
-  setStatus('Cropped to selection — everything outside it is now transparent. Export as PNG to keep it.');
+  setStatus(
+    'Cropped to selection — everything outside it is now transparent. Export as PNG to keep it.',
+  );
 }

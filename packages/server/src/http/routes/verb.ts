@@ -276,6 +276,20 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   const denied = requirePermission(principal, uri, verb);
   if (denied) return denied;
 
+  // `invoke { action: 'copy', from }` reads one URI and writes another, so the write
+  // permission checked above covers only half of it. Without this an app permitted to
+  // write its own storage could name any source and pull the bytes in — a read grant
+  // for the whole tree, spelled as a write. The source is checked under the same rules
+  // as reading it directly; `copy` adds no authority, only a cheaper route.
+  if (verb === 'invoke' && body.payload?.action === 'copy') {
+    const from = body.payload.from;
+    if (typeof from !== 'string') {
+      return errorResponse('"from" (a yaar:// storage URI) is required for copy', 400);
+    }
+    const deniedSource = requirePermission(principal, from, 'read');
+    if (deniedSource) return deniedSource;
+  }
+
   const tokenEntry: Extract<Principal, { kind: 'app' }> | null =
     principal.kind === 'app' ? principal : null;
 

@@ -6,7 +6,7 @@
   "capture": "dom",
   "permissions": [
     "yaar://apps/self/storage/",
-    "yaar://storage/"
+    "yaar://storage/media/"
   ],
   "version": "1.2.0",
   "author": "YAAR"

@@ -125,6 +125,54 @@ describe('requirePermission', () => {
     expect(requirePermission(readOnly, 'yaar://storage/x.txt', 'delete')?.status).toBe(403);
   });
 
+  // ── The flat spelling of app storage ──
+  //
+  // `yaar://storage/apps/{id}/…` names the same file as `yaar://apps/{id}/storage/…`.
+  // Permissions are written against the second, so the first is canonicalized before
+  // matching — otherwise `yaar://storage/` is prefix-matched straight onto every
+  // other app's storage, which thirteen bundled apps declare.
+
+  const broadStorage: Principal = { ...notes, permissions: ['yaar://storage/'] };
+
+  it("refuses another app's storage spelled through the flat tree", () => {
+    const denied = requirePermission(
+      broadStorage,
+      'yaar://storage/apps/vault/credentials.json',
+      'read',
+    );
+    expect(denied?.status).toBe(403);
+  });
+
+  it('still admits the flat tree proper', () => {
+    expect(requirePermission(broadStorage, 'yaar://storage/media/logo.png', 'read')).toBeNull();
+    // "apps" itself is a directory in the flat tree, not an app's storage.
+    expect(requirePermission(broadStorage, 'yaar://storage/apps', 'list')).toBeNull();
+  });
+
+  it('lets an app reach its own storage through the flat spelling', () => {
+    expect(requirePermission(notes, 'yaar://storage/apps/notes/todo.json', 'read')).toBeNull();
+    expect(requirePermission(notes, 'yaar://storage/apps/self/todo.json', 'read')).toBeNull();
+  });
+
+  it('canonicalizes the grant side too', () => {
+    const flatGrant: Principal = { ...notes, permissions: ['yaar://storage/apps/vault/'] };
+    // Either spelling of the same explicit grant matches either spelling of the URI.
+    expect(requirePermission(flatGrant, 'yaar://apps/vault/storage/x.json', 'read')).toBeNull();
+    expect(requirePermission(flatGrant, 'yaar://storage/apps/vault/x.json', 'read')).toBeNull();
+    expect(requirePermission(flatGrant, 'yaar://storage/apps/other/x.json', 'read')?.status).toBe(
+      403,
+    );
+  });
+
+  it('refuses a traversing storage URI outright', () => {
+    const denied = requirePermission(
+      broadStorage,
+      'yaar://storage/apps/notes/../vault/credentials.json',
+      'read',
+    );
+    expect(denied?.status).toBe(403);
+  });
+
   it('does not let a prefix permission match a sibling by string prefix', () => {
     // "yaar://storage/photos/" must not admit "yaar://storage/photos-private/x"
     expect(
@@ -154,6 +202,49 @@ describe('requireHost / requireBundle', () => {
   it('admits a declared bundle and refuses an undeclared one', () => {
     expect(requireBundle(app, 'yaar-web')).toBeNull();
     expect(requireBundle(app, 'yaar-dev')?.status).toBe(403);
+  });
+});
+
+// ── The copy primitive's second gate ───────────────────────────────────────
+//
+// `invoke { action: 'copy', from }` reads one URI and writes another. The gate on
+// the request's own `uri` covers only the write, so the source needs its own `read`
+// check — otherwise an app permitted to write its own storage can name any source
+// and pull the bytes in, which is a read grant over the whole tree spelled as a
+// write.
+
+describe('POST /api/verb — copy checks its source', () => {
+  let token: string;
+  beforeAll(() => {
+    token = appToken('notes');
+  });
+
+  const copy = (from: unknown) =>
+    makeRequest('/api/verb', {
+      method: 'POST',
+      headers: { 'x-iframe-token': token, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        verb: 'invoke',
+        uri: 'yaar://apps/self/storage/pulled.png',
+        payload: { action: 'copy', from },
+      }),
+    });
+
+  it('refuses a source the app could not have read directly', async () => {
+    expect((await copy('yaar://apps/vault/storage/credentials.json')).status).toBe(403);
+    // ...including through the flat spelling of the same file.
+    expect((await copy('yaar://storage/apps/vault/credentials.json')).status).toBe(403);
+  });
+
+  it('admits a source the app may read', async () => {
+    // Its own storage. The file does not exist, so the handler will report that —
+    // what matters here is that the request got past the gate.
+    const res = await copy('yaar://apps/self/storage/original.png');
+    expect(res.status).not.toBe(403);
+  });
+
+  it('rejects a copy with no source', async () => {
+    expect((await copy(undefined)).status).toBe(400);
   });
 });
 

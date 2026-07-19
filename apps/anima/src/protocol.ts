@@ -1,6 +1,7 @@
 import { app, defineCommand, errMsg } from '@bundled/yaar';
 import type { Bucket } from './buckets';
 import { listSavedImages } from './appfiles';
+import { publishImage } from './publish';
 
 export type GenerationOptions = {
   prompt: string;
@@ -43,7 +44,8 @@ export function registerProtocol(deps: ProtocolDeps): void {
         description: 'Generation progress changed. Payload: { label, pct, busy }.',
       },
       generated: {
-        description: 'A protocol generation finished. Payload is the same stable result exposed by lastResult.',
+        description:
+          'A protocol generation finished. Payload is the same stable result exposed by lastResult.',
       },
       generationError: {
         description: 'A protocol generation failed. Payload: { error, prompt, seed, ratio }.',
@@ -51,20 +53,29 @@ export function registerProtocol(deps: ProtocolDeps): void {
     },
     state: {
       status: {
-        description: 'Current pipeline status, including whether generation is active and the latest UI message',
+        description:
+          'Current pipeline status, including whether generation is active and the latest UI message',
         handler: () => ({
           busy: deps.getBusy(),
-          phase: deps.getBusy() ? 'generating' : deps.getLastResult()?.ok ? 'completed' : deps.getLastResult() ? 'error' : 'idle',
+          phase: deps.getBusy()
+            ? 'generating'
+            : deps.getLastResult()?.ok
+              ? 'completed'
+              : deps.getLastResult()
+                ? 'error'
+                : 'idle',
           message: deps.getStatus(),
           capabilities: deps.getCapabilities(),
         }),
       },
       progress: {
-        description: 'Current progress as { label, pct }, where pct may be null while indeterminate',
+        description:
+          'Current progress as { label, pct }, where pct may be null while indeterminate',
         handler: () => deps.getProgress(),
       },
       lastResult: {
-        description: 'Stable result from the most recent generation, including storagePath/storageUrl or a fallback dataUrl',
+        description:
+          'Stable result from the most recent generation, including storagePath/storageUrl or a fallback dataUrl',
         handler: () => deps.getLastResult(),
       },
       savedImages: {
@@ -94,7 +105,10 @@ export function registerProtocol(deps: ProtocolDeps): void {
         params: {
           type: 'object',
           properties: {
-            prompt: { type: 'string', description: 'Image description. Required and must not be blank.' },
+            prompt: {
+              type: 'string',
+              description: 'Image description. Required and must not be blank.',
+            },
             seed: { type: 'number', description: 'Deterministic signed 32-bit seed (default 0).' },
             ratio: {
               type: 'string',
@@ -121,16 +135,61 @@ export function registerProtocol(deps: ProtocolDeps): void {
             // onto the result. Saving here too would write the image twice.
             const result = (await deps.generate({ prompt, seed, ratio })) as GenerationResult;
             if (!result.ok) {
-              app.emit('generationError', { error: result.error ?? 'Generation failed', prompt, seed, ratio });
+              app.emit('generationError', {
+                error: result.error ?? 'Generation failed',
+                prompt,
+                seed,
+                ratio,
+              });
               return result;
             }
             app.emit('generated', result);
             return result;
           } catch (error) {
-            const result: GenerationResult = { ok: false, error: errMsg(error), prompt, seed, ratio };
+            const result: GenerationResult = {
+              ok: false,
+              error: errMsg(error),
+              prompt,
+              seed,
+              ratio,
+            };
             deps.setLastResult(result);
             app.emit('generationError', result);
             throw error;
+          }
+        },
+      }),
+      publish: defineCommand({
+        description:
+          'Publish a generated image to the shared media tree (yaar://storage/media/anima/), ' +
+          'where other apps can reach it — e.g. so devtools can import it as an asset for an ' +
+          'app it is building. Defaults to the most recent generation; pass `image` (a name or ' +
+          'storage path from savedImages) to pick another. The bytes are copied server-side, so ' +
+          "this is cheap regardless of image size. Anima's own gallery is unaffected.",
+        params: {
+          type: 'object',
+          properties: {
+            image: {
+              type: 'string',
+              description:
+                'Name or storage path of a saved image (see the savedImages state). Omit for the newest.',
+            },
+            as: {
+              type: 'string',
+              description:
+                'File name to publish under. Defaults to the saved name. Useful for something ' +
+                'a person can recognize, e.g. "dragon.png".',
+            },
+          },
+        },
+        handler: async (params) => {
+          try {
+            return await publishImage(
+              params.image ? String(params.image) : undefined,
+              params.as ? String(params.as) : undefined,
+            );
+          } catch (error) {
+            throw new Error(errMsg(error));
           }
         },
       }),

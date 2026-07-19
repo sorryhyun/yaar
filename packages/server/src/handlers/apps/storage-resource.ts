@@ -21,6 +21,7 @@ import {
 } from '../../storage/storage-manager.js';
 import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { appStoragePath, parseAppStoragePath } from './paths.js';
+import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
 
 /**
  * List an app-storage directory as resource links.
@@ -50,7 +51,9 @@ export function describeStorage(uri: string): VerbResult | null {
   if (!parseAppStoragePath(uri)) return null;
   return okJson({
     uri,
-    description: 'App-scoped file storage.',
+    description:
+      'App-scoped file storage. Invoke with action "write" (add "encoding": "base64" for ' +
+      'binary), "copy" (with "from": a yaar:// storage URI — moves bytes server-side), or "grep".',
     verbs: ['read', 'list', 'invoke', 'delete'],
   });
 }
@@ -116,14 +119,25 @@ export async function invokeStorage(
   }
 
   if (!storagePath.path) return error('Provide a file path under /storage/.');
-  if (payload.action !== 'write') return error(`Unknown storage action "${payload.action}".`);
-  if (typeof payload.content !== 'string')
-    return error('"content" (string) is required for write.');
 
   const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
-  const content =
-    payload.encoding === 'base64' ? Buffer.from(payload.content, 'base64') : payload.content;
-  const result = await storageWrite(prefixedPath, content);
+
+  // `copy` is how a file crosses between this app's storage and the shared tree
+  // without its bytes passing through whoever asked for the move.
+  if (payload.action === 'copy') {
+    if (typeof payload.from !== 'string')
+      return error('"from" (a yaar:// storage URI) is required for copy.');
+    const copied = await copyStorageBytes(payload.from, prefixedPath);
+    if ('error' in copied) return error(copied.error);
+    subscriptionRegistry.notifyChange(resolved.sourceUri);
+    return ok(`Copied ${payload.from} → ${resolved.sourceUri} (${copied.bytes} bytes)`);
+  }
+
+  if (payload.action !== 'write') return error(`Unknown storage action "${payload.action}".`);
+
+  const decoded = decodeWriteContent(payload);
+  if ('error' in decoded) return error(decoded.error);
+  const result = await storageWrite(prefixedPath, decoded.content);
   if (!result.success) return error(result.error!);
   subscriptionRegistry.notifyChange(resolved.sourceUri);
   return ok(`Written to yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);

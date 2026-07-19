@@ -10,7 +10,7 @@ import {
   setTool,
   undoEdit,
 } from '../store';
-import { activeTool, doExport, doSaveToStorage, hasDoc } from './actions';
+import { activeTool, doExport, doPublish, doSaveToStorage, hasDoc } from './actions';
 import { HISTORY_ICONS, TOOLS, TRANSFORMS } from './constants';
 import { openLibrary } from './LibraryModal';
 
@@ -36,6 +36,14 @@ export function Toolbar() {
           onClick=${doSaveToStorage}
         >
           Save
+        </button>
+        <button
+          class="y-btn y-btn-sm"
+          title="Publish to shared media, so other apps can use this image"
+          disabled=${() => !hasDoc()}
+          onClick=${doPublish}
+        >
+          Publish
         </button>
       </div>
 

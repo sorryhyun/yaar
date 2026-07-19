@@ -82,7 +82,33 @@ invoke('yaar://storage/', { action: "grep", pattern: "TODO", glob: "*.md" })
 read('yaar://storage/docs/readme.txt')
 list('yaar://storage/docs')
 delete('yaar://storage/docs/readme.txt')
-\`\`\``;
+\`\`\`
+
+**Reserved prefixes.** The flat tree has four by convention:
+
+| Prefix | What lives there |
+|---|---|
+| \`media/{producer}/\` | Artifacts apps publish for **each other** — a generated image, an edited logo. Apps are granted \`yaar://storage/media/\` and nothing wider, so this is the one place a file can cross between them. |
+| \`temp/\` | Scratch, including OS file drops. Safe to prune. |
+| \`files/\` | The user's own documents. |
+| \`apps/{id}/\` | One app's **private** storage — the same files as \`yaar://apps/{id}/storage/\`. You can read it; the app itself cannot read any other app's. |
+
+**Moving a file — use \`copy\`, never read-then-write.**
+
+\`\`\`
+invoke('yaar://storage/media/anima/dragon.png', { action: "copy", from: "yaar://apps/anima/storage/generated/2026-07-19T10-02-seed42.png" })
+\`\`\`
+
+\`copy\` moves the bytes server-side and works in either direction between the two
+spellings. Reading an image and writing it back drags several hundred KB of base64
+through this conversation for no gain.
+
+**Binary.** Pass \`encoding: "base64"\` when writing image or PDF bytes. Without it the
+base64 *text* is what lands on disk — a file that looks written and is unreadable.
+
+This is how you hand an image from one app to another: \`copy\` it into
+\`media/{producer}/\`, then \`direct_message\` the consuming app naming the new URI.
+The app can read \`media/\` itself; it cannot read where the file came from.`;
 
 export const HTTP_SECTION = `## HTTP Access
 

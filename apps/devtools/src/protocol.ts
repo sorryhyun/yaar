@@ -20,6 +20,7 @@ import { buildCommands } from './protocol/build';
 import { gitCommands } from './protocol/git';
 import { previewCommands } from './protocol/preview';
 import { introspectCommands } from './protocol/introspect';
+import { mediaCommands } from './protocol/media';
 
 export function registerProtocol() {
   if (!app) return;
@@ -148,6 +149,7 @@ export function registerProtocol() {
       ...gitCommands,
       ...previewCommands,
       ...introspectCommands,
+      ...mediaCommands,
     },
   });
 }

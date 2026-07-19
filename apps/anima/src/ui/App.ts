@@ -32,7 +32,7 @@ import {
   showOptions,
   status,
 } from '../state';
-import { copyImage, saveImage } from './imageActions';
+import { copyImage, publishToMedia, saveImage } from './imageActions';
 
 export function App() {
   let optionsEl: HTMLDivElement | undefined;
@@ -199,6 +199,14 @@ export function App() {
             onclick=${saveImage}
           >
             💾
+          </button>
+          <button
+            class="anima-icon-btn"
+            title="Publish to shared media (other apps can use it)"
+            disabled=${() => busy() || !hasImage()}
+            onclick=${publishToMedia}
+          >
+            🌍
           </button>
         </div>
       </div>

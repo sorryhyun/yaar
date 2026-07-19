@@ -1,5 +1,5 @@
 import { createSignal } from '@bundled/solid-js';
-import { appStorage } from '@bundled/yaar';
+import { appStorage, invoke } from '@bundled/yaar';
 import {
   applyCommand,
   createDoc,
@@ -321,6 +321,32 @@ export async function saveToStorage(
       url: storageFileUrl(fileName),
     }
   );
+}
+
+/**
+ * Save, then copy into the shared media tree.
+ *
+ * Two steps rather than one write into `media/` directly, and deliberately: the edit
+ * stays in this app's library where the user can reopen it, and `media/` gets a copy
+ * that other apps can be granted. The copy is server-side — the bytes are already on
+ * disk, so handing the image to another app costs one cheap call rather than a
+ * several-hundred-KB string passed through whoever is brokering it.
+ */
+export async function publishToMedia(
+  format: ExportFormat,
+  name?: string,
+  quality = 0.92,
+): Promise<{ uri: string; name: string; source: string }> {
+  const file = await saveToStorage(format, name, quality);
+  const target = `yaar://storage/media/${APP_ID}/${file.name}`;
+
+  await invoke(target, {
+    action: 'copy',
+    from: `yaar://apps/self/storage/${file.path}`,
+  });
+
+  setStatus(`Published ${file.name} to shared media.`);
+  return { uri: target, name: file.name, source: file.path };
 }
 
 export async function deleteStorageFile(path: string): Promise<void> {
