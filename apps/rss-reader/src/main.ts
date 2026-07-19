@@ -1,4 +1,4 @@
-import { createMemo } from '@bundled/solid-js';
+import { createMemo, createEffect } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import type { Article, Feed } from './types';
@@ -95,6 +95,44 @@ async function submitAdd() {
   } finally {
     setState('addBusy', false);
   }
+}
+
+// ── Article body ────────────────────────────────────────────────────────────
+
+/**
+ * Render an article body.
+ *
+ * The HTML arrives PRE-SANITIZED from `fetcher.ts` — DOMPurify runs at ingestion,
+ * so nothing unsanitized ever reaches `state.articles`. This function only stages
+ * the already-clean fragment, rewrites it, and inserts it.
+ *
+ * NOTE: this is deliberately a real DOM node rather than `innerHTML=${...}` in the
+ * template, because we need a DOM rewrite pass between sanitize and insert. It must
+ * never become `.innerHTML=${...}`: that is lit-html property syntax, which Solid's
+ * `html` tag does not support — Solid treats it as a literal attribute named
+ * `.innerhtml` and the node renders completely empty. (See apps/github/src/views/common.ts.)
+ */
+function articleBody(getHtml: () => string): HTMLElement {
+  const host = document.createElement('div');
+  host.className = 'art-body';
+
+  createEffect(() => {
+    // Stage the sanitized fragment detached from the document.
+    const staged = document.createElement('div');
+    staged.innerHTML = getHtml();
+
+    // App-specific rewrite, applied to the SANITIZED fragment before insertion.
+    // The app renders inside an iframe, so a plain feed link would navigate the
+    // whole app frame away. Force a new tab and sever the opener reference.
+    for (const a of Array.from(staged.querySelectorAll('a'))) {
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+    }
+
+    host.replaceChildren(...Array.from(staged.childNodes));
+  });
+
+  return host;
 }
 
 // ── Render ──────────────────────────────────────────────────────────────────
@@ -237,10 +275,9 @@ render(() => html`
                   >Open original ↗</a>
                 </div>
               </div>
-              <div
-                class="art-body"
-                .innerHTML=${() => state.selectedArticle!.content || state.selectedArticle!.description || ''}
-              ></div>
+              ${() => articleBody(
+                () => state.selectedArticle!.content || state.selectedArticle!.description || ''
+              )}
             </div>`}
       </div>
 

@@ -4,7 +4,7 @@ import { showConfirm } from '@bundled/yaar';
 import { state } from '../store';
 import { CommentSection } from './CommentSection';
 import { subscribeSeries, unsubscribeSeries } from '../actions';
-import { processImages } from '../helpers';
+import { processImages, attachImageErrorFallbacks } from '../helpers';
 import type { SeriesLink } from '../types';
 
 function fmtNum(n: string): string {
@@ -105,6 +105,11 @@ export function DetailPanel() {
   const setupLazyImages = (el: HTMLElement) => {
     observer?.disconnect();
     observer = null;
+    // Attach the image load-failure fallback. This replaces the generated
+    // inline `onerror=` attribute, which DOMPurify now strips. Runs
+    // synchronously right after innerHTML assignment, so it is always in place
+    // before any error event can be dispatched.
+    attachImageErrorFallbacks(el);
     const deferred = Array.from(el.querySelectorAll('img.deferred-img')) as HTMLImageElement[];
     if (deferred.length === 0) return;
 

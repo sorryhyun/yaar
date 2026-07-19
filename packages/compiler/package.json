@@ -37,6 +37,7 @@
     "date-fns": "catalog:",
     "diff": "catalog:",
     "diff2html": "catalog:",
+    "dompurify": "catalog:",
     "konva": "catalog:",
     "lodash-es": "catalog:",
     "mammoth": "catalog:",

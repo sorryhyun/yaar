@@ -1,3 +1,4 @@
+import DOMPurify from '@bundled/dompurify';
 import type { Feed, Article } from './types';
 import { state, setState, showToast } from './store';
 import { stripHtml, extractFirstImage } from './utils';
@@ -27,7 +28,19 @@ export async function fetchFeed(feed: Feed): Promise<Article[]> {
       title: item.title || 'Untitled', link: item.link || '',
       pubDate: item.pubDate || '', author: item.author || '',
       description: stripHtml(item.description || '').slice(0, 300),
-      content: item.content || item.description || '',
+      // Feed HTML is fully attacker-controlled (any URL can be added as a feed, and
+      // rss2json passes item content through verbatim). Sanitize HERE, at ingestion,
+      // so `state` only ever holds clean HTML and every present/future sink is safe by
+      // construction.
+      //
+      // Deviation from the baseline `sanitize(dirty)` call: DOMPurify's default
+      // allowlist permits <form> and form controls. Those are safe against XSS but not
+      // against phishing — a hostile feed could render a credential form inside the
+      // reader that POSTs to an attacker origin, visually indistinguishable from app
+      // chrome. Article prose has no legitimate use for them, so drop them.
+      content: DOMPurify.sanitize(item.content || item.description || '', {
+        FORBID_TAGS: ['form', 'input', 'button', 'select', 'textarea', 'option'],
+      }),
       thumbnail: item.thumbnail || extractFirstImage(item.content || item.description || ''),
     };
   });

@@ -97,6 +97,9 @@ npm 설치 없이 `@bundled/*`로 바로 사용 가능:
 | 라이브러리 | import 경로 | 용도 |
 |-----------|------------|------|
 | solid-js | `@bundled/solid-js` | 반응형 UI (createSignal, createEffect, Show, For 등) |
+| solid-js/html | `@bundled/solid-js/html` | `html` 태그드 템플릿 (JSX 미사용) |
+| solid-js/web | `@bundled/solid-js/web` | `render`, DOM 헬퍼 |
+| solid-js/store | `@bundled/solid-js/store` | 중첩 반응형 스토어 (`createStore`) |
 | uuid | `@bundled/uuid` | ID 생성 |
 | lodash | `@bundled/lodash` | 유틸리티 (debounce, cloneDeep, groupBy 등) |
 | date-fns | `@bundled/date-fns` | 날짜 처리 |
@@ -112,6 +115,12 @@ npm 설치 없이 `@bundled/*`로 바로 사용 가능:
 | Tone.js | `@bundled/tone` | 오디오/음악 |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL 렌더링 |
 | p5.js | `@bundled/p5` | 크리에이티브 코딩 |
+| marked | `@bundled/marked` | 마크다운 → HTML |
+| Prism | `@bundled/prismjs` | 구문 강조 |
+| DOMPurify | `@bundled/dompurify` | HTML 새니타이즈 (외부 리치 콘텐츠에 필수) |
+| mammoth | `@bundled/mammoth` | `.docx` → HTML |
+| diff | `@bundled/diff` | 텍스트 diff |
+| diff2html | `@bundled/diff2html` | diff 렌더링 뷰 |
 
 ```typescript
 import { v4 as uuid } from '@bundled/uuid';
@@ -127,6 +136,7 @@ import anime from '@bundled/anime';
 |-----|------------|------|-------------------|
 | Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()` 등 | `"yaar-web"` |
+| ML 런타임 | `@bundled/yaar-ml` | 브라우저 내 모델 추론 (WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
 
 **app.json:**
 ```json
@@ -172,6 +182,73 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 - **localStorage/IndexedDB 사용 금지** — `@bundled/yaar`의 `appStorage`를 사용하세요 (서버 측 저장, 세션 간 유지).
 - **자체 완결형** — 앱은 외부 서버, localhost 서비스, iframe 외부 인프라에 의존해서는 안 됩니다.
 
+## 신뢰할 수 없는 HTML 렌더링
+
+앱이 직접 작성하지 않은 HTML — 스토리지에서 읽은 마크다운, 스크래핑한 페이지, RSS 피드
+본문, GitHub README, `appStorage` 를 거쳐 되돌아온 콘텐츠 — 은 DOM 에 닿기 전에 반드시
+`@bundled/dompurify` 를 통과해야 합니다. 앱은 iframe 안에서 실행되지만, 그 iframe 은 앱
+자신의 스토리지, 자격 증명, 에이전트와의 프로토콜 채널을 쥐고 있습니다. 주입된 스크립트는
+그 전부를 장악합니다.
+
+모든 리치 콘텐츠 파이프라인은 다음 순서를 따릅니다:
+
+1. 마크다운 또는 원본 콘텐츠를 파싱한다;
+2. **완성된 프래그먼트를 새니타이즈한다**;
+3. 새니타이즈된 프래그먼트에 앱 고유의 DOM 재작성을 수행한다;
+4. 결과를 삽입한다;
+5. 인라인 이벤트 속성이 아니라 이벤트 리스너로 동작을 연결한다.
+
+```typescript
+import DOMPurify from '@bundled/dompurify';
+
+const clean = DOMPurify.sanitize(marked.parse(source) as string);
+const doc = new DOMParser().parseFromString(clean, 'text/html');
+rewriteRelativeLinks(doc);       // 이미 안전한 HTML 위에서 도는 앱 로직
+el.innerHTML = doc.body.innerHTML;
+attachImageFallbacks(el);        // 삽입 후 addEventListener
+```
+
+2번과 3번의 순서에는 이유가 있습니다. 먼저 새니타이즈하면 안전하지 않은 원본 속성이 재작성
+단계까지 살아남지 못하고, 그 뒤에 재작성하면 기본 정책을 약화시키지 않고도 앱이 안전하다고
+아는 URL 과 속성을 만들어 넣을 수 있습니다. 순서를 뒤집으면 재작성 코드가 공격자가 통제하는
+입력을 받게 됩니다.
+
+5번도 그만큼 중요합니다. DOMPurify 는 `onerror`/`onload`/`onclick` 을 무조건 제거하므로,
+`img.setAttribute('onerror', '...')` 로 만든 폴백은 새니타이저를 도입하는 순간 조용히
+동작을 멈춥니다. 대신 삽입된 노드에 실제
+`addEventListener('error', handler, { once: true })` 를 등록하세요.
+
+파이프라인당 한 곳에서만 새니타이즈하세요. 외부 콘텐츠가 앱 상태로 처음 들어오는 지점이
+가장 좋습니다. 그래야 하위의 모든 싱크가 구조적으로 안전해집니다. 정책이 두 겹으로 겹치는
+것은 한 겹보다 나쁩니다 — 다음 편집자가 다른 쪽이 막아준다고 믿고 한쪽을 느슨하게 만듭니다.
+
+옵션 없는 `DOMPurify.sanitize(dirty)` 가 기본 정책이며, OS 셸의 마크다운/HTML 렌더러와
+동일합니다. 콘텐츠 종류가 정말로 다른 허용 목록을 필요로 할 때만 — 인쇄용 문서는 산문
+렌더링에 필요 없는 인라인 `style` 이 필요합니다 — 옵션 객체를 넘기고, 그 이유를 옆에
+주석으로 남기세요.
+
+새니타이저를 직접 만들지 마세요. 엘리먼트 차단 목록과 `^on` 속성 제거는 `<svg>`/`<math>`
+뮤테이션 XSS, `srcset`, `formaction`, `xlink:href` 를 놓칩니다.
+
+### 새니타이저가 동작하는 것처럼 보이게 만드는 두 가지 함정
+
+**`USE_PROFILES` 는 `ALLOWED_TAGS` 와 교집합을 이루지 않고 덮어씁니다.** 이미 명시적인
+`ALLOWED_TAGS` 목록이 있는 설정에 `USE_PROFILES: { html: true }` 를 추가하면, 그 목록이
+DOMPurify 의 훨씬 넓은 HTML 프로필로 *교체*됩니다. 더 엄격해 보이는 정책이 어느 순간
+`<form action="//evil"><input name=pw>` 를 조용히 통과시키게 됩니다. 명시적인
+`ALLOWED_TAGS` 가 있다면 그것만으로 이미 출력이 해당 태그로 제한됩니다 — SVG 와 MathML
+엘리먼트는 구조적으로 존재할 수 없습니다.
+
+**새니타이저는 jsdom 이나 실제 브라우저에서 테스트하고, happy-dom 은 절대 쓰지 마세요.**
+DOMPurify 는 `isSupported` 를 확인해 호스트 DOM 이 불완전하면 조용히 no-op 이 됩니다.
+그래서 happy-dom 에서는 `javascript:` href 가 그대로 통과하는 동시에 happy-dom 자체 파서가
+멀쩡한 `<table>`/`<ul>`/`<pre>` 래퍼를 제거합니다. 한 번의 실행에서 거짓 통과와 거짓 실패가
+동시에 나오는 셈이고, 초록불로 보이지만 아무것도 증명하지 못하는 테스트가 됩니다.
+
+살아남으면 안 되는 것(`<script>`, `<iframe>`, `<object>`, `<form>`, SVG 로 감싼 script,
+`javascript:` URL, 인라인 `on*=`)**과** 반드시 살아남아야 하는 것(표, 코드 블록, 이미지,
+링크)을 **모두** 검증하세요. 전부 제거하는 새니타이저는 앞쪽 목록만은 완벽하게 통과합니다.
+
 ## 안티패턴
 
 앱 개발 시 피해야 할 일반적인 실수:
@@ -182,6 +259,9 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 - **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
 - **저장 실패를 삼키지 마세요** — `appStorage.save()` 를 `catch { /* ignore */ }` 로 감싸면 UI는 "저장됨"이라고 표시한 채 데이터가 조용히 사라집니다. `appStorage.trySave()` 를 쓰고 그 결과에 따라 성공 UI를 표시하세요. [저장 실패를 삼키지 마세요](#저장-실패를-삼키지-마세요) 참고.
 - **SDK 헬퍼를 다시 구현하지 마세요** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` 는 `@bundled/yaar` 가, `debounce` 는 `@bundled/lodash` 가 제공합니다. 네이티브 `alert()`/`confirm()`/`prompt()` 는 페이지(그리고 브라우저를 조작 중인 에이전트)를 블로킹하므로 쓰지 마세요.
+- **새니타이즈하지 않은 HTML 을 `innerHTML` 에 넣지 마세요** — `marked.parse()` 는 원본 HTML 을 이스케이프하지 않으며, RSS 피드나 스크래핑한 페이지, 스토리지에서 읽은 파일도 마찬가지입니다. 먼저 `@bundled/dompurify` 를 통과시키세요. [신뢰할 수 없는 HTML 렌더링](#신뢰할-수-없는-html-렌더링) 참고.
+- **새니타이저를 직접 만들지 마세요** — 엘리먼트 차단 목록에 `^on` 속성 제거를 더하면 완전해 보이지만 그렇지 않습니다. `<svg>`/`<math>` 뮤테이션 XSS, `style`, `srcset`, `formaction`, `xlink:href` 를 놓칩니다.
+- **인라인 이벤트 속성을 생성하지 마세요** — `setAttribute('onerror', ...)` 는 어떤 새니타이저든 제거하므로, 파이프라인을 안전하게 만드는 순간 그 동작이 사라집니다. 삽입된 노드에 `addEventListener` 를 쓰세요.
 
 ### 외부 서비스 연동의 올바른 패턴
 

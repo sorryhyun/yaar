@@ -12,6 +12,7 @@
     "@yaar/server": "workspace:*",
     "@yaar/shared": "workspace:*",
     "bun-types": "catalog:",
+    "jsdom": "^29.1.1",
     "mitata": "^1.0.34"
   }
 }

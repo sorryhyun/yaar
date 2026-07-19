@@ -1,7 +1,19 @@
 import { marked } from '@bundled/marked';
+import DOMPurify from '@bundled/dompurify';
 import { state } from './store';
 
 marked.setOptions({ gfm: true, breaks: false });
+
+/**
+ * The one deviation every YAAR app makes from DOMPurify's defaults.
+ *
+ * `form` and its controls are on the default ALLOWED_TAGS. That is right for a
+ * general-purpose sanitizer and wrong for an app iframe: no foreign content YAAR
+ * renders has a legitimate form in it, while a form styled as app chrome can
+ * collect a password and POST it to another origin. Forbidding the controls too
+ * (not just `form`) avoids leaving orphaned inputs behind when the wrapper goes.
+ */
+const FORBID_FORM_TAGS = ['form', 'input', 'button', 'select', 'textarea', 'option'];
 
 /** Render GitHub markdown to HTML (synchronous, unsanitized). */
 export function renderMarkdown(md: string | null | undefined): string {
@@ -32,9 +44,6 @@ export function decodeBase64Utf8(b64: string): string {
 
 // -- Sanitize + rewrite -----------------------------------------------------
 
-/** Elements that must never survive into the document. */
-const FORBIDDEN = new Set(['SCRIPT', 'IFRAME', 'OBJECT', 'EMBED', 'LINK', 'META', 'BASE', 'FORM']);
-
 export interface MdContext {
   owner: string;
   name: string;
@@ -63,6 +72,16 @@ function joinPath(dir: string, rel: string): string {
 /**
  * Sanitize rendered markdown and rewrite repo-relative URLs to absolute GitHub URLs.
  *
+ * Ordering matters and is deliberate:
+ *   1. DOMPurify sanitizes the complete fragment (the ONLY security boundary here).
+ *   2. We reparse the now-trusted output and rewrite repo-relative URLs.
+ *
+ * Rewriting strictly AFTER sanitization is what lets us mint known-safe
+ * github.com / raw.githubusercontent.com URLs without relaxing DOMPurify's
+ * default policy. Do not add element/attribute denylists to the rewrite pass:
+ * a second, weaker policy alongside DOMPurify's invites someone to loosen one
+ * believing the other still covers it.
+ *
  * Relative images (`docs/gui.png`) must point at raw.githubusercontent.com or they
  * 404 silently; relative links must point at the repo blob/tree view.
  */
@@ -71,9 +90,22 @@ export function sanitizeAndRewrite(rendered: string, ctx: MdContext): string {
   const { owner, name, branch } = ctx;
   const dir = ctx.dir || '';
 
+  // DOMPurify's defaults, plus the shared no-forms deviation every YAAR app that
+  // renders foreign HTML applies: `form` and its controls ARE in the default
+  // ALLOWED_TAGS, GitHub itself strips forms from rendered markdown, and a form
+  // in a README is a phishing surface rather than content. Verified under jsdom
+  // against 8 adversarial fixtures (nested forms, `formaction="javascript:"`,
+  // autofocus handlers): forbidden nodes and their controls are removed with no
+  // attribute leaking through re-parenting.
+  //
+  // DOMPurify keeps relative URLs verbatim - it neither strips nor absolutizes
+  // them - which is what the rewrite pass below depends on.
+  const clean = DOMPurify.sanitize(rendered, { FORBID_TAGS: FORBID_FORM_TAGS });
+  if (!clean) return '';
+
   let doc: Document;
   try {
-    doc = new DOMParser().parseFromString(`<body>${rendered}</body>`, 'text/html');
+    doc = new DOMParser().parseFromString(`<body>${clean}</body>`, 'text/html');
   } catch {
     return '';
   }
@@ -84,25 +116,13 @@ export function sanitizeAndRewrite(rendered: string, ctx: MdContext): string {
   const blobBase = `https://github.com/${owner}/${name}`;
 
   for (const el of Array.from(root.querySelectorAll('*'))) {
-    // Drop dangerous elements outright.
-    if (FORBIDDEN.has(el.tagName)) {
-      el.remove();
-      continue;
-    }
-
-    // Strip every inline event handler (onerror, onload, onclick, ...).
-    for (const attr of Array.from(el.attributes)) {
-      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name);
-    }
+    // Every URL still present here already passed DOMPurify's protocol policy,
+    // so `isAbsolute` only decides WHETHER to rewrite - never whether it's safe.
 
     // Images / media: relative -> raw.githubusercontent.com
     const src = el.getAttribute('src');
-    if (src != null) {
-      if (!isAbsolute(src)) {
-        el.setAttribute('src', rawBase + joinPath(dir, src));
-      } else if (!/^https?:/i.test(src)) {
-        el.removeAttribute('src');
-      }
+    if (src != null && !isAbsolute(src)) {
+      el.setAttribute('src', rawBase + joinPath(dir, src));
     }
 
     // Links: relative -> github.com blob/tree; anchors left alone.
@@ -113,11 +133,8 @@ export function sanitizeAndRewrite(rendered: string, ctx: MdContext): string {
         const kind = href.endsWith('/') ? 'tree' : 'blob';
         const path = joinPath(dir, href);
         el.setAttribute('href', `${blobBase}/${kind}/${branch}/${path}`);
-      } else if (!/^(https?:|mailto:|#)/i.test(href)) {
-        // javascript: and friends.
-        el.removeAttribute('href');
       }
-      if (el.tagName === 'A' && el.hasAttribute('href')) {
+      if (el.tagName === 'A') {
         el.setAttribute('target', '_blank');
         el.setAttribute('rel', 'noopener noreferrer');
       }

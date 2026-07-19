@@ -2,7 +2,7 @@ import { createSignal, createEffect, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { state, setState } from '../store';
 import { takeScreenshot } from '../actions';
-import { processImages } from '../helpers';
+import { processImages, attachImageErrorFallbacks } from '../helpers';
 import { CommentSection } from './CommentSection';
 
 export function DetailPanel() {
@@ -25,6 +25,11 @@ export function DetailPanel() {
   const setupLazyImages = (el: HTMLElement) => {
     observer?.disconnect();
     observer = null;
+    // Attach the image load-failure fallback. This replaces the generated
+    // inline `onerror=` attribute, which DOMPurify now strips. Runs
+    // synchronously right after innerHTML assignment, so it is always in place
+    // before any error event can be dispatched.
+    attachImageErrorFallbacks(el);
     const deferred = Array.from(
       el.querySelectorAll('img.deferred-img'),
     ) as HTMLImageElement[];

@@ -1,4 +1,5 @@
 export {};
+import DOMPurify from '@bundled/dompurify';
 import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
 import { storage } from '@bundled/yaar';
@@ -54,8 +55,14 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   elPreviewBody.innerHTML = '<span class="preview-loading">Loading…</span>';
 
   if (isImage(name)) {
+    // Built via DOM construction rather than string interpolation: `name` is an
+    // attacker-controlled filename, and a `"` in it would break out of the alt
+    // attribute. Property assignment has no attribute-injection surface at all.
     // inline styles intentionally omitted — .preview-body img already covers max-width + border-radius
-    elPreviewBody.innerHTML = `<img src="${storage.url(entry.path)}" alt="${name}" />`;
+    const img = document.createElement('img');
+    img.src = storage.url(entry.path);
+    img.alt = name;
+    elPreviewBody.replaceChildren(img);
     return;
   }
 
@@ -65,8 +72,24 @@ export async function selectFile(entry: import('./types').StorageEntry) {
     try {
       const content = await storage.read(entry.path, { as: 'text' }) as string;
       setState('previewContent', content);
-      const htmlContent = marked.parse(content) as string;
-      elPreviewBody.innerHTML = `<div class="md-preview">${htmlContent}</div>`;
+      // Stored file content is untrusted and marked does NOT escape raw HTML,
+      // so the parsed fragment must be sanitized before it reaches the DOM.
+      // Order: parse -> sanitize whole fragment -> wrap -> insert.
+      // Deviation from the bare frontend MarkdownRenderer baseline: DOMPurify's
+      // default allowlist permits <form> and its controls, so a stored .md file
+      // could render a credential-phishing form that posts to an attacker origin
+      // from inside this app. Markdown never produces form elements, so denying
+      // them costs no fidelity. Everything else stays at DOMPurify defaults.
+      // Note: DOMPurify lifts a forbidden tag's children without re-scanning
+      // them, so a stray <input> can outlive its <form>. That leftover is inert
+      // (no form to submit to, and event attributes are stripped regardless).
+      const htmlContent = DOMPurify.sanitize(marked.parse(content) as string, {
+        FORBID_TAGS: ['form', 'input', 'button', 'select', 'textarea', 'option'],
+      });
+      const wrapper = document.createElement('div');
+      wrapper.className = 'md-preview';
+      wrapper.innerHTML = htmlContent;
+      elPreviewBody.replaceChildren(wrapper);
     } catch {
       elPreviewBody.innerHTML = PREVIEW_UNAVAILABLE;
     }
@@ -82,6 +105,10 @@ export async function selectFile(entry: import('./types').StorageEntry) {
       const grammar = (Prism.languages as any)[lang] ?? Prism.languages.clike;
       const highlighted = Prism.highlight(content, grammar, lang);
 
+      // Not sanitized, deliberately: Prism.highlight HTML-escapes its input
+      // before wrapping it in <span> tokens, and `lang` is a value from the
+      // fixed EXT_LANG map (never raw user input), so neither interpolation
+      // can inject markup. Do not copy this pattern to sinks fed by raw text.
       elPreviewBody.innerHTML = `<pre class="code-preview language-${lang}"><code class="language-${lang}">${highlighted}</code></pre>`;
     } catch {
       elPreviewBody.innerHTML = PREVIEW_UNAVAILABLE;

@@ -4,6 +4,24 @@ import { state, setState } from '../store';
 import { submitComment } from '../actions';
 import type { Comment } from '../types';
 
+/**
+ * Dccon (emoticon) load-failure fallback. Previously an inline `onerror=`
+ * attribute; attached with addEventListener instead so no event handler is ever
+ * expressed as HTML. `{ once: true }` mirrors the old `this.onerror=null`
+ * one-shot semantics.
+ */
+function attachDcconFallback(img: HTMLImageElement): void {
+  img.addEventListener(
+    'error',
+    () => {
+      img.alt = '[이모티콘]';
+      img.style.fontSize = '0.8em';
+      img.style.color = 'var(--yaar-text-muted)';
+    },
+    { once: true },
+  );
+}
+
 function NickBadge(props: { nickType?: Comment['nickType'] }) {
   if (props.nickType === 'sub-gonick') {
     return html`<span class="nick-badge nick-badge-manager" title="운영진/매니저">★</span>`;
@@ -31,7 +49,7 @@ function CommentItem(props: { comment: Comment }) {
       </div>
       <div class="comment-body">
         ${() => c.dcconSrc
-          ? html`<img class="comment-dccon" src=${c.dcconSrc} alt="이모티콘" loading="lazy" referrerpolicy="no-referrer" onerror="this.onerror=null;this.alt='[이모티콘]';this.style.cssText='font-size:0.8em;color:var(--yaar-text-muted)'" />`
+          ? html`<img class="comment-dccon" src=${c.dcconSrc} alt="이모티콘" loading="lazy" referrerpolicy="no-referrer" ref=${(el: HTMLImageElement) => attachDcconFallback(el)} />`
           : html`<span class="comment-text">${c.text}</span>`
         }
       </div>
@@ -109,7 +127,7 @@ export function CommentSection() {
         }}
         disabled=${() => state.commentsLoading}
       >
-        <span innerHTML=${toggleLabel}></span>
+        <span>${toggleLabel}</span>
         <span class=${() => 'comment-toggle-chevron' + (state.showComments ? ' open' : '')}>⏄</span>
       </button>
 

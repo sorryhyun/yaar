@@ -1,4 +1,4 @@
-import { renderBodyContent, escapeHtml } from './markdown';
+import { renderBodyContent, escapeHtml, safeUrl } from './markdown';
 import { THEMES } from './theme';
 import type { FontSize, Slide, ThemeId } from './types';
 
@@ -25,9 +25,21 @@ export function renderSlideHtml(slide: Slide, themeId: ThemeId, fontSize: FontSi
   // Middle content varies by layout.
   let middle = '';
   if (slide.layout === 'title-image') {
-    middle = slide.imageUrl
-      ? `<img src="${slide.imageUrl}" style="max-width:100%; max-height:260px; border-radius:12px; margin-top:12px; box-shadow:0 8px 20px rgba(0,0,0,.15);"/>`
-      : '<div style="opacity:.65; padding:8px 0;">No image selected</div>';
+    // slide.imageUrl is user data going straight into an attribute, so it never gets
+    // interpolated as a raw string: validate the protocol, then set it as a property
+    // on a real element so quotes can't break out of the attribute.
+    const src = safeUrl(slide.imageUrl);
+    if (src) {
+      const img = document.createElement('img');
+      img.src = src;
+      img.setAttribute(
+        'style',
+        'max-width:100%; max-height:260px; border-radius:12px; margin-top:12px; box-shadow:0 8px 20px rgba(0,0,0,.15);',
+      );
+      middle = img.outerHTML;
+    } else {
+      middle = '<div style="opacity:.65; padding:8px 0;">No image selected</div>';
+    }
   }
 
   return `<div class="${cls}" style="${style}"><h1>${title}</h1>${middle}${body}</div>`;

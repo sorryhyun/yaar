@@ -119,6 +119,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | p5.js | `@bundled/p5` | Creative coding |
 | marked | `@bundled/marked` | Markdown → HTML |
 | Prism | `@bundled/prismjs` | Syntax highlighting |
+| DOMPurify | `@bundled/dompurify` | HTML sanitization (required for untrusted rich content) |
 | mammoth | `@bundled/mammoth` | `.docx` → HTML |
 | diff | `@bundled/diff` | Text diffing |
 | diff2html | `@bundled/diff2html` | Rendered diff views |
@@ -195,6 +196,74 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No localStorage/IndexedDB** — Use `appStorage` from `@bundled/yaar` for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 
+## Rendering Untrusted HTML
+
+Any HTML an app did not author itself — a Markdown file from storage, a scraped page, an
+RSS feed body, a GitHub README, content round-tripped through `appStorage` — must pass
+through `@bundled/dompurify` before it reaches the DOM. Apps run in an iframe, but that
+iframe holds the app's own storage, credentials, and protocol channel to its agent; an
+injected script owns all of it.
+
+Every rich-content pipeline follows this order:
+
+1. parse the Markdown or source content;
+2. **sanitize the complete fragment**;
+3. perform app-specific DOM rewrites on the sanitized fragment;
+4. insert the result;
+5. attach behavior with event listeners — never inline event attributes.
+
+```typescript
+import DOMPurify from '@bundled/dompurify';
+
+const clean = DOMPurify.sanitize(marked.parse(source) as string);
+const doc = new DOMParser().parseFromString(clean, 'text/html');
+rewriteRelativeLinks(doc);       // app logic, on already-safe HTML
+el.innerHTML = doc.body.innerHTML;
+attachImageFallbacks(el);        // addEventListener, after insertion
+```
+
+Steps 2 and 3 are in that order for a reason. Sanitizing first means no unsafe source
+attribute survives into your rewriting pass; rewriting after means the app can mint
+known-safe URLs and attributes without weakening the default policy. Reversing them
+hands your rewriter attacker-controlled input.
+
+Step 5 matters just as much. DOMPurify strips `onerror`/`onload`/`onclick`
+unconditionally, so a generated `img.setAttribute('onerror', '...')` fallback will
+silently stop working after you add the sanitizer. Register a real
+`addEventListener('error', handler, { once: true })` on the inserted node instead.
+
+Sanitize at one choke point per pipeline, ideally where foreign content first enters app
+state, so that every downstream sink is safe by construction. Two overlapping policies are
+worse than one: the next editor will weaken one assuming the other covers it.
+
+`DOMPurify.sanitize(dirty)` with no options is the default policy, matching the OS shell's
+own Markdown and HTML renderers. Pass an options object only when the content type
+genuinely needs a different allowlist — a printable document needs inline `style` that
+prose rendering does not — and comment the reasoning next to it.
+
+Do not hand-roll a sanitizer. Element denylists and `^on` attribute stripping miss
+`<svg>`/`<math>` mutation-XSS, `srcset`, `formaction`, and `xlink:href`.
+
+### Two traps that make a sanitizer look like it works
+
+**`USE_PROFILES` overrides `ALLOWED_TAGS`; it does not intersect with it.** Adding
+`USE_PROFILES: { html: true }` to a config that already has an explicit `ALLOWED_TAGS`
+list *replaces* your list with DOMPurify's much broader HTML profile. A policy that looks
+strictly tighter can silently start passing `<form action="//evil"><input name=pw>`. If
+you have an explicit `ALLOWED_TAGS`, that alone already confines output to those tags —
+SVG and MathML elements are absent by construction.
+
+**Test sanitizers against jsdom or a real browser, never happy-dom.** DOMPurify checks
+`isSupported` and silently becomes a no-op when the host DOM is too incomplete, so under
+happy-dom a `javascript:` href sails through untouched while happy-dom's own parser drops
+benign `<table>`/`<ul>`/`<pre>` wrappers. The result is false passes and false failures in
+the same run — a test suite that proves nothing while looking green.
+
+Always assert on what must *not* survive (`<script>`, `<iframe>`, `<object>`, `<form>`,
+SVG-wrapped script, `javascript:` URLs, inline `on*=`) **and** on what must survive
+(tables, code blocks, images, links). A sanitizer that strips everything passes the first
+half of that list perfectly.
+
 ## Anti-Patterns
 
 Common mistakes to avoid when building apps:
@@ -205,6 +274,9 @@ Common mistakes to avoid when building apps:
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
 - **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
+- **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `@bundled/dompurify` first. See [Rendering Untrusted HTML](#rendering-untrusted-html).
+- **Don't hand-roll a sanitizer** — an element denylist plus `^on` attribute stripping looks complete and isn't: it misses `<svg>`/`<math>` mutation-XSS, `style`, `srcset`, `formaction`, and `xlink:href`.
+- **Don't generate inline event attributes** — `setAttribute('onerror', ...)` is stripped by any sanitizer, so the behavior it encodes disappears the moment the pipeline is secured. Use `addEventListener` on the inserted node.
 
 ### Right Pattern for External Service Integration
 

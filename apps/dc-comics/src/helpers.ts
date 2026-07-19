@@ -1,3 +1,5 @@
+import DOMPurify from '@bundled/dompurify';
+
 /**
  * Lazy-load attributes used by DCinside mobile (and common lazy-load libs).
  * The real image URL is stored in one of these while `src` is empty or a
@@ -62,7 +64,9 @@ export const LAZY_IMAGE_ATTRS = LAZY_ATTRS;
  * DCinside mobile lazy-loads body images: the real URL lives in a `data-*`
  * attribute (data-original / data-src / ...) while `src` is empty or a tiny
  * placeholder. This resolves lazy attributes, removes tracking pixels, and adds
- * a referrerpolicy + onerror fallback for cross-origin image hosts.
+ * a referrerpolicy + load-failure fallback for cross-origin image hosts.
+ *
+ * The incoming HTML is sanitized with DOMPurify before anything else runs.
  *
  * Progressive loading: the first `eagerCount` images keep their real `src` and
  * load immediately. Every image after that is *deferred* — its real URL is
@@ -75,9 +79,65 @@ export const LAZY_IMAGE_ATTRS = LAZY_ATTRS;
 const TRANSPARENT_PX =
   'data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==';
 
+/**
+ * Marker attribute for images that need the load-failure placeholder.
+ * The fallback used to be a generated inline `onerror=` attribute; DOMPurify
+ * strips inline handlers unconditionally, so the behaviour is now attached with
+ * addEventListener after insertion (see `attachImageErrorFallbacks`).
+ */
+const IMG_FALLBACK_ATTR = 'data-img-fallback';
+
+/**
+ * Replace a failed <img> with the same inline placeholder the old generated
+ * `onerror` attribute produced. Built with createElement/textContent rather
+ * than an HTML string so nothing re-enters an HTML sink.
+ */
+function replaceWithFailurePlaceholder(img: HTMLImageElement): void {
+  const span = document.createElement('span');
+  span.textContent = '[이미지 로드 실패]';
+  span.style.display = 'inline-block';
+  span.style.padding = '4px 8px';
+  span.style.background = 'var(--yaar-bg-surface)';
+  span.style.borderRadius = '4px';
+  span.style.fontSize = '0.8em';
+  span.style.color = 'var(--yaar-text-muted)';
+  span.style.margin = '2px';
+  img.replaceWith(span);
+}
+
+/**
+ * Attach the image load-failure fallback to every marked <img> inside `el`.
+ * Must be called after the processed HTML has been inserted into the document.
+ *
+ * `{ once: true }` reproduces the one-shot semantics of the old
+ * `this.onerror=null` prelude: a failing replacement can never loop.
+ */
+export function attachImageErrorFallbacks(el: HTMLElement): void {
+  const imgs = Array.from(
+    el.querySelectorAll(`img[${IMG_FALLBACK_ATTR}]`),
+  ) as HTMLImageElement[];
+  for (const img of imgs) {
+    img.removeAttribute(IMG_FALLBACK_ATTR);
+    img.addEventListener('error', () => replaceWithFailurePlaceholder(img), { once: true });
+  }
+}
+
 export function processImages(htmlStr: string, eagerCount = 2): string {
   const div = document.createElement('div');
-  div.innerHTML = htmlStr;
+  // SANITIZE FIRST. This is the choke point for all scraped DC HTML: every
+  // display path goes through processImages, so sanitizing here guarantees the
+  // `div.innerHTML =` parse below never instantiates a live `onerror`/`onload`
+  // handler, and the image rewrites that follow operate on a clean fragment.
+  //
+  // DEVIATION from the baseline (no-options) config used by the OS shell's
+  // MarkdownRenderer: DOMPurify's default ALLOWED_TAGS permits <form> and its
+  // controls. Post bodies here are read-only scraped forum content where an
+  // interactive form has no legitimate purpose, but a <form action="//evil">
+  // rendered inside the app chrome is a credential-phishing surface. Forbidden
+  // explicitly; everything else stays at the audited defaults.
+  div.innerHTML = DOMPurify.sanitize(htmlStr, {
+    FORBID_TAGS: ['form', 'input', 'button', 'select', 'textarea', 'option'],
+  });
   let kept = 0;
   div.querySelectorAll('img').forEach((img) => {
     const w = img.getAttribute('width');
@@ -133,16 +193,10 @@ export function processImages(htmlStr: string, eagerCount = 2): string {
       // opts the image INTO CORS mode, which DC's image hosts reject (no ACAO
       // header) -> the image is blocked. referrerpolicy alone is safe.
       img.setAttribute('referrerpolicy', 'no-referrer');
-      img.setAttribute(
-        'onerror',
-        'this.onerror=null;' +
-          "var s=document.createElement('span');" +
-          "s.textContent='[이미지 로드 실패]';" +
-          "s.style.cssText='display:inline-block;padding:4px 8px;" +
-          'background:var(--yaar-bg-surface);border-radius:4px;' +
-          "font-size:0.8em;color:var(--yaar-text-muted);margin:2px';" +
-          'this.replaceWith(s)',
-      );
+      // Mark for the post-insertion error listener. An inline `onerror` string
+      // cannot be used here: DOMPurify strips inline handlers, and generating
+      // one would violate the "behaviour via addEventListener" contract.
+      img.setAttribute(IMG_FALLBACK_ATTR, '');
     }
 
     // Progressive loading: only the first `eagerCount` images load immediately.

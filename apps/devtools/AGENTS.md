@@ -157,6 +157,43 @@ import { animate, createTimeline } from '@bundled/anime';
 
 When migrating legacy apps, check `describeBundledLibrary({ name: "yaar" })` for SDK replacements for hand-rolled toasts, error handling, loading state, shortcuts and storage reads.
 
+## Untrusted HTML
+
+Any HTML the app did not author — Markdown from storage, a scraped page, a feed body, an
+API string, anything round-tripped through `appStorage` — goes through
+`@bundled/dompurify` before it reaches a DOM sink. Never hand-roll a sanitizer; an
+element denylist plus `^on` stripping misses `<svg>`/`<math>` mXSS, `srcset`,
+`formaction` and `xlink:href`.
+
+```ts
+import DOMPurify from '@bundled/dompurify';
+
+// `form` and its controls are on DOMPurify's DEFAULT allowlist. Every YAAR app
+// forbids them: no foreign content has a legitimate form, and one styled as app
+// chrome can collect a password and POST it cross-origin.
+const FORBID_FORM_TAGS = ['form', 'input', 'button', 'select', 'textarea', 'option'];
+
+const clean = DOMPurify.sanitize(dirty, { FORBID_TAGS: FORBID_FORM_TAGS });
+```
+
+Order is fixed: **parse → sanitize → app-specific DOM rewrites → insert → attach
+behavior with `addEventListener`.** Sanitizing before rewriting means no unsafe source
+attribute survives into your rewrite pass; rewriting after means you can mint known-safe
+URLs without loosening the policy.
+
+Never generate an inline handler (`setAttribute('onerror', ...)`). Any sanitizer strips
+it, so the behavior silently vanishes — use `addEventListener(..., { once: true })` on
+the inserted node.
+
+Two traps: `USE_PROFILES` **overrides** `ALLOWED_TAGS` instead of intersecting with it,
+so adding it to an explicit allowlist silently widens the policy. And DOMPurify does not
+CSS-parse `style` values, so `style` is passed through verbatim — treat it as presentation
+you allowed, not as something the sanitizer vetted.
+
+Adversarial fixtures live in `packages/tests/src/security/html-sanitization.test.ts`.
+Test sanitizers under jsdom or a real browser, never happy-dom: DOMPurify silently no-ops
+when `isSupported` fails, producing false passes and false failures in the same run.
+
 ## Static Assets (images, fonts, audio)
 
 **Import the file. Do not fetch it from storage.**

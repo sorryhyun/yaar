@@ -19,7 +19,12 @@ import {
 import { fetchArxivPapers, fetchHfPapers } from './data';
 import { registerProtocol } from './protocol';
 import { renderActivityChart, destroyChart } from './chart';
+import { safeUrlRaw } from './sanitize';
 import './styles.css';
+
+const HF_LOGO = 'https://huggingface.co/front/assets/huggingface_logo-noborder.svg';
+const ARXIV_LOGO =
+  'https://static.arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg';
 
 // ── Signals ───────────────────────────────────────────────────────────────────────
 const [sourcePapers, setSourcePapers] = createSignal<DailyPaperItem[]>([]);
@@ -156,11 +161,17 @@ function PaperCard(props: { item: DailyPaperItem }) {
     item?.organization?.fullname || item?.organization?.name || item?.arxiv?.primaryCategory;
   const comments = getComments(item);
   const upvotes = getUpvotes(item);
+  // Solid escapes interpolated text and attribute *values*, so foreign text
+  // cannot break out of the markup here. What Solid does NOT do is validate URL
+  // schemes — a remote `absUrl`/`pdfUrl`/`thumbnail` of `javascript:alert(1)`
+  // would land in a live `href`/`src`. Allowlist http(s) at every URL sink.
   const thumbnail =
     source === 'huggingface'
-      ? item?.thumbnail || 'https://huggingface.co/front/assets/huggingface_logo-noborder.svg'
-      : 'https://static.arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg';
-  const absUrl = paperAbsUrl(item);
+      ? safeUrlRaw(item?.thumbnail, HF_LOGO)
+      : ARXIV_LOGO;
+  const absUrl = safeUrlRaw(paperAbsUrl(item));
+  const pdfUrl = safeUrlRaw(item?.arxiv?.pdfUrl);
+  const hfUrl = safeUrlRaw(`https://huggingface.co/papers/${encodeURIComponent(id)}`);
 
   return html`
     <article class="card">
@@ -177,14 +188,12 @@ function PaperCard(props: { item: DailyPaperItem }) {
           </div>
           <p class="summary">${summary}</p>
           <div class="links">
-            ${source === 'huggingface'
-              ? html`<a href="https://huggingface.co/papers/${id}" target="_blank" rel="noreferrer"
-                  >Hugging Face</a
-                >`
+            ${source === 'huggingface' && hfUrl
+              ? html`<a href="${hfUrl}" target="_blank" rel="noreferrer">Hugging Face</a>`
               : ''}
-            <a href="${absUrl}" target="_blank" rel="noreferrer">arXiv</a>
-            ${item?.arxiv?.pdfUrl
-              ? html`<a href="${item.arxiv.pdfUrl}" target="_blank" rel="noreferrer">PDF</a>`
+            ${absUrl ? html`<a href="${absUrl}" target="_blank" rel="noreferrer">arXiv</a>` : ''}
+            ${pdfUrl
+              ? html`<a href="${pdfUrl}" target="_blank" rel="noreferrer">PDF</a>`
               : ''}
           </div>
         </div>
@@ -335,7 +344,10 @@ render(
                       <p class="recommend-item">
                         <strong>${i + 1}.</strong>
                         <a
-                          href="${r.url || `https://arxiv.org/abs/${r.id}`}"
+                          href="${safeUrlRaw(
+                            r.url,
+                            `https://arxiv.org/abs/${encodeURIComponent(String(r.id ?? ''))}`,
+                          )}"
                           target="_blank"
                           rel="noreferrer"
                           >${r.title}</a

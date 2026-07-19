@@ -28,9 +28,14 @@ import { join } from 'path';
  * its baked-in CSS never defines. '10': the capture SDK now composites live
  * canvas pixels into a full-window screenshot and honors app.register's new
  * onCapture provider — the app-protocol script that wires onCapture is not
- * hot-upgraded, so old builds must be recompiled to pick it up.
+ * hot-upgraded, so old builds must be recompiled to pick it up. '11': @bundled/
+ * dompurify entered the catalog and eight apps moved their untrusted-HTML sinks
+ * onto it. Those apps' own hashes changed, so they would rebuild regardless —
+ * the bump is here to guarantee no installed dist/ predating the sanitization
+ * work survives on a machine whose hashes happen to match, since a stale copy of
+ * one of these apps is an unsanitized innerHTML sink rather than a cosmetic lag.
  */
-export const COMPILER_VERSION = '10';
+export const COMPILER_VERSION = '11';
 
 export interface BuildManifest {
   sourceHash: string;

@@ -34,7 +34,11 @@ const BUNDLED_LIBRARY_DOCS = [
   'CLAUDE.md',
   'packages/compiler/CLAUDE.md',
   'docs/guides/app-development.md',
+  'docs/ko/app-development.md',
 ];
+
+/** Section headings that introduce a prose list of `@bundled/*` imports, per locale. */
+const BUNDLED_LIBRARY_HEADING = /^#{2,6}\s+.*(Bundled Libraries|번들 라이브러리)\s*$/;
 
 function git(args: string[]): string {
   try {
@@ -90,7 +94,7 @@ function parseSources(docText: string): { valid: string[]; broken: string[] } {
 /** Extract @bundled/* import names from a doc's Bundled Libraries section. */
 function parseDocumentedBundledLibraries(docText: string): Set<string> | null {
   const lines = docText.split('\n');
-  const start = lines.findIndex((line) => /^#{2,6}\s+.*Bundled Libraries\s*$/.test(line.trim()));
+  const start = lines.findIndex((line) => BUNDLED_LIBRARY_HEADING.test(line.trim()));
   if (start === -1) return null;
 
   const headingLevel = lines[start].match(/^#+/)![0].length;

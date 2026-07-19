@@ -10,6 +10,10 @@ import {
   paperTitle,
   getPublishedAt,
 } from './paper-utils';
+import { esc, safeUrl, sanitizeMarkup } from './sanitize';
+
+const HF_LOGO = 'https://huggingface.co/front/assets/huggingface_logo-noborder.svg';
+const ARXIV_LOGO = 'https://static.arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg';
 
 type RenderArgs = {
   statusEl: HTMLDivElement;
@@ -30,20 +34,23 @@ export function renderRecommendations(recommendBoxEl: HTMLDivElement, recommenda
   }
 
   recommendBoxEl.style.display = 'block';
-  recommendBoxEl.innerHTML = `
+  // `recommendations` arrive from the agent via the app protocol and are derived
+  // from the same remote paper feeds — untrusted. Escape each field, allowlist
+  // the URL protocol, then sanitize the assembled fragment before inserting.
+  recommendBoxEl.innerHTML = sanitizeMarkup(`
     <h3 class="recommend-title">🤖 Today's 2 recommended papers</h3>
     ${recommendations
       .map(
         (r, i) => `
       <p class="recommend-item">
         <strong>${i + 1}.</strong>
-        <a href="${r.url || `https://arxiv.org/abs/${r.id}`}" target="_blank" rel="noreferrer">${r.title}</a>
-        — ${r.reason} (👍 ${r.upvotes}, 💬 ${r.comments})
+        <a href="${safeUrl(r.url, `https://arxiv.org/abs/${encodeURIComponent(String(r.id ?? ''))}`)}" target="_blank" rel="noreferrer">${esc(r.title)}</a>
+        — ${esc(r.reason)} (👍 ${esc(r.upvotes)}, 💬 ${esc(r.comments)})
       </p>
     `,
       )
       .join('')}
-  `;
+  `);
 }
 
 function renderPaperCard(item: DailyPaperItem): string {
@@ -55,29 +62,31 @@ function renderPaperCard(item: DailyPaperItem): string {
   const org = item?.organization?.fullname || item?.organization?.name || item?.arxiv?.primaryCategory;
   const comments = getComments(item);
   const upvotes = getUpvotes(item);
-  const thumbnail =
-    source === 'huggingface'
-      ? item?.thumbnail || 'https://huggingface.co/front/assets/huggingface_logo-noborder.svg'
-      : 'https://static.arxiv.org/static/browse/0.3.4/images/arxiv-logo-one-color-white.svg';
+  const thumbnail = source === 'huggingface' ? safeUrl(item?.thumbnail, HF_LOGO) : esc(ARXIV_LOGO);
+  const absUrl = safeUrl(paperAbsUrl(item));
+  const pdfUrl = safeUrl(item?.arxiv?.pdfUrl);
+  const hfUrl = safeUrl(`https://huggingface.co/papers/${encodeURIComponent(id)}`);
 
+  // Every value below is remote-sourced text; none of it may reach an HTML or
+  // attribute context unescaped. URLs additionally pass a http(s) allowlist.
   return `
     <article class="card">
       <div class="card-inner">
-        <img class="thumb" src="${thumbnail}" alt="thumbnail for ${title.replace(/"/g, '&quot;')}" loading="lazy" />
+        <img class="thumb" src="${thumbnail}" alt="thumbnail for ${esc(title)}" loading="lazy" />
         <div class="content">
-          <h2 class="title"><a href="${paperAbsUrl(item)}" target="_blank" rel="noreferrer">${title}</a></h2>
+          <h2 class="title"><a href="${absUrl}" target="_blank" rel="noreferrer">${esc(title)}</a></h2>
           <div class="meta">
             <span class="tag">${source === 'huggingface' ? 'Hugging Face' : 'arXiv'}</span>
-            <span>🗓 ${formatDate(published)}</span>
-            <span>👍 ${upvotes}</span>
-            <span>💬 ${comments} comments</span>
-            ${org ? `<span>🏷 ${org}</span>` : ''}
+            <span>🗓 ${esc(formatDate(published))}</span>
+            <span>👍 ${esc(upvotes)}</span>
+            <span>💬 ${esc(comments)} comments</span>
+            ${org ? `<span>🏷 ${esc(org)}</span>` : ''}
           </div>
-          <p class="summary">${summary}</p>
+          <p class="summary">${esc(summary)}</p>
           <div class="links">
-            ${source === 'huggingface' ? `<a href="https://huggingface.co/papers/${id}" target="_blank" rel="noreferrer">Hugging Face</a>` : ''}
-            <a href="${paperAbsUrl(item)}" target="_blank" rel="noreferrer">arXiv</a>
-            ${item?.arxiv?.pdfUrl ? `<a href="${item.arxiv.pdfUrl}" target="_blank" rel="noreferrer">PDF</a>` : ''}
+            ${source === 'huggingface' && hfUrl ? `<a href="${hfUrl}" target="_blank" rel="noreferrer">Hugging Face</a>` : ''}
+            ${absUrl ? `<a href="${absUrl}" target="_blank" rel="noreferrer">arXiv</a>` : ''}
+            ${pdfUrl ? `<a href="${pdfUrl}" target="_blank" rel="noreferrer">PDF</a>` : ''}
           </div>
         </div>
       </div>
@@ -130,9 +139,13 @@ export function renderApp({
   if (sourceMode === 'both') {
     const hf = papers.filter((p) => getSource(p) === 'huggingface');
     const arxiv = papers.filter((p) => getSource(p) === 'arxiv');
-    listEl.innerHTML = `${renderSection('Hugging Face Papers', hf)}${renderSection('arXiv Papers', arxiv)}`;
+    listEl.innerHTML = sanitizeMarkup(
+      `${renderSection('Hugging Face Papers', hf)}${renderSection('arXiv Papers', arxiv)}`,
+    );
     return;
   }
 
-  listEl.innerHTML = `<div class="grid">${papers.map((item) => renderPaperCard(item)).join('')}</div>`;
+  listEl.innerHTML = sanitizeMarkup(
+    `<div class="grid">${papers.map((item) => renderPaperCard(item)).join('')}</div>`,
+  );
 }

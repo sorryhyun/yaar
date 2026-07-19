@@ -80,6 +80,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   d3: 'd3',
   diff: 'diff',
   diff2html: 'diff2html',
+  dompurify: 'dompurify',
   'matter-js': 'matter-js',
   tone: 'tone',
   'pixi.js': 'pixi.js',

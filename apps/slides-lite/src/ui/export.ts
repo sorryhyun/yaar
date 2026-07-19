@@ -4,6 +4,12 @@ import { parseAspectRatio } from '../aspect-ratio';
 import { escapeHtml } from '../markdown';
 import { renderSlideHtml } from '../slide-render';
 
+/**
+ * The document shell below (doctype, styles, auto-print script) is app-authored and
+ * intentionally NOT sanitized -- sanitizing the assembled string would strip the
+ * window.print() bootstrap and silently break PDF export. Untrusted slide content is
+ * already sanitized upstream in renderBodyContent, so only clean HTML is assembled here.
+ */
 export function exportPdf() {
   const deck = getDeck();
   const ratio = parseAspectRatio(deck.aspectRatio);

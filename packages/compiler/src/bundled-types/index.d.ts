@@ -228,6 +228,11 @@ declare module '@bundled/prismjs' {
   export * from 'prismjs';
 }
 
+declare module '@bundled/dompurify' {
+  export * from 'dompurify';
+  export { default } from 'dompurify';
+}
+
 // ── Audio ───────────────────────────────────────────────────────────────────
 
 declare module '@bundled/tone' {
