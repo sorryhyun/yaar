@@ -46,6 +46,11 @@ export const [projects, setProjects] = createSignal<ProjectMeta[]>([]);
 export const [files, setFiles] = createSignal<FileEntry[]>([]);
 export const [openFilePath, setOpenFilePath] = createSignal<string | null>(null);
 export const [openFileContent, setOpenFileContent] = createSignal<string | null>(null);
+/**
+ * Data URL for the open file when it is an image. Non-null means the editor shows
+ * a picture instead of the textarea — an image's bytes are not editable source.
+ */
+export const [openFileImage, setOpenFileImage] = createSignal<string | null>(null);
 export const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>([]);
 export const [compileStatus, setCompileStatus] = createSignal<
   'idle' | 'compiling' | 'success' | 'error'

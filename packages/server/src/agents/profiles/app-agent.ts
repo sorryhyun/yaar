@@ -103,8 +103,12 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
 
   // Protocol manifest from app.json is always appended
   if (protocol) {
+    // The two lists are separate namespaces, and a name from one is invalid in the
+    // other — `command("consoleLogs")` on a state key fails with "Unknown command",
+    // which reads as a broken app rather than the wrong verb. Name the verb in each
+    // heading so the distinction is visible where the names are read.
     if (protocol.state && Object.keys(protocol.state).length > 0) {
-      systemPrompt += '\n## Available State\n\n';
+      systemPrompt += '\n## Available State — read with `query(stateKey)`, never `command`\n\n';
       for (const [key, desc] of Object.entries(protocol.state)) {
         const description =
           typeof desc === 'string' ? desc : ((desc as { description?: string })?.description ?? '');
@@ -113,7 +117,7 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
     }
 
     if (protocol.commands && Object.keys(protocol.commands).length > 0) {
-      systemPrompt += '\n## Available Commands\n\n';
+      systemPrompt += '\n## Available Commands — run with `command(command, params)`\n\n';
       for (const [key, desc] of Object.entries(protocol.commands)) {
         const description =
           typeof desc === 'string' ? desc : ((desc as { description?: string })?.description ?? '');

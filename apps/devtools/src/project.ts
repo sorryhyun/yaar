@@ -10,6 +10,7 @@ import {
   openFilePath,
   setOpenFilePath,
   setOpenFileContent,
+  setOpenFileImage,
   setDiagnostics,
   setCompileStatus,
   setPreviewUrl,
@@ -170,6 +171,7 @@ export async function deleteProject(id: string): Promise<void> {
         setFiles([]);
         setOpenFilePath(null);
         setOpenFileContent(null);
+        setOpenFileImage(null);
         setDiagnostics([]);
         setCompileStatus('idle');
         setPreviewUrl(null);
@@ -193,6 +195,7 @@ export function closeTab(id: string): void {
         setFiles([]);
         setOpenFilePath(null);
         setOpenFileContent(null);
+        setOpenFileImage(null);
         setDiagnostics([]);
         setCompileStatus('idle');
         setPreviewUrl(null);
@@ -237,18 +240,57 @@ export async function refreshFiles(projectId?: string): Promise<void> {
 
 // ── File Operations ──
 
+// Raster images the editor renders as a picture. SVG is deliberately absent: it is
+// text the user may want to edit, and it highlights fine as markup.
+const IMAGE_EXT = /\.(png|jpe?g|gif|webp|avif|bmp|ico)$/i;
+
+const IMAGE_MIME: Record<string, string> = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  avif: 'image/avif',
+  bmp: 'image/bmp',
+  ico: 'image/x-icon',
+};
+
 export async function openFile(path: string): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
+  if (IMAGE_EXT.test(path)) {
+    // Reading an image as text yields a wall of base64 (or mojibake). Read the bytes
+    // and hand the editor a data URL instead.
+    try {
+      const { data, mimeType, encoding } = await appStorage.readBinary(projectPath(proj.id, path));
+      if (encoding === 'base64') {
+        const ext = path.split('.').pop()?.toLowerCase() ?? '';
+        const mime =
+          mimeType && mimeType !== 'application/octet-stream'
+            ? mimeType
+            : (IMAGE_MIME[ext] ?? 'application/octet-stream');
+        batch(() => {
+          setOpenFilePath(path);
+          setOpenFileContent(null);
+          setOpenFileImage(`data:${mime};base64,${data}`);
+        });
+        return;
+      }
+    } catch {
+      /* fall through to the text path, which reports the failure */
+    }
+  }
   try {
     const content = await appStorage.read(projectPath(proj.id, path));
     batch(() => {
       setOpenFilePath(path);
+      setOpenFileImage(null);
       setOpenFileContent(typeof content === 'string' ? content : JSON.stringify(content));
     });
   } catch {
     batch(() => {
       setOpenFilePath(path);
+      setOpenFileImage(null);
       setOpenFileContent(`// Could not read ${path}`);
     });
   }
@@ -368,6 +410,7 @@ export async function deleteFile(path: string): Promise<void> {
     batch(() => {
       setOpenFilePath(null);
       setOpenFileContent(null);
+      setOpenFileImage(null);
     });
   }
   await refreshFiles();

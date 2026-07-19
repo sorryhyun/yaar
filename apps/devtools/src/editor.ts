@@ -3,7 +3,7 @@ import { createSignal, createEffect, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
-import { openFilePath, openFileContent, writeFile } from './project';
+import { openFilePath, openFileContent, openFileImage, writeFile } from './project';
 
 // Register TypeScript grammar (Prism base only has js/css/markup)
 // TypeScript extends JavaScript, so we define it here
@@ -131,50 +131,58 @@ export function Editor() {
             <span class="dirty-dot"></span>
           <//>
         </div>
-        <div class="editor-content">
-          <div class="editor-overlay">
-            <pre
-              class="editor-highlight"
-              aria-hidden="true"
-            ><code innerHTML=${highlightedHtml}></code>
-</pre>
-            <textarea
-              class="editor-textarea"
-              spellcheck=${false}
-              value=${currentContent}
-              onInput=${(e: Event) => {
-                const val = (e.target as HTMLTextAreaElement).value;
-                setLocalContent(val);
-                setIsDirty(true);
-                const lang = getLanguage(openFilePath());
-                setHighlightedHtml(highlight(val, lang));
-                scheduleSave();
-              }}
-              onScroll=${syncScroll}
-              onKeyDown=${(e: KeyboardEvent) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                  e.preventDefault();
-                  saveNow();
-                }
-                if (e.key === 'Tab') {
-                  e.preventDefault();
-                  const ta = e.target as HTMLTextAreaElement;
-                  const start = ta.selectionStart;
-                  const end = ta.selectionEnd;
-                  const val = ta.value;
-                  ta.value = val.substring(0, start) + '  ' + val.substring(end);
-                  ta.selectionStart = ta.selectionEnd = start + 2;
-                  setLocalContent(ta.value);
-                  setIsDirty(true);
-                  const lang = getLanguage(openFilePath());
-                  setHighlightedHtml(highlight(ta.value, lang));
-                  scheduleSave();
-                }
-              }}
-            ></textarea>
+        <${Show} when=${() => openFileImage()} fallback=${TextEditor}>
+          <div class="editor-image">
+            <img src=${() => openFileImage() ?? ''} alt=${() => openFilePath() ?? ''} />
           </div>
-        </div>
+        <//>
       <//>
+    </div>
+  `;
+}
+
+/** The code surface: highlighted <pre> under a transparent <textarea>. */
+function TextEditor() {
+  return html`
+    <div class="editor-content">
+      <div class="editor-overlay">
+        <pre class="editor-highlight" aria-hidden="true"><code innerHTML=${highlightedHtml}></code>
+</pre>
+        <textarea
+          class="editor-textarea"
+          spellcheck=${false}
+          value=${currentContent}
+          onInput=${(e: Event) => {
+            const val = (e.target as HTMLTextAreaElement).value;
+            setLocalContent(val);
+            setIsDirty(true);
+            const lang = getLanguage(openFilePath());
+            setHighlightedHtml(highlight(val, lang));
+            scheduleSave();
+          }}
+          onScroll=${syncScroll}
+          onKeyDown=${(e: KeyboardEvent) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+              e.preventDefault();
+              saveNow();
+            }
+            if (e.key === 'Tab') {
+              e.preventDefault();
+              const ta = e.target as HTMLTextAreaElement;
+              const start = ta.selectionStart;
+              const end = ta.selectionEnd;
+              const val = ta.value;
+              ta.value = val.substring(0, start) + '  ' + val.substring(end);
+              ta.selectionStart = ta.selectionEnd = start + 2;
+              setLocalContent(ta.value);
+              setIsDirty(true);
+              const lang = getLanguage(openFilePath());
+              setHighlightedHtml(highlight(ta.value, lang));
+              scheduleSave();
+            }
+          }}
+        ></textarea>
+      </div>
     </div>
   `;
 }

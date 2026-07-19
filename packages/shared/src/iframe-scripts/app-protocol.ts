@@ -71,6 +71,39 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     }
   };
 
+  // State and commands are separate lookups, so a name used against the wrong one
+  // fails with a bare "Unknown command: consoleLogs" that says nothing about where
+  // the name actually lives. An agent reading that concludes the app is broken, or
+  // guesses another name. Point at the right verb instead, and otherwise list what
+  // this app does register so the next call can be right.
+  function memberNames(bag) {
+    var out = [];
+    if (bag) { for (var k in bag) out.push(k); }
+    return out.sort();
+  }
+
+  var MAX_LISTED_NAMES = 40;
+
+  function memberError(kind, name) {
+    var isCmd = kind === 'command';
+    var label = isCmd ? 'Unknown command: ' + name : 'Unknown state key: ' + name;
+    if (!registration) return label + '. No app is registered in this window.';
+    var otherBag = isCmd ? registration.state : registration.commands;
+    var otherName = name;
+    if (!isCmd && aliasMap[name]) otherName = aliasMap[name];
+    if (otherBag && otherBag[otherName]) {
+      return isCmd
+        ? label + '. "' + name + '" is a state key, not a command - read it with query("' + name + '").'
+        : label + '. "' + name + '" is a command, not a state key - run it with command("' + name + '").';
+    }
+    var own = memberNames(isCmd ? registration.commands : registration.state);
+    var noun = isCmd ? 'commands' : 'state keys';
+    if (!own.length) return label + '. This app registers no ' + noun + '.';
+    var shown = own.slice(0, MAX_LISTED_NAMES).join(', ');
+    if (own.length > MAX_LISTED_NAMES) shown += ', ... (' + own.length + ' total)';
+    return label + '. Available ' + noun + ': ' + shown;
+  }
+
   window.addEventListener('message', function(e) {
     if (!e.data || !e.data.type) return;
     var msg = e.data;
@@ -147,7 +180,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           type: 'yaar:app-query-response',
           requestId: requestId,
           data: null,
-          error: 'Unknown state key: ' + msg.stateKey
+          error: memberError('state', msg.stateKey)
         }, '*');
         return;
       }
@@ -196,7 +229,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           type: 'yaar:app-command-response',
           requestId: requestId,
           result: null,
-          error: 'Unknown command: ' + msg.command
+          error: memberError('command', msg.command)
         }, '*');
         return;
       }
