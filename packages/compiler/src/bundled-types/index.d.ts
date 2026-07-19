@@ -696,6 +696,15 @@ declare module '@bundled/yaar' {
   /** Subscribe to reactive URI updates. */
   export function subscribe(uri: string, callback: (uri: string) => void): Promise<() => void>;
   /**
+   * Make an HTTP request. The canonical app HTTP contract.
+   *
+   * Cross-origin calls go through YAAR's proxy (SSRF protection, domain allowlist,
+   * 10 MB cap, 30s timeout, per-app cookie jar) and require `yaar://http` in
+   * app.json. Same-origin calls behave like normal fetch. Both return a standard
+   * `Response`. Prefer this over `invoke('yaar://http', …)`.
+   */
+  export function httpFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response>;
+  /**
    * One frame of a stream subscription. `seq` is monotonic per subscription — a
    * gap means frames were dropped; `kind` is source-defined.
    */

@@ -1,8 +1,16 @@
 /**
- * Fetch proxy route — enforces domain allowlist for iframe app HTTP requests.
+ * Fetch proxy route — the iframe door to cross-origin HTTP.
  *
  * Apps in iframes route cross-origin fetch through POST /api/fetch,
  * which delegates to performFetch() for SSRF protection and domain allowlist.
+ *
+ * This is an *app* door, like POST /api/verb: it resolves the caller to a
+ * principal and names the URI it is about to reach (`yaar://http`), rather than
+ * inventing its own check. It used to read the iframe token opportunistically —
+ * an expired token silently downgraded the request to an anonymous, un-jarred
+ * fetch instead of failing it, and no `yaar://http` permission was ever
+ * consulted, so the transparent-proxy path was strictly weaker than the verb
+ * path that reaches the very same performFetch().
  */
 
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
@@ -12,7 +20,7 @@ import {
   FetchResponseError,
   FetchTimeoutError,
 } from '../../features/http/fetch.js';
-import { validateIframeToken } from '../iframe-tokens.js';
+import { resolvePrincipal, requirePermission } from '../access.js';
 import { jarKey } from '../../features/http/cookie-jar.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -21,7 +29,8 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     path: '/api/fetch',
     response: 'JSON',
     description:
-      'Proxy HTTP request (for CORS-blocked APIs). Body: `{ url, method?, headers?, body? }`',
+      'Proxy HTTP request (for CORS-blocked APIs). Requires an iframe token; apps must ' +
+      'declare `yaar://http`. Body: `{ url, method?, headers?, body? }`',
   },
 ];
 
@@ -36,7 +45,9 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     method?: string;
     headers?: Record<string, string>;
     body?: string;
+    /** Accepted for wire compatibility with older iframe scripts; ignored — see below. */
     sessionId?: string;
+    redirect?: string;
   }>(req);
   if (body instanceof Response) return body;
 
@@ -45,32 +56,31 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     return errorResponse('Missing or invalid "url" field', 400);
   }
 
-  // Resolve sessionId from request context for permission dialogs.
-  // The iframe URL may carry a stale/restored sessionId, so we also check
-  // the Referer header and fall back to the default session.
-  let sessionId = body.sessionId;
-  if (!sessionId) {
-    const referer = req.headers.get('referer');
-    if (referer) {
-      try {
-        sessionId = new URL(referer).searchParams.get('sessionId') ?? undefined;
-      } catch {
-        /* invalid referer URL */
-      }
-    }
+  // Resolve the caller. An invalid or expired token is a 403 from resolvePrincipal;
+  // a request bearing *no* token resolves to the host, which this route refuses —
+  // the desktop drives the server over the WebSocket and never posts here.
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+  if (principal.kind !== 'app') {
+    return errorResponse('Invalid or missing iframe token', 403);
   }
 
-  // Resolve cookie jar key from iframe token context
-  let cookieJarKey: string | undefined;
-  const iframeToken = req.headers.get('x-iframe-token');
-  if (iframeToken) {
-    const tokenEntry = validateIframeToken(iframeToken);
-    if (tokenEntry) {
-      cookieJarKey = jarKey(tokenEntry.sessionId, tokenEntry.appId);
-      // Also use token's sessionId if none was provided explicitly
-      if (!sessionId) sessionId = tokenEntry.sessionId;
-    }
+  // Only an app can *hold* a `yaar://http` permission. A plain (non-app) iframe
+  // window — AI-generated HTML, no app.json — has no manifest to declare one in, so
+  // gating it would deny cross-origin fetch with no way to opt in. It still passes
+  // through the SSRF check and the domain allowlist below, which are the actual
+  // network gate; what the permission adds for apps is a *declared* intent.
+  if (principal.appId) {
+    const denied = requirePermission(principal, 'yaar://http', 'invoke');
+    if (denied) return denied;
   }
+
+  // Session and cookie-jar identity come from the validated token only. The body's
+  // `sessionId` and the Referer are caller-supplied and were previously trusted,
+  // which let a request name a session it did not belong to — and so surface a
+  // domain-approval dialog in someone else's session.
+  const sessionId = principal.sessionId;
+  const cookieJarKey = jarKey(principal.sessionId, principal.appId);
 
   try {
     const result = await performFetch(targetUrl, {
@@ -79,6 +89,9 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
       body: body.body,
       sessionId,
       cookieJarKey,
+      // `follow` is performFetch's default; anything that is not an explicit
+      // `manual` falls back to it rather than being guessed at.
+      redirect: body.redirect === 'manual' ? 'manual' : undefined,
     });
     return jsonResponse(result);
   } catch (err) {

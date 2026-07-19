@@ -1,4 +1,4 @@
-import { invoke, read } from '@bundled/yaar';
+import { errMsg, httpFetch, invoke, read } from '@bundled/yaar';
 import type { Subscription, SeriesLink, SeriesPost } from './types';
 
 const STORAGE_KEY = 'yaar://storage/dc-comics/subscriptions.json';
@@ -28,12 +28,12 @@ function urlToId(url: string): string {
 
 async function fetchSeriesPosts(url: string): Promise<SeriesPost[]> {
   try {
-    const result = await invoke('yaar://http', {
-      url,
+    const res = await httpFetch(url, {
       method: 'GET',
       headers: { 'User-Agent': 'Mozilla/5.0 (Linux; Android 11) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Mobile Safari/537.36' },
-    }) as { ok: boolean; data?: string };
-    const html = result?.data ?? '';
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`.trim());
+    const html = await res.text();
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     const rows = Array.from(doc.querySelectorAll('tr.ub-content'));
@@ -48,7 +48,11 @@ async function fetchSeriesPosts(url: string): Promise<SeriesPost[]> {
       posts.push({ id: noAttr, title, date, isNew: false });
     }
     return posts;
-  } catch {
+  } catch (e) {
+    // Transport/domain failures now throw (the verb envelope used to return an
+    // error object). Callers still treat "no posts" as a soft failure, so keep
+    // the empty result but make the reason visible.
+    console.warn(`[dc-comics] failed to fetch series posts from ${url}: ${errMsg(e)}`);
     return [];
   }
 }

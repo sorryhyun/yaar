@@ -67,6 +67,11 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
       input.headers.forEach(function(v, k) { headers[k] = v; });
     }
 
+    // Redirect mode. Only 'manual' is worth forwarding — the server defaults to
+    // 'follow', and 'error' has no representation on the proxy path, so it is left
+    // to fall back to 'follow' rather than being silently mistranslated.
+    var redirect = (init && init.redirect) || (input instanceof Request ? input.redirect : null);
+
     var bodyPromise;
     if (init && init.body != null) {
       if (typeof init.body === 'string') {
@@ -84,6 +89,7 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
       var payload = { url: url, method: method, headers: headers };
       if (bodyStr !== undefined) payload.body = bodyStr;
       if (sessionId) payload.sessionId = sessionId;
+      if (redirect === 'manual') payload.redirect = 'manual';
 
       var proxyHeaders = { 'Content-Type': 'application/json' };
       if (iframeToken) proxyHeaders['X-Iframe-Token'] = iframeToken;

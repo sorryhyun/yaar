@@ -1,6 +1,6 @@
 # Proposal: App Library Integration and Boundary Consolidation
 
-**Status:** Draft — Phase 1 (safe rich-HTML boundary) is implemented and removed from this document; phase numbering below is unchanged so existing references still resolve.
+**Status:** Draft — Phase 1 (safe rich-HTML boundary) is implemented and removed from this document; phase numbering below is unchanged so existing references still resolve. **Phase 2 is fully implemented**, including 2.4. One follow-up it surfaced — the cookie jar has no app-facing lifecycle — is recorded below and is not yet addressed.
 **Scope:** `apps/`, `packages/compiler`, `packages/shared`, `packages/server`, and app-development guidance
 **Primary objective:** reduce repeated boundary code in bundled apps by standardizing safe HTML, HTTP, validation, persistence, and browser-session helpers without turning the app runtime into a general-purpose framework
 
@@ -89,6 +89,89 @@ The domain selectors and authenticated workflows differ enough that the whole ap
 - Optimizing for source line count without measuring bundle size and runtime behavior.
 
 ## Phase 2: converge HTTP semantics and publish one client
+
+**Implemented (2026-07-19), except 2.4.** What landed, and the one correction the
+implementation forced:
+
+- `POST /api/fetch` now resolves a principal and refuses a missing or expired token
+  (`http/routes/proxy.ts`). Session and cookie-jar identity come from the validated
+  token only — the body's `sessionId` and the `Referer` are no longer trusted, which
+  also closes a smaller hole the audit missed: a caller could name *someone else's*
+  session and raise a domain-approval dialog there.
+- **Correction — the permission gate is scoped to app principals.** The audit's claim
+  that "only the injected fetch-proxy script" posts to `/api/fetch` is true but
+  incomplete: `IframeRenderer.tsx` injects that same script into **plain
+  AI-generated iframe windows**, which mint a token with no `appId` and therefore an
+  empty permission list. Enforcing `requirePermission` on them would deny cross-origin
+  fetch to something that has no `app.json` to declare `yaar://http` in. So the gate
+  applies when `principal.appId` is set; plain windows still pass SSRF validation and
+  the domain allowlist, which are the actual network gate. Generalize the lesson: a
+  sweep of `apps/` does not enumerate the callers of an iframe-injected script.
+- The manifest sweep's prediction held exactly — `market-apps` was the sole app-side
+  breakage, and now declares `yaar://http`.
+- `redirect: 'manual'` was the one advanced behavior the proxy could not represent
+  (2.3). It is now forwarded by the iframe script and accepted by the route rather
+  than silently downgraded. No app uses it today; it was added so `httpFetch` could be
+  called canonical honestly. `redirect: 'error'` remains unrepresentable and documented
+  as falling back to `'follow'`.
+- `httpFetch` is exported from `@bundled/yaar` (shim + `.d.ts`), documented in both the
+  English and Korean guides, and proven end-to-end: the `recent-papers` canary compiles
+  to an inlined `window.fetch(…)` call inside a bundle carrying the proxy script.
+- `packages/tests/src/integration/fetch-proxy-access.test.ts` covers the gate. It had
+  no coverage at all before.
+
+**2.4 is done** — `github`, `mcp-manager`, `dc-comics`, and `thesingularity-reader` all
+use `httpFetch`, and `grep -rn 'yaar://http' apps/*/src` is now empty. Two corrections
+the migration produced:
+
+- The audit reported `mcp-manager` as having "no live call site". It has one
+  (`src/main.ts:69`), behind the most complete of the four envelope copies. Treat
+  single-pass call-site inventories as leads, not conclusions.
+- `mcp-manager` read `initRes.headers['mcp-session-id']` — a lowercase-exact lookup
+  that worked only because `performFetch` happens to lowercase envelope header keys.
+  On real `Headers` it is case-insensitive, so a server replying `Mcp-Session-Id` now
+  works where it previously produced a sessionless follow-up. That latent bug was
+  invisible precisely *because* the app had re-typed the envelope.
+
+### Resolved: the cookie jar's logout door
+
+`yaar://http` now accepts `delete`, which clears the calling principal's jar
+(`handlers/http.ts`). `thesingularity-reader`'s `logoutFromDC()` calls `del('yaar://http')`
+alongside its existing `clearSession()`. The key is derived from the caller's own agent
+context and never from a payload, so an app can only clear its own jar.
+
+This needed one supporting change: `AgentContext` gained an `appId` field. The verb route
+previously encoded the app only as the display string `agentId: 'iframe:{appId}'`, and a
+handler keying an app-scoped resource must not parse that back out. Note
+`runWithAgentContext` rebuilds the context field by field, so a new `AgentContext` field
+has to be added in *both* places or it is silently dropped — which is exactly what
+happened on the first attempt here, and the tests caught it.
+
+The original write-up of this gap is kept below, since it explains why the door exists.
+
+### Background: the cookie jar had no app-facing lifecycle
+
+Migrating an app from the verb path to the proxy path *gains* it a cookie jar — the verb
+path (`handlers/http.ts`) still passes no `cookieJarKey`. That asymmetry is deliberate
+and was left standing, but it exposes a gap worth its own change:
+
+`clearJar` (`features/http/cookie-jar.ts:98`) is only ever called from token lifecycle —
+expiry and revocation (`http/iframe-tokens.ts:85,167,181`). **There is no app-facing way
+to clear the jar.** For `thesingularity-reader`, whose `logoutFromDC()` clears only the
+`appStorage` session, this means DCInside cookies accumulated server-side survive logout
+until the token's 24-hour TTL. The app *appears* logged out (`checkLoginStatus` gates on
+the stored `dcPaPP` and correctly returns false) and its authenticated writes go through
+the browser rather than HTTP, so this is a privacy leak rather than a security hole — but
+"log out" not clearing server-held session cookies is wrong regardless of severity.
+
+Note also that the merge at `features/http/fetch.ts:87` is naive concatenation with no
+dedup by cookie name, so an app sending its own `Cookie` header can produce duplicate
+names; the app's value sorts first, which is why `checkLoginStatus` still behaves.
+
+Any app with a login that uses `httpFetch` needs a jar-clear door. (Resolved above, via
+the `delete` verb — there turned out to be no existing server-side logout path to hang it
+on: `revokeIframeToken` has no callers, and `/api/auth/google/logout` is marketplace auth,
+unrelated to app cookie jars.)
 
 ### 2.1 Put `/api/fetch` behind the app-principal gate
 

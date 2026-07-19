@@ -12,7 +12,7 @@
  * app restarts. checkLoginStatus() verifies via HTTP GET against a known
  * authenticated page.
  */
-import { invoke, appStorage } from '@bundled/yaar';
+import { httpFetch, appStorage, del, errMsg } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import { openOrNavigate, isTabInitialized, syncCookiesToTab, MAIN_TAB, DC_COOKIE_URLS } from './browser';
 import type { Post } from './types';
@@ -47,13 +47,6 @@ export interface DcSession {
 }
 
 type CookieInfo = { name: string; value: string; [key: string]: unknown };
-
-type HttpResult = {
-  ok: boolean;
-  status?: number;
-  body?: string;
-  headers?: Record<string, string>;
-};
 
 function parseCookieResponse(raw: unknown): CookieInfo[] {
   if (Array.isArray(raw)) return raw as CookieInfo[];
@@ -175,6 +168,14 @@ export async function loginToDC(
 
 export async function logoutFromDC(): Promise<void> {
   await clearSession();
+  // Also drop the proxy's stored DC cookies. Clearing our own session only makes
+  // the app *look* logged out — the server-side jar would keep sending DC's
+  // session cookies on later fetches until the iframe token expired.
+  try {
+    await del('yaar://http');
+  } catch (e) {
+    console.warn('[logout] could not clear the HTTP cookie jar:', errMsg(e));
+  }
 }
 
 /** Verify session is still valid by fetching a known authenticated page */
@@ -183,18 +184,21 @@ export async function checkLoginStatus(): Promise<boolean> {
   if (!session?.dcPaPP) return false;
 
   try {
-    const res = await invoke('yaar://http', {
-      url:     DC_VERIFY_URL_HTTP,
-      method:  'GET',
+    const res = await httpFetch(DC_VERIFY_URL_HTTP, {
+      method: 'GET',
       headers: {
+        // Sent explicitly, and deliberately: this is the session harvested from
+        // the browser tab, not whatever the proxy's own cookie jar has picked up.
+        // The server merges the two (app header first), so DC sees this one.
         'Cookie':          session.dcPaPP,
         'User-Agent':      MOBILE_UA,
         'Accept':          'text/html,application/xhtml+xml',
         'Accept-Language': 'ko-KR,ko;q=0.9',
       },
-    }) as HttpResult;
+    });
+    if (!res.ok) return false;
 
-    return isLoggedInPage(res.body ?? '');
+    return isLoggedInPage(await res.text());
   } catch {
     return false;
   }

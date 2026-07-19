@@ -178,7 +178,7 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 - **Node.js API 없음** — `fs`, `process`, `child_process`, `net` 등을 사용할 수 없습니다. 브라우저 환경입니다.
 - **서버 프로세스 없음** — 앱은 포트를 열거나 서버를 실행할 수 없습니다.
 - **OAuth 플로우 불가** — OAuth code-for-token 교환에는 서버 측 `client_secret`이 필요합니다. iframe 앱에서는 안전하게 수행할 수 없으므로, API 기반 앱 패턴을 사용하세요 (아래 참조).
-- **브라우저 `fetch()`는 CORS 제한** — 직접적인 크로스 오리진 요청은 차단됩니다. `yaar.invoke('yaar://http', { url, ... })`를 사용하여 서버를 통해 프록시하세요.
+- **크로스 오리진 HTTP는 프록시 경유** — `@bundled/yaar`의 `httpFetch`를 사용하고 `app.json`에 `yaar://http`를 선언하세요. [HTTP 요청하기](#http-요청하기)를 참조하세요.
 - **localStorage/IndexedDB 사용 금지** — `@bundled/yaar`의 `appStorage`를 사용하세요 (서버 측 저장, 세션 간 유지).
 - **자체 완결형** — 앱은 외부 서버, localhost 서비스, iframe 외부 인프라에 의존해서는 안 됩니다.
 
@@ -249,13 +249,74 @@ DOMPurify 는 `isSupported` 를 확인해 호스트 DOM 이 불완전하면 조�
 `javascript:` URL, 인라인 `on*=`)**과** 반드시 살아남아야 하는 것(표, 코드 블록, 이미지,
 링크)을 **모두** 검증하세요. 전부 제거하는 새니타이저는 앞쪽 목록만은 완벽하게 통과합니다.
 
+## HTTP 요청하기
+
+`@bundled/yaar` 의 `httpFetch` 를 사용하고, `app.json` 에 `yaar://http` 를 선언하세요.
+
+```typescript
+import { httpFetch } from '@bundled/yaar';
+
+const res = await httpFetch('https://api.example.com/items?page=2');
+if (!res.ok) throw new Error(`요청 실패: ${res.status}`);
+const items = await res.json();
+```
+
+`fetch` 그 자체입니다. 표준 `Response` 를 받으므로 `json()`, `text()`, `blob()`,
+`arrayBuffer()` 와 실제 `Headers` 를 그대로 쓸 수 있고(따라서 업스트림의 rate-limit·세션
+헤더도 읽을 수 있습니다), 바이너리 본문도 손상 없이 전달됩니다.
+
+플랫폼이 내부에서 하는 일:
+
+| | 크로스 오리진 | 동일 오리진 / 상대 경로 |
+|---|---|---|
+| 경로 | YAAR 서버 측 프록시 | iframe 토큰을 실어 직접 요청 |
+| CORS | 해당 없음 — 서버가 대신 호출 | 일반 브라우저 규칙 |
+| `yaar://http` 필요 | 예 | 아니오 |
+| 쿠키 | (세션, 앱) 범위의 쿠키 저장소 | iframe 자체 쿠키 |
+
+크로스 오리진 요청에는 SSRF 검증, 도메인 허용 목록(새 도메인마다 사용자에게 한 번 확인),
+10 MB 응답 제한, 30초 타임아웃이 함께 적용됩니다. `redirect: 'manual'` 은 지원되며,
+`redirect: 'error'` 는 표현할 수 없어 `'follow'` 로 처리됩니다.
+
+**권한을 선언하세요.** `app.json` 의 `permissions` 에 `"yaar://http"` 가 없으면 크로스
+오리진 요청은 403 으로 거부됩니다. `"yaar://http"` 와 `"yaar://http/"` 둘 다 동작합니다.
+
+```json
+{ "permissions": ["yaar://apps/self/storage/", "yaar://http"] }
+```
+
+**`invoke('yaar://http', …)` 보다 `httpFetch` 를 쓰세요.** verb 형태는 `Response` 가 아니라
+YAAR 내부 응답 봉투를 반환하며, 이를 사용한 앱들은 결국 그 봉투 타입을 각자 부분적으로
+다시 선언했습니다 — 하나의 업스트림 계약에 대해 서로 호환되지 않는 네 가지가 저장소에
+생겼습니다. verb 형태는 패치할 `window.fetch` 가 없는 에이전트 측 코드용으로 남겨두세요.
+
+**로그인이 있는 앱이라면 로그아웃 시 쿠키 저장소를 비우세요.** 프록시가 저장한 쿠키는
+(세션, 앱) 키로 서버 측에 남으며, iframe 토큰이 만료되기 전까지 아무것도 이를 지우지
+않습니다. 따라서 앱이 보관한 세션만 지우면 겉보기에만 로그아웃된 상태가 되고, 이후 요청은
+계속 업스트림 세션을 실어 나릅니다.
+
+```typescript
+import { del } from '@bundled/yaar';
+
+export async function logout() {
+  await clearMyStoredSession();
+  await del('yaar://http');   // 이 앱의 프록시 쿠키를 삭제
+}
+```
+
+`del('yaar://http')` 은 호출한 앱 자신의 저장소만 비웁니다. 키는 payload 가 아니라 호출자의
+토큰에서 유도되므로, 한 앱이 다른 앱을 로그아웃시킬 수 없습니다.
+
+페이지네이션, rate limit, JSON-RPC 프레이밍, 인증 갱신 같은 서비스별 관심사는 앱에
+남습니다. `httpFetch` 는 전송 계층만 표준화합니다.
+
 ## 안티패턴
 
 앱 개발 시 피해야 할 일반적인 실수:
 
 - **OAuth 클라이언트를 컴파일된 앱으로 만들지 마세요** — OAuth에는 서버 측 `client_secret` 토큰 교환이 필요합니다. 대신, 사용자가 개인 액세스 토큰(PAT)을 제공하고 `invoke('yaar://config/app/{appId}', { config })`로 저장하는 API 기반 앱(SKILL.md만)을 만드세요.
 - **외부 서버가 실행 중이라고 가정하지 마세요** — `localhost:3000`이나 다른 포트에 백엔드가 없습니다. 앱은 완전히 자체 완결형이어야 합니다.
-- **iframe에서 서버 기능을 복제하지 마세요** — 인증이 필요한 외부 API를 호출해야 하면, AI 에이전트가 `invoke('yaar://http', { url, method?, headers?, body? })`로 HTTP 호출을 처리하고 App Protocol로 데이터를 전달해야 합니다.
+- **프록시 응답 봉투를 직접 정의하지 마세요** — `httpFetch` 와 그것이 반환하는 표준 `Response` 를 쓰세요. `invoke('yaar://http')` 주위에 `{ ok, status, body }` 인터페이스를 직접 선언하는 것은 소유하지 않은 내부 계약을 다시 타이핑하는 일입니다. [HTTP 요청하기](#http-요청하기) 참고.
 - **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
 - **저장 실패를 삼키지 마세요** — `appStorage.save()` 를 `catch { /* ignore */ }` 로 감싸면 UI는 "저장됨"이라고 표시한 채 데이터가 조용히 사라집니다. `appStorage.trySave()` 를 쓰고 그 결과에 따라 성공 UI를 표시하세요. [저장 실패를 삼키지 마세요](#저장-실패를-삼키지-마세요) 참고.
 - **SDK 헬퍼를 다시 구현하지 마세요** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` 는 `@bundled/yaar` 가, `debounce` 는 `@bundled/lodash` 가 제공합니다. 네이티브 `alert()`/`confirm()`/`prompt()` 는 페이지(그리고 브라우저를 조작 중인 에이전트)를 블로킹하므로 쓰지 마세요.

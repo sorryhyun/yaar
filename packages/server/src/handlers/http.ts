@@ -10,14 +10,16 @@ import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { okJson, error } from './utils.js';
 import { performFetch } from '../features/http/fetch.js';
-import { getSessionId } from '../agents/agent-context.js';
+import { clearJar, jarKey } from '../features/http/cookie-jar.js';
+import { getSessionId, getAppId } from '../agents/agent-context.js';
 
 export function registerHttpHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://http', {
     description:
       'Proxy HTTP requests with SSRF protection and domain allowlist enforcement. ' +
-      'Use invoke with { url, method?, headers?, body? }.',
-    verbs: ['describe', 'invoke'],
+      'Use invoke with { url, method?, headers?, body? }. ' +
+      "Use delete to drop the caller's stored cookies (call this on logout).",
+    verbs: ['describe', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
       properties: {
@@ -66,6 +68,26 @@ export function registerHttpHandlers(registry: ResourceRegistry): void {
         const message = err instanceof Error ? err.message : 'Fetch failed';
         return error(message);
       }
+    },
+
+    /**
+     * Drop every cookie the proxy has stored for this caller.
+     *
+     * Cross-origin requests are jarred per (session, app), and until this existed
+     * the jar's only lifecycle was the iframe token's 24-hour expiry. An app with a
+     * login therefore could not fully log out: clearing its own stored session left
+     * the upstream service's cookies alive server-side, so later "anonymous"
+     * requests still carried them. `delete yaar://http` is the logout door.
+     *
+     * The key is derived from the caller's own context, never from a payload —
+     * an app can only ever clear its own jar.
+     */
+    async delete(): Promise<VerbResult> {
+      const sessionId = getSessionId();
+      if (!sessionId) return error('No session context — cannot resolve the cookie jar');
+
+      clearJar(jarKey(sessionId, getAppId()));
+      return okJson({ cleared: true });
     },
   });
 }

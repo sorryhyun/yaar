@@ -192,7 +192,7 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 - **No Node.js APIs** — No `fs`, `process`, `child_process`, `net`, etc. This is a browser environment.
 - **No server processes** — Apps cannot listen on ports, spawn servers, or run background daemons.
 - **No OAuth flows** — OAuth code-for-token exchange requires a server-side `client_secret`. Iframe apps cannot safely perform this. Use the API-based app pattern instead (see below).
-- **Browser `fetch()` subject to CORS** — Direct cross-origin requests will be blocked. Use `yaar.invoke('yaar://http', { url, ... })` to proxy requests through the server.
+- **Cross-origin HTTP goes through the proxy** — Use `httpFetch` from `@bundled/yaar` and declare `yaar://http` in `app.json`. See [Making HTTP Requests](#making-http-requests).
 - **No localStorage/IndexedDB** — Use `appStorage` from `@bundled/yaar` for persistence (server-side, survives across sessions).
 - **Self-contained** — Apps must not depend on external servers, localhost services, or infrastructure outside the iframe.
 
@@ -264,13 +264,77 @@ SVG-wrapped script, `javascript:` URLs, inline `on*=`) **and** on what must surv
 (tables, code blocks, images, links). A sanitizer that strips everything passes the first
 half of that list perfectly.
 
+## Making HTTP Requests
+
+Use `httpFetch` from `@bundled/yaar`, and declare `yaar://http` in `app.json`.
+
+```typescript
+import { httpFetch } from '@bundled/yaar';
+
+const res = await httpFetch('https://api.example.com/items?page=2');
+if (!res.ok) throw new Error(`Request failed: ${res.status}`);
+const items = await res.json();
+```
+
+It is `fetch`. You get a standard `Response` — `json()`, `text()`, `blob()`,
+`arrayBuffer()`, and real `Headers` (so upstream rate-limit and session headers stay
+readable). Binary bodies survive intact.
+
+What the platform does underneath:
+
+| | Cross-origin | Same-origin / relative |
+|---|---|---|
+| Route | YAAR's server-side proxy | direct, with the iframe token |
+| CORS | not applicable — the server makes the call | normal browser rules |
+| Requires `yaar://http` | yes | no |
+| Cookies | jar scoped to (session, app) | the iframe's own |
+
+Cross-origin requests are also subject to SSRF validation, the domain allowlist (the
+user is prompted once per new domain), a 10 MB response cap, and a 30-second timeout.
+`redirect: 'manual'` is honored; `redirect: 'error'` is not representable and falls
+back to `'follow'`.
+
+**Declare the permission.** Without `"yaar://http"` in your `app.json` `permissions`,
+cross-origin requests are refused with a 403. Both `"yaar://http"` and `"yaar://http/"`
+work.
+
+```json
+{ "permissions": ["yaar://apps/self/storage/", "yaar://http"] }
+```
+
+**Prefer `httpFetch` over `invoke('yaar://http', …)`.** The verb form returns YAAR's
+internal envelope rather than a `Response`, and every app that reached for it ended up
+hand-writing its own partial copy of that envelope's type — four mutually incompatible
+ones across the repo, for a single upstream contract. Keep the verb form for agent-side
+code, where there is no `window.fetch` to patch.
+
+**If your app has a login, clear the cookie jar on logout.** Cookies the proxy stores
+live server-side, keyed by (session, app), and nothing else clears them until the iframe
+token expires — so clearing your own stored session only makes the app *look* logged out
+while later requests keep carrying the upstream session.
+
+```typescript
+import { del } from '@bundled/yaar';
+
+export async function logout() {
+  await clearMyStoredSession();
+  await del('yaar://http');   // drop the proxy's cookies for this app
+}
+```
+
+`del('yaar://http')` clears only the calling app's jar — the key comes from your own
+token, never from a payload, so one app cannot log another out.
+
+Service-specific concerns — pagination, rate limiting, JSON-RPC framing, auth refresh —
+stay in your app. `httpFetch` normalizes transport only.
+
 ## Anti-Patterns
 
 Common mistakes to avoid when building apps:
 
 - **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { config })`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
-- **Don't replicate server functionality in iframe** — If the app needs to call external APIs that require auth, the AI agent should handle HTTP calls via `invoke('yaar://http', { url, method?, headers?, body? })` and relay data via App Protocol.
+- **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
 - **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).

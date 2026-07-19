@@ -2,10 +2,10 @@
  * GitHub sign-in via the OAuth Device Authorization Grant (RFC 8628) — the same
  * flow `gh auth login` uses. No PAT, no client secret, no redirect/callback: we
  * request a short user code, the user authorizes it in their browser, and we
- * poll for the resulting access token. All HTTP goes through `yaar://http`, so
- * there is no CORS concern and no new server capability is required.
+ * poll for the resulting access token. All HTTP goes through YAAR's proxy via
+ * `httpFetch`, so there is no CORS concern and no new server capability is required.
  */
-import { invoke, wait, errMsg, showToast } from '@bundled/yaar';
+import { httpFetch, wait, errMsg, showToast } from '@bundled/yaar';
 import { state, setState } from './store';
 import { writeToken, readClientId } from './storage';
 import { fetchUser } from './api';
@@ -26,13 +26,6 @@ const GRANT_TYPE = 'urn:ietf:params:oauth:grant-type:device_code';
 // repos; `read:user` lets us show who is signed in.
 const SCOPE = 'repo read:user';
 
-interface RawHttp {
-  ok: boolean;
-  status: number;
-  body?: string;
-  bodyEncoding?: 'base64';
-}
-
 interface FormReply {
   status: number;
   ok: boolean;
@@ -45,27 +38,28 @@ function str(v: unknown): string {
 }
 
 /**
- * POST a form-encoded body through the yaar HTTP proxy and parse the reply.
- * GitHub's device endpoints return JSON when Accept: application/json is honored,
- * but fall back to form-urlencoded otherwise — and the proxy base64-encodes any
- * body whose content-type it doesn't recognize as text. Handle all three.
+ * POST a form-encoded body to a GitHub device endpoint and parse the reply.
+ * GitHub returns JSON when `Accept: application/json` is honored but falls back
+ * to form-urlencoded otherwise, so handle both shapes.
  */
 async function postForm(url: string, params: Record<string, string>): Promise<FormReply> {
-  const res = (await invoke('yaar://http', {
-    url,
-    method: 'POST',
-    headers: {
-      Accept: 'application/json',
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams(params).toString(),
-  })) as RawHttp;
-
-  let text = res.body || '';
-  if (res.bodyEncoding === 'base64') {
-    try { text = atob(text); } catch { /* keep as-is */ }
+  let res: Response;
+  try {
+    res = await httpFetch(url, {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+      body: new URLSearchParams(params).toString(),
+    });
+  } catch (e) {
+    // Transport/domain failure — the verb path used to return a non-ok envelope
+    // here; now it rejects. Keep the message useful for the sign-in error banner.
+    throw new Error(`Could not reach GitHub: ${errMsg(e)}`);
   }
-  text = text.trim();
+
+  const text = (await res.text()).trim();
 
   let data: Record<string, unknown> = {};
   if (text.startsWith('{') || text.startsWith('[')) {
@@ -144,11 +138,19 @@ async function pollForToken(
     // The user cancelled or restarted the flow while we were waiting.
     if (state.auth.status !== 'pending') return;
 
-    const { data } = await postForm(TOKEN_URL, {
-      client_id: clientId,
-      device_code: deviceCode,
-      grant_type: GRANT_TYPE,
-    });
+    // A blip while polling is not a sign-in failure — the user may still be
+    // typing the code. Under the old verb transport these surfaced as an empty
+    // reply and the loop simply retried; keep that behavior now that they throw.
+    let data: Record<string, unknown>;
+    try {
+      ({ data } = await postForm(TOKEN_URL, {
+        client_id: clientId,
+        device_code: deviceCode,
+        grant_type: GRANT_TYPE,
+      }));
+    } catch {
+      continue;
+    }
 
     const accessToken = str(data.access_token);
     if (accessToken) {

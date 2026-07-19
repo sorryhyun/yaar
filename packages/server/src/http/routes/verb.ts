@@ -333,6 +333,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
             sessionId,
             monitorId,
             windowId: callerWindowId,
+            appId: tokenEntry?.appId,
           },
           execute,
         )

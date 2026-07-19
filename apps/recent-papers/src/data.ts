@@ -1,3 +1,4 @@
+import { httpFetch } from '@bundled/yaar';
 import type { DailyPaperItem, PaperDetails } from './types';
 import { getApiSort, getFirstText, normalizeText, parseArxivIdFromUrl } from './paper-utils';
 
@@ -9,7 +10,7 @@ export async function fetchArxivPapers(limit: number, queryValue: string, sortBy
   const sortOrder = sortByValue === 'oldest' ? 'ascending' : 'descending';
   const url = `https://export.arxiv.org/api/query?search_query=${encodeURIComponent(query)}&start=0&max_results=${Math.max(1, limit)}&sortBy=${sortBy}&sortOrder=${sortOrder}`;
 
-  const resp = await fetch(url);
+  const resp = await httpFetch(url);
   if (!resp.ok) throw new Error(`arXiv HTTP ${resp.status}`);
   const xml = await resp.text();
 
@@ -55,7 +56,7 @@ export async function fetchArxivPapers(limit: number, queryValue: string, sortBy
 
 export async function fetchHfPapers(limit: number, sortByValue: string): Promise<DailyPaperItem[]> {
   const apiSort = getApiSort(sortByValue);
-  const resp = await fetch(`https://huggingface.co/api/daily_papers?limit=${limit}&sort=${apiSort}`);
+  const resp = await httpFetch(`https://huggingface.co/api/daily_papers?limit=${limit}&sort=${apiSort}`);
   if (!resp.ok) throw new Error(`HF HTTP ${resp.status}`);
   const data = (await resp.json()) as DailyPaperItem[];
   return (Array.isArray(data) ? data : []).map((item) => ({ ...item, source: 'huggingface' as const }));
@@ -67,7 +68,7 @@ export async function fetchPaperDetailsById(id: string, cache: Record<string, Pa
 
   if (cache[cleanId]) return cache[cleanId];
 
-  const resp = await fetch(`https://huggingface.co/api/papers/${encodeURIComponent(cleanId)}`);
+  const resp = await httpFetch(`https://huggingface.co/api/papers/${encodeURIComponent(cleanId)}`);
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   const data = await resp.json();
 

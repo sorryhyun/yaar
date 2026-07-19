@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { invoke, list, read, del, showToast, withLoading } from '@bundled/yaar';
+import { invoke, list, read, del, httpFetch, showToast, withLoading } from '@bundled/yaar';
 import './styles.css';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -17,13 +17,6 @@ interface McpServer {
 interface McpTool {
   name: string;
   description?: string;
-}
-
-interface HttpResult {
-  ok: boolean;
-  status: number;
-  headers: Record<string, string>;
-  body: string;
 }
 
 interface DiscoveredServer {
@@ -60,13 +53,13 @@ function jsonRpcNotification(method: string) {
   return JSON.stringify({ jsonrpc: '2.0', method });
 }
 
-async function mcpPost(url: string, body: string, sessionId?: string): Promise<HttpResult> {
+async function mcpPost(url: string, body: string, sessionId?: string): Promise<Response> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     Accept: 'application/json, text/event-stream',
   };
   if (sessionId) headers['mcp-session-id'] = sessionId;
-  return invoke<HttpResult>('yaar://http', { url, method: 'POST', headers, body });
+  return httpFetch(url, { method: 'POST', headers, body });
 }
 
 /** Parse JSON-RPC response from body — handles both direct JSON and SSE format. */
@@ -110,16 +103,21 @@ async function probePort(host: string, port: number, path: string): Promise<Disc
         clientInfo: { name: 'yaar-mcp-manager', version: '1.0.0' },
       }),
     );
+    // httpFetch does not throw on 4xx/5xx — a non-MCP service answering on this
+    // port is a normal scan outcome, not an error.
     if (!initRes.ok) return null;
-    const initResult = parseRpcResponse(initRes.body) as {
+    // The body is either JSON or an SSE stream; parseRpcResponse handles both,
+    // so read it as text rather than committing to res.json().
+    const initResult = parseRpcResponse(await initRes.text()) as {
       serverInfo?: { name?: string; version?: string };
     };
-    const sessionId = initRes.headers['mcp-session-id'];
+    // Headers.get() is case-insensitive, unlike the plain-object lookup this replaced.
+    const sessionId = initRes.headers.get('mcp-session-id') ?? undefined;
 
     await mcpPost(url, jsonRpcNotification('notifications/initialized'), sessionId);
 
     const toolsRes = await mcpPost(url, jsonRpcRequest('tools/list'), sessionId);
-    const toolsResult = parseRpcResponse(toolsRes.body) as {
+    const toolsResult = parseRpcResponse(await toolsRes.text()) as {
       tools?: Array<{ name: string; description?: string }>;
     };
 

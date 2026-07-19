@@ -6,7 +6,8 @@
   "capture": "dom",
   "permissions": [
     "yaar://storage/",
-    "yaar://apps/"
+    "yaar://apps/",
+    "yaar://http"
   ],
   "version": "1.0.5",
   "author": "YAAR",

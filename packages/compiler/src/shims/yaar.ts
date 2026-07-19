@@ -55,6 +55,37 @@ export async function subscribe(uri: string, callback: (uri: string) => void): P
 }
 
 /**
+ * The canonical way for an app to make an HTTP request.
+ *
+ * Deliberately thin — it is `window.fetch`, and its value is that the contract is
+ * named and documented rather than folklore:
+ *
+ * - **Cross-origin** calls are routed through YAAR's proxy, which enforces SSRF
+ *   protection, the domain allowlist (prompting the user on a miss), a 10 MB body
+ *   cap, and a 30-second timeout. The app's `app.json` must declare `yaar://http`.
+ * - **Relative and same-origin** calls behave like normal fetch and carry the
+ *   iframe token.
+ * - Either way you get a standard `Response` — `json()`, `text()`, `blob()`,
+ *   `arrayBuffer()`, and real `Headers`. Binary bodies survive intact.
+ * - Cookies are kept in a jar scoped to (session, app), so one app cannot read
+ *   another's session with an upstream service.
+ *
+ * Prefer this over `invoke('yaar://http', …)`, which returns YAAR's internal
+ * envelope and has led every app that used it to hand-roll its own response type.
+ *
+ * Note it reads `window.fetch` at call time rather than capturing it. Today's
+ * wrapper makes that redundant — the proxy ships as a blocking classic script in
+ * `<head>` and app code as a deferred module, so the swap is guaranteed to have
+ * happened first. It is written this way so that guarantee stays an implementation
+ * detail of the wrapper: the proxy installs itself by *replacing* `window.fetch`,
+ * and a captured reference would silently bypass it the moment that ordering
+ * changed.
+ */
+export function httpFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  return window.fetch(input, init);
+}
+
+/**
  * One frame of a stream subscription. `seq` is monotonic per subscription — a gap
  * means frames were dropped; `kind` is source-defined.
  */

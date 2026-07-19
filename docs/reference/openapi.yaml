@@ -188,7 +188,7 @@ paths:
                 type: object
   /api/fetch:
     post:
-      summary: 'Proxy HTTP request (for CORS-blocked APIs). Body: `{ url, method?, headers?, body? }`'
+      summary: 'Proxy HTTP request (for CORS-blocked APIs). Requires an iframe token; apps must declare `yaar://http`. Body: `{ url, method?, headers?, body? }`'
       responses:
         '200':
           description: JSON

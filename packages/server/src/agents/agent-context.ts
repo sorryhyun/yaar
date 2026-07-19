@@ -23,6 +23,14 @@ interface AgentContext {
   sessionId: SessionId;
   monitorId?: string;
   windowId?: string;
+  /**
+   * The app this context is acting as, when it was entered from an app iframe.
+   *
+   * `agentId` encodes it as `iframe:{appId}`, but that is a display string — a
+   * handler that needs the real id (to key an app-scoped resource such as the
+   * HTTP cookie jar) must not parse it back out.
+   */
+  appId?: string;
   /** Principal tier for URI access control (undefined → treated as non-session). */
   role?: AgentRole;
 }
@@ -55,6 +63,11 @@ export function getSessionId(): SessionId | undefined {
 
 export function getMonitorId(): string | undefined {
   return agentContext.getStore()?.monitorId;
+}
+
+/** The app id this context is acting as, if it was entered from an app iframe. */
+export function getAppId(): string | undefined {
+  return agentContext.getStore()?.appId;
 }
 
 /**
@@ -105,11 +118,14 @@ export function runWithAgentContext<T>(
     sessionId?: SessionId;
     monitorId?: string;
     windowId?: string;
+    appId?: string;
     role?: AgentRole;
   },
   fn: () => T,
 ): T {
   const existing = agentContext.getStore();
+  // Rebuilt field by field on purpose — anything not listed here is dropped, so a
+  // new AgentContext field must be added in both places or it silently vanishes.
   return agentContext.run(
     {
       agentId: ctx.agentId,
@@ -117,6 +133,7 @@ export function runWithAgentContext<T>(
       sessionId: ctx.sessionId ?? existing?.sessionId ?? ('' as SessionId),
       monitorId: ctx.monitorId ?? existing?.monitorId,
       windowId: ctx.windowId ?? existing?.windowId,
+      appId: ctx.appId ?? existing?.appId,
       role: ctx.role ?? existing?.role,
     },
     fn,

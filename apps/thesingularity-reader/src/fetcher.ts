@@ -11,7 +11,7 @@
  */
 import type { Post, Comment, SearchType } from './types';
 import * as web from '@bundled/yaar-web';
-import { invoke } from '@bundled/yaar';
+import { httpFetch } from '@bundled/yaar';
 import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
 import { extractRealImageUrl, LAZY_IMAGE_ATTRS } from './helpers';
 
@@ -537,8 +537,15 @@ function extractContentFromDoc(doc: Document, post: Post): string {
 /** Referer DC's hotlink protection accepts (mobile gallery origin). */
 const DC_REFERER = 'https://m.dcinside.com/';
 
-/** Log the proxy response shape only once per session (diagnostic). */
-let imgProxyShapeLogged = false;
+/** Read a Blob as a `data:` URI. Resolves to null rather than throwing. */
+function blobToDataUri(blob: Blob): Promise<string | null> {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(typeof reader.result === 'string' ? reader.result : null);
+    reader.onerror = () => resolve(null);
+    reader.readAsDataURL(blob);
+  });
+}
 
 /**
  * Fetch a single image via the server-side HTTP proxy and return it as a
@@ -548,15 +555,14 @@ let imgProxyShapeLogged = false;
  *  - In-browser fetch() is CORS-blocked for DC's cross-origin image hosts
  *    (dcimg*.dcinside.*) — they send no ACAO header.
  *  - Plain remote <img> loads are unreliable due to Referer hotlink protection.
- * Server-side fetch (yaar://http) is NOT subject to CORS and lets us send a DC
- * Referer header so hotlink protection allows the request.
+ * The proxy is NOT subject to CORS and lets us send a DC Referer header so
+ * hotlink protection allows the request.
  *
  * Returns null on any failure; the caller keeps the original src.
  */
 async function fetchImageAsDataUri(url: string): Promise<string | null> {
   try {
-    const res = (await invoke('yaar://http', {
-      url,
+    const res = await httpFetch(url, {
       method: 'GET',
       headers: {
         'User-Agent': MOBILE_UA,
@@ -564,67 +570,15 @@ async function fetchImageAsDataUri(url: string): Promise<string | null> {
         Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
         'Accept-Language': 'ko-KR,ko;q=0.9',
       },
-    })) as {
-      ok?: boolean;
-      status?: number;
-      headers?: Record<string, string>;
-      body?: string;
-      base64?: string;
-      bodyBase64?: string;
-      data?: string;
-      contentType?: string;
-      mimeType?: string;
-    };
-    // One-time diagnostic: log the response shape so we can confirm the proxy's
-    // binary encoding (keys present, body type/length) without dumping payloads.
-    if (!imgProxyShapeLogged) {
-      imgProxyShapeLogged = true;
-      try {
-        const keys = res && typeof res === 'object' ? Object.keys(res) : [];
-        console.log('[dc-img-proxy] response shape', {
-          url: url.slice(0, 80),
-          keys,
-          ok: res?.ok,
-          status: res?.status,
-          bodyType: typeof res?.body,
-          bodyLen: typeof res?.body === 'string' ? res.body.length : undefined,
-          bodyHead: typeof res?.body === 'string' ? res.body.slice(0, 24) : undefined,
-          hasBase64: typeof res?.base64 === 'string',
-          contentType: (res?.headers ?? {})['content-type'] ?? res?.contentType ?? res?.mimeType,
-        });
-      } catch {
-        /* ignore logging errors */
-      }
-    }
+    });
+    if (!res.ok) return null;
 
-    if (!res || res.ok === false) return null;
-    if (typeof res.status === 'number' && res.status >= 400) return null;
-
-    // Resolve mime type from headers/fields; default to jpeg.
-    const h = res.headers ?? {};
-    const ctRaw =
-      h['content-type'] ?? h['Content-Type'] ?? res.contentType ?? res.mimeType ?? '';
-    let mime = String(ctRaw).split(';')[0].trim();
-    if (!mime || !mime.startsWith('image/')) mime = 'image/jpeg';
-
-    // Locate the base64 payload across possible proxy response shapes.
-    let b64: string | null = null;
-    if (typeof res.base64 === 'string') b64 = res.base64;
-    else if (typeof res.bodyBase64 === 'string') b64 = res.bodyBase64;
-    else if (typeof res.data === 'string' && res.data) b64 = res.data;
-    else if (typeof res.body === 'string') {
-      if (res.body.startsWith('data:')) return res.body;
-      b64 = res.body;
-    }
-    if (!b64) return null;
-
-    // Strip an existing data-uri prefix if the proxy returned one.
-    const m = b64.match(/^data:[^;,]+;base64,([\s\S]*)$/);
-    if (m) b64 = m[1];
-    b64 = b64.trim();
-    if (!b64) return null;
-
-    return `data:${mime};base64,${b64}`;
+    // A Blob already carries the response's content type, so the mime no longer
+    // has to be recovered from a header map by hand. DC's image hosts sometimes
+    // answer with a generic or empty type, so fall back to jpeg as before.
+    const raw = await res.blob();
+    const blob = raw.type.startsWith('image/') ? raw : new Blob([raw], { type: 'image/jpeg' });
+    return await blobToDataUri(blob);
   } catch {
     return null;
   }
@@ -632,7 +586,7 @@ async function fetchImageAsDataUri(url: string): Promise<string | null> {
 
 /**
  * Inline all remote <img> sources in a post-body HTML string as base64 data
- * URIs by proxying them through yaar://http. This is the reliable image path —
+ * URIs by proxying them through httpFetch. This is the reliable image path —
  * see fetchImageAsDataUri for why direct/in-browser loading fails. Images that
  * are already inlined (data:) or have no usable URL are left untouched.
  */
@@ -680,7 +634,7 @@ function extractBodyFromHtml(html: string, post: Post): string {
   return extractContentFromDoc(doc, post);
 }
 
-/** Shared headers for the server-side (yaar://http) mobile DC fetches. */
+/** Shared headers for the proxied (httpFetch) mobile DC fetches. */
 const DC_HTTP_HEADERS = {
   'User-Agent': MOBILE_UA,
   Accept: 'text/html,application/xhtml+xml',
@@ -688,7 +642,7 @@ const DC_HTTP_HEADERS = {
 } as const;
 
 /**
- * Fetch a post's body over plain HTTP (server-side `yaar://http` proxy) and
+ * Fetch a post’s body over plain HTTP (via the server-side proxy) and
  * inline its images.
  *
  * This is the primary body path. The mobile DC post page renders the body in
@@ -703,13 +657,14 @@ const DC_HTTP_HEADERS = {
  */
 export async function fetchPostBody(post: Post): Promise<string | null> {
   try {
-    const res = (await invoke('yaar://http', {
-      url: post.url,
+    const res = await httpFetch(post.url, {
       method: 'GET',
       headers: { ...DC_HTTP_HEADERS },
-    })) as { ok: boolean; status?: number; body?: string };
-    if (!res?.ok || !res.body) return null;
-    const content = extractBodyFromHtml(res.body, post);
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    if (!html) return null;
+    const content = extractBodyFromHtml(html, post);
     // If we hit the "불러올 수 없습니다" fallback, treat as no result so the caller
     // falls back to the browser snapshot instead of flashing the error message.
     if (content.includes('본문을 불러올 수 없습니다')) return null;
@@ -803,13 +758,14 @@ export async function fetchPostDetail(
  */
 async function fetchPostText(post: Post): Promise<string> {
   try {
-    const res = (await invoke('yaar://http', {
-      url: post.url,
+    const res = await httpFetch(post.url, {
       method: 'GET',
       headers: { ...DC_HTTP_HEADERS },
-    })) as { ok: boolean; body?: string };
-    if (!res?.ok || !res.body) return '';
-    const doc = new DOMParser().parseFromString(res.body, 'text/html');
+    });
+    if (!res.ok) return '';
+    const html = await res.text();
+    if (!html) return '';
+    const doc = new DOMParser().parseFromString(html, 'text/html');
     doc.querySelectorAll('script, noscript, style').forEach((e) => e.remove());
     const el =
       doc.querySelector('.write_div') ??
