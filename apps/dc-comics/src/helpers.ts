@@ -1,4 +1,5 @@
 import DOMPurify from '@bundled/dompurify';
+import { httpFetch } from '@bundled/yaar';
 
 /**
  * Lazy-load attributes used by DCinside mobile (and common lazy-load libs).
@@ -92,7 +93,7 @@ const IMG_FALLBACK_ATTR = 'data-img-fallback';
  * `onerror` attribute produced. Built with createElement/textContent rather
  * than an HTML string so nothing re-enters an HTML sink.
  */
-function replaceWithFailurePlaceholder(img: HTMLImageElement): void {
+export function replaceWithFailurePlaceholder(img: HTMLImageElement): void {
   const span = document.createElement('span');
   span.textContent = '[이미지 로드 실패]';
   span.style.display = 'inline-block';
@@ -120,6 +121,33 @@ export function attachImageErrorFallbacks(el: HTMLElement): void {
     img.removeAttribute(IMG_FALLBACK_ATTR);
     img.addEventListener('error', () => replaceWithFailurePlaceholder(img), { once: true });
   }
+}
+
+/**
+ * DC's image CDN (dcimg*.dcinside.co.kr/viewimage.php, image.dcinside.com)
+ * enforces Referer-based hotlink protection. A plain <img src> from the app's
+ * sandboxed iframe origin sends either no Referer or the iframe's, and the CDN
+ * rejects both -- every body image failed to load with a bare `[resource]
+ * failed to load <img>` in the console.
+ *
+ * `referrerpolicy="no-referrer"` does NOT help: the CDN wants a *dcinside*
+ * Referer, not the absence of one. So we fetch the bytes through the
+ * yaar://http proxy, which can set Referer server-side (the browser forbids
+ * setting it from fetch()), and render the result from a same-origin blob URL.
+ */
+const DC_REFERER = 'https://m.dcinside.com/';
+
+export async function fetchImageAsBlobUrl(url: string): Promise<string> {
+  const res = await httpFetch(url, {
+    headers: {
+      Referer: DC_REFERER,
+      Accept: 'image/avif,image/webp,image/apng,image/*,*/*;q=0.8',
+    },
+  });
+  if (!res.ok) throw new Error(`이미지 요청 실패 (HTTP ${res.status})`);
+  const blob = await res.blob();
+  if (blob.size === 0) throw new Error('빈 이미지 응답');
+  return URL.createObjectURL(blob);
 }
 
 export function processImages(htmlStr: string, eagerCount = 2): string {
@@ -183,32 +211,27 @@ export function processImages(htmlStr: string, eagerCount = 2): string {
     // DC lazy-load classes can re-blank the src via their JS; drop them.
     img.removeAttribute('class');
 
-    // For images that weren't converted to a data URI, the iframe must load them
-    // cross-origin. DC's image hosts (dcimg*/viewimage.php) use hotlink
-    // protection; sending no referrer is the most reliable way to be allowed
-    // from a sandboxed origin. Add a graceful placeholder on failure.
-    if (!src.startsWith('data:')) {
-      // NOTE: do NOT set crossorigin here. A plain <img> displaying a
-      // cross-origin resource is NOT subject to CORS, but adding crossorigin
-      // opts the image INTO CORS mode, which DC's image hosts reject (no ACAO
-      // header) -> the image is blocked. referrerpolicy alone is safe.
-      img.setAttribute('referrerpolicy', 'no-referrer');
-      // Mark for the post-insertion error listener. An inline `onerror` string
-      // cannot be used here: DOMPurify strips inline handlers, and generating
-      // one would violate the "behaviour via addEventListener" contract.
-      img.setAttribute(IMG_FALLBACK_ATTR, '');
+    // Data URIs are already inline -- render them as-is.
+    if (src.startsWith('data:')) {
+      img.setAttribute('src', src);
+      return;
     }
 
-    // Progressive loading: only the first `eagerCount` images load immediately.
-    // The rest are deferred and swapped in by an IntersectionObserver as they
-    // scroll into view (see DetailPanel). `loading="lazy"` alone does NOT defer
-    // inlined base64 data URIs, so we move the real URL out of `src`.
+    // Every remote image is loaded through the proxy (see fetchImageAsBlobUrl).
+    // The real URL is parked in data-deferred-src and `src` holds a transparent
+    // placeholder until DetailPanel swaps in the fetched blob URL.
+    img.setAttribute('data-deferred-src', src);
+    img.setAttribute('src', TRANSPARENT_PX);
+    // Mark for the post-insertion error listener. An inline `onerror` string
+    // cannot be used here: DOMPurify strips inline handlers, and generating
+    // one would violate the "behaviour via addEventListener" contract.
+    img.setAttribute(IMG_FALLBACK_ATTR, '');
+
+    // Progressive loading: the first `eagerCount` images are fetched as soon as
+    // the body mounts. The rest get `deferred-img` (shimmer placeholder) and are
+    // fetched by an IntersectionObserver as they scroll into view.
     kept += 1;
-    if (kept > eagerCount) {
-      img.setAttribute('data-deferred-src', src);
-      img.setAttribute('src', TRANSPARENT_PX);
-      img.classList.add('deferred-img');
-    }
+    if (kept > eagerCount) img.classList.add('deferred-img');
   });
   return div.innerHTML;
 }

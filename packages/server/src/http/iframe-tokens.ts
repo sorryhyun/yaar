@@ -6,7 +6,10 @@
  * them to PUBLIC_ENDPOINTS only.
  */
 
+import { join } from 'node:path';
+import { isPreviewAppId, PREVIEW_APP_PREFIX } from '@yaar/shared';
 import type { PermissionEntry } from './access.js';
+import { getStorageDir } from '../config.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -101,6 +104,43 @@ export function generateIframeToken(
 }
 
 /**
+ * Gated SDKs a devtools *preview* may use, read from the project's own app.json.
+ *
+ * A preview runs under a `preview--{projectId}` principal, which no `getAppMeta`
+ * can resolve — the project is not installed yet, that is the point. So `bundles`
+ * came back undefined and every gated door 403'd the preview, while the *deployed*
+ * app sailed through: an app declaring `yaar-web` could only be tested after it
+ * shipped. `openPreview` already forwards the project's `permissions`; this is the
+ * same manifest field it could not forward, because `bundles` must not be
+ * caller-supplied (any app could then mint itself `yaar-dev`). Reading it off disk
+ * keeps it the project's declared identity rather than the request's claim.
+ *
+ * The compiler already honours this exact list when it builds the preview (see
+ * `handleDevRoutes`), so a bundle that reaches the iframe is a bundle that was
+ * declared. The preview principal is neither bundled nor system, so the sharper
+ * guards — `canWriteApp`, `controls`, `streams` — still refuse it.
+ */
+export async function previewBundles(
+  appId: string | undefined,
+  storageRoot: string = getStorageDir(),
+): Promise<string[] | undefined> {
+  if (!isPreviewAppId(appId)) return undefined;
+  const projectId = appId!.slice(PREVIEW_APP_PREFIX.length);
+  // Reject anything that could climb out of the projects directory. Project ids are
+  // timestamps in practice, but this string reaches a path join.
+  if (!projectId || !/^[\w.-]+$/.test(projectId) || projectId.includes('..')) return undefined;
+  try {
+    const manifest = await Bun.file(
+      join(storageRoot, 'apps', 'devtools', 'projects', projectId, 'app.json'),
+    ).json();
+    const bundles = (manifest as { bundles?: unknown }).bundles;
+    return Array.isArray(bundles) ? bundles.filter((b) => typeof b === 'string') : undefined;
+  } catch {
+    return undefined; // no project, no app.json, or malformed — no bundles
+  }
+}
+
+/**
  * Generate an iframe token with automatic app metadata resolution.
  * Consolidates the repeated pattern of: getAppMeta -> extract permissions -> generateIframeToken.
  */
@@ -150,7 +190,7 @@ export async function generateAppIframeToken(
     permissions,
     monitorId,
     systemApp: appMeta?.systemApp,
-    bundles: appMeta?.bundles,
+    bundles: appMeta?.bundles ?? (await previewBundles(appId)),
     streams: appMeta?.streams,
   });
 }

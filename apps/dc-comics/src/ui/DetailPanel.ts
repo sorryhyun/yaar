@@ -4,7 +4,12 @@ import { showConfirm } from '@bundled/yaar';
 import { state } from '../store';
 import { CommentSection } from './CommentSection';
 import { subscribeSeries, unsubscribeSeries } from '../actions';
-import { processImages, attachImageErrorFallbacks } from '../helpers';
+import {
+  processImages,
+  attachImageErrorFallbacks,
+  fetchImageAsBlobUrl,
+  replaceWithFailurePlaceholder,
+} from '../helpers';
 import type { SeriesLink } from '../types';
 
 function fmtNum(n: string): string {
@@ -95,11 +100,37 @@ export function DetailPanel() {
   // image-heavy posts don't decode/paint everything at once.
   let observer: IntersectionObserver | null = null;
 
-  const loadImg = (img: HTMLImageElement) => {
+  // Blob URLs minted by fetchImageAsBlobUrl. Held so they can be revoked when
+  // the body is replaced or the panel unmounts -- an image-heavy comic post
+  // would otherwise leak every decoded image for the lifetime of the app.
+  const blobUrls = new Set<string>();
+  const revokeBlobUrls = () => {
+    for (const u of blobUrls) URL.revokeObjectURL(u);
+    blobUrls.clear();
+  };
+
+  // Fetch through the yaar://http proxy with a dcinside Referer. A direct
+  // <img src> is refused by DC's hotlink protection, so the bytes have to come
+  // back through the proxy and be rendered from a same-origin blob URL.
+  const loadImg = async (img: HTMLImageElement) => {
     const real = img.getAttribute('data-deferred-src');
-    if (real) img.setAttribute('src', real);
     img.removeAttribute('data-deferred-src');
     img.classList.remove('deferred-img');
+    if (!real) return;
+    try {
+      const objUrl = await fetchImageAsBlobUrl(real);
+      // The body may have been swapped out while this fetch was in flight.
+      if (!img.isConnected) {
+        URL.revokeObjectURL(objUrl);
+        return;
+      }
+      blobUrls.add(objUrl);
+      img.setAttribute('src', objUrl);
+    } catch {
+      // A proxy failure dispatches no 'error' event (src stays the placeholder),
+      // so the fallback has to be applied directly rather than via the listener.
+      if (img.isConnected) replaceWithFailurePlaceholder(img);
+    }
   };
 
   const setupLazyImages = (el: HTMLElement) => {
@@ -110,7 +141,14 @@ export function DetailPanel() {
     // synchronously right after innerHTML assignment, so it is always in place
     // before any error event can be dispatched.
     attachImageErrorFallbacks(el);
-    const deferred = Array.from(el.querySelectorAll('img.deferred-img')) as HTMLImageElement[];
+
+    const pending = Array.from(
+      el.querySelectorAll('img[data-deferred-src]'),
+    ) as HTMLImageElement[];
+    // Eager images carry no `deferred-img` class -- fetch them straight away.
+    pending.filter((i) => !i.classList.contains('deferred-img')).forEach(loadImg);
+
+    const deferred = pending.filter((i) => i.classList.contains('deferred-img'));
     if (deferred.length === 0) return;
 
     if (typeof IntersectionObserver === 'undefined') {
@@ -141,9 +179,12 @@ export function DetailPanel() {
     if (!el) {
       observer?.disconnect();
       observer = null;
+      revokeBlobUrls();
       return;
     }
     const content = state.postContent;
+    // Drop the previous post's blob URLs before the DOM referencing them goes.
+    revokeBlobUrls();
     el.innerHTML = content && !state.postLoading ? processImages(content) : '';
     setupLazyImages(el);
   });
@@ -151,6 +192,7 @@ export function DetailPanel() {
   onCleanup(() => {
     observer?.disconnect();
     observer = null;
+    revokeBlobUrls();
   });
 
   return html`

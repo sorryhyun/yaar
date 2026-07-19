@@ -211,6 +211,11 @@ const CONTENT_SELECTORS = ['.write_div', '.thum-txt', '.view_content_wrap', '.ga
 const REMOVE_INSIDE = [
   '.gallview-tit-wrap', '.gallview-head', '.view_content_bottom',
   '.bottom_nav', '.comment_wrap', '.reply_wrap', '.ad', '.adsbygoogle', '.float_ad',
+  // The mobile comment container is #comment_box / ul.all-comment-lst -- neither
+  // matched the old .comment_wrap/.reply_wrap pair, so the whole comment thread
+  // was being pulled into the body HTML and rendered twice (once inline, once in
+  // CommentSection), dragging every comment dccon through the image pipeline.
+  '#comment_box', '.all-comment-lst', '.comment-add-box', '.cmt_write_box',
 ].join(', ');
 
 function extractContentFromDoc(doc: Document, post: Post): string {
@@ -220,8 +225,13 @@ function extractContentFromDoc(doc: Document, post: Post): string {
     el.querySelectorAll(REMOVE_INSIDE).forEach((e) => e.remove());
     // Lazy-load resolution + progressive deferral happens in DetailPanel via
     // processImages() on the returned HTML; no need to touch <img> here.
+    // Accept on text OR on images. A comic-gallery post is almost entirely
+    // images with little or no caption text, so a text-length-only guard
+    // rejects the correct element and falls through to the "cannot load"
+    // message -- the body is there, it just has nothing to say in words.
     const textContent = (el.textContent ?? '').replace(/\s+/g, ' ').trim();
-    if (textContent.length > 20) return el.innerHTML.trim();
+    const hasImage = !!el.querySelector('img');
+    if (textContent.length > 20 || hasImage) return el.innerHTML.trim();
   }
   const safeUrl = post.url.replace(/"/g, '&quot;');
   return `<p style="color:var(--yaar-text-muted)">본문을 불러올 수 없습니다. <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:var(--yaar-accent)">DC에서 직접 보기 &uarr;</a></p>`;

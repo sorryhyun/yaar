@@ -36,15 +36,34 @@ export function registerProtocol() {
         }),
       },
       selectedPost: {
-        description: '현재 선택된 게시물 (없으면 null).',
-        handler: () =>
-          state.selectedPost
-            ? {
-                num: state.selectedPost.num,
-                title: state.selectedPost.title,
-                url: state.selectedPost.url,
-              }
-            : null,
+        description:
+          '현재 선택된 게시물 (없으면 null). 본문 로딩 상태와 본문에 포함된 이미지 수/텍스트 미리보기를 함께 반환하므로, 본문이 제대로 파싱됐는지 확인할 수 있습니다.',
+        handler: () => {
+          const post = state.selectedPost;
+          if (!post) return null;
+          const content = state.postContent;
+          let imageCount = 0;
+          let textPreview = '';
+          if (content) {
+            try {
+              const doc = new DOMParser().parseFromString(content, 'text/html');
+              imageCount = doc.querySelectorAll('img').length;
+              textPreview = (doc.body.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 200);
+            } catch {
+              // Leave the defaults; a parse failure is itself visible as imageCount 0.
+            }
+          }
+          return {
+            num: post.num,
+            title: post.title,
+            url: post.url,
+            loading: state.postLoading,
+            error: state.postError,
+            hasContent: !!content,
+            imageCount,
+            textPreview,
+          };
+        },
       },
       comments: {
         description: '현재 선택된 게시물의 댓글 목록.',
