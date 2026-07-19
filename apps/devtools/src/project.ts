@@ -110,7 +110,10 @@ export async function createProject(name: string): Promise<string> {
 export async function cloneApp(appId: string): Promise<string> {
   setStatusText(`Cloning "${appId}"...`);
   const result = await invoke<{
-    files: { path: string; content: string }[];
+    // `encoding` is set for files whose bytes are not valid UTF-8 (images, fonts,
+    // wasm). Writing those with the default utf-8 encoding re-encodes the base64
+    // payload as text and corrupts the asset — see cloneAppSource.
+    files: { path: string; content: string; encoding?: 'base64' }[];
     meta: Record<string, unknown>;
   }>('yaar://apps/' + appId, { action: 'clone' });
   const meta = result?.meta ?? {};
@@ -120,7 +123,11 @@ export async function cloneApp(appId: string): Promise<string> {
   await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ ...meta, name }, null, 2));
   if (result?.files) {
     for (const file of result.files) {
-      await appStorage.save(projectPath(id, file.path), file.content);
+      await appStorage.save(
+        projectPath(id, file.path),
+        file.content,
+        file.encoding ? { encoding: file.encoding } : undefined,
+      );
     }
   }
   await loadProjects();
@@ -255,30 +262,59 @@ const IMAGE_MIME: Record<string, string> = {
   ico: 'image/x-icon',
 };
 
+/** Whether this path is a raster image — rendered, never decoded as text. */
+export function isImagePath(path: string): boolean {
+  return IMAGE_EXT.test(path);
+}
+
+/**
+ * Whether this path holds bytes that are not text at all. Reading one as text gives
+ * mojibake, so the callers that would have shown it say what the file is instead.
+ */
+export function isBinaryPath(path: string): boolean {
+  return BINARY_EXT.test(path);
+}
+
+/**
+ * An image file's raw base64 plus its MIME type, or null if it could not be read as
+ * bytes. Shared by the editor (which builds a data URL) and the `readFile` command
+ * (which returns an image content block), so both agree on how an image is decoded.
+ */
+export async function readImageFile(
+  path: string,
+): Promise<{ data: string; mimeType: string } | null> {
+  const proj = activeProject();
+  if (!proj) return null;
+  try {
+    const { data, mimeType, encoding } = await appStorage.readBinary(projectPath(proj.id, path));
+    if (encoding !== 'base64') return null;
+    const ext = path.split('.').pop()?.toLowerCase() ?? '';
+    const mime =
+      mimeType && mimeType !== 'application/octet-stream'
+        ? mimeType
+        : (IMAGE_MIME[ext] ?? 'application/octet-stream');
+    return { data, mimeType: mime };
+  } catch {
+    return null;
+  }
+}
+
 export async function openFile(path: string): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
-  if (IMAGE_EXT.test(path)) {
+  if (isImagePath(path)) {
     // Reading an image as text yields a wall of base64 (or mojibake). Read the bytes
     // and hand the editor a data URL instead.
-    try {
-      const { data, mimeType, encoding } = await appStorage.readBinary(projectPath(proj.id, path));
-      if (encoding === 'base64') {
-        const ext = path.split('.').pop()?.toLowerCase() ?? '';
-        const mime =
-          mimeType && mimeType !== 'application/octet-stream'
-            ? mimeType
-            : (IMAGE_MIME[ext] ?? 'application/octet-stream');
-        batch(() => {
-          setOpenFilePath(path);
-          setOpenFileContent(null);
-          setOpenFileImage(`data:${mime};base64,${data}`);
-        });
-        return;
-      }
-    } catch {
-      /* fall through to the text path, which reports the failure */
+    const image = await readImageFile(path);
+    if (image) {
+      batch(() => {
+        setOpenFilePath(path);
+        setOpenFileContent(null);
+        setOpenFileImage(`data:${image.mimeType};base64,${image.data}`);
+      });
+      return;
     }
+    // Unreadable as bytes — fall through to the text path, which reports the failure.
   }
   try {
     const content = await appStorage.read(projectPath(proj.id, path));
@@ -476,6 +512,19 @@ export async function readFileContent(
   const proj = activeProject();
   if (!proj)
     return { path, content: '// No active project', totalLines: 0, startLine: 1, endLine: 0 };
+  // Bytes that are not text decode to mojibake, which reads like a corrupt file
+  // rather than the wrong tool. Say what the file is; the caller turns an image
+  // into an image block, and there is nothing to line-number either way.
+  if (isBinaryPath(path)) {
+    const kind = isImagePath(path) ? 'an image' : 'a binary file';
+    return {
+      path,
+      content: `── ${path} ──\n(${kind}, not text — reference it from code with \`import asset from './${path.split('/').pop()}'\`)`,
+      totalLines: 0,
+      startLine: 1,
+      endLine: 0,
+    };
+  }
   try {
     const raw = await appStorage.read(projectPath(proj.id, path));
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);

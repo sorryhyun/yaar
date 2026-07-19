@@ -8,6 +8,8 @@ import {
   copyFile,
   grep,
   readFileContent,
+  readImageFile,
+  isImagePath,
   type EditSpec,
 } from '../project';
 
@@ -27,6 +29,35 @@ const MIME_MAP: Record<string, string> = {
 function getMimeType(path: string): string {
   const ext = path.split('.').pop()?.toLowerCase() ?? '';
   return MIME_MAP[ext] || 'text/plain';
+}
+
+/** The block shapes `readFile` returns. Image blocks pass through the app protocol as-is. */
+type ReadBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; data: string; mimeType: string }
+  | { type: 'resource'; resource: { uri: string; text: string; mimeType: string } };
+
+/**
+ * Above this an inlined image costs more than it tells anyone — a project asset that
+ * big is a mistake worth naming rather than rendering. (Base64 is ~4/3 of the bytes,
+ * and the model's own per-image ceiling is near 5MB encoded.)
+ */
+const MAX_INLINE_IMAGE_BYTES = 3_500_000;
+
+function imageBlocks(path: string, image: { data: string; mimeType: string }): ReadBlock[] {
+  const kb = Math.round((image.data.length * 3) / 4 / 1024);
+  if ((image.data.length * 3) / 4 > MAX_INLINE_IMAGE_BYTES) {
+    return [
+      {
+        type: 'text',
+        text: `── ${path} ──\n(image, ${kb}KB — too large to inline; open it in the editor with openFile)`,
+      },
+    ];
+  }
+  return [
+    { type: 'text', text: `── ${path} (image, ${kb}KB) ──` },
+    { type: 'image', data: image.data, mimeType: image.mimeType },
+  ];
 }
 
 export const fileCommands = {
@@ -58,7 +89,8 @@ export const fileCommands = {
       'Read one or more files and return their contents with line numbers. Does NOT change the editor open state. ' +
       'Use `path` (string) for a single file or `path` (array) for multiple files. ' +
       'Optionally specify `startLine` / `endLine` for a line range (1-based, inclusive). ' +
-      'Set `openInEditor: true` to also open each file in the editor.',
+      'Set `openInEditor: true` to also open each file in the editor. ' +
+      'Image files come back as an image you can see, not as text.',
     params: {
       type: 'object',
       properties: {
@@ -81,21 +113,34 @@ export const fileCommands = {
         startLine: p.startLine != null ? Number(p.startLine) : undefined,
         endLine: p.endLine != null ? Number(p.endLine) : undefined,
       };
-      const results = await Promise.all(paths.map((fp) => readFileContent(fp, opts)));
       if (p.openInEditor) {
         for (const fp of paths) await openFile(fp);
       }
-      // Return as embedded resource blocks — gives Claude URI + MIME metadata per file
       const proj = activeProject();
       const projectId = proj?.id ?? 'unknown';
-      return results.map((r) => ({
-        type: 'resource' as const,
-        resource: {
-          uri: `yaar://storage/apps/devtools/projects/${projectId}/${r.path}`,
-          text: r.content,
-          mimeType: getMimeType(r.path),
-        },
-      }));
+      const uriFor = (fp: string) => `yaar://storage/apps/devtools/projects/${projectId}/${fp}`;
+
+      const perFile = await Promise.all(
+        paths.map(async (fp): Promise<ReadBlock[]> => {
+          // An image is answered with the picture. Decoding it as text produced
+          // mojibake, and handing back base64 would be a wall of characters that
+          // says nothing — an image block is the only form that can be read.
+          if (isImagePath(fp)) {
+            const image = await readImageFile(fp);
+            if (image) return imageBlocks(fp, image);
+            // Unreadable as bytes — fall through to the text path, which reports it.
+          }
+          const r = await readFileContent(fp, opts);
+          // Embedded resource block — gives Claude URI + MIME metadata per file
+          return [
+            {
+              type: 'resource',
+              resource: { uri: uriFor(r.path), text: r.content, mimeType: getMimeType(r.path) },
+            },
+          ];
+        }),
+      );
+      return perFile.flat();
     },
   }),
   writeFile: defineCommand({

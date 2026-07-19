@@ -6,11 +6,43 @@ import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { resolveAppDir } from '../apps/roots.js';
 
+interface CloneFile {
+  path: string;
+  content: string;
+  /** Present only when `content` is base64 — the file's bytes are not valid UTF-8. */
+  encoding?: 'base64';
+}
+
 interface CloneResult {
   success: boolean;
   error?: string;
-  files?: { path: string; content: string }[];
+  files?: CloneFile[];
   meta?: { name: string; icon: string; description: string };
+}
+
+/**
+ * Read a source file in whichever form survives the trip.
+ *
+ * `Bun.file().text()` does not throw on binary — it decodes lossily, so a PNG came
+ * back as ~88k U+FFFD replacement chars and was written to the sandbox as that.
+ * Cloning an app with an asset therefore corrupted the asset, and nothing failed:
+ * mascot's 216KB sprite arrived as 390KB of garbage that only broke at runtime.
+ * A strict UTF-8 decode is the actual question being asked — can this file be a
+ * string? — so anything that fails it travels as base64 instead.
+ */
+const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
+
+async function readCloneFile(absPath: string, relPath: string): Promise<CloneFile> {
+  const bytes = await Bun.file(absPath).arrayBuffer();
+  try {
+    return { path: relPath, content: strictUtf8.decode(bytes) };
+  } catch {
+    return {
+      path: relPath,
+      content: Buffer.from(bytes).toString('base64'),
+      encoding: 'base64',
+    };
+  }
 }
 
 export async function cloneAppSource(appId: string): Promise<CloneResult> {
@@ -38,7 +70,7 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
   }
 
   // Read all source files recursively
-  const files: { path: string; content: string }[] = [];
+  const files: CloneFile[] = [];
 
   // Include top-level app files so permissions, protocol, skill docs, etc. are preserved
   for (const filename of ['app.json', 'SKILL.md', 'AGENTS.md', 'HINT.md']) {
@@ -58,8 +90,7 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
         ? join(entry.parentPath, entry.name).slice(srcDir.length + 1)
         : entry.name;
       try {
-        const content = await Bun.file(join(srcDir, relPath)).text();
-        files.push({ path: `src/${relPath}`, content });
+        files.push(await readCloneFile(join(srcDir, relPath), `src/${relPath}`));
       } catch {
         /* skip unreadable files */
       }
