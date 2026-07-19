@@ -102,7 +102,16 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       });
     },
     url: function(path) {
-      return '/api/storage/' + encodePath(path);
+      // Carry the token in the query string. This URL exists to be handed to an
+      // <img src>, a <video>, a CSS url() — subresource fetches the app cannot attach
+      // a header to, so tokenHeaders() is unreachable here. Without it the server sees
+      // no token, resolves the caller as "host" rather than as this app, and a path
+      // containing "self" cannot be resolved at all (403). The access gate already
+      // accepts the __yaar_token query param for exactly this case; only this builder
+      // never sent it.
+      var base = '/api/storage/' + encodePath(path);
+      var t = window.__YAAR_TOKEN__ || iframeToken;
+      return t ? base + '?__yaar_token=' + encodeURIComponent(t) : base;
     }
   };
 })();

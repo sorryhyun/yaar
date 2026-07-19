@@ -93,7 +93,8 @@ src/
 ├── protocol.ts    # App Protocol registration (if using bidirectional communication)
 ├── store.ts       # Signals and shared state
 ├── types.ts       # Type definitions
-└── helpers.ts     # Pure utility functions
+├── helpers.ts     # Pure utility functions
+└── sprite.png     # Static assets live here too — imported, not fetched (see Static Assets)
 ```
 
 If `main.ts` has no `import` statements, add `export {};` at the top so TypeScript treats it as a module.
@@ -131,6 +132,44 @@ Some SDKs require `"bundles"` in `app.json` to import:
 - `@bundled/yaar-dev` also exposes `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` — per-app version history. See **Version History**.
 
 When creating or editing `app.json` for apps that use these, include the appropriate `bundles` entry.
+
+## Static Assets (images, fonts, audio)
+
+**Import the file. Do not fetch it from storage.**
+
+```ts
+import sprite from './sprite.png';
+// sprite is a `data:image/png;base64,...` string
+img.src = sprite;                       // <img src>, CSS url(), new Audio(), fetch() — all fine
+```
+
+The bundler inlines the bytes as a data URI and resolves the default export to it, so the
+asset ships inside `dist/index.html` and no request is made for it at runtime. Supported:
+`.png .jpg .jpeg .gif .svg .webp .avif .ico .woff .woff2 .ttf .otf .wasm .mp3 .wav`.
+Put the file next to the code that imports it, under `src/`.
+
+**Why this and not `storage.url('...')`:** a preview window runs under a throwaway
+`preview--{projectId}` principal, not the app's. Anything reaching `/api/storage/` is
+therefore resolved against a different identity than the deployed app will use — `self`
+points at an empty namespace, and the auto-granted document permission covers the single
+HTML file, not its siblings. So a storage-backed asset can 403/404 in preview and work
+after deploy, or the reverse. An imported asset has no identity to get wrong: preview and
+deployed render identically. This is also the only form that survives the preview iframe
+being remounted on every compile.
+
+**Use storage instead only for genuinely dynamic files** — user uploads, generated output,
+anything that changes without a recompile. A sprite, icon, font, or sound that is versioned
+with the source belongs in the bundle.
+
+**Size:** base64 costs ~33% over the raw bytes, and the compiler warns past 5MB total.
+A few hundred KB of sprites is unremarkable; a video is not — stream that at runtime.
+
+**A broken asset is invisible unless you look.** A failed image load produces no
+`console.log` and does not fail the build, so "compilation successful" says nothing about
+whether it rendered. Uncaught errors and resource-load failures are captured into the
+console buffer (`[resource] failed to load <img>: ...`), so read `consoleLogs` after a
+preview — and read the preview window itself for a screenshot. Green compile is not
+evidence for anything visual.
 
 ## Design Tokens (CSS)
 

@@ -112,6 +112,19 @@ async function openPreview(): Promise<{ previewUrl: string; windowId: string }> 
   // namespace, not the deployed app's live data. The server refuses to route an app
   // agent to a `preview--*` identity, so this cannot displace the real app either.
   const previewAppId = proj ? `preview--${proj.id}` : undefined;
+  // Close before create, unconditionally. `create` on an id that already exists is a
+  // hard error server-side (features/window/create.ts) — not a replace — so the create
+  // below would throw and take the whole `compile` command down with it, reported as
+  // "compile failing" even though the build succeeded. Gating this on previewWindowId()
+  // is not enough: that signal is set only here and cleared only in two catch blocks,
+  // and nothing subscribes to window close, so it goes stale in both directions. Asking
+  // the server to close is the only thing that knows the truth. A close that fails
+  // because there was nothing there is the expected case, not an error.
+  try {
+    await invoke(`yaar://windows/${previewId}`, { action: 'close' });
+  } catch {
+    /* no such window — that is the normal first-open path */
+  }
   const result = await invoke<{ windowId?: string }>(`yaar://windows/${previewId}`, {
     action: 'create',
     title: `${name} (preview)`,

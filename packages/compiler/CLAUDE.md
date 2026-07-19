@@ -16,7 +16,7 @@ bun run dev              # Watch mode
 src/
 ├── index.ts               # Barrel exports
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
-├── plugins.ts             # 3 Bun plugins: bundledLibrary, cssFile, solidHtmlSource
+├── plugins.ts             # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
 ├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
 ├── mount-guard.ts         # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
 ├── design-token-guard.ts  # Rejects var(--yaar-*) names that can never resolve
@@ -84,6 +84,14 @@ each derives its expectation from the compiler's own output so it cannot drift.
 Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires explicit `"bundles"` in app.json. Solid-js imports from bundled libs are intercepted to prevent duplicate module instances.
 
 **`cssFilePlugin()`** — converts `.css` imports to JS that injects a `<style>` element at runtime.
+
+**`assetDataUrlPlugin()`** — inlines imported binary assets as base64 `data:` URIs, so
+`import logo from './logo.png'` yields a string usable in `<img src>`, CSS `url()`, `fetch()`,
+`new Audio()`. Covers `ASSET_MIME_TYPES` (images, fonts, wasm, mp3/wav); `*.png`-style ambient
+declarations in `bundled-types/index.d.ts` keep typecheck green. Written as a plugin because
+Bun's `loader: { '.png': 'dataurl' }` is silently a no-op in the *programmatic* bundler (1.3.14),
+emitting an empty string — inlining only works through the HTML-entrypoint pipeline, which YAAR
+doesn't use. Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (5MB) warns on the total.
 
 **`solidHtmlSourcePlugin()`** — reads each TypeScript source once, rewrites `</${Component}>` to `</>` (closing tags cause expression index misalignment in solid-js/html), then fails the build on `html` templates that would silently drop text or throw a stackless `SyntaxError`. Finds templates via the TypeScript AST, classifies them with `classifyTemplate()`, and reports file/line/column plus a fix. The fast gate intentionally recognizes the current literal `html\`` spelling and does not trace the tag's import. `typescript` is absent in exe mode, so validation no-ops there while the rewrite still runs.
 
