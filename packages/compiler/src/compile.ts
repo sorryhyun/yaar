@@ -14,7 +14,11 @@ import {
   solidHtmlSourcePlugin,
   toForwardSlash,
 } from './plugins.js';
-import { extractProtocolFromSource } from './extract-protocol.js';
+import {
+  extractProtocolWithDiagnostics,
+  isBlockingProtocolWarning,
+  type ProtocolExtraction,
+} from './extract-protocol.js';
 import { getCompilerConfig } from './config.js';
 import {
   computeSourceHash,
@@ -56,6 +60,10 @@ export interface CompileResult {
   success: boolean;
   outputPath?: string;
   errors?: string[];
+  /** Key names written to dist/protocol.json, when the app registers a protocol. */
+  protocol?: { commands: string[]; state: string[] };
+  /** Protocol extraction diagnostics. Blocking ones (commands/state) fail the compile. */
+  protocolWarnings?: string[];
 }
 
 /**
@@ -213,20 +221,22 @@ async function readAppSources(srcDir: string): Promise<AppSourceFile[]> {
 
 /**
  * Extract protocol manifest from src/main.ts or src/protocol.ts.
+ *
+ * A file that produced warnings but no protocol still wins over the next file:
+ * warnings mean a register() call was found and choked, and falling through
+ * would hide exactly the truncation the diagnostics exist to surface.
  */
-async function extractProtocolFromDir(
-  srcDir: string,
-): Promise<ReturnType<typeof extractProtocolFromSource>> {
+async function extractProtocolFromDir(srcDir: string): Promise<ProtocolExtraction> {
   for (const file of ['main.ts', 'protocol.ts']) {
     try {
       const source = await Bun.file(join(srcDir, file)).text();
-      const protocol = extractProtocolFromSource(source);
-      if (protocol) return protocol;
+      const extraction = extractProtocolWithDiagnostics(source);
+      if (extraction.protocol || extraction.warnings.length > 0) return extraction;
     } catch {
       continue;
     }
   }
-  return null;
+  return { protocol: null, warnings: [] };
 }
 
 /**
@@ -264,6 +274,26 @@ export async function compileTypeScript(
     // Bundle TypeScript to JavaScript
     const jsCode = await compileWithBun(entryPoint, minify, options.bundles);
 
+    // Protocol gate — after bundling so genuine build errors keep precedence.
+    // A register() whose commands/state only partially parse used to write a
+    // silently truncated dist/protocol.json while every other signal stayed
+    // green (one real incident: 29 commands shrank to 3). Blocking warnings
+    // fail the build instead of shipping a manifest missing commands.
+    const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'));
+    const blocking = extraction.warnings.filter(isBlockingProtocolWarning);
+    if (blocking.length > 0) {
+      return {
+        success: false,
+        errors: [
+          'Protocol extraction failed — the manifest would silently drop entries:',
+          ...blocking,
+          'Fix hint: spread and computed keys are not statically extractable; write command ' +
+            'entries as literal `name: defineCommand({...})` or `name: {...}` properties.',
+        ],
+        protocolWarnings: extraction.warnings,
+      };
+    }
+
     // Get SDK scripts (minified when minify is enabled)
     const sdkCode = await getSdkScripts(minify);
 
@@ -286,15 +316,9 @@ export async function compileTypeScript(
     // Write to dist/index.html
     await Bun.write(outputPath, htmlContent);
 
-    // Extract app protocol manifest from source (best-effort).
-    // Check main.ts first, then scan all src/*.ts files for .register() calls.
-    try {
-      const protocol = await extractProtocolFromDir(join(sandboxPath, 'src'));
-      if (protocol) {
-        await Bun.write(join(distDir, 'protocol.json'), JSON.stringify(protocol, null, 2));
-      }
-    } catch {
-      // Non-fatal — protocol discovery just won't be available
+    // Write the extracted protocol manifest (validated by the gate above)
+    if (extraction.protocol) {
+      await Bun.write(join(distDir, 'protocol.json'), JSON.stringify(extraction.protocol, null, 2));
     }
 
     // Write build manifest for change detection
@@ -316,6 +340,15 @@ export async function compileTypeScript(
     return {
       success: true,
       outputPath,
+      ...(extraction.protocol
+        ? {
+            protocol: {
+              commands: Object.keys(extraction.protocol.commands),
+              state: Object.keys(extraction.protocol.state),
+            },
+          }
+        : {}),
+      ...(extraction.warnings.length > 0 ? { protocolWarnings: extraction.warnings } : {}),
     };
   } catch (err) {
     let errors: string[];

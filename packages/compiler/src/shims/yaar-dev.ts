@@ -33,7 +33,15 @@ async function devPost<T>(action: string, body: Record<string, unknown>): Promis
 }
 
 export function compile(path: string, opts?: { title?: string }) {
-  return devPost<{ success: boolean; previewUrl?: string; errors?: string[] }>('compile', {
+  return devPost<{
+    success: boolean;
+    previewUrl?: string;
+    errors?: string[];
+    /** Extracted manifest key names — null when the app registers no protocol. */
+    protocol?: { commands: string[]; state: string[] } | null;
+    /** Protocol extraction diagnostics. Blocking ones (commands/state) fail the compile. */
+    protocolWarnings?: string[];
+  }>('compile', {
     path,
     ...opts,
   });
@@ -58,6 +66,12 @@ export function deploy(
      * this states you know, and want it anyway.
      */
     skipTypecheck?: boolean;
+    /**
+     * Ship a manifest that drops commands the installed app currently has. Deploy
+     * compares protocols first and refuses shrink — this states you know, and
+     * want it anyway.
+     */
+    allowProtocolShrink?: boolean;
   },
 ) {
   return devPost<{
@@ -66,6 +80,8 @@ export function deploy(
     name?: string;
     icon?: string;
     error?: string;
+    /** Present when the deploy was refused by the protocol shrink gate. Counts are commands. */
+    protocolShrink?: { before: number; after: number; missing: string[] };
   }>('deploy', { path, ...opts });
 }
 

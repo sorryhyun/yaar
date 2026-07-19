@@ -39,7 +39,12 @@ export {
   type AppSourceFile,
   type TokenFinding,
 } from './design-token-guard.js';
-export { extractProtocolFromSource } from './extract-protocol.js';
+export {
+  extractProtocolFromSource,
+  extractProtocolWithDiagnostics,
+  isBlockingProtocolWarning,
+  type ProtocolExtraction,
+} from './extract-protocol.js';
 export { YAAR_DESIGN_TOKENS_CSS, describeDesignTokens } from './design-tokens.js';
 export {
   isAppStale,

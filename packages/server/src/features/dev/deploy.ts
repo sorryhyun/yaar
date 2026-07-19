@@ -104,6 +104,12 @@ export interface DeployArgs {
   /** Ship without type checking. Escape hatch — the caller is stating they know. */
   skipTypecheck?: boolean;
   /**
+   * Ship a manifest that drops commands the installed app currently has. Deploy
+   * compares the new protocol against the installed dist/protocol.json and
+   * refuses shrink — this states you know, and want it anyway.
+   */
+  allowProtocolShrink?: boolean;
+  /**
    * Session to scope deploy-progress stream frames to. When set, `doDeploy`
    * pushes `progress`/`done`/`error` frames to `yaar://dev/deploy/{appId}` for
    * any app streaming that URI (e.g. devtools' live deploy bar). Omit for
@@ -119,10 +125,17 @@ export interface DeployResult {
   icon: string;
 }
 
+export interface DeployRefusal {
+  success: false;
+  error: string;
+  /** Present when the protocol shrink gate refused. Counts are commands. */
+  protocolShrink?: { before: number; after: number; missing: string[] };
+}
+
 export async function doDeploy(
   sandboxId: string,
   args: DeployArgs,
-): Promise<DeployResult | { success: false; error: string }> {
+): Promise<DeployResult | DeployRefusal> {
   const { appId, name, description, icon, keepSource = true, skill, skipTypecheck } = args;
 
   // Deploy-progress stream. Frames go to any app streaming this URI; a no-op
@@ -221,6 +234,43 @@ export async function doDeploy(
         }
       } catch {
         continue;
+      }
+    }
+  }
+
+  // Protocol shrink gate. The extractor is best-effort, so a manifest that
+  // parsed short (or not at all) would silently overwrite the installed app's
+  // protocol.json — and the agent loses commands it could see yesterday, with
+  // every other signal green. Compare against what is installed and refuse to
+  // shrink the command set unless the caller says so on purpose. First deploys
+  // have nothing to compare; components-only deploys leave dist/ untouched.
+  if (hasCompiledApp || extractedProtocol) {
+    let installed: Pick<AppManifest, 'state' | 'commands'> | null = null;
+    try {
+      installed = JSON.parse(await Bun.file(join(appPath, 'dist', 'protocol.json')).text());
+    } catch {
+      // No installed manifest (first deploy, or app never had one) — exempt.
+    }
+    if (installed && !args.allowProtocolShrink) {
+      const beforeCommands = Object.keys(installed.commands ?? {});
+      const afterCommands = Object.keys(extractedProtocol?.commands ?? {});
+      const missing = beforeCommands.filter((k) => !afterCommands.includes(k));
+      if (missing.length > 0) {
+        const beforeState = Object.keys(installed.state ?? {});
+        const afterState = Object.keys(extractedProtocol?.state ?? {});
+        const missingState = beforeState.filter((k) => !afterState.includes(k));
+        const error =
+          `Protocol shrinks from ${beforeCommands.length} to ${afterCommands.length} commands; ` +
+          `missing: ${missing.join(', ')}.` +
+          (missingState.length > 0 ? ` Also missing state keys: ${missingState.join(', ')}.` : '') +
+          ` Pass allowProtocolShrink: true if intended.`;
+        const protocolShrink = {
+          before: beforeCommands.length,
+          after: afterCommands.length,
+          missing,
+        };
+        emit('error', { step: 'protocol', error, protocolShrink });
+        return { success: false, error, protocolShrink };
       }
     }
   }

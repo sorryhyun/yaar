@@ -43,11 +43,16 @@ All file commands operate **only inside the active project's sandbox**, never th
 - `writeFile` — `content` may be a string (verbatim) or an object (pretty-printed JSON, so `app.json` needs no hand-escaping).
 - `copyFile` — `{ from, to }`, creates destination dirs. Does not delete the source; pair with `deleteFile` to move.
 
-**`editFile` takes exactly one edit per call** — flat `search`/`replace` strings (aliases: `oldString`/`newString`), first match only. Call it once per change. Read the file first to get the exact text.
+**`editFile` has three modes.** Read the file first to get exact text (or line numbers — `query("project")` gives each file's `lines`). It returns `{ editsApplied, lines }`.
+
+- **Search/replace** (default): `search` + `replace` (aliases `oldString`/`newString`), first match only.
+- **Line range**: `startLine` + `endLine` (1-based, inclusive), optional `replace`. Omitting `replace` (or passing `""`) *deletes* those lines — this is how you drop a block in one call instead of crafting a search string for 90 lines.
+- **Multi-edit**: `edits`, an array of `{ search, replace }` and/or `{ startLine, endLine, replace? }` objects, applied **sequentially in memory and written once, all-or-nothing** — if any edit fails to match, the error names its index and nothing is written. Line numbers in later edits refer to the content *after* earlier edits.
 
 ```
 // ✅ command("editFile", { path: "src/main.ts", search: "const x = 1;", replace: "const x = 2;" })
-// ❌ command("editFile", { path: "src/main.ts", diff: [...] })   → "Missing search string"
+// ✅ command("editFile", { path: "src/main.ts", startLine: 40, endLine: 130 })   // delete lines 40–130
+// ✅ command("editFile", { path: "src/main.ts", edits: [ { search: "a", replace: "b" }, { startLine: 5, endLine: 5, replace: "// note" } ] })
 ```
 
 ## Preview & Debugging
@@ -61,6 +66,8 @@ All file commands operate **only inside the active project's sandbox**, never th
 **`protocolLog` shows real traffic.** Every query/command sent to the preview and every event it emitted, in order, with results and timings. For duplicate emits, ordering, or "did that handler fire", read the log instead of reasoning from source — an app that emits twice looks identical to one that emits once until you look.
 
 **`previewQuery` / `previewCommand`** exercise the app protocol; the app needs `app.register()` for these to work. **`resizePreview`** changes window size without remounting the iframe, so preview state survives.
+
+**`manifest` inspects the protocol without deploying.** It reports two truths: the **static** manifest (command/state names the compiler extracted from source on the last compile — what agents see after deploy) and the **runtime** manifest (what the running preview actually registered via `app.register`), plus a `drift` report between them. Drift means an entry is reached via a spread or computed key — it runs but is invisible to agents, so add it as a literal property. Run `compile` first for the static side and open a `preview` for the runtime side; `manifest` says which side is missing if one is. `compile` runs this same check automatically when a preview is open and surfaces `manifestDrift` in its result when the two disagree (a warning, never a build failure).
 
 **Preview identity.** The preview window has its own id (`devtools-preview-{projectId}`), so previewing an app while it is running will not displace the real app's window. It runs under its own principal (`preview--{projectId}`), so `self` resolves: `appStorage`, `appDb` and app-scoped permissions all work against the project's `app.json`. Storage features can and should be tested here before deploying — "it compiled, and `self` will resolve once it's a real app" is an argument, not a test. Two consequences: the preview's storage is a **throwaway namespace** (it cannot show or corrupt the live app's data, and dies with the project), and the preview has **no app agent** — you are the agent inside it.
 

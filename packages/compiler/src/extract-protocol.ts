@@ -11,6 +11,12 @@ import type { AppManifest } from '@yaar/shared';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events'>;
 
+export interface ProtocolExtraction {
+  protocol: Protocol | null;
+  /** Diagnostics from partial parses — see `stopWarning()` for the format. */
+  warnings: string[];
+}
+
 /**
  * Find the matching closing brace for an opening brace at `start`.
  * Handles nested braces, string literals (single, double, template), and comments.
@@ -264,17 +270,97 @@ function extractObjectProp(body: string, propName: string): object | null {
   }
 }
 
+/** True when the property exists syntactically (`propName: {`), parseable or not. */
+function hasObjectProp(body: string, propName: string): boolean {
+  return new RegExp(`\\b${propName}\\s*:\\s*\\{`).test(body);
+}
+
+/**
+ * Like extractObjectProp, but a block that is present yet unparseable pushes a
+ * warning instead of vanishing — an agent reading the manifest would otherwise
+ * see the command and have no idea its schema was dropped. The usual culprit is
+ * a description built with `+` string concatenation inside the block.
+ *
+ * These warnings are entry-scoped (`` `commands.name`: ... ``), deliberately NOT
+ * the `commands:` prefix `isBlockingProtocolWarning` matches: the entry itself
+ * survives with its description, so this reports degradation without failing
+ * builds (several shipped apps have such blocks today).
+ */
+function extractObjectPropChecked(
+  body: string,
+  propName: string,
+  section: SectionName,
+  entryName: string,
+  warnings: string[],
+): object | null {
+  const value = extractObjectProp(body, propName);
+  if (value === null && hasObjectProp(body, propName)) {
+    warnings.push(
+      `\`${section}.${entryName}\`: its \`${propName}\` block could not be parsed ` +
+        `(often a string built with \`+\` concatenation inside it); the entry was kept ` +
+        `but its \`${propName}\` was dropped from the manifest`,
+    );
+  }
+  return value;
+}
+
+type SectionName = 'commands' | 'state' | 'events';
+
+/** Clip text to a short single-line, printable-ASCII snippet for warning messages. */
+function asciiSnippet(text: string, maxLen = 40): string {
+  return text
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLen)
+    .replace(/[^\x20-\x7e]/g, '?');
+}
+
+/**
+ * Describe why parsing a section stopped mid-body. Warning messages start with
+ * the section name (`commands: ...`) — `isBlockingProtocolWarning` relies on it.
+ * ASCII only: compiler error paths mangle non-ASCII bytes.
+ */
+function stopWarning(section: SectionName, rest: string, parsedCount: number): string {
+  const blocker = rest.startsWith('...')
+    ? 'a `...` spread entry (not statically extractable)'
+    : `an unparseable entry starting at \`${asciiSnippet(rest)}\``;
+  const parsed = parsedCount === 1 ? '1 entry was parsed' : `${parsedCount} entries were parsed`;
+  return (
+    `${section}: parsing stopped at ${blocker}; ${parsed} before this point, ` +
+    `and every entry after it was dropped from the manifest`
+  );
+}
+
+/**
+ * True when an extraction warning concerns `commands` or `state` — the manifest
+ * content agents act on. `events` warnings are informational, as are the
+ * entry-scoped `` `commands.name`: ... `` warnings for unparseable
+ * params/schema/returns blocks (the entry itself survived).
+ */
+export function isBlockingProtocolWarning(warning: string): boolean {
+  return warning.startsWith('commands:') || warning.startsWith('state:');
+}
+
 /**
  * Parse top-level keys from an object body, extracting each key's block.
- * Yields [keyName, blockContent] pairs for keys whose value is `{ ... }`.
+ * Returns [keyName, blockContent] pairs for keys whose value is `{ ... }`.
  *
  * A single identifier call may wrap the literal — `navigate: defineCommand({ ... })`
- * — in which case the wrapper is stepped over and the inner block is yielded.
+ * — in which case the wrapper is stepped over and the inner block is returned.
  * The trailing `)` is consumed by the inter-key skip below.
+ *
+ * When the next non-skippable token is not a parseable `key: {` entry (a spread,
+ * computed key, shorthand, or method shorthand), parsing stops and a warning is
+ * pushed — everything after that point is invisible to the extractor.
  */
-function* iterateTopLevelKeys(body: string): Generator<[string, string]> {
+function parseTopLevelKeys(
+  body: string,
+  section: SectionName,
+  warnings: string[],
+): Array<[string, string]> {
   // Match key: { at the top level of the body
   // Supports bare identifiers (navigate) and quoted keys ('current-path', "select-file")
+  const entries: Array<[string, string]> = [];
   let pos = 0;
   while (pos < body.length) {
     // Skip whitespace, commas, close parens (from a descriptor-builder call),
@@ -287,35 +373,51 @@ function* iterateTopLevelKeys(body: string): Generator<[string, string]> {
     const keyMatch = body
       .slice(pos)
       .match(/^(?:(['"])([^'"]+)\1|(\w+))\s*:\s*(?:[A-Za-z_$][\w$]*\s*(?:<[^<>]*>\s*)?\(\s*)?\{/);
-    if (!keyMatch || keyMatch.index === undefined) break;
+    if (!keyMatch || keyMatch.index === undefined) {
+      warnings.push(stopWarning(section, body.slice(pos), entries.length));
+      break;
+    }
 
     const keyName = keyMatch[2] ?? keyMatch[3]; // quoted group or bare group
     const bracePos = pos + keyMatch.index + keyMatch[0].length - 1; // points to {
     const blockContent = extractBlock(body, bracePos);
-    if (blockContent === null) break;
+    if (blockContent === null) {
+      warnings.push(
+        `${section}: parsing stopped at \`${keyName}\` because its braces never close; ` +
+          `${entries.length} entries were parsed before this point, ` +
+          `and every entry after it was dropped from the manifest`,
+      );
+      break;
+    }
 
-    yield [keyName, blockContent];
+    entries.push([keyName, blockContent]);
 
     // Move past this block
     const endBrace = findMatchingBrace(body, bracePos);
     pos = endBrace + 1;
   }
+  return entries;
 }
 
 /**
- * Extract app protocol from TypeScript source code.
- * Looks for `.register({...})` and extracts state/command descriptors.
+ * Extract app protocol from TypeScript source code, reporting where the parser
+ * had to give up. `warnings` is non-empty when a section's body was only
+ * partially parsed — the manifest then silently misses every entry after the
+ * stop, which is exactly the failure mode callers should surface or refuse.
  */
-export function extractProtocolFromSource(source: string): Protocol | null {
+export function extractProtocolWithDiagnostics(source: string): ProtocolExtraction {
+  const warnings: string[] = [];
   try {
     // Find the register call: .register({ or register({
     const registerMatch = source.match(/\.register\s*\(\s*\{/);
-    if (!registerMatch || registerMatch.index === undefined) return null;
+    if (!registerMatch || registerMatch.index === undefined) {
+      return { protocol: null, warnings };
+    }
 
     // Find the opening brace of the config object
     const configStart = source.indexOf('{', registerMatch.index);
     const configBody = extractBlock(source, configStart);
-    if (!configBody) return null;
+    if (!configBody) return { protocol: null, warnings };
 
     // Extract state, commands, and events sections
     const stateBody = findPropertyBlock(configBody, 'state');
@@ -326,12 +428,12 @@ export function extractProtocolFromSource(source: string): Protocol | null {
 
     // Parse state descriptors
     if (stateBody) {
-      for (const [key, block] of iterateTopLevelKeys(stateBody)) {
+      for (const [key, block] of parseTopLevelKeys(stateBody, 'state', warnings)) {
         if (key === 'manifest') continue; // Built-in, skip
         const description = extractStringProp(block, 'description');
         if (description) {
           protocol.state[key] = { description };
-          const schema = extractObjectProp(block, 'schema');
+          const schema = extractObjectPropChecked(block, 'schema', 'state', key, warnings);
           if (schema) protocol.state[key].schema = schema;
         }
       }
@@ -339,15 +441,15 @@ export function extractProtocolFromSource(source: string): Protocol | null {
 
     // Parse command descriptors
     if (commandsBody) {
-      for (const [key, block] of iterateTopLevelKeys(commandsBody)) {
+      for (const [key, block] of parseTopLevelKeys(commandsBody, 'commands', warnings)) {
         const description = extractStringProp(block, 'description');
         if (description) {
           protocol.commands[key] = { description };
           const aliases = extractStringArrayProp(block, 'aliases');
           if (aliases) protocol.commands[key].aliases = aliases;
-          const params = extractObjectProp(block, 'params');
+          const params = extractObjectPropChecked(block, 'params', 'commands', key, warnings);
           if (params) protocol.commands[key].params = params;
-          const returns = extractObjectProp(block, 'returns');
+          const returns = extractObjectPropChecked(block, 'returns', 'commands', key, warnings);
           if (returns) protocol.commands[key].returns = returns;
         }
       }
@@ -356,7 +458,7 @@ export function extractProtocolFromSource(source: string): Protocol | null {
     // Parse event channel descriptors
     if (eventsBody) {
       const events: NonNullable<Protocol['events']> = {};
-      for (const [key, block] of iterateTopLevelKeys(eventsBody)) {
+      for (const [key, block] of parseTopLevelKeys(eventsBody, 'events', warnings)) {
         const description = extractStringProp(block, 'description');
         if (description) events[key] = { description };
       }
@@ -368,11 +470,19 @@ export function extractProtocolFromSource(source: string): Protocol | null {
       Object.keys(protocol.commands).length === 0 &&
       !protocol.events
     ) {
-      return null;
+      return { protocol: null, warnings };
     }
 
-    return protocol;
+    return { protocol, warnings };
   } catch {
-    return null;
+    return { protocol: null, warnings };
   }
+}
+
+/**
+ * Extract app protocol from TypeScript source code.
+ * Looks for `.register({...})` and extracts state/command descriptors.
+ */
+export function extractProtocolFromSource(source: string): Protocol | null {
+  return extractProtocolWithDiagnostics(source).protocol;
 }

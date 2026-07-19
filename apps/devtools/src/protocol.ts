@@ -1,5 +1,14 @@
 export {};
-import { app, invoke, describe, list, errMsg, AppCommandError, defineCommand } from '@bundled/yaar';
+import {
+  app,
+  invoke,
+  describe,
+  list,
+  errMsg,
+  wait,
+  AppCommandError,
+  defineCommand,
+} from '@bundled/yaar';
 import { bundledLibraries } from '@bundled/yaar-dev';
 import {
   activeProject,
@@ -34,8 +43,11 @@ import {
   grep,
   readFileContent,
   copyFile,
+  staticProtocol,
+  type EditSpec,
 } from './project';
 import { openPreview, readPreview } from './preview';
+import { getStaticManifest, getRuntimeManifest, diffManifestNames } from './manifest';
 
 const MIME_MAP: Record<string, string> = {
   ts: 'text/typescript',
@@ -64,11 +76,24 @@ export function registerProtocol() {
     name: 'Devtools',
     state: {
       project: {
-        description: 'Active project',
+        description:
+          'Active project. Files come with their size: { path, lines, bytes } for text files, ' +
+          '{ path, isDirectory: true } for directories.',
         handler: () => {
           const proj = activeProject();
           if (!proj) return null;
-          return { ...proj, files: files().map((f) => f.path) };
+          return {
+            ...proj,
+            files: files().map((f) =>
+              f.isDirectory
+                ? { path: f.path, isDirectory: true as const }
+                : {
+                    path: f.path,
+                    ...(f.lines !== undefined ? { lines: f.lines } : {}),
+                    ...(f.bytes !== undefined ? { bytes: f.bytes } : {}),
+                  },
+            ),
+          };
         },
       },
       projects: {
@@ -297,30 +322,87 @@ export function registerProtocol() {
       }),
       editFile: defineCommand({
         description:
-          'Edit a file (search & replace, first match only). Pass search/replace, or their ' +
-          'oldString/newString aliases.',
+          'Edit a file in place. Three modes: (1) search/replace — pass search + replace ' +
+          '(aliases: oldString/newString), first match only. (2) line range — pass ' +
+          'startLine/endLine (1-based, inclusive) with optional replace; omitting replace (or ' +
+          'passing "") deletes those lines. (3) multi-edit — pass edits, an array of ' +
+          '{ search, replace } and/or { startLine, endLine, replace? } objects, applied ' +
+          'sequentially in memory and written to disk once, all-or-nothing: if any edit fails, ' +
+          'the error names its index and nothing is written. Line numbers in later edits refer ' +
+          'to the content AFTER earlier edits have been applied. Returns ' +
+          '{ editsApplied, lines } with the new line count.',
         params: {
           type: 'object',
           properties: {
             path: { type: 'string' },
-            search: { type: 'string', description: 'Text to find. Alias: oldString.' },
-            replace: { type: 'string', description: 'Replacement text. Alias: newString.' },
+            search: {
+              type: 'string',
+              description:
+                'Text to find (first match). Alias: oldString. Mutually exclusive with startLine/endLine.',
+            },
+            replace: {
+              type: 'string',
+              description:
+                'Replacement text. Alias: newString. With startLine/endLine, omit or pass an empty string to delete the range.',
+            },
             oldString: { type: 'string', description: 'Alias for search.' },
             newString: { type: 'string', description: 'Alias for replace.' },
+            startLine: {
+              type: 'number',
+              description:
+                'First line to replace (1-based, inclusive). Mutually exclusive with search.',
+            },
+            endLine: {
+              type: 'number',
+              description: 'Last line to replace (1-based, inclusive). Defaults to startLine.',
+            },
+            edits: {
+              type: 'array',
+              description:
+                'Multiple edits applied sequentially in memory and written once (all-or-nothing). Takes precedence over the top-level single-edit params. Line numbers in later edits refer to the content after earlier edits.',
+              items: {
+                type: 'object',
+                properties: {
+                  search: { type: 'string' },
+                  replace: { type: 'string' },
+                  startLine: { type: 'number' },
+                  endLine: { type: 'number' },
+                },
+              },
+            },
           },
           required: ['path'],
         },
         handler: async (p) => {
-          const search = p.search ?? p.oldString;
-          const replace = p.replace ?? p.newString;
-          if (!search)
-            throw new AppCommandError('Missing search string (pass search or oldString)');
-          // `''` is a valid replacement (delete the match), so only `undefined` is missing.
-          if (replace === undefined) {
-            throw new AppCommandError('Missing replacement text (pass replace or newString)');
+          const normalize = (e: {
+            search?: string;
+            replace?: string;
+            oldString?: string;
+            newString?: string;
+            startLine?: number;
+            endLine?: number;
+          }): EditSpec => {
+            const search = e.search ?? e.oldString;
+            const replace = e.replace ?? e.newString;
+            return {
+              ...(search !== undefined ? { search: String(search) } : {}),
+              ...(replace !== undefined ? { replace: String(replace) } : {}),
+              ...(e.startLine !== undefined ? { startLine: Number(e.startLine) } : {}),
+              ...(e.endLine !== undefined ? { endLine: Number(e.endLine) } : {}),
+            };
+          };
+          let edits: EditSpec[];
+          if (Array.isArray(p.edits)) {
+            if (p.edits.length === 0) throw new AppCommandError('edits array is empty');
+            edits = p.edits.map(normalize);
+          } else {
+            edits = [normalize(p)];
           }
-          const changed = await editFile(p.path, search, replace);
-          if (!changed) throw new AppCommandError('Search string not found in file');
+          try {
+            return await editFile(String(p.path), edits);
+          } catch (err) {
+            throw err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
+          }
         },
       }),
       deleteFile: defineCommand({
@@ -446,6 +528,29 @@ export function registerProtocol() {
             previewRefreshed = true;
           }
 
+          // Best-effort manifest drift check: with a freshly refreshed preview,
+          // compare what the compiler extracted (what agents will see after
+          // deploy) against what the running app actually registered. A command
+          // reached via a spread or computed key runs fine but vanishes from
+          // the static manifest — this is where that mismatch surfaces instead
+          // of staying latent until deploy. Any fetch failure drops the check
+          // silently; it is advisory, never a reason to fail a compile.
+          let manifestDrift: ReturnType<typeof diffManifestNames> | undefined;
+          if (previewRefreshed) {
+            const statNames = staticProtocol()?.protocol;
+            if (statNames) {
+              await wait(800); // the remounted iframe needs a beat to boot and register
+              const runtime = await getRuntimeManifest();
+              if (runtime.names) {
+                const drift = diffManifestNames(statNames, runtime.names);
+                if (drift.missingFromStatic.length > 0 || drift.missingFromRuntime.length > 0) {
+                  manifestDrift = drift;
+                }
+              }
+            }
+          }
+          const protocolWarnings = staticProtocol()?.warnings ?? [];
+
           return {
             status,
             built,
@@ -454,6 +559,16 @@ export function registerProtocol() {
             ...(typeErrors > 0 ? { typeErrors } : {}),
             ...(!built && errors.length > 0 ? { errors } : {}),
             ...(diags.length > 0 ? { diagnostics: diags } : {}),
+            ...(protocolWarnings.length > 0 ? { protocolWarnings } : {}),
+            ...(manifestDrift
+              ? {
+                  manifestDrift,
+                  manifestNote:
+                    'warning: the runtime registration and the static protocol manifest ' +
+                    'disagree — entries reached via spreads or computed keys are invisible to ' +
+                    'agents. Run the manifest command for details.',
+                }
+              : {}),
           };
         },
       }),
@@ -463,6 +578,58 @@ export function registerProtocol() {
         handler: async () => {
           await typecheck();
           return { diagnostics: diagnostics() };
+        },
+      }),
+      manifest: defineCommand({
+        description:
+          'Inspect the app protocol manifest without deploying. Reports the STATIC manifest ' +
+          '(command/state names the compiler extracted from source on the last compile — what ' +
+          'agents will see after deploy) and the RUNTIME manifest (what the running preview ' +
+          'actually registered via app.register), plus a drift report between the two. Drift ' +
+          'means an entry is reached via a spread or computed key: it runs but is invisible to ' +
+          'agents. Run compile first for the static side; open a preview for the runtime side.',
+        params: { type: 'object', properties: {} },
+        handler: async () => {
+          const stat = await getStaticManifest();
+          const runtime = await getRuntimeManifest();
+          const result = {
+            static: stat.names
+              ? {
+                  available: true as const,
+                  source: stat.source,
+                  commands: stat.names.commands,
+                  state: stat.names.state,
+                  ...(stat.warnings.length > 0 ? { warnings: stat.warnings } : {}),
+                }
+              : {
+                  available: false as const,
+                  reason: stat.reason ?? 'Static manifest unavailable.',
+                  ...(stat.warnings.length > 0 ? { warnings: stat.warnings } : {}),
+                },
+            runtime: runtime.names
+              ? {
+                  available: true as const,
+                  commands: runtime.names.commands,
+                  state: runtime.names.state,
+                }
+              : {
+                  available: false as const,
+                  reason: runtime.reason ?? 'Runtime manifest unavailable.',
+                },
+          };
+          if (stat.names && runtime.names) {
+            return { ...result, drift: diffManifestNames(stat.names, runtime.names) };
+          }
+          const note =
+            !stat.names && !runtime.names
+              ? 'Neither side is available — compile the project (static) and open a preview ' +
+                '(runtime), then retry.'
+              : !stat.names
+                ? 'Only the runtime side is available, so no drift check was possible. ' +
+                  (stat.reason ?? '')
+                : 'Only the static side is available, so no drift check was possible. ' +
+                  (runtime.reason ?? '');
+          return { ...result, note: note.trim() };
         },
       }),
       protocolLog: defineCommand({
@@ -649,8 +816,8 @@ export function registerProtocol() {
               action: 'app_query',
               stateKey: String(p.stateKey),
             });
-          } catch {
-            throw new AppCommandError('Preview window not responding.');
+          } catch (err) {
+            throw new AppCommandError(`Preview query failed: ${errMsg(err)}`);
           }
         },
       }),
@@ -673,8 +840,8 @@ export function registerProtocol() {
               command: String(p.command),
               params: (p.params as Record<string, unknown>) ?? {},
             });
-          } catch {
-            throw new AppCommandError('Preview window not responding.');
+          } catch (err) {
+            throw new AppCommandError(`Preview command failed: ${errMsg(err)}`);
           }
         },
       }),
@@ -724,8 +891,8 @@ export function registerProtocol() {
           try {
             const result = await describe(String(p.uri));
             return { result };
-          } catch {
-            throw new AppCommandError(`Failed to describe URI: ${p.uri}`);
+          } catch (err) {
+            throw new AppCommandError(`Failed to describe URI ${p.uri}: ${errMsg(err)}`);
           }
         },
       }),
@@ -742,8 +909,8 @@ export function registerProtocol() {
           try {
             const result = await list(String(p.uri));
             return { items: result };
-          } catch {
-            throw new AppCommandError(`Failed to list URI: ${p.uri}`);
+          } catch (err) {
+            throw new AppCommandError(`Failed to list URI ${p.uri}: ${errMsg(err)}`);
           }
         },
       }),

@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { extractProtocolFromSource } from '../extract-protocol.js';
+import {
+  extractProtocolFromSource,
+  extractProtocolWithDiagnostics,
+  isBlockingProtocolWarning,
+} from '../extract-protocol.js';
 
 /**
  * The manifest that reaches the agent is built twice from the same source: once
@@ -190,5 +194,116 @@ describe('extractProtocolFromSource', () => {
 
   test('returns null when there is no register call', () => {
     expect(extractProtocolFromSource('export const x = 1;')).toBeNull();
+  });
+});
+
+/**
+ * The parser stops on the first entry it cannot read — a spread, computed key,
+ * shorthand — and everything after that point silently vanishes from the
+ * manifest. One real incident took an app from 29 commands to 3 with every
+ * other signal green. Diagnostics turn that silence into warnings.
+ */
+describe('extractProtocolWithDiagnostics', () => {
+  const SPREAD_MID = `app.register({
+    appId: 'a', name: 'A', state: {},
+    commands: {
+      first: { description: 'First', handler: () => 1 },
+      second: { description: 'Second', handler: () => 2 },
+      ...sharedCommands,
+      third: { description: 'Third', handler: () => 3 },
+    },
+  });`;
+
+  test('a spread inside commands warns and keeps the parsed prefix', () => {
+    const { protocol, warnings } = extractProtocolWithDiagnostics(SPREAD_MID);
+    expect(Object.keys(protocol?.commands ?? {})).toEqual(['first', 'second']);
+    expect(warnings).toHaveLength(1);
+    const warning = warnings[0];
+    // Names the section, the blocker, the parsed count, and the consequence.
+    expect(warning).toStartWith('commands:');
+    expect(warning).toContain('spread');
+    expect(warning).toContain('2 entries were parsed');
+    expect(warning).toContain('dropped');
+    expect(isBlockingProtocolWarning(warning)).toBe(true);
+  });
+
+  test('a non-spread blocker quotes a snippet of the offending token', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A', state: {},
+      commands: {
+        first: { description: 'First', handler: () => 1 },
+        [dynamicName]: { description: 'Computed', handler: () => 2 },
+      },
+    });`;
+    const { protocol, warnings } = extractProtocolWithDiagnostics(source);
+    expect(Object.keys(protocol?.commands ?? {})).toEqual(['first']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toStartWith('commands:');
+    expect(warnings[0]).toContain('[dynamicName]');
+  });
+
+  test('a blocked state section warns with the state section name', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A',
+      state: {
+        tabs: { description: 'Tabs', handler: () => [] },
+        ...extraState,
+      },
+      commands: { run: { description: 'Run', handler: () => 0 } },
+    });`;
+    const { protocol, warnings } = extractProtocolWithDiagnostics(source);
+    expect(Object.keys(protocol?.state ?? {})).toEqual(['tabs']);
+    expect(Object.keys(protocol?.commands ?? {})).toEqual(['run']);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toStartWith('state:');
+  });
+
+  test('an events-only warning is not blocking', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A', state: {},
+      commands: { run: { description: 'Run', handler: () => 0 } },
+      events: {
+        navigated: { description: 'Navigated' },
+        ...extraEvents,
+      },
+    });`;
+    const { warnings } = extractProtocolWithDiagnostics(source);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toStartWith('events:');
+    expect(isBlockingProtocolWarning(warnings[0])).toBe(false);
+  });
+
+  test('a spread as the first commands entry warns even though nothing parsed', () => {
+    const source = `app.register({
+      appId: 'a', name: 'A', state: {},
+      commands: {
+        ...sharedCommands,
+        first: { description: 'First', handler: () => 1 },
+      },
+    });`;
+    const { protocol, warnings } = extractProtocolWithDiagnostics(source);
+    expect(protocol).toBeNull();
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toStartWith('commands:');
+    expect(warnings[0]).toContain('0 entries were parsed');
+  });
+
+  test('clean extraction yields no warnings', () => {
+    expect(extractProtocolWithDiagnostics(PLAIN).warnings).toEqual([]);
+    expect(extractProtocolWithDiagnostics(WRAPPED).warnings).toEqual([]);
+  });
+
+  test('no register call yields null protocol and no warnings', () => {
+    expect(extractProtocolWithDiagnostics('export const x = 1;')).toEqual({
+      protocol: null,
+      warnings: [],
+    });
+  });
+
+  test('extractProtocolFromSource delegates — same parsed prefix, no throw', () => {
+    expect(Object.keys(extractProtocolFromSource(SPREAD_MID)?.commands ?? {})).toEqual([
+      'first',
+      'second',
+    ]);
   });
 });

@@ -21,6 +21,7 @@ import {
   setConsoleLogs,
   setDiagnostics,
   setBundledLibs,
+  setStaticProtocol,
   type Diagnostic,
 } from './store';
 
@@ -37,10 +38,18 @@ export async function compile(): Promise<void> {
   if (!proj) return;
   setCompileStatus('compiling');
   setCompileErrors([]);
+  setStaticProtocol(null);
   setStatusText('Compiling...');
   try {
     const result = await devCompile(projectPath(proj.id), { title: proj.name });
     if (result.success) {
+      // Retain the statically extracted manifest so the `manifest` command and
+      // the compile drift check can compare it against the running preview.
+      setStaticProtocol({
+        protocol: result.protocol ?? null,
+        warnings: result.protocolWarnings ?? [],
+        reported: result.protocol !== undefined || result.protocolWarnings !== undefined,
+      });
       batch(() => {
         setCompileStatus('success');
         setCompileErrors([]);

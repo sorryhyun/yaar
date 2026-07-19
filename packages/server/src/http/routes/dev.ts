@@ -223,11 +223,16 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
         return jsonResponse({
           success: false,
           errors: result.errors ?? ['Unknown error'],
+          ...(result.protocolWarnings?.length ? { protocolWarnings: result.protocolWarnings } : {}),
         });
       }
       return jsonResponse({
         success: true,
         previewUrl: `/api/storage/apps/${callerAppId}/${path}/dist/index.html`,
+        // Manifest key names as extracted, so callers can inspect what the
+        // agent will see without deploying. Null when the app registers none.
+        protocol: result.protocol ?? null,
+        ...(result.protocolWarnings?.length ? { protocolWarnings: result.protocolWarnings } : {}),
       });
     }
 
@@ -254,6 +259,7 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
         icon: body.icon as string | undefined,
         message: body.message as string | undefined,
         skipTypecheck: body.skipTypecheck === true,
+        allowProtocolShrink: body.allowProtocolShrink === true,
         sessionId: principal.sessionId,
       });
       if (!result.success) return jsonResponse(result);

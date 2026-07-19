@@ -20,6 +20,10 @@ export interface ProjectMeta {
 export interface FileEntry {
   path: string;
   isDirectory: boolean;
+  /** Line count — populated for text files when the file list refreshes. */
+  lines?: number;
+  /** Size in bytes (UTF-8) — populated alongside `lines`. */
+  bytes?: number;
 }
 
 export interface Diagnostic {
@@ -61,6 +65,20 @@ export const [consoleLogs, setConsoleLogs] = createSignal<ConsoleEntry[]>([]);
 
 // ── Feature: Preview Window ──
 export const [previewWindowId, setPreviewWindowId] = createSignal<string | null>(null);
+
+// ── Feature: Static protocol manifest (from the last successful compile) ──
+
+/** What the dev-server compile reported about the app's statically extracted protocol. */
+export interface StaticProtocolInfo {
+  /** Command/state names the compiler extracted, or null when it extracted none. */
+  protocol: { commands: string[]; state: string[] } | null;
+  /** Extraction warnings (e.g. entries the static parser could not see). */
+  warnings: string[];
+  /** False when the compile response carried no protocol fields at all (older dev API). */
+  reported: boolean;
+}
+
+export const [staticProtocol, setStaticProtocol] = createSignal<StaticProtocolInfo | null>(null);
 
 // ── Helpers ──
 

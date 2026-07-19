@@ -13,6 +13,7 @@ import {
   setDiagnostics,
   setCompileStatus,
   setPreviewUrl,
+  setStaticProtocol,
   setStatusText,
   openTabs,
   setOpenTabs,
@@ -133,6 +134,9 @@ export async function openProject(id: string): Promise<void> {
   // Add to tabs if not present
   if (!openTabs().includes(id)) setOpenTabs([...openTabs(), id]);
   setActiveProject(proj);
+  // The static manifest belongs to whichever project was last compiled — drop it
+  // on switch so the manifest command never reports another project's protocol.
+  setStaticProtocol(null);
   await refreshFiles(id);
   // Open main.ts by default
   await openFile('src/main.ts');
@@ -169,6 +173,7 @@ export async function deleteProject(id: string): Promise<void> {
         setDiagnostics([]);
         setCompileStatus('idle');
         setPreviewUrl(null);
+        setStaticProtocol(null);
       });
     }
   }
@@ -191,10 +196,15 @@ export function closeTab(id: string): void {
         setDiagnostics([]);
         setCompileStatus('idle');
         setPreviewUrl(null);
+        setStaticProtocol(null);
       });
     }
   }
 }
+
+// Extensions whose bytes are not meaningfully countable as text — skip metadata
+// rather than report the size of a base64/garbled decode.
+const BINARY_EXT = /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav)$/i;
 
 export async function refreshFiles(projectId?: string): Promise<void> {
   const id = projectId ?? activeProject()?.id;
@@ -202,6 +212,23 @@ export async function refreshFiles(projectId?: string): Promise<void> {
   const basePath = projectPath(id);
   try {
     const mapped = await listAllFiles(basePath, basePath);
+    // Attach line/byte counts so the `project` state can answer "how big is this
+    // file" without a read per file (agents used to read line 1 just to see the
+    // "(N lines)" header). Projects are a handful of source files, so reading
+    // them in parallel here is cheap; a file that cannot be read stays uncounted.
+    await Promise.all(
+      mapped.map(async (entry) => {
+        if (entry.isDirectory || BINARY_EXT.test(entry.path)) return;
+        try {
+          const raw = await appStorage.read(projectPath(id, entry.path));
+          const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+          entry.lines = text.split('\n').length;
+          entry.bytes = new TextEncoder().encode(text).length;
+        } catch {
+          /* unreadable — leave counts unset */
+        }
+      }),
+    );
     setFiles(mapped);
   } catch {
     setFiles([]);
@@ -236,22 +263,91 @@ export async function writeFile(path: string, content: string): Promise<void> {
   setStatusText(`Saved ${path}`);
 }
 
+/**
+ * One edit step. Either `search`/`replace` (first match), or a 1-based inclusive
+ * `startLine`/`endLine` range where `replace` omitted (or '') deletes the lines.
+ */
+export interface EditSpec {
+  search?: string;
+  replace?: string;
+  startLine?: number;
+  endLine?: number;
+}
+
+function applyEdit(content: string, edit: EditSpec, label: string): string {
+  const hasSearch = edit.search !== undefined;
+  const hasRange = edit.startLine !== undefined || edit.endLine !== undefined;
+  if (hasSearch && hasRange) {
+    throw new Error(`${label}: pass search/replace OR startLine/endLine, not both`);
+  }
+  if (hasSearch) {
+    if (edit.replace === undefined) {
+      throw new Error(
+        `${label}: missing replacement text (pass replace or newString; '' deletes the match)`,
+      );
+    }
+    if (!content.includes(edit.search!)) {
+      throw new Error(`${label}: search string not found in file`);
+    }
+    // A function replacer inserts the replacement literally. Passing it as a string
+    // would expand $&, $1, $` and $' — so a replacement containing `$` would
+    // silently corrupt the file.
+    return content.replace(edit.search!, () => edit.replace!);
+  }
+  if (hasRange) {
+    const lines = content.split('\n');
+    const start = Math.trunc(Number(edit.startLine ?? edit.endLine));
+    const end = Math.trunc(Number(edit.endLine ?? edit.startLine));
+    if (!Number.isFinite(start) || !Number.isFinite(end) || start < 1 || end < start) {
+      throw new Error(
+        `${label}: invalid line range ${edit.startLine}-${edit.endLine} ` +
+          '(1-based, inclusive, startLine <= endLine)',
+      );
+    }
+    if (start > lines.length) {
+      throw new Error(
+        `${label}: startLine ${start} is past the end of the file (${lines.length} lines)`,
+      );
+    }
+    // `replace` omitted or '' deletes the range; otherwise its lines take its place.
+    const replacement = edit.replace ? edit.replace.split('\n') : [];
+    lines.splice(start - 1, Math.min(end, lines.length) - start + 1, ...replacement);
+    return lines.join('\n');
+  }
+  throw new Error(
+    `${label}: provide search/replace (aliases oldString/newString) or startLine/endLine`,
+  );
+}
+
+/**
+ * Apply edits sequentially against in-memory content. Throws on the first edit
+ * that fails, naming its index — the caller writes nothing in that case, so a
+ * multi-edit is all-or-nothing. Line numbers in later edits refer to the content
+ * AFTER earlier edits have been applied.
+ */
+export function applyEdits(content: string, edits: EditSpec[]): string {
+  let current = content;
+  edits.forEach((edit, i) => {
+    const label = edits.length > 1 ? `edit ${i + 1} of ${edits.length}` : 'edit';
+    current = applyEdit(current, edit, label);
+  });
+  return current;
+}
+
 export async function editFile(
   path: string,
-  oldString: string,
-  newString: string,
-): Promise<boolean> {
+  edits: EditSpec[],
+): Promise<{ editsApplied: number; lines: number }> {
   const proj = activeProject();
-  if (!proj) return false;
-  const content = await appStorage.read(projectPath(proj.id, path));
-  if (typeof content !== 'string') return false;
-  if (!content.includes(oldString)) return false;
-  // A function replacer inserts newString literally. Passing it as a string would
-  // expand $&, $1, $` and $' — so replacing with source containing a `$` would
-  // silently corrupt the file.
-  const updated = content.replace(oldString, () => newString);
+  if (!proj) throw new Error('No active project. Open or create one first.');
+  if (edits.length === 0) throw new Error('No edits given');
+  const raw = await appStorage.read(projectPath(proj.id, path));
+  // JSON files can come back parsed — render them the way readFile does, so a
+  // search string copied from a readFile result matches.
+  const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+  const updated = applyEdits(content, edits);
   await writeFile(path, updated);
-  return true;
+  return { editsApplied: edits.length, lines: updated.split('\n').length };
 }
 
 export async function copyFile(from: string, to: string): Promise<void> {
