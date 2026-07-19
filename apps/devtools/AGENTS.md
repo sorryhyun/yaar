@@ -217,6 +217,20 @@ To make a deployed app agent-controllable, put `app.register()` in `src/protocol
 
 Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `list`, `invoke`, `describe`, `del`. For HTTP from an iframe, proxy through the server to avoid CORS: `invoke('yaar://http', { url, method?, headers?, body?, redirect? })`.
 
+**Splitting a large `protocol.ts`.** Descriptor maps may live in `src/protocol/<domain>.ts` and be spread back in — `commands: { ...fileCommands, ...gitCommands }`. The compiler resolves relative imports and spreads, so this reaches the manifest intact. The constraint is that every descriptor stays statically readable: a `const` object literal, no `...buildCommands()` call result, no `` `${x}` `` description, no map built in a loop. Violations are a build error with `file:line:col`, never a silently shrunken manifest. Later spreads win on duplicate names, at runtime and in the manifest alike.
+
+**When handlers need a context.** A descriptor map at module scope cannot close over the parameter of a `registerProtocol(ctx)`, and wrapping it in a factory is the call result the extractor refuses. Use the SDK holder:
+
+```ts
+// src/protocol/context.ts
+export const { set: setProtocolContext, get: ctx } =
+  createProtocolContext<ProtocolContext>('my-app');
+```
+
+Call `setProtocolContext(context)` at the top of `registerProtocol`, before `app.register()`, and have handlers read `ctx()`. The context becomes module state shared by every descriptor, which fits an app that registers once per document — the normal case. Both edges throw rather than corrupt: reading before set, and setting twice with a different context.
+
+Verify a split with `manifest` — it diffs the static manifest against what the preview actually registered. A pure move must not change it.
+
 ## URI Reference
 
 Verify a URI before writing code against it: `command("describeUri", { uri })` returns verbs and invoke schema, `command("listUri", { uri })` lists children. `describe` works without holding the permission, so it is a cheap way to check a path is real.
