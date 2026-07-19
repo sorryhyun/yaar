@@ -589,6 +589,44 @@ The limit is static resolvability, and it is enforced rather than tolerated: a s
 runtime while being invisible to every agent, which is the one outcome worse than a broken
 build.
 
+#### When handlers need a runtime context
+
+Static resolvability and a per-registration context pull in opposite directions: descriptor
+maps must be top-level `const`s, so they cannot close over the parameter of a
+`registerProtocol(ctx)`, and hoisting them into a `buildCommands(ctx)` factory produces
+exactly the call result the extractor refuses. `createProtocolContext` is the seam — the
+descriptors stay static, the context is installed at registration time, and handlers reach
+it through the accessor:
+
+```typescript
+// src/protocol/context.ts
+import { createProtocolContext } from '@bundled/yaar';
+
+export const { set: setProtocolContext, get: ctx } =
+  createProtocolContext<ProtocolContext>('slides-lite');
+
+// src/protocol/deck.ts — a plain const, so the extractor reads it
+export const deckCommands = {
+  setDeck: defineCommand({
+    description: 'Replace the whole deck',
+    params: { ... },
+    handler: (p) => ctx().setDeck(p.deck),
+  }),
+};
+
+// src/protocol.ts
+export function registerProtocol(context: ProtocolContext) {
+  setProtocolContext(context); // before app.register()
+  app.register({ appId: 'slides-lite', commands: { ...deckCommands } });
+}
+```
+
+The tradeoff is real and worth stating: the context becomes module state shared by every
+descriptor, so this suits an app that registers once per document — which is the normal
+case. Both edges are loud rather than silent: `get()` before `set()` throws instead of
+returning `undefined`, and `set()` twice with a *different* context throws instead of
+quietly retargeting the first registration's handlers.
+
 ### Talking Back to the Agent
 
 `app.register()` is how the agent reads *you*. These three APIs are how you reach the agent. See [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md) for full signatures.

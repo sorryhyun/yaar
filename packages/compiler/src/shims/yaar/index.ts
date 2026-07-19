@@ -53,6 +53,9 @@ export {
   onShortcut,
 } from './ui.js';
 
+// ── Protocol handler context ────────────────────────────────────
+export { createProtocolContext } from './protocol-context.js';
+
 // ── Dialogs ─────────────────────────────────────────────────────
 export { showAlert, showConfirm, showPrompt } from './dialogs.js';
 export type { DialogOptions } from './dialogs.js';

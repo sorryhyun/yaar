@@ -781,6 +781,29 @@ declare module '@bundled/yaar' {
     handler: () => R | Promise<R>;
   }): YaarAppCommandDescriptor;
 
+  /**
+   * Create a set-once holder for the runtime context a protocol's handlers need.
+   *
+   * Descriptor maps must be top-level `const`s for the protocol extractor to
+   * read them, so they cannot close over a `registerProtocol(ctx)` parameter,
+   * and a `buildCommands(ctx)` factory is a call result the extractor refuses.
+   * This is the supported seam: descriptors stay static, the context is
+   * installed at registration time, and handlers read it via the accessor.
+   *
+   * ```ts
+   * export const { set: setProtocolContext, get: ctx } =
+   *   createProtocolContext<ProtocolContext>('slides-lite');
+   * ```
+   *
+   * `get()` throws if read before `set()`. `set()` throws if called twice with
+   * a different context — the holder is module state, so a second registration
+   * would otherwise silently retarget the first one's handlers.
+   */
+  export function createProtocolContext<T>(label: string): {
+    set(value: T): void;
+    get(): T;
+  };
+
   /** Returns a promise that resolves after `ms` milliseconds. */
   export function wait(ms: number): Promise<void>;
 

@@ -96,8 +96,14 @@ process.on('exit', () => {
   console.error = originalError;
 });
 
-const { appStorage, createPersistedSignal, showAlert, showConfirm, showPrompt } =
-  await import('../shims/yaar/index.js');
+const {
+  appStorage,
+  createPersistedSignal,
+  createProtocolContext,
+  showAlert,
+  showConfirm,
+  showPrompt,
+} = await import('../shims/yaar/index.js');
 
 /** Lets microtask-scheduled saves (`void trySave(...)`) settle. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -319,5 +325,47 @@ describe('dialogs', () => {
     inputField()!.value = 'discarded';
     cancelButton()!.onclick!({});
     expect(await p).toBeNull();
+  });
+});
+
+describe('createProtocolContext', () => {
+  test('get() returns the context installed by set()', () => {
+    const holder = createProtocolContext('demo-app');
+    const context = { n: 1 };
+    holder.set(context);
+    expect(holder.get()).toBe(context);
+  });
+
+  test('destructured set/get stay bound to their own holder', () => {
+    // The documented usage is `export const { set, get } = createProtocolContext(...)`,
+    // so the accessors must not depend on being called as methods.
+    const { set, get } = createProtocolContext('demo-app');
+    const other = createProtocolContext('other-app');
+    set('mine');
+    other.set('theirs');
+    expect(get()).toBe('mine');
+  });
+
+  test('get() before set() throws naming the app, rather than returning undefined', () => {
+    // Returning undefined here is the failure this helper exists to prevent:
+    // it surfaces later as an unrelated TypeError deep inside a handler.
+    const { get } = createProtocolContext('demo-app');
+    expect(() => get()).toThrow(/demo-app.*read before it was set/s);
+  });
+
+  test('set() twice with a different context throws', () => {
+    // Module state is shared by every descriptor, so a silent second install
+    // would retarget the first registration's handlers.
+    const { set } = createProtocolContext('demo-app');
+    set({ n: 1 });
+    expect(() => set({ n: 2 })).toThrow(/demo-app.*set twice/s);
+  });
+
+  test('set() twice with the identical context is a no-op', () => {
+    const { set, get } = createProtocolContext('demo-app');
+    const context = { n: 1 };
+    set(context);
+    set(context);
+    expect(get()).toBe(context);
   });
 });
