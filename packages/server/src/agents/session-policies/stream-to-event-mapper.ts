@@ -7,7 +7,12 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { getToolUseHooks, type ToolUseContext } from '../../features/config/hooks.js';
 import { VERB_TOOL_NAMES } from '../../handlers/index.js';
 import { publishFrame } from '../../streams/stream-hub.js';
-import { buildAgentStreamUri, type AgentStreamKind } from '../../streams/agent-stream.js';
+import {
+  buildAgentStreamUri,
+  type AgentStreamKind,
+  type AgentTurnStatus,
+} from '../../streams/agent-stream.js';
+import { recordSourceDelta } from '../../streams/stream-diagnostics.js';
 
 export interface StreamMappingState {
   responseText: string;
@@ -76,6 +81,10 @@ export class StreamToEventMapper {
   /** Offset into `state.thinkingText` where the current block starts — same reason. */
   private blockThinkingStart = 0;
 
+  /** Turn-boundary latches — see {@link start} / {@link finish}. One turn per mapper. */
+  private turnOpened = false;
+  private turnClosed = false;
+
   private readonly role: string;
   private readonly providerName: string;
   private readonly state: StreamMappingState;
@@ -115,6 +124,51 @@ export class StreamToEventMapper {
     publishFrame(buildAgentStreamUri(this.agentInstanceId), kind, data, this.streamSessionId);
   }
 
+  /**
+   * Open the turn: exactly one `start` frame, published before any provider
+   * message is consumed.
+   *
+   * An observer cannot derive this boundary from the frames themselves — the
+   * first `text` delta of a new turn is indistinguishable from a continuation of
+   * the previous turn's text tail. `start` is what lets Process Explorer clear
+   * the old tool/text state instead of appending to it forever.
+   *
+   * Called by {@link AgentSession} immediately before `provider.query()`, so it
+   * has the same meaning for Claude and Codex.
+   */
+  start(): void {
+    if (this.turnOpened) return;
+    this.turnOpened = true;
+    this.emitStreamFrame('start', {
+      messageId: this.state.currentMessageId ?? undefined,
+      provider: this.providerName,
+      monitorId: this.monitorId,
+    });
+  }
+
+  /**
+   * Close the turn: exactly one terminal frame, ever.
+   *
+   * Idempotent because the turn has two ends that both want to close it — the
+   * provider's `complete`/`error` message, and `AgentSession`'s `finally`, which
+   * must fire for interrupts and aborts where no provider message ever arrives.
+   * Whichever gets there first wins; the other is a no-op. Without that, an
+   * interrupted observer would sit in `responding` forever, and a clean turn
+   * would emit two `done`s.
+   */
+  finish(status: AgentTurnStatus): void {
+    if (this.turnClosed) return;
+    this.turnClosed = true;
+    this.emitStreamFrame('done', { status });
+  }
+
+  /** Close the turn with a terminal `error` frame. Same once-only rule as {@link finish}. */
+  fail(error: string): void {
+    if (this.turnClosed) return;
+    this.turnClosed = true;
+    this.emitStreamFrame('error', { error });
+  }
+
   async map(message: StreamMessage): Promise<void> {
     // Flush pending thinking before processing non-thinking messages
     if (message.type !== 'thinking') {
@@ -140,6 +194,12 @@ export class StreamToEventMapper {
           });
           // Stream subscribers get the *delta*, not the running accumulation —
           // the registry coalesces these on a tick.
+          //
+          // Measure the delta *here*, before coalescing: this is the provider's
+          // own chunk size, and comparing it against the post-coalescing cadence
+          // at the delivery seam is what tells a block-sized-update report apart
+          // from YAAR's own 60ms merge. Length only, never content.
+          recordSourceDelta(this.agentInstanceId, message.content.length);
           this.emitStreamFrame('text', { delta: message.content });
         }
         break;
@@ -165,10 +225,51 @@ export class StreamToEventMapper {
         }
         break;
 
+      case 'tool_use_start': {
+        // The parameter-generation phase opens here, so this is where the text
+        // block actually ends — not at `tool_use`, which on a long argument
+        // arrives many seconds later. Closing it twice is harmless (`tool_use`
+        // repeats it for providers that have no pending phase).
+        this.blockText = '';
+        this.blockThinkingStart = this.state.thinkingText.length;
+
+        // Only the plain name is available yet: the `verb:(uri)` display form is
+        // built from the arguments, which is exactly what hasn't arrived. The
+        // `tool_use` frame below replaces this with the enriched name.
+        const displayName = formatToolDisplay(message.toolName ?? 'unknown');
+        await this.sendEvent({
+          type: ServerEventType.TOOL_PROGRESS,
+          toolName: displayName,
+          status: 'pending',
+          agentId: this.role,
+          monitorId: this.monitorId,
+        });
+        this.emitStreamFrame('tool', { toolName: displayName, status: 'pending' });
+        break;
+      }
+
+      case 'tool_input_delta': {
+        if (!message.content) break;
+        // Frontend-only: the CLI panel renders these raw fragments and throws
+        // them away once the summarized entry lands. Deliberately *not* published
+        // as a stream frame — handing apps partial JSON invites parsing it, and
+        // only one provider can produce it. Apps still get `pending` → `running`
+        // on the `tool` frames, which degrades cleanly.
+        await this.sendEvent({
+          type: ServerEventType.TOOL_PROGRESS,
+          toolName: formatToolDisplay(message.toolName ?? 'unknown'),
+          status: 'pending',
+          message: message.content,
+          agentId: this.role,
+          monitorId: this.monitorId,
+        });
+        break;
+      }
+
       case 'tool_use': {
         // Close the current text/thinking block: whatever the agent says next is a new
         // one, and the client renders it after this tool rather than merged with what
-        // came before.
+        // came before. Already done at `tool_use_start` when there was one.
         this.blockText = '';
         this.blockThinkingStart = this.state.thinkingText.length;
 
@@ -302,7 +403,9 @@ export class StreamToEventMapper {
           monitorId: this.monitorId,
           messageId: this.state.currentMessageId ?? undefined,
         });
-        this.emitStreamFrame('done', {});
+        // The provider says the turn ended cleanly; `AgentSession.finally` will
+        // call `finish()` again and find it already latched.
+        this.finish('completed');
         break;
 
       case 'error':
@@ -312,7 +415,9 @@ export class StreamToEventMapper {
           agentId: this.role,
           monitorId: this.monitorId,
         });
-        this.emitStreamFrame('error', { error: message.error ?? 'Unknown error' });
+        // Terminal for observers: a provider error ends the turn, so it takes the
+        // same latch as `done` rather than adding a second close after it.
+        this.fail(message.error ?? 'Unknown error');
         break;
 
       default:

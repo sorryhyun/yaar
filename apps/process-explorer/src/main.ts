@@ -3,11 +3,12 @@ export {};
 import { onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import type { AgentEntry, WindowInfo, AppProcess } from './types';
+import type { AgentEntry, AgentTurnState, WindowInfo, AppProcess } from './types';
 import {
   agentStats,
   agentList,
   agentActivity,
+  now,
   windows,
   appProcesses,
   lastRefresh,
@@ -33,6 +34,27 @@ function typeBadge(type: AgentEntry['type']) {
     session: '#f5a623',
   };
   return colors[type] ?? 'var(--yaar-text-muted)';
+}
+
+/**
+ * Label + colour for a turn state. `done` is deliberately muted and `interrupted`
+ * is not: a turn the user cut short is worth noticing, one that finished isn't.
+ */
+const TURN_STATE_STYLE: Record<AgentTurnState, { label: string; color: string }> = {
+  responding: { label: 'responding', color: 'var(--yaar-accent)' },
+  'using-tool': { label: 'using tool', color: 'var(--yaar-accent)' },
+  done: { label: 'done', color: 'var(--yaar-text-muted)' },
+  error: { label: 'error', color: 'var(--yaar-error)' },
+};
+
+/** Elapsed time since a frame arrived, as a glanceable "how stale is this row". */
+function formatAge(ts: number, at: number) {
+  const secs = Math.max(0, Math.round((at - ts) / 1000));
+  if (secs < 1) return 'now';
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  return `${Math.floor(mins / 60)}h ago`;
 }
 
 function formatTime(date: Date | null) {
@@ -88,13 +110,30 @@ function AgentRow(props: { agent: AgentEntry }) {
     return 'dot dot-ok';
   };
 
-  // Live activity, folded from the agent's stream. Tool line + a tail of text.
+  // Live activity, folded from the agent's stream: an explicit turn state, the
+  // tool line, a tail of text, and how long since the last frame.
   const act = () => agentActivity[a().id];
   const toolText = () => {
     const t = act()?.tool;
     return t ? `${t.name} · ${t.status}` : '';
   };
   const bodyText = () => act()?.text ?? '';
+  const stateStyle = () => {
+    const state = act()?.state;
+    return state ? TURN_STATE_STYLE[state] : null;
+  };
+  const stateLabel = () => {
+    const activity = act();
+    if (!activity) return '';
+    // An interrupted turn reads as its own outcome, not a plain `done`.
+    if (activity.state === 'done' && activity.endStatus === 'interrupted') return 'interrupted';
+    return TURN_STATE_STYLE[activity.state].label;
+  };
+  const ageText = () => {
+    const at = act()?.updatedAt;
+    return at ? formatAge(at, now()) : '';
+  };
+  const errorText = () => act()?.error ?? '';
 
   return html`
     <div class="process-row">
@@ -106,10 +145,19 @@ function AgentRow(props: { agent: AgentEntry }) {
             <span style=${() => `color: ${typeBadge(a().type)}`}>${() => a().type}</span>
             <span>${() => (a().busy ? 'busy' : 'idle')}</span>
           </div>
-          <${Show} when=${() => toolText() || bodyText()}>
+          <${Show} when=${() => act() !== undefined}>
             <div class="process-activity">
+              <div class="activity-state">
+                <span class="activity-badge" style=${() => `color: ${stateStyle()?.color ?? ''}`}
+                  >${stateLabel}</span
+                >
+                <span class="activity-age">${ageText}</span>
+              </div>
               <${Show} when=${toolText}>
                 <span class="activity-tool y-truncate">${toolText}</span>
+              </>
+              <${Show} when=${errorText}>
+                <span class="activity-error y-truncate">${errorText}</span>
               </>
               <${Show} when=${bodyText}>
                 <span class="activity-text y-truncate">${bodyText}</span>

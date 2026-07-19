@@ -209,7 +209,16 @@ export function startWatching() {
     for (const stop of streamStops.values()) stop();
     streamStops.clear();
   });
+
+  // Freshness is the one readout that changes with no frame arriving — "3s ago"
+  // has to become "4s ago" on its own — so it needs a clock of its own.
+  const clock = setInterval(() => setNow(Date.now()), 1000);
+  onCleanup(() => clearInterval(clock));
 }
+
+/** Ticks once a second so `updatedAt` can be rendered as elapsed time. */
+const [now, setNow] = createSignal(Date.now());
+export { now };
 
 // ── Live agent streams ───────────────────────────────────────
 
@@ -219,26 +228,61 @@ const TEXT_TAIL_CHARS = 200;
 /** Active stream unsubscribers, keyed by agent id. */
 const streamStops = new Map<string, () => void>();
 
-/** Fold one frame from agent `id`'s stream into its live activity. */
+/**
+ * Fold one frame from agent `id`'s stream into its live activity.
+ *
+ * `start` *replaces* the record rather than merging into it — that is the whole
+ * point of the boundary. Every other kind merges, and every kind refreshes
+ * `updatedAt` so a row can show how long it has been since the agent last said
+ * anything.
+ */
 function onAgentFrame(id: string, frame: StreamFrame) {
-  const data = (frame.data ?? {}) as { delta?: string; toolName?: string; status?: string };
+  const data = (frame.data ?? {}) as {
+    delta?: string;
+    toolName?: string;
+    status?: string;
+    error?: string;
+  };
+  const at = frame.ts;
+
   switch (frame.kind) {
+    case 'start':
+      // A new turn: drop last turn's text tail and tool line entirely.
+      setAgentActivity(id, { state: 'responding', updatedAt: at });
+      break;
     case 'tool':
       setAgentActivity(id, (prev) => ({
         ...prev,
+        // A finished tool hands the turn back to the model; only a running one
+        // is 'using-tool'.
+        state: data.status === 'running' ? 'using-tool' : 'responding',
         tool: { name: data.toolName ?? 'tool', status: data.status ?? 'running' },
-        done: false,
+        updatedAt: at,
       }));
       break;
     case 'text':
       setAgentActivity(id, (prev) => ({
         ...prev,
+        state: 'responding',
         text: ((prev?.text ?? '') + (data.delta ?? '')).slice(-TEXT_TAIL_CHARS),
-        done: false,
+        updatedAt: at,
       }));
       break;
     case 'done':
-      setAgentActivity(id, (prev) => ({ ...prev, done: true }));
+      setAgentActivity(id, (prev) => ({
+        ...prev,
+        state: 'done',
+        endStatus: data.status === 'interrupted' ? 'interrupted' : 'completed',
+        updatedAt: at,
+      }));
+      break;
+    case 'error':
+      setAgentActivity(id, (prev) => ({
+        ...prev,
+        state: 'error',
+        error: data.error ?? 'error',
+        updatedAt: at,
+      }));
       break;
   }
 }
@@ -260,7 +304,9 @@ function reconcileStreams(agents: AgentEntry[]) {
     // subscribe resolves doesn't open a duplicate.
     streamStops.set(agent.id, () => {});
     stream(`yaar://agents/${agent.id}/stream`, (frame) => onAgentFrame(agent.id, frame), {
-      kinds: ['text', 'tool', 'done'],
+      // `start` and `error` are as load-bearing as the content kinds: one resets
+      // the row per turn, the other is a terminal the row would otherwise miss.
+      kinds: ['start', 'text', 'tool', 'done', 'error'],
     })
       .then((stop) => {
         // Torn down (agent vanished) before the subscription landed — drop it.

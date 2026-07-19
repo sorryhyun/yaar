@@ -449,7 +449,27 @@ export interface ConnectionStatusEvent {
 export interface ToolProgressEvent {
   type: typeof ServerEventType.TOOL_PROGRESS;
   toolName: string;
-  status: 'running' | 'complete' | 'error';
+  /**
+   * Where the call is.
+   *
+   * `'pending'` is the *parameter-generation* phase: the model has named a tool
+   * but is still writing its arguments, which for a large input (a long file
+   * body, a big component tree) takes seconds to tens of seconds. Without it the
+   * whole window is silent — the call only became visible once its arguments
+   * were complete. A `pending` event with no `message` announces the tool name;
+   * subsequent `pending` events carry a raw argument fragment in `message`.
+   *
+   * Only providers that expose argument deltas emit `pending` (Claude does;
+   * Codex delivers arguments whole), so a consumer must treat the phase as
+   * optional enrichment and stay correct when a call goes straight to
+   * `'running'`.
+   */
+  status: 'pending' | 'running' | 'complete' | 'error';
+  /**
+   * Result text on `complete`/`error`. On `pending`, a raw fragment of the
+   * argument JSON — **display only**. It is a prefix of a JSON document, not a
+   * document: parsing it will fail or, worse, half-succeed.
+   */
   message?: string;
   toolInput?: unknown;
   agentId?: string;

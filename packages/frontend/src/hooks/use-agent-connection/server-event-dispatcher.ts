@@ -42,7 +42,13 @@ export interface ServerEventDispatchHandlers {
   updateCliStreaming: (
     agentId: string,
     content: string,
-    type: 'thinking' | 'response',
+    type: 'thinking' | 'response' | 'tool',
+    monitorId?: string,
+  ) => void;
+  appendCliStreaming: (
+    agentId: string,
+    delta: string,
+    type: 'thinking' | 'response' | 'tool',
     monitorId?: string,
   ) => void;
   finalizeCliStreaming: (agentId: string) => void;
@@ -95,8 +101,11 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     message.type === ServerEventType.ERROR ||
     (message.type === ServerEventType.AGENT_RESPONSE &&
       (message as { isComplete?: boolean }).isComplete) ||
+    // `pending` is one event per argument fragment — a firehose that would bury
+    // the debug panel, and it carries no information the `running` event lacks.
     (message.type === ServerEventType.TOOL_PROGRESS &&
-      (message as { status?: string }).status !== 'running');
+      (message as { status?: string }).status !== 'running' &&
+      (message as { status?: string }).status !== 'pending');
 
   if (shouldLog) {
     handlers.addDebugEntry({
@@ -204,6 +213,25 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
       const status = (message as { status?: string }).status;
       const toolInput = (message as { toolInput?: unknown }).toolInput;
       const monitorId = (message as { monitorId?: string }).monitorId;
+
+      // The parameter-generation phase: the model has named a tool but is still
+      // writing its arguments. Render them raw as they arrive, so a large input
+      // shows progress instead of a stall; the `running` branch below throws this
+      // scaffolding away and replaces it with the summarized entry.
+      if (status === 'pending') {
+        const fragment = (message as { message?: string }).message;
+        if (fragment === undefined) {
+          // The announcement. Flush the preceding text/thinking block first, for
+          // the same chronological reason as the `running` case.
+          handlers.finalizeCliStreaming(agentId);
+          handlers.setAgentActive(agentId, `Preparing: ${toolName}`);
+          handlers.updateCliStreaming(agentId, `[${toolName}] `, 'tool', monitorId);
+        } else {
+          handlers.appendCliStreaming(agentId, fragment, 'tool', monitorId);
+        }
+        break;
+      }
+
       // A tool call ends the current text/thinking block. Flush it into `cliHistory`
       // *before* appending the tool entry so the two land in true chronological order —
       // otherwise the live text sits in `cliStreaming`, which TerminalPane renders after

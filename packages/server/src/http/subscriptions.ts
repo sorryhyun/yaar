@@ -8,6 +8,7 @@
 
 import { ServerEventType, type StreamFrame } from '@yaar/shared';
 import { actionEmitter } from '../session/action-emitter.js';
+import { recordDeliveredFrame } from '../streams/stream-diagnostics.js';
 
 /**
  * A subscription is either a change *ping* (`'change'` — the callback gets a URI
@@ -295,6 +296,10 @@ class SubscriptionRegistry {
       data: capPayload(data),
       ts: Date.now(),
     };
+    // The post-coalescing half of the cadence measurement — count and timing of
+    // what actually went on the wire. Pairs with `recordSourceDelta` at the
+    // mapper; see stream-diagnostics.ts. Off unless explicitly enabled.
+    recordDeliveredFrame(sub.id, kind, deltaOf(data)?.length ?? 0);
     actionEmitter.emit('verb-subscription', {
       sessionId: sub.sessionId,
       event: {

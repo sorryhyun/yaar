@@ -297,6 +297,12 @@ export class AgentSession {
     this.sessionLogger?.logUserMessage(fullContent, role, options.source);
     onContextMessage?.('user', fullContent);
 
+    // Hoisted so `catch`/`finally` can close the observed turn. The stream's
+    // `done` must be published even on the paths where no provider message ever
+    // arrives — an interrupt, an abort, a throw — or a subscriber stays stuck in
+    // `responding` for the rest of the session.
+    let mapper: StreamToEventMapper | null = null;
+
     try {
       // For forked sessions, use the parent's session ID so the provider can fork from it.
       // For resume, use the saved thread ID (only on first message).
@@ -335,7 +341,7 @@ export class AgentSession {
         currentMessageId: this.currentMessageId,
       };
 
-      const mapper = new StreamToEventMapper({
+      const turnMapper = new StreamToEventMapper({
         role,
         providerName: this.provider.name,
         state: streamState,
@@ -362,10 +368,14 @@ export class AgentSession {
         agentInstanceId: stableAgentId,
         streamSessionId: this.liveSessionId,
       });
+      mapper = turnMapper;
 
       console.log(
         `[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`,
       );
+      // Open the observed turn before the first provider message, so a stream
+      // subscriber can clear last turn's state rather than appending to it.
+      turnMapper.start();
       await runInAgentContext(
         {
           agentId: stableAgentId,
@@ -379,17 +389,25 @@ export class AgentSession {
           console.log(`[AgentSession] ${role} entered agentContext.run`);
           for await (const message of this.provider!.query(fullContent, transportOptions)) {
             if (!this.running) break;
-            await mapper.map(message);
+            await turnMapper.map(message);
           }
         },
       );
     } catch (err) {
       console.error(`[AgentSession] ${role} error:`, err);
+      // Terminal for stream observers too — a throw ends the turn as surely as a
+      // provider `error` message does. Latched, so the `finish` below won't add
+      // a second close after it.
+      mapper?.fail(errMessage(err));
       await this.sendEvent({
         type: ServerEventType.ERROR,
         error: errMessage(err),
       });
     } finally {
+      // The guaranteed close. A no-op on the clean path (the provider's
+      // `complete` already latched it) and the only close on the interrupt path,
+      // where the provider stream stops without a terminal message.
+      mapper?.finish(this.interrupted ? 'interrupted' : 'completed');
       // Always notify frontend that this agent is done.
       // When interrupted, the stream never emits a 'complete' message,
       // so the frontend would never clear the agent from the dashboard.

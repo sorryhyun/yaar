@@ -171,6 +171,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           registerWindowAgent: store.registerWindowAgent,
           updateWindowAgentStatus: store.updateWindowAgentStatus,
           updateCliStreaming: store.updateCliStreaming,
+          appendCliStreaming: store.appendCliStreaming,
           finalizeCliStreaming: store.finalizeCliStreaming,
           addCliEntry: store.addCliEntry,
           handleAppProtocolRequest: handleAppProtocolRequestCb,

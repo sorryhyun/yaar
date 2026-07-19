@@ -23,19 +23,39 @@ export interface AgentEntry {
 }
 
 /**
+ * Where an agent's current turn is, derived from its stream's frame kinds.
+ *
+ * `busy` on the roster only says a turn is in flight. This says what it is doing
+ * inside that turn — and, once it ends, *how* it ended, which the roster never
+ * reports at all.
+ */
+export type AgentTurnState = 'responding' | 'using-tool' | 'done' | 'error';
+
+/**
  * Live activity for one agent, folded from its `yaar://agents/{id}/stream` feed.
  *
  * The roster (`yaar://session/agents`) tells us an agent is *busy*; the stream
  * tells us *what* — the tool it is running and a tail of the text it is emitting.
  * Kept small on purpose: a glance, not a transcript.
+ *
+ * The whole record is replaced on each `start` frame. Turn boundaries are what
+ * make that possible: without them the first delta of a new turn is
+ * indistinguishable from a continuation of the last one, so text accumulated
+ * across turns forever and a stale tool line outlived the call that set it.
  */
 export interface AgentActivity {
+  /** Where the current turn is. */
+  state: AgentTurnState;
   /** The current/last tool call: display name + status. */
   tool?: { name: string; status: string };
   /** Tail of the assistant text streamed this turn (capped). */
   text?: string;
-  /** True once a `done` frame lands; cleared when the next turn starts streaming. */
-  done?: boolean;
+  /** How the turn ended, from the terminal `done` frame. */
+  endStatus?: 'completed' | 'interrupted';
+  /** Error text from a terminal `error` frame. */
+  error?: string;
+  /** `frame.ts` of the most recent frame — drives the freshness readout. */
+  updatedAt: number;
 }
 
 export interface WindowInfo {

@@ -178,6 +178,35 @@
   color: var(--yaar-text-muted);
 }
 
+/*
+ * Turn state + freshness — the pair that says "this row is live" versus "this is
+ * what the agent was doing a while ago". Fixed-width-ish and first in the line so
+ * a column of rows scans vertically.
+ */
+.activity-state {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+  gap: 5px;
+}
+
+.activity-badge {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.66rem;
+}
+
+.activity-age {
+  color: var(--yaar-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-error {
+  min-width: 0;
+  color: var(--yaar-error);
+}
+
 .process-actions {
   display: flex;
   gap: var(--yaar-sp-1);
