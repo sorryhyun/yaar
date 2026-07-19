@@ -43,6 +43,7 @@ function debugBundledLibrary(message: string): void {
  */
 export const BUNDLED_SHIMS: Record<string, string> = {
   anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
+  uuid: toForwardSlash(join(SHIMS_DIR, 'uuid.ts')),
   yaar: toForwardSlash(join(SHIMS_DIR, 'yaar.ts')),
   'yaar-dev': toForwardSlash(join(SHIMS_DIR, 'yaar-dev.ts')),
   'yaar-web': toForwardSlash(join(SHIMS_DIR, 'yaar-web.ts')),

@@ -32,7 +32,8 @@ src/
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
-    └── anime.ts           # v3→v4 easing name compat wrapper
+    ├── anime.ts           # v3→v4 easing name compat wrapper
+    └── uuid.ts            # re-export barrel workaround (see below)
 ```
 
 ## Compilation Flow
@@ -120,6 +121,7 @@ Shims wrap npm packages with compatibility fixes or SDK wrappers:
 - **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy, plus per-app version history (`gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint`) backed by a shadow git repo per app
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4
+- **`uuid.ts`** — uuid's browser entry is a pure `export { default as v4 } from './v4.js'` barrel; bundling it directly makes Bun emit the `export { ... }` statement with every binding dropped, so the prebundled artifact fails later with `uuid:1:8: "h" is not declared in this file`. Importing the bindings and re-exporting them separately gives the bundler real references to follow. Any bundled library that is a pure re-export barrel needs the same treatment.
 
 ## Build Manifest & Staleness
 
