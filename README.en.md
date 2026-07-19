@@ -36,11 +36,13 @@ Once running, start with something like "install essential apps".
 
 **Pin a version / custom install path:**
 ```bash
-VERSION=v0.1.0 curl -fsSL ... | bash             # Specific version
-INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Custom install path
+VERSION=v0.1.0 curl -fsSL ... | bash              # Specific version (default: latest)
+INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # Install path (default: ~/.local/bin)
 ```
 
 **Windows:** You can also download `yaar.exe` directly from the [Releases page](https://github.com/sorryhyun/yaar/releases).
+
+Bundled apps ship separately as `yaar-apps.tar.gz`; the install scripts extract them next to the binary automatically.
 
 **Build from source** (requires [Bun](https://bun.sh/) >= 1.3):
 ```bash
@@ -51,15 +53,13 @@ make dev          # Browser opens automatically
 
 </details>
 
-Once running, start with something like "install essential apps".
-
 
 ## What You Can Do
 
 - **"Analyze this CSV"** → AI reads the data and opens a chart window with visualizations
-- **"Make a presentation"** → Slides Lite generates a slide deck with internal (chrome dev tool)
+- **"Make a presentation"** → Slides Lite generates a slide deck
 - **Right-click drag to sketch** → AI interprets your drawing and converts it to code or diagrams
-- **"Build me a Tetris game"** → AI writes the code, builds it, and deploys a playable browser app in a static form.
+- **"Build me a Tetris game"** → AI writes the code, builds it, and deploys a playable app
 
 
 ## What's Different?
@@ -146,6 +146,8 @@ Once running, start with something like "install essential apps".
 
     </details>
 
+- **Every app can have its own agent.** Drop in an `AGENTS.md` and that app gets a dedicated agent that exchanges messages with the monitor agent. Apps can even drive other apps directly (`controls` in `app.json`) — Dev Tools, for example, pilots the real browser app to build and test an app end to end.
+
 - **Permissions are explicitly separated and visible.** App access scope, filesystem, and network are all transparent and user-controlled.
 
     <details>
@@ -224,6 +226,8 @@ Once running, start with something like "install essential apps".
 
     </details>
 
+- **The UI stays live with its data.** Apps subscribe to `yaar://` URIs and the server pushes updates when those resources change — no polling, no asking the AI again to refresh a view.
+
 
 ## How It Works
 
@@ -231,36 +235,29 @@ Once running, start with something like "install essential apps".
 Browser (UI) ←→ Local Server ←→ Claude Code / Codex (AI)
 ```
 
-On startup, the program creates `storage/, config/, apps/, session_logs/` folders. The AI **cannot access anything outside these folders.** To give the AI access to an external directory, use the "Mount..." button in the Storage app — specify an alias and path, and it becomes available at `storage/mounts/{alias}/` with optional read-only protection.
+On startup, the program creates `storage/, config/, apps/, session_logs/` folders, and the AI's file access is scoped to these by default. To give the AI access to an external directory, use the "Mount..." button in the Storage app — specify an alias and path, and it becomes available at `storage/mounts/{alias}/` with optional read-only protection.
 
 
 ## Key Features
 
 ### App Ecosystem
 
-Bundled apps available from YAAR Market:
+Browse and install apps from YAAR Market — a file manager, spreadsheet, document and slide editors, PDF/image/video viewers, an RSS reader, GitHub management, a browser, an in-app IDE (Dev Tools), a process explorer, an MCP manager, and more ship bundled. The list keeps growing, so check Market rather than a table here.
 
-| App | Description |
-|-----|-------------|
-| 📁 Storage | File manager |
-| 🌐 Browser | Live browser with screenshot streaming |
-| 📊 Excel Lite | Spreadsheet with formula support |
-| 📝 Word Lite | DOCX/Markdown document editor |
-| 🎞️ Slides Lite | Presentation editor |
-| 📄 PDF Viewer | PDF viewer |
-| 🐙 GitHub Manager | GitHub issues & PR management |
-| 📰 RSS Reader | Multi-feed RSS reader |
-| 🖼️ Image Viewer | Image viewer |
-| 🎬 Video Editor / Viewer | Video editing and playback |
-| 📄 Recent Papers | Academic paper browser |
-| 🕐 Dock | Clock, weather, and notification panel |
+You can also develop your own apps:
 
-You can also develop your own apps. Bundled libraries (lodash, anime.js, Konva, Solid.js, etc.) are available without npm install, and code runs in an isolated sandbox. Built apps are **bundled into a single HTML file** that runs independently anywhere. See the [App Development Guide](./docs/guides/app-development.md) for details.
+- **Bundled libraries** — import Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js and more via `@bundled/*`, no `npm install`
+- **Single-HTML bundle** — builds to one HTML file that runs standalone anywhere
+- **`appDb`** — per-app isolated SQLite with Mongo-style filters and FTS5 full-text search ([guide](./docs/guides/sqlite.md))
+- **Gated SDKs** — extra capabilities you must declare in `app.json`: `yaar-dev` (compile/deploy), `yaar-web` (browser automation), `yaar-ml` (in-browser ONNX inference)
+- **Reversible deploys** — each app has a shadow git repo that snapshots around every deploy, so you can restore any earlier version
+
+See the [App Development Guide](./docs/guides/app-development.md) for details.
 
 
 ### Multi-Monitor & Sessions
 
-Create multiple **virtual desktops (monitors)** to organize your work. Each monitor has its own monitor agent and conversation history. Sessions persist across browser closures, and you can join the same session from another tab or device with `?sessionId=X`.
+Create multiple **virtual desktops (monitors)** to organize your work. Each monitor has its own monitor agent and conversation history, and above them sits a **session agent** that keeps track of things across monitors. Sessions persist across browser closures, and you can join the same session from another tab or device with `?sessionId=X`.
 
 
 ### Remote Access
@@ -277,12 +274,16 @@ Set up event-driven automation with `config/hooks.json`. Automatically execute a
 
 Since YAAR lets the AI execute code and communicate with external services, it ships with multiple security layers.
 
-- **Sandbox isolation** — Runs in `node:vm` with `eval`/`import`/filesystem/WebAssembly disabled
-- **Domain allowlist** — Only domains in `config/curl_allowed_domains.yaml` are permitted; new domains require user approval
-- **MCP authentication** — Bearer token-based tool call authentication
-- **Remembered permissions** — Allow/deny decisions persisted in `config/permissions.json`
-- **Iframe isolation** — Apps run inside iframes, communicating with the server only via `postMessage`
-- **Path validation** — Guards against path traversal attacks
+- **A single access chokepoint** — every HTTP route resolves its caller to a principal (the desktop `host`, or an `app`) and names the `yaar://` URI and verb it is about to perform, all through the same check. Routes never invent their own permission logic.
+- **Scoped app permissions** — an app is confined to the `permissions` in its `app.json`, plus its own storage (`yaar://apps/self/storage/`).
+- **Gated SDK doors** — endpoints for `yaar-dev` / `yaar-web` / `yaar-ml` are re-verified server-side, because a compile-time gate says nothing about a hand-written `fetch()`.
+- **Agent tiers** — `yaar://session/*` (including the door that drives your real Chrome) is reachable only by the session agent; everything else is denied by default.
+- **Domain allowlist + SSRF protection** — only domains listed in `config/curl_allowed_domains.yaml` are permitted, new ones require user approval, and requests are blocked from being redirected at internal network addresses.
+- **MCP authentication** — a shared bearer token authenticates the transport, while a separate per-agent token (`X-Agent-Token`), minted and bound server-side, identifies *which* agent is calling.
+- **Remembered permissions** — allow/deny decisions persisted in `config/permissions.json`
+- **Path validation** — guards against path traversal attacks
+
+**Known limitation:** local app iframes are served same-origin and are deliberately not sandboxed. The model above binds network callers, cross-session and cross-app access, and every accidental path taken by an app that plays by the rules — but it **does not stop app code that sets out to escape.** Don't install apps you don't trust. See [known gaps](./docs/architecture/known_gaps.md) for details and the intended fix.
 
 
 ## Project Structure
@@ -294,8 +295,10 @@ yaar/
 ├── storage/           # AI-accessible file storage (git-ignored)
 ├── packages/
 │   ├── shared/        # OS Actions, WebSocket events, Component DSL types
+│   ├── compiler/      # App compiler (@bundled/* resolution, single-HTML bundle)
 │   ├── server/        # WebSocket server + AI providers (Claude/Codex)
-│   └── frontend/      # React frontend
+│   ├── frontend/      # React frontend
+│   └── tests/         # Integration and security tests
 ```
 
 YAAR's architecture can be interpreted through traditional OS concepts. `LiveSession` maps to the kernel, agents to processes, MCP tools to syscalls, and `storage/` to the filesystem. See the [OS Architecture Map](./docs/architecture/os_architecture.md) for the full mapping.

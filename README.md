@@ -37,11 +37,13 @@ Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/dow
 
 **특정 버전 / 설치 경로 변경:**
 ```bash
-VERSION=v0.1.0 curl -fsSL ... | bash     # 특정 버전
-INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 변경
+VERSION=v0.1.0 curl -fsSL ... | bash     # 특정 버전 (기본: 최신)
+INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 (기본: ~/.local/bin)
 ```
 
 **Windows:** `yaar.exe`를 [릴리즈 페이지](https://github.com/sorryhyun/yaar/releases)에서 직접 다운로드할 수도 있습니다.
+
+번들 앱은 바이너리와 별도로 `yaar-apps.tar.gz`로 배포되며, 설치 스크립트가 바이너리 옆에 자동으로 풀어줍니다.
 
 **소스에서 빌드** ([Bun](https://bun.sh/) >= 1.3 필요):
 ```bash
@@ -51,6 +53,15 @@ make dev          # 브라우저가 자동으로 열립니다
 ```
 
 </details>
+
+
+## 이런 걸 할 수 있습니다
+
+- **"이 CSV 분석해줘"** → AI가 데이터를 읽고 차트 윈도우를 띄웁니다
+- **"발표자료 만들어줘"** → Slides Lite가 슬라이드 덱을 생성합니다
+- **우클릭 드래그로 스케치** → AI가 그림을 해석해 코드나 다이어그램으로 변환합니다
+- **"테트리스 만들어줘"** → AI가 코드를 작성·빌드하고, 바로 플레이 가능한 앱으로 배포합니다
+
 
 ## 뭐가 다른가요?
 
@@ -134,6 +145,8 @@ make dev          # 브라우저가 자동으로 열립니다
 
     </details>
 
+- **앱마다 자기 에이전트를 가집니다.** `AGENTS.md`를 넣으면 그 앱 전용 에이전트가 생기고, 모니터 에이전트와 서로 메시지를 주고받습니다. 앱이 다른 앱을 직접 조종할 수도 있습니다 (`app.json`의 `controls`) — 예를 들어 Dev Tools는 실제 브라우저 앱을 몰아 앱을 만들고 테스트까지 끝냅니다.
+
 - **권한 영역을 명시적으로 분리합니다.** 앱의 접근 범위, 파일시스템, 네트워크가 가시화되며 사용자가 제어합니다.
 
     <details>
@@ -212,6 +225,8 @@ make dev          # 브라우저가 자동으로 열립니다
 
     </details>
 
+- **UI가 데이터를 따라 살아 움직입니다.** 앱은 `yaar://` URI를 구독해두면 그 리소스가 바뀔 때 서버가 밀어줍니다. 폴링 없이, 다시 물어볼 필요 없이 화면이 갱신됩니다.
+
 
 ## 기본 구조
 
@@ -219,35 +234,29 @@ make dev          # 브라우저가 자동으로 열립니다
 브라우저 (UI) ←→ 로컬 서버 ←→ Claude Code / Codex (AI)
 ```
 
-실행 시 자동으로 `storage/, config/, apps/, session_logs/` 폴더를 생성하며, AI는 **이 폴더 이외에는 접근이 불가능합니다.** 외부 폴더를 연결하려면 Storage 앱의 "Mount..." 버튼으로 마운트하세요 — 별칭과 경로를 지정하면 `storage/mounts/{별칭}/`으로 접근 가능하며, 읽기 전용 옵션도 지원합니다.
+실행 시 자동으로 `storage/, config/, apps/, session_logs/` 폴더를 생성하며, AI의 파일 접근은 기본적으로 이 폴더들로 한정됩니다. 외부 폴더를 연결하려면 Storage 앱의 "Mount..." 버튼으로 마운트하세요 — 별칭과 경로를 지정하면 `storage/mounts/{별칭}/`으로 접근 가능하며, 읽기 전용 옵션도 지원합니다.
 
 
 ## 주요 기능
 
 ### 앱 생태계
 
-YAAR Market에서 바로 설치할 수 있는 번들 앱:
+앱은 YAAR Market에서 둘러보고 바로 설치할 수 있습니다 — 파일 매니저, 스프레드시트, 문서/슬라이드 편집기, PDF·이미지·영상 뷰어, RSS 리더, GitHub 관리, 브라우저, 인앱 IDE(Dev Tools), 프로세스 탐색기, MCP 매니저 등이 기본 제공됩니다. 목록은 계속 늘어나므로 여기 옮겨 적는 대신 Market에서 확인하세요.
 
-| 앱 | 설명 |
-|----|------|
-| 📁 Storage | 파일 매니저 |
-| 🌐 Browser | 스크린샷 스트리밍 기반 라이브 브라우저 |
-| 📊 Excel Lite | 스프레드시트 (수식 지원) |
-| 📝 Word Lite | DOCX/Markdown 문서 편집기 |
-| 🎞️ Slides Lite | 프레젠테이션 편집기 |
-| 📄 PDF Viewer | PDF 뷰어 |
-| 📰 RSS Reader | 멀티 피드 RSS 리더 |
-| 🖼️ Image Viewer | 이미지 뷰어 |
-| 🎬 Video Editor / Viewer | 영상 편집 및 재생 |
-| 📄 Recent Papers | 학술 논문 브라우저 |
-| 🕐 Dock | 시계, 날씨, 알림 패널 |
+직접 앱을 개발할 수도 있습니다:
 
-직접 앱을 개발할 수도 있습니다. 번들 라이브러리(lodash, anime.js, Konva, Solid.js 등)를 npm 설치 없이 사용 가능하며, 격리된 샌드박스에서 코드가 실행됩니다. 빌드된 앱은 **하나의 HTML 파일로 번들링**되어 어디서든 독립 실행 가능합니다. 자세한 내용은 [앱 개발 가이드](./docs/guides/app-development.md)를 참고하세요.
+- **번들 라이브러리** — Solid.js, lodash, Three.js, Konva, Chart.js, D3, Tone.js 등을 `npm install` 없이 `@bundled/*`로 바로 import
+- **단일 HTML 번들** — 빌드 결과물이 HTML 파일 하나라 어디서든 독립 실행 가능
+- **`appDb`** — 앱마다 격리된 SQLite. Mongo 스타일 필터와 FTS5 전문 검색 지원 ([가이드](./docs/guides/sqlite.md))
+- **게이트된 SDK** — `app.json`에 선언해야 열리는 확장 권한: `yaar-dev`(컴파일·배포), `yaar-web`(브라우저 자동화), `yaar-ml`(브라우저 내 ONNX 추론)
+- **배포 되돌리기** — 앱마다 shadow git 저장소가 있어 배포 전후로 스냅샷이 남고, 언제든 이전 버전으로 복구 가능
+
+자세한 내용은 [앱 개발 가이드](./docs/guides/app-development.md)를 참고하세요.
 
 
 ### 멀티 모니터 & 세션
 
-여러 **가상 데스크톱(모니터)** 을 만들어 작업을 분리할 수 있습니다. 각 모니터는 독립된 메인 에이전트와 대화 히스토리를 가집니다. 세션은 브라우저를 닫아도 유지되며, `?sessionId=X`로 다른 탭/기기에서 같은 세션에 접속할 수 있습니다.
+여러 **가상 데스크톱(모니터)** 을 만들어 작업을 분리할 수 있습니다. 각 모니터는 독립된 모니터 에이전트와 대화 히스토리를 가집니다. 그 위에는 모니터를 가로질러 상황을 파악하는 **세션 에이전트**가 있습니다. 세션은 브라우저를 닫아도 유지되며, `?sessionId=X`로 다른 탭/기기에서 같은 세션에 접속할 수 있습니다.
 
 
 ### 원격 접속
@@ -264,12 +273,16 @@ YAAR Market에서 바로 설치할 수 있는 번들 앱:
 
 AI가 코드를 실행하고 외부 서비스와 통신하는 만큼, 여러 보안 레이어를 갖추고 있습니다.
 
-- **샌드박스 격리** — `node:vm`에서 실행, `eval`/`import`/파일시스템/WebAssembly 차단
-- **도메인 허용 목록** — `config/curl_allowed_domains.yaml`에 등록된 도메인만 허용, 신규 도메인은 사용자 승인 필요
-- **MCP 인증** — Bearer 토큰 기반 도구 호출 인증
+- **단일 접근 관문** — 모든 HTTP 라우트가 호출자를 principal(데스크톱 `host` / 앱 `app`)로 판별하고, 수행하려는 `yaar://` URI와 verb를 명시해 같은 검사를 통과합니다. 라우트가 제각각 권한 검사를 발명하지 않습니다.
+- **앱 권한 범위** — 앱은 `app.json`의 `permissions`와 자기 스토리지(`yaar://apps/self/storage/`)로 한정됩니다.
+- **게이트된 SDK 도어** — `yaar-dev` / `yaar-web` / `yaar-ml` 전용 엔드포인트는 서버에서 재확인합니다. 컴파일 타임 게이트만으로는 손으로 쓴 `fetch()`를 막지 못하기 때문입니다.
+- **에이전트 티어** — `yaar://session/*`(사용자의 실제 Chrome을 조작하는 문 포함)은 세션 에이전트만 접근 가능하며, 나머지는 기본 거부됩니다.
+- **도메인 허용 목록 + SSRF 방어** — `config/curl_allowed_domains.yaml`에 등록된 도메인만 허용, 신규 도메인은 사용자 승인 필요. 내부망 주소로의 우회 요청도 차단합니다.
+- **MCP 인증** — 전송 계층은 공유 Bearer 토큰으로, 호출 주체 식별은 에이전트별로 발급·바인딩되는 별도 토큰(`X-Agent-Token`)으로 처리합니다.
 - **권한 기억** — 승인/거부 결정을 `config/permissions.json`에 저장
-- **iframe 격리** — 앱은 iframe 내에서 `postMessage`로만 서버와 통신
 - **경로 검증** — path traversal 방지
+
+**알려진 한계:** 로컬 앱 iframe은 same-origin으로, 샌드박스 없이 실행됩니다. 즉 위 모델은 네트워크 호출자와 세션·앱 간 접근, 그리고 규칙을 지키는 앱의 실수는 막지만, **의도적으로 탈출하려는 악성 앱 코드는 막지 못합니다.** 신뢰할 수 없는 앱은 설치하지 마세요. 자세한 내용과 해결 방향은 [known gaps](./docs/architecture/known_gaps.md)를 참고하세요.
 
 
 ## 프로젝트 구조
@@ -281,8 +294,10 @@ yaar/
 ├── storage/           # AI가 접근하는 파일 저장소 (git-ignored)
 ├── packages/
 │   ├── shared/        # OS Actions, WebSocket 이벤트, Component DSL 타입
+│   ├── compiler/      # 앱 컴파일러 (@bundled/* 해석, 단일 HTML 번들)
 │   ├── server/        # WebSocket 서버 + AI 프로바이더 (Claude/Codex)
-│   └── frontend/      # React 프론트엔드
+│   ├── frontend/      # React 프론트엔드
+│   └── tests/         # 통합 및 보안 테스트
 ```
 
 YAAR의 구조는 전통적인 OS 아키텍처로도 해석될 수 있습니다. `LiveSession`은 커널, 에이전트는 프로세스, MCP 도구는 시스템 콜, `storage/`는 파일시스템에 대응됩니다. 자세한 매핑은 [OS Architecture Map](./docs/architecture/os_architecture.md)을 참고하세요.
