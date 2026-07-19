@@ -271,10 +271,19 @@ app.register({
   onClose: () => {
     // optional — called when the window is about to be destroyed
   },
+
+  onCapture: () => {
+    // optional — return a data-URL image when the OS captures this window
+    // (e.g. an agent reads it). Return null to fall back to the default
+    // full-window screenshot. May be async.
+    return myCanvas.toDataURL('image/png');
+  },
 });
 ```
 
 On registration the SDK sends `{ type: 'yaar:app-ready', appId }` to the parent so the server knows the app supports the protocol.
+
+**Window capture:** when an agent reads an iframe window, the injected capture script returns a screenshot. By default this is a full-window composite — the DOM rendered via foreignObject SVG with every live `<canvas>`'s pixels composited in place. An app that can produce a better image (e.g. a WebGL scene that snapshots blank, or a viewport larger than the visible area) overrides it with `onCapture`.
 
 ### `app.sendInteraction(description)`
 

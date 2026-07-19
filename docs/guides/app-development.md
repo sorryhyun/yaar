@@ -449,6 +449,12 @@ app.emit('item-added', { text: 'Buy milk' });
 app.register({ /* ... */ onClose: () => saveDraft(editor().value) });
 ```
 
+**`onCapture`** — an optional hook on the `app.register()` config, called when the OS captures the window (e.g. an agent reads it). Return a data-URL image to use instead of the default full-window screenshot (DOM + live canvas pixels composited); return `null` to fall back. May be async. Useful when the default capture can't see your content — e.g. a WebGL canvas without `preserveDrawingBuffer`, or state that renders outside the viewport.
+
+```typescript
+app.register({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
+```
+
 ### MCP Tools
 
 | Tool | Description |

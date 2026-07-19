@@ -31,6 +31,11 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           }
         }
       }
+      // Custom capture: the capture helper checks this provider before taking
+      // its default window screenshot (see iframe-scripts/capture.ts).
+      if (typeof config.onCapture === 'function') {
+        window.__yaarCaptureProvider = config.onCapture;
+      }
       // Notify parent that this app supports the protocol
       window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
     },

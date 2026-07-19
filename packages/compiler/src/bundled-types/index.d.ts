@@ -343,6 +343,13 @@ interface YaarAppRegistration {
   events?: Record<string, YaarAppEventDescriptor>;
   /** Fire-and-forget callback invoked when the app window is closed. */
   onClose?: () => void;
+  /**
+   * Custom capture handler. When the OS captures this window (e.g. an agent
+   * reads it), the returned data-URL image (`data:image/...`) is used instead
+   * of the default window screenshot. Return null/undefined to fall back to
+   * the default DOM+canvas composite capture. May be async.
+   */
+  onCapture?: () => string | null | undefined | Promise<string | null | undefined>;
 }
 
 interface YaarApp {

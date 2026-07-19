@@ -25,9 +25,12 @@ import { join } from 'path';
  * unstyled markup.) '8': the dark palette moved to GitHub Dark Dimmed and
  * .y-btn-primary now fills with the new --yaar-accent-emphasis token — an old
  * build keeps the near-black canvas and paints its primary button with a token
- * its baked-in CSS never defines.
+ * its baked-in CSS never defines. '10': the capture SDK now composites live
+ * canvas pixels into a full-window screenshot and honors app.register's new
+ * onCapture provider — the app-protocol script that wires onCapture is not
+ * hot-upgraded, so old builds must be recompiled to pick it up.
  */
-export const COMPILER_VERSION = '9';
+export const COMPILER_VERSION = '10';
 
 export interface BuildManifest {
   sourceHash: string;
