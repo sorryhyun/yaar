@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
 import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { Taskbar } from '@/components/taskbar/Taskbar';
+import { MonitorTabs } from '@/components/taskbar/MonitorTabs';
 
 function createMinimizedWindow(id: string, title: string, renderer = 'markdown') {
   return {
@@ -34,9 +35,11 @@ describe('Taskbar', () => {
     cleanup();
   });
 
-  it('renders only the new-monitor button when no minimized windows', () => {
+  // Monitor controls moved onto the command-palette input bar (MonitorTabs); the
+  // taskbar row below it is now minimized-window tabs and nothing else.
+  it('renders nothing but window tabs — no monitor controls', () => {
     render(<Taskbar />);
-    expect(screen.getByTitle('Create new monitor')).toBeInTheDocument();
+    expect(screen.queryByTitle('Create new monitor')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Close/ })).not.toBeInTheDocument();
   });
 
@@ -112,5 +115,66 @@ describe('Taskbar', () => {
     fireEvent.click(closeBtn);
     expect(closeSpy).toHaveBeenCalledWith('w1');
     expect(focusSpy).not.toHaveBeenCalled();
+  });
+});
+
+// Lives in this file rather than its own: the frontend suite runs test files
+// concurrently against one happy-dom document and one Zustand singleton, so a
+// second file mutating monitor state races this one's renders.
+describe('MonitorTabs', () => {
+  const monitor = (id: string, label: string) => ({ id, label });
+
+  beforeEach(() => {
+    useDesktopStore.setState({
+      monitors: [monitor('m1', 'Monitor 1')],
+      activeMonitorId: 'm1',
+    } as any);
+  });
+
+  afterEach(() => {
+    cleanup();
+  });
+
+  it('shows only the new-monitor button with a single monitor', () => {
+    render(<MonitorTabs />);
+    expect(screen.getByTitle('Create new monitor')).toBeInTheDocument();
+    expect(screen.queryByText('Monitor 1')).not.toBeInTheDocument();
+  });
+
+  it('renders a tab per monitor once there is more than one', () => {
+    useDesktopStore.setState({
+      monitors: [monitor('m1', 'Monitor 1'), monitor('m2', 'Monitor 2')],
+    } as any);
+
+    render(<MonitorTabs />);
+    expect(screen.getByText('Monitor 1')).toBeInTheDocument();
+    expect(screen.getByText('Monitor 2')).toBeInTheDocument();
+  });
+
+  it('hides the new-monitor button at the 4-monitor cap', () => {
+    useDesktopStore.setState({
+      monitors: ['m1', 'm2', 'm3', 'm4'].map((id, i) => monitor(id, `Monitor ${i + 1}`)),
+    } as any);
+
+    render(<MonitorTabs />);
+    expect(screen.queryByTitle('Create new monitor')).not.toBeInTheDocument();
+  });
+
+  it('clicking a tab switches monitor; clicking its close removes it instead', () => {
+    const switchSpy = mock(() => {});
+    const removeSpy = mock(() => {});
+    useDesktopStore.setState({
+      monitors: [monitor('m1', 'Monitor 1'), monitor('m2', 'Monitor 2')],
+      switchMonitor: switchSpy,
+      removeMonitor: removeSpy,
+    } as any);
+
+    render(<MonitorTabs />);
+    fireEvent.click(screen.getByText('Monitor 2'));
+    expect(switchSpy).toHaveBeenCalledWith('m2');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close Monitor 2' }));
+    expect(removeSpy).toHaveBeenCalledWith('m2');
+    expect(switchSpy).toHaveBeenCalledTimes(1);
   });
 });

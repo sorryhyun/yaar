@@ -1,5 +1,8 @@
 /**
- * Taskbar - Shows monitor tabs, minimized window tabs, and new monitor button.
+ * Taskbar - Shows minimized window tabs.
+ *
+ * Monitor tabs and the "new monitor" button used to live here; they now render
+ * inside the command palette's input bar (see MonitorTabs).
  */
 import { useDesktopStore, selectMinimizedWindows } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
@@ -18,44 +21,10 @@ export function Taskbar() {
   const minimizedWindows = useDesktopStore(useShallow(selectMinimizedWindows));
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
   const userCloseWindow = useDesktopStore((s) => s.userCloseWindow);
-  const monitors = useDesktopStore((s) => s.monitors);
-  const activeMonitorId = useDesktopStore((s) => s.activeMonitorId);
-  const switchMonitor = useDesktopStore((s) => s.switchMonitor);
-  const createMonitor = useDesktopStore((s) => s.createMonitor);
-  const removeMonitor = useDesktopStore((s) => s.removeMonitor);
-
-  const showMonitorTabs = monitors.length > 1;
 
   return (
     <div className={styles.taskbar}>
-      {/* Monitor tabs (left) */}
-      {showMonitorTabs && (
-        <div className={styles.monitorTabs}>
-          {monitors.map((m) => (
-            <button
-              key={m.id}
-              className={`${styles.monitorTab} ${m.id === activeMonitorId ? styles.monitorTabActive : ''}`}
-              onClick={() => switchMonitor(m.id)}
-              title={m.label}
-            >
-              {m.label}
-              <span
-                className={styles.monitorClose}
-                role="button"
-                aria-label={`Close ${m.label}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeMonitor(m.id);
-                }}
-              >
-                &#x2715;
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Minimized window tabs (center) */}
+      {/* Minimized window tabs */}
       {minimizedWindows.length > 0 && (
         <div className={styles.windowTabs}>
           {minimizedWindows.map((win) => (
@@ -83,17 +52,6 @@ export function Taskbar() {
             </button>
           ))}
         </div>
-      )}
-
-      {/* New monitor button (right, hidden at max 4) */}
-      {monitors.length < 4 && (
-        <button
-          className={styles.newMonitorButton}
-          onClick={() => createMonitor()}
-          title="Create new monitor"
-        >
-          +
-        </button>
       )}
     </div>
   );

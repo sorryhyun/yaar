@@ -57,8 +57,13 @@ export const WINDOW_PLACEMENT = {
   cascadeMax: 280,
   /** Origin used when the monitor's viewport is not known yet. */
   fallbackOrigin: 100,
-  /** Bottom viewport space reserved for the command palette. */
-  paletteInset: 104,
+  /**
+   * Bottom viewport space reserved for the command palette:
+   * 31 taskbar slot + ~32 monitor row + ~56 input bar + 8 margin.
+   * The monitor row sits directly above the glass bar and is present whenever a
+   * monitor can be added or switched — i.e. effectively always.
+   */
+  paletteInset: 127,
 } as const;
 
 /**

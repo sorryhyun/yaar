@@ -1,13 +1,14 @@
 /**
  * CommandPalette - Input for sending messages to the agent.
  */
-import { useState, useCallback, useMemo, useRef, KeyboardEvent } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { useDesktopStore } from '@/store';
 import type { MessageStatus } from '@/store/types';
 import { QrCodeModal } from '../overlays/QrCodeModal';
 import { Taskbar } from '../taskbar/Taskbar';
+import { MonitorTabs } from '../taskbar/MonitorTabs';
 import { apiFetch, isRemoteMode } from '@/lib/api';
 import { isComposingKey } from '@/lib/ime';
 import styles from '@/styles/command-palette/CommandPalette.module.css';
@@ -52,6 +53,7 @@ export function CommandPalette() {
   const [isDragOver, setIsDragOver] = useState(false);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const { isConnected, sendMessage, sendWindowMessage, interrupt, reset } = useAgentConnection();
   const activeAgents = useDesktopStore((state) => state.activeAgents);
   const applyAction = useDesktopStore((state) => state.applyAction);
@@ -100,6 +102,28 @@ export function CommandPalette() {
     setMentionIndex(0);
     textareaRef.current?.focus();
   }, []);
+
+  // Collapse the palette when the user's attention goes elsewhere. Focus alone can't
+  // tell us this: clicking into an app iframe never fires a pointer event this document
+  // can see, so a window `blur` (which *does* fire when an iframe takes focus) backs up
+  // the outside-click listener.
+  useEffect(() => {
+    if (!isExpanded) return;
+
+    const collapseIfOutside = (e: PointerEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) setIsExpanded(false);
+    };
+    const collapseOnFocusLoss = () => {
+      if (!containerRef.current?.contains(document.activeElement)) setIsExpanded(false);
+    };
+
+    document.addEventListener('pointerdown', collapseIfOutside);
+    window.addEventListener('blur', collapseOnFocusLoss);
+    return () => {
+      document.removeEventListener('pointerdown', collapseIfOutside);
+      window.removeEventListener('blur', collapseOnFocusLoss);
+    };
+  }, [isExpanded]);
 
   // Derive the most relevant active status to display.
   //
@@ -267,7 +291,7 @@ export function CommandPalette() {
   return (
     <>
       {qrCodeOpen && <QrCodeModal onClose={() => setQrCodeOpen(false)} />}
-      <div className={styles.container} data-expanded={isExpanded}>
+      <div ref={containerRef} className={styles.container} data-expanded={isExpanded}>
         {hasDrawing && (
           <div className={styles.drawingIndicator}>
             <span className={styles.drawingIcon}>&#9998;</span>
@@ -302,6 +326,9 @@ export function CommandPalette() {
             )}
           </div>
         )}
+        {/* Monitor switcher sits above the bar, as its own row — same relationship
+            the taskbar row has below it, just on the other side. */}
+        <MonitorTabs />
         <div className={styles.inputRow}>
           {/* Single glass bar: icon cluster, textarea, and Send share one surface. */}
           <div
