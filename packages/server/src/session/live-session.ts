@@ -845,6 +845,28 @@ export class LiveSession {
 
       const applied = await this.windowState.applyUserInteraction(interaction, getAppMeta);
 
+      // Wake iframe apps watching this window, mirroring the tool-action path in
+      // handleEmittedAction: change subscribers get a ping, stream subscribers get a
+      // `user` frame carrying the interaction. Tool-emitted moves never come through
+      // here, so a `user` frame is unambiguously the human — an app watching its own
+      // window can tell "I was dragged" from "I moved myself".
+      if (interaction.windowId && interaction.type.startsWith('window.')) {
+        const handle =
+          this.windowState.handleMap.resolve(interaction.windowId) ?? interaction.windowId;
+        const uri = `yaar://windows/${handle}`;
+        subscriptionRegistry.notifyChange(uri, this.sessionId);
+        subscriptionRegistry.publishFrame(
+          uri,
+          'user',
+          {
+            type: interaction.type,
+            windowId: interaction.windowId,
+            ...(interaction.bounds ? { bounds: interaction.bounds } : {}),
+          },
+          this.sessionId,
+        );
+      }
+
       // Only a window the user *made* is worth replaying from the log — a move or a close
       // is already implied by the window's absence or its bounds at snapshot time.
       if (interaction.type === 'window.create') {

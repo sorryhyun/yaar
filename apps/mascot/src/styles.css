@@ -1,0 +1,374 @@
+/* Mascot is drawn content, not OS chrome — fixed palette on a transparent window. */
+
+/* An iframe only stays transparent when its color-scheme matches the embedder's;
+   the OS shell declares `color-scheme: dark`, and the default (`normal`) counts
+   as a mismatch — the browser then paints an opaque white canvas behind the app.
+   The shell's light theme adds `.y-light`, whose injected rule flips this. */
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: transparent !important;
+  margin: 0;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  position: relative;
+}
+
+/* ── Speech bubble (top strip) ── */
+.bubble {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.6);
+  max-width: 140px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  background: #fff;
+  color: #333;
+  border: 2px solid #333;
+  font-family: var(--yaar-font, sans-serif);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    opacity 0.18s ease,
+    transform 0.18s ease;
+  pointer-events: none;
+}
+.bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: #333;
+  border-bottom: none;
+}
+.bubble[data-visible='true'] {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+/* ── Character ── */
+.hit {
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  transform: translateX(-50%);
+  width: 110px;
+  height: 130px;
+  cursor: grab;
+  touch-action: none;
+}
+.hit:active {
+  cursor: grabbing;
+}
+
+.flip {
+  position: absolute;
+  inset: 0;
+  transition: transform 0.15s ease;
+}
+.flip[data-facing='-1'] {
+  transform: scaleX(-1);
+}
+
+.chara {
+  position: absolute;
+  inset: 0;
+}
+
+.shadow {
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70px;
+  height: 12px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.28);
+  transition: width 0.2s ease;
+}
+
+.torso {
+  position: absolute;
+  bottom: 10px;
+  left: 50%;
+  width: 92px;
+  height: 84px;
+  margin-left: -46px;
+  border-radius: 46px 46px 42px 42px;
+  background: linear-gradient(180deg, #ffe066 0%, #ffd23f 55%, #f4b942 100%);
+  border: 3px solid #3a3226;
+  box-sizing: border-box;
+  transform-origin: 50% 90%;
+}
+
+/* tuft */
+.torso::before {
+  content: '';
+  position: absolute;
+  top: -10px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-14deg);
+  width: 14px;
+  height: 16px;
+  border-radius: 50% 50% 50% 0;
+  background: #f4b942;
+  border: 3px solid #3a3226;
+}
+
+.wing {
+  position: absolute;
+  top: 34px;
+  width: 22px;
+  height: 30px;
+  border-radius: 50% 50% 50% 50%;
+  background: #f4b942;
+  border: 3px solid #3a3226;
+  box-sizing: border-box;
+  transform-origin: 50% 10%;
+}
+.wing.l {
+  left: -6px;
+  transform: rotate(18deg);
+}
+.wing.r {
+  right: -6px;
+  transform: rotate(-18deg);
+}
+
+.eye {
+  position: absolute;
+  top: 26px;
+  width: 12px;
+  height: 14px;
+  border-radius: 50%;
+  background: #3a3226;
+}
+.eye.l {
+  left: 22px;
+}
+.eye.r {
+  right: 22px;
+}
+.eye::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 3px;
+  width: 4px;
+  height: 5px;
+  border-radius: 50%;
+  background: #fff;
+}
+
+/* dizzy eyes: ✕ ✕ */
+[data-mood='dizzy'] .eye {
+  background: transparent;
+}
+[data-mood='dizzy'] .eye::after {
+  content: '✕';
+  position: static;
+  display: block;
+  width: auto;
+  height: auto;
+  background: none;
+  color: #3a3226;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 14px;
+  text-align: center;
+}
+
+/* held eyes: > < (startled squint) */
+[data-mood='held'] .eye {
+  height: 4px;
+  top: 32px;
+  border-radius: 2px;
+}
+[data-mood='held'] .eye::after {
+  display: none;
+}
+
+.beak {
+  position: absolute;
+  top: 38px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-top: 9px solid #f28c28;
+  filter: drop-shadow(0 1px 0 #3a3226);
+}
+
+.cheek {
+  position: absolute;
+  top: 42px;
+  width: 12px;
+  height: 7px;
+  border-radius: 50%;
+  background: rgba(255, 122, 122, 0.65);
+}
+.cheek.l {
+  left: 12px;
+}
+.cheek.r {
+  right: 12px;
+}
+
+.foot {
+  position: absolute;
+  bottom: 2px;
+  width: 24px;
+  height: 12px;
+  border-radius: 50% 50% 40% 40%;
+  background: #f28c28;
+  border: 3px solid #3a3226;
+  box-sizing: border-box;
+}
+.foot.l {
+  left: 26px;
+}
+.foot.r {
+  right: 26px;
+}
+
+/* ── Mood animations ── */
+
+[data-mood='idle'] .torso {
+  animation: bob 2.4s ease-in-out infinite;
+}
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-3px) scale(0.99, 1.01);
+  }
+}
+
+[data-mood='walk'] .torso {
+  animation: waddle 0.36s ease-in-out infinite;
+}
+@keyframes waddle {
+  0%,
+  100% {
+    transform: rotate(-5deg) translateY(0);
+  }
+  50% {
+    transform: rotate(5deg) translateY(-4px);
+  }
+}
+[data-mood='walk'] .foot.l {
+  animation: stepl 0.36s ease-in-out infinite;
+}
+[data-mood='walk'] .foot.r {
+  animation: stepr 0.36s ease-in-out infinite;
+}
+@keyframes stepl {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  25% {
+    transform: translateY(-5px);
+  }
+}
+@keyframes stepr {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  75% {
+    transform: translateY(-5px);
+  }
+}
+
+[data-mood='held'] .chara {
+  animation: dangle 0.5s ease-in-out infinite;
+  transform-origin: 50% 20%;
+}
+[data-mood='held'] .torso {
+  transform: translateY(4px);
+}
+[data-mood='held'] .foot.l {
+  animation: kick 0.22s ease-in-out infinite;
+}
+[data-mood='held'] .foot.r {
+  animation: kick 0.22s ease-in-out infinite reverse;
+}
+[data-mood='held'] .wing.l {
+  animation: flapl 0.24s ease-in-out infinite;
+}
+[data-mood='held'] .wing.r {
+  animation: flapr 0.24s ease-in-out infinite;
+}
+[data-mood='held'] .shadow {
+  width: 40px;
+  opacity: 0.5;
+}
+@keyframes dangle {
+  0%,
+  100% {
+    transform: rotate(-7deg);
+  }
+  50% {
+    transform: rotate(7deg);
+  }
+}
+@keyframes kick {
+  0%,
+  100% {
+    transform: translateY(0) rotate(0);
+  }
+  50% {
+    transform: translateY(-7px) rotate(14deg);
+  }
+}
+@keyframes flapl {
+  0%,
+  100% {
+    transform: rotate(18deg);
+  }
+  50% {
+    transform: rotate(58deg);
+  }
+}
+@keyframes flapr {
+  0%,
+  100% {
+    transform: rotate(-18deg);
+  }
+  50% {
+    transform: rotate(-58deg);
+  }
+}
+
+[data-mood='dizzy'] .chara {
+  animation: wobble 0.7s ease-in-out infinite;
+  transform-origin: 50% 90%;
+}
+@keyframes wobble {
+  0%,
+  100% {
+    transform: rotate(-6deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}

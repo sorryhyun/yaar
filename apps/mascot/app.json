@@ -1,0 +1,15 @@
+{
+  "icon": "🐥",
+  "name": "Mascot",
+  "description": "A tiny SD character that wanders around the desktop, can be grabbed and dragged, and reacts when moved",
+  "run": "dist/index.html",
+  "createShortcut": true,
+  "frameless": true,
+  "variant": "widget",
+  "defaultWidth": 150,
+  "defaultHeight": 190,
+  "windowStyle": { "transition": "top 0.26s linear, left 0.26s linear" },
+  "permissions": ["yaar://windows/"],
+  "version": "0.1.0",
+  "author": "YAAR"
+}

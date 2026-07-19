@@ -339,6 +339,11 @@
 /* ============ Frameless ============ */
 .frame[data-frameless='true'] {
   background: transparent;
+  /* Widget/panel variants add a glass blur; a blur over a transparent frame
+     still frosts the desktop behind it, so it must go too — as must the base
+     frame's hairline outline. */
+  backdrop-filter: none;
+  outline: none;
   border-radius: 0;
   box-shadow: none;
   border: none;
