@@ -79,7 +79,7 @@ client can only answer over a socket the server is holding is a deadlock waiting
 ```
 src/
 ├── main.ts               # Thin orchestrator (~35 lines)
-├── config.ts             # Constants, paths, MIME types, PORT, monitor budget limits
+├── config.ts             # Barrel over config/ (env, paths, assets, deadlines, limits, browser, providers/claude, providers/codex)
 ├── lifecycle.ts          # initializeSubsystems(), printBanner(), shutdown()
 ├── http/                 # HTTP server: createFetchHandler() (CORS, auth, MCP dispatch)
 │   ├── access.ts         # THE ACCESS CHOKEPOINT — resolvePrincipal(), requirePermission(), requireHost(), requireBundle()
@@ -99,7 +99,8 @@ src/
 │   ├── context.ts        # ContextTape — hierarchical message history
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore
 │   ├── session.ts        # AgentSession + AsyncLocalStorage (getAgentId, getSessionId)
-│   ├── monitor-task-processor.ts / app-task-processor.ts
+│   ├── monitor-task-processor.ts / app-task-processor.ts / session-task-processor.ts
+│   ├── window-event-coordinator.ts  # subscription/notification fan-out + window-close teardown
 │   ├── interaction-timeline.ts / pool-types.ts / profiles.ts / turn-helpers.ts
 │   ├── session-policies/       # StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge
 │   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
@@ -114,7 +115,8 @@ src/
 │   ├── uri-registry.ts   # ResourceRegistry — central handler registry
 │   ├── uri-resolve.ts    # Server-side URI resolution
 │   ├── utils.ts          # Shared handler utilities
-│   ├── agents.ts / apps.ts / storage.ts / config.ts
+│   ├── agents.ts / apps.ts (barrel over apps/) / storage.ts / config.ts
+│   ├── apps/             # register.ts, app-resource.ts, storage-resource.ts, db-resource.ts, paths.ts — still one yaar://apps/* registration (ResourceRegistry has no middle wildcard)
 │   ├── session.ts / skills.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS

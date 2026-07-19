@@ -1,9 +1,9 @@
 # Proposal: Runtime Decomposition and Session-Scoped Event Routing
 
-**Status:** In progress. **0A, 0B, and Phase 1 have landed and have been removed from this
-document** — see "Already landed" for where that work is now documented. What remains is 0C
-(open; its original premise turned out to be stale), Phase 2 (unblocked), and Phase 3
-(opportunistic). Revised 2026-07-19.
+**Status:** In progress. **0A, 0B, Phase 1, Phase 2, and Phase 3 have landed and their plans
+have been removed from this document** — see "Already landed" for where that work is now
+documented. What remains is 0C alone, and its original premise turned out to be stale.
+Revised 2026-07-19.
 **Scope:** `packages/server`, `packages/frontend`, and the `@bundled/yaar` shim in `packages/compiler`
 **Primary objective:** split the remaining large runtime coordinators without changing YAAR's public protocols or application behavior
 
@@ -13,9 +13,9 @@ YAAR's package-level architecture is healthy: shared wire contracts are centrali
 
 The remaining headroom is concentrated in a few runtime coordinators:
 
-- `ActionEmitter` still combines ambient identity with four request/response brokers, permissions, prompts, and app readiness.
-- `ContextPool` has monitor/app processors, but still implements session-agent turns and window/app event coordination directly.
-- A few internal modules (`handlers/apps.ts`, `config.ts`, `iframe-bridge.ts`, and the `@bundled/yaar` shim) contain several independently testable domains behind one file.
+- `ActionEmitter` still combines ambient identity with four request/response brokers, permissions, prompts, and app readiness. This is the last one, and it is 0C.
+
+`ContextPool` and the four internal modules (`handlers/apps.ts`, `config.ts`, `iframe-bridge.ts`, the `@bundled/yaar` shim) are done — see "Already landed".
 
 A related constraint that used to be Phase 3 here — app `protocol.ts` files cannot be freely decomposed because the compiler discovers their manifest from one literal `app.register({ ... })` expression — is a compiler/DX project with its own risk profile and demand curve. It now lives in [`app_protocol_manifest_proposal.md`](./app_protocol_manifest_proposal.md); this proposal only carries the invariant it protects (see Required invariants).
 
@@ -29,6 +29,8 @@ the code, which is where it binds:
 | 0A | Every frontend-directed action and app-RPC request names its destination session; an unaddressable emit drops loudly and its waiting variants settle as `cancelled` | `session/emitter-channels.ts`, `session/action-emitter.ts` |
 | 0B | One process-wide subscription per channel, replacing per-session fan-out; `detach()` checks sink identity because a session id is reused across reconnects | `session/session-event-router.ts` |
 | 1 | `LiveSession` delegates four policies (`MonitorRegistry`, `ClientEventController`, `SessionSnapshotService`, `AppWindowCoordinator`) while remaining the aggregate root | `session/live-session.ts` and the four modules beside it; `packages/server/CLAUDE.md` |
+| 2 | Session-agent turns run through a processor like monitor and app turns; window/app event fan-out, the per-window rate cap, and window-close teardown move behind one coordinator. `ContextPool` keeps the reset guard and inflight accounting, which are pool-wide and must not delegate | `agents/session-task-processor.ts`, `agents/window-event-coordinator.ts`, `agents/context-pool.ts` (878 → 741 lines) |
+| 3 | `handlers/apps.ts`, `config.ts`, `store/iframe-bridge.ts`, and `shims/yaar.ts` each became a directory behind an unchanged public entry point | the four directories; `packages/compiler/CLAUDE.md` |
 
 Their acceptance tests are `tests/session-isolation.test.ts`, `tests/session-event-router.test.ts`,
 and the loopback suite. Note that the loopback tripwire
@@ -43,13 +45,12 @@ to its `ANSWERING_SOURCES` list, and the test's count guard is what will say so.
 | Module | Approximate size | Responsibilities currently combined |
 |---|---:|---|
 | `session/action-emitter.ts` | 809 lines | ambient identity, feedback, dialogs, prompts, permissions, app RPC/readiness |
-| `agents/context-pool.ts` | 878 lines | pool lifecycle, session tasks, routing, subscriptions, event rate limits, reset/cleanup |
 | `agents/agent-pool.ts` | 684 lines | monitor/app/session/ephemeral agent lifecycle and lookup |
-| `frontend/store/iframe-bridge.ts` | 563 lines | iframe lookup, capture, app RPC, subscriptions, drag state, SDK requests, notifications |
-| `compiler/shims/yaar.ts` | 696 lines | verb client, app storage, app DB, dialogs, UI helpers, reactive persistence |
 
-`session/live-session.ts` was on this list at 1,044 lines and is now 605, with its four
-extracted policies beside it. See "Already landed".
+`agent-pool.ts` stays as it is on purpose — see "Keep role lifecycle explicit" under Phase 2's
+outcome below. `session/live-session.ts` (1,044 → 605), `agents/context-pool.ts` (878 → 741),
+`frontend/store/iframe-bridge.ts`, and `compiler/shims/yaar.ts` all came off this list. See
+"Already landed".
 
 ### Validation baseline
 
@@ -149,124 +150,23 @@ Do not replace this with another global map keyed only by "current turn". Identi
 
 - Two concurrent provider turns retain distinct agent, monitor, and session identity.
 
-## Phase 2: finish `ContextPool` decomposition
+## Phase 2 and Phase 3 outcomes
 
-### 2.1 `SessionTaskProcessor`
+Both have landed; the plans are gone and the reasoning lives in the code. Two decisions from
+them are worth keeping here because they are choices *not* to do something, which the code
+cannot state on its own:
 
-Monitor and app turns already have processors; session-agent execution should use the same boundary. Move:
+**Keep role lifecycle explicit.** `AgentPool.createAgentCore()` and `disposeAgent()` remain the
+shared lifecycle seams, and monitor, app, session, and ephemeral agents keep named APIs because
+they differ in key and owner, persistence, provider acquisition, monitor/window association,
+removal behavior, and roster presentation. A generic `ManagedAgentRegistry<TKey, TRoleConfig>`
+would collapse repeated map operations and obscure exactly the behavior the multi-monitor tests
+exist to protect. The processor extractions have now happened and did not leave enough identical
+logic behind to change that answer.
 
-- lazy session-agent acquisition;
-- session-agent steering;
-- monitor pinning;
-- session prompt construction;
-- model/tool selection;
-- `runAgentTurn()` invocation.
-
-`ContextPool.handleSessionTask()` becomes the reset/inflight guard plus delegation.
-
-### 2.2 `WindowEventCoordinator`
-
-Move:
-
-- window subscription key resolution;
-- change and app-channel notifications;
-- per-window app-event rate limiting;
-- close-time subscription and queue cleanup;
-- active app-window resolution where it is genuinely event/window state.
-
-It composes `WindowSubscriptionPolicy` and `AppTaskProcessor`; it does not become another agent pool.
-
-### 2.3 Keep role lifecycle explicit
-
-`AgentPool.createAgentCore()` and `disposeAgent()` are the correct shared lifecycle seams. Monitor, app, session, and ephemeral agents should continue to have named APIs because they differ in:
-
-- key and owner;
-- persistence;
-- provider acquisition;
-- monitor/window association;
-- removal behavior;
-- roster presentation.
-
-A generic `ManagedAgentRegistry<TKey, TRoleConfig>` would reduce repeated map operations but obscure the behavior that multi-monitor tests are designed to protect. Do not introduce it unless a later implementation shows substantial identical logic remaining after the processor extractions.
-
-### Phase 2 acceptance tests
-
-- All multi-monitor and monitor-identity tests remain green.
-- Session, monitor, and app steering preserve current queue semantics.
-- Reset reports every dropped message and waits for inflight work exactly as before.
-- Closing an app window clears only its scoped tasks/subscriptions.
-
-## Phase 3: bounded internal module splits
-
-These extractions have lower architectural risk and can proceed independently after the session boundary is fixed. They are opportunistic cleanup — pick them up as the files are touched, not as a scheduled program.
-
-### 3.1 App URI handlers
-
-Keep `registerAppsHandlers()` as the public registration function and split implementation into:
-
-```text
-handlers/apps/
-  register.ts
-  app-resource.ts
-  storage-resource.ts
-  db-resource.ts
-  paths.ts
-```
-
-The current `ResourceRegistry` wildcard syntax does not support arbitrary middle wildcards such as `yaar://apps/*/storage/*`. Therefore the initial split should remain an internal composite behind `yaar://apps/*`, not pretend the registry can dispatch these subresources independently.
-
-### 3.2 Server configuration
-
-Turn `config.ts` into a compatibility barrel over:
-
-```text
-config/
-  env.ts
-  paths.ts
-  assets.ts
-  deadlines.ts
-  limits.ts
-  providers/claude.ts
-  providers/codex.ts
-  browser.ts
-```
-
-Load the root `.env` from one explicit bootstrap point before importing environment-derived constants. Avoid modules whose values change depending on which consumer imported `config.ts` first.
-
-### 3.3 Frontend iframe bridge
-
-Keep one initialization entry point and split:
-
-```text
-store/iframe-bridge/
-  target.ts
-  capture.ts
-  app-protocol-relay.ts
-  subscription-relay.ts
-  app-events.ts
-  windows-sdk.ts
-  notifications.ts
-  index.ts
-```
-
-`target.ts` owns the repeated monitor/window-key resolution, DOM lookup, iframe lookup, and target-origin logic. Inject the store accessor or narrow selectors so the current explicit circular import from `iframe-bridge.ts` to `desktop.ts` does not spread to every child module.
-
-### 3.4 `@bundled/yaar` SDK internals
-
-Preserve `import { ... } from '@bundled/yaar'` and split its source into internal modules:
-
-```text
-shims/yaar/
-  verbs.ts
-  app-storage.ts
-  app-db.ts
-  dialogs.ts
-  ui.ts
-  reactive.ts
-  index.ts
-```
-
-The compiler shim entry remains a barrel. This is an internal ownership/testability change, not a new collection of public subpath imports.
+**The app handler split stays an internal composite.** `ResourceRegistry` has no middle wildcard,
+so `yaar://apps/*/storage/*` cannot be dispatched as its own resource. `handlers/apps/` is five
+modules behind one `yaar://apps/*` registration, not five registrations.
 
 ## Change inventory
 
@@ -279,27 +179,14 @@ Files marked *(exists)* already exist on master — the work is modification, no
 - `packages/server/src/mcp/server.ts`
 - `packages/server/src/session/session-hub.ts`, `agents/agent-context.ts`
 
-### Phase 2
-
-- `packages/server/src/agents/context-pool.ts`
-- `packages/server/src/agents/pool-types.ts`
-- `packages/server/src/agents/app-task-processor.ts`
-- new session-task and window-event modules
-
-### Phase 3
-
-- `packages/server/src/handlers/apps.ts`
-- `packages/server/src/config.ts`
-- `packages/frontend/src/store/iframe-bridge.ts`
-- `packages/compiler/src/shims/yaar.ts`
 
 ## Delivery plan
 
 | Phase | Outcome | Merge gate | Status |
 |---|---|---|---|
 | 0C | Broker split and removal of global current identity | concurrent-turn identity tests | open — premise revised |
-| 2 | Session processor and window event coordinator | agent pool and multi-monitor suites | open |
-| 3 | Handler/config/frontend/SDK internal splits | package-local tests plus full workspace gate | opportunistic |
+| 2 | Session processor and window event coordinator | agent pool and multi-monitor suites | landed |
+| 3 | Handler/config/frontend/SDK internal splits | package-local tests plus full workspace gate | landed |
 
 Each row should be independently mergeable. Avoid one repository-wide relocation commit: it would mix behavior fixes with import churn and make review unnecessarily difficult.
 
@@ -330,7 +217,14 @@ Do not modularize app protocol descriptor maps with spreads under the existing e
 
 ## Recommendation
 
-The session boundary is fixed and `LiveSession` is decomposed, so the remaining work is no longer gated on anything. Phase 2 is the substantive next target: it finishes the processor pattern in `ContextPool`, and its risk is well-understood because monitor and app turns already run through the same seam. 0C proceeds in parallel and gates nothing — it is blocked on validation against a live Codex session, not on design. Phase 3 is useful cleanup to pick up opportunistically as those files are touched. The app protocol manifest contract is a separate, demand-driven proposal.
+0C is all that is left, and it is blocked on validation against a live Codex session rather
+than on design: the question is whether `SessionHub.findMonitorForAgent()` always resolves for
+an agent that emits a window action, because `resolveWindowMonitor()` throws rather than
+guessing and deleting the fallback converts an unresolved monitor into a failed `window.create`.
+That is the correct direction — a window placed by guess is worse than one that fails to open —
+but it is a runtime behavior change on exactly the concurrent-turn paths a unit test cannot
+reach. Nothing else waits on it. The app protocol manifest contract is a separate,
+demand-driven proposal.
 
 The desired end state is not “small files.” It is explicit ownership:
 
