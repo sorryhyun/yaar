@@ -14,13 +14,8 @@
  * Complex work is delegated to native provider subagents (Claude Task / Codex collab)
  */
 
-import { ContextTape, monitorSource, type ContextMessage } from './context.js';
-import { runAgentTurn, buildReloadContext } from './turn-helpers.js';
-import {
-  SESSION_AGENT_PROFILE,
-  claudeModelToCodex,
-  getMonitorTurnOptions,
-} from './profiles/index.js';
+import { ContextTape, type ContextMessage } from './context.js';
+import { getMonitorTurnOptions } from './profiles/index.js';
 import { AgentPool, type PooledAgent, type AgentEntry } from './agent-pool.js';
 import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
@@ -47,12 +42,10 @@ import {
   WindowSubscriptionPolicy,
 } from './context-pool-policies/index.js';
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
-
-/** Per-window app-event rate cap: emits beyond this within the window are dropped. */
-const APP_EVENT_RATE_LIMIT = 20;
-const APP_EVENT_RATE_WINDOW_MS = 1000;
 import { MonitorTaskProcessor } from './monitor-task-processor.js';
 import { AppTaskProcessor } from './app-task-processor.js';
+import { SessionTaskProcessor } from './session-task-processor.js';
+import { WindowEventCoordinator } from './window-event-coordinator.js';
 import type { PoolContext, PoolStats, Task } from './pool-types.js';
 
 import { MAX_QUEUE_SIZE } from '../config.js';
@@ -92,15 +85,12 @@ export class ContextPool implements PoolContext {
   private resetting = false;
   private inflightCount = 0;
   private inflightResolve: (() => void) | null = null;
-  /** Per-window app-event rate tracking: windowId → { count, windowStart }. */
-  private appEventRate = new Map<
-    string,
-    { count: number; windowStart: number; warned?: boolean }
-  >();
 
   // ── Processors ────────────────────────────────────────────────────
   private monitorProcessor: MonitorTaskProcessor;
   private appProcessor: AppTaskProcessor;
+  private sessionProcessor: SessionTaskProcessor;
+  private windowEvents: WindowEventCoordinator;
 
   /**
    * Where this pool gets its providers. Defaults to the global warm pool; the loopback
@@ -156,6 +146,15 @@ export class ContextPool implements PoolContext {
     // Create processors
     this.monitorProcessor = new MonitorTaskProcessor(this);
     this.appProcessor = new AppTaskProcessor(this);
+    this.sessionProcessor = new SessionTaskProcessor(this);
+    // Notifications route back through handleTask, not the processors directly, so a
+    // subscription wake is subject to the same reset guard and inflight accounting as
+    // any other task.
+    this.windowEvents = new WindowEventCoordinator(this, this.appProcessor, (task) => {
+      this.handleTask(task).catch((err) => {
+        console.error('[ContextPool] Error delivering window notification:', err);
+      });
+    });
   }
 
   // ── PoolContext methods ─────────────────────────────────────────────
@@ -348,9 +347,7 @@ export class ContextPool implements PoolContext {
   // ── Session agent ─────────────────────────────────────────────────
 
   async getOrCreateSessionAgent(): Promise<PooledAgent | null> {
-    const existing = this.agentPool.getSessionAgent();
-    if (existing) return existing;
-    return this.agentPool.createSessionAgent();
+    return this.sessionProcessor.getOrCreateAgent();
   }
 
   /**
@@ -360,6 +357,8 @@ export class ContextPool implements PoolContext {
    * with a `session-*` role — the principal tier that unlocks `yaar://session/*`,
    * including `yaar://session/browser` (the user's real browser). Triggered by
    * the CLI-panel "Session" target toggle.
+   *
+   * This method is the reset/inflight guard; the turn itself is `SessionTaskProcessor`.
    */
   async handleSessionTask(task: Task): Promise<void> {
     if (this.resetting) {
@@ -368,11 +367,9 @@ export class ContextPool implements PoolContext {
       return;
     }
 
-    // The session agent is the user's deputy, so its monitor is the user's — it comes
-    // from the connection that spoke, and arrives on the task. `?? '0'` here meant a
-    // deputy invoked from monitor 1 quietly did its work on monitor 0.
-    const monitorId = task.monitorId;
-    if (!monitorId) {
+    // Validate before entering inflight: the missing-monitor throw is a routing bug
+    // upstream, and it must not leave the inflight counter raised on its way out.
+    if (!task.monitorId) {
       throw new Error(
         `Cannot run session task ${task.messageId}: no monitor. A user-scoped task takes ` +
           `its monitor from the connection that sent it.`,
@@ -381,57 +378,7 @@ export class ContextPool implements PoolContext {
 
     this.inflightEnter();
     try {
-      const agent = await this.getOrCreateSessionAgent();
-      if (!agent) {
-        await this.sendEvent({
-          type: ServerEventType.ERROR,
-          error: 'No AI provider available for the session agent.',
-        });
-        return;
-      }
-
-      // Pin before the turn: the MCP requests this turn makes resolve their monitor by
-      // asking the pool which monitor this agent is on. The pin outlives the turn — an
-      // idle deputy's monitor is the one it last acted on, which is the only honest answer.
-      this.agentPool.setSessionAgentMonitor(monitorId);
-
-      const source = monitorSource(monitorId);
-      const role = `session-${task.messageId}`;
-
-      // If the deputy is mid-turn, steer it rather than spawning a parallel run.
-      if (agent.session.isRunning()) {
-        const steered = await agent.session.steer(task.content);
-        if (steered) {
-          this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
-          await this.sendEvent({
-            type: ServerEventType.MESSAGE_ACCEPTED,
-            messageId: task.messageId,
-            agentId: agent.currentRole ?? role,
-          });
-          return;
-        }
-      }
-
-      const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this, task);
-      const prompt = openWindowsContext + reloadPrefix + task.content;
-      this.contextAssembly.appendUserMessage(this.contextTape, task.content, source);
-
-      await runAgentTurn(this, {
-        agent,
-        role,
-        source,
-        task,
-        prompt,
-        fp,
-        monitorId,
-        systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
-        allowedTools:
-          this.providerType === 'codex' ? undefined : SESSION_AGENT_PROFILE.allowedTools,
-        model:
-          this.providerType === 'codex'
-            ? claudeModelToCodex(SESSION_AGENT_PROFILE.model)
-            : SESSION_AGENT_PROFILE.model,
-      });
+      await this.sessionProcessor.process(task);
     } finally {
       this.inflightExit();
     }
@@ -551,11 +498,7 @@ export class ContextPool implements PoolContext {
    * Checks app agents via AppTaskProcessor.
    */
   findWindowForAgent(agentId: string): string | undefined {
-    // App agent -> look up active window via AppTaskProcessor
-    const app = this.agentPool.findAppForAgent(agentId);
-    if (app) return this.appProcessor.getActiveWindowId(app.monitorId, app.appId);
-
-    return undefined;
+    return this.windowEvents.findWindowForAgent(agentId);
   }
 
   /**
@@ -564,24 +507,11 @@ export class ContextPool implements PoolContext {
    * caller on monitor 1 can never reach into monitor 0's copy of the app.
    */
   getActiveAppWindow(monitorId: string, appId: string): string | undefined {
-    return this.appProcessor.getActiveWindowId(monitorId, appId);
+    return this.windowEvents.getActiveAppWindow(monitorId, appId);
   }
 
   recordMonitorAction(monitorId: string): void {
     this.monitorProcessor.recordMonitorAction(monitorId);
-  }
-
-  /**
-   * The monitor-scoped key a subscription is indexed under.
-   *
-   * Subscriptions are keyed by window, and callers hand us a mix: an agent's raw
-   * AI-facing id ("ai-chat") from a verb, or the frontend's scoped key ("1/ai-chat")
-   * from a client event. A raw id names one window *per monitor*, so indexing on it
-   * would let monitor 0's subscription match an event emitted by monitor 1's copy of
-   * the same app. Both ends of the channel — subscribe and notify — normalize here.
-   */
-  private windowKey(windowId: string): string {
-    return this.windowState.getWindow(windowId)?.id ?? windowId;
   }
 
   notifyWindowSubscribers(
@@ -590,86 +520,20 @@ export class ContextPool implements PoolContext {
     summary: string,
     sourceAgentKey?: string,
   ): void {
-    const key = this.windowKey(windowId);
-    this.windowSubscriptionPolicy.notifyChange(key, event, summary, sourceAgentKey, (task) => {
-      this.handleTask(task).catch((err) => {
-        console.error('[ContextPool] Error delivering subscription notification:', err);
-      });
-    });
+    this.windowEvents.notifyWindowSubscribers(windowId, event, summary, sourceAgentKey);
   }
 
-  /**
-   * Deliver an app event (`app.emit(channel, payload)`) to subscribed agents.
-   *
-   * Matches channel subscribers and either wakes them (`wake` mode → task) or
-   * buffers the framed event into their next turn (`buffer` mode → timeline).
-   * Rate-capped per window; emits with no subscribers are dropped silently.
-   */
   notifyAppChannel(
     windowId: string,
     channel: string,
     payload: unknown,
     sourceAgentKey?: string,
   ): void {
-    const key = this.windowKey(windowId);
-    if (this.isAppEventRateLimited(key)) {
-      // A chatty app trips the limit on nearly every emit; warning per drop buries
-      // everything else in the log. One line per rate window says the same thing.
-      const entry = this.appEventRate.get(key);
-      if (entry && !entry.warned) {
-        entry.warned = true;
-        console.warn(
-          `[ContextPool] App event rate limit hit for window "${key}" (channel "${channel}") — dropping until the window resets.`,
-        );
-      }
-      return;
-    }
-
-    this.windowSubscriptionPolicy.notifyChannel(
-      key,
-      channel,
-      payload,
-      sourceAgentKey,
-      (task) => {
-        this.handleTask(task).catch((err) => {
-          console.error('[ContextPool] Error delivering app event notification:', err);
-        });
-      },
-      (_sub, framedContent) => {
-        // Buffer mode: drain into the agent's next turn without waking it.
-        this.timeline.pushRaw(framedContent);
-      },
-    );
-  }
-
-  /** True when the window has exceeded its app-event rate cap in the current window. */
-  private isAppEventRateLimited(windowId: string): boolean {
-    const now = Date.now();
-    const entry = this.appEventRate.get(windowId);
-    if (!entry || now - entry.windowStart >= APP_EVENT_RATE_WINDOW_MS) {
-      this.appEventRate.set(windowId, { count: 1, windowStart: now });
-      return false;
-    }
-    entry.count++;
-    return entry.count > APP_EVENT_RATE_LIMIT;
+    this.windowEvents.notifyAppChannel(windowId, channel, payload, sourceAgentKey);
   }
 
   handleWindowClose(windowId: string, appId?: string, monitorId?: string): void {
-    // Clean up subscriptions and prune context for this window. Subscriptions are
-    // indexed by the scoped key (see windowKey), so clear under that — clearing by a
-    // raw id would leave this window's subscriptions live and, worse, could drop the
-    // same-named window on another monitor.
-    const key = this.windowKey(windowId);
-    this.windowSubscriptionPolicy.clearForWindow(key);
-    this.contextTape.pruneWindow(windowId);
-    this.appEventRate.delete(key);
-
-    // If this window belongs to an app, interrupt the running agent and clear its queue
-    if (appId) {
-      this.appProcessor.handleWindowClose(windowId, appId, monitorId).catch((err) => {
-        console.error(`[ContextPool] Error interrupting app agent on window close:`, err);
-      });
-    }
+    this.windowEvents.handleWindowClose(windowId, appId, monitorId);
   }
 
   // ── Query methods ──────────────────────────────────────────────────
@@ -804,8 +668,7 @@ export class ContextPool implements PoolContext {
     // 7. Clear remaining state
     this.contextTape.clear();
     this.timeline.clear();
-    this.windowSubscriptionPolicy.clear();
-    this.appEventRate.clear();
+    this.windowEvents.clear();
     this.appProcessor.disposeAll();
     if (closeWindows) {
       this.windowState.clear();
