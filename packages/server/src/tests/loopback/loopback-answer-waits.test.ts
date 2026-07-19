@@ -303,15 +303,28 @@ describe('S2 — every server→client wait is answerable on the socket that is 
  */
 describe('S2 — the tripwire: the next wait fails this file rather than the product', () => {
   it('every wait that routeMessage resolves is declared in ANSWER_EVENT_TYPES', () => {
-    const source = readFileSync(join(import.meta.dir, '../../session/live-session.ts'), 'utf8');
+    // The frame-answering surface, in dispatch order. It is more than one file since the
+    // route table moved out of `LiveSession`: the controller holds the table and most
+    // handlers, the coordinator holds the app-window ones (`notifyAppReady` among them).
+    // A new file that answers a frame belongs in this list — and if one is added and
+    // forgotten, the count guard below is what says so.
+    const ANSWERING_SOURCES = [
+      '../../session/client-event-controller.ts',
+      '../../session/app-window-coordinator.ts',
+    ];
+    // Joined with a separator that cannot appear mid-chunk, so the last chunk of one file
+    // cannot swallow the head of the next and inherit a resolve that is not its own.
+    const source = ANSWERING_SOURCES.map((rel) =>
+      readFileSync(join(import.meta.dir, rel), 'utf8'),
+    ).join('\n/* --- end of source --- */\n');
 
     // Each chunk starts at a mention of a `ClientEventType` member and runs to the next
-    // one. That covers both places a frame is named now that `routeMessage` dispatches
-    // through a table instead of a switch: the route row (`[ClientEventType.X]: ...`), for
-    // a frame answered inline, and the handler's signature
-    // (`ClientEventOf<typeof ClientEventType.X>`), for one answered in a method. A resolve
-    // that lands in neither chunk is attributed to whichever frame precedes it, which is
-    // wrong — and wrong loudly, via the count guard below, rather than quietly.
+    // one. That covers both places a frame is named now that dispatch goes through a table
+    // instead of a switch: the route row (`[ClientEventType.X]: ...`), for a frame answered
+    // inline, and the handler's signature (`ClientEventOf<typeof ClientEventType.X>`), for
+    // one answered in a method. A resolve that lands in neither chunk is attributed to
+    // whichever frame precedes it, which is wrong — and wrong loudly, via the count guard
+    // below, rather than quietly.
     const chunks = source.split(/ClientEventType\./).slice(1);
     const resolvesAWait = /actionEmitter\.(resolve[A-Z]\w*|notifyAppReady)\s*\(/;
 

@@ -1,11 +1,11 @@
 # Proposal: Runtime Decomposition and Session-Scoped Event Routing
 
-**Status:** Partially implemented — **0A and 0B have landed**, so Phase 1 is unblocked. 0C is
-open and its stated premise turned out to be stale (see that section). Revised 2026-07-19:
-evidence re-verified against master, and the app protocol manifest work extracted to
-[`app_protocol_manifest_proposal.md`](./app_protocol_manifest_proposal.md).
+**Status:** In progress. **0A, 0B, and Phase 1 have landed and have been removed from this
+document** — see "Already landed" for where that work is now documented. What remains is 0C
+(open; its original premise turned out to be stale), Phase 2 (unblocked), and Phase 3
+(opportunistic). Revised 2026-07-19.
 **Scope:** `packages/server`, `packages/frontend`, and the `@bundled/yaar` shim in `packages/compiler`
-**Primary objective:** remove process-global session fan-out and split the remaining large runtime coordinators without changing YAAR's public protocols or application behavior
+**Primary objective:** split the remaining large runtime coordinators without changing YAAR's public protocols or application behavior
 
 ## Summary
 
@@ -13,15 +13,28 @@ YAAR's package-level architecture is healthy: shared wire contracts are centrali
 
 The remaining headroom is concentrated in a few runtime coordinators:
 
-- `ActionEmitter` combines process-wide delivery, ambient identity, four request/response brokers, permissions, prompts, and app readiness.
-- Every `LiveSession` subscribes separately to that process-global emitter.
-- `LiveSession` owns connection lifecycle, routing, monitors, snapshots, app protocol, user interaction handling, and browser cleanup.
+- `ActionEmitter` still combines ambient identity with four request/response brokers, permissions, prompts, and app readiness.
 - `ContextPool` has monitor/app processors, but still implements session-agent turns and window/app event coordination directly.
 - A few internal modules (`handlers/apps.ts`, `config.ts`, `iframe-bridge.ts`, and the `@bundled/yaar` shim) contain several independently testable domains behind one file.
 
-This proposal addresses those in dependency order. The first phase is not cosmetic: session-addressed event delivery is a correctness boundary that the later extractions should build on.
-
 A related constraint that used to be Phase 3 here — app `protocol.ts` files cannot be freely decomposed because the compiler discovers their manifest from one literal `app.register({ ... })` expression — is a compiler/DX project with its own risk profile and demand curve. It now lives in [`app_protocol_manifest_proposal.md`](./app_protocol_manifest_proposal.md); this proposal only carries the invariant it protects (see Required invariants).
+
+## Already landed
+
+The plans for these are gone from this document; the reasoning that outlived them lives in
+the code, which is where it binds:
+
+| Phase | Outcome | Where the reasoning now lives |
+|---|---|---|
+| 0A | Every frontend-directed action and app-RPC request names its destination session; an unaddressable emit drops loudly and its waiting variants settle as `cancelled` | `session/emitter-channels.ts`, `session/action-emitter.ts` |
+| 0B | One process-wide subscription per channel, replacing per-session fan-out; `detach()` checks sink identity because a session id is reused across reconnects | `session/session-event-router.ts` |
+| 1 | `LiveSession` delegates four policies (`MonitorRegistry`, `ClientEventController`, `SessionSnapshotService`, `AppWindowCoordinator`) while remaining the aggregate root | `session/live-session.ts` and the four modules beside it; `packages/server/CLAUDE.md` |
+
+Their acceptance tests are `tests/session-isolation.test.ts`, `tests/session-event-router.test.ts`,
+and the loopback suite. Note that the loopback tripwire
+(`tests/loopback/loopback-answer-waits.test.ts`) works by *scanning source text* for frames
+that resolve waits: a future phase that moves a frame handler to a new file must add that file
+to its `ANSWERING_SOURCES` list, and the test's count guard is what will say so.
 
 ## Current evidence
 
@@ -29,43 +42,14 @@ A related constraint that used to be Phase 3 here — app `protocol.ts` files ca
 
 | Module | Approximate size | Responsibilities currently combined |
 |---|---:|---|
-| `session/live-session.ts` | 1,044 lines | session lifecycle, client routing, monitors, snapshots, app protocol, interactions, cleanup |
-| `session/action-emitter.ts` | 809 lines | event dispatch, ambient identity, feedback, dialogs, prompts, permissions, app RPC/readiness |
+| `session/action-emitter.ts` | 809 lines | ambient identity, feedback, dialogs, prompts, permissions, app RPC/readiness |
 | `agents/context-pool.ts` | 878 lines | pool lifecycle, session tasks, routing, subscriptions, event rate limits, reset/cleanup |
 | `agents/agent-pool.ts` | 684 lines | monitor/app/session/ephemeral agent lifecycle and lookup |
 | `frontend/store/iframe-bridge.ts` | 563 lines | iframe lookup, capture, app RPC, subscriptions, drag state, SDK requests, notifications |
 | `compiler/shims/yaar.ts` | 696 lines | verb client, app storage, app DB, dialogs, UI helpers, reactive persistence |
 
-### Existing groundwork
-
-*(As surveyed before Phase 0 landed. `SessionEmitterBridge` no longer exists — 0B replaced it
-with `session/session-event-router.ts`.)*
-
-Part of the session-addressing machinery already exists, which makes Phase 0A smaller than it may read:
-
-- `session/emitter-channels.ts` defines a `SessionScopedEvent` envelope with a required `sessionId`, and derives the `SessionScopedChannel` list from the channel map type so a new session-scoped channel cannot be forgotten in the filter path.
-- Seven forwarded channels (`session-action`, `user-prompt`, `approval-request`, `verb-subscription`, `desktop-shortcut`, `browser-action`, and app readiness via `AppReadyEvent`) already carry a session and are filtered per session in `subscribeSessionChannels()`.
-- `SessionEmitterBridge` centralizes each session's subscriptions with an idempotent `detach()`.
-- `session/client-event-router.ts` exists as the total `ClientEventRoutes` seam that Phase 1.2 builds on.
-
-The channels that remain unscoped are exactly `action` and `app-protocol`. Phase 0A is therefore "extend the existing envelope pattern to those two channels and make their `sessionId` required," not "invent session addressing." The per-session listener growth (Phase 0B) is unaddressed by any of the above.
-
-### Session fan-out
-
-*(Fixed by 0A and 0B. Retained as the evidence those phases were built against, and as the
-description of what regresses if the addressing is ever loosened again.)*
-
-`SessionEmitterBridge` adds one listener per live session for `action`, `app-protocol`, `bridge-event`, and each session-scoped forwarding channel. Creating eleven retained sessions in `packages/tests/src/integration/websocket-session.test.ts` produces `MaxListenersExceededWarning` for those channels. The assertions still pass, so this is not evidence of a failed cleanup path by itself; it is evidence that listener count grows with session count.
-
-There are also stronger static correctness findings:
-
-- `ActionEvent` has an optional `sessionId`, but `emitAction()` does not populate it from `AgentContext` by default.
-- `SessionEmitterBridge` forwards every `action` event to every `LiveSession`, and `LiveSession.handleEmittedAction()` does not filter by session. The handler applies every process-wide action to its own `WindowStateRegistry`, notifies its own `yaar://windows` subscribers, and — because monitor IDs are session-local — bills `event.monitorId` against its **own** monitor's action budget. With two live sessions, session B's budget is charged for session A's actions today. In local single-browser use this is invisible; in `REMOTE` mode with two connected devices it is real.
-- `AppProtocolRequestData` has no `sessionId` at all.
-- `emitAppProtocolRequest()` reads the current session for its pending entry, then emits a process-global `app-protocol` request without that session.
-- Every `LiveSession` therefore relays the request to its frontend. Two sessions with the same monitor/window key can observe and answer the same request ID; the first answer wins the global pending entry.
-
-`bridge-event` is intentionally global because one real-browser bridge may be relevant to more than one session. Action and app-protocol delivery are not intentionally global.
+`session/live-session.ts` was on this list at 1,044 lines and is now 605, with its four
+extracted policies beside it. See "Already landed".
 
 ### Validation baseline
 
@@ -73,17 +57,14 @@ At the time of this revision:
 
 - `bun run typecheck` passes for every workspace package.
 - `bun run test` passes for every workspace package.
-- The targeted WebSocket session integration test passes with the listener warnings described above.
 
 This green baseline is the compatibility gate for each phase below.
 
 ## Goals
 
-1. Make every frontend-directed action and app-protocol request belong to exactly one session.
-2. Keep process-global subscriptions constant as the number of live sessions grows.
-3. Keep `LiveSession` as the session aggregate root while moving independently testable policies out of it.
-4. Finish the processor pattern in `ContextPool` without hiding role-specific agent semantics behind a generic framework.
-5. Preserve existing public imports, wire event shapes during migration, and app behavior unless a phase explicitly introduces a versioned contract.
+1. Finish the processor pattern in `ContextPool` without hiding role-specific agent semantics behind a generic framework.
+2. Bind agent/monitor identity to a connection or async context rather than a process-global singleton.
+3. Preserve existing public imports, wire event shapes during migration, and app behavior unless a phase explicitly introduces a versioned contract.
 
 ## Non-goals
 
@@ -134,97 +115,10 @@ LiveSession (aggregate root)
 
 The names are descriptive, not mandated. The ownership boundaries are the proposal.
 
-## Phase 0: session-addressed event delivery
+## Phase 0C: remove process-global ambient identity
 
-This phase should land before moving substantial code out of `LiveSession` or `ActionEmitter`. Otherwise the existing implicit routing is merely redistributed across more modules.
-
-Phase 0 is three independently mergeable steps, and only the first two gate the later phases: **Phase 1 may begin once 0A and 0B have landed.** 0C (ambient identity removal) is the step most likely to stall on provider capabilities and must not block the rest of the program.
-
-### 0A. Make delivery envelopes honest — **landed**
-
-Extend the existing `SessionScopedEvent` pattern to the two channels that lack it. Change frontend-directed emitter payloads so they name their destination:
-
-```ts
-interface ActionEvent {
-  sessionId: SessionId;
-  action: OSAction;
-  requestId?: string;
-  agentId?: string;
-  monitorId?: string;
-}
-
-interface AppProtocolRequestData {
-  sessionId: SessionId;
-  requestId: string;
-  windowId: string;
-  request: AppProtocolRequest;
-  timeoutMs?: number;
-}
-```
-
-`emitAction()` and `emitAppProtocolRequest()` resolve `sessionId` from the explicit argument or `AgentContext`. If neither exists, a frontend-directed call fails loudly instead of being broadcast to an arbitrary/default session. `SessionEmitterBridge` (or its successor) filters `action` and `app-protocol` by session the same way `subscribeSessionChannels()` already filters the forwarded channels.
-
-Some actions originate outside an agent turn. Those call sites already know their target session or use a session-scoped channel; make that target explicit rather than consulting `SessionHub.getDefault()`.
-
-Keep `BridgeEvent` explicitly global. If another global event is added later, it must opt into a separate global envelope rather than making `sessionId` optional again.
-
-#### What landed, and two things this plan did not anticipate
-
-An unaddressable emit *drops* with a `console.error` naming the action type, rather than
-throwing. Throwing would have introduced new crash paths into fire-and-forget callers on HTTP
-routes; the waiting variants (`emitActionWithFeedback`, `emitAppProtocolRequest`) instead
-settle immediately as `cancelled`, so no caller waits out a deadline for an action that was
-never sent — a silence the caller would otherwise read as "the frontend declined".
-
-Two findings beyond the plan:
-
-- **`ToolActionBridge` had the same defect at a second layer.** It filtered with
-  `if (event.agentId && event.agentId !== myAgentId)`, so an action emitted *outside* a turn —
-  carrying no `agentId` — passed the filter for every agent in every session. The plan treated
-  the `LiveSession` listener as the only unfiltered consumer of `action`; it was not. Now
-  filtered on session first, which is only possible because 0A made the field required.
-- **Three call sites had no session to resolve**, and would have silently regressed to dropped
-  emits: `/api/dev/*` (deploy and git-restore emit `desktop.refreshApps` and shortcut actions)
-  and two `/api/browser` routes. Each already had an `AppPrincipal` carrying `sessionId`, so
-  they now run inside `runWithAgentContext` exactly as `POST /api/verb` already did. One
-  `SessionHub.getDefault()` went with them — it was choosing which session to raise a browser
-  consent dialog against, which is a question about *whose* desktop and not one a map ordering
-  should answer.
-
-### 0B. Install one process-level router — **landed**
-
-Add a `SessionEventRouter` initialized with server lifecycle:
-
-```ts
-interface SessionEventSink {
-  handleAction(event: ActionEvent): void;
-  handleAppProtocolRequest(event: AppProtocolRequestData): void;
-  broadcast(event: ServerEvent): void;
-}
-
-router.attach(sessionId, sink);
-router.detach(sessionId);
-```
-
-The router subscribes once to each process-global source and resolves the destination sink by `sessionId`. `LiveSession` registers one sink when constructed and unregisters it during cleanup. Session-scoped forwarding channels can either enter the same router or call a lifecycle-owned `SessionHub` delivery method; they should no longer create one listener per session.
-
-`bridge-event` keeps one process-level listener and explicitly fans out only to sessions with a relevant bridge window.
-
-#### What landed
-
-`session/session-event-router.ts` holds one subscription per channel for the process
-lifetime and resolves the destination sink by id; `session-emitter-bridge.ts` is deleted.
-`bridge-event` fans out to every attached sink, as the one deliberately global channel.
-
-`detach()` takes the sink and checks its identity before removing it. A session id is not
-unique over time — an evicted `LiveSession` and its replacement share one, which is what
-`epoch` exists to distinguish — so deleting by id alone would let a late `cleanup()` on the
-old object unsubscribe the new one. That failure is silent: a live session that receives
-nothing logs no error and drops no event, it just stops updating. The per-session bridge could
-not have this bug, because each object removed the listeners it had personally added; the
-identity check is what preserves that property under a shared map.
-
-### 0C. Remove process-global ambient identity
+The other two steps of Phase 0 have landed. 0C is the step most likely to stall on provider
+capabilities, and it gates nothing: Phases 2 and 3 do not depend on it.
 
 `ActionEmitter.currentAgentId` and `currentMonitorId` are mutable fallbacks around provider turns. Concurrent provider turns can overwrite one another, even though `AsyncLocalStorage` is exact for ordinary in-process work.
 
@@ -251,91 +145,9 @@ Preferred order:
 
 Do not replace this with another global map keyed only by "current turn". Identity must be connection- or async-context-scoped.
 
-### Phase 0 acceptance tests
-
-Per step, so each can merge on its own gate. 0A's live in
-`packages/server/src/tests/session-isolation.test.ts` and 0B's in
-`session-event-router.test.ts`; both sets were confirmed to fail against the unfixed code
-rather than merely to pass against the fixed code.
-
-**0A — session isolation:**
-
-- Two live sessions with the same window key: an app query reaches only its originating session.
-- A response from the non-originating session cannot resolve the pending request.
-- An action emitted in session A changes only session A's `WindowStateRegistry`, subscriptions, and monitor budgets.
-- Existing loopback answerability and late-reply tests remain green.
-
-**0B — constant listener count and cleanup:**
-
-- Creating twenty live sessions keeps process-global listener counts constant.
-- Cleanup cancels only the departing session's waits and leaves the other session's waits intact.
-- No `MaxListenersExceededWarning` in the retained-sessions integration test. Measured rather
-  than assumed: nine warnings on master, zero after 0B.
-
-**0C — concurrent identity:**
+### Phase 0C acceptance test
 
 - Two concurrent provider turns retain distinct agent, monitor, and session identity.
-
-## Phase 1: thin `LiveSession` without weakening ownership
-
-`LiveSession` remains the owner of its connections, `WindowStateRegistry`, layout, reload cache, context pool, logger, and cleanup order. It delegates four coherent policies. Prerequisite: Phases 0A and 0B (not 0C).
-
-### 1.1 `MonitorRegistry`
-
-Move:
-
-- authoritative monitor list;
-- ID allocation and limit enforcement;
-- per-connection subscription updates;
-- viewport updates;
-- monitor removal and subscriber detachment.
-
-The registry calls injected callbacks for `removeMonitorAgent()` and event delivery. It does not import `ContextPool` or `BroadcastCenter` singletons directly.
-
-### 1.2 `ClientEventController`
-
-Move the total `ClientEventRoutes` table and event-specific handlers behind a dependency object containing:
-
-- session and connection delivery functions;
-- `WindowStateRegistry`;
-- `SurfaceRegistry`;
-- lazy `ContextPool` access;
-- monitor registry;
-- logger and browser-cleanup callbacks.
-
-The route table stays total at compile time. `LiveSession.routeMessage()` remains the public entry and delegates after initialization and message-ID deduplication.
-
-Message acceptance/deduplication should remain at the session boundary, not inside individual task processors.
-
-### 1.3 `SessionSnapshotService`
-
-Move:
-
-- window-to-create-action conversion;
-- iframe-token refresh;
-- surface snapshots;
-- active-agent snapshot formatting.
-
-Snapshot construction remains read-only over injected registries. It must not acquire providers, create agents, or mutate window state.
-
-### 1.4 `AppWindowCoordinator`
-
-Move:
-
-- app readiness tracking at the session boundary;
-- command replay after a real iframe re-registration;
-- app channel/event routing;
-- app-protocol request delivery to the originating frontend.
-
-The request/response pending lifecycle itself belongs to `AppProtocolBroker` from Phase 0; this coordinator owns session/window behavior only.
-
-### Phase 1 acceptance tests
-
-- Existing `ClientEventRoutes` exhaustiveness test remains compile-time enforced.
-- Resync snapshots are identical before and after extraction.
-- Re-announcing app readiness does not replay commands; remounting does.
-- Removing one monitor detaches only that monitor's subscribers and agents.
-- Browser sessions close under the same user-interaction conditions as before.
 
 ## Phase 2: finish `ContextPool` decomposition
 
@@ -460,32 +272,12 @@ The compiler shim entry remains a barrel. This is an internal ownership/testabil
 
 Files marked *(exists)* already exist on master — the work is modification, not creation.
 
-### Phase 0
-
-Done in 0A/0B:
-
-- `packages/server/src/session/emitter-channels.ts` — `sessionId` required on both envelopes
-- `packages/server/src/session/action-emitter.ts` — address-or-drop on every emit path
-- `packages/server/src/session/session-emitter-bridge.ts` — **deleted**, replaced by:
-- `packages/server/src/session/session-event-router.ts` — **new**
-- `packages/server/src/session/live-session.ts` — attaches/detaches a sink
-- `packages/server/src/agents/session-policies/tool-action-bridge.ts` — session filter *(not in the original inventory)*
-- `packages/server/src/agents/agent-session.ts` — passes its session to the bridge
-- `packages/server/src/http/routes/dev.ts`, `http/routes/browser.ts` — run in agent context *(not in the original inventory)*
-- `packages/server/src/tests/session-isolation.test.ts`, `session-event-router.test.ts` — **new**
-
-Remaining for 0C:
+### Phase 0C
 
 - `packages/server/src/providers/claude/session-provider.ts`
 - `packages/server/src/providers/codex/provider.ts`
 - `packages/server/src/mcp/server.ts`
 - `packages/server/src/session/session-hub.ts`, `agents/agent-context.ts`
-
-### Phase 1
-
-- `packages/server/src/session/live-session.ts`
-- `packages/server/src/session/client-event-router.ts` *(exists — becomes the `ClientEventController` seam)*
-- new monitor, snapshot, client-event, and app-window modules
 
 ### Phase 2
 
@@ -505,24 +297,13 @@ Remaining for 0C:
 
 | Phase | Outcome | Merge gate | Status |
 |---|---|---|---|
-| 0A | Session IDs required on action and app-RPC envelopes | two-session isolation tests | **landed** |
-| 0B | One session event router; constant global listener count | listener-count and cleanup tests | **landed** |
 | 0C | Broker split and removal of global current identity | concurrent-turn identity tests | open — premise revised |
-| 1 | Thin `LiveSession` (needs 0A+0B, not 0C) | snapshot, reconnect, monitor, and loopback suites | unblocked |
 | 2 | Session processor and window event coordinator | agent pool and multi-monitor suites | open |
 | 3 | Handler/config/frontend/SDK internal splits | package-local tests plus full workspace gate | opportunistic |
 
-Each row should be independently mergeable. Avoid one repository-wide relocation commit: it would mix behavior fixes with import churn and make review of the session boundary unnecessarily difficult.
+Each row should be independently mergeable. Avoid one repository-wide relocation commit: it would mix behavior fixes with import churn and make review unnecessarily difficult.
 
 ## Risks and mitigations
-
-### Duplicate delivery during migration
-
-Running the old per-session bridge and the new router simultaneously can send an action twice. Put delivery behind one feature seam and switch ownership atomically per channel. Add a request/action ID assertion in tests where possible.
-
-### Events emitted without a session
-
-Making `sessionId` required will expose timer, HTTP, warm-up, and test call sites that depended on defaults. Treat that as useful migration evidence. Session-scoped UI work must take a session explicitly; truly global work must use a distinct global channel.
 
 ### 0C removes a fallback that is load-bearing at runtime
 
@@ -532,8 +313,8 @@ The live risk is narrower and sharper: `currentMonitorId` backstops
 unresolved monitor into a failed `window.create` instead of a misplaced one. That is the
 correct direction (a window placed by guess is worse than one that fails to open) but it is a
 runtime behavior change, and the paths that would hit it are exactly the concurrent-turn ones
-that are hard to reach from a unit test. If 0C stalls the program continues: Phases 1–3 do not
-depend on it, and the fallback's blast radius already shrank when 0A made delivery explicit.
+that are hard to reach from a unit test. If 0C stalls the program continues: Phases 2 and 3 do
+not depend on it, and the fallback's blast radius already shrank when 0A made delivery explicit.
 
 ### Cleanup ordering regressions
 
@@ -549,7 +330,7 @@ Do not modularize app protocol descriptor maps with spreads under the existing e
 
 ## Recommendation
 
-Approve Phases 0–2 as the runtime architecture program, with Phase 0A as the first implementation target: it is the cheapest phase, it fixes a verified correctness bug (cross-session app-protocol answers and cross-session window-state/budget pollution, both reproducible on master today), and the envelope machinery it needs is already half-built in `emitter-channels.ts`. Phase 1 starts as soon as 0A and 0B land; 0C proceeds in parallel and gates nothing. Phase 3 is useful cleanup to pick up opportunistically. The app protocol manifest contract is a separate, demand-driven proposal.
+The session boundary is fixed and `LiveSession` is decomposed, so the remaining work is no longer gated on anything. Phase 2 is the substantive next target: it finishes the processor pattern in `ContextPool`, and its risk is well-understood because monitor and app turns already run through the same seam. 0C proceeds in parallel and gates nothing — it is blocked on validation against a live Codex session, not on design. Phase 3 is useful cleanup to pick up opportunistically as those files are touched. The app protocol manifest contract is a separate, demand-driven proposal.
 
 The desired end state is not “small files.” It is explicit ownership:
 

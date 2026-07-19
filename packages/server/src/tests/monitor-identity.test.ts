@@ -423,7 +423,7 @@ describe('F-13 — a session has no active monitor; a connection does', () => {
   });
 
   it('does not collapse two tabs onto one monitor', async () => {
-    // LiveSession.activeMonitorId (live-session.ts:108,719) is one field per session,
+    // LiveSession.activeMonitorId was one field per session,
     // overwritten by whichever connection last sent SUBSCRIBE_MONITOR. With two tabs on
     // different monitors, tab B's subscribe retargets every monitor-less action of tab A's.
     // The fix is not a better fallback — it is that the field is a category error and goes.

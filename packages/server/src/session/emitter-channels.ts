@@ -26,8 +26,9 @@ import type { AppProtocolRequest, OSAction, ServerEvent } from '@yaar/shared';
  * An event addressed to one session, for `LiveSession` to broadcast.
  *
  * The `sessionId` is the whole point of the envelope: these channels are process-global,
- * so *every* live session hears every emit and each one keeps only what is addressed to
- * it (see `subscribeSessionChannels` in `live-session.ts`).
+ * and the destination is resolved from it by a single map lookup rather than by every
+ * session hearing every emit and declining what is not its own (see
+ * `FORWARDED_SESSION_CHANNELS` in `session-event-router.ts`).
  */
 export interface SessionScopedEvent {
   sessionId: string;

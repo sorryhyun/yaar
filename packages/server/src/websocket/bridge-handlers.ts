@@ -67,7 +67,7 @@ export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | 
       // T4: the extension speaking unprompted. There is exactly one real browser but possibly many
       // live sessions, and the hub is deliberately state-only ("does not push change
       // notifications"), so this fans out through `actionEmitter` — each LiveSession picks it up and
-      // delivers it to its own `browser-user` windows. See LiveSession.routeBridgeEvent.
+      // delivers it to its own `browser-user` windows. See AppWindowCoordinator.routeBridgeEvent.
       actionEmitter.emit('bridge-event', { channel: msg.channel, payload: msg.payload });
       return;
     }
