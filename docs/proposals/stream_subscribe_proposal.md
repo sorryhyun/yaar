@@ -1,15 +1,17 @@
 # Proposal: Stream Subscriptions (Push-with-Payload Channels)
 
-**Status:** Phases 1–2 shipped — Phases 3–4 pending. The access-tier decision below was resolved to **(b)+(c)**.
-**Builds on:** the app-event channel system (`app.register({events})` / `app.emit()` / `app_subscribe`), which shipped and closed the **app → agent** quadrant. This one adds **server/agent → app (and agent → agent)** *streaming* push. Its design record lived in `app_events_subscribe_proposal.md`, removed once implemented; the code is `WindowSubscriptionPolicy`, `ContextPool.notifyAppChannel`, and `features/window/subscribe.ts`.
+**Status:** Phases 1–2.1 shipped — Phases 3–4 deferred. The access-tier decision below was resolved to **(b)+(c)**.
+**Builds on:** the app-event channel system (`app.register({events})` / `app.emit()` / `app_subscribe`), which shipped and closed the **app → agent** quadrant. This one adds **server/agent → app** *streaming* push. Its design record lived in `app_events_subscribe_proposal.md`, removed once implemented; the code is `WindowSubscriptionPolicy`, `ContextPool.notifyAppChannel`, and `features/window/subscribe.ts`.
 
-**Shipped (Phase 1):** the frame envelope + transport + app SDK, plus one real source (deploy progress). See the "Change inventory" below for the file-by-file record of what landed versus what remains. The design prose (Model / Transport / Guards / Access control) is kept as the record for the still-pending agent-side phases.
+**Provider references:** [Claude Agent SDK streaming output](https://code.claude.com/docs/en/agent-sdk/streaming-output) and [Codex app-server](https://learn.chatgpt.com/docs/app-server). Both providers already expose incremental response events; YAAR normalizes them as `StreamMessage` before any observer sees them.
+
+**Shipped (Phase 1):** the frame envelope + transport + app SDK, plus one real source (deploy progress). See the "Change inventory" below for the file-by-file record of what landed versus what remains. The design prose (Model / Transport / Guards / Access control) is kept as the record for the remaining phases.
 
 ---
 
 ## Motivation
 
-YAAR has two reactive edges today, and both are **discrete, single-shot**:
+Before Phases 1–2, YAAR had two reactive edges, and both were **discrete, single-shot**:
 
 | Direction | Mechanism | Payload? |
 |---|---|---|
@@ -18,9 +20,9 @@ YAAR has two reactive edges today, and both are **discrete, single-shot**:
 
 `subscribe()` is a change *notification*: the callback receives a URI string and the app must re-`read()` the whole resource (`verb-sdk.ts:65`, `subscriptions.ts:111`). That is a fine model for "the agent roster changed, refetch it" — which is exactly what `process-explorer` does (`apps/process-explorer/src/data.ts:162`).
 
-It is a bad model for anything that *flows*. And the highest-value flowing thing in the system is already being produced, frame by frame, and thrown at exactly one consumer: `StreamToEventMapper` (`agents/session-policies/stream-to-event-mapper.ts`) turns every provider `StreamMessage` into `AGENT_RESPONSE` / `AGENT_THINKING` / `TOOL_PROGRESS` server events — which reach the **frontend CLI panel and nothing else**. An app cannot see what the agent is doing. An agent cannot see what another agent is doing.
+It is a bad model for anything that *flows*. The highest-value flowing thing in the system is already produced frame by frame: `StreamToEventMapper` (`agents/session-policies/stream-to-event-mapper.ts`) turns every provider `StreamMessage` into `AGENT_RESPONSE` / `AGENT_THINKING` / `TOOL_PROGRESS` server events.
 
-There is no way, today, to say *"push me the frames as they happen."*
+Phases 1–2 made that feed available to apps, including Process Explorer. The remaining practical gap is **fidelity and observer UX**: prove that Claude and Codex both reach the feed incrementally, make turn boundaries explicit, and distinguish provider-sized deltas from YAAR's intentional 60ms coalescing.
 
 **This proposal generalizes `subscribe` from a ping into a feed:** a subscription may declare `mode: 'stream'`, and the server pushes typed **frames** with payloads instead of bare change pings.
 
@@ -31,7 +33,6 @@ There is no way, today, to say *"push me the frames as they happen."*
 Once a URI can stream frames, several unrelated features collapse into one mechanism:
 
 - **Live agent observability.** `process-explorer` stops showing `busy/idle` and starts showing *what* — the current tool, the streaming text, the thinking. A CLI panel becomes an ordinary app instead of privileged frontend code.
-- **Agent watching agent.** A supervisor/session agent subscribes to a monitor agent's stream in `buffer` mode and sees the transcript on its next turn — oversight without polling `yaar://session/agents`.
 - **Long-running verb progress.** `compile`, `deploy`, `browser` actions, `fetch` of a large body: today they're a blocking `invoke()` that returns once. Frames give apps a progress bar for free.
 - **Tail-style sources.** Session log tail, `db` collection changes with the changed row attached, notification firehose — all become `stream(uri)` instead of poll-or-refetch.
 - **App → app fan-out.** An app's declared event channels (from the app_events proposal) become subscribable *by other apps*, not just by agents — closing the last quadrant of the reactivity matrix.
@@ -42,7 +43,9 @@ The unifying claim: **one registry, one frame envelope, many sources.** If we bu
 
 ## Non-goals (and why)
 
-This proposal is about **event streams** — low-rate JSON frames whose producer is the server. Two adjacent things are *deliberately* out of scope, because they need a different transport and would be silently broken by this one.
+This proposal is about **event streams** — low-rate JSON frames whose producer is the server. Adjacent concerns below are *deliberately* out of scope because they need different transport or model semantics.
+
+**Streaming output into another model.** Agent-to-agent subscription is a different orchestration problem. Claude `streamInput()` and Codex `turn/steer` actively steer an in-flight turn; neither is a passive context feed with well-defined ordering, backpressure, or attention semantics. Token-by-token injection could destabilize the consuming turn or amplify one producer turn into many watcher turns. Phase 2.1 therefore streams only to user-facing/frontend/app observers. Agent consumption remains deferred until models and provider APIs expose a better primitive, and should get its own proposal if revisited.
 
 **App → app data pipes.** A producer app streaming structured data to a consumer app should not round-trip through iframe → frontend → WS → server → WS → frontend → iframe. The right primitive is a **`MessageChannel` brokered by the frontend**: the server authorizes the connection, each iframe gets one end of a port, and the data then flows directly, zero-copy, with the server out of the loop. Same *handshake* as `subscribe` (URI + permission check), different thing handed back (a port, not frames). Worth building; not this doc.
 
@@ -64,7 +67,7 @@ This proposal is about **event streams** — low-rate JSON frames whose producer
 ```ts
 import { stream } from '@bundled/yaar';
 
-const stop = await stream('yaar://agents/monitor-1/stream', (frame) => {
+const stop = await stream(`yaar://agents/${agent.id}/stream`, (frame) => {
   // frame: { uri, seq, kind, data, ts }
   if (frame.kind === 'tool')  showTool(frame.data.toolName, frame.data.status);
   if (frame.kind === 'text')  appendText(frame.data.delta);
@@ -89,9 +92,9 @@ interface StreamFrame {
 
 `kind` is source-defined rather than a closed enum, so a new stream source doesn't need a shared-package change. `seq` is what makes dropping honest: a consumer that sees `seq` jump from 8 to 12 *knows* it missed frames rather than silently rendering a hole.
 
-### Stream sources (registry, not hardcodes)
+### Stream sources
 
-A source is a URI pattern plus an attach function. Proposed initial set:
+A source publishes frames under a URI. Proposed initial set:
 
 | URI | Frames |
 |---|---|
@@ -99,18 +102,52 @@ A source is a URI pattern plus an attach function. Proposed initial set:
 | `yaar://windows/{id}/events/{channel}` | `event` — fan-out of `app.emit()` to *app* subscribers |
 | `yaar://dev/compile/{jobId}` etc. | `progress` — long-running verb steps |
 
-The registry lives next to `ResourceRegistry` (`handlers/uri-registry.ts`) and reuses its URI parsing, so `describe`/`list` can advertise which URIs are streamable.
+The shipped agent and deploy sources are push-based and need no attach callback: they publish under a URI and the broker matches subscribers. A URI-pattern → attach-function source registry belongs under `streams/` only when a pull-style source lands; `describe`/`list` can then advertise which URIs are streamable.
 
-### Agent side
+### Provider normalization (already shipped)
 
-The same source registry backs an agent-facing subscription, reusing `WindowSubscriptionPolicy`'s delivery machinery (which the app_events work already generalized from the `WindowChangeEvent` enum to arbitrary channel strings):
+Phase 2.1 begins at `StreamMessage`; observer code must not consume Claude SDK or Codex app-server events directly. Both providers already normalize incremental output into the same transport contract:
 
+| Semantic event | Claude Agent SDK | Codex app-server | YAAR `StreamMessage` |
+|---|---|---|---|
+| Assistant text delta | `stream_event` → `content_block_delta` → `text_delta` | `item/agentMessage/delta` | `{ type: 'text', content }` |
+| Reasoning delta | `thinking_delta` | `item/reasoning/textDelta` | `{ type: 'thinking', content }` |
+| Tool begins | `content_block_start` (`tool_use`) | `item/started` with a tool item | `{ type: 'tool_use', ... }` |
+| Tool finishes | SDK tool-result user message | `item/completed` with a tool item | `{ type: 'tool_result', ... }` |
+| Turn finishes | `result` | `turn/completed` | `{ type: 'complete' | 'error' }` |
+
+Claude requires `includePartialMessages: true`; YAAR sets it in `providers/claude/sdk-options.ts` and maps raw stream events in `providers/claude/message-mapper.ts`. Claude does not forward token-level deltas from a Claude-native subagent through its parent stream. YAAR monitor/app/session agents are separate provider sessions, so each is the main stream for its own turn; native subagent output remains complete-message-only.
+
+Codex app-server sends server-initiated JSON-RPC notifications for thread, turn, and item lifecycles. YAAR already maps `item/agentMessage/delta` and `item/reasoning/textDelta` in `providers/codex/message-mapper.ts`; each `CodexProvider` has its own WebSocket connection and thread. `item/completed` remains authoritative for final item state, but completed assistant snapshots must not be emitted again after their deltas.
+
+Codex additionally exposes command-output, plan, reasoning-summary, and collaboration item events. They are not required for Phase 2.1 response tracking. A later stream-kind expansion may map command output to `tool_output`, but provider-native notification names must stay below `AITransport`.
+
+### Observer side
+
+Apps already subscribe by the stable instance ID returned from `yaar://session/agents`. Phase 2.1 keeps that public API:
+
+```ts
+const stop = await stream(`yaar://agents/${agent.id}/stream`, onFrame, {
+  kinds: ['start', 'text', 'tool', 'done', 'error'],
+});
 ```
-invoke('yaar://agents/{id}', { action: 'subscribe_stream', kinds: ['tool','done'], mode: 'buffer' })
+
+The missing observer primitive is a reliable turn boundary. Today Process Explorer can receive `text`, `tool`, and `done`, but it cannot reliably distinguish the first delta of a new turn from continuation of the previous text tail, and an interrupted provider stream may end without a stream terminal. Add provider-neutral start/finish methods around the query loop:
+
+```ts
+{
+  kind: 'start',
+  data: {
+    messageId: string | undefined,
+    provider: 'claude' | 'codex',
+    monitorId: string | undefined
+  }
+}
 ```
 
-- **`buffer`** is the *default and strongly recommended* mode for agents — frames fold into the subscriber's next turn via `InteractionTimeline.pushRaw` (the Phase-3 path). Streaming another agent's tokens in `wake` mode is a turn-amplification footgun: one agent's stream would wake the watcher hundreds of times.
-- **`wake`** should be allowed only for coarse kinds (`done`, `error`), and probably gated behind an explicit `kinds` filter so it can't be opened onto `text`.
+`StreamToEventMapper.start()` should publish it from `AgentSession` immediately before consuming `provider.query()`. `finish(status)` publishes one idempotent `done` frame with `status: 'completed' | 'interrupted'`; provider errors remain terminal `error` frames. `AgentSession.finally` calls `finish()` so aborts cannot strand an observer in `responding`. These boundaries do not depend on a Claude message or Codex notification and therefore have identical semantics for both providers. Process Explorer clears the old text/tool state on `start`, appends every `text` delta for the current turn, and treats `done`/`error` as terminal.
+
+The UI should describe this as **incremental** streaming, not token streaming. Both providers choose their own delta sizes, and YAAR intentionally merges deltas arriving within 60ms. Smoothness should be judged by time-to-first-update and update cadence, not one UI render per model token.
 
 ---
 
@@ -129,9 +166,14 @@ StreamToEventMapper.map(msg)                       [already produces frames]
   → [iframe] verb-sdk listener → __yaarSubs[id](frame)
 ```
 
-Every arrow already exists for the ping case (`subscriptions.ts:111` → `live-session` `'verb-subscription'` listener → `server-event-dispatcher.ts:278` → `iframe-bridge.ts:259` → `verb-sdk.ts:57`). We are widening the envelope, not laying new pipe.
+Every arrow already exists for the iframe path, and both Claude and Codex enter it through `StreamMessage`. Phase 2.1 does not add a new broker, socket, input channel, or agent delivery path.
 
-For agent subscribers the last three hops are replaced by `WindowSubscriptionPolicy` → `InteractionTimeline.pushRaw` (buffer) or `pool.handleTask` (wake), exactly as in app_events Phase 2/3.
+To diagnose reports of block-sized updates without logging response content, add development-only counters at two seams:
+
+1. provider mapper output: timestamp and character count for each `text` `StreamMessage`;
+2. subscription delivery: timestamp and merged character count for each emitted `text` frame.
+
+These measurements distinguish a provider that emitted one large delta from multiple source deltas intentionally coalesced by YAAR. They should be exposed through debug logging or test hooks, not added to the public frame payload.
 
 ---
 
@@ -140,13 +182,13 @@ For agent subscribers the last three hops are replaced by `WindowSubscriptionPol
 A stream is a firehose pointed at a component that may be slow, so backpressure is a **design requirement**, not a hardening step.
 
 1. **Coalescing per (subscription, kind).** `text` frames merge on a ~50–100ms tick into one delta; `tool` frames do not merge. This mirrors the 200ms `AGENT_THINKING` throttle already in `stream-to-event-mapper.ts:67`.
-2. **Bounded queue, drop-oldest.** Per-subscription cap (e.g. 200 frames). Dropping bumps `seq` so the consumer sees the gap. **Never** buffer unboundedly for a slow iframe.
+2. **Bounded buffering.** The shipped iframe path flushes a coalesced delta early rather than growing it without limit. Any later queued sink must drop oldest and expose the resulting `seq` gap.
 3. **Payload cap** (4KB, matching app_events), truncated with a marker.
 4. **Kind filter at subscribe time**, so a progress-bar app doesn't pay for token deltas.
-5. **Self-stream suppression** for agent subscribers — an agent never receives its own stream (same `subscriberAgentKey === sourceAgentKey` skip as `window-subscription-policy.ts:110`).
-6. **Teardown on window/session close** — already free via `clearForWindow` / `clearForSession` (`subscriptions.ts:87`).
+5. **Turn boundaries.** Every observed turn begins with exactly one `start` and ends with exactly one `done` (completed/interrupted) or `error`.
+6. **Teardown on window/session close** — unsubscribing or closing the observing window clears pending coalesced frames and timers.
 
-### Access control (open question, and the sharpest one)
+### Access control
 
 `yaar://agents/{id}/stream` is a **transcript**: user prompts, thinking, tool inputs, tool results. It is strictly more sensitive than the roster that `yaar://session/agents` already exposes to any app.
 
@@ -197,15 +239,27 @@ The access-tier system (`ResourceRegistry.execute()` + `access: 'session-princip
 **Consumer**
 - `apps/process-explorer` — declares `streams:["agents"]`; reconciles a `stream()` per non-session agent as the roster changes; folds frames into an `agentActivity` store; renders a live tool/text line per agent row.
 
+### Shipped (Phase 2.1)
+
+**Server** (`packages/server`)
+- `streams/agent-stream.ts` — `'start'` added to `AgentStreamKind`; `AgentTurnStatus` + `AgentStartFrameData`.
+- `agents/session-policies/stream-to-event-mapper.ts` — `start()` / `finish(status)` / `fail(error)`, each latched so a turn publishes exactly one open and one terminal. The provider's `complete` now calls `finish('completed')` and its `error` calls `fail(...)`, so the provider path and the session path share one latch instead of racing to close.
+- `agents/agent-session.ts` — the mapper is hoisted out of the `try` so `catch` can `fail()` and `finally` can `finish(this.interrupted ? 'interrupted' : 'completed')`. `start()` fires immediately before `provider.query()` is consumed. Interrupts and throws can no longer strand an observer in `responding`.
+- **`streams/stream-diagnostics.ts` (new)** — opt-in (`YAAR_STREAM_DIAG=1` or `setStreamDiagnosticsEnabled`) cadence sampling at two seams: `recordSourceDelta` in the mapper (pre-coalescing, provider chunk size) and `recordDeliveredFrame` in `subscriptions.deliverFrame` (post-coalescing). Counts and timestamps only — never content — with a 500-sample ring per seam.
+- `tests/provider-delta-parity.test.ts` (new) — Claude `text_delta` and Codex `item/agentMessage/delta` normalize to the same ordered `text` contract; the `assistant` snapshot and `item/agentMessage/completed` do not re-emit streamed text.
+- `tests/agent-stream-source.test.ts` — `start → text/tool → done` for both provider-normalized turns, plus double-`start`/double-`finish` idempotence, the interrupted turn with no provider terminal, and `error` suppressing a later `done`.
+- `tests/stream-diagnostics.test.ts` (new) — six source samples collapse to one delivered `text` frame with the characters preserved (coalescing, not a provider block), and no sample carries content.
+
+**Consumer**
+- `apps/process-explorer` — subscribes to `start`/`error` as well; `start` *replaces* the activity record (per-turn reset); explicit `responding` / `using-tool` / `done` / `error` state with `interrupted` surfaced distinctly; `updatedAt` from `frame.ts` rendered as elapsed time against a 1s clock.
+
 ### Remaining
 
 **Server** (`packages/server`)
-1. `streams/` — a URI-pattern → attach-function source *registry* (earns its keep once a pull-style source or app-channel fan-out lands). *(Phase 4)*
-2. `agents/context-pool-policies/window-subscription-policy.ts` — accept stream sources as subscribable channels (mostly free after the app_events generalization). *(Phase 3)*
-3. `handlers/agents.ts` — `subscribe_stream` / `unsubscribe_stream` actions; advertise streamability in `describe`. *(Phase 3)*
+1. `streams/` — a URI-pattern → attach-function source registry, once a pull-style source or app-channel fan-out lands. *(Phase 4)*
 
 **Consumers**
-4. `apps/devtools` — a live deploy-progress bar consuming the Phase 1 `yaar://dev/deploy/{appId}` frames; (later) a CLI-panel app.
+1. `apps/devtools` — a live deploy-progress bar consuming the Phase 1 `yaar://dev/deploy/{appId}` frames; (later) a CLI-panel app. *(Phase 4 consumer)*
 
 ---
 
@@ -213,17 +267,28 @@ The access-tier system (`ResourceRegistry.execute()` + `access: 'session-princip
 
 - **Phase 1 — Envelope + transport. ✅ Shipped.** `mode:'stream'` on the registry, `STREAM_FRAME` event, frontend hop, `yaar.stream()` SDK, and one real source (deploy progress via `yaar://dev/deploy/{appId}`) to prove the pipe without touching agent auth. `seq` + payload cap + kind filter landed; coalescing + drop-oldest deferred to Phase 2 (the deploy source doesn't need them).
 - **Phase 2 — Agent stream source. ✅ Shipped.** `emitStreamFrame` in `StreamToEventMapper`, coalescing (Guard 1) + early-flush bound (Guard 2), access gate (b)+(c). Consumer: `process-explorer` live view.
-- **Phase 3 — Agent-side stream subscriptions.** `subscribe_stream` in `buffer` mode, reusing `WindowSubscriptionPolicy` + `InteractionTimeline`. Unlocks agent-watching-agent.
+- **Phase 2.1 — Provider parity + observer UX. ✅ Shipped.** Provider-neutral latched `start`/`done` boundaries published from the query loop (so interrupts close too), Claude/Codex delta parity pinned in tests, Process Explorer's per-turn state made explicit, and opt-in non-content cadence diagnostics at the source and delivery seams.
+- **Phase 3 — Agent-side stream subscriptions. Deferred.** Streaming output into another model is not part of observer streaming. Revisit only with a provider/model primitive designed for passive, bounded external context—not `streamInput()` or `turn/steer` token injection.
 - **Phase 4 — App-channel fan-out.** `yaar://windows/{id}/events/{channel}` streams `app.emit()` to app subscribers, completing the app_events matrix.
 
-Phase 2 is independently useful; Phase 3 is the one with real footgun potential and should not ship before the buffer-mode default is enforced.
+Phase 2.1 is independently useful and keeps all delivery user-facing. Phase 3 is intentionally not a prerequisite.
 
 ---
 
-## Open decisions
+## Phase 2.1 acceptance criteria
 
-1. **Access tier for agent streams** — (a) / (b) / (c) above. *This one blocks Phase 2.* (Recommend b+c.)
-2. **Frame envelope: closed `kind` enum vs source-defined string?** (Recommend string — avoids a shared-package change per new source.)
-3. **Replay on subscribe** — does a new subscriber get the last N frames, or only frames from now on? (Recommend: from-now-only in Phase 1; a `since: seq` replay window is a clean later add and is what makes reconnect survivable.)
-4. **Does `stream` subsume `subscribe`?** A change-ping is just a stream with `kind:'change'` and no data. Tempting to unify, but `subscribe()` is already used by shipped apps — recommend keeping both names, one registry underneath.
-5. **Do frames survive reconnect?** Subscriptions are keyed by `windowId` and torn down on window close; a WS reconnect that preserves the session should arguably preserve stream subs. Ties to #3.
+1. Claude `text_delta` and Codex `item/agentMessage/delta` produce the same ordered `text` `StreamMessage` contract; provider-completed assistant snapshots do not duplicate text.
+2. Every observed turn emits exactly one `start` before `text`, `tool`, `done`, or `error`, for both providers.
+3. Process Explorer clears the previous text/tool state on `start` and visibly updates before `done` for a multi-delta response.
+4. Text frames retain ordering around tool frames and preserve monotonic `seq` values after coalescing.
+5. Development diagnostics can distinguish source delta cadence from the 60ms delivery cadence without recording response content.
+6. Existing iframe access controls, session scoping, payload caps, and teardown behavior remain unchanged.
+7. Focused stream tests, Process Explorer build/typecheck, and server typecheck pass under both provider mappings.
+
+## Deferred decisions
+
+1. **Agent-to-agent subscriptions.** Separate proposal, deferred until passive bounded streaming input is a credible model/provider capability.
+2. **Replay after subscribe/reconnect.** Streams remain from-now-only. A bounded `since: seq` replay window can be added later.
+3. **Codex extended item streams.** Command-output, plan, and reasoning-summary deltas may become new kinds after response tracking is solid.
+4. **Does `stream` subsume change `subscribe`?** Keep both public names; payload streams and invalidation pings have different consumer behavior.
+5. **Cross-reconnect lifetime.** App stream subscriptions are runtime state and are not persisted.

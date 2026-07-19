@@ -31,7 +31,28 @@ export interface ProviderInfo {
  * Messages streamed from the transport during a query.
  */
 export interface StreamMessage {
-  type: 'text' | 'thinking' | 'tool_use' | 'tool_result' | 'complete' | 'error';
+  /**
+   * `tool_use_start` and `tool_input_delta` are the *parameter-generation* phase
+   * of a call, split out from `tool_use` so a long argument doesn't render as
+   * silence. `tool_use` still arrives afterwards carrying the complete, parsed
+   * `toolInput` and remains the authoritative one — the two delta types are
+   * additive and a provider that cannot produce them (Codex hands arguments over
+   * whole) simply never does.
+   */
+  type:
+    | 'text'
+    | 'thinking'
+    | 'tool_use_start'
+    | 'tool_input_delta'
+    | 'tool_use'
+    | 'tool_result'
+    | 'complete'
+    | 'error';
+  /**
+   * Text/thinking delta — and, on `tool_input_delta`, a raw fragment of the
+   * argument JSON. That fragment is display-only: it is a prefix of a JSON
+   * document, so it must not be parsed. Wait for `tool_use.toolInput`.
+   */
   content?: string;
   sessionId?: string;
   toolName?: string;

@@ -145,13 +145,16 @@ function mapStreamEvent(event: unknown): StreamMessage | null {
       if (block.id) toolNameById.set(block.id, block.name);
       const idx = evt.index ?? ++currentBlockIndex;
       currentBlockIndex = idx;
-      // Buffer: don't emit yet — wait for input_json_delta + content_block_stop
+      // Still buffered — the authoritative `tool_use` with parsed input waits for
+      // content_block_stop. But the *name* is known right now, and withholding it
+      // until the arguments finish is what made a large tool call look like a
+      // hang. Announce it; the input follows as deltas.
       pendingToolUse.set(idx, {
         toolName: block.name,
         toolUseId: block.id,
         inputChunks: [],
       });
-      return null;
+      return { type: 'tool_use_start', toolName: block.name, toolUseId: block.id };
     }
   }
 
@@ -175,10 +178,18 @@ function mapStreamEvent(event: unknown): StreamMessage | null {
     if (delta.type === 'input_json_delta' && delta.partial_json) {
       const idx = evt.index ?? currentBlockIndex;
       const pending = pendingToolUse.get(idx);
-      if (pending) {
-        pending.inputChunks.push(delta.partial_json);
-      }
-      return null;
+      if (!pending) return null;
+      // Keep buffering — this fragment is still needed to assemble the real input
+      // at content_block_stop. Forwarding a *copy* of it only adds a display feed;
+      // it does not make the fragment authoritative. Deliberately not parsed here:
+      // a prefix of a JSON document is not a JSON document.
+      pending.inputChunks.push(delta.partial_json);
+      return {
+        type: 'tool_input_delta',
+        toolName: pending.toolName,
+        toolUseId: pending.toolUseId,
+        content: delta.partial_json,
+      };
     }
   }
 

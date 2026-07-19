@@ -338,7 +338,14 @@ export interface CliSliceActions {
   updateCliStreaming: (
     agentId: string,
     content: string,
-    type: 'thinking' | 'response',
+    type: 'thinking' | 'response' | 'tool',
+    monitorId?: string,
+  ) => void;
+  /** Append to the live entry, for feeds that arrive as deltas rather than snapshots. */
+  appendCliStreaming: (
+    agentId: string,
+    delta: string,
+    type: 'thinking' | 'response' | 'tool',
     monitorId?: string,
   ) => void;
   finalizeCliStreaming: (agentId: string) => void;
