@@ -17,8 +17,7 @@ import {
   isMutatingAction,
   isYaarOriginUrl,
 } from '../../features/browser/guards.js';
-import { getSessionId } from '../../agents/agent-context.js';
-import { getSessionHub } from '../../session/session-hub.js';
+import { getSessionId, runWithAgentContext } from '../../agents/agent-context.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { runBrowserAction } from '../../features/browser/actions.js';
 import type { EndpointMeta } from '../utils.js';
@@ -139,7 +138,13 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     if (!session) return jsonResponse({ ok: false, error: `No browser with ID ${id}` }, 404);
 
     if (session.windowId) {
-      actionEmitter.emitAction({ type: 'window.close', windowId: session.windowId });
+      // The token names the desktop this window is on. There is no agent context on an
+      // HTTP route, and closing a window on every desktop that happens to be open is not
+      // a reasonable reading of "close mine".
+      actionEmitter.emitAction(
+        { type: 'window.close', windowId: session.windowId },
+        auth.sessionId,
+      );
     }
     await pool.closeSession(id);
     return jsonResponse({ ok: true, data: `Browser ${id} closed.` });
@@ -262,7 +267,10 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
 
     // Phase 3 consent + self-target guards (no-ops for sandboxed headless tabs).
     const guardedSession = pool.getSession(browserId);
-    const sessionId = getSessionId() ?? getSessionHub().getDefault()?.sessionId;
+    // The caller's own token, not "whichever session is first in the hub". `getDefault()`
+    // is right only while there is one session, and consent prompts raised against the
+    // wrong desktop are asked of the wrong person.
+    const sessionId = getSessionId() ?? auth.sessionId;
     const guard = await enforceBrowserGuards({
       provider: pool,
       action,
@@ -276,7 +284,19 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     if (driving) guardedSession!.setDriving(true);
 
     try {
-      const result = await runBrowserAction(pool, action, browserId, body);
+      // In the caller's context, as POST /api/verb runs its verbs: the actions this
+      // dispatch emits (closing a tab's window, creating one) belong on the desktop whose
+      // token authorized the call, and an emit that cannot name a desktop is dropped.
+      const result = await runWithAgentContext(
+        {
+          agentId: `iframe:${auth.appId ?? 'unknown'}`,
+          sessionId: auth.sessionId,
+          monitorId: auth.monitorId,
+          windowId: auth.windowId,
+          appId: auth.appId,
+        },
+        () => runBrowserAction(pool, action, browserId, body),
+      );
       return verbResultToResponse(result);
     } catch (err) {
       return jsonResponse({ ok: false, error: `Browser error: ${errMessage(err)}` }, 500);

@@ -111,9 +111,14 @@ describe('Emitted actions carry the acting monitor', () => {
 
   it('falls back to the provider-turn monitor when there is no agent context', () => {
     // Codex cannot stamp identity onto MCP requests, so the field remains the fallback.
+    // The session is passed explicitly rather than taken from a context: what is absent
+    // here is the *monitor*, and an action with no destination at all is now dropped
+    // before it is stamped, which would test the drop instead of the fallback.
     actionEmitter.setCurrentMonitor('1');
     try {
-      expect(stampedMonitor(() => actionEmitter.emitAction(createAppWindow('ai-chat')))).toBe('1');
+      expect(
+        stampedMonitor(() => actionEmitter.emitAction(createAppWindow('ai-chat'), 'test-session')),
+      ).toBe('1');
     } finally {
       actionEmitter.clearCurrentMonitor();
     }
@@ -163,7 +168,7 @@ describe('Emitted actions carry the acting monitor', () => {
     // why resolveWindowMonitor throws but resolveMonitorId still returns undefined.
     actionEmitter.clearCurrentMonitor();
     const notify = { type: 'notification.show', message: 'hi' } as unknown as OSAction;
-    expect(stampedMonitor(() => actionEmitter.emitAction(notify))).toBeUndefined();
+    expect(stampedMonitor(() => actionEmitter.emitAction(notify, 'test-session'))).toBeUndefined();
   });
 });
 

@@ -271,15 +271,54 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   }
 
   /**
-   * Emit an OS Action to all listeners.
+   * The session an emitted action is addressed to — explicit argument, else the agent
+   * context, else nothing.
+   *
+   * Returning `undefined` is a delivery failure, not a fallback, and every caller here
+   * treats it as one. There was a third option once — `SessionHub.getDefault()` — and it
+   * is exactly what this method exists to refuse: "the session that happens to be first
+   * in the map" is a correct answer only while there is one session, and the whole point
+   * of addressing is the case where there is more than one.
+   */
+  private resolveSessionId(explicit?: string): string | undefined {
+    return explicit ?? getSessionId();
+  }
+
+  /**
+   * Say, once and loudly, that an action could not be addressed.
+   *
+   * Dropping is deliberate: broadcasting to an arbitrary session puts a window on a
+   * stranger's desktop, which is worse than not opening it. Dropping *silently* would be
+   * worse than both, hence the error — the message names the action type because that is
+   * what identifies the call site that needs a session threaded through it.
+   */
+  private reportUnaddressed(what: string): void {
+    console.error(
+      `[ActionEmitter] Dropped ${what}: no session in context and none passed. ` +
+        'Frontend-directed emits must run inside an agent turn or an iframe verb call, ' +
+        'or name their session explicitly.',
+    );
+  }
+
+  /**
+   * Emit an OS Action to the session it belongs to.
+   *
+   * `sessionId` stays optional in the signature because almost every caller runs inside an
+   * agent turn or iframe verb call and the context already holds the answer. What is not
+   * optional is that an answer exists.
    */
   emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
+    const sid = this.resolveSessionId(sessionId);
+    if (!sid) {
+      this.reportUnaddressed(`action ${action.type}`);
+      return;
+    }
     this.emit('action', {
       action,
-      sessionId,
+      sessionId: sid,
       agentId: this.resolveAgentId(agentId),
-      monitorId: this.monitorForAction(action, sessionId),
-    } as ActionEvent);
+      monitorId: this.monitorForAction(action, sid),
+    });
   }
 
   /**
@@ -302,12 +341,20 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
      */
     monitorId?: string,
   ): Promise<PendingOutcome<RenderingFeedback>> {
+    const currentSessionId = this.resolveSessionId(sessionId);
+    if (!currentSessionId) {
+      // Settle now rather than creating a pending entry nothing can answer. A caller
+      // that waits out a full deadline for an action that was never delivered reads the
+      // silence as "the frontend declined", which is a different fact entirely.
+      this.reportUnaddressed(`action ${action.type} (awaiting feedback)`);
+      return { ok: false, reason: 'cancelled' };
+    }
+
     const requestId = this.generateRequestId();
     // Get current agent ID from context (with Codex fallback) and include in action
     const agentId = this.resolveAgentId();
     const actionWithAgent = agentId ? { ...action, agentId } : action;
 
-    const currentSessionId = sessionId ?? getSessionId();
     const feedbackPromise = this.pendingRequests.create(requestId, {
       timeoutMs: clampDeadline(timeoutMs ?? deadlines.renderFeedbackMs),
       sessionId: currentSessionId,
@@ -317,10 +364,10 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     this.emit('action', {
       action: actionWithAgent,
       requestId,
-      sessionId,
+      sessionId: currentSessionId,
       agentId,
       monitorId: monitorId ?? this.monitorForAction(action, currentSessionId),
-    } as ActionEvent);
+    });
 
     return feedbackPromise;
   }
@@ -344,7 +391,10 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    */
   private emitSessionAction(sessionId: string | undefined, action: OSAction): void {
     if (!sessionId) {
-      this.emit('action', { action, sessionId: undefined, agentId: 'system' } as ActionEvent);
+      // There is nothing to fall back to. This used to re-emit on `'action'`, which
+      // reached whichever sessions happened to be listening — and a dialog being taken
+      // off *someone's* screen is not a partial success.
+      this.reportUnaddressed(`session action ${action.type}`);
       return;
     }
     this.emit('session-action', {
@@ -392,9 +442,16 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     cancelText: string = 'No',
     timeoutMs?: number,
   ): Promise<boolean> {
-    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
     const agentId = getAgentId();
     const currentSessionId = getSessionId();
+    if (!currentSessionId) {
+      // A dialog nobody can be shown cannot be answered, and an unanswered dialog is a
+      // denial — so this is the same `false` the deadline would have produced, minus the
+      // wait, plus a line saying why.
+      this.reportUnaddressed(`confirm dialog "${title}"`);
+      return false;
+    }
+    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
 
     const dialogPromise = this.pendingDialogs.create(dialogId, {
       timeoutMs: clampDeadline(timeoutMs ?? deadlines.dialogMs),
@@ -414,9 +471,9 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
 
     this.emit('action', {
       action: action as OSAction,
-      sessionId: undefined,
+      sessionId: currentSessionId,
       agentId,
-    } as ActionEvent);
+    });
 
     const outcome = await dialogPromise;
     return outcome.ok ? outcome.value : false;
@@ -506,9 +563,15 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     allowDismiss?: boolean;
     timeoutMs?: number;
   }): Promise<UserPromptResult> {
-    const promptId = `prompt-${Date.now()}-${++this.requestCounter}`;
     const agentId = getAgentId();
     const currentSessionId = getSessionId();
+    if (!currentSessionId) {
+      // Nobody can be asked, so report it as nobody having answered — `dismissed` without
+      // `timedOut`, which is the shape a caller already knows how to read.
+      this.reportUnaddressed(`user prompt "${opts.title}"`);
+      return { dismissed: true };
+    }
+    const promptId = `prompt-${Date.now()}-${++this.requestCounter}`;
     // The old default was 300s — 45s past the transport's idle timeout, so the request
     // this prompt is holding open died before the prompt could ever report expiring.
     const timeoutMs = clampDeadline(opts.timeoutMs ?? deadlines.userPromptMs);
@@ -534,24 +597,15 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       allowDismiss: opts.allowDismiss ?? true,
     };
 
-    if (currentSessionId) {
-      // Deliver via dedicated event -> LiveSession.broadcast() (session-scoped, no monitor filter)
-      this.emit('user-prompt', {
-        sessionId: currentSessionId,
-        event: {
-          type: ServerEventType.ACTIONS,
-          actions: [action],
-          agentId: agentId ?? 'system',
-        },
-      });
-    } else {
-      // Fallback: generic action path (requires active ToolActionBridge subscription)
-      this.emit('action', {
-        action: action as OSAction,
-        sessionId: undefined,
-        agentId,
-      } as ActionEvent);
-    }
+    // Deliver via dedicated event -> LiveSession.broadcast() (session-scoped, no monitor filter)
+    this.emit('user-prompt', {
+      sessionId: currentSessionId,
+      event: {
+        type: ServerEventType.ACTIONS,
+        actions: [action],
+        agentId: agentId ?? 'system',
+      },
+    });
 
     const outcome = await promptPromise;
     if (outcome.ok) return outcome.value;
@@ -652,8 +706,17 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     request: AppProtocolRequest,
     timeoutMs?: number,
   ): Promise<PendingOutcome<AppProtocolResponse>> {
-    const requestId = this.generateRequestId();
     const currentSessionId = getSessionId();
+    if (!currentSessionId) {
+      // The pending entry was always created against the caller's session; only the
+      // *request* went out unaddressed. Without a session there is no iframe to ask, so
+      // this is `cancelled` — the caller's "the app is unreachable" branch — rather than
+      // a deadline the frontend was never given a chance to meet.
+      this.reportUnaddressed(`app protocol ${request.kind} for ${windowId}`);
+      return { ok: false, reason: 'cancelled' };
+    }
+
+    const requestId = this.generateRequestId();
     const deadlineMs = clampDeadline(timeoutMs ?? deadlines.appQueryMs);
     const meta: AppRequestMeta = {
       windowId,
@@ -675,7 +738,13 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     // Pass the deadline to the frontend too — it relays the postMessage leg and needs to
     // know how long we are prepared to wait. It no longer times the leg itself: this
     // deadline is the only one.
-    this.emit('app-protocol', { requestId, windowId, request, timeoutMs: deadlineMs });
+    this.emit('app-protocol', {
+      sessionId: currentSessionId,
+      requestId,
+      windowId,
+      request,
+      timeoutMs: deadlineMs,
+    });
 
     return responsePromise;
   }

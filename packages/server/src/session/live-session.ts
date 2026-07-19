@@ -37,7 +37,7 @@ import { SurfaceRegistry } from './surface-state.js';
 import type { YaarWebSocket } from './types.js';
 import { actionEmitter } from './action-emitter.js';
 import type { ActionEvent, AppProtocolRequestData } from './emitter-channels.js';
-import { SessionEmitterBridge } from './session-emitter-bridge.js';
+import { sessionEventRouter, type SessionEventSink } from './session-event-router.js';
 import {
   ClientEventRouter,
   type ClientEventOf,
@@ -138,14 +138,18 @@ export class LiveSession {
   // pool is initialized (i.e., before the user sends their first message).
   private sessionLogger: SessionLogger | null = null;
 
-  /** Everything this session hears from the global `actionEmitter`. Detached in cleanup(). */
-  private readonly emitterBridge: SessionEmitterBridge;
-
   /** The client frames this session answers. See `client-event-router.ts`. */
   private readonly router = new ClientEventRouter(this.buildRoutes());
 
   /** Provider seam, handed to the ContextPool when it is created. */
   private readonly acquireProvider?: () => Promise<AITransport | null>;
+
+  /**
+   * This session's registration with the process event router. Held so `cleanup()` can
+   * detach *this* object's sink rather than whatever is currently registered under the id
+   * — see `SessionEventRouter.detach`.
+   */
+  private readonly eventSink: SessionEventSink;
 
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
@@ -167,18 +171,21 @@ export class LiveSession {
     }
 
     // Everything this session hears from the process-global emitter: actions (window state
-    // tracking + budget recording), app protocol requests, and unsolicited real-browser
-    // frames. Attached and detached as one unit — see `session-emitter-bridge.ts`.
-    this.emitterBridge = new SessionEmitterBridge(sessionId, {
-      onAction: (event) => this.handleEmittedAction(event),
-      onAppProtocolRequest: (data) => this.handleAppProtocolRequest(data),
+    // tracking + budget recording), app protocol requests, forwarded session-scoped events,
+    // and unsolicited real-browser frames. The router holds the subscriptions — one set for
+    // the whole process — and this session is simply reachable or not, by id. Detached in
+    // cleanup(); see `session-event-router.ts`.
+    this.eventSink = {
+      handleAction: (event) => this.handleEmittedAction(event),
+      handleAppProtocolRequest: (data) => this.handleAppProtocolRequest(data),
       // The real browser reporting something nobody asked for (a native dialog fired, a tab
       // being driven navigated). The frame arrives on a process-global socket with no session
-      // on it, so every LiveSession hears it and decides for itself whether it has a window
+      // on it, so every session hears it and decides for itself whether it has a window
       // that cares.
-      onBridgeEvent: (data) => this.routeBridgeEvent(data.channel, data.payload),
+      handleBridgeEvent: (data) => this.routeBridgeEvent(data.channel, data.payload),
       broadcast: (event) => this.broadcast(event),
-    });
+    };
+    sessionEventRouter.attach(sessionId, this.eventSink);
   }
 
   /**
@@ -1016,7 +1023,7 @@ export class LiveSession {
   // ── Cleanup ─────────────────────────────────────────────────────────
 
   async cleanup(): Promise<void> {
-    this.emitterBridge.detach();
+    sessionEventRouter.detach(this.sessionId, this.eventSink);
 
     // Force-clear any pending requests/dialogs/app-requests for this session
     // so awaiting tools unblock immediately instead of waiting for timeouts.

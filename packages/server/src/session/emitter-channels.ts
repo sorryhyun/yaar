@@ -35,16 +35,23 @@ export interface SessionScopedEvent {
 }
 
 /**
- * An OS Action emitted by a tool, with whatever identity the emitter could resolve.
+ * An OS Action emitted by a tool, addressed to the session whose screen it belongs on.
  *
- * Unlike {@link SessionScopedEvent}, every field but the action is optional: an action
- * emitted from a timer or a warm-up has no agent, and one emitted outside a session has
- * no session. Consumers filter on what is present.
+ * `sessionId` is required, and that is the correctness fix rather than a tidy-up. It used
+ * to be optional and was left unset by `emitAction()`, so the channel — which every live
+ * session listens to — delivered every action to *every* session. Each one then applied it
+ * to its own `WindowStateRegistry`, woke its own `yaar://windows` subscribers, and billed
+ * `monitorId` against its **own** monitor's budget, because monitor IDs are session-local
+ * and every session has a monitor `0`. With one browser open that is invisible; with two
+ * (`REMOTE=1`, phone plus laptop) session B's budget paid for session A's work.
+ *
+ * `agentId` and `monitorId` stay optional: an action emitted from a timer has no agent,
+ * and a non-window action has no monitor. A *destination* is not optional.
  */
 export interface ActionEvent {
   action: OSAction;
+  sessionId: string;
   requestId?: string;
-  sessionId?: string;
   agentId?: string;
   monitorId?: string;
 }
@@ -59,8 +66,16 @@ export interface ActionEvent {
  * Deliberately *not* named `AppProtocolRequestEvent`: `@yaar/shared` already exports that
  * name for the `ServerEvent` the frontend receives. This is the emitter-side envelope the
  * `LiveSession` listener turns into that event, and the two are a field apart.
+ *
+ * `sessionId` is required for the same reason as {@link ActionEvent}, with a sharper edge:
+ * the pending entry is created against the *caller's* session, but the request went out
+ * with no session on it, so every session relayed it to its own frontend. A window key
+ * ("0/ai-chat") names a place on a desktop and two browsers looking at the same YAAR have
+ * the same places — so two iframes could both answer, and whichever replied first resolved
+ * the one global pending entry on the other's behalf.
  */
 export interface AppProtocolRequestData {
+  sessionId: string;
   requestId: string;
   windowId: string;
   request: AppProtocolRequest;

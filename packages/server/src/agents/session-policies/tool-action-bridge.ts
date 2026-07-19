@@ -5,6 +5,8 @@ import type { SessionLogger } from '../../logging/index.js';
 export interface ToolActionBridgeState {
   currentRole: string | null;
   monitorId?: string;
+  /** The live session this agent belongs to. Actions for any other one are not ours. */
+  sessionId: string;
 }
 
 /**
@@ -35,6 +37,14 @@ export class ToolActionBridge {
   ) {}
 
   async handleToolAction(event: ActionEvent): Promise<void> {
+    // Session first, because the agent filter below has a hole the session filter closes:
+    // an action emitted outside any turn carries no `agentId`, and `event.agentId &&`
+    // lets exactly those through — in *every* session, to every agent's socket. The
+    // emitter now addresses every action, so the hole is closable rather than merely known.
+    if (event.sessionId !== this.state.sessionId) {
+      return;
+    }
+
     const myAgentId = this.getFilterAgentId();
     if (event.agentId && event.agentId !== myAgentId) {
       return;

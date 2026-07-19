@@ -144,6 +144,7 @@ export class AgentSession {
         get monitorId() {
           return connection.currentMonitorId;
         },
+        sessionId: this.liveSessionId,
       },
       this.sendEvent.bind(this),
       this.getFilterAgentId.bind(this),

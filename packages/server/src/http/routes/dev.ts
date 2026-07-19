@@ -17,7 +17,8 @@ import { join } from 'path';
 import { stat } from 'fs/promises';
 import { PROJECT_ROOT } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
-import { requireBundledApp } from '../access.js';
+import { requireBundledApp, type AppPrincipal } from '../access.js';
+import { runWithAgentContext } from '../../agents/agent-context.js';
 import { resolveAppSource } from '../../features/apps/roots.js';
 import type { EndpointMeta } from '../utils.js';
 
@@ -150,6 +151,34 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   const body = await parseJsonBody<Record<string, unknown>>(req);
   if (body instanceof Response) return body;
 
+  // Run the action as the calling iframe, the way POST /api/verb does.
+  //
+  // Deploy and git-restore emit desktop actions (`refreshApps`, shortcut add/remove) to
+  // put the app's new state on screen, and an emitted action is addressed from the agent
+  // context. Without one there is no addressee: the emit used to go out session-less and
+  // reach every desktop, and now it is dropped with a line in the log. Either way the
+  // caller's own desktop is the only one that asked, and the token names it.
+  return runWithAgentContext(
+    {
+      agentId: `iframe:${callerAppId}`,
+      sessionId: principal.sessionId,
+      monitorId: principal.monitorId,
+      windowId: principal.windowId,
+      appId: callerAppId,
+    },
+    () => dispatchDevAction(action, body, principal, callerAppId),
+  );
+}
+
+/**
+ * The dev action itself, split out so the whole of it runs inside one agent context.
+ */
+async function dispatchDevAction(
+  action: DevAction,
+  body: Record<string, unknown>,
+  principal: AppPrincipal,
+  callerAppId: string,
+): Promise<Response | null> {
   // Git actions address an *app*, not a sandbox project path — they branch out
   // before the path resolution the compile/typecheck/deploy actions need.
   if (isGitAction(action)) {

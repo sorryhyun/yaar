@@ -139,12 +139,19 @@ describe('F-15 — a timeout is never observable as a success', () => {
   });
 
   it('a prompt whose deadline passes says so', async () => {
-    const result = await actionEmitter.showUserPrompt({
-      title: 'Still there?',
-      message: 'Answer within 10ms',
-      inputField: { placeholder: '...' },
-      timeoutMs: 10,
-    });
+    // Inside a session, because a prompt with nowhere to go is a different outcome —
+    // `dismissed` with no `timedOut`, since no deadline was ever started. That is the
+    // distinction this test exists to protect, from the other side.
+    const result = await runWithAgentContext(
+      { agentId: 'agent-prompt', sessionId: 'sess-prompt' as SessionId },
+      () =>
+        actionEmitter.showUserPrompt({
+          title: 'Still there?',
+          message: 'Answer within 10ms',
+          inputField: { placeholder: '...' },
+          timeoutMs: 10,
+        }),
+    );
 
     expect(result).toEqual({ dismissed: true, timedOut: true });
   });
@@ -271,17 +278,22 @@ describe('F-17 — an expired dialog leaves the screen', () => {
   });
 
   it('withdraws an expired prompt from the screen too', async () => {
-    const result = await actionEmitter.showUserPrompt({
-      title: 'Gone fishing',
-      message: 'No one is here',
-      inputField: {},
-      timeoutMs: 10,
-    });
+    const result = await runWithAgentContext(
+      { agentId: 'agent-fishing', sessionId: 'sess-fishing' as SessionId },
+      () =>
+        actionEmitter.showUserPrompt({
+          title: 'Gone fishing',
+          message: 'No one is here',
+          inputField: {},
+          timeoutMs: 10,
+        }),
+    );
     await settle(5);
 
     expect(result.timedOut).toBe(true);
-    // Emitted only when the prompt is bound to a session (it is, inside an agent turn);
-    // outside one there is no session to deliver to, and nothing to clean off a screen.
+    // The dismissal goes out on the session channel, which is why the prompt has to be
+    // bound to a session for there to be anything to withdraw.
+    expect(actions.some((a) => a.type === 'user.prompt.dismiss')).toBe(true);
     stop();
   });
 

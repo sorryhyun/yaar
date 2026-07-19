@@ -7,6 +7,8 @@
  */
 import { describe, it, expect } from 'bun:test';
 import { actionEmitter } from '../session/action-emitter.js';
+import { runWithAgentContext } from '../agents/agent-context.js';
+import type { SessionId } from '../session/types.js';
 import type { AppProtocolResponse } from '@yaar/shared';
 
 describe('an app protocol response settles its pending request', () => {
@@ -16,7 +18,13 @@ describe('an app protocol response settles its pending request', () => {
     const listener = (data: { requestId: string }) => seen.push(data);
     actionEmitter.on('app-protocol', listener);
 
-    const pending = actionEmitter.emitAppProtocolRequest('0/ai-chat', { kind: 'manifest' }, 5_000);
+    // In a session, because the request now names the frontend it is asking. "0/ai-chat"
+    // is a place on a desktop and every session has one, so without the session the
+    // request has no addressee — see `AppProtocolRequestData`.
+    const pending = runWithAgentContext(
+      { agentId: 'agent-manifest', sessionId: 'sess-manifest' as SessionId },
+      () => actionEmitter.emitAppProtocolRequest('0/ai-chat', { kind: 'manifest' }, 5_000),
+    );
 
     // Let the emit land.
     await new Promise((r) => setTimeout(r, 10));

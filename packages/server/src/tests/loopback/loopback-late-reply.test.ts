@@ -34,11 +34,22 @@ import { expectSettlesWithin } from './harness/liveness.js';
 
 const { actionEmitter } = await import('../../session/action-emitter.js');
 const { handleAppCommand } = await import('../../features/window/app-protocol.js');
+const { runWithAgentContext } = await import('../../agents/agent-context.js');
 
 /** Longer than `EXPIRED_APP_REQUEST_GRACE_MS` (5 minutes) in `action-emitter.ts`. */
 const PAST_THE_GRACE_WINDOW_MS = 6 * 60_000;
 
 const WINDOW = '0/ai-chat';
+const SESSION = 'sess-late-reply';
+
+/**
+ * Issue a request as an agent would. `emitAppProtocolRequest` reads its addressee from
+ * the agent context — "0/ai-chat" names a place on a desktop, and every session has one,
+ * so a request that cannot say *whose* iframe it is asking is not sent at all.
+ */
+function issue<T>(fn: () => T): T {
+  return runWithAgentContext({ agentId: 'agent-late', sessionId: SESSION, monitorId: '0' }, fn);
+}
 
 /** The `requestId` the emitter minted, taken off the event exactly as the frontend takes it. */
 function captureRequestId(): { get: () => string; stop: () => void } {
@@ -76,10 +87,8 @@ const reply: AppProtocolResponse = { kind: 'command', result: 'I answered, just 
 describe('S7 — the emitter says a late reply out loud', () => {
   it('names it as late, with the latency that made it useless', async () => {
     const capture = captureRequestId();
-    const pending = actionEmitter.emitAppProtocolRequest(
-      WINDOW,
-      { kind: 'command', command: 'noop' },
-      30,
+    const pending = issue(() =>
+      actionEmitter.emitAppProtocolRequest(WINDOW, { kind: 'command', command: 'noop' }, 30),
     );
     const requestId = capture.get();
     capture.stop();
@@ -120,10 +129,8 @@ describe('S7 — the emitter says a late reply out loud', () => {
 
   it('remembers an expired request for the grace window, and forgets it after', async () => {
     const first = captureRequestId();
-    const expired = actionEmitter.emitAppProtocolRequest(
-      WINDOW,
-      { kind: 'command', command: 'noop' },
-      30,
+    const expired = issue(() =>
+      actionEmitter.emitAppProtocolRequest(WINDOW, { kind: 'command', command: 'noop' }, 30),
     );
     const staleId = first.get();
     first.stop();
@@ -139,10 +146,8 @@ describe('S7 — the emitter says a late reply out loud', () => {
     // Pruning is opportunistic: it happens when the *next* request expires. So this second
     // request is not scaffolding, it is the event that does the forgetting.
     const second = captureRequestId();
-    const next = actionEmitter.emitAppProtocolRequest(
-      WINDOW,
-      { kind: 'query', stateKey: 'noop' },
-      30,
+    const next = issue(() =>
+      actionEmitter.emitAppProtocolRequest(WINDOW, { kind: 'query', stateKey: 'noop' }, 30),
     );
     const freshId = second.get();
     second.stop();
