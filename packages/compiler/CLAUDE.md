@@ -28,7 +28,14 @@ src/
 ├── bundled-types/
 │   └── index.d.ts         # Type declarations for all @bundled/* imports
 └── shims/
-    ├── yaar.ts            # Main SDK: verb functions, appStorage, createPersistedSignal, onShortcut
+    ├── yaar/              # Main SDK, split into internal modules (index.ts is the only entry)
+    │   ├── index.ts       # Barrel — the entire @bundled/yaar public surface
+    │   ├── verbs.ts       # window.yaar global, read/invoke/list/describe/del/subscribe, stream, httpFetch
+    │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
+    │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)
+    │   ├── dialogs.ts     # showAlert / showConfirm / showPrompt
+    │   ├── ui.ts          # showToast, onShortcut, withLoading, errMsg, wait, AppCommandError, defineCommand
+    │   └── reactive.ts    # createPersistedSignal
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
@@ -125,7 +132,7 @@ agents exists* are generated from one source (asserted by a test).
 
 Shims wrap npm packages with compatibility fixes or SDK wrappers:
 
-- **`yaar.ts`** — thin wrapper over `window.yaar` global. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`, plus `trySave` — reports the failure and resolves `false` instead of throwing, so callers can withhold a "Saved" UI), `appDb` (SQLite-backed collections via `yaar://apps/self/db/*` — insert/find/search/update/remove with Mongo-style filters, plus `createReactiveCollection` for a query-tracking Solid signal), `createPersistedSignal` (Solid signal auto-synced to storage via `trySave`), `defineCommand`, `onShortcut`, `showToast`, `withLoading`, `errMsg`, `wait`, `AppCommandError`
+- **`yaar/`** — thin wrapper over `window.yaar` global. Split into internal modules for ownership; `index.ts` is the sole entry and `BUNDLED_SHIMS` points at it. The split is internal only — there are no `@bundled/yaar/*` subpath imports, and the declared type surface stays a single `declare module '@bundled/yaar'` in `bundled-types/index.d.ts`. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`, plus `trySave` — reports the failure and resolves `false` instead of throwing, so callers can withhold a "Saved" UI), `appDb` (SQLite-backed collections via `yaar://apps/self/db/*` — insert/find/search/update/remove with Mongo-style filters, plus `createReactiveCollection` for a query-tracking Solid signal), `createPersistedSignal` (Solid signal auto-synced to storage via `trySave`), `defineCommand`, `onShortcut`, `showToast`, `withLoading`, `errMsg`, `wait`, `AppCommandError`
 - **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy, plus per-app version history (`gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint`) backed by a shadow git repo per app
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4

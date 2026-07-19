@@ -97,7 +97,7 @@ process.on('exit', () => {
 });
 
 const { appStorage, createPersistedSignal, showAlert, showConfirm, showPrompt } =
-  await import('../shims/yaar.js');
+  await import('../shims/yaar/index.js');
 
 /** Lets microtask-scheduled saves (`void trySave(...)`) settle. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
