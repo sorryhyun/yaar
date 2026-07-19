@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 import { scanSource, formatFindings } from './solid-html-guard.js';
 import { scanMountTargets, formatMountFindings } from './mount-guard.js';
 import { describeDesignTokens } from './design-tokens.js';
+import { loadTypeScript } from './load-typescript.js';
 
 /**
  * Normalize a file path to use forward slashes.
@@ -484,21 +485,7 @@ export function assetDataUrlPlugin(): Bun.BunPlugin {
  * the closing-tag rewrite still runs.
  */
 export function solidHtmlSourcePlugin(): Bun.BunPlugin {
-  let tsModule: typeof import('typescript') | null | undefined;
-
-  const loadTs = async (): Promise<typeof import('typescript') | null> => {
-    if (tsModule !== undefined) return tsModule;
-    const specifier = ['type', 'script'].join('');
-    try {
-      const mod = (await import(specifier)) as {
-        default?: typeof import('typescript');
-      } & typeof import('typescript');
-      tsModule = mod.default ?? mod;
-    } catch {
-      tsModule = null;
-    }
-    return tsModule;
-  };
+  const loadTs = loadTypeScript;
 
   return {
     name: 'solid-html-source',

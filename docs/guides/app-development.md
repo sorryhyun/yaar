@@ -558,8 +558,36 @@ freely within one `commands` block.
 
 Keep the call shape literal — `defineCommand({ ... })` wrapping an inline object. The
 build-time protocol extractor is a source parser, not an evaluator: it steps over a single
-identifier call to find the descriptor, so a spread descriptor or a computed callee will
-make it skip the command and silently drop it from `dist/protocol.json`.
+identifier call to find the descriptor, and a computed callee fails the build.
+
+#### Splitting a protocol by domain
+
+A `commands` or `state` map may be assembled from descriptor maps that live in other files.
+The extractor follows relative imports and spreads, so this reaches `dist/protocol.json`
+intact:
+
+```typescript
+// src/commands/files.ts
+export const fileCommands = {
+  readFile: defineCommand({ description: 'Read a file', params: { ... }, handler }),
+};
+
+// src/protocol.ts
+import { fileCommands } from './commands/files';
+import { gitCommands } from './commands/git';
+
+app.register({
+  appId: 'devtools',
+  commands: { ...fileCommands, ...gitCommands },
+});
+```
+
+The limit is static resolvability, and it is enforced rather than tolerated: a spread of a
+**call result** (`...buildCommands()`), a descriptor imported from an npm package, a
+`${...}` template description, or a missing `description` fails the compile with a
+`file:line:col`. That is deliberate — a command the extractor skipped would still work at
+runtime while being invisible to every agent, which is the one outcome worse than a broken
+build.
 
 ### Talking Back to the Agent
 

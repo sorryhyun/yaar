@@ -14,11 +14,9 @@ import {
   solidHtmlSourcePlugin,
   toForwardSlash,
 } from './plugins.js';
-import {
-  extractProtocolWithDiagnostics,
-  isBlockingProtocolWarning,
-  type ProtocolExtraction,
-} from './extract-protocol.js';
+import { isBlockingProtocolWarning } from './extract-protocol.js';
+import { formatProtocolError } from './extract-protocol-ast.js';
+import { extractProtocolFromDir } from './extract-protocol-dir.js';
 import { getCompilerConfig } from './config.js';
 import {
   computeSourceHash,
@@ -220,26 +218,6 @@ async function readAppSources(srcDir: string): Promise<AppSourceFile[]> {
 }
 
 /**
- * Extract protocol manifest from src/main.ts or src/protocol.ts.
- *
- * A file that produced warnings but no protocol still wins over the next file:
- * warnings mean a register() call was found and choked, and falling through
- * would hide exactly the truncation the diagnostics exist to surface.
- */
-async function extractProtocolFromDir(srcDir: string): Promise<ProtocolExtraction> {
-  for (const file of ['main.ts', 'protocol.ts']) {
-    try {
-      const source = await Bun.file(join(srcDir, file)).text();
-      const extraction = extractProtocolWithDiagnostics(source);
-      if (extraction.protocol || extraction.warnings.length > 0) return extraction;
-    } catch {
-      continue;
-    }
-  }
-  return { protocol: null, warnings: [] };
-}
-
-/**
  * Compile TypeScript from a sandbox directory to a bundled HTML file.
  */
 export async function compileTypeScript(
@@ -280,6 +258,18 @@ export async function compileTypeScript(
     // green (one real incident: 29 commands shrank to 3). Blocking warnings
     // fail the build instead of shipping a manifest missing commands.
     const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'));
+    if (extraction.errors.length > 0) {
+      return {
+        success: false,
+        errors: [
+          'Protocol extraction failed - the manifest would silently drop entries:',
+          ...extraction.errors.map(formatProtocolError),
+          'Every state key and command must be statically resolvable, or an agent cannot ' +
+            'see it. Descriptors may live in other files and arrive via `...spread`, but ' +
+            'each one must resolve to an object literal reached through relative imports.',
+        ],
+      };
+    }
     const blocking = extraction.warnings.filter(isBlockingProtocolWarning);
     if (blocking.length > 0) {
       return {

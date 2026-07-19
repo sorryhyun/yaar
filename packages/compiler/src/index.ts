@@ -45,6 +45,15 @@ export {
   isBlockingProtocolWarning,
   type ProtocolExtraction,
 } from './extract-protocol.js';
+export {
+  extractProtocolFromModules,
+  formatProtocolError,
+  type AstProtocolExtraction,
+  type ProtocolError,
+  type ReadFile,
+} from './extract-protocol-ast.js';
+export { extractProtocolFromDir, type DirExtraction } from './extract-protocol-dir.js';
+export { loadTypeScript } from './load-typescript.js';
 export { YAAR_DESIGN_TOKENS_CSS, describeDesignTokens } from './design-tokens.js';
 export {
   isAppStale,

@@ -12,10 +12,11 @@
  * All the work happens in the type declarations (`bundled-types/index.d.ts`),
  * which infer the handler's parameter type from the `params` JSON Schema.
  *
- * Keep the call shape `defineCommand({ ... })`: the build-time protocol
- * extractor recognises a bare identifier wrapping the descriptor literal, and
- * anything fancier (a computed callee, a spread descriptor) will make it skip
- * the command.
+ * Keep the call shape `defineCommand({ ... })` — a single identifier wrapping
+ * the descriptor literal. The build-time extractor treats that as transparent
+ * (matching this function), but it is a parser, not an evaluator: a computed
+ * callee is a hard build error rather than a silently dropped command. The
+ * descriptor itself may live in another module and be spread in.
  */
 export const defineCommand = <T>(descriptor: T): T => descriptor;
 

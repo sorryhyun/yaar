@@ -1,8 +1,20 @@
 /**
- * Extract App Protocol manifest from TypeScript source.
+ * Extract App Protocol manifest from TypeScript source — FALLBACK PATH.
  *
- * Parses the `register({...})` call in app source code using brace matching
- * and regex extraction. Works on human-written TypeScript (not minified code).
+ * `extract-protocol-ast.ts` is the real extractor. This text scanner survives
+ * for one reason: `typescript` is a devDependency and is absent in bundled-exe
+ * mode, where a compile still has to produce *some* manifest.
+ *
+ * It is strictly less capable, and the gap is the point of the AST rewrite:
+ * this parser sees one file, stops at the first spread, and drops a
+ * `params`/`returns` block that contains a `+`-concatenated string. Those are
+ * silent degradations, which is why it reports warnings and the caller
+ * (`extract-protocol-dir.ts`) refuses to build on the blocking ones.
+ *
+ * Do not extend this to reach further. Reach belongs in the AST path.
+ *
+ * Parses the `register({...})` call using brace matching and regex extraction.
+ * Works on human-written TypeScript (not minified code).
  *
  * Best-effort: returns null if extraction fails for any reason.
  */

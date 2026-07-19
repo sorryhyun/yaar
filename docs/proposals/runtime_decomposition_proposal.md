@@ -86,7 +86,7 @@ This green baseline is the compatibility gate for each phase below.
 4. `LiveSession.broadcast()` remains the only server-to-frontend gateway because it enforces monitor routing and surface tracking.
 5. Session cleanup settles all pending waits as cancelled and detaches every session-owned resource.
 6. Agent roles remain explicit (`session`, `monitor`, `app`, `ephemeral`); shared lifecycle primitives may be deduplicated, but role behavior does not become data-driven magic.
-7. App protocol descriptor maps remain single-literal `app.register({ ... })` expressions until the manifest contract lands. Handler bodies may move to imported functions; descriptor objects may not be spread, computed, or imported. Static and runtime manifests must continue to agree.
+7. Static and runtime app protocol manifests must continue to agree. The single-literal restriction this invariant used to carry is **lifted**: the compiler's AST extractor resolves descriptor maps that are imported and spread, and fails the build on what it cannot resolve. See [`app_protocol_manifest_proposal.md`](./app_protocol_manifest_proposal.md).
 
 ## Target architecture
 

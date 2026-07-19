@@ -1,11 +1,16 @@
 /**
  * A compile refuses to ship a truncated protocol manifest.
  *
- * The extractor stops at the first entry it cannot parse (a spread, a computed
- * key) and silently drops everything after it — dist/protocol.json shrinks
- * while the bundle builds green and the app runs fine. The gate turns those
- * partial parses into a failed compile; a clean register() is unaffected, and
- * so is an app with no register() at all.
+ * The rule is one-sided: an entry that works at runtime must be visible in
+ * dist/protocol.json, because a command an agent cannot see does not exist. So
+ * the gate fails the build on anything the extractor cannot resolve rather than
+ * writing a manifest it had to guess around.
+ *
+ * What counts as resolvable widened when extraction moved to the TypeScript AST.
+ * A spread of a descriptor map — including one imported from another file — is
+ * now followed, which is what lets a large protocol.ts be split by domain. A
+ * spread of a *call result* still cannot be resolved, and that is the case the
+ * gate exists for.
  */
 import { beforeAll, afterEach, describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
@@ -31,22 +36,31 @@ afterEach(async () => {
   sandbox = null;
 });
 
-async function compileSource(source: string) {
+/** Write `files` (relative to the sandbox) and compile. */
+async function compileFiles(files: Record<string, string>) {
   sandbox = await mkdtemp(join(tmpdir(), 'yaar-protocol-gate-'));
   await mkdir(join(sandbox, 'src'), { recursive: true });
-  await Bun.write(join(sandbox, 'src', 'main.ts'), source);
+  for (const [rel, content] of Object.entries(files)) {
+    await Bun.write(join(sandbox, rel), content);
+  }
   return compileTypeScript(sandbox, { title: 'Gate Test' });
 }
 
-// A local stand-in for app.register — the extractor only pattern-matches
-// `.register({`, and a @bundled import would drag the whole SDK into the test.
+async function compileSource(source: string) {
+  return compileFiles({ 'src/main.ts': source });
+}
+
+// A local stand-in for app.register — a @bundled import would drag the whole SDK
+// into the test. The binding must still be named `app`: the extractor looks for
+// the SDK's app object specifically, so an unrelated `Chart.register(...)` in a
+// real app is not mistaken for a protocol registration.
 const PRELUDE = `
 const app = { register(_config: unknown): void {} };
 const sharedCommands = { extra: { description: 'Extra', handler: () => 0 } };
 void sharedCommands;
 `;
 
-const CHOKED = `${PRELUDE}
+const SPREAD = `${PRELUDE}
 app.register({
   appId: 'demo',
   name: 'Demo',
@@ -54,6 +68,32 @@ app.register({
     first: { description: 'First', handler: () => 1 },
     ...sharedCommands,
     third: { description: 'Third', handler: () => 3 },
+  },
+});
+export {};
+`;
+
+const UNRESOLVABLE = `${PRELUDE}
+function buildCommands() {
+  return { generated: { description: 'Generated', handler: () => 0 } };
+}
+app.register({
+  appId: 'demo',
+  name: 'Demo',
+  commands: {
+    first: { description: 'First', handler: () => 1 },
+    ...buildCommands(),
+  },
+});
+export {};
+`;
+
+const NO_DESCRIPTION = `${PRELUDE}
+app.register({
+  appId: 'demo',
+  name: 'Demo',
+  commands: {
+    silent: { handler: () => 1 },
   },
 });
 export {};
@@ -75,18 +115,76 @@ export {};
 `;
 
 describe('compile protocol gate', () => {
-  test('fails the build when a commands spread chokes extraction', async () => {
-    const result = await compileSource(CHOKED);
+  test('a spread of a local descriptor map lands in the manifest', async () => {
+    const result = await compileFiles({ 'src/main.ts': SPREAD });
+
+    expect(result.success).toBe(true);
+    // `extra` is the entry the old text scanner stopped at and dropped.
+    expect(result.protocol?.commands).toEqual(['first', 'extra', 'third']);
+
+    const written = JSON.parse(await Bun.file(join(sandbox!, 'dist', 'protocol.json')).text());
+    expect(Object.keys(written.commands)).toEqual(['first', 'extra', 'third']);
+    expect(written.commands.extra.description).toBe('Extra');
+  });
+
+  test('descriptor maps may live in another file', async () => {
+    const result = await compileFiles({
+      'src/commands/files.ts': `
+        export const fileCommands = {
+          readFile: {
+            description: 'Read a file from disk, ' + 'returning its text',
+            params: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
+            handler: (_p: { path: string }) => '',
+          },
+        };
+      `,
+      'src/main.ts': `
+        const app = { register(_config: unknown): void {} };
+        import { fileCommands } from './commands/files';
+        app.register({
+          appId: 'demo',
+          name: 'Demo',
+          commands: { ...fileCommands, ping: { description: 'Ping', handler: () => 'pong' } },
+        });
+        export {};
+      `,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.protocol?.commands).toEqual(['readFile', 'ping']);
+
+    const written = JSON.parse(await Bun.file(join(sandbox!, 'dist', 'protocol.json')).text());
+    // The `+`-concatenated description is joined, and the params schema — which
+    // the text scanner dropped whenever the block held a concatenation — survives.
+    expect(written.commands.readFile.description).toBe('Read a file from disk, returning its text');
+    expect(written.commands.readFile.params).toEqual({
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    });
+  });
+
+  test('fails the build when a spread cannot be resolved', async () => {
+    const result = await compileSource(UNRESOLVABLE);
 
     expect(result.success).toBe(false);
     const errors = (result.errors ?? []).join('\n');
     expect(errors).toContain('spread');
     expect(errors).toContain('commands');
-    // The refusal must say how to fix it, or it just reads as a broken build.
-    expect(errors).toContain('defineCommand');
-    expect(result.protocolWarnings?.length).toBeGreaterThan(0);
+    // The location is what makes the refusal actionable.
+    expect(errors).toMatch(/src\/main\.ts:\d+:\d+/);
 
     // The truncated manifest must not have been written.
+    expect(await Bun.file(join(sandbox!, 'dist', 'protocol.json')).exists()).toBe(false);
+  });
+
+  test('fails the build when a descriptor has no description', async () => {
+    const result = await compileSource(NO_DESCRIPTION);
+
+    expect(result.success).toBe(false);
+    const errors = (result.errors ?? []).join('\n');
+    expect(errors).toContain('commands.silent');
+    expect(errors).toContain('description');
     expect(await Bun.file(join(sandbox!, 'dist', 'protocol.json')).exists()).toBe(false);
   });
 
@@ -107,5 +205,23 @@ describe('compile protocol gate', () => {
     expect(result.success).toBe(true);
     expect(result.protocol).toBeUndefined();
     expect(result.protocolWarnings).toBeUndefined();
+  });
+
+  test('an unrelated .register() call is not mistaken for the protocol', async () => {
+    const result = await compileSource(`
+      const Chart = { register(..._parts: unknown[]): void {} };
+      const registerables = [1, 2, 3];
+      Chart.register(...registerables);
+      const app = { register(_config: unknown): void {} };
+      app.register({
+        appId: 'demo',
+        name: 'Demo',
+        commands: { ping: { description: 'Ping', handler: () => 'pong' } },
+      });
+      export {};
+    `);
+
+    expect(result.success).toBe(true);
+    expect(result.protocol?.commands).toEqual(['ping']);
   });
 });

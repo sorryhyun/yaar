@@ -8,7 +8,8 @@ import {
   compileTypeScript,
   typecheckSandbox,
   getSandboxPath,
-  extractProtocolFromSource,
+  extractProtocolFromDir,
+  formatProtocolError,
 } from '@yaar/compiler';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { publishFrame } from '../../streams/stream-hub.js';
@@ -223,18 +224,29 @@ export async function doDeploy(
     const protocolJson = await Bun.file(join(sandboxPath, 'dist', 'protocol.json')).text();
     extractedProtocol = JSON.parse(protocolJson);
   } catch {
-    // No dist/protocol.json — try extracting directly from source files
-    for (const file of ['main.ts', 'protocol.ts']) {
-      try {
-        const source = await Bun.file(join(sandboxPath, 'src', file)).text();
-        const protocol = extractProtocolFromSource(source);
-        if (protocol) {
-          extractedProtocol = protocol;
-          break;
-        }
-      } catch {
-        continue;
+    // No dist/protocol.json — extract directly from source. This must use the
+    // same extractor the compiler does: a weaker read here under-reports the
+    // command set, and the shrink gate below would then refuse a deploy that
+    // drops nothing.
+    //
+    // Extraction failures have to be raised here rather than left to the shrink
+    // gate. That gate only fires when there is an installed manifest to compare
+    // against, so on a *first* deploy an unresolvable protocol would sail
+    // through and install an app whose commands no agent can see.
+    try {
+      const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'));
+      if (extraction.errors.length > 0) {
+        const error =
+          `Protocol extraction failed - the manifest would silently drop entries:\n` +
+          extraction.errors.map(formatProtocolError).join('\n');
+        emit('error', { step: 'protocol', error });
+        return { success: false, error };
       }
+      if (extraction.protocol) extractedProtocol = extraction.protocol;
+    } catch (err) {
+      const error = `Protocol extraction failed: ${err instanceof Error ? err.message : String(err)}`;
+      emit('error', { step: 'protocol', error });
+      return { success: false, error };
     }
   }
 

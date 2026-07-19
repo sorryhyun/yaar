@@ -22,7 +22,10 @@ src/
 ├── design-token-guard.ts  # Rejects var(--yaar-*) names that can never resolve
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
-├── extract-protocol.ts    # Regex-based protocol manifest extraction from source (sees through `defineCommand({...})`)
+├── extract-protocol-dir.ts # Protocol extraction entry point — picks AST or text scanner
+├── extract-protocol-ast.ts # AST protocol extraction: follows relative imports + spreads, hard-errors on the unresolvable
+├── extract-protocol.ts    # Legacy text scanner — bundled-exe fallback only (no `typescript` there)
+├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens() (generated token reference)
 ├── build-manifest.ts      # SHA-256 source/app.json hashing for staleness detection
 ├── bundled-types/
@@ -50,8 +53,54 @@ src/
 3. **Bundle:** `Bun.build()` with 3 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
 4. **SDK injection:** 8 iframe SDK scripts (capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
 5. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + app `<script type="module">`
-6. **Protocol extraction:** Best-effort regex parse of `.register({...})` for state/command descriptors → `dist/protocol.json`. A descriptor may be wrapped in a single identifier call (`defineCommand({...})`) — the parser steps over it. Anything less literal (spread, computed callee) is skipped, so the command silently vanishes from the manifest.
+6. **Protocol extraction:** AST parse of `app.register({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable (see below)
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
+
+## Protocol Extraction
+
+The manifest an agent reads is built from source at compile time, while the manifest the
+app actually serves is built at runtime by the iframe SDK from the same `app.register({...})`
+call. **Those two must agree.** The failure that matters is one-sided: a command that runs
+fine but never reaches `dist/protocol.json` is invisible to agents while every build signal
+stays green — one real incident shrank 29 commands to 3.
+
+`extract-protocol-dir.ts` is the entry point and picks between two implementations:
+
+| | `extract-protocol-ast.ts` | `extract-protocol.ts` (legacy) |
+|---|---|---|
+| When | `typescript` loads (normal builds) | bundled-exe mode only |
+| Reach | follows relative imports, `...spreads`, `const` refs, `as const` | one file, literal properties only |
+| Values | constant-folds `+` concatenation anywhere, including inside `params` | `+` inside a `params` block drops the whole block |
+| Unresolvable | **hard build error with `file:line:col`** | warning; blocking ones (`commands:`/`state:`) fail the build |
+
+Because the AST path resolves spreads, **descriptor maps may be split across files by
+domain** — `commands: { ...fileCommands, ...gitCommands }` where each map lives in its own
+module. This is what the extractor exists to allow; it was the constraint that kept
+`devtools/src/protocol.ts` at 963 lines. See
+[`docs/proposals/app_protocol_manifest_proposal.md`](../../docs/proposals/app_protocol_manifest_proposal.md).
+
+What it refuses, always with a location: a spread of a call result, a descriptor imported
+from a package (resolution is deliberately app-local), a `${...}` template description, a
+missing `description`, a method shorthand, a non-constant `params`/`schema`. One bad entry
+rejects the **whole** manifest — a partial manifest is the failure mode, not a consolation
+prize.
+
+Three rules exist because breaking them produces a manifest that *disagrees with the
+runtime and says nothing about it* — worse than a failed build, since every signal stays
+green:
+
+- **Which `register`.** `register` is a common method name (`Chart.register(...registerables)`
+  ships in a bundled app today), so the receiver must be the SDK's `app` object — the bare
+  `app` identifier or a member chain ending in `.app`. Anything else is considered only if
+  its argument resolves to an object literal carrying `appId`/`commands`/`state`, and **two
+  such candidates is a hard error**, not a first-match pick.
+- **Which wrappers are transparent.** `defineCommand({...})` is stepped over because the
+  shim's `defineCommand` is the identity function. Any callee this app *declares* must
+  prove it — resolve to `(d) => d` or equivalent — including one named `defineCommand`.
+  A wrapper that decorates its argument would otherwise be reported pre-decoration.
+- **Which bindings are readable.** `const` only, and lexical scope is honored (a local
+  shadowing a module binding wins). A `let`, a parameter, or a destructured binding is
+  unreadable and errors rather than falling back to a same-named module binding.
 
 ## Runtime-Contract Guards
 
@@ -145,7 +194,7 @@ Shims wrap npm packages with compatibility fixes or SDK wrappers:
 ## Key Patterns
 
 - **Lazy SDK caching:** SDK scripts minified on first compile, reused for all subsequent compiles
-- **Best-effort extraction:** Protocol extraction never blocks compilation — fails silently
+- **Refusal over omission:** protocol extraction fails the build rather than emitting a manifest it had to guess around
 - **`</script` escaping:** `generateHtmlWrapper` escapes `</script` sequences in JS to prevent premature tag closing
 - **Deterministic hashing:** Source hash computed from sorted file list for consistent staleness detection
 - **Path normalization:** `toForwardSlash()` used throughout for Windows compatibility with Bun.build
