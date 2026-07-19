@@ -8,8 +8,12 @@
   "variant": "widget",
   "defaultWidth": 150,
   "defaultHeight": 190,
-  "windowStyle": { "transition": "top 0.26s linear, left 0.26s linear" },
-  "permissions": ["yaar://windows/"],
-  "version": "0.1.0",
+  "windowStyle": {
+    "transition": "top 0.26s linear, left 0.26s linear"
+  },
+  "permissions": [
+    "yaar://windows/"
+  ],
+  "version": "0.2.0",
   "author": "YAAR"
 }

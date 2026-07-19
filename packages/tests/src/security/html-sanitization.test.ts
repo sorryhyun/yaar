@@ -84,7 +84,8 @@ describe('adversarial fixtures do not survive', () => {
     base: '<base href="//evil.test/">',
     form: '<form action="//evil.test"><input name="password"></form>',
     'nested form': '<form><form><input formaction="javascript:alert(1)"></form></form>',
-    'form in table': '<div><form><table><form><input formaction=javascript:alert(1)></form></table></form></div>',
+    'form in table':
+      '<div><form><table><form><input formaction=javascript:alert(1)></form></table></form></div>',
     'svg script': '<svg><script>alert(1)</script></svg>',
     'svg animate': '<svg><animate onbegin="alert(1)" attributeName="x"></animate></svg>',
     'math mtext mXSS': '<math><mtext><style><img src=x onerror=alert(1)></style></mtext></math>',
@@ -112,7 +113,8 @@ describe('adversarial fixtures do not survive', () => {
     // DOMPurify lifts a forbidden node's children (KEEP_CONTENT) rather than
     // discarding them. This asserts the lifted subtree is still sanitized — i.e.
     // that FORBID_TAGS is not weaker than the default it deviates from.
-    const dirty = '<form><input formaction="javascript:alert(1)"><img src=x onerror=alert(1)></form>';
+    const dirty =
+      '<form><input formaction="javascript:alert(1)"><img src=x onerror=alert(1)></form>';
     const out = DOMPurify.sanitize(dirty, APP_CONFIG);
     expect(out).not.toMatch(EXECUTABLE);
     expect(out).not.toMatch(FORM_MARKUP);
@@ -130,8 +132,11 @@ describe('benign rich content survives', () => {
   // A sanitizer that strips everything passes the adversarial half of this file
   // perfectly. These are the assertions that make the suite meaningful.
   const cases: Record<string, string[]> = {
-    '<table><thead><tr><th>h</th></tr></thead><tbody><tr><td>c</td></tr></tbody></table>':
-      ['<table', '<th', '<td'],
+    '<table><thead><tr><th>h</th></tr></thead><tbody><tr><td>c</td></tr></tbody></table>': [
+      '<table',
+      '<th',
+      '<td',
+    ],
     '<pre><code class="language-js">const a = 1;</code></pre>': ['<pre', '<code', 'language-js'],
     '<img src="https://example.test/a.png" alt="a">': ['<img', 'https://example.test/a.png'],
     '<a href="https://example.test">link</a>': ['<a', 'https://example.test'],

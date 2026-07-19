@@ -44,6 +44,7 @@ body {
     opacity 0.18s ease,
     transform 0.18s ease;
   pointer-events: none;
+  z-index: 2;
 }
 .bubble::after {
   content: '';
@@ -66,8 +67,8 @@ body {
   left: 50%;
   bottom: 6px;
   transform: translateX(-50%);
-  width: 110px;
-  height: 130px;
+  width: 130px;
+  height: 140px;
   cursor: grab;
   touch-action: none;
 }
@@ -98,158 +99,34 @@ body {
   height: 12px;
   border-radius: 50%;
   background: rgba(0, 0, 0, 0.28);
-  transition: width 0.2s ease;
+  transition:
+    width 0.2s ease,
+    opacity 0.2s ease;
 }
 
-.torso {
+/* Wrapper carries the per-mood motion so the <img> itself stays untransformed. */
+.body {
   position: absolute;
-  bottom: 10px;
-  left: 50%;
-  width: 92px;
-  height: 84px;
-  margin-left: -46px;
-  border-radius: 46px 46px 42px 42px;
-  background: linear-gradient(180deg, #ffe066 0%, #ffd23f 55%, #f4b942 100%);
-  border: 3px solid #3a3226;
-  box-sizing: border-box;
+  bottom: 6px;
+  left: 0;
+  right: 0;
+  height: 128px;
   transform-origin: 50% 90%;
 }
 
-/* tuft */
-.torso::before {
-  content: '';
-  position: absolute;
-  top: -10px;
-  left: 50%;
-  transform: translateX(-50%) rotate(-14deg);
-  width: 14px;
-  height: 16px;
-  border-radius: 50% 50% 50% 0;
-  background: #f4b942;
-  border: 3px solid #3a3226;
-}
-
-.wing {
-  position: absolute;
-  top: 34px;
-  width: 22px;
-  height: 30px;
-  border-radius: 50% 50% 50% 50%;
-  background: #f4b942;
-  border: 3px solid #3a3226;
-  box-sizing: border-box;
-  transform-origin: 50% 10%;
-}
-.wing.l {
-  left: -6px;
-  transform: rotate(18deg);
-}
-.wing.r {
-  right: -6px;
-  transform: rotate(-18deg);
-}
-
-.eye {
-  position: absolute;
-  top: 26px;
-  width: 12px;
-  height: 14px;
-  border-radius: 50%;
-  background: #3a3226;
-}
-.eye.l {
-  left: 22px;
-}
-.eye.r {
-  right: 22px;
-}
-.eye::after {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 3px;
-  width: 4px;
-  height: 5px;
-  border-radius: 50%;
-  background: #fff;
-}
-
-/* dizzy eyes: ✕ ✕ */
-[data-mood='dizzy'] .eye {
-  background: transparent;
-}
-[data-mood='dizzy'] .eye::after {
-  content: '✕';
-  position: static;
+.art {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  object-position: center bottom;
   display: block;
-  width: auto;
-  height: auto;
-  background: none;
-  color: #3a3226;
-  font-size: 13px;
-  font-weight: 900;
-  line-height: 14px;
-  text-align: center;
-}
-
-/* held eyes: > < (startled squint) */
-[data-mood='held'] .eye {
-  height: 4px;
-  top: 32px;
-  border-radius: 2px;
-}
-[data-mood='held'] .eye::after {
-  display: none;
-}
-
-.beak {
-  position: absolute;
-  top: 38px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 7px solid transparent;
-  border-right: 7px solid transparent;
-  border-top: 9px solid #f28c28;
-  filter: drop-shadow(0 1px 0 #3a3226);
-}
-
-.cheek {
-  position: absolute;
-  top: 42px;
-  width: 12px;
-  height: 7px;
-  border-radius: 50%;
-  background: rgba(255, 122, 122, 0.65);
-}
-.cheek.l {
-  left: 12px;
-}
-.cheek.r {
-  right: 12px;
-}
-
-.foot {
-  position: absolute;
-  bottom: 2px;
-  width: 24px;
-  height: 12px;
-  border-radius: 50% 50% 40% 40%;
-  background: #f28c28;
-  border: 3px solid #3a3226;
-  box-sizing: border-box;
-}
-.foot.l {
-  left: 26px;
-}
-.foot.r {
-  right: 26px;
+  pointer-events: none;
+  -webkit-user-drag: none;
 }
 
 /* ── Mood animations ── */
 
-[data-mood='idle'] .torso {
+[data-mood='idle'] .body {
   animation: bob 2.4s ease-in-out infinite;
 }
 @keyframes bob {
@@ -262,7 +139,7 @@ body {
   }
 }
 
-[data-mood='walk'] .torso {
+[data-mood='walk'] .body {
   animation: waddle 0.36s ease-in-out infinite;
 }
 @keyframes waddle {
@@ -274,49 +151,14 @@ body {
     transform: rotate(5deg) translateY(-4px);
   }
 }
-[data-mood='walk'] .foot.l {
-  animation: stepl 0.36s ease-in-out infinite;
-}
-[data-mood='walk'] .foot.r {
-  animation: stepr 0.36s ease-in-out infinite;
-}
-@keyframes stepl {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  25% {
-    transform: translateY(-5px);
-  }
-}
-@keyframes stepr {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  75% {
-    transform: translateY(-5px);
-  }
-}
 
+/* Held: the whole character dangles from the cursor while the body flails. */
 [data-mood='held'] .chara {
   animation: dangle 0.5s ease-in-out infinite;
   transform-origin: 50% 20%;
 }
-[data-mood='held'] .torso {
-  transform: translateY(4px);
-}
-[data-mood='held'] .foot.l {
-  animation: kick 0.22s ease-in-out infinite;
-}
-[data-mood='held'] .foot.r {
-  animation: kick 0.22s ease-in-out infinite reverse;
-}
-[data-mood='held'] .wing.l {
-  animation: flapl 0.24s ease-in-out infinite;
-}
-[data-mood='held'] .wing.r {
-  animation: flapr 0.24s ease-in-out infinite;
+[data-mood='held'] .body {
+  animation: flail 0.24s ease-in-out infinite;
 }
 [data-mood='held'] .shadow {
   width: 40px;
@@ -331,31 +173,13 @@ body {
     transform: rotate(7deg);
   }
 }
-@keyframes kick {
+@keyframes flail {
   0%,
   100% {
-    transform: translateY(0) rotate(0);
+    transform: translateY(4px) rotate(-6deg);
   }
   50% {
-    transform: translateY(-7px) rotate(14deg);
-  }
-}
-@keyframes flapl {
-  0%,
-  100% {
-    transform: rotate(18deg);
-  }
-  50% {
-    transform: rotate(58deg);
-  }
-}
-@keyframes flapr {
-  0%,
-  100% {
-    transform: rotate(-18deg);
-  }
-  50% {
-    transform: rotate(-58deg);
+    transform: translateY(-2px) rotate(6deg);
   }
 }
 

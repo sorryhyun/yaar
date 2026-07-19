@@ -9,6 +9,7 @@
  * as `user` stream frames on the window URI).
  */
 import { invoke, list, stream, app, defineCommand } from '@bundled/yaar';
+import ART_SRC from './assets/bocchi-sd.png';
 import './styles.css';
 
 type Mood = 'idle' | 'walk' | 'held' | 'dizzy';
@@ -22,6 +23,12 @@ const DRAG_SEND_MS = 120; // throttle for move invokes while held
 const EDGE = 12; // margin from viewport edges
 const PALETTE_INSET = 110; // bottom strip reserved for the command palette
 const DIZZY_MS = 1600;
+
+// Character artwork, base64-inlined into the bundle by the compiler's asset
+// loader. It used to be fetched from image-edit's storage, which broke because
+// `<img src>` cannot send X-Iframe-Token and the storage route 403'd — the
+// broken-image icon. Owning the file also drops the cross-app permission and
+// the runtime fetch entirely, so the app is self-contained.
 
 // ── State ────────────────────────────────────────────────────────
 
@@ -46,17 +53,9 @@ mount.innerHTML = `
     <div class="flip" data-facing="1">
       <div class="chara">
         <div class="shadow"></div>
-        <div class="torso">
-          <div class="wing l"></div>
-          <div class="wing r"></div>
-          <div class="eye l"></div>
-          <div class="eye r"></div>
-          <div class="beak"></div>
-          <div class="cheek l"></div>
-          <div class="cheek r"></div>
+        <div class="body">
+          <img class="art" src="${ART_SRC}" alt="" draggable="false">
         </div>
-        <div class="foot l"></div>
-        <div class="foot r"></div>
       </div>
     </div>
   </div>
@@ -85,11 +84,34 @@ function say(text: string, ms = 3500): void {
 
 // ── Geometry (same-origin: read our own frame's place on the desktop) ──
 
-function getPos(): { x: number; y: number } | null {
+/**
+ * Where we believe our window is, in the same coordinate space `move` accepts.
+ *
+ * Deliberately NOT re-measured every hop. `getBoundingClientRect()` is
+ * viewport-relative and, worse, reports the *animated* position while the
+ * windowStyle `left/top` transition is mid-flight — so with STEP_MS equal to the
+ * transition duration every tick read a position the window had already left,
+ * the remaining distance never fell below STEP_PX, and walkStep spammed
+ * `window.move` forever. We command the position, so we know it exactly; the
+ * DOM only has to seed it once and correct it when someone else moves us.
+ */
+let pos: { x: number; y: number } | null = null;
+
+/** Read the window frame's inline left/top — the transition *target*, in desktop coords. */
+function readHostPos(): { x: number; y: number } | null {
   const fe = window.frameElement;
-  const host = fe?.closest?.('[data-window-id]') ?? fe;
-  const r = host?.getBoundingClientRect();
-  return r ? { x: r.left, y: r.top } : null;
+  const host = (fe?.closest?.('[data-window-id]') ?? fe) as HTMLElement | null;
+  if (!host) return null;
+  const x = parseFloat(host.style.left);
+  const y = parseFloat(host.style.top);
+  if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
+  // No inline style yet — offsetLeft/Top are already offsetParent-relative.
+  return { x: host.offsetLeft, y: host.offsetTop };
+}
+
+function getPos(): { x: number; y: number } | null {
+  if (!pos) pos = readHostPos();
+  return pos;
 }
 
 function getViewport(): { w: number; h: number } {
@@ -105,7 +127,9 @@ function getViewport(): { w: number; h: number } {
 
 function moveWindow(x: number, y: number): void {
   if (!windowUri) return;
-  invoke(windowUri, { action: 'move', x: Math.round(x), y: Math.round(y) }).catch(() => {});
+  const next = { x: Math.round(x), y: Math.round(y) };
+  pos = next; // we commanded it, so this is where we are — no re-measure needed
+  invoke(windowUri, { action: 'move', ...next }).catch(() => {});
 }
 
 // ── Wandering ────────────────────────────────────────────────────
@@ -222,7 +246,13 @@ function watchOwnWindow(): void {
   stream(
     windowUri,
     (frame) => {
-      const d = frame.data as { type?: string } | null;
+      const d = frame.data as { type?: string; bounds?: { x: number; y: number } } | null;
+      // Someone else moved us, so our commanded position is stale — the frame
+      // carries the authoritative bounds, so adopt them rather than re-measuring
+      // a window that is still mid-transition.
+      if (d?.bounds && Number.isFinite(d.bounds.x) && Number.isFinite(d.bounds.y)) {
+        pos = { x: d.bounds.x, y: d.bounds.y };
+      }
       if (mood === 'held') return;
       if (d?.type === 'window.move' || d?.type === 'window.resize') {
         say('!?', 1200);
