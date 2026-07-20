@@ -57,6 +57,16 @@ export interface StreamMessage {
   sessionId?: string;
   toolName?: string;
   toolInput?: unknown;
+  /**
+   * How the raw argument JSON spelled its text, recorded before JSON.parse
+   * erases the distinction. `unicodeEscapes` counts `\uXXXX` spellings that
+   * decoded to printable characters (valid JSON, normalized on parse);
+   * `literalBackslashU` counts backslash-u sequences that survived parsing as
+   * literal text in the value — the double-escape form that actually corrupts
+   * payloads. Absent when the raw text had neither, or the provider hands
+   * arguments over pre-parsed (Codex).
+   */
+  toolInputEscapes?: { unicodeEscapes: number; literalBackslashU: number };
   toolUseId?: string;
   error?: string;
   isError?: boolean;

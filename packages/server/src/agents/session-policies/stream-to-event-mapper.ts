@@ -308,6 +308,7 @@ export class StreamToEventMapper {
           message.toolInput,
           message.toolUseId,
           this.role,
+          message.toolInputEscapes,
         );
         if (message.toolUseId) {
           this.toolStartTimes.set(message.toolUseId, {

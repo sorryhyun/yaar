@@ -28,23 +28,12 @@ the literal characters you mean. Do **not** hand-escape them.
 - Never wrap an object argument in quotes. \`{ action: "message" }\` is an object;
   \`"{\\"action\\":\\"message\\"}"\` is a string and will be rejected.
 
-A hand-written \`\\uXXXX\` gets escaped again on the wire, so the app, file, or window
-receives the literal characters \`\\uc548\\ub155\` instead of the text — corrupting file
-writes, window content, and app commands. Same for \`\\n\`, which lands as a backslash and
-an "n" rather than a line break.`;
-
-/**
- * One-line restatement of PAYLOAD_LITERALS_SECTION, appended to the tail of each
- * turn's prompt rather than the system prompt.
- *
- * The full section is already in every tier's system prompt, but on long turns —
- * exactly the ones that write the most payloads — it is thousands of tokens back
- * and agents were still emitting `\uXXXX`. This rides at the very end of the
- * prompt, after the user/relay content, so it is the most recent instruction in
- * context when the next tool call is composed. Appended to the prompt only, never
- * to the context tape, so stored history stays clean.
- */
-export const PAYLOAD_LITERALS_REMINDER = `<reminder>In tool payloads write literal characters — 한글/日本語/emoji as themselves ("안녕", not "\\uc548\\ub155"), real line breaks not \\n, and object arguments as objects not quoted strings.</reminder>`;
+The failure mode is *double* escaping: \`"\\\\uc548"\` or a stringified object puts literal
+backslash text into the payload — corrupting file writes, window content, and app
+commands. A single \`\\uXXXX\` or \`\\n\` inside a JSON string is just the escaped spelling
+of the same value; it decodes to the real character on parse. So if you notice \`\\uXXXX\`
+in a tool call you already made, the payload was delivered correctly — **never resend
+a message because of it**.`;
 
 export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 |-----------|----------|--------------|

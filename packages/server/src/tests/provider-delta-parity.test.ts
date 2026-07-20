@@ -180,6 +180,49 @@ describe('tool parameter streaming — Claude', () => {
     });
   });
 
+  it('records escape spellings from the raw JSON before parse erases them', () => {
+    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc1'));
+    // Escape split across fragments on purpose — chunks are joined before scanning.
+    for (const f of ['{"message":"\\uc5', '48\\ub155"}']) mapClaudeMessage(inputDelta(f));
+
+    expect(mapClaudeMessage(stop())).toEqual({
+      type: 'tool_use',
+      toolName: 'mcp__verbs__invoke',
+      toolUseId: 'tu_esc1',
+      toolInput: { message: '안녕' },
+      toolInputEscapes: { unicodeEscapes: 2, literalBackslashU: 0 },
+    });
+  });
+
+  it('omits toolInputEscapes when the model wrote literal characters', () => {
+    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc2'));
+    mapClaudeMessage(inputDelta('{"message":"안녕"}'));
+
+    const result = mapClaudeMessage(stop());
+    expect(result?.toolInput).toEqual({ message: '안녕' });
+    expect(result && 'toolInputEscapes' in result).toBe(false);
+  });
+
+  it('counts double-escaped sequences as literalBackslashU — the corrupting form', () => {
+    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc3'));
+    // Raw JSON `\\uc548` parses to the literal text `안` in the value.
+    mapClaudeMessage(inputDelta('{"message":"\\\\uc548"}'));
+
+    expect(mapClaudeMessage(stop())).toMatchObject({
+      toolInput: { message: '\\uc548' },
+      toolInputEscapes: { unicodeEscapes: 0, literalBackslashU: 1 },
+    });
+  });
+
+  it('does not count mandatory control-character escapes as a spelling choice', () => {
+    mapClaudeMessage(start('mcp__verbs__invoke', 'tu_esc4'));
+    //   has no literal spelling in JSON — the escape is required, not chosen.
+    mapClaudeMessage(inputDelta('{"message":"a\\u0000b"}'));
+
+    const result = mapClaudeMessage(stop());
+    expect(result && 'toolInputEscapes' in result).toBe(false);
+  });
+
   it('survives malformed argument JSON without losing the call', () => {
     mapClaudeMessage(start('Write', 'tu_4'));
     mapClaudeMessage(inputDelta('{"path": "unterminated'));

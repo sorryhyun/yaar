@@ -1,7 +1,6 @@
 import type { UserInteraction, WindowBounds, WindowState } from '@yaar/shared';
 import type { ContextTape, ContextSource } from '../context.js';
 import type { InteractionTimeline } from '../interaction-timeline.js';
-import { PAYLOAD_LITERALS_REMINDER } from '../profiles/shared-sections.js';
 
 export interface MonitorPromptContext {
   prompt: string;
@@ -86,15 +85,7 @@ export class ContextAssemblyPolicy {
     }
 
     return {
-      // The reminder trails the content so it is the last thing read before the
-      // agent composes its tool calls. `contextContent` stays clean — the tape
-      // records what was actually said, not the per-turn nudge.
-      prompt:
-        timelinePrefix +
-        options.openWindows +
-        options.reloadPrefix +
-        content +
-        `\n\n${PAYLOAD_LITERALS_REMINDER}`,
+      prompt: timelinePrefix + options.openWindows + options.reloadPrefix + content,
       contextContent: content,
     };
   }

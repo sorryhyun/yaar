@@ -35,6 +35,10 @@ export interface ParsedMessage {
   action?: OSAction;
   toolName?: string;
   toolInput?: unknown;
+  // How the raw argument JSON spelled its text (Claude provider only):
+  // unicodeEscapes = \uXXXX spellings normalized away by parse (harmless),
+  // literalBackslashU = backslash-u text surviving in the parsed value (corrupting).
+  toolInputEscapes?: { unicodeEscapes: number; literalBackslashU: number };
   toolUseId?: string;
   interactionSource?: string;
   interaction?: string;

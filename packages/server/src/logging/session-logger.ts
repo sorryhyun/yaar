@@ -291,11 +291,13 @@ export class SessionLogger {
     toolInput: unknown,
     toolUseId: string | undefined,
     agentId?: string,
+    toolInputEscapes?: { unicodeEscapes: number; literalBackslashU: number },
   ): void {
     this.appendEntry('tool_use', agentId, {
       toolName,
       toolInput: reviveJson(toolInput),
       toolUseId,
+      ...(toolInputEscapes ? { toolInputEscapes } : {}),
     });
   }
 

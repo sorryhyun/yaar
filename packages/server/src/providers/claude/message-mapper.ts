@@ -127,6 +127,31 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
 }
 
 /**
+ * Scan raw argument JSON for backslash-u spellings, before JSON.parse erases
+ * the distinction. Backslash-run parity decides which side each hit is on:
+ * an odd run ends in a live escape (`안` — the model chose the escape
+ * spelling for a character; parse normalizes it), an even run puts literal
+ * `\uXXXX` text into the parsed value (`\\uc548` — the double-escape form
+ * that corrupts payloads). Escapes for control characters (< 0x20) are the
+ * only ones JSON requires, so they don't count as a spelling choice.
+ */
+function countEscapeSpellings(rawJson: string): StreamMessage['toolInputEscapes'] {
+  let unicodeEscapes = 0;
+  let literalBackslashU = 0;
+  const re = /(\\+)u([0-9a-fA-F]{4})/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(rawJson)) !== null) {
+    if (m[1].length % 2 === 1) {
+      if (parseInt(m[2], 16) >= 0x20) unicodeEscapes++;
+    } else {
+      literalBackslashU++;
+    }
+  }
+  if (unicodeEscapes === 0 && literalBackslashU === 0) return undefined;
+  return { unicodeEscapes, literalBackslashU };
+}
+
+/**
  * Map a stream event to a StreamMessage.
  */
 function mapStreamEvent(event: unknown): StreamMessage | null {
@@ -199,9 +224,12 @@ function mapStreamEvent(event: unknown): StreamMessage | null {
     if (pending) {
       pendingToolUse.delete(idx);
       let toolInput: Record<string, unknown> | undefined;
+      let toolInputEscapes: StreamMessage['toolInputEscapes'];
       if (pending.inputChunks.length > 0) {
+        const rawJson = pending.inputChunks.join('');
+        toolInputEscapes = countEscapeSpellings(rawJson);
         try {
-          toolInput = JSON.parse(pending.inputChunks.join(''));
+          toolInput = JSON.parse(rawJson);
         } catch {
           // Malformed JSON — emit without input
         }
@@ -211,6 +239,7 @@ function mapStreamEvent(event: unknown): StreamMessage | null {
         toolName: pending.toolName,
         toolUseId: pending.toolUseId,
         toolInput,
+        ...(toolInputEscapes ? { toolInputEscapes } : {}),
       };
     }
   }

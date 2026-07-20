@@ -16,7 +16,6 @@ import {
   APP_AGENT_TOOL_NAMES,
   claudeModelToCodex,
 } from './profiles/index.js';
-import { PAYLOAD_LITERALS_REMINDER } from './profiles/shared-sections.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 import { appAgentKey } from './agent-pool.js';
@@ -141,10 +140,7 @@ export class AppTaskProcessor {
         role: agentRole,
         source,
         task,
-        // Reminder trails the message so it is the most recent instruction when the
-        // agent composes its command payloads. The tape above recorded the clean
-        // `task.content`, so history is unaffected.
-        prompt: `${task.content}\n\n${PAYLOAD_LITERALS_REMINDER}`,
+        prompt: task.content,
         fp,
         windowId,
         // The turn runs on the window's monitor, not the sender's — this scopes the
