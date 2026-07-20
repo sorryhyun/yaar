@@ -12,7 +12,6 @@ import type { VerbResult } from '../uri-registry.js';
 import type { ResolvedUri } from '../uri-resolve.js';
 import { ok, okJson, okResource, okLinks, okWithImages, error, mimeFromPath } from '../utils.js';
 import {
-  resolvePath,
   storageRead,
   storageWrite,
   storageList,
@@ -74,16 +73,12 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
   if (result.images?.length) {
     return okWithImages(result.content!, result.images);
   }
-  // Unknown binary — read raw bytes and return as base64
-  if (result.content?.startsWith('Binary file')) {
-    const resolvedFile = resolvePath(prefixedPath);
-    if (resolvedFile) {
-      const buf = Buffer.from(await Bun.file(resolvedFile.absolutePath).arrayBuffer());
-      return okWithImages('', [
-        { data: buf.toString('base64'), mimeType: 'application/octet-stream' },
-      ]);
-    }
-  }
+  // Unknown binary falls through to the resource block below. It must NOT go out as an
+  // `image` content item: Codex turns every MCP image block into an `input_image` data URL
+  // (`convert_mcp_content_to_items`), and a non-image MIME there is either rejected by the
+  // API or fed to the model as garbage. `storageRead` already returns a "Binary file (…) —
+  // use /api/storage/… to serve it directly" line, which is the useful answer anyway.
+
   // Text content — return as embedded resource with URI + MIME
   return okResource(resolved.sourceUri, result.content!, mimeFromPath(storagePath.path));
 }
