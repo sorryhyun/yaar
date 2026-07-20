@@ -62,12 +62,25 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
     if (!el) return;
     const remembered = scrollMemory.get(monitorId);
     shouldAutoScroll.current = remembered?.atBottom ?? true;
-    if (remembered && !remembered.atBottom) {
-      el.scrollTop = remembered.top;
-    } else {
-      el.scrollTop = el.scrollHeight;
-    }
+
+    // `.cliBody` sets scroll-behavior: smooth, so a plain scrollTop assignment
+    // animates from 0 — and any content settling mid-animation aborts it near
+    // the top. Restoring must be instant.
+    const jump = () => {
+      if (remembered && !remembered.atBottom) {
+        el.scrollTo({ top: remembered.top, behavior: 'instant' });
+      } else {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'instant' });
+      }
+    };
+    jump();
+    // Re-assert once layout has settled, in case the pane wasn't fully sized
+    // on this first pass (a clamped assignment silently lands at 0).
+    const raf = requestAnimationFrame(jump);
+
     return () => {
+      cancelAnimationFrame(raf);
+      if (!el.clientHeight) return; // detached or unlaid-out: values are junk
       const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
       scrollMemory.set(monitorId, { top: el.scrollTop, atBottom });
     };
