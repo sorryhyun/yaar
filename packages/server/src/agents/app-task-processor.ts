@@ -16,6 +16,7 @@ import {
   APP_AGENT_TOOL_NAMES,
   claudeModelToCodex,
 } from './profiles/index.js';
+import { PAYLOAD_LITERALS_REMINDER } from './profiles/shared-sections.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 import { appAgentKey } from './agent-pool.js';
@@ -140,7 +141,10 @@ export class AppTaskProcessor {
         role: agentRole,
         source,
         task,
-        prompt: task.content,
+        // Reminder trails the message so it is the most recent instruction when the
+        // agent composes its command payloads. The tape above recorded the clean
+        // `task.content`, so history is unaffected.
+        prompt: `${task.content}\n\n${PAYLOAD_LITERALS_REMINDER}`,
         fp,
         windowId,
         // The turn runs on the window's monitor, not the sender's — this scopes the
@@ -164,13 +168,23 @@ export class AppTaskProcessor {
           await this.sendWindowStatus(windowId, agentRole, 'active');
         },
         onAfterRun: async (recordedActions) => {
-          // Push to timeline with response text so the monitor agent sees it on next turn
+          // Fire message hook if the originating agent requested it.
+          // Skip it when the turn was interrupted (e.g. "stop all") — otherwise
+          // the hook re-enqueues a monitor task and resurrects the monitor agent
+          // the user just asked to stop.
+          const hookWillFire =
+            task.hook === 'response' && !!task.monitorId && !agent.session.wasInterrupted();
+
+          // Push to timeline so the monitor agent sees it on its next turn — but only
+          // carry the response text when no hook will deliver it. Both sinks land in
+          // the monitor's next prompt, so including it in both makes the monitor read
+          // the app agent's entire response twice, back to back.
           this.ctx.timeline.pushAI(
             agentRole,
             task.content.slice(0, 100),
             recordedActions,
             windowId,
-            appResponseText || undefined,
+            hookWillFire ? undefined : appResponseText || undefined,
           );
 
           // Also append to context tape for logging/debugging
@@ -186,12 +200,8 @@ export class AppTaskProcessor {
             );
           }
 
-          // Fire message hook if the originating agent requested it.
-          // Skip it when the turn was interrupted (e.g. "stop all") — otherwise
-          // the hook re-enqueues a monitor task and resurrects the monitor agent
-          // the user just asked to stop.
-          if (task.hook === 'response' && task.monitorId && !agent.session.wasInterrupted()) {
-            this.ctx.notifyHookResponse(appId, windowId, task.monitorId, appResponseText);
+          if (hookWillFire) {
+            this.ctx.notifyHookResponse(appId, windowId, task.monitorId!, appResponseText);
           }
         },
         onFinally: async () => {
