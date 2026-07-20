@@ -346,9 +346,9 @@ Common mistakes to avoid when building apps:
 
 ```
 Option A: API-based app (preferred for API wrappers)
-  apps/github/SKILL.md → describes GitHub API, auth flow
-  User provides PAT → stored via invoke('yaar://config/app/{appId}', { config })
-  AI calls GitHub API via invoke('yaar://http', ...) → renders in windows
+  apps/recent-papers/SKILL.md → describes the arXiv API, query flow
+  User provides an API key → stored via invoke('yaar://config/app/{appId}', { config })
+  AI calls the service API via invoke('yaar://http', ...) → renders in windows
 
 Option B: Compiled app + AI-mediated API (for rich UI)
   Compiled iframe app handles UI/display only
@@ -438,7 +438,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 **Ignored fields seen in the wild** — these parse as unknown keys and do nothing:
 
 - `capture` (`"dom"` / `"canvas"`) — present in 19 bundled apps, read by no current code. It once named a screenshot strategy for a `window.capture` tool that has since been removed; the manifest field outlived it.
-- `id` (`apps/github`) and `appId` (`apps/memo`, `apps/music-maker`) — the folder name is always the id. The `appId` passed to `app.register()` in your source is a separate thing and *is* used.
+- `id` and `appId` (`apps/memo`, `apps/music-maker`) — the folder name is always the id. The `appId` passed to `app.register()` in your source is a separate thing and *is* used.
 
 ## App Types
 
@@ -669,13 +669,13 @@ The agent first calls `app_query` with a bare window URI to discover capabilitie
 
 The `message` action lets **monitor agents delegate tasks to app agents** via the window URI. It queues a task through `AppTaskProcessor` exactly like a user `WINDOW_MESSAGE`, creating the app agent on demand if needed. Combine with `subscribe` to get notified when the app agent completes.
 
-### Example: Excel Lite
+### Example: Slides Lite
 
 ```
-invoke('yaar://windows/excel-lite', { action: 'app_query' })
-invoke('yaar://windows/excel-lite', { action: 'app_query', key: 'cells' })
-invoke('yaar://windows/excel-lite', { action: 'app_command', command: 'setCells', params: { cells: { "A1": "Hello" } } })
-invoke('yaar://windows/excel-lite', { action: 'message', message: 'Summarize column A' })
+invoke('yaar://windows/slides-lite', { action: 'app_query' })
+invoke('yaar://windows/slides-lite', { action: 'app_query', key: 'slideCount' })
+invoke('yaar://windows/slides-lite', { action: 'app_command', command: 'setActiveIndex', params: { index: 2 } })
+invoke('yaar://windows/slides-lite', { action: 'message', message: 'Summarize this deck' })
 ```
 
 ## Credential Management

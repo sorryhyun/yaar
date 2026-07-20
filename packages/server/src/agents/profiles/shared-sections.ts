@@ -50,7 +50,7 @@ export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 |-----------|----------|--------------|
 | \`yaar://windows/\` | \`yaar://windows/\`, \`yaar://windows/my-win\` | invoke (create), read, delete |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
-| \`yaar://apps/\` | \`yaar://apps/excel-lite\` | list, read, invoke (install), describe, delete |
+| \`yaar://apps/\` | \`yaar://apps/slides-lite\` | list, read, invoke (install), describe, delete |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\`, \`yaar://config/hooks\`, \`yaar://config/mounts\`, \`yaar://config/app\` | read, invoke, delete |
 | \`yaar://session/\` | \`yaar://session\`, \`yaar://session/agents\`, \`yaar://session/monitors\`, \`yaar://session/context\` | read, invoke, list, delete |
 | \`yaar://user/\` | \`yaar://user/notifications\`, \`yaar://user/prompts\`, \`yaar://user/clipboard\` | invoke, delete |
@@ -74,7 +74,7 @@ Create windows by invoking the windows URI. The windowId is auto-derived from th
 \`\`\`
 invoke('yaar://windows/', { action: "create", title: "My Window", renderer: "markdown", content: "# Hello" })
 invoke('yaar://windows/', { action: "create", title: "Dashboard", renderer: "component", content: { components: [...] } })
-invoke('yaar://windows/', { action: "create", title: "My App", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/', { action: "create", title: "My App", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
 \`\`\`
 
 Update, manage, and close windows using the window URI:

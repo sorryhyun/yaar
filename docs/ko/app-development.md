@@ -328,7 +328,7 @@ export async function logout() {
 
 ```
 옵션 A: API 기반 앱 (API 래퍼에 적합)
-  apps/github/SKILL.md → GitHub API, 인증 흐름 기술
+  apps/recent-papers/SKILL.md → arXiv API, 조회 흐름 기술
   사용자가 PAT 제공 → invoke('yaar://config/app/{appId}', { config })로 저장
   AI가 invoke('yaar://http', ...)로 GitHub API 호출 → 윈도우에 렌더링
 
@@ -466,13 +466,13 @@ export function registerProtocol() {
 
 `message` 액션은 **모니터 에이전트가 앱 에이전트에 작업을 위임**할 수 있게 합니다. `AppTaskProcessor`를 통해 사용자 `WINDOW_MESSAGE`와 동일한 경로로 태스크를 큐잉하며, 필요시 앱 에이전트를 자동 생성합니다. `subscribe`와 결합하면 앱 에이전트 작업 완료 알림을 받을 수 있습니다.
 
-### 예시: Excel Lite
+### 예시: Slides Lite
 
 ```
-invoke('yaar://windows/excel-lite', { action: 'app_query' })
-invoke('yaar://windows/excel-lite', { action: 'app_query', key: 'cells' })
-invoke('yaar://windows/excel-lite', { action: 'app_command', command: 'setCells', params: { cells: { "A1": "Hello" } } })
-invoke('yaar://windows/excel-lite', { action: 'message', message: 'A열을 요약해줘' })
+invoke('yaar://windows/slides-lite', { action: 'app_query' })
+invoke('yaar://windows/slides-lite', { action: 'app_query', key: 'slideCount' })
+invoke('yaar://windows/slides-lite', { action: 'app_command', command: 'setActiveIndex', params: { index: 2 } })
+invoke('yaar://windows/slides-lite', { action: 'message', message: '이 덱을 요약해줘' })
 ```
 
 ## 자격 증명 관리

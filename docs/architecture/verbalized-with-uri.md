@@ -223,7 +223,7 @@ registry.register('yaar://session/agents/*', {
 Window `content` fields use `yaar://` URIs. The server resolves them to API paths before sending to the frontend.
 
 ```
-create({ uri: "excel-lite", title: "Excel Lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+create({ uri: "slides-lite", title: "Slides Lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
 create({ uri: "report", title: "Q4 Report", renderer: "iframe", content: "yaar://storage/reports/q4.pdf" })
 ```
 
@@ -246,8 +246,8 @@ Content URIs are resolved via `resolveContentUri()` in `@yaar/shared`:
 ```typescript
 import { resolveContentUri } from '@yaar/shared';
 
-resolveContentUri('yaar://apps/excel-lite')
-// -> '/api/apps/excel-lite/dist/index.html'
+resolveContentUri('yaar://apps/slides-lite')
+// -> '/api/apps/slides-lite/dist/index.html'
 
 resolveContentUri('yaar://storage/docs/file.txt')
 // -> '/api/storage/docs/file.txt'
@@ -282,11 +282,11 @@ import { parseYaarUri, buildYaarUri, extractAppId, isYaarUri } from '@yaar/share
 parseYaarUri('yaar://apps/storage')
 // -> { authority: 'apps', path: 'storage' }
 
-buildYaarUri('apps', 'excel-lite')
-// -> 'yaar://apps/excel-lite'
+buildYaarUri('apps', 'slides-lite')
+// -> 'yaar://apps/slides-lite'
 
-extractAppId('yaar://apps/excel-lite')
-// -> 'excel-lite'
+extractAppId('yaar://apps/slides-lite')
+// -> 'slides-lite'
 ```
 
 ---

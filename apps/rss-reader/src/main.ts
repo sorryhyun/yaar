@@ -110,7 +110,7 @@ async function submitAdd() {
  * template, because we need a DOM rewrite pass between sanitize and insert. It must
  * never become `.innerHTML=${...}`: that is lit-html property syntax, which Solid's
  * `html` tag does not support — Solid treats it as a literal attribute named
- * `.innerhtml` and the node renders completely empty. (See apps/github/src/views/common.ts.)
+ * `.innerhtml` and the node renders completely empty.
  */
 function articleBody(getHtml: () => string): HTMLElement {
   const host = document.createElement('div');

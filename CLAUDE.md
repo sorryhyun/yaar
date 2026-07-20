@@ -113,7 +113,7 @@ yaar/
 ├── apps/                        # Convention-based apps (each folder = one app)
 │   ├── dock/                    # Taskbar/dock panel app
 │   ├── storage/                 # File storage browser app
-│   └── ...                      # Other bundled apps (github-manager, pdf-viewer, etc.)
+│   └── ...                      # Other bundled apps (slides-lite, pdf-viewer, etc.)
 ├── config/                      # User config (git-ignored)
 │   ├── credentials/             # Centralized app credentials (git-ignored)
 │   ├── permissions.json         # Saved permission decisions

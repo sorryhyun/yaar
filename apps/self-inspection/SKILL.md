@@ -140,84 +140,87 @@ When you receive the `COMPONENT_ACTION` event with form data, read the submitted
 delete('yaar://windows/si-v-form')
 ```
 
-### 7. App Protocol Round-Trip (Excel)
+### 7. App Protocol Round-Trip (Memo)
 
-Open Excel Lite, query its manifest, write cells, read them back, verify data integrity:
+Open Memo, query its manifest, write a record, read it back, verify data integrity:
 
 ```
-invoke('yaar://windows/si-v-excel', { action: "create", title: "Excel Lite", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/si-v-memo', { action: "create", title: "Memo", appId: "memo", renderer: "iframe", content: "yaar://apps/memo" })
 ```
 
 Wait for App Protocol ready, then query manifest:
 ```
-invoke('yaar://windows/si-v-excel', { action: "app_query" })
+invoke('yaar://windows/si-v-memo', { action: "app_query" })
 ```
-Verify manifest contains `setCells` command and `cells` state key.
+Verify manifest contains `addMemo` command and `memos` state key.
 
-Write test data:
+Write test data (note the returned memo id):
 ```
-invoke('yaar://windows/si-v-excel', { action: "app_command", command: "setCells", params: { "cells": { "A1": "Name", "B1": "Score", "A2": "Alice", "B2": "95", "A3": "Bob", "B3": "87" } } })
+invoke('yaar://windows/si-v-memo', { action: "app_command", command: "addMemo", params: { "title": "SI Test", "content": "self-inspection round-trip" } })
 ```
 
 Read back:
 ```
-invoke('yaar://windows/si-v-excel', { action: "app_query", stateKey: "cells" })
+invoke('yaar://windows/si-v-memo', { action: "app_query", stateKey: "memos" })
 ```
-Verify cells A1="Name", B1="Score", A2="Alice", B2="95", A3="Bob", B3="87".
+Verify a memo with title="SI Test" and content="self-inspection round-trip" is present.
 
-Test clearRange:
+Test updateMemo and deleteMemo:
 ```
-invoke('yaar://windows/si-v-excel', { action: "app_command", command: "clearRange", params: { "start": "A3", "end": "B3" } })
-invoke('yaar://windows/si-v-excel', { action: "app_query", stateKey: "cells" })
+invoke('yaar://windows/si-v-memo', { action: "app_command", command: "updateMemo", params: { "id": "<the-memo-id>", "content": "edited" } })
+invoke('yaar://windows/si-v-memo', { action: "app_query", stateKey: "memos" })
+invoke('yaar://windows/si-v-memo', { action: "app_command", command: "deleteMemo", params: { "id": "<the-memo-id>" } })
+invoke('yaar://windows/si-v-memo', { action: "app_query", stateKey: "memos" })
 ```
-Verify A3 and B3 are now empty/missing, but A1-B2 still intact.
+Verify the content updated to "edited", then that the memo is gone after delete.
 
 ```
-delete('yaar://windows/si-v-excel')
+delete('yaar://windows/si-v-memo')
 ```
 
 **PASS** if all read-back values match expectations.
 
-### 8. App Protocol Round-Trip (Word)
+### 8. App Protocol Round-Trip (Slides)
 
-Open Word Lite, set content, read it back:
+Open Slides Lite, set a deck, read it back:
 
 ```
-invoke('yaar://windows/si-v-word', { action: "create", title: "Word Lite", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
+invoke('yaar://windows/si-v-slides', { action: "create", title: "Slides Lite", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
 ```
 
 Wait for ready, then:
 ```
-invoke('yaar://windows/si-v-word', { action: "app_command", command: "setTitle", params: { "title": "Self Inspection Test" } })
-invoke('yaar://windows/si-v-word', { action: "app_command", command: "setContent", params: { "content": "<h1>Test Document</h1><p>This is a self-inspection test.</p>", "renderer": "html" } })
-invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "title" })   # should be "Self Inspection Test"
-invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "stats" })    # should have words > 0
-invoke('yaar://windows/si-v-word', { action: "app_query", stateKey: "text" })     # should contain "self-inspection test"
-delete('yaar://windows/si-v-word')
+invoke('yaar://windows/si-v-slides', { action: "app_command", command: "setDeck", params: { "deck": { "title": "Self Inspection Test", "themeId": "midnight-dark", "aspectRatio": "16:9", "fontSize": "md", "activeIndex": 0, "slides": [{ "layout": "title", "title": "Test Deck", "body": "This is a self-inspection test." }, { "layout": "bullets", "title": "Second", "body": "one\ntwo" }] } } })
+invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "title" })       # should be "Self Inspection Test"
+invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "slideCount" })  # should be 2
+invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "theme" })       # should be "midnight-dark"
+invoke('yaar://windows/si-v-slides', { action: "app_command", command: "setActiveIndex", params: { "index": 1 } })
+invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "activeSlide" }) # title should be "Second"
+delete('yaar://windows/si-v-slides')
 ```
 
-**PASS** if title, stats, and text match expectations.
+**PASS** if title, slideCount, theme, and activeSlide match expectations.
 
-### 9. Cross-App Data Flow (Storage → Excel)
+### 9. Cross-App Data Flow (Storage → Slides)
 
-Write structured data to storage via invoke, then import it into Excel via App Protocol:
+Write structured data to storage via invoke, then import it into Slides via App Protocol:
 
 ```
-invoke('yaar://storage/_si-v-test-data.json', { action: "write", content: "{\"cells\":{\"A1\":\"Product\",\"B1\":\"Price\",\"A2\":\"Widget\",\"B2\":\"9.99\",\"A3\":\"Gadget\",\"B3\":\"24.50\"},\"styles\":{\"A1\":{\"bold\":true},\"B1\":{\"bold\":true}}}" })
+invoke('yaar://storage/_si-v-test-data.json', { action: "write", content: "{\"title\":\"Imported Deck\",\"themeId\":\"ocean\",\"aspectRatio\":\"16:9\",\"fontSize\":\"md\",\"activeIndex\":0,\"slides\":[{\"layout\":\"title\",\"title\":\"Product\",\"body\":\"Widget\"},{\"layout\":\"bullets\",\"title\":\"Price\",\"body\":\"9.99\"}]}" })
 read('yaar://storage/_si-v-test-data.json')     # verify JSON is readable
 ```
 
-Open Excel and import:
+Open Slides and import:
 ```
-invoke('yaar://windows/si-v-cross', { action: "create", title: "Cross-App Test", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
+invoke('yaar://windows/si-v-cross', { action: "create", title: "Cross-App Test", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
 ```
 
 Wait for ready, then import the data you read from storage:
 ```
-invoke('yaar://windows/si-v-cross', { action: "app_command", command: "importWorkbook", params: { "data": <parsed JSON from storage read> } })
-invoke('yaar://windows/si-v-cross', { action: "app_query", stateKey: "cells" })
+invoke('yaar://windows/si-v-cross', { action: "app_command", command: "setDeck", params: { "deck": <parsed JSON from storage read> } })
+invoke('yaar://windows/si-v-cross', { action: "app_query", stateKey: "deck" })
 ```
-Verify A1="Product", B2="9.99".
+Verify title="Imported Deck", themeId="ocean", and slides[1].body="9.99".
 
 Cleanup:
 ```
@@ -301,30 +304,30 @@ delete('yaar://storage/_si-v-test-dir/sub/file3.txt')
 Open 3 App Protocol apps simultaneously and interact with all of them:
 
 ```
-invoke('yaar://windows/si-v-multi-excel', { action: "create", title: "Multi: Excel", appId: "excel-lite", renderer: "iframe", content: "yaar://apps/excel-lite" })
-invoke('yaar://windows/si-v-multi-word', { action: "create", title: "Multi: Word", appId: "word-lite", renderer: "iframe", content: "yaar://apps/word-lite" })
+invoke('yaar://windows/si-v-multi-memo', { action: "create", title: "Multi: Memo", appId: "memo", renderer: "iframe", content: "yaar://apps/memo" })
+invoke('yaar://windows/si-v-multi-slides', { action: "create", title: "Multi: Slides", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
 invoke('yaar://windows/si-v-multi-img', { action: "create", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "yaar://apps/image-viewer" })
 ```
 
 Wait for all 3 to be ready, then interact with each:
 
 ```
-invoke('yaar://windows/si-v-multi-excel', { action: "app_command", command: "setCells", params: { "cells": { "A1": "Multi-app test" } } })
-invoke('yaar://windows/si-v-multi-word', { action: "app_command", command: "setContent", params: { "content": "<p>Multi-app test</p>", "renderer": "html" } })
+invoke('yaar://windows/si-v-multi-memo', { action: "app_command", command: "addMemo", params: { "title": "Multi", "content": "Multi-app test" } })
+invoke('yaar://windows/si-v-multi-slides', { action: "app_command", command: "setDeck", params: { "deck": { "title": "Multi-app test", "themeId": "classic-light", "aspectRatio": "16:9", "fontSize": "md", "activeIndex": 0, "slides": [{ "layout": "title", "title": "Multi", "body": "test" }] } } })
 invoke('yaar://windows/si-v-multi-img', { action: "app_command", command: "setLayout", params: { "mode": "grid", "columns": 3 } })
 ```
 
 Query each to verify:
 ```
-invoke('yaar://windows/si-v-multi-excel', { action: "app_query", stateKey: "cells" })    # A1 = "Multi-app test"
-invoke('yaar://windows/si-v-multi-word', { action: "app_query", stateKey: "text" })      # contains "Multi-app test"
+invoke('yaar://windows/si-v-multi-memo', { action: "app_query", stateKey: "memos" })     # contains "Multi-app test"
+invoke('yaar://windows/si-v-multi-slides', { action: "app_query", stateKey: "title" })   # "Multi-app test"
 invoke('yaar://windows/si-v-multi-img', { action: "app_query", stateKey: "layout" })     # mode = "grid"
 ```
 
 Close all:
 ```
-delete('yaar://windows/si-v-multi-excel')
-delete('yaar://windows/si-v-multi-word')
+delete('yaar://windows/si-v-multi-memo')
+delete('yaar://windows/si-v-multi-slides')
 delete('yaar://windows/si-v-multi-img')
 ```
 

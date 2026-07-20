@@ -154,8 +154,8 @@ describe('benign rich content survives', () => {
   }
 
   test('relative URLs are preserved verbatim, not stripped or absolutized', () => {
-    // apps/github rewrites repo-relative URLs to raw.githubusercontent.com in a
-    // pass that runs AFTER sanitization, so it depends on them surviving intact.
+    // Apps that rewrite repo-relative URLs to absolute ones do so in a pass that
+    // runs AFTER sanitization, so they depend on them surviving intact.
     const out = DOMPurify.sanitize('<img src="./docs/a.png"><a href="../b.md">x</a>', APP_CONFIG);
     expect(out).toContain('./docs/a.png');
     expect(out).toContain('../b.md');
@@ -182,8 +182,6 @@ describe('app sanitize policies have not drifted', () => {
     ['slides-lite', 'src/markdown.ts'],
     ['rss-reader', 'src/fetcher.ts'],
     ['dc-comics', 'src/helpers.ts'],
-    ['thesingularity-reader', 'src/helpers.ts'],
-    ['github', 'src/markdown.ts'],
   ];
 
   const canonical = FORBID_FORM_TAGS.map((t) => `'${t}'`).join(', ');

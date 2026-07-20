@@ -68,9 +68,9 @@ Deviations are legal only if listed here, with a reason:
 
 - **dock** — translucent glass panel, no `y-*` classes. Deliberate: the dock is
   meta-chrome floating over the wallpaper. Uses the glass-tier overlay tokens.
-- **dc-comics / thesingularity-reader** — dcinside brand orange (`#f7b731`) layered
+- **dc-comics** — dcinside brand orange (`#f7b731`) layered
   over the token base. Brand accents ride on top of, never replace, the system.
-- **excel-lite, slides-lite** — opt into `.y-light` for document-like surfaces.
+- **pdf-viewer, slides-lite** — opt into `.y-light` for document-like surfaces.
 - **process-explorer** (Tailwind-slate re-skin) and **video-viewer-lite** (bespoke
   pale-blue light theme) — *grandfathered, not endorsed*: they redefine `--yaar-*`
   in `:root`, which is the supported override mechanism, but they diverge from the
