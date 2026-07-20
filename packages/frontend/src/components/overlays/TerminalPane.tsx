@@ -1,7 +1,7 @@
 /**
  * TerminalPane - A single terminal pane for one monitor's CLI history.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef } from 'react';
 import { useDesktopStore } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import styles from '@/styles/overlays/CliPanel.module.css';
@@ -14,6 +14,13 @@ interface TerminalPaneProps {
 }
 
 const MAX_CONTENT_LEN = 200;
+
+/**
+ * Scroll position per monitor, kept outside React so it survives the unmount
+ * that happens whenever the CLI panel is toggled off (DesktopSurface renders
+ * `cliMode && <CliPanel />`).
+ */
+const scrollMemory = new Map<string, { top: number; atBottom: boolean }>();
 
 /** Split "[label] rest" into a dimmed bracket + truncated content */
 function renderContent(content: string) {
@@ -38,14 +45,33 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
   );
 
   const bodyRef = useRef<HTMLDivElement>(null);
-  const shouldAutoScroll = useRef(true);
+  const shouldAutoScroll = useRef(scrollMemory.get(monitorId)?.atBottom ?? true);
 
   const handleScroll = () => {
     const el = bodyRef.current;
     if (!el) return;
     const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
     shouldAutoScroll.current = isNearBottom;
+    scrollMemory.set(monitorId, { top: el.scrollTop, atBottom: isNearBottom });
   };
+
+  // Restore the position the user was last looking at (before the auto-scroll
+  // effect below runs), and persist it again on unmount.
+  useLayoutEffect(() => {
+    const el = bodyRef.current;
+    if (!el) return;
+    const remembered = scrollMemory.get(monitorId);
+    shouldAutoScroll.current = remembered?.atBottom ?? true;
+    if (remembered && !remembered.atBottom) {
+      el.scrollTop = remembered.top;
+    } else {
+      el.scrollTop = el.scrollHeight;
+    }
+    return () => {
+      const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+      scrollMemory.set(monitorId, { top: el.scrollTop, atBottom });
+    };
+  }, [monitorId]);
 
   useEffect(() => {
     if (shouldAutoScroll.current && bodyRef.current) {

@@ -17,8 +17,10 @@ type Mood = 'idle' | 'walk' | 'held' | 'dizzy';
 const APP_ID = 'mascot';
 const WIN_W = 150;
 const WIN_H = 190;
-const STEP_PX = 30; // one hop
-const STEP_MS = 260; // hop cadence — matches the windowStyle transition duration
+const STEP_PX = 30; // legacy hop size — kept only to derive the walking speed
+const STEP_MS = 260; // legacy hop cadence — ditto
+const WALK_PX_PER_MS = STEP_PX / STEP_MS; // same average speed, now continuous
+const WALK_DT_MAX = 100; // clamp dt so a backgrounded tab doesn't teleport us
 const DRAG_SEND_MS = 120; // throttle for move invokes while held
 const EDGE = 12; // margin from viewport edges
 const PALETTE_INSET = 110; // bottom strip reserved for the command palette
@@ -35,7 +37,8 @@ const DIZZY_MS = 1600;
 let windowUri: string | null = null;
 let mood: Mood = 'idle';
 let walkTarget: { x: number; y: number } | null = null;
-let walkTimer: ReturnType<typeof setInterval> | null = null;
+let walkRaf: number | null = null;
+let walkLast = 0;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let dizzyTimer: ReturnType<typeof setTimeout> | null = null;
 let bubbleTimer: ReturnType<typeof setTimeout> | null = null;
@@ -43,6 +46,16 @@ let lastDragSend = 0;
 let dragBase: { x: number; y: number } | null = null;
 let dragStart: { x: number; y: number } | null = null;
 let dragPending: { x: number; y: number } | null = null;
+let uncommitted = false; // moved the frame locally; server not told yet
+
+/**
+ * The window manager applies windowStyle.transition as an INLINE style on our
+ * frame, so clearing it with `style.transition = ''` deletes it permanently
+ * rather than falling back to a stylesheet rule. We stash the real value the
+ * first time we suppress it and put exactly that back afterwards.
+ */
+let baseTransition: string | null = null;
+let transitionSuppressed = false;
 
 // ── DOM ──────────────────────────────────────────────────────────
 
@@ -97,10 +110,15 @@ function say(text: string, ms = 3500): void {
  */
 let pos: { x: number; y: number } | null = null;
 
+/** Our own window frame on the desktop. Same-origin, so we can both read and nudge it. */
+function getHostEl(): HTMLElement | null {
+  const fe = window.frameElement;
+  return (fe?.closest?.('[data-window-id]') ?? fe) as HTMLElement | null;
+}
+
 /** Read the window frame's inline left/top — the transition *target*, in desktop coords. */
 function readHostPos(): { x: number; y: number } | null {
-  const fe = window.frameElement;
-  const host = (fe?.closest?.('[data-window-id]') ?? fe) as HTMLElement | null;
+  const host = getHostEl();
   if (!host) return null;
   const x = parseFloat(host.style.left);
   const y = parseFloat(host.style.top);
@@ -125,20 +143,72 @@ function getViewport(): { w: number; h: number } {
   return { w: screen.availWidth, h: screen.availHeight };
 }
 
+/**
+ * Move ourselves WITHOUT telling the server.
+ *
+ * Every `invoke(..., 'move')` is recorded as a user interaction on the OS
+ * timeline, so a drag at DRAG_SEND_MS or a walk at STEP_MS used to write a
+ * `<ui:move>` entry several times a second. The frame is same-origin, so we
+ * can set its left/top ourselves for the intermediate frames and commit the
+ * real move exactly once when the motion settles (see commitPos).
+ *
+ * If the frame is somehow unreachable we fall back to the server move so the
+ * mascot still goes where it is told — callers throttle that path.
+ */
 function moveWindow(x: number, y: number): void {
-  if (!windowUri) return;
   const next = { x: Math.round(x), y: Math.round(y) };
   pos = next; // we commanded it, so this is where we are — no re-measure needed
-  invoke(windowUri, { action: 'move', ...next }).catch(() => {});
+  const host = getHostEl();
+  if (host) {
+    host.style.left = `${next.x}px`;
+    host.style.top = `${next.y}px`;
+    uncommitted = true;
+    return;
+  }
+  if (windowUri) invoke(windowUri, { action: 'move', ...next }).catch(() => {});
+}
+
+/** Tell the server where we ended up — one move invoke, one timeline entry. */
+function commitPos(): void {
+  if (!uncommitted || !pos || !windowUri) return;
+  uncommitted = false;
+  invoke(windowUri, { action: 'move', x: pos.x, y: pos.y }).catch(() => {});
+}
+
+// ── Frame transition ─────────────────────────────────────────────
+// Whenever we drive the frame ourselves — per rAF frame while walking, per
+// pointermove while dragging — the CSS transition is pure lag on top of motion
+// we are already interpolating, so it goes off. The suppressed flag makes both
+// helpers idempotent, so a drag starting mid-walk (or a walk right after a
+// drag) can't stash 'none' as the base value and leak it between modes.
+
+function suppressTransition(): void {
+  const host = getHostEl();
+  if (!host || transitionSuppressed) return;
+  if (baseTransition === null) baseTransition = host.style.transition;
+  host.style.transition = 'none';
+  transitionSuppressed = true;
+}
+
+function restoreTransition(): void {
+  const host = getHostEl();
+  if (!host || !transitionSuppressed) return;
+  host.style.transition = baseTransition ?? '';
+  transitionSuppressed = false;
 }
 
 // ── Wandering ────────────────────────────────────────────────────
 
-function stopWalk(): void {
-  if (walkTimer) {
-    clearInterval(walkTimer);
-    walkTimer = null;
+function stopWalkLoop(): void {
+  if (walkRaf !== null) {
+    cancelAnimationFrame(walkRaf);
+    walkRaf = null;
   }
+}
+
+function stopWalk(): void {
+  stopWalkLoop();
+  restoreTransition();
   if (idleTimer) {
     clearTimeout(idleTimer);
     idleTimer = null;
@@ -148,6 +218,8 @@ function stopWalk(): void {
 
 function scheduleIdle(): void {
   stopWalk();
+  // The hop loop moved the frame silently; settle up now that we've stopped.
+  commitPos();
   setMood('idle');
   idleTimer = setTimeout(startWalk, 2500 + Math.random() * 4500);
 }
@@ -166,26 +238,38 @@ function startWalk(): void {
     y: EDGE + Math.random() * (maxY - EDGE),
   };
   setMood('walk');
-  walkTimer = setInterval(walkStep, STEP_MS);
-  walkStep();
+  startWalkLoop();
 }
 
-function walkStep(): void {
+/** Begin interpolating toward walkTarget, one animation frame at a time. */
+function startWalkLoop(): void {
+  stopWalkLoop();
+  suppressTransition();
+  walkLast = performance.now();
+  walkRaf = requestAnimationFrame(walkFrame);
+}
+
+function walkFrame(now: number): void {
+  walkRaf = null;
   const cur = getPos();
   if (!cur || !walkTarget || mood !== 'walk') {
     scheduleIdle();
     return;
   }
+  const dt = Math.min(now - walkLast, WALK_DT_MAX);
+  walkLast = now;
   const dx = walkTarget.x - cur.x;
   const dy = walkTarget.y - cur.y;
   const dist = Math.hypot(dx, dy);
   setFacing(dx);
-  if (dist <= STEP_PX) {
+  const step = WALK_PX_PER_MS * dt;
+  if (dist <= step || dist < 1) {
     moveWindow(walkTarget.x, walkTarget.y);
-    scheduleIdle();
+    scheduleIdle(); // stopWalk restores the transition, then we commit once
     return;
   }
-  moveWindow(cur.x + (dx / dist) * STEP_PX, cur.y + (dy / dist) * STEP_PX);
+  moveWindow(cur.x + (dx / dist) * step, cur.y + (dy / dist) * step);
+  walkRaf = requestAnimationFrame(walkFrame);
 }
 
 // ── Grab & drag (pointer capture keeps events flowing outside the iframe) ──
@@ -210,6 +294,8 @@ hitEl.addEventListener('pointerdown', (e) => {
   dragBase = getPos();
   dragStart = { x: e.screenX, y: e.screenY };
   dragPending = null;
+  // Following a pointer directly — the transition would only add lag.
+  suppressTransition();
 });
 
 hitEl.addEventListener('pointermove', (e) => {
@@ -219,6 +305,12 @@ hitEl.addEventListener('pointermove', (e) => {
     y: dragBase.y + (e.screenY - dragStart.y),
   };
   dragPending = next;
+  // moveWindow is local-only when the frame is reachable, so this is free —
+  // the throttle only matters on the invoke fallback path.
+  if (getHostEl()) {
+    moveWindow(next.x, next.y);
+    return;
+  }
   const now = Date.now();
   if (now - lastDragSend >= DRAG_SEND_MS) {
     lastDragSend = now;
@@ -228,7 +320,9 @@ hitEl.addEventListener('pointermove', (e) => {
 
 function endDrag(): void {
   if (mood !== 'held') return;
+  restoreTransition();
   if (dragPending) moveWindow(dragPending.x, dragPending.y);
+  commitPos(); // single move invoke for the whole drag
   dragBase = dragStart = dragPending = null;
   say('@_@', 1400);
   goDizzy();
@@ -252,6 +346,7 @@ function watchOwnWindow(): void {
       // a window that is still mid-transition.
       if (d?.bounds && Number.isFinite(d.bounds.x) && Number.isFinite(d.bounds.y)) {
         pos = { x: d.bounds.x, y: d.bounds.y };
+        uncommitted = false; // theirs is authoritative; don't re-commit ours over it
       }
       if (mood === 'held') return;
       if (d?.type === 'window.move' || d?.type === 'window.resize') {
@@ -319,8 +414,7 @@ if (app) {
           if (dizzyTimer) clearTimeout(dizzyTimer);
           walkTarget = { x: p.x, y: p.y };
           setMood('walk');
-          walkTimer = setInterval(walkStep, STEP_MS);
-          walkStep();
+          startWalkLoop();
           return { ok: true };
         },
       }),
@@ -342,5 +436,12 @@ if (app) {
 
 // ── Boot ─────────────────────────────────────────────────────────
 
+// A silent hop that never got committed would be lost if we go away mid-walk.
+window.addEventListener('pagehide', commitPos);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) commitPos();
+});
+
 setMood('idle');
 findSelf();
+    
