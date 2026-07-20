@@ -12,6 +12,7 @@ import { APP_AGENT_TOOL_NAMES } from './types.js';
 import { loadAppSkill, loadAppAgentDoc, listApps } from '../../features/apps/discovery.js';
 import { APP_MOUNT_ID, describeDesignTokens } from '@yaar/compiler';
 import { resolveAgentModel } from './model-tiers.js';
+import { PAYLOAD_LITERALS_SECTION } from './shared-sections.js';
 
 /**
  * The parts of the app-authoring contract the compiler owns, stated by the compiler.
@@ -100,6 +101,11 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
 - **Always end your turn with a tool call** — use \`command\` to update the app UI, or \`relay\` to pass information/results to the monitor agent. Do NOT end with plain text; the user interacts through the app UI, not through your text responses.
 `;
   }
+
+  // Payload-literal rule is always appended — an AGENTS.md app issues the same
+  // `command` payloads as a generic one, so replacing the base prompt must not
+  // drop it.
+  systemPrompt += `\n${PAYLOAD_LITERALS_SECTION}\n`;
 
   // Protocol manifest from app.json is always appended
   if (protocol) {

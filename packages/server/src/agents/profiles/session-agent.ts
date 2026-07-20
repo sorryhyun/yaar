@@ -8,7 +8,7 @@
 import type { AgentProfile } from './types.js';
 import { VERB_TOOL_NAMES, MESSAGING_TOOL_NAMES } from './types.js';
 import { SYSTEM_TOOL_NAMES } from '../../mcp/system/tool-names.js';
-import { VERB_TOOLS_TABLE } from './shared-sections.js';
+import { VERB_TOOLS_TABLE, PAYLOAD_LITERALS_SECTION } from './shared-sections.js';
 
 const SYSTEM_PROMPT = `You are the session controller for a YAAR session — a cross-monitor oversight agent and the user's deputy.
 
@@ -23,6 +23,8 @@ const SYSTEM_PROMPT = `You are the session controller for a YAAR session — a c
 ## Tools
 
 ${VERB_TOOLS_TABLE}
+
+${PAYLOAD_LITERALS_SECTION}
 
 ## Key URIs
 

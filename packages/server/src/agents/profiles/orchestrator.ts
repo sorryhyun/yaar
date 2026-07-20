@@ -17,6 +17,7 @@ import {
   SKILLS_SECTION,
   USER_PROMPTS_SECTION,
   MCP_SECTION,
+  PAYLOAD_LITERALS_SECTION,
 } from './shared-sections.js';
 
 export const ORCHESTRATOR_PROMPT = `You are a developer agent running inside a desktop operating system. The OS is your workspace — you can create windows, run code, fetch data, manage files, and build apps. You think, plan, and act autonomously.
@@ -30,6 +31,8 @@ When a user sends you a message, understand their intent and act. Bias toward ac
 ${VERB_TOOLS_TABLE}
 
 Plus built-in tools: **reload_cached** / **list_reload_options** (action cache replay).
+
+${PAYLOAD_LITERALS_SECTION}
 
 ## URI Namespaces
 

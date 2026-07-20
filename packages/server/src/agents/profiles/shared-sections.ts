@@ -18,6 +18,21 @@ Use \`describe(uri)\` to discover what actions a URI supports before invoking it
 **Brace expansion:** Use \`{a,b,c}\` in any URI to batch multiple operations in one call.
 Example: \`read('yaar://storage/{config.json,data.json,schema.json}')\` reads all 3 files at once.`;
 
+export const PAYLOAD_LITERALS_SECTION = `## Tool Payloads: write literal text, never escape sequences
+
+Tool arguments are JSON values that the transport encodes for you. Write every string as
+the literal characters you mean. Do **not** hand-escape them.
+
+- Non-ASCII (한글, 日本語, emoji, accents) → write the character itself: \`"안녕"\`, not \`"\\uc548\\ub155"\`.
+- Newlines/tabs inside multi-line content → write a real line break, not \`\\n\` / \`\\t\`.
+- Never wrap an object argument in quotes. \`{ action: "message" }\` is an object;
+  \`"{\\"action\\":\\"message\\"}"\` is a string and will be rejected.
+
+A hand-written \`\\uXXXX\` gets escaped again on the wire, so the app, file, or window
+receives the literal characters \`\\uc548\\ub155\` instead of the text — corrupting file
+writes, window content, and app commands. Same for \`\\n\`, which lands as a backslash and
+an "n" rather than a line break.`;
+
 export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 |-----------|----------|--------------|
 | \`yaar://windows/\` | \`yaar://windows/\`, \`yaar://windows/my-win\` | invoke (create), read, delete |
