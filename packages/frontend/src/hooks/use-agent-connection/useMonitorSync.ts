@@ -54,6 +54,12 @@ export function useMonitorSync() {
             monitorId: state.activeMonitorId,
             viewport: getViewport(),
           });
+          // Deliberately no RESYNC here. Window state and agent streams are delivered
+          // session-wide (see LiveSession.broadcast), so a switch has nothing to catch
+          // up on — and a snapshot is not free: it mints fresh iframe tokens, which
+          // remounts every app iframe, and the remount replays that window's app
+          // commands. Side-effectful commands (e.g. memo's addMemo) would run again
+          // on every switch.
         }
       }
     });

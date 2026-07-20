@@ -149,7 +149,7 @@ mock.module('../agents/agent-session.js', () => {
 // ── Imports under test (after mocks) ───────────────────────────────────────
 
 const { ContextPool } = await import('../agents/context-pool.js');
-const { LiveSession } = await import('../session/live-session.js');
+const { LiveSession, monitorEventScope } = await import('../session/live-session.js');
 
 import {
   ClientEventType,
@@ -525,5 +525,139 @@ describe('F-14 — monitors belong to the session, not to a tab', () => {
       .filter((e) => e.type === 'MONITORS');
     expect(monitorEvents.at(-1)?.monitors?.map((m) => m.id)).toEqual(['0', '1']);
     expect(monitorEvents.at(-1)?.focus).toBeUndefined();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Broadcast scope — which monitor-tagged events cross monitors.
+//
+// The frontend keeps every monitor's windows mounted (hidden) and renders a CLI
+// pane for every monitor, so window state and agent streams must reach a tab
+// regardless of which desktop it is looking at. Found live: a devtools agent on
+// monitor 0 opened its preview window while the user watched monitor 1 — the
+// window.create was dropped, the window never entered the DOM, and every
+// subsequent screenshot of it failed with "Window element not found".
+
+describe('broadcast scope — window state and agent streams cross monitors', () => {
+  it('classifies stream events and pure-window batches as session-wide', () => {
+    expect(monitorEventScope({ type: ServerEventType.AGENT_THINKING } as ServerEvent)).toBe(
+      'session',
+    );
+    expect(monitorEventScope({ type: ServerEventType.AGENT_RESPONSE } as ServerEvent)).toBe(
+      'session',
+    );
+    expect(monitorEventScope({ type: ServerEventType.TOOL_PROGRESS } as ServerEvent)).toBe(
+      'session',
+    );
+    expect(monitorEventScope({ type: ServerEventType.ERROR } as ServerEvent)).toBe('session');
+    expect(
+      monitorEventScope({
+        type: ServerEventType.ACTIONS,
+        actions: [plainWindow('0/notes')],
+      } as ServerEvent),
+    ).toBe('session');
+  });
+
+  it('keeps interactive surfaces, mixed batches, and unknown events on their monitor', () => {
+    expect(
+      monitorEventScope({
+        type: ServerEventType.ACTIONS,
+        actions: [{ type: 'toast.show', id: 't', message: 'hi' } as OSAction],
+      } as ServerEvent),
+    ).toBe('monitor');
+    expect(
+      monitorEventScope({
+        type: ServerEventType.ACTIONS,
+        actions: [
+          plainWindow('0/notes'),
+          { type: 'toast.show', id: 't', message: 'hi' } as OSAction,
+        ],
+      } as ServerEvent),
+    ).toBe('monitor');
+    expect(
+      monitorEventScope({ type: ServerEventType.ACTIONS, actions: [] } as unknown as ServerEvent),
+    ).toBe('monitor');
+    expect(monitorEventScope({ type: ServerEventType.MONITORS } as ServerEvent)).toBe('monitor');
+  });
+
+  describe('through LiveSession.broadcast', () => {
+    let session: InstanceType<typeof LiveSession>;
+    let wsA: ReturnType<typeof createMockWs>;
+    let wsB: ReturnType<typeof createMockWs>;
+
+    const typesSentTo = (ws: ReturnType<typeof createMockWs>): string[] =>
+      ws.sent.map((raw) => (JSON.parse(raw) as { type: string }).type);
+
+    beforeEach(async () => {
+      resetBroadcastCenter();
+      session = new LiveSession(SESSION);
+      const bc = getBroadcastCenter();
+      wsA = createMockWs();
+      wsB = createMockWs();
+      bc.subscribe('conn-a', wsA, SESSION);
+      bc.subscribe('conn-b', wsB, SESSION);
+      await session.routeMessage({ type: ClientEventType.ADD_MONITOR } as never, 'conn-b');
+      bc.subscribeToMonitor('conn-a', '0');
+      bc.subscribeToMonitor('conn-b', '1');
+      wsA.sent.length = 0;
+      wsB.sent.length = 0;
+    });
+
+    afterEach(async () => {
+      await session.cleanup();
+      resetBroadcastCenter();
+    });
+
+    it('a window created on monitor 0 reaches the tab watching monitor 1', () => {
+      session.broadcast({
+        type: ServerEventType.ACTIONS,
+        actions: [plainWindow('0/preview')],
+        monitorId: '0',
+      } as ServerEvent);
+
+      expect(typesSentTo(wsA)).toEqual([ServerEventType.ACTIONS]);
+      expect(typesSentTo(wsB)).toEqual([ServerEventType.ACTIONS]);
+    });
+
+    it("monitor 0's agent stream reaches the tab watching monitor 1", () => {
+      session.broadcast({
+        type: ServerEventType.AGENT_RESPONSE,
+        agentId: 'monitor-0',
+        content: 'hello',
+        monitorId: '0',
+      } as ServerEvent);
+
+      expect(typesSentTo(wsB)).toEqual([ServerEventType.AGENT_RESPONSE]);
+    });
+
+    it("a toast on monitor 0 stays on monitor 0's tab", () => {
+      session.broadcast({
+        type: ServerEventType.ACTIONS,
+        actions: [{ type: 'toast.show', id: 't', message: 'hi' } as OSAction],
+        monitorId: '0',
+      } as ServerEvent);
+
+      expect(typesSentTo(wsA)).toEqual([ServerEventType.ACTIONS]);
+      expect(typesSentTo(wsB)).toEqual([]);
+    });
+
+    it('events tagged with a monitor the session does not have reach no one', () => {
+      // Agent teardown is async: a turn already running when its monitor is removed can
+      // still emit. Delivering those would re-create windows of a closed desktop.
+      session.broadcast({
+        type: ServerEventType.ACTIONS,
+        actions: [plainWindow('9/ghost')],
+        monitorId: '9',
+      } as ServerEvent);
+      session.broadcast({
+        type: ServerEventType.AGENT_RESPONSE,
+        agentId: 'monitor-9',
+        content: 'hello',
+        monitorId: '9',
+      } as ServerEvent);
+
+      expect(wsA.sent).toEqual([]);
+      expect(wsB.sent).toEqual([]);
+    });
   });
 });

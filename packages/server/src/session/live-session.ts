@@ -70,6 +70,35 @@ export interface LiveSessionOptions {
   acquireProvider?: () => Promise<AITransport | null>;
 }
 
+/**
+ * How far a monitor-tagged event travels.
+ *
+ * The frontend keeps every monitor's windows mounted (hidden, so iframe state survives
+ * switches — see WindowManager.tsx) and the CLI panel renders a pane for every monitor.
+ * Both assume every tab hears about every monitor. So window state and agent-stream
+ * events go to the whole session: a tab looking at another desktop still has to mount
+ * the window (a capture of it can be asked for at any time) and still renders the pane
+ * the stream belongs in. Interactive surfaces (dialogs, toasts, prompts, notifications)
+ * stay on the monitor that asked — with two tabs on two desktops, the same dialog on
+ * both screens would leave a stale twin on one of them once the other answers.
+ */
+export function monitorEventScope(event: ServerEvent): 'session' | 'monitor' {
+  switch (event.type) {
+    case ServerEventType.AGENT_THINKING:
+    case ServerEventType.AGENT_RESPONSE:
+    case ServerEventType.TOOL_PROGRESS:
+    case ServerEventType.ERROR:
+      return 'session';
+    case ServerEventType.ACTIONS:
+      return event.actions.length > 0 &&
+        event.actions.every((action) => action.type.startsWith('window.'))
+        ? 'session'
+        : 'monitor';
+    default:
+      return 'monitor';
+  }
+}
+
 export class LiveSession {
   readonly sessionId: SessionId;
   /**
@@ -346,10 +375,18 @@ export class LiveSession {
 
     const monitorId = (event as { monitorId?: string }).monitorId;
     const bc = getBroadcastCenter();
-    if (monitorId) {
-      bc.publishToMonitor(this.sessionId, monitorId, event);
-    } else {
+    if (!monitorId) {
       bc.publishToSession(this.sessionId, event);
+      return;
+    }
+    // A deleted monitor's in-flight events go nowhere: agent teardown is async, so a
+    // turn already running can still emit after REMOVE_MONITOR — and delivering those
+    // would have the frontend re-create windows of a desktop the user just closed.
+    if (!this.monitorRegistry.has(monitorId)) return;
+    if (monitorEventScope(event) === 'session') {
+      bc.publishToSession(this.sessionId, event);
+    } else {
+      bc.publishToMonitor(this.sessionId, monitorId, event);
     }
   }
 
