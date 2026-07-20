@@ -6,9 +6,10 @@
 // handling so the components stay declarative.
 
 import { errMsg, wait } from '@bundled/yaar';
-import { SIGNED_OUT_ACCOUNT } from './constants.js';
+import { SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY, GITHUB_STATUS_POLL_MS } from './constants.js';
 import {
   apiGet,
+  fetchGithubStatus,
   hostDelete,
   hostInstall,
   hostListInstalled,
@@ -25,11 +26,12 @@ import {
   setAccount,
   setAuthBusy,
   setInstalledApps,
+  setGithubStatus,
   setLoading,
   setMarketApps,
   setStatus,
 } from './store.js';
-import { parseMarket } from './parsers.js';
+import { parseGithubStatus, parseMarket } from './parsers.js';
 import type { ApiPayload, ListedApp } from './types.js';
 
 // ── Async action runner ──────────────────────────────────────────────
@@ -203,4 +205,35 @@ export async function signOut(): Promise<void> {
   } finally {
     setAuthBusy(false);
   }
+}
+
+// ── GitHub health polling ────────────────────────────────────────────
+
+/**
+ * Refresh the GitHub health hint behind the publish banner.
+ *
+ * Deliberately silent: it does not go through `runAction`, does not touch
+ * `statusText`, and swallows its own errors. This is ambient context, not a user
+ * action — if the status page is unreachable (offline, blocked domain, rate
+ * limited) the honest UI is no banner, not an error about a health check.
+ */
+export async function refreshGithubStatus(): Promise<void> {
+  try {
+    setGithubStatus(parseGithubStatus(await fetchGithubStatus()));
+  } catch {
+    // Can't tell — fall back to silence rather than guessing at an outage.
+    setGithubStatus(GITHUB_STATUS_HEALTHY);
+  }
+}
+
+/**
+ * Poll while the window lives; returns the stop thunk for `onCleanup`.
+ *
+ * Tied to the window rather than the server so the request stops the moment the
+ * user closes Market Apps — nothing polls GitHub in the background.
+ */
+export function startGithubStatusPolling(): () => void {
+  void refreshGithubStatus();
+  const timer = setInterval(() => void refreshGithubStatus(), GITHUB_STATUS_POLL_MS);
+  return () => clearInterval(timer);
 }

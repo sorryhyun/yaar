@@ -6,6 +6,7 @@
 // state and status text are the caller's concern (see actions.ts).
 
 import { del, invoke, list } from '@bundled/yaar';
+import { GITHUB_STATUS_URL } from './constants.js';
 import { parseInstalledAny } from './parsers.js';
 import { apiBase } from './store.js';
 import type { InstalledApp } from './types.js';
@@ -18,6 +19,19 @@ export async function apiGet<T>(path: string): Promise<T> {
   const res = await fetch(`${base}${path}`, { method: 'GET' });
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
   return res.json() as Promise<T>;
+}
+
+// ── GitHub health ────────────────────────────────────────────────────
+//
+// Cross-origin, so this goes through YAAR's fetch proxy (SSRF checks + the domain
+// allowlist) on the strength of this app's `yaar://http` permission. Unauthenticated
+// and uncredentialed by design — it is a public status page, and it must never look
+// like a request worth attaching a token to.
+
+export async function fetchGithubStatus(): Promise<unknown> {
+  const res = await fetch(GITHUB_STATUS_URL, { method: 'GET' });
+  if (!res.ok) throw new Error(`GitHub status check failed (${res.status})`);
+  return res.json();
 }
 
 // ── Host verbs (yaar://apps/) ──────────────────────────────────────────

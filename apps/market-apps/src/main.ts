@@ -13,12 +13,23 @@ import './protocol.js';
 import { App } from './components.js';
 import { DEFAULT_MARKET_DOMAIN, STORAGE_DOMAIN_KEY } from './constants.js';
 import { normalizeDomain } from './parsers.js';
-import { refreshAccount, refreshData } from './actions.js';
+import { refreshAccount, refreshData, startGithubStatusPolling } from './actions.js';
 import { setApiBase, setStatus } from './store.js';
 
 // ── Mount reactive UI ────────────────────────────────────────────────
 
 render(() => App(), document.getElementById('app')!);
+
+// ── Ambient GitHub health ───────────────────────────────────────────
+//
+// Feeds the publish banner. Started here rather than inside `onMount` below
+// because that callback is async: after its first `await`, Solid's owner is gone
+// and an `onCleanup` registered there would never fire. Independent of both the
+// marketplace domain and sign-in — an outage is worth flagging before the user
+// gets that far. `pagehide` covers the window being closed; the interval dies
+// with the iframe either way, so this is belt-and-braces.
+const stopGithubStatusPolling = startGithubStatusPolling();
+window.addEventListener('pagehide', stopGithubStatusPolling);
 
 // ── Async initialization ────────────────────────────────────────────
 

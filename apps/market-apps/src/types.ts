@@ -44,6 +44,26 @@ export type Account = {
   ownedApps: string[];
 };
 
+/**
+ * GitHub health, as it bears on publishing.
+ *
+ * Publishing commits through GitHub's Git Data API, so a GitHub-side outage
+ * surfaces here as an opaque 5xx from the marketplace. This is only ever a
+ * *hint* — GitHub can be green while a publish still fails for reasons local
+ * to you (expired sign-in, not the app's owner), so the banner says
+ * "may fail", never "will fail".
+ */
+export type GithubStatus = {
+  /** False while healthy — the banner renders nothing at all in that case. */
+  degraded: boolean;
+  /** Worst status among the components publishing depends on. */
+  level: string;
+  /** Which of those components are unhealthy, e.g. ["API Requests"]. */
+  components: string[];
+  /** The newest unresolved incident's latest update, when there is one. */
+  incident: string | null;
+};
+
 export type ApiPayload = {
   apps?: ListedApp[];
   marketApps?: ListedApp[];

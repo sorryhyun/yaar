@@ -7,9 +7,9 @@
 
 import { createSignal } from '@bundled/solid-js';
 import { storage } from '@bundled/yaar';
-import { STORAGE_DOMAIN_KEY, SIGNED_OUT_ACCOUNT } from './constants.js';
+import { STORAGE_DOMAIN_KEY, SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY } from './constants.js';
 import { normalizeDomain, normalizeId, sameAppId } from './parsers.js';
-import type { Account, DisplayApp, InstalledApp, ListedApp } from './types.js';
+import type { Account, DisplayApp, GithubStatus, InstalledApp, ListedApp } from './types.js';
 
 // ── Signals ─────────────────────────────────────────────────────────────
 
@@ -23,6 +23,9 @@ export const [hideInstalled, setHideInstalled] = createSignal(false);
 
 export const [account, setAccount] = createSignal<Account>(SIGNED_OUT_ACCOUNT);
 export const [authBusy, setAuthBusy] = createSignal(false);
+
+/** Starts healthy so nothing flashes on screen before the first check answers. */
+export const [githubStatus, setGithubStatus] = createSignal<GithubStatus>(GITHUB_STATUS_HEALTHY);
 
 // ── Status helpers ──────────────────────────────────────────────────────
 
