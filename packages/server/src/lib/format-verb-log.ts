@@ -6,8 +6,14 @@
  * each carrying a full header block. Logging those verbatim buries the entries
  * that actually describe what happened in the session.
  *
- * Two rules:
+ * Three rules:
  *  - `yaar://http` is an app's `fetch()` — data plane, not a desktop action. Skip it.
+ *  - An `app_query` for `__console` is devtools polling its own console panel on a
+ *    timer (`apps/devtools/src/project.ts` — `startConsolePolling`, every 1.5s for as
+ *    long as a preview window is open). It is instrumentation, not session activity:
+ *    logged, it fills the JSONL with dozens of identical entries between the two the
+ *    log exists to show. `features/window/protocol-log.ts` already suppresses the same
+ *    poll from the visible protocol log for the same reason. Skip it here too.
  *  - Everything else is logged with its payload summarized: headers dropped,
  *    long strings and arrays collapsed, nesting capped.
  */
@@ -19,8 +25,18 @@ const MAX_STRING = 120;
 const MAX_KEYS = 12;
 
 /** Whether an iframe verb call is worth a session-log entry. */
-export function shouldLogVerb(uri: string): boolean {
-  return !DATA_PLANE_URIS.some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`));
+export function shouldLogVerb(uri: string, payload?: unknown): boolean {
+  if (DATA_PLANE_URIS.some((prefix) => uri === prefix || uri.startsWith(`${prefix}/`))) {
+    return false;
+  }
+  return !isConsolePoll(payload);
+}
+
+/** The devtools console-panel poll: `invoke yaar://windows/{id}` app_query for `__console`. */
+function isConsolePoll(payload: unknown): boolean {
+  if (!payload || typeof payload !== 'object') return false;
+  const { action, stateKey } = payload as { action?: unknown; stateKey?: unknown };
+  return action === 'app_query' && stateKey === '__console';
 }
 
 /**

@@ -305,9 +305,9 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         : uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
   }
 
-  // Log to session logs. Data-plane verbs (an app's proxied fetch) are skipped and the
-  // rest are summarized — see lib/format-verb-log.ts.
-  if (tokenEntry?.sessionId && shouldLogVerb(resolvedUri)) {
+  // Log to session logs. Data-plane verbs (an app's proxied fetch) and the devtools
+  // console poll are skipped; the rest are summarized — see lib/format-verb-log.ts.
+  if (tokenEntry?.sessionId && shouldLogVerb(resolvedUri, body.payload)) {
     const session = getSessionHub().get(tokenEntry.sessionId);
     const logger = session?.getPool()?.getSessionLogger();
     if (logger) {

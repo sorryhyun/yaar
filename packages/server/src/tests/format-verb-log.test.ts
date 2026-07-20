@@ -13,6 +13,23 @@ describe('shouldLogVerb', () => {
     // A URI that merely starts with the same letters is not the http door.
     expect(shouldLogVerb('yaar://https-config')).toBe(true);
   });
+
+  it('skips the devtools console poll', () => {
+    expect(
+      shouldLogVerb('yaar://windows/devtools-preview-1', {
+        action: 'app_query',
+        stateKey: '__console',
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps other app_query state reads', () => {
+    const uri = 'yaar://windows/devtools-preview-1';
+    expect(shouldLogVerb(uri, { action: 'app_query', stateKey: 'selection' })).toBe(true);
+    // Only the query verb is a poll — a command named `__console` is a real action.
+    expect(shouldLogVerb(uri, { action: 'app_command', command: '__console' })).toBe(true);
+    expect(shouldLogVerb(uri)).toBe(true);
+  });
 });
 
 describe('compactVerbPayload', () => {
