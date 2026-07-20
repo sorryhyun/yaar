@@ -16,9 +16,9 @@ import { getStaticManifest, getRuntimeManifest, diffManifestNames } from '../man
 export const buildCommands = {
   compile: defineCommand({
     description:
-      'Type check and compile the active project, and refresh the preview window if one is ' +
-      'open. `status` is success only when the code both builds and type checks. Slow: ' +
-      'pass timeoutMs (e.g. 60000).',
+      'Type check and compile the active project; refreshes the preview window if one is ' +
+      'open. `built` reflects the bundle, `status` reflects type checking — they can ' +
+      'differ. Slow: pass timeoutMs (e.g. 60000).',
     params: {
       type: 'object',
       properties: {
@@ -101,22 +101,11 @@ export const buildCommands = {
       };
     },
   }),
-  typecheck: defineCommand({
-    description: 'Run TypeScript type checker only. `compile` already does this.',
-    params: { type: 'object', properties: {} },
-    handler: async () => {
-      await typecheck();
-      return { diagnostics: diagnostics() };
-    },
-  }),
   manifest: defineCommand({
     description:
-      'Inspect the app protocol manifest without deploying. Reports the STATIC manifest ' +
-      '(command/state names the compiler extracted from source on the last compile — what ' +
-      'agents will see after deploy) and the RUNTIME manifest (what the running preview ' +
-      'actually registered via app.register), plus a drift report between the two. Drift ' +
-      'means an entry is reached via a spread or computed key: it runs but is invisible to ' +
-      'agents. Run compile first for the static side; open a preview for the runtime side.',
+      'Compare the STATIC manifest (from the last compile) against the RUNTIME manifest ' +
+      '(what the open preview actually registered), plus a drift report. Needs a compile ' +
+      '(static side) and an open preview (runtime side).',
     params: { type: 'object', properties: {} },
     handler: async () => {
       const stat = await getStaticManifest();
@@ -163,9 +152,8 @@ export const buildCommands = {
   }),
   protocolLog: defineCommand({
     description:
-      'Read App Protocol traffic for the preview window — every query/command sent to it ' +
-      'and every event it emitted, in order, with results and timings. Use this to see what ' +
-      'the app actually did, rather than inferring it from source.',
+      'App Protocol traffic for the preview window: every query/command sent and event ' +
+      'emitted, in order, with results and timings.',
     params: {
       type: 'object',
       properties: {
@@ -183,8 +171,8 @@ export const buildCommands = {
   }),
   deploy: defineCommand({
     description:
-      'Deploy to apps/. Type checks first and refuses to ship type errors. Snapshots the ' +
-      'previous version first — see gitRestore.',
+      'Deploy to apps/. Refuses type errors unless skipTypecheck. Snapshots the previous ' +
+      'version — see gitRestore.',
     params: {
       type: 'object',
       properties: {
@@ -192,14 +180,8 @@ export const buildCommands = {
         name: { type: 'string' },
         icon: { type: 'string' },
         description: { type: 'string' },
-        message: {
-          type: 'string',
-          description: 'Commit message for this deploy, e.g. "add dark mode toggle"',
-        },
-        skipTypecheck: {
-          type: 'boolean',
-          description: 'Ship despite type errors. Say so on purpose.',
-        },
+        message: { type: 'string', description: 'Commit message for this deploy.' },
+        skipTypecheck: { type: 'boolean', description: 'Ship despite type errors.' },
       },
       required: ['appId'],
     },

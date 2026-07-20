@@ -50,7 +50,7 @@ function imageBlocks(path: string, image: { data: string; mimeType: string }): R
     return [
       {
         type: 'text',
-        text: `── ${path} ──\n(image, ${kb}KB — too large to inline; open it in the editor with openFile)`,
+        text: `── ${path} ──\n(image, ${kb}KB — too large to inline; use readFile({ openInEditor: true }) to view it)`,
       },
     ];
   }
@@ -61,36 +61,10 @@ function imageBlocks(path: string, image: { data: string; mimeType: string }): R
 }
 
 export const fileCommands = {
-  openFile: defineCommand({
-    description:
-      'Open a file (or multiple files) in the editor. Use `path` for a single file or `files` array for multiple files.',
-    params: {
-      type: 'object',
-      properties: {
-        path: { type: 'string', description: 'Single file path' },
-        files: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Multiple file paths to open as tabs',
-        },
-      },
-    },
-    handler: async (p) => {
-      const paths: string[] = [];
-      if (Array.isArray(p.files)) paths.push(...p.files.map(String));
-      if (p.path) paths.push(String(p.path));
-      if (paths.length === 0) throw new AppCommandError('Provide path or files[]');
-      for (const fp of paths) await openFile(fp);
-      return { opened: paths };
-    },
-  }),
   readFile: defineCommand({
     description:
-      'Read one or more files and return their contents with line numbers. Does NOT change the editor open state. ' +
-      'Use `path` (string) for a single file or `path` (array) for multiple files. ' +
-      'Optionally specify `startLine` / `endLine` for a line range (1-based, inclusive). ' +
-      'Set `openInEditor: true` to also open each file in the editor. ' +
-      'Image files come back as an image you can see, not as text.',
+      'Read one or more files, returned with line numbers. Does not change editor open state ' +
+      'unless openInEditor is set. Image files come back as a viewable image block, not text.',
     params: {
       type: 'object',
       properties: {
@@ -166,17 +140,14 @@ export const fileCommands = {
   }),
   editFile: defineCommand({
     description:
-      'Edit a file in place. Three modes: (1) search/replace — pass search + replace ' +
-      '(aliases: oldString/newString), first match only. (2) line range — pass ' +
-      'startLine/endLine (1-based, inclusive) plus anchor (REQUIRED: the current text of ' +
-      'startLine, compared trimmed; mismatch rejects the edit and writes nothing) with ' +
-      'optional replace; omitting replace (or passing "") deletes those lines. ' +
-      '(3) multi-edit — pass edits, an array of { search, replace } and/or ' +
-      '{ startLine, endLine, anchor, replace? } objects, applied sequentially in memory and ' +
-      'written to disk once, all-or-nothing: if any edit fails, the error names its index and ' +
-      'nothing is written. Line numbers in later edits refer to the content AFTER earlier ' +
-      'edits have been applied. Returns { editsApplied, lines, removed } — removed echoes the ' +
-      'replaced text (truncated ~500 chars, middle elided); check it caught what you meant.',
+      'Edit a file in place. Three modes: (1) search/replace — pass search + replace, first ' +
+      'match only. (2) line range — pass startLine/endLine (1-based, inclusive) and anchor ' +
+      '(REQUIRED: current text of startLine, compared trimmed; mismatch rejects the edit and ' +
+      'writes nothing) with optional replace; omit replace to delete the range. ' +
+      '(3) multi-edit — pass edits, an array of single-edit objects, applied sequentially in ' +
+      'memory and written once, all-or-nothing: any failure names its index and nothing is ' +
+      'written; later line numbers refer to content after earlier edits. Returns ' +
+      '{ editsApplied, lines, removed } — removed echoes the replaced text (truncated, middle elided).',
     params: {
       type: 'object',
       properties: {
@@ -272,10 +243,8 @@ export const fileCommands = {
   }),
   copyFile: defineCommand({
     description:
-      'Copy a file to another path within the active project. ' +
-      'Reads the source and writes it to the destination — destination directories are created automatically. ' +
-      'Useful for restructuring (e.g. moving files into a subdirectory) without a separate read+write cycle. ' +
-      'Does NOT delete the original; pair with deleteFile to move.',
+      'Copy a file to another path within the active project; destination directories are ' +
+      'created automatically. Does NOT delete the original — pair with deleteFile to move.',
     params: {
       type: 'object',
       properties: {

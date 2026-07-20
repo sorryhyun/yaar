@@ -83,11 +83,8 @@ export const mediaCommands = {
   listMedia: defineCommand({
     description:
       'List artifacts other apps have published to the shared media tree ' +
-      '(yaar://storage/media/), keyed by the app that produced them. Use this to find an ' +
-      'image the user made elsewhere ("the dragon I generated in anima") before importing ' +
-      'it with importAsset. Pass `prefix` to look inside one producer, e.g. "anima". ' +
-      'An empty result means nothing has been published yet — the user can publish from ' +
-      'the producing app, or ask the desktop to copy the file into media/.',
+      '(yaar://storage/media/), keyed by producer app. Pass `prefix` to look inside one ' +
+      'producer, e.g. "anima". Empty result means nothing has been published yet.',
     params: {
       type: 'object',
       properties: {
@@ -127,13 +124,10 @@ export const mediaCommands = {
 
   importAsset: defineCommand({
     description:
-      'Copy a file from the shared media tree into the active project, so it can be ' +
-      'imported as a build-time asset. Writes to src/assets/ by default and returns the ' +
-      'import line to add. The bundler inlines the file as a data: URI — import it, do not ' +
-      'fetch it from storage at runtime. Raster images are re-encoded to WebP unless ' +
-      '`recompress: false`, which typically halves the bundle cost. Keep total inlined ' +
-      "assets under ~2MB; for anything larger, deploy the file to the app's own storage " +
-      'and fetch it at runtime instead.',
+      'Copy a file from the shared media tree (yaar://storage/media/) into the active ' +
+      'project as a build-time asset, under src/assets/ by default. Returns the import line ' +
+      'to add; the bundler inlines the file as a data: URI. Raster images are re-encoded to ' +
+      'WebP unless `recompress: false`.',
     params: {
       type: 'object',
       properties: {

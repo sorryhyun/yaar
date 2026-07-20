@@ -17,17 +17,13 @@ export const gitCommands = {
   }),
   gitDiff: defineCommand({
     description:
-      'Diff a deployed app. against="snapshot" (default) compares its current files to a ' +
-      'commit in its own history — what changed since the last deploy. against="repo" compares ' +
-      "to the user's git repo — what has changed relative to what the user committed (bundled apps only).",
+      'Diff a deployed app against a commit. against="snapshot" (default): app\'s own deploy ' +
+      'history. against="repo": user\'s git repo (bundled apps only).',
     params: {
       type: 'object',
       properties: {
         appId: { type: 'string', description: 'App to diff' },
-        ref: {
-          type: 'string',
-          description: 'Commit to compare against: a hash or HEAD~N. Default HEAD.',
-        },
+        ref: { type: 'string', description: 'Hash or HEAD~N. Default HEAD.' },
         against: { type: 'string', enum: ['snapshot', 'repo'] },
       },
       required: ['appId'],
@@ -48,16 +44,15 @@ export const gitCommands = {
   }),
   gitRestore: defineCommand({
     description:
-      'Roll a deployed app back to an earlier commit and rebuild it. Use after a bad deploy. ' +
-      'The current state is snapshotted first, so this is itself undoable.',
+      'Roll a deployed app back to an earlier commit and rebuild it, overwriting current files. ' +
+      'Current state is auto-snapshotted first, so this is itself undoable via another gitRestore.',
     params: {
       type: 'object',
       properties: {
         appId: { type: 'string', description: 'App to roll back' },
         ref: {
           type: 'string',
-          description:
-            'Commit to restore: a hash from gitHistory, or HEAD~1 for the previous version.',
+          description: 'Hash from gitHistory, or HEAD~1 for previous version.',
         },
       },
       required: ['appId', 'ref'],
@@ -65,8 +60,7 @@ export const gitCommands = {
     handler: async (p) => gitRestore(String(p.appId), String(p.ref)),
   }),
   gitCheckpoint: defineCommand({
-    description:
-      "Snapshot a deployed app's current state as a commit, so you can return to it later.",
+    description: "Snapshot a deployed app's current state as a restorable commit.",
     params: {
       type: 'object',
       properties: {

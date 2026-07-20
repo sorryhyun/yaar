@@ -41,7 +41,7 @@ export const projectCommands = {
     },
   }),
   deleteProject: defineCommand({
-    description: 'Delete a project',
+    description: 'Permanently delete a project and its files. Not undoable.',
     params: {
       type: 'object',
       properties: { id: { type: 'string' } },

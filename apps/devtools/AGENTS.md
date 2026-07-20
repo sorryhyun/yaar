@@ -17,7 +17,7 @@ The full list of state keys and commands is appended to this prompt automaticall
 1. `query("project")` — confirm a project is active. **Every file command silently returns empty when none is.**
 2. `command("createProject", { name })`, `command("openProject", { id })`, or `command("cloneApp", { appId })`.
 3. Write files (see **App Structure**).
-4. `command("compile", {}, { timeoutMs: 60000 })` — type checks *and* builds. Do not call `typecheck` separately.
+4. `command("compile", {}, { timeoutMs: 60000 })` — type checks *and* builds in one call.
 5. Preview and **look at it** (see **Preview & Debugging**).
 6. `command("deploy", { appId, message, ... }, { timeoutMs: 120000 })`.
 7. `command("deleteProject", { id })` — always clean up, especially clones.
@@ -38,47 +38,35 @@ The full list of state keys and commands is appended to this prompt automaticall
 
 All file commands operate **only inside the active project's sandbox**, never the server filesystem. A glob like `apps/**/*.ts` means paths inside the project, not `apps/` on disk.
 
-- `readFile` — inspect without touching editor state. Takes `path` as string or array, optional `startLine`/`endLine` (1-based, inclusive), optional `openInEditor: true`.
-- `grep` — regex across the project, optional `glob` filter.
-- `writeFile` — `content` may be a string (verbatim) or an object (pretty-printed JSON, so `app.json` needs no hand-escaping).
-- `copyFile` — `{ from, to }`, creates destination dirs. Does not delete the source; pair with `deleteFile` to move.
+**Read the file before editing it.** `editFile`'s line-range and multi-edit modes anchor on content from *this* turn — `query("project")` gives each file's current `lines`, but a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset.
 
-**`editFile` has three modes.** Read the file first to get exact text (or line numbers — `query("project")` gives each file's `lines`). It returns `{ editsApplied, lines, removed }`.
+**Multi-edit is all-or-nothing.** If any edit in the `edits` array fails to match (or fails its anchor check), the error names its index and *nothing is written* — there is no partial application to clean up after.
 
-- **Search/replace** (default): `search` + `replace` (aliases `oldString`/`newString`), first match only.
-- **Line range**: `startLine` + `endLine` (1-based, inclusive) + **`anchor` (required)**, optional `replace`. Omitting `replace` (or passing `""`) *deletes* those lines — this is how you drop a block in one call instead of crafting a search string for 90 lines.
-- **Multi-edit**: `edits`, an array of `{ search, replace }` and/or `{ startLine, endLine, anchor, replace? }` objects, applied **sequentially in memory and written once, all-or-nothing** — if any edit fails to match (or fails its anchor check), the error names its index and nothing is written. Line numbers in later edits refer to the content *after* earlier edits.
-
-**`anchor` is mandatory for line ranges.** It is the current text of `startLine`, compared trimmed. Search mode anchors on content; a bare line number anchors on nothing, so a number that went stale (because an earlier edit shifted the file, or you read it two turns ago) splices into the wrong place and destroys working code without erroring. On mismatch the edit is rejected with the actual text at that line and **nothing is written** — re-read the file for current numbers rather than guessing an offset.
-
-**Read `removed` in the result.** It echoes the text the edit took out, truncated to ~500 chars with the middle elided (`… [N chars elided] …`); in a multi-edit each edit's removal is labelled. This is the cheapest check that the edit hit what you meant — a wrong splice is visible in the same turn instead of at the next compile.
-
-```
-// ✅ command("editFile", { path: "src/main.ts", search: "const x = 1;", replace: "const x = 2;" })
-// ✅ command("editFile", { path: "src/main.ts", startLine: 40, endLine: 130, anchor: "function render() {" })   // delete lines 40–130
-// ✅ command("editFile", { path: "src/main.ts", edits: [ { search: "a", replace: "b" }, { startLine: 5, endLine: 5, anchor: "let n = 0;", replace: "// note" } ] })
-// ❌ command("editFile", { path: "src/main.ts", startLine: 40, endLine: 130 })   // rejected: no anchor
-```
+**Check `removed` in the result before moving on.** It echoes what the edit actually took out — the cheapest way to confirm a splice hit what you meant, in the same turn instead of at the next compile.
 
 ## Preview & Debugging
 
 `compile` produces the preview URL and refreshes an open preview window. `preview` opens one.
 
-**Look at the app before theorizing about it.** `previewScreenshot` returns pixels; `viewPreview` adds size and position. When the question is visual ("renders blank", "did the list appear", "is the layout broken"), one screenshot settles what a chain of inference cannot — this environment offers ready-made culprits (the `flex: 1` gotcha below is a favourite) that make a wrong diagnosis feel well-supported. Screenshot before proposing a fix, and again after applying one. A green compile is not evidence about anything visual.
+**Look at the app before theorizing about it — screenshot before proposing a fix, and again after applying one.** A green compile is not evidence about anything visual; this environment has ready-made culprits (the `flex: 1` gotcha below is a favourite) that make a wrong diagnosis feel well-supported.
 
-**`consoleLogs` reports connection state.** It returns `{ connected, logs, reason? }`. When `connected` is `false` the buffer could not be read at all, so an empty `logs` says *nothing* — read `reason` and fix that first. Only trust an empty `logs` when `connected` is `true`. Resource failures land here too (`[resource] failed to load <img>: ...`), which is how you catch a broken asset — it produces no `console.log` and does not fail the build.
+**An empty `consoleLogs` only means something when `connected` is `true`** — read `reason` first. Resource failures surface there too (`[resource] failed to load <img>: ...`), which is how you catch a broken asset; it produces no `console.log` and does not fail the build.
 
-**`protocolLog` shows real traffic.** Every query/command sent to the preview and every event it emitted, in order, with results and timings. For duplicate emits, ordering, or "did that handler fire", read the log instead of reasoning from source — an app that emits twice looks identical to one that emits once until you look.
+**`protocolLog`'s canonical use: duplicate emits, ordering, or "did that handler fire"** — an app that emits an event twice looks identical to one that emits once until you look at the log instead of the source.
 
-**`previewQuery` / `previewCommand`** exercise the app protocol; the app needs `app.register()` for these to work. **`resizePreview`** changes window size without remounting the iframe, so preview state survives.
+**`previewQuery`/`previewCommand` only work once the preview has called `app.register()`.**
 
-**`manifest` inspects the protocol without deploying.** It reports two truths: the **static** manifest (command/state names the compiler extracted from source on the last compile — what agents see after deploy) and the **runtime** manifest (what the running preview actually registered via `app.register`), plus a `drift` report between them. Drift means an entry runs but is invisible to agents. Spreads and imported descriptor maps are resolved by the compiler and no longer cause it; the remaining causes are entries built at runtime (a descriptor assembled in a loop or returned by a call), which the compiler rejects outright, and a stale static side — so recompile before trusting a drift report. Run `compile` first for the static side and open a `preview` for the runtime side; `manifest` says which side is missing if one is. `compile` runs this same check automatically when a preview is open and surfaces `manifestDrift` in its result when the two disagree (a warning, never a build failure).
+**`manifest`'s drift cause is narrower than its description implies.** Spreads and imported descriptor maps are resolved by the compiler and no longer cause drift — the remaining causes are a descriptor built at runtime (rejected as a build error now, not silent) or a stale static side, so recompile before trusting a report. `compile` runs the same check automatically whenever a preview is open, surfacing `manifestDrift` in its result as a warning, never a build failure.
 
-**Preview identity.** The preview window has its own id (`devtools-preview-{projectId}`), so previewing an app while it is running will not displace the real app's window. It runs under its own principal (`preview--{projectId}`), so `self` resolves: `appStorage`, `appDb` and app-scoped permissions all work against the project's `app.json`. Storage features can and should be tested here before deploying — "it compiled, and `self` will resolve once it's a real app" is an argument, not a test. Two consequences: the preview's storage is a **throwaway namespace** (it cannot show or corrupt the live app's data, and dies with the project), and the preview has **no app agent** — you are the agent inside it.
+**The preview runs under its own principal** (`preview--{projectId}`), so `self`-scoped calls — `appStorage`, `appDb`, permissions — resolve against the project's `app.json` and can be tested here before deploying. Its storage is a throwaway namespace (dies with the project, never touches the live app's data), and it has **no app agent** — you are the agent inside it.
+
+**`compile` remounts the preview and resets all in-app state** — a new build is a new app, not a hot reload. Relatedly, the first headless-browser call after a cold start can come back empty (`postCount: 0` and the like); retry once before concluding the app itself is broken. Cache expensive-to-build state (scraping, multi-step fetches) into `appStorage` keyed by source URL + TTL, so a remount rehydrates instantly instead of re-running it.
+
+**Confirm network-dependent probe results twice before reporting them as fact.** Scrape counts and lazy-load outcomes vary run to run; one read is not evidence.
 
 ## Deploy
 
-`command("deploy", { appId, name?, icon?, description?, message? })`. Type checks first and refuses to ship type errors.
+Type checks first and refuses to ship type errors.
 
 **Always pass `message`** ("add dark mode toggle") — it becomes the commit message in the app's version history, and it is what you will read later when choosing a version to roll back to.
 
@@ -100,11 +88,9 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 ## Version History
 
-Every deployed app has its own history; each deploy is one automatic commit. These commands target a **deployed app** (`appId`), not a sandbox project: `gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint`.
+Every deployed app has its own history; each deploy is one automatic commit. `gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint` all target a **deployed app** (`appId`), not a sandbox project.
 
-**Two kinds of diff, answering different questions:**
-- `against: "snapshot"` (default) — current files vs. a commit in its own history. *"What changed since the last deploy?"* Works for every app.
-- `against: "repo"` — vs. the user's git repo. *"What have we changed relative to what the user committed?"* Use before telling the user an app is done. Bundled apps only; marketplace installs aren't in the repo.
+**Diff `against: "repo"` before telling the user an app is done** — it answers "what have we changed relative to what the user committed," not just "what changed since the last deploy" (the `snapshot` default). Repo diff is bundled apps only; marketplace installs aren't in the repo.
 
 **Rolling back a bad deploy** — the main reason this exists. Deploy is destructive: it overwrites source and deletes files no longer present.
 
@@ -114,7 +100,7 @@ command("gitDiff",    { appId: "my-app", ref: "HEAD~1" })  → confirm what the 
 command("gitRestore", { appId: "my-app", ref: "HEAD~1" })  → roll back and rebuild
 ```
 
-`gitRestore` snapshots the current state first, so rollback is itself undoable — restore the hash you rolled back *from* to return. History is append-only.
+`gitRestore` snapshots current state first — to undo a rollback, restore the hash you rolled back *from*. History is append-only.
 
 **Check `recompiled` in the restore result.** If `false`, the source rolled back but the rebuild failed (`compileError` says why) and the app is serving stale code until you fix and redeploy.
 
@@ -137,12 +123,7 @@ src/
 
 If `main.ts` has no `import`, add `export {};` so TypeScript treats it as a module.
 
-**Mounting and design tokens are specified in the App Authoring Contract at the end of this prompt** — it is generated from the compiler itself and is authoritative. Two things it will not shout loudly enough:
-
-- Mount into `#app`. Any other id resolves to `null`, and the wrapper hides an empty mount, so you get a blank window with a green compile rather than an error.
-- `--yaar-*` names are **not** Tailwind-shaped (`--yaar-sp-2`, not `--yaar-space-2`; `--yaar-bg-surface`, not `--yaar-bg-elevated`). An undefined token drops the whole declaration at render time. Never hardcode colors, spacing or fonts; use the `y-*` utilities instead of reimplementing scrollbars, buttons, modals, toolbars, list items or empty states; `y-light` on the root for light themes. For a name that isn't on the list, declare it in your own `:root` or give it a fallback: `var(--yaar-custom, #fff)`.
-
-The compiler rejects both a wrong render target and an undefined token, so a build error naming one is telling you the truth.
+**Mounting and design tokens are specified in the App Authoring Contract at the end of this prompt** — generated from the compiler itself and authoritative. Read it rather than guessing a token name or a mount id; the compiler rejects both a wrong render target and an undefined token, so a build error naming one is telling you the truth.
 
 ## Bundled Libraries
 
@@ -218,15 +199,7 @@ The bundler inlines the bytes into `dist/index.html`, so no request is made at r
 
 ### Assets the user made in another app
 
-When the user says *"use the dragon image I generated in anima"* or *"the logo I edited"*, the image is almost certainly in the shared media tree. Two commands cover it:
-
-```
-listMedia()                                   // what has been published, by producer
-listMedia({ prefix: "anima" })                // just one producer
-importAsset({ from: "anima/dragon.png" })     // → src/assets/dragon.webp + the import line
-```
-
-`importAsset` re-encodes raster images to WebP by default (roughly halves the bundle cost) and returns the exact `import` line to add. Pass `recompress: false` for SVG, animated GIF, or anything that must stay byte-identical. Then add the import and compile — the asset is inlined like any other, so everything in the section above applies unchanged.
+When the user says *"use the dragon image I generated in anima"* or *"the logo I edited"*, it is almost certainly in the shared media tree — `listMedia` finds it, `importAsset` pulls it into the project and returns the `import` line to add. Then add the import and compile — the asset is inlined like any other, so everything above in this section applies unchanged.
 
 **If `listMedia` comes back empty,** the image exists but was never published — app storage is private to the app that owns it, and this is not a dead end. Say so and offer the two recoveries: ask the user to publish it from the producing app (anima and image-edit both have a `publish` command), or `relay` to the monitor agent, which can reach both trees and copy the file into `media/` for you.
 
@@ -240,21 +213,13 @@ Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `
 
 **Splitting a large `protocol.ts`.** Descriptor maps may live in `src/protocol/<domain>.ts` and be spread back in — `commands: { ...fileCommands, ...gitCommands }`. The compiler resolves relative imports and spreads, so this reaches the manifest intact. The constraint is that every descriptor stays statically readable: a `const` object literal, no `...buildCommands()` call result, no `` `${x}` `` description, no map built in a loop. Violations are a build error with `file:line:col`, never a silently shrunken manifest. Later spreads win on duplicate names, at runtime and in the manifest alike.
 
-**When handlers need a context.** A descriptor map at module scope cannot close over the parameter of a `registerProtocol(ctx)`, and wrapping it in a factory is the call result the extractor refuses. Use the SDK holder:
-
-```ts
-// src/protocol/context.ts
-export const { set: setProtocolContext, get: ctx } =
-  createProtocolContext<ProtocolContext>('my-app');
-```
-
-Call `setProtocolContext(context)` at the top of `registerProtocol`, before `app.register()`, and have handlers read `ctx()`. The context becomes module state shared by every descriptor, which fits an app that registers once per document — the normal case. Both edges throw rather than corrupt: reading before set, and setting twice with a different context.
+**When handlers need a context.** A descriptor map at module scope cannot close over the parameter of a `registerProtocol(ctx)`, and wrapping it in a factory is the call result the extractor refuses. Use `createProtocolContext` instead (`describeBundledLibrary({ name: "yaar" })` has the exact API and throw semantics) — set it at the top of `registerProtocol`, before `app.register()`, and have handlers read it back. The context becomes module state shared by every descriptor, which fits an app that registers once per document — the normal case.
 
 Verify a split with `manifest` — it diffs the static manifest against what the preview actually registered. A pure move must not change it.
 
 ## URI Reference
 
-Verify a URI before writing code against it: `command("describeUri", { uri })` returns verbs and invoke schema, `command("listUri", { uri })` lists children. `describe` works without holding the permission, so it is a cheap way to check a path is real.
+Verify a URI before writing code against it: `command("inspectUri", { uri })` returns verbs and invoke schema; pass `list: true` to also list children. Works without holding the permission, so it's a cheap way to check a path is real.
 
 | URI | Verbs | Notes |
 |-----|-------|-------|

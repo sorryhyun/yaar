@@ -4,32 +4,22 @@ import { captureFailureHint, openPreview, previewEvaluate, readPreview } from '.
 
 export const previewCommands = {
   preview: defineCommand({
-    description: 'Open preview window for the compiled app',
+    description: 'Open preview window for the compiled app.',
     params: { type: 'object', properties: {} },
     handler: async () => await openPreview(),
   }),
-  viewPreview: defineCommand({
-    description:
-      'Read the preview window: a screenshot of what is actually on screen, plus its ' +
-      'size and position. Look at the picture before theorizing about a rendering bug.',
-    params: { type: 'object', properties: {} },
-    handler: async () => {
-      const { info, images } = await readPreview();
-      // Content blocks pass through to the agent untouched (wrapAppValue), so the
-      // image arrives as an image and not as a wall of base64.
-      return [
-        { type: 'text', text: JSON.stringify(info, null, 2) },
-        ...images.map((img) => ({ type: 'image', data: img.data, mimeType: img.mimeType })),
-      ];
-    },
-  }),
   previewScreenshot: defineCommand({
     description:
-      'See the preview — a screenshot of the running app, nothing else. Use it whenever a ' +
-      'question is about pixels ("is it blank?", "did that render?"): looking costs one ' +
-      'call and settles it, where reasoning from source can be confidently wrong.',
-    params: { type: 'object', properties: {} },
-    handler: async () => {
+      'Screenshot of the running preview. With `info: true`, also returns window ' +
+      'geometry/size as a leading text block. Throws on capture failure with `reason`: ' +
+      "'taint' | 'zero-size' | 'serialize-error' | 'no-provider' | 'no-response' | undefined.",
+    params: {
+      type: 'object',
+      properties: {
+        info: { type: 'boolean', description: 'Also return window geometry/size.' },
+      },
+    },
+    handler: async (p) => {
       const { images, info } = await readPreview();
       if (images.length === 0) {
         // The server reports *why* the capture produced nothing (window.ts attaches
@@ -43,20 +33,22 @@ export const previewCommands = {
                 'The window may have just been created — give it a moment, then retry.',
         );
       }
-      return images.map((img) => ({
+      // Content blocks pass through to the agent untouched (wrapAppValue), so the
+      // image arrives as an image and not as a wall of base64.
+      const imageBlocks = images.map((img) => ({
         type: 'image',
         data: img.data,
         mimeType: img.mimeType,
       }));
+      return p.info === true
+        ? [{ type: 'text', text: JSON.stringify(info, null, 2) }, ...imageBlocks]
+        : imageBlocks;
     },
   }),
   previewEval: defineCommand({
     description:
-      'Evaluate a JS expression inside the running preview and get the result back. Use it ' +
-      'to ask the live page a question source cannot answer — element counts, computed ' +
-      'styles, actual state — instead of adding a temporary debug command and recompiling. ' +
-      'Runs in the iframe global scope; await-able values are resolved. Result is ' +
-      'JSON-serialized and capped at 16KB. Preview windows only.',
+      "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
+      'Result is JSON-serialized and capped at 16KB. Preview windows only.',
     params: {
       type: 'object',
       properties: {
@@ -76,7 +68,7 @@ export const previewCommands = {
     },
   }),
   previewQuery: defineCommand({
-    description: 'Query app protocol state from the preview window',
+    description: 'Query app protocol state from the preview window.',
     params: {
       type: 'object',
       properties: { stateKey: { type: 'string', description: 'State key to query' } },
@@ -96,7 +88,7 @@ export const previewCommands = {
     },
   }),
   previewCommand: defineCommand({
-    description: 'Send an app protocol command to the preview window',
+    description: 'Send an app protocol command to the preview window.',
     params: {
       type: 'object',
       properties: {
@@ -121,9 +113,8 @@ export const previewCommands = {
   }),
   resizePreview: defineCommand({
     description:
-      'Resize the preview window to width × height pixels. Use this to give a preview more ' +
-      'room (e.g. testing a wide layout) instead of relaying the request to the monitor. ' +
-      'Unlike re-running preview, this does not remount the iframe, so preview state is kept.',
+      'Resize the preview window to width × height pixels. Unlike `preview`, this does not ' +
+      'remount the iframe, so preview state is kept.',
     params: {
       type: 'object',
       properties: {
