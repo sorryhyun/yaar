@@ -262,6 +262,7 @@ export class ClientEventController {
       url: event.url,
       locked: event.locked,
       imageData: event.imageData,
+      captureFailure: event.captureFailure,
     });
   }
 

@@ -168,13 +168,15 @@ export const fileCommands = {
     description:
       'Edit a file in place. Three modes: (1) search/replace — pass search + replace ' +
       '(aliases: oldString/newString), first match only. (2) line range — pass ' +
-      'startLine/endLine (1-based, inclusive) with optional replace; omitting replace (or ' +
-      'passing "") deletes those lines. (3) multi-edit — pass edits, an array of ' +
-      '{ search, replace } and/or { startLine, endLine, replace? } objects, applied ' +
-      'sequentially in memory and written to disk once, all-or-nothing: if any edit fails, ' +
-      'the error names its index and nothing is written. Line numbers in later edits refer ' +
-      'to the content AFTER earlier edits have been applied. Returns ' +
-      '{ editsApplied, lines } with the new line count.',
+      'startLine/endLine (1-based, inclusive) plus anchor (REQUIRED: the current text of ' +
+      'startLine, compared trimmed; mismatch rejects the edit and writes nothing) with ' +
+      'optional replace; omitting replace (or passing "") deletes those lines. ' +
+      '(3) multi-edit — pass edits, an array of { search, replace } and/or ' +
+      '{ startLine, endLine, anchor, replace? } objects, applied sequentially in memory and ' +
+      'written to disk once, all-or-nothing: if any edit fails, the error names its index and ' +
+      'nothing is written. Line numbers in later edits refer to the content AFTER earlier ' +
+      'edits have been applied. Returns { editsApplied, lines, removed } — removed echoes the ' +
+      'replaced text (truncated ~500 chars, middle elided); check it caught what you meant.',
     params: {
       type: 'object',
       properties: {
@@ -200,6 +202,11 @@ export const fileCommands = {
           type: 'number',
           description: 'Last line to replace (1-based, inclusive). Defaults to startLine.',
         },
+        anchor: {
+          type: 'string',
+          description:
+            'Required with startLine/endLine: the current text of startLine (compared trimmed). Mismatch rejects the edit and reports the actual line text; nothing is written.',
+        },
         edits: {
           type: 'array',
           description:
@@ -211,6 +218,7 @@ export const fileCommands = {
               replace: { type: 'string' },
               startLine: { type: 'number' },
               endLine: { type: 'number' },
+              anchor: { type: 'string', description: 'Required with startLine/endLine.' },
             },
           },
         },
@@ -225,6 +233,7 @@ export const fileCommands = {
         newString?: string;
         startLine?: number;
         endLine?: number;
+        anchor?: string;
       }): EditSpec => {
         const search = e.search ?? e.oldString;
         const replace = e.replace ?? e.newString;
@@ -233,6 +242,7 @@ export const fileCommands = {
           ...(replace !== undefined ? { replace: String(replace) } : {}),
           ...(e.startLine !== undefined ? { startLine: Number(e.startLine) } : {}),
           ...(e.endLine !== undefined ? { endLine: Number(e.endLine) } : {}),
+          ...(e.anchor !== undefined ? { anchor: String(e.anchor) } : {}),
         };
       };
       let edits: EditSpec[];

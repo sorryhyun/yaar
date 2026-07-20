@@ -161,6 +161,8 @@ export function handleAppProtocolRequest(
     msg = { type: 'yaar:app-manifest-request', requestId };
   } else if (request.kind === 'query') {
     msg = { type: 'yaar:app-query-request', requestId, stateKey: request.stateKey };
+  } else if (request.kind === 'eval') {
+    msg = { type: 'yaar:app-eval-request', requestId, expression: request.expression };
   } else {
     msg = {
       type: 'yaar:app-command-request',
@@ -220,6 +222,11 @@ export function handleAppProtocolRequest(
         console.warn(`[AppProtocol] Command response missing both result and error fields`);
       }
       response = { kind: 'command', result: msg.result, error: msg.error };
+    } else if (msg.type === 'yaar:app-eval-response') {
+      if (msg.value === undefined && msg.error == null) {
+        console.warn(`[AppProtocol] Eval response missing both value and error fields`);
+      }
+      response = { kind: 'eval', value: msg.value, error: msg.error };
     } else {
       console.warn(`[AppProtocol] Unknown response type: ${msg.type}`);
       response = {

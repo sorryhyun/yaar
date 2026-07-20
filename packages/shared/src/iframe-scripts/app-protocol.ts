@@ -104,10 +104,67 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     return label + '. Available ' + noun + ': ' + shown;
   }
 
+  // Max serialized eval result, in characters. A result bigger than this is almost
+  // always an accident (returning \`document\` or a whole store), and shipping it
+  // through the agent's context costs far more than it explains.
+  var MAX_EVAL_CHARS = 16384;
+
+  /**
+   * Serialize an eval result to a string the agent can read.
+   *
+   * Structured-clone cannot carry DOM nodes or functions, so serialize here rather
+   * than postMessage-ing the raw value — a returned element would otherwise fail the
+   * clone and surface as an opaque bridge error instead of an answer.
+   */
+  function serializeEvalValue(value) {
+    var text;
+    try {
+      if (value === undefined) text = 'undefined';
+      else if (typeof value === 'function') text = String(value);
+      else if (typeof Node !== 'undefined' && value instanceof Node) text = String(value.outerHTML || value.nodeName);
+      else text = JSON.stringify(value, null, 2);
+      // JSON.stringify returns undefined for symbols and the like.
+      if (text === undefined) text = String(value);
+    } catch (err) {
+      // Circular structures and getters that throw land here.
+      try { text = String(value); } catch (_) { text = '[unserializable value]'; }
+    }
+    if (text.length > MAX_EVAL_CHARS) {
+      text = text.slice(0, MAX_EVAL_CHARS) +
+        '\\n... [truncated: ' + text.length + ' chars total, ' + MAX_EVAL_CHARS + ' shown]';
+    }
+    return text;
+  }
+
   window.addEventListener('message', function(e) {
     if (!e.data || !e.data.type) return;
     var msg = e.data;
     var requestId = msg.requestId;
+
+    // Arbitrary expression evaluation. Reaching this handler at all means the server
+    // already checked the window is a devtools preview (handleAppEval) — the iframe
+    // cannot verify that itself, so the gate lives on the side that knows.
+    if (msg.type === 'yaar:app-eval-request') {
+      var reply = function(payload) {
+        payload.type = 'yaar:app-eval-response';
+        payload.requestId = requestId;
+        window.parent.postMessage(payload, '*');
+      };
+      try {
+        // Indirect eval: runs in global scope, so the expression sees the app's
+        // globals rather than this function's locals.
+        var out = (0, eval)(msg.expression);
+        if (out && typeof out.then === 'function') {
+          out.then(function(v) { reply({ value: serializeEvalValue(v) }); })
+             .catch(function(err) { reply({ error: String(err && err.message || err) }); });
+        } else {
+          reply({ value: serializeEvalValue(out) });
+        }
+      } catch (err) {
+        reply({ error: String(err && err.message || err) });
+      }
+      return;
+    }
 
     if (msg.type === 'yaar:app-close') {
       if (registration && typeof registration.onClose === 'function') {

@@ -6,7 +6,7 @@
  *   list('yaar://windows/')               → list all windows
  *   invoke('yaar://windows/', ...)        → create window (windowId auto-derived from payload)
  *   read('yaar://windows/{w}')            → view window content/metadata
- *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, protocol_log, message
+ *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, app_eval, protocol_log, message
  *   delete('yaar://windows/{w}')          → close window
  */
 
@@ -26,7 +26,11 @@ import { formatWindowFlags } from '../features/window/helpers.js';
 import { handleCreate } from '../features/window/create.js';
 import { handleUpdate } from '../features/window/update.js';
 import { handleManage, handleGeometry } from '../features/window/manage.js';
-import { handleAppQuery, handleAppCommand } from '../features/window/app-protocol.js';
+import {
+  handleAppQuery,
+  handleAppCommand,
+  handleAppEval,
+} from '../features/window/app-protocol.js';
 import { readLog } from '../features/window/protocol-log.js';
 import {
   handleSubscribe,
@@ -73,7 +77,7 @@ export function registerWindowHandlers(
   };
   registry.register('yaar://windows', listHandler);
 
-  // The 15 window actions. The `enum` the model sees is derived from these keys
+  // The window actions. The `enum` the model sees is derived from these keys
   // (see invokeSchema below), so a case cannot exist undeclared and a declaration
   // cannot exist without a case.
   const windowActions = defineActions<{ windowId: string; p: Record<string, unknown> }>({
@@ -86,6 +90,7 @@ export function registerWindowHandlers(
     resize: ({ windowId, p }) => handleGeometry(getWindowState(), windowId, 'resize', p),
     app_query: ({ windowId, p }) => handleAppQuery(getWindowState(), windowId, p),
     app_command: ({ windowId, p }) => handleAppCommand(getWindowState(), windowId, p),
+    app_eval: ({ windowId, p }) => handleAppEval(getWindowState(), windowId, p),
     protocol_log: ({ windowId, p }) => {
       // Address by the monitor-scoped key, as app_query/app_command do — the log is
       // keyed the same way.
@@ -134,7 +139,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, update (requires operation), close, lock, unlock, move (x, y), resize (width, height), app_query, app_command, protocol_log, message.',
+      'Invoke actions: create, update (requires operation), close, lock, unlock, move (x, y), resize (width, height), app_query, app_command, app_eval (devtools previews only), protocol_log, message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -175,6 +180,13 @@ export function registerWindowHandlers(
         command: { type: 'string' },
         params: { type: 'object' },
         stateKey: { type: 'string' },
+        // app_eval fields
+        expression: {
+          type: 'string',
+          description:
+            'app_eval only. JS expression evaluated in the iframe. Devtools preview ' +
+            'windows only — refused elsewhere. Result is JSON-serialized, capped at 16KB.',
+        },
         timeoutMs: {
           type: 'number',
           description:
@@ -261,7 +273,7 @@ export function registerWindowHandlers(
         return error(`Window "${resolved.windowId}" not found. Use list to see available windows.`);
       }
 
-      const windowInfo = {
+      const windowInfo: Record<string, unknown> & { captureFailure?: string } = {
         id: win.id,
         title: win.title,
         renderer: win.content.renderer,
@@ -307,6 +319,13 @@ export function registerWindowHandlers(
               { type: 'image', data: feedback.imageData, mimeType: 'image/webp' },
             ],
           };
+        }
+        // No image. Say why, in the metadata the caller gets anyway: a capture that
+        // failed because the canvas was tainted is unfixable by retrying, and one
+        // that timed out may well succeed on the next call. Reported as the same
+        // empty result, both looked like "it may not have painted yet".
+        if (feedback?.captureFailure) {
+          windowInfo.captureFailure = feedback.captureFailure;
         }
       }
 

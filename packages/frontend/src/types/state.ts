@@ -116,6 +116,8 @@ export interface RenderingFeedback {
   url?: string;
   locked?: boolean;
   imageData?: string;
+  /** Why a capture produced no image. See RenderingFeedbackEvent.captureFailure. */
+  captureFailure?: string;
 }
 
 import type { UserInteraction } from '@yaar/shared';

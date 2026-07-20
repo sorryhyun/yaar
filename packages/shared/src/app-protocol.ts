@@ -90,6 +90,29 @@ export interface AppCommandResponse {
   error?: string;
 }
 
+/**
+ * Evaluate an arbitrary expression inside an iframe.
+ *
+ * Deliberately *not* a general app-protocol capability: the server only dispatches
+ * this to devtools preview windows (see `handleAppEval`). It exists so a developer
+ * agent can ask a running preview a one-off question — "what is
+ * document.querySelectorAll('.row').length?" — instead of the plant-a-debug-command,
+ * recompile, read, remove, recompile loop that question otherwise costs.
+ */
+export interface AppEvalRequest {
+  type: 'yaar:app-eval-request';
+  requestId: string;
+  expression: string;
+}
+
+export interface AppEvalResponse {
+  type: 'yaar:app-eval-response';
+  requestId: string;
+  /** JSON-serialized result, size-capped with an explicit truncation marker. */
+  value?: string;
+  error?: string;
+}
+
 /** Fire-and-forget notification sent to iframe before window is destroyed. */
 export interface AppCloseNotification {
   type: 'yaar:app-close';
@@ -113,6 +136,8 @@ export type AppProtocolPostMessage =
   | AppQueryResponse
   | AppCommandRequest
   | AppCommandResponse
+  | AppEvalRequest
+  | AppEvalResponse
   | AppCloseNotification
   | AppEventMessage;
 
@@ -122,10 +147,12 @@ export type AppProtocolPostMessage =
 export type AppProtocolRequest =
   | { kind: 'manifest' }
   | { kind: 'query'; stateKey: string }
-  | { kind: 'command'; command: string; params?: unknown };
+  | { kind: 'command'; command: string; params?: unknown }
+  | { kind: 'eval'; expression: string };
 
 /** Client → Server: iframe's answer */
 export type AppProtocolResponse =
   | { kind: 'manifest'; manifest: AppManifest | null; error?: string }
   | { kind: 'query'; data: unknown; error?: string }
-  | { kind: 'command'; result: unknown; error?: string };
+  | { kind: 'command'; result: unknown; error?: string }
+  | { kind: 'eval'; value?: string; error?: string };

@@ -1,6 +1,6 @@
 import { AppCommandError, defineCommand, errMsg, invoke } from '@bundled/yaar';
 import { previewWindowId, setPreviewWindowId } from '../project';
-import { openPreview, readPreview } from '../preview';
+import { captureFailureHint, openPreview, previewEvaluate, readPreview } from '../preview';
 
 export const previewCommands = {
   preview: defineCommand({
@@ -30,11 +30,17 @@ export const previewCommands = {
       'call and settles it, where reasoning from source can be confidently wrong.',
     params: { type: 'object', properties: {} },
     handler: async () => {
-      const { images } = await readPreview();
+      const { images, info } = await readPreview();
       if (images.length === 0) {
+        // The server reports *why* the capture produced nothing (window.ts attaches
+        // captureFailure). Pass that through with its recovery hint rather than
+        // guessing "not painted yet", which was wrong for every cause but one.
+        const reason = typeof info.captureFailure === 'string' ? info.captureFailure : undefined;
         throw new AppCommandError(
-          'Preview window returned no screenshot. The iframe may not have painted yet — ' +
-            'give it a moment after preview/compile, then retry.',
+          reason
+            ? `Preview screenshot failed: ${reason}. ${captureFailureHint(reason)}`
+            : 'Preview window returned no screenshot, and the capture reported no reason. ' +
+                'The window may have just been created — give it a moment, then retry.',
         );
       }
       return images.map((img) => ({
@@ -42,6 +48,31 @@ export const previewCommands = {
         data: img.data,
         mimeType: img.mimeType,
       }));
+    },
+  }),
+  previewEval: defineCommand({
+    description:
+      'Evaluate a JS expression inside the running preview and get the result back. Use it ' +
+      'to ask the live page a question source cannot answer — element counts, computed ' +
+      'styles, actual state — instead of adding a temporary debug command and recompiling. ' +
+      'Runs in the iframe global scope; await-able values are resolved. Result is ' +
+      'JSON-serialized and capped at 16KB. Preview windows only.',
+    params: {
+      type: 'object',
+      properties: {
+        expression: {
+          type: 'string',
+          description:
+            'JS expression, e.g. "document.querySelectorAll(\'.row\').length" or ' +
+            '"getComputedStyle(document.querySelector(\'#app\')).height"',
+        },
+      },
+      required: ['expression'],
+    },
+    handler: async (p) => {
+      const expression = String(p.expression ?? '').trim();
+      if (!expression) throw new AppCommandError('expression is required.');
+      return await previewEvaluate(expression);
     },
   }),
   previewQuery: defineCommand({

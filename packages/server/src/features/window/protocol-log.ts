@@ -27,7 +27,7 @@ export interface ProtocolLogEntry {
   windowKey: string;
   /** `out` = agent→app request, `in` = app→agent emit. */
   direction: 'out' | 'in';
-  kind: 'manifest' | 'query' | 'command' | 'emit';
+  kind: 'manifest' | 'query' | 'command' | 'eval' | 'emit';
   /** stateKey for a query, command name for a command, channel for an emit. */
   name?: string;
   params?: unknown;
@@ -72,7 +72,11 @@ export function beginRequest(windowKey: string, request: AppProtocolRequest): Pr
       ? request.stateKey
       : request.kind === 'command'
         ? request.command
-        : undefined;
+        : // An eval has no name but the expression *is* the interesting part, and a log
+          // that showed a bare `eval` row would say nothing about what was asked.
+          request.kind === 'eval'
+          ? request.expression
+          : undefined;
 
   // `__console` is not app traffic — it is devtools polling its own console panel, twice a
   // second, each poll carrying back the whole accumulated buffer. Recorded, it buried the
@@ -115,7 +119,9 @@ export function endRequest(
       ? response.manifest
       : response.kind === 'query'
         ? response.data
-        : response.result;
+        : response.kind === 'eval'
+          ? response.value
+          : response.result;
   if (value !== undefined) entry.result = clamp(value);
 }
 

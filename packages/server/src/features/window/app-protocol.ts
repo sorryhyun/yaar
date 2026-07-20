@@ -3,6 +3,7 @@
  */
 
 import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
+import { isPreviewAppId } from '@yaar/shared';
 import type { ContentBlock, VerbResult } from '../../handlers/uri-registry.js';
 import { isContentBlocks } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
@@ -163,6 +164,75 @@ export async function handleAppQuery(
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
   return wrapAppValue(response.data);
+}
+
+/**
+ * Window ids devtools gives its preview windows (`apps/devtools/src/preview.ts`).
+ * The id is monitor-scoped by the time it reaches us (`0/devtools-preview-x`), so
+ * match the last segment, not the whole string.
+ */
+const PREVIEW_WINDOW_PREFIX = 'devtools-preview-';
+
+/**
+ * Whether a window is a devtools preview — the only kind `app_eval` may touch.
+ *
+ * Two conditions, both required, because either alone is forgeable by an ordinary
+ * app: any app can ask for a window named `devtools-preview-x`, and a window can
+ * carry no appId at all (devtools' own scratch preview does). So the id must look
+ * like a preview *and* the identity must not be a real app's — a window claiming
+ * the preview name while running as `notes` is exactly the confusion this rejects.
+ */
+export function isPreviewWindow(win: { id: string; appId?: string }): boolean {
+  const segment = win.id.slice(win.id.lastIndexOf('/') + 1);
+  if (!segment.startsWith(PREVIEW_WINDOW_PREFIX)) return false;
+  return win.appId === undefined || isPreviewAppId(win.appId);
+}
+
+/**
+ * Handle app_eval: evaluate an expression inside a devtools preview iframe.
+ *
+ * Scoped hard to preview windows. A preview is a disposable sandbox devtools just
+ * built from source it is already editing, so eval there grants an agent nothing it
+ * could not get by editing the source and recompiling — it only saves the four-step
+ * loop (plant debug command → compile → read → remove → recompile) that asking a
+ * running app a one-off question otherwise costs. That reasoning does not extend to
+ * a user's real, installed apps holding real data, which is why this is not a
+ * general app-protocol verb and why the guard is a hard refusal rather than a
+ * permission an app could be granted.
+ */
+export async function handleAppEval(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  payload: Record<string, unknown>,
+): Promise<VerbResult> {
+  const win = windowState.getWindow(windowId);
+  if (!win) return error(`Window "${windowId}" not found.`);
+  if (win.content.renderer !== 'iframe') return error(`Window "${windowId}" is not an iframe app.`);
+
+  if (!isPreviewWindow(win)) {
+    return error(
+      `app_eval is refused for window "${windowId}": it is not a devtools preview. ` +
+        'Arbitrary evaluation is allowed only in the throwaway preview windows devtools ' +
+        'builds from source (window id "devtools-preview-{projectId}"). To drive a real ' +
+        'app, use its declared commands via app_command.',
+    );
+  }
+
+  const expression = payload.expression;
+  if (typeof expression !== 'string' || !expression.trim()) {
+    return error('"expression" (non-empty string) is required for app_eval.');
+  }
+
+  // No requireAppReady: the eval responder is part of the injected app-protocol
+  // script and answers whether or not the app ever called app.register(). Waiting
+  // on readiness would make eval unusable for exactly the broken-app case it is
+  // most useful for. (Same reasoning as the built-in `__console` state key.)
+  const outcome = await request(win.id, { kind: 'eval', expression }, deadlines.appQueryMs);
+  if (!outcome.ok) return error(noAnswer(outcome, 'eval request'));
+  const response = outcome.value;
+  if (response.kind !== 'eval') return error('Unexpected response kind.');
+  if (response.error) return error(response.error);
+  return ok(response.value ?? 'undefined');
 }
 
 /** Handle app_command: send a command to an app via the app protocol. */

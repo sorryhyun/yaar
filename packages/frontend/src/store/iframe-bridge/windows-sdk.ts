@@ -77,7 +77,7 @@ export function initWindowsSdkHandler() {
       if (el) {
         const iframe = findIframeIn(el);
         if (iframe?.contentWindow) {
-          const imageData = await tryIframeSelfCapture(iframe);
+          const { imageData } = await tryIframeSelfCapture(iframe);
           if (imageData) result.imageData = imageData;
         }
       }

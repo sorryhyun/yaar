@@ -12,6 +12,21 @@
  *
  * Supports hot-upgrade: if an older version was compiled into the HTML,
  * the frontend-injected newer version removes the old handler and takes over.
+ *
+ * Failure reasons. A response carrying `imageData: null` also carries a `reason`,
+ * so "the canvas was tainted" stops being indistinguishable from "nothing is
+ * listening" (the old bare null, which the parent could only wait out):
+ *   'taint'           — toDataURL/drawImage threw; an external resource poisoned
+ *                       the canvas. Deterministic; retrying cannot help.
+ *   'img-load-error'  — the serialized SVG data URL failed to load as an image.
+ *   'zero-size'       — the document had no layout box and no canvas to fall back to.
+ *   'serialize-error' — XMLSerializer or the clone/inline pipeline threw.
+ *   'no-provider'     — nothing in the window produced an image and no more
+ *                       specific cause could be attributed (e.g. an app-defined
+ *                       onCapture returned a non-image and the default path also
+ *                       came back empty).
+ * The reason field is what makes a null terminal for the parent — a bare null
+ * from an older compiled-in handler stays ignorable. See iframe-bridge/capture.ts.
  */
 export const IFRAME_CAPTURE_HELPER_SCRIPT = `
 (function() {
@@ -20,16 +35,20 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
     window.removeEventListener('message', window.__yaarCaptureHandler);
   }
 
-  function respond(requestId, imageData) {
+  function respond(requestId, imageData, reason) {
     window.parent.postMessage({
       type: 'yaar:capture-response',
       requestId: requestId,
-      imageData: imageData
+      imageData: imageData,
+      // Only attach a reason to failures — a successful response is unchanged.
+      reason: imageData ? undefined : (reason || 'no-provider')
     }, '*');
   }
 
   /**
-   * Render an SVG/foreignObject to a canvas data URL, then call cb(dataUrl).
+   * Render an SVG/foreignObject to a canvas data URL, then call cb(dataUrl, reason).
+   * On success the reason is undefined; on failure dataUrl is null and reason
+   * names the cause.
    */
   function svgToCanvas(svgStr, w, h, cb) {
     // Use data URL instead of blob URL — Chromium is less strict about
@@ -45,11 +64,12 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         ctx.drawImage(img, 0, 0, w, h);
         cb(c.toDataURL('image/webp', 0.9));
       } catch (ex) {
-        cb(null);
+        // drawImage/toDataURL only throw here for a tainted (cross-origin) canvas.
+        cb(null, 'taint');
       }
     };
     img.onerror = function() {
-      cb(null);
+      cb(null, 'img-load-error');
     };
     img.src = dataUrl;
   }
@@ -202,7 +222,9 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
       var w = docEl.clientWidth || docEl.scrollWidth;
       var h = docEl.clientHeight || docEl.scrollHeight;
       if (!(w > 0 && h > 0)) {
-        respond(requestId, largestCanvasCapture());
+        // No layout box. The canvas fallback may still have pixels; if it doesn't,
+        // the window simply has not been laid out yet.
+        respond(requestId, largestCanvasCapture(), 'zero-size');
         return;
       }
 
@@ -230,20 +252,28 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         var scripts = clone.querySelectorAll('script');
         for (var i = scripts.length - 1; i >= 0; i--) scripts[i].remove();
 
-        var serializer = new XMLSerializer();
-        var xhtml = serializer.serializeToString(clone);
-        var svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
-          '<foreignObject width="100%" height="100%">' + xhtml + '</foreignObject></svg>';
-        svgToCanvas(svg, w, h, function(data) {
-          respond(requestId, data || largestCanvasCapture());
+        var svg;
+        try {
+          var serializer = new XMLSerializer();
+          var xhtml = serializer.serializeToString(clone);
+          svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
+            '<foreignObject width="100%" height="100%">' + xhtml + '</foreignObject></svg>';
+        } catch (ex) {
+          respond(requestId, largestCanvasCapture(), 'serialize-error');
+          return;
+        }
+        svgToCanvas(svg, w, h, function(data, reason) {
+          // The canvas fallback can rescue the pixels, but not the diagnosis: if it
+          // also comes back empty, report why the real capture failed.
+          respond(requestId, data || largestCanvasCapture(), reason);
         });
       }).catch(function() {
-        respond(requestId, largestCanvasCapture());
+        respond(requestId, largestCanvasCapture(), 'serialize-error');
       });
     } catch (ex) {
       var fallback = null;
       try { fallback = largestCanvasCapture(); } catch (ex2) {}
-      respond(requestId, fallback);
+      respond(requestId, fallback, 'serialize-error');
     }
   }
 

@@ -6,19 +6,35 @@ import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-man
 import { findIframeIn, findWindowElement, getIframeTargetOrigin } from './target';
 
 /**
+ * Outcome of a self-capture attempt. A failure always names its cause, so the
+ * agent that asked can tell "the canvas is tainted, retrying is futile" from
+ * "the page had not painted yet, retry".
+ */
+export type IframeCaptureResult =
+  | { imageData: string; reason?: undefined }
+  | { imageData: null; reason: string };
+
+/**
  * Try capturing iframe content via the postMessage self-capture protocol.
- * Returns a base64 PNG data URL or null if the iframe doesn't respond.
+ *
+ * Null responses are terminal *only when they carry a `reason`*. That condition is
+ * load-bearing, not defensive: a stale capture handler compiled into an app's HTML
+ * can answer a bare null while the newer frontend-injected handler is still working
+ * on real pixels, and treating the first null as the answer would throw away the
+ * image that was about to arrive. New-protocol handlers always attach a reason, so
+ * a bare null identifies exactly the old handler — keep ignoring those and let the
+ * timeout speak instead.
  */
 export function tryIframeSelfCapture(
   iframe: HTMLIFrameElement,
   timeoutMs = 2000,
-): Promise<string | null> {
+): Promise<IframeCaptureResult> {
   return new Promise((resolve) => {
     const requestId = `capture-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
     const timer = setTimeout(() => {
       window.removeEventListener('message', handler);
-      resolve(null);
+      resolve({ imageData: null, reason: 'no-response' });
     }, timeoutMs);
 
     function handler(e: MessageEvent) {
@@ -27,12 +43,17 @@ export function tryIframeSelfCapture(
         e.data.requestId === requestId &&
         e.source === iframe.contentWindow
       ) {
-        // Ignore null responses — an upgraded capture handler may still
-        // respond with actual image data (e.g. foreignObject DOM capture).
-        if (!e.data.imageData) return;
+        if (!e.data.imageData) {
+          // Legacy bare null (no reason): keep waiting — see the note above.
+          if (typeof e.data.reason !== 'string' || !e.data.reason) return;
+          clearTimeout(timer);
+          window.removeEventListener('message', handler);
+          resolve({ imageData: null, reason: e.data.reason });
+          return;
+        }
         clearTimeout(timer);
         window.removeEventListener('message', handler);
-        resolve(e.data.imageData);
+        resolve({ imageData: e.data.imageData });
       }
     }
 
@@ -53,7 +74,10 @@ export function tryIframeSelfCapture(
  * (bypassing the Zustand queue) to minimize latency.
  */
 export async function captureWindow(windowId: string, requestId: string) {
-  const sendFeedback = (success: boolean, extra?: { imageData?: string; error?: string }) => {
+  const sendFeedback = (
+    success: boolean,
+    extra?: { imageData?: string; error?: string; captureFailure?: string },
+  ) => {
     sendEvent(wsManager, {
       type: ClientEventType.RENDERING_FEEDBACK,
       requestId,
@@ -78,12 +102,15 @@ export async function captureWindow(windowId: string, requestId: string) {
       return;
     }
 
-    const iframeData = await tryIframeSelfCapture(iframe);
-    if (iframeData) {
-      const base64 = iframeData.replace(/^data:image\/[^;]+;base64,/, '');
+    const result = await tryIframeSelfCapture(iframe);
+    if (result.imageData) {
+      const base64 = result.imageData.replace(/^data:image\/[^;]+;base64,/, '');
       sendFeedback(true, { imageData: base64 });
     } else {
-      sendFeedback(false, { error: 'Capture returned empty' });
+      sendFeedback(false, {
+        error: `Capture returned empty (${result.reason})`,
+        captureFailure: result.reason,
+      });
     }
   } catch (error) {
     sendFeedback(false, { error: error instanceof Error ? error.message : 'Capture failed' });

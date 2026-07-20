@@ -95,9 +95,9 @@ export async function captureMonitorScreenshot(): Promise<string | null> {
         const rect = iframe.getBoundingClientRect();
         if (rect.width === 0 || rect.height === 0) return;
 
-        const selfData = await tryIframeSelfCapture(iframe, 2000);
-        if (selfData) {
-          iframeCaptures.push({ rect, dataUrl: selfData });
+        const { imageData } = await tryIframeSelfCapture(iframe, 2000);
+        if (imageData) {
+          iframeCaptures.push({ rect, dataUrl: imageData });
         }
       }),
     );

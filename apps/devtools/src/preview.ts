@@ -1,5 +1,5 @@
 export {};
-import { appStorage, invoke, read, AppCommandError } from '@bundled/yaar';
+import { appStorage, errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
 import { activeProject, previewUrl, previewWindowId, setPreviewWindowId } from './project';
 
 // Preview window mechanics: how it is opened and how pixels are read back out.
@@ -14,6 +14,50 @@ import { activeProject, previewUrl, previewWindowId, setPreviewWindowId } from '
 export interface CapturedImage {
   data: string;
   mimeType: string;
+}
+
+/**
+ * Turn a capture failure reason into something actionable.
+ *
+ * The old message guessed ("may not have painted yet — retry") for every failure,
+ * which is right for exactly one of these and actively misleading for the rest:
+ * a tainted canvas fails the same way forever, so the advice to retry burned turns
+ * on a capture that could never succeed.
+ */
+export function captureFailureHint(reason: string): string {
+  switch (reason) {
+    case 'taint':
+      return (
+        'An external resource tainted the canvas, so the browser refuses to read its ' +
+        'pixels. Retrying will not help — find the non-`data:` URL in the DOM ' +
+        '(an <img>, a CSS url(), a <video>) and inline or remove it. Meanwhile use ' +
+        'previewEval to check structure instead of pixels.'
+      );
+    case 'no-response':
+      return (
+        'The preview never answered the capture request: either no capture handler is ' +
+        'installed (an old build — recompile and re-open the preview) or the page is ' +
+        'busy blocking the main thread. Check previewConsole for a stuck script.'
+      );
+    case 'zero-size':
+      return (
+        'The preview has no layout box yet — the window is not laid out, or the app ' +
+        'renders into a zero-size container. Retry after a moment; if it persists, ' +
+        'check the root element has a height (resizePreview can also give it room).'
+      );
+    case 'serialize-error':
+      return (
+        'Serializing the DOM for capture threw. Usually a node the cloner cannot handle ' +
+        '(exotic embeds, a huge tree). Use previewEval to inspect structure instead.'
+      );
+    case 'img-load-error':
+      return (
+        'The serialized snapshot failed to load as an image — typically malformed markup ' +
+        'in the DOM. Use previewEval to inspect structure instead.'
+      );
+    default:
+      return `Capture failed (${reason}).`;
+  }
 }
 
 /**
@@ -107,4 +151,25 @@ export async function readPreview(): Promise<{
     info: ((hasImages ? wrapped?.data : result) ?? {}) as Record<string, unknown>,
     images: hasImages ? (wrapped?.images ?? []) : [],
   };
+}
+
+/**
+ * Evaluate a JS expression inside the preview iframe and return the result as text.
+ *
+ * Answers questions about a *running* preview that source alone cannot settle —
+ * computed styles, element counts, live state — without the plant-a-debug-command,
+ * recompile, read, remove, recompile round trip. Also the fallback when a screenshot
+ * fails for good (a tainted canvas): structure is still checkable when pixels are not.
+ *
+ * The server refuses this for anything that is not a devtools preview window, so it
+ * is not a door into the user's installed apps.
+ */
+export async function previewEvaluate(expression: string): Promise<string> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  try {
+    return await invoke<string>(`yaar://windows/${wid}`, { action: 'app_eval', expression });
+  } catch (err) {
+    throw new AppCommandError(`Preview eval failed: ${errMsg(err)}`);
+  }
 }

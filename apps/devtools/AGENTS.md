@@ -43,16 +43,21 @@ All file commands operate **only inside the active project's sandbox**, never th
 - `writeFile` — `content` may be a string (verbatim) or an object (pretty-printed JSON, so `app.json` needs no hand-escaping).
 - `copyFile` — `{ from, to }`, creates destination dirs. Does not delete the source; pair with `deleteFile` to move.
 
-**`editFile` has three modes.** Read the file first to get exact text (or line numbers — `query("project")` gives each file's `lines`). It returns `{ editsApplied, lines }`.
+**`editFile` has three modes.** Read the file first to get exact text (or line numbers — `query("project")` gives each file's `lines`). It returns `{ editsApplied, lines, removed }`.
 
 - **Search/replace** (default): `search` + `replace` (aliases `oldString`/`newString`), first match only.
-- **Line range**: `startLine` + `endLine` (1-based, inclusive), optional `replace`. Omitting `replace` (or passing `""`) *deletes* those lines — this is how you drop a block in one call instead of crafting a search string for 90 lines.
-- **Multi-edit**: `edits`, an array of `{ search, replace }` and/or `{ startLine, endLine, replace? }` objects, applied **sequentially in memory and written once, all-or-nothing** — if any edit fails to match, the error names its index and nothing is written. Line numbers in later edits refer to the content *after* earlier edits.
+- **Line range**: `startLine` + `endLine` (1-based, inclusive) + **`anchor` (required)**, optional `replace`. Omitting `replace` (or passing `""`) *deletes* those lines — this is how you drop a block in one call instead of crafting a search string for 90 lines.
+- **Multi-edit**: `edits`, an array of `{ search, replace }` and/or `{ startLine, endLine, anchor, replace? }` objects, applied **sequentially in memory and written once, all-or-nothing** — if any edit fails to match (or fails its anchor check), the error names its index and nothing is written. Line numbers in later edits refer to the content *after* earlier edits.
+
+**`anchor` is mandatory for line ranges.** It is the current text of `startLine`, compared trimmed. Search mode anchors on content; a bare line number anchors on nothing, so a number that went stale (because an earlier edit shifted the file, or you read it two turns ago) splices into the wrong place and destroys working code without erroring. On mismatch the edit is rejected with the actual text at that line and **nothing is written** — re-read the file for current numbers rather than guessing an offset.
+
+**Read `removed` in the result.** It echoes the text the edit took out, truncated to ~500 chars with the middle elided (`… [N chars elided] …`); in a multi-edit each edit's removal is labelled. This is the cheapest check that the edit hit what you meant — a wrong splice is visible in the same turn instead of at the next compile.
 
 ```
 // ✅ command("editFile", { path: "src/main.ts", search: "const x = 1;", replace: "const x = 2;" })
-// ✅ command("editFile", { path: "src/main.ts", startLine: 40, endLine: 130 })   // delete lines 40–130
-// ✅ command("editFile", { path: "src/main.ts", edits: [ { search: "a", replace: "b" }, { startLine: 5, endLine: 5, replace: "// note" } ] })
+// ✅ command("editFile", { path: "src/main.ts", startLine: 40, endLine: 130, anchor: "function render() {" })   // delete lines 40–130
+// ✅ command("editFile", { path: "src/main.ts", edits: [ { search: "a", replace: "b" }, { startLine: 5, endLine: 5, anchor: "let n = 0;", replace: "// note" } ] })
+// ❌ command("editFile", { path: "src/main.ts", startLine: 40, endLine: 130 })   // rejected: no anchor
 ```
 
 ## Preview & Debugging

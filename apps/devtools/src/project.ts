@@ -344,15 +344,37 @@ export async function writeFile(path: string, content: string): Promise<void> {
 /**
  * One edit step. Either `search`/`replace` (first match), or a 1-based inclusive
  * `startLine`/`endLine` range where `replace` omitted (or '') deletes the lines.
+ * Line-range edits require `anchor`: the current text of `startLine`, compared
+ * trimmed. Search mode anchors on content already; line numbers anchor on nothing,
+ * so a stale one would splice into the wrong place silently.
  */
 export interface EditSpec {
   search?: string;
   replace?: string;
   startLine?: number;
   endLine?: number;
+  anchor?: string;
 }
 
-function applyEdit(content: string, edit: EditSpec, label: string): string {
+/** What one edit step produced: the new content, and the text it took out. */
+interface EditResult {
+  content: string;
+  removed: string;
+}
+
+/**
+ * Keep the head and tail of removed text, eliding the middle — a wrong splice is
+ * usually visible at either edge, and both edges together beat twice as much head.
+ */
+export function truncateRemoved(text: string, max = 500): string {
+  if (text.length <= max) return text;
+  const head = Math.ceil(max * 0.6);
+  const tail = max - head;
+  const elided = text.length - head - tail;
+  return `${text.slice(0, head)}\n… [${elided} chars elided] …\n${text.slice(-tail)}`;
+}
+
+function applyEdit(content: string, edit: EditSpec, label: string): EditResult {
   const hasSearch = edit.search !== undefined;
   const hasRange = edit.startLine !== undefined || edit.endLine !== undefined;
   if (hasSearch && hasRange) {
@@ -370,7 +392,10 @@ function applyEdit(content: string, edit: EditSpec, label: string): string {
     // A function replacer inserts the replacement literally. Passing it as a string
     // would expand $&, $1, $` and $' — so a replacement containing `$` would
     // silently corrupt the file.
-    return content.replace(edit.search!, () => edit.replace!);
+    return {
+      content: content.replace(edit.search!, () => edit.replace!),
+      removed: edit.search!,
+    };
   }
   if (hasRange) {
     const lines = content.split('\n');
@@ -387,35 +412,65 @@ function applyEdit(content: string, edit: EditSpec, label: string): string {
         `${label}: startLine ${start} is past the end of the file (${lines.length} lines)`,
       );
     }
+    const actual = lines[start - 1] ?? '';
+    if (edit.anchor === undefined) {
+      throw new Error(
+        `${label}: line-range edits require anchor (the current text of startLine). ` +
+          `Line ${start} is: ${JSON.stringify(actual)}`,
+      );
+    }
+    if (edit.anchor.trim() !== actual.trim()) {
+      throw new Error(
+        `${label}: anchor mismatch at line ${start} — expected ${JSON.stringify(edit.anchor)}, ` +
+          `found ${JSON.stringify(actual)}. Nothing was written; re-read the file for current line numbers.`,
+      );
+    }
     // `replace` omitted or '' deletes the range; otherwise its lines take its place.
     const replacement = edit.replace ? edit.replace.split('\n') : [];
-    lines.splice(start - 1, Math.min(end, lines.length) - start + 1, ...replacement);
-    return lines.join('\n');
+    const count = Math.min(end, lines.length) - start + 1;
+    const removed = lines.splice(start - 1, count, ...replacement);
+    return { content: lines.join('\n'), removed: removed.join('\n') };
   }
   throw new Error(
-    `${label}: provide search/replace (aliases oldString/newString) or startLine/endLine`,
+    `${label}: provide search/replace (aliases oldString/newString) or startLine/endLine + anchor`,
   );
 }
 
 /**
  * Apply edits sequentially against in-memory content. Throws on the first edit
  * that fails, naming its index — the caller writes nothing in that case, so a
- * multi-edit is all-or-nothing. Line numbers in later edits refer to the content
- * AFTER earlier edits have been applied.
+ * multi-edit is all-or-nothing (an anchor mismatch anywhere aborts the batch).
+ * Line numbers in later edits refer to the content AFTER earlier edits have been
+ * applied. Returns the new content plus each edit's removed text, in order.
  */
-export function applyEdits(content: string, edits: EditSpec[]): string {
+export function applyEdits(
+  content: string,
+  edits: EditSpec[],
+): { content: string; removals: string[] } {
   let current = content;
+  const removals: string[] = [];
   edits.forEach((edit, i) => {
     const label = edits.length > 1 ? `edit ${i + 1} of ${edits.length}` : 'edit';
-    current = applyEdit(current, edit, label);
+    const result = applyEdit(current, edit, label);
+    current = result.content;
+    removals.push(result.removed);
   });
-  return current;
+  return { content: current, removals };
+}
+
+/** One echo of what an edit took out, budget shared so a big batch stays bounded. */
+function formatRemoved(removals: string[]): string {
+  if (removals.length === 1) return truncateRemoved(removals[0] ?? '');
+  const budget = Math.max(120, Math.floor(500 / removals.length));
+  return removals
+    .map((text, i) => `── edit ${i + 1} ──\n${truncateRemoved(text, budget)}`)
+    .join('\n');
 }
 
 export async function editFile(
   path: string,
   edits: EditSpec[],
-): Promise<{ editsApplied: number; lines: number }> {
+): Promise<{ editsApplied: number; lines: number; removed: string }> {
   const proj = activeProject();
   if (!proj) throw new Error('No active project. Open or create one first.');
   if (edits.length === 0) throw new Error('No edits given');
@@ -423,9 +478,13 @@ export async function editFile(
   // JSON files can come back parsed — render them the way readFile does, so a
   // search string copied from a readFile result matches.
   const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-  const updated = applyEdits(content, edits);
+  const { content: updated, removals } = applyEdits(content, edits);
   await writeFile(path, updated);
-  return { editsApplied: edits.length, lines: updated.split('\n').length };
+  return {
+    editsApplied: edits.length,
+    lines: updated.split('\n').length,
+    removed: formatRemoved(removals),
+  };
 }
 
 export async function copyFile(from: string, to: string): Promise<void> {

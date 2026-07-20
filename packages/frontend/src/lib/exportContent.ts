@@ -73,7 +73,7 @@ export async function exportContent(
 
           // Tier 2: Screenshot via self-capture protocol
           if (el.contentWindow) {
-            const imageData = await tryIframeSelfCapture(el);
+            const { imageData } = await tryIframeSelfCapture(el);
             if (imageData) {
               const res = await fetch(imageData);
               const pngBlob = await res.blob();
