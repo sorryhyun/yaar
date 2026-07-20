@@ -20,14 +20,16 @@ function browserHeaders(): Record<string, string> {
   return h;
 }
 
-async function browserPost<T>(body: Record<string, unknown>): Promise<T> {
+async function browserPost<T>(body: Record<string, unknown>, budgetMs?: number): Promise<T> {
   if (!body.browserId) body.browserId = '0';
   const res = await fetch('/api/browser', {
     method: 'POST',
     headers: browserHeaders(),
     body: JSON.stringify(body),
-    // Bound stuck CDP actions — most have no server-side timeout
-    signal: AbortSignal.timeout(120_000),
+    // Bound stuck CDP actions — most have no server-side timeout. When an action
+    // carries its own budget (evaluate, scrollToBottom), stay above it so the
+    // server's error arrives instead of a bare client abort.
+    signal: AbortSignal.timeout(Math.max(120_000, (budgetMs ?? 0) + 15_000)),
   });
   const json = await res.json().catch(() => null);
   if (json === null) {
@@ -64,9 +66,27 @@ export async function open(
   return browserPost({ action: 'open', browserId, url, ...params });
 }
 
-export async function scroll(opts: { direction: 'up' | 'down'; browserId?: string }) {
+export async function scroll(opts: {
+  direction: 'up' | 'down';
+  amount?: number;
+  browserId?: string;
+}) {
   const { browserId, ...params } = opts;
   return browserPost({ action: 'scroll', browserId, ...params });
+}
+
+/**
+ * Scroll to the bottom one viewport at a time, dwelling after each step so
+ * lazy-loaded content can extend the page.
+ */
+export async function scrollToBottom(opts?: {
+  maxSteps?: number;
+  dwellMs?: number;
+  browserId?: string;
+}) {
+  const { browserId, ...params } = opts ?? {};
+  const budget = (params.maxSteps ?? 40) * (params.dwellMs ?? 400);
+  return browserPost({ action: 'scroll_to_bottom', browserId, ...params }, budget);
 }
 
 export async function navigate(
@@ -156,14 +176,32 @@ export async function extractImages(opts?: {
   return browserPost({ action: 'extract_images', browserId, ...params });
 }
 
-export async function html(opts?: { selector?: string; browserId?: string }) {
+/**
+ * Page HTML. Default is `document.body.innerHTML` — a fragment, no doctype/head/title.
+ * `outerHTML: true` includes the element's own tag (whole document when no selector);
+ * `includeMeta: true` returns `{ html, url, title, readyState }` instead of a string.
+ */
+export async function html(opts?: {
+  selector?: string;
+  outerHTML?: boolean;
+  includeMeta?: boolean;
+  browserId?: string;
+}) {
   const { browserId, ...params } = opts ?? {};
   return browserPost({ action: 'html', browserId, ...params });
 }
 
-export async function evaluate(opts: { expression: string; browserId?: string }) {
+/**
+ * Evaluate an expression in the page. Promises are awaited, so a page-side wait
+ * counts against `timeoutMs` (default 15s, max 120s).
+ */
+export async function evaluate(opts: {
+  expression: string;
+  timeoutMs?: number;
+  browserId?: string;
+}) {
   const { browserId, ...params } = opts;
-  return browserPost({ action: 'evaluate', browserId, ...params });
+  return browserPost({ action: 'evaluate', browserId, ...params }, params.timeoutMs);
 }
 
 // ── Visual ──────────────────────────────────────────────────────

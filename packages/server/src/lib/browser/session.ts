@@ -701,6 +701,63 @@ export class BrowserSession extends EventEmitter {
     return state;
   }
 
+  /**
+   * Scroll to the bottom of the page one viewport at a time, waiting after each
+   * step so lazy-loading content can extend the document. Stops when the height
+   * stops growing (two consecutive stable reads) or `maxSteps` is reached.
+   */
+  async scrollToBottom(opts?: { maxSteps?: number; dwellMs?: number }): Promise<{
+    steps: number;
+    finalHeight: number;
+    reachedBottom: boolean;
+  }> {
+    this.touch();
+
+    const maxSteps = Math.max(1, Math.min(opts?.maxSteps ?? 40, 500));
+    const dwellMs = Math.max(0, Math.min(opts?.dwellMs ?? 400, 10_000));
+
+    let lastHeight = (await this.eval<number>('document.documentElement.scrollHeight')) ?? 0;
+    let steps = 0;
+    let reachedBottom = false;
+    let stable = 0;
+
+    while (steps < maxSteps) {
+      await this.cdp.send('Runtime.evaluate', {
+        expression: 'window.scrollBy(0, window.innerHeight)',
+      });
+      steps++;
+      await new Promise((r) => setTimeout(r, dwellMs));
+
+      const metrics = await this.eval<{ height: number; atBottom: boolean }>(
+        `(() => {
+          const d = document.documentElement;
+          return {
+            height: d.scrollHeight,
+            atBottom: window.innerHeight + window.scrollY >= d.scrollHeight - 2,
+          };
+        })()`,
+      );
+      const height = metrics?.height ?? lastHeight;
+
+      if (metrics?.atBottom && height === lastHeight) {
+        // At the bottom AND the document stopped growing. One more confirming
+        // round protects against a loader that appends a frame late.
+        stable++;
+        if (stable >= 2) {
+          reachedBottom = true;
+          break;
+        }
+      } else {
+        stable = 0;
+      }
+      lastHeight = height;
+    }
+
+    if (!this.closed) await this.takeScreenshot();
+    this.notifyUpdate();
+    return { steps, finalHeight: lastHeight, reachedBottom };
+  }
+
   async screenshot(opts?: {
     clip?: { x: number; y: number; width: number; height: number };
   }): Promise<Buffer> {
@@ -712,14 +769,23 @@ export class BrowserSession extends EventEmitter {
     return downscaleForModel(await this.takeScreenshot());
   }
 
-  /** Evaluate arbitrary JS expression in the page and return the result. */
-  async evaluate(expression: string): Promise<unknown> {
+  /**
+   * Evaluate arbitrary JS expression in the page and return the result.
+   *
+   * `awaitPromise` means a page-side sleep counts against `timeoutMs`, so a
+   * long poll needs the budget raised explicitly — the CDP default is 15s.
+   */
+  async evaluate(expression: string, timeoutMs?: number): Promise<unknown> {
     this.touch();
-    const result = await this.cdp.send('Runtime.evaluate', {
-      expression,
-      returnByValue: true,
-      awaitPromise: true,
-    });
+    const result = await this.cdp.send(
+      'Runtime.evaluate',
+      {
+        expression,
+        returnByValue: true,
+        awaitPromise: true,
+      },
+      timeoutMs,
+    );
     if (result.exceptionDetails) {
       const msg =
         result.exceptionDetails.exception?.description ||
@@ -730,13 +796,40 @@ export class BrowserSession extends EventEmitter {
     return result.result?.value;
   }
 
-  /** Return raw innerHTML of a selector (or document.body). */
-  async getHtml(selector?: string): Promise<string> {
+  /**
+   * Return the HTML of a selector (or `document.body`).
+   *
+   * Default is `innerHTML` — a *fragment*, with no doctype, `<head>`, or title.
+   * `outerHTML` includes the element's own tag; for the whole document that is
+   * `<html>…</html>` (still no doctype). `includeMeta` wraps the result with the
+   * page url/title/readyState, which the bare string cannot carry.
+   */
+  async getHtml(selector?: string, opts?: { outerHTML?: boolean }): Promise<string> {
     this.touch();
-    const expr = selector
-      ? `(document.querySelector(${JSON.stringify(selector)}) || document.body).innerHTML`
-      : `document.body.innerHTML`;
-    return (await this.eval<string>(expr)) || '';
+    const prop = opts?.outerHTML ? 'outerHTML' : 'innerHTML';
+    const target = selector
+      ? `(document.querySelector(${JSON.stringify(selector)}) || document.body)`
+      : opts?.outerHTML
+        ? `document.documentElement`
+        : `document.body`;
+    return (await this.eval<string>(`${target}.${prop}`)) || '';
+  }
+
+  /** `getHtml` plus the page metadata a bare HTML string cannot carry. */
+  async getHtmlWithMeta(
+    selector?: string,
+    opts?: { outerHTML?: boolean },
+  ): Promise<{ html: string; url: string; title: string; readyState: string }> {
+    const html = await this.getHtml(selector, opts);
+    const meta = await this.eval<{ url: string; title: string; readyState: string }>(
+      `({ url: location.href, title: document.title, readyState: document.readyState })`,
+    );
+    return {
+      html,
+      url: meta?.url ?? '',
+      title: meta?.title ?? '',
+      readyState: meta?.readyState ?? '',
+    };
   }
 
   async extractContent(selector?: string): Promise<PageContent> {

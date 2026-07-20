@@ -1049,6 +1049,30 @@ declare module '@bundled/yaar-ml' {
 
 declare module '@bundled/yaar-web' {
   // ── Tab lifecycle ──────────────────────────────────────────────
+  //
+  // A `browserId` is a TAB, not an isolated browser. Every tab lives in one
+  // shared Chrome profile, so cookies, localStorage, and logins are SHARED
+  // across browserIds — opening a new browserId does not give you a clean
+  // session. Real isolation exists only between this headless sandbox and the
+  // user's own Chrome, which apps cannot reach at all.
+  //
+  // At most 5 tabs may be open at once; `create` fails beyond that, so close
+  // tabs you are done with. `browserId` defaults to '0' everywhere.
+
+  /**
+   * Every function here resolves to this envelope, NOT to the payload directly.
+   * The payload is in `content[0].text` — a plain string for text results, a
+   * JSON string for structured ones (parse it). Always check `isError`.
+   */
+  export interface WebResult {
+    content: Array<
+      | { type: 'text'; text: string }
+      | { type: 'image'; data: string; mimeType: string }
+      | { type: string; [key: string]: unknown }
+    >;
+    isError?: boolean;
+  }
+
   /** Create a new browser tab without navigating. */
   export function create(opts?: {
     browserId?: string;
@@ -1077,7 +1101,25 @@ declare module '@bundled/yaar-web' {
     direction: 'back' | 'forward';
     browserId?: string;
   }): Promise<unknown>;
-  export function scroll(opts: { direction: 'up' | 'down'; browserId?: string }): Promise<unknown>;
+  /** Scroll by `amount` pixels (default 500) in one step. */
+  export function scroll(opts: {
+    direction: 'up' | 'down';
+    amount?: number;
+    browserId?: string;
+  }): Promise<unknown>;
+  /**
+   * Scroll to the bottom one viewport at a time, dwelling after each step so
+   * lazy-loaded content can extend the page. Stops when the document height
+   * stops growing or `maxSteps` (default 40) is reached.
+   *
+   * `content[0].text` is JSON: `{ steps, finalHeight, reachedBottom }`.
+   */
+  export function scrollToBottom(opts?: {
+    maxSteps?: number;
+    /** Pause after each step, ms (default 400). Raise it for slow loaders. */
+    dwellMs?: number;
+    browserId?: string;
+  }): Promise<WebResult>;
 
   // ── Interaction ────────────────────────────────────────────────
   export function click(opts: {
@@ -1134,8 +1176,38 @@ declare module '@bundled/yaar-web' {
     extensions?: string[];
     browserId?: string;
   }): Promise<unknown>;
-  export function html(opts?: { selector?: string; browserId?: string }): Promise<unknown>;
-  export function evaluate(opts: { expression: string; browserId?: string }): Promise<unknown>;
+  /**
+   * Page HTML, in `content[0].text`.
+   *
+   * The default is `document.body.innerHTML` — a FRAGMENT. There is no doctype,
+   * no `<head>`, no `<title>`, and no page metadata of any kind. Do not feed it
+   * to a parser expecting a document, and do not read a title out of it.
+   *
+   * - `outerHTML: true` — include the element's own tag; with no selector that
+   *   is the whole `<html>` element (still no doctype).
+   * - `includeMeta: true` — `content[0].text` becomes JSON
+   *   `{ html, url, title, readyState }` instead of a bare string. This is the
+   *   only way to learn which URL the HTML actually came from.
+   */
+  export function html(opts?: {
+    selector?: string;
+    outerHTML?: boolean;
+    includeMeta?: boolean;
+    browserId?: string;
+  }): Promise<WebResult>;
+  /**
+   * Evaluate an expression in the page; the result is JSON in `content[0].text`.
+   *
+   * Promises are awaited, so a page-side `await sleep(...)` counts against the
+   * budget. `timeoutMs` defaults to 15000 and is capped at 120000 — raise it for
+   * anything that polls or waits, or the call fails with a CDP timeout that
+   * looks like a page error.
+   */
+  export function evaluate(opts: {
+    expression: string;
+    timeoutMs?: number;
+    browserId?: string;
+  }): Promise<WebResult>;
 
   // ── Visual ─────────────────────────────────────────────────────
   export function annotate(browserId?: string): Promise<unknown>;

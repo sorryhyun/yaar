@@ -41,6 +41,18 @@ import { handleCreate } from '../../features/window/create.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
 import { getActiveSession, getActivePool, ok, okJson, error } from '../../handlers/utils.js';
 import { scopedAppStoragePath } from '../../handlers/apps.js';
+
+/**
+ * The URI that names what a `storage/...` tool argument actually resolved to.
+ *
+ * `storage/x` is silently rewritten to this app's own storage. Reporting the
+ * resolved URI is what makes the rewrite visible: an agent that asked for
+ * `storage/reports/x` and got "not found" otherwise has no way to see that it
+ * looked under its own app, not the shared root.
+ */
+function resolvedStorageUri(appId: string, relativePath: string): string {
+  return `yaar://apps/${appId}/storage/${relativePath}`;
+}
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '../../lib/ids.js';
 import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
@@ -161,13 +173,15 @@ export function registerAppAgentTools(server: McpServer): void {
     {
       description:
         'Query the app state. Pass a stateKey to read specific state, or omit for the app manifest. ' +
-        'Use stateKey starting with "storage/" to read from app-scoped storage (e.g. "storage/config.json").',
+        'Use stateKey starting with "storage/" to read from app-scoped storage (e.g. "storage/config.json"). ' +
+        'Storage is always YOUR app\'s — "storage/x" resolves to yaar://apps/{yourApp}/storage/x, never the shared root.',
       inputSchema: {
         stateKey: z
           .string()
           .optional()
           .describe(
-            'State key to query (omit for manifest). Use "storage/{path}" to read app storage.',
+            'State key to query (omit for manifest). Use "storage/{path}" to read app storage — ' +
+              'resolved under your own app, not the shared storage root.',
           ),
         appId: z
           .string()
@@ -193,13 +207,16 @@ export function registerAppAgentTools(server: McpServer): void {
           args.stateKey === 'storage' ? '' : args.stateKey.slice('storage/'.length);
         const scoped = scopedAppStoragePath(appId, relativePath);
         if (!scoped) return error(STORAGE_PATH_ERROR);
+        const uri = resolvedStorageUri(appId, relativePath);
         if (!relativePath) {
           // List root storage
           const result = await storageList(scoped);
-          return okJson(result);
+          return okJson({ uri, ...result });
         }
         const result = await storageRead(scoped);
-        if (!result.success) return error(result.error ?? 'read failed.');
+        if (!result.success) {
+          return error(`${result.error ?? 'read failed.'} (resolved to ${uri})`);
+        }
         return ok(result.content ?? '');
       }
 
@@ -260,6 +277,7 @@ export function registerAppAgentTools(server: McpServer): void {
         const path = (args.params?.path as string) ?? '';
         const scoped = scopedAppStoragePath(appId, path);
         if (!scoped) return error(STORAGE_PATH_ERROR);
+        const uri = resolvedStorageUri(appId, path);
 
         switch (subCommand) {
           case 'write': {
@@ -268,18 +286,22 @@ export function registerAppAgentTools(server: McpServer): void {
               return error('"content" (string) is required for storage:write.');
             }
             const result = await storageWrite(scoped, content);
-            if (!result.success) return error(result.error ?? 'write failed.');
-            return ok(`Written to ${path}`);
+            if (!result.success) {
+              return error(`${result.error ?? 'write failed.'} (resolved to ${uri})`);
+            }
+            return ok(`Written to ${uri}`);
           }
           case 'delete': {
             if (!path) return error('"path" is required for storage:delete.');
             const result = await storageDelete(scoped);
-            if (!result.success) return error(result.error ?? 'delete failed.');
-            return ok(`Deleted ${path}`);
+            if (!result.success) {
+              return error(`${result.error ?? 'delete failed.'} (resolved to ${uri})`);
+            }
+            return ok(`Deleted ${uri}`);
           }
           case 'list': {
             const result = await storageList(scoped);
-            return okJson(result);
+            return okJson({ uri, ...result });
           }
           default:
             return error(

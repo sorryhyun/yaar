@@ -247,8 +247,23 @@ export async function handleScroll(
   const session = resolveSession(pool, browserId);
   const dir = p.direction as string;
   if (dir !== 'up' && dir !== 'down') return error('"direction" must be "up" or "down".');
-  const state = await session.scroll(dir);
+  const amount =
+    typeof p.amount === 'number' ? Math.max(1, Math.min(p.amount, 100_000)) : undefined;
+  const state = await session.scroll(dir, amount);
   return ok(formatPageState(state));
+}
+
+export async function handleScrollToBottom(
+  pool: BrowserProvider,
+  browserId: string,
+  p: Payload,
+): Promise<VerbResult> {
+  const session = resolveSession(pool, browserId);
+  const result = await session.scrollToBottom({
+    maxSteps: typeof p.maxSteps === 'number' ? p.maxSteps : undefined,
+    dwellMs: typeof p.dwellMs === 'number' ? p.dwellMs : undefined,
+  });
+  return okJson(result);
 }
 
 export async function handleNavigate(
@@ -506,7 +521,11 @@ export async function handleEvaluate(
 ): Promise<VerbResult> {
   const session = resolveSession(pool, browserId);
   if (!p.expression) return error('"expression" is required for evaluate.');
-  const result = await session.evaluate(p.expression as string);
+  // `awaitPromise` makes a page-side sleep count against this budget. Capped at
+  // 120s to stay inside the SDK's own fetch abort.
+  const raw = typeof p.timeoutMs === 'number' ? p.timeoutMs : undefined;
+  const timeoutMs = raw === undefined ? undefined : Math.max(1_000, Math.min(raw, 120_000));
+  const result = await session.evaluate(p.expression as string, timeoutMs);
   return okJson((result as object) ?? null);
 }
 
@@ -516,8 +535,12 @@ export async function handleHtml(
   p: Payload,
 ): Promise<VerbResult> {
   const session = resolveSession(pool, browserId);
-  const html = await session.getHtml(p.selector as string | undefined);
-  return ok(html);
+  const selector = p.selector as string | undefined;
+  const opts = { outerHTML: p.outerHTML === true };
+  if (p.includeMeta === true) {
+    return okJson(await session.getHtmlWithMeta(selector, opts));
+  }
+  return ok(await session.getHtml(selector, opts));
 }
 
 export async function handleAnnotate(
@@ -564,6 +587,8 @@ export async function runBrowserAction(
       return handlePress(pool, browserId, body);
     case 'scroll':
       return handleScroll(pool, browserId, body);
+    case 'scroll_to_bottom':
+      return handleScrollToBottom(pool, browserId, body);
     case 'navigate':
       return handleNavigate(pool, browserId, body);
     case 'hover':
