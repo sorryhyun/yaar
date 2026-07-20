@@ -201,6 +201,14 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
 - **CI** (`.github/workflows/ci.yml`): `bun install` → build shared → typecheck → test (runs on push/PR to master)
 
+### Subagent Model Selection
+
+When the main agent is **Fable**, always pass an explicit `model` to the `Agent` tool — one of `opus`, `sonnet`, or `haiku`. Omitting it makes the subagent inherit Fable, which is not what we want for delegated work.
+
+- **`sonnet`** — the default choice for almost everything (code search, edits, tests, docs).
+- **`opus`** — hard debugging, architecture design, tricky multi-file refactors.
+- **`haiku`** — trivial mechanical work (renames, one-line lookups, formatting sweeps).
+
 ## Code Style
 
 - All packages: TypeScript strict mode, ESM (`"type": "module"`)
