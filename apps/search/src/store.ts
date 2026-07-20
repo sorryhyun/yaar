@@ -6,6 +6,8 @@ export const [state, setState] = createStore({
   query: '',
   glob: '',
   scope: '',
+  /** The scope the CURRENT results were actually fetched with (may differ from the UI's `scope`). */
+  resultScope: '',
   matches: [] as SearchMatch[],
   truncated: false,
   searching: false,
