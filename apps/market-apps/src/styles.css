@@ -209,9 +209,20 @@ body {
   padding: 0;
 }
 
-/* Publish / Update button — accent outline */
+/* Push-to-marketplace button ("Publish" / "Publish update") — accent outline */
 .publish-btn {
   font-size: 13px;
+}
+
+/* Publisher badge — marks apps the signed-in user published. Deliberately
+   quiet: it annotates the name, it is not an action. */
+.publisher-badge {
+  margin-left: var(--yaar-sp-1);
+  font-size: var(--yaar-text-sm);
+  line-height: 1;
+  opacity: 0.75;
+  cursor: default;
+  vertical-align: baseline;
 }
 
 /* Uninstall button — muted danger style */

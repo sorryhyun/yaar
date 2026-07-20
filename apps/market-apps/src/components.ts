@@ -25,16 +25,27 @@ import {
 } from './store.js';
 import type { DisplayApp } from './types.js';
 
-/** Publish/Update button for an installed, non-system app — only when signed in. */
+/**
+ * Push-to-marketplace button for an installed, non-system app — only when signed in.
+ *
+ * This button only ever *uploads* the local copy to the marketplace. It never pulls
+ * a newer version down, so it must never read as a bare "Update" — that reliably
+ * gets misread as "download the newer marketplace version", which is the opposite
+ * direction. First push says "Publish"; every later push says "Publish update".
+ */
 export function publishButton(app: DisplayApp) {
   if (isSystem(app.id) || !account().signedIn) return '';
   return html`
     <button
       class="y-btn y-btn-sm publish-btn"
       disabled=${() => loading()}
+      title=${() =>
+        ownsApp(app.id)
+          ? `Publish your local version of ${app.name} to the marketplace as a new version`
+          : `Publish ${app.name} to the marketplace for the first time`}
       onClick=${() => void publishApp(app)}
     >
-      ${() => (ownsApp(app.id) ? 'Update' : 'Publish')}
+      ${() => (ownsApp(app.id) ? 'Publish update' : 'Publish')}
     </button>
   `;
 }
@@ -50,7 +61,17 @@ export function marketCard(app: DisplayApp) {
   return html`
     <div class="y-card app-card">
       <div class="app-info">
-        <div class="app-name">${app.name}</div>
+        <div class="app-name">
+          ${app.name}${() =>
+            ownsApp(app.id)
+              ? html`<span
+                  class="publisher-badge"
+                  title="You published this app"
+                  aria-label="You published this app"
+                  >✏️</span
+                >`
+              : ''}
+        </div>
         <div class="app-subtitle y-text-muted">${subtitle || app.id}</div>
       </div>
       <div class="app-actions">

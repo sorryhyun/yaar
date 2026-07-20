@@ -111,14 +111,14 @@ export async function uninstallApp(app: { id: string; name: string }): Promise<v
 
 export async function publishApp(app: { id: string; name: string }): Promise<void> {
   await runAction(
-    `Publishing ${app.name}…`,
+    `Publishing ${app.name} to the marketplace…`,
     async () => {
       const result = await hostPublish(app);
-      setStatus(result?.message || `Published ${app.name}`);
+      setStatus(result?.message || `Published ${app.name} to the marketplace`);
       // Ownership may have just been claimed — refresh so the badge reflects it.
       await refreshAccount();
     },
-    'Publish failed',
+    'Publish to marketplace failed',
   );
 }
 

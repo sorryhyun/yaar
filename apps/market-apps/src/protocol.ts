@@ -21,7 +21,6 @@ import {
   touch,
 } from './store.js';
 import { refreshData } from './actions.js';
-import type { ListedApp, InstalledApp } from './types.js';
 
 if (app) {
   app.register({
