@@ -11,9 +11,9 @@
 // itself, so a raw huggingface.co URL would be blocked. `assetUrl()` resolves
 // each path against, in order:
 //
-//   1. storage/anima/…            — what the download button fills in
-//   2. storage/mounts/krea/…      — a hand-configured local mount, if present
-//   3. /api/ml-weights?url=<hf>   — same-origin streaming proxy to Hugging Face
+//   1. storage/apps/anima/weights/… — app-scoped cache filled by the download button
+//   2. storage/mounts/krea/…        — hand-configured read-only mount, if present
+//   3. /api/ml-weights?url=<hf>     — same-origin streaming proxy to Hugging Face
 //
 // So a fresh install works with zero setup (streaming from HF on demand), and
 // downloading just makes it fast and offline-capable.
@@ -25,8 +25,8 @@ export { Tensor, run, capabilities, dispose };
 /** Upstream weights repo. `resolve/main` serves raw bytes (and 302s to the LFS CDN). */
 export const HF_BASE = 'https://huggingface.co/sorryhyun/anima-turbo-4step/resolve/main/onnx';
 
-/** Where the download button writes, relative to storage/. */
-export const LOCAL_DIR = 'anima';
+/** App-scoped weight cache written by the download button, relative to storage/. */
+export const LOCAL_DIR = 'apps/anima/weights';
 
 /** Same-origin candidates, most-preferred first. */
 const LOCAL_SOURCES = [`/api/storage/${LOCAL_DIR}`, '/api/storage/mounts/krea'];

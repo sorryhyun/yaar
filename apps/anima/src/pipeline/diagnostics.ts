@@ -164,10 +164,11 @@ export async function ditProbe(
   }
 }
 
-// Pull the whole weight set to storage/anima/ via the server. Without this the app
-// still works — assetUrl() streams from Hugging Face through /api/ml-weights — but
-// each fresh page load re-fetches the 3.9 GB DiT, which the proxy sends `no-store`
-// (within a page, loadModel's session memo means it streams at most once).
+// Pull the whole weight set to storage/apps/anima/weights/ via the server. Without
+// this the app still works — assetUrl() streams from Hugging Face through
+// /api/ml-weights — but each fresh page load re-fetches the 3.9 GB DiT, which the
+// proxy sends `no-store` (within a page, loadModel's session memo means it streams
+// at most once).
 export async function downloadModels(): Promise<unknown> {
   if (busy()) return { ok: false, error: 'busy' };
   setBusy(true);

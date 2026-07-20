@@ -9,6 +9,12 @@
   ],
   "permissions": [
     "yaar://storage/media/",
+    {
+      "uri": "yaar://storage/mounts/krea/",
+      "verbs": [
+        "read"
+      ]
+    },
     "yaar://apps/self/storage/"
   ],
   "version": "0.1.0",

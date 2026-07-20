@@ -1,17 +1,17 @@
 ## Writing prompts
 
-Anima takes **danbooru-style tags**, comma-separated. A short natural-language sentence at the end works too, but tags are the backbone.
+Anima takes **danbooru-style tags**, comma-separated. A short natural-language sentence at the end works too.
 
-**Tag order** (official guideline): `[meta] [character] [series] @[artist] [general]`
+**Tag order** (official guideline): `[meta] [character] [series] @[artist] [general] ... [natural language]`
 
 ```
 general, 1girl, chitanda eru, hyouka, @ningen mame, long hair, school uniform,
-looking at viewer, upper body, classroom, sunlight
+looking at viewer, upper body, classroom, sunlight. She is saying hi to the viewer.
 ```
 
 Tips:
 
-- **Rating tag first** — `general` / `sensitive` / `questionable` / `explicit`.
+- **Rating tag first** — `general` / `sensitive` / `questionable` / `explicit`. `general` tag tends to generate monotone, collapsed images. Rating tags don't explicitly generate adultery images.
 - **Quality tags like `masterpiece, best quality` are mostly unnecessary.** They don't hurt, but the effect is marginal — omit them or keep them minimal.
 - **Be specific.** `blue eyes, silver hair, fur-trimmed coat` beats `pretty`.
 - Framing and camera are tags too: `upper body`, `full body`, `from above`, `close-up`, `cowboy shot`.
@@ -58,11 +58,11 @@ The artist tag is the single biggest lever on style. Use one or two — mixing t
 ### Examples
 
 ```
-general, 1girl, @ningen mame, solo, short black hair, red ribbon, sailor uniform,
+sensitive, 1girl, @ningen mame, solo, short black hair, red ribbon, sailor uniform,
 sitting, warm afternoon light, upper body. She is reading a book in a library.
 ```
 
 ```
-sensitive, 1girl, @rurudo, solo, white hair, red eyes, black jacket, neon signs,
+questionable, 1girl, @rurudo, solo, white hair, red eyes, black jacket, neon signs,
 rain, night city, looking at viewer, from below, cowboy shot
 ```

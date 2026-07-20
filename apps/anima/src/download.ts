@@ -1,5 +1,6 @@
-// Pull the weight set from Hugging Face onto the server's disk (storage/anima/),
-// so subsequent loads are local, offline-capable and survive a browser cache clear.
+// Pull the weight set from Hugging Face into Anima's app-scoped storage
+// (storage/apps/anima/weights/), so subsequent loads are local, offline-capable
+// and survive a browser cache clear.
 //
 // The browser never touches the bytes: `POST /api/storage/{path}` buffers the whole
 // body under MAX_UPLOAD_SIZE (50 MB) and the DiT sidecar alone is 3.9 GB. Instead
