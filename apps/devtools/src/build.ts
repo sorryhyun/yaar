@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { errMsg, AppCommandError } from '@bundled/yaar';
+import { errMsg, invoke, AppCommandError } from '@bundled/yaar';
 import {
   compile as devCompile,
   typecheck as devTypecheck,
@@ -22,6 +22,8 @@ import {
   setDiagnostics,
   setBundledLibs,
   setStaticProtocol,
+  previewWindowId,
+  setPreviewWindowId,
   type Diagnostic,
 } from './store';
 
@@ -104,6 +106,9 @@ export async function typecheck(): Promise<void> {
 /**
  * Deploy the active project, or throw saying why not.
  *
+ * On success the preview window is closed: it renders the pre-deploy build under a
+ * throwaway principal, so leaving it up invites confirming a deploy against stale pixels.
+ *
  * A failed deploy used to be written to the status bar and then swallowed — the caller got
  * back the same `undefined` a successful one returns. An agent, which cannot read the status
  * bar, was told nothing and moved on believing it had shipped. The server refusing to deploy
@@ -116,7 +121,7 @@ export async function deploy(opts: {
   description?: string;
   message?: string;
   skipTypecheck?: boolean;
-}): Promise<{ appId: string; name: string }> {
+}): Promise<{ appId: string; name: string; previewClosed?: boolean }> {
   const proj = activeProject();
   if (!proj) throw new AppCommandError('No active project. Open or create one first.');
   setStatusText('Deploying...');
@@ -134,8 +139,31 @@ export async function deploy(opts: {
     throw new AppCommandError(`Deploy failed: ${reason}`);
   }
   const name = result.name ?? opts.appId;
+
+  // Close the preview once the deploy has actually landed. A preview is a window onto a
+  // *build*, not onto the app: it runs under the throwaway `preview--{projectId}` principal
+  // against a sandbox that deploy has now superseded. Left open it keeps rendering the
+  // pre-deploy bundle under a title that reads like the shipped app, which is exactly the
+  // window someone screenshots to confirm a deploy worked.
+  //
+  // Best-effort, and only on success: a close that fails (or a preview that was never open)
+  // must not turn a deploy that shipped into a reported failure. The signal is cleared
+  // regardless — nothing subscribes to window close, so it goes stale in both directions,
+  // and leaving it set would point the preview commands at a window that is gone.
+  let previewClosed = false;
+  const wid = previewWindowId();
+  if (wid) {
+    try {
+      await invoke(`yaar://windows/${wid}`, { action: 'close' });
+      previewClosed = true;
+    } catch {
+      /* already gone, or the server refused — the deploy still succeeded */
+    }
+    setPreviewWindowId(null);
+  }
+
   setStatusText(`Deployed as "${name}"`);
-  return { appId: result.appId ?? opts.appId, name };
+  return { appId: result.appId ?? opts.appId, name, ...(previewClosed ? { previewClosed } : {}) };
 }
 
 // ── Version history ──

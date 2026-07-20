@@ -172,7 +172,8 @@ export const buildCommands = {
   deploy: defineCommand({
     description:
       'Deploy to apps/. Refuses type errors unless skipTypecheck. Snapshots the previous ' +
-      'version — see gitRestore.',
+      'version — see gitRestore. Closes the preview window on success: it shows the ' +
+      'pre-deploy build, so re-open it with `preview` if you still need it.',
     params: {
       type: 'object',
       properties: {
