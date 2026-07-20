@@ -14,7 +14,7 @@ import {
 import { actionEmitter } from '../../session/action-emitter.js';
 import { publishFrame } from '../../streams/stream-hub.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
-import { toDisplayName, generateSkillMd } from './helpers.js';
+import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
 import { snapshotApp } from './git.js';
@@ -373,17 +373,14 @@ export async function doDeploy(
       await cp(join(sandboxPath, f), join(appPath, f));
     }
 
-    const skillContent = sandboxSkill
-      ? sandboxSkill
-      : generateSkillMd(
-          appId,
-          displayName,
-          hasCompiledApp,
-          componentFiles,
-          skill,
-          !!extractedProtocol,
-        );
-    await writeIfChanged(join(appPath, 'SKILL.md'), skillContent);
+    // Only hand-written SKILL.md is deployed. There is no generated fallback:
+    // the launch snippet and protocol blurb it used to emit are already derived
+    // at read time (`features/apps/describe.ts` appends the protocol manifest),
+    // so generating them here only produced boilerplate files to maintain.
+    const skillContent = sandboxSkill ?? skill;
+    if (skillContent !== undefined) {
+      await writeIfChanged(join(appPath, 'SKILL.md'), skillContent);
+    }
 
     // Copy HINT.md from sandbox if it exists (monitor agent orchestration hints)
     try {

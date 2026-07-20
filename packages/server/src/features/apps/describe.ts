@@ -36,17 +36,19 @@ export async function describeApp(appId: string): Promise<Record<string, unknown
 
 /**
  * Load an app's SKILL.md and append protocol manifest + permissions sections.
- * Returns null if no SKILL.md exists for the app.
+ * Returns null if the app is not installed.
+ *
+ * SKILL.md is optional and no longer generated at deploy time, so an app
+ * without one still gets a doc here — a header plus the manifest and
+ * permissions derived from app.json/protocol.json.
  */
 export async function loadAppSkillWithManifest(appId: string): Promise<string | null> {
-  const skill = await loadAppSkill(appId);
-  if (skill === null) return null;
-
-  let result = skill;
-
-  // Append static protocol manifest if available
   const apps = await listApps();
   const app = apps.find((a) => a.id === appId);
+  if (!app) return null;
+
+  const skill = await loadAppSkill(appId);
+  let result = skill ?? `# ${app.name}${app.description ? `\n\n${app.description}` : ''}`.trimEnd();
   if (app?.protocol) {
     const sections: string[] = [];
     const { state, commands } = app.protocol;
