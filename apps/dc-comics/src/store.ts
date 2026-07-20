@@ -1,6 +1,6 @@
 import { createStore } from '@bundled/solid-js/store';
 import { createPersistedSignal } from '@bundled/yaar';
-import type { Post, Comment, TabMode, Subscription, AppSettings } from './types';
+import type { Post, Comment, TabMode, Subscription, AppSettings, ImgCommentMap } from './types';
 
 const DEFAULT_SETTINGS: AppSettings = { refreshInterval: 300 };
 export const [settings, setSettings] = createPersistedSignal<AppSettings>(
@@ -28,6 +28,15 @@ export const [state, setState] = createStore({
   // Comments
   comments: [] as Comment[],
   showComments: false,
+
+  // Per-image comments (짤방댓글). Fetched lazily on the first toggle open and
+  // cached for the lifetime of the selected post: one desktop page load yields
+  // every image's thread, so there is never more than one request per post.
+  imgComments: {} as ImgCommentMap,
+  imgCommentsLoading: false,
+  imgCommentsLoaded: false,
+  imgCommentsError: null as string | null,
+  imgCommentsExpandAll: false,
 
   // Panel
   activePanel: 'feed' as 'feed' | 'subscriptions',

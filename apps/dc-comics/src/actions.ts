@@ -1,6 +1,6 @@
 import { setState, state, settings, updatePosts, resetNewPostTracking } from './store';
-import { fetchPosts, fetchPostDetail } from './fetcher';
-import type { Post, Comment, SeriesLink, Subscription } from './types';
+import { fetchPosts, fetchPostDetail, fetchImageComments } from './fetcher';
+import type { Post, Comment, SeriesLink, Subscription, ImgCommentMap } from './types';
 import { errMsg } from '@bundled/yaar';
 import {
   loadSubscriptions,
@@ -39,6 +39,52 @@ function cacheSet(id: string, content: string, comments: Comment[]): void {
     if (firstKey) postDetailCache.delete(firstKey);
   }
   postDetailCache.set(id, { content, comments, ts: Date.now() });
+}
+
+// Per-image comments are cached separately from the body: they come from a
+// different (desktop) page load and are only fetched if the reader actually
+// opens a thread, so most posts never populate this at all.
+const imgCommentCache = new Map<string, { map: ImgCommentMap; ts: number }>();
+
+/** Blank per-image comment state. Used whenever the open post changes. */
+const EMPTY_IMGC = {
+  imgComments: {} as ImgCommentMap,
+  imgCommentsLoading: false,
+  imgCommentsLoaded: false,
+  imgCommentsError: null as string | null,
+  imgCommentsExpandAll: false,
+};
+
+/**
+ * Load every per-image comment thread for the open post, once.
+ *
+ * Called on the first toggle a reader opens (or on 전체 펼치기). A single desktop
+ * page load returns all of them, so repeated toggles cost nothing and there is
+ * no per-image request fan-out to rate-limit.
+ */
+export async function loadImageComments(): Promise<void> {
+  const post = state.selectedPost;
+  if (!post) return;
+  if (state.imgCommentsLoaded || state.imgCommentsLoading) return;
+
+  const hit = imgCommentCache.get(post.id);
+  if (hit && Date.now() - hit.ts <= POST_CACHE_TTL) {
+    setState({ imgComments: hit.map, imgCommentsLoaded: true, imgCommentsError: null });
+    return;
+  }
+
+  const version = fetchVersion;
+  setState({ imgCommentsLoading: true, imgCommentsError: null });
+  try {
+    const map = await fetchImageComments(post);
+    // The reader may have moved to another post while this was in flight.
+    if (version !== fetchVersion || state.selectedPost?.id !== post.id) return;
+    imgCommentCache.set(post.id, { map, ts: Date.now() });
+    setState({ imgComments: map, imgCommentsLoading: false, imgCommentsLoaded: true });
+  } catch (err) {
+    if (version !== fetchVersion || state.selectedPost?.id !== post.id) return;
+    setState({ imgCommentsError: errMsg(err), imgCommentsLoading: false });
+  }
 }
 
 export function clearTimers(): void {
@@ -100,6 +146,7 @@ export async function selectPost(post: Post): Promise<void> {
       postError: null,
       comments: cached.comments,
       showComments: false,
+      ...EMPTY_IMGC,
     });
     return;
   }
@@ -112,6 +159,7 @@ export async function selectPost(post: Post): Promise<void> {
     postError: null,
     comments: [],
     showComments: false,
+    ...EMPTY_IMGC,
   });
   try {
     const { content, comments } = await fetchPostDetail(post);

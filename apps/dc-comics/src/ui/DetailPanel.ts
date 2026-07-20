@@ -3,7 +3,13 @@ import html from '@bundled/solid-js/html';
 import { showConfirm } from '@bundled/yaar';
 import { state } from '../store';
 import { CommentSection } from './CommentSection';
-import { subscribeSeries, unsubscribeSeries } from '../actions';
+import { subscribeSeries, unsubscribeSeries, loadImageComments } from '../actions';
+import {
+  setupImageComments,
+  syncImageComments,
+  setAllOpen,
+  type ImgCommentsController,
+} from './imgComments';
 import {
   processImages,
   attachImageErrorFallbacks,
@@ -93,6 +99,11 @@ function EmptyState() {
 export function DetailPanel() {
   // ref signal so createEffect can track when the body element mounts/remounts.
   const [contentBodyEl, setContentBodyEl] = createSignal<HTMLDivElement | null>(null);
+
+  // Controller for the per-image comment toggles mounted into the body HTML.
+  // Rebuilt whenever the body is re-rendered.
+  const [imgcCtl, setImgcCtl] = createSignal<ImgCommentsController | null>(null);
+  const [allOpen, setAllOpenFlag] = createSignal(false);
 
   // Progressive image loader. processImages() marks every image past the first
   // two with class "deferred-img" and stashes the real URL in data-deferred-src.
@@ -187,7 +198,26 @@ export function DetailPanel() {
     revokeBlobUrls();
     el.innerHTML = content && !state.postLoading ? processImages(content) : '';
     setupLazyImages(el);
+    // Mount the per-image comment toggles onto the freshly-written body.
+    setAllOpenFlag(false);
+    setImgcCtl(content && !state.postLoading ? setupImageComments(el) : null);
   });
+
+  // Push fetch results into the mounted toggles as they arrive.
+  createEffect(() => {
+    const ctl = imgcCtl();
+    if (ctl) syncImageComments(ctl);
+  });
+
+  const toggleAll = () => {
+    const ctl = imgcCtl();
+    if (!ctl) return;
+    const next = !allOpen();
+    setAllOpenFlag(next);
+    setAllOpen(ctl, next);
+    // One fetch covers every thread, so expanding all costs a single request.
+    if (next) void loadImageComments();
+  };
 
   onCleanup(() => {
     observer?.disconnect();
@@ -243,6 +273,29 @@ export function DetailPanel() {
                         <div class="error-msg">${() => state.postError}</div>
                       </div>`
                     : null}
+
+                ${() => {
+                  const ctl = imgcCtl();
+                  if (state.postLoading || !ctl || !ctl.hasAny) return null;
+                  return html`
+                    <div class="imgc-bar">
+                      <button type="button" class="imgc-all-btn" onclick=${toggleAll}>
+                        <span class="imgc-icon">💬</span>
+                        <span
+                          >${() =>
+                            allOpen() ? '전체 코멘트 접기' : '전체 코멘트 펼치기'}</span
+                        >
+                        ${() =>
+                          state.imgCommentsLoading
+                            ? html`<span
+                                class="y-spinner"
+                                style="width:10px;height:10px"
+                              ></span>`
+                            : null}
+                      </button>
+                    </div>
+                  `;
+                }}
 
                 <div
                   class="post-body post-content-body"

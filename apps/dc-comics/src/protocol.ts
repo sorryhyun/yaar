@@ -79,6 +79,24 @@ export function registerProtocol() {
           })),
         }),
       },
+      imageComments: {
+        description:
+          '현재 선택된 게시물의 이미지별 짤방댓글. 리더가 처음 토글을 열 때 한 번만 불러오므로, 그 전에는 loaded=false입니다.',
+        handler: () => ({
+          loading: state.imgCommentsLoading,
+          loaded: state.imgCommentsLoaded,
+          error: state.imgCommentsError,
+          threads: Object.keys(state.imgComments).map((fileno) => ({
+            fileno,
+            count: state.imgComments[fileno].length,
+            items: state.imgComments[fileno].map((c) => ({
+              author: c.author,
+              text: c.text,
+              date: c.date,
+            })),
+          })),
+        }),
+      },
       subscriptions: {
         description: '구독 중인 시리즈 목록과 각 시리즈의 안 읽은 글 수.',
         handler: () =>

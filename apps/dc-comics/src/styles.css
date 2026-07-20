@@ -406,6 +406,152 @@
   color: var(--yaar-accent);
 }
 
+/* ===== Per-image comments (짤방댓글) ===== */
+
+/* Toolbar above the body with the expand-all control. Only rendered when the
+   post actually has image comments. */
+.imgc-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3) 0;
+}
+
+.imgc-all-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-full);
+  color: var(--yaar-text-muted);
+  font-family: var(--yaar-font);
+  font-size: var(--yaar-text-sm);
+  cursor: pointer;
+  transition:
+    background var(--yaar-ease),
+    color var(--yaar-ease);
+}
+
+.imgc-all-btn:hover {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+
+/* Per-image toggle, inserted directly after each image that has comments. */
+.imgc-wrap {
+  margin: 2px 0 10px;
+}
+
+.imgc-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  max-width: 100%;
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-full);
+  color: var(--yaar-text-muted);
+  font-family: var(--yaar-font);
+  font-size: var(--yaar-text-sm);
+  line-height: 1.6;
+  cursor: pointer;
+  transition:
+    background var(--yaar-ease),
+    color var(--yaar-ease);
+}
+
+.imgc-toggle:hover {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+
+.imgc-toggle.imgc-open {
+  color: var(--yaar-text);
+  border-color: var(--yaar-accent-emphasis);
+}
+
+.imgc-icon {
+  font-size: var(--yaar-text-xs);
+  flex-shrink: 0;
+}
+
+/* The label carries a preview of the first comment, so it must not push the
+   chevron off the row on a long one. */
+.imgc-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imgc-chev {
+  flex-shrink: 0;
+  font-size: var(--yaar-text-xs);
+  transition: transform var(--yaar-ease);
+}
+
+.imgc-toggle.imgc-open .imgc-chev {
+  transform: rotate(180deg);
+}
+
+.imgc-panel {
+  margin-top: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-left: 2px solid var(--yaar-accent-emphasis);
+  border-radius: var(--yaar-radius);
+}
+
+.imgc-item + .imgc-item {
+  margin-top: var(--yaar-sp-2);
+  padding-top: var(--yaar-sp-2);
+  border-top: 1px solid var(--yaar-border);
+}
+
+.imgc-item-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--yaar-sp-2);
+  margin-bottom: 2px;
+}
+
+.imgc-author {
+  font-size: var(--yaar-text-xs);
+  font-weight: 600;
+  color: var(--yaar-text-muted);
+}
+
+.imgc-author.imgc-gonick {
+  color: var(--yaar-accent);
+}
+
+.imgc-date {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+}
+
+.imgc-text {
+  font-size: var(--yaar-text-base);
+  line-height: 1.6;
+  color: var(--yaar-text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.imgc-status {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-text-dim);
+}
+
+.imgc-status.imgc-error {
+  color: var(--yaar-error);
+}
+
 /* ===== Comment section ===== */
 .comment-section {
   border-top: 1px solid var(--yaar-border);
