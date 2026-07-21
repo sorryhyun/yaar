@@ -222,19 +222,6 @@ describe('app sanitize policies have not drifted', () => {
     expect(main).toContain('safeUrlRaw');
   });
 
-  test('pdf-viewer uses an explicit allowlist instead', () => {
-    // Print documents need inline `style` and full table markup that a prose policy
-    // would not grant, so this app deliberately uses ALLOWED_TAGS/ALLOWED_ATTR.
-    // An explicit allowlist cannot admit an `on*` handler by construction.
-    const src = readFileSync(join(REPO_ROOT, 'apps/pdf-viewer/src/main.ts'), 'utf8');
-    expect(src).toContain('@bundled/dompurify');
-    expect(src).toContain('ALLOWED_TAGS');
-    // USE_PROFILES overrides ALLOWED_TAGS rather than intersecting with it, so
-    // adding it would silently widen this policy back to DOMPurify's HTML profile.
-    // Matched with a colon so the file's warning comment about it stays allowed.
-    expect(src).not.toMatch(/USE_PROFILES\s*:/);
-  });
-
   test('no app generates inline event handler attributes', () => {
     // Step 5 of the ordering contract: behavior attaches via addEventListener.
     // A generated `onerror` is stripped by any sanitizer, so the behavior it

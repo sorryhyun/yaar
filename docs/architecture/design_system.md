@@ -70,7 +70,7 @@ Deviations are legal only if listed here, with a reason:
   meta-chrome floating over the wallpaper. Uses the glass-tier overlay tokens.
 - **dc-comics** — dcinside brand orange (`#f7b731`) layered
   over the token base. Brand accents ride on top of, never replace, the system.
-- **pdf-viewer, slides-lite** — opt into `.y-light` for document-like surfaces.
+- **slides-lite** — opts into `.y-light` for document-like surfaces.
 - **process-explorer** (Tailwind-slate re-skin) and **video-viewer-lite** (bespoke
   pale-blue light theme) — *grandfathered, not endorsed*: they redefine `--yaar-*`
   in `:root`, which is the supported override mechanism, but they diverge from the
