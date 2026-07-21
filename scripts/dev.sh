@@ -51,6 +51,36 @@ bun run --filter @yaar/compiler build
 # without a Chrome binary. Backgrounds itself: waits for the server, then opens
 # the URL (which also brings the debug port up).
 CHROME_PID=""
+CHROME_PIDFILE=""
+
+# Kill a Chrome this script started in a previous run but never cleaned up —
+# e.g. the terminal/pane was closed (SIGHUP), the shell was force-killed, or the
+# server died and `wait` returned, none of which the old INT/TERM-only trap
+# caught. Mirrors cleanupStaleChrome() in lib/browser for the headless sandbox
+# Chrome; the frontend (.yaar-chrome, port 9222) Chrome otherwise had no
+# orphan-reaping at all — and because the next run *reuses* an existing profile
+# instance (open-a-tab handoff), the orphan would persist across runs forever.
+reap_stale_chrome() {
+  local pidfile="$1" port="$2"
+  [ -f "$pidfile" ] || return 0
+  local pid cmd
+  pid="$(cat "$pidfile" 2>/dev/null || true)"
+  rm -f "$pidfile" 2>/dev/null || true
+  [ -n "$pid" ] || return 0
+  kill -0 "$pid" 2>/dev/null || return 0
+  # Only kill if the live PID is really our debuggable Chrome — a recycled PID
+  # could now belong to something unrelated.
+  cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+  case "$cmd" in
+    *"remote-debugging-port=$port"*) ;;
+    *) return 0 ;;
+  esac
+  echo "[chrome] Reaping stale Chrome from a previous run (PID ${pid})"
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.1; done
+  kill -KILL "$pid" 2>/dev/null || true
+}
+
 launch_chrome_when_ready() {
   [ "${LAUNCH_CHROME:-0}" = "1" ] || return 0
 
@@ -84,6 +114,12 @@ launch_chrome_when_ready() {
   # A non-default profile is mandatory: Chrome refuses remote debugging on the
   # default profile (the one holding your real logins).
   local profile="${YAAR_CHROME_PROFILE:-$HOME/.yaar-chrome}"
+  # Record the fresh-launched Chrome's PID so a future run can reap it (see
+  # reap_stale_chrome). Derive the pidfile from the *unix* profile path, before
+  # any cygpath conversion, so bash can read/write it on Git Bash too.
+  local pidfile="${profile}.pid"
+  CHROME_PIDFILE="$pidfile"
+  reap_stale_chrome "$pidfile" "$port"
   # chrome.exe can't interpret MSYS /c/... paths — convert on Git Bash.
   command -v cygpath >/dev/null 2>&1 && profile="$(cygpath -w "$profile")"
   local url="http://localhost:${PORT:-8000}"
@@ -120,21 +156,32 @@ launch_chrome_when_ready() {
       --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${url}" >/dev/null 2>&1
   ) &
   CHROME_PID=$!
+  # exec (above) replaces the subshell in place, so CHROME_PID becomes the Chrome
+  # process itself once it launches — record it so a future run can reap it if
+  # this one dies without running cleanup. (If an existing Chrome was reused, the
+  # handoff exits immediately and this PID goes dead; the reaper's liveness +
+  # command check then skips it.)
+  echo "$CHROME_PID" > "$pidfile" 2>/dev/null || true
 }
 
-# Cleanup function
+# Cleanup function. Guarded so the EXIT trap can't re-run it after an explicit
+# signal (INT/TERM/HUP) already did.
+_cleanup_ran=0
 cleanup() {
+  [ "$_cleanup_ran" = 1 ] && return
+  _cleanup_ran=1
   echo ""
   echo "Shutting down..."
 
-  # Kill process groups (negative PID kills the group)
-  kill -TERM -$SERVER_PID 2>/dev/null
+  # Kill process groups (negative PID kills the group). SERVER_PID may be unset
+  # if we abort during the build steps before the server starts.
+  [ -n "$SERVER_PID" ] && kill -TERM -$SERVER_PID 2>/dev/null
 
   # Give the server time to gracefully stop child processes (e.g. codex app-server)
   sleep 3
 
   # Force kill if still running
-  kill -KILL -$SERVER_PID 2>/dev/null
+  [ -n "$SERVER_PID" ] && kill -KILL -$SERVER_PID 2>/dev/null
 
   # Clean up any orphaned codex app-server processes
   pkill -f "codex app-server" 2>/dev/null || true
@@ -144,11 +191,16 @@ cleanup() {
   # so we never kill a browser we didn't start. The profile dir persists, so
   # logins survive across runs.
   [ -n "$CHROME_PID" ] && kill -TERM "$CHROME_PID" 2>/dev/null
+  [ -n "$CHROME_PIDFILE" ] && rm -f "$CHROME_PIDFILE" 2>/dev/null
 
   exit 0
 }
 
-trap cleanup INT TERM
+# Trap HUP (terminal/pane closed) and EXIT (server died and `wait` returned, or
+# `set -e` aborted a build step) in addition to INT/TERM. A plain INT/TERM-only
+# trap leaked the frontend Chrome whenever the shell went away without one of
+# those two signals — the most common way it happens in practice.
+trap cleanup INT TERM HUP EXIT
 
 # Enable job control for process groups
 set -m
