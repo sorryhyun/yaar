@@ -55,3 +55,5 @@ apps/*/credentials.json
 # Root-only: a downloaded `claude` binary. Must not be bare — a bare `claude`
 # matches any path component, which silently hides src/providers/claude/.
 /claude
+# Resource benchmark output (make claude-bench)
+bench/

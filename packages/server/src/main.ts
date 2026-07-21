@@ -99,6 +99,23 @@ async function startup() {
   process.on('SIGINT', handleShutdown);
   process.on('SIGTERM', handleShutdown);
 
+  // Benchmarking hook: `kill -USR2 <pid>` prints a one-line memory snapshot of
+  // THIS server process (RSS + JS heap). Lets an external harness mark phase
+  // boundaries (boot-idle, after-market, after-singularity) and diff the deltas.
+  // Bun's --heap-prof only dumps once at exit; this gives per-phase samples.
+  // Deliberately uses only process.memoryUsage() (cheap) and NOT bun:jsc
+  // heapStats() — the latter is expensive enough to dominate the near-idle
+  // server's own --cpu-prof flamegraph and skew the very benchmark it serves.
+  process.on('SIGUSR2', () => {
+    const m = process.memoryUsage();
+    const mb = (n: number) => (n / 1024 / 1024).toFixed(1);
+    console.log(
+      `[mem-snapshot] rss=${mb(m.rss)}MB heapUsed=${mb(m.heapUsed)}MB ` +
+        `heapTotal=${mb(m.heapTotal)}MB external=${mb(m.external)}MB ` +
+        `arrayBuffers=${mb(m.arrayBuffers)}MB`,
+    );
+  });
+
   // Catch unhandled errors — ensure Chrome and other resources are cleaned up
   process.on('uncaughtException', (err) => {
     console.error('Uncaught exception:', err);

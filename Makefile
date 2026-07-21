@@ -1,4 +1,4 @@
-.PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench codex-types design design-preview
+.PHONY: dev claude codex claude-dev codex-dev claude-windows codex-windows server install lint build build-exe clean test test-frontend test-server test-shared test-integration bench claude-bench codex-types design design-preview
 
 # GNU make on Windows runs recipes with cmd.exe by default, which can't parse
 # the POSIX `VAR=1 ./script.sh` lines below. Route recipes through Git Bash
@@ -85,6 +85,12 @@ test-integration:
 # Run performance benchmarks (packages/tests/src/benchmarks/)
 bench:
 	bun run --filter @yaar/tests bench
+
+# CPU/memory benchmark: launch a Claude session under Bun's profiler, drive a
+# headless Chrome to open apps, sample the whole process tree per phase, and
+# write bench/report.md. Override apps: make claude-bench APPS=market-apps,memo
+claude-bench:
+	@bun scripts/bench-claude.ts $(if $(APPS),--apps $(APPS),) $(if $(SETTLE),--settle $(SETTLE),) $(BENCH_ARGS)
 
 # Regenerate Codex app-server TypeScript types
 # Post-processes imports to add .js extensions required by ESM resolution
