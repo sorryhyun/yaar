@@ -2,6 +2,8 @@ import { createSignal, onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import { invoke, list, read, del, httpFetch, showToast, withLoading } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+import { JsonRpcResponse, McpConfigResponse } from './schema';
 import './styles.css';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -66,18 +68,28 @@ async function mcpPost(url: string, body: string, sessionId?: string): Promise<R
 function parseRpcResponse(body: string): unknown {
   // Try direct JSON first
   try {
-    const parsed = JSON.parse(body);
-    if (parsed.result !== undefined) return parsed.result;
-    if (parsed.error) throw new Error(parsed.error.message ?? 'JSON-RPC error');
-    return parsed;
+    const parsed = z.safeParse(JsonRpcResponse, JSON.parse(body));
+    if (!parsed.success) {
+      console.error('MCP JSON-RPC response failed validation', parsed.error.issues);
+      throw new Error('Malformed MCP JSON-RPC response');
+    }
+    const data = parsed.data;
+    if (data.result !== undefined) return data.result;
+    if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
+    return data;
   } catch {
     // Try SSE format: look for "data: {...}" lines
     for (const line of body.split('\n')) {
       if (line.startsWith('data: ')) {
         try {
-          const parsed = JSON.parse(line.slice(6));
-          if (parsed.result !== undefined) return parsed.result;
-          if (parsed.error) throw new Error(parsed.error.message ?? 'JSON-RPC error');
+          const parsed = z.safeParse(JsonRpcResponse, JSON.parse(line.slice(6)));
+          if (!parsed.success) {
+            console.error('MCP SSE data line failed validation', parsed.error.issues);
+            throw new Error('Malformed MCP SSE payload');
+          }
+          const data = parsed.data;
+          if (data.result !== undefined) return data.result;
+          if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
         } catch {
           // skip malformed SSE lines
         }
@@ -171,11 +183,19 @@ async function startScan() {
 async function loadServers() {
   try {
     // Read config for names/types, and runtime status for state/toolCount
-    const [configData, statusData] = await Promise.all([
-      read<{ servers: Record<string, { type: string; url?: string; command?: string }> }>('yaar://config/mcp'),
+    const [configRaw, statusData] = await Promise.all([
+      read('yaar://config/mcp'),
       list<{ servers: McpServer[] }>('yaar://mcp'),
     ]);
-    const configs = configData?.servers ?? {};
+    // Validate the persisted config at the trust boundary. A missing config
+    // (null/undefined) is normal — treat it as an empty `{}` rather than a
+    // validation failure so first-run users don't see a spurious error.
+    const configParsed = z.safeParse(McpConfigResponse, configRaw ?? {});
+    if (!configParsed.success) {
+      console.error('MCP config failed validation', configParsed.error.issues);
+      throw new Error('Malformed MCP config');
+    }
+    const configs = configParsed.data.servers ?? {};
     const statuses = statusData?.servers ?? [];
     const statusMap = new Map(statuses.map((s) => [s.name, s]));
 

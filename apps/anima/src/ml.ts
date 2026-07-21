@@ -17,6 +17,7 @@
 //
 // So a fresh install works with zero setup (streaming from HF on demand), and
 // downloading just makes it fast and offline-capable.
+import * as z from '@bundled/zod';
 import { session, run, Tensor, capabilities, dispose } from '@bundled/yaar-ml';
 import type { InferenceSession } from '@bundled/yaar-ml';
 
@@ -162,8 +163,21 @@ export async function fetchFile(url: string, onProgress?: ProgressFn): Promise<A
   return out.buffer;
 }
 
-export async function fetchJSON<T = any>(name: string): Promise<T> {
-  return JSON.parse(new TextDecoder().decode(await fetchFile(await assetUrl(name))));
+export async function fetchJSON<T = any>(name: string): Promise<T>;
+export async function fetchJSON<S extends z.ZodMiniType>(
+  name: string,
+  schema: S,
+): Promise<z.infer<S>>;
+export async function fetchJSON(name: string, schema?: z.ZodMiniType): Promise<unknown> {
+  // Untrusted: a JSON model config streamed from the ML-weights proxy / Hugging Face.
+  const raw: unknown = JSON.parse(new TextDecoder().decode(await fetchFile(await assetUrl(name))));
+  if (!schema) return raw;
+  const parsed = z.safeParse(schema, raw);
+  if (!parsed.success) {
+    console.error(`model config ${name} failed validation`, parsed.error.issues);
+    throw new Error(`Model config ${name} is malformed.`);
+  }
+  return parsed.data;
 }
 export async function fetchF32(name: string): Promise<Float32Array> {
   return new Float32Array(await fetchFile(await assetUrl(name)));

@@ -5,20 +5,30 @@
 // verb (install / delete / list). Everything here returns plain data; loading
 // state and status text are the caller's concern (see actions.ts).
 
+import * as z from '@bundled/zod';
 import { del, invoke, list } from '@bundled/yaar';
 import { GITHUB_STATUS_URL } from './constants.js';
 import { parseInstalledAny } from './parsers.js';
+import { GithubStatusSummarySchema } from './schema.js';
 import { apiBase } from './store.js';
 import type { InstalledApp } from './types.js';
 
 // ── Marketplace domain ───────────────────────────────────────────────
 
-export async function apiGet<T>(path: string): Promise<T> {
+export async function apiGet<S extends z.ZodMiniType>(
+  path: string,
+  schema: S,
+): Promise<z.infer<S>> {
   const base = apiBase();
   if (!base) throw new Error('No domain configured. Set a domain first.');
   const res = await fetch(`${base}${path}`, { method: 'GET' });
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
-  return res.json() as Promise<T>;
+  const parsed = z.safeParse(schema, await res.json());
+  if (!parsed.success) {
+    console.error(`GET ${path} response failed validation`, parsed.error.issues);
+    throw new Error('The marketplace returned an unexpected response.');
+  }
+  return parsed.data;
 }
 
 // ── GitHub health ────────────────────────────────────────────────────
@@ -31,7 +41,12 @@ export async function apiGet<T>(path: string): Promise<T> {
 export async function fetchGithubStatus(): Promise<unknown> {
   const res = await fetch(GITHUB_STATUS_URL, { method: 'GET' });
   if (!res.ok) throw new Error(`GitHub status check failed (${res.status})`);
-  return res.json();
+  const parsed = z.safeParse(GithubStatusSummarySchema, await res.json());
+  if (!parsed.success) {
+    console.error('GitHub status summary failed validation', parsed.error.issues);
+    throw new Error('GitHub status page returned an unexpected response.');
+  }
+  return parsed.data;
 }
 
 // ── Host verbs (yaar://apps/) ──────────────────────────────────────────
@@ -64,20 +79,42 @@ export async function hostPublish(app: { id: string }): Promise<{ message?: stri
 // answers because market-apps is a bundled system app. `login` opens a real Google
 // consent screen, which is why the routes are closed to ordinary apps.
 
-export async function yaarGet<T>(path: string): Promise<T> {
+export async function yaarGet<S extends z.ZodMiniType>(
+  path: string,
+  schema: S,
+): Promise<z.infer<S>> {
   const res = await fetch(path, { method: 'GET' });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error || `GET ${path} failed (${res.status})`);
   }
-  return res.json() as Promise<T>;
+  const parsed = z.safeParse(schema, await res.json());
+  if (!parsed.success) {
+    console.error(`GET ${path} response failed validation`, parsed.error.issues);
+    throw new Error(`GET ${path} returned an unexpected response.`);
+  }
+  return parsed.data;
 }
 
-export async function yaarPost<T>(path: string): Promise<T> {
+/**
+ * POST to a YAAR auth route. `schema` is optional: the callers here (login/logout)
+ * never read the response body, so passing a schema only asserts the endpoint
+ * answered with well-formed JSON of the expected shape; omit it to skip that check.
+ */
+export async function yaarPost<S extends z.ZodMiniType>(
+  path: string,
+  schema?: S,
+): Promise<z.infer<S> | undefined> {
   const res = await fetch(path, { method: 'POST' });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error || `POST ${path} failed (${res.status})`);
   }
-  return res.json() as Promise<T>;
+  if (!schema) return undefined;
+  const parsed = z.safeParse(schema, await res.json());
+  if (!parsed.success) {
+    console.error(`POST ${path} response failed validation`, parsed.error.issues);
+    throw new Error(`POST ${path} returned an unexpected response.`);
+  }
+  return parsed.data;
 }

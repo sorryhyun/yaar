@@ -32,7 +32,13 @@ import {
   setStatus,
 } from './store.js';
 import { parseGithubStatus, parseMarket } from './parsers.js';
-import type { ApiPayload, ListedApp } from './types.js';
+import {
+  AuthLoginSchema,
+  AuthMeSchema,
+  AuthStatusSchema,
+  MarketPayloadSchema,
+} from './schema.js';
+import type { ListedApp } from './types.js';
 
 // ── Async action runner ──────────────────────────────────────────────
 
@@ -67,7 +73,7 @@ export async function refreshData(): Promise<void> {
   await runAction(
     'Refreshing…',
     async () => {
-      const marketPayload = await apiGet<ApiPayload>('/api/apps/');
+      const marketPayload = await apiGet('/api/apps/', MarketPayloadSchema);
       const apps = parseMarket(marketPayload);
 
       try {
@@ -127,19 +133,14 @@ export async function publishApp(app: { id: string; name: string }): Promise<voi
 /** Pull sign-in status + owned apps from the server into the `account` signal. */
 export async function refreshAccount(): Promise<void> {
   try {
-    const status = await yaarGet<{
-      configured: boolean;
-      signedIn: boolean;
-      email: string | null;
-      pending: boolean;
-    }>('/api/auth/google/status');
+    const status = await yaarGet('/api/auth/google/status', AuthStatusSchema);
 
     let ownedApps: string[] = [];
     let email = status.email;
     if (status.signedIn) {
       // Best-effort: the marketplace may be unreachable — keep the local status either way.
       try {
-        const me = await yaarGet<{ email: string | null; apps: string[] }>('/api/auth/google/me');
+        const me = await yaarGet('/api/auth/google/me', AuthMeSchema);
         ownedApps = Array.isArray(me.apps) ? me.apps : [];
         email = me.email ?? status.email;
       } catch {
@@ -171,7 +172,7 @@ export async function signIn(): Promise<void> {
   if (authBusy()) return;
   setAuthBusy(true);
   try {
-    await yaarPost<{ authUrl: string }>('/api/auth/google/login');
+    await yaarPost('/api/auth/google/login', AuthLoginSchema);
     setStatus('Complete sign-in in the browser window that just opened…', false);
 
     for (let i = 0; i < 150; i++) {

@@ -7,7 +7,9 @@
  */
 import type { Post, Comment, TabMode, ImgComment, ImgCommentMap } from './types';
 import * as web from '@bundled/yaar-web';
+import * as z from '@bundled/zod';
 import { openOrNavigate, MAIN_TAB, POST_TAB } from './browser';
+import { ScrollInfoSchema } from './schema';
 
 const GALLERY_ID = 'comic_new6';
 const GALLERY_LIST_BASE = 'https://gall.dcinside.com/board/lists/';
@@ -389,9 +391,17 @@ export async function fetchImageComments(post: Post): Promise<ImgCommentMap> {
     await sleep(260);
 
     if (!r?.data) continue;
+    // The expression is ours, but `data` is an untyped string off the CDP
+    // envelope, so validate before trusting these numbers to drive the loop.
+    // A malformed frame is a soft failure: skip this step, keep scrolling.
     let info: { y: number; h: number; vh: number; d: number };
     try {
-      info = JSON.parse(r.data);
+      const parsed = z.safeParse(ScrollInfoSchema, JSON.parse(r.data));
+      if (!parsed.success) {
+        console.error('[dc-comics] scroll telemetry failed validation', parsed.error.issues);
+        continue;
+      }
+      info = parsed.data;
     } catch {
       continue;
     }

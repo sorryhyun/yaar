@@ -35,16 +35,9 @@ import {
   setStatus,
 } from '../state';
 import type { GenerationResult } from '../protocol';
+import { LatentStatsSchema } from '../schema';
 import { canvasBlob } from '../utils/canvas';
 import { ditSessionOptions, releaseOtherDits } from './session';
-
-interface LatentStats {
-  latents_mean: number[];
-  latents_std: number[];
-  sigmas: number[];
-  z: number;
-  size: number;
-}
 
 export type GenerateOptions = {
   model?: string;
@@ -103,7 +96,7 @@ export async function generate(opts: GenerateOptions = {}): Promise<unknown> {
     log(`ratio ${bk.id} → image ${bk.W}×${bk.H}, ${tokens(bk)} attention tokens`);
     log(`prompt: ${JSON.stringify(pr.slice(0, 80))}${pr.length > 80 ? '…' : ''}`);
     phase('Preparing…');
-    const cfg = await fetchJSON<LatentStats>('webgpu/latent_stats.json');
+    const cfg = await fetchJSON('webgpu/latent_stats.json', LatentStatsSchema);
     const Z = cfg.z; // 16
     // Latent grid comes from the bucket, NOT cfg.size — cfg is per-channel denorm
     // stats + sigmas, which are resolution-independent.

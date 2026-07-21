@@ -1,13 +1,28 @@
 import { errMsg, httpFetch, invoke, read } from '@bundled/yaar';
+import * as z from '@bundled/zod';
 import type { Subscription, SeriesLink, SeriesPost } from './types';
+import { SubscriptionSchema } from './schema';
 
 const STORAGE_KEY = 'yaar://storage/dc-comics/subscriptions.json';
 
 export async function loadSubscriptions(): Promise<Subscription[]> {
   try {
-    const result = await read(STORAGE_KEY) as { ok: boolean; data?: string };
+    const result = (await read(STORAGE_KEY)) as { ok: boolean; data?: string };
     if (!result?.ok || !result.data) return [];
-    return JSON.parse(result.data) as Subscription[];
+
+    // Persisted blob: shape can drift across app versions. Validate defensively
+    // and recover gracefully — never let a corrupt/outdated store crash startup.
+    const raw = JSON.parse(result.data);
+    const parsed = z.safeParse(z.array(SubscriptionSchema), raw);
+    if (parsed.success) return parsed.data as Subscription[];
+
+    console.error('[dc-comics] persisted subscriptions failed validation', parsed.error.issues);
+    // Salvage individually valid entries rather than dropping the whole list —
+    // losing every subscription because one entry drifted would be a poor trade.
+    if (Array.isArray(raw)) {
+      return raw.filter((s) => z.safeParse(SubscriptionSchema, s).success) as Subscription[];
+    }
+    return [];
   } catch {
     return [];
   }

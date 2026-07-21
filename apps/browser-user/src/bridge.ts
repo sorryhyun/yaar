@@ -17,6 +17,8 @@
  */
 
 import { errMsg } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+import { BridgeEnvelopeSchema } from './schema';
 
 /** A single real browser tab as reported by the Bridge. */
 export interface Tab {
@@ -98,7 +100,15 @@ async function bridgePost<T>(body: BridgeRequest): Promise<BridgeEnvelope<T>> {
       headers: bridgeHeaders(),
       body: JSON.stringify(body),
     });
-    return (await res.json()) as BridgeEnvelope<T>;
+    // Validate the untrusted envelope wrapper at the boundary. `data` stays
+    // `unknown` here (the schema's job is only to confirm a well-formed envelope);
+    // we restore the caller's generic `<T>` by casting once the shape is confirmed.
+    const parsed = z.safeParse(BridgeEnvelopeSchema, await res.json());
+    if (!parsed.success) {
+      console.error('bridge envelope failed validation', parsed.error.issues);
+      throw new Error('The bridge returned an unrecognized response.');
+    }
+    return parsed.data as BridgeEnvelope<T>;
   } catch (err) {
     return { ok: false, error: errMsg(err) };
   }

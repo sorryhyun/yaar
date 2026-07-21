@@ -7,9 +7,11 @@
 // `POST /api/ml-weights/download` has the *server* stream HF → disk, and we poll
 // `GET /api/ml-weights/download?dest=…` for progress. Each file is resumable: a
 // partial `.part` is continued with a Range request.
+import * as z from '@bundled/zod';
 import { wait } from '@bundled/yaar';
 import { HF_BASE, LOCAL_DIR, resetAssetUrls } from './ml';
 import { BUCKETS, SHARED_DIT_DATA, SHARED_VAE_DATA } from './buckets';
+import { JobStatusSchema } from './schema';
 
 /** One DiT + VAE graph per aspect ratio. These are the ONLY per-ratio cost: the
  *  weights live in the two shared sidecars below, which every bucket's graph points
@@ -74,7 +76,12 @@ async function post(path: string): Promise<JobStatus> {
     body: JSON.stringify({ url: `${HF_BASE}/${path}`, dest: dest(path) }),
   });
   if (!res.ok) throw new Error(`start ${path} → ${res.status} ${await res.text()}`);
-  return res.json();
+  const parsed = z.safeParse(JobStatusSchema, await res.json());
+  if (!parsed.success) {
+    console.error(`ml-weights download start (${path}) failed validation`, parsed.error.issues);
+    throw new Error(`start ${path}: malformed job status`);
+  }
+  return parsed.data;
 }
 
 async function poll(path: string): Promise<JobStatus> {
@@ -82,7 +89,12 @@ async function poll(path: string): Promise<JobStatus> {
     headers: authHeaders(),
   });
   if (!res.ok) throw new Error(`status ${path} → ${res.status}`);
-  return res.json();
+  const parsed = z.safeParse(JobStatusSchema, await res.json());
+  if (!parsed.success) {
+    console.error(`ml-weights download status (${path}) failed validation`, parsed.error.issues);
+    throw new Error(`status ${path}: malformed job status`);
+  }
+  return parsed.data;
 }
 
 /** Download every manifest entry that isn't already on disk, one file at a time.
