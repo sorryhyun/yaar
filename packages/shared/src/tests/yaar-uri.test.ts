@@ -4,6 +4,7 @@ import {
   parseBareWindowUri,
   isBareWindowsAuthority,
   resolveContentUri,
+  expandBraceUri,
 } from '../yaar-uri.js';
 
 // ============ Window URIs (yaar://windows/) ============
@@ -135,5 +136,38 @@ describe('resolveContentUri', () => {
 
   it('resolves shared storage URIs unchanged', () => {
     expect(resolveContentUri('yaar://storage/notes/a.md')).toBe('/api/storage/notes/a.md');
+  });
+});
+
+// ============ Brace expansion ============
+
+describe('expandBraceUri', () => {
+  it('expands a single brace group and trims whitespace', () => {
+    expect(expandBraceUri('yaar://storage/{a.txt, b.txt}')).toEqual([
+      'yaar://storage/a.txt',
+      'yaar://storage/b.txt',
+    ]);
+  });
+
+  it('returns URIs without braces unchanged', () => {
+    expect(expandBraceUri('yaar://storage/file.txt')).toEqual(['yaar://storage/file.txt']);
+  });
+
+  it('does not treat single-item braces as expansion', () => {
+    expect(expandBraceUri('yaar://storage/{file}.txt')).toEqual(['yaar://storage/{file}.txt']);
+  });
+
+  it('expands the first brace group when several are present', () => {
+    expect(expandBraceUri('yaar://storage/{a,b}/{c,d}')).toEqual([
+      'yaar://storage/a/{c,d}',
+      'yaar://storage/b/{c,d}',
+    ]);
+  });
+
+  it('skips a single-item group and expands the first expandable one', () => {
+    expect(expandBraceUri('yaar://storage/{dir}/{a.txt,b.txt}')).toEqual([
+      'yaar://storage/{dir}/a.txt',
+      'yaar://storage/{dir}/b.txt',
+    ]);
   });
 });

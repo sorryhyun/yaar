@@ -153,15 +153,16 @@ export function extractAppId(uri: string): string | null {
  *   expandBraceUri('yaar://storage/file.txt')
  *     → ['yaar://storage/file.txt']
  *
- * Only the first brace group is expanded. No nesting.
+ * Only the first expandable brace group (one containing a comma) is expanded.
+ * No nesting.
  */
 export function expandBraceUri(uri: string): string[] {
-  const match = uri.match(/^(.*)\{([^}]+)}(.*)$/);
+  // Lazy prefix + comma required in the group: matches the FIRST {a,b} group,
+  // skipping single-item braces like {file} which are not expansions.
+  const match = uri.match(/^(.*?)\{([^{}]*,[^{}]*)}(.*)$/);
   if (!match) return [uri];
   const [, prefix, inner, suffix] = match;
   const alternatives = inner.split(',');
-  // Require at least 2 alternatives (single item in braces is not expansion)
-  if (alternatives.length < 2) return [uri];
   return alternatives.map((alt) => `${prefix}${alt.trim()}${suffix}`);
 }
 
