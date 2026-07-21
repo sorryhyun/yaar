@@ -4,7 +4,8 @@
  * App agents have a focused system prompt built from:
  * 1. AGENTS.md (if present) — full custom prompt, replaces the generic base
  * 2. SKILL.md (fallback) — app documentation appended to generic base prompt
- * Protocol manifest from app.json is always appended.
+ * Protocol manifest from app.json is appended when the app declares one (in both
+ * prompt branches).
  */
 
 import type { AgentProfile } from './types.js';
@@ -107,7 +108,7 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
   // drop it.
   systemPrompt += `\n${PAYLOAD_LITERALS_SECTION}\n`;
 
-  // Protocol manifest from app.json is always appended
+  // Protocol manifest from app.json is appended when the app declares one
   if (protocol) {
     // The two lists are separate namespaces, and a name from one is invalid in the
     // other — `command("consoleLogs")` on a state key fails with "Unknown command",

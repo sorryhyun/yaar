@@ -2,7 +2,7 @@
  * SSE (Server-Sent Events) and polling connection management.
  * Handles real-time screenshot updates from the browser session.
  *
- * Depends only on store.ts — DOM callbacks (refreshScreenshot) are
+ * Depends only on store.ts and token.ts — DOM callbacks (refreshScreenshot) are
  * injected via initSSE() to avoid circular imports with actions.ts.
  */
 import { setShowScreenshot, setPlaceholderText, updateUrlBar } from './store';

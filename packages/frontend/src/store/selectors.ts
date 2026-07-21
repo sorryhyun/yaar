@@ -31,11 +31,12 @@ function createCachedWindowSelector(
 }
 
 /**
- * Returns visible (non-minimized) standard windows on the active monitor in
- * stable insertion order.  Z-order is intentionally NOT used here so that
- * changing focus only updates CSS z-index values without reordering DOM
- * nodes — which would cause browsers to reload iframes (e.g. YouTube videos
- * restart).
+ * Returns visible (non-minimized) standard, non-iframe windows on the active
+ * monitor in stable insertion order. Z-order is intentionally NOT used here
+ * so that changing focus only updates CSS z-index values without reordering
+ * DOM nodes. Iframe-renderer windows are excluded — they're rendered from a
+ * separate, persistent list (`selectAllIframeWindows`, used in
+ * `components/desktop/WindowManager.tsx`) to prevent remounts.
  */
 export const selectVisibleWindows = createCachedWindowSelector(
   (w) =>

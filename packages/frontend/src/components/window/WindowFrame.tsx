@@ -36,6 +36,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   // Subscribe to individual stable action refs — never triggers re-renders
   const userFocusWindow = useDesktopStore((s) => s.userFocusWindow);
   const userCloseWindow = useDesktopStore((s) => s.userCloseWindow);
+  // Live per-window state — re-renders on change
   const queuedCount = useDesktopStore(selectQueuedActionsCount(window.id));
   const windowAgent = useDesktopStore(selectWindowAgent(window.id));
   const isSelected = useDesktopStore((s) => s.selectedWindowIds.includes(window.id));

@@ -87,7 +87,8 @@ export async function removeAppShortcut(appId: string): Promise<boolean> {
 
 /**
  * Sync shortcuts with the current app list:
- * - Remove shortcuts for apps that no longer exist or have createShortcut: false
+ * - Remove shortcuts for apps that no longer exist (createShortcut: false only
+ *   prevents auto-creation; existing shortcuts are kept)
  * - Ensure shortcuts exist for apps that should have them
  * Returns the list of removed shortcut IDs (for emitting frontend actions).
  */
