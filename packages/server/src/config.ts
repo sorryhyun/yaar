@@ -9,7 +9,7 @@
  *   config/assets.ts            MIME table, upload ceiling, ML runtime artifacts
  *   config/deadlines.ts         the request budget and the mutable `deadlines` object
  *   config/limits.ts            queue and monitor budget limits
- *   config/providers/claude.ts  claude binary discovery + spawn args
+ *   config/providers/claude.ts  claude binary discovery + spawn args + SDK env/options
  *   config/providers/codex.ts   codex binary discovery + app-server args
  *   config/browser.ts           CDP debug port
  *
@@ -67,7 +67,12 @@ export {
   MONITOR_MAX_OUTPUT_PER_MIN,
 } from './config/limits.js';
 
-export { resolveClaudeBinPath, getClaudeSpawnArgs } from './config/providers/claude.js';
+export {
+  resolveClaudeBinPath,
+  getClaudeSpawnArgs,
+  buildClaudeEnv,
+  CLAUDE_STATIC_SDK_OPTIONS,
+} from './config/providers/claude.js';
 
 export {
   getCodexSpawnArgs,

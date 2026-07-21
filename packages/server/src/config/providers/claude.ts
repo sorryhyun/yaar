@@ -1,7 +1,8 @@
 /**
- * Locating and spawning the `claude` CLI.
+ * Locating, spawning, and configuring the `claude` CLI.
  */
 
+import type { Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { IS_BUNDLED_EXE } from '../env.js';
@@ -59,3 +60,75 @@ export function getClaudeSpawnArgs(): string[] {
 
   return ['claude'];
 }
+
+// ── Spawned-CLI environment ───────────────────────────────────────────
+
+/**
+ * Vars the parent Claude Code harness leaks that would bind the spawned child
+ * CLI to parent-only resources (FDs, session ids, host-managed mode). When YAAR
+ * runs inside another Claude Code harness (e.g. a cloud sandbox) they must be
+ * stripped so the child starts clean — this scrub is what makes YAAR-in-Claude
+ * work; without it the inner `claude` inherits the outer's FD-based auth and
+ * exits with code 1.
+ */
+const PARENT_HARNESS_ENV_VARS = [
+  'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
+  'CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR',
+  'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
+  'CLAUDE_CODE_SESSION_ID',
+  'CLAUDE_CODE_REMOTE_SESSION_ID',
+  'CLAUDE_CODE_CONTAINER_ID',
+  'CLAUDE_CODE_REMOTE',
+  'CLAUDECODE',
+] as const;
+
+/**
+ * YAAR overrides layered onto the scrubbed parent env. Disable the CLI's built-in
+ * agents, auto-memory, bundled skills, CLAUDE.md loading, git instructions, and
+ * claude.ai MCP servers — none apply to YAAR's short-lived, app-scoped agents —
+ * and raise the MCP output ceiling.
+ */
+const CLAUDE_ENV_OVERRIDES = {
+  MAX_MCP_OUTPUT_TOKENS: '131072',
+  CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: '1',
+  CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
+  ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
+  CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1',
+  CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1',
+  CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: '1',
+} as const;
+
+/**
+ * Environment for the spawned `claude` CLI: the current process env with
+ * parent-harness vars scrubbed and YAAR's overrides applied. Computed per spawn
+ * so a mutated `process.env` is reflected.
+ */
+export function buildClaudeEnv(): Record<string, string | undefined> {
+  const env = { ...process.env };
+  for (const k of PARENT_HARNESS_ENV_VARS) delete env[k];
+  return { ...env, ...CLAUDE_ENV_OVERRIDES };
+}
+
+// ── Static SDK options ────────────────────────────────────────────────
+
+/**
+ * Turn-independent Claude Agent SDK options — the static hardening/policy that is
+ * the same for every agent tier and every turn. The per-turn options factory
+ * (`providers/claude/sdk-options.ts`) spreads these and fills in the dynamic fields
+ * (prompt, model, resume, tools, mcpServers, cwd, abortController, binary path, env).
+ */
+export const CLAUDE_STATIC_SDK_OPTIONS = {
+  executable: 'bun',
+  // YAAR provides no LSP integration, but the spawned `claude` CLI ships an
+  // `LSP` tool by default and agents reach for it. Strip it from context so
+  // they don't waste turns calling a tool that can't do anything here.
+  disallowedTools: ['LSP'],
+  includePartialMessages: true,
+  // Drop the built-in commit/PR workflow instructions from the spawned CLI's
+  // system prompt. YAAR's monitor/session/app agents don't run git workflows,
+  // so the instructions are pure prompt overhead. Applies to all three tiers,
+  // since the options factory is the single per-turn source for the provider.
+  settings: { includeGitInstructions: false },
+  permissionMode: 'bypassPermissions',
+  allowDangerouslySkipPermissions: true,
+} satisfies Partial<SDKOptions>;

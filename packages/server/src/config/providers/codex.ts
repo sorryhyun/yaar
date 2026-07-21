@@ -57,6 +57,7 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   args.push('-c', 'features.apply_patch_freeform=false');
   args.push('-c', 'features.multi_agent=false');
   args.push('-c', 'features.personality=false');
+  args.push('-c', 'features.unified_exec=false');
   args.push('-c', 'features.fast_mode=false');
   args.push('-c', 'features.skill_mcp_dependency_install=false');
   args.push('-c', 'apps._default.enabled=false');
@@ -98,7 +99,7 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
     // Enable web search (mirrors Claude's WebSearch builtin tool). The Codex
     // message-mapper already maps webSearch items; this turns the tool on.
     '-c',
-    'web_search=live',
+    'web_search=disabled',
   );
 
   return args;

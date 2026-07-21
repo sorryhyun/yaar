@@ -10,7 +10,12 @@
 import type { Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
 import type { TransportOptions } from '../types.js';
 import { getToolNames, getMcpToken } from '../../mcp/index.js';
-import { getStorageDir, resolveClaudeBinPath } from '../../config.js';
+import {
+  getStorageDir,
+  resolveClaudeBinPath,
+  buildClaudeEnv,
+  CLAUDE_STATIC_SDK_OPTIONS,
+} from '../../config.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
 
 /** Inputs to the SDK options builder for one turn. */
@@ -79,57 +84,20 @@ export function buildSDKOptions({
 
   const claudeBin = resolveClaudeBinPath();
 
-  // When YAAR runs inside another Claude Code harness (e.g. cloud sandbox),
-  // the parent leaks vars that bind the child to parent-only resources (FDs,
-  // session IDs, host-managed mode). Strip them so the spawned CLI starts clean.
-  const cleanEnv = { ...process.env };
-  for (const k of [
-    'CLAUDE_CODE_OAUTH_TOKEN_FILE_DESCRIPTOR',
-    'CLAUDE_CODE_WEBSOCKET_AUTH_FILE_DESCRIPTOR',
-    'CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST',
-    'CLAUDE_CODE_SESSION_ID',
-    'CLAUDE_CODE_REMOTE_SESSION_ID',
-    'CLAUDE_CODE_CONTAINER_ID',
-    'CLAUDE_CODE_REMOTE',
-    'CLAUDECODE',
-  ]) {
-    delete cleanEnv[k];
-  }
-
   return {
+    // Static hardening/policy + spawned-CLI env live in config/providers/claude.ts.
+    ...CLAUDE_STATIC_SDK_OPTIONS,
+    env: buildClaudeEnv(),
     abortController,
-    executable: 'bun',
     ...(claudeBin ? { pathToClaudeCodeExecutable: claudeBin } : {}),
     systemPrompt: systemPrompt ?? defaultSystemPrompt,
     // `||`, not `??`: an empty model string falls back to the default, as it
     // did when callers patched the model in with `if (options.model)`.
-    model: options.model || 'claude-sonnet-4-6',
+    model: options.model || 'claude-sonnet-5',
     resume: resumeSession,
     cwd: getStorageDir(),
     tools: builtinTools,
     allowedTools: effectiveAllowed,
-    // YAAR provides no LSP integration, but the spawned `claude` CLI ships an
-    // `LSP` tool by default and agents reach for it. Strip it from context so
-    // they don't waste turns calling a tool that can't do anything here.
-    disallowedTools: ['LSP'],
     mcpServers: mcpServerConfigs,
-    includePartialMessages: true,
-    // Drop the built-in commit/PR workflow instructions from the spawned CLI's
-    // system prompt. YAAR's monitor/session/app agents don't run git workflows,
-    // so the instructions are pure prompt overhead. Applies to all three tiers,
-    // since this builder is the single per-turn options factory for the provider.
-    settings: { includeGitInstructions: false },
-    permissionMode: 'bypassPermissions',
-    allowDangerouslySkipPermissions: true,
-    env: {
-      ...cleanEnv,
-      MAX_MCP_OUTPUT_TOKENS: '131072',
-      CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: '1',
-      CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
-      ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
-      CLAUDE_CODE_DISABLE_BUNDLED_SKILLS: '1',
-      CLAUDE_CODE_DISABLE_CLAUDE_MDS: '1',
-      CLAUDE_CODE_DISABLE_GIT_INSTRUCTIONS: '1',
-    },
   };
 }
