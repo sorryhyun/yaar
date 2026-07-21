@@ -165,6 +165,33 @@ button,input,select,textarea{font-family:inherit}
 .y-chip{display:inline-flex;align-items:center;gap:6px;font-size:var(--yaar-text-xs);font-weight:600;border-radius:var(--yaar-radius-full);padding:5px 11px;background:${alpha(D.accent, 0.12)};color:var(--yaar-accent);white-space:nowrap}
 .y-chip-warning{background:${alpha(D.warning, 0.16)};color:var(--yaar-warning)}
 .y-chip-muted{background:${O.light};color:var(--yaar-text-dim)}
+/* ── Nav-overlay chrome ────────────────────────────────────────────────
+   The hover-open + pin + resize left panel shared verbatim by storage and
+   thesingularity-reader (their navOverlay.ts state machines are identical).
+   The root is zero-footprint — every child is absolutely positioned, so
+   opening the panel never reflows the content behind it. Panel width comes
+   from an inline --panel-w the app sets from its persisted layout. The
+   body-level .nav-resizing class (toggled by the app during a width drag)
+   suppresses the slide transition and locks the cursor document-wide; it is
+   left unprefixed because it is a body-state flag the app owns, not chrome. */
+.y-nav-root{position:absolute;inset:0;pointer-events:none;z-index:50}
+.y-nav-hover-zone{position:absolute;left:0;top:0;bottom:0;width:28px;pointer-events:auto}
+.y-nav-hamburger{position:absolute;left:8px;top:8px;width:28px;height:28px;display:flex;align-items:center;justify-content:center;border-radius:var(--yaar-radius);border:1px solid var(--yaar-border);background:var(--yaar-bg-surface);color:var(--yaar-text-muted);font-size:var(--yaar-text-base);cursor:pointer;pointer-events:auto;opacity:.75;transition:opacity var(--yaar-ease),background var(--yaar-ease),color var(--yaar-ease)}
+.y-nav-hamburger:hover{opacity:1;background:var(--yaar-bg-surface-hover);color:var(--yaar-text)}
+.y-nav-hamburger-pinned{opacity:1;border-color:var(--yaar-accent);color:var(--yaar-accent)}
+.y-nav-hamburger-hidden{opacity:0;pointer-events:none}
+.y-nav-resizer{position:absolute;top:0;bottom:0;right:-3px;width:10px;cursor:col-resize;pointer-events:auto;touch-action:none;background:transparent;transition:background var(--yaar-ease);z-index:2}
+.y-nav-resizer:hover,body.nav-resizing .y-nav-resizer{background:var(--yaar-accent);opacity:.55}
+body.nav-resizing{cursor:col-resize;user-select:none}
+body.nav-resizing .y-nav-panel{transition:none}
+.y-nav-panel{position:absolute;left:0;top:0;bottom:0;width:var(--panel-w,340px);max-width:90%;display:flex;flex-direction:column;background:var(--yaar-bg-surface);border-right:1px solid var(--yaar-border);box-shadow:var(--yaar-shadow-lg);transform:translateX(-100%);opacity:0;pointer-events:none;transition:transform 180ms ease,opacity 180ms ease}
+.y-nav-panel-open{transform:translateX(0);opacity:1;pointer-events:auto}
+.y-nav-header{display:flex;align-items:center;justify-content:space-between;padding:var(--yaar-sp-2) var(--yaar-sp-3);border-bottom:1px solid var(--yaar-border);flex-shrink:0}
+.y-nav-title{font-size:var(--yaar-text-sm);font-weight:600;color:var(--yaar-text-muted);letter-spacing:.04em}
+.y-nav-count{color:var(--yaar-accent);font-variant-numeric:tabular-nums}
+.y-nav-pin{border:1px solid transparent;background:transparent;border-radius:var(--yaar-radius-sm);padding:2px 6px;cursor:pointer;font-size:var(--yaar-text-base);line-height:1;transition:background var(--yaar-ease),border-color var(--yaar-ease)}
+.y-nav-pin:hover{background:var(--yaar-bg-surface-hover)}
+.y-nav-pin-active{border-color:var(--yaar-accent)}
 pre[class*="language-"],code[class*="language-"]{color:${P.plain};background:var(--yaar-bg-surface);font-family:var(--yaar-font-mono);font-size:var(--yaar-text-sm);border-radius:var(--yaar-radius)}
 pre[class*="language-"]{padding:var(--yaar-sp-3);overflow:auto;margin:var(--yaar-sp-2) 0}
 .token.comment,.token.prolog,.token.doctype,.token.cdata{color:${P.comment};font-style:italic}

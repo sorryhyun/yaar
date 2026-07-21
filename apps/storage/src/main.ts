@@ -105,28 +105,28 @@ const App = () => html`
   </div>
 
   <!-- Left hover-open overlay: toolbar + directory listing -->
-  <div class="nav-overlay-root">
-    <div class="nav-hover-zone" onMouseEnter=${openNav} onMouseLeave=${scheduleNavClose}></div>
+  <div class="y-nav-root">
+    <div class="y-nav-hover-zone" onMouseEnter=${openNav} onMouseLeave=${scheduleNavClose}></div>
 
     <button
       class=${() =>
-        'nav-hamburger' +
-        (navPinned() ? ' nav-hamburger-pinned' : '') +
-        (navOpen() ? ' nav-hamburger-hidden' : '')}
+        'y-nav-hamburger' +
+        (navPinned() ? ' y-nav-hamburger-pinned' : '') +
+        (navOpen() ? ' y-nav-hamburger-hidden' : '')}
       onClick=${() => toggleNavPin()}
       title="Files (click to pin open)"
     >☰</button>
 
     <div
-      class=${() => 'nav-panel' + (navOpen() ? ' nav-panel-open' : '')}
+      class=${() => 'y-nav-panel' + (navOpen() ? ' y-nav-panel-open' : '')}
       style=${() => '--panel-w:' + panelWidth() + 'px'}
       onMouseEnter=${openNav}
       onMouseLeave=${scheduleNavClose}
     >
-      <div class="nav-panel-header">
-        <span class="nav-panel-title">FILES <span class="nav-panel-count">${() => state.entries.length}</span></span>
+      <div class="y-nav-header">
+        <span class="y-nav-title">FILES <span class="y-nav-count">${() => state.entries.length}</span></span>
         <button
-          class=${() => 'nav-pin-btn' + (navPinned() ? ' nav-pin-active' : '')}
+          class=${() => 'y-nav-pin' + (navPinned() ? ' y-nav-pin-active' : '')}
           onClick=${() => toggleNavPin()}
           title=${() => (navPinned() ? 'Unpin panel' : 'Pin panel open')}
         >📌</button>
@@ -224,10 +224,10 @@ const App = () => html`
         }}
       </div>
 
-      <div class="statusbar y-text-xs y-text-muted">${() => state.statusText}</div>
+      <div class="y-statusbar">${() => state.statusText}</div>
 
       <div
-        class="nav-resizer"
+        class="y-nav-resizer"
         onPointerDown=${startResize}
         onDblClick=${() => resetPanelWidth()}
         title="Drag to resize (double-click: reset)"
@@ -236,12 +236,12 @@ const App = () => html`
   </div>
 
   <${Show} when=${() => state.showModal}>
-    <div class="modal-overlay" onClick=${(e: MouseEvent) => {
+    <div class="y-overlay" onClick=${(e: MouseEvent) => {
       if (e.target === e.currentTarget) closeMountDialog();
     }}>
-      <div class="modal-card y-card">
-        <div class="modal-title">Request Host Folder Mount</div>
-        <div class="modal-note y-text-sm y-text-muted">The app cannot mount folders directly. Submit a request and the agent will ask for permission and run the mount tool.</div>
+      <div class="y-modal">
+        <div class="y-modal-title">Request Host Folder Mount</div>
+        <div class="y-modal-msg">The app cannot mount folders directly. Submit a request and the agent will ask for permission and run the mount tool.</div>
         <form class="modal-form" onSubmit=${submitMountRequest}>
           <label class="modal-label y-text-xs y-text-muted">Mount alias</label>
           <input class="modal-input y-input" name="alias" placeholder="project-files" required
@@ -254,7 +254,7 @@ const App = () => html`
               ref=${(el: HTMLInputElement) => { setElMountReadonly(el); }} />
             Read-only mount
           </label>
-          <div class="modal-actions">
+          <div class="y-modal-actions">
             <button class="toolbar-btn y-btn y-btn-sm" type="button" onClick=${closeMountDialog}>Cancel</button>
             <button class="toolbar-btn y-btn y-btn-sm y-btn-primary" type="submit">Request Mount</button>
           </div>
