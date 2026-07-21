@@ -6,6 +6,7 @@ import { storage } from '@bundled/yaar';
 import { setState, elPreviewBody } from './state';
 import { basename, formatSize, isImage, isMarkdown, isPreviewable, getFileIcon, getExtension } from './helpers';
 import { refreshMountAliases } from './mount-dialog';
+import { closeNavAfterSelect } from './navOverlay';
 
 const EXT_LANG: Record<string, string> = {
   js: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -51,6 +52,8 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   setState('previewTitleText', name);
   setState('previewMetaText', formatSize(entry.size));
   setState('showPreview', true);
+  // Reveal the full-window preview: slide the overlay out unless it's pinned.
+  closeNavAfterSelect();
 
   elPreviewBody.innerHTML = '<span class="preview-loading">Loading…</span>';
 

@@ -3,6 +3,15 @@ import { app, defineCommand } from '@bundled/yaar';
 import { state } from './state';
 import { basename, sanitizeAlias } from './helpers';
 import { navigate, selectFile } from './navigation';
+import {
+  panelWidth,
+  setPanelWidth,
+  resetPanelWidth,
+  maxPanelWidth,
+  MIN_PANEL_WIDTH,
+  DEFAULT_PANEL_WIDTH,
+} from './layout';
+import { navOpen, navPinned, openNav, closeNav, setNavPin } from './navOverlay';
 
 export function registerProtocol() {
   if (!app) return;
@@ -36,6 +45,18 @@ export function registerProtocol() {
       'file-preview': {
         description: 'Text content of the currently previewed file (null if not text)',
         handler: () => state.previewContent,
+      },
+      layout: {
+        description:
+          'Current layout state. The file preview always fills the whole window as the background; the directory listing lives in a left hover-open overlay panel. navOpen is whether the panel is currently visible, navPinned whether it is pinned open, panelWidth its width in px.',
+        handler: () => ({
+          navOpen: navOpen(),
+          navPinned: navPinned(),
+          panelWidth: panelWidth(),
+          minPanelWidth: MIN_PANEL_WIDTH,
+          maxPanelWidth: maxPanelWidth(),
+          defaultPanelWidth: DEFAULT_PANEL_WIDTH,
+        }),
       },
     },
     commands: {
@@ -86,6 +107,33 @@ export function registerProtocol() {
             readOnly: Boolean(params.readOnly),
           });
           return { success: true };
+        },
+      }),
+      'set-layout': defineCommand({
+        description:
+          'Control the left file-list overlay panel. open opens or closes the panel; pinned toggles pin (pinned keeps it open even when the cursor leaves). panelWidth sets the panel width in px (auto-clamped to 300..70% of the window); reset:true restores the default width. Width is persisted and restored on relaunch.',
+        params: {
+          type: 'object',
+          properties: {
+            open: { type: 'boolean', description: 'true opens the panel, false closes it' },
+            pinned: { type: 'boolean', description: 'true pins the panel open' },
+            panelWidth: { type: 'number', description: 'Panel width in px' },
+            reset: { type: 'boolean', description: 'true resets panel width to the default' },
+          },
+        },
+        handler: (params) => {
+          // Pin first: setNavPin(true) implies open, so an explicit open:false
+          // in the same call can still override it.
+          if (typeof params.pinned === 'boolean') setNavPin(params.pinned);
+          if (params.open === true) openNav();
+          else if (params.open === false) closeNav();
+
+          if (params.reset) {
+            resetPanelWidth();
+          } else if (typeof params.panelWidth === 'number' && Number.isFinite(params.panelWidth)) {
+            setPanelWidth(params.panelWidth);
+          }
+          return { navOpen: navOpen(), navPinned: navPinned(), panelWidth: panelWidth() };
         },
       }),
       refresh: defineCommand({

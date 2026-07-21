@@ -10,9 +10,18 @@ import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
 import { navigate, selectFile, closePreview } from './navigation';
 import { registerProtocol } from './protocol';
+import { panelWidth, setPanelWidth, resetPanelWidth, reclampPanelWidth } from './layout';
+import {
+  navOpen,
+  navPinned,
+  openNav,
+  scheduleNavClose,
+  toggleNavPin,
+  setNavResizing,
+} from './navOverlay';
 import { storage, showToast, showConfirm } from '@bundled/yaar';
 
-// ── Upload ───────────────────────────────────────────────────────────────────────
+// ── Upload ──────────────────────────────────────────────────────
 
 let uploadInput: HTMLInputElement;
 
@@ -40,107 +49,189 @@ async function handleUpload(e: Event) {
   }
 }
 
-// ── Template ───────────────────────────────────────────────────────────────────
+// ── Panel width drag ────────────────────────────────────────────────
+
+// The panel is pinned to left:0, so the pointer's clientX *is* the desired
+// width — setPanelWidth applies the min/max clamp. Pointer capture keeps the
+// stream flowing when the cursor outruns the handle.
+function startResize(e: PointerEvent) {
+  e.preventDefault();
+  const handle = e.currentTarget as HTMLElement;
+  handle.setPointerCapture(e.pointerId);
+  setNavResizing(true);
+  document.body.classList.add('nav-resizing');
+
+  const onMove = (ev: PointerEvent) => setPanelWidth(ev.clientX);
+  const onUp = (ev: PointerEvent) => {
+    handle.releasePointerCapture(ev.pointerId);
+    handle.removeEventListener('pointermove', onMove);
+    handle.removeEventListener('pointerup', onUp);
+    handle.removeEventListener('pointercancel', onUp);
+    document.body.classList.remove('nav-resizing');
+    setNavResizing(false);
+    openNav();
+  };
+
+  handle.addEventListener('pointermove', onMove);
+  handle.addEventListener('pointerup', onUp);
+  handle.addEventListener('pointercancel', onUp);
+}
+
+// Keep the panel width within 70% of the window as it shrinks.
+window.addEventListener('resize', () => reclampPanelWidth());
+
+// ── Template ──────────────────────────────────────────────
 
 const App = () => html`
-  <div class="toolbar y-flex-between">
-    <div class="breadcrumb">
-      ${() => {
-        const parts = state.currentPath ? state.currentPath.split('/').filter(Boolean) : [];
-        const crumbs: any[] = [
-          html`<button onClick=${() => navigate('')}>yaar://storage/</button>`
-        ];
-        let accumulated = '';
-        for (const part of parts) {
-          accumulated += (accumulated ? '/' : '') + part;
-          const p = accumulated;
-          crumbs.push(html`<span class="sep">/</span>`);
-          crumbs.push(html`<button onClick=${() => navigate(p)}>${part}</button>`);
-        }
-        return crumbs;
-      }}
-    </div>
-    <select class="toolbar-select" title="Jump to mounted folder"
-      onChange=${(e: Event) => {
-        const val = (e.target as HTMLSelectElement).value;
-        if (!val) return;
-        navigate(`mounts/${val}`);
-        (e.target as HTMLSelectElement).value = '';
-      }}>
-      <option value="">Mounts</option>
-      <${For} each=${() => state.mountAliases}>
-        ${(alias: string) => html`<option value="${alias}">${alias}</option>`}
-      <//>
-    </select>
-    <button class="toolbar-btn y-btn y-btn-sm" onClick=${openMountDialog} title="Request mount folder">Mount...</button>
-    <button class="toolbar-btn y-btn y-btn-sm" onClick=${() => navigate(state.currentPath)} title="Refresh">↻</button>
-    <button class="toolbar-btn y-btn y-btn-sm" onClick=${openUploadDialog} title="Upload files">⬆ Upload</button>
-    <input type="file" id="upload-input" multiple style="display:none"
-      ref=${(el: HTMLInputElement) => { uploadInput = el; }}
-      onChange=${handleUpload} />
-  </div>
-
-  <div class="main">
-    <div class="file-list y-scroll">
-      ${() => {
-        const list = state.entries;
-        if (list.length === 0) return html`<div class="y-empty empty">This folder is empty</div>`;
-        return html`
-          <${For} each=${() => state.entries}>
-            ${(entry: StorageEntry) => {
-              const name = basename(entry.path);
-              return html`
-                <div
-                  class=${() => `file-row${state.selectedFile === entry.path ? ' selected' : ''}`}
-                  draggable="true"
-                  onClick=${(e: MouseEvent) => {
-                    if ((e.target as HTMLElement).closest('.file-actions')) return;
-                    if (entry.isDirectory) navigate(entry.path);
-                    else selectFile(entry);
-                  }}
-                  onDblclick=${(e: MouseEvent) => {
-                    if ((e.target as HTMLElement).closest('.file-actions')) return;
-                    if (!entry.isDirectory) requestOpenByAgent(entry);
-                  }}
-                  onDragstart=${(e: DragEvent) => handleDragStart(e, entry)}
-                  onDragend=${(e: DragEvent) => handleDragEnd(e)}
-                >
-                  <span class="file-icon">${getFileIcon(name, entry.isDirectory)}</span>
-                  <span class=${`file-name${entry.isDirectory ? ' dir' : ''}`}>${name}</span>
-                  <span class="file-size">${entry.isDirectory ? '' : formatSize(entry.size)}</span>
-                  <span class="file-actions">
-                    <${Show} when=${() => !entry.isDirectory}>
-                      <button title="Open in new tab" onClick=${(e: MouseEvent) => {
-                        e.stopPropagation();
-                        window.open(storage.url(entry.path), '_blank');
-                      }}>⇗</button>
-                    <//>
-                    <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
-                      e.stopPropagation();
-                      if (!(await showConfirm(`Delete "${name}"?`, { danger: true, okLabel: 'Delete' }))) return;
-                      try {
-                        await storage.remove(entry.path);
-                        navigate(state.currentPath);
-                      } catch {
-                        setState('statusText', `Failed to delete ${name}`);
-                      }
-                    }}>🗑</button>
-                  </span>
-                </div>
-              `;
-            }}
-          <//>
-        `;
-      }}
-    </div>
-
+  <!-- Full-window background: the file preview, or a hint when nothing is open -->
+  <div class="bg-layer">
     <div class=${() => `preview${state.showPreview ? '' : ' hidden'}`}>
       <div class="y-label preview-header y-flex-between">
         <span class="y-truncate">${() => state.previewTitleText}</span>
-        <button class="preview-close" onClick=${closePreview}>✕</button>
+        <button class="preview-close" onClick=${closePreview} title="Close preview">✕</button>
       </div>
       <div class="preview-body" ref=${(el: HTMLDivElement) => { setElPreviewBody(el); }}></div>
       <div class="preview-meta y-text-xs y-text-muted">${() => state.previewMetaText}</div>
+    </div>
+
+    <${Show} when=${() => !state.showPreview}>
+      <div class="bg-empty">
+        <div class="bg-empty-icon">🗂️</div>
+        <div class="bg-empty-title">Storage</div>
+        <div class="bg-empty-hint">Hover the left edge to browse files, then pick a file to preview it here.</div>
+        <div class="bg-empty-path y-text-xs y-text-muted">${() => 'yaar://storage/' + (state.currentPath || '')}</div>
+      </div>
+    <//>
+  </div>
+
+  <!-- Left hover-open overlay: toolbar + directory listing -->
+  <div class="nav-overlay-root">
+    <div class="nav-hover-zone" onMouseEnter=${openNav} onMouseLeave=${scheduleNavClose}></div>
+
+    <button
+      class=${() =>
+        'nav-hamburger' +
+        (navPinned() ? ' nav-hamburger-pinned' : '') +
+        (navOpen() ? ' nav-hamburger-hidden' : '')}
+      onClick=${() => toggleNavPin()}
+      title="Files (click to pin open)"
+    >☰</button>
+
+    <div
+      class=${() => 'nav-panel' + (navOpen() ? ' nav-panel-open' : '')}
+      style=${() => '--panel-w:' + panelWidth() + 'px'}
+      onMouseEnter=${openNav}
+      onMouseLeave=${scheduleNavClose}
+    >
+      <div class="nav-panel-header">
+        <span class="nav-panel-title">FILES <span class="nav-panel-count">${() => state.entries.length}</span></span>
+        <button
+          class=${() => 'nav-pin-btn' + (navPinned() ? ' nav-pin-active' : '')}
+          onClick=${() => toggleNavPin()}
+          title=${() => (navPinned() ? 'Unpin panel' : 'Pin panel open')}
+        >📌</button>
+      </div>
+
+      <div class="nav-panel-controls">
+        <div class="breadcrumb">
+          ${() => {
+            const parts = state.currentPath ? state.currentPath.split('/').filter(Boolean) : [];
+            const crumbs: any[] = [
+              html`<button onClick=${() => navigate('')}>yaar://storage/</button>`
+            ];
+            let accumulated = '';
+            for (const part of parts) {
+              accumulated += (accumulated ? '/' : '') + part;
+              const p = accumulated;
+              crumbs.push(html`<span class="sep">/</span>`);
+              crumbs.push(html`<button onClick=${() => navigate(p)}>${part}</button>`);
+            }
+            return crumbs;
+          }}
+        </div>
+        <div class="toolbar-actions">
+          <select class="toolbar-select" title="Jump to mounted folder"
+            onChange=${(e: Event) => {
+              const val = (e.target as HTMLSelectElement).value;
+              if (!val) return;
+              navigate(`mounts/${val}`);
+              (e.target as HTMLSelectElement).value = '';
+            }}>
+            <option value="">Mounts</option>
+            <${For} each=${() => state.mountAliases}>
+              ${(alias: string) => html`<option value="${alias}">${alias}</option>`}
+            <//>
+          </select>
+          <button class="toolbar-btn y-btn y-btn-sm" onClick=${openMountDialog} title="Request mount folder">Mount…</button>
+          <button class="toolbar-btn y-btn y-btn-sm" onClick=${() => navigate(state.currentPath)} title="Refresh">↻</button>
+          <button class="toolbar-btn y-btn y-btn-sm" onClick=${openUploadDialog} title="Upload files">⬆ Upload</button>
+          <input type="file" id="upload-input" multiple style="display:none"
+            ref=${(el: HTMLInputElement) => { uploadInput = el; }}
+            onChange=${handleUpload} />
+        </div>
+      </div>
+
+      <div class="file-list y-scroll">
+        ${() => {
+          const list = state.entries;
+          if (list.length === 0) return html`<div class="y-empty empty">This folder is empty</div>`;
+          return html`
+            <${For} each=${() => state.entries}>
+              ${(entry: StorageEntry) => {
+                const name = basename(entry.path);
+                return html`
+                  <div
+                    class=${() => `file-row${state.selectedFile === entry.path ? ' selected' : ''}`}
+                    draggable="true"
+                    onClick=${(e: MouseEvent) => {
+                      if ((e.target as HTMLElement).closest('.file-actions')) return;
+                      if (entry.isDirectory) navigate(entry.path);
+                      else selectFile(entry);
+                    }}
+                    onDblclick=${(e: MouseEvent) => {
+                      if ((e.target as HTMLElement).closest('.file-actions')) return;
+                      if (!entry.isDirectory) requestOpenByAgent(entry);
+                    }}
+                    onDragstart=${(e: DragEvent) => handleDragStart(e, entry)}
+                    onDragend=${(e: DragEvent) => handleDragEnd(e)}
+                  >
+                    <span class="file-icon">${getFileIcon(name, entry.isDirectory)}</span>
+                    <span class=${`file-name${entry.isDirectory ? ' dir' : ''}`}>${name}</span>
+                    <span class="file-size">${entry.isDirectory ? '' : formatSize(entry.size)}</span>
+                    <span class="file-actions">
+                      <${Show} when=${() => !entry.isDirectory}>
+                        <button title="Open in new tab" onClick=${(e: MouseEvent) => {
+                          e.stopPropagation();
+                          window.open(storage.url(entry.path), '_blank');
+                        }}>⇗</button>
+                      <//>
+                      <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
+                        e.stopPropagation();
+                        if (!(await showConfirm(`Delete "${name}"?`, { danger: true, okLabel: 'Delete' }))) return;
+                        try {
+                          await storage.remove(entry.path);
+                          navigate(state.currentPath);
+                        } catch {
+                          setState('statusText', `Failed to delete ${name}`);
+                        }
+                      }}>🗑</button>
+                    </span>
+                  </div>
+                `;
+              }}
+            <//>
+          `;
+        }}
+      </div>
+
+      <div class="statusbar y-text-xs y-text-muted">${() => state.statusText}</div>
+
+      <div
+        class="nav-resizer"
+        onPointerDown=${startResize}
+        onDblClick=${() => resetPanelWidth()}
+        title="Drag to resize (double-click: reset)"
+      ></div>
     </div>
   </div>
 
@@ -171,13 +262,11 @@ const App = () => html`
       </div>
     </div>
   <//>
-
-  <div class="statusbar y-text-xs y-text-muted">${() => state.statusText}</div>
 `;
 
 render(App, document.getElementById('app')!);
 
-// ── App Protocol & Init ───────────────────────────────────────────────────
+// ── App Protocol & Init ────────────────────────────────────
 
 registerProtocol();
 navigate('');

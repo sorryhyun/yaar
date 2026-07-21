@@ -1,6 +1,5 @@
   #app {
-    display: flex;
-    flex-direction: column;
+    position: relative;
     height: 100vh;
     background: var(--yaar-bg);
     color: var(--yaar-text);
@@ -8,20 +7,33 @@
     font-size: 13px;
     overflow: hidden;
   }
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--yaar-bg-surface);
-    border-bottom: 1px solid var(--yaar-border);
-    flex-shrink: 0;
+
+  /* ── Background layer: preview or empty hint fills the whole window ──────── */
+  .bg-layer {
+    position: absolute;
+    inset: 0;
   }
+  .bg-empty {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    text-align: center;
+    padding: 24px;
+    color: var(--yaar-text-muted);
+  }
+  .bg-empty-icon { font-size: 56px; opacity: 0.85; }
+  .bg-empty-title { font-size: 20px; font-weight: 600; color: var(--yaar-text); }
+  .bg-empty-hint { font-size: 13px; max-width: 360px; line-height: 1.5; }
+  .bg-empty-path { margin-top: 8px; font-family: var(--yaar-font-mono); }
+
   .breadcrumb {
     display: flex;
     align-items: center;
     gap: 2px;
-    flex: 1;
     min-width: 0;
     overflow-x: auto;
   }
@@ -45,6 +57,12 @@
   }
   .toolbar-btn:hover { border-color: var(--yaar-accent); }
 
+  .toolbar-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
   .toolbar-select {
     background: var(--yaar-bg-surface-hover);
     border: 1px solid var(--yaar-border);
@@ -52,8 +70,161 @@
     border-radius: var(--yaar-radius);
     font-size: 12px;
     height: 26px;
-    max-width: 180px;
+    max-width: 160px;
   }
+
+  /* ── Left hover-open overlay panel ──────────────────────────────────────── */
+  .nav-overlay-root {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 50;
+  }
+  /* Strip along the left edge that arms the panel. */
+  .nav-hover-zone {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 28px;
+    pointer-events: auto;
+  }
+  .nav-hamburger {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--yaar-radius);
+    border: 1px solid var(--yaar-border);
+    background: var(--yaar-bg-surface);
+    color: var(--yaar-text-muted);
+    font-size: var(--yaar-text-base);
+    cursor: pointer;
+    pointer-events: auto;
+    opacity: 0.75;
+    transition:
+      opacity var(--yaar-ease),
+      background var(--yaar-ease),
+      color var(--yaar-ease);
+  }
+  .nav-hamburger:hover {
+    opacity: 1;
+    background: var(--yaar-bg-surface-hover);
+    color: var(--yaar-text);
+  }
+  .nav-hamburger-pinned {
+    opacity: 1;
+    border-color: var(--yaar-accent);
+    color: var(--yaar-accent);
+  }
+  /* The panel covers the button; fade it so it doesn't ghost during slide-in. */
+  .nav-hamburger-hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+  /* Grab strip on the panel's right border. Sits half outside so it is
+     catchable from either side. */
+  .nav-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -3px;
+    width: 10px;
+    cursor: col-resize;
+    pointer-events: auto;
+    touch-action: none;
+    background: transparent;
+    transition: background var(--yaar-ease);
+    z-index: 2;
+  }
+  .nav-resizer:hover,
+  body.nav-resizing .nav-resizer {
+    background: var(--yaar-accent);
+    opacity: 0.55;
+  }
+  /* Kill text selection and cursor flicker across the whole document mid-drag. */
+  body.nav-resizing {
+    cursor: col-resize;
+    user-select: none;
+  }
+  body.nav-resizing .nav-panel {
+    transition: none;
+  }
+  .nav-panel {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: var(--panel-w, 340px);
+    max-width: 90%;
+    display: flex;
+    flex-direction: column;
+    background: var(--yaar-bg-surface);
+    border-right: 1px solid var(--yaar-border);
+    box-shadow: var(--yaar-shadow-lg);
+    transform: translateX(-100%);
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 180ms ease,
+      opacity 180ms ease;
+  }
+  .nav-panel-open {
+    transform: translateX(0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .nav-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--yaar-border);
+    flex-shrink: 0;
+  }
+  .nav-panel-title {
+    font-size: var(--yaar-text-sm);
+    font-weight: 600;
+    color: var(--yaar-text-muted);
+    letter-spacing: 0.04em;
+  }
+  .nav-panel-count {
+    color: var(--yaar-accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .nav-pin-btn {
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: var(--yaar-radius-sm);
+    padding: 2px 6px;
+    cursor: pointer;
+    font-size: var(--yaar-text-base);
+    line-height: 1;
+    filter: grayscale(0.6);
+    opacity: 0.7;
+  }
+  .nav-pin-btn:hover {
+    background: var(--yaar-bg-surface-hover);
+    opacity: 1;
+  }
+  .nav-pin-active {
+    border-color: var(--yaar-accent);
+    filter: none;
+    opacity: 1;
+  }
+  .nav-panel-controls {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--yaar-border);
+  }
+
   .modal-overlay {
     position: fixed;
     inset: 0;
@@ -61,7 +232,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 20;
+    z-index: 60;
   }
   .modal-card {
     width: min(520px, calc(100vw - 32px));
@@ -83,17 +254,12 @@
   }
   .modal-check { display: flex; align-items: center; gap: 6px; font-size: 12px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 8px; }
-  .main {
-    display: flex;
-    flex: 1;
-    min-height: 0;
-    overflow: hidden;
-  }
+
   .file-list {
     flex: 1;
+    min-height: 0;
     overflow-y: auto;
     padding: 4px 0;
-    min-width: 0;
   }
   .file-row {
     display: flex;
@@ -115,7 +281,7 @@
     white-space: nowrap;
   }
   .file-name.dir { color: var(--yaar-accent); }
-  .file-size { color: var(--yaar-text-muted); font-size: 12px; flex-shrink: 0; width: 70px; text-align: right; }
+  .file-size { color: var(--yaar-text-muted); font-size: 12px; flex-shrink: 0; width: 60px; text-align: right; }
   .file-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
   .file-row:hover .file-actions { opacity: 1; }
   .file-actions button {
@@ -130,26 +296,28 @@
   .file-actions button:hover { background: var(--yaar-border); color: var(--yaar-text); }
   .file-actions button.danger:hover { color: var(--yaar-error); }
   .empty {
-    flex: 1;
     font-size: 14px;
     padding: 40px;
   }
+
+  /* ── Full-window preview ────────────────────────────────────────────────── */
   .preview {
-    width: 320px;
-    border-left: 1px solid var(--yaar-border);
+    position: absolute;
+    inset: 0;
     display: flex;
     flex-direction: column;
-    background: var(--yaar-bg-surface);
-    flex-shrink: 0;
+    background: var(--yaar-bg);
   }
   .preview.hidden { display: none; }
   .preview-header {
-    padding: 10px 12px;
+    padding: 10px 16px 10px 48px;
     border-bottom: 1px solid var(--yaar-border);
+    background: var(--yaar-bg-surface);
     font-size: 12px;
     display: flex;
     align-items: center;
     justify-content: space-between;
+    flex-shrink: 0;
   }
   .preview-close {
     background: none;
@@ -163,7 +331,11 @@
   .preview-body {
     flex: 1;
     overflow: auto;
-    padding: 12px;
+    padding: 20px 24px;
+    width: 100%;
+    max-width: 1000px;
+    margin: 0 auto;
+    box-sizing: border-box;
   }
   .preview-body pre {
     white-space: pre-wrap;
@@ -179,13 +351,15 @@
     border-radius: var(--yaar-radius);
   }
   .preview-meta {
-    padding: 8px 12px;
+    padding: 8px 16px;
     border-top: 1px solid var(--yaar-border);
+    background: var(--yaar-bg-surface);
     font-size: 11px;
     color: var(--yaar-text-muted);
+    flex-shrink: 0;
   }
   .statusbar {
-    padding: 4px 12px;
+    padding: 6px 12px;
     background: var(--yaar-bg-surface);
     border-top: 1px solid var(--yaar-border);
     font-size: 11px;
