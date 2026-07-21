@@ -6,8 +6,7 @@
 // non-circular place to import shared state from.
 
 import { createSignal } from '@bundled/solid-js';
-import { storage } from '@bundled/yaar';
-import { STORAGE_DOMAIN_KEY, SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY } from './constants.js';
+import { SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY } from './constants.js';
 import { normalizeDomain, normalizeId, sameAppId } from './parsers.js';
 import type {
   Account,
@@ -57,7 +56,6 @@ export function setStatus(next: string, stamp = true): void {
 export function setDomain(nextDomain: string): void {
   const d = normalizeDomain(nextDomain);
   setApiBase(d);
-  if (d) void storage.save(STORAGE_DOMAIN_KEY, d);
   setStatus(d ? `Domain set: ${d}` : 'Domain cleared');
 }
 

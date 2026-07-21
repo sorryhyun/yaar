@@ -2,7 +2,6 @@
 
 import type { Account, GithubStatus } from './types.js';
 
-export const STORAGE_DOMAIN_KEY = 'market_apps/domain.txt';
 export const DEFAULT_MARKET_DOMAIN = 'https://yaarmarket.vercel.app';
 
 /** One call returns components + unresolved incidents, so we only need this one. */

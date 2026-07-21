@@ -7,11 +7,10 @@
 
 import { onMount } from '@bundled/solid-js';
 import { render } from '@bundled/solid-js/web';
-import { storage } from '@bundled/yaar';
 import './styles.css';
 import './protocol.js';
 import { App } from './components.js';
-import { DEFAULT_MARKET_DOMAIN, STORAGE_DOMAIN_KEY } from './constants.js';
+import { DEFAULT_MARKET_DOMAIN } from './constants.js';
 import { normalizeDomain } from './parsers.js';
 import { refreshAccount, refreshData, startGithubStatusPolling } from './actions.js';
 import { setApiBase, setStatus } from './store.js';
@@ -39,15 +38,6 @@ onMount(async () => {
       ((window as any).__MARKET_APPS_DOMAIN__ as string | undefined) ||
       '',
   );
-
-  if (!domain) {
-    try {
-      const saved = await storage.read(STORAGE_DOMAIN_KEY);
-      if (typeof saved === 'string' && saved.trim()) domain = normalizeDomain(saved.trim());
-    } catch {
-      // no saved domain
-    }
-  }
 
   if (!domain) domain = DEFAULT_MARKET_DOMAIN;
   setApiBase(domain);

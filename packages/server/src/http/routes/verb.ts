@@ -87,7 +87,14 @@ function toEnvelope(result: VerbResult): Record<string, unknown> {
   // Collect blocks by type
   const textItems: Array<{ type: 'text'; text: string }> = [];
   const images: Array<{ data: string; mimeType: string }> = [];
-  const links: Array<{ uri: string; name: string; description?: string; mimeType?: string }> = [];
+  const links: Array<{
+    uri: string;
+    name: string;
+    description?: string;
+    mimeType?: string;
+    kind?: string;
+    version?: string;
+  }> = [];
 
   for (const c of result.content) {
     switch (c.type) {
@@ -106,12 +113,21 @@ function toEnvelope(result: VerbResult): Record<string, unknown> {
         break;
       }
       case 'resource_link': {
-        const link = c as { uri: string; name: string; description?: string; mimeType?: string };
+        const link = c as {
+          uri: string;
+          name: string;
+          description?: string;
+          mimeType?: string;
+          kind?: string;
+          version?: string;
+        };
         links.push({
           uri: link.uri,
           name: link.name,
           ...(link.description ? { description: link.description } : {}),
           ...(link.mimeType ? { mimeType: link.mimeType } : {}),
+          ...(link.kind ? { kind: link.kind } : {}),
+          ...(link.version ? { version: link.version } : {}),
         });
         break;
       }
