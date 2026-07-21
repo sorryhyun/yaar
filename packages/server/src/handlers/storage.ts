@@ -97,7 +97,10 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
           prependNote(r, 'This is a folder — used list instead.'),
         );
 
-      const result = await storageRead(parsed.path);
+      const result = await storageRead(parsed.path, {
+        pdfText: options?.pdfText,
+        pdfPages: options?.pdfPages,
+      });
       if (!result.success) {
         // Directory → fall through to list
         if (result.error?.includes('is a directory'))
@@ -107,10 +110,23 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         return error(result.error!);
       }
 
+      // PDF, metadata only (view-first default): steer to a viewer window instead of ingesting.
+      if (result.pdfMeta) {
+        return ok(
+          `${result.content}\n\nTo SHOW this PDF to the user, open it in a window — the ` +
+            `browser renders it natively, no need to read it:\n` +
+            `  invoke('yaar://windows/<id>', { action: 'create', renderer: 'iframe', ` +
+            `content: 'yaar://storage/${parsed.path}' })\n` +
+            `To READ the content yourself, re-read with one of:\n` +
+            `  read('yaar://storage/${parsed.path}', { pdfText: true })   — extract the text layer (cheap, all pages)\n` +
+            `  read('yaar://storage/${parsed.path}', { pdfPages: '1-3' }) — rasterize pages to images (scanned/visual PDFs)`,
+        );
+      }
+
       if (result.images && result.images.length > 0) {
         const isPdf = result.totalPages != null;
         const hint = isPdf
-          ? `\n\nTo display this PDF, create an iframe window with content="yaar://storage/${parsed.path}" — the browser's built-in PDF viewer will render it.`
+          ? `\n\nThese are rasterized page images. To display the PDF to the user, open an iframe window with content="yaar://storage/${parsed.path}" instead.`
           : '';
         return okWithImages(
           result.content! + hint,

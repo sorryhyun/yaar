@@ -120,6 +120,12 @@ invoke('yaar://storage/media/anima/dragon.png', { action: "copy", from: "yaar://
 spellings. Reading an image and writing it back drags several hundred KB of base64
 through this conversation for no gain.
 
+**PDFs.** To *show* a PDF, open it in a window — the browser renders it natively, don't read it:
+\`invoke('yaar://windows/<id>', { action: "create", renderer: "iframe", content: "yaar://storage/<path>.pdf" })\`.
+\`read\` on a \`.pdf\` returns metadata only. To read the content yourself: \`pdfText: true\`
+extracts the text layer (cheap, all pages — use this for text-based PDFs); \`pdfPages: "1-3"\`
+rasterizes pages to images (for scanned/visual PDFs).
+
 **Binary.** Pass \`encoding: "base64"\` when writing image or PDF bytes. Without it the
 base64 *text* is what lands on disk — a file that looks written and is unreadable.
 

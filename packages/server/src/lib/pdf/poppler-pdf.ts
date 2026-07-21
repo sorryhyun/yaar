@@ -42,13 +42,20 @@ export interface PdfPageImage {
   mimeType: 'image/png';
 }
 
+/** Page range to rasterize (1-based, inclusive). Omit fields to default to the whole document. */
+export interface PdfPageRange {
+  firstPage?: number;
+  lastPage?: number;
+}
+
 /**
- * Convert all pages of a PDF to PNG images.
+ * Convert pages of a PDF to PNG images. Without a range, converts the whole document.
+ * Page numbers on the results reflect the real 1-based page index, not the array position.
  */
 export async function pdfToImages(
   pdfPath: string,
   scale: number = 1.5,
-  maxPages?: number,
+  range?: PdfPageRange,
 ): Promise<PdfPageImage[]> {
   const poppler = getPoppler();
   const images: PdfPageImage[] = [];
@@ -67,29 +74,25 @@ export async function pdfToImages(
       pngFile: true,
       resolutionXYAxis: resolution,
     };
-    if (maxPages !== undefined) {
-      options.firstPageToConvert = 1;
-      options.lastPageToConvert = maxPages;
-    }
+    if (range?.firstPage !== undefined) options.firstPageToConvert = range.firstPage;
+    if (range?.lastPage !== undefined) options.lastPageToConvert = range.lastPage;
 
     await poppler.pdfToCairo(pdfPath, outputPrefix, options);
 
-    // Read all generated PNG files
+    // Read all generated PNG files. Poppler names each file `page-<realPageNumber>.png`,
+    // so parse the true page index from the filename rather than the array position —
+    // otherwise a range starting past page 1 would be mislabeled.
     const files = await readdir(tempDir);
     const pngFiles = files
       .filter((f) => f.endsWith('.png'))
-      .sort((a, b) => {
-        // Extract page number from filename (e.g., "page-1.png")
-        const numA = parseInt(a.match(/-(\d+)\.png$/)?.[1] || '0', 10);
-        const numB = parseInt(b.match(/-(\d+)\.png$/)?.[1] || '0', 10);
-        return numA - numB;
-      });
+      .map((f) => ({ file: f, page: parseInt(f.match(/-(\d+)\.png$/)?.[1] || '0', 10) }))
+      .sort((a, b) => a.page - b.page);
 
-    for (let i = 0; i < pngFiles.length; i++) {
-      const filePath = join(tempDir, pngFiles[i]);
+    for (const { file, page } of pngFiles) {
+      const filePath = join(tempDir, file);
       const data = Buffer.from(await Bun.file(filePath).arrayBuffer());
       images.push({
-        pageNumber: i + 1,
+        pageNumber: page,
         data,
         mimeType: 'image/png',
       });
@@ -141,6 +144,20 @@ export async function renderPdfPage(
     // Cleanup temp directory
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
+}
+
+/**
+ * Extract the text layer of a PDF (via pdftotext). Without a range, extracts the whole document.
+ * Returns an empty string for scanned/image-only PDFs that carry no text layer.
+ */
+export async function pdfToText(pdfPath: string, range?: PdfPageRange): Promise<string> {
+  const poppler = getPoppler();
+  const options: Record<string, unknown> = {};
+  if (range?.firstPage !== undefined) options.firstPageToConvert = range.firstPage;
+  if (range?.lastPage !== undefined) options.lastPageToConvert = range.lastPage;
+  // No outputFile → node-poppler resolves with the extracted text on stdout.
+  const out = await poppler.pdfToText(pdfPath, undefined, options);
+  return typeof out === 'string' ? out : '';
 }
 
 /**

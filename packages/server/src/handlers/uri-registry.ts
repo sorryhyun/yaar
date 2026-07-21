@@ -88,6 +88,18 @@ export interface ReadOptions {
   pattern?: string;
   /** Number of context lines around pattern matches (default: 0). */
   context?: number;
+  /**
+   * PDF only: extract the text layer. `true` (or "all") reads the whole document; a range
+   * string like "1-3" scopes it. Cheapest way to read a text-based PDF.
+   */
+  pdfText?: boolean | string;
+  /**
+   * PDF page range to rasterize to images, e.g. "1-3", "5", "2-" (1-based, inclusive) — for
+   * scanned/visual PDFs or when layout matters. Omit both pdfText and pdfPages to get document
+   * metadata plus a hint to open the PDF in a viewer window — reading a PDF should not ingest
+   * its content unless the agent explicitly asks.
+   */
+  pdfPages?: string;
 }
 
 export interface ResourceHandler {

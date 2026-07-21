@@ -144,6 +144,8 @@ export function registerVerbTools(server: McpServer): void {
       description:
         'Read the current value/state of a yaar:// resource. ' +
         'For text files, optionally filter by line range or regex pattern. ' +
+        'Reading a PDF returns its metadata plus a hint to open it in a viewer window — it does ' +
+        'NOT ingest the content unless you pass pdfText (text layer) or pdfPages (page images). ' +
         'URIs support brace expansion: yaar://storage/{a,b,c} reads all 3 files at once.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to read'),
@@ -159,10 +161,25 @@ export function registerVerbTools(server: McpServer): void {
           .number()
           .optional()
           .describe('Context lines around pattern matches (default: 0)'),
+        pdfText: z
+          .union([z.boolean(), z.string()])
+          .optional()
+          .describe(
+            'PDF only: extract the text layer. true (or "all") reads the whole document; ' +
+              'a range like "1-3" scopes it. Cheapest way to read a text-based PDF.',
+          ),
+        pdfPages: z
+          .string()
+          .optional()
+          .describe(
+            'PDF only: page range to rasterize to images, e.g. "1-3", "5", "2-" — for ' +
+              'scanned/visual PDFs. Omit both pdfText and pdfPages to just get metadata + a ' +
+              'hint to open a viewer window.',
+          ),
       },
     },
-    async ({ uri, lines, pattern, context }) =>
-      exec(reg, 'read', uri, undefined, { lines, pattern, context }),
+    async ({ uri, lines, pattern, context, pdfText, pdfPages }) =>
+      exec(reg, 'read', uri, undefined, { lines, pattern, context, pdfText, pdfPages }),
   );
 
   server.registerTool(

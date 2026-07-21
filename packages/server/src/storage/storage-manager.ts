@@ -6,7 +6,7 @@
 
 import { mkdir, readdir, unlink, rm, stat, realpath } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
-import { pdfToImages, getPdfPageCount } from '../lib/pdf/index.js';
+import { pdfToImages, pdfToText, getPdfPageCount } from '../lib/pdf/index.js';
 import {
   STORAGE_DIR,
   getConfigDir,
@@ -119,30 +119,89 @@ function isTextFile(filePath: string): boolean {
   return TEXT_EXTENSIONS.has(extname(filePath).toLowerCase());
 }
 
-const MAX_PDF_PREVIEW_PAGES = 3;
+/** Cap on how many pages a single rasterize request may return, to bound token cost. */
+const MAX_PDF_RASTER_PAGES = 20;
 
 /**
- * Convert a PDF file to images (PNG format via poppler).
- * Returns at most MAX_PDF_PREVIEW_PAGES images.
+ * Parse a 1-based inclusive page range like "1-3", "5", or "2-". Clamped to [1, totalPages].
+ * `maxPages` caps the span (images are expensive; text is cheap so callers pass Infinity).
  */
-async function convertPdfToImages(filePath: string): Promise<{ images: StorageImageContent[]; totalPages: number }> {
-  const totalPages = await getPdfPageCount(filePath);
-  const pdfPages = await pdfToImages(filePath, 1.5, MAX_PDF_PREVIEW_PAGES);
+function parsePdfPageRange(
+  spec: string,
+  totalPages: number,
+  maxPages: number = MAX_PDF_RASTER_PAGES,
+): { firstPage: number; lastPage: number } {
+  const m = spec.trim().match(/^(\d+)?\s*(-)?\s*(\d+)?$/);
+  const first = m?.[1] ? parseInt(m[1], 10) : 1;
+  const openEnded = m?.[2] === '-' && !m?.[3];
+  const last = m?.[3] ? parseInt(m[3], 10) : openEnded ? totalPages : first;
+  const firstPage = Math.max(1, Math.min(first, totalPages || first));
+  const lastPage = Math.max(
+    firstPage,
+    Math.min(last, totalPages || last, firstPage + maxPages - 1),
+  );
+  return { firstPage, lastPage };
+}
 
-  const images = pdfPages.map(page => ({
+/**
+ * Rasterize a PDF page range to PNG images (via poppler) for when the agent must actually
+ * read the document's content. Callers only reach here on an explicit `pages` opt-in.
+ */
+async function convertPdfToImages(
+  filePath: string,
+  pages: string,
+): Promise<{ images: StorageImageContent[]; totalPages: number; firstPage: number; lastPage: number }> {
+  const totalPages = await getPdfPageCount(filePath);
+  const { firstPage, lastPage } = parsePdfPageRange(pages, totalPages);
+  const pdfPages = await pdfToImages(filePath, 1.5, { firstPage, lastPage });
+
+  const images = pdfPages.map((page) => ({
     type: 'image' as const,
     data: page.data.toString('base64'),
     mimeType: page.mimeType,
     pageNumber: page.pageNumber,
   }));
 
-  return { images, totalPages };
+  return { images, totalPages, firstPage, lastPage };
+}
+
+/** Extract a PDF's text layer. Returns the text plus whether any was found. */
+async function extractPdfText(
+  filePath: string,
+  spec: boolean | string,
+): Promise<{ text: string; totalPages: number; firstPage: number; lastPage: number }> {
+  const totalPages = await getPdfPageCount(filePath);
+  const wantsRange = typeof spec === 'string' && spec.trim() !== '' && spec.trim() !== 'all';
+  // `true` (or "all"/"") means the whole document; a range string scopes it. When the page
+  // count is unknown (0), extract the whole document rather than passing a bogus 1..0 range.
+  const range =
+    wantsRange && totalPages > 0
+      ? parsePdfPageRange(spec as string, totalPages, Infinity)
+      : totalPages > 0
+        ? { firstPage: 1, lastPage: totalPages }
+        : undefined;
+  const text = await pdfToText(filePath, range);
+  return { text, totalPages, firstPage: range?.firstPage ?? 1, lastPage: range?.lastPage ?? totalPages };
+}
+
+/** Options controlling how {@link storageRead} handles special file types. */
+export interface StorageReadOptions {
+  /**
+   * Extract a PDF's text layer instead of just metadata. `true` (or "all") reads the whole
+   * document; a range string like "1-3" scopes it. Cheapest way to read a text-based PDF.
+   */
+  pdfText?: boolean | string;
+  /** PDF page range to rasterize to images (e.g. "1-3"), for visual/scanned PDFs. */
+  pdfPages?: string;
 }
 
 /**
  * Read a file from storage.
  */
-export async function storageRead(filePath: string): Promise<StorageReadResult> {
+export async function storageRead(
+  filePath: string,
+  opts?: StorageReadOptions,
+): Promise<StorageReadResult> {
   const resolved = resolvePath(filePath);
   if (!resolved) {
     return { success: false, error: 'Invalid path: path traversal detected. Storage tools only access files under storage/. Use relative paths without "..".' };
@@ -161,18 +220,51 @@ export async function storageRead(filePath: string): Promise<StorageReadResult> 
       return { success: false, error: `"${filePath}" is a directory. Use list instead.` };
     }
 
-    // Handle PDF files by converting to images
+    // PDFs. View-first: by default return metadata only and let the caller steer the agent
+    // to open the file in a viewer window (native, zero bytes ingested). Rasterizing pages to
+    // images is an explicit opt-in via `pdfPages`, for when the agent must read the content.
     if (isPdfFile(validatedPath)) {
-      const { images, totalPages } = await convertPdfToImages(validatedPath);
-      const exceeded = totalPages > MAX_PDF_PREVIEW_PAGES;
-      const content = exceeded
-        ? `PDF preview (first ${MAX_PDF_PREVIEW_PAGES} of ${totalPages} pages). It exceeds ${MAX_PDF_PREVIEW_PAGES} pages! Total: ${totalPages} pages.`
-        : `PDF with ${totalPages} page(s)`;
+      // Text layer — cheapest way to read a text-based PDF (all pages, real characters).
+      if (opts?.pdfText) {
+        const { text, totalPages, firstPage, lastPage } = await extractPdfText(
+          validatedPath,
+          opts.pdfText,
+        );
+        if (text.trim()) {
+          return {
+            success: true,
+            content: `PDF text, pages ${firstPage}-${lastPage} of ${totalPages}:\n\n${text}`,
+            totalPages,
+          };
+        }
+        // Empty text layer → almost certainly a scanned/image-only PDF.
+        return {
+          success: true,
+          content:
+            `PDF has no extractable text layer (pages ${firstPage}-${lastPage} of ${totalPages}) — ` +
+            `it is likely scanned. Re-read with pdfPages to rasterize pages to images instead.`,
+          totalPages,
+        };
+      }
+      // Rasterize pages to images — for visual/scanned PDFs, or when layout matters.
+      if (opts?.pdfPages) {
+        const { images, totalPages, firstPage, lastPage } = await convertPdfToImages(
+          validatedPath,
+          opts.pdfPages,
+        );
+        return {
+          success: true,
+          content: `PDF pages ${firstPage}-${lastPage} of ${totalPages} (rasterized to images).`,
+          images,
+          totalPages,
+        };
+      }
+      const totalPages = await getPdfPageCount(validatedPath);
       return {
         success: true,
-        content,
-        images,
+        content: `PDF document with ${totalPages} page(s), ${fileStat.size} bytes.`,
         totalPages,
+        pdfMeta: true,
       };
     }
 

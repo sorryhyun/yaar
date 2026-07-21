@@ -69,6 +69,13 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
   }
   const result = await storageRead(prefixedPath);
   if (!result.success) return error(result.error!);
+  // PDF metadata (view-first default): no pages ingested — return the summary as text.
+  if (result.pdfMeta) {
+    return ok(
+      `${result.content}\n\nOpen it in a viewer window with renderer "iframe" and ` +
+        `content "${resolved.sourceUri}" rather than reading the bytes.`,
+    );
+  }
   // Images / PDFs — return base64 content items
   if (result.images?.length) {
     return okWithImages(result.content!, result.images);

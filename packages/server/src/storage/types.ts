@@ -21,6 +21,9 @@ export interface StorageReadResult {
   content?: string;
   images?: StorageImageContent[];
   totalPages?: number;
+  /** Set for PDFs. When true, the result carries metadata only (no rasterized images) and the
+   *  caller should steer the agent to open the PDF in a viewer window instead of ingesting it. */
+  pdfMeta?: boolean;
   error?: string;
 }
 
