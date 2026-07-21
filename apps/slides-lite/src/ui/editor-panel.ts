@@ -19,7 +19,7 @@ function renderEditorPanel() {
   return html`
     <div class="field">
       <label>Layout</label>
-      <select onchange=${(e: Event) => {
+      <select class="tb-select" onchange=${(e: Event) => {
         slide.layout = (e.target as HTMLSelectElement).value as SlideLayout;
         markDirty(); bumpDeck();
       }}>
@@ -58,7 +58,7 @@ function renderEditorPanel() {
     </div>
     <div class="field">
       <label>Font Size <span class="small">overrides deck setting</span></label>
-      <select onchange=${(e: Event) => {
+      <select class="tb-select" onchange=${(e: Event) => {
         const val = (e.target as HTMLSelectElement).value;
         if (val === '') { delete slide.fontSize; }
         else if (isFontSize(val)) { slide.fontSize = val; }
@@ -68,13 +68,13 @@ function renderEditorPanel() {
         ${FONT_SIZES.map(s => html`<option value=${s} selected=${slide.fontSize === s}>${s.toUpperCase()}</option>`)}
       </select>
     </div>
-    <div class="field" style="display:flex;gap:8px">
-      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
+    <div class="panel-actions">
+      <button class="tb-btn tb-btn-text tb-btn-bordered tb-btn-danger" onClick=${() => {
         if (deck.slides.length === 1) { deck.slides[0] = newSlide(); deck.activeIndex = 0; }
         else { deck.slides.splice(deck.activeIndex, 1); clampActive(); }
         markDirty(); bumpDeck(); bumpActiveIndex();
       }}>Delete Slide</button>
-      <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => {
+      <button class="tb-btn tb-btn-text tb-btn-bordered" onClick=${() => {
         const s = newSlide('section');
         s.title = 'Section Title'; s.body = 'Add key message';
         deck.slides.splice(deck.activeIndex + 1, 0, s);

@@ -27,6 +27,7 @@ import { createThumbnailList } from './ui/thumbnail-list';
 import { createEditorPanel } from './ui/editor-panel';
 import { startPresent } from './ui/present';
 import { registerProtocol } from './protocol';
+import { sidebarPinned } from './sidebar';
 import { onShortcut } from '@bundled/yaar';
 import type { Deck } from './types';
 
@@ -66,9 +67,9 @@ function updateSlideSize() {
 // Mount
 render(
   () => html`
-    <div class="root y-light">
+    <div class="root">
       ${createTopbar()}
-      <div class="main">
+      <div class=${() => 'main' + (sidebarPinned() ? ' sidebar-pinned' : '')}>
         ${createThumbnailList()}
         <div
           class="center"
@@ -148,3 +149,4 @@ registerProtocol({
   bumpDeck,
   bumpActiveIndex,
 });
+  
