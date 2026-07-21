@@ -901,6 +901,51 @@ declare module '@bundled/yaar' {
     options?: { label?: string; onError?: (message: string, error: unknown) => void },
   ): [get: () => T, set: (v: T | ((prev: T) => T)) => void];
 
+  /**
+   * The hover-expand + pin sidebar/overlay state machine.
+   *
+   * Visible when pinned or while the cursor is over the panel; a grace period
+   * before the fold keeps a brief cursor exit from flickering it shut. Pin state
+   * persists to appStorage when `pinKey` is given (with a touch-guard so a user
+   * toggle beats the async load). `setResizing(true)` suppresses the auto-close
+   * while a width handle is dragged. Headless — the app owns the markup.
+   */
+  export function createCollapsiblePanel(opts?: {
+    pinKey?: string;
+    closeDelayMs?: number;
+    pinLabel?: string;
+  }): {
+    expanded: () => boolean;
+    pinned: () => boolean;
+    open(): void;
+    scheduleClose(): void;
+    close(): void;
+    cancelClose(): void;
+    togglePin(): void;
+    setPin(v: boolean): void;
+    setResizing(active: boolean): void;
+  };
+
+  /**
+   * The dirty / debounced-save / save-status lifecycle for an autosaving document.
+   *
+   * Wraps `save` with a debounce, a `dirty`/`saveFailed`/`lastSavedAt` triad, and
+   * an editSeq guard so a save that began before the latest edit does not clear
+   * the dirty flag. `save` returns whether the write succeeded (`false` stays
+   * dirty). `statusLabel()` yields "Saving…" | "Saved 14:22" | "Not saved".
+   */
+  export function createAutosave<T = void>(
+    save: (value: T) => Promise<boolean>,
+    opts?: { debounceMs?: number; onSaved?: () => void },
+  ): {
+    markDirty(value: T): void;
+    flush(withToast?: boolean): Promise<void>;
+    dirty: () => boolean;
+    saveFailed: () => boolean;
+    lastSavedAt: () => number;
+    statusLabel: () => string;
+  };
+
   /** The raw window.yaar global. */
   export const yaar: YaarGlobal;
   export default yaar;

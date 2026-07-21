@@ -1,6 +1,6 @@
 # Proposal: Extracting Repeated App UI Patterns into the SDK
 
-**Status:** Draft (Tier 1 landed; Tiers 2–3 proposed here)
+**Status:** Draft (Tiers 1–2 landed; Tier 3 proposed here)
 **Scope:** `packages/shared/src/design` (Tier 1, done), `packages/compiler/src/shims/yaar` (Tier 2), app docs (Tier 3)
 **Consumers:** `user-apps/word-lite`, `user-apps/slides-lite`, `apps/storage` — and future document/browser-style apps
 
@@ -68,11 +68,29 @@ Tier-1 consumer.
 
 ---
 
-## Tier 2 — Headless behavior primitives
+## Tier 2 — Headless behavior primitives (landed)
 
-Two state machines are near-verbatim clones today. Both become small primitives in the
-existing internal modules of the SDK (`reactive.ts`), keeping the public surface one
-module while the ownership stays clean. No new `@bundled/yaar/*` subpath.
+Two state machines were near-verbatim clones. Both now live as small primitives in the
+existing internal SDK module (`packages/compiler/src/shims/yaar/reactive.ts`), exported from
+the `@bundled/yaar` barrel with type declarations in `bundled-types/index.d.ts`. The public
+surface stays one module — no new `@bundled/yaar/*` subpath. Both are tree-shaken, so apps
+that don't import them pay nothing.
+
+**Migrated:** `apps/storage/navOverlay.ts` and `slides-lite/sidebar.ts` are now thin naming
+adapters over `createCollapsiblePanel` (each ~110/92 lines → ~30, all consumer imports
+unchanged). `slides-lite/store.ts` uses `createAutosave` (dropped its `debounce`/`showToast`
+imports and the hand-rolled `editSeq`/`persist` loop); `slides-lite/ui/topbar.ts` now reads
+the chip text from `saveStatusLabel()` instead of formatting `date-fns` by hand.
+
+**Deferred:** `word-lite/documents.ts` was listed as a `createAutosave` consumer but is a
+weaker fit — it has no `dirty`/`saveFailed`/`editSeq` machine, persists through
+`createPersistedSignal` (not a boolean-returning `save`), and shows a free-text status
+(`Loaded saved draft` / `New document`) rather than a `y-chip`. Adopting `createAutosave`
+would be a rewrite that regresses its status UX, not a de-duplication. Left as-is; revisit
+only if it grows the dirty/status machine independently.
+
+The primitives as shipped (one addition to the proposed shape: `cancelClose()`, needed
+because `thumbnail-list.ts` calls it from `onCleanup`):
 
 ### 2a. `createCollapsiblePanel` — the hover-expand + pin sidebar
 
@@ -166,10 +184,10 @@ separate export is warranted now.
 
 1. **Tier 1 (done):** chrome family + `word-lite`. Follow-up: migrate `slides-lite`, then
    audit `storage`'s toolbar for reuse.
-2. **Tier 2a:** land `createCollapsiblePanel`; migrate `storage/navOverlay.ts` and
+2. **Tier 2a (done):** landed `createCollapsiblePanel`; migrated `storage/navOverlay.ts` and
    `slides-lite/sidebar.ts` (the most exact clone — ~200 lines → one primitive).
-3. **Tier 2b:** land `createAutosave`; migrate `slides-lite/store.ts` and
-   `word-lite/documents.ts`.
+3. **Tier 2b (done):** landed `createAutosave`; migrated `slides-lite/store.ts`.
+   `word-lite/documents.ts` deferred (see Tier 2 note — not the same machine).
 4. **Tier 3:** add the document-app skeleton snippet to the app-development guide.
 
 Each step is independently shippable and independently reversible. Update

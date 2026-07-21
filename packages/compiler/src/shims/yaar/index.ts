@@ -61,7 +61,7 @@ export { showAlert, showConfirm, showPrompt } from './dialogs.js';
 export type { DialogOptions } from './dialogs.js';
 
 // ── Reactive primitives ─────────────────────────────────────────
-export { createPersistedSignal } from './reactive.js';
+export { createPersistedSignal, createCollapsiblePanel, createAutosave } from './reactive.js';
 
 // ── Default export: the raw global ───────────────────────────────
 
