@@ -71,6 +71,20 @@ export function isContentBlocks(value: unknown): value is ContentBlock[] {
 export interface VerbResult {
   content: ContentBlock[];
   isError?: boolean;
+  /**
+   * Optional lossless, typed copy of the result for programmatic consumers
+   * (app→app SDK calls via `POST /api/verb`, non-model MCP clients). `content`
+   * remains the model-facing channel — a JSON *string* the LLM reads — while
+   * `structuredContent` carries the original object/array untruncated so a
+   * downstream reader gets typed data without re-parsing a possibly-truncated
+   * text block. Populated by `wrapAppValue` for app object returns; rides through
+   * to the MCP `CallToolResult` via the tool handler's `{...result}` spread.
+   *
+   * Object-only, matching the MCP `structuredContent` contract (and the SDK's
+   * `{[x:string]:unknown}` type). Bare-array returns keep their text-only shape and
+   * still round-trip through `toEnvelope`'s `tryParseJson`.
+   */
+  structuredContent?: Record<string, unknown>;
 }
 
 export interface DescribeResult {

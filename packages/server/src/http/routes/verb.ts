@@ -146,6 +146,14 @@ function toEnvelope(result: VerbResult): Record<string, unknown> {
     return envelope;
   }
 
+  // Lossless structured payload (app object/array returns) → hand the typed value
+  // straight to the caller instead of re-parsing the (possibly truncated) text block.
+  if (result.structuredContent !== undefined) {
+    const envelope: Record<string, unknown> = { ok: true, data: result.structuredContent };
+    if (images.length > 0) envelope.images = images;
+    return envelope;
+  }
+
   // Detect batch results: formatBatchResults() produces "--- uri ---" header blocks
   // interleaved with data blocks.
   const isBatch =

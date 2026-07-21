@@ -64,8 +64,21 @@ function wrapAppValue(value: unknown): VerbResult {
   // Plain string
   if (typeof value === 'string') return ok(truncateText(value));
 
-  // Object → JSON text
-  if (typeof value === 'object') return ok(truncateText(JSON.stringify(value, null, 2)));
+  // Object → a JSON text block for the model/logs PLUS a lossless
+  // `structuredContent` copy for programmatic consumers (app→app SDK calls,
+  // non-model MCP clients). The text block stays truncated for token budget and
+  // log readability; the structured copy is the full, untruncated value so a
+  // truncated preview never costs a downstream reader real data. Trade-off: the
+  // payload rides the wire twice — accepted for the typed-access guarantee.
+  //
+  // `structuredContent` is object-only (MCP contract), so bare arrays get the
+  // text-only shape and still round-trip via `toEnvelope`'s tryParseJson.
+  if (typeof value === 'object') {
+    const content = [{ type: 'text' as const, text: truncateText(JSON.stringify(value, null, 2)) }];
+    return Array.isArray(value)
+      ? { content }
+      : { content, structuredContent: value as Record<string, unknown> };
+  }
 
   return ok(String(value));
 }

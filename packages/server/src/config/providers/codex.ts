@@ -58,6 +58,13 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   args.push('-c', 'features.multi_agent=false');
   args.push('-c', 'features.personality=false');
   args.push('-c', 'features.unified_exec=false');
+  // Disable "code mode": Codex otherwise exposes a single `exec` custom tool that
+  // runs model-authored JavaScript against an `ALL_TOOLS`/`text()` runtime to call
+  // tools programmatically. code_mode_host is stable+true by default, so it turns on
+  // even though we never enabled it. YAAR wants explicit MCP tool calls, not an
+  // opaque JS shell, so force both host and model sides off.
+  args.push('-c', 'features.code_mode.enabled=false');
+  args.push('-c', 'features.code_mode_host=false');
   args.push('-c', 'features.fast_mode=false');
   args.push('-c', 'features.skill_mcp_dependency_install=false');
   args.push('-c', 'apps._default.enabled=false');
