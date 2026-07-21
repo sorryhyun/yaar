@@ -35,7 +35,7 @@ import { join, basename } from 'path';
  * work survives on a machine whose hashes happen to match, since a stale copy of
  * one of these apps is an unsanitized innerHTML sink rather than a cosmetic lag.
  */
-export const COMPILER_VERSION = '11';
+export const COMPILER_VERSION = '12';
 
 export interface BuildManifest {
   sourceHash: string;

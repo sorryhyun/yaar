@@ -129,7 +129,7 @@ export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: stri
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
-<style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden}#${APP_MOUNT_ID}{height:100%}#${APP_MOUNT_ID}:empty{display:none}body{font-family:${FONT_SANS}}</style>
+<style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:var(--yaar-bg)}#${APP_MOUNT_ID}{height:100%}#${APP_MOUNT_ID}:empty{display:none}body{font-family:${FONT_SANS}}</style>
 <script>${escapeInlineJs(sdkCode)}</script>
 </head>
 <body>
