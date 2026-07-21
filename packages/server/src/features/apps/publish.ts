@@ -58,11 +58,26 @@ export async function packageAppTarball(appId: string, appDir: string): Promise<
       '-',
       '--exclude',
       `${basename(appDir)}/dist`,
+      // Unanchored so they catch macOS cruft at any depth: `.DS_Store` (Finder drops
+      // these into every browsed directory) and `._*` AppleDouble sidecars (macOS
+      // writes `._app.json` next to a file when it crosses a filesystem that can't
+      // hold xattrs — a zip extract, USB/network share). Neither belongs on the marketplace.
+      '--exclude',
+      '.DS_Store',
+      '--exclude',
+      '._*',
       '-C',
       dirname(appDir),
       basename(appDir),
     ],
-    { stdout: 'pipe', stderr: 'pipe' },
+    {
+      stdout: 'pipe',
+      stderr: 'pipe',
+      // Belt-and-suspenders: on tar builds that *do* emit AppleDouble metadata for
+      // xattr-bearing files (older/Apple bsdtar), this suppresses the synthesized
+      // `._{name}` members. GNU tar and libarchive 3.5+ ignore it, so it's a no-op there.
+      env: { ...process.env, COPYFILE_DISABLE: '1' },
+    },
   );
 
   const [tarball, stderr, exitCode] = await Promise.all([

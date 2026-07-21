@@ -7,7 +7,7 @@
  */
 
 import { readdir, stat } from 'fs/promises';
-import { join } from 'path';
+import { join, basename } from 'path';
 
 /**
  * Bump this to force a full rebuild of all apps.
@@ -59,6 +59,10 @@ export async function computeSourceHash(appPath: string): Promise<string> {
     const entries = await readdir(srcDir, { recursive: true });
     const checks = await Promise.all(
       (entries as string[]).map(async (rel) => {
+        // Ignore macOS cruft (`.DS_Store`, `._*` AppleDouble sidecars) so it never
+        // perturbs the source hash (spurious drift detection on publish, spurious recompiles).
+        const name = basename(rel);
+        if (name === '.DS_Store' || name.startsWith('._')) return null;
         try {
           const s = await stat(join(srcDir, rel));
           return s.isFile() ? rel : null;
