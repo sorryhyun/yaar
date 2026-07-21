@@ -7,13 +7,15 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAutoDismiss } from '@/hooks/useAutoDismiss';
 import styles from '@/styles/overlays/NotificationCenter.module.css';
 
-const DEFAULT_DURATION = 8000;
-
 export function NotificationCenter() {
   const notifications = useDesktopStore(useShallow(selectNotifications));
   const dismissNotification = useDesktopStore((s) => s.dismissNotification);
 
-  useAutoDismiss(notifications, dismissNotification, (n) => n.duration || DEFAULT_DURATION);
+  // Notifications persist until the user dismisses them via the × button.
+  // They only auto-dismiss when the sender sets an explicit positive `duration`
+  // (e.g. yaar://user notify with duration). Agent → user direct messages carry
+  // no duration, so they stay put until manually closed.
+  useAutoDismiss(notifications, dismissNotification, (n) => n.duration ?? 0);
 
   if (notifications.length === 0) return null;
 

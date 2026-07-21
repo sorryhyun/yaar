@@ -13,11 +13,16 @@ export function useAutoDismiss<T extends { id: string }>(
 
   useEffect(() => {
     for (const item of items) {
+      const duration = getDuration(item);
+      // A non-positive/non-finite duration means "never auto-dismiss" — the
+      // item persists until the user dismisses it manually (e.g. agent → user
+      // direct messages, which have no duration and must be closed via ×).
+      if (!(duration > 0 && Number.isFinite(duration))) continue;
       if (!timersRef.current.has(item.id)) {
         const timer = setTimeout(() => {
           onDismiss(item.id);
           timersRef.current.delete(item.id);
-        }, getDuration(item));
+        }, duration);
         timersRef.current.set(item.id, timer);
       }
     }
