@@ -114,6 +114,11 @@ export function buildSDKOptions({
     disallowedTools: ['LSP'],
     mcpServers: mcpServerConfigs,
     includePartialMessages: true,
+    // Drop the built-in commit/PR workflow instructions from the spawned CLI's
+    // system prompt. YAAR's monitor/session/app agents don't run git workflows,
+    // so the instructions are pure prompt overhead. Applies to all three tiers,
+    // since this builder is the single per-turn options factory for the provider.
+    settings: { includeGitInstructions: false },
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
     env: {
