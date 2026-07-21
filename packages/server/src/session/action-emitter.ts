@@ -160,7 +160,6 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   private readyWindows = new Map<string, Set<string>>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
-  private currentAgentId: string | undefined;
 
   /**
    * Set the current monitor ID for action stamping.
@@ -178,31 +177,6 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   }
 
   /**
-   * Set the current agent ID for action stamping.
-   * Called before a provider turn so emitted actions carry the correct agent ID.
-   * Used by providers (like Codex) that cannot pass X-Agent-Id headers on MCP requests.
-   */
-  setCurrentAgent(id: string): void {
-    this.currentAgentId = id;
-  }
-
-  /**
-   * Clear the current agent ID after a provider turn completes.
-   */
-  clearCurrentAgent(): void {
-    this.currentAgentId = undefined;
-  }
-
-  /**
-   * The fallback agent ID set by header-less providers (Codex) before a turn.
-   * Used by the MCP HTTP handler to restore agent context when the inbound
-   * request carries no X-Agent-Id header.
-   */
-  getCurrentAgentId(): string | undefined {
-    return this.currentAgentId;
-  }
-
-  /**
    * Generate a unique request ID.
    */
   private generateRequestId(): string {
@@ -212,14 +186,16 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   /**
    * Resolve the effective agent ID from (in priority order):
    * 1. Explicit parameter
-   * 2. AsyncLocalStorage context (set by Claude via X-Agent-Id header)
-   * 3. Fallback currentAgentId (set by Codex provider before turn)
+   * 2. AsyncLocalStorage context — set from the server-minted agent token at the
+   *    MCP boundary (Claude via `X-Agent-Token`, Codex via the per-thread
+   *    `mcp_servers` header). Every turn stamps `agentId` unconditionally, so there
+   *    is no header-less provider left to fall back for.
    */
   private resolveAgentId(explicit?: string): string | undefined {
     if (explicit) return explicit;
     const contextId = getAgentId();
     if (contextId && contextId !== 'unknown') return contextId;
-    return this.currentAgentId;
+    return undefined;
   }
 
   /**

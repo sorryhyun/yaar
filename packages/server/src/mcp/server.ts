@@ -14,7 +14,6 @@ import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/
 import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
-import { actionEmitter } from '../session/action-emitter.js';
 import { SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerReloadTools } from './system/reload.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
@@ -164,15 +163,15 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   // anyone behind the shared bearer token could set to any value they liked — which
   // made the whole role-based access tier, `session-principal` included, advisory.
   //
-  // Falling back to the emitter's current agent is safe: that value is set server-side
-  // by the running turn, not by the request. It covers a provider that hasn't attached
-  // a token yet, and is the same fallback used for outbound action routing.
+  // Every turn stamps this token: Claude sends it as `X-Agent-Token`, Codex bakes it
+  // into the thread's `mcp_servers` header (providers/codex, buildMcpScope). There is
+  // no header-less provider left, so a request with no resolvable token is 'unknown'
+  // rather than borrowing a process-global "current agent".
   const presented = req.headers.get('x-agent-token');
   if (presented && !resolveAgentToken(presented)) {
     return Response.json({ error: 'Unknown agent token' }, { status: 403 });
   }
-  const agentId =
-    (presented && resolveAgentToken(presented)) ?? actionEmitter.getCurrentAgentId() ?? 'unknown';
+  const agentId = (presented && resolveAgentToken(presented)) ?? 'unknown';
   const hub = getSessionHub();
   const yaarSessionId = hub.findSessionByAgent(agentId) ?? hub.getDefault()?.sessionId;
   const monitorId = hub.findMonitorForAgent(agentId);

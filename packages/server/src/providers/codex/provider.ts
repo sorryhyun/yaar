@@ -135,14 +135,12 @@ export class CodexProvider extends BaseTransport {
         yield { type: 'text', sessionId: this.currentSession!.threadId };
       }
 
-      // Stamp monitorId and agentId so actions emitted during this turn carry the
-      // correct origin, and so an MCP request that arrives without a per-agent token
-      // still resolves to the right agent (see handleMcpRequest's fallback).
+      // Stamp monitorId so actions emitted during this turn carry the correct origin
+      // when the MCP boundary can't resolve one from the agent (see resolveMonitorId).
+      // Agent identity needs no such fallback: buildMcpScope bakes this agent's token
+      // into the thread's MCP header, so every tool call self-identifies.
       if (options.monitorId) {
         actionEmitter.setCurrentMonitor(options.monitorId);
-      }
-      if (options.agentId) {
-        actionEmitter.setCurrentAgent(options.agentId);
       }
 
       // pendingMessages is local per-query to avoid cross-talk.
@@ -230,7 +228,6 @@ export class CodexProvider extends BaseTransport {
         client.off('notification', notificationHandler);
         client.off('server_request', serverRequestHandler);
         actionEmitter.clearCurrentMonitor();
-        actionEmitter.clearCurrentAgent();
         this.currentTurnId = null;
         this.turnReadyResolve?.();
         this.turnReadyResolve = null;
@@ -396,12 +393,11 @@ export class CodexProvider extends BaseTransport {
    *
    * Why this is required for Codex: all agents share one app-server process and
    * one HTTP MCP server, so a tool call arriving over HTTP carries no inherent
-   * agent identity. Without the header the server falls back to a single
-   * process-global "current agent" (actionEmitter.getCurrentAgentId), which
-   * races whenever two Codex turns overlap — e.g. a monitor agent spawns an app
-   * agent (fire-and-forget). The app agent then resolves the wrong/empty window
-   * and its `app:command`/`app:query` fail with "no active window context".
-   * Stamping identity per-thread eliminates the race at its root.
+   * agent identity. Without the header the server cannot tell overlapping turns
+   * apart — e.g. a monitor agent spawns an app agent (fire-and-forget), and the
+   * app agent resolves the wrong/empty window, so its `app:command`/`app:query`
+   * fail with "no active window context". Stamping identity per-thread means every
+   * tool call self-identifies, eliminating the race at its root.
    *
    * We expose the FULL active server set (system+verbs+app) — same as the
    * process-level config — so this override never narrows the agent's tools; the
