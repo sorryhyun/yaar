@@ -269,11 +269,31 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   };
 }
 
+// listApps() does ~6 filesystem ops per app (stat SKILL.md, hasConfig, stat
+// dist, parse app.json, parse protocol.json, readdir for an icon) and runs on
+// every GET /api/apps, every app-agent profile build, and every describe/query
+// MCP call — none of which mutate the filesystem. A short-lived cache collapses
+// the repeated scans within one desktop load or one agent turn into a single
+// pass. Mutations (install/uninstall/deploy/auto-compile) call
+// invalidateAppsCache() so their changes show up immediately; the TTL is a
+// backstop for anything not explicitly invalidated.
+const APPS_CACHE_TTL_MS = 5_000;
+let appsCache: { apps: AppInfo[]; at: number } | null = null;
+
+/** Drop the cached app list so the next listApps() re-scans from disk. */
+export function invalidateAppsCache(): void {
+  appsCache = null;
+}
+
 /**
  * List all apps across both roots. On an id collision the bundled app wins
  * (a user-installed app cannot shadow a shipped one).
  */
 export async function listApps(): Promise<AppInfo[]> {
+  if (appsCache && Date.now() - appsCache.at < APPS_CACHE_TTL_MS) {
+    return [...appsCache.apps]; // fresh array; callers may sort/filter in place
+  }
+
   const byId = new Map<string, AppInfo>();
 
   for (const root of APP_ROOTS) {
@@ -292,7 +312,9 @@ export async function listApps(): Promise<AppInfo[]> {
     }
   }
 
-  return [...byId.values()];
+  const apps = [...byId.values()];
+  appsCache = { apps, at: Date.now() };
+  return [...apps];
 }
 
 /**

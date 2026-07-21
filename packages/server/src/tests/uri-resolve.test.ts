@@ -21,6 +21,7 @@ mock.module('../storage/storage-manager.js', () => ({
   ensureStorageDir: async () => {},
   configRead: mock(async () => ({ success: false })),
   configWrite: mock(async () => ({ success: true })),
+  configStatMtime: mock(async () => null),
   storageRead: mock(async () => ({ success: false })),
   storageWrite: mock(async () => ({ success: true })),
   storageList: mock(async () => ({ success: true, entries: [] })),

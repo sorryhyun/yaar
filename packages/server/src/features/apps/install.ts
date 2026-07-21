@@ -10,7 +10,7 @@ import type { VerbResult } from '../../handlers/uri-registry.js';
 import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/agent-context.js';
-import { listApps } from './discovery.js';
+import { listApps, invalidateAppsCache } from './discovery.js';
 import { INSTALL_ROOT, resolveAppDir } from './roots.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
@@ -172,6 +172,7 @@ export async function installApp(appId: string): Promise<VerbResult> {
     }
   }
 
+  invalidateAppsCache(); // app files just changed on disk — re-scan below
   const apps = await listApps();
   const installed = apps.find((a) => a.id === appId);
   if (installed && installed.createShortcut !== false) {
@@ -202,6 +203,7 @@ export async function uninstallApp(appId: string): Promise<VerbResult> {
   }
 
   await rm(appDir, { recursive: true, force: true });
+  invalidateAppsCache(); // app dir removed — drop stale cached listing
 
   const configPath = join(getConfigDir(), `${appId}.json`);
   await unlink(configPath).catch(() => {});

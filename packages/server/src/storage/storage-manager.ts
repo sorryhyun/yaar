@@ -457,6 +457,23 @@ export async function storageGrep(
 const CONFIG_DIR = getConfigDir();
 
 /**
+ * Modification time (ms) of a config file, or `null` if it doesn't exist.
+ * Lets callers cache parsed config in memory and re-read only when the file
+ * actually changes (including external hand-edits) — far cheaper than a full
+ * read + parse on every access.
+ */
+export async function configStatMtime(filePath: string): Promise<number | null> {
+  const normalizedPath = normalize(join(CONFIG_DIR, filePath));
+  const rel = relative(CONFIG_DIR, normalizedPath);
+  if (rel.startsWith('..') || rel.includes('..')) return null;
+  try {
+    return (await stat(normalizedPath)).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Read a file from the config directory.
  */
 export async function configRead(filePath: string): Promise<StorageReadResult> {

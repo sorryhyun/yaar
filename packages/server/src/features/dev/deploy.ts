@@ -17,6 +17,7 @@ import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
+import { invalidateAppsCache } from '../apps/discovery.js';
 import { snapshotApp } from './git.js';
 
 /**
@@ -456,6 +457,10 @@ export async function doDeploy(
         });
       }
     }
+
+    // App files on disk just changed — drop the cached listing so the
+    // frontend's refreshApps fetch and any agent describe sees the new build.
+    invalidateAppsCache();
 
     // Emit refreshApps AFTER shortcut changes are persisted to disk.
     actionEmitter.emitAction({ type: 'desktop.refreshApps' });

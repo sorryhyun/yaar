@@ -66,6 +66,7 @@ mock.module('../logging/session-logger.js', () => {
 mock.module('../storage/storage-manager.js', () => ({
   configRead: mock(async () => ({ success: false })),
   configWrite: mock(async () => {}),
+  configStatMtime: mock(async () => null),
   resolvePath: (path: string) => ({ absolutePath: `/mock-storage/${path}`, readOnly: false }),
   resolvePathAsync: async (path: string) => ({
     absolutePath: `/mock-storage/${path}`,

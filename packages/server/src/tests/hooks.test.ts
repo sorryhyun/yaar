@@ -33,6 +33,7 @@ mock.module('../storage/storage-manager.js', () => ({
     await wf(normalizedPath, content, 'utf-8');
     return { success: true, path: filePath };
   },
+  configStatMtime: async () => null,
   getConfigDir: () => TEST_CONFIG_DIR,
   resolvePath: (path: string) => ({ absolutePath: `/mock-storage/${path}`, readOnly: false }),
   resolvePathAsync: async (path: string) => ({

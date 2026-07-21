@@ -9,6 +9,7 @@ import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { compileTypeScript, isAppStale } from '@yaar/compiler';
 import { APP_ROOTS } from './roots.js';
+import { invalidateAppsCache } from './discovery.js';
 
 const CONCURRENCY = 4;
 
@@ -93,5 +94,9 @@ export async function autoCompileApps(): Promise<AutoCompileResult> {
   });
 
   await runWithConcurrency(tasks, CONCURRENCY);
+  // Freshly-built dist/ changes what listApps() reports (isCompiled, protocol).
+  // With boot now serving before compile finishes, drop any listing cached
+  // mid-compile so the next scan reflects the new builds.
+  if (result.compiled.length > 0) invalidateAppsCache();
   return result;
 }

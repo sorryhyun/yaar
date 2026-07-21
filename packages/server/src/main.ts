@@ -6,7 +6,13 @@
 
 import { createFetchHandler } from './http/index.js';
 import { createWsHandlers, type WsData } from './websocket/index.js';
-import { initializeSubsystems, initWarmProviders, shutdown, printBanner } from './lifecycle.js';
+import {
+  initializeSubsystems,
+  initWarmProviders,
+  compileAppsAndSyncShortcuts,
+  shutdown,
+  printBanner,
+} from './lifecycle.js';
 import { IS_REMOTE, getPort, setPort, TRANSPORT_IDLE_TIMEOUT_S } from './config.js';
 
 const MAX_PORT_ATTEMPTS = 20;
@@ -60,9 +66,16 @@ async function startup() {
 
   await printBanner(server);
 
-  // Initialize warm pool AFTER server is listening — codex app-server needs
-  // to reach MCP endpoints at http://127.0.0.1:{PORT}/mcp/*
-  await initWarmProviders();
+  // Compile stale apps and warm the provider pool concurrently, AFTER the server
+  // is listening — codex app-server needs to reach MCP endpoints at
+  // http://127.0.0.1:{PORT}/mcp/*, and compile no longer blocks either the
+  // server or the (slower) warm-pool spin-up. Neither is fatal on failure.
+  await Promise.all([
+    compileAppsAndSyncShortcuts().catch((err) =>
+      console.error('App compile/shortcut sync error:', err),
+    ),
+    initWarmProviders(),
+  ]);
 
   // Re-print connect URL after warm pool so it's visible at the bottom
   if (IS_REMOTE) {

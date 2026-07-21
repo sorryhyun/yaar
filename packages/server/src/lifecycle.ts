@@ -105,36 +105,14 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 
   await initMcpServer();
 
-  // Auto-compile stale apps before shortcut sync (so shortcuts see fresh builds)
-  try {
-    const { autoCompileApps } = await import('./features/apps/auto-compile.js');
-    const compileResult = await autoCompileApps();
-    if (compileResult.compiled.length > 0) {
-      console.log(
-        `Auto-compiled ${compileResult.compiled.length} app(s): ${compileResult.compiled.join(', ')}`,
-      );
-    }
-    for (const f of compileResult.failed) {
-      console.warn(`Failed to compile ${f.appId}: ${f.errors.join('; ')}`);
-    }
-  } catch (err) {
-    console.error('Auto-compile error:', err);
-  }
-
-  // Sync desktop shortcuts: create missing, remove stale
-  try {
-    const apps = await listApps();
-    const removedIds = await syncAppShortcuts(apps);
-    if (removedIds.length > 0) {
-      console.log(`Cleaned up ${removedIds.length} stale shortcut(s)`);
-    }
-  } catch {
-    // Non-fatal: shortcuts will be created on next app interaction
-  }
-
-  // NOTE: Warm pool init is deferred to initWarmProviders() — must run AFTER
-  // Bun.serve() so the HTTP server is listening when codex app-server connects
-  // to MCP endpoints at http://127.0.0.1:{PORT}/mcp/*.
+  // NOTE: App auto-compile + shortcut sync are deferred to
+  // compileAppsAndSyncShortcuts(), and warm-pool init to initWarmProviders() —
+  // both run AFTER Bun.serve() (see main.ts). Warm pool must, because codex
+  // app-server connects to MCP at http://127.0.0.1:{PORT}/mcp/* and needs the
+  // HTTP server listening. Compile is deferred so it no longer blocks the server
+  // from accepting connections and can overlap the (slower) warm-pool spin-up;
+  // the already-built dist/ is served in the meantime, and a fresh build
+  // invalidates the app-list cache the moment it lands.
 
   // Create session log eagerly so user interactions are logged from the start
   const sessionInfo = await createSession('pending');
@@ -188,6 +166,42 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   }
 
   return options;
+}
+
+/**
+ * Compile any stale apps, then reconcile desktop shortcuts against the result.
+ *
+ * Runs AFTER the HTTP server is listening (see main.ts) so a slow rebuild — e.g.
+ * after a compiler-version bump makes every app stale — doesn't hold the server
+ * offline. It runs concurrently with warm-pool init; the two are independent.
+ * Compile-before-shortcut ordering is preserved so shortcuts see fresh builds.
+ */
+export async function compileAppsAndSyncShortcuts(): Promise<void> {
+  try {
+    const { autoCompileApps } = await import('./features/apps/auto-compile.js');
+    const compileResult = await autoCompileApps();
+    if (compileResult.compiled.length > 0) {
+      console.log(
+        `Auto-compiled ${compileResult.compiled.length} app(s): ${compileResult.compiled.join(', ')}`,
+      );
+    }
+    for (const f of compileResult.failed) {
+      console.warn(`Failed to compile ${f.appId}: ${f.errors.join('; ')}`);
+    }
+  } catch (err) {
+    console.error('Auto-compile error:', err);
+  }
+
+  // Sync desktop shortcuts: create missing, remove stale
+  try {
+    const apps = await listApps();
+    const removedIds = await syncAppShortcuts(apps);
+    if (removedIds.length > 0) {
+      console.log(`Cleaned up ${removedIds.length} stale shortcut(s)`);
+    }
+  } catch {
+    // Non-fatal: shortcuts will be created on next app interaction
+  }
 }
 
 /**
