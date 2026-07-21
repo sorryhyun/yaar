@@ -18,6 +18,7 @@ import {
   SHADOWS_DARK,
   SHADOWS_LIGHT,
   PRISM_PALETTE as P,
+  OVERLAYS as O,
   FONT_FACE_CSS,
   alpha,
 } from './tokens.js';
@@ -127,6 +128,43 @@ button,input,select,textarea{font-family:inherit}
 .y-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .y-clamp-3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .y-btn-danger{color:var(--yaar-error);border-color:var(--yaar-error)}.y-btn-danger:hover{background:${alpha(D.error, 0.1)}}
+/* ── Document-app chrome ──────────────────────────────────────────────
+   The appbar + editable title + formatting toolbar + save chip shared by
+   the document apps (word-lite, slides-lite). Extracted from near-identical
+   per-app CSS; the raw GitHub blues those apps hardcoded are re-derived here
+   from the accent tokens, so this chrome recolors with the palette. Brand
+   badges keep an accent-emphasis default and let the app override the fill. */
+.y-appbar{display:flex;align-items:center;gap:var(--yaar-sp-4);padding:0 var(--yaar-sp-4);height:52px;background:linear-gradient(180deg,var(--yaar-bg),var(--yaar-bg-surface));border-bottom:1px solid var(--yaar-border);flex-shrink:0}
+.y-appbar-actions{display:inline-flex;align-items:center;gap:var(--yaar-sp-1);flex-shrink:0}
+.y-brand{display:flex;align-items:center;gap:var(--yaar-sp-2);flex-shrink:0}
+.y-brand-badge{width:28px;height:28px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;background:var(--yaar-accent-emphasis);color:#fff;font-weight:800;font-size:15px;box-shadow:var(--yaar-shadow-sm)}
+.y-brand-name{font-weight:700;font-size:var(--yaar-text-lg);letter-spacing:.2px;color:var(--yaar-text)}
+.y-doc-field{display:inline-flex;align-items:center;gap:var(--yaar-sp-2);flex:1;max-width:460px;padding:6px var(--yaar-sp-3);background:${O.light};border:1px solid var(--yaar-border);border-radius:var(--yaar-radius);transition:border-color var(--yaar-ease),background var(--yaar-ease)}
+.y-doc-field:focus-within{border-color:var(--yaar-accent);background:${alpha(D.accent, 0.07)}}
+.y-doc-icon{display:inline-flex;align-items:center;color:var(--yaar-text-dim);flex-shrink:0}
+.y-doc-field:focus-within .y-doc-icon{color:var(--yaar-accent)}
+.y-doc-input{flex:1;min-width:0;background:transparent;border:0;outline:none;color:var(--yaar-text);font-family:var(--yaar-font);font-size:var(--yaar-text-base);font-weight:600}
+.y-doc-input::placeholder{color:var(--yaar-text-dim);font-weight:500}
+.y-editbar{display:flex;flex-wrap:wrap;align-items:center;gap:var(--yaar-sp-1);padding:var(--yaar-sp-2) var(--yaar-sp-3);background:var(--yaar-bg-surface);border-bottom:1px solid var(--yaar-border);flex-shrink:0}
+.y-tgroup{display:inline-flex;align-items:center;gap:2px}
+.y-tsep{width:1px;height:22px;margin:0 var(--yaar-sp-1);background:var(--yaar-border);flex-shrink:0}
+.y-tbtn{display:inline-flex;align-items:center;justify-content:center;gap:6px;height:32px;min-width:32px;padding:0 7px;border:1px solid transparent;border-radius:var(--yaar-radius);background:transparent;color:var(--yaar-text-muted);font-family:var(--yaar-font);font-size:var(--yaar-text-sm);font-weight:600;cursor:pointer;transition:background var(--yaar-ease),color var(--yaar-ease),border-color var(--yaar-ease)}
+.y-tbtn svg{display:block}
+.y-tbtn:hover{background:var(--yaar-bg-surface-hover);color:var(--yaar-text);border-color:var(--yaar-border)}
+.y-tbtn:active{background:${alpha(D.accent, 0.14)};color:var(--yaar-accent)}
+.y-tbtn-text{padding:0 12px}
+.y-tlabel{font-size:var(--yaar-text-sm);font-weight:600}
+.y-tbtn-primary{background:var(--yaar-accent-emphasis);color:#fff;border-color:var(--yaar-accent-emphasis)}
+.y-tbtn-primary:hover{background:var(--yaar-accent-emphasis-hover);border-color:var(--yaar-accent-emphasis-hover);color:#fff}
+.y-tbtn-active{background:${alpha(D.accent, 0.16)};color:var(--yaar-accent);border-color:${alpha(D.accent, 0.4)}}
+/* chevron is a data: URI and cannot resolve var(); hex is --yaar-text-dim (${D.textDim}) */
+.y-tselect{height:32px;padding:0 28px 0 10px;border:1px solid var(--yaar-border);border-radius:var(--yaar-radius);background-color:${O.light};background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b98a5' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 8px center;color:var(--yaar-text);font-family:var(--yaar-font);font-size:var(--yaar-text-sm);font-weight:600;cursor:pointer;-webkit-appearance:none;appearance:none;transition:border-color var(--yaar-ease),background-color var(--yaar-ease)}
+.y-tselect:hover{border-color:var(--yaar-text-dim);background-color:var(--yaar-bg-surface-hover)}
+.y-tselect:focus{outline:none;border-color:var(--yaar-accent)}
+.y-tselect option{background:var(--yaar-bg-surface);color:var(--yaar-text)}
+.y-chip{display:inline-flex;align-items:center;gap:6px;font-size:var(--yaar-text-xs);font-weight:600;border-radius:var(--yaar-radius-full);padding:5px 11px;background:${alpha(D.accent, 0.12)};color:var(--yaar-accent);white-space:nowrap}
+.y-chip-warning{background:${alpha(D.warning, 0.16)};color:var(--yaar-warning)}
+.y-chip-muted{background:${O.light};color:var(--yaar-text-dim)}
 pre[class*="language-"],code[class*="language-"]{color:${P.plain};background:var(--yaar-bg-surface);font-family:var(--yaar-font-mono);font-size:var(--yaar-text-sm);border-radius:var(--yaar-radius)}
 pre[class*="language-"]{padding:var(--yaar-sp-3);overflow:auto;margin:var(--yaar-sp-2) 0}
 .token.comment,.token.prolog,.token.doctype,.token.cdata{color:${P.comment};font-style:italic}
