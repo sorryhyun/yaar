@@ -1,7 +1,9 @@
 import DOMPurify from '@bundled/dompurify';
+import * as z from '@bundled/zod';
 import type { Feed, Article } from './types';
 import { state, setState, showToast } from './store';
 import { stripHtml, extractFirstImage } from './utils';
+import { Rss2JsonResponse } from './schema';
 
 const RSS2JSON_API = 'https://api.rss2json.com/v1/api.json?rss_url=';
 
@@ -18,9 +20,14 @@ export async function fetchFeed(feed: Feed): Promise<Article[]> {
   const apiUrl = `${RSS2JSON_API}${encodeURIComponent(feed.url)}`;
   const res = await fetch(apiUrl);
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const json = await res.json();
+  const parsed = z.safeParse(Rss2JsonResponse, await res.json());
+  if (!parsed.success) {
+    console.error('rss2json response failed validation', parsed.error.issues);
+    throw new Error('The feed service returned an unsupported response.');
+  }
+  const json = parsed.data;
   if (json.status !== 'ok') throw new Error(json.message || 'Feed error');
-  return (json.items || []).map((item: any) => {
+  return (json.items ?? []).map((item) => {
     const raw = item.link || item.title || Math.random().toString();
     const id = `${feed.id}_${djb2Hash(raw)}`;
     return {

@@ -51,7 +51,8 @@
     "three": "catalog:",
     "tone": "catalog:",
     "typescript": "catalog:",
-    "uuid": "catalog:"
+    "uuid": "catalog:",
+    "zod": "catalog:"
   },
   "engines": {
     "bun": ">=1.1.22"

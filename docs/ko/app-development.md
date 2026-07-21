@@ -118,6 +118,7 @@ npm 설치 없이 `@bundled/*`로 바로 사용 가능:
 | marked | `@bundled/marked` | 마크다운 → HTML |
 | Prism | `@bundled/prismjs` | 구문 강조 |
 | DOMPurify | `@bundled/dompurify` | HTML 새니타이즈 (외부 리치 콘텐츠에 필수) |
+| Zod (Mini) | `@bundled/zod` | 신뢰 경계에서 외부/영속 JSON 검증 (함수형 Mini API) |
 | mammoth | `@bundled/mammoth` | `.docx` → HTML |
 | diff | `@bundled/diff` | 텍스트 diff |
 | diff2html | `@bundled/diff2html` | diff 렌더링 뷰 |

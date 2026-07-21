@@ -14,6 +14,11 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const outDir = join(rootDir, 'dist', 'bundled-libs');
+// Resolve every bundled library from the compiler package, where each one is a declared
+// dependency — the same anchor the compiler's own plugin uses (PLUGIN_DIR). Resolving from
+// scripts/ instead relied on hoisting to the root node_modules, which bun does not do for a
+// package also depended on by other workspaces (e.g. zod, shared by shared/server/compiler).
+const compilerDir = join(rootDir, 'packages', 'compiler');
 
 // Import the canonical map and shims from @yaar/compiler (Bun can resolve .ts directly)
 const { BUNDLED_LIBRARIES: _allLibs, BUNDLED_SHIMS, resolveBrowserEntry } = await import('../packages/compiler/src/plugins.ts');
@@ -33,8 +38,8 @@ const results = await Promise.allSettled(
       // For packages with browser/node conditional exports (e.g. solid-js),
       // import.meta.resolve() picks the node/bun condition (SSR build).
       // Use resolveBrowserEntry() first to get the browser build.
-      const browserEntry = resolveBrowserEntry(pkg, __dirname);
-      const resolved = browserEntry ?? import.meta.resolve(pkg);
+      const browserEntry = resolveBrowserEntry(pkg, compilerDir);
+      const resolved = browserEntry ?? Bun.resolveSync(pkg, compilerDir);
       const entrypoint = resolved.startsWith('file://') ? Bun.fileURLToPath(resolved) : resolved;
       if (browserEntry) console.log(`    (browser entry: ${entrypoint})`);
       /** Shim Node builtins that some libs try to require in browser builds */

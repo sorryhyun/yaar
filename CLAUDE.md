@@ -245,6 +245,7 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 - **Audio**: `@bundled/tone`
 - **Parsing**: `@bundled/marked`, `@bundled/prismjs`, `@bundled/mammoth`
 - **Sanitization**: `@bundled/dompurify` (mandatory for any externally-sourced HTML)
+- **Validation**: `@bundled/zod` (Zod Mini functional API — validate untrusted/persisted JSON at trust boundaries)
 - **YAAR SDK**: `@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, `appDb` (SQLite collections), etc.
 - **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy, plus per-app version history: gitHistory/gitDiff/gitRestore/gitCheckpoint), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/guides/yaar_ml_runtime.md`](./docs/guides/yaar_ml_runtime.md))
 

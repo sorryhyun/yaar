@@ -91,6 +91,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   mammoth: 'mammoth',
   marked: 'marked',
   prismjs: 'prismjs',
+  zod: 'zod/mini',
   yaar: 'yaar',
   'yaar-dev': 'yaar-dev',
   'yaar-web': 'yaar-web',

@@ -173,6 +173,7 @@ agents exists* are generated from one source (asserted by a test).
 - **Utils:** `@bundled/uuid`, `@bundled/lodash`, `@bundled/date-fns`, `@bundled/clsx`
 - **Graphics:** `@bundled/three`, `@bundled/konva`, `@bundled/pixi.js`, `@bundled/p5`, `@bundled/cannon-es`, `@bundled/matter-js`
 - **Data:** `@bundled/chart.js`, `@bundled/d3`, `@bundled/diff`, `@bundled/diff2html`, `@bundled/xlsx`, `@bundled/marked`, `@bundled/mammoth`, `@bundled/prismjs`, `@bundled/dompurify`
+- **Validation:** `@bundled/zod` (Zod Mini — functional API, tree-shakeable)
 - **Animation:** `@bundled/anime` (with v3 compat shim)
 - **Audio:** `@bundled/tone`
 - **YAAR SDKs:** `@bundled/yaar`, `@bundled/yaar-dev` (gated), `@bundled/yaar-web` (gated), `@bundled/yaar-ml` (gated — in-browser ONNX/WebGPU inference)

@@ -180,6 +180,40 @@ Adversarial fixtures live in `packages/tests/src/security/html-sanitization.test
 Test sanitizers under jsdom or a real browser, never happy-dom: DOMPurify silently no-ops
 when `isSupported` fails, producing false passes and false failures in the same run.
 
+## Validating External JSON
+
+Anything you `as`-cast out of a `response.json()` is an unchecked assertion — the upstream
+can change shape, rename a field, or return an `{ error }` envelope where you expected a
+list, and TypeScript believes your lie until it crashes in reactive state. Validate JSON at
+the trust boundary with `@bundled/zod`.
+
+**`@bundled/zod` is Zod Mini** — the functional API, not the chained one. Standard Zod's `z`
+namespace defeats bundler tree-shaking and adds ~260KB to your app; Mini's per-validator
+functions bundle to ~10KB. So it is `z.optional(z.string())`, not `z.string().optional()`,
+and `z.safeParse(Schema, data)`, not `Schema.safeParse(data)`.
+
+```ts
+import * as z from '@bundled/zod';
+
+// looseObject KEEPS unknown keys — required when you spread the item downstream, and it
+// lets the schema tolerate additive upstream fields. Validate only what you read.
+const Item = z.looseObject({ id: z.optional(z.string()), title: z.optional(z.string()) });
+const Response = z.array(Item);
+
+const parsed = z.safeParse(Response, await resp.json());
+if (!parsed.success) {
+  console.error('feed validation failed', parsed.error.issues); // full issues to console
+  throw new Error('The service returned an unsupported response.'); // concise user error
+}
+return parsed.data; // typed, no cast
+```
+
+Scope it to boundaries: external HTTP responses, and persisted JSON whose shape has changed
+across app versions. Do **not** validate ordinary internal state, and do **not** use Zod as
+a second schema language for the App Protocol — `defineCommand()` params are JSON-Schema-first
+and agents read that JSON Schema, not a Zod type. See `apps/recent-papers/src/schema.ts` for
+a worked example.
+
 ## Static Assets (images, fonts, audio)
 
 **Import the file. Do not fetch it from storage.**

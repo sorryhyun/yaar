@@ -120,6 +120,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | marked | `@bundled/marked` | Markdown → HTML |
 | Prism | `@bundled/prismjs` | Syntax highlighting |
 | DOMPurify | `@bundled/dompurify` | HTML sanitization (required for untrusted rich content) |
+| Zod (Mini) | `@bundled/zod` | Validating untrusted/persisted JSON at trust boundaries (functional Mini API) |
 | mammoth | `@bundled/mammoth` | `.docx` → HTML |
 | diff | `@bundled/diff` | Text diffing |
 | diff2html | `@bundled/diff2html` | Rendered diff views |

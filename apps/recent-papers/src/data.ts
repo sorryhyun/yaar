@@ -1,6 +1,8 @@
 import { httpFetch } from '@bundled/yaar';
 import type { DailyPaperItem, PaperDetails } from './types';
 import { getApiSort, getFirstText, normalizeText, parseArxivIdFromUrl } from './paper-utils';
+import * as z from '@bundled/zod';
+import { DailyPapersResponse, PaperDetailResponse } from './schema';
 
 export async function fetchArxivPapers(limit: number, queryValue: string, sortByValue: string): Promise<DailyPaperItem[]> {
   const rawQuery = normalizeText(queryValue || 'cat:cs.AI OR cat:cs.LG');
@@ -58,8 +60,12 @@ export async function fetchHfPapers(limit: number, sortByValue: string): Promise
   const apiSort = getApiSort(sortByValue);
   const resp = await httpFetch(`https://huggingface.co/api/daily_papers?limit=${limit}&sort=${apiSort}`);
   if (!resp.ok) throw new Error(`HF HTTP ${resp.status}`);
-  const data = (await resp.json()) as DailyPaperItem[];
-  return (Array.isArray(data) ? data : []).map((item) => ({ ...item, source: 'huggingface' as const }));
+  const parsed = z.safeParse(DailyPapersResponse, await resp.json());
+  if (!parsed.success) {
+    console.error('HF daily_papers response failed validation', parsed.error.issues);
+    throw new Error('Hugging Face returned an unsupported response.');
+  }
+  return parsed.data.map((item) => ({ ...item, source: 'huggingface' as const }));
 }
 
 export async function fetchPaperDetailsById(id: string, cache: Record<string, PaperDetails>) {
@@ -70,23 +76,28 @@ export async function fetchPaperDetailsById(id: string, cache: Record<string, Pa
 
   const resp = await httpFetch(`https://huggingface.co/api/papers/${encodeURIComponent(cleanId)}`);
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-  const data = await resp.json();
+  const parsed = z.safeParse(PaperDetailResponse, await resp.json());
+  if (!parsed.success) {
+    console.error('HF paper detail response failed validation', parsed.error.issues);
+    throw new Error('Hugging Face returned an unsupported response.');
+  }
+  const data = parsed.data;
 
   const normalized: PaperDetails = {
-    id: data?.id || cleanId,
-    title: data?.title || '',
-    summary: data?.summary || '',
-    aiSummary: data?.ai_summary || '',
-    keywords: Array.isArray(data?.ai_keywords) ? data.ai_keywords : [],
-    authors: Array.isArray(data?.authors) ? data.authors.map((a: any) => a?.name).filter(Boolean) : [],
-    upvotes: Number(data?.upvotes || 0),
-    publishedAt: data?.publishedAt || '',
-    projectPage: data?.projectPage || '',
-    githubRepo: data?.githubRepo || '',
-    githubStars: Number(data?.githubStars || 0),
+    id: data.id || cleanId,
+    title: data.title || '',
+    summary: data.summary || '',
+    aiSummary: data.ai_summary || '',
+    keywords: data.ai_keywords ?? [],
+    authors: (data.authors ?? []).map((a) => a?.name).filter((n): n is string => Boolean(n)),
+    upvotes: Number(data.upvotes || 0),
+    publishedAt: data.publishedAt || '',
+    projectPage: data.projectPage || '',
+    githubRepo: data.githubRepo || '',
+    githubStars: Number(data.githubStars || 0),
     links: {
-      huggingFace: `https://huggingface.co/papers/${data?.id || cleanId}`,
-      arxiv: `https://arxiv.org/abs/${data?.id || cleanId}`,
+      huggingFace: `https://huggingface.co/papers/${data.id || cleanId}`,
+      arxiv: `https://arxiv.org/abs/${data.id || cleanId}`,
     },
   };
 

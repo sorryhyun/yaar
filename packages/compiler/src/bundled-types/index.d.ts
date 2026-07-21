@@ -233,6 +233,16 @@ declare module '@bundled/dompurify' {
   export { default } from 'dompurify';
 }
 
+// ── Validation ──────────────────────────────────────────────────────────────
+
+// Zod Mini — the tree-shakeable functional API. Standard Zod's `z` namespace pulls
+// ~260KB into every consuming app because it defeats bundler tree-shaking; Mini's
+// per-validator functions bundle to ~10KB. Functional API: `z.optional(z.string())`,
+// `z.safeParse(Schema, data)`. See https://zod.dev/packages/mini
+declare module '@bundled/zod' {
+  export * from 'zod/mini';
+}
+
 // ── Audio ───────────────────────────────────────────────────────────────────
 
 declare module '@bundled/tone' {
