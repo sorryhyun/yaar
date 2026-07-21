@@ -10,10 +10,12 @@ import { SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY, GITHUB_STATUS_POLL_MS } from
 import {
   apiGet,
   fetchGithubStatus,
+  hostCancelPublish,
+  hostConfirmPublish,
   hostDelete,
   hostInstall,
   hostListInstalled,
-  hostPublish,
+  hostPreparePublish,
   yaarGet,
   yaarPost,
 } from './api.js';
@@ -23,21 +25,19 @@ import {
   authBusy,
   hasInstalled,
   markInstalledSignal,
+  pendingPublish,
   setAccount,
   setAuthBusy,
+  setConfirmBusy,
   setInstalledApps,
   setGithubStatus,
   setLoading,
   setMarketApps,
+  setPendingPublish,
   setStatus,
 } from './store.js';
 import { parseGithubStatus, parseMarket } from './parsers.js';
-import {
-  AuthLoginSchema,
-  AuthMeSchema,
-  AuthStatusSchema,
-  MarketPayloadSchema,
-} from './schema.js';
+import { AuthLoginSchema, AuthMeSchema, AuthStatusSchema, MarketPayloadSchema } from './schema.js';
 import type { ListedApp } from './types.js';
 
 // ── Async action runner ──────────────────────────────────────────────
@@ -115,17 +115,72 @@ export async function uninstallApp(app: { id: string; name: string }): Promise<v
   );
 }
 
+/**
+ * Phase 1: package + freeze the app on the host and open the confirmation dialog.
+ * A not-newer version is refused *here* (the host throws) before any dialog opens,
+ * so `runAction`'s catch surfaces "bump the version" as the publish's failure.
+ */
 export async function publishApp(app: { id: string; name: string }): Promise<void> {
   await runAction(
-    `Publishing ${app.name} to the marketplace…`,
+    `Preparing ${app.name} to publish…`,
     async () => {
-      const result = await hostPublish(app);
-      setStatus(result?.message || `Published ${app.name} to the marketplace`);
+      const summary = await hostPreparePublish(app);
+      setPendingPublish({ app, summary });
+      setStatus(`Review ${app.name} v${summary.version ?? '?'} before publishing.`);
+    },
+    'Prepare to publish failed',
+  );
+}
+
+/**
+ * Phase 2: confirm the open publication. `acknowledgeDrift` ships the frozen
+ * snapshot even though the source changed since prepare; the dialog only sets it on
+ * the second, "Publish anyway" press. A first drift reply re-opens the dialog with
+ * the changed-file list instead of uploading.
+ */
+export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
+  const pending = pendingPublish();
+  if (!pending) return;
+
+  setConfirmBusy(true);
+  setStatus(`Publishing ${pending.app.name}…`, false);
+  try {
+    const outcome = await hostConfirmPublish(
+      pending.app,
+      pending.summary.publicationId,
+      acknowledgeDrift,
+    );
+    if (outcome.published) {
+      setPendingPublish(null);
+      setStatus(outcome.message || `Published ${pending.app.name} to the marketplace`);
       // Ownership may have just been claimed — refresh so the badge reflects it.
       await refreshAccount();
-    },
-    'Publish to marketplace failed',
-  );
+    } else if (outcome.status === 'drift_detected') {
+      setPendingPublish({ ...pending, drift: { changedFiles: outcome.drift?.changedFiles ?? [] } });
+      setStatus('Source changed since prepare — review the changes.');
+    } else {
+      // expired / not_found / error: the freeze is gone or unusable — close and report.
+      setPendingPublish(null);
+      setStatus(outcome.message || 'Publish failed.');
+    }
+  } catch (err: unknown) {
+    setStatus(`Publish failed: ${errMsg(err)}`);
+  } finally {
+    setConfirmBusy(false);
+  }
+}
+
+/** Dismiss the dialog and discard the host-side freeze (best-effort — it also expires). */
+export async function cancelPublish(): Promise<void> {
+  const pending = pendingPublish();
+  setPendingPublish(null);
+  if (!pending) return;
+  try {
+    await hostCancelPublish(pending.app, pending.summary.publicationId);
+  } catch {
+    /* best-effort: the frozen bytes are swept on TTL expiry regardless */
+  }
+  setStatus('Publish cancelled.');
 }
 
 // ── Publisher sign-in ───────────────────────────────────────────────

@@ -11,7 +11,7 @@ import { GITHUB_STATUS_URL } from './constants.js';
 import { parseInstalledAny } from './parsers.js';
 import { GithubStatusSummarySchema } from './schema.js';
 import { apiBase } from './store.js';
-import type { InstalledApp } from './types.js';
+import type { ConfirmOutcome, InstalledApp, PreparedPublication } from './types.js';
 
 // ── Marketplace domain ───────────────────────────────────────────────
 
@@ -67,9 +67,32 @@ export async function hostListInstalled(): Promise<InstalledApp[]> {
   return parseInstalledAny(result);
 }
 
-/** Publish a locally installed app to the marketplace via the apps verb. */
-export async function hostPublish(app: { id: string }): Promise<{ message?: string }> {
-  return (await invoke('yaar://apps/' + app.id, { action: 'publish' })) as { message?: string };
+/**
+ * Two-phase publish over `yaar://apps/{id}`. `prepare` freezes the exact bytes and
+ * returns their digest; `confirm` ships those frozen bytes after the user approves;
+ * `cancel` discards the freeze. The host refuses `confirm` on source drift unless
+ * `acknowledgeDrift` is set — the dialog surfaces that as a "Publish anyway" step.
+ */
+export async function hostPreparePublish(app: { id: string }): Promise<PreparedPublication> {
+  return (await invoke('yaar://apps/' + app.id, {
+    action: 'publish_prepare',
+  })) as PreparedPublication;
+}
+
+export async function hostConfirmPublish(
+  app: { id: string },
+  publicationId: string,
+  acknowledgeDrift: boolean,
+): Promise<ConfirmOutcome> {
+  return (await invoke('yaar://apps/' + app.id, {
+    action: 'publish_confirm',
+    publicationId,
+    acknowledgeDrift,
+  })) as ConfirmOutcome;
+}
+
+export async function hostCancelPublish(app: { id: string }, publicationId: string): Promise<void> {
+  await invoke('yaar://apps/' + app.id, { action: 'publish_cancel', publicationId });
 }
 
 // ── Publisher auth (YAAR's own origin, relative paths) ─────────────────────────

@@ -266,3 +266,88 @@ body {
   margin-top: var(--yaar-sp-1);
   font-size: 12px;
 }
+
+/* ── Publish confirmation dialog ───────────────────────────────────── */
+/* Freeze-and-confirm: the digest + size the user approves before upload. */
+
+.publish-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--yaar-sp-4);
+  background: color-mix(in srgb, #000 55%, transparent);
+}
+
+.publish-modal {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--yaar-sp-4);
+  border: 1px solid var(--yaar-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.publish-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin-bottom: var(--yaar-sp-3);
+}
+
+.publish-meta {
+  margin: 0 0 var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-1);
+}
+
+.publish-meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--yaar-sp-3);
+  font-size: 13px;
+}
+
+.publish-meta-row dt {
+  margin: 0;
+}
+
+.publish-meta-row dd {
+  margin: 0;
+  text-align: right;
+}
+
+.publish-digest {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.publish-drift {
+  margin-bottom: var(--yaar-sp-3);
+  padding: var(--yaar-sp-3);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--yaar-error) 10%, var(--yaar-bg-surface));
+  border: 1px solid color-mix(in srgb, var(--yaar-error) 35%, transparent);
+  font-size: 12px;
+}
+
+.publish-drift-head {
+  color: var(--yaar-error);
+  font-weight: 600;
+  margin-bottom: var(--yaar-sp-1);
+}
+
+.publish-drift-files {
+  margin: var(--yaar-sp-2) 0 0;
+  padding-left: var(--yaar-sp-4);
+  max-height: 140px;
+  overflow-y: auto;
+}
+
+.publish-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--yaar-sp-2);
+}

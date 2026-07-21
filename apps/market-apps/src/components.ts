@@ -5,11 +5,21 @@
 // layer. No network or state-shape logic in this file.
 
 import html from '@bundled/solid-js/html';
-import { installApp, publishApp, refreshData, signIn, signOut, uninstallApp } from './actions.js';
+import {
+  cancelPublish,
+  confirmPublish,
+  installApp,
+  publishApp,
+  refreshData,
+  signIn,
+  signOut,
+  uninstallApp,
+} from './actions.js';
 import {
   account,
   apiBase,
   authBusy,
+  confirmBusy,
   displayApps,
   githubStatus,
   hasInstalled,
@@ -19,11 +29,20 @@ import {
   lastUpdated,
   loading,
   ownsApp,
+  pendingPublish,
   setHideInstalled,
   statusText,
   visibleApps,
 } from './store.js';
+import { isNewerVersion } from './parsers.js';
 import type { DisplayApp } from './types.js';
+
+/** Human-readable byte size for the confirmation dialog. */
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+}
 
 /**
  * Push-to-marketplace button for an installed, non-system app — only when signed in.
@@ -32,20 +51,35 @@ import type { DisplayApp } from './types.js';
  * a newer version down, so it must never read as a bare "Update" — that reliably
  * gets misread as "download the newer marketplace version", which is the opposite
  * direction. First push says "Publish"; every later push says "Publish update".
+ *
+ * When the publisher owns the app and the local version is not newer than what is
+ * already published, the button is disabled — the host would refuse the publish for
+ * the same reason, so we surface it here rather than after a failed round-trip. The
+ * check needs both versions: `app.version` (published, from the catalog) and
+ * `app.installedVersion` (local). Absent either, we can't prove it's stale, so the
+ * button stays enabled and the host remains the backstop.
  */
 export function publishButton(app: DisplayApp) {
   if (isSystem(app.id) || !account().signedIn) return '';
+  const published = app.version;
+  const local = app.installedVersion;
+  // Reactive so it tracks ownership as the account signal settles after sign-in.
+  const upToDate = () =>
+    ownsApp(app.id) && !!published && !!local && !isNewerVersion(local, published);
   return html`
     <button
       class="y-btn y-btn-sm publish-btn"
-      disabled=${() => loading()}
+      disabled=${() => loading() || upToDate()}
       title=${() =>
-        ownsApp(app.id)
-          ? `Publish your local version of ${app.name} to the marketplace as a new version`
-          : `Publish ${app.name} to the marketplace for the first time`}
+        upToDate()
+          ? `v${published} is already published — bump "version" in app.json to publish an update`
+          : ownsApp(app.id)
+            ? `Publish your local version of ${app.name} to the marketplace as a new version`
+            : `Publish ${app.name} to the marketplace for the first time`}
       onClick=${() => void publishApp(app)}
     >
-      ${() => (ownsApp(app.id) ? 'Publish update' : 'Publish')}
+      ${() =>
+        upToDate() ? `v${published} published` : ownsApp(app.id) ? 'Publish update' : 'Publish'}
     </button>
   `;
 }
@@ -202,11 +236,91 @@ export function accountBar() {
 }
 
 /** The full application view. */
+/**
+ * The publish confirmation dialog. Stable outer node + reactive inner content (the
+ * `githubBanner` idiom), so it shows/hides as `pendingPublish` flips without the
+ * parent re-rendering. Shows the frozen digest + size the user is approving, and on
+ * source drift, the changed-file list behind a "Publish anyway" press.
+ */
+export function publishModal() {
+  return html`
+    <div>
+      ${() => {
+        const pending = pendingPublish();
+        if (!pending) return null;
+        const { app, summary } = pending;
+        const drifted = !!pending.drift;
+        const files = pending.drift?.changedFiles ?? [];
+        return html`
+          <div
+            class="publish-backdrop"
+            onClick=${(e: Event) => {
+              // Click the dim area (not the card) to cancel.
+              if (e.target === e.currentTarget && !confirmBusy()) void cancelPublish();
+            }}
+          >
+            <div class="publish-modal y-surface" role="dialog" aria-modal="true">
+              <div class="publish-modal-title">Publish ${app.name}</div>
+              <dl class="publish-meta">
+                <div class="publish-meta-row">
+                  <dt class="y-text-muted">Version</dt>
+                  <dd>${summary.version ?? '(none)'}</dd>
+                </div>
+                <div class="publish-meta-row">
+                  <dt class="y-text-muted">Artifact</dt>
+                  <dd class="publish-digest">sha256:${summary.artifactSha256.slice(0, 12)}…</dd>
+                </div>
+                <div class="publish-meta-row">
+                  <dt class="y-text-muted">Size</dt>
+                  <dd>${formatBytes(summary.byteLength)}</dd>
+                </div>
+              </dl>
+              ${drifted
+                ? html`<div class="publish-drift" role="alert">
+                    <div class="publish-drift-head">⚠ Source changed since prepare</div>
+                    <div class="y-text-muted">
+                      "Publish anyway" uploads the frozen snapshot you prepared — not these newer
+                      edits. Cancel and publish again to include them.
+                    </div>
+                    <ul class="publish-drift-files">
+                      ${(files.length ? files : ['(changed-file list unavailable)']).map(
+                        (f) => html`<li class="publish-digest">${f}</li>`,
+                      )}
+                    </ul>
+                  </div>`
+                : ''}
+              <div class="publish-actions">
+                <button
+                  class="y-btn y-btn-sm"
+                  disabled=${() => confirmBusy()}
+                  onClick=${() => void cancelPublish()}
+                >
+                  Cancel
+                </button>
+                <button
+                  class="y-btn y-btn-sm y-btn-primary"
+                  disabled=${() => confirmBusy()}
+                  onClick=${() => void confirmPublish(drifted)}
+                >
+                  ${() => (confirmBusy() ? 'Publishing…' : drifted ? 'Publish anyway' : 'Publish')}
+                </button>
+              </div>
+            </div>
+          </div>
+        `;
+      }}
+    </div>
+  `;
+}
+
 export function App() {
   return html`
     <div class="y-app">
       <!-- GitHub outage warning (renders nothing while healthy) -->
       ${githubBanner()}
+
+      <!-- Publish confirmation dialog (renders nothing until a publish is prepared) -->
+      ${publishModal()}
 
       <!-- Header -->
       <div class="header-bar y-surface">

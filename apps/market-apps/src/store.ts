@@ -9,7 +9,14 @@ import { createSignal } from '@bundled/solid-js';
 import { storage } from '@bundled/yaar';
 import { STORAGE_DOMAIN_KEY, SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY } from './constants.js';
 import { normalizeDomain, normalizeId, sameAppId } from './parsers.js';
-import type { Account, DisplayApp, GithubStatus, InstalledApp, ListedApp } from './types.js';
+import type {
+  Account,
+  DisplayApp,
+  GithubStatus,
+  InstalledApp,
+  ListedApp,
+  PendingPublish,
+} from './types.js';
 
 // ── Signals ─────────────────────────────────────────────────────────────
 
@@ -23,6 +30,11 @@ export const [hideInstalled, setHideInstalled] = createSignal(false);
 
 export const [account, setAccount] = createSignal<Account>(SIGNED_OUT_ACCOUNT);
 export const [authBusy, setAuthBusy] = createSignal(false);
+
+/** The publish awaiting confirmation (freeze + digest), or null when no dialog is open. */
+export const [pendingPublish, setPendingPublish] = createSignal<PendingPublish | null>(null);
+/** True while a `publish_confirm` round-trip is in flight, to disable the dialog buttons. */
+export const [confirmBusy, setConfirmBusy] = createSignal(false);
 
 /** Starts healthy so nothing flashes on screen before the first check answers. */
 export const [githubStatus, setGithubStatus] = createSignal<GithubStatus>(GITHUB_STATUS_HEALTHY);
@@ -68,6 +80,12 @@ export function ownsApp(appId: string): boolean {
   return account().ownedApps.some((id) => normalizeId(id) === target);
 }
 
+/** The locally installed version of an app, or undefined if not installed / unknown. */
+export function installedVersionOf(appId: string): string | undefined {
+  const target = normalizeId(appId);
+  return installedApps().find((a) => normalizeId(a.id) === target)?.version;
+}
+
 export function markInstalledSignal(app: { id: string; name: string }, installed: boolean): void {
   if (installed) {
     if (!installedApps().some((a) => sameAppId(a.id, app.id))) {
@@ -92,10 +110,18 @@ export function displayApps(): DisplayApp[] {
   const marketMapped: DisplayApp[] = market.map((m) => ({
     ...m,
     installed: m.installed || hasInstalled(m.id),
+    installedVersion: installedVersionOf(m.id),
   }));
   const installedOnly: DisplayApp[] = installedApps()
     .filter((a) => !marketIds.has(normalizeId(a.id)))
-    .map((a) => ({ id: a.id, name: a.name, kind: a.kind, installed: true, notPublished: true }));
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      kind: a.kind,
+      installed: true,
+      notPublished: true,
+      installedVersion: a.version,
+    }));
   return [...marketMapped, ...installedOnly];
 }
 

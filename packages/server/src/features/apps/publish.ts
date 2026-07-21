@@ -16,6 +16,7 @@ import { spawn } from 'bun';
 import { MARKET_URL } from '../../config.js';
 import { getIdToken } from '../market/google-auth.js';
 import { resolveAppDir } from './roots.js';
+import { readAppVersion, versionPublishError } from './version.js';
 import { errMessage } from '../../lib/errors.js';
 
 /** Matches the marketplace's own app id rule; a mismatch is rejected there anyway. */
@@ -42,8 +43,14 @@ export interface PublishResult {
  *
  * `dist/` is excluded: the marketplace ships source and YAAR compiles on install,
  * so uploading build output would only bloat the archive and stale the repo.
+ *
+ * Note the gzip stream is **not** byte-deterministic — `tar czf` stamps an mtime
+ * into the gzip header — so two archives of identical source hash differently.
+ * That is fine for the freeze-and-ship model (`publish-staging.ts`): the artifact
+ * digest attests *these exact frozen bytes*, and source-drift detection uses
+ * `computeSourceHash` over `src/` content, never a re-tar comparison.
  */
-async function packageApp(appId: string, appDir: string): Promise<Buffer> {
+export async function packageAppTarball(appId: string, appDir: string): Promise<Buffer> {
   const proc = spawn(
     [
       'tar',
@@ -70,14 +77,18 @@ async function packageApp(appId: string, appDir: string): Promise<Buffer> {
   return Buffer.from(tarball);
 }
 
-export async function publishApp(appId: string): Promise<PublishResult> {
-  if (!APP_ID_RE.test(appId)) {
-    return { success: false, error: `Invalid app id "${appId}".` };
-  }
+/** Reject an id that would break the marketplace's own id rule before we bother packaging. */
+export function isValidAppId(appId: string): boolean {
+  return APP_ID_RE.test(appId);
+}
 
-  const appDir = resolveAppDir(appId);
-  if (!appDir) return { success: false, error: `App "${appId}" is not installed.` };
-
+/**
+ * Upload an already-built tarball to the marketplace, authenticated by the Google
+ * ID token. Split out from `publishApp` so the two-phase publish flow
+ * (`publish-staging.ts`) can ship its *frozen* bytes through the identical path —
+ * same auth, same retry policy, same response parsing.
+ */
+export async function uploadTarball(appId: string, tarball: Buffer): Promise<PublishResult> {
   const idToken = await getIdToken().catch((err) => {
     // An expired refresh grant surfaces here as "sign in again" — pass it through
     // rather than flattening it into a generic publish failure.
@@ -88,13 +99,6 @@ export async function publishApp(appId: string): Promise<PublishResult> {
       success: false,
       error: 'Not signed in to Google. Open the Market Apps window and sign in to publish.',
     };
-  }
-
-  let tarball: Buffer;
-  try {
-    tarball = await packageApp(appId, appDir);
-  } catch (err) {
-    return { success: false, error: `Failed to package "${appId}": ${errMessage(err)}` };
   }
 
   const form = new FormData();
@@ -152,4 +156,31 @@ export async function publishApp(appId: string): Promise<PublishResult> {
     commit: body?.commit,
     files: body?.files,
   };
+}
+
+/**
+ * Single-phase publish: package the app's *current* on-disk state and upload it in
+ * one shot. There is no window between packaging and upload, so no source-drift
+ * detection is needed here. The two-phase flow in `publish-staging.ts` opens that
+ * window (freeze at prepare, upload at confirm) and adds the detection for it.
+ */
+export async function publishApp(appId: string): Promise<PublishResult> {
+  if (!isValidAppId(appId)) {
+    return { success: false, error: `Invalid app id "${appId}".` };
+  }
+
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return { success: false, error: `App "${appId}" is not installed.` };
+
+  const versionError = await versionPublishError(appId, await readAppVersion(appDir));
+  if (versionError) return { success: false, error: versionError };
+
+  let tarball: Buffer;
+  try {
+    tarball = await packageAppTarball(appId, appDir);
+  } catch (err) {
+    return { success: false, error: `Failed to package "${appId}": ${errMessage(err)}` };
+  }
+
+  return uploadTarball(appId, tarball);
 }

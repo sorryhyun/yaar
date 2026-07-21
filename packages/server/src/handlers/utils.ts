@@ -111,6 +111,7 @@ export const okLinks = (
     description?: string;
     mimeType?: string;
     kind?: string;
+    version?: string;
   }>,
 ): VerbResult => ({
   content:
@@ -123,6 +124,7 @@ export const okLinks = (
           ...(link.description ? { description: link.description } : {}),
           ...(link.mimeType ? { mimeType: link.mimeType } : {}),
           ...(link.kind ? { kind: link.kind } : {}),
+          ...(link.version ? { version: link.version } : {}),
         })),
 });
 

@@ -16,6 +16,8 @@ export type InstalledApp = {
   hasSkill?: boolean;
   /** 'system' apps are built-in and cannot be uninstalled. */
   kind?: string;
+  /** The local app.json version — compared against the published version to gate publishing. */
+  version?: string;
 };
 
 /** A card in the list — a marketplace app, an installed app, or both. */
@@ -23,6 +25,12 @@ export type DisplayApp = ListedApp & {
   kind?: string;
   /** Installed locally but not (yet) on the marketplace — publishable, not installable. */
   notPublished?: boolean;
+  /**
+   * The locally installed app.json version, when known. Distinct from `version`,
+   * which on a marketplace card is the *published* version. The publish button is
+   * disabled when this is not newer than the published one.
+   */
+  installedVersion?: string;
 };
 
 /**
@@ -69,4 +77,39 @@ export type ApiPayload = {
   marketApps?: ListedApp[];
   installed?: InstalledApp[];
   installedApps?: InstalledApp[];
+};
+
+/**
+ * The host's answer to `publish_prepare`: an app has been packaged and its exact
+ * bytes frozen server-side under `publicationId`, awaiting confirmation. The digest
+ * + size are what the confirmation dialog shows before we commit to uploading.
+ */
+export type PreparedPublication = {
+  publicationId: string;
+  appId: string;
+  version: string | null;
+  artifactSha256: string;
+  manifestSha256: string;
+  byteLength: number;
+  expiresAt: string;
+};
+
+/** The host's answer to `publish_confirm`. `published` is the only field always present. */
+export type ConfirmOutcome = {
+  published: boolean;
+  status?: 'published' | 'drift_detected' | 'expired' | 'not_found' | 'error';
+  message?: string;
+  drift?: { drifted: boolean; changedFiles: string[] };
+};
+
+/**
+ * A publish awaiting the user's confirmation. Holds the frozen digest to show and,
+ * once a confirm comes back reporting drift, the list of files that changed since
+ * prepare — so the dialog can warn before shipping the frozen snapshot.
+ */
+export type PendingPublish = {
+  app: { id: string; name: string };
+  summary: PreparedPublication;
+  /** Present only after a confirm returned `drift_detected`. */
+  drift?: { changedFiles: string[] };
 };

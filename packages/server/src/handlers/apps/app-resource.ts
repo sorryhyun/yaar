@@ -28,6 +28,7 @@ export const appsListHandler: ResourceHandler = {
         name: app.name,
         description: app.description,
         kind: app.kind,
+        version: app.version,
       })),
     );
   },
@@ -94,6 +95,41 @@ export async function invokeApplication(
       files: result.files,
       message: result.message,
     });
+  }
+
+  if (payload.action === 'publish_prepare') {
+    const { preparePublication } = await import('../../features/apps/publish-staging.js');
+    const prep = await preparePublication(appId);
+    if (!prep.success) return error(prep.error);
+    return okJson({ prepared: true, ...prep.summary });
+  }
+
+  if (payload.action === 'publish_confirm') {
+    const publicationId = payload.publicationId;
+    if (typeof publicationId !== 'string') {
+      return error('publish_confirm requires the "publicationId" from publish_prepare.');
+    }
+    const { finalizePublication } = await import('../../features/apps/publish-staging.js');
+    const outcome = await finalizePublication(publicationId, {
+      expectedAppId: appId,
+      acknowledgeDrift: payload.acknowledgeDrift === true,
+    });
+    if (outcome.status === 'published') {
+      return okJson({ published: true, appId, ...outcome.result });
+    }
+    // drift_detected / expired / not_found / error are all actionable states, not
+    // hard failures — hand the agent structured detail so it can re-prepare or ack.
+    return okJson({ published: false, ...outcome });
+  }
+
+  if (payload.action === 'publish_cancel') {
+    const publicationId = payload.publicationId;
+    if (typeof publicationId !== 'string') {
+      return error('publish_cancel requires a "publicationId".');
+    }
+    const { cancelPublication } = await import('../../features/apps/publish-staging.js');
+    const cancelled = await cancelPublication(publicationId);
+    return okJson({ cancelled });
   }
 
   if (payload.action === 'clone') {

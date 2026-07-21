@@ -57,7 +57,35 @@ export function coerceInstalledApp(input: unknown): InstalledApp | null {
   if (!id) return null;
   const name = firstString(obj.name, obj.title) ?? id;
   const kind = firstString(obj.kind);
-  return { id, name, ...(kind ? { kind } : {}) };
+  const version = firstString(obj.version);
+  return { id, name, ...(kind ? { kind } : {}), ...(version ? { version } : {}) };
+}
+
+/**
+ * Numeric dot-parts of a semver core (ignoring any `-prerelease`/`+build` suffix),
+ * or null for anything non-numeric. Mirrors the server's version guard so the
+ * button's disabled state and the host's refusal agree.
+ */
+export function parseSemver(v: string): number[] | null {
+  const core = v.trim().split('+')[0].split('-')[0];
+  if (!core) return null;
+  const nums = core.split('.').map((p) => Number(p));
+  if (nums.some((n) => !Number.isInteger(n) || n < 0)) return null;
+  return nums;
+}
+
+/** Is `local` strictly newer than `published`? Unparseable versions never block (→ true). */
+export function isNewerVersion(local: string, published: string): boolean {
+  const a = parseSemver(local);
+  const b = parseSemver(published);
+  if (!a || !b) return true;
+  const len = Math.max(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const x = a[i] ?? 0;
+    const y = b[i] ?? 0;
+    if (x !== y) return x > y;
+  }
+  return false; // equal → not newer
 }
 
 /** Map a raw array to valid InstalledApp entries, dropping nulls. */
