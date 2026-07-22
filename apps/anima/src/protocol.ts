@@ -31,6 +31,8 @@ export type ProtocolDeps = {
   buckets: Bucket[];
   /** Runs the pipeline *and* persists the PNG; returns the storage-stamped result. */
   generate: (options: GenerationOptions) => Promise<unknown>;
+  /** Generates many images behind a single text-encode phase; persists each PNG. */
+  batchGenerate: (requests: GenerationOptions[]) => Promise<unknown>;
 };
 
 export function registerProtocol(deps: ProtocolDeps): void {
@@ -157,6 +159,77 @@ export function registerProtocol(deps: ProtocolDeps): void {
             app.emit('generationError', result);
             throw error;
           }
+        },
+      }),
+      batchGenerate: defineCommand({
+        description:
+          'Generate several images in one call, sharing a single text-encode pass. Use this ' +
+          'instead of calling generate repeatedly: all prompts are encoded while the 1.46 GB ' +
+          'text model is loaded once (a big saving for distinct prompts), then the DiT/VAE run ' +
+          'per request grouped by ratio. Returns { ok, count, okCount, results } where results ' +
+          'preserves request order; each entry is the same shape as generate. First use can take ' +
+          'minutes while multi-GB weights load — use a long timeout and query status/progress if ' +
+          'transport times out. Duplicate prompts are encoded once; omit a seed to get one per ' +
+          'request (defaults to its index).',
+        params: {
+          type: 'object',
+          properties: {
+            requests: {
+              type: 'array',
+              minItems: 1,
+              description: 'Images to generate, in order.',
+              items: {
+                type: 'object',
+                properties: {
+                  prompt: {
+                    type: 'string',
+                    description: 'Image description. Required and must not be blank.',
+                  },
+                  seed: {
+                    type: 'number',
+                    description: 'Deterministic signed 32-bit seed (defaults to the request index).',
+                  },
+                  ratio: {
+                    type: 'string',
+                    enum: ['512x512', '624x416', '416x624', '688x384', '384x688'],
+                    description: 'Output size/aspect bucket (default 512x512).',
+                  },
+                },
+                required: ['prompt'],
+              },
+            },
+          },
+          required: ['requests'],
+        },
+        handler: async (params) => {
+          if (deps.getBusy()) throw new Error('Anima is already generating an image');
+          const raw = Array.isArray(params.requests) ? params.requests : [];
+          const requests = raw.map((r: GenerationOptions) => ({
+            prompt: String(r?.prompt ?? '').trim(),
+            seed: r?.seed,
+            ratio: r?.ratio,
+          }));
+          if (requests.length === 0) throw new Error('requests must be a non-empty array');
+          if (requests.some((r) => !r.prompt)) throw new Error('every request needs a prompt');
+
+          const batch = (await deps.batchGenerate(requests)) as {
+            ok: boolean;
+            results?: GenerationResult[];
+            error?: string;
+          };
+          // Mirror the per-image events the single `generate` command emits, so
+          // subscribers (UI, agents) see each result as it would from a solo call.
+          for (const result of batch.results ?? []) {
+            if (result?.ok) app.emit('generated', result);
+            else
+              app.emit('generationError', {
+                error: result?.error ?? 'Generation failed',
+                prompt: result?.prompt,
+                seed: result?.seed,
+                ratio: result?.ratio,
+              });
+          }
+          return batch;
         },
       }),
       publish: defineCommand({

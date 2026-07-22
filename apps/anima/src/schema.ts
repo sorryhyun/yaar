@@ -35,3 +35,5 @@ export const LatentStatsSchema = z.looseObject({
   sigmas: z.array(z.number()),
   z: z.number(),
 });
+
+export type LatentStats = z.infer<typeof LatentStatsSchema>;

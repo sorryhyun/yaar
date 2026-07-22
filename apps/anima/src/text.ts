@@ -90,3 +90,83 @@ export async function promptEmbeds(prompt: string, opts: EncodeOpts = {}): Promi
   _cache = { prompt, embeds };
   return embeds;
 }
+
+/** Batch variant: encode N prompts while loading the text encoder and conditioner
+ *  ONCE each, instead of the load→run→free cycle `promptEmbeds` repeats per call.
+ *  The 1.46 GB text weights are the expensive part; each embed is only
+ *  [1,512,1024] f32 = 2 MB, so we keep all N resident and pay the load once — this
+ *  is the whole point of the batch (see docs on batchGenerate). Duplicate prompts
+ *  are encoded once; the returned array is aligned 1:1 with `prompts`. Weights are
+ *  freed before returning, so the 3.9 GB DiT phase has room exactly as the
+ *  single-prompt path guarantees. */
+export async function promptEmbedsBatch(
+  prompts: string[],
+  opts: EncodeOpts = {},
+): Promise<Float32Array[]> {
+  const log = opts.log ?? (() => {});
+  const backend = opts.backend ?? 'webgpu';
+  const sessionOpts = opts.disableGraphOpt ? { graphOptimizationLevel: 'disabled' } : {};
+
+  // Dedup, first-seen order: one encode per distinct prompt.
+  const uniq = [...new Set(prompts)];
+  const toks = await loadTokenizers();
+  const tokd = uniq.map((p) => ({ p, ...tokenizePrompt(toks, p) }));
+
+  // ── Encoder phase: load once, run every prompt, free once ──
+  const t0 = performance.now();
+  const enc = await loadModel('text_encoder_fp16', opts.onProgress, backend, 'bytes', sessionOpts);
+  log(
+    `text encoder ready (${((performance.now() - t0) / 1000).toFixed(1)}s), encoding ${uniq.length} prompt(s)`,
+  );
+  const hiddens: Float32Array[] = [];
+  for (const t of tokd) {
+    const encOut = await run(enc, {
+      input_ids: new Tensor('int64', t.qwen.ids, [1, SEQ]),
+      attention_mask: new Tensor('int64', t.qwen.mask, [1, SEQ]),
+    });
+    hiddens.push(asF32(encOut.qwen_prompt_embeds));
+  }
+  await releaseModel('text_encoder_fp16');
+
+  // ── Conditioner phase: load once, run every prompt, free once ──
+  const t1 = performance.now();
+  const cond = await loadModel(
+    'text_conditioner_fp16',
+    opts.onProgress,
+    backend,
+    'bytes',
+    sessionOpts,
+  );
+  log(`conditioner ready (${((performance.now() - t1) / 1000).toFixed(1)}s)`);
+  const byPrompt = new Map<string, Float32Array>();
+  for (let i = 0; i < tokd.length; i++) {
+    const t = tokd[i];
+    const condOut = await run(cond, {
+      source_hidden_states: new Tensor('float32', hiddens[i], [1, SEQ, DIM]),
+      target_input_ids: new Tensor('int64', t.t5.ids, [1, SEQ]),
+      target_attention_mask: new Tensor('int64', t.t5.mask, [1, SEQ]),
+      source_attention_mask: new Tensor('int64', t.qwen.mask, [1, SEQ]),
+    });
+    const embeds = asF32(condOut.prompt_embeds);
+    let nan = 0;
+    for (const v of embeds) if (Number.isNaN(v)) nan++;
+    if (nan > 0) {
+      await releaseModel('text_conditioner_fp16');
+      throw new Error(
+        `text path produced ${nan} NaN for ${JSON.stringify(t.p.slice(0, 40))} — ` +
+          `fp16 overflow on the ${backend} EP. Retry with disableGraphOpt, or run on wasm.`,
+      );
+    }
+    byPrompt.set(t.p, embeds);
+  }
+  await releaseModel('text_conditioner_fp16');
+
+  // Warm the single-prompt cache with the last encode so a following solo generate
+  // of the same prompt is free, then map embeds back to the caller's input order.
+  const last = tokd[tokd.length - 1];
+  if (last) _cache = { prompt: last.p, embeds: byPrompt.get(last.p)! };
+  log(
+    `✅ batch embeds ready (${((performance.now() - t0) / 1000).toFixed(1)}s, ${uniq.length} encode(s)), freed text weights`,
+  );
+  return prompts.map((p) => byPrompt.get(p)!);
+}

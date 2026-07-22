@@ -7,7 +7,7 @@ import { BUCKETS, bucketById } from '../buckets';
 import { TOTAL_BYTES } from '../download';
 import { gb } from '../logging';
 import { registerProtocol } from '../protocol';
-import { generate } from '../pipeline/generate';
+import { generate, batchGenerate } from '../pipeline/generate';
 import { downloadModels } from '../pipeline/diagnostics';
 import { releaseOtherDits } from '../pipeline/session';
 import {
@@ -57,6 +57,7 @@ export function App() {
       getCapabilities: caps,
       buckets: BUCKETS,
       generate,
+      batchGenerate,
     });
     const c = await capabilities();
     setCaps(

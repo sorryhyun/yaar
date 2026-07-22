@@ -16,13 +16,14 @@ import { promptEmbeds } from './text';
 import { loadTokenizers, tokenizePrompt } from './tokenizer';
 import { BUCKETS } from './buckets';
 import { log, onProg, stats } from './logging';
-import { generate } from './pipeline/generate';
+import { generate, batchGenerate } from './pipeline/generate';
 import { ditGate, ditProbe, downloadModels, vaeProbe } from './pipeline/diagnostics';
 
 export function installHeadlessHook(): void {
   (window as unknown as { __anima: unknown }).__anima = {
     ready: true,
     generate, // ({model?, seed?, prompt?, ratio?}) => result
+    batchGenerate, // ([{prompt, seed?, ratio?}, …]) => {ok, count, okCount, results}
     ratios: BUCKETS, // the exportable aspect ratios; pass one's id as `ratio`
     probe: ditProbe, // () => {rows, firstBad}
     vaeProbe, // decode a precomputed latent (plumbing sanity check; no UI button)
