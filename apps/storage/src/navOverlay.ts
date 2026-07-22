@@ -31,11 +31,3 @@ export const setNavPin = panel.setPin;
 export const toggleNavPin = panel.togglePin;
 /** True while the user is dragging the width handle — suppresses the auto-close. */
 export const setNavResizing = panel.setResizing;
-
-/**
- * Called after the user picks a file. Pinning is an explicit "keep this open"
- * signal, so it takes priority over the auto-close.
- */
-export function closeNavAfterSelect() {
-  if (!panel.pinned()) panel.close();
-}

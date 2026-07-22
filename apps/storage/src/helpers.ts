@@ -50,3 +50,7 @@ export function isImage(name: string): boolean {
 export function isMarkdown(name: string): boolean {
   return ['md', 'mdx', 'markdown'].includes(getExtension(name));
 }
+
+export function isPdf(name: string): boolean {
+  return getExtension(name) === 'pdf';
+}

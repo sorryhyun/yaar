@@ -4,9 +4,8 @@ import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
 import { storage } from '@bundled/yaar';
 import { setState, elPreviewBody } from './state';
-import { basename, formatSize, isImage, isMarkdown, isPreviewable, getFileIcon, getExtension } from './helpers';
+import { basename, formatSize, isImage, isMarkdown, isPdf, isPreviewable, getFileIcon, getExtension } from './helpers';
 import { refreshMountAliases } from './mount-dialog';
-import { closeNavAfterSelect } from './navOverlay';
 
 const EXT_LANG: Record<string, string> = {
   js: 'javascript', mjs: 'javascript', cjs: 'javascript',
@@ -24,9 +23,11 @@ const PREVIEW_UNAVAILABLE = '<span class="preview-unavailable">Unable to preview
 
 export async function navigate(path: string) {
   setState('currentPath', path);
-  setState('selectedFile', null);
-  setState('previewContent', null);
-  setState('showPreview', false);
+  // The open preview persists across directory navigation — moving between
+  // folders keeps the current content view in place. The preview is only
+  // replaced when the user actually selects a different file (selectFile) or
+  // explicitly closes it (closePreview). The selected-row highlight simply
+  // won't show while the selected file lives outside the current directory.
   setState('statusText', 'Loading...');
   try {
     await refreshMountAliases();
@@ -52,8 +53,9 @@ export async function selectFile(entry: import('./types').StorageEntry) {
   setState('previewTitleText', name);
   setState('previewMetaText', formatSize(entry.size));
   setState('showPreview', true);
-  // Reveal the full-window preview: slide the overlay out unless it's pinned.
-  closeNavAfterSelect();
+  // The preview renders behind the overlay; the nav panel stays until the cursor
+  // leaves it (onMouseLeave → scheduleNavClose), so selecting a file no longer
+  // dismisses the panel on its own.
 
   elPreviewBody.innerHTML = '<span class="preview-loading">Loading…</span>';
 
@@ -66,6 +68,20 @@ export async function selectFile(entry: import('./types').StorageEntry) {
     img.src = storage.url(entry.path);
     img.alt = name;
     elPreviewBody.replaceChildren(img);
+    return;
+  }
+
+  if (isPdf(name)) {
+    // The browser renders PDFs natively; point an iframe at the file's storage
+    // URL. Built via DOM construction rather than string interpolation because
+    // `name`/path are attacker-controlled filenames — property assignment has no
+    // attribute-injection surface. The iframe is same-origin to /api/storage and
+    // carries no app scripting, so it's a plain document viewer.
+    const frame = document.createElement('iframe');
+    frame.className = 'pdf-frame';
+    frame.src = storage.url(entry.path);
+    frame.title = name;
+    elPreviewBody.replaceChildren(frame);
     return;
   }
 
