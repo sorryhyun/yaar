@@ -1,6 +1,6 @@
 # App Development Guide
 
-In YAAR, you tell the AI what to build and it creates the app. TypeScript authoring, compilation, preview, and desktop deployment are all handled by the AI through the devtools app.
+In YAAR, you tell the AI what to build and it creates the app. TypeScript authoring, compilation, preview, and desktop deployment are all handled by the AI through the devtools app — and finished apps can be [published to the shared marketplace](#publishing-to-the-marketplace) for anyone to install.
 
 > [한국어 버전](../ko/app-development.md)
 
@@ -37,9 +37,24 @@ See the devtools app's `SKILL.md` for the full list of available commands.
 | Verb | URI | Description |
 |------|-----|-------------|
 | `list` | `yaar://apps` | List all installed apps |
-| `read` | `yaar://apps/{appId}` | Load an app's SKILL.md |
-| `invoke` | `yaar://apps/{appId}`, `{ action: "set_badge", count }` | Set badge count on app icon |
+| `describe` | `yaar://apps/{appId}` | Metadata + protocol manifest (capabilities) |
+| `read` | `yaar://apps/{appId}` | Load an app's SKILL.md (manifest appended) |
+| `invoke` | `yaar://apps/{appId}`, `{ action, ... }` | Run an app action (see below) |
 | `delete` | `yaar://apps/{appId}` | Uninstall app |
+
+**`invoke` actions on `yaar://apps/{appId}`** (`handlers/apps/app-resource.ts`):
+
+| Action | Payload | Description |
+|--------|---------|-------------|
+| `set_badge` | `{ count }` | Set (or clear, when `0`) the badge on the app icon |
+| `install` | — | Download + install the app from the marketplace |
+| `clone` | — | Copy the app's source into the devtools workspace for editing |
+| `publish` | — | Single-phase publish of the app's current on-disk state |
+| `publish_prepare` | — | Two-phase publish, step 1: freeze bytes, return a `publicationId` + summary |
+| `publish_confirm` | `{ publicationId, acknowledgeDrift? }` | Step 2: upload the frozen bytes |
+| `publish_cancel` | `{ publicationId }` | Discard a prepared publication |
+
+See [Publishing to the Marketplace](#publishing-to-the-marketplace) for the full publish flow.
 
 ### App Config — `yaar://config/app/`
 
@@ -91,6 +106,83 @@ The AI sends a deploy command to the devtools app.
 ### Editing Existing Apps — clone → edit → compile → deploy
 
 The AI clones an existing app's source into the devtools workspace, makes edits, recompiles, and redeploys with the same appId to overwrite in-place.
+
+## Publishing to the Marketplace
+
+Deploy puts an app on *your* desktop. Publishing pushes it to the shared YAAR marketplace so anyone can install it. The full lifecycle is **write → compile → deploy → publish**, and installing is the mirror image on someone else's machine.
+
+The Market Apps app (🛒, `apps/market-apps`) is the front door for both directions — browse and install others' apps, sign in, and publish your own. The AI can also drive every step directly through `yaar://apps/{appId}` verbs.
+
+### Publisher identity — sign in with Google
+
+Publishing is authenticated by a **Google ID token**: a JWT signed by Google that asserts your email, which the marketplace verifies against Google's public keys. There is no API key, no shared secret, and no device registry — the email proves itself.
+
+- **Sign in** from the Market Apps window ("Sign in to publish"). YAAR opens the system browser at Google's consent screen (PKCE over a loopback redirect to this server's `/api/auth/google/callback`), then exchanges the code for tokens. Only the `openid email` scope is requested — publishing authorizes against your email, not any Google API.
+- The **refresh token** is the durable half and is the only thing persisted locally (in the config dir). ID tokens live an hour and are minted on demand, cached in memory only.
+- The token exchange is routed through the marketplace (`MARKET_URL/api/auth/exchange`) because Google's Desktop-client token endpoint requires a `client_secret` that an open-source app installed on user machines has nowhere safe to keep. YAAR does the half it can (open consent, hold the PKCE verifier, receive the code); the marketplace adds the secret and calls Google. Only tokens come back.
+
+Auth routes live on YAAR's own origin and are host/bundled-only — `GET /api/auth/google/status`, `POST /api/auth/google/login`, `POST /api/auth/google/logout` (`http/routes/auth.ts`).
+
+### What gets published
+
+Publishing uploads a **tar.gz of the app directory**, entries prefixed `{appId}/` — the same shape `GET /api/apps/{id}/download` produces, so the round trip is symmetric. The archive excludes:
+
+- **`dist/`** — the marketplace ships *source* and YAAR compiles on install. Uploading build output would only bloat the archive and let it go stale against the source.
+- **macOS cruft** — `.DS_Store` and `._*` AppleDouble sidecars, at any depth.
+
+App secrets are not a concern here because they don't live in the app directory in the first place: credentials are stored separately under `config/{appId}.json` (git-ignored, see [Credential Management](#credential-management)), never inside `apps/{appId}/`.
+
+The marketplace commits the app into its own git repo, so publishing is queued rather than instant — the response says "live in ~1 minute", once the redeploy lands. The app id must match `^[a-z][a-z0-9-]*$`.
+
+### Version policy — bump before you publish
+
+The marketplace refuses a version that is not strictly newer than what it already serves, and YAAR checks the same thing locally *before* packaging so you hear "bump the version" without waiting on an upload it would only reject. Bump `"version"` in `app.json` (semver) for every update. The check is best-effort and fail-open: if the catalog is unreachable or the app was never published, the publish is allowed and the marketplace is the backstop.
+
+In the Market Apps UI, the Publish button disables itself with a "vX already published" tooltip when it can prove the local version isn't newer.
+
+### Single-phase publish
+
+Package the app's current on-disk state and upload it in one call — no window in which the source can change underneath you:
+
+```
+invoke('yaar://apps/{appId}', { action: 'publish' })
+// → { published: true, appId, commit, files, message }
+```
+
+Transient upstream failures (429/5xx, dropped connections) are retried up to 3 times with backoff — safe because nothing is committed until the whole upload lands.
+
+### Two-phase publish (freeze → confirm)
+
+When you want to show the user exactly what will ship and get an explicit confirmation, use the two-phase flow. `prepare` freezes the exact bytes and hashes the source; `confirm` uploads *those frozen bytes*, never a fresh re-tar:
+
+```
+invoke('yaar://apps/{appId}', { action: 'publish_prepare' })
+// → { prepared: true, publicationId, appId, version, byteLength, artifactSha256, ... }
+
+invoke('yaar://apps/{appId}', { action: 'publish_confirm', publicationId })
+// → { published: true, appId, commit, files, message }
+```
+
+Between the two calls, YAAR watches for **source drift**: if `src/` or `app.json` changed since `prepare`, `confirm` refuses with `{ published: false, status: 'drift_detected', ... }` and lists the changed files. Re-prepare, or pass `acknowledgeDrift: true` to ship the originally frozen bytes anyway. Other non-fatal states (`expired`, `not_found`) come back the same structured way rather than as hard errors. Prepared publications are swept after 15 minutes; discard one early with:
+
+```
+invoke('yaar://apps/{appId}', { action: 'publish_cancel', publicationId })
+```
+
+Source drift is detected by content-hashing `src/` and `app.json` (deterministic), not by re-tarring — the gzip stream stamps an mtime and so is never byte-identical even when nothing changed.
+
+### Installing & uninstalling
+
+```
+invoke('yaar://http', { url: '<MARKET_URL>/api/apps' })   // browse the catalog
+invoke('yaar://apps/{appId}', { action: 'install' })      // download + install
+delete('yaar://apps/{appId}')                             // uninstall
+list('yaar://apps')                                       // list installed
+```
+
+`<MARKET_URL>` is the marketplace origin (server env var `MARKET_URL`). `install` downloads the tarball, extracts it, and — because the marketplace ships source — compiles the app locally. Fresh installs land in the git-ignored user-apps root so they never pollute the tracked bundled tree; re-installing an app already present updates it in place. Bundled `"kind": "system"` apps can't be replaced from the marketplace. If the app declares `permissions`, the user is prompted to approve them before the install completes.
+
+The AI reaches all of this through the `yaar://skills/marketplace` reference topic (`read('yaar://skills/marketplace')`), which documents the live marketplace API with `MARKET_URL` substituted in.
 
 ## Bundled Libraries
 
@@ -185,6 +277,94 @@ render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => 
 ```
 
 If you already `import` from `@bundled/*` or other modules, the file is already a module and no extra `export {};` is needed.
+
+## UI Chrome & Headless Primitives
+
+The compiler injects a `y-*` utility/chrome layer into every compiled app — colors, spacing, layout, buttons, and a **document-app chrome family** (app bar, title field, formatting toolbar, status bar). Reuse these instead of hand-writing CSS: they cost zero extra bytes (the CSS ships with every app regardless), recolor with the theme, and are advertised to app agents automatically. **Never hardcode colors** — always use `var(--yaar-*)`. The full class list is in `packages/frontend`/`shared` design docs; see [`docs/architecture/design_system.md`](../architecture/design_system.md) for the chrome-vs-content rules and the exception registry.
+
+### Document-app skeleton
+
+Word-, slides-, and file-style apps share the same surface: an identity bar, an inline-editable title, a formatting toolbar, and a save-status chip. Paste this skeleton and fill in your own brand and buttons — the classes carry all the styling:
+
+```typescript
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
+
+render(() => html`
+  <div class="y-app">
+    <!-- Identity bar: brand + title field + primary actions -->
+    <div class="y-appbar">
+      <div class="y-brand">
+        <span class="y-brand-badge">W</span>
+        <span class="y-brand-name">My App</span>
+      </div>
+      <div class="y-doc-field">
+        <input class="y-doc-input" type="text" placeholder="Untitled" />
+      </div>
+      <div class="y-appbar-actions">
+        <button class="y-tbtn y-tbtn-text y-tbtn-primary" title="Save (Ctrl+S)">Save</button>
+      </div>
+    </div>
+
+    <!-- Formatting toolbar: groups (y-tgroup) separated by y-tsep -->
+    <div class="y-editbar">
+      <div class="y-tgroup">
+        <select class="y-tselect" title="Style">
+          <option>Paragraph</option>
+        </select>
+      </div>
+      <div class="y-tsep"></div>
+      <div class="y-tgroup">
+        <button class="y-tbtn" title="Bold">B</button>
+        <button class="y-tbtn y-tbtn-active" title="Italic">I</button>
+      </div>
+    </div>
+
+    <!-- Your content region here -->
+    <div class="y-scroll" style="position:absolute; inset:0; top:auto"></div>
+
+    <!-- Status bar: stats on the left, a save-status chip on the right -->
+    <div class="y-statusbar">
+      <span>0 words</span>
+      <span class="y-chip y-chip-muted">Saved</span>
+    </div>
+  </div>
+`, document.getElementById('app')!);
+```
+
+Chrome classes: `y-appbar` / `y-appbar-actions`, `y-brand` / `-badge` / `-name`, `y-doc-field` / `y-doc-icon` / `y-doc-input`, `y-editbar`, `y-tgroup` / `y-tsep`, `y-tbtn` (`-text` / `-primary` / `-active`), `y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (`-warning` / `-muted`). A collapsible sidebar/overlay uses the `y-nav-*` family (`y-nav-root`, `y-nav-panel`, `y-nav-hover-zone`, `y-nav-pin`, `y-nav-resizer`, …).
+
+The skeleton is intentionally a **snippet, not a component** — the SDK never ships `solid-js/html` templates, because a shared component's props would ossify across every consuming app and drag Solid rendering into the SDK's type surface. The chrome you copy is short and yours to edit.
+
+### Headless behavior primitives
+
+Two state machines that document apps kept re-implementing now live in `@bundled/yaar` as **headless** primitives — they return state and handlers, and your app owns the markup. Both are tree-shaken, so apps that don't import them pay nothing.
+
+**`createCollapsiblePanel`** — the hover-expand + pin sidebar/overlay. Visible while pinned or hovered, with a grace period before folding so a brief cursor exit doesn't flicker it shut; pin state persists to `appStorage` when `pinKey` is given, and `setResizing(true)` suppresses auto-close while a width handle is dragged.
+
+```typescript
+import { createCollapsiblePanel } from '@bundled/yaar';
+
+const panel = createCollapsiblePanel({ pinKey: 'nav.pinned', closeDelayMs: 280 });
+// panel.expanded() / pinned(), open(), scheduleClose(), close(), cancelClose(),
+// togglePin(), setPin(v), setResizing(active)
+// Wire your own pointer handlers: onMouseEnter=panel.open, onMouseLeave=panel.scheduleClose
+```
+
+**`createAutosave`** — the dirty / debounced-save / save-status lifecycle. Wraps a `save` (returning `true` on success; `false` keeps the doc dirty) with a debounce and an `editSeq` guard, so a save that started before the latest edit never clears the dirty flag. `statusLabel()` yields `"Saving…"` | `"Saved 14:22"` | `"Not saved"` — pair it with a `y-chip`.
+
+```typescript
+import { createAutosave } from '@bundled/yaar';
+
+const autosave = createAutosave(
+  (value: string) => appStorage.trySave('draft.txt', value),  // false ⇒ stays dirty
+  { debounceMs: 800 },
+);
+// autosave.markDirty(value) on input; autosave.flush(true) on Ctrl+S;
+// bind the status chip to autosave.statusLabel()
+```
+
+For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice.
 
 ## Runtime Constraints
 

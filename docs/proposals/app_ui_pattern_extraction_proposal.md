@@ -1,7 +1,7 @@
 # Proposal: Extracting Repeated App UI Patterns into the SDK
 
-**Status:** Draft (Tiers 1–2 landed; Tier 3 proposed here)
-**Scope:** `packages/shared/src/design` (Tier 1, done), `packages/compiler/src/shims/yaar` (Tier 2), app docs (Tier 3)
+**Status:** Complete — all three tiers landed
+**Scope:** `packages/shared/src/design` (Tier 1, done), `packages/compiler/src/shims/yaar` (Tier 2, done), app docs (Tier 3, done)
 **Consumers:** `user-apps/word-lite`, `user-apps/slides-lite`, `apps/storage` — and future document/browser-style apps
 
 ## Summary
@@ -156,7 +156,12 @@ framework the reactive module assumes.
 
 ---
 
-## Tier 3 — Rendered markup stays in apps
+## Tier 3 — Rendered markup stays in apps (landed)
+
+> **Landed:** the document-app skeleton snippet and the two headless primitives are
+> documented under "UI Chrome & Headless Primitives" in
+> [`docs/guides/app-development.md`](../guides/app-development.md). No SDK component was
+> shipped, per the reasoning below.
 
 The topbar template, the slide thumbnail list, and the export-chip cluster are genuinely
 similar shapes but carry app-specific content (word's formatting buttons vs slides' ratio
@@ -188,7 +193,9 @@ separate export is warranted now.
    `slides-lite/sidebar.ts` (the most exact clone — ~200 lines → one primitive).
 3. **Tier 2b (done):** landed `createAutosave`; migrated `slides-lite/store.ts`.
    `word-lite/documents.ts` deferred (see Tier 2 note — not the same machine).
-4. **Tier 3:** add the document-app skeleton snippet to the app-development guide.
+4. **Tier 3 (done):** added the "UI Chrome & Headless Primitives" section — document-app
+   skeleton snippet plus `createCollapsiblePanel` / `createAutosave` docs — to the
+   app-development guide.
 
-Each step is independently shippable and independently reversible. Update
-`packages/compiler/CLAUDE.md`'s shim inventory as Tier-2 exports land.
+Each step is independently shippable and independently reversible.
+`packages/compiler/CLAUDE.md`'s shim inventory already lists the Tier-2 exports.
