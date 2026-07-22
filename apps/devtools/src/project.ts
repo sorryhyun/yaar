@@ -152,6 +152,21 @@ export async function openProject(id: string): Promise<void> {
   setStatusText(`Opened "${proj.name}"`);
 }
 
+/** Clear project-scoped UI state when no project remains open. */
+function clearActiveProjectState(): void {
+  batch(() => {
+    setActiveProject(null);
+    setFiles([]);
+    setOpenFilePath(null);
+    setOpenFileContent(null);
+    setOpenFileImage(null);
+    setDiagnostics([]);
+    setCompileStatus('idle');
+    setPreviewUrl(null);
+    setStaticProtocol(null);
+  });
+}
+
 export async function deleteProject(id: string): Promise<void> {
   try {
     // Remove the entire project directory (server handles recursive deletion)
@@ -174,17 +189,7 @@ export async function deleteProject(id: string): Promise<void> {
     if (remaining.length > 0) {
       await openProject(remaining[remaining.length - 1]);
     } else {
-      batch(() => {
-        setActiveProject(null);
-        setFiles([]);
-        setOpenFilePath(null);
-        setOpenFileContent(null);
-        setOpenFileImage(null);
-        setDiagnostics([]);
-        setCompileStatus('idle');
-        setPreviewUrl(null);
-        setStaticProtocol(null);
-      });
+      clearActiveProjectState();
     }
   }
   await loadProjects();
@@ -198,17 +203,7 @@ export function closeTab(id: string): void {
     if (tabs.length > 0) {
       openProject(tabs[tabs.length - 1]);
     } else {
-      batch(() => {
-        setActiveProject(null);
-        setFiles([]);
-        setOpenFilePath(null);
-        setOpenFileContent(null);
-        setOpenFileImage(null);
-        setDiagnostics([]);
-        setCompileStatus('idle');
-        setPreviewUrl(null);
-        setStaticProtocol(null);
-      });
+      clearActiveProjectState();
     }
   }
 }

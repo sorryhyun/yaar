@@ -50,8 +50,8 @@ export function registerProtocol() {
           };
         },
       },
-      projects: {
-        description: 'All projects',
+      projectList: {
+        description: 'List of all projects (id/name only). Distinct from `project`, the active project with its files.',
         handler: () => [...projects()],
       },
       openFile: {

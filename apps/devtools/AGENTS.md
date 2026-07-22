@@ -30,7 +30,7 @@ The full list of state keys and commands is appended to this prompt automaticall
 
 ## Cloned Projects
 
-`cloneApp` makes a **temporary copy** in devtools storage — it is not the live app. Editing it changes nothing until you deploy. Delete it when done. If `query("projects")` shows stale projects from earlier sessions, clear them before starting.
+`cloneApp` makes a **temporary copy** in devtools storage — it is not the live app. Editing it changes nothing until you deploy. Delete it when done. If `query("projectList")` shows stale projects from earlier sessions, clear them before starting.
 
 **`cloneApp` is the only way to read an app's source.** `yaar://apps/{id}` returns metadata, protocol and skill text — never source files.
 
