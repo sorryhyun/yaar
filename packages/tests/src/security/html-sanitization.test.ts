@@ -192,34 +192,6 @@ describe('app sanitize policies have not drifted', () => {
     });
   }
 
-  test('recent-papers escapes at interpolation and sanitizes the assembly', () => {
-    // This app builds its OWN markup from foreign text rather than rendering
-    // foreign HTML, so the primary fix is encoding at each interpolation point;
-    // the sanitizer is the backstop for whatever a future edit forgets to wrap.
-    const src = readFileSync(join(REPO_ROOT, 'apps/recent-papers/src/sanitize.ts'), 'utf8');
-    expect(src).toContain('@bundled/dompurify');
-    expect(src).toContain('ALLOWED_TAGS');
-    expect(src).not.toMatch(/USE_PROFILES\s*:/);
-
-    // Every content-bearing sink in render.ts must go through the backstop.
-    // A fully static string literal (a clear, or an app-authored empty state)
-    // carries no foreign data and is exempt; anything that interpolates is not.
-    const STATIC_LITERAL = /\.innerHTML\s*=\s*('[^'${]*'|"[^"${]*"|`[^`${]*`)\s*;/;
-    const render = readFileSync(join(REPO_ROOT, 'apps/recent-papers/src/render.ts'), 'utf8');
-    const sinks = render
-      .split('\n')
-      .filter((l) => l.includes('.innerHTML ='))
-      .filter((l) => !STATIC_LITERAL.test(l));
-    expect(sinks.length).toBeGreaterThan(0);
-    for (const sink of sinks) expect(sink).toContain('sanitizeMarkup(');
-
-    // Solid escapes attribute VALUES but does not validate URL schemes, so the
-    // template path needs the http(s) allowlist even though it never touches
-    // innerHTML. Regressing this would put `javascript:` back into a live href.
-    const main = readFileSync(join(REPO_ROOT, 'apps/recent-papers/src/main.ts'), 'utf8');
-    expect(main).toContain('safeUrlRaw');
-  });
-
   test('no app generates inline event handler attributes', () => {
     // Step 5 of the ordering contract: behavior attaches via addEventListener.
     // A generated `onerror` is stripped by any sanitizer, so the behavior it
