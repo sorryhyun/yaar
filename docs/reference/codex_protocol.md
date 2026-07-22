@@ -1,6 +1,6 @@
 # Codex App Server Protocol Reference
 
-This document covers the Codex App Server JSON-RPC protocol, configuration, and internals. For a comparison of Claude vs Codex provider behavior within YAAR, see [claude_codex.md](../architecture/claude_codex.md).
+This document covers the Codex App Server JSON-RPC protocol, configuration, and internals. For a comparison of Claude vs Codex provider behavior within YAAR, see [claude_codex.md](./claude_codex.md).
 
 ## Quick Start
 

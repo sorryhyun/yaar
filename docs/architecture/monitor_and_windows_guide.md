@@ -20,15 +20,13 @@ Session
 
 ## Session
 
-A **session** is the top-level container for one complete conversation. It owns all state — agents, windows, monitors, context history, and the on-disk log. Sessions survive individual WebSocket disconnections.
+A **session** is the top-level container for one complete conversation. It owns all state — agents, windows, monitors, context history, and the on-disk log. Sessions survive individual WebSocket disconnections: the session is about *persistence*, not about any one browser tab.
 
-### Identity
-
-Sessions are identified by `ses-{timestamp}-{random}` IDs (e.g., `ses-1707000000000-abc1234`), generated in `session/types.ts`. The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. The current session is addressable as `yaar://session`, with sub-resources for logs (`yaar://session/logs`) and context (`yaar://session/context`). See [URI-Based Resource Addressing](./verbalized-with-uri.md).
+The `yaar://` URI scheme is implicitly scoped to the current session — `yaar://` *is* the session root. The session itself is addressable as `yaar://session` (see the [URI & Verb Reference](../reference/uri_reference.md)).
 
 ### Multi-connection
 
-Multiple browser tabs can share one session. When a tab connects with `?sessionId=X`, the server looks up the existing `LiveSession` instead of creating a new one. All connections in a session receive the same agent output via `BroadcastCenter.publishToSession()`.
+Multiple browser tabs can share one session. When a tab connects with `?sessionId=X`, the server looks up the existing `LiveSession` (`session/live-session.ts`, registered in the singleton `SessionHub`) instead of creating a new one. All connections receive the same agent output via `BroadcastCenter`.
 
 ```
 Tab 1 ──┐
@@ -38,210 +36,71 @@ Tab 3 ──┘
 
 ### Lifecycle
 
-1. **First connection** — no `?sessionId` param. Server creates a new `LiveSession` and sends `CONNECTION_STATUS { sessionId }`. Frontend stores it for future reconnections.
-2. **Reconnection** — frontend passes `?sessionId=X`. Server returns the existing session. New client gets a snapshot of current windows via `generateSnapshot()`.
+1. **First connection** — no `?sessionId` param. Server creates a new `LiveSession` and sends `CONNECTION_STATUS { sessionId }`; the frontend stores it for reconnection.
+2. **Reconnection** — frontend passes `?sessionId=X`; server returns the existing session and the new client gets a snapshot of current windows.
 3. **Lazy init** — the expensive `ContextPool` (agents, provider) isn't created until the first message. This keeps `/health` fast.
-4. **Persistence** — `SessionLogger` writes all messages to `session_logs/{sessionId}/messages.jsonl`. Sessions are browsable via `GET /api/sessions` and restorable via `POST /api/sessions/:id/restore`.
-
-### Key types
-
-| Type | Location | Purpose |
-|------|----------|---------|
-| `LiveSession` | `server/session/live-session.ts` | Session container — owns pool, window state, reload cache |
-| `SessionHub` | `server/session/session-hub.ts` | Singleton registry of all active sessions |
-| `SessionLogger` | `server/logging/session-logger.ts` | Writes messages.jsonl to disk |
-| `SessionMetadata` | `server/logging/types.ts` | On-disk metadata (provider, agent hierarchy, thread IDs) |
+4. **Persistence** — `SessionLogger` writes everything to `session_logs/{sessionId}/messages.jsonl`; sessions are browsable and restorable from those logs.
 
 ---
 
 ## Monitor
 
-A **monitor** is a virtual desktop workspace within a session (up to 4 per session). Think Linux workspaces or macOS Spaces — each monitor holds an independent set of windows and runs its own monitor agent.
+A **monitor** is a virtual desktop workspace within a session (up to 4). Think Linux workspaces or macOS Spaces — each monitor holds an independent set of windows and runs its own monitor agent.
 
 ### Why monitors exist
 
-Monitors enable parallel, independent AI workflows. A user can run a long background task on Monitor 2 while continuing to interact on Monitor 1. Each monitor maintains its own:
-
-- **Monitor agent** — persistent agent with its own provider session
-- **Main queue** — sequential message processing, independent of other monitors
-- **CLI history** — per-monitor command log
-- **Windows** — each window belongs to exactly one monitor
-
-### Identity
-
-Monitors use numeric IDs like `0`, `1`, etc. The default monitor is always `0` ("Desktop 1"). Window URIs use the `yaar://monitors/{id}/{windowId}` format — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
+Monitors enable parallel, independent AI workflows: a long background task can run on Monitor 2 while the user keeps interacting on Monitor 1. Each monitor has its own monitor agent (with its own provider session), its own sequential main queue, its own CLI history, and its own windows. Monitors are addressed as `yaar://session/monitors/{id}`; suspend/resume/interrupt controls are listed in the [URI & Verb Reference](../reference/uri_reference.md).
 
 ### Who owns what
 
 **The session owns the monitor list; a connection owns which monitor it is looking at.**
 
-`LiveSession.monitors` is authoritative. The server mints the ids (`ADD_MONITOR` → lowest
-unused integer) and broadcasts the list (`MONITORS`) on attach and on every change; the
-frontend renders it. It used to be per-tab state minted from a per-tab counter, so two tabs
-each made a monitor `"1"`, collided on one server-side agent, and neither saw the other's.
+`LiveSession.monitors` is authoritative. The server mints the ids (`ADD_MONITOR` → lowest unused integer) and broadcasts the list (`MONITORS`) on attach and on every change; the frontend renders it. It used to be per-tab state minted from a per-tab counter, so two tabs each made a monitor `"1"`, collided on one server-side agent, and neither saw the other's.
 
-`activeMonitorId` lives only in the frontend store, one per tab, and is mirrored server-side
-as the connection's single `BroadcastCenter` subscription (replace-on-set). The server has no
-session-wide "active monitor" — a session has N connections, so one such field is a category
-error, and it was last-writer-wins between tabs.
-
-```typescript
-interface Monitor {
-  id: string;        // "0"          — minted by the server
-  label: string;     // "Monitor 1"
-  createdAt: number; // client-side only
-}
-```
-
-- **Taskbar tabs** — when more than one monitor exists, tabs appear on the left side of the taskbar
-- **Keyboard** — `Ctrl+1` through `Ctrl+9` to switch monitors
-- **Window filtering** — `selectVisibleWindows` filters by the tab's `activeMonitorId`
-- **Create / remove** — the store asks the server (`ADD_MONITOR` / `REMOVE_MONITOR`) and applies the `MONITORS` answer; removing a monitor drops its agent, detaches its subscribers, and deletes its windows
+`activeMonitorId` lives only in the frontend store, one per tab, and is mirrored server-side as the connection's single `BroadcastCenter` subscription (replace-on-set). The server has no session-wide "active monitor" — a session has N connections, so one such field is a category error, and it was last-writer-wins between tabs.
 
 ### There is no monitor fallback
 
-For a **window-scoped** event (`WINDOW_MESSAGE`, `COMPONENT_ACTION`, any `window.*` action)
-the monitor comes from the window — `WindowStateRegistry.getMonitorForWindow`. For a
-**user-scoped** event it comes from the connection that sent it. Nothing defaults to `'0'`:
-a task or action whose monitor cannot be resolved throws (`requireMonitorId`,
-`ActionEmitter.resolveWindowMonitor`). Guessing is what made a click in a window on monitor 1
-run on monitor 0's agent and open its windows there. The findings behind the rule, and the
-tests that pin it, are in `packages/server/src/tests/monitor-identity.test.ts`.
+For a **window-scoped** event (`WINDOW_MESSAGE`, `COMPONENT_ACTION`, any `window.*` action) the monitor comes from the window — `WindowStateRegistry.getMonitorForWindow`. For a **user-scoped** event it comes from the connection that sent it. Nothing defaults to `'0'`: a task or action whose monitor cannot be resolved throws (`requireMonitorId`, `ActionEmitter.resolveWindowMonitor`). Guessing is what made a click in a window on monitor 1 run on monitor 0's agent and open its windows there. The findings behind the rule, and the tests that pin it, are in `packages/server/src/tests/monitor-identity.test.ts`.
 
-### Server
+### Server side
 
-Each monitor gets its own monitor agent and queue:
-
-```typescript
-// agent-pool.ts
-private mainAgents = new Map<string, PooledAgent>();  // Key: monitorId
-
-// context-pool.ts — per-monitor main queue
-private getOrCreateMainQueue(monitorId: string): MainQueuePolicy
-```
-
-When the server receives a `USER_MESSAGE` with a `monitorId` it hasn't seen before, it auto-creates a new monitor agent for that monitor.
-
-### Event plumbing
-
-`USER_MESSAGE`, `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, and `TOOL_PROGRESS` events all carry an optional `monitorId` field for routing.
-
-### Monitor control URIs
-
-Individual monitors can be inspected and controlled via `yaar://session/monitors/{id}`:
-
-| Verb | Effect |
-|------|--------|
-| `read` | Monitor detail: agent status (busy/idle), suspended state, queue depth, windows |
-| `invoke { action: "suspend" }` | Pause the monitor's queue — agent stays alive, new tasks enqueue but don't process |
-| `invoke { action: "resume" }` | Unpause and drain pending tasks |
-| `invoke { action: "interrupt" }` | Interrupt the monitor's current task |
-| `delete` | Dispose the monitor agent and clear its queue |
-
-Suspend/resume is implemented via `MonitorQueuePolicy.suspended` — when suspended, `dequeue()` returns nothing, so the queue accumulates tasks until resumed.
+Each monitor gets its own monitor agent (keyed by `monitorId` in `AgentPool`) and its own main queue in `ContextPool`. A `USER_MESSAGE` carrying an unseen `monitorId` auto-creates the agent. Monitor-scoped events (`USER_MESSAGE`, `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`) carry a `monitorId` for routing.
 
 ### Session agent
 
-A **session agent** is a lazy, on-demand AI supervisor that sits above monitor agents — and is the **session principal**, the one agent tier with access to `yaar://session/*`. It provides cross-monitor visibility and coordination — auditing monitor states, intervening when agents are stuck, and orchestrating cross-monitor workflows.
+A **session agent** is a lazy, on-demand AI supervisor that sits above monitor agents — and is the **session principal**, the one agent tier with access to `yaar://session/*`. It provides cross-monitor visibility and coordination: auditing monitor states, intervening when agents are stuck, orchestrating cross-monitor workflows.
 
-- **Lazy singleton** — created on first invocation, not at session start. Keyed as `sessionAgent` in `AgentPool`.
-- **No monitor** — the session agent doesn't belong to any monitor. It uses verb tools to read monitor states and invoke control actions.
-- **No windows** — communicates via tool results and relay messages only.
-- **Verb tools only** — same 5 generic `yaar://` verbs as other agents, no WebSearch or Task.
-- **Privileged principal** — agents carry a `role` (`session` / `monitor` / `app`); only `role === 'session'` may reach `yaar://session/*`. Enforced centrally in `ResourceRegistry.execute()`; monitor/app agents get a `403`.
+- **Lazy singleton** — created on first invocation, not at session start
+- **No monitor, no windows** — communicates via tool results and relay messages only
+- **Verb tools only** — the same 5 generic verbs as other agents; no WebSearch, no Task
+- **Privileged principal** — agents carry a `role` (`session` / `monitor` / `app`); only `role === 'session'` may reach `yaar://session/*`, enforced centrally in `ResourceRegistry.execute()`
 
-Invoke via `yaar://session/agents/session`:
-
-| Action | Payload | Effect |
-|--------|---------|--------|
-| `audit` | — | Reviews all monitors, reports anomalies |
-| `coordinate` | `{ plan: "..." }` | Orchestrates cross-monitor work |
-| `query` | `{ question: "..." }` | Answers questions about session state |
-
-`read` returns status (exists, busy/idle), `delete` disposes the agent.
+Its invoke actions (`audit`, `coordinate`, `query`) are listed in the [URI & Verb Reference](../reference/uri_reference.md).
 
 ---
 
 ## Window
 
-A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions (JSON commands). Windows are addressed as `yaar://monitors/{monitorId}/{windowId}` — see [URI-Based Resource Addressing](./verbalized-with-uri.md).
+A **window** is an AI-generated rectangular UI surface on the desktop. Windows are not pre-built screens — they are created and controlled entirely by the AI through OS Actions. Agents address them as `yaar://windows/{windowId}`; the monitor is inferred from the agent's context.
 
-### Structure
+A window carries an id, title, bounds, a lock state, and — the interesting part — a `content` payload of `{ renderer, data }`. Renderers are pluggable: `markdown`, `html`, `text`, `table`, `iframe`, and `component` (a flat Component DSL — no recursive nesting, CSS-grid layout — designed so an LLM can emit it reliably). The frontend extends this with pure UI state (minimized/maximized, z-order). Full renderer payload shapes are in the [OS Actions Reference](../reference/os_actions_reference.md).
 
-```typescript
-// Shared (actions.ts)
-interface WindowState {
-  id: string;           // e.g., "win-settings"
-  title: string;
-  bounds: { x, y, w, h };
-  content: { renderer: string; data: unknown };
-  locked: boolean;
-  lockedBy?: string;    // Agent ID holding the lock
-}
+### Who handles a window interaction
 
-// Frontend (types/state.ts) — extends with UI state
-interface WindowModel extends ... {
-  minimized: boolean;
-  maximized: boolean;
-  previousBounds?: WindowBounds;
-  monitorId?: string;   // Which monitor this window belongs to
-}
-```
+Window interactions (`COMPONENT_ACTION`, `WINDOW_MESSAGE`) route by window type:
 
-### Content renderers
+- **Plain windows** (markdown, table, component, …) → the **monitor agent** for the window's monitor. It has the full conversation context.
+- **App windows** → a dedicated **app agent** via `AppTaskProcessor`. App agents are persistent per `appId` and survive window close/reopen. They use a scoped `app` MCP toolset (`query`/`command`/`relay`) instead of generic verbs — see [common_flow.md](./common_flow.md) for the division of responsibility.
+- **Monitor → app agent** — a monitor agent messages an app window with `invoke('yaar://windows/{id}', { action: 'message', ... })`; the task takes the same queue path as a user interaction. Fire-and-forget; combine with `subscribe` to learn when the app agent finishes.
 
-Windows display content through pluggable renderers:
+Same-window tasks are serialized via `WindowQueuePolicy`; different windows run in parallel.
 
-| Renderer | Data | Description |
-|----------|------|-------------|
-| `markdown` | `string` | Markdown converted to HTML |
-| `html` | `string` | Raw HTML |
-| `text` | `string` | Plain text |
-| `table` | `{headers, rows}` | Tabular data |
-| `iframe` | `string` or `{url}` | Embedded web content |
-| `component` | `ComponentLayout` | Interactive React components from a flat JSON array |
+### Subscriptions and locking
 
-The `component` renderer uses a flat Component DSL (no recursive nesting) designed for LLM simplicity. Components support forms (`formId`/`submitForm`), buttons with `action` strings, and CSS grid layout (`cols`, `gap`).
+Agents can subscribe to another window's changes (`action: 'subscribe'`, events like `content`, `interaction`, `close`); the subscriber receives a synthetic `<window:change>` message when the target changes. Updates are debounced (500ms), an agent's own writes don't trigger its own subscription, and subscriptions are cleaned up on window close or agent disposal.
 
-### Window interactions
-
-Window interactions (`COMPONENT_ACTION`, `WINDOW_MESSAGE`) route based on window type:
-
-- **Plain windows** (markdown, table, component, etc.) — interactions route to the **monitor agent** for the window's monitor. The monitor agent has the full conversation context.
-- **App windows** — interactions route to a **dedicated app agent** via `AppTaskProcessor`. App agents are persistent per app (keyed by `appId`) and survive window close/reopen.
-- **Monitor → App agent**: Monitor agents can send messages to app agents via `invoke('yaar://windows/{windowId}', { action: 'message', message: '...' })`. This takes the same code path as user interaction — the task is queued to the app agent through `AppTaskProcessor`. The call is fire-and-forget; combine with `subscribe` to get notified when the app agent finishes.
-
-Same-window tasks are serialized via `WindowQueuePolicy`.
-
-### App agent tools
-
-App agents use a dedicated `app` MCP server (`mcp__app__*`) instead of the generic `yaar://` verb tools. This avoids requiring the agent to know its windowId (resolved via `AsyncLocalStorage`), limits tool access to exactly what's needed, and eliminates URI discovery round-trips.
-
-| Tool | Description |
-|------|-------------|
-| `query(stateKey?)` | Read app state. WindowId resolved from AsyncLocalStorage context. |
-| `command(command, params?)` | Execute an app command. WindowId resolved automatically. |
-| `relay(message)` | Enqueue a message to the monitor agent for out-of-scope requests. |
-
-Tools are defined in `mcp/app-agent/index.ts`. The windowId is set in `AgentContext` by `AppTaskProcessor` before each agent turn.
-
-### Window subscriptions
-
-Agents can subscribe to changes on other windows via `invoke('yaar://windows/{id}', { action: 'subscribe', events: [...] })`. When the target window changes, the subscribing agent receives a synthetic `<window:change>` message automatically.
-
-- **Events**: `content`, `interaction`, `close`, `lock`, `unlock`, `move`, `resize`, `title`
-- **Debounced** at 500ms per subscription to coalesce rapid updates (e.g., streaming appends)
-- **Self-skip**: an agent modifying its own subscribed window won't trigger its own subscription
-- **Cleanup**: subscriptions auto-removed on window close, agent dispose, or session teardown
-
-### Locking
-
-Locking prevents concurrent modification of a window's content by multiple agents:
-
-```
-window.lock(windowId, agentId)    → only this agent can modify
-window.unlock(windowId, agentId)  → release (only locker can unlock)
-```
+Locking prevents concurrent modification: `window.lock(windowId, agentId)` makes the window writable only by that agent until it unlocks.
 
 ### Lifecycle summary
 
@@ -259,9 +118,7 @@ AI emits window.close / user clicks X
   → Server: subscriptions cleared, context pruned, reload cache invalidated
 ```
 
-### Server-side tracking
-
-`WindowStateRegistry` (in `LiveSession`) maintains the server's view of all open windows. This lets agents call `list('yaar://windows/')` / `read('yaar://windows/{id}')` verb tools to inspect what's on screen without asking the frontend. (Legacy: `list_windows` / `view_window` — deprecated.)
+`WindowStateRegistry` (in `LiveSession`) is the server's own view of every open window — agents inspect what's on screen via `list('yaar://windows/')` / `read('yaar://windows/{id}')` without asking the frontend.
 
 ---
 

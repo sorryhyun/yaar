@@ -12,7 +12,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
 | Process types | Main (init), app (daemon), ephemeral (one-shot) | `yaar://agents/{instanceId}` | `agents/profiles.ts` |
 | Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |
-| Syscalls | 8 MCP tool namespaces | — | `mcp/server.ts` |
+| Syscalls | 5 URI verbs + system tools (4 MCP namespaces) | — | `mcp/server.ts` |
 | Instruction set | System prompt (~108 lines) | — | `providers/claude/system-prompt.ts` |
 | Boot | `initializeSubsystems()` | — | `lifecycle.ts` |
 | Filesystem | `storage/` + mount system | `yaar://storage/` | `storage/storage-manager.ts`, `storage/mounts.ts` |
@@ -25,7 +25,7 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | User interaction | Notifications, prompts, clipboard | `yaar://user/` | `mcp/user/` |
 | Configuration | Settings, hooks, shortcuts, mounts | `yaar://config/` | `storage/settings.ts`, `mcp/system/` |
 
-All paths are relative to `packages/server/src/` unless noted otherwise. All resources are addressable via the `yaar://` URI scheme — see [`verbalized-with-uri.md`](./verbalized-with-uri.md) for the full 9-namespace reference.
+All paths are relative to `packages/server/src/` unless noted otherwise. All resources are addressable via the `yaar://` URI scheme — see [`verbalized-with-uri.md`](./verbalized-with-uri.md) for the rationale and the [URI & Verb Reference](../reference/uri_reference.md) for the full namespace tables.
 
 ---
 
@@ -83,7 +83,7 @@ The primary monitor is never throttled.
 
 ## Syscalls (MCP Tools)
 
-MCP tools are syscalls. **Verb mode (default):** 2 namespaced HTTP endpoints (`/mcp/system`, `/mcp/verbs`) expose 5 generic URI verbs plus system tools:
+MCP tools are syscalls. A single HTTP MCP server exposes four namespaces (`CORE_SERVERS`: `system`, `verbs`, `app`, `messaging`); the `verbs` namespace carries the 5 generic URI verbs that do most of the work:
 
 | Verb | OS analogy | URI pattern examples |
 |---|---|---|
@@ -93,11 +93,7 @@ MCP tools are syscalls. **Verb mode (default):** 2 namespaced HTTP endpoints (`/
 | `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://config/app/{id}` |
 | `delete` | unlink / rm | `yaar://storage/{path}`, `yaar://windows/{id}`, `yaar://config/hooks/{id}` |
 
-System tools (always active): `reload_cached`, `list_reload_options`. HTTP requests use verb layer: `invoke('yaar://http', { url, ... })`
-
-Domain allowlisting moved to verb layer: `invoke('yaar://config/domains', { domain })`
-
-> **Note:** Legacy named tools (~30 individual tools across 8 namespaces: `system`, `window`, `storage`, `apps`, `user`, `dev`, `basic`, `browser`) are deprecated. See individual domain docs for migration details.
+System tools (always active): `reload_cached`, `list_reload_options`. HTTP requests and domain allowlisting also flow through the verb layer (`invoke('yaar://http', ...)`, `invoke('yaar://config/domains', ...)`).
 
 Tools execute inside `AsyncLocalStorage` context so `getAgentId()` routes actions to the correct agent. Results flow back through the `ActionEmitter` → `BroadcastCenter` → WebSocket pipeline.
 
@@ -131,7 +127,7 @@ No separate formal ISA document is needed — the prompt itself is concise (~108
  3. (bundled exe) mkdirs        ← apps/, config/
  4. (remote mode) genToken      ← generate remote access token
  5. initSessionHub()            ← create singleton SessionHub
- 6. initMcpServer()             ← register 8 MCP namespaces + bearer token
+ 6. initMcpServer()             ← register 4 MCP namespaces + bearer token
  7. ensureAppShortcut() × N     ← sync desktop shortcuts for installed apps
  8. initWarmPool()              ← detect provider, pre-initialize instances
  9. Session restore             ← reload prior windows + context from logs
@@ -194,9 +190,7 @@ Four IPC mechanisms:
 
 Convention-based: each folder in `apps/` is an app. `SKILL.md` defines what the AI knows about it. `app.json` provides metadata (icon, variant, visibility, file associations).
 
-Hidden apps (`"hidden": true`) inject their skill into the system prompt automatically — system-level capabilities the AI always knows about.
-
-Marketplace tools (`apps_market_list`, `apps_market_get`, `apps_market_delete`) handle install/uninstall.
+Hidden apps (`"hidden": true`) inject their skill into the system prompt automatically — system-level capabilities the AI always knows about. Install/uninstall flows through the marketplace resources under `yaar://apps/`.
 
 See the Apps System section in the root `CLAUDE.md` for the full schema.
 
@@ -213,7 +207,7 @@ See the Apps System section in the root `CLAUDE.md` for the full schema.
 
 **Warm pool** (`providers/warm-pool.ts`): Pre-initializes provider instances at startup. `acquire()` shifts from pool and triggers async replenishment. Auto-detects provider from environment (`PROVIDER` env var) or probes Claude → Codex availability.
 
-See [`claude_codex.md`](./claude_codex.md) for behavioral differences between providers.
+See [`claude_codex.md`](../reference/claude_codex.md) for behavioral differences between providers.
 
 ---
 
@@ -231,8 +225,8 @@ See [`claude_codex.md`](./claude_codex.md) for behavioral differences between pr
 │        Syscall returns · Dialogs · App Protocol     │
 ├─────────────────────────────────────────────────────┤
 │              MCP Tools (Syscalls)                   │
-│  system · window · storage · apps · user · dev ·    │
-│  browser                                            │
+│  describe · read · list · invoke · delete           │
+│         over yaar:// URIs (+ system tools)          │
 ├─────────────────────────────────────────────────────┤
 │              LiveSession (Kernel)                   │
 │  ContextPool · AgentPool · WindowStateRegistry ·    │

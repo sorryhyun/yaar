@@ -119,10 +119,10 @@ yaar/
 │   ├── permissions.json         # Saved permission decisions
 │   ├── hooks.json               # Event-driven hooks config
 │   └── curl_allowed_domains.yaml # Allowed HTTP domains
-├── docs/                        # Architecture documentation
-│   ├── monitor_and_windows_guide.md              # Core concepts: Session, Monitor, Window
-│   ├── common_flow.md           # Agent pools, context, message flow diagrams
-│   └── claude_codex.md          # Claude vs Codex provider behavioral differences
+├── docs/                        # Documentation
+│   ├── architecture/            # Concept & rationale docs (intuition-first)
+│   ├── reference/               # Precise schemas, protocols, API tables
+│   └── faq.md                   # Why-is-it-like-this introduction
 ├── session_logs/                # AI conversation logs, timestamp-named dirs (git-ignored)
 ├── storage/                     # Persistent data storage (git-ignored)
 ├── packages/
@@ -168,7 +168,7 @@ Each package has its own `CLAUDE.md` with detailed architecture docs:
     - `session-policies/` — `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge` (handle stream mapping, provider init, and MCP action routing)
     - `context-pool-policies/` — `MonitorQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `MonitorBudgetPolicy`, `WindowSubscriptionPolicy` (handle task queuing, prompt assembly, monitor rate limits, and window change notifications)
 
-See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/architecture/monitor_and_windows_guide.md`](./docs/architecture/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/architecture/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/architecture/claude_codex.md` for provider behavioral differences. See `docs/guides/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/guides/remote_mode.md` for network access.
+See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture.md) for how YAAR maps to OS concepts (kernel, processes, syscalls, boot, etc.). See [`docs/architecture/monitor_and_windows_guide.md`](./docs/architecture/monitor_and_windows_guide.md) for the Session/Monitor/Window mental model. See `docs/architecture/common_flow.md` for agent pool, context, and message flow diagrams. See `docs/reference/claude_codex.md` for provider behavioral differences. See `docs/guides/hooks.md` for the event-driven hooks system (`config/hooks.json`) and `docs/guides/remote_mode.md` for network access.
 
 ### Server Subsystems
 
