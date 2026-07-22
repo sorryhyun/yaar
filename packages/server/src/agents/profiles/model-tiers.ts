@@ -18,8 +18,8 @@ export const AGENT_TYPE_MODELS: Record<string, string> = {
 /** Resolve an app's `agentType` to the model its agent runs on. */
 export function resolveAgentModel(agentType?: string): string | undefined {
   // App agents default to the Sonnet capability tier. Keep that default explicit
-  // so Codex can translate it to Terra instead of omitting `model` from
-  // thread/start and inheriting the shared app-server's Sol default.
+  // so Codex can translate it to Terra explicitly instead of omitting `model`
+  // from thread/start and inheriting the shared app-server default.
   if (!agentType) return AGENT_TYPE_MODELS.sonnet;
   return AGENT_TYPE_MODELS[agentType] ?? agentType; // allow full model ID as fallback
 }
@@ -27,7 +27,7 @@ export function resolveAgentModel(agentType?: string): string | undefined {
 /** Map Claude capability tiers to their Codex equivalents. */
 export function claudeModelToCodex(model?: string): string | undefined {
   if (!model) return undefined;
-  if (model.includes('opus')) return 'gpt-5.6-sol';
+  if (model.includes('opus')) return 'gpt-5.6-terra';
   if (model.includes('sonnet')) return 'gpt-5.6-terra';
   return undefined;
 }

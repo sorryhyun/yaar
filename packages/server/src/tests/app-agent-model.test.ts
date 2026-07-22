@@ -13,10 +13,10 @@ describe('app agent model selection', () => {
     expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-terra');
   });
 
-  it('preserves an explicit Opus/Sol app tier', async () => {
+  it('preserves an explicit Opus app tier and maps it to Terra', async () => {
     const profile = await buildAppAgentProfile('devtools');
 
     expect(profile.model).toBe('claude-opus-4-8');
-    expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-sol');
+    expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-terra');
   });
 });

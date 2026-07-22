@@ -41,7 +41,7 @@ import type {
  * Configuration for the app-server.
  */
 export interface AppServerConfig {
-  /** Model to use (default: gpt-5.6-sol) */
+  /** Model to use (default: gpt-5.6-terra) */
   model?: string;
   /** Request timeout in milliseconds */
   requestTimeout?: number;
