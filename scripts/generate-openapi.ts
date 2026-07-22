@@ -5,16 +5,19 @@
  * Output: docs/reference/openapi.yaml
  */
 
-import { writeFileSync } from 'fs';
+import { readdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import type { EndpointMeta } from '../packages/server/src/http/utils.js';
 
 // Import PUBLIC_ENDPOINTS from all route files
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from '../packages/server/src/http/routes/api.js';
+import { PUBLIC_ENDPOINTS as AUTH_PUBLIC } from '../packages/server/src/http/routes/auth.js';
+import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from '../packages/server/src/http/routes/bridge.js';
 import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from '../packages/server/src/http/routes/browser.js';
 import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from '../packages/server/src/http/routes/dev.js';
 import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from '../packages/server/src/http/routes/files.js';
+import { PUBLIC_ENDPOINTS as ML_RUNTIME_PUBLIC } from '../packages/server/src/http/routes/ml-runtime.js';
 import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from '../packages/server/src/http/routes/proxy.js';
 import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from '../packages/server/src/http/routes/sessions.js';
 import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from '../packages/server/src/http/routes/settings.js';
@@ -23,15 +26,49 @@ import { PUBLIC_ENDPOINTS as VERB_PUBLIC } from '../packages/server/src/http/rou
 
 const ALL_ENDPOINTS: EndpointMeta[] = [
   ...API_PUBLIC,
+  ...AUTH_PUBLIC,
+  ...BRIDGE_PUBLIC,
   ...BROWSER_PUBLIC,
   ...DEV_PUBLIC,
   ...FILES_PUBLIC,
+  ...ML_RUNTIME_PUBLIC,
   ...PROXY_PUBLIC,
   ...SESSIONS_PUBLIC,
   ...SETTINGS_PUBLIC,
   ...SHORTCUTS_PUBLIC,
   ...VERB_PUBLIC,
 ];
+
+// Guard: every route file (except index.ts/static.ts, which don't export
+// PUBLIC_ENDPOINTS) must be represented above, or new routes silently
+// vanish from the generated spec.
+const WIRED_ROUTE_FILES = new Set([
+  'api.ts',
+  'auth.ts',
+  'bridge.ts',
+  'browser.ts',
+  'dev.ts',
+  'files.ts',
+  'ml-runtime.ts',
+  'proxy.ts',
+  'sessions.ts',
+  'settings.ts',
+  'shortcuts.ts',
+  'verb.ts',
+]);
+const SKIPPED_ROUTE_FILES = new Set(['index.ts', 'static.ts']);
+const routesDir = join(import.meta.dir, '..', 'packages', 'server', 'src', 'http', 'routes');
+const actualRouteFiles = readdirSync(routesDir).filter((f) => f.endsWith('.ts'));
+const unwired = actualRouteFiles.filter(
+  (f) => !WIRED_ROUTE_FILES.has(f) && !SKIPPED_ROUTE_FILES.has(f),
+);
+if (unwired.length > 0) {
+  console.error(
+    `generate-openapi: found route file(s) not wired into ALL_ENDPOINTS: ${unwired.join(', ')}\n` +
+      `Add a PUBLIC_ENDPOINTS import for each and list it in WIRED_ROUTE_FILES.`,
+  );
+  process.exit(1);
+}
 
 /** Escape a YAML string value — wrap in quotes if it contains special chars. */
 function yamlString(s: string): string {

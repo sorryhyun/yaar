@@ -17,7 +17,7 @@ The `YaarAuthority` type covers nine namespaces:
 | `windows` | `yaar://windows/{windowId}` | Windows (monitor inferred from agent context) |
 | `config` | `yaar://config/...` | Settings, hooks, shortcuts, mounts, app credentials |
 | `session` | `yaar://session/...` | Session info, agents, monitors, logs, context, browser |
-| `user` | `yaar://user/...` | Notifications, prompts, clipboard |
+| `user` | `yaar://user/...` | Notifications, prompts |
 | `history` | `yaar://history/` | Past session logs (list/read) |
 | `skills` | `yaar://skills/{topic}` | Skill topic docs (read before using related tools) |
 | `mcp` | `yaar://mcp/...` | External MCP server gateway (add/remove/refresh servers, call their tools) |
@@ -30,8 +30,18 @@ The canonical way agents address windows. The monitor is injected automatically 
 |-----|-------------|
 | `yaar://windows/` | Window collection (list, create) |
 | `yaar://windows/{windowId}` | Window (read, update, subscribe, message, delete) |
-| `yaar://windows/{windowId}/state/{key}` | Window state (app-protocol) |
-| `yaar://windows/{windowId}/commands/{key}` | Window command (app-protocol) |
+
+> `yaar://windows/{windowId}/state/{key}` and `yaar://windows/{windowId}/commands/{key}` are
+> **not** independently-dispatched resources. `buildWindowResourceUri`
+> (`packages/server/src/lib/yaar-uri-server.ts`) attaches these shapes as a cosmetic `uri` label
+> on each state/command entry in the app-protocol manifest returned by `app_query` — so an agent
+> reading the manifest knows how to *refer to* a given piece of state or a command.
+> `packages/server/src/handlers/uri-resolve.ts` does parse the sub-path into
+> `ResolvedWindow.subPath`, but the registered `yaar://windows/*` handler
+> (`packages/server/src/handlers/window.ts`) never reads it, so `read`/`invoke` on the sub-path
+> resolves and executes identically to the base window URI. The real way to read state or run a
+> command is `invoke('yaar://windows/{id}', { action: 'app_query', ... })` /
+> `invoke('yaar://windows/{id}', { action: 'app_command', ... })`.
 
 > `yaar://monitors/{monitorId}` survives only as an internal `ContextSource` tag
 > (`agents/context.ts`) for tagging message history — it is **not** an addressable resource URI.
@@ -52,13 +62,13 @@ The canonical way agents address windows. The monitor is injected automatically 
 
 ### Session — `yaar://session/...`
 
-Session-scoped resources. The entire namespace is **session-principal** — only the session agent may access it (enforced centrally in `ResourceRegistry.execute()`; monitor/app agents get a 403).
+Session-scoped resources. Most of the namespace is **session-principal** — only the session agent may access it (enforced centrally in `ResourceRegistry.execute()`; monitor/app agents get a 403). `yaar://session/agents` and `yaar://session/agents/*` are the exception: they carry no principal gate, since `relay` is meant to be called by app/window agents (targeting `.../monitor`) and `interrupt`/`delete` are usable by any tier that can name an agent id.
 
 | URI | Description |
 |-----|-------------|
 | `yaar://session` | Current session info (platform, uptime, stats) |
 | `yaar://session/agents` | All active agents (list) |
-| `yaar://session/agents/{agentId}` | Agent by instance ID (read info, invoke with `{ action: 'interrupt' }`) |
+| `yaar://session/agents/{agentId}` | Agent by instance ID — read for info; invoke with `{ action: 'interrupt' }` (any agent) or `{ action: 'relay', message }` (only on `.../monitor` — hands a message from an app/window agent back to its monitor agent); delete disposes the session agent (`id === 'session'`) or an app agent (by instanceId or appId) |
 | `yaar://session/agents/session` | The session agent itself (invoke with `audit` / `coordinate` / `query`) |
 | `yaar://session/monitors/{monitorId}` | Monitor status and control (see below) |
 | `yaar://session/browser` | The user's real Chrome (the only door to it) |
@@ -92,7 +102,7 @@ Callable by every agent tier:
 | `yaar://user/notifications` | Show notification (invoke with `{ id, title, body }`) |
 | `yaar://user/notifications/{id}` | Dismiss notification (delete) |
 | `yaar://user/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
-| `yaar://user/clipboard` | Clipboard contents |
+| `yaar://user/clipboard` | **Not yet implemented.** The `clipboard` sub-kind is recognized by URI parsing (`packages/server/src/lib/yaar-uri-server.ts`), but no handler is registered for it in `packages/server/src/handlers/user.ts` — invoking it resolves to "no handler found." |
 
 ---
 
@@ -102,9 +112,9 @@ Five verbs. The URI identifies the resource; the verb determines the operation.
 
 | Verb | Semantics | Returns |
 |------|-----------|---------|
-| `describe` | Schema + capabilities of a URI (which verbs it supports, payload shape) | `{ verbs, schema?, description }` |
+| `describe` | Schema + capabilities of a URI (which verbs it supports, payload shape) | `{ uri, description, verbs, invokeSchema? }` |
 | `read` | Get current state of a resource | Resource-specific data |
-| `list` | Enumerate children of a collection URI | `{ items: { uri, name, ... }[] }` |
+| `list` | Enumerate children of a collection URI | MCP `resource_link` content blocks, one per child (`{ uri, name, description?, mimeType?, kind?, version? }`) — not a JSON object with an `items` key |
 | `invoke` | Mutate, create, or trigger — the universal write/action verb | Resource-specific result |
 | `delete` | Remove a resource | `{ deleted: true }` |
 
@@ -126,8 +136,10 @@ delete('yaar://windows/win-1')                          -> close window
 
 list('yaar://session/agents')                  -> active agents
 invoke('yaar://session/agents/agent-1', { action: 'interrupt' })
+invoke('yaar://session/agents/monitor', { action: 'relay', message: '...' })  -> app/window agent hands a message back to its monitor agent
+delete('yaar://session/agents/session')        -> dispose the session agent
+delete('yaar://session/agents/notes')          -> dispose the "notes" app's agent
 
-read('yaar://user/clipboard')                  -> clipboard contents
 invoke('yaar://user/notifications', { id: 'n1', title: '...', body: '...' })
 delete('yaar://user/notifications/n1')         -> dismiss notification
 invoke('yaar://user/prompts', { action: 'ask', title: '...', message: '...', options: [...] })
@@ -135,10 +147,10 @@ invoke('yaar://user/prompts', { action: 'ask', title: '...', message: '...', opt
 read('yaar://session/monitors/0')              -> monitor status
 read('yaar://session')                         -> session info
 
-describe('yaar://config/settings')             -> { verbs: ['read', 'invoke'], schema: { ... } }
+describe('yaar://config/settings')             -> { verbs: ['describe', 'read', 'invoke'], invokeSchema: { ... } }
 ```
 
-HTTP requests also flow through the verb layer: `invoke('yaar://http', { url, ... })`, with domain allowlisting at `invoke('yaar://config/domains', { domain })`.
+HTTP requests also flow through the verb layer: `invoke('yaar://http', { url, ... })`, with domain allowlisting at `invoke('yaar://config/domains', { domain })`. `delete('yaar://http')` clears the caller's stored cookie jar (use on app logout).
 
 ### MCP Surface
 
@@ -164,14 +176,16 @@ Central registry in `packages/server/src/handlers/uri-registry.ts`. Maps URI pat
 type Verb = 'describe' | 'read' | 'list' | 'invoke' | 'delete';
 
 interface ResourceHandler {
-  verbs: Verb[];                 // which verbs this handler supports
   description: string;           // human-readable, returned by `describe`
-  invokeSchema?: object;         // JSON Schema for invoke payload (optional)
+  verbs: Verb[];                 // which verbs this handler supports (describe is always auto-generated)
+  invokeSchema?: Record<string, unknown>;  // JSON Schema for invoke payload (optional)
+  access?: 'session-principal';  // when set, only the session agent may call any verb (403 for others)
 
-  read?(parsed: ResolvedUri): Promise<unknown>;
-  list?(parsed: ResolvedUri): Promise<{ items: { uri: string; name: string }[] }>;
-  invoke?(parsed: ResolvedUri, payload: unknown): Promise<unknown>;
-  delete?(parsed: ResolvedUri): Promise<{ deleted: boolean }>;
+  describe?(resolved: ResolvedUri): Promise<VerbResult>;  // custom describe; overrides auto-generation
+  read?(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult>;
+  list?(resolved: ResolvedUri): Promise<VerbResult>;
+  invoke?(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult>;
+  delete?(resolved: ResolvedUri): Promise<VerbResult>;
 }
 ```
 
@@ -300,7 +314,7 @@ yaar://apps/self/storage/data.json  →  yaar://apps/{actual-appId}/storage/data
 
 ### Iframe SDK
 
-Apps should use `@bundled/yaar` imports (the underlying globals are injected by `IFRAME_VERB_SDK_SCRIPT` from `packages/shared/src/capture-helper.ts`):
+Apps should use `@bundled/yaar` imports (the underlying globals are injected by `IFRAME_VERB_SDK_SCRIPT` from `packages/shared/src/iframe-scripts/verb-sdk.ts`, re-exported via `packages/shared/src/iframe-scripts/index.ts` and `packages/shared/src/index.ts`):
 
 | `@bundled/yaar` import | Endpoint |
 |-------------------------|----------|

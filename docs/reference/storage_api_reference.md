@@ -43,10 +43,12 @@ Read a file by URI.
 | `lines` | `string` | no | Line range to read, 1-based inclusive (e.g. `"10-20"`, `"50"`, `"100-"`) |
 | `pattern` | `string` | no | Regex — returns only matching lines, with line numbers |
 | `context` | `number` | no | Context lines around pattern matches (default: `0`) |
+| `pdfText` | `boolean \| string` | no | PDF only: extract the text layer. `true` (or `"all"`) reads the whole document; a range like `"1-3"` scopes it. |
+| `pdfPages` | `string` | no | PDF only: page range to rasterize to images, e.g. `"1-3"`, `"5"`, `"2-"` — for scanned/visual PDFs. |
 
 **Returns (text files):** Line-numbered content as an embedded resource — the full file, or filtered by `lines`/`pattern`.
 
-**Returns (PDF files):** A summary string plus base64 PNG images of up to 3 pages. Includes a hint to display the PDF via an iframe window with `yaar://storage/` protocol.
+**Returns (PDF files):** View-first by default — reading a PDF with no `pdfText`/`pdfPages` returns metadata only (`pdfMeta: true`, page count, byte size) plus a hint to open it in a viewer window (`yaar://storage/` iframe content), with zero bytes ingested. Pass `pdfText` to extract the text layer (cheapest way to actually read the content), or `pdfPages` to rasterize a page range to base64 PNG images — capped at `MAX_PDF_RASTER_PAGES` (20 pages) per request.
 
 **Returns (image files):** Base64-encoded image content with MIME type.
 
@@ -66,7 +68,7 @@ Returns `resource_link` entries, directories first then alphabetically. Mounted 
 
 **Returns:** Resource links, or `"(empty)"` if the directory has no entries.
 
-### `invoke` — write / edit / grep
+### `invoke` — write / copy / edit / grep
 
 Dispatches on `payload.action`.
 
@@ -76,8 +78,18 @@ Dispatches on `payload.action`.
 |-----------|------|----------|-------------|
 | `uri` | `string` | yes | File URI (e.g. `yaar://storage/docs/file.txt`) |
 | `content` | `string` | yes | Content to write |
+| `encoding` | `'base64'` | no | Set when `content` is base64-encoded binary (images, PDFs). Omit for text — writing binary without it stores the base64 text itself. |
 
 Parent directories are created automatically. Overwrites existing files. Fails on read-only mounts. **Returns:** `"Written to yaar://storage/{path}"`
+
+**`copy`** — copy bytes server-side between two `yaar://storage` URIs, without round-tripping the content through the conversation:
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `uri` | `string` | yes | Destination file URI (e.g. `yaar://storage/docs/copy.txt`) |
+| `from` | `string` | yes | Source `yaar://` storage URI to copy bytes from. Either spelling works: `yaar://storage/…` or `yaar://apps/{id}/storage/…`. |
+
+Prefer this over reading a file and writing it back when moving/duplicating content — a read/write round-trip drags the bytes through the conversation. **Returns:** `"Copied {from} → yaar://storage/{path} ({bytes} bytes)"`
 
 **`edit`** — apply an edit to a file. Two modes:
 
@@ -168,6 +180,8 @@ Base URL: `/api/storage/{filePath}`
 
 All paths are relative to the storage directory. Path traversal is blocked (HTTP 403). Read-only mounts block POST and DELETE (HTTP 403).
 
+Every storage HTTP call also goes through the access chokepoint (`packages/server/src/http/access.ts`): `resolvePrincipal` resolves the caller to `host` (the desktop, unconfined) or `app` (an iframe token, confined to its `app.json` permissions), then `requirePermission` checks the resolved principal against the storage URI equivalent of the requested path and verb (`read`/`list`/`invoke`/`delete`). This can independently 403 with `"Not permitted: {verb} {uri}"` for an app lacking the grant, on top of the path-traversal and read-only-mount checks above. For app-scoped storage, a request path under `apps/self/` is rewritten to `apps/{appId}/` for the calling app (`storageUriFor` in `access.ts`) before the permission check and the actual file resolution, so an app can address its own storage as `self` without needing its literal id.
+
 ### GET — Serve file
 
 ```
@@ -176,7 +190,7 @@ GET /api/storage/documents/report.pdf
 
 Returns the raw file with `Content-Type` inferred from the extension (see [MIME types](#mime-types)). Returns `Cache-Control: no-cache`.
 
-**Status codes:** 200, 404 (not found), 403 (path traversal).
+**Status codes:** 200, 404 (not found), 403 (path traversal, or app lacks permission for the resource).
 
 ### GET — List directory
 
@@ -214,7 +228,7 @@ DELETE /api/storage/documents/old.pdf
 
 **Response:** `{ "ok": true, "path": "documents/old.pdf" }`
 
-**Status codes:** 200, 404 (not found), 403 (path traversal or read-only mount).
+**Status codes:** 200, 404 (not found), 403 (path traversal, read-only mount, or app lacks permission for the resource).
 
 ---
 
@@ -249,6 +263,7 @@ interface StorageReadResult {
   content?: string;
   images?: StorageImageContent[];
   totalPages?: number;
+  pdfMeta?: boolean;     // Set for PDFs read without pdfText/pdfPages — metadata only, no images
   error?: string;
 }
 
@@ -313,7 +328,7 @@ Core functions used by both MCP tools and REST routes:
 
 | Function | Signature | Description |
 |----------|-----------|-------------|
-| `storageRead` | `(filePath: string) → Promise<StorageReadResult>` | Read file; converts PDFs to images (max 3 pages), images to base64, text with line numbers |
+| `storageRead` | `(filePath: string, opts?: StorageReadOptions) → Promise<StorageReadResult>` | Read file; PDFs return metadata only unless `opts.pdfText`/`opts.pdfPages` are given, images to base64, text with line numbers |
 | `storageWrite` | `(filePath: string, content: string \| Buffer) → Promise<StorageWriteResult>` | Write file; creates parent dirs; respects read-only mounts |
 | `storageList` | `(dirPath?: string) → Promise<StorageListResult>` | List directory; injects virtual `mounts/` entry at root |
 | `storageDelete` | `(filePath: string) → Promise<StorageDeleteResult>` | Delete file or directory (recursively); respects read-only mounts |
@@ -337,7 +352,7 @@ All operations resolve paths in order:
 | File Type | Behavior |
 |-----------|----------|
 | Text files (`.txt`, `.md`, `.ts`, `.json`, etc.) | Read as UTF-8, line-numbered output |
-| PDF (`.pdf`) | Convert first 3 pages to PNG via poppler |
+| PDF (`.pdf`) | View-first: returns metadata only (page count, byte size) by default. `pdfText` extracts the text layer; `pdfPages` rasterizes a page range to PNG via poppler (capped at 20 pages) |
 | Images (`.png`, `.jpg`, `.gif`, `.webp`) | Return as base64 image content |
 | Other binary | Return explanation message, point to REST API |
 
@@ -434,6 +449,7 @@ interface Settings {
   wallpaper: string;
   accentColor: string;
   iconSize: 'small' | 'medium' | 'large';
+  theme: 'dark' | 'light';
   allowAllApps: boolean;
 }
 ```
@@ -471,5 +487,5 @@ Stored at `config/{appId}.json`. Managed via verb tools: `read('yaar://config/ap
 | Limit | Value |
 |-------|-------|
 | Max upload size (REST) | 50 MB |
-| Max PDF preview pages | 3 |
+| Max PDF rasterize pages (`pdfPages` per request) | 20 |
 | PDF render scale | 1.5× |

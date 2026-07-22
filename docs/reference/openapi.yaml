@@ -38,6 +38,56 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/auth/google/login:
+    post:
+      summary: Start Google sign-in — opens the consent screen (host + system apps only).
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/google/logout:
+    post:
+      summary: Forget the local Google session (host + system apps only).
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/google/me:
+    get:
+      summary: The publisher identity + owned app ids from the marketplace (host + system apps only).
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/auth/google/status:
+    get:
+      summary: Google sign-in status (host + bundled system apps only).
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/bridge:
+    post:
+      summary: "Observe/manage the user's real browser tabs via the YAAR Bridge extension"
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
   /api/browser:
     post:
       summary: Execute browser action
@@ -189,6 +239,51 @@ paths:
   /api/fetch:
     post:
       summary: 'Proxy HTTP request (for CORS-blocked APIs). Requires an iframe token; apps must declare `yaar://http`. Body: `{ url, method?, headers?, body? }`'
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/ml-runtime/{file}:
+    parameters:
+      - name: file
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: 'onnxruntime-web runtime artifacts (wasm/mjs) for @bundled/yaar-ml'
+      responses:
+        '200':
+          description: file
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/ml-weights:
+    get:
+      summary: 'Streaming proxy for ML model weights (same-origin, no base64)'
+      responses:
+        '200':
+          description: file
+          content:
+            application/json:
+              schema:
+                type: object
+  /api/ml-weights/download:
+    post:
+      summary: 'Download a weight file to storage/. Body: `{ url, dest }`. Resumable.'
+      responses:
+        '200':
+          description: JSON
+          content:
+            application/json:
+              schema:
+                type: object
+    get:
+      summary: 'Progress of a weight download: `{ state, loaded, total }`'
       responses:
         '200':
           description: JSON

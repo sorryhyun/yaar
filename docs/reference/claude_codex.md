@@ -10,12 +10,14 @@ YAAR supports two AI providers behind a unified `AITransport` interface. While t
 YAAR Server Process
 └── ClaudeSessionProvider (in-process)
     └── @anthropic-ai/claude-agent-sdk
-        └── query() → async iterable of SDK messages
+        └── query() → persistent streaming session (long-lived CLI process)
+            ├── InputChannel — pushes turns into the open stream
+            └── MCP-connect gating on the first turn (bounded wait)
 ```
 
-- **In-process**: The Agent SDK runs inside the YAAR server process
-- **Each provider instance** is lightweight — just an SDK wrapper with session state
-- **Multiple instances** can run truly in parallel with no coordination needed
+- **In-process, persistent-streaming design**: Each provider opens a long-lived CLI process via `sdkQuery()` fed by an `InputChannel`; the process and its MCP connections survive across turns instead of respawning per query
+- **Per-instance `busy` locking**: A provider's persistent session tracks `busy`, so a second turn arriving while one is in flight closes and reopens the stream (or waits) rather than racing it — concurrent turns on the *same* provider are serialized, not parallel
+- **Cross-instance parallelism**: Separate `ClaudeSessionProvider` instances (one per agent) each own their own persistent stream, so different agents still run truly in parallel with no cross-instance coordination needed
 
 ### Codex (`CodexProvider`)
 
@@ -137,16 +139,16 @@ Both providers support warmup for faster first response, but the mechanism diffe
 ### Claude Warmup
 
 ```
-Server startup → WarmPool.initialize()
-  → new ClaudeSessionProvider()
-  → warmup()
-    → sdkQuery({ prompt: "ping", options: { systemPrompt, mcpServers } })
-    → SDK creates session, loads MCP tools, processes system prompt
-    → Returns "pong" (system prompt instructs this handshake)
-    → sessionId captured for resume
+WebSocket connect → ContextPool.prewarmMonitorAgent()
+  → AgentSession.prewarm()
+  → ClaudeSessionProvider.prewarm(options)
+    → openPersistentSession() — opens the persistent stream with the exact
+      SDK options (systemPrompt, mcpServers, model) the first turn will use
+    → await session.mcpReady — waits for MCP servers to connect (bounded)
+    → "Prewarmed persistent stream (MCP connected)"
 ```
 
-The warmup is expensive but effective: it pre-loads the entire system prompt and MCP tool definitions into a session. The first real user message then `resume`s this session.
+Warmup pre-opens the long-lived CLI process and waits for its MCP connections, so the first real user message lands on an already-running stream instead of paying process-spawn and MCP-handshake latency. A prompt/tools/model change later still reopens the stream with `resume`, carrying the conversation over.
 
 ### Codex Warmup
 
@@ -166,36 +168,35 @@ Codex warmup starts the child process and establishes a dedicated WebSocket conn
 
 ## MCP Integration
 
-Both providers connect to the same MCP tool servers. **Verb mode (default):** only `system` + `verbs` namespaces are active (2 servers). **Legacy mode (deprecated):** all 8 namespaces active (`system`, `window`, `storage`, `apps`, `user`, `dev`, `basic`, `browser`).
+Both providers connect to the same MCP tool servers: `CORE_SERVERS` (`mcp/server.ts`) is always active — `system`, `verbs`, `app`, `messaging` (4 namespaces). `verbs` exposes the 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to `handlers/` via `yaar://` URIs; `app` carries the app-agent tools (`describe`/`query`/`command`/`relay`); `messaging` carries cross-app/user messaging tools; `system` carries `reload_cached`/`list_reload_options`.
 
 ### Claude
 
 MCP servers are passed as SDK options:
 
 ```typescript
-// Verb mode (default) — 2 servers
 mcpServers: {
   system: { type: 'http', url: 'http://127.0.0.1:8000/mcp/system', headers: { Authorization: 'Bearer ...' } },
   verbs: { type: 'http', url: 'http://127.0.0.1:8000/mcp/verbs', headers: { Authorization: 'Bearer ...' } },
+  app: { type: 'http', url: 'http://127.0.0.1:8000/mcp/app', headers: { Authorization: 'Bearer ...' } },
+  messaging: { type: 'http', url: 'http://127.0.0.1:8000/mcp/messaging', headers: { Authorization: 'Bearer ...' } },
 }
-
-// Legacy mode (deprecated) — 8 servers
-// system, window, storage, apps, user, dev, basic, browser
 ```
 
 ### Codex
 
-MCP servers are configured via CLI flags at process spawn:
+MCP servers are configured via CLI flags at process spawn, looping over `CORE_SERVERS` (`getCodexAppServerArgs()`):
 
 ```
-# Verb mode (default) — 2 servers
 codex app-server \
   -c mcp_servers.system.url=http://127.0.0.1:8000/mcp/system \
   -c mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN \
   -c mcp_servers.verbs.url=http://127.0.0.1:8000/mcp/verbs \
-  -c mcp_servers.verbs.bearer_token_env_var=YAAR_MCP_TOKEN
-
-# Legacy mode (deprecated) — all 8 namespaces
+  -c mcp_servers.verbs.bearer_token_env_var=YAAR_MCP_TOKEN \
+  -c mcp_servers.app.url=http://127.0.0.1:8000/mcp/app \
+  -c mcp_servers.app.bearer_token_env_var=YAAR_MCP_TOKEN \
+  -c mcp_servers.messaging.url=http://127.0.0.1:8000/mcp/messaging \
+  -c mcp_servers.messaging.bearer_token_env_var=YAAR_MCP_TOKEN
 ```
 
 The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than directly in headers.
@@ -204,14 +205,14 @@ The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than
 
 | Setting | Claude | Codex |
 |---------|--------|-------|
-| Model | Sonnet/Opus by agent tier | `gpt-5.6-terra` for Sonnet-tier agents; `gpt-5.6-sol` for Opus-tier agents and the default; per-query `options.model` honored via `thread/start`/`thread/fork` |
-| Thinking | Enabled, 4096 max tokens | Medium reasoning effort |
-| Web search | Enabled (`tools: ['WebSearch', 'Task']`) | Enabled (`-c web_search=live`) |
-| Shell tool | N/A (MCP tools only) | Explicitly disabled |
+| Model | Sonnet/Opus by agent tier | `gpt-5.6-terra` for both Sonnet-tier and Opus-tier agents (and the default) — `claudeModelToCodex()` maps both to the same Codex model; per-query `options.model` honored via `thread/start`/`thread/fork` |
+| Thinking | Not explicitly configured (no `thinking`/`maxThinkingTokens` option set anywhere in the Claude provider — default SDK behavior) | High reasoning effort (`-c model_reasoning_effort=high`) |
+| Web search | Enabled (`tools: ['WebSearch', 'Task']`) | Disabled by design (`-c web_search=disabled`) — YAAR controls HTTP access via MCP tools |
+| Shell tool | N/A (MCP tools only) | Explicitly disabled (`features.shell_tool=false`) |
 | Sandbox | N/A | `danger-full-access` |
-| Personality | Default | `none` |
+| Personality | Default | Feature disabled outright (`features.personality=false`) — no personality value is ever set |
 | Permissions | `bypassPermissions` | `approval_policy = "never"` |
-| Multi-agent | Task tool (profile-based delegation) | `features.collaboration_modes=true` |
+| Multi-agent | Task tool (profile-based delegation) | Native Codex multi-agent/collab features disabled (`features.multi_agent=false`, `features.collaboration_modes=false`) — orchestration stays YAAR-tracked, not Codex-internal. Also disabled: `apply_patch_freeform`, `unified_exec`, `code_mode.enabled`/`code_mode_host`, `fast_mode`, `skill_mcp_dependency_install`, `image_generation`, `computer_use`, `browser_use`, `skill_search`, `tool_search_always_defer_mcp_tools`, `workspace_dependencies`, `memories`, `apps`, `remote_plugin` — see `DISABLED_FEATURES` in `config/providers/codex.ts` |
 
 ## Image Handling
 
@@ -315,12 +316,12 @@ This means:
 | `providers/factory.ts` | Auto-detection, dynamic imports, provider registry |
 | `providers/warm-pool.ts` | Pre-initialization pool with auto-replenish |
 | `providers/base-transport.ts` | Shared abort/interrupt logic |
-| `providers/claude/session-provider.ts` | Claude Agent SDK integration with warmup |
+| `providers/claude/session-provider.ts` | Claude Agent SDK integration — persistent streaming session, prewarm |
+| `providers/claude/input-channel.ts` | `InputChannel` — pushes turns into the open persistent stream |
 | `providers/claude/message-mapper.ts` | SDK message → StreamMessage |
-| `providers/claude/system-prompt.ts` | Claude-specific system prompt |
 | `providers/codex/provider.ts` | Codex provider with thread management |
 | `providers/codex/app-server.ts` | AppServer process manager (spawn, WS connections, auth) |
-| `providers/codex/jsonrpc-ws-client.ts` | JSON-RPC client over WebSocket |
-| `providers/codex/jsonrpc-client.ts` | Base JSON-RPC client (request/notification helpers) |
+| `providers/codex/raw-ws.ts` | Base WebSocket transport (raw TCP, bypasses Bun/tungstenite issues) |
+| `providers/codex/jsonrpc-ws-client.ts` | JSON-RPC client layered over `raw-ws.ts` |
 | `providers/codex/message-mapper.ts` | Notification → StreamMessage |
-| `providers/codex/system-prompt.ts` | Codex-specific system prompt |
+| `agents/profiles/orchestrator.ts` | Shared system prompt (`ORCHESTRATOR_PROMPT`/`getOrchestratorPrompt`) — imported by both `providers/claude/session-provider.ts` and `providers/codex/provider.ts`; neither provider has its own `system-prompt.ts` |

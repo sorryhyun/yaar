@@ -34,18 +34,20 @@ Both paths converge on the same executor below, so app-side behavior (readiness 
 
 ### Generic verb (monitor/session agents)
 
-Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`), alongside the window's other actions (`create`, `update`, `close`, `lock`, `unlock`, `message`, `subscribe`, `unsubscribe`, `app_subscribe`, `app_unsubscribe`):
+Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`), alongside the window's other actions (`create`, `update`, `close`, `lock`, `unlock`, `move`, `resize`, `message`, `subscribe`, `unsubscribe`, `app_subscribe`, `app_unsubscribe`, `app_eval`, `protocol_log`):
 
 | Call | Description |
 |------|-------------|
 | `invoke('yaar://windows/{windowId}', { action: 'app_query', stateKey? })` | Read a state key, or the manifest if `stateKey` is omitted (defaults to `'manifest'`). The reserved key `'__console'` pulls the app's console-capture buffer (`window.__YAAR_CONSOLE`) directly from the injected app-protocol script — it works even when the app never called `app.register()` and bypasses the app-ready wait (used by devtools to read a preview app's console logs). |
-| `invoke('yaar://windows/{windowId}', { action: 'app_command', command, params? })` | Execute a command. |
+| `invoke('yaar://windows/{windowId}', { action: 'app_command', command, params?, timeoutMs? })` | Execute a command. Optional `timeoutMs` overrides how long the server waits for the app to respond (default 30s, clamped to a max of 180s) — raise it for slow commands like a compile or a deploy. |
+| `invoke('yaar://windows/{windowId}', { action: 'app_eval', expression })` | Evaluate a JS expression inside the iframe and return its JSON-serialized result (capped at 16KB). Refused everywhere except devtools preview windows (`devtools-preview-{projectId}`) — a disposable sandbox devtools just built from source, where eval grants nothing beyond what editing-and-recompiling already would. |
 
 ### Scoped tools (app agents)
 
 Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. These tools:
 - Default to the agent's own window; pass `appId` to target another app permitted via that app's `app.json` `controls` list (see root `CLAUDE.md` "Cross-app control").
 - Intercept `stateKey`/`command` values prefixed `storage/` / `storage:` to read/write app-scoped storage directly, bypassing the app protocol entirely (own app only — storage is not cross-app controllable).
+- `command` accepts an optional `timeoutMs` to override the default wait (30s, max 180s) for slow commands like a compile or a deploy.
 
 `query`/`command`/`describe` are the app agent's app-protocol tools. Its remaining tools — `relay` (hand a request to the monitor agent) and `direct_message` (message another app's agent, when `app.json` sets `"messaging": "all"`) — are _not_ app-protocol calls and don't touch the executor below; see `agents/profiles/app-agent.ts`.
 
@@ -55,6 +57,22 @@ Each persistent app agent (one per `appId`) instead gets dedicated `query` / `co
 3. Sends the request through the protocol pipeline (`ActionEmitter.emitAppProtocolRequest`).
 4. For `app_command`, records the command via `WindowStateRegistry.recordAppCommand()` for replay on reload.
 5. Returns the JSON response (manifest responses are enriched with resource `uri` hints per state/command key) or an error string. Large text/resource results are truncated to ~400KB.
+
+### Event subscriptions: `app_subscribe` / `app_unsubscribe`
+
+An agent subscribes to an app's declared `app.emit()` channels rather than polling state:
+
+```
+invoke('yaar://windows/{windowId}', { action: 'app_subscribe', channels?, mode? })
+invoke('yaar://windows/{windowId}', { action: 'app_unsubscribe', subscriptionId })
+```
+
+| Field | Description |
+|-------|-------------|
+| `channels?: string[]` | Channel names to subscribe to. Omit (or pass `["*"]`) to subscribe to all channels the app has declared. Discover channel names via `app_query` manifest (`events`). |
+| `mode?: 'wake' \| 'buffer'` | Delivery mode. `'wake'` (default) delivers a task to the subscribing agent as soon as the event fires. `'buffer'` folds the event into the agent's next turn instead of waking it. |
+
+`app_subscribe` returns `{ subscriptionId, targetWindowId, channels, mode }`. `app_unsubscribe` takes the returned `subscriptionId` (same shape as the generic `unsubscribe` action). Currently monitor agents only. **Source:** `packages/server/src/features/window/subscribe.ts`.
 
 ---
 
@@ -89,6 +107,37 @@ interface AppEventDescriptor {
 ```
 
 The manifest is built automatically from the registration config by stripping handler functions and exposing only descriptions and schemas.
+
+---
+
+## Protocol Log
+
+A per-window ring buffer of App Protocol traffic, for inspecting what an app was asked and what it answered without re-running commands or reading the app's source.
+
+```
+invoke('yaar://windows/{windowId}', { action: 'protocol_log', limit? })
+```
+
+Returns entries for that window, oldest dropped first, newest last (default `limit`: 100):
+
+```typescript
+interface ProtocolLogEntry {
+  seq: number;
+  ts: number;                                            // Unix ms
+  windowKey: string;
+  direction: 'out' | 'in';                                // out = agent → app request, in = app → agent emit
+  kind: 'manifest' | 'query' | 'command' | 'eval' | 'emit';
+  name?: string;         // stateKey for a query, command name for a command, channel for an emit
+  params?: unknown;
+  result?: unknown;      // set on `out` entries once the app responds
+  error?: string;
+  durationMs?: number;   // round-trip time; `out` entries only
+}
+```
+
+Retains the last 500 entries across all windows (oldest evicted first); `params`/`result` fields are truncated to 2000 chars. The `__console` polling query (devtools reading its console panel) is deliberately excluded so it doesn't drown real traffic in duplicate replays.
+
+**Source:** `packages/server/src/features/window/protocol-log.ts`
 
 ---
 
@@ -144,6 +193,22 @@ If `command` matches a declared `aliases` entry, the SDK resolves it to the cano
 { "type": "yaar:app-command-response", "requestId": "req-...", "result": { "ok": true }, "error": null }
 ```
 
+### Eval
+
+Arbitrary expression evaluation, dispatched only to devtools preview windows — the server-side `handleAppEval` guard rejects it for any other window before the request ever reaches the iframe (the iframe itself cannot verify that; the gate lives on the side that knows).
+
+**Request** (parent → iframe):
+```json
+{ "type": "yaar:app-eval-request", "requestId": "req-...", "expression": "document.querySelectorAll('.row').length" }
+```
+
+**Response** (iframe → parent):
+```json
+{ "type": "yaar:app-eval-response", "requestId": "req-...", "value": "3", "error": null }
+```
+
+`expression` is run via indirect `eval` (global scope, so it sees the app's globals). `value` is the JSON-serialized result (or `String(...)` for values `JSON.stringify` can't handle), truncated with an explicit marker if oversized.
+
 ### Close
 
 Fire-and-forget, sent right before the window is destroyed (no response expected). The SDK invokes the app's `onClose()` handler (from `app.register()`), if any.
@@ -176,8 +241,10 @@ Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, pa
   request:
     | { kind: 'manifest' }
     | { kind: 'query'; stateKey: string }
-    | { kind: 'command'; command: string; params?: unknown };
-  seq?: number;
+    | { kind: 'command'; command: string; params?: unknown }
+    | { kind: 'eval'; expression: string };
+  timeoutMs?: number;  // how long the server is prepared to wait; the frontend runs its own
+                        // round-trip timer against this instead of a fixed 5s
 }
 ```
 
@@ -191,7 +258,8 @@ Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, pa
   response:
     | { kind: 'manifest'; manifest: AppManifest | null; error?: string }
     | { kind: 'query'; data: unknown; error?: string }
-    | { kind: 'command'; result: unknown; error?: string };
+    | { kind: 'command'; result: unknown; error?: string }
+    | { kind: 'eval'; value?: string; error?: string };
 }
 ```
 
@@ -203,6 +271,10 @@ Sent when an iframe app calls `app.register()` (from `@bundled/yaar`).
 {
   type: 'APP_PROTOCOL_READY';
   windowId: string;
+  reannounce?: boolean;  // true when the desktop is repeating a registration it already
+                          // witnessed (e.g. reattach after a server restart), not reporting a
+                          // fresh one from the iframe — the server must not replay recorded
+                          // commands in this case, since the iframe never forgot its state
 }
 ```
 
@@ -345,8 +417,8 @@ When a user opens a file with a matching extension, the agent invokes `app_comma
 |--------|-------------|
 | `emitAppProtocolRequest(windowId, request, timeoutMs)` | Sends a request through the pipeline and returns a promise that resolves with the response (or `undefined` on timeout). Default timeout: 5000 ms. |
 | `resolveAppProtocolResponse(requestId, response)` | Called when the frontend sends `APP_PROTOCOL_RESPONSE`. Resolves the corresponding pending promise. |
-| `waitForAppReady(windowId, timeoutMs)` | Waits for `APP_PROTOCOL_READY` from the frontend. Returns `true` if the app registered, `false` on timeout. |
-| `notifyAppReady(windowId)` | Marks a window as protocol-ready and resolves pending `waitForAppReady()` calls. |
+| `waitForAppReady(sessionId, windowId, timeoutMs?)` | Waits for `APP_PROTOCOL_READY` from the frontend, scoped to the caller's session. Returns `true` if the app registered, `false` on timeout. |
+| `notifyAppReady(sessionId, windowId)` | Marks a window as protocol-ready in that session and resolves pending `waitForAppReady()` calls. |
 
 ### WindowStateRegistry
 

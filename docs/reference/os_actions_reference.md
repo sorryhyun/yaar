@@ -27,6 +27,7 @@ Create a new window on the desktop.
 | `windowStyle` | `Record<string, string \| number>` | no | Custom CSS styles on the window element |
 | `minimized` | `boolean` | no | Create in minimized state |
 | `iframeToken` | `string` | no | Token for iframe route restriction |
+| `isolateOrigin` | `boolean` | no | Serve the iframe from the sibling loopback origin, cross-origin to the desktop (app-origin isolation) |
 
 **Behavior:**
 - Bounds are clamped to the viewport.
@@ -193,7 +194,7 @@ Capture a window's content as a PNG screenshot.
 | `windowId` | `string` | yes |
 | `requestId` | `string` | no |
 
-Async operation. For iframes, uses a three-tier strategy: (1) iframe self-capture via postMessage, (2) html2canvas on iframe content document, (3) html2canvas on the window frame. Returns base64 PNG via `RENDERING_FEEDBACK`.
+Async operation. Sends a `yaar:capture-request` postMessage to the window's iframe and awaits a `yaar:capture-response` (2s timeout); the injected capture script handles canvas and DOM (via `foreignObject`) capture using the browser's native CSS engine. There is no fallback tier — if the iframe doesn't respond in time, or responds with no image data, capture fails outright. Returns base64 PNG via `RENDERING_FEEDBACK` (`success: true, imageData`) on success, or `success: false` with an `error`/`captureFailure` reason (e.g. `no-response`) on failure.
 
 ---
 
@@ -278,6 +279,18 @@ Show a modal confirmation dialog.
 | `context` | `string?` | Optional context identifier |
 
 The user's response is sent back to the server as a `DIALOG_FEEDBACK` event. If `permissionOptions` is set and the user checks "remember", the decision is persisted to `config/permissions.json`.
+
+### `dialog.close`
+
+Take a dialog off the screen without an answer.
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `'dialog.close'` | yes | |
+| `id` | `string` | yes | ID of the dialog to close |
+| `reason` | `'timeout'` | no | Why it left the screen. `'timeout'` means the server stopped waiting for an answer. |
+
+A confirm dialog has a deadline the user can't see. When it passes, the server stops listening and the waiting tool is told "denied" — `dialog.close` clears the dialog from the screen so its buttons don't stay wired to a request that no longer exists.
 
 ---
 
@@ -365,6 +378,7 @@ Update desktop-wide settings.
 | `wallpaper` | `string` | Optional wallpaper path/URL |
 | `accentColor` | `string` | Optional accent color |
 | `iconSize` | `'small' \| 'medium' \| 'large'` | Optional desktop icon size |
+| `theme` | `'dark' \| 'light'` | Optional color theme |
 
 ---
 
@@ -562,4 +576,4 @@ AI emits tool call → MCP tool creates OSAction
 
 Actions are scoped by monitor. The store key format is `"monitorId/windowId"` (e.g., `"0/win-settings"`). If no `monitorId` is present in the action, it falls back to the active monitor.
 
-Multiple synchronous actions are batched into a single Immer transaction. Async actions (`window.capture`) run outside Immer.
+Multiple synchronous actions are batched into a single Immer transaction. Async actions (`window.capture`, `desktop.updateSettings`) run outside Immer.

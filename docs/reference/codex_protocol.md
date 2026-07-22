@@ -24,15 +24,15 @@ codex app-server --listen ws://127.0.0.1:4510
 # With YAAR configuration
 codex app-server --listen ws://127.0.0.1:4510 \
   -c "features.shell_tool=false" \
-  -c "approval_policy=on-request" \
-  -c "model_reasoning_effort=medium" \
-  -c "model_personality=none"
+  -c "approval_policy=never" \
+  -c "model_reasoning_effort=high" \
+  -c "features.personality=false"
 
 # Debug: send a test message
 codex debug app-server send-message-v2 "Hello, world!"
 
 # Generate TypeScript types from the protocol
-codex app-server generate-ts
+codex app-server generate-ts --out packages/server/src/providers/codex/generated --experimental
 
 # Generate JSON Schema
 codex app-server generate-json-schema
@@ -171,16 +171,17 @@ The App Server protocol has three primitives (per the Codex harness blog):
 
 ### Notification Events We Handle
 
+Note: there is no `turn/failed` method in the generated `ServerNotification` union. Failure is
+reported as a `status: "failed"` field inside `turn/completed` (`TurnStatus`), handled by
+inspecting `p.turn?.status` in `message-mapper.ts`.
+
 | Event | Maps To | Purpose |
 |-------|---------|---------|
 | `item/agentMessage/delta` | `StreamMessage { type: 'text' }` | Streaming response text |
 | `item/reasoning/textDelta` | `StreamMessage { type: 'thinking' }` | Chain-of-thought |
-| `item/mcpToolCall/started` | `StreamMessage { type: 'tool_use' }` | MCP tool invocation |
-| `item/mcpToolCall/completed` | `StreamMessage { type: 'tool_result' }` | MCP tool result |
-| `item/commandExecution/started` | `StreamMessage { type: 'tool_use' }` | Shell command start |
-| `item/commandExecution/completed` | `StreamMessage { type: 'tool_result' }` | Shell command output |
-| `turn/completed` | `StreamMessage { type: 'complete' }` | Turn finished |
-| `turn/failed` | `StreamMessage { type: 'error' }` | Turn failed |
+| `item/started` | `StreamMessage { type: 'tool_use' }` (or `null`) | Item begins — dispatched by `item.type`: `mcpToolCall`, `commandExecution`, `webSearch`, `collabAgentToolCall` each map to a tool-use message; unrecognized item types are logged and skipped |
+| `item/completed` | `StreamMessage { type: 'tool_result' }` (or `null`) | Item finalized — same `item.type` dispatch as `item/started`, mapping to the matching tool-result message |
+| `turn/completed` | `StreamMessage { type: 'complete' }` or `{ type: 'error' }` | Turn finished — `status: 'failed'` or `'interrupted'` maps to `error`, otherwise `complete` |
 | `error` | `StreamMessage { type: 'error' }` | Protocol error |
 
 ### Events We Skip
@@ -189,12 +190,20 @@ The App Server protocol has three primitives (per the Codex harness blog):
 |-------|--------|
 | `turn/started` | No content to yield |
 | `item/agentMessage/completed` | Already streamed via deltas |
-| `item/reasoning/completed` | Already streamed via deltas |
-| `item/reasoning/summaryTextDelta` | Summary not needed |
-| `item/reasoning/summaryTextCompleted` | Summary not needed |
-| `item/started` | Item type tracking not yet implemented |
-| `item/completed` | Item lifecycle tracking not yet implemented |
-| `codex/event/*` | Internal telemetry |
+| `item/reasoning/completed`, `item/reasoning/summaryTextDelta`, `item/reasoning/summaryTextCompleted`, `item/reasoning/summaryPartAdded` | Reasoning lifecycle/summary events — not needed beyond the `textDelta` stream |
+| `item/mcpToolCall/progress`, `item/commandExecution/outputDelta`, `item/commandExecution/terminalInteraction` | Sub-item progress — the coarser `item/started`/`item/completed` pair already covers these tool calls |
+| `codex/event/*`, `fuzzyFileSearch/*` | Internal telemetry |
+
+### Dead Notification Cases (defensive, unreachable)
+
+`message-mapper.ts` also has switch cases for `item/mcpToolCall/started`, `item/mcpToolCall/completed`,
+`item/commandExecution/started`, and `item/commandExecution/completed`. These method names do **not**
+appear in the generated `ServerNotification` union — Codex only emits the sub-item events listed
+above (`.../progress`, `.../outputDelta`, `.../terminalInteraction`), plus the coarse `item/started`/
+`item/completed` pair that already dispatches these item types. The four cases are unreachable given
+the current protocol; they share mapper functions with the `item/started`/`item/completed` handlers,
+so keeping them costs nothing, but treat them as legacy/defensive rather than a documented part of
+the live protocol.
 
 ### Bidirectional Requests (Approval Flow)
 
@@ -223,35 +232,52 @@ These are routed through YAAR's existing permission dialog system (`actionEmitte
 
 ### App Server CLI Arguments
 
+Built by `getCodexAppServerArgs()` (`config/providers/codex.ts`): every entry in its
+`DISABLED_FEATURES` list becomes a `-c features.<name>=false` flag, every entry in
+`CONFIG_OVERRIDES` becomes a `-c <key>=<value>` flag, then it loops over `CORE_SERVERS`
+(`system`, `verbs`, `app`, `messaging`) to emit the MCP server flags:
+
 ```bash
 codex app-server \
-  # Tools
-  -c 'features.shell_tool=false' \          # Disable shell commands
+  # Disabled feature surfaces (DISABLED_FEATURES — YAAR wants explicit MCP calls,
+  # not Codex-internal tool/orchestration paths)
+  -c 'features.shell_tool=false' \
   -c 'features.apply_patch_freeform=false' \
-  -c 'features.multi_agent=true' \
-  -c 'features.collaboration_modes=true' \  # Subagent delegation
-  # MCP servers (YAAR's 8 namespaced servers)
-  -c 'mcp_servers.system.url=http://127.0.0.1:8000/mcp/system' \
-  -c 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.window.url=http://127.0.0.1:8000/mcp/window' \
-  -c 'mcp_servers.window.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.storage.url=http://127.0.0.1:8000/mcp/storage' \
-  -c 'mcp_servers.storage.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.apps.url=http://127.0.0.1:8000/mcp/apps' \
-  -c 'mcp_servers.apps.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.user.url=http://127.0.0.1:8000/mcp/user' \
-  -c 'mcp_servers.user.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.dev.url=http://127.0.0.1:8000/mcp/dev' \
-  -c 'mcp_servers.dev.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.browser.url=http://127.0.0.1:8000/mcp/browser' \
-  -c 'mcp_servers.browser.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  # Model
-  -c 'model_reasoning_effort=medium' \
-  -c 'personality=none' \
-  # Execution
+  -c 'features.multi_agent=false' \
+  -c 'features.collaboration_modes=false' \
+  -c 'features.personality=false' \
+  -c 'features.unified_exec=false' \
+  -c 'features.code_mode.enabled=false' \
+  -c 'features.code_mode_host=false' \
+  -c 'features.fast_mode=false' \
+  -c 'features.skill_mcp_dependency_install=false' \
+  -c 'features.image_generation=false' \
+  -c 'features.computer_use=false' \
+  -c 'features.browser_use=false' \
+  -c 'features.skill_search=false' \
+  -c 'features.tool_search_always_defer_mcp_tools=false' \
+  -c 'features.workspace_dependencies=false' \
+  -c 'features.memories=false' \
+  -c 'features.apps=false' \
+  -c 'features.remote_plugin=false' \
+  # Non-feature config overrides (CONFIG_OVERRIDES)
+  -c 'apps._default.enabled=false' \
+  -c 'include_permissions_instructions=false' \
+  -c 'skills.include_instructions=false' \
+  -c 'model_reasoning_effort=high' \
   -c 'sandbox_mode=danger-full-access' \
   -c 'approval_policy=never' \
-  -c 'project_doc_max_bytes=0'
+  -c 'project_doc_max_bytes=0' \
+  -c 'web_search=disabled' \
+  # MCP servers (YAAR's 4 core namespaces — CORE_SERVERS)
+  -c 'mcp_servers.system.url=http://127.0.0.1:8000/mcp/system' \
+  -c 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN' \
+  -c 'mcp_servers.verbs.url=http://127.0.0.1:8000/mcp/verbs' \
+  -c 'mcp_servers.verbs.bearer_token_env_var=YAAR_MCP_TOKEN' \
+  -c 'mcp_servers.app.url=http://127.0.0.1:8000/mcp/app' \
+  -c 'mcp_servers.app.bearer_token_env_var=YAAR_MCP_TOKEN' \
+  -c 'mcp_servers.messaging.url=http://127.0.0.1:8000/mcp/messaging' \
+  -c 'mcp_servers.messaging.bearer_token_env_var=YAAR_MCP_TOKEN'
 ```
 
 ### Environment Variables
@@ -264,10 +290,18 @@ codex app-server \
 
 ### Working Directory
 
-Uses an isolated temp directory (`mkdtemp('codex-')`) to prevent:
-- Reading `AGENTS.md` from the YAAR repo
-- Auto-loading `~/.codex/skills/` instructions
-- File contamination from shell commands
+The app-server process's `cwd` is `STORAGE_DIR` (YAAR's own storage directory), not an isolated
+temp directory — `app-server.ts`'s `start()` sets `cwd: STORAGE_DIR` when spawning the process.
+
+A `mkdtemp('codex-')` temp directory is created, but only to write per-role agent config TOML
+files (`{tempDir}/agents/{role}.toml`) so subagents inherit the correct model — it plays no part
+in isolating the working directory.
+
+`AGENTS.md`/skills contamination is prevented via explicit config overrides instead of directory
+isolation:
+- `project_doc_max_bytes=0` — suppresses reading `AGENTS.md`
+- `apps._default.enabled=false` and `skills.include_instructions=false` — suppress
+  auto-injected app/skill instructions
 
 ---
 
@@ -279,10 +313,10 @@ YAAR is a desktop agent interface, not an IDE. Several Codex defaults work again
 |---------|--------|-------------|
 | Shell tool | `features.shell_tool=false` | YAAR controls execution via MCP tools |
 | Approval policy | `approval_policy=never` | Auto-run (mirrors Claude `bypassPermissions`); only first-party MCP tools are callable |
-| Web search | (default off with shell disabled) | YAAR controls HTTP access via MCP tools |
+| Web search | `web_search=disabled` | YAAR controls HTTP access via MCP tools |
 | View image | (default off) | YAAR handles images directly |
-| Skills | Isolated temp dir | Auto-injected prompts contaminate agent personality |
-| AGENTS.md | Isolated temp dir | Project files contaminate agent context |
+| Skills | `skills.include_instructions=false` | Auto-injected prompts contaminate agent context |
+| AGENTS.md | `project_doc_max_bytes=0`, `apps._default.enabled=false` | Project files contaminate agent context |
 
 ### Instructions Constraint
 
