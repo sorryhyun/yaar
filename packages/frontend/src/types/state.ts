@@ -21,6 +21,7 @@ export interface WindowModel {
   windowStyle?: Record<string, string | number>;
   iframeToken?: string;
   appId?: string;
+  isolateOrigin?: boolean; // Render this app's iframe from the sibling loopback origin (see WindowState.isolateOrigin)
 }
 
 export interface CliEntry {

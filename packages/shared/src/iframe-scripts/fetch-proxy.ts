@@ -15,10 +15,20 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
 
   // Extract sessionId from URL params for domain permission dialogs
   var sessionId = '';
+  // App-origin isolation (Stage 1): the backend the SDK talks to. When this app is
+  // served from the sibling loopback origin, API calls (including our own proxy
+  // endpoint) must target the desktop origin. Empty otherwise → relative as before.
+  var API_BASE = '';
+  var API_ORIGIN = '';
   try {
     var sp = new URLSearchParams(location.search);
     var raw = sp.get('sessionId') || '';
     if (/^[a-zA-Z0-9_-]+$/.test(raw)) sessionId = raw;
+    var _b = sp.get('__yaar_api');
+    if (_b && /^https?:\\/\\/[a-zA-Z0-9.:_-]+$/.test(_b)) {
+      API_BASE = _b.replace(/\\/$/, '');
+      try { API_ORIGIN = new URL(API_BASE).origin; } catch(e) {}
+    }
   } catch(e) {}
 
   // Add X-Iframe-Token to same-origin requests for route restriction
@@ -45,7 +55,11 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
     }
     try {
       var parsed = new URL(url, location.origin);
-      if (parsed.origin === location.origin) {
+      // The desktop API origin is trusted infrastructure, not an external site:
+      // the verb/storage SDKs address it absolutely when this app is isolated, so
+      // pass it through with the token header rather than routing it back through
+      // the proxy (which would wrap our own /api/fetch call and never terminate).
+      if (parsed.origin === location.origin || (API_ORIGIN && parsed.origin === API_ORIGIN)) {
         return addTokenHeader(input, init);
       }
     } catch(e) {
@@ -94,7 +108,7 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
       var proxyHeaders = { 'Content-Type': 'application/json' };
       if (iframeToken) proxyHeaders['X-Iframe-Token'] = iframeToken;
 
-      return realFetch('/api/fetch', {
+      return realFetch(API_BASE + '/api/fetch', {
         method: 'POST',
         headers: proxyHeaders,
         body: JSON.stringify(payload)

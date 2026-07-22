@@ -7,7 +7,7 @@
  */
 
 import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
-import { getPort, IS_REMOTE } from '../config.js';
+import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
 
 // ── Dev reload SSE handler (set by dev-bundler.ts) ──────────────────
 let _devReloadHandler: (() => Response) | null = null;
@@ -124,6 +124,24 @@ export function createFetchHandler() {
       return new Response('Bridge upgrade failed', { status: 500 });
     }
 
+    // App-origin isolation (Stage 2): pin the desktop to localhost. Installed apps
+    // are served from 127.0.0.1, and resolvePrincipal now refuses a token-less
+    // request that lands on that alias — so the desktop must never live there, or its
+    // own (legitimately token-less) requests would be refused too. A top-level
+    // *document* navigation that lands on 127.0.0.1 is the human's desktop; send it to
+    // localhost. App iframe documents (Sec-Fetch-Dest: iframe) carry a token and are
+    // left alone; so are API/asset calls (not documents).
+    if (
+      APP_ORIGIN_ISOLATION &&
+      url.hostname === '127.0.0.1' &&
+      req.method === 'GET' &&
+      req.headers.get('sec-fetch-dest') === 'document'
+    ) {
+      const port = url.port ? `:${url.port}` : '';
+      const target = `http://localhost${port}${url.pathname}${url.search}`;
+      return new Response(null, { status: 302, headers: { Location: target } });
+    }
+
     // CORS headers
     const origin = req.headers.get('origin');
     const corsHeaders: Record<string, string> = {};
@@ -140,6 +158,13 @@ export function createFetchHandler() {
     } else {
       // Local mode: whitelist localhost origins (same-origin requests won't have Origin header)
       const allowedOrigins = [`http://localhost:${getPort()}`];
+      // App-origin isolation (Stage 1): installed apps are served from the sibling
+      // loopback alias, so their SDK's cross-origin calls to the desktop API carry
+      // that Origin and must be allowed. Both aliases resolve to this same loopback
+      // socket, so widening the allowlist to the sibling adds no new reachability.
+      if (APP_ORIGIN_ISOLATION) {
+        allowedOrigins.push(`http://127.0.0.1:${getPort()}`);
+      }
       if (origin && allowedOrigins.includes(origin)) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';

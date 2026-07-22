@@ -16,9 +16,14 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
   window.yaar = window.yaar || {};
 
   var iframeToken = '';
+  var API_BASE = '';
   try {
     var sp = new URLSearchParams(location.search);
     iframeToken = sp.get('__yaar_token') || '';
+    // App-origin isolation (Stage 1): target the desktop origin for /api calls
+    // when this app is served cross-origin. Empty otherwise → relative as before.
+    var _b = sp.get('__yaar_api');
+    if (_b && /^https?:\\/\\/[a-zA-Z0-9.:_-]+$/.test(_b)) API_BASE = _b.replace(/\\/$/, '');
   } catch(e) {}
 
   function tokenHeaders(extra) {
@@ -42,7 +47,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       } else {
         body = String(data);
       }
-      return fetch('/api/storage/' + encodePath(path), {
+      return fetch(API_BASE + '/api/storage/' + encodePath(path), {
         method: 'POST',
         headers: tokenHeaders(),
         body: body
@@ -57,7 +62,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
     },
     read: function(path, options) {
       var mode = (options && options.as) || 'auto';
-      return fetch('/api/storage/' + encodePath(path), {
+      return fetch(API_BASE + '/api/storage/' + encodePath(path), {
         headers: tokenHeaders()
       }).then(function(res) {
         if (!res.ok) {
@@ -77,7 +82,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
     },
     list: function(dirPath) {
       var p = dirPath ? encodePath(dirPath) : '';
-      return fetch('/api/storage/' + p + '?list=true', {
+      return fetch(API_BASE + '/api/storage/' + p + '?list=true', {
         headers: tokenHeaders()
       }).then(function(res) {
         if (!res.ok) {
@@ -89,7 +94,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       });
     },
     remove: function(path) {
-      return fetch('/api/storage/' + encodePath(path), {
+      return fetch(API_BASE + '/api/storage/' + encodePath(path), {
         method: 'DELETE',
         headers: tokenHeaders()
       }).then(function(res) {
@@ -109,7 +114,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       // containing "self" cannot be resolved at all (403). The access gate already
       // accepts the __yaar_token query param for exactly this case; only this builder
       // never sent it.
-      var base = '/api/storage/' + encodePath(path);
+      var base = API_BASE + '/api/storage/' + encodePath(path);
       var t = window.__YAAR_TOKEN__ || iframeToken;
       return t ? base + '?__yaar_token=' + encodeURIComponent(t) : base;
     }

@@ -20,6 +20,16 @@ export const IFRAME_VERB_SDK_SCRIPT = `
     if (urlToken && !window.__YAAR_TOKEN__) window.__YAAR_TOKEN__ = urlToken;
   } catch(e) {}
 
+  // App-origin isolation (Stage 1): when this app is served from the sibling
+  // loopback origin, its API calls must target the desktop origin so they cross
+  // the origin boundary. \`__yaar_api\` carries that base; absent (bundled apps,
+  // flag off), API_BASE stays '' and every call below is relative as before.
+  var API_BASE = '';
+  try {
+    var _b = new URLSearchParams(location.search).get('__yaar_api');
+    if (_b && /^https?:\\/\\/[a-zA-Z0-9.:_-]+$/.test(_b)) API_BASE = _b.replace(/\\/$/, '');
+  } catch(e) {}
+
   function tokenHeaders() {
     var t = window.__YAAR_TOKEN__ || '';
     var h = { 'Content-Type': 'application/json' };
@@ -45,7 +55,7 @@ export const IFRAME_VERB_SDK_SCRIPT = `
     var body = { verb: verb, uri: uri };
     if (payload !== undefined) body.payload = payload;
     attempt = attempt || 0;
-    return fetch('/api/verb', {
+    return fetch(API_BASE + '/api/verb', {
       method: 'POST',
       headers: tokenHeaders(),
       body: JSON.stringify(body)
@@ -102,7 +112,7 @@ export const IFRAME_VERB_SDK_SCRIPT = `
     var headers = tokenHeaders();
     body.uri = uri;
     body.action = 'subscribe';
-    return fetch('/api/verb/subscribe', {
+    return fetch(API_BASE + '/api/verb/subscribe', {
       method: 'POST',
       headers: headers,
       body: JSON.stringify(body)
@@ -114,7 +124,7 @@ export const IFRAME_VERB_SDK_SCRIPT = `
       __yaarSubs[serverId] = callback;
       return function unsubscribe() {
         delete __yaarSubs[serverId];
-        return fetch('/api/verb/subscribe', {
+        return fetch(API_BASE + '/api/verb/subscribe', {
           method: 'POST',
           headers: headers,
           body: JSON.stringify({ action: 'unsubscribe', subscriptionId: serverId })

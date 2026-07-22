@@ -16,9 +16,16 @@ interface ContentRendererProps {
   windowId: string;
   requestId?: string;
   iframeToken?: string;
+  isolateOrigin?: boolean;
 }
 
-function ContentRenderer({ content, windowId, requestId, iframeToken }: ContentRendererProps) {
+function ContentRenderer({
+  content,
+  windowId,
+  requestId,
+  iframeToken,
+  isolateOrigin,
+}: ContentRendererProps) {
   const callbacks = useWindowCallbacks();
 
   const handleIframeSuccess = useCallback(() => {
@@ -50,6 +57,7 @@ function ContentRenderer({ content, windowId, requestId, iframeToken }: ContentR
           data={content.data as string | { url: string; sandbox?: string }}
           requestId={requestId}
           iframeToken={iframeToken}
+          isolateOrigin={isolateOrigin}
           onRenderSuccess={handleIframeSuccess}
           onRenderError={handleIframeError}
         />

@@ -22,7 +22,8 @@ import { generateAppIframeToken } from '../../http/iframe-tokens.js';
 import { storageUriForPath } from '../../http/access.js';
 import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import { getAppMeta } from '../apps/discovery.js';
-import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
+import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
+import { APP_ORIGIN_ISOLATION } from '../../config.js';
 import {
   formatWindowRef,
   deriveWindowId,
@@ -228,6 +229,13 @@ export async function handleCreate(
 
   const appMeta = appId ? await getAppMeta(appId) : null;
 
+  // App-origin isolation (docs/architecture/known_gaps.md): only installed
+  // (`source:'user'`) apps move to the pinned app origin — bundled apps and
+  // AI-authored HTML are host-authored, not the hostile-app threat, and stay
+  // same-origin. The frontend does the actual origin swap; here we only mark it.
+  const isolateOrigin =
+    APP_ORIGIN_ISOLATION && renderer === 'iframe' && !!appId && resolveAppSource(appId) === 'user';
+
   const osAction: OSAction = {
     type: 'window.create',
     windowId: actualId,
@@ -236,6 +244,7 @@ export async function handleCreate(
     content: { renderer, data },
     ...getAppMetaOverrides(appMeta),
     ...(appId ? { appId } : {}),
+    ...(isolateOrigin ? { isolateOrigin: true } : {}),
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {

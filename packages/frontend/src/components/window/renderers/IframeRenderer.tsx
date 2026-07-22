@@ -23,11 +23,37 @@ interface IframeRendererProps {
   data: string | { url: string; sandbox?: string };
   requestId?: string;
   iframeToken?: string;
+  /**
+   * App-origin isolation (docs/architecture/known_gaps.md). When set, render this
+   * app from the `127.0.0.1` alias so it is cross-origin to the desktop, and hand it
+   * the desktop origin as `__yaar_api` so its SDK still reaches the backend across
+   * that boundary. The server refuses a token-less request that carries the app
+   * origin, so an isolated app can no longer pass as the host.
+   */
+  isolateOrigin?: boolean;
   onRenderSuccess?: () => void;
   onRenderError?: (error: string, url: string) => void;
 }
 
 type LoadState = 'loading' | 'loaded' | 'error';
+
+/**
+ * The app origin — the `127.0.0.1` loopback alias on the current port — or null
+ * when the desktop isn't on `localhost` (a LAN IP / remote tunnel, or already on
+ * `127.0.0.1`), where isolation has no meaning here.
+ *
+ * The assignment is pinned, not symmetric (Stage 2): the desktop lives on
+ * `localhost` and apps on `127.0.0.1`. The server enforces exactly that — it
+ * refuses a token-less request carrying the `127.0.0.1` origin, and redirects a
+ * desktop document that lands there back to localhost — so we must never serve an
+ * app onto the desktop's own alias. Both aliases resolve to the same local socket,
+ * so this only changes the browser-visible origin, not what host is reached.
+ */
+function siblingLoopbackOrigin(): string | null {
+  const { protocol, hostname, port } = window.location;
+  if (hostname !== 'localhost') return null;
+  return `${protocol}//127.0.0.1${port ? `:${port}` : ''}`;
+}
 
 // Check if URL is same-origin (relative path or same host)
 function isSameOrigin(url: string): boolean {
@@ -51,6 +77,7 @@ function IframeRenderer({
   data,
   requestId,
   iframeToken,
+  isolateOrigin,
   onRenderSuccess,
   onRenderError,
 }: IframeRendererProps) {
@@ -58,6 +85,15 @@ function IframeRenderer({
   const resolved = resolveAssetUrl(rawUrl);
   const sessionId = useDesktopStore((s) => s.sessionId);
   const customSandbox = typeof data === 'object' ? data.sandbox : undefined;
+
+  // App-origin isolation: resolve to the pinned app origin (127.0.0.1). Only when
+  // the server marked this app (source:'user'), the content is a relative desktop
+  // path, and we're actually on localhost (not remote). Null means "not isolated"
+  // and every path below falls back to the same-origin behavior.
+  const appOrigin =
+    isolateOrigin && !getRemoteConnection() && resolved.startsWith('/')
+      ? siblingLoopbackOrigin()
+      : null;
 
   // Lock sessionId at mount time so late CONNECTION_STATUS doesn't re-render the iframe.
   // If sessionId isn't available yet, pick it up once and freeze.
@@ -71,6 +107,24 @@ function IframeRenderer({
   // iframeToken: read by the verb SDK at init time (before handleLoad injects __YAAR_TOKEN__)
   const url = (() => {
     const sid = sessionIdRef.current;
+    // Isolated app: build an absolute URL on the sibling origin, and hand the app
+    // the desktop origin as __yaar_api so its baked-in SDK calls the backend across
+    // the boundary. The token still rides in the query (the app reads it there).
+    if (appOrigin) {
+      try {
+        const u = new URL(resolved, window.location.origin);
+        if (sid && !u.searchParams.has('sessionId')) u.searchParams.set('sessionId', sid);
+        if (iframeToken && !u.searchParams.has('__yaar_token')) {
+          u.searchParams.set('__yaar_token', iframeToken);
+        }
+        if (!u.searchParams.has('__yaar_api')) {
+          u.searchParams.set('__yaar_api', window.location.origin);
+        }
+        return `${appOrigin}${u.pathname}${u.search}`;
+      } catch {
+        return resolved;
+      }
+    }
     if (!isSameOrigin(resolved)) return resolved;
     try {
       const u = new URL(resolved, window.location.origin);
@@ -91,9 +145,15 @@ function IframeRenderer({
   // allow-same-origin: lets the site access its own localStorage/cookies (required by most sites)
   // allow-scripts: lets the site run JavaScript
   // allow-forms: lets the site submit forms
-  const sandbox =
-    customSandbox ??
-    (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms allow-same-origin');
+  //
+  // An isolated app is cross-origin but still left unsandboxed — the origin swap is
+  // what makes its principal unforgeable (the server refuses a token-less request
+  // from the app origin). Sandboxing the frame to also cut off `window.parent` DOM
+  // reach is the remaining, separate step (docs/architecture/known_gaps.md).
+  const sandbox = appOrigin
+    ? customSandbox
+    : (customSandbox ??
+      (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms allow-same-origin'));
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');

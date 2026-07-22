@@ -103,6 +103,40 @@ export function setPort(p: number): void {
 
 export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
 
+/**
+ * App-origin isolation — the origin boundary that makes an app's principal
+ * unforgeable (Stages 1 + 2).
+ *
+ * When on, `source:'user'` app iframes are served from the `127.0.0.1` alias while
+ * the desktop stays on `localhost` — the same socket, a distinct browser origin —
+ * and `resolvePrincipal` refuses a token-less request that carries the app origin,
+ * so an app can no longer omit its token and be read as the host.
+ *
+ * **Default on, local mode only.** The localhost/127.0.0.1 trick has no meaning
+ * behind a remote tunnel or in the bundled exe (both fold into `IS_REMOTE`), so it
+ * is off there. Set `YAAR_APP_ORIGIN_ISOLATION=0` to force it off locally — the one
+ * remaining escape it does *not* close is `window.parent` on the still-unsandboxed
+ * frame; sandboxing is a later stage.
+ */
+export function isAppOriginIsolationEnabled(): boolean {
+  return process.env.YAAR_APP_ORIGIN_ISOLATION !== '0' && !IS_REMOTE;
+}
+
+export const APP_ORIGIN_ISOLATION = isAppOriginIsolationEnabled();
+
+/**
+ * The loopback hostnames the origin boundary pins to (Stage 2).
+ *
+ * The desktop lives on `localhost`; installed (`source:'user'`) apps are served
+ * from `127.0.0.1` — the same socket, a distinct browser origin. The server keeps
+ * the desktop off the app alias (redirects a document that lands on `127.0.0.1`
+ * back to localhost), so a token-less request that *does* carry the app origin is
+ * an app, never the host. Both sides — this constant and the frontend's
+ * `siblingLoopbackOrigin()` — must agree on the assignment.
+ */
+export const DESKTOP_ORIGIN_HOST = 'localhost';
+export const APP_ORIGIN_HOST = '127.0.0.1';
+
 /** Dev mode: local development with live reload (not remote, not bundled). */
 export const IS_DEV = !IS_REMOTE && !IS_BUNDLED_EXE;
 

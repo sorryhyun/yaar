@@ -283,7 +283,9 @@ Since YAAR lets the AI execute code and communicate with external services, it s
 - **Remembered permissions** — allow/deny decisions persisted in `config/permissions.json`
 - **Path validation** — guards against path traversal attacks
 
-**Known limitation:** local app iframes are served same-origin and are deliberately not sandboxed. The model above binds network callers, cross-session and cross-app access, and every accidental path taken by an app that plays by the rules — but it **does not stop app code that sets out to escape.** Don't install apps you don't trust. See [known gaps](./docs/architecture/known_gaps.md) for details and the intended fix.
+- **App-origin isolation** (on by default, local mode) — installed apps are served from a distinct browser origin (`127.0.0.1` while the desktop stays on `localhost`), so an app can no longer omit its token and be read as the desktop. Set `YAAR_APP_ORIGIN_ISOLATION=0` to disable.
+
+**Known limitation:** app iframes are still not sandboxed, so a *hostile* app can reach the desktop's DOM directly via `window.parent` — origin isolation closes the token-forgery escapes but not that one. Don't install apps you don't trust. See [known gaps](./docs/architecture/known_gaps.md) for the boundary that landed and the sandboxing that remains.
 
 
 ## Project Structure

@@ -327,6 +327,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
               windowId={windowId}
               requestId={window.requestId}
               iframeToken={window.iframeToken}
+              isolateOrigin={window.isolateOrigin}
             />
           </RendererErrorBoundary>
         </WindowCallbackProvider>
