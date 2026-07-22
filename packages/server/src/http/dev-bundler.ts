@@ -33,13 +33,29 @@ export async function initDevBundler(): Promise<void> {
 /** SSE endpoint handler — keeps connection open, sends reload events. */
 function handleDevReload(): Response {
   let ctrl: SSEController;
+  let heartbeat: ReturnType<typeof setInterval>;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
       ctrl = controller;
       sseClients.add(ctrl);
       ctrl.enqueue(encoder.encode('data: connected\n\n'));
+      // Bun resets any socket idle longer than its 255s transport timeout. This
+      // channel is silent between rebuilds — during a quiet stretch (e.g. editing
+      // apps/, which the frontend watcher ignores) it would be dropped mid-stream
+      // with no terminal chunk, surfacing as net::ERR_INCOMPLETE_CHUNKED_ENCODING
+      // in the console. A comment ping keeps the connection under the ceiling,
+      // matching the browser-events SSE (30s) and MCP stream (60s) keepalives.
+      heartbeat = setInterval(() => {
+        try {
+          ctrl.enqueue(encoder.encode(': ping\n\n'));
+        } catch {
+          clearInterval(heartbeat);
+          sseClients.delete(ctrl);
+        }
+      }, 30_000);
     },
     cancel() {
+      clearInterval(heartbeat);
       sseClients.delete(ctrl);
     },
   });

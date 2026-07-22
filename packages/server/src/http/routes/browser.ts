@@ -187,6 +187,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
       const stream = new ReadableStream({
         start(controller) {
           const encoder = new TextEncoder();
+          let closed = false;
           const write = (data: string) => {
             try {
               controller.enqueue(encoder.encode(data));
@@ -195,19 +196,20 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
             }
           };
 
-          const initial = JSON.stringify({
-            url: session.currentUrl,
-            title: session.currentTitle,
-            version: session.version,
-            driving: session.driving,
-            isSelf: isYaarOriginUrl(session.currentUrl),
-          });
-          write(`data: ${initial}\n\n`);
-
           const cleanup = () => {
+            if (closed) return;
+            closed = true;
             clearInterval(heartbeat);
             session.off('updated', onUpdate);
             session.off('closed', onClosed);
+            // Emit the terminal zero-length chunk on every teardown path — abort,
+            // session close, or a failed enqueue. Skipping it drops the socket
+            // mid-stream and surfaces as net::ERR_INCOMPLETE_CHUNKED_ENCODING.
+            try {
+              controller.close();
+            } catch {
+              // Already closed/errored
+            }
           };
 
           const onUpdate = (update: {
@@ -220,14 +222,7 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
               `data: ${JSON.stringify({ ...update, isSelf: isYaarOriginUrl(update.url) })}\n\n`,
             );
           };
-          const onClosed = () => {
-            cleanup();
-            try {
-              controller.close();
-            } catch {
-              // Already closed
-            }
-          };
+          const onClosed = () => cleanup();
 
           const heartbeat = setInterval(() => {
             write(': heartbeat\n\n');
@@ -236,6 +231,17 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
           session.on('updated', onUpdate);
           session.on('closed', onClosed);
           req.signal.addEventListener('abort', cleanup);
+
+          // Sent last, so cleanup()/heartbeat are already initialized if the very
+          // first enqueue throws (otherwise the catch touches them in the TDZ).
+          const initial = JSON.stringify({
+            url: session.currentUrl,
+            title: session.currentTitle,
+            version: session.version,
+            driving: session.driving,
+            isSelf: isYaarOriginUrl(session.currentUrl),
+          });
+          write(`data: ${initial}\n\n`);
         },
       });
 
