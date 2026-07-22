@@ -52,31 +52,62 @@ export function getCodexWsPort(): number {
 export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[] {
   const args = ['app-server'];
 
-  // Disable shell tool and apply_patch (apps use clone-revise-compile-deploy flow)
-  args.push('-c', 'features.shell_tool=false');
-  args.push('-c', 'features.apply_patch_freeform=false');
-  args.push('-c', 'features.multi_agent=false');
-  args.push('-c', 'features.personality=false');
-  args.push('-c', 'features.unified_exec=false');
-  // Disable "code mode": Codex otherwise exposes a single `exec` custom tool that
-  // runs model-authored JavaScript against an `ALL_TOOLS`/`text()` runtime to call
-  // tools programmatically. code_mode_host is stable+true by default, so it turns on
-  // even though we never enabled it. YAAR wants explicit MCP tool calls, not an
-  // opaque JS shell, so force both host and model sides off.
-  args.push('-c', 'features.code_mode.enabled=false');
-  args.push('-c', 'features.code_mode_host=false');
-  args.push('-c', 'features.fast_mode=false');
-  args.push('-c', 'features.skill_mcp_dependency_install=false');
-  args.push('-c', 'apps._default.enabled=false');
-  // Disable native memory: it injects a large `## Memory` developer message
-  // (the full MEMORY_SUMMARY + lookup instructions from ~/.codex/memories) into
-  // every thread. That cross-project history is irrelevant noise for YAAR's
-  // short-lived, app-scoped agents.
-  args.push('-c', 'features.memories=false');
-  args.push('-c', 'features.apps=false');
-  args.push('-c', 'features.remote_plugin=false');
-  args.push('-c', 'include_permissions_instructions=false');
-  args.push('-c', 'skills.include_instructions=false');
+  // Native Codex tool/feature surfaces we force OFF (each → `-c features.<name>=false`).
+  // YAAR provides equivalents through its own MCP verbs / apps and wants explicit,
+  // YAAR-tracked orchestration; leaving one on gives the agent a second, untracked
+  // path that bypasses YAAR's window/agent model.
+  const DISABLED_FEATURES = [
+    'shell_tool', // apps use the clone-revise-compile-deploy flow, not shell/apply_patch
+    'apply_patch_freeform',
+    'multi_agent', // orchestration is separate YAAR-tracked threads, not Codex-internal subagents
+    'collaboration_modes', // native multi-agent collab (mirrors multi_agent)
+    'personality',
+    'unified_exec',
+    // "code mode": Codex otherwise exposes a single `exec` tool that runs model-authored
+    // JS against an `ALL_TOOLS`/`text()` runtime. code_mode_host is stable+true by default,
+    // so disable both host and model sides — YAAR wants explicit MCP calls, not a JS shell.
+    'code_mode.enabled',
+    'code_mode_host',
+    'fast_mode',
+    'skill_mcp_dependency_install',
+    'image_generation', // image gen is the first-party `anima` app, not Codex's built-in tool
+    'computer_use', // browser/computer driven via the Browser app + yaar://session/browser
+    'browser_use',
+    'skill_search', // YAAR curates skills (yaar://skills) and exposes its MCP tools directly
+    'tool_search_always_defer_mcp_tools', // ...so don't defer our verbs behind a search tool
+    'workspace_dependencies', // no host workspace to scan (isolated temp cwd)
+    // Native memory injects a large `## Memory` developer message (MEMORY_SUMMARY +
+    // lookup instructions from ~/.codex/memories) into every thread — cross-project
+    // noise for YAAR's short-lived, app-scoped agents.
+    'memories',
+    'apps',
+    'remote_plugin',
+  ];
+  for (const feature of DISABLED_FEATURES) {
+    args.push('-c', `features.${feature}=false`);
+  }
+
+  // Non-feature scalar config overrides (`-c key=value`), in order: suppressions first,
+  // then model behavior.
+  const CONFIG_OVERRIDES: Array<[string, string]> = [
+    ['apps._default.enabled', 'false'],
+    ['include_permissions_instructions', 'false'],
+    ['skills.include_instructions', 'false'],
+    ['model_reasoning_effort', 'high'],
+    ['sandbox_mode', 'danger-full-access'],
+    // YAAR auto-runs agents (mirrors Claude's bypassPermissions). With shell_tool/apply_patch
+    // disabled, codex can only call YAAR's first-party MCP tools (app/verbs/system) — those
+    // must never prompt. `on-request` gated MCP calls through an approval the provider doesn't
+    // handle, so codex declined them ("user rejected MCP tool call").
+    ['approval_policy', 'never'],
+    ['project_doc_max_bytes', '0'],
+    // Web search stays off — YAAR controls HTTP access via MCP tools. (The Codex message-mapper
+    // already maps webSearch items, so flip to "enabled" here to turn the builtin tool on.)
+    ['web_search', 'disabled'],
+  ];
+  for (const [key, value] of CONFIG_OVERRIDES) {
+    args.push('-c', `${key}=${value}`);
+  }
 
   // Configure YAAR MCP servers
   for (const ns of mcpNamespaces) {
@@ -87,27 +118,6 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
       `mcp_servers.${ns}.bearer_token_env_var=YAAR_MCP_TOKEN`,
     );
   }
-
-  // Model behavior
-  args.push(
-    '-c',
-    'model_reasoning_effort=high',
-    '-c',
-    'sandbox_mode=danger-full-access',
-    '-c',
-    // YAAR auto-runs agents (mirrors Claude's bypassPermissions). With
-    // shell_tool/apply_patch disabled, codex can only call YAAR's first-party
-    // MCP tools (app/verbs/system) — those must never prompt. `on-request`
-    // instead gated MCP calls through an approval the provider doesn't handle,
-    // so codex declined them ("user rejected MCP tool call").
-    'approval_policy=never',
-    '-c',
-    'project_doc_max_bytes=0',
-    // Enable web search (mirrors Claude's WebSearch builtin tool). The Codex
-    // message-mapper already maps webSearch items; this turns the tool on.
-    '-c',
-    'web_search=disabled',
-  );
 
   return args;
 }

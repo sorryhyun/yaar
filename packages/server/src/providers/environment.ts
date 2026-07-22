@@ -79,6 +79,21 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
 
   let result = `\n\n## Environment\n${lines.join('\n')}`;
 
+  if (provider === 'codex') {
+    // Codex tends to "check on" a sub-agent after handing off by polling
+    // yaar://session/agents. That namespace is session-principal only (refused
+    // for the monitor) and is not how results come back — the hook is. Steer it
+    // to the hook: "response" path instead. Claude already reliably uses hooks,
+    // so this reinforcement is Codex-only.
+    result += `\n\n## Getting results back from sub-agents (use hooks, not yaar://session/agents)
+
+When you hand work to an app or window agent, pass \`hook: "response"\` in the invoke:
+\`invoke('yaar://windows/{id}', { action: "message", message: "...", hook: "response" })\`.
+The system then delivers that agent's result to you as a single \`<agent-hook>\` message when it finishes. Wait for it and act on it — that message **is** the handoff.
+
+Do **not** poll or relay through \`yaar://session/agents\` to find out what a sub-agent did. That namespace is refused for you (session-principal only) and is not how results are returned.`;
+  }
+
   if (!settings.onboardingCompleted) {
     result += `\n\n## Onboarding
 
