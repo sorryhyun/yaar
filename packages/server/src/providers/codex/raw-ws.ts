@@ -67,6 +67,12 @@ export class RawWebSocket extends EventEmitter {
     const socket = new Socket();
     this.socket = socket;
 
+    // Keep the connection warm across idle turns: probe a quiet peer after 30s so
+    // a silently-dead app-server is detected (socket 'close' fires) instead of the
+    // next turn hanging on a zombie connection. noDelay keeps JSON-RPC latency low.
+    socket.setKeepAlive(true, 30_000);
+    socket.setNoDelay(true);
+
     socket.connect(port, host, () => {
       // Send HTTP upgrade request
       const request =

@@ -74,6 +74,10 @@ export class CodexProvider extends BaseTransport {
   private turnReadyResolve: (() => void) | null = null;
   private turnReadyPromise: Promise<void> | null = null;
 
+  // Guards the idle-recovery retry in query() so a persistently-broken thread
+  // can't recurse forever (resume fails → new thread → turn/start fails → …).
+  private recovering = false;
+
   /**
    * Create a CodexProvider.
    * @param appServer - The shared AppServer (owned by WarmPool, not this provider).
@@ -117,17 +121,39 @@ export class CodexProvider extends BaseTransport {
     return (this.appServer?.isRunning ?? false) && (this.client?.isConnected ?? false);
   }
 
+  /**
+   * Ensure a live WS connection to the app-server, re-establishing one if it
+   * dropped while the agent was idle. The connection is per-provider plumbing;
+   * threads live in the shared app-server process, so a fresh connection can
+   * resume/continue a thread the previous one created — no context is tied to
+   * the socket. Returns false only when the app-server itself is gone.
+   */
+  private async ensureClient(): Promise<boolean> {
+    if (this.client?.isConnected) return true;
+    if (!this.appServer?.isRunning) return false;
+    try {
+      // Reap the dead client before replacing it so its socket/timers are freed.
+      this.client?.close();
+      this.client = await this.appServer.createConnection();
+      return true;
+    } catch (err) {
+      console.error('[codex] Failed to re-establish WS connection:', err);
+      return false;
+    }
+  }
+
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
     this.createAbortController();
 
     try {
-      if (!this.appServer?.isRunning || !this.client?.isConnected) {
+      // Reconnect a socket that dropped while idle rather than failing the turn.
+      if (!this.appServer?.isRunning || !(await this.ensureClient())) {
         yield this.createErrorMessage(new Error('AppServer or WS connection is not available'));
         return;
       }
 
       // Capture local references so dispose() doesn't crash the finally block.
-      const client = this.client;
+      const client = this.client!;
 
       // Handle thread creation: new, fork, or reuse
       const threadCreated = await this.ensureThread(options);
@@ -238,13 +264,29 @@ export class CodexProvider extends BaseTransport {
         return;
       }
 
-      // Check for session recovery error (invalid thread)
+      // Session recovery: the app-server evicted our idle thread from memory (or
+      // the connection it lived behind dropped), so turn/start reported an
+      // invalid thread. The thread is still persisted as a rollout on disk —
+      // resume it by id so the conversation history survives, instead of nulling
+      // it and silently starting a blank thread. `recovering` bounds this to a
+      // single retry: if the resume itself fails, ensureThread falls back to a
+      // fresh thread and this second failure surfaces as an error.
       if (
         err instanceof Error &&
+        !this.recovering &&
         (err.message.includes('thread') || err.message.includes('invalid'))
       ) {
+        const lostThreadId = this.currentSession?.threadId;
         this.currentSession = null;
-        yield* this.query(prompt, options);
+        this.recovering = true;
+        try {
+          const retryOptions: TransportOptions = lostThreadId
+            ? { ...options, resumeThread: true, sessionId: lostThreadId }
+            : options;
+          yield* this.query(prompt, retryOptions);
+        } finally {
+          this.recovering = false;
+        }
         return;
       }
 
