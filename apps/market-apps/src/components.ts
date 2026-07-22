@@ -4,6 +4,7 @@
 // store's signals and derived views, and wire buttons straight to the actions
 // layer. No network or state-shape logic in this file.
 
+import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import {
   cancelPublish,
@@ -30,12 +31,17 @@ import {
   loading,
   ownsApp,
   pendingPublish,
+  search,
   setHideInstalled,
+  setSearch,
   statusText,
   visibleApps,
 } from './store.js';
 import { isNewerVersion } from './parsers.js';
 import type { DisplayApp } from './types.js';
+
+/** Whether the settings/config popover is open. UI-only, so it stays local to this module. */
+const [configOpen, setConfigOpen] = createSignal(false);
 
 /** Human-readable byte size for the confirmation dialog. */
 function formatBytes(n: number): string {
@@ -191,10 +197,10 @@ export function githubBanner() {
   `;
 }
 
-/** The publisher sign-in bar between the header and the filter row. */
-export function accountBar() {
+/** The publisher account controls (sign in / sign out), reused inside the config panel. */
+export function accountControls() {
   return html`
-    <div class="account-bar y-surface">
+    <div class="account-controls">
       ${() => {
         const a = account();
         if (!a.configured) {
@@ -229,6 +235,64 @@ export function accountBar() {
           >
             ${() => (authBusy() ? 'Signing in…' : 'Sign in with Google')}
           </button>
+        `;
+      }}
+    </div>
+  `;
+}
+
+/**
+ * Settings/config popover. Consolidates the account controls and the
+ * "Hide installed apps" filter that used to sit inline in the header, so the
+ * primary view stays focused on the search box and the app list.
+ *
+ * Stable outer node + reactive inner content (the `githubBanner` idiom): the
+ * panel shows/hides as `configOpen` flips without the parent re-rendering. A
+ * full-screen backdrop closes it on an outside click.
+ */
+export function configPanel() {
+  return html`
+    <div>
+      ${() => {
+        if (!configOpen()) return null;
+        return html`
+          <div
+            class="config-backdrop"
+            onClick=${(e: Event) => {
+              if (e.target === e.currentTarget) setConfigOpen(false);
+            }}
+          >
+            <div class="config-panel y-surface" role="dialog" aria-modal="true" aria-label="Settings">
+              <div class="config-panel-head">
+                <span class="config-panel-title">Settings</span>
+                <button
+                  class="y-btn y-btn-sm y-btn-ghost"
+                  title="Close"
+                  aria-label="Close settings"
+                  onClick=${() => setConfigOpen(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div class="config-section">
+                <div class="config-section-label y-text-muted">Account</div>
+                ${accountControls()}
+              </div>
+
+              <div class="config-section">
+                <div class="config-section-label y-text-muted">Filters</div>
+                <label class="filter-toggle">
+                  <input
+                    type="checkbox"
+                    checked=${() => hideInstalled()}
+                    onChange=${(e: Event) => setHideInstalled((e.target as HTMLInputElement).checked)}
+                  />
+                  Hide installed apps
+                </label>
+              </div>
+            </div>
+          </div>
         `;
       }}
     </div>
@@ -333,35 +397,48 @@ export function App() {
             ${() => (apiBase() ? `Domain: ${apiBase()}` : 'Domain: (not set)')}
           </div>
         </div>
-        <button
-          class="y-btn y-btn-primary refresh-btn"
-          disabled=${() => loading()}
-          onClick=${() => void refreshData()}
-        >
-          ${() => (loading() ? 'Refreshing…' : '↻ Refresh')}
-        </button>
+        <div class="header-actions">
+          <div class="config-wrap">
+            <button
+              class="y-btn y-btn-ghost config-btn"
+              title="Settings"
+              aria-label="Settings"
+              aria-haspopup="dialog"
+              aria-expanded=${() => configOpen()}
+              onClick=${() => setConfigOpen(!configOpen())}
+            >
+              ⚙️
+            </button>
+            ${configPanel()}
+          </div>
+          <button
+            class="y-btn y-btn-primary refresh-btn"
+            disabled=${() => loading()}
+            onClick=${() => void refreshData()}
+          >
+            ${() => (loading() ? 'Refreshing…' : '↻ Refresh')}
+          </button>
+        </div>
       </div>
 
-      <!-- Publisher sign-in -->
-      ${accountBar()}
-
-      <!-- Filter bar -->
-      <div class="filter-bar y-surface">
-        <label class="filter-toggle">
-          <input
-            type="checkbox"
-            checked=${() => hideInstalled()}
-            onChange=${(e: Event) => setHideInstalled((e.target as HTMLInputElement).checked)}
-          />
-          Hide installed apps
-        </label>
+      <!-- Search bar (primary filter) -->
+      <div class="search-bar y-surface">
+        <input
+          class="y-input search-input"
+          type="search"
+          placeholder="Search apps by name or description…"
+          aria-label="Search apps"
+          value=${() => search()}
+          onInput=${(e: Event) => setSearch((e.target as HTMLInputElement).value)}
+        />
         <span class="filter-count y-text-muted">
           ${() => {
             const total = displayApps().length;
             const visible = visibleApps().length;
             const installed = installedApps().length;
             if (!total) return 'No apps loaded';
-            return hideInstalled()
+            const filtered = hideInstalled() || !!search().trim();
+            return filtered
               ? `${visible} of ${total} apps • ${installed} installed`
               : `${total} apps • ${installed} installed`;
           }}
@@ -373,9 +450,11 @@ export function App() {
         ${() => {
           const apps = visibleApps();
           if (!apps.length) {
-            const msg = displayApps().length
-              ? 'All apps are already installed.'
-              : 'No marketplace apps loaded.';
+            const msg = !displayApps().length
+              ? 'No marketplace apps loaded.'
+              : search().trim()
+                ? 'No apps match your search.'
+                : 'All apps are already installed.';
             return html`<div class="empty-msg y-text-muted">${msg}</div>`;
           }
           return apps.map((app) => marketCard(app));

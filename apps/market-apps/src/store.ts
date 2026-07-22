@@ -26,6 +26,7 @@ export const [lastUpdated, setLastUpdated] = createSignal('');
 export const [loading, setLoading] = createSignal(false);
 export const [apiBase, setApiBase] = createSignal('');
 export const [hideInstalled, setHideInstalled] = createSignal(false);
+export const [search, setSearch] = createSignal('');
 
 export const [account, setAccount] = createSignal<Account>(SIGNED_OUT_ACCOUNT);
 export const [authBusy, setAuthBusy] = createSignal(false);
@@ -123,8 +124,16 @@ export function displayApps(): DisplayApp[] {
   return [...marketMapped, ...installedOnly];
 }
 
-/** Apps visible after applying the Hide Installed filter. */
+/** Apps visible after applying the Hide Installed filter and the search query. */
 export function visibleApps(): DisplayApp[] {
-  const apps = displayApps();
-  return hideInstalled() ? apps.filter((a) => !a.installed) : apps;
+  let apps = displayApps();
+  if (hideInstalled()) apps = apps.filter((a) => !a.installed);
+  const q = search().trim().toLowerCase();
+  if (q) {
+    apps = apps.filter(
+      (a) =>
+        a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q),
+    );
+  }
+  return apps;
 }

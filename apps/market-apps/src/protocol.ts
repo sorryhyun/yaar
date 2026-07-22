@@ -16,6 +16,8 @@ import {
   apiBase,
   hideInstalled,
   setHideInstalled,
+  search,
+  setSearch,
   setDomain,
   setStatus,
   touch,
@@ -54,6 +56,10 @@ if (app) {
       hideInstalled: {
         description: 'Whether the Hide Installed filter is active',
         handler: () => hideInstalled(),
+      },
+      search: {
+        description: 'Current search query filtering the app list by name and description',
+        handler: () => search(),
       },
     },
     commands: {
@@ -147,6 +153,18 @@ if (app) {
         handler: (p) => {
           setHideInstalled(p.hide);
           return { hideInstalled: hideInstalled() };
+        },
+      }),
+      setSearch: defineCommand({
+        description: 'Set the search query that filters the app list by name and description',
+        params: {
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        },
+        handler: (p) => {
+          setSearch(p.query);
+          return { search: search() };
         },
       }),
       clearData: defineCommand({
