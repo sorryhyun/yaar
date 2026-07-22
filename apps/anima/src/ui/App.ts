@@ -11,7 +11,6 @@ import { generate } from '../pipeline/generate';
 import { downloadModels } from '../pipeline/diagnostics';
 import { releaseOtherDits } from '../pipeline/session';
 import {
-  GOLDEN_PROMPT,
   bucket,
   bucketId,
   busy,
@@ -68,9 +67,9 @@ export function App() {
   });
   return html`
     <div class="y-app anima-root">
-      <div>
+      <div class="y-flex" style="align-items: baseline; gap: var(--yaar-sp-3); flex-wrap: wrap;">
         <h2 style="margin:0; font-size: var(--yaar-text-lg);">🌸 Anima — WebGPU probe</h2>
-        <div class="y-label" style="margin-top:2px">${caps}</div>
+        <div class="y-label">${caps}</div>
       </div>
       <textarea
         class="y-input anima-prompt"
@@ -79,12 +78,6 @@ export function App() {
         value=${prompt}
         oninput=${(e: Event) => setPrompt((e.target as HTMLTextAreaElement).value)}
       ></textarea>
-      <div class="y-label">
-        ${() =>
-          prompt().trim() === GOLDEN_PROMPT || !prompt().trim()
-            ? 'golden prompt — reuses precomputed embeds (skips the text encoder)'
-            : 'custom prompt — runs the text encoder + conditioner (1.46 GB)'}
-      </div>
       <div class="y-flex" style="gap: var(--yaar-sp-2); flex-wrap: wrap; align-items: center;">
         <button class="y-btn y-btn-primary" disabled=${busy} onclick=${() => generate()}>
           ✨ Generate image
