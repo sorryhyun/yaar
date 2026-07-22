@@ -5,6 +5,7 @@ import type { ImageGenerationItem } from "../ImageGenerationItem.js";
 import type { LegacyAppPathString } from "../LegacyAppPathString.js";
 import type { MessagePhase } from "../MessagePhase.js";
 import type { ReasoningEffort } from "../ReasoningEffort.js";
+import type { SleepItem } from "../SleepItem.js";
 import type { WebSearchItem } from "../WebSearchItem.js";
 import type { JsonValue } from "../serde_json/JsonValue.js";
 import type { CollabAgentState } from "./CollabAgentState.js";
@@ -105,4 +106,4 @@ reasoningEffort: ReasoningEffort | null,
 /**
  * Last known status of the target agents, when available.
  */
-agentsStates: { [key in string]?: CollabAgentState }, } | { "type": "subAgentActivity", id: string, kind: SubAgentActivityKind, agentThreadId: string, agentPath: string, } | { "type": "webSearch" } & WebSearchItem | { "type": "imageView", id: string, path: LegacyAppPathString, } | { "type": "sleep", id: string, durationMs: number, } | { "type": "imageGeneration" } & ImageGenerationItem | { "type": "enteredReviewMode", id: string, review: string, } | { "type": "exitedReviewMode", id: string, review: string, } | { "type": "contextCompaction", id: string, };
+agentsStates: { [key in string]?: CollabAgentState }, } | { "type": "subAgentActivity", id: string, kind: SubAgentActivityKind, agentThreadId: string, agentPath: string, } | { "type": "webSearch" } & WebSearchItem | { "type": "imageView", id: string, path: LegacyAppPathString, } | { "type": "sleep" } & SleepItem | { "type": "imageGeneration" } & ImageGenerationItem | { "type": "enteredReviewMode", id: string, review: string, } | { "type": "exitedReviewMode", id: string, review: string, } | { "type": "contextCompaction", id: string, };
