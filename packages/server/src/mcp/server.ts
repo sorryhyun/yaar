@@ -45,17 +45,80 @@ interface McpSessionEntry {
  */
 const mcpSessions = new Map<string, McpSessionEntry>();
 
-/** Evict idle MCP sessions every 5 minutes. */
+/**
+ * The SDK's internal id for the standalone server→client SSE stream — the GET
+ * "common stream" that a streamable-HTTP client (rmcp/codex) holds open for
+ * server-pushed messages. Matches
+ * `WebStandardStreamableHTTPServerTransport._standaloneSseStreamId`.
+ */
+const STANDALONE_GET_STREAM_ID = '_GET_stream';
+
+/** Minimal view of one entry in the SDK transport's private stream registry. */
+interface StandaloneStreamHandle {
+  controller: ReadableStreamDefaultController<Uint8Array>;
+  encoder: TextEncoder;
+}
+
+/**
+ * Return the live standalone GET SSE stream for a transport, or null when the
+ * client isn't currently holding one open.
+ *
+ * Reaches into an SDK-private field (`_streamMapping`) — verified against
+ * @modelcontextprotocol/sdk 1.29.0. Guarded with optional chaining so a future
+ * shape change degrades to "no keep-alive / eligible for eviction" rather than
+ * throwing.
+ */
+function getOpenGetStream(
+  transport: WebStandardStreamableHTTPServerTransport,
+): StandaloneStreamHandle | null {
+  const mapping = (transport as unknown as { _streamMapping?: Map<string, StandaloneStreamHandle> })
+    ._streamMapping;
+  return mapping?.get(STANDALONE_GET_STREAM_ID) ?? null;
+}
+
+/**
+ * Evict idle MCP sessions every 5 minutes — but never one whose client still
+ * holds the GET common stream open. Such a session is live even if it hasn't
+ * made a tool call recently (e.g. the agent is busy driving the browser);
+ * reaping it would drop the stream and make rmcp log "fail to get common
+ * stream" on its next reconnect.
+ */
 const MCP_SESSION_TTL_MS = 5 * 60 * 1000;
 setInterval(() => {
   const now = Date.now();
   for (const [key, entry] of mcpSessions) {
+    if (getOpenGetStream(entry.transport)) continue;
     if (now - entry.lastUsed > MCP_SESSION_TTL_MS) {
       mcpSessions.delete(key);
       void entry.server.close();
     }
   }
 }, MCP_SESSION_TTL_MS).unref();
+
+/**
+ * Keep the standalone GET stream warm. rmcp holds one GET SSE stream open per
+ * server for server→client messages, but YAAR pushes almost nothing over it, so
+ * it sits idle — and Bun closes idle sockets at TRANSPORT_IDLE_TIMEOUT_S (255s).
+ * A periodic SSE comment (`:`-prefixed, ignored by any spec-compliant client)
+ * keeps the socket active so the stream never has to be reconnected, and
+ * refreshes `lastUsed` as a belt-and-suspenders alongside the eviction skip
+ * above. 60s gives a comfortable margin under the 255s ceiling.
+ */
+const MCP_KEEPALIVE_MS = 60 * 1000;
+setInterval(() => {
+  const now = Date.now();
+  for (const entry of mcpSessions.values()) {
+    const stream = getOpenGetStream(entry.transport);
+    if (!stream) continue;
+    try {
+      stream.controller.enqueue(stream.encoder.encode(': keepalive\n\n'));
+      entry.lastUsed = now;
+    } catch {
+      // Controller already closed/errored — the transport's own cancel handler
+      // removes it from `_streamMapping`; nothing to clean up here.
+    }
+  }
+}, MCP_KEEPALIVE_MS).unref();
 
 // Bearer token for MCP authentication (generated at startup)
 let mcpToken: string | null = null;
