@@ -1,6 +1,12 @@
 export {};
 import { appStorage, errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
-import { activeProject, previewUrl, previewWindowId, setPreviewWindowId } from './project';
+import {
+  activeProject,
+  previewUrl,
+  previewWindowId,
+  setPreviewWindowId,
+  addConsoleEntry,
+} from './project';
 
 // Preview window mechanics: how it is opened and how pixels are read back out.
 //
@@ -164,12 +170,38 @@ export async function readPreview(): Promise<{
  * The server refuses this for anything that is not a devtools preview window, so it
  * is not a door into the user's installed apps.
  */
-export async function previewEvaluate(expression: string): Promise<string> {
+function formatEvaluationContent(content: unknown): string {
+  if (typeof content === 'string') return content;
+  try {
+    const json = JSON.stringify(content, null, 2);
+    return json === undefined ? String(content) : json;
+  } catch {
+    return String(content);
+  }
+}
+
+function logPreviewEvaluation(kind: 'input' | 'result' | 'error', content: unknown): void {
+  addConsoleEntry({
+    level: kind === 'error' ? 'error' : 'info',
+    // Keep the complete expression/result in a single argument: ConsolePanel renders
+    // args verbatim with pre-wrap, so agents can recover precisely what was evaluated.
+    args: [`[preview eval ${kind}]\n${formatEvaluationContent(content)}`],
+    timestamp: Date.now(),
+    source: 'evaluation',
+  });
+}
+
+export async function previewEvaluate(expression: string): Promise<unknown> {
   const wid = previewWindowId();
   if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  logPreviewEvaluation('input', expression);
   try {
-    return await invoke<string>(`yaar://windows/${wid}`, { action: 'app_eval', expression });
+    const result = await invoke<unknown>(`yaar://windows/${wid}`, { action: 'app_eval', expression });
+    logPreviewEvaluation('result', result);
+    return result;
   } catch (err) {
-    throw new AppCommandError(`Preview eval failed: ${errMsg(err)}`);
+    const message = errMsg(err);
+    logPreviewEvaluation('error', message);
+    throw new AppCommandError(`Preview eval failed: ${message}`);
   }
 }

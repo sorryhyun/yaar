@@ -173,9 +173,43 @@
 }
 
 .editor-content {
+  display: flex;
   flex: 1;
   overflow: hidden;
   min-height: 0;
+  background: var(--yaar-bg);
+}
+
+.editor-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-line-number-toggle {
+  margin-left: auto;
+}
+
+.editor-gutter {
+  flex: 0 0 auto;
+  min-width: 3.5ch;
+  overflow: hidden;
+  border-right: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text-dim);
+  user-select: none;
+}
+
+.editor-line-numbers {
+  margin: 0;
+  padding: var(--yaar-sp-2);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: right;
+  white-space: pre;
+  will-change: transform;
 }
 
 /* Image files render as a picture instead of the textarea — see openFile(). */
@@ -202,7 +236,8 @@
 
 .editor-overlay {
   position: relative;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   height: 100%;
   overflow: hidden;
 }

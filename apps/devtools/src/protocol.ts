@@ -96,15 +96,15 @@ export function registerProtocol() {
       },
       consoleLogs: {
         description:
-          'Console output from the preview app, with connection state. `connected: false` means ' +
-          'the buffer could not be read — an empty `logs` then says nothing about whether the ' +
-          'app logged anything.',
+          'Console output from the preview app and Dev Tools evaluation audit entries. ' +
+          '`connected: false` means the preview buffer could not be read — an empty `logs` ' +
+          'then says nothing about whether the app logged anything.',
         handler: async () => {
           // Pull the live console buffer straight from the preview window over
           // the app protocol. The preview runs as its own registered window
           // (where verb calls work), so its console-capture buffer is the
-          // source of truth — the local signal is only a display cache updated
-          // by the poll in project.ts.
+          // source of truth for preview output. The local signal is updated by the
+          // poll in project.ts and also retains Dev Tools' evaluation audit entries.
           //
           // Every failure here used to collapse into the same empty array, so "no preview open",
           // "preview unreachable" and "app logged nothing" were indistinguishable — a reader had
@@ -130,7 +130,14 @@ export function registerProtocol() {
                 logs: [...consoleLogs()],
               };
             }
-            return { connected: true, windowId: wid, logs: entries };
+            // Evaluations run from Dev Tools rather than inside the preview, so the
+            // preview's own console buffer does not contain their input/result audit.
+            // Include the local audit entries in both the panel and this state response.
+            const evaluations = consoleLogs().filter((entry) => entry.source === 'evaluation');
+            const logs = [...entries, ...evaluations]
+              .sort((a, b) => a.timestamp - b.timestamp)
+              .slice(-200);
+            return { connected: true, windowId: wid, logs };
           } catch (err) {
             return {
               connected: false,

@@ -62,8 +62,8 @@ export const previewCommands = {
       required: ['expression'],
     },
     handler: async (p) => {
-      const expression = String(p.expression ?? '').trim();
-      if (!expression) throw new AppCommandError('expression is required.');
+      const expression = typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
+      if (!expression.trim()) throw new AppCommandError('expression is required.');
       return await previewEvaluate(expression);
     },
   }),

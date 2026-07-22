@@ -63,8 +63,8 @@ function imageBlocks(path: string, image: { data: string; mimeType: string }): R
 export const fileCommands = {
   readFile: defineCommand({
     description:
-      'Read one or more files, returned with line numbers. Does not change editor open state ' +
-      'unless openInEditor is set. Image files come back as a viewable image block, not text.',
+      'Read one or more files. Does not change editor open state unless openInEditor is set. ' +
+      'Image files come back as a viewable image block, not text.',
     params: {
       type: 'object',
       properties: {
@@ -76,6 +76,7 @@ export const fileCommands = {
         },
         startLine: { type: 'number', description: 'Start line (1-based, inclusive)' },
         endLine: { type: 'number', description: 'End line (1-based, inclusive)' },
+        lineNum: { type: 'boolean', description: 'Prefix each line with its number. Default false.' },
         openInEditor: { type: 'boolean', description: 'Also open file(s) in editor UI' },
       },
       required: ['path'],
@@ -86,6 +87,7 @@ export const fileCommands = {
       const opts = {
         startLine: p.startLine != null ? Number(p.startLine) : undefined,
         endLine: p.endLine != null ? Number(p.endLine) : undefined,
+        lineNum: Boolean(p.lineNum),
       };
       if (p.openInEditor) {
         for (const fp of paths) await openFile(fp);

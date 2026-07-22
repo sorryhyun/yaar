@@ -19,6 +19,7 @@ import {
   openTabs,
   setOpenTabs,
   setConsoleLogs,
+  consoleLogs,
   previewWindowId,
   projectPath,
   type ProjectMeta,
@@ -538,7 +539,15 @@ export async function refreshConsole(): Promise<void> {
       action: 'app_query',
       stateKey: '__console',
     });
-    if (Array.isArray(entries)) setConsoleLogs(entries.slice(-200));
+    if (Array.isArray(entries)) {
+      // The preview buffer is a snapshot, while evaluations are initiated by Dev Tools
+      // itself. Retain those local audit entries when the next preview poll arrives.
+      const evaluations = consoleLogs().filter((entry) => entry.source === 'evaluation');
+      const merged = [...entries, ...evaluations]
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .slice(-200);
+      setConsoleLogs(merged);
+    }
   } catch {
     /* preview window may be closed — leave the last snapshot in place */
   }
@@ -566,7 +575,7 @@ export interface ReadFileResult {
 
 export async function readFileContent(
   path: string,
-  opts?: { startLine?: number; endLine?: number },
+  opts?: { startLine?: number; endLine?: number; lineNum?: boolean },
 ): Promise<ReadFileResult> {
   const proj = activeProject();
   if (!proj)
@@ -592,13 +601,14 @@ export async function readFileContent(
     const start = opts?.startLine ? Math.max(1, opts.startLine) : 1;
     const end = opts?.endLine ? Math.min(totalLines, opts.endLine) : totalLines;
     const sliced = allLines.slice(start - 1, end);
-    const width = String(totalLines).length;
-    const numbered = sliced
-      .map((line, i) => `${String(start + i).padStart(width)}\t│${line}`)
-      .join('\n');
+    const body = opts?.lineNum
+      ? sliced
+          .map((line, i) => `${String(start + i).padStart(String(totalLines).length)}\t│${line}`)
+          .join('\n')
+      : sliced.join('\n');
     const rangeTag = opts?.startLine || opts?.endLine ? ` [${start}-${end}]` : '';
     const header = `── ${path} (${totalLines} lines)${rangeTag} ──\n`;
-    return { path, content: header + numbered, totalLines, startLine: start, endLine: end };
+    return { path, content: header + body, totalLines, startLine: start, endLine: end };
   } catch {
     return { path, content: `// Could not read ${path}`, totalLines: 0, startLine: 1, endLine: 0 };
   }

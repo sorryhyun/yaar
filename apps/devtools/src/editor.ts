@@ -3,6 +3,7 @@ import { createSignal, createEffect, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
+import { createPersistedSignal } from '@bundled/yaar';
 import { openFilePath, openFileContent, openFileImage, writeFile } from './project';
 
 // Register TypeScript grammar (Prism base only has js/css/markup)
@@ -59,6 +60,12 @@ function escapeHtml(s: string): string {
 const [isDirty, setIsDirty] = createSignal(false);
 const [localContent, setLocalContent] = createSignal<string>('');
 const [highlightedHtml, setHighlightedHtml] = createSignal('');
+const [showLineNumbers, setShowLineNumbers] = createPersistedSignal(
+  'preferences/show-line-numbers.json',
+  true,
+  { label: 'editor preferences' },
+);
+const [editorScrollTop, setEditorScrollTop] = createSignal(0);
 const SAVE_DELAY_MS = 1000;
 
 function currentContent(): string {
@@ -100,6 +107,12 @@ function saveNow() {
   performSave();
 }
 
+function lineNumbers(): string {
+  const total = Math.max(1, currentContent().split('\n').length);
+  const width = String(total).length;
+  return Array.from({ length: total }, (_, i) => String(i + 1).padStart(width, ' ')).join('\n');
+}
+
 function syncScroll(e: Event) {
   const ta = e.target as HTMLTextAreaElement;
   const pre = ta.parentElement?.querySelector('.editor-highlight') as HTMLElement | null;
@@ -107,6 +120,7 @@ function syncScroll(e: Event) {
     pre.scrollTop = ta.scrollTop;
     pre.scrollLeft = ta.scrollLeft;
   }
+  setEditorScrollTop(ta.scrollTop);
 }
 
 export function Editor() {
@@ -126,9 +140,20 @@ export function Editor() {
         `}
       >
         <div class="editor-header y-text-xs y-text-muted">
-          ${() => openFilePath()}
+          <span class="editor-file-name">${() => openFilePath()}</span>
           <${Show} when=${isDirty}>
             <span class="dirty-dot"></span>
+          <//>
+          <${Show} when=${() => !openFileImage()}>
+            <button
+              class="editor-line-number-toggle y-btn y-btn-ghost y-btn-sm"
+              type="button"
+              aria-pressed=${showLineNumbers}
+              title="Toggle line numbers"
+              onClick=${() => setShowLineNumbers(!showLineNumbers())}
+            >
+              Lines
+            </button>
           <//>
         </div>
         <${Show} when=${() => openFileImage()} fallback=${TextEditor}>
@@ -145,6 +170,14 @@ export function Editor() {
 function TextEditor() {
   return html`
     <div class="editor-content">
+      <${Show} when=${showLineNumbers}>
+        <div class="editor-gutter" aria-hidden="true">
+          <pre
+            class="editor-line-numbers"
+            style=${() => `transform: translateY(-${editorScrollTop()}px)`}
+          >${lineNumbers}</pre>
+        </div>
+      <//>
       <div class="editor-overlay">
         <pre class="editor-highlight" aria-hidden="true"><code innerHTML=${highlightedHtml}></code>
 </pre>

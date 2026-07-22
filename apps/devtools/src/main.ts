@@ -16,7 +16,6 @@ import {
   openProject,
   closeTab,
   compile,
-  typecheck,
   startConsolePolling,
 } from './project';
 import { FileTree } from './file-tree';
@@ -78,15 +77,6 @@ const App = () => html`
           )}
         <option value="__new__">+ New Project</option>
       </select>
-
-      <button
-        class="y-btn y-btn-sm"
-        disabled=${() => !activeProject()}
-        onClick=${() => typecheck()}
-        title="Type check"
-      >
-        Typecheck
-      </button>
 
       <button
         class="y-btn y-btn-sm y-btn-primary"

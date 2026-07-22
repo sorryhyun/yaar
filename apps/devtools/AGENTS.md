@@ -38,7 +38,7 @@ The full list of state keys and commands is appended to this prompt automaticall
 
 All file commands operate **only inside the active project's sandbox**, never the server filesystem. A glob like `apps/**/*.ts` means paths inside the project, not `apps/` on disk.
 
-**Read the file before editing it.** `editFile`'s line-range and multi-edit modes anchor on content from *this* turn — `query("project")` gives each file's current `lines`, but a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset.
+**Read the file before editing it.** `editFile`'s line-range and multi-edit modes anchor on content from *this* turn — `query("project")` gives each file's current `lines`, but a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset. `readFile` omits line-number prefixes by default — pass `lineNum: true` when you need to see which number corresponds to which line (e.g. before a line-range `editFile`).
 
 **Multi-edit is all-or-nothing.** If any edit in the `edits` array fails to match (or fails its anchor check), the error names its index and *nothing is written* — there is no partial application to clean up after.
 
