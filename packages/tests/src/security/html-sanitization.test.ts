@@ -179,7 +179,6 @@ describe('app sanitize policies have not drifted', () => {
   // orphaning controls instead of removing them.
   const APPS_WITH_SHARED_POLICY: Array<[string, string]> = [
     ['storage', 'src/navigation.ts'],
-    ['rss-reader', 'src/fetcher.ts'],
     ['dc-comics', 'src/helpers.ts'],
   ];
 

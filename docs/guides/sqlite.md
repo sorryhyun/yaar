@@ -28,8 +28,8 @@ Bun has `bun:sqlite` built in — zero dependencies, WAL mode, fast. `appDb` add
 
 | Pattern | Apps | Example |
 |---------|------|---------|
-| Single JSON file (load-all, save-all) | memo, rss-reader, slides-lite | `appStorage.save('memos.json', JSON.stringify(all))` |
-| `createPersistedSignal` (auto-save signal) | falling-blocks, rss-reader, dc-comics | `createPersistedSignal('settings.json', defaults)` |
+| Single JSON file (load-all, save-all) | memo | `appStorage.save('memos.json', JSON.stringify(all))` |
+| `createPersistedSignal` (auto-save signal) | falling-blocks, dc-comics | `createPersistedSignal('settings.json', defaults)` |
 | Multiple files in directories | devtools (project files), anima (generated frames) | `appStorage.save('projects/abc/main.ts', code)` |
 | Binary via base64 | anima (PNG frames), image-edit (image blobs) | `appStorage.save(path, btoa(data), { encoding: 'base64' })` |
 
