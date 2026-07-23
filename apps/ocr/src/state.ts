@@ -1,8 +1,8 @@
 // Signals shared by the UI, the protocol handlers, and the headless hook.
 import { createSignal } from '@bundled/solid-js';
-import { DEFAULT_DET_MODEL } from './detect';
-import { DEFAULT_ASSIST, DEFAULT_MODEL, modelById, type RecResult } from './model';
-import type { PageResult } from './pipeline';
+import { DEFAULT_DET_MODEL } from './engine/detect';
+import { DEFAULT_ASSIST, DEFAULT_MODEL, modelById, type RecResult } from './engine/model';
+import type { PageResult } from './workflows/pipeline';
 
 export interface Rect {
   x: number;

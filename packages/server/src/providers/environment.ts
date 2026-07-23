@@ -45,25 +45,33 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
   }
 
   if (apps.length > 0) {
-    const appLines = apps.map((a) => {
-      let line = `  - **${a.name}** (${a.id}): ${a.description || 'No description'}`;
-      if (a.isCompiled) line += ` (iframe: yaar://apps/${a.id})`;
-      if (a.variant && a.variant !== 'standard') {
-        line += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
-      }
-      if (a.createShortcut === false) line += ' [system]';
-      return line;
-    });
+    const appLines = [...apps]
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map((a) => {
+        let line = `  - **${a.name}** (${a.id}): ${a.description || 'No description'}`;
+        if (a.isCompiled) line += ` (iframe: yaar://apps/${a.id})`;
+        if (a.variant && a.variant !== 'standard') {
+          line += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
+        }
+        if (a.createShortcut === false) line += ' [system]';
+        return line;
+      });
     lines.push(`- Installed apps:\n${appLines.join('\n')}`);
   }
 
   if (appHints.length > 0) {
-    const hintLines = appHints.map((h) => `### ${h.appId}\n${h.hint.trim()}`).join('\n\n');
+    const hintLines = [...appHints]
+      .sort((a, b) => (a.appId < b.appId ? -1 : a.appId > b.appId ? 1 : 0))
+      .map((h) => `### ${h.appId}\n${h.hint.trim()}`)
+      .join('\n\n');
     lines.push(`- App hints:\n${hintLines}`);
   }
 
   if (storage.success && storage.entries && storage.entries.length > 0) {
-    const names = storage.entries.map((e) => e.path).join(', ');
+    const names = storage.entries
+      .map((e) => e.path)
+      .sort()
+      .join(', ');
     lines.push(`- Storage: ${names}`);
   } else {
     lines.push('- Storage: empty');
@@ -71,9 +79,9 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
 
   const mounts = await loadMounts();
   if (mounts.length > 0) {
-    const mountLines = mounts.map(
-      (m) => `  - mounts/${m.alias}/ \u2192 ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`,
-    );
+    const mountLines = [...mounts]
+      .sort((a, b) => (a.alias < b.alias ? -1 : a.alias > b.alias ? 1 : 0))
+      .map((m) => `  - mounts/${m.alias}/ \u2192 ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`);
     lines.push(`- Mounts:\n${mountLines.join('\n')}`);
   }
 

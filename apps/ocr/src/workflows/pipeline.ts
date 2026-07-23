@@ -4,10 +4,10 @@
 // button, the `readPage` command, and the headless hook all come through here, so
 // status, error, and history behave identically however the read was asked for.
 import { errMsg } from '@bundled/yaar';
-import { detect, detModelById, type DetectOptions } from './detect';
-import { cropQuad } from './crop';
-import { readLines, type Judged } from './ensemble';
-import { quadAngle, quadBounds, readingOrder, type Point } from './geometry';
+import { detect, detModelById, type DetectOptions, type DetectResult } from '../engine/detect';
+import { cropQuad } from '../engine/crop';
+import { readLines, type EnsembleResult, type Judged } from '../engine/ensemble';
+import { quadAngle, quadBounds, readingOrder, type Point } from '../engine/geometry';
 import { ensureModels, pageModels, requireLoaded } from './warm';
 import {
   busy,
@@ -24,7 +24,7 @@ import {
   setPage,
   setStatus,
   sourceCanvas,
-} from './state';
+} from '../state';
 
 export interface PageLine {
   text: string;
@@ -77,6 +77,45 @@ export interface ReadPageOptions {
   keepLines?: boolean;
   /** Fetch missing weights instead of refusing. Off by default — see warm.ts. */
   download?: boolean;
+}
+
+/** Pair detected boxes with their recognition results in the already-computed reading order. */
+function buildPageLines(
+  detection: DetectResult,
+  order: number[],
+  recognized: EnsembleResult,
+): PageLine[] {
+  return order.map((boxIndex, index) => {
+    const box = detection.boxes[boxIndex];
+    const bounds = quadBounds(box.quad);
+    const rec = recognized.results[index];
+    return {
+      text: rec.text,
+      confidence: rec.confidence,
+      score: box.score,
+      box: { ...bounds, angle: (quadAngle(box.quad) * 180) / Math.PI },
+      quad: box.quad,
+      readable: rec.text.trim().length > 0,
+      readBy: rec.modelId,
+      alternatives: rec.alternatives,
+    };
+  });
+}
+
+/** Reinsert line breaks after the recognizer has processed a flat, reading-ordered list. */
+function joinPageRows(groups: number[][], lines: PageLine[]): string {
+  let cursor = 0;
+  return groups
+    .map((group) => {
+      const row = lines.slice(cursor, cursor + group.length);
+      cursor += group.length;
+      return row
+        .map((line) => line.text)
+        .filter(Boolean)
+        .join(' ');
+    })
+    .filter(Boolean)
+    .join('\n');
 }
 
 export async function runPageRead(options: ReadPageOptions = {}): Promise<PageResult> {
@@ -150,38 +189,12 @@ export async function runPageRead(options: ReadPageOptions = {}): Promise<PageRe
         ),
     });
 
-    const lines: PageLine[] = order.map((boxIndex, n) => {
-      const box = detection.boxes[boxIndex];
-      const bounds = quadBounds(box.quad);
-      const rec = recognized.results[n];
-      return {
-        text: rec.text,
-        confidence: rec.confidence,
-        score: box.score,
-        box: { ...bounds, angle: (quadAngle(box.quad) * 180) / Math.PI },
-        quad: box.quad,
-        readable: rec.text.trim().length > 0,
-        readBy: rec.modelId,
-        alternatives: rec.alternatives,
-      };
-    });
-
-    // `order` is the flattened `groups`, so walking it with a cursor recovers which
-    // lines shared a visual row without a second lookup table.
-    let cursor = 0;
-    const rows = groups.map((group) => {
-      const row = lines.slice(cursor, cursor + group.length);
-      cursor += group.length;
-      return row
-        .map((l) => l.text)
-        .filter(Boolean)
-        .join(' ');
-    });
+    const lines = buildPageLines(detection, order, recognized);
 
     const unreadable = lines.filter((l) => !l.readable).length;
     const assisted = lines.filter((l) => l.readable && l.readBy !== recId).length;
     const result: PageResult = {
-      text: rows.filter(Boolean).join('\n'),
+      text: joinPageRows(groups, lines),
       lines,
       truncated: detection.truncated,
       detected: detection.boxes.length,

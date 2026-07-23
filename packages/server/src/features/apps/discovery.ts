@@ -14,6 +14,11 @@ import type { Verb } from '../../handlers/uri-registry.js';
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
 
+/** Stable bytewise ordering for app IDs, independent of filesystem or locale order. */
+function compareAppIds(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
+}
+
 /** Parse permission entries from app.json, supporting both string and object formats. */
 function parsePermissions(raw: unknown[]): PermissionEntry[] {
   const result: PermissionEntry[] = [];
@@ -304,7 +309,7 @@ export async function listApps(): Promise<AppInfo[]> {
     } catch {
       continue; // root doesn't exist
     }
-    for (const entry of entries) {
+    for (const entry of entries.sort((a, b) => compareAppIds(a.name, b.name))) {
       if (!entry.isDirectory()) continue;
       // First root (bundled) wins on id collision.
       if (byId.has(entry.name)) continue;
@@ -312,7 +317,7 @@ export async function listApps(): Promise<AppInfo[]> {
     }
   }
 
-  const apps = [...byId.values()];
+  const apps = [...byId.values()].sort((a, b) => compareAppIds(a.id, b.id));
   appsCache = { apps, at: Date.now() };
   return [...apps];
 }
@@ -446,17 +451,27 @@ export async function loadAllAppHints(): Promise<{ appId: string; hint: string }
     } catch {
       continue;
     }
-    await Promise.all(
-      entries
-        .filter((e) => e.isDirectory() && !seen.has(e.name))
-        .map(async (e) => {
-          seen.add(e.name);
-          const hint = await loadAppHint(e.name);
-          if (hint) results.push({ appId: e.name, hint });
-        }),
+
+    // Select IDs synchronously so root precedence is deterministic, then let the
+    // reads run concurrently without racing to push into the shared result array.
+    const appIds: string[] = [];
+    for (const entry of entries.sort((a, b) => compareAppIds(a.name, b.name))) {
+      if (!entry.isDirectory() || seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      appIds.push(entry.name);
+    }
+
+    const hints = await Promise.all(
+      appIds.map(async (appId) => {
+        const hint = await loadAppHint(appId);
+        return hint ? { appId, hint } : null;
+      }),
     );
+    for (const hint of hints) {
+      if (hint) results.push(hint);
+    }
   }
-  return results;
+  return results.sort((a, b) => compareAppIds(a.appId, b.appId));
 }
 
 /**

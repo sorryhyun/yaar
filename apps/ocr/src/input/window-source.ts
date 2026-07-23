@@ -6,7 +6,7 @@
 // shape `loadDataUrl` already takes.
 import { errMsg, list, read } from '@bundled/yaar';
 import { loadDataUrl } from './image-input';
-import { setStatus } from './state';
+import { setStatus } from '../state';
 
 export interface WindowEntry {
   windowId: string;

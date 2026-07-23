@@ -1,5 +1,5 @@
 // Getting a bitmap into the app: file picker, drag-drop, clipboard paste, data URL.
-import { setSourceImage, setStatus } from './state';
+import { setSourceImage, setStatus } from '../state';
 
 async function decode(blob: Blob): Promise<ImageBitmap> {
   if (typeof createImageBitmap === 'function') return createImageBitmap(blob);

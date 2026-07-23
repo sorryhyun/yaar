@@ -1,15 +1,10 @@
 // OCR — PP-OCRv6 text detection and recognition running in the app iframe on WebGPU.
 //
-//   model.ts       recognizer weights, PaddleOCR-faithful preprocessing, CTC decode
-//   charset.ts     the CTC label table, fetched from the model's own inference.yml
-//   detect.ts      detector weights, resize policy, image → probability map
-//   geometry.ts    probability map → boxes: DB post-processing, pure and unit-tested
-//   crop.ts        detected quad → an upright bitmap the recognizer can read
-//   pipeline.ts    the page funnel: detect → order → crop → batch-recognize → assemble
-//   recognize.ts   the single-box funnel
-//   image-input.ts file picker, drag-drop, paste, data URL
-//   sample.ts      generated multi-script test card
+//   engine/        model runtime, detection, geometry, crops, arbitration, and weights
+//   workflows/     model warming plus single-region and whole-page OCR funnels
+//   input/         file/paste/drop loading, generated sample image, and window capture
 //   ui/App.ts      the whole view
+//   state.ts       reactive state shared by the UI, protocol, and workflows
 //   protocol.ts    what an agent can read and command
 //   headless.ts    window.__ocr, for CDP-driven verification
 //
@@ -20,7 +15,7 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { App } from './ui/App';
-import { capabilities } from './model';
+import { capabilities } from './engine/model';
 import { registerProtocol } from './protocol';
 import { installHeadlessHook } from './headless';
 import { setBackend } from './state';

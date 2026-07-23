@@ -1,8 +1,8 @@
 // The one funnel every caller uses — toolbar button, protocol command, headless
 // hook — so status, error, and history behave identically however OCR was asked for.
 import { errMsg } from '@bundled/yaar';
-import { readRegion } from './ensemble';
-import { type ChannelOrder } from './model';
+import { readRegion } from '../engine/ensemble';
+import { type ChannelOrder } from '../engine/model';
 import { ensureModels, regionModels, requireLoaded } from './warm';
 import {
   busy,
@@ -18,7 +18,7 @@ import {
   pushResult,
   type OcrRecord,
   type Rect,
-} from './state';
+} from '../state';
 
 /** Clamp a rect to the image and reject one too small to hold a glyph. */
 function normalizeRect(rect: Rect, w: number, h: number): Rect {

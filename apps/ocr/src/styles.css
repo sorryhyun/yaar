@@ -8,7 +8,41 @@
   overflow: hidden;
 }
 
-.ocr-spacer {
+.ocr-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--yaar-sp-2) var(--yaar-sp-3);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+}
+
+.ocr-control-group {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  min-width: 0;
+}
+
+.ocr-control-group + .ocr-control-group {
+  padding-left: var(--yaar-sp-3);
+  border-left: 1px solid var(--yaar-border);
+}
+
+.ocr-control-label,
+.ocr-section-detail {
+  color: var(--yaar-text-dim);
+  font-size: var(--yaar-text-xs);
+}
+
+.ocr-control-label {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ocr-backend {
   margin-left: auto;
 }
 
@@ -24,10 +58,70 @@
 .ocr-stage {
   position: relative;
   overflow: auto;
-  padding: var(--yaar-sp-4);
+  padding: var(--yaar-sp-3);
   background: var(--yaar-bg);
   display: grid;
+  justify-items: center;
+  align-items: start;
+}
+
+.ocr-image-section {
+  width: min(100%, 1080px);
+  box-sizing: border-box;
+  display: grid;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-3);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-lg);
+  background: var(--yaar-bg-surface);
+  box-shadow: var(--yaar-shadow-sm);
+}
+
+.ocr-section-heading,
+.ocr-panel-heading,
+.ocr-results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+}
+
+.ocr-results-head {
+  align-items: flex-start;
+}
+
+.ocr-results-section {
+  display: grid;
+  gap: var(--yaar-sp-2);
+  padding-top: var(--yaar-sp-2);
+  border-top: 1px solid var(--yaar-border);
+}
+
+.ocr-results-title {
+  display: grid;
+  gap: 2px;
+}
+
+.ocr-section-heading {
+  padding-bottom: var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.ocr-section-title {
+  color: var(--yaar-text);
+  font-size: var(--yaar-text-sm);
+  font-weight: 700;
+}
+
+.ocr-image-content {
+  display: grid;
+  min-width: 0;
   place-items: center;
+}
+
+.ocr-empty-card {
+  min-height: 170px;
+  padding: var(--yaar-sp-6);
 }
 
 .ocr-hint {
@@ -40,6 +134,8 @@
   position: relative;
   line-height: 0;
   max-width: 100%;
+  overflow: hidden;
+  border-radius: var(--yaar-radius);
 }
 
 .ocr-canvas {
@@ -118,6 +214,11 @@
   display: grid;
   gap: var(--yaar-sp-2);
   overflow: hidden;
+}
+
+.ocr-panel-heading {
+  padding-bottom: var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
 }
 
 .ocr-statusline {

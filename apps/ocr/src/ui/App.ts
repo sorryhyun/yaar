@@ -1,11 +1,11 @@
 import { createEffect, createSignal, For, Show, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { showToast, errMsg } from '@bundled/yaar';
-import { loadFromDataTransfer, pickFile } from '../image-input';
-import { loadSample } from '../sample';
-import { runRecognition } from '../recognize';
-import { runPageRead, type PageLine } from '../pipeline';
-import { bytesOf, cancelLoad, ensureModels, formatBytes, missing, pageModels } from '../warm';
+import { loadFromDataTransfer, pickFile } from '../input/image-input';
+import { loadSample } from '../input/sample';
+import { runRecognition } from '../workflows/recognize';
+import { runPageRead, type PageLine } from '../workflows/pipeline';
+import { bytesOf, cancelLoad, ensureModels, formatBytes, missing, pageModels } from '../workflows/warm';
 import {
   activeLine,
   assistIds,
@@ -117,21 +117,17 @@ export function App() {
     ].join(';');
   };
 
-  const recognize = async () => {
+  /** Run a toolbar action and present pipeline failures consistently. */
+  const runWithToast = async (operation: () => Promise<unknown>) => {
     try {
-      await runRecognition();
+      await operation();
     } catch (err) {
       showToast(errMsg(err), 'error');
     }
   };
 
-  const readPage = async () => {
-    try {
-      await runPageRead();
-    } catch (err) {
-      showToast(errMsg(err), 'error');
-    }
-  };
+  const recognize = () => runWithToast(runRecognition);
+  const readPage = () => runWithToast(runPageRead);
 
   const korean = () => assistIds().includes('korean');
   const toggleKorean = () =>
@@ -208,112 +204,135 @@ export function App() {
   };
 
   return html`<div class="y-app ocr-root">
-    <div class="y-toolbar">
-      <button class="y-btn" onClick=${() => pickFile()}>Open image…</button>
-      <button class="y-btn y-btn-ghost" onClick=${() => loadSample()}>Sample</button>
-      <div class="y-tsep"></div>
-      <!-- The download is a button of its own: a read must never be the thing that
-           starts 150 MB moving. Primary until the models are here, because until then it
-           is the only action that leads anywhere. -->
-      <${Show}
-        when=${() => loading()}
-        fallback=${() =>
-          html`<button
-            class=${() => `y-btn${ready() ? ' y-btn-ghost' : ' y-btn-primary'}`}
-            disabled=${() => ready() || busy()}
-            title=${() =>
-              ready()
-                ? 'Detector and recognizers are loaded'
-                : `Download ${pending()
-                    .map((m) => m.id)
-                    .join(', ')} — cached afterwards, and usable offline`}
-            onClick=${loadModels}
-          >
-            ${() => (ready() ? 'Models ready' : `Load models (${formatBytes(bytesOf(pending()))})`)}
-          </button>`}
-      >
-        <button class="y-btn y-btn-danger" onClick=${() => cancelLoad()}>Cancel</button>
-      <//>
-      <div class="y-tsep"></div>
-      <button
-        class="y-btn"
-        disabled=${() => busy() || loading() || !ready() || !imageSize()}
-        title=${() => (ready() ? '' : 'Load the models first')}
-        onClick=${recognize}
-      >
-        ${() => (busy() ? 'Working…' : 'Read selection')}
-      </button>
-      <button
-        class="y-btn y-btn-primary"
-        disabled=${() => busy() || loading() || !ready() || !imageSize()}
-        title=${() => (ready() ? '' : 'Load the models first')}
-        onClick=${readPage}
-      >
-        ${() => (busy() ? 'Working…' : 'Read page')}
-      </button>
-      <span class="ocr-spacer"></span>
-      <button
-        class=${() => `y-btn y-btn-ghost ocr-toggle${korean() ? ' ocr-toggle-on' : ''}`}
-        title="Read every line with the Korean recognizer too (13 MB) and keep the better decode"
-        aria-pressed=${() => String(korean())}
-        onClick=${toggleKorean}
-      >
-        한 Korean
-      </button>
-      <span class="y-badge">${() => backend()}</span>
+    <div class="ocr-controls" aria-label="OCR controls">
+      <div class="ocr-control-group">
+        <span class="ocr-control-label">Input</span>
+        <button class="y-btn" onClick=${() => pickFile()}>Open image…</button>
+        <button class="y-btn y-btn-ghost" onClick=${() => loadSample()}>Sample</button>
+      </div>
+      <div class="ocr-control-group">
+        <span class="ocr-control-label">Models</span>
+        <!-- The download is a button of its own: a read must never be the thing that
+             starts 150 MB moving. Primary until the models are here, because until then it
+             is the only action that leads anywhere. -->
+        <${Show}
+          when=${() => loading()}
+          fallback=${() =>
+            html`<button
+              class=${() => `y-btn${ready() ? ' y-btn-ghost' : ' y-btn-primary'}`}
+              disabled=${() => ready() || busy()}
+              title=${() =>
+                ready()
+                  ? 'Detector and recognizers are loaded'
+                  : `Download ${pending()
+                      .map((m) => m.id)
+                      .join(', ')} — cached afterwards, and usable offline`}
+              onClick=${loadModels}
+            >
+              ${() =>
+                ready() ? 'Models ready' : `Load models (${formatBytes(bytesOf(pending()))})`}
+            </button>`}
+        >
+          <button class="y-btn y-btn-danger" onClick=${() => cancelLoad()}>Cancel</button>
+        <//>
+        <button
+          class=${() => `y-btn y-btn-ghost ocr-toggle${korean() ? ' ocr-toggle-on' : ''}`}
+          title="Read every line with the Korean recognizer too (13 MB) and keep the better decode"
+          aria-pressed=${() => String(korean())}
+          onClick=${toggleKorean}
+        >
+          한 Korean
+        </button>
+      </div>
+      <div class="ocr-control-group">
+        <span class="ocr-control-label">Read</span>
+        <button
+          class="y-btn"
+          disabled=${() => busy() || loading() || !ready() || !imageSize()}
+          title=${() => (ready() ? '' : 'Load the models first')}
+          onClick=${recognize}
+        >
+          ${() => (busy() ? 'Working…' : 'Read selection')}
+        </button>
+        <button
+          class="y-btn y-btn-primary"
+          disabled=${() => busy() || loading() || !ready() || !imageSize()}
+          title=${() => (ready() ? '' : 'Load the models first')}
+          onClick=${readPage}
+        >
+          ${() => (busy() ? 'Working…' : 'Read page')}
+        </button>
+      </div>
+      <span class="y-badge ocr-backend">${() => backend()}</span>
     </div>
 
     <div class="ocr-stage" onDragOver=${(e: DragEvent) => e.preventDefault()} onDrop=${onDrop}>
-      <${Show}
-        when=${() => imageSize()}
-        fallback=${() =>
-          html`<div class="y-empty">
-            <div class="y-empty-icon">🔎</div>
-            <div>Drop an image here, paste one, or press <b>Sample</b>.</div>
-            <div class="ocr-hint">
-              ${() =>
-                ready()
-                  ? 'Then press Read page — or drag a box over one line and press Read selection.'
-                  : `Reading needs the models first: press Load models (${formatBytes(
-                      bytesOf(pending()),
-                    )}, once per machine).`}
-            </div>
-          </div>`}
-      >
-        <div class="ocr-canvas-wrap">
-          <canvas
-            class="ocr-canvas"
-            ref=${(el: HTMLCanvasElement) => (canvasRef = el)}
-            onPointerDown=${onPointerDown}
-            onPointerMove=${onPointerMove}
-            onPointerUp=${onPointerUp}
-          ></canvas>
-          <div class="ocr-selection" style=${overlayStyle}></div>
-          <${Show} when=${() => page()}>
-            <div class="ocr-boxes">
-              <${For} each=${() => page()?.lines ?? []}
-                >${(line: PageLine, i: () => number) =>
-                  html`<button
-                    class=${() =>
-                      [
-                        'ocr-box',
-                        line.readable ? '' : 'ocr-box-unread',
-                        activeLine() === i() ? 'ocr-box-active' : '',
-                      ]
-                        .filter(Boolean)
-                        .join(' ')}
-                    style=${() => boxStyle(line)}
-                    title=${line.text || 'detected, but nothing readable here'}
-                    onClick=${() => setActiveLine(activeLine() === i() ? null : i())}
-                  ></button>`}<//
-              >
+      <section class="ocr-image-section" aria-label="Input image">
+        <div class="ocr-section-heading">
+          <span class="ocr-section-title">Input image</span>
+          <span class="ocr-section-detail">
+            ${() => (imageSize() ? `${imageSize()!.w} × ${imageSize()!.h} px` : 'Drop, paste, or open')}
+          </span>
+        </div>
+        <div class="ocr-image-content">
+          <${Show}
+            when=${() => imageSize()}
+            fallback=${() =>
+              html`<div class="y-empty ocr-empty-card">
+                <div class="y-empty-icon">🔎</div>
+                <div>Drop an image here, paste one, or press <b>Sample</b>.</div>
+                <div class="ocr-hint">
+                  ${() =>
+                    ready()
+                      ? 'Then press Read page — or drag a box over one line and press Read selection.'
+                      : `Reading needs the models first: press Load models (${formatBytes(
+                          bytesOf(pending()),
+                        )}, once per machine).`}
+                </div>
+              </div>`}
+          >
+            <div class="ocr-canvas-wrap">
+              <canvas
+                class="ocr-canvas"
+                ref=${(el: HTMLCanvasElement) => (canvasRef = el)}
+                onPointerDown=${onPointerDown}
+                onPointerMove=${onPointerMove}
+                onPointerUp=${onPointerUp}
+              ></canvas>
+              <div class="ocr-selection" style=${overlayStyle}></div>
+              <${Show} when=${() => page()}>
+                <div class="ocr-boxes">
+                  <${For} each=${() => page()?.lines ?? []}
+                    >${(line: PageLine, i: () => number) =>
+                      html`<button
+                        class=${() =>
+                          [
+                            'ocr-box',
+                            line.readable ? '' : 'ocr-box-unread',
+                            activeLine() === i() ? 'ocr-box-active' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                        style=${() => boxStyle(line)}
+                        title=${line.text || 'detected, but nothing readable here'}
+                        onClick=${() => setActiveLine(activeLine() === i() ? null : i())}
+                      ></button>`}<//
+                  >
+                </div>
+              <//>
             </div>
           <//>
         </div>
-      <//>
+      </section>
     </div>
 
     <div class="ocr-panel">
+      <div class="ocr-panel-heading">
+        <span class="ocr-section-title">Results</span>
+        <span class="ocr-section-detail">
+          ${() => (page() || results().length ? 'Latest OCR activity' : 'OCR output appears here')}
+        </span>
+      </div>
       <div class="ocr-statusline">
         <span class="ocr-status">${() => status()}</span>
         <${Show} when=${() => downloadRatio() !== null}>
@@ -331,19 +350,21 @@ export function App() {
       <//>
 
       <${Show} when=${() => page()}>
-        <div class="ocr-results">
+        <section class="ocr-results-section">
           <div class="ocr-results-head">
-            <span class="y-label">
-              Whole page ·
-              ${() => {
-                const p = page()!;
-                const parts = [`${p.lines.length} lines`];
-                if (p.unreadable) parts.push(`${p.unreadable} unreadable`);
-                if (p.truncated) parts.push('partial (box limit)');
-                parts.push(`${Math.round(p.elapsedMs)} ms`);
-                return parts.join(' · ');
-              }}
-            </span>
+            <div class="ocr-results-title">
+              <span class="ocr-section-title">Whole-page result</span>
+              <span class="ocr-section-detail">
+                ${() => {
+                  const p = page()!;
+                  const parts = [`${p.lines.length} lines`];
+                  if (p.unreadable) parts.push(`${p.unreadable} unreadable`);
+                  if (p.truncated) parts.push('partial (box limit)');
+                  parts.push(`${Math.round(p.elapsedMs)} ms`);
+                  return parts.join(' · ');
+                }}
+              </span>
+            </div>
             <button class="y-btn y-btn-ghost" onClick=${() => copy(page()?.text)}>Copy page</button>
           </div>
           <${Show} when=${() => activeLine() !== null && page()?.lines[activeLine()!]}>
@@ -362,13 +383,16 @@ export function App() {
           <div class="ocr-text ocr-page-text">
             ${() => page()!.text || '(detected boxes, but nothing readable — check the script)'}
           </div>
-        </div>
+        </section>
       <//>
 
       <${Show} when=${() => results().length > 0}>
-        <div class="ocr-results">
+        <section class="ocr-results-section">
           <div class="ocr-results-head">
-            <span class="y-label">Selection reads</span>
+            <div class="ocr-results-title">
+              <span class="ocr-section-title">Selection reads</span>
+              <span class="ocr-section-detail">Newest first</span>
+            </div>
             <button class="y-btn y-btn-ghost" onClick=${() => copy(results()[0]?.text)}>
               Copy latest
             </button>
@@ -385,7 +409,7 @@ export function App() {
                 </div>`}<//
             >
           </div>
-        </div>
+        </section>
       <//>
     </div>
   </div>`;

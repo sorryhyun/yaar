@@ -1,10 +1,10 @@
 import { app, defineCommand, errMsg } from '@bundled/yaar';
-import { loadDataUrl } from './image-input';
-import { runRecognition } from './recognize';
-import { runPageRead, type PageResult } from './pipeline';
-import { MODELS } from './model';
-import { bytesOf, ensureModels, isLoaded, missing, pageModels, requireLoaded } from './warm';
-import { captureWindow, listWindows } from './window-source';
+import { loadDataUrl } from './input/image-input';
+import { runRecognition } from './workflows/recognize';
+import { runPageRead, type PageResult } from './workflows/pipeline';
+import { MODELS } from './engine/model';
+import { bytesOf, ensureModels, isLoaded, missing, pageModels, requireLoaded } from './workflows/warm';
+import { captureWindow, listWindows } from './input/window-source';
 import {
   assistIds,
   backend,
@@ -71,6 +71,20 @@ function summarizePage(result: PageResult | null) {
   };
 }
 
+/** Keep command failures uniform without obscuring their original, user-facing message. */
+async function runCommand<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    throw new Error(errMsg(error));
+  }
+}
+
+/** The detector and recognizers required by the current page-read settings. */
+function currentPageModels() {
+  return pageModels(recognizerIds(), detModelId());
+}
+
 export function registerProtocol(): void {
   if (!app) return;
 
@@ -82,7 +96,7 @@ export function registerProtocol(): void {
         description:
           'Whether a recognition is running, the loaded image size, and the last message',
         handler: () => {
-          const absent = missing(pageModels(recognizerIds(), detModelId()));
+          const absent = missing(currentPageModels());
           return {
             busy: busy(),
             loading: loading(),
@@ -146,13 +160,7 @@ export function registerProtocol(): void {
           },
           required: ['dataUrl'],
         },
-        handler: async (params) => {
-          try {
-            return await loadDataUrl(params.dataUrl);
-          } catch (e) {
-            throw new Error(errMsg(e));
-          }
-        },
+        handler: (params) => runCommand(() => loadDataUrl(params.dataUrl)),
       }),
       loadModels: defineCommand({
         description:
@@ -164,24 +172,23 @@ export function registerProtocol(): void {
           'offline. Use a long timeout, and poll the status state rather than re-issuing ' +
           'this if the transport gives up.',
         params: { type: 'object', properties: {} },
-        handler: async () => {
-          try {
-            const result = await ensureModels(pageModels(recognizerIds(), detModelId()), {
-              onProgress: setDownloadRatio,
-              onModel: (ref) => setStatus(`Downloading the ${ref.id} ${ref.kind}…`),
-            });
-            setStatus(`Models ready — ${Math.round(result.bytes / 1_000_000)} MB.`);
-            return {
-              downloaded: result.loaded.map((m) => `${m.kind} ${m.id}`),
-              bytes: result.bytes,
-              elapsedMs: Math.round(result.elapsedMs),
-            };
-          } catch (e) {
-            throw new Error(errMsg(e));
-          } finally {
-            setDownloadRatio(null);
-          }
-        },
+        handler: () =>
+          runCommand(async () => {
+            try {
+              const result = await ensureModels(currentPageModels(), {
+                onProgress: setDownloadRatio,
+                onModel: (ref) => setStatus(`Downloading the ${ref.id} ${ref.kind}…`),
+              });
+              setStatus(`Models ready — ${Math.round(result.bytes / 1_000_000)} MB.`);
+              return {
+                downloaded: result.loaded.map((m) => `${m.kind} ${m.id}`),
+                bytes: result.bytes,
+                elapsedMs: Math.round(result.elapsedMs),
+              };
+            } finally {
+              setDownloadRatio(null);
+            }
+          }),
       }),
       readPage: defineCommand({
         description:
@@ -204,13 +211,8 @@ export function registerProtocol(): void {
             },
           },
         },
-        handler: async (params) => {
-          try {
-            return summarizePage(await runPageRead({ download: params.download }));
-          } catch (e) {
-            throw new Error(errMsg(e));
-          }
-        },
+        handler: (params) =>
+          runCommand(async () => summarizePage(await runPageRead({ download: params.download }))),
       }),
       readWindow: defineCommand({
         description:
@@ -237,19 +239,16 @@ export function registerProtocol(): void {
           },
           required: ['windowId'],
         },
-        handler: async (params) => {
-          try {
+        handler: (params) =>
+          runCommand(async () => {
             // The same refusal readPage makes, made before the capture rather than after
             // it: capturing replaces whatever image was loaded, and a call that is going
             // to be turned away for missing weights should not have thrown that away.
-            if (!params.download) requireLoaded(pageModels(recognizerIds(), detModelId()));
+            if (!params.download) requireLoaded(currentPageModels());
             const captured = await captureWindow(params.windowId);
             const result = await runPageRead({ download: params.download });
             return { window: captured, ...summarizePage(result) };
-          } catch (e) {
-            throw new Error(errMsg(e));
-          }
-        },
+          }),
       }),
       recognize: defineCommand({
         description:
@@ -273,11 +272,11 @@ export function registerProtocol(): void {
             },
           },
         },
-        handler: async (params) => {
+        handler: (params) => {
           const hasRect = [params.x, params.y, params.width, params.height].every(
-            (v) => typeof v === 'number',
+            (value) => typeof value === 'number',
           );
-          try {
+          return runCommand(async () => {
             const record = await runRecognition({
               download: params.download,
               ...(hasRect
@@ -285,9 +284,7 @@ export function registerProtocol(): void {
                 : {}),
             });
             return summarize(record);
-          } catch (e) {
-            throw new Error(errMsg(e));
-          }
+          });
         },
       }),
     },

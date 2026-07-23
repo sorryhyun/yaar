@@ -27,7 +27,7 @@ import {
   unclip,
   type DbOptions,
   type Point,
-} from '../src/geometry';
+} from '../src/engine/geometry';
 
 const near = (a: number, b: number, tol = 1e-6) => expect(Math.abs(a - b)).toBeLessThan(tol);
 

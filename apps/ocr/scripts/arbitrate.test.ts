@@ -14,7 +14,7 @@
  * that lacks a script emits nothing or one stray character, never an error.
  */
 import { describe, expect, test } from 'bun:test';
-import { MARGIN, pickBest, trust, type Judged } from '../src/arbitrate';
+import { MARGIN, pickBest, trust, type Judged } from '../src/engine/arbitrate';
 
 const v6 = (text: string, confidence: number): Judged => ({ modelId: 'medium', text, confidence });
 const ko = (text: string, confidence: number): Judged => ({ modelId: 'korean', text, confidence });

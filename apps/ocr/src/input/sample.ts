@@ -11,7 +11,7 @@
 // The Hangul line is the one that changes meaning with the settings: with the assist
 // off it comes back empty, which is the correct answer for a 0-Hangul dictionary and
 // the reason the assist exists. Cyrillic stays out because nothing here reads it.
-import { setSourceImage, setStatus, setSelection } from './state';
+import { setSourceImage, setStatus, setSelection } from '../state';
 
 export const SAMPLE_LINES = [
   'The quick brown fox jumps over the lazy dog',

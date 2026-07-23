@@ -2,17 +2,17 @@
 // results without clicking anything. Kept separate from the protocol because this
 // is for *verifying the numerics* (raw scores, channel order A/B, resize policy A/B)
 // rather than for an agent using the app.
-import { capabilities, preprocess, decodeCtc, type ChannelOrder } from './model';
-import { loadCharset } from './charset';
-import { detect, resizeForDetect, type ResizePolicy } from './detect';
-import { readRegion, trust } from './ensemble';
-import { allModels, bytesOf, cancelLoad, ensureModels, missing, pageModels } from './warm';
-import { quadAngle, quadBounds } from './geometry';
-import { loadDataUrl } from './image-input';
-import { captureWindow, listWindows } from './window-source';
-import { loadSample, sampleLineRect, SAMPLE_LINES } from './sample';
-import { runRecognition } from './recognize';
-import { runPageRead } from './pipeline';
+import { capabilities, preprocess, decodeCtc, type ChannelOrder } from './engine/model';
+import { loadCharset } from './engine/charset';
+import { detect, resizeForDetect, type ResizePolicy } from './engine/detect';
+import { readRegion, trust } from './engine/ensemble';
+import { allModels, bytesOf, cancelLoad, ensureModels, missing, pageModels } from './workflows/warm';
+import { quadAngle, quadBounds } from './engine/geometry';
+import { loadDataUrl } from './input/image-input';
+import { captureWindow, listWindows } from './input/window-source';
+import { loadSample, sampleLineRect, SAMPLE_LINES } from './input/sample';
+import { runRecognition } from './workflows/recognize';
+import { runPageRead } from './workflows/pipeline';
 import {
   assistIds,
   results,

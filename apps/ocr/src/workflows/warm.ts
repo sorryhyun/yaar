@@ -18,10 +18,10 @@
 // them locally in about a second, but the session itself does not survive a reload and
 // claiming otherwise would put the silent multi-minute wait back in the one place it was
 // removed.
-import { loadCharset } from './charset';
-import { DET_MODELS, detModelById, loadDetector } from './detect';
-import { MODELS, loadRecognizer, modelById, type LoadProgress } from './model';
-import { loadedModels, setLoadedModels, setLoading } from './state';
+import { loadCharset } from '../engine/charset';
+import { DET_MODELS, detModelById, loadDetector } from '../engine/detect';
+import { MODELS, loadRecognizer, modelById, type LoadProgress } from '../engine/model';
+import { loadedModels, setLoadedModels, setLoading } from '../state';
 
 export interface ModelRef {
   /** Unique across kinds: a detector and a recognizer may share an id. */
