@@ -45,6 +45,7 @@ function debugBundledLibrary(message: string): void {
 export const BUNDLED_SHIMS: Record<string, string> = {
   anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
   uuid: toForwardSlash(join(SHIMS_DIR, 'uuid.ts')),
+  zod: toForwardSlash(join(SHIMS_DIR, 'zod.ts')),
   // The yaar SDK is split into internal modules; index.ts is the barrel entry.
   // onResolve returns this path verbatim, so it must name a file, not a directory.
   yaar: toForwardSlash(join(SHIMS_DIR, 'yaar', 'index.ts')),

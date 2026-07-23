@@ -187,6 +187,7 @@ Shims wrap npm packages with compatibility fixes or SDK wrappers:
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4
 - **`uuid.ts`** — uuid's browser entry is a pure `export { default as v4 } from './v4.js'` barrel; bundling it directly makes Bun emit the `export { ... }` statement with every binding dropped, so the prebundled artifact fails later with `uuid:1:8: "h" is not declared in this file`. Importing the bindings and re-exporting them separately gives the bundler real references to follow. Any bundled library that is a pure re-export barrel needs the same treatment.
+- **`zod.ts`** — `@bundled/zod` maps to `zod/mini`, whose browser entry is a nested `export * from …` barrel; the same defect makes the prebundled artifact fail with `zod:40:23830: "u6" is not declared in this file`. Routing it through a shim (`import * as z from 'zod/mini'; export * from 'zod/mini'; export { z }`) turns `zod/mini` into an inner module Bun materializes before re-exporting, so both the functional API and the `z` namespace survive. Because the surface is too large to enumerate uuid-style, the fix is the extra layer of indirection rather than an explicit binding list.
 
 ## Build Manifest & Staleness
 
