@@ -1,10 +1,16 @@
 /**
  * Load the `typescript` module at runtime, or null when it is unavailable.
  *
- * `typescript` is a devDependency and is absent in bundled-exe mode, so the
- * specifier is assembled at runtime to defeat the bundler's static import scan.
- * Every caller must handle `null` — the guards degrade to no-ops there, and the
- * protocol extractor falls back to its text scanner.
+ * `typescript` is a devDependency, so in a plain server install it may be absent;
+ * the specifier is assembled at runtime to defeat the bundler's static import
+ * scan and let a missing module degrade to null instead of failing the build.
+ * Every caller must handle `null` — the guards degrade to no-ops there.
+ *
+ * The bundled exe is the exception: `build-exe-bundle.js` statically imports
+ * `typescript` into the generated entry (so Bun embeds it) and stashes the
+ * module on `globalThis.__YAAR_TYPESCRIPT`. The runtime-assembled import below
+ * is invisible to Bun's compiler, so without the stash the exe would fall back
+ * to the text scanner and reject any app whose protocol uses `...spreads`.
  *
  * The result is memoized, including the failure: a missing module does not
  * become available later, and retrying costs a rejected dynamic import per file.
@@ -13,6 +19,14 @@ let cached: typeof import('typescript') | null | undefined;
 
 export async function loadTypeScript(): Promise<typeof import('typescript') | null> {
   if (cached !== undefined) return cached;
+
+  // Bundled-exe path: typescript was embedded at build time (see build-exe-bundle.js).
+  const embedded = (globalThis as Record<string, unknown>).__YAAR_TYPESCRIPT;
+  if (embedded) {
+    cached = embedded as typeof import('typescript');
+    return cached;
+  }
+
   const specifier = ['type', 'script'].join('');
   try {
     const mod = (await import(specifier)) as {

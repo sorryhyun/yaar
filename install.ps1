@@ -9,9 +9,35 @@
 
 $ErrorActionPreference = "Stop"
 
+# Invoke-WebRequest redraws a progress bar on every response chunk, which throttles
+# large downloads (the YAAR binary is tens of MB) by an order of magnitude. Silencing
+# it is the single biggest speedup; the curl.exe fast path below is faster still.
+$ProgressPreference = "SilentlyContinue"
+
 $Repo = "sorryhyun/yaar"
 $BinaryName = "yaar"
 $InstallDir = if ($env:INSTALL_DIR) { $env:INSTALL_DIR } else { Join-Path $HOME ".local\bin" }
+
+# — Download helper ————————————————————————————————————————————————————
+#
+# Prefer curl.exe (bundled with Windows 10 1803+): it streams to disk without .NET's
+# response buffering and is markedly faster on large files. Fall back to
+# Invoke-WebRequest (progress bar already disabled above) when curl is absent.
+$CurlExe = Get-Command curl.exe -ErrorAction SilentlyContinue
+
+function Get-File {
+    param([string]$Uri, [string]$OutFile)
+
+    if ($CurlExe) {
+        # -L follow redirects (GitHub asset URLs redirect to a CDN), -f fail on HTTP
+        # errors so a 404 body is not written as if it were the file, --retry for
+        # transient CDN blips.
+        & $CurlExe.Source -sSL -f --retry 3 -o $OutFile $Uri
+        if ($LASTEXITCODE -ne 0) { throw "curl.exe failed to download $Uri (exit $LASTEXITCODE)" }
+    } else {
+        Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing
+    }
+}
 
 # — Resolve version ——————————————————————————————————————————————————
 
@@ -38,7 +64,7 @@ Write-Host "Installing YAAR $Version for windows-x64..."
 # Download
 $TmpFile = Join-Path ([System.IO.Path]::GetTempPath()) $AssetName
 try {
-    Invoke-WebRequest -Uri $Url -OutFile $TmpFile -UseBasicParsing
+    Get-File -Uri $Url -OutFile $TmpFile
 } catch {
     Write-Error "Failed to download: $Url`nCheck that version '$Version' exists."
     exit 1
@@ -57,7 +83,7 @@ Write-Host "Installed to: $Dest"
 $AppsUrl = "https://github.com/$Repo/releases/download/$Version/yaar-apps.tar.gz"
 $AppsTmp = Join-Path ([System.IO.Path]::GetTempPath()) "yaar-apps.tar.gz"
 try {
-    Invoke-WebRequest -Uri $AppsUrl -OutFile $AppsTmp -UseBasicParsing
+    Get-File -Uri $AppsUrl -OutFile $AppsTmp
     tar -xzf $AppsTmp -C $InstallDir
     Remove-Item -Force $AppsTmp -ErrorAction SilentlyContinue
     Write-Host "Installed bundled apps to: $(Join-Path $InstallDir 'apps')"
