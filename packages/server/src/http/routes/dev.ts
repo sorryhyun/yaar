@@ -21,6 +21,7 @@ import { PROJECT_ROOT } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundledApp, requireHost, resolvePrincipal, type AppPrincipal } from '../access.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
+import { appHtmlCsp } from '../csp.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
 import { resolveAppDir, resolveAppSource } from '../../features/apps/roots.js';
 import type { EndpointMeta } from '../utils.js';
@@ -249,7 +250,7 @@ async function servePreview(req: Request, url: URL): Promise<Response> {
       'Content-Type': 'text/html; charset=utf-8',
       // The same CSP the app runs under in a window, so a preview cannot pass
       // something the deployed app would be refused.
-      'Content-Security-Policy': "connect-src 'self'",
+      'Content-Security-Policy': appHtmlCsp(req),
       'Cache-Control': 'no-store',
     },
   });

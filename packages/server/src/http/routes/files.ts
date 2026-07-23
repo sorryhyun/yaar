@@ -7,6 +7,7 @@ import { renderPdfPage } from '../../lib/pdf/index.js';
 import { MIME_TYPES, MAX_UPLOAD_SIZE } from '../../config.js';
 import { errorResponse, jsonResponse, safePathAsync, type EndpointMeta } from '../utils.js';
 import { readBodyWithLimit, BodyTooLargeError } from '../body-limit.js';
+import { appHtmlCsp } from '../csp.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 import { resolveAppDir } from '../../features/apps/roots.js';
 import { parseContentPath, type ParsedContentPath } from '../../lib/yaar-uri-server.js';
@@ -257,7 +258,7 @@ async function serveStaticFile(
       'Cache-Control': 'no-cache',
     };
     if (ext === '.html') {
-      headers['Content-Security-Policy'] = "connect-src 'self'";
+      headers['Content-Security-Policy'] = appHtmlCsp(req);
     }
     const body = maybeGzip(req, headers, content);
     return new Response(body, { headers });

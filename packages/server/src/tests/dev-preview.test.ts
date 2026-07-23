@@ -17,6 +17,7 @@ import { join } from 'path';
 import { generateHtmlWrapper } from '@yaar/compiler';
 import { IFRAME_FETCH_PROXY_SCRIPT } from '@yaar/shared';
 import { handleDevRoutes } from '../http/routes/dev.js';
+import { appHtmlCsp } from '../http/csp.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
 import { validateIframeToken } from '../http/iframe-tokens.js';
 import { USER_APPS_DIR } from '../features/apps/roots.js';
@@ -85,9 +86,13 @@ describe('GET /api/dev/preview/{appId}', () => {
 
   it('serves it under the same CSP the app runs under in a window', async () => {
     // A preview that is laxer than production is a preview that green-lights code the
-    // deployed app would be refused.
+    // deployed app would be refused — so both come from appHtmlCsp(). Asserted here
+    // against the request the route actually saw, not against a literal, because the
+    // policy widens to the loopback pair when app-origin isolation is on.
     const res = await get(`/api/dev/preview/${APP}`);
-    expect(res!.headers.get('Content-Security-Policy')).toBe("connect-src 'self'");
+    const req = new Request(`http://localhost:8000/api/dev/preview/${APP}`);
+    expect(res!.headers.get('Content-Security-Policy')).toBe(appHtmlCsp(req));
+    expect(res!.headers.get('Content-Security-Policy')).toStartWith("connect-src 'self'");
   });
 
   it('is refused to app iframes — it hands out an app token', async () => {
