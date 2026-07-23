@@ -17,6 +17,7 @@ src/
 ├── index.ts               # Barrel exports
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
 ├── plugins.ts             # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
+├── prebundle.ts           # prebundleLibrary(name) — shared by scripts/prebundle-libs.js and the completeness test
 ├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
 ├── mount-guard.ts         # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
 ├── design-token-guard.ts  # Rejects var(--yaar-*) names that can never resolve
@@ -188,6 +189,7 @@ Shims wrap npm packages with compatibility fixes or SDK wrappers:
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4
 - **`uuid.ts`** — uuid's browser entry is a pure `export { default as v4 } from './v4.js'` barrel; bundling it directly makes Bun emit the `export { ... }` statement with every binding dropped, so the prebundled artifact fails later with `uuid:1:8: "h" is not declared in this file`. Importing the bindings and re-exporting them separately gives the bundler real references to follow. Any bundled library that is a pure re-export barrel needs the same treatment.
 - **`zod.ts`** — `@bundled/zod` maps to `zod/mini`, whose browser entry is a nested `export * from …` barrel; the same defect makes the prebundled artifact fail with `zod:40:23830: "u6" is not declared in this file`. Routing it through a shim (`import * as z from 'zod/mini'; export * from 'zod/mini'; export { z }`) turns `zod/mini` into an inner module Bun materializes before re-exporting, so both the functional API and the `z` namespace survive. Because the surface is too large to enumerate uuid-style, the fix is the extra layer of indirection rather than an explicit binding list.
+- **`lodash.ts`** / **`pixi.ts`** — same barrel defect. `@bundled/lodash` → `lodash-es` (a wall of `export { default as add } from './add.js'`) collapses to a ~4.7 KB stub failing with `lodash:1:8: "Yu" is not declared`; `@bundled/pixi.js` collapses to a ~16 KB stub. Both are fixed with a bare `export * from '<pkg>'` shim — the indirection alone is enough here, and lodash deliberately does **not** re-export the default (monolithic) build so named imports stay tree-shakeable. These three (plus uuid) are caught automatically by the prebundle-completeness test, so a new barrel library fails a test rather than an install.
 
 ## Build Manifest & Staleness
 

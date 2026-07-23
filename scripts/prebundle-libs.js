@@ -5,6 +5,11 @@
  * Runs at build time (before build-exe-bundle.js) to produce one .js file
  * per library in dist/bundled-libs/. These are then embedded into the exe
  * via Bun's `with { type: "file" }` import mechanism.
+ *
+ * The per-library build lives in @yaar/compiler's `prebundleLibrary()` so the
+ * prebundle-completeness test verifies the exact artifact this script writes —
+ * the two cannot drift. Entry resolution (shim vs npm browser entry), the Node
+ * builtin shims, and the solid-js external handling all live there.
  */
 
 import { mkdirSync } from 'fs';
@@ -14,119 +19,47 @@ import { fileURLToPath } from 'url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = join(__dirname, '..');
 const outDir = join(rootDir, 'dist', 'bundled-libs');
-// Resolve every bundled library from the compiler package, where each one is a declared
-// dependency — the same anchor the compiler's own plugin uses (PLUGIN_DIR). Resolving from
-// scripts/ instead relied on hoisting to the root node_modules, which bun does not do for a
-// package also depended on by other workspaces (e.g. zod, shared by shared/server/compiler).
-const compilerDir = join(rootDir, 'packages', 'compiler');
 
-// Import the canonical map and shims from @yaar/compiler (Bun can resolve .ts directly)
-const { BUNDLED_LIBRARIES: _allLibs, BUNDLED_SHIMS, resolveBrowserEntry } = await import('../packages/compiler/src/plugins.ts');
-// Filter out shim-based libraries (bundled separately below)
-const BUNDLED_LIBRARIES = Object.fromEntries(
-  Object.entries(_allLibs).filter(([k]) => !(k in BUNDLED_SHIMS)),
-);
+// The canonical library map and the shared per-library build (Bun resolves .ts directly).
+// `prebundleLibrary` routes shim-backed names (uuid, zod, lodash, pixi.js, yaar*) through
+// their shim and everything else through the npm browser entry — one code path for both.
+const { BUNDLED_LIBRARIES } = await import('../packages/compiler/src/plugins.ts');
+const { prebundleLibrary } = await import('../packages/compiler/src/prebundle.ts');
 
 mkdirSync(outDir, { recursive: true });
 
-console.log(`Pre-bundling ${Object.keys(BUNDLED_LIBRARIES).length} libraries into ${outDir}...`);
+const libNames = Object.keys(BUNDLED_LIBRARIES);
+console.log(`Pre-bundling ${libNames.length} libraries into ${outDir}...`);
 
 const results = await Promise.allSettled(
-  Object.entries(BUNDLED_LIBRARIES).map(async ([name, pkg]) => {
+  libNames.map(async (name) => {
+    // Output written manually to support names with slashes (e.g. solid-js/html, pixi.js).
     const outfile = join(outDir, `${name}.js`);
     try {
-      // For packages with browser/node conditional exports (e.g. solid-js),
-      // import.meta.resolve() picks the node/bun condition (SSR build).
-      // Use resolveBrowserEntry() first to get the browser build.
-      const browserEntry = resolveBrowserEntry(pkg, compilerDir);
-      const resolved = browserEntry ?? Bun.resolveSync(pkg, compilerDir);
-      const entrypoint = resolved.startsWith('file://') ? Bun.fileURLToPath(resolved) : resolved;
-      if (browserEntry) console.log(`    (browser entry: ${entrypoint})`);
-      /** Shim Node builtins that some libs try to require in browser builds */
-      const nodeShimPlugin = {
-        name: 'node-shim',
-        setup(build) {
-          build.onResolve({ filter: /^(perf_hooks|worker_threads)$/ }, (args) => ({
-            path: args.path,
-            namespace: 'node-shim',
-          }));
-          build.onLoad({ filter: /.*/, namespace: 'node-shim' }, (args) => {
-            if (args.path === 'perf_hooks') {
-              return { contents: 'export const performance = globalThis.performance || {};', loader: 'js' };
-            }
-            return { contents: 'export default {};', loader: 'js' };
-          });
-        },
-      };
-      // For solid-js sub-packages (html, web, store), mark sister packages as
-      // external so they don't each bundle their own copy of solid-js. At runtime,
-      // the compiler plugin's onResolve interceptor redirects these bare imports
-      // to the shared prebundled solid-js bundle, preventing duplicate instances.
-      const external = [];
-      if (name.startsWith('solid-js/')) {
-        external.push('solid-js', ...['solid-js/web', 'solid-js/html', 'solid-js/store'].filter(n => n !== name));
-      }
-      const result = await Bun.build({
-        entrypoints: [entrypoint],
-        minify: true,
-        format: 'esm',
-        target: 'browser',
-        plugins: [nodeShimPlugin],
-        external,
-      });
-      if (!result.success) {
-        const errors = result.logs
-          .filter((l) => l.level === 'error')
-          .map((l) => l.message || String(l));
-        throw new Error(errors.join('\n') || `Bun.build() failed for ${pkg}`);
-      }
-      // Write output manually to support names with slashes (e.g. solid-js/html)
+      const code = await prebundleLibrary(name);
       mkdirSync(dirname(outfile), { recursive: true });
-      await Bun.write(outfile, result.outputs[0]);
-      console.log(`  ✓ ${name} (${pkg})`);
+      await Bun.write(outfile, code);
+      console.log(`  ✓ ${name} (${BUNDLED_LIBRARIES[name]})`);
       return { name, success: true };
     } catch (err) {
-      console.error(`  ✗ ${name} (${pkg}): ${err.message}`);
+      console.error(`  ✗ ${name} (${BUNDLED_LIBRARIES[name]}): ${err.message}`);
       return { name, success: false, error: err.message };
     }
-  })
+  }),
 );
 
-const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success));
+const failed = results.filter(
+  (r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success),
+);
 if (failed.length > 0) {
   console.error(`\n${failed.length} library(ies) failed to bundle.`);
   process.exit(1);
 }
 
-// Bundle shim-based libraries (e.g. yaar) — these are local .ts files, not npm packages
-for (const [name, shimPath] of Object.entries(BUNDLED_SHIMS)) {
-  const outfile = join(outDir, `${name}.js`);
-  try {
-    const result = await Bun.build({
-      entrypoints: [shimPath],
-      minify: true,
-      format: 'esm',
-      target: 'browser',
-    });
-    if (!result.success) {
-      const errors = result.logs.filter(l => l.level === 'error').map(l => l.message || String(l));
-      throw new Error(errors.join('\n') || `Bun.build() failed for shim ${name}`);
-    }
-    mkdirSync(dirname(outfile), { recursive: true });
-    await Bun.write(outfile, result.outputs[0]);
-    console.log(`  ✓ ${name} (shim)`);
-  } catch (err) {
-    console.error(`  ✗ ${name} (shim): ${err.message}`);
-    process.exit(1);
-  }
-}
-
 // Bundle CSS files from bundled libraries as JS style-injector modules.
 // These are embedded into the exe via __YAAR_BUNDLED_LIBS, keyed by their
 // original import path (e.g. "diff2html/bundles/css/diff2html.min.css").
-const BUNDLED_CSS_FILES = [
-  'diff2html/bundles/css/diff2html.min.css',
-];
+const BUNDLED_CSS_FILES = ['diff2html/bundles/css/diff2html.min.css'];
 
 for (const cssPath of BUNDLED_CSS_FILES) {
   try {

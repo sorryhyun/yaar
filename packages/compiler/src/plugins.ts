@@ -44,6 +44,8 @@ function debugBundledLibrary(message: string): void {
  */
 export const BUNDLED_SHIMS: Record<string, string> = {
   anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
+  lodash: toForwardSlash(join(SHIMS_DIR, 'lodash.ts')),
+  'pixi.js': toForwardSlash(join(SHIMS_DIR, 'pixi.ts')),
   uuid: toForwardSlash(join(SHIMS_DIR, 'uuid.ts')),
   zod: toForwardSlash(join(SHIMS_DIR, 'zod.ts')),
   // The yaar SDK is split into internal modules; index.ts is the barrel entry.
