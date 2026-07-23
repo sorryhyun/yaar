@@ -121,6 +121,7 @@ export async function deploy(opts: {
   description?: string;
   message?: string;
   skipTypecheck?: boolean;
+  allowProtocolShrink?: boolean;
 }): Promise<{ appId: string; name: string; previewClosed?: boolean }> {
   const proj = activeProject();
   if (!proj) throw new AppCommandError('No active project. Open or create one first.');

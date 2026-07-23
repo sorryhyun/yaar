@@ -2,7 +2,12 @@
 
 import type { Account, GithubStatus } from './types.js';
 
-export const DEFAULT_MARKET_DOMAIN = 'https://yaarmarket.vercel.app';
+/**
+ * The marketplace. There is one, it is fixed, and the app is compiled against it —
+ * so it is a constant rather than configurable state. The host's own `MARKET_URL`
+ * (server `config/env.ts`) points at the same place for install/publish.
+ */
+export const MARKET_DOMAIN = 'https://yaarmarket.vercel.app';
 
 /** One call returns components + unresolved incidents, so we only need this one. */
 export const GITHUB_STATUS_URL = 'https://www.githubstatus.com/api/v2/summary.json';

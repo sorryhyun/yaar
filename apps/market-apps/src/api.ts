@@ -7,10 +7,9 @@
 
 import * as z from '@bundled/zod';
 import { del, invoke, list } from '@bundled/yaar';
-import { GITHUB_STATUS_URL } from './constants.js';
+import { GITHUB_STATUS_URL, MARKET_DOMAIN } from './constants.js';
 import { parseInstalledAny } from './parsers.js';
 import { GithubStatusSummarySchema } from './schema.js';
-import { apiBase } from './store.js';
 import type { ConfirmOutcome, InstalledApp, PreparedPublication } from './types.js';
 
 // ── Marketplace domain ───────────────────────────────────────────────
@@ -19,9 +18,7 @@ export async function apiGet<S extends z.ZodMiniType>(
   path: string,
   schema: S,
 ): Promise<z.infer<S>> {
-  const base = apiBase();
-  if (!base) throw new Error('No domain configured. Set a domain first.');
-  const res = await fetch(`${base}${path}`, { method: 'GET' });
+  const res = await fetch(`${MARKET_DOMAIN}${path}`, { method: 'GET' });
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
   const parsed = z.safeParse(schema, await res.json());
   if (!parsed.success) {

@@ -171,9 +171,10 @@ export const buildCommands = {
   }),
   deploy: defineCommand({
     description:
-      'Deploy to apps/. Refuses type errors unless skipTypecheck. Snapshots the previous ' +
-      'version — see gitRestore. Closes the preview window on success: it shows the ' +
-      'pre-deploy build, so re-open it with `preview` if you still need it.',
+      'Deploy to apps/. Refuses type errors unless skipTypecheck, and refuses a manifest ' +
+      'that drops commands the installed app has unless allowProtocolShrink. Snapshots the ' +
+      'previous version — see gitRestore. Closes the preview window on success: it shows ' +
+      'the pre-deploy build, so re-open it with `preview` if you still need it.',
     params: {
       type: 'object',
       properties: {
@@ -183,6 +184,10 @@ export const buildCommands = {
         description: { type: 'string' },
         message: { type: 'string', description: 'Commit message for this deploy.' },
         skipTypecheck: { type: 'boolean', description: 'Ship despite type errors.' },
+        allowProtocolShrink: {
+          type: 'boolean',
+          description: 'Ship despite dropping commands the installed app currently exposes.',
+        },
       },
       required: ['appId'],
     },
@@ -194,6 +199,7 @@ export const buildCommands = {
         description: p.description ? String(p.description) : undefined,
         message: p.message ? String(p.message) : undefined,
         skipTypecheck: p.skipTypecheck === true,
+        allowProtocolShrink: p.allowProtocolShrink === true,
       }),
   }),
 };

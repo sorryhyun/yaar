@@ -1,19 +1,16 @@
 // ── Entry point ─────────────────────────────────────────────────────────
 //
 // Wires the pieces together: mounts the reactive UI (components.ts) and runs
-// startup (resolve domain, load publisher status + marketplace data). All state
-// lives in store.ts, business logic in actions.ts, I/O in api.ts, and App
-// Protocol wiring in protocol.ts.
+// startup (load publisher status + marketplace data). All state lives in
+// store.ts, business logic in actions.ts, I/O in api.ts, and App Protocol
+// wiring in protocol.ts.
 
 import { onMount } from '@bundled/solid-js';
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import './protocol.js';
 import { App } from './components.js';
-import { DEFAULT_MARKET_DOMAIN } from './constants.js';
-import { normalizeDomain } from './parsers.js';
 import { refreshAccount, refreshData, startGithubStatusPolling } from './actions.js';
-import { setApiBase, setStatus } from './store.js';
 
 // ── Mount reactive UI ────────────────────────────────────────────────
 
@@ -33,21 +30,7 @@ window.addEventListener('pagehide', stopGithubStatusPolling);
 // ── Async initialization ────────────────────────────────────────────
 
 onMount(async () => {
-  let domain = normalizeDomain(
-    new URLSearchParams(window.location.search).get('domain') ||
-      ((window as any).__MARKET_APPS_DOMAIN__ as string | undefined) ||
-      '',
-  );
-
-  if (!domain) domain = DEFAULT_MARKET_DOMAIN;
-  setApiBase(domain);
-
-  // Publisher sign-in is independent of the marketplace domain — load it either way.
+  // Publisher sign-in and the catalog are independent — neither waits for the other.
   void refreshAccount();
-
-  if (domain) {
-    void refreshData();
-  } else {
-    setStatus('No domain configured. Set domain via App Protocol setDomain command.', true);
-  }
+  void refreshData();
 });

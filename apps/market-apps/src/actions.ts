@@ -21,7 +21,6 @@ import {
 } from './api.js';
 import {
   account,
-  apiBase,
   authBusy,
   hasInstalled,
   installedVersionOf,
@@ -69,10 +68,6 @@ export async function runAction(
 // ── Marketplace data ───────────────────────────────────────────────
 
 export async function refreshData(): Promise<void> {
-  if (!apiBase()) {
-    setStatus('No domain configured. Use App Protocol command setDomain.', true);
-    return;
-  }
   await runAction(
     'Refreshing…',
     async () => {

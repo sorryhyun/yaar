@@ -11,7 +11,7 @@ import {
   SIGNED_OUT_ACCOUNT,
   GITHUB_STATUS_HEALTHY,
 } from './constants.js';
-import { isNewerVersion, normalizeDomain, normalizeId, parseSemver, sameAppId } from './parsers.js';
+import { isNewerVersion, normalizeId, parseSemver, sameAppId } from './parsers.js';
 import type {
   Account,
   DisplayApp,
@@ -28,7 +28,6 @@ export const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]
 export const [statusText, setStatusText] = createSignal('Waiting for data…');
 export const [lastUpdated, setLastUpdated] = createSignal('');
 export const [loading, setLoading] = createSignal(false);
-export const [apiBase, setApiBase] = createSignal('');
 export const [hideInstalled, setHideInstalled] = createSignal(false);
 export const [search, setSearch] = createSignal('');
 
@@ -67,12 +66,6 @@ export function touch(): void {
 export function setStatus(next: string, stamp = true): void {
   setStatusText(next);
   if (stamp) touch();
-}
-
-export function setDomain(nextDomain: string): void {
-  const d = normalizeDomain(nextDomain);
-  setApiBase(d);
-  setStatus(d ? `Domain set: ${d}` : 'Domain cleared');
 }
 
 // ── Installed / ownership queries ──────────────────────────────────────────

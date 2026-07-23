@@ -16,9 +16,9 @@ import {
   signOut,
   uninstallApp,
 } from './actions.js';
+import { MARKET_DOMAIN } from './constants.js';
 import {
   account,
-  apiBase,
   authBusy,
   confirmBusy,
   displayApps,
@@ -411,9 +411,7 @@ export function App() {
           <div class="header-status y-text-muted">
             ${() => statusText()}${() => (lastUpdated() ? ` • ${lastUpdated()}` : '')}
           </div>
-          <div class="header-domain y-text-dim">
-            ${() => (apiBase() ? `Domain: ${apiBase()}` : 'Domain: (not set)')}
-          </div>
+          <div class="header-domain y-text-dim">Domain: ${MARKET_DOMAIN}</div>
         </div>
         <div class="header-actions">
           <div class="config-wrap">

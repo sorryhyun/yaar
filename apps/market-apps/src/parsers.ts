@@ -7,12 +7,6 @@
 import { GITHUB_PUBLISH_COMPONENTS } from './constants.js';
 import type { ApiPayload, GithubStatus, InstalledApp, ListedApp } from './types.js';
 
-export function normalizeDomain(input?: string | null): string {
-  const value = (input || '').trim();
-  if (!value) return '';
-  return value.replace(/\/+$/, '');
-}
-
 export function normalizeId(value: string): string {
   return (value || '').trim().toLowerCase();
 }

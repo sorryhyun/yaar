@@ -13,12 +13,10 @@ import {
   statusText,
   lastUpdated,
   loading,
-  apiBase,
   hideInstalled,
   setHideInstalled,
   search,
   setSearch,
-  setDomain,
   setStatus,
   touch,
 } from './store.js';
@@ -45,10 +43,6 @@ if (app) {
         description: 'Last updated local timestamp',
         handler: () => lastUpdated(),
       },
-      domain: {
-        description: 'Configured marketplace domain',
-        handler: () => apiBase(),
-      },
       loading: {
         description: 'Whether network request is in progress',
         handler: () => loading(),
@@ -63,24 +57,8 @@ if (app) {
       },
     },
     commands: {
-      setDomain: defineCommand({
-        description: 'Set marketplace API domain (e.g. https://example.com)',
-        params: {
-          type: 'object',
-          properties: {
-            domain: { type: 'string' },
-            autoRefresh: { type: 'boolean' },
-          },
-          required: ['domain'],
-        },
-        handler: async (p) => {
-          setDomain(p.domain);
-          if (p.autoRefresh !== false) await refreshData();
-          return { domain: apiBase() };
-        },
-      }),
       refresh: defineCommand({
-        description: 'Fetch data from configured domain',
+        description: 'Fetch the marketplace catalog and the installed-app list',
         params: { type: 'object', properties: {} },
         handler: async () => {
           await refreshData();
