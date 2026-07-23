@@ -15,9 +15,7 @@
  *
  * Every launcher that opens a *visible* Chrome for a human to use YAAR in wants exactly
  * this set, and there are three of them (`scripts/dev.sh`, `exe-entry.ts`, and the
- * headless pool in `chrome.ts`, which adds its own). The exe's launcher shipped without
- * them, so `yaar` and `make claude-dev` disagreed about whether WebGPU worked — same
- * machine, same GPU, same app.
+ * headless pool in `chrome.ts`, which adds its own).
  *
  * `scripts/dev.sh` is bash and cannot import this; it keeps its own copy. Change one,
  * change both.

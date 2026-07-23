@@ -11,10 +11,7 @@ import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { resolveWindowKey } from '../helpers';
 import { getDesktopState } from './store-access';
 
-/**
- * Get the target origin for postMessage to an iframe.
- * srcdoc/about:blank iframes have a "null" origin, requiring '*'.
- */
+/** srcdoc/about:blank iframes have a "null" origin, requiring '*'. */
 export function getIframeTargetOrigin(iframe: HTMLIFrameElement): string {
   try {
     const origin = iframe.contentWindow?.origin;

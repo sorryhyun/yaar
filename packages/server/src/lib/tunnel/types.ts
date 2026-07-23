@@ -1,7 +1,3 @@
-/**
- * SSH reverse tunnel configuration types.
- */
-
 export interface TunnelConfig {
   /** Use a managed tunnel service instead of a custom SSH server */
   service?: 'localhost.run';

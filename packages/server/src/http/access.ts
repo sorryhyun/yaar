@@ -95,7 +95,6 @@ function extractIframeToken(req: Request, url: URL): string | null {
   return req.headers.get('x-iframe-token') ?? url.searchParams.get('__yaar_token');
 }
 
-/** Parse the hostname out of an origin/URL string, or null if it isn't one. */
 function hostnameOf(value: string | null): string | null {
   if (!value) return null;
   try {
@@ -171,14 +170,12 @@ export function resolvePrincipal(req: Request, url: URL): Principal | Response {
 
 // ── Matching a URI against declared permissions ─────────────────────────────
 
-/** Check if a single permission entry matches the URI. */
 function uriMatches(uri: string, pattern: string): boolean {
   return (
     uri === pattern || (pattern.endsWith('/') && (uri.startsWith(pattern) || uri + '/' === pattern))
   );
 }
 
-/** Check if a URI + verb is allowed by the given permission entries. */
 export function isUriAllowed(uri: string, verb: Verb, entries: PermissionEntry[]): boolean {
   return entries.some((entry) => {
     if (typeof entry === 'string') {

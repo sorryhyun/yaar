@@ -8,10 +8,9 @@
 import { releaseModels } from '../ml';
 import { DEFAULT_BUCKET } from '../buckets';
 
-/** The DiT the diagnostics (ditGate/ditProbe) run against. The other exports the
- *  header used to describe — plain fp16 (all-NaN on WebGPU) and the fp32-activation
- *  `_webgpu` build — were only ever 512² and are no longer published, so r16 is the
- *  one DiT: every ratio ships exactly one graph. */
+/** The DiT the diagnostics (ditGate/ditProbe) run against. Plain fp16 (all-NaN on
+ *  WebGPU) and the fp32-activation `_webgpu` build were only ever 512² and are no
+ *  longer published, so r16 is the one DiT: every ratio ships exactly one graph. */
 export const DIT_512 = DEFAULT_BUCKET.dit;
 
 // Session options per DiT export. The cast-hack exports NEED graph opt disabled

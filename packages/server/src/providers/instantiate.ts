@@ -1,12 +1,9 @@
 /**
  * Provider construction, single-sourced.
  *
- * `factory.ts` and `warm-pool.ts` each used to carry their own copy of the
- * preference order and their own `new XProvider()` switch, so adding a provider
- * meant editing both and a missed one drifted silently. The *construction* is
- * shared here; what each caller does afterwards is not, and stays with them —
- * the warm pool warms and probes its instances, while the factory hands Codex
- * off to the pool entirely (the pool owns the AppServer).
+ * The *construction* is shared here; what each caller does afterwards stays with
+ * them — the warm pool warms and probes its instances, while the factory hands
+ * Codex off to the pool entirely (the pool owns the AppServer).
  *
  * Dynamic imports keep the SDK dependencies lazy.
  */

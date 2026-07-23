@@ -1,5 +1,4 @@
-// Anima WebGPU toy — in-browser text→image on WebGPU. Entry point: mount the UI and
-// install the headless driver hook. The work itself lives in:
+// Anima WebGPU toy — in-browser text→image on WebGPU. The work itself lives in:
 //
 //   state.ts            signals shared by UI / pipeline / protocol, + the canvas ref
 //   logging.ts          console log, progress-bar bridge, tensor stat summaries

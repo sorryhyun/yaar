@@ -11,12 +11,10 @@ import { join, dirname } from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 
-/** Read an integer from an environment variable with a default. */
 export function getEnvInt(key: string, defaultValue: number): number {
   return parseInt(process.env[key] ?? String(defaultValue), 10);
 }
 
-// Detect if running as bundled executable
 // __YAAR_BUNDLED is injected at compile time via bun build --define
 declare const __YAAR_BUNDLED: boolean | undefined;
 export const IS_BUNDLED_EXE = typeof __YAAR_BUNDLED !== 'undefined' && __YAAR_BUNDLED;
@@ -96,7 +94,6 @@ export function getPort(): number {
   return getEnvInt('PORT', DEFAULT_PORT);
 }
 
-/** Update the port after the server has bound to a free port. */
 export function setPort(p: number): void {
   process.env.PORT = String(p);
 }
@@ -140,7 +137,6 @@ export const APP_ORIGIN_HOST = '127.0.0.1';
 /** Dev mode: local development with live reload (not remote, not bundled). */
 export const IS_DEV = !IS_REMOTE && !IS_BUNDLED_EXE;
 
-/** Marketplace base URL. */
 export const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 
 /**

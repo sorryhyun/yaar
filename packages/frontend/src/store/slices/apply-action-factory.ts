@@ -7,14 +7,6 @@
  */
 import type { OSAction } from '@yaar/shared';
 
-/**
- * Creates an apply-action mutation function for show/dismiss overlay patterns.
- *
- * @param recordKey   - The state property name holding the Record (e.g. 'notifications')
- * @param showType    - The action type string for show/create (e.g. 'notification.show')
- * @param buildItem   - Builder that constructs the record value from the raw action
- * @param dismissType - Optional action type string for dismiss (e.g. 'notification.dismiss')
- */
 export function createApplyAction<TState, TItem extends { id: string }>(
   recordKey: string,
   showType: string,

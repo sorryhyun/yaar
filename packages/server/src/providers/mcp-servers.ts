@@ -19,11 +19,9 @@
 import { getActiveServers, getAgentToken } from '../mcp/index.js';
 import { getPort } from '../config.js';
 
-/** One MCP namespace and the endpoint this process serves it on. */
 export interface McpServerEndpoint {
   /** MCP namespace — 'system', 'verbs', 'app', 'messaging'. */
   name: string;
-  /** This process's HTTP MCP endpoint for that namespace. */
   url: string;
 }
 
@@ -38,8 +36,6 @@ export interface McpServerSet {
 }
 
 /**
- * Build the active MCP endpoints plus the calling agent's token.
- *
  * @param agentId - The agent this turn runs as; undefined mints no token.
  * @param include - Optional namespace filter. Omitted = every active server.
  */

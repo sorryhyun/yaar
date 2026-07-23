@@ -60,7 +60,6 @@ export function parseAppStoragePath(uri: string): { appId: string; path: string 
   const match = uri.match(/^yaar:\/\/apps\/([^/]+)\/storage(?:\/(.*))?$/);
   if (!match) return null;
   const path = match[2] ?? '';
-  // Block path traversal — apps must stay within their own namespace
   if (validateRelativePath(path)) return null;
   return { appId: match[1], path };
 }

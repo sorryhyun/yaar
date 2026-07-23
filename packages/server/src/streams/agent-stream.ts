@@ -31,30 +31,20 @@
  */
 export type AgentStreamKind = 'start' | 'text' | 'thinking' | 'tool' | 'done' | 'error';
 
-/** How a turn ended, carried on its terminal `done` frame. */
 export type AgentTurnStatus = 'completed' | 'interrupted';
 
-/** Payload of the `start` frame — enough for an observer to reset its per-turn state. */
 export interface AgentStartFrameData {
-  /** The message this turn is answering, when the caller supplied one. */
   messageId?: string;
-  /** Which provider is producing the deltas — `'claude'`, `'codex'`, … */
   provider: string;
-  /** The monitor this turn belongs to, for turns that have one. */
   monitorId?: string;
 }
 
 const AGENT_STREAM_RE = /^yaar:\/\/agents\/([^/]+)\/stream$/;
 
-/** Build the stream URI for an agent instance id. */
 export function buildAgentStreamUri(instanceId: string): string {
   return `yaar://agents/${instanceId}/stream`;
 }
 
-/**
- * Parse an agent stream URI, returning the agent instance id — or `null` if the
- * URI is not an `yaar://agents/{id}/stream`.
- */
 export function parseAgentStreamUri(uri: string): string | null {
   const m = AGENT_STREAM_RE.exec(uri);
   return m ? m[1] : null;

@@ -27,7 +27,6 @@ export const TRANSPORT_IDLE_TIMEOUT_S = 255;
  */
 export const MAX_REQUEST_DEADLINE_MS = 240_000;
 
-/** Clamp a caller-supplied deadline into the budget. */
 export function clampDeadline(timeoutMs: number): number {
   return Math.min(Math.max(timeoutMs, 0), MAX_REQUEST_DEADLINE_MS);
 }
@@ -35,13 +34,9 @@ export function clampDeadline(timeoutMs: number): number {
 /**
  * The deadlines a server→client wait runs on — one object, read at call time.
  *
- * These were `const QUERY_TIMEOUT_MS = 5_000` and friends, scattered across the call sites
- * that used them. That is fine until something has to *prove* the waits are alive, which
- * is what the loopback harness does: a deadlocked turn is indistinguishable from a slow
- * one except by how long it takes to end, so the test has to be able to make "how long"
- * small. At production values a deadlock test would spend 30 seconds finding out, per
- * scenario, and nobody runs that per commit. With these shrunk to tens of milliseconds,
- * the same test goes red in a quarter of a second.
+ * A deadlocked turn is indistinguishable from a slow one except by how long it takes to
+ * end, so the loopback harness needs "how long" to be small: shrunk to tens of
+ * milliseconds, a deadlock test goes red in a quarter of a second instead of 30.
  *
  * Injectable, not merely configurable: `setDeadlinesForTest()` mutates this object and
  * hands back the restore, and every call site reads the field rather than closing over a

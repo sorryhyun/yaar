@@ -1,10 +1,8 @@
 /** Layout constants shared across window management, drag, and monitor logic. */
 import { WINDOW_PLACEMENT } from '@yaar/shared';
 
-/** Height of a window's title bar in pixels. */
 export const TITLEBAR_HEIGHT = 36;
 
-/** Height of the taskbar in pixels. */
 export const TASKBAR_HEIGHT = 36;
 
 /**
@@ -32,7 +30,6 @@ export const DEFAULT_VIEWPORT_WIDTH = 1280;
 /** Fallback viewport height when `globalThis.innerHeight` is unavailable. */
 export const DEFAULT_VIEWPORT_HEIGHT = 720;
 
-/** Maximum number of virtual monitors (desktops) allowed per session. */
 // The server mints monitor ids and enforces the cap; the frontend only hides the
 // "add monitor" button at it. One number, in @yaar/shared.
 export { MAX_MONITORS } from '@yaar/shared';

@@ -17,29 +17,6 @@
 /**
  * Create a set-once holder for the context a protocol's handlers need.
  *
- * ```ts
- * // src/protocol/context.ts
- * export const { set: setProtocolContext, get: ctx } =
- *   createProtocolContext<ProtocolContext>('slides-lite');
- *
- * // src/protocol/deck.ts — descriptors stay statically readable
- * export const deckCommands = {
- *   setDeck: defineCommand({
- *     description: 'Replace the whole deck',
- *     params: { ... },
- *     handler: (p) => ctx().setDeck(p.deck),
- *   }),
- * };
- *
- * // src/protocol.ts
- * export function registerProtocol(context: ProtocolContext) {
- *   setProtocolContext(context);
- *   app.register({ commands: { ...deckCommands } });
- * }
- * ```
- *
- * `label` names the app and appears in both error messages.
- *
  * Two failure modes are made loud rather than silent, because both otherwise
  * produce handlers that run against the wrong state and report nothing:
  *
@@ -49,8 +26,6 @@
  *   so a second registration would silently retarget the *first*
  *   registration's handlers. An app that genuinely needs two live contexts in
  *   one document needs a different design, not a quietly shared one.
- *
- * Re-setting the identical context is allowed and is a no-op.
  */
 export function createProtocolContext(label) {
   let current = null;

@@ -2,26 +2,18 @@
  * The table of client frames a session answers — one row per frame, and no rows for
  * anything else.
  *
- * This used to be a 390-line `switch` in `routeMessage`, which meant that "does the
- * server handle X?" could only be answered by reading the whole thing, and that a frame
- * with no case fell out of the bottom indistinguishable from one that was deliberately
- * ignored. As a map, the question is a grep and the answer is a key.
- *
  * `ClientEventRoutes` is **total**: every member of the `ClientEvent` union needs a row,
  * so a new frame type added in `@yaar/shared` is a compile error here rather than a frame
  * that is silently dropped at runtime. The runtime `if (!handler)` in `dispatch` is not
  * that check — it is for frames that are not a `ClientEvent` at all (a malformed or
- * newer-client body that got past parsing), which the old `switch` also ignored without
- * a word. That behavior is preserved deliberately.
+ * newer-client body that got past parsing). That behavior is preserved deliberately.
  */
 
 import type { ClientEvent } from '@yaar/shared';
 import type { ConnectionId } from './broadcast-center.js';
 
-/** Every client frame's discriminant. */
 export type ClientEventName = ClientEvent['type'];
 
-/** The frame that goes with one discriminant. */
 export type ClientEventOf<K extends ClientEventName> = Extract<ClientEvent, { type: K }>;
 
 /**

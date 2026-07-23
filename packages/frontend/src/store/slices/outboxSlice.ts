@@ -1,14 +1,7 @@
 /**
  * Outbox slice — the commands this client has taken responsibility for delivering.
  *
- * A user message used to be fire-and-forget: `send()` returned nothing, and if the socket
- * happened to be closed it logged a warning and dropped the event on the floor — *after*
- * the UI had already minted a message id, written the message into the CLI panel, and
- * consumed the drawing and attached images. The command was gone, its attachments were
- * gone, and the transcript said it had been sent. There was no worse failure in the app:
- * it lied in the user's own record of what they had asked for.
- *
- * So a message that requires delivery is held here until the server acknowledges it —
+ * A message that requires delivery is held here until the server acknowledges it —
  * `MESSAGE_ACCEPTED` or `MESSAGE_QUEUED` (the server has it) or `ERROR` naming it (the
  * server refused it). Anything still in the outbox has *not* been accepted, whatever the
  * socket looked like at the time, and is resent on reconnect. The whole event is held,
