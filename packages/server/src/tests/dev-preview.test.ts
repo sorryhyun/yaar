@@ -11,13 +11,43 @@
  * What has to hold: the token is real and is the *app's* identity, and handing one out
  * is host-only — the same escalation oracle `POST /api/iframe-token` is.
  */
-import { describe, it, expect } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { mkdir, rm, writeFile } from 'fs/promises';
+import { join } from 'path';
+import { generateHtmlWrapper } from '@yaar/compiler';
+import { IFRAME_FETCH_PROXY_SCRIPT } from '@yaar/shared';
 import { handleDevRoutes } from '../http/routes/dev.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
 import { validateIframeToken } from '../http/iframe-tokens.js';
+import { USER_APPS_DIR } from '../features/apps/roots.js';
 
-/** An app that ships a compiled dist/index.html in the repo. */
-const APP = 'browser-user';
+/**
+ * An installed app with a compiled `dist/index.html`, written for the test.
+ *
+ * Pointing at a bundled app instead looks simpler and is wrong: `dist/` is
+ * git-ignored, so a checked-out tree that has not compiled anything — CI — has no
+ * entry point to serve and every assertion here fell to the route's own 404. The
+ * fixture is the real compiler wrapper around the real fetch-proxy SDK script, so
+ * the injection point is still asserted against the HTML the route actually meets.
+ */
+const APP = 'zz-dev-preview-fixture';
+const appDir = join(USER_APPS_DIR, APP);
+
+beforeAll(async () => {
+  await mkdir(join(appDir, 'dist'), { recursive: true });
+  await writeFile(
+    join(appDir, 'app.json'),
+    JSON.stringify({ id: APP, name: 'Dev Preview Fixture', description: 'test fixture' }),
+  );
+  await writeFile(
+    join(appDir, 'dist', 'index.html'),
+    generateHtmlWrapper('/* fixture app */', 'Dev Preview Fixture', IFRAME_FETCH_PROXY_SCRIPT),
+  );
+});
+
+afterAll(async () => {
+  await rm(appDir, { recursive: true, force: true });
+});
 
 function get(path: string, headers: Record<string, string> = {}) {
   const req = new Request(`http://localhost:8000${path}`, { headers });
