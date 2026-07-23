@@ -1,6 +1,8 @@
 /**
  * Dev routes — compile, typecheck, deploy, and version history for iframe apps.
  *
+ * GET  /api/dev/preview/{appId} — serve an installed app as a TOP-LEVEL page, with
+ *                                 an iframe token injected (host-only, see below)
  * POST /api/dev/compile       — compile a project directory
  * POST /api/dev/typecheck     — typecheck a project directory
  * POST /api/dev/deploy        — deploy a project as an installed app
@@ -17,9 +19,10 @@ import { join } from 'path';
 import { stat } from 'fs/promises';
 import { PROJECT_ROOT } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
-import { requireBundledApp, type AppPrincipal } from '../access.js';
+import { requireBundledApp, requireHost, resolvePrincipal, type AppPrincipal } from '../access.js';
+import { generateAppIframeToken } from '../iframe-tokens.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
-import { resolveAppSource } from '../../features/apps/roots.js';
+import { resolveAppDir, resolveAppSource } from '../../features/apps/roots.js';
 import type { EndpointMeta } from '../utils.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -62,6 +65,9 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     description: 'List bundled libraries',
   },
 ];
+
+/** App ids are directory names. Keep this to what a directory name may be. */
+const APP_ID = /^[A-Za-z0-9._-]+$/;
 
 const PATH_ACTIONS = ['compile', 'typecheck', 'deploy'] as const;
 const GIT_ACTIONS = ['git-history', 'git-diff', 'git-restore', 'git-checkpoint'] as const;
@@ -110,6 +116,11 @@ function writeDenied(callerAppId: string, targetAppId: string): Response {
 
 export async function handleDevRoutes(req: Request, url: URL): Promise<Response | null> {
   if (!url.pathname.startsWith('/api/dev/')) return null;
+
+  // GET /api/dev/preview/{appId} — the app as a top-level page, token included.
+  if (url.pathname.startsWith('/api/dev/preview/') && req.method === 'GET') {
+    return servePreview(req, url);
+  }
 
   // GET /api/dev/bundled-libraries — no auth required (static list)
   // GET /api/dev/bundled-libraries?lib=yaar — returns detailed type info for a specific library
@@ -168,6 +179,80 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
     },
     () => dispatchDevAction(action, body, principal, callerAppId),
   );
+}
+
+/**
+ * Serve an installed app as a top-level page with its iframe token injected.
+ *
+ * Driving an app through the whole desktop is the wrong inner loop for verifying
+ * one app: you fight window management, you cannot reach into a cross-origin
+ * iframe from CDP, and the app's own automation hook is two frames down. Opening
+ * `dist/index.html` directly is far better — but the app is then token-less, so
+ * every gated SDK call (`appStorage`, `appDb`, `/api/ml-weights`) 403s, and the
+ * failure ("Invalid or missing iframe token") points nowhere near the cause.
+ *
+ * This route closes that: it mints the app's real token — the same identity
+ * `generateAppIframeToken` gives the app in a window, permissions and `bundles`
+ * read off its own app.json, never from the request — and injects it ahead of the
+ * SDK scripts, which read `window.__YAAR_TOKEN__` at install time.
+ *
+ * **Host-only.** It hands out an app's token, so it is the same
+ * privilege-escalation oracle `POST /api/iframe-token` is, and carries the same
+ * gate: reachable by an app, any app could mint a bundled system app's token. In
+ * REMOTE mode the caller has already proven the remote token in auth.ts.
+ *
+ * On the host name: with app-origin isolation on, `127.0.0.1` is the *app* origin
+ * and a token-less request carrying it is refused — so this must be opened on
+ * `localhost`. A top-level navigation to `127.0.0.1` is already redirected there
+ * (http/server.ts), which is what makes the mistake self-correcting rather than a
+ * blank page with a 403 in the console.
+ */
+async function servePreview(req: Request, url: URL): Promise<Response> {
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+  const denied = requireHost(principal);
+  if (denied) return denied;
+
+  const appId = decodeURIComponent(url.pathname.slice('/api/dev/preview/'.length)).replace(
+    /\/$/,
+    '',
+  );
+  if (!appId || !APP_ID.test(appId)) return errorResponse('Invalid app id', 400);
+
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return errorResponse(`App "${appId}" not found`, 404);
+
+  const entry = Bun.file(join(appDir, 'dist', 'index.html'));
+  if (!(await entry.exists())) {
+    return errorResponse(`App "${appId}" has no dist/index.html — compile it first`, 404);
+  }
+  const html = await entry.text();
+
+  // Bind the token to the running desktop's session when there is one, so
+  // session-scoped verbs (windows, notifications) act on the desktop the developer
+  // is looking at. With no desktop connected the app still gets its own storage,
+  // db, and gated HTTP doors — those are keyed on the app, not the session.
+  const { getSessionHub } = await import('../../session/session-hub.js');
+  const sessionId = getSessionHub().getDefault()?.sessionId ?? `dev-preview-${appId}`;
+  const token = await generateAppIframeToken(`preview:${appId}`, sessionId, { appId });
+
+  // Ahead of the compiler's own <script>, which installs the SDKs and reads the
+  // token as it does so. Anchoring on <head> rather than that script keeps this
+  // independent of the wrapper's internal ordering.
+  const inject = `<script>window.__YAAR_TOKEN__=${JSON.stringify(token)};</script>`;
+  const headAt = html.indexOf('<head>');
+  const body =
+    headAt === -1 ? inject + html : html.slice(0, headAt + 6) + inject + html.slice(headAt + 6);
+
+  return new Response(body, {
+    headers: {
+      'Content-Type': 'text/html; charset=utf-8',
+      // The same CSP the app runs under in a window, so a preview cannot pass
+      // something the deployed app would be refused.
+      'Content-Security-Policy': "connect-src 'self'",
+      'Cache-Control': 'no-store',
+    },
+  });
 }
 
 /**

@@ -49,6 +49,16 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
       url = String(input);
     }
 
+    // Self-contained URLs carry their own bytes. There is nothing to proxy, and a
+    // data: URL's origin parses as the string "null" — so the cross-origin check
+    // below would classify it as an external site and POST the entire base64
+    // payload to /api/fetch, which rejects it without an iframe token and, with
+    // one, would round-trip megabytes to decode a string the app already holds.
+    // realFetch rather than addTokenHeader: there is no request to authorize.
+    if (/^(data|blob):/i.test(url)) {
+      return realFetch(input, init);
+    }
+
     // Relative URLs and same-origin — pass through with token header
     if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) {
       return addTokenHeader(input, init);

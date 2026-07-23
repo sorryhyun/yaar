@@ -20,7 +20,13 @@ import { basename, extname } from 'path';
 import { stat } from 'fs/promises';
 import { getMlRuntimeArtifact, MIME_TYPES } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
-import { requireBundle, resolvePrincipal } from '../access.js';
+import {
+  requireBundle,
+  requirePermission,
+  resolvePrincipal,
+  storageUriFor,
+  type Principal,
+} from '../access.js';
 import { validateUrl, safeFetch } from '../../lib/ssrf.js';
 import { errMessage } from '../../lib/errors.js';
 import { downloadToFile } from '../../lib/download/chunked.js';
@@ -71,16 +77,18 @@ export async function handleMlRuntimeRoutes(req: Request, url: URL): Promise<Res
   // that, so `yaar-ml` is what it takes to reach it.
   const weightRoute =
     url.pathname === '/api/ml-weights' || url.pathname === '/api/ml-weights/download';
+  let principal: Principal | undefined;
   if (weightRoute) {
-    const principal = resolvePrincipal(req, url);
-    if (principal instanceof Response) return principal;
-    const denied = requireBundle(principal, 'yaar-ml');
+    const resolved = resolvePrincipal(req, url);
+    if (resolved instanceof Response) return resolved;
+    const denied = requireBundle(resolved, 'yaar-ml');
     if (denied) return denied;
+    principal = resolved;
   }
 
   if (url.pathname === '/api/ml-weights/download') {
-    if (req.method === 'POST') return startDownload(req);
-    if (req.method === 'GET') return downloadStatus(url);
+    if (req.method === 'POST') return startDownload(req, principal!);
+    if (req.method === 'GET') return downloadStatus(url, principal!);
     return errorResponse('Method not allowed', 405);
   }
   if (url.pathname === '/api/ml-weights') {
@@ -199,16 +207,46 @@ interface DownloadJob {
   error?: string;
 }
 
-/** Keyed by the cleaned `dest` path. Survives for the process lifetime. */
+/**
+ * Keyed by the `self`-resolved `dest` path. Survives for the process lifetime.
+ *
+ * Resolved, not raw: two apps both prefetching to `apps/self/weights/model.onnx`
+ * name different files, and a raw key would have them sharing one job — the second
+ * app would poll the first app's progress and stop before its own file existed.
+ */
 const downloads = new Map<string, DownloadJob>();
 
-/** Resolve `dest` inside storage/, refusing traversal and read-only mounts. */
-function resolveWritableDest(dest: string): { abs: string } | { error: Response } {
+/**
+ * Resolve `dest` inside storage/, refusing traversal, read-only mounts, and any
+ * path the caller holds no write permission for.
+ *
+ * This route streams an attacker-nameable URL to a caller-nameable path. `yaar-ml`
+ * says the caller may download weights; it does not say *where*, and without a
+ * permission check any app declaring the bundle could write over another app's
+ * storage. So the destination is named in the permission model's own vocabulary
+ * and checked, exactly as `/api/storage/{path}` does — which also resolves
+ * `apps/self/` to the calling app, the spelling the SDK's `prefetchWeights` uses.
+ */
+function resolveWritableDest(
+  principal: Principal,
+  dest: string,
+): { abs: string; key: string } | { error: Response } {
   if (!dest) return { error: errorResponse('Missing "dest"', 400) };
-  const resolved = resolvePath(dest);
+
+  const uri = storageUriFor(principal, dest);
+  if (uri instanceof Response) return { error: uri };
+  const denied = requirePermission(principal, uri, 'invoke');
+  if (denied) return { error: denied };
+
+  const key =
+    principal.kind === 'app' && principal.appId
+      ? dest.replace(/^apps\/self(?=\/|$)/, `apps/${principal.appId}`)
+      : dest;
+
+  const resolved = resolvePath(key);
   if (!resolved) return { error: errorResponse('Access denied', 403) };
   if (resolved.readOnly) return { error: errorResponse('Destination is read-only', 403) };
-  return { abs: resolved.absolutePath };
+  return { abs: resolved.absolutePath, key };
 }
 
 async function fileSize(path: string): Promise<number> {
@@ -219,7 +257,7 @@ async function fileSize(path: string): Promise<number> {
   }
 }
 
-async function startDownload(req: Request): Promise<Response> {
+async function startDownload(req: Request, principal: Principal): Promise<Response> {
   const body = await parseJsonBody<{ url?: string; dest?: string }>(req);
   if (body instanceof Response) return body;
   const target = body.url ?? '';
@@ -230,6 +268,13 @@ async function startDownload(req: Request): Promise<Response> {
   } catch (err) {
     return errorResponse(err instanceof Error ? err.message : 'Invalid URL', 400);
   }
+  // Where before whether: the destination check is local and certain, while the domain
+  // gate can put a dialog in front of the user. Asking "may this app reach huggingface?"
+  // about a write we are going to refuse anyway trains people to click through prompts
+  // that had no bearing on the outcome.
+  const r = resolveWritableDest(principal, dest);
+  if ('error' in r) return r.error;
+
   // Ask before refusing. This is the route a model download actually travels, and the
   // very first thing a fresh install does with it is name a domain nobody has approved.
   const denial = await ensureDomainAllowed(target, {
@@ -239,21 +284,18 @@ async function startDownload(req: Request): Promise<Response> {
   });
   if (denial) return errorResponse(denial.message, 403);
 
-  const r = resolveWritableDest(dest);
-  if ('error' in r) return r.error;
-
   // Already complete, or already running — don't start a second writer.
-  const existing = downloads.get(dest);
+  const existing = downloads.get(r.key);
   if (existing?.state === 'downloading') return jsonResponse({ dest, ...existing });
   const done = await fileSize(r.abs);
   if (done > 0) {
     const job: DownloadJob = { state: 'done', loaded: done, total: done };
-    downloads.set(dest, job);
+    downloads.set(r.key, job);
     return jsonResponse({ dest, ...job });
   }
 
   const job: DownloadJob = { state: 'downloading', loaded: 0, total: 0 };
-  downloads.set(dest, job);
+  downloads.set(r.key, job);
   // Detached: the client polls GET for progress rather than holding a request open
   // for a multi-GB transfer.
   void runDownload(target, r.abs, job).catch((err) => {
@@ -277,11 +319,11 @@ async function runDownload(target: string, abs: string, job: DownloadJob): Promi
   job.total = job.loaded;
 }
 
-function downloadStatus(url: URL): Response {
+function downloadStatus(url: URL, principal: Principal): Response {
   const dest = url.searchParams.get('dest') ?? '';
-  const r = resolveWritableDest(dest);
+  const r = resolveWritableDest(principal, dest);
   if ('error' in r) return r.error;
-  const job = downloads.get(dest);
+  const job = downloads.get(r.key);
   if (job) return jsonResponse({ dest, ...job });
   return jsonResponse({ dest, state: 'idle', loaded: 0, total: 0 });
 }

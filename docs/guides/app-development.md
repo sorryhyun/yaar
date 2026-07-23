@@ -107,6 +107,47 @@ The AI sends a deploy command to the devtools app.
 
 The AI clones an existing app's source into the devtools workspace, makes edits, recompiles, and redeploys with the same appId to overwrite in-place.
 
+### Standalone preview — driving one app without the desktop
+
+When you are verifying *one app* — especially over CDP, from a test, or from another
+agent — the whole desktop is the wrong harness: you fight window management, you
+cannot reach into a cross-origin app iframe, and the app's own automation hook is two
+frames down. Open the app as a top-level page instead:
+
+```
+http://localhost:8000/api/dev/preview/{appId}
+```
+
+This serves the deployed app's `dist/index.html` with its **real iframe token
+injected**, so token-gated SDK calls (`appStorage`, `appDb`, `/api/ml-weights`, the
+verb SDK) work exactly as they do in a window. The identity is the app's own — the
+permissions and `bundles` come off its `app.json`, never from the request — so a
+preview cannot pass anything the deployed app would be refused, and it runs under the
+same `connect-src 'self'` CSP.
+
+```js
+// Anything speaking CDP: Playwright, Puppeteer, claude-in-chrome, …
+navigate('http://localhost:8000/api/dev/preview/ocr');
+javascript_tool("await window.__ocr.readSample()"); // the app's own automation hook
+```
+
+Notes:
+
+- **Host-only.** The route hands out an app's token, so — like `POST /api/iframe-token`
+  — it is refused to app iframes. In `REMOTE=1` the caller must already hold the
+  remote token.
+- **`localhost`, not `127.0.0.1`.** With app-origin isolation on (the default in local
+  mode), `127.0.0.1` *is* the app origin and a token-less request carrying it is
+  refused by design. A top-level navigation there is redirected to `localhost`
+  automatically, so this mostly self-corrects — but a `fetch` of the preview URL
+  against `127.0.0.1` will not.
+- Session-scoped verbs (windows, notifications) bind to the running desktop's session
+  when one is connected. With no desktop up, the app still gets its storage, its db,
+  and its gated HTTP doors — those are keyed on the app, not the session.
+- The app must be **deployed** and compiled (`dist/index.html` present). For an
+  uncompiled project in the devtools workspace, compile first — `POST /api/dev/compile`
+  returns a `previewUrl` under `/api/storage/…`.
+
 ## Publishing to the Marketplace
 
 Deploy puts an app on *your* desktop. Publishing pushes it to the shared YAAR marketplace so anyone can install it. The full lifecycle is **write → compile → deploy → publish**, and installing is the mirror image on someone else's machine.

@@ -1,0 +1,127 @@
+/* Layout is a three-row grid rather than flex children: `flex: 1` breaks Solid's
+   reactivity inside the iframe (see CLAUDE.md), and grid rows do not. */
+.ocr-root {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+}
+
+.ocr-spacer {
+  margin-left: auto;
+}
+
+.ocr-stage {
+  position: relative;
+  overflow: auto;
+  padding: var(--yaar-sp-4);
+  background: var(--yaar-bg);
+  display: grid;
+  place-items: center;
+}
+
+.ocr-hint {
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  margin-top: var(--yaar-sp-2);
+}
+
+.ocr-canvas-wrap {
+  position: relative;
+  line-height: 0;
+  max-width: 100%;
+}
+
+.ocr-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--yaar-border);
+  border-radius: 4px;
+  cursor: crosshair;
+  touch-action: none; /* pointer events must not be stolen by scroll/pan */
+}
+
+.ocr-selection {
+  position: absolute;
+  border: 1.5px solid var(--yaar-accent);
+  background: color-mix(in srgb, var(--yaar-accent) 14%, transparent);
+  pointer-events: none;
+}
+
+/* Height is capped on the results list, not here. A percentage `max-height` on a
+   grid item resolves against its own grid area, so the `auto` track still sized
+   itself to the full content while the panel clamped to a fraction of that —
+   leaving a band of dead track below the panel that nothing could fill. */
+.ocr-panel {
+  border-top: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  padding: var(--yaar-sp-3);
+  display: grid;
+  gap: var(--yaar-sp-2);
+  overflow: hidden;
+}
+
+.ocr-statusline {
+  display: grid;
+  gap: var(--yaar-sp-2);
+}
+
+.ocr-status {
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+}
+
+.ocr-progress {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--yaar-border);
+  overflow: hidden;
+}
+
+.ocr-progress-fill {
+  height: 100%;
+  background: var(--yaar-accent);
+  transition: width 120ms linear;
+}
+
+.ocr-error {
+  color: var(--yaar-error);
+  font-size: 12px;
+}
+
+.ocr-results-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+}
+
+.ocr-results-list {
+  display: grid;
+  gap: var(--yaar-sp-1);
+  /* Keeps a long history from crowding out the image. `vh` is the iframe's own
+     viewport here, which is exactly the window the app fills. */
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+.ocr-result {
+  display: grid;
+  gap: 2px;
+}
+
+.ocr-text {
+  color: var(--yaar-text);
+  font-size: 14px;
+  /* Recognized text is data — let it wrap and stay selectable rather than truncate. */
+  white-space: pre-wrap;
+  word-break: break-word;
+  user-select: text;
+}
+
+.ocr-meta {
+  color: var(--yaar-text-muted);
+  font-size: 11px;
+}

@@ -205,6 +205,41 @@ export interface SessionOptions {
   sessionOptions?: Record<string, unknown>;
 }
 
+/** One remote weight file and the storage path it should land at. */
+export interface WeightFile {
+  /** Remote URL to pull from (HuggingFace `resolve/…`, a CDN, …). */
+  url: string;
+  /**
+   * Storage-relative destination, e.g. `apps/self/weights/model.onnx`.
+   * `apps/self/` resolves to the calling app's own storage directory.
+   */
+  dest: string;
+  /** Expected size, for the progress bar before the server reports a real total. */
+  bytes?: number;
+}
+
+export interface PrefetchProgress {
+  /** The file currently transferring. */
+  file: WeightFile;
+  /** 1-based index of that file within the set. */
+  index: number;
+  /** Number of files in the set. */
+  count: number;
+  /** Bytes of the current file. */
+  loaded: number;
+  total: number;
+  /** Bytes across the whole set (uses `bytes` hints for files not yet started). */
+  overallLoaded: number;
+  overallTotal: number;
+}
+
+export interface PrefetchOptions {
+  onProgress?: (p: PrefetchProgress) => void;
+  signal?: AbortSignal;
+  /** How often to poll the server for progress. Default 500 ms. */
+  pollIntervalMs?: number;
+}
+
 // ── Capabilities ─────────────────────────────────────────────────────────────
 
 const NO_WEBGPU: MlCapabilities = {
@@ -377,18 +412,42 @@ function concatChunks(chunks: Uint8Array[], total: number): ArrayBuffer {
 }
 
 /**
+ * Is this a URL the browser can fetch itself, with no proxy in between?
+ *
+ * A weight file already pulled to disk by {@link prefetchWeights} is read back off
+ * `/api/storage/…` — same-origin, already inside the CSP, and served straight from
+ * disk by `Bun.file`. Sending it through `/api/ml-weights?url=…` instead would fail
+ * outright: that proxy runs the SSRF guard, which rejects a relative URL and blocks
+ * the loopback address an absolute one would name.
+ */
+function isLocalWeightUrl(url: string): boolean {
+  if (url.startsWith('/') || url.startsWith('./') || url.startsWith('../')) return true;
+  try {
+    return new URL(url, location.href).origin === location.origin;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Download model weights as an ArrayBuffer, cached in IndexedDB by URL.
  *
  * The fetch goes through YAAR's same-origin streaming proxy so it satisfies the
  * app CSP and streams (real progress, no base64 blow-up). HuggingFace `resolve`
  * URLs are revision-pinned and treated as immutable — pass `force: true` to
  * bypass the cache.
+ *
+ * A same-origin URL (a file already on disk via {@link prefetchWeights}) is read
+ * directly and *not* mirrored into IndexedDB: it is already local, and a second
+ * copy of a multi-GB weight file is pure waste.
  */
 export async function fetchWeights(
   url: string,
   opts: FetchWeightsOptions = {},
 ): Promise<ArrayBuffer> {
-  if (!opts.force) {
+  const local = isLocalWeightUrl(url);
+
+  if (!local && !opts.force) {
     const cached = await cacheGet(url);
     if (cached) {
       opts.onProgress?.({
@@ -401,8 +460,8 @@ export async function fetchWeights(
     }
   }
 
-  const proxied = '/api/ml-weights?url=' + encodeURIComponent(url);
-  const res = await fetch(proxied, { signal: opts.signal, headers: mlHeaders() });
+  const target = local ? url : '/api/ml-weights?url=' + encodeURIComponent(url);
+  const res = await fetch(target, { signal: opts.signal, headers: mlHeaders() });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`Failed to download weights (${res.status}): ${detail || res.statusText}`);
@@ -415,7 +474,7 @@ export async function fetchWeights(
     // No streamable body — fall back to a single buffered read.
     const buf = await res.arrayBuffer();
     opts.onProgress?.({ loaded: buf.byteLength, total: buf.byteLength, ratio: 1 });
-    await cachePut(url, buf, etag);
+    if (!local) await cachePut(url, buf, etag);
     return buf;
   }
 
@@ -431,13 +490,149 @@ export async function fetchWeights(
   }
 
   const buf = concatChunks(chunks, loaded);
-  await cachePut(url, buf, etag);
+  if (!local) await cachePut(url, buf, etag);
   return buf;
+}
+
+// ── Prefetch to disk ─────────────────────────────────────────────────────────
+//
+// The IndexedDB cache above is the right default — one call, no server state — but
+// it is the *browser's* cache: clearing site data drops it, quota pressure evicts it,
+// and nothing there survives to another tab's first paint. An app that ships a 77 MB
+// recognizer, or a multi-GB diffusion model, wants the bytes on disk instead: pulled
+// once, offline afterwards, and read back same-origin off /api/storage.
+//
+// The browser cannot write those files — `POST /api/storage/{path}` buffers the whole
+// body under MAX_UPLOAD_SIZE — so the *server* streams remote → disk over parallel
+// Range requests (resuming a partial `.part`), and the app polls for progress.
+
+/** The storage URL a prefetched file is read back from. Feed it to `session()`. */
+export function weightUrl(dest: string): string {
+  return '/api/storage/' + dest.split('/').map(encodeURIComponent).join('/');
+}
+
+interface JobStatus {
+  state: 'idle' | 'downloading' | 'done' | 'error';
+  loaded: number;
+  total: number;
+  error?: string;
+}
+
+/** Untrusted JSON off the wire — read only the fields we use, with sane fallbacks. */
+function asJobStatus(raw: unknown): JobStatus {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const state = o.state;
+  return {
+    state:
+      state === 'downloading' || state === 'done' || state === 'error' || state === 'idle'
+        ? state
+        : 'error',
+    loaded: typeof o.loaded === 'number' ? o.loaded : 0,
+    total: typeof o.total === 'number' ? o.total : 0,
+    error: typeof o.error === 'string' ? o.error : undefined,
+  };
+}
+
+async function downloadJson(input: string, init: RequestInit): Promise<JobStatus> {
+  const res = await fetch(input, init);
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Weight download failed (${res.status}): ${detail || res.statusText}`);
+  }
+  return asJobStatus(await res.json());
+}
+
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(new Error('Aborted'));
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(new Error('Aborted'));
+    };
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Pull weight files to this machine's storage, one at a time, and return the
+ * same-origin URLs to read them back from.
+ *
+ * Files already on disk complete instantly, so this is safe to call on every boot —
+ * it is the "make sure the model is here" step, not a one-shot installer. Each file
+ * is fetched server-side over parallel Range requests and resumed from a partial
+ * `.part`, so an interrupted multi-GB download picks up where it stopped.
+ *
+ * ```ts
+ * const [modelUrl] = await prefetchWeights(
+ *   [{ url: `${HF}/model.onnx`, dest: 'apps/self/weights/model.onnx', bytes: 77_000_000 }],
+ *   { onProgress: (p) => setStatus(`${p.file.dest} ${(p.overallLoaded / p.overallTotal * 100) | 0}%`) },
+ * );
+ * const s = await session(modelUrl);   // reads off disk, no IndexedDB copy
+ * ```
+ */
+export async function prefetchWeights(
+  files: WeightFile[],
+  opts: PrefetchOptions = {},
+): Promise<string[]> {
+  const pollMs = opts.pollIntervalMs ?? 500;
+  const overallTotal = files.reduce((n, f) => n + (f.bytes ?? 0), 0);
+  let done = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const emit = (s: JobStatus) =>
+      opts.onProgress?.({
+        file,
+        index: i + 1,
+        count: files.length,
+        loaded: s.loaded,
+        total: s.total || (file.bytes ?? 0),
+        overallLoaded: done + s.loaded,
+        overallTotal,
+      });
+
+    let status = await downloadJson('/api/ml-weights/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...mlHeaders() },
+      body: JSON.stringify({ url: file.url, dest: file.dest }),
+      signal: opts.signal,
+    });
+    emit(status);
+
+    const statusUrl = '/api/ml-weights/download?dest=' + encodeURIComponent(file.dest);
+    while (status.state === 'downloading') {
+      await sleep(pollMs, opts.signal);
+      status = await downloadJson(statusUrl, { headers: mlHeaders(), signal: opts.signal });
+      emit(status);
+    }
+    if (status.state === 'error') {
+      throw new Error(`${file.dest}: ${status.error ?? 'download failed'}`);
+    }
+    done += status.loaded || file.bytes || 0;
+  }
+
+  return files.map((f) => weightUrl(f.dest));
 }
 
 // ── Inference sessions ───────────────────────────────────────────────────────
 
-const _sessions = new Map<string, Promise<ort.InferenceSession>>();
+/**
+ * Live sessions, keyed by url+backend+options.
+ *
+ * The model URL is kept as its own field rather than parsed back out of the key:
+ * the key also carries a JSON blob of session options, which can contain the
+ * delimiter, so a key that round-trips is not a key that can be split.
+ */
+interface MemoizedSession {
+  url: string;
+  promise: Promise<ort.InferenceSession>;
+}
+
+const _sessions = new Map<string, MemoizedSession>();
 
 async function resolveProviders(backend: Backend): Promise<string[]> {
   if (backend === 'wasm') return ['wasm'];
@@ -517,14 +712,14 @@ export async function session(
     const optsKey = opts.sessionOptions ? JSON.stringify(opts.sessionOptions) : '';
     const key = `${model}::${backend}::${optsKey}`;
     const existing = _sessions.get(key);
-    if (existing) return existing;
+    if (existing) return existing.promise;
     const promise = (async () => {
       const buf = await fetchWeights(model, { onProgress: opts.onProgress, signal: opts.signal });
       return createSession(new Uint8Array(buf), backend, opts.sessionOptions);
     })();
     // Drop the memo if creation fails so a retry can start clean.
     promise.catch(() => _sessions.delete(key));
-    _sessions.set(key, promise);
+    _sessions.set(key, { url: model, promise });
     return promise;
   }
 
@@ -570,10 +765,37 @@ export function run(
 
 /** Release a session's native resources. Also clears it from the URL memo. */
 export async function dispose(s: ort.InferenceSession): Promise<void> {
-  for (const [key, promise] of _sessions) {
-    if ((await promise.catch(() => null)) === s) _sessions.delete(key);
+  for (const [key, entry] of [..._sessions]) {
+    if ((await entry.promise.catch(() => null)) === s) _sessions.delete(key);
   }
   await s.release?.();
+}
+
+/**
+ * Release every memoized session whose model URL matches, freeing GPU memory.
+ *
+ * ORT does *not* free native/GPU memory when a session is garbage-collected — only
+ * an explicit release does — and {@link session} memoizes by URL with no way to drop
+ * an entry. Reaching for `dispose()` alone is the trap: it frees the native side and
+ * leaves the dead session in the memo, so the next `session(sameUrl)` hands back a
+ * released handle. This is the supported way to swap model sizes, or to drop a
+ * detector before loading a bigger recognizer.
+ *
+ * ```ts
+ * await releaseSessions((url) => url.includes('_det_'));   // free the detector
+ * await releaseSessions(() => true);                       // free everything
+ * ```
+ *
+ * Sessions created from raw bytes are never memoized — release those with
+ * {@link dispose}.
+ */
+export async function releaseSessions(match: (url: string) => boolean): Promise<void> {
+  for (const [key, entry] of [..._sessions]) {
+    if (!match(entry.url)) continue;
+    _sessions.delete(key);
+    const s = await entry.promise.catch(() => null);
+    if (s) await s.release?.();
+  }
 }
 
 // ── Re-exports ───────────────────────────────────────────────────────────────

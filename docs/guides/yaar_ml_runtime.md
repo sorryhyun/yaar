@@ -45,9 +45,12 @@ console.log(out);
 | `capabilities()` | `{ webgpu, f16, maxBufferSize, maxStorageBufferBindingSize, estMemoryBudget, adapter }`. Never throws; cached. |
 | `session(model, opts?)` | Create (or return a memoized) `InferenceSession` from a model **URL** or raw `ArrayBuffer`/`Uint8Array`. `opts.backend`: `'webgpu' \| 'wasm' \| 'auto'` (default `auto`). `opts.onProgress` reports weight download. |
 | `run(session, feeds, options?)` | Run inference. `feeds` maps input names → `Tensor`. Resolves to the output map. |
-| `fetchWeights(url, opts?)` | Download weights as an `ArrayBuffer`, IndexedDB-cached by URL, streamed with `opts.onProgress`. `opts.force` re-downloads. |
+| `fetchWeights(url, opts?)` | Download weights as an `ArrayBuffer`, IndexedDB-cached by URL, streamed with `opts.onProgress`. `opts.force` re-downloads. A same-origin URL is read directly and not mirrored into IndexedDB. |
+| `prefetchWeights(files, opts?)` | Stream weight files to **disk** server-side (resumable), returning the same-origin URLs to read them back from. See [Prefetch to disk](#prefetch-to-disk). |
+| `weightUrl(dest)` | The `/api/storage/…` URL a prefetched `dest` is read back from. |
 | `clearCache(url?)` | Evict one cached weight file, or the whole cache. |
 | `dispose(session)` | Release a session's native resources. |
+| `releaseSessions(match)` | Release **and un-memoize** every session whose model URL matches. The correct way to free GPU memory — see [Swapping models](#swapping-models). |
 | `Tensor`, `env`, `ort` | onnxruntime-web's `Tensor` constructor, `env` (advanced tuning), and the raw namespace. |
 
 ## How it works (platform plumbing)
@@ -74,6 +77,54 @@ console.log(out);
   pins `numThreads = 1`. The **WebGPU** execution provider does not need threads,
   so the primary path is unaffected; single-thread wasm is only the fallback.
 
+## Prefetch to disk
+
+The IndexedDB cache is the right default: one call, no server state, nothing to
+clean up. But it is the *browser's* cache — clearing site data drops it, quota
+pressure evicts it, and nothing in it survives to another tab's first paint. For a
+model you want to pull once and keep, `prefetchWeights` streams it to this
+machine's storage instead:
+
+```typescript
+import { prefetchWeights, session } from '@bundled/yaar-ml';
+
+const [modelUrl] = await prefetchWeights(
+  [{ url: `${HF}/model.onnx`, dest: 'apps/self/weights/model.onnx', bytes: 77_000_000 }],
+  { onProgress: (p) => setStatus(`${((p.overallLoaded / p.overallTotal) * 100) | 0}%`) },
+);
+
+const s = await session(modelUrl); // reads off disk, no second copy in IndexedDB
+```
+
+- The browser never touches the bytes. `POST /api/storage/{path}` buffers the whole
+  body under `MAX_UPLOAD_SIZE` (50 MB), so the *server* streams remote → disk over
+  parallel Range requests and the SDK polls for progress.
+- **Resumable.** An interrupted transfer leaves a `.part` and picks up where it
+  stopped. Files already on disk complete instantly, so calling this on every boot
+  is the intended usage — it is "make sure the model is here", not an installer.
+- `dest` is storage-relative and `apps/self/` resolves to your app's own directory.
+  The destination is permission-checked like any other storage write, so an app can
+  only prefetch into somewhere it may already write.
+- Offline afterwards: the read-back URL is same-origin and served straight from
+  disk, so `session()` never touches the network again.
+
+## Swapping models
+
+`session()` memoizes by URL, and **ORT does not free native/GPU memory when a
+session is garbage-collected** — only an explicit release does. Those two facts
+combine into a trap: `dispose(s)` frees the native side but the memo is keyed by
+URL, so a later `session(sameUrl)` can hand back a released handle. Use
+`releaseSessions` instead, which does both:
+
+```typescript
+await releaseSessions((url) => url.includes('_det_')); // drop the detector
+await releaseSessions(() => true);                     // drop everything
+```
+
+This is what an app holding two models — a detector and a recognizer, a small and a
+large variant — needs before loading the next one. Sessions created from raw bytes
+are never memoized; release those with `dispose`.
+
 ## Capabilities & limits — "what fits"
 
 Tier 1 is bounded by two ceilings:
@@ -94,6 +145,8 @@ Tier 1 is bounded by two ceilings:
 - Small speech (whisper-tiny/base) — on-device transcription.
 - Background removal (U²-Net / MODNet).
 - Small diffusion (SD-Turbo int8) — the plan's pipeline-validation target.
+- OCR (PP-OCRv6 recognizer, 77 MB) — ~30 ms/line on WebGPU, exact on 13–15px
+  dark-theme UI text. See the bundled `ocr` app.
 
 Prefer **int8 weights / f16 compute**. Check `capabilities().f16` before relying
 on half-precision; not every adapter exposes `shader-f16`.
@@ -114,6 +167,38 @@ IndexedDB cache self-evicts oldest-first past a ~4 GB budget.
 - **Bundle size.** onnxruntime-web's JS glue adds ~400 KB to a compiled app; the
   `.wasm` artifacts (13–27 MB) are served once from `/api/ml-runtime/` and cached
   by the browser.
+
+- **Snap dynamic dimensions to a handful of buckets.** The WebGPU execution
+  provider compiles its kernels **per concrete input shape**. Any model with a
+  dynamic dimension — which is most sequence and vision models — turns a one-time
+  compile into a per-call one if you feed it arbitrary shapes. Pick a small fixed
+  set and pad up to the nearest:
+
+  ```typescript
+  const BUCKETS = [160, 320, 480, 640, 960, 1280, 1920, 2400];
+  const width = BUCKETS.find((b) => b >= needed) ?? BUCKETS.at(-1)!;
+  ```
+
+  A 40-line page recognized one line at a time at 40 distinct widths pays 40
+  compiles; bucketed, it pays at most 8, once. Buckets also make **batching**
+  possible — a dynamic batch dimension lets every crop in one bucket go through in
+  a single `run` — which is usually the larger win of the two.
+
+- **Assert the model's output shape against whatever table you index with it.**
+  Any app pairing weights with a vocabulary, label set, or class list has one
+  failure mode that produces *output* rather than an error: the wrong table. A
+  character-level check is one line and catches it on the first run:
+
+  ```typescript
+  const vocabSize = session.outputMetadata /* … */ ?? logits.dims.at(-1)!;
+  if (vocabSize !== charset.length + 1) {
+    throw new Error(`Model expects a ${vocabSize - 1}-char dictionary, got ${charset.length}`);
+  }
+  ```
+
+  This is not hypothetical: PP-OCRv6's `tiny` recognizer ships a 6,904-character
+  dictionary where `medium`/`small` ship 18,708. Mispaired, it decodes to
+  confident, fluent nonsense — the check caught it on the first run of the OCR app.
 
 ## Server / config knobs
 

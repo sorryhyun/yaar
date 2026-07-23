@@ -1,0 +1,12 @@
+{
+  "name": "OCR",
+  "icon": "🔎",
+  "description": "Read text out of an image with PP-OCRv6, running in-browser on WebGPU",
+  "run": "dist/index.html",
+  "bundles": ["yaar-ml"],
+  "createShortcut": true,
+  "defaultWidth": 900,
+  "defaultHeight": 700,
+  "version": "0.1.0",
+  "author": "YAAR"
+}

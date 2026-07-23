@@ -1069,11 +1069,51 @@ declare module '@bundled/yaar-ml' {
     sessionOptions?: Record<string, unknown>;
   }
 
+  /** One remote weight file and the storage path it should land at. */
+  export interface WeightFile {
+    /** Remote URL to pull from (HuggingFace `resolve/…`, a CDN, …). */
+    url: string;
+    /** Storage-relative destination; `apps/self/` is this app's own storage. */
+    dest: string;
+    /** Expected size, for the progress bar before the server reports a real total. */
+    bytes?: number;
+  }
+
+  export interface PrefetchProgress {
+    file: WeightFile;
+    /** 1-based index of the current file. */
+    index: number;
+    count: number;
+    /** Bytes of the current file. */
+    loaded: number;
+    total: number;
+    /** Bytes across the whole set. */
+    overallLoaded: number;
+    overallTotal: number;
+  }
+
+  export interface PrefetchOptions {
+    onProgress?: (p: PrefetchProgress) => void;
+    signal?: AbortSignal;
+    /** Poll interval for download progress. Default 500 ms. */
+    pollIntervalMs?: number;
+  }
+
   /** Detect WebGPU/f16 support and GPU buffer limits. Never throws; cached. */
   export function capabilities(): Promise<MlCapabilities>;
 
   /** Download weights (IndexedDB-cached, streamed with progress) as an ArrayBuffer. */
   export function fetchWeights(url: string, opts?: FetchWeightsOptions): Promise<ArrayBuffer>;
+
+  /**
+   * Stream weight files to this machine's storage (server-side, resumable) and
+   * return the same-origin URLs to read them back from. Files already on disk
+   * complete instantly, so this is safe to call on every boot.
+   */
+  export function prefetchWeights(files: WeightFile[], opts?: PrefetchOptions): Promise<string[]>;
+
+  /** The `/api/storage/…` URL a prefetched `dest` is read back from. */
+  export function weightUrl(dest: string): string;
 
   /** Remove one cached weight file, or the whole cache when no URL is given. */
   export function clearCache(url?: string): Promise<void>;
@@ -1093,6 +1133,15 @@ declare module '@bundled/yaar-ml' {
 
   /** Release a session's native resources. */
   export function dispose(session: InferenceSession): Promise<void>;
+
+  /**
+   * Release every memoized session whose model URL matches, freeing GPU memory.
+   *
+   * `session()` memoizes by URL and ORT frees GPU memory only on an explicit
+   * release, so a bare `dispose()` leaves a released handle in the memo. Use this
+   * to swap model sizes or drop one model before loading another.
+   */
+  export function releaseSessions(match: (url: string) => boolean): Promise<void>;
 
   /** onnxruntime-web env (advanced tuning). */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
