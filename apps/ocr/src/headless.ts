@@ -9,6 +9,7 @@ import { readRegion, trust } from './ensemble';
 import { allModels, bytesOf, cancelLoad, ensureModels, missing, pageModels } from './warm';
 import { quadAngle, quadBounds } from './geometry';
 import { loadDataUrl } from './image-input';
+import { captureWindow, listWindows } from './window-source';
 import { loadSample, sampleLineRect, SAMPLE_LINES } from './sample';
 import { runRecognition } from './recognize';
 import { runPageRead } from './pipeline';
@@ -99,6 +100,9 @@ export function installHeadlessHook(): void {
     detect: detectOnly,
     resizeForDetect,
     readPage: (options: Parameters<typeof runPageRead>[0] = {}) => runPageRead(options),
+    /** The two halves of readWindow, separately: the window list, and the capture. */
+    listWindows,
+    captureWindow,
     /**
      * Read every sample line in one call — the Phase 1 end-to-end smoke test.
      *

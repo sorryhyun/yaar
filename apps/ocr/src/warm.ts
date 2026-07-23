@@ -12,10 +12,12 @@
 // what a read would actually use — an explicit load and a `download: true` read record
 // themselves identically.
 //
-// Loaded-ness is tracked for this page session only, deliberately. The bytes survive in
-// IndexedDB, so a load after a reload finishes in about a second, but *whether* they are
-// there is not something this app can ask the cache — and a remembered "yes" that turned
-// out to be wrong would put the silent download back, in the one place it was removed.
+// Loaded-ness is tracked for this page session only, deliberately, and it means
+// *resident in this page* — an ORT session on the GPU — not *downloaded*. The bytes live
+// on disk under the app's own storage (weights.ts), so a load after a reload re-reads
+// them locally in about a second, but the session itself does not survive a reload and
+// claiming otherwise would put the silent multi-minute wait back in the one place it was
+// removed.
 import { loadCharset } from './charset';
 import { DET_MODELS, detModelById, loadDetector } from './detect';
 import { MODELS, loadRecognizer, modelById, type LoadProgress } from './model';

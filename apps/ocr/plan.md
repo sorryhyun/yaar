@@ -125,7 +125,77 @@ turned out to be wrong would put the silent download back in the one place it wa
 
 ---
 
-# Appendix — YAAR changes this work suggests
+# Phase 4 — reading any window, and weights that stay put (shipped)
+
+The appendix below asked for a window-capture → OCR path and guessed it would need a new
+door: `controls`, or a verb. It needed neither. Reading `yaar://windows/{id}` already
+emits a window capture, and `POST /api/verb` already lifts the image out of the result
+into `envelope.images` — so an app with `read` on that URI gets the pixels back beside
+the JSON. Devtools has read its own preview that way since it shipped. The whole of
+`readWindow` is: read the window, take `images[0]`, hand it to `loadDataUrl`, `readPage`.
+
+Three decisions inside that are not obvious:
+
+- **The refusal comes before the capture.** Capturing replaces whatever image was
+  loaded, and a call about to be turned away for missing weights should not have thrown
+  that away first. `readWindow` runs `requireLoaded` itself rather than letting
+  `runPageRead` raise it three steps later.
+- **"No image" is three different answers.** A component or markdown window has no
+  screenshot and never will (read it as text); a tainted canvas is deterministic
+  (retrying cannot help); a window that has not painted yet is worth asking again. One
+  "capture failed" would send a caller round the retry loop for two of them.
+- **The permission is `read` + `list`, not `yaar://windows/`.** A bare string grants
+  every verb — an OCR app that could `invoke` could close, lock, or drive any window on
+  the desktop. Verified from inside the iframe: `read` and `list` pass, `invoke` and
+  `delete` come back `Not permitted`.
+
+Falling out of the same pass: `loadSample` and `setModel` left the protocol. Every read
+is medium + Korean assist; the sizes stay switchable in the toolbar, where a person can
+see what they cost.
+
+## The weights stop living in the browser
+
+`session(remoteUrl)` caches through `fetchWeights` into IndexedDB, which is the
+*browser's* store, not the machine's: clearing site data drops it, quota pressure evicts
+it, another profile starts from zero. The app was telling agents "cached on disk, usable
+offline" about 152 MB that a routine cleanup could evaporate.
+
+`@bundled/yaar-ml` already had the other door — `prefetchWeights` has the server stream
+each file to `storage/` over resumable Range requests and returns the same-origin URL to
+read it back from, and `session()` takes a local URL straight off disk *without*
+mirroring it into IndexedDB. So `weights.ts` now sits in front of every load, and the
+dictionaries go the same way: 114 KB is nothing to re-download, but a dictionary that
+vanished while the weights survived would report the outage as a corrupt model instead
+of a missing file.
+
+The layout is derived from the URL rather than tabulated —
+`{owner}/{repo}/resolve/{rev}/{file}` becomes `apps/self/models/{repo}/{file}` — so a
+model's weights and its `inference.yml` land in one directory named after where they
+came from, and the pairing cannot drift.
+
+Measured on this machine: 152 MB in **32.6 s** cold, and **889 ms** to bring all of it
+back after a full page reload, with nothing on the network. Loaded-ness stays per page
+session, and now means what it says — *resident on the GPU*, not *downloaded*.
+
+## What verification found
+
+The end-to-end run (memo window, medium + Korean, WebGPU): 632×428 capture, every line
+read, and `2026년 7월 14일` correctly attributed to the `korean` recognizer on a page
+that is otherwise English. The refusal path leaves `imageSize()` null — the capture
+genuinely does not happen. `readWindow` on an unknown id reports
+`Window "nope" not found. Use list to see available windows.`
+
+# Still out of scope
+
+- **Below the fold.** The capture is the window's visible area (`clientWidth/Height`),
+  so a scrolled-out region is not in the image. Scrolling the target window first is the
+  workaround; stitching several captures would be the fix.
+- **Non-iframe windows.** Refused with an explanation rather than approximated — their
+  content is already text and `read yaar://windows/{id}` returns it.
+
+---
+
+# Appendix — YAAR changes this work suggests (resolved)
 
 ### Phase 3 will want a window-capture → OCR path
 
@@ -137,3 +207,10 @@ OCR) or a verb. Worth designing alongside Phase 3 rather than bolting on after.
 
 The capture arrives as a `data:` URL, which is exactly the shape `loadImage({ dataUrl })`
 already takes — so whichever door is chosen, the app side of it is done.
+
+**Resolved in Phase 4, and no platform change was needed** — the `read` verb was already
+the door. One thing it did surface: `window.yaar.windows.read()` (the windows SDK) still
+declares `includeImage` and an `imageData` field it never populates — it returns the raw
+`{ data, images }` envelope instead. Apps that want a capture have to bypass it and call
+`read()` directly, as devtools and OCR both do. Fixing that shim is a small, separate
+change to `packages/shared/src/iframe-scripts/windows-sdk.ts`.

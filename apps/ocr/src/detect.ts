@@ -5,7 +5,7 @@
 // is the one number here that changes results without ever erroring.
 import { session, run, Tensor, type InferenceSession } from '@bundled/yaar-ml';
 import { dbBoxes, type DetBox } from './geometry';
-import type { LoadProgress } from './model';
+import { ensureOnDisk, type LoadProgress } from './weights';
 
 export interface DetModelChoice {
   id: string;
@@ -134,9 +134,9 @@ export function resizeForDetect(width: number, height: number, policy: ResizePol
 }
 
 /**
- * Load (and memoize) a detector session. Same route and cache as the recognizer —
- * `session()` memoizes by URL, so both models can be resident without extra
- * bookkeeping here.
+ * Load (and memoize) a detector session. Same route and storage as the recognizer —
+ * pulled to disk by weights.ts, then `session()` memoizes by URL, so both models can
+ * be resident without extra bookkeeping here.
  */
 export async function loadDetector(
   modelId: string,
@@ -144,11 +144,8 @@ export async function loadDetector(
   signal?: AbortSignal,
 ): Promise<InferenceSession> {
   const model = detModelById(modelId);
-  return session(model.url, {
-    backend: 'auto',
-    signal,
-    onProgress: (p) => onProgress?.({ ratio: p.ratio, loaded: p.loaded, total: p.total }),
-  });
+  const local = await ensureOnDisk(model.url, model.bytes, onProgress, signal);
+  return session(local, { backend: 'auto', signal });
 }
 
 /**

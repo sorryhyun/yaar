@@ -1,9 +1,9 @@
 // The CTC label table, read from the model's own config at runtime.
 //
 // PaddleOCR ships each recognizer's character dictionary inside its `inference.yml`,
-// next to the weights. This module fetches that file through the same proxy and the
-// same IndexedDB cache the weights use, so the dictionary arrives from — and stays
-// pinned to — the model it belongs to. It used to be a generated 77 KB source file;
+// next to the weights. This module pulls that file to the same place on disk the
+// weights go, so the dictionary arrives from — and stays pinned to — the model it
+// belongs to. It used to be a generated 77 KB source file;
 // that copy could drift from the model it described, and nothing in this repo needs to
 // contain 18,708 characters of Unicode.
 //
@@ -19,6 +19,7 @@
 // model.ts pins one dictionary per model and checks the model's output width against
 // its length before decoding anything.
 import { fetchWeights } from '@bundled/yaar-ml';
+import { ensureOnDisk } from './weights';
 
 export type CharsetId = 'v6' | 'v6-tiny' | 'v5-korean';
 
@@ -88,11 +89,16 @@ export function loadCharset(id: CharsetId): Promise<string[]> {
   const pending = (async () => {
     const url = DICTIONARY_URLS[id];
     try {
-      const buffer = await fetchWeights(url);
+      // To disk beside its own weights, not into IndexedDB. 114 KB is nothing to
+      // re-download, but a dictionary that vanished while the weights survived would
+      // make an offline app fail at decode time rather than at load time — the same
+      // outage, reported as a corrupt model instead of a missing file.
+      const local = await ensureOnDisk(url, undefined);
+      const buffer = await fetchWeights(local);
       return parseCharacterDict(new TextDecoder().decode(buffer));
     } catch (e) {
-      // Cached in IndexedDB after the first success, so this can only bite on a first
-      // run with no network — the same run whose weight download has already failed.
+      // On disk after the first success, so this can only bite on a first run with no
+      // network — the same run whose weight download has already failed.
       throw new Error(
         `could not load the "${id}" character dictionary from ${url}: ${(e as Error).message}`,
       );

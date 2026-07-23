@@ -5,55 +5,83 @@ models, plus a **PP-OCRv5 Korean** recognizer for Hangul, running entirely in th
 iframe on WebGPU (single-thread wasm fallback) via `@bundled/yaar-ml`. Nothing leaves the
 machine; the only network traffic is the one-time model download.
 
-## The two ways to use it
+## The three ways to use it
 
 | | |
 |---|---|
-| `readPage` | Finds every line itself and reads them all. **Start here.** No coordinates needed. |
+| `readWindow` | Screenshots another open window and reads it. **This is how OCR reaches things that were never a file** — a rendered app, a chart, a page in the Browser. |
+| `readPage` | Finds every line in the loaded image and reads them all. **Start here** when you already handed it an image. No coordinates needed. |
 | `recognize` | Reads ONE line inside a box you specify. The escape hatch when detection misses a line, or when you already know exactly where to look. |
 
-`readPage` runs a detector to locate the text lines, then every selected recognizer over
-each line. `recognize` skips the detector entirely.
+`readWindow` is `loadImage` + `readPage` over the OS's own window capture. Both of those
+run a detector to locate the text lines, then every recognizer over each line;
+`recognize` skips the detector entirely.
 
 ## Typical flow
 
 ```
-app_command loadModels                     # once — downloads the weights (slow, see below)
+app_command loadModels                     # once per window — see below
+app_query   windows                        # → [{ windowId, title, detail }, ...]
+app_command readWindow { windowId }        # → { window, text, lines: [...] }
+```
+
+or, when you already have the pixels:
+
+```
 app_command loadImage   { dataUrl }        # or the user drops/pastes one
 app_command readPage                       # → { text, lines: [...], truncated }
 ```
 
-To re-read one line more carefully, take its `box` from `readPage` and pass it to
-`recognize`.
+To re-read one line more carefully, take its `box` from the result and pass it to
+`recognize` — the image stays loaded, so no second capture is needed.
 
 ## Commands
 
 | Command | Params | Notes |
 |---|---|---|
 | `loadModels` | — | Download the detector and recognizers. **Required before reading** |
+| `readWindow` | `{ windowId, download? }` | Capture that window and read it. Get the id from the `windows` state |
 | `loadImage` | `{ dataUrl }` | Replaces the loaded image, clears the selection |
 | `readPage` | `{ download? }` | Detect + read every line; returns joined text plus per-line entries |
 | `recognize` | `{ x?, y?, width?, height?, download? }` | One line. Omit the box to use the selection, else the whole image |
-| `loadSample` | — | Built-in multi-script test card; good for checking the models run |
-| `setModel` | `{ modelId?, assist?, detModelId? }` | `medium` (default) / `small` / `tiny` / `korean` |
+
+The models are not selectable through the protocol: every read uses the medium
+recognizer with the Korean assist. The window's toolbar can still change them.
 
 ## State
 
 `status` (busy / loading / message / backend / model ids / **what is still missing** /
-image size / selection), `page` (the last whole-page read), `lastResult` and `results`
-(single-line history, newest first), `models`, `detectors` (each with `loaded`).
+image size / selection), `windows` (what `readWindow` can target), `page` (the last
+whole-page read), `lastResult` and `results` (single-line history, newest first),
+`models` (which scripts each recognizer covers — consult it when a line is
+`readable: false`).
+
+## What `readWindow` can and cannot capture
+
+Only **iframe (app) windows** have a screenshot. A `markdown`, `table`, `text`, or
+`component` window is already text — read it with `read yaar://windows/{id}` instead of
+OCR-ing a picture of it, and `readWindow` says so rather than failing vaguely.
+
+The capture is the window's visible area at CSS resolution — what is scrolled out of
+view is not in it, so scroll the window (or make it bigger) before reading if the text
+you want is below the fold. A window whose canvas is tainted by a cross-origin image
+cannot be captured at all; that error says so, and retrying will not help.
 
 ## Reading never downloads
 
-`readPage` and `recognize` **fail** rather than fetch 152 MB of weights behind your back.
-The error names what is missing; `status.modelsMissing` says the same thing before you
-try. Fix it by calling `loadModels` — or by passing `download: true` to the read, which
-makes that one call as slow as `loadModels` would have been.
+`readWindow`, `readPage` and `recognize` **fail** rather than fetch 152 MB of weights
+behind your back — `readWindow` refuses before it captures anything. The error names what
+is missing; `status.modelsMissing` says the same thing before you try. Fix it by calling
+`loadModels` — or by passing `download: true` to the read, which makes that one call as
+slow as `loadModels` would have been.
 
-`loadModels` is the slow one: 152 MB at the default sizes, cached on disk afterwards and
-usable offline. Use a long timeout; if the transport gives up, poll the `status` state
-rather than re-issuing it. Loading is tracked per window, so a freshly opened OCR window
-needs `loadModels` again — it returns in about a second once the bytes are on disk.
+`loadModels` is the slow one: 152 MB at the default sizes, roughly half a minute on a
+fast link. The files land in this app's own storage
+(`storage/apps/ocr/models/{model}/inference.onnx`), not in the browser's cache, so they
+survive a cleared profile and work offline afterwards. Use a long timeout; if the
+transport gives up, poll the `status` state rather than re-issuing it. Loading is tracked
+per window, so a freshly opened OCR window needs `loadModels` again — it comes back in
+about a second once the bytes are on disk (measured: 889 ms for all 152 MB).
 
 Once warm, a page read is fast: the sample card takes ~270 ms end to end, and a dense
 32-line screenshot ~2.4 s. The Korean assist adds a second pass with a mobile-sized
@@ -102,10 +130,10 @@ that up. Counted directly from the dictionary each model was exported with:
 | **Korean (Hangul)** | **no — 0** | **no** | yes (all 11,172 syllables) |
 | **Cyrillic** | **no — 0** | **no** | **no** |
 
-No single model covers a mixed page, which is why `assist` exists: every line is read by
-the primary *and* by each assist, and the better read is kept. `["korean"]` by default,
-which is what makes a Korean page — or a Korean page with English in it — readable at
-all. `setModel({ assist: [] })` turns it off and roughly halves recognition time.
+No single model covers a mixed page, which is why the assist exists: every line is read by
+`medium` *and* by `korean`, and the better read is kept. That is what makes a Korean page
+— or a Korean page with English in it — readable at all. The window's toolbar can turn it
+off, which roughly halves recognition time; the protocol always runs both.
 
 A line in a script none of the loaded models covers still does not error. Through
 `readPage` it comes back with `readable: false`; through `recognize` it comes back as an

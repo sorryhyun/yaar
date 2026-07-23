@@ -1,11 +1,10 @@
 import { app, defineCommand, errMsg } from '@bundled/yaar';
 import { loadDataUrl } from './image-input';
-import { loadSample } from './sample';
 import { runRecognition } from './recognize';
 import { runPageRead, type PageResult } from './pipeline';
-import { MODELS, modelById } from './model';
-import { DET_MODELS, detModelById } from './detect';
-import { bytesOf, ensureModels, isLoaded, missing, pageModels } from './warm';
+import { MODELS } from './model';
+import { bytesOf, ensureModels, isLoaded, missing, pageModels, requireLoaded } from './warm';
+import { captureWindow, listWindows } from './window-source';
 import {
   assistIds,
   backend,
@@ -18,10 +17,7 @@ import {
   recognizerIds,
   results,
   selection,
-  setAssistIds,
-  setDetModelId,
   setDownloadRatio,
-  setModelId,
   setStatus,
   status,
   type OcrRecord,
@@ -117,26 +113,25 @@ export function registerProtocol(): void {
       },
       models: {
         description:
-          'Recognizers that can be selected with setModel, which scripts each covers, ' +
-          'and whether its weights are loaded',
+          'Every recognizer this app ships and which scripts each one covers — what to ' +
+          'consult when a line comes back readable:false. `running` marks the ones a read ' +
+          'actually uses; the rest are selectable in the window only.',
         handler: () =>
           MODELS.map((m) => ({
             id: m.id,
             label: m.label,
             bytes: m.bytes,
             scripts: m.scripts,
+            running: recognizerIds().includes(m.id),
             loaded: isLoaded(`rec:${m.id}`),
           })),
       },
-      detectors: {
-        description: 'Text-detector sizes that can be selected with setModel',
-        handler: () =>
-          DET_MODELS.map((m) => ({
-            id: m.id,
-            label: m.label,
-            bytes: m.bytes,
-            loaded: isLoaded(`det:${m.id}`),
-          })),
+      windows: {
+        description:
+          'Open windows, any of which readWindow can OCR. Each entry is the windowId to ' +
+          'pass, its title, and its renderer — only iframe (app) windows have a screenshot ' +
+          'to read.',
+        handler: () => listWindows(),
       },
     },
     commands: {
@@ -157,53 +152,6 @@ export function registerProtocol(): void {
           } catch (e) {
             throw new Error(errMsg(e));
           }
-        },
-      }),
-      loadSample: defineCommand({
-        description:
-          'Load the built-in multi-script test card. Useful for checking the model runs.',
-        params: { type: 'object', properties: {} },
-        handler: () => {
-          loadSample();
-          return imageSize();
-        },
-      }),
-      setModel: defineCommand({
-        description:
-          'Choose the recognizer and/or detector size, and which extra recognizers assist. ' +
-          'Larger is more accurate and slower to download. The detector only affects readPage.',
-        params: {
-          type: 'object',
-          properties: {
-            // Enums are literals on purpose: the protocol extractor JSON-parses this
-            // object out of the source, so an identifier here would not survive it.
-            modelId: {
-              type: 'string',
-              enum: ['medium', 'small', 'tiny', 'korean'],
-              description:
-                'Primary recognizer — reads the text inside a box. medium/small/tiny cover ' +
-                'Latin and CJK; korean covers Hangul and ASCII only.',
-            },
-            assist: {
-              type: 'array',
-              items: { type: 'string', enum: ['medium', 'small', 'tiny', 'korean'] },
-              description:
-                'Extra recognizers run on every line beside the primary, with the better ' +
-                'decode kept per line. Defaults to ["korean"], which is what makes a Korean ' +
-                'page readable at all. Pass [] to turn it off and halve recognition time.',
-            },
-            detModelId: {
-              type: 'string',
-              enum: ['medium', 'small', 'tiny'],
-              description: 'Detector — finds the boxes. Defaults to tiny, which is 1.8 MB.',
-            },
-          },
-        },
-        handler: (params) => {
-          if (params.modelId) setModelId(modelById(params.modelId).id);
-          if (params.assist) setAssistIds(params.assist.map((id) => modelById(id).id));
-          if (params.detModelId) setDetModelId(detModelById(params.detModelId).id);
-          return { modelId: modelId(), assist: assistIds(), detModelId: detModelId() };
         },
       }),
       loadModels: defineCommand({
@@ -259,6 +207,45 @@ export function registerProtocol(): void {
         handler: async (params) => {
           try {
             return summarizePage(await runPageRead({ download: params.download }));
+          } catch (e) {
+            throw new Error(errMsg(e));
+          }
+        },
+      }),
+      readWindow: defineCommand({
+        description:
+          'Screenshot another open window and read every line of text on it. This is how ' +
+          'to OCR something that was never a file: a rendered app, a chart, a page in the ' +
+          'Browser. Get the windowId from the `windows` state. Returns what readPage ' +
+          'returns, plus which window was captured — and leaves that screenshot as the ' +
+          'loaded image, so a follow-up recognize on a line box needs no second capture. ' +
+          'Only iframe (app) windows have a screenshot; a markdown/table/component window ' +
+          'is already text, so read it directly instead. Needs loadModels to have run.',
+        params: {
+          type: 'object',
+          properties: {
+            windowId: {
+              type: 'string',
+              description: 'The window to capture, from the `windows` state.',
+            },
+            download: {
+              type: 'boolean',
+              description:
+                'Fetch any missing weights as part of this call instead of failing. Makes ' +
+                'the call take as long as loadModels would. Default false.',
+            },
+          },
+          required: ['windowId'],
+        },
+        handler: async (params) => {
+          try {
+            // The same refusal readPage makes, made before the capture rather than after
+            // it: capturing replaces whatever image was loaded, and a call that is going
+            // to be turned away for missing weights should not have thrown that away.
+            if (!params.download) requireLoaded(pageModels(recognizerIds(), detModelId()));
+            const captured = await captureWindow(params.windowId);
+            const result = await runPageRead({ download: params.download });
+            return { window: captured, ...summarizePage(result) };
           } catch (e) {
             throw new Error(errMsg(e));
           }

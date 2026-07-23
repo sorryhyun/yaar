@@ -12,6 +12,7 @@
 // order, and zero padding applied *after* normalization.
 import { session, run, Tensor, capabilities, type InferenceSession } from '@bundled/yaar-ml';
 import { loadCharset, type CharsetId } from './charset';
+import { ensureOnDisk, type LoadProgress } from './weights';
 
 export type { CharsetId };
 
@@ -103,18 +104,15 @@ export function modelById(id: string): ModelChoice {
   return MODELS.find((m) => m.id === id) ?? MODELS[0];
 }
 
-export interface LoadProgress {
-  ratio: number;
-  loaded: number;
-  total: number;
-}
+export type { LoadProgress };
 
 /**
  * Load (and memoize) a recognizer session.
  *
- * `session()` streams the weights through YAAR's same-origin `/api/ml-weights`
- * proxy and caches them in IndexedDB, so only the first call per model pays the
- * download. It memoizes by URL, so calling this repeatedly is cheap.
+ * The weights are pulled to this machine's storage first (weights.ts) and the session
+ * is created from the file on disk, so a second window — or a browser that has been
+ * cleaned out since — reads bytes it already has instead of fetching 77 MB again.
+ * `session()` memoizes by URL, so calling this repeatedly is cheap.
  */
 export async function loadRecognizer(
   modelId: string,
@@ -122,10 +120,10 @@ export async function loadRecognizer(
   signal?: AbortSignal,
 ): Promise<InferenceSession> {
   const model = modelById(modelId);
-  const s = await session(model.url, {
+  const local = await ensureOnDisk(model.url, model.bytes, onProgress, signal);
+  const s = await session(local, {
     backend: 'auto', // WebGPU when the tab has it, single-thread wasm otherwise
     signal,
-    onProgress: (p) => onProgress?.({ ratio: p.ratio, loaded: p.loaded, total: p.total }),
   });
   return s;
 }
