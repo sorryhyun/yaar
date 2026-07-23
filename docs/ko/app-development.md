@@ -1,6 +1,6 @@
 # 앱 개발 가이드
 
-YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, 컴파일, 프리뷰, 바탕화면 배포까지 모두 AI가 devtools 앱을 통해 처리합니다.
+YAAR에서는 AI에게 무엇을 만들지 말하면 AI가 앱을 만듭니다. TypeScript 작성, 컴파일, 프리뷰, 바탕화면 배포까지 모두 devtools 앱을 통해 AI가 처리하며, 완성된 앱은 [공유 마켓플레이스에 게시](#마켓플레이스에-게시하기)해 누구나 설치할 수 있게 만들 수도 있습니다.
 
 > [English version](../guides/app-development.md)
 
@@ -18,11 +18,13 @@ YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, �
 🎮 바탕화면에 테트리스 아이콘 등장
 ```
 
-사용자는 코드를 직접 작성할 필요가 없습니다. AI가 devtools 앱을 통해 TypeScript를 작성하고, Bun으로 컴파일하고, 프리뷰한 뒤 앱으로 배포합니다. 빌드된 앱은 모든 라이브러리와 코드가 하나의 HTML 파일로 번들링되므로, 별도의 설치 없이 어떤 브라우저에서든 독립적으로 실행할 수 있습니다.
+사용자는 코드를 직접 작성할 필요가 없습니다. AI가 devtools 앱을 통해 TypeScript를 작성하고, Bun으로 컴파일하고, 결과를 프리뷰한 뒤 앱으로 배포합니다. 빌드된 앱은 모든 라이브러리, CSS, 코드가 하나의 자체 완결형 HTML 파일로 인라인되므로, 별도 의존성 없이 어떤 브라우저에서든 독립적으로 실행할 수 있습니다.
 
 ## URI 동사
 
-모든 작업은 5개의 범용 동사(`read`, `list`, `invoke`, `delete`, `describe`)를 `yaar://` URI에 적용하여 수행합니다.
+모든 작업은 `yaar://` URI에 5개의 범용 동사(`read`, `list`, `invoke`, `delete`, `describe`)를 적용해 수행합니다.
+
+> **참고:** `yaar://session/*`는 **세션 에이전트 전용**입니다 — 세션 프린시펄만의 프라이빗 네임스페이스이며, `app.json` 권한과 무관하게 앱이 `POST /api/verb`로 접근할 수 없습니다(앱은 이를 스스로에게 부여할 수 없습니다). 여기에는 `yaar://session/browser`(세션 에이전트가 사용자의 *실제* 브라우저로 통하는 문)도 포함됩니다. 브라우징이 필요한 앱은 `@bundled/yaar-web` → 헤드리스 샌드박스를 대신 사용해야 합니다.
 
 ### Devtools 앱
 
@@ -35,9 +37,24 @@ YAAR에서는 AI에게 말하면 앱이 만들어집니다. TypeScript 작성, �
 | 동사 | URI | 설명 |
 |------|-----|------|
 | `list` | `yaar://apps` | 설치된 앱 전체 목록 조회 |
-| `read` | `yaar://apps/{appId}` | 앱의 SKILL.md 로드 |
-| `invoke` | `yaar://apps/{appId}`, `{ action: "set_badge", count }` | 앱 아이콘 배지 설정 |
+| `describe` | `yaar://apps/{appId}` | 메타데이터 + 프로토콜 매니페스트(기능) |
+| `read` | `yaar://apps/{appId}` | 앱의 SKILL.md 로드 (매니페스트가 덧붙여짐) |
+| `invoke` | `yaar://apps/{appId}`, `{ action, ... }` | 앱 액션 실행 (아래 참조) |
 | `delete` | `yaar://apps/{appId}` | 앱 삭제 |
+
+**`yaar://apps/{appId}`에 대한 `invoke` 액션** (`handlers/apps/app-resource.ts`):
+
+| 액션 | 페이로드 | 설명 |
+|--------|---------|------|
+| `set_badge` | `{ count }` | 앱 아이콘 배지 설정(`0`이면 해제) |
+| `install` | — | 마켓플레이스에서 앱을 다운로드하여 설치 |
+| `clone` | — | 앱의 소스를 devtools 워크스페이스로 복사해 편집할 수 있게 함 |
+| `publish` | — | 앱의 현재 디스크 상태를 단일 단계로 게시 |
+| `publish_prepare` | — | 2단계 게시의 1단계: 바이트를 고정하고 `publicationId`와 요약을 반환 |
+| `publish_confirm` | `{ publicationId, acknowledgeDrift? }` | 2단계: 고정된 바이트를 업로드 |
+| `publish_cancel` | `{ publicationId }` | 준비된 게시를 취소 |
+
+전체 게시 흐름은 [마켓플레이스에 게시하기](#마켓플레이스에-게시하기)를 참조하세요.
 
 ### 앱 설정 — `yaar://config/app/`
 
@@ -83,16 +100,116 @@ AI가 devtools 앱에 deploy 명령을 보냅니다.
 - 컴파일된 HTML을 `apps/{appId}/`로 복사
 - `SKILL.md`와 `app.json` 자동 생성
 - 바탕화면에 아이콘 즉시 등장
-- `appProtocol`: App Protocol 지원 여부 (HTML에서 자동 감지, 수동 설정 가능)
-- `fileAssociations`: 앱이 열 수 있는 파일 확장자 매핑
+- `appProtocol`: App Protocol 지원 여부 표시 (설정하지 않으면 HTML에서 자동 감지)
+- `fileAssociations`: 파일 확장자를 파일 열기용 `app_command` 호출에 매핑
 
 ### 기존 앱 수정 — clone → 편집 → compile → deploy
 
 AI가 기존 앱의 소스를 devtools 워크스페이스로 복제하고, 편집 후 다시 컴파일하여 동일한 appId로 재배포합니다.
 
+### 독립 실행 프리뷰 — 바탕화면 없이 앱 하나만 구동하기
+
+*하나의 앱*만 검증할 때 — 특히 CDP를 통해서, 테스트에서, 또는 다른 에이전트에서 — 바탕화면 전체는 잘못된 도구입니다. 윈도우 관리와 씨름해야 하고, 크로스 오리진 앱 iframe 안으로 들어갈 수 없으며, 앱 자체의 자동화 훅은 두 단계 프레임 아래에 있습니다. 대신 앱을 최상위 페이지로 여세요:
+
+```
+http://localhost:8000/api/dev/preview/{appId}
+```
+
+이 경로는 배포된 앱의 `dist/index.html`을 **실제 iframe 토큰이 주입된 채로** 제공하므로, 토큰으로 게이트된 SDK 호출(`appStorage`, `appDb`, `/api/ml-weights`, verb SDK)이 윈도우 안에서와 완전히 동일하게 동작합니다. 신원은 앱 자신의 것입니다 — 권한과 `bundles`는 요청이 아니라 앱의 `app.json`에서만 나오므로, 프리뷰가 배포된 앱이 거부당할 무언가를 통과시킬 수는 없으며, 동일한 `connect-src 'self'` CSP 아래에서 실행됩니다.
+
+```js
+// CDP로 말하는 모든 것: Playwright, Puppeteer, claude-in-chrome, …
+navigate('http://localhost:8000/api/dev/preview/ocr');
+javascript_tool("await window.__ocr.readSample()"); // 앱 자체의 자동화 훅
+```
+
+참고 사항:
+
+- **호스트 전용.** 이 경로는 앱의 토큰을 내주므로 — `POST /api/iframe-token`과 마찬가지로 — 앱 iframe에는 거부됩니다. `REMOTE=1`에서는 호출자가 이미 원격 토큰을 갖고 있어야 합니다.
+- **`127.0.0.1`이 아니라 `localhost`.** 앱 오리진 격리가 켜져 있으면(로컬 모드 기본값), `127.0.0.1`은 앱 오리진 *자체*이므로 토큰 없는 요청이 이를 실어 오면 설계상 거부됩니다. 최상위 내비게이션은 자동으로 `localhost`로 리다이렉트되어 대부분 저절로 해결되지만, `127.0.0.1`로 프리뷰 URL을 `fetch`하는 경우는 해당되지 않습니다.
+- 세션 범위 verb(윈도우, 알림)는 연결된, 실행 중인 바탕화면의 세션에 바인딩됩니다. 바탕화면이 떠 있지 않아도 앱은 자신의 스토리지, DB, 게이트된 HTTP 도어는 그대로 사용할 수 있습니다 — 이것들은 세션이 아니라 앱에 키가 걸려 있기 때문입니다.
+- 앱은 **배포되어** 컴파일된 상태(`dist/index.html` 존재)여야 합니다. devtools 워크스페이스의 아직 컴파일되지 않은 프로젝트라면 먼저 컴파일하세요 — `POST /api/dev/compile`이 `/api/storage/…` 아래의 `previewUrl`을 반환합니다.
+
+## 마켓플레이스에 게시하기
+
+배포(deploy)는 앱을 *당신의* 바탕화면에 올립니다. 게시(publish)는 앱을 공유 YAAR 마켓플레이스로 올려 누구나 설치할 수 있게 합니다. 전체 라이프사이클은 **작성 → 컴파일 → 배포 → 게시**이며, 설치는 다른 사람의 머신에서 이를 거울처럼 반복하는 과정입니다.
+
+Market Apps 앱(🛒, `apps/market-apps`)이 양방향 모두의 관문입니다 — 다른 사람의 앱을 둘러보고 설치하고, 로그인하고, 자신의 앱을 게시합니다. AI는 `yaar://apps/{appId}` verb를 통해 모든 단계를 직접 수행할 수도 있습니다.
+
+### 게시자 신원 — Google 로그인
+
+게시는 **Google ID 토큰**으로 인증됩니다: Google이 서명한 JWT로 당신의 이메일을 증명하며, 마켓플레이스는 이를 Google의 공개 키로 검증합니다. API 키도, 공유 비밀도, 기기 등록도 없습니다 — 이메일 자체가 증명입니다.
+
+- Market Apps 윈도우에서 **로그인**하세요("Sign in to publish"). YAAR가 시스템 브라우저를 열어 Google 동의 화면으로 이동합니다(이 서버의 `/api/auth/google/callback`으로의 루프백 리다이렉트를 통한 PKCE), 이후 코드를 토큰으로 교환합니다. `openid email` 스코프만 요청합니다 — 게시는 어떤 Google API가 아니라 당신의 이메일에 대해서만 인증됩니다.
+- **리프레시 토큰**이 영속적인 절반이며, 로컬(설정 디렉터리)에 저장되는 유일한 것입니다. ID 토큰은 1시간짜리이고 필요할 때마다 생성되며, 메모리에만 캐시됩니다.
+- 토큰 교환은 마켓플레이스(`MARKET_URL/api/auth/exchange`)를 경유합니다. Google의 데스크톱 클라이언트 토큰 엔드포인트는 `client_secret`을 요구하는데, 사용자 머신에 설치되는 오픈소스 앱에는 이를 안전하게 보관할 곳이 없기 때문입니다. YAAR는 자신이 할 수 있는 절반을 처리하고(동의 화면 열기, PKCE verifier 보관, 코드 수신), 마켓플레이스가 시크릿을 더해 Google을 호출합니다. 돌아오는 것은 토큰뿐입니다.
+
+인증 라우트는 YAAR 자체 오리진에 있으며 호스트/번들 앱 전용입니다 — `GET /api/auth/google/status`, `POST /api/auth/google/login`, `POST /api/auth/google/logout` (`http/routes/auth.ts`).
+
+### 게시되는 것
+
+게시는 앱 디렉터리를 **tar.gz로 압축**해 업로드하며, 각 엔트리는 `{appId}/`로 시작합니다 — `GET /api/apps/{id}/download`가 만드는 것과 같은 모양이라 왕복이 대칭적입니다. 아카이브에서 제외되는 것:
+
+- **`dist/`** — 마켓플레이스는 *소스*를 배포하며 설치 시 YAAR가 직접 컴파일합니다. 빌드 산출물을 업로드하면 아카이브만 커지고 소스와 어긋나 금방 낡아버릴 뿐입니다.
+- **macOS 잔재물** — 어느 깊이에 있든 `.DS_Store`와 `._*` AppleDouble 사이드카.
+
+앱 시크릿은 애초에 앱 디렉터리에 있지 않으므로 여기서 문제가 되지 않습니다. 자격 증명은 `config/{appId}.json`(git-ignored, [자격 증명 관리](#자격-증명-관리) 참조)에 별도로 저장되며, `apps/{appId}/` 안에는 절대 들어가지 않습니다.
+
+마켓플레이스는 앱을 자신의 git 저장소에 커밋하므로, 게시는 즉시가 아니라 큐에 들어갑니다 — 응답은 재배포가 반영되면 "약 1분 후 반영됩니다"라고 안내합니다. 앱 id는 `^[a-z][a-z0-9-]*$`와 일치해야 합니다.
+
+### 버전 정책 — 게시 전에 버전을 올리세요
+
+마켓플레이스는 이미 서비스 중인 버전보다 엄격히 더 높지 않은 버전을 거부하며, YAAR도 패키징 *전에* 로컬에서 동일하게 확인하므로 업로드를 기다리다 거부당하는 대신 곧바로 "버전을 올리세요"라는 메시지를 받습니다. 업데이트할 때마다 `app.json`의 `"version"`(semver)을 올리세요. 이 확인은 최선 노력(best-effort)이며 fail-open입니다 — 카탈로그에 접근할 수 없거나 앱이 한 번도 게시된 적이 없으면 게시가 허용되고, 마켓플레이스가 최종 방어선 역할을 합니다.
+
+Market Apps UI에서는 로컬 버전이 더 높지 않다는 것을 확인할 수 있으면 게시 버튼이 "vX already published" 툴팁과 함께 비활성화됩니다.
+
+### 단일 단계 게시
+
+앱의 현재 디스크 상태를 패키징해 한 번에 업로드합니다 — 그 사이에 소스가 바뀔 틈이 없습니다:
+
+```
+invoke('yaar://apps/{appId}', { action: 'publish' })
+// → { published: true, appId, commit, files, message }
+```
+
+일시적인 업스트림 실패(429/5xx, 연결 끊김)는 백오프와 함께 최대 3회까지 재시도됩니다 — 전체 업로드가 완료되기 전까지는 아무것도 커밋되지 않으므로 안전합니다.
+
+### 2단계 게시 (freeze → confirm)
+
+사용자에게 정확히 무엇이 나갈지 보여주고 명시적 확인을 받고 싶다면 2단계 흐름을 사용하세요. `prepare`가 정확한 바이트를 고정하고 소스를 해시하며, `confirm`은 *그 고정된 바이트*를 업로드합니다 — 새로 다시 tar하지 않습니다:
+
+```
+invoke('yaar://apps/{appId}', { action: 'publish_prepare' })
+// → { prepared: true, publicationId, appId, version, byteLength, artifactSha256, ... }
+
+invoke('yaar://apps/{appId}', { action: 'publish_confirm', publicationId })
+// → { published: true, appId, commit, files, message }
+```
+
+두 호출 사이에 YAAR는 **소스 드리프트**를 감시합니다: `prepare` 이후 `src/`나 `app.json`이 바뀌었다면 `confirm`은 `{ published: false, status: 'drift_detected', ... }`로 거부하고 바뀐 파일 목록을 알려줍니다. 다시 `prepare`하거나, `acknowledgeDrift: true`를 넘겨 원래 고정된 바이트를 그대로 내보낼 수 있습니다. 그 외의 치명적이지 않은 상태(`expired`, `not_found`)도 하드 에러가 아니라 같은 구조화된 형태로 돌아옵니다. 준비된 게시는 15분 후 정리되며, 미리 폐기하려면:
+
+```
+invoke('yaar://apps/{appId}', { action: 'publish_cancel', publicationId })
+```
+
+소스 드리프트는 재압축이 아니라 `src/`와 `app.json`의 콘텐츠 해시(결정적)로 감지합니다 — gzip 스트림은 mtime을 새기므로 아무것도 바뀌지 않아도 절대 바이트 단위로 동일하지 않기 때문입니다.
+
+### 설치와 삭제
+
+```
+invoke('yaar://http', { url: '<MARKET_URL>/api/apps' })   // 카탈로그 탐색
+invoke('yaar://apps/{appId}', { action: 'install' })      // 다운로드 + 설치
+delete('yaar://apps/{appId}')                             // 삭제
+list('yaar://apps')                                       // 설치된 앱 목록
+```
+
+`<MARKET_URL>`은 마켓플레이스 오리진입니다(서버 환경 변수 `MARKET_URL`). `install`은 tarball을 다운로드하고 압축을 풀고 — 마켓플레이스가 소스를 배포하므로 — 로컬에서 앱을 컴파일합니다. 새로 설치되는 앱은 git-ignored된 user-apps 루트에 놓여 추적 중인 번들 트리를 오염시키지 않습니다. 이미 설치된 앱을 다시 설치하면 그 자리에서 업데이트됩니다. 번들된 `"kind": "system"` 앱은 마켓플레이스에서 교체할 수 없습니다. 앱이 `permissions`를 선언하면 설치가 완료되기 전에 사용자에게 승인을 요청합니다.
+
+AI는 이 모든 것을 `yaar://skills/marketplace` 참조 토픽(`read('yaar://skills/marketplace')`)을 통해 접근합니다. 이 토픽은 `MARKET_URL`이 치환된 실제 마켓플레이스 API를 문서화합니다.
+
 ## 번들 라이브러리
 
-npm 설치 없이 `@bundled/*`로 바로 사용 가능:
+`@bundled/*` import로 사용 가능 — npm install 불필요. 신뢰할 수 있는 목록은 `packages/compiler/src/plugins.ts`의 `BUNDLED_LIBRARIES`이며, `GET /api/dev/bundled-libraries`에서도 제공됩니다.
 
 | 라이브러리 | import 경로 | 용도 |
 |-----------|------------|------|
@@ -135,9 +252,21 @@ import anime from '@bundled/anime';
 
 | SDK | Import 경로 | 용도 | 필요한 `bundles` 값 |
 |-----|------------|------|-------------------|
-| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()` | `"yaar-dev"` |
+| Dev Tools | `@bundled/yaar-dev` | `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`, 그리고 앱별 버전 이력: `gitHistory()`, `gitDiff()`, `gitRestore()`, `gitCheckpoint()` | `"yaar-dev"` |
 | Browser | `@bundled/yaar-web` | `open()`, `click()`, `type()`, `extract()` 등 | `"yaar-web"` |
-| ML 런타임 | `@bundled/yaar-ml` | 브라우저 내 모델 추론 (WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
+| ML 런타임 | `@bundled/yaar-ml` | 브라우저 내 모델 추론(WebGPU/wasm): `session()`, `run()`, `capabilities()`, `fetchWeights()` | `"yaar-ml"` |
+
+ML 런타임의 기능, 메모리 제한, "무엇이 들어맞는지"에 대한 가이드는 [`docs/guides/yaar_ml_runtime.md`](./yaar_ml_runtime.md)를 참조하세요.
+
+### 앱별 버전 이력
+
+배포(deploy)는 파괴적입니다 — 소스를 덮어쓰고 더는 존재하지 않는 파일을 삭제합니다 — 그래서 모든 배포 전에 스냅샷이 먼저 찍힙니다. 각 앱은 **워크트리가 앱 디렉터리 자체인** 자신만의 섀도 git 저장소를 가지며, 이것이 바로 "앱 경계"를 우리가 걸러내는 규칙이 아니라 git이 강제하는 경계로 만들어줍니다. 저장소 메타데이터는 git-ignored된 `storage/app-git/<appId>.git`에 있으며 앱 내부에는 절대 없습니다 — 사용자 자신의 저장소는 중첩된 `.git`을 보지 않고, 그 이력도 에이전트 커밋으로 오염되지 않습니다. `dist/`와 `credentials.json`은 제외됩니다.
+
+`gitDiff`는 두 가지 기준을 받습니다. `against: "snapshot"`(기본값)은 앱의 파일을 자신의 이력 속 커밋과 비교합니다 — *마지막 배포 이후 무엇이 바뀌었는지* — 모든 앱에서 동작합니다. `against: "repo"`는 사용자 자신의 git 저장소와 비교합니다 — *사용자가 커밋한 것에 비해 무엇이 바뀌었는지* — 읽기 전용이며 번들 앱 전용입니다. `user-apps/`는 git-ignored이기 때문입니다.
+
+`gitRestore(appId, ref)`는 앱을 롤백하고 다시 빌드합니다. 먼저 현재 상태를 스냅샷으로 남기고, 롤백을 `HEAD`를 옮기는 대신 새 커밋으로 덧붙이므로, 이력은 append-only이며 되돌리기 자체도 되돌릴 수 있습니다.
+
+다른 앱의 디렉터리에 쓰는 작업(`deploy`, `gitRestore`, `gitCheckpoint`)은 번들 앱으로 제한됩니다 — `"bundles": ["yaar-dev"]`를 선언한 마켓플레이스 앱은 자기 자신만 수정할 수 있습니다.
 
 **app.json:**
 ```json
@@ -170,14 +299,102 @@ const [count, setCount] = createSignal(0);
 render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => count()} times</button>`, document.getElementById('app')!);
 ```
 
-`@bundled/*` 라이브러리를 import하는 경우 이미 모듈로 인식되므로 별도 추가 불필요.
+`@bundled/*` 등 다른 모듈에서 이미 import를 하고 있다면 파일은 이미 모듈로 인식되므로 별도의 `export {};` 는 필요 없습니다.
+
+## UI 크롬 & 헤드리스 프리미티브
+
+컴파일러는 컴파일된 모든 앱에 `y-*` 유틸리티/크롬 레이어를 주입합니다 — 색상, 여백, 레이아웃, 버튼, 그리고 **문서형 앱 크롬 패밀리**(앱 바, 제목 필드, 서식 툴바, 상태 바)까지 포함합니다. CSS를 직접 작성하는 대신 이를 재사용하세요: 이 CSS는 어차피 모든 앱에 실려 가므로 추가 바이트 비용이 없고, 테마에 맞춰 자동으로 색이 바뀌며, 앱 에이전트에게도 자동으로 안내됩니다. **색상은 절대 하드코딩하지 말고** 항상 `var(--yaar-*)`를 사용하세요. 전체 클래스 목록은 `packages/frontend`/`shared` 디자인 문서에 있으며, 크롬과 콘텐츠를 구분하는 규칙과 예외 목록은 [`docs/architecture/design_system.md`](../architecture/design_system.md)를 참조하세요.
+
+### 문서형 앱 스켈레톤
+
+워드, 슬라이드, 파일류 앱은 같은 표면을 공유합니다: 신원 바, 인라인 편집 가능한 제목, 서식 툴바, 저장 상태 칩. 아래 스켈레톤을 붙여넣고 브랜드와 버튼만 채우세요 — 스타일은 클래스가 전부 처리합니다:
+
+```typescript
+import html from '@bundled/solid-js/html';
+import { render } from '@bundled/solid-js/web';
+
+render(() => html`
+  <div class="y-app">
+    <!-- 신원 바: 브랜드 + 제목 필드 + 주요 액션 -->
+    <div class="y-appbar">
+      <div class="y-brand">
+        <span class="y-brand-badge">W</span>
+        <span class="y-brand-name">My App</span>
+      </div>
+      <div class="y-doc-field">
+        <input class="y-doc-input" type="text" placeholder="Untitled" />
+      </div>
+      <div class="y-appbar-actions">
+        <button class="y-tbtn y-tbtn-text y-tbtn-primary" title="Save (Ctrl+S)">Save</button>
+      </div>
+    </div>
+
+    <!-- 서식 툴바: y-tsep으로 구분된 그룹(y-tgroup) -->
+    <div class="y-editbar">
+      <div class="y-tgroup">
+        <select class="y-tselect" title="Style">
+          <option>Paragraph</option>
+        </select>
+      </div>
+      <div class="y-tsep"></div>
+      <div class="y-tgroup">
+        <button class="y-tbtn" title="Bold">B</button>
+        <button class="y-tbtn y-tbtn-active" title="Italic">I</button>
+      </div>
+    </div>
+
+    <!-- 콘텐츠 영역 -->
+    <div class="y-scroll" style="position:absolute; inset:0; top:auto"></div>
+
+    <!-- 상태 바: 왼쪽에 통계, 오른쪽에 저장 상태 칩 -->
+    <div class="y-statusbar">
+      <span>0 words</span>
+      <span class="y-chip y-chip-muted">Saved</span>
+    </div>
+  </div>
+`, document.getElementById('app')!);
+```
+
+크롬 클래스: `y-appbar` / `y-appbar-actions`, `y-brand` / `-badge` / `-name`, `y-doc-field` / `y-doc-icon` / `y-doc-input`, `y-editbar`, `y-tgroup` / `y-tsep`, `y-tbtn` (`-text` / `-primary` / `-active`), `y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (`-warning` / `-muted`). 접었다 펴는 사이드바/오버레이는 `y-nav-*` 패밀리(`y-nav-root`, `y-nav-panel`, `y-nav-hover-zone`, `y-nav-pin`, `y-nav-resizer` 등)를 사용합니다.
+
+이 스켈레톤은 의도적으로 **컴포넌트가 아니라 스니펫**입니다 — SDK는 `solid-js/html` 템플릿을 절대 내보내지 않습니다. 공유 컴포넌트의 props는 이를 쓰는 모든 앱에 걸쳐 고착되고 Solid 렌더링을 SDK의 타입 표면으로 끌고 들어오기 때문입니다. 복사해 오는 크롬은 짧고, 그 다음부터는 당신이 편집하면 됩니다.
+
+### 헤드리스 동작 프리미티브
+
+문서형 앱들이 계속 다시 구현하던 두 개의 상태 머신이 이제 `@bundled/yaar`에 **헤드리스** 프리미티브로 들어 있습니다 — 상태와 핸들러를 반환하고, 마크업은 앱이 소유합니다. 둘 다 트리 셰이킹되므로 import하지 않는 앱은 아무 비용도 치르지 않습니다.
+
+**`createCollapsiblePanel`** — 호버로 펼쳐지고 고정할 수 있는 사이드바/오버레이입니다. 고정되어 있거나 호버 중일 때 보이며, 커서가 잠깐 벗어나도 바로 접히지 않도록 유예 시간을 둡니다. `pinKey`를 주면 고정 상태가 `appStorage`에 영속되고, 너비 핸들을 드래그하는 동안에는 `setResizing(true)`로 자동 닫힘을 억제합니다.
+
+```typescript
+import { createCollapsiblePanel } from '@bundled/yaar';
+
+const panel = createCollapsiblePanel({ pinKey: 'nav.pinned', closeDelayMs: 280 });
+// panel.expanded() / pinned(), open(), scheduleClose(), close(), cancelClose(),
+// togglePin(), setPin(v), setResizing(active)
+// 직접 포인터 핸들러를 연결하세요: onMouseEnter=panel.open, onMouseLeave=panel.scheduleClose
+```
+
+**`createAutosave`** — dirty / 디바운스 저장 / 저장 상태 라이프사이클입니다. `save`(성공하면 `true`, 실패하면 `false`를 반환해 문서를 dirty로 유지)를 디바운스와 `editSeq` 가드로 감쌉니다. 그래서 최신 편집보다 먼저 시작된 저장이 dirty 플래그를 지우는 일이 없습니다. `statusLabel()`은 `"Saving…"` | `"Saved 14:22"` | `"Not saved"`를 내며, `y-chip`과 짝지어 쓰면 됩니다.
+
+```typescript
+import { createAutosave } from '@bundled/yaar';
+
+const autosave = createAutosave(
+  (value: string) => appStorage.trySave('draft.txt', value),  // false ⇒ dirty 유지
+  { debounceMs: 800 },
+);
+// 입력 시 autosave.markDirty(value); Ctrl+S 시 autosave.flush(true);
+// 상태 칩은 autosave.statusLabel()에 바인딩
+```
+
+저장 상태 머신 없이 단순히 영속화만 하려면, `createPersistedSignal`(`trySave`를 통해 `appStorage`에 자동 동기화되는 Solid 시그널)이 더 가벼운 선택입니다.
 
 ## 런타임 제약 사항
 
 컴파일된 앱은 **브라우저 iframe 샌드박스**에서 실행됩니다. 다음과 같은 하드 제약이 있습니다:
 
 - **Node.js API 없음** — `fs`, `process`, `child_process`, `net` 등을 사용할 수 없습니다. 브라우저 환경입니다.
-- **서버 프로세스 없음** — 앱은 포트를 열거나 서버를 실행할 수 없습니다.
+- **서버 프로세스 없음** — 앱은 포트를 열거나, 서버를 실행하거나, 백그라운드 데몬을 돌릴 수 없습니다.
 - **OAuth 플로우 불가** — OAuth code-for-token 교환에는 서버 측 `client_secret`이 필요합니다. iframe 앱에서는 안전하게 수행할 수 없으므로, API 기반 앱 패턴을 사용하세요 (아래 참조).
 - **크로스 오리진 HTTP는 프록시 경유** — `@bundled/yaar`의 `httpFetch`를 사용하고 `app.json`에 `yaar://http`를 선언하세요. [HTTP 요청하기](#http-요청하기)를 참조하세요.
 - **localStorage/IndexedDB 사용 금지** — `@bundled/yaar`의 `appStorage`를 사용하세요 (서버 측 저장, 세션 간 유지).
@@ -330,8 +547,8 @@ export async function logout() {
 ```
 옵션 A: API 기반 앱 (API 래퍼에 적합)
   apps/recent-papers/SKILL.md → arXiv API, 조회 흐름 기술
-  사용자가 PAT 제공 → invoke('yaar://config/app/{appId}', { config })로 저장
-  AI가 invoke('yaar://http', ...)로 GitHub API 호출 → 윈도우에 렌더링
+  사용자가 API 키 제공 → invoke('yaar://config/app/{appId}', { config })로 저장
+  AI가 invoke('yaar://http', ...)로 서비스 API 호출 → 윈도우에 렌더링
 
 옵션 B: 컴파일된 앱 + AI 매개 API (풍부한 UI용)
   컴파일된 iframe 앱은 UI/표시만 담당
@@ -343,18 +560,31 @@ export async function logout() {
 
 ## 에이전트 프롬프트 커스터마이징
 
-각 앱은 사용자가 상호작용할 때 전용 **앱 에이전트**를 생성합니다. 에이전트의 시스템 프롬프트는 앱 디렉토리의 파일로부터 빌드됩니다:
+각 앱은 사용자가 상호작용할 때 전용 **앱 에이전트**를 생성합니다. 에이전트의 시스템 프롬프트는 앱 디렉터리의 파일로부터 빌드됩니다:
 
 | 파일 | 역할 | 사용 시점 |
 |------|------|-----------|
 | `SKILL.md` | 범용 기본 프롬프트에 추가 | 대부분의 앱 — API 문서, 사용법, 도메인 컨텍스트 추가 |
 | `AGENTS.md` | 범용 기본 프롬프트를 **완전히 대체** | 정밀한 에이전트 동작이 필요한 앱 (예: devtools IDE) |
+| `HINT.md` | **모니터 에이전트**의 시스템 프롬프트에 주입 | 오케스트레이터가 언제/어떻게 이 앱을 쓸지 아는 라우팅 힌트 |
 
 **우선순위:** `AGENTS.md` > `SKILL.md`. 둘 다 있으면 `AGENTS.md`만 사용됩니다. `protocol.json` 매니페스트(사용 가능한 state 키와 command)는 어떤 경우든 항상 추가됩니다.
 
+### HINT.md (오케스트레이터 컨텍스트)
+
+**앱 에이전트**를 구성하는 `SKILL.md`, `AGENTS.md`와 달리, `HINT.md`는 **모니터(오케스트레이터) 에이전트**의 시스템 프롬프트에 주입됩니다. 오케스트레이터에게 언제 이 앱으로 작업을 라우팅할지 알려주는 역할입니다. 힌트는 설치된 앱과 자동으로 동기화됩니다 — 앱을 삭제하면 힌트도 함께 사라집니다.
+
+정적인 시스템 프롬프트에 두면 금세 낡아버릴, 앱에 의존적인 오케스트레이션 안내에 이를 사용하세요. 예시:
+
+```markdown
+Use the devtools app for all app development tasks. The devtools app agent
+is a specialist with direct access to the project filesystem, compiler,
+and type checker.
+```
+
 ### SKILL.md (기본)
 
-에이전트가 범용 프롬프트("당신은 X 앱의 AI 어시스턴트입니다...")를 받고, `SKILL.md` 내용이 "App Documentation" 제목 아래 추가됩니다. 기본 3-tool 동작(query, command, relay)이 충분하고 도메인 지식만 추가하면 되는 앱에 적합합니다.
+에이전트가 범용 프롬프트("당신은 X 앱의 AI 어시스턴트입니다...")를 받고, `SKILL.md` 내용이 "App Documentation" 제목 아래 추가됩니다. 기본 도구 동작(describe, query, command, relay)이 충분하고 도메인 지식만 추가하면 되는 앱에 적합합니다.
 
 ### AGENTS.md (완전 제어)
 
@@ -363,7 +593,7 @@ export async function logout() {
 - 안티패턴, 주의사항, 도메인 특화 규칙을 정의해야 하는 경우
 - 범용 프롬프트의 동작 가이드라인이 맞지 않는 경우
 
-`AGENTS.md`는 기본 프롬프트를 대체하므로, 에이전트가 사용할 수 있는 3가지 도구(`query`, `command`, `relay`)를 직접 문서화해야 합니다.
+`AGENTS.md`는 기본 프롬프트를 대체하므로, 에이전트가 알아야 할 도구(`describe`, `query`, `command`, `relay`)를 직접 문서화해야 합니다. (`protocol.json`과, `controls`가 설정된 경우의 "Controllable Apps" 섹션은 여전히 자동으로 추가됩니다.)
 
 ### 예시 구조
 
@@ -371,10 +601,44 @@ export async function logout() {
 apps/my-app/
 ├── AGENTS.md       # 완전한 커스텀 에이전트 프롬프트 (선택, 고급)
 ├── SKILL.md        # 앱 문서 (선택, 간단)
+├── HINT.md         # 모니터 에이전트 라우팅 힌트 (선택)
 ├── app.json        # 메타데이터, 권한, 프로토콜 매니페스트
 ├── index.html      # 컴파일된 앱 (컴파일된 경우)
 └── src/            # 소스 코드 (컴파일된 경우)
 ```
+
+## `app.json` 참조
+
+**소스:** `packages/server/src/features/apps/discovery.ts`
+
+앱의 **id는 폴더 이름**입니다. `app.json`은 관대하게(lenient) 파싱됩니다 — 알 수 없는 필드와 타입이 잘못된 값은 조용히 무시되므로, 오타는 조용히 실패합니다.
+
+| 필드 | 타입 | 용도 |
+|------|------|------|
+| `name` | `string` | 표시 이름 |
+| `icon` | `string` | 이모지. 앱 폴더의 `icon.{png,jpg,svg,…}` 파일이 있으면 이를 대신 사용 |
+| `description` | `string` | 런처에 표시됨; 에이전트에도 전달됨 |
+| `version` | `string` | 정보용 |
+| `author` | `string` | 정보용 |
+| `run` | `string` | iframe 진입점 — `dist/index.html` 또는 `yaar://apps/{id}/…` URI |
+| `kind` | `"system"` | 보호되고 자동 신뢰되는 앱임을 표시. **번들 앱 전용** — 설치된 앱에서는 무시됨 |
+| `createShortcut` | `boolean` | `false`면 런처에서 앱을 숨김 (`"hidden": true`도 동일한 의미) |
+| `permissions` | `(string \| { uri, verbs? })[]` | 미리 부여된 URI 권한, 예: `"yaar://storage/"` 또는 `{ "uri": "yaar://http", "verbs": ["read"] }` |
+| `bundles` | `string[]` | 게이트된 SDK(`yaar-dev`, `yaar-web`, `yaar-ml`) 사용 동의. 선언하지 않으면 컴파일러가 import를 거부 |
+| `agentType` | `string` | 이 앱의 에이전트에 사용할 에이전트 프로필 오버라이드 |
+| `messaging` | `"all"` | 앱 에이전트가 모니터/사용자뿐 아니라 다른 앱/윈도우에도 `direct_message`할 수 있게 함 |
+| `controls` | `(string \| { appId, commands? })[]` | 이 앱이 조작할 수 있는 다른 앱. **번들 앱 전용** |
+| `fileAssociations` | `{ extensions, command, paramKey }[]` | 프로토콜 명령을 호출해 일치하는 파일 열기 |
+| `variant` | `"widget" \| "panel"` | 윈도우 변형 |
+| `dockEdge` | `"top" \| "bottom"` | 윈도우를 화면 가장자리에 도킹 |
+| `frameless` | `boolean` | 윈도우 크롬 제거 |
+| `windowStyle` | `object` | 윈도우에 적용할 CSS 오버라이드 |
+| `defaultWidth` / `defaultHeight` | `number` | 초기 윈도우 크기(px) |
+
+**실전에서 보이지만 무시되는 필드** — 알 수 없는 키로 파싱되어 아무 동작도 하지 않습니다:
+
+- `capture` (`"dom"` / `"canvas"`) — 번들 앱 19개에 존재하지만 현재 코드에서는 읽지 않습니다. 한때 이미 제거된 `window.capture` 도구용 스크린샷 전략을 지정했으나, 그 도구가 사라진 뒤에도 매니페스트 필드만 남았습니다.
+- `id`와 `appId` (`apps/memo`, `apps/music-maker`) — id는 항상 폴더 이름입니다. 소스 코드에서 `app.register()`에 넘기는 `appId`는 별개이며 실제로 *사용됩니다*.
 
 ## 앱 유형
 
@@ -423,12 +687,15 @@ iframe 앱 → postMessage → WebSocket → MCP 도구 응답
 
 ### 앱에서 등록하기
 
-`@bundled/yaar`에서 `app`을 import하고 `app.register()`로 상태 핸들러와 명령 핸들러를 등록합니다.
+`@bundled/yaar`에서 `app`과 `defineCommand`를 import하고 `app.register()`로 상태 핸들러와 명령 핸들러를 등록합니다.
 
 ```typescript
+// src/store.ts
+import { createSignal } from '@bundled/solid-js';
+export const [items, setItems] = createSignal<string[]>([]);
+
 // src/protocol.ts
-import { app } from '@bundled/yaar';
-// src/store.ts: export const [items, setItems] = createSignal<string[]>([]);
+import { app, defineCommand } from '@bundled/yaar';
 import { items, setItems } from './store';
 
 export function registerProtocol() {
@@ -442,17 +709,121 @@ export function registerProtocol() {
       },
     },
     commands: {
-      addItem: {
-        description: '아이템 추가. Params: { text: string }',
+      addItem: defineCommand({
+        description: '아이템 추가',
         params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-        handler: (p: { text: string }) => {
-          setItems([...items(), p.text]);  // 불변 시그널 쓰기, render() 불필요
+        handler: (p) => {                 // p는 { text: string }로 추론됨
+          setItems([...items(), p.text]); // 불변 시그널 쓰기, render() 불필요
           return { ok: true };
         },
-      },
+      }),
     },
   });
 }
+```
+
+### `defineCommand` — 스키마로부터 핸들러의 params를 추론하기
+
+명령은 파라미터 형태를 두 번 선언합니다: 에이전트가 읽는 `params` JSON Schema로 한 번, 핸들러의 TypeScript 타입으로 한 번. 이 둘을 동기화해 주는 장치가 없으므로, `handler: (p: { text: string })`는 `content`라고 말하는 스키마에도 아무렇지 않게 컴파일되고, 이 불일치는 에이전트가 명령을 호출할 때야 드러납니다.
+
+`defineCommand`는 스키마로부터 핸들러의 파라미터 타입을 유도해, 스키마를 단일 진실 공급원(single source of truth)으로 만듭니다:
+
+```typescript
+addItem: defineCommand({
+  description: 'Add an item',
+  params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+  handler: (p) => setItems([...items(), p.txt]),
+  //                                       ^^^ 컴파일 에러: 'text'를 쓰려던 것 아닌가요?
+})
+```
+
+런타임에서는 아무 일도 하지 않는 항등 함수(identity function)입니다 — 그래서 `dist/protocol.json`과 에이전트가 보는 모든 것은 그대로입니다. 오직 컴파일러가 핸들러를 검사하게 만들기 위해서만 존재합니다.
+
+추론되는 것: `enum`(리터럴 유니언으로), `string` / `number` / `integer` / `boolean` / `null`, `array` + `items`, 그리고 임의로 중첩된 `object` + `properties` / `required`. `required`에 없는 키는 옵셔널로 추론됩니다. `properties`가 없고 `additionalProperties` 스키마만 있는 `object`는 딕셔너리입니다: `{ type: 'object', additionalProperties: { type: 'string' } }`는 `Record<string, string>`으로 추론됩니다. 그냥 `{ type: 'object' }`는 `Record<string, unknown>`으로 추론됩니다.
+
+추론되지 않는 것: `anyOf`, `oneOf`, `$ref`와 그 밖의 키워드는 `unknown`으로 추론됩니다. 그런 핸들러의 파라미터는 직접 타입을 명시하거나, 그 명령을 `defineCommand` 없는 평범한 객체 리터럴로 남겨두세요 — `defineCommand`를 쓰지 않은 디스크립터도 예전과 똑같이 동작하며, 두 형태는 하나의 `commands` 블록 안에서 자유롭게 섞일 수 있습니다.
+
+호출 형태는 리터럴로 유지하세요 — `defineCommand({ ... })`가 인라인 객체를 감싸는 형태여야 합니다. 빌드 타임 프로토콜 추출기는 평가기가 아니라 소스 파서입니다: 단일 식별자 호출을 그대로 지나쳐 디스크립터를 찾으므로, 계산된 콜리(computed callee)는 빌드를 실패시킵니다.
+
+#### 도메인별로 프로토콜 나누기
+
+`commands`나 `state` 맵은 다른 파일에 있는 디스크립터 맵들을 모아 구성할 수 있습니다. 추출기는 상대 경로 import와 스프레드를 따라가므로, 다음은 `dist/protocol.json`에 온전히 도달합니다:
+
+```typescript
+// src/commands/files.ts
+export const fileCommands = {
+  readFile: defineCommand({ description: 'Read a file', params: { ... }, handler }),
+};
+
+// src/protocol.ts
+import { fileCommands } from './commands/files';
+import { gitCommands } from './commands/git';
+
+app.register({
+  appId: 'devtools',
+  commands: { ...fileCommands, ...gitCommands },
+});
+```
+
+한계는 정적으로 분석 가능한가이며, 이는 감수해야 할 제약이 아니라 강제되는 규칙입니다: **호출 결과**의 스프레드(`...buildCommands()`), npm 패키지에서 import한 디스크립터, `${...}` 템플릿 description, 또는 누락된 `description`은 `file:line:col`과 함께 컴파일을 실패시킵니다. 이는 의도된 것입니다 — 추출기가 건너뛴 명령이 런타임에는 여전히 동작하면서 모든 에이전트에게는 보이지 않는 상태가 되는 것이, 깨진 빌드보다 더 나쁜 유일한 결과이기 때문입니다.
+
+#### 핸들러에 런타임 컨텍스트가 필요할 때
+
+정적 분석 가능성과 등록별(per-registration) 컨텍스트는 서로 반대 방향으로 당깁니다: 디스크립터 맵은 최상위 `const`여야 하므로 `registerProtocol(ctx)`의 파라미터를 클로저로 잡을 수 없고, 이를 `buildCommands(ctx)` 팩토리로 끌어올리면 추출기가 정확히 거부하는 그 호출 결과가 되어버립니다. `createProtocolContext`가 그 이음매입니다 — 디스크립터는 정적으로 남고, 컨텍스트는 등록 시점에 설치되며, 핸들러는 접근자를 통해 그것에 닿습니다:
+
+```typescript
+// src/protocol/context.ts
+import { createProtocolContext } from '@bundled/yaar';
+
+export const { set: setProtocolContext, get: ctx } =
+  createProtocolContext<ProtocolContext>('slides-lite');
+
+// src/protocol/deck.ts — 평범한 const이므로 추출기가 읽을 수 있음
+export const deckCommands = {
+  setDeck: defineCommand({
+    description: 'Replace the whole deck',
+    params: { ... },
+    handler: (p) => ctx().setDeck(p.deck),
+  }),
+};
+
+// src/protocol.ts
+export function registerProtocol(context: ProtocolContext) {
+  setProtocolContext(context); // app.register() 이전에
+  app.register({ appId: 'slides-lite', commands: { ...deckCommands } });
+}
+```
+
+이 트레이드오프는 실재하며 짚어둘 가치가 있습니다: 컨텍스트는 모든 디스크립터가 공유하는 모듈 상태가 되므로, 문서 하나당 한 번 등록하는 앱 — 즉 일반적인 경우 — 에 적합합니다. 양쪽 경계 모두 조용히 넘어가지 않고 시끄럽게 실패합니다: `set()` 전에 `get()`을 부르면 `undefined`를 반환하는 대신 throw하고, *다른* 컨텍스트로 `set()`을 두 번 부르면 첫 등록의 핸들러를 조용히 다시 겨냥하는 대신 throw합니다.
+
+### 에이전트에게 말 걸기
+
+`app.register()`는 에이전트가 *당신을* 읽는 방법입니다. 다음 세 API는 당신이 에이전트에게 닿는 방법입니다. 전체 시그니처는 [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md)를 참조하세요.
+
+**`app.sendInteraction(description)`** — 자유 형식 메시지를 에이전트에게 보냅니다. 보통 iframe 안에서 사용자 액션이 일어난 뒤에 씁니다. 문자열을 받거나, `instructions`와 `toMonitor`(이 윈도우의 앱 에이전트 대신 모니터 에이전트로 라우팅)에 임의의 페이로드 필드를 더한 객체를 받습니다.
+
+```typescript
+app.sendInteraction('User clicked Save');
+app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection: text });
+```
+
+**`app.emit(channel, payload)`** — `app.register({ events })`로 선언된 채널에 fire-and-forget 이벤트를 보냅니다. 구독한 에이전트에게만 전달되며, 선언되지 않았거나 구독되지 않은 채널은 서버 측에서 폐기됩니다.
+
+```typescript
+app.register({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
+app.emit('item-added', { text: 'Buy milk' });
+```
+
+**`onClose`** — `app.register()` 설정의 선택적 훅으로, 윈도우가 파괴되기 직전에 호출됩니다. 저장되지 않은 상태를 플러시하는 데 쓰세요.
+
+```typescript
+app.register({ /* ... */ onClose: () => saveDraft(editor().value) });
+```
+
+**`onCapture`** — `app.register()` 설정의 선택적 훅으로, OS가 윈도우를 캡처할 때(예: 에이전트가 읽을 때) 호출됩니다. 기본 전체 윈도우 스크린샷(DOM + 라이브 캔버스 픽셀 합성) 대신 사용할 data-URL 이미지를 반환하세요. 기본 동작으로 되돌리려면 `null`을 반환하세요. async여도 됩니다. 기본 캡처가 콘텐츠를 볼 수 없을 때 유용합니다 — 예를 들어 `preserveDrawingBuffer`가 없는 WebGL 캔버스나, 뷰포트 밖에 렌더링되는 상태 등.
+
+```typescript
+app.register({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
 ```
 
 ### MCP 도구
@@ -517,12 +888,15 @@ const binary = await appStorage.readBinary('image.png');
 
 // 파일 목록 (returns [{ path, isDirectory, uri, mimeType }])
 // 얕은 목록 — 직계 자식만 반환합니다. 하위 디렉터리는 직접 재귀 순회해야 합니다.
-// size / modifiedAt 은 포함되지 않습니다. 필요하면 REST API(`GET /api/storage/{dir}/?list=true`)를 사용하세요.
 const files = await appStorage.list();
 
 // 파일 삭제
 await appStorage.remove('data.json');
 ```
+
+> **`list()`는 `size`나 `modifiedAt`을 반환하지 않습니다.** 각 항목은 `{ path, isDirectory, uri, mimeType }`입니다. 파일 크기나 타임스탬프가 필요하면 REST API(`GET /api/storage/{dir}/?list=true`)를 사용하세요. 이는 `size`와 `modifiedAt`을 포함하는 `StorageEntry` 객체를 반환합니다.
+
+> **PDF에 대한 `readBlob()`은 PDF 바이트가 아니라 첫 페이지를 PNG로 렌더링한 것을 반환합니다.** 서버는 읽기 시점에 PDF를 페이지 이미지로 변환합니다(`packages/server/src/handlers/apps.ts`). 원본 바이트가 필요하면 REST URL을 직접 fetch하세요 — 앱 범위 파일은 `/api/storage/apps/{appId}/{path}`에 있습니다.
 
 ### 저장 실패를 삼키지 마세요
 
@@ -609,4 +983,77 @@ invoke('yaar://apps/my-app/storage/data.json', { action: 'write', content: '...'
 read('yaar://apps/my-app/storage/data.json')
 list('yaar://apps/my-app/storage/')
 delete('yaar://apps/my-app/storage/data.json')
+```
+
+## 앱 전용 데이터베이스 (`appDb`)
+
+구조화된 레코드를 위해 각 앱은 `storage/apps/{appId}/data.db`에 SQLite 데이터베이스도 갖습니다(설계: [`docs/guides/sqlite.md`](./sqlite.md)). `appStorage`와 달리 쿼리, 카운팅, 페이지네이션, 전문 검색(full-text search)을 서버 측에서 지원하므로, 더 이상 JSON을 통째로 불러와 필터링할 필요가 없습니다. 바이너리 blob과 단순한 단일 파일은 계속 `appStorage`에 두세요. 둘은 공존합니다.
+
+앱의 `app.json` 권한에 `"yaar://apps/self/db/"`가 필요합니다.
+
+### 앱 코드에서 (`@bundled/yaar`)
+
+```typescript
+import { appDb } from '@bundled/yaar';
+
+interface Note { title: string; tags: string[] }
+const notes = appDb.collection<Note>('notes');
+
+const id = await notes.insert({ title: 'Hello', tags: ['intro'] }); // → 생성된 _id
+await notes.insertMany([{ title: 'A', tags: [] }, { title: 'B', tags: [] }]);
+
+const one = await notes.get(id);                    // → doc | null (_id, _created_at, _updated_at 포함)
+const page = await notes.find(
+  { tags: 'intro' },                                // 필터 (아래 문법 참조)
+  { sort: { _created_at: -1 }, limit: 20, offset: 0 },
+);
+const hits = await notes.search('hello world');     // FTS5 전문 검색, 가장 잘 맞는 것부터
+
+await notes.update(id, { title: 'Updated' });       // 얕은 병합
+await notes.remove(id);
+await notes.removeWhere({ tags: 'draft' });         // 필터는 비어 있으면 안 됨
+const n = await notes.count({ tags: 'intro' });
+
+await appDb.collections();                          // → ['notes', ...]
+await appDb.drop('notes');                          // 컬렉션 + 문서 삭제
+```
+
+**필터 문법** (Mongo 스타일, 필드는 AND로 결합):
+
+```typescript
+{ status: 'active' }                 // 정확히 일치
+{ tags: 'intro' }                    // 배열이 포함 (스칼라 동등 비교와 같은 문법)
+{ age: { $gt: 18 } }                 // $gt / $gte / $lt / $lte
+{ name: { $ne: 'admin' } }           // 같지 않음 (필드가 없는 문서도 매치)
+{ kind: { $in: ['a', 'b'] } }        // 여러 값 중 하나
+{ avatar: { $exists: true } }        // 필드 존재 여부
+{ 'author.name': 'kim' }             // 점 표기 경로로 중첩 객체 접근
+```
+
+**반응형 바인딩** — 쿼리를 추적하는 Solid 시그널:
+
+```typescript
+const [docs, { insert, update, remove, refresh }] = appDb.createReactiveCollection<Note>(
+  'notes',
+  { sort: { _created_at: -1 }, limit: 50 },
+);
+// docs()는 이 헬퍼들을 통한 변경에는 다시 렌더링됩니다; 외부 변경
+// (에이전트, 다른 윈도우)은 verb 구독을 통해 도착합니다.
+```
+
+### 에이전트에서 (MCP 도구)
+
+에이전트는 파일 전체를 불러올 필요 없이 앱 데이터를 직접 쿼리할 수 있습니다:
+
+```
+list('yaar://apps/memo/db')                                            → 컬렉션 이름 목록
+read('yaar://apps/memo/db/notes')                                      → 최근 문서
+read('yaar://apps/memo/db/notes/{id}')                                 → 문서 하나
+invoke('yaar://apps/memo/db/notes', { action: 'find', filter: { tags: 'important' }, limit: 5 })
+invoke('yaar://apps/memo/db/notes', { action: 'search', query: 'quarterly report' })
+invoke('yaar://apps/memo/db/notes', { action: 'insert', doc: { ... } })  → { _id }
+invoke('yaar://apps/memo/db/notes/{id}', { action: 'update', patch: { ... } })
+invoke('yaar://apps/memo/db/notes', { action: 'count' })                 → { count }
+delete('yaar://apps/memo/db/notes/{id}')                                 → 문서 삭제
+delete('yaar://apps/memo/db/notes')                                      → 컬렉션 삭제
 ```

@@ -1,5 +1,7 @@
 # Remote Mode
 
+> [한국어 버전](../ko/remote_mode.md)
+
 Remote mode lets you access YAAR from other devices on your network (phone, tablet, another PC) with token-based authentication.
 
 ## Quick Start

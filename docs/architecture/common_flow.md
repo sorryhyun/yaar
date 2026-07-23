@@ -1,5 +1,7 @@
 # Agent Architecture: Pools, Context, and Message Flow
 
+> [한국어 버전](../ko/common_flow.md)
+
 How YAAR manages concurrent AI agents through unified pooling, hierarchical context, and
 policy-based orchestration. Diagrams are Mermaid — GitHub renders them natively.
 

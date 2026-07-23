@@ -1,5 +1,7 @@
 # `@bundled/yaar-ml` — In-Browser Model Runtime
 
+> [한국어 버전](../ko/yaar_ml_runtime.md)
+
 **Source:** `packages/compiler/src/shims/yaar-ml.ts`, `packages/compiler/src/bundled-types/index.d.ts`, `packages/server/src/http/routes/ml-runtime.ts`, `packages/server/src/config.ts`
 
 Run a model *inside a YAAR app iframe* — no Python, no install — using WebGPU

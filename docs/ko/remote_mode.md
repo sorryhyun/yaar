@@ -1,0 +1,184 @@
+# 원격 모드
+
+> [English version](../guides/remote_mode.md)
+
+원격 모드를 사용하면 네트워크 상의 다른 기기(휴대폰, 태블릿, 다른 PC)에서 토큰 기반 인증으로 YAAR에 접속할 수 있습니다.
+
+## 빠른 시작
+
+```bash
+make claude   # Claude 프로바이더로 시작 (원격 모드)
+make codex    # Codex 프로바이더로 시작 (원격 모드)
+```
+
+서버가 연결 배너를 출력합니다:
+
+```
+╔══════════════════════════════════════════════════╗
+║              YAAR Remote Mode                   ║
+╠══════════════════════════════════════════════════╣
+║  Server:  http://192.168.1.100:8000
+║  Token:   <random-token>
+╠══════════════════════════════════════════════════╣
+║  Connect: http://192.168.1.100:8000/#remote=<token>
+╚══════════════════════════════════════════════════╝
+```
+
+`qrcode-terminal`이 설치되어 있으면 모바일에서 쉽게 스캔할 수 있도록 QR code도 함께 출력됩니다.
+
+## 접속하기
+
+다른 기기에서 접속하는 세 가지 방법:
+
+1. **QR code** — 터미널에 출력된 QR code를 휴대폰 카메라로 스캔
+2. **URL** — `Connect:` URL을 브라우저에서 직접 열기
+3. **수동** — 호스팅된 프론트엔드를 아무거나 열고, 연결 대화상자에 서버 URL과 토큰을 입력
+
+프론트엔드는 연결 방식을 자동으로 감지합니다:
+- 해시 프래그먼트(`#remote=<token>`) → 자동 연결 후 localStorage에 저장
+- localStorage에 저장된 연결 정보 → 검증 후 재연결
+- 로컬 서버의 `/health` 응답 → 로컬 모드(인증 없음)
+- 아무것도 없음 → 연결 대화상자 표시
+
+## 로컬 개발 (인증 없음)
+
+```bash
+make claude-dev   # Claude, 로컬 전용, MCP 인증 없음
+make codex-dev    # Codex, 로컬 전용, MCP 인증 없음
+make dev          # 프로바이더 자동 감지, 로컬 전용
+```
+
+이전과 동일하게 토큰 인증 없이 `127.0.0.1`에 바인딩됩니다.
+
+## 인증 동작 방식
+
+- `REMOTE=1` 환경 변수가 원격 모드를 활성화합니다
+- 서버가 시작 시 무작위 32바이트 base64url 토큰을 생성합니다
+- 서버가 `127.0.0.1` 대신 `0.0.0.0`(모든 인터페이스)에 바인딩됩니다
+- 모든 HTTP 엔드포인트는 `Authorization: Bearer <token>` 헤더 또는 `?token=` 쿼리 파라미터를 요구합니다
+- WebSocket 업그레이드는 `?token=` 쿼리 파라미터를 요구합니다
+- `/health` 엔드포인트는 (연결 테스트를 위해) 항상 예외입니다
+- 원격 모드에서는 CORS가 모든 오리진을 허용합니다(로컬 모드는 localhost만 허용)
+
+## 내장 터널 (자동)
+
+원격 모드에서 YAAR는 [localhost.run](https://localhost.run)을 통해 SSH 리버스 터널을 자동으로 구성합니다 — 별도 설정도, 가입도, 추가 바이너리도 필요 없습니다. 서버를 시작하고 어디서든 QR code를 스캔하기만 하면 됩니다.
+
+**요구 사항:** 머신에 SSH 키(`~/.ssh/id_ed25519`, `id_rsa`, 또는 `id_ecdsa`)가 있어야 합니다. 대부분의 개발 머신에는 이미 있습니다. 없다면 `ssh-keygen`을 실행하세요.
+
+### 동작 방식
+
+1. 서버가 원격 모드로 시작 → 디스크(또는 SSH 에이전트)에서 SSH 키를 감지
+2. SSH로 `localhost.run`에 연결해 리버스 터널을 요청
+3. `localhost.run`이 공개 HTTPS URL을 할당(예: `https://abc123.lhr.life`)
+4. 배너와 QR code에 터널 URL이 표시됨 — 외부 클라이언트는 이를 통해 연결
+5. 터널 연결이 실패하면(SSH 키 없음, 인터넷 없음) 서버는 LAN 전용 모드로 계속 동작
+
+### 터널 배너
+
+```
+╔══════════════════════════════════════════════════╗
+║              YAAR Remote Mode                   ║
+╠══════════════════════════════════════════════════╣
+║  Server:  http://192.168.1.100:8000
+║  Tunnel:  https://abc123.lhr.life/#remote=<token>
+║  Token:   <random-token>
+╠══════════════════════════════════════════════════╣
+║  Connect: https://abc123.lhr.life/#remote=<token>   ← QR encodes this
+╚══════════════════════════════════════════════════╝
+```
+
+### 자동 터널 비활성화
+
+`config/tunnel.json`을 생성하세요:
+```json
+{ "disabled": true }
+```
+
+### 커스텀 SSH 서버
+
+localhost.run 대신, 자신의 서버를 통해 터널링할 수도 있습니다:
+
+```json
+{
+  "host": "myserver.com",
+  "username": "deploy",
+  "privateKeyPath": "~/.ssh/id_ed25519",
+  "remotePort": 8000,
+  "publicHost": "myserver.com"
+}
+```
+
+| 필드 | 타입 | 기본값 | 설명 |
+|-------|------|---------|-------------|
+| `host` | string | **(필수)** | SSH 서버 호스트명 |
+| `port` | number | `22` | SSH 포트 |
+| `username` | string | **(필수)** | SSH 사용자명 |
+| `privateKeyPath` | string | — | 개인 키 경로(`~`는 홈 디렉터리로 해석됨) |
+| `password` | string | — | 비밀번호 인증 폴백 |
+| `remotePort` | number | 로컬 `PORT`와 동일 | 원격 서버에서 포워딩할 포트 |
+| `remoteHost` | string | `"0.0.0.0"` | 원격 서버의 바인딩 주소 |
+| `publicHost` | string | `host`와 동일 | 공개 URL에 사용할 호스트명 |
+| `publicHttps` | boolean | `false` | 공개 URL에 `https://` 사용 여부 |
+
+인증 우선순위: `privateKeyPath` → `password` → `SSH_AUTH_SOCK` 에이전트.
+
+### 터널 동작
+
+- 원격 모드(`REMOTE=1` 또는 번들 실행 파일)에서만 활성화됩니다
+- 연결에 성공하면 배너와 QR code가 LAN URL 대신 터널 URL을 사용합니다
+- 시작 시 연결에 실패하면 경고가 로그에 남고 서버는 LAN 전용 모드로 계속 동작합니다
+- 성공 후 연결이 끊기면 지수 백오프(1초 → 최대 30초)로 자동 재연결합니다
+- 종료 시(`Ctrl+C`) 3초 타임아웃으로 터널이 정상적으로 닫힙니다
+- Keepalive: 15초 간격, 최대 3회 하트비트 누락까지 허용
+
+## 외부 터널링 (대안)
+
+내장 터널 없이 LAN을 넘어선 접속이 필요하다면 외부 도구를 사용하세요:
+
+**Cloudflare Tunnel(권장):**
+```bash
+cloudflared tunnel --url http://localhost:8000
+```
+
+**SSH 터널(수동):**
+```bash
+ssh -R 8000:localhost:8000 your-server.com
+```
+
+**bore:**
+```bash
+bore local 8000 --to bore.pub
+```
+
+**Tailscale:**
+터널이 필요 없습니다 — 같은 tailnet에 속한 기기는 바로 연결할 수 있습니다.
+
+외부 터널을 사용할 때, 프론트엔드의 연결 대화상자는 터널 URL을 서버 URL로 그대로 받아들입니다.
+
+## 보안 모델
+
+- 토큰은 서버가 시작될 때마다 새로 생성되며(영속되지 않음)
+- 토큰은 URL 해시 프래그먼트(`#remote=token`)로 전달되는데, 브라우저는 이를 서버로 **전송하지 않으므로** 클라이언트 측에만 머뭅니다
+- 프론트엔드는 재연결을 위해 연결 정보를 localStorage에 저장합니다
+- 모든 API 및 WebSocket 요청에 토큰이 포함됩니다
+- 기본적으로 HTTPS는 사용되지 않습니다 — 인터넷을 통한 암호화된 연결이 필요하면 터널(Cloudflare 등)을 사용하세요
+
+## 문제 해결
+
+**연결 대화상자에 "Server not reachable"이 표시될 때:**
+- 서버가 실행 중인지, URL이 올바른지 확인하세요
+- 방화벽이 서버 포트(기본값 8000)로의 연결을 허용하는지 확인하세요
+- 클라이언트 기기에서 서버 IP로 ping을 시도해 보세요
+
+**"Invalid token":**
+- 토큰은 서버가 재시작될 때마다 재생성됩니다 — 터미널에서 새 토큰을 확인하세요
+- 토큰을 붙여넣을 때 뒤에 공백이 붙지 않았는지 확인하세요
+
+**페이지를 새로고침하면 연결이 끊길 때:**
+- 프론트엔드가 연결 정보를 localStorage에 저장하므로 자동으로 재연결되어야 합니다
+- 서버가 재시작되었다면 새 토큰이 필요합니다
+
+**WebSocket 연결 실패:**
+- 일부 프록시/방화벽은 WebSocket 업그레이드를 차단합니다
+- WebSocket을 지원하는 터널(Cloudflare Tunnel, bore 등)을 사용해 보세요

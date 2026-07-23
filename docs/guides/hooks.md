@@ -1,5 +1,7 @@
 # Hooks
 
+> [한국어 버전](../ko/hooks.md)
+
 Hooks are event-driven config entries that fire actions on specific triggers. They let you automate responses to desktop events — for example, showing a progress toast when the AI compiles an app.
 
 ## Storage

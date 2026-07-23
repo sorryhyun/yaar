@@ -1,5 +1,7 @@
 # FAQ — Why Is YAAR Like This?
 
+> [한국어 버전](./ko/faq.md)
+
 Questions people actually ask when they first see the project, with honest answers. If you want the mechanics instead, start with the [OS Architecture Map](./architecture/os_architecture.md) and the [Monitor & Windows guide](./architecture/monitor_and_windows_guide.md).
 
 ---
