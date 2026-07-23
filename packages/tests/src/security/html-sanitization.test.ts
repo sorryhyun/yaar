@@ -27,7 +27,7 @@
  * entire file from degrading into a suite that passes while testing nothing.
  */
 import { describe, expect, test } from 'bun:test';
-import { readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { JSDOM } from 'jsdom';
 import createDOMPurify from 'dompurify';
@@ -173,21 +173,64 @@ describe('known gaps are documented, not assumed closed', () => {
   });
 });
 
+/**
+ * Every app source file that imports `@bundled/dompurify`, found by scanning rather
+ * than by list.
+ *
+ * This used to be a hardcoded roster of `[app, file]` pairs, which fails in both
+ * directions: a *new* app that copies the policy wrong is simply absent from the
+ * list and never checked, and a *removed* app takes the suite down with an ENOENT
+ * (which is how unbundling `dc-comics` broke it). Discovery closes both — anything
+ * that reaches for the sanitizer is held to the policy from its first commit, and
+ * an app leaving the tree is a non-event.
+ */
+function findSanitizingAppFiles(): string[] {
+  const appsDir = join(REPO_ROOT, 'apps');
+  const found: string[] = [];
+  for (const app of readdirSync(appsDir, { withFileTypes: true })) {
+    if (!app.isDirectory()) continue;
+    const srcDir = join(appsDir, app.name, 'src');
+    if (!existsSync(srcDir)) continue;
+    for (const rel of readdirSync(srcDir, { recursive: true }) as string[]) {
+      if (!/\.tsx?$/.test(rel)) continue;
+      const abs = join(srcDir, rel);
+      if (!statSync(abs).isFile()) continue;
+      if (readFileSync(abs, 'utf8').includes('@bundled/dompurify')) {
+        found.push(join(app.name, 'src', rel));
+      }
+    }
+  }
+  return found.sort();
+}
+
 describe('app sanitize policies have not drifted', () => {
   // The policy is intentionally duplicated per app rather than shared. Pin it so a
   // copy cannot quietly diverge — an app that drops `input` from its list starts
   // orphaning controls instead of removing them.
-  const APPS_WITH_SHARED_POLICY: Array<[string, string]> = [
-    ['storage', 'src/navigation.ts'],
-    ['dc-comics', 'src/helpers.ts'],
-  ];
+  const SANITIZING_FILES = findSanitizingAppFiles();
+
+  /**
+   * Apps that must never stop sanitizing, by id rather than by file path.
+   *
+   * Discovery alone cannot catch an app that deletes its `@bundled/dompurify`
+   * import and starts writing foreign HTML to a DOM sink raw — it would just drop
+   * off the scan and every assertion below would still pass. This floor is what
+   * makes that a failure. Keyed on the app id, not a file, so refactoring inside
+   * the app is free; only unbundling the app itself needs a line removed here.
+   */
+  const MUST_SANITIZE = ['storage'];
 
   const canonical = FORBID_FORM_TAGS.map((t) => `'${t}'`).join(', ');
 
-  for (const [app, file] of APPS_WITH_SHARED_POLICY) {
-    test(`${app} uses the canonical FORBID_TAGS list`, () => {
-      const src = readFileSync(join(REPO_ROOT, 'apps', app, file), 'utf8');
-      expect(src).toContain('@bundled/dompurify');
+  for (const app of MUST_SANITIZE) {
+    test(`${app} still sanitizes somewhere in its source`, () => {
+      expect(SANITIZING_FILES.filter((f) => f.startsWith(`${app}/`))).not.toEqual([]);
+    });
+  }
+
+  for (const file of SANITIZING_FILES) {
+    test(`${file} uses the canonical FORBID_TAGS list`, () => {
+      const src = readFileSync(join(REPO_ROOT, 'apps', file), 'utf8');
       expect(src.replace(/\s+/g, ' ')).toContain(`[${canonical}]`);
     });
   }
@@ -196,11 +239,9 @@ describe('app sanitize policies have not drifted', () => {
     // Step 5 of the ordering contract: behavior attaches via addEventListener.
     // A generated `onerror` is stripped by any sanitizer, so the behavior it
     // encodes disappears the moment the pipeline is secured.
-    const offenders: string[] = [];
-    for (const [app, file] of APPS_WITH_SHARED_POLICY) {
-      const src = readFileSync(join(REPO_ROOT, 'apps', app, file), 'utf8');
-      if (/setAttribute\(\s*['"`]on\w+/i.test(src)) offenders.push(`${app}/${file}`);
-    }
+    const offenders = SANITIZING_FILES.filter((file) =>
+      /setAttribute\(\s*['"`]on\w+/i.test(readFileSync(join(REPO_ROOT, 'apps', file), 'utf8')),
+    );
     expect(offenders).toEqual([]);
   });
 });
