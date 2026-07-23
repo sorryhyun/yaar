@@ -24,6 +24,7 @@ import {
   displayApps,
   githubStatus,
   hasInstalled,
+  hasMarketplaceUpdate,
   hideInstalled,
   installedApps,
   isSystem,
@@ -92,6 +93,7 @@ export function publishButton(app: DisplayApp) {
 
 /** Render a single app card with Install / Publish / Uninstall actions. */
 export function marketCard(app: DisplayApp) {
+  const updateAvailable = () => hasMarketplaceUpdate(app);
   const subtitle = app.notPublished
     ? 'Installed locally • not on marketplace'
     : [app.description, app.version ? `v${app.version}` : '', app.author || '']
@@ -126,7 +128,17 @@ export function marketCard(app: DisplayApp) {
             return html`
               <span class="installed-badge" title="Installed" aria-label="Installed">✅</span>
               <div class="action-group">
-                ${publishButton(app)}
+                ${() =>
+                  updateAvailable()
+                    ? html`<button
+                        class="y-btn y-btn-sm y-btn-primary"
+                        title=${`Replace the installed copy with v${app.version} from the marketplace`}
+                        disabled=${() => loading()}
+                        onClick=${() => void installApp(app)}
+                      >
+                        Install update
+                      </button>`
+                    : publishButton(app)}
                 <button
                   class="y-btn y-btn-sm y-btn-danger uninstall-btn"
                   title="Uninstall"
@@ -262,7 +274,12 @@ export function configPanel() {
               if (e.target === e.currentTarget) setConfigOpen(false);
             }}
           >
-            <div class="config-panel y-surface" role="dialog" aria-modal="true" aria-label="Settings">
+            <div
+              class="config-panel y-surface"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Settings"
+            >
               <div class="config-panel-head">
                 <span class="config-panel-title">Settings</span>
                 <button
@@ -286,7 +303,8 @@ export function configPanel() {
                   <input
                     type="checkbox"
                     checked=${() => hideInstalled()}
-                    onChange=${(e: Event) => setHideInstalled((e.target as HTMLInputElement).checked)}
+                    onChange=${(e: Event) =>
+                      setHideInstalled((e.target as HTMLInputElement).checked)}
                   />
                   Hide installed apps
                 </label>

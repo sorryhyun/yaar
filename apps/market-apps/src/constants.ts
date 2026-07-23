@@ -17,6 +17,13 @@ export const GITHUB_PUBLISH_COMPONENTS = ['API Requests', 'Git Operations'];
 /** Re-check while the window is open. Slow on purpose: an outage lasts minutes. */
 export const GITHUB_STATUS_POLL_MS = 60_000;
 
+/**
+ * Host app-list reads may briefly lag a successful install. During this short
+ * window, retain the marketplace version that triggered the install rather than
+ * trusting an older list snapshot.
+ */
+export const INSTALL_RECONCILIATION_GRACE_MS = 15_000;
+
 /** The default and the fallback — an unreachable status page means "say nothing". */
 export const GITHUB_STATUS_HEALTHY: GithubStatus = {
   degraded: false,

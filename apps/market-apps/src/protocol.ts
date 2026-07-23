@@ -117,6 +117,7 @@ if (app) {
                   name: { type: 'string' },
                   hasSkill: { type: 'boolean' },
                   kind: { type: 'string' },
+                  version: { type: 'string' },
                 },
                 required: ['id', 'name'],
               },
