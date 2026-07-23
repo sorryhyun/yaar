@@ -42,7 +42,14 @@ describe('appHtmlCsp', () => {
     expect(csp('localhost:5173')).toContain('http://127.0.0.1:5173');
   });
 
-  it.if(!APP_ORIGIN_ISOLATION)('stays at self when isolation is off', () => {
-    expect(csp('localhost:8000')).toBe("connect-src 'self'");
+  it.if(!APP_ORIGIN_ISOLATION)('names no host beyond self when isolation is off', () => {
+    expect(csp('localhost:8000')).toBe("connect-src 'self' blob: data:");
+  });
+
+  it('lets an app fetch its own object URLs', () => {
+    // `'self'` does not cover blob:/data: — unlisted, `fetch(URL.createObjectURL(b))`
+    // is refused, which silently blanked every proxied image out of a window capture.
+    expect(csp('localhost:8000')).toContain('blob:');
+    expect(csp('localhost:8000')).toContain('data:');
   });
 });

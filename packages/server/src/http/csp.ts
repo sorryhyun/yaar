@@ -15,11 +15,25 @@
  * Widening to the sibling alias grants no new reach: both names resolve to this
  * same loopback socket, and every route behind them still runs the iframe-token and
  * permission checks in `http/access.ts`.
+ *
+ * `blob:` and `data:` are named because `'self'` does not cover them — CSP matches
+ * those schemes only when they are listed literally, so `fetch(blobUrl)` was refused
+ * inside every app. That broke window capture on any app that renders proxied images
+ * from object URLs (the DC gallery fetches through `yaar://http` to get a Referer,
+ * then paints from `URL.createObjectURL`): the capture script inlines each `<img>` by
+ * fetching its `src`, the fetch was blocked, and every image landed in the screenshot
+ * as a transparent placeholder — so OCR read a page with holes where the art was.
+ *
+ * Neither scheme is network reach. A `blob:` URL is only fetchable by the origin that
+ * created it, and a `data:` URL is bytes the document already holds; both are content
+ * the app can read anyway (`FileReader` over the source `Blob`, `atob` over the
+ * base64). What the directive confines — which *hosts* an app may talk to — is
+ * untouched.
  */
 
 import { APP_ORIGIN_ISOLATION, APP_ORIGIN_HOST, DESKTOP_ORIGIN_HOST, getPort } from '../config.js';
 
-const BASE = "connect-src 'self'";
+const BASE = "connect-src 'self' blob: data:";
 
 /**
  * The port the browser addressed, taken from `Host` so a proxied dev server (vite
