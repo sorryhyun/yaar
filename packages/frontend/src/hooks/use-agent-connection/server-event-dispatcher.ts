@@ -101,11 +101,13 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     message.type === ServerEventType.ERROR ||
     (message.type === ServerEventType.AGENT_RESPONSE &&
       (message as { isComplete?: boolean }).isComplete) ||
-    // `pending` is one event per argument fragment — a firehose that would bury
-    // the debug panel, and it carries no information the `running` event lacks.
+    // `pending` and `output` are one event per fragment — a firehose that would
+    // bury the debug panel, and they carry no information the `running` and
+    // `complete` events lack.
     (message.type === ServerEventType.TOOL_PROGRESS &&
       (message as { status?: string }).status !== 'running' &&
-      (message as { status?: string }).status !== 'pending');
+      (message as { status?: string }).status !== 'pending' &&
+      (message as { status?: string }).status !== 'output');
 
   if (shouldLog) {
     handlers.addDebugEntry({
@@ -229,6 +231,17 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         } else {
           handlers.appendCliStreaming(agentId, fragment, 'tool', monitorId);
         }
+        break;
+      }
+
+      // The mirror image: the tool is running and printing. Tail it live in the
+      // same throwaway `tool` channel the argument phase uses — `running` has
+      // already flushed the readable `[tool] input` entry into history, so this
+      // sits below it and is dropped on the next finalize rather than filling
+      // history with a build log.
+      if (status === 'output') {
+        const fragment = (message as { message?: string }).message;
+        if (fragment) handlers.appendCliStreaming(agentId, fragment, 'tool', monitorId);
         break;
       }
 

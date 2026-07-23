@@ -44,6 +44,14 @@ function classifyToolError(content: string): string {
   return 'unknown';
 }
 
+/**
+ * Ceiling on the live output tail forwarded for a single tool call. The tail is
+ * a progress indicator, not the result — the result arrives whole on
+ * `tool_result` regardless — so a runaway command is cut off here rather than
+ * streamed byte for byte to every connection in the session.
+ */
+const MAX_TOOL_OUTPUT_TAIL_BYTES = 64 * 1024;
+
 export interface StreamMapperOptions {
   role: string;
   providerName: string;
@@ -66,6 +74,8 @@ export class StreamToEventMapper {
   private lastFlushedThinkingLength = 0;
   private thinkingDirty = false;
   private toolStartTimes = new Map<string, { toolName: string; startTime: number }>();
+  /** Live-tail bytes already forwarded per tool call, against `MAX_TOOL_OUTPUT_TAIL_BYTES`. */
+  private toolOutputBytes = new Map<string, number>();
 
   /**
    * Text emitted since the last tool call — the *current* block, not the turn.
@@ -345,8 +355,38 @@ export class StreamToEventMapper {
         break;
       }
 
+      case 'tool_output_delta': {
+        if (!message.content) break;
+        // Frontend-only, for the same reason as `tool_input_delta`: this is a
+        // live tail, and the authoritative output arrives whole on `tool_result`
+        // (which is what gets logged and fed back). Publishing it as a stream
+        // frame would hand apps a half-written result they'd be tempted to parse.
+        //
+        // Capped per call: a command that prints a hundred megabytes must not
+        // become a hundred megabytes of WebSocket traffic. Past the cap the
+        // call goes quiet again, which is the pre-existing behavior, and the
+        // complete output still lands on `tool_result`.
+        const key = message.toolUseId ?? '';
+        const sent = this.toolOutputBytes.get(key) ?? 0;
+        if (sent >= MAX_TOOL_OUTPUT_TAIL_BYTES) break;
+        const room = MAX_TOOL_OUTPUT_TAIL_BYTES - sent;
+        const chunk =
+          message.content.length <= room ? message.content : message.content.slice(0, room);
+        this.toolOutputBytes.set(key, sent + chunk.length);
+        await this.sendEvent({
+          type: ServerEventType.TOOL_PROGRESS,
+          toolName: formatToolDisplay(message.toolName ?? 'tool'),
+          status: 'output',
+          message: chunk,
+          agentId: this.role,
+          monitorId: this.monitorId,
+        });
+        break;
+      }
+
       case 'tool_result': {
         const isError = message.isError === true;
+        this.toolOutputBytes.delete(message.toolUseId ?? '');
         const resultToolName = formatToolDisplay(message.toolName ?? 'tool');
         await this.sendEvent({
           type: ServerEventType.TOOL_PROGRESS,

@@ -21,6 +21,12 @@ export interface StreamMessage {
    * `toolInput` and remains the authoritative one — the two delta types are
    * additive and a provider that cannot produce them (Codex hands arguments over
    * whole) simply never does.
+   *
+   * `tool_output_delta` is the same idea for the *result* phase: chunks of a
+   * running tool's stdout/stderr, in order, so a long command isn't silence.
+   * `tool_result` still arrives afterwards with the complete output and stays
+   * authoritative — the deltas are a live tail, and a provider that cannot
+   * produce them (Claude) simply never does.
    */
   type:
     | 'text'
@@ -28,6 +34,7 @@ export interface StreamMessage {
     | 'tool_use_start'
     | 'tool_input_delta'
     | 'tool_use'
+    | 'tool_output_delta'
     | 'tool_result'
     | 'complete'
     | 'error';
@@ -35,6 +42,8 @@ export interface StreamMessage {
    * Text/thinking delta — and, on `tool_input_delta`, a raw fragment of the
    * argument JSON. That fragment is display-only: it is a prefix of a JSON
    * document, so it must not be parsed. Wait for `tool_use.toolInput`.
+   * On `tool_output_delta`, a fragment of the tool's output — a prefix of what
+   * `tool_result` will carry whole, to be appended rather than to replace.
    */
   content?: string;
   sessionId?: string;

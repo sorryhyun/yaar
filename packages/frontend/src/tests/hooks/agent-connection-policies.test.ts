@@ -313,4 +313,46 @@ describe('server event dispatcher', () => {
     );
     expect(handlers.setAgentActive).toHaveBeenCalledWith('a2', 'Thinking...');
   });
+
+  it('tails a running tool output by appending each chunk in order', () => {
+    const handlers = createHandlers();
+
+    for (const message of ['compiling\n', 'linking\n']) {
+      dispatchServerEvent(
+        { type: 'TOOL_PROGRESS', toolName: 'command', status: 'output', message, agentId: 'a3' },
+        handlers,
+      );
+    }
+
+    expect(handlers.appendCliStreaming).toHaveBeenCalledTimes(2);
+    expect(handlers.appendCliStreaming).toHaveBeenNthCalledWith(
+      1,
+      'a3',
+      'compiling\n',
+      'tool',
+      undefined,
+    );
+    expect(handlers.appendCliStreaming).toHaveBeenNthCalledWith(
+      2,
+      'a3',
+      'linking\n',
+      'tool',
+      undefined,
+    );
+    // A tail is not a phase change: it must not flush the live block or restate
+    // what the agent is doing — `running` already said "Running: command".
+    expect(handlers.finalizeCliStreaming).not.toHaveBeenCalled();
+    expect(handlers.setAgentActive).not.toHaveBeenCalled();
+    // And it must not reach the debug panel, which one chunk per line would bury.
+    expect(handlers.addDebugEntry).not.toHaveBeenCalled();
+  });
+
+  it('ignores an output event with no chunk', () => {
+    const handlers = createHandlers();
+    dispatchServerEvent(
+      { type: 'TOOL_PROGRESS', toolName: 'command', status: 'output', agentId: 'a3' },
+      handlers,
+    );
+    expect(handlers.appendCliStreaming).not.toHaveBeenCalled();
+  });
 });

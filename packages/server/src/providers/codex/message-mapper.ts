@@ -8,6 +8,7 @@
 import type { StreamMessage } from '../types.js';
 import type {
   AgentMessageDeltaNotification,
+  CommandExecutionOutputDeltaNotification,
   ReasoningTextDeltaNotification,
   TurnCompletedNotification,
   ErrorNotification,
@@ -75,6 +76,7 @@ function mapCommandExecutionStarted(
   return {
     type: 'tool_use',
     toolName: 'command',
+    toolUseId: item?.id,
     toolInput: { command: item?.command },
   };
 }
@@ -85,6 +87,7 @@ function mapCommandExecutionCompleted(
   return {
     type: 'tool_result',
     toolName: 'command',
+    toolUseId: item?.id,
     content: formatCommandResult(item),
   };
 }
@@ -162,7 +165,6 @@ const IGNORED_METHODS = new Set([
   'turn/plan/updated',
   'turn/diff/updated',
   'item/fileChange/outputDelta',
-  'item/commandExecution/outputDelta',
   'item/commandExecution/terminalInteraction',
   'item/mcpToolCall/progress',
   'item/reasoning/summaryTextDelta',
@@ -269,6 +271,21 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
 
     case 'item/commandExecution/started':
       return mapCommandExecutionStarted(params as Partial<CommandExecutionItem> | undefined);
+
+    case 'item/commandExecution/outputDelta': {
+      // The live tail of a running command. `item/commandExecution/completed`
+      // still follows with `aggregatedOutput`, which stays the authoritative
+      // result — these chunks only fill the silence while it runs, so they are
+      // not fed back into context or the transcript.
+      const p = params as CommandExecutionOutputDeltaNotification;
+      if (!p?.delta) return null;
+      return {
+        type: 'tool_output_delta',
+        toolName: 'command',
+        toolUseId: p.itemId,
+        content: p.delta,
+      };
+    }
 
     case 'item/commandExecution/completed':
       return mapCommandExecutionCompleted(params as Partial<CommandExecutionItem> | undefined);

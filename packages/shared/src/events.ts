@@ -474,12 +474,24 @@ export interface ToolProgressEvent {
    * Codex delivers arguments whole), so a consumer must treat the phase as
    * optional enrichment and stay correct when a call goes straight to
    * `'running'`.
+   *
+   * `'output'` is the mirror image on the far side of the call: the tool is
+   * running and producing output, and each event carries the next chunk of it in
+   * `message`. It exists for the same reason as `pending` — a command that takes
+   * a minute used to be a minute of silence broken only by its finished result.
+   * Events arrive in order and are meant to be *appended*; unlike `complete`,
+   * `message` is a fragment and not the whole. Only providers that expose output
+   * deltas emit it (Codex does, via `item/commandExecution/outputDelta`), so it
+   * too is optional enrichment: a call may go `running` → `complete` with
+   * nothing in between.
    */
-  status: 'pending' | 'running' | 'complete' | 'error';
+  status: 'pending' | 'running' | 'output' | 'complete' | 'error';
   /**
    * Result text on `complete`/`error`. On `pending`, a raw fragment of the
    * argument JSON — **display only**. It is a prefix of a JSON document, not a
-   * document: parsing it will fail or, worse, half-succeed.
+   * document: parsing it will fail or, worse, half-succeed. On `output`, the
+   * next chunk of the tool's stdout/stderr, to be appended to the chunks before
+   * it.
    */
   message?: string;
   toolInput?: unknown;
