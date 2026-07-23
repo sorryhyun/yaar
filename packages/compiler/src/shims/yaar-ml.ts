@@ -159,6 +159,22 @@ ort.env.wasm.numThreads = 1;
 // Two things proxy mode does not support, both of which the SDK stays clear of:
 // `preferredOutputLocation` (session option) and GPU-resident input tensors.
 ort.env.wasm.proxy = true;
+// Warnings off; errors still print.
+//
+// The one ORT emits on nearly every session is the EP-partition notice —
+// "Some nodes were not assigned to the preferred execution providers" — which
+// fires whenever the graph does not land 100% on WebGPU. That is the normal
+// case, not a fault: ORT deliberately keeps shape-related ops on CPU because
+// round-tripping them to the GPU costs more than it saves, and the message says
+// so in its own second sentence. An app author can do nothing with it, and every
+// ML app pays it twice per model load, so it trains people to ignore the console
+// that real failures also print to.
+//
+// Nothing actionable is lost. The failures that matter — a GPU too small for the
+// model, an EP that cannot initialize — are thrown, not logged, and
+// `createSession` below translates them into messages aimed at the app author.
+// An app that wants the firehose can reopen it via the exported `env`.
+ort.env.logLevel = 'error';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 

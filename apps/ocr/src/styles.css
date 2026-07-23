@@ -50,6 +50,54 @@
   pointer-events: none;
 }
 
+/* Detected boxes. The layer ignores the pointer so a manual selection can still be
+   dragged across the image; only the boxes themselves are clickable. */
+.ocr-boxes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.ocr-box {
+  position: absolute;
+  /* Rotation is about the box's own top-left corner, which is where the quad's first
+     point is — see boxStyle(). */
+  transform-origin: 0 0;
+  padding: 0;
+  border: 1px solid var(--yaar-success);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--yaar-success) 10%, transparent);
+  pointer-events: auto;
+  cursor: pointer;
+}
+
+.ocr-box:hover {
+  background: color-mix(in srgb, var(--yaar-success) 24%, transparent);
+}
+
+/* Detected but unreadable — a real outcome (an unsupported script), not a failure,
+   so it gets its own colour rather than being hidden. */
+.ocr-box-unread {
+  border-color: var(--yaar-error);
+  background: color-mix(in srgb, var(--yaar-error) 12%, transparent);
+}
+
+.ocr-box-active {
+  border-width: 2px;
+  background: color-mix(in srgb, var(--yaar-accent) 28%, transparent);
+  border-color: var(--yaar-accent);
+}
+
+.ocr-page-text {
+  max-height: 22vh;
+  overflow-y: auto;
+  font-size: 13px;
+}
+
+.ocr-line-detail {
+  border-left: 2px solid var(--yaar-accent);
+}
+
 /* Height is capped on the results list, not here. A percentage `max-height` on a
    grid item resolves against its own grid area, so the `auto` track still sized
    itself to the full content while the panel clamped to a fraction of that —

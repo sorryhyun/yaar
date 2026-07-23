@@ -34,8 +34,11 @@ import { join, basename } from 'path';
  * the bump is here to guarantee no installed dist/ predating the sanitization
  * work survives on a machine whose hashes happen to match, since a stale copy of
  * one of these apps is an unsanitized innerHTML sink rather than a cosmetic lag.
+ * '13': the yaar-ml shim now pins ORT's log level to 'error', silencing the
+ * EP-partition warning every WebGPU session emits. The level is baked into the
+ * bundled shim, so an app that does not rebuild keeps printing it.)
  */
-export const COMPILER_VERSION = '12';
+export const COMPILER_VERSION = '13';
 
 export interface BuildManifest {
   sourceHash: string;

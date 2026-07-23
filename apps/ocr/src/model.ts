@@ -1,10 +1,9 @@
 // PP-OCRv6 text *recognition* in the browser: crop → 48px-tall line → CTC → text.
 //
-// This is the recognition half of PaddleOCR only. The model takes an already
-// cropped, roughly horizontal line of text and emits per-timestep character
-// probabilities; it has no notion of where text is on a page. Locating lines is
-// the detection model's job (PP-OCRv6_*_det), which this app does not load yet —
-// the user draws the box instead.
+// This is the recognition half of PaddleOCR. The model takes an already cropped,
+// roughly horizontal line of text and emits per-timestep character probabilities; it
+// has no notion of where text is on a page. Locating lines is detect.ts's job — or the
+// user's, when they drag a box.
 //
 // Everything here mirrors PaddleOCR's own pre/post-processing exactly, because
 // the numbers are baked into the trained weights and "close enough" decodes to
@@ -12,31 +11,12 @@
 // get silently wrong elsewhere are called out at their use sites: BGR channel
 // order, and zero padding applied *after* normalization.
 import { session, run, Tensor, capabilities, type InferenceSession } from '@bundled/yaar-ml';
-import { CHARSET_V6, CHARSET_V6_TINY } from './charset';
+import { loadCharset, type CharsetId } from './charset';
 
-export type CharsetId = 'v6' | 'v6-tiny';
-
-/**
- * The recognizer sizes do NOT share a dictionary — `tiny` was exported against a
- * much smaller character set — so each model is pinned to its own. Decoding with
- * the wrong table produces fluent-looking nonsense rather than an error, which is
- * why `recognizeCrop` re-checks the width against the model at runtime.
- *
- * Split with `Array.from`: both contain astral characters, so `.length` and `[i]`
- * would tear surrogate pairs.
- */
-const CHARSETS: Record<CharsetId, string[]> = {
-  v6: Array.from(CHARSET_V6),
-  'v6-tiny': Array.from(CHARSET_V6_TINY),
-};
+export type { CharsetId };
 
 /** Label table: index 0 is the CTC blank, 1..N index the charset, N+1 is a space. */
 const BLANK = 0;
-
-/** Output width a model must have for its charset's index mapping to hold. */
-export function expectedClasses(charset: CharsetId): number {
-  return CHARSETS[charset].length + 2;
-}
 
 /** The recognizer is trained at a fixed 48px line height; only width varies. */
 const REC_HEIGHT = 48;
@@ -151,14 +131,14 @@ export type ChannelOrder = 'bgr' | 'rgb';
  *   in pixel space, which is why the tensor is allocated zeroed and only the
  *   resized region is written, instead of padding a canvas and normalizing after.
  */
-export function preprocess(
+export function preprocessData(
   src: CanvasImageSource,
   sx: number,
   sy: number,
   sw: number,
   sh: number,
   order: ChannelOrder = 'bgr',
-): Preprocessed {
+): { data: Float32Array; width: number; bucket: number } {
   const wanted = Math.max(1, Math.ceil((REC_HEIGHT * sw) / sh));
   const bucket = WIDTH_BUCKETS.find((b) => b >= wanted) ?? WIDTH_BUCKETS[WIDTH_BUCKETS.length - 1];
   const width = Math.min(wanted, bucket);
@@ -193,7 +173,19 @@ export function preprocess(
     }
   }
 
-  return { tensor: makeTensor(out, [1, 3, REC_HEIGHT, bucket]), width, bucket };
+  return { data: out, width, bucket };
+}
+
+export function preprocess(
+  src: CanvasImageSource,
+  sx: number,
+  sy: number,
+  sw: number,
+  sh: number,
+  order: ChannelOrder = 'bgr',
+): Preprocessed {
+  const { data, width, bucket } = preprocessData(src, sx, sy, sw, sh, order);
+  return { tensor: makeTensor(data, [1, 3, REC_HEIGHT, bucket]), width, bucket };
 }
 
 export interface RecResult {
@@ -218,9 +210,8 @@ export function decodeCtc(
   data: Float32Array,
   timesteps: number,
   classes: number,
-  charset: CharsetId,
+  chars: string[],
 ): RecResult {
-  const chars = CHARSETS[charset];
   const space = chars.length + 1;
   const charScores: { char: string; score: number }[] = [];
   let sum = 0;
@@ -271,7 +262,12 @@ export async function recognizeCrop(
   options: RecognizeOptions = {},
 ): Promise<RecResult & { elapsedMs: number; inputWidth: number }> {
   const model = modelById(options.modelId ?? DEFAULT_MODEL);
-  const s = await loadRecognizer(model.id, options.onProgress);
+  // The dictionary is 114 KB against the weights' 77 MB, and both are IndexedDB-cached
+  // by the same helper — asking for them together costs nothing over the weights alone.
+  const [s, chars] = await Promise.all([
+    loadRecognizer(model.id, options.onProgress),
+    loadCharset(model.charset),
+  ]);
   const { tensor, bucket } = preprocess(src, sx, sy, sw, sh, options.order ?? 'bgr');
 
   const started = performance.now();
@@ -281,22 +277,101 @@ export async function recognizeCrop(
   const logits = outputs[s.outputNames[0]];
   const dims = logits.dims;
   const classes = dims[dims.length - 1];
-  // A model paired with the wrong dictionary still decodes — to confident nonsense.
-  // The only cheap signal that the pairing is right is the output width, so check it.
-  const expected = expectedClasses(model.charset);
+  assertPairing(model, classes, chars);
+
+  const decoded = decodeCtc(logits.data as Float32Array, dims[dims.length - 2], classes, chars);
+  return { ...decoded, elapsedMs, inputWidth: bucket };
+}
+
+/**
+ * A model paired with the wrong dictionary still decodes — to confident nonsense.
+ * The only cheap signal that the pairing is right is the output width, so check it.
+ */
+function assertPairing(model: ModelChoice, classes: number, chars: string[]): void {
+  // +2: the CTC blank at index 0 and the trailing space. See charset.ts.
+  const expected = chars.length + 2;
   if (classes !== expected) {
     throw new Error(
       `the ${model.id} model has ${classes} output classes but its "${model.charset}" ` +
-        `dictionary describes ${expected}. Regenerate src/charset.ts ` +
-        `(bun run apps/ocr/scripts/gen-charset.ts).`,
+        `dictionary describes ${expected}. The dictionary is read from the model's own ` +
+        'inference.yml, so this means the URLs in charset.ts and model.ts have drifted apart.',
     );
   }
+}
 
-  const decoded = decodeCtc(
-    logits.data as Float32Array,
-    dims[dims.length - 2],
-    classes,
-    model.charset,
+/**
+ * Lines per `run`.
+ *
+ * Bounded so a dense page does not build one enormous tensor: at the 2400 bucket a
+ * batch of 16 is already 22 MB of float32 going to the GPU in one go.
+ */
+const MAX_BATCH = 16;
+
+/**
+ * Recognize many crops, batching them through the model.
+ *
+ * Worth doing for one reason that dominates everything else: onnxruntime's WebGPU
+ * backend compiles kernels per *concrete* shape. Run a 40-line page one crop at a time
+ * and it sees up to 40 distinct widths and pays 40 compilations, each far longer than
+ * the inference itself. The width buckets in `preprocess` exist so that never happens
+ * — crops group onto at most 8 shapes, each compiled once and then reused for the rest
+ * of the session.
+ *
+ * Results come back in input order regardless of how they were grouped.
+ */
+export async function recognizeCrops(
+  crops: HTMLCanvasElement[],
+  options: RecognizeOptions = {},
+): Promise<{ results: (RecResult & { inputWidth: number })[]; elapsedMs: number }> {
+  const model = modelById(options.modelId ?? DEFAULT_MODEL);
+  if (crops.length === 0) return { results: [], elapsedMs: 0 };
+  const [s, chars] = await Promise.all([
+    loadRecognizer(model.id, options.onProgress),
+    loadCharset(model.charset),
+  ]);
+
+  const prepared = crops.map((crop) =>
+    preprocessData(crop, 0, 0, crop.width, crop.height, options.order ?? 'bgr'),
   );
-  return { ...decoded, elapsedMs, inputWidth: bucket };
+
+  const byBucket = new Map<number, number[]>();
+  prepared.forEach((p, i) => {
+    const group = byBucket.get(p.bucket);
+    if (group) group.push(i);
+    else byBucket.set(p.bucket, [i]);
+  });
+
+  const results = new Array<RecResult & { inputWidth: number }>(crops.length);
+  const started = performance.now();
+
+  for (const [bucket, indices] of byBucket) {
+    for (let from = 0; from < indices.length; from += MAX_BATCH) {
+      const chunk = indices.slice(from, from + MAX_BATCH);
+      const stride = prepared[chunk[0]].data.length;
+      const batch = new Float32Array(stride * chunk.length);
+      chunk.forEach((index, n) => batch.set(prepared[index].data, n * stride));
+
+      const outputs = await run(s, {
+        [s.inputNames[0]]: makeTensor(batch, [chunk.length, 3, REC_HEIGHT, bucket]),
+      });
+      const logits = outputs[s.outputNames[0]];
+      const dims = logits.dims;
+      const classes = dims[dims.length - 1];
+      const timesteps = dims[dims.length - 2];
+      assertPairing(model, classes, chars);
+
+      const data = logits.data as Float32Array;
+      const span = timesteps * classes;
+      chunk.forEach((index, n) => {
+        // A view, not a copy — the batch output is already the right layout per item.
+        const slice = data.subarray(n * span, (n + 1) * span);
+        results[index] = {
+          ...decodeCtc(slice, timesteps, classes, chars),
+          inputWidth: bucket,
+        };
+      });
+    }
+  }
+
+  return { results, elapsedMs: performance.now() - started };
 }

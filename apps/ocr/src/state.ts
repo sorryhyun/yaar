@@ -1,6 +1,8 @@
 // Signals shared by the UI, the protocol handlers, and the headless hook.
 import { createSignal } from '@bundled/solid-js';
+import { DEFAULT_DET_MODEL } from './detect';
 import { DEFAULT_MODEL, type RecResult } from './model';
+import type { PageResult } from './pipeline';
 
 export interface Rect {
   x: number;
@@ -22,11 +24,16 @@ export const [busy, setBusy] = createSignal(false);
 /** Weight-download progress, 0..1, or null when not downloading. */
 export const [downloadRatio, setDownloadRatio] = createSignal<number | null>(null);
 export const [modelId, setModelId] = createSignal(DEFAULT_MODEL);
+export const [detModelId, setDetModelId] = createSignal(DEFAULT_DET_MODEL);
 export const [backend, setBackend] = createSignal('checking…');
 export const [imageSize, setImageSize] = createSignal<{ w: number; h: number } | null>(null);
 export const [selection, setSelection] = createSignal<Rect | null>(null);
 export const [results, setResults] = createSignal<OcrRecord[]>([]);
 export const [error, setError] = createSignal<string | null>(null);
+/** The last whole-page read: its boxes are what the canvas overlay draws. */
+export const [page, setPage] = createSignal<PageResult | null>(null);
+/** Index into `page().lines` of the box the user clicked, or null. */
+export const [activeLine, setActiveLine] = createSignal<number | null>(null);
 
 /**
  * The loaded image at native resolution.
@@ -52,6 +59,10 @@ export function setSourceImage(image: CanvasImageSource, w: number, h: number): 
   setImageSize({ w, h });
   setSelection(null);
   setError(null);
+  // Boxes belong to the image they were found on; leaving them up would draw the last
+  // page's overlay over the new one.
+  setPage(null);
+  setActiveLine(null);
 }
 
 export function latest(): OcrRecord | null {
