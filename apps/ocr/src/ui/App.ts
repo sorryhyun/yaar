@@ -5,18 +5,26 @@ import { loadFromDataTransfer, pickFile } from '../image-input';
 import { loadSample } from '../sample';
 import { runRecognition } from '../recognize';
 import { runPageRead, type PageLine } from '../pipeline';
+import { bytesOf, cancelLoad, ensureModels, formatBytes, missing, pageModels } from '../warm';
 import {
   activeLine,
+  assistIds,
   backend,
   busy,
+  detModelId,
   downloadRatio,
   error,
   imageSize,
+  loading,
   page,
+  recognizerIds,
   results,
   selection,
   setActiveLine,
+  setAssistIds,
+  setDownloadRatio,
   setSelection,
+  setStatus,
   sourceCanvas,
   status,
   type OcrRecord,
@@ -125,6 +133,41 @@ export function App() {
     }
   };
 
+  const korean = () => assistIds().includes('korean');
+  const toggleKorean = () =>
+    setAssistIds(
+      korean() ? assistIds().filter((id) => id !== 'korean') : [...assistIds(), 'korean'],
+    );
+
+  /**
+   * What a page read with the current settings would have to download.
+   *
+   * Reads `loadedModels()` through `missing`, so toggling Korean or swapping a model size
+   * moves the button back to "Load" by itself — the toolbar cannot claim ready for a set
+   * that is not the set the next read would use.
+   */
+  const pending = () => missing(pageModels(recognizerIds(), detModelId()));
+  const ready = () => pending().length === 0;
+
+  const loadModels = async () => {
+    const wanted = pageModels(recognizerIds(), detModelId());
+    try {
+      const result = await ensureModels(wanted, {
+        onProgress: setDownloadRatio,
+        onModel: (ref, index, total) =>
+          setStatus(`Downloading the ${ref.id} ${ref.kind} (${index + 1} of ${total})…`),
+      });
+      setStatus(
+        `Models ready — ${formatBytes(result.bytes)} in ${Math.round(result.elapsedMs)} ms.`,
+      );
+    } catch (err) {
+      showToast(errMsg(err), 'error');
+      setStatus(errMsg(err));
+    } finally {
+      setDownloadRatio(null);
+    }
+  };
+
   const copy = async (text: string | undefined) => {
     if (!text) return;
     await navigator.clipboard.writeText(text);
@@ -169,17 +212,54 @@ export function App() {
       <button class="y-btn" onClick=${() => pickFile()}>Open image…</button>
       <button class="y-btn y-btn-ghost" onClick=${() => loadSample()}>Sample</button>
       <div class="y-tsep"></div>
-      <button class="y-btn" disabled=${() => busy() || !imageSize()} onClick=${recognize}>
+      <!-- The download is a button of its own: a read must never be the thing that
+           starts 150 MB moving. Primary until the models are here, because until then it
+           is the only action that leads anywhere. -->
+      <${Show}
+        when=${() => loading()}
+        fallback=${() =>
+          html`<button
+            class=${() => `y-btn${ready() ? ' y-btn-ghost' : ' y-btn-primary'}`}
+            disabled=${() => ready() || busy()}
+            title=${() =>
+              ready()
+                ? 'Detector and recognizers are loaded'
+                : `Download ${pending()
+                    .map((m) => m.id)
+                    .join(', ')} — cached afterwards, and usable offline`}
+            onClick=${loadModels}
+          >
+            ${() => (ready() ? 'Models ready' : `Load models (${formatBytes(bytesOf(pending()))})`)}
+          </button>`}
+      >
+        <button class="y-btn y-btn-danger" onClick=${() => cancelLoad()}>Cancel</button>
+      <//>
+      <div class="y-tsep"></div>
+      <button
+        class="y-btn"
+        disabled=${() => busy() || loading() || !ready() || !imageSize()}
+        title=${() => (ready() ? '' : 'Load the models first')}
+        onClick=${recognize}
+      >
         ${() => (busy() ? 'Working…' : 'Read selection')}
       </button>
       <button
         class="y-btn y-btn-primary"
-        disabled=${() => busy() || !imageSize()}
+        disabled=${() => busy() || loading() || !ready() || !imageSize()}
+        title=${() => (ready() ? '' : 'Load the models first')}
         onClick=${readPage}
       >
         ${() => (busy() ? 'Working…' : 'Read page')}
       </button>
       <span class="ocr-spacer"></span>
+      <button
+        class=${() => `y-btn y-btn-ghost ocr-toggle${korean() ? ' ocr-toggle-on' : ''}`}
+        title="Read every line with the Korean recognizer too (13 MB) and keep the better decode"
+        aria-pressed=${() => String(korean())}
+        onClick=${toggleKorean}
+      >
+        한 Korean
+      </button>
       <span class="y-badge">${() => backend()}</span>
     </div>
 
@@ -191,8 +271,12 @@ export function App() {
             <div class="y-empty-icon">🔎</div>
             <div>Drop an image here, paste one, or press <b>Sample</b>.</div>
             <div class="ocr-hint">
-              Then press <b>Read page</b> — or drag a box over one line and press
-              <b>Read selection</b>.
+              ${() =>
+                ready()
+                  ? 'Then press Read page — or drag a box over one line and press Read selection.'
+                  : `Reading needs the models first: press Load models (${formatBytes(
+                      bytesOf(pending()),
+                    )}, once per machine).`}
             </div>
           </div>`}
       >
@@ -270,7 +354,8 @@ export function App() {
               <div class="ocr-meta">
                 line ${() => activeLine()! + 1} ·
                 ${() => Math.round(page()!.lines[activeLine()!].confidence * 100)}% read ·
-                ${() => Math.round(page()!.lines[activeLine()!].score * 100)}% detected
+                ${() => Math.round(page()!.lines[activeLine()!].score * 100)}% detected ·
+                ${() => page()!.lines[activeLine()!].readBy}
               </div>
             </div>
           <//>

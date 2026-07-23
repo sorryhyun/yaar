@@ -38,9 +38,20 @@ export interface ModelChoice {
   url: string;
   bytes: number;
   charset: CharsetId;
+  /** What the dictionary actually covers, counted from it. Shown to agents. */
+  scripts: string;
 }
 
-/** Same graph shape throughout; `tiny` differs in its character dictionary. */
+/**
+ * Every recognizer takes the same input — 3×48×W, BGR, ±1 — and differs only in its
+ * dictionary. That is what lets ensemble.ts preprocess a page once and feed the same
+ * tensors to several of these.
+ *
+ * The `korean` entry is a different family (PP-OCRv5 mobile, per-language) and covers a
+ * script none of the v6 sizes do. PaddleOCR publishes siblings for cyrillic, latin,
+ * arabic, devanagari, greek, thai and more under the same naming; each is a data entry
+ * here plus one URL in charset.ts, and would need its own end-to-end check.
+ */
 export const MODELS: ModelChoice[] = [
   {
     id: 'medium',
@@ -48,6 +59,7 @@ export const MODELS: ModelChoice[] = [
     url: 'https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/main/inference.onnx',
     bytes: 76_554_979,
     charset: 'v6',
+    scripts: 'Latin, digits, Chinese, Japanese kana',
   },
   {
     id: 'small',
@@ -55,6 +67,7 @@ export const MODELS: ModelChoice[] = [
     url: 'https://huggingface.co/PaddlePaddle/PP-OCRv6_small_rec_onnx/resolve/main/inference.onnx',
     bytes: 21_159_378,
     charset: 'v6',
+    scripts: 'Latin, digits, Chinese, Japanese kana',
   },
   {
     id: 'tiny',
@@ -62,10 +75,29 @@ export const MODELS: ModelChoice[] = [
     url: 'https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx/resolve/main/inference.onnx',
     bytes: 4_462_639,
     charset: 'v6-tiny',
+    scripts: 'Latin, digits, Chinese',
+  },
+  {
+    id: 'korean',
+    label: 'Korean (13 MB) — Hangul + ASCII only',
+    url: 'https://huggingface.co/PaddlePaddle/korean_PP-OCRv5_mobile_rec_onnx/resolve/main/inference.onnx',
+    bytes: 13_418_787,
+    charset: 'v5-korean',
+    scripts: 'Hangul, Latin, digits',
   },
 ];
 
 export const DEFAULT_MODEL = MODELS[0].id;
+
+/**
+ * Recognizers run alongside the primary by default, arbitrated per line by ensemble.ts.
+ *
+ * On by default because the alternative is worse than slow: a Korean line detected by a
+ * script-agnostic detector and handed to a dictionary with zero Hangul comes back empty,
+ * with nothing in the output to say why. 13 MB and one extra pass of a mobile model buys
+ * that back. `setModel({ assist: [] })`, or the toolbar toggle, turns it off.
+ */
+export const DEFAULT_ASSIST = ['korean'];
 
 export function modelById(id: string): ModelChoice {
   return MODELS.find((m) => m.id === id) ?? MODELS[0];
@@ -87,10 +119,12 @@ export interface LoadProgress {
 export async function loadRecognizer(
   modelId: string,
   onProgress?: (p: LoadProgress) => void,
+  signal?: AbortSignal,
 ): Promise<InferenceSession> {
   const model = modelById(modelId);
   const s = await session(model.url, {
     backend: 'auto', // WebGPU when the tab has it, single-thread wasm otherwise
+    signal,
     onProgress: (p) => onProgress?.({ ratio: p.ratio, loaded: p.loaded, total: p.total }),
   });
   return s;
@@ -248,39 +282,7 @@ export function decodeCtc(
 
 export interface RecognizeOptions {
   modelId?: string;
-  order?: ChannelOrder;
   onProgress?: (p: LoadProgress) => void;
-}
-
-/** Recognize one line of text from a crop of `src`. */
-export async function recognizeCrop(
-  src: CanvasImageSource,
-  sx: number,
-  sy: number,
-  sw: number,
-  sh: number,
-  options: RecognizeOptions = {},
-): Promise<RecResult & { elapsedMs: number; inputWidth: number }> {
-  const model = modelById(options.modelId ?? DEFAULT_MODEL);
-  // The dictionary is 114 KB against the weights' 77 MB, and both are IndexedDB-cached
-  // by the same helper — asking for them together costs nothing over the weights alone.
-  const [s, chars] = await Promise.all([
-    loadRecognizer(model.id, options.onProgress),
-    loadCharset(model.charset),
-  ]);
-  const { tensor, bucket } = preprocess(src, sx, sy, sw, sh, options.order ?? 'bgr');
-
-  const started = performance.now();
-  const outputs = await run(s, { [s.inputNames[0]]: tensor });
-  const elapsedMs = performance.now() - started;
-
-  const logits = outputs[s.outputNames[0]];
-  const dims = logits.dims;
-  const classes = dims[dims.length - 1];
-  assertPairing(model, classes, chars);
-
-  const decoded = decodeCtc(logits.data as Float32Array, dims[dims.length - 2], classes, chars);
-  return { ...decoded, elapsedMs, inputWidth: bucket };
 }
 
 /**
@@ -307,32 +309,47 @@ function assertPairing(model: ModelChoice, classes: number, chars: string[]): vo
  */
 const MAX_BATCH = 16;
 
+/** A crop already turned into model input. Model-independent: see MODELS. */
+export interface Prepared {
+  data: Float32Array;
+  width: number;
+  bucket: number;
+}
+
+/** Preprocess whole crops — the shape `runPrepared` consumes. */
+export function prepareCrops(crops: HTMLCanvasElement[], order: ChannelOrder = 'bgr'): Prepared[] {
+  return crops.map((crop) => preprocessData(crop, 0, 0, crop.width, crop.height, order));
+}
+
 /**
- * Recognize many crops, batching them through the model.
+ * Recognize many prepared lines with one model, batching them through it.
  *
- * Worth doing for one reason that dominates everything else: onnxruntime's WebGPU
- * backend compiles kernels per *concrete* shape. Run a 40-line page one crop at a time
- * and it sees up to 40 distinct widths and pays 40 compilations, each far longer than
- * the inference itself. The width buckets in `preprocess` exist so that never happens
- * — crops group onto at most 8 shapes, each compiled once and then reused for the rest
- * of the session.
+ * Batching is worth doing for one reason that dominates everything else: onnxruntime's
+ * WebGPU backend compiles kernels per *concrete* shape. Run a 40-line page one crop at a
+ * time and it sees up to 40 distinct widths and pays 40 compilations, each far longer
+ * than the inference itself. The width buckets in `preprocess` exist so that never
+ * happens — crops group onto at most 8 shapes, each compiled once and then reused for
+ * the rest of the session.
+ *
+ * Input arrives already preprocessed because every recognizer in MODELS takes the same
+ * tensor; ensemble.ts prepares a page once and runs it through several models, and
+ * preprocessing per model would redo a canvas draw and a `getImageData` per crop for
+ * bytes that would come out identical.
  *
  * Results come back in input order regardless of how they were grouped.
  */
-export async function recognizeCrops(
-  crops: HTMLCanvasElement[],
+export async function runPrepared(
+  prepared: Prepared[],
   options: RecognizeOptions = {},
 ): Promise<{ results: (RecResult & { inputWidth: number })[]; elapsedMs: number }> {
   const model = modelById(options.modelId ?? DEFAULT_MODEL);
-  if (crops.length === 0) return { results: [], elapsedMs: 0 };
+  if (prepared.length === 0) return { results: [], elapsedMs: 0 };
+  // The dictionary is 114 KB against the weights' 77 MB, and both are IndexedDB-cached
+  // by the same helper — asking for them together costs nothing over the weights alone.
   const [s, chars] = await Promise.all([
     loadRecognizer(model.id, options.onProgress),
     loadCharset(model.charset),
   ]);
-
-  const prepared = crops.map((crop) =>
-    preprocessData(crop, 0, 0, crop.width, crop.height, options.order ?? 'bgr'),
-  );
 
   const byBucket = new Map<number, number[]>();
   prepared.forEach((p, i) => {
@@ -341,7 +358,7 @@ export async function recognizeCrops(
     else byBucket.set(p.bucket, [i]);
   });
 
-  const results = new Array<RecResult & { inputWidth: number }>(crops.length);
+  const results = new Array<RecResult & { inputWidth: number }>(prepared.length);
   const started = performance.now();
 
   for (const [bucket, indices] of byBucket) {

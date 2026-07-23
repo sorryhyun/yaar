@@ -1,7 +1,7 @@
 // Signals shared by the UI, the protocol handlers, and the headless hook.
 import { createSignal } from '@bundled/solid-js';
 import { DEFAULT_DET_MODEL } from './detect';
-import { DEFAULT_MODEL, type RecResult } from './model';
+import { DEFAULT_ASSIST, DEFAULT_MODEL, modelById, type RecResult } from './model';
 import type { PageResult } from './pipeline';
 
 export interface Rect {
@@ -13,7 +13,10 @@ export interface Rect {
 
 export interface OcrRecord extends RecResult {
   rect: Rect;
+  /** The recognizer whose decode won, which is not always the selected primary. */
   modelId: string;
+  /** What the other recognizers made of the same region. Empty when only one ran. */
+  alternatives: { modelId: string; text: string; confidence: number }[];
   elapsedMs: number;
   inputWidth: number;
   at: number;
@@ -21,9 +24,20 @@ export interface OcrRecord extends RecResult {
 
 export const [status, setStatus] = createSignal('Drop, paste, or open an image to start.');
 export const [busy, setBusy] = createSignal(false);
+/** True while weights are downloading. Separate from `busy`: nothing is being read. */
+export const [loading, setLoading] = createSignal(false);
 /** Weight-download progress, 0..1, or null when not downloading. */
 export const [downloadRatio, setDownloadRatio] = createSignal<number | null>(null);
+/**
+ * Models resident in this page session, as `det:id` / `rec:id` keys.
+ *
+ * Written only by `ensureModels`, so a read cannot believe a model is loaded that it
+ * would in fact have to fetch. See warm.ts for why this is not persisted.
+ */
+export const [loadedModels, setLoadedModels] = createSignal<string[]>([]);
 export const [modelId, setModelId] = createSignal(DEFAULT_MODEL);
+/** Extra recognizers run beside the primary, arbitrated per line. See ensemble.ts. */
+export const [assistIds, setAssistIds] = createSignal<string[]>([...DEFAULT_ASSIST]);
 export const [detModelId, setDetModelId] = createSignal(DEFAULT_DET_MODEL);
 export const [backend, setBackend] = createSignal('checking…');
 export const [imageSize, setImageSize] = createSignal<{ w: number; h: number } | null>(null);
@@ -34,6 +48,23 @@ export const [error, setError] = createSignal<string | null>(null);
 export const [page, setPage] = createSignal<PageResult | null>(null);
 /** Index into `page().lines` of the box the user clicked, or null. */
 export const [activeLine, setActiveLine] = createSignal<number | null>(null);
+
+/**
+ * Every recognizer a read should use, primary first.
+ *
+ * The single source of this list, so the toolbar, the protocol and the headless hook
+ * cannot disagree about which models ran. An assist that duplicates the primary is
+ * dropped here rather than at each call site.
+ */
+export function recognizerIds(): string[] {
+  const primary = modelById(modelId()).id;
+  return [
+    primary,
+    ...assistIds()
+      .map((id) => modelById(id).id)
+      .filter((id) => id !== primary),
+  ];
+}
 
 /**
  * The loaded image at native resolution.

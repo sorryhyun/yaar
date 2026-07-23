@@ -141,10 +141,12 @@ export function resizeForDetect(width: number, height: number, policy: ResizePol
 export async function loadDetector(
   modelId: string,
   onProgress?: (p: LoadProgress) => void,
+  signal?: AbortSignal,
 ): Promise<InferenceSession> {
   const model = detModelById(modelId);
   return session(model.url, {
     backend: 'auto',
+    signal,
     onProgress: (p) => onProgress?.({ ratio: p.ratio, loaded: p.loaded, total: p.total }),
   });
 }

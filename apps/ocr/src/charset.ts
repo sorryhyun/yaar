@@ -14,18 +14,24 @@
 // wrong does not error, it decodes to plausible-looking garbage.
 //
 // The v6 sizes do NOT share a dictionary: `medium` and `small` use the 50-language
-// set, `tiny` a much smaller one. Pairing a model with the wrong table is the same
-// silent-garbage failure, so model.ts pins one dictionary per model and checks the
-// model's output width against its length before decoding anything.
+// set, `tiny` a much smaller one, and the per-language PP-OCRv5 recognizers a third
+// again. Pairing a model with the wrong table is the same silent-garbage failure, so
+// model.ts pins one dictionary per model and checks the model's output width against
+// its length before decoding anything.
 import { fetchWeights } from '@bundled/yaar-ml';
 
-export type CharsetId = 'v6' | 'v6-tiny';
+export type CharsetId = 'v6' | 'v6-tiny' | 'v5-korean';
 
 /** One entry per distinct dictionary, not per model. */
 const DICTIONARY_URLS: Record<CharsetId, string> = {
   v6: 'https://huggingface.co/PaddlePaddle/PP-OCRv6_medium_rec_onnx/resolve/main/inference.yml',
   'v6-tiny':
     'https://huggingface.co/PaddlePaddle/PP-OCRv6_tiny_rec_onnx/resolve/main/inference.yml',
+  // 11,945 entries: all 11,172 Hangul syllables plus 94 ASCII characters — and no CJK
+  // ideographs and no kana at all, which is why this model complements the v6 ones
+  // rather than replacing them. See ensemble.ts.
+  'v5-korean':
+    'https://huggingface.co/PaddlePaddle/korean_PP-OCRv5_mobile_rec_onnx/resolve/main/inference.yml',
 };
 
 /**

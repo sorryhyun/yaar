@@ -1,12 +1,16 @@
 // A generated test card, so the app is usable (and verifiable) the moment it opens
 // without hunting for a screenshot.
 //
-// Deliberately multi-script, but only across scripts the dictionary actually
-// covers: Latin, digits and punctuation, Chinese, and Japanese kana. Hangul and
-// Cyrillic are absent from the v6 dictionary (verified against inference.yml), so
-// a Korean or Russian line would decode to nothing and read as a broken app
-// rather than as an unsupported script. A Latin-only card, at the other extreme,
-// would hide a dictionary that had drifted out of sync with the model.
+// Deliberately multi-script, across exactly the scripts some loaded dictionary
+// covers: Latin, digits and punctuation, Chinese and Japanese kana from the v6
+// models, Hangul from the Korean assist. No line here is unreadable by design — a
+// card with one would read as a broken app rather than as an unsupported script,
+// and a Latin-only card at the other extreme would hide a dictionary that had
+// drifted out of sync with its model.
+//
+// The Hangul line is the one that changes meaning with the settings: with the assist
+// off it comes back empty, which is the correct answer for a 0-Hangul dictionary and
+// the reason the assist exists. Cyrillic stays out because nothing here reads it.
 import { setSourceImage, setStatus, setSelection } from './state';
 
 export const SAMPLE_LINES = [
@@ -14,6 +18,7 @@ export const SAMPLE_LINES = [
   'Invoice #48213 — total $1,299.00 (2026-07-23)',
   '简体中文识别测试',
   '日本語のテキスト認識',
+  '한국어 텍스트 인식 테스트',
 ];
 
 const LINE_HEIGHT = 72;

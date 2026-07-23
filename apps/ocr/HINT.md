@@ -6,6 +6,12 @@ It finds the text itself: `readPage` detects every line and reads them all, so a
 screenshot or document needs no coordinates. `recognize` is still there for reading one
 specific box, and the user can drag a box in the window.
 
-It reads Latin, digits, punctuation, Chinese, and Japanese kana. It has **no Korean
-(Hangul) or Cyrillic** characters in its dictionary — those lines come back marked
-`readable: false` rather than as an error, so don't route Korean or Russian images here.
+It reads Latin, digits, punctuation, Chinese, Japanese kana, and **Korean** — Hangul
+comes from a second recognizer that runs beside the main one, with the better read kept
+per line. **Cyrillic** is still absent from every dictionary it ships, so a Russian line
+comes back marked `readable: false` rather than as an error.
+
+Reading does not download. The models are fetched by the `loadModels` command (or the
+Load models button in the window), and `readPage` / `recognize` fail with a message
+saying so until that has run. Call `loadModels` first, with a long timeout — 152 MB on a
+cold start, and near-instant afterwards.

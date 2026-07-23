@@ -74,6 +74,57 @@ Measured on WebGPU (apple metal-3), medium detector + medium recognizer:
 
 ---
 
+# Phase 3 — Korean, by running two recognizers (shipped)
+
+Phase 2 measured its own gap: "Korean detected at 92% and marked `readable: false`." The
+detector is script-agnostic and boxes Hangul perfectly; the v6 dictionary contains zero
+Hangul characters, so the crop came back empty. PaddleOCR's answer is per-language
+recognizers, and `korean_PP-OCRv5_mobile_rec_onnx` is 13 MB of exactly that.
+
+It cannot *replace* the v6 model — its 11,945 characters are all 11,172 Hangul syllables
+plus 94 ASCII, with no CJK and no kana at all. So both run, and the better read wins per
+line.
+
+**Why it drops in unchanged.** Verified before writing any code: the graph is
+`x:[N,3,48,W] → [N,T,11947]`, its config says `img_mode: BGR` and `CTCLabelDecode`, and
+its dictionary is 11,945 entries — so `11945 + 2` is exactly what `assertPairing` already
+expects, and `preprocess`/`decodeCtc` needed no changes. Every recognizer taking the same
+tensor is also what lets a page be preprocessed *once* and fed to both models; that split
+is `prepareCrops` / `runPrepared`.
+
+**The one judgement call is the arbitration** (`arbitrate.ts`, tested). A recognizer
+cannot say "that is not my script" — with no labels for what it sees it emits blanks or a
+stray character at high confidence, never an error. So neither routing by language guess
+nor asking the models is available; the only evidence is the two decodes. Mean confidence
+alone would let one stray character at 0.99 beat a correct ten-character read; summed
+confidence would let a long hallucination beat a correct short read. What is used is
+confidence shrunk by length, `conf × n/(n+2)`, with the primary keeping anything the
+challenger does not beat by 0.05 — so a page does not read differently from one run to
+the next. `__ocr.candidates()` re-measures that call on a real line instead of re-arguing
+it.
+
+# Phase 3b — the download is its own button (shipped)
+
+Falling out of the above: the default set became 152 MB (62 detector + 77 primary + 13
+Korean), all of it fetched as a side effect of pressing "Read page". One action meant
+either a 300 ms read or a multi-minute download, with no way to know which was about to
+happen and no way to stop it.
+
+So `warm.ts` owns loading, a read *asserts* rather than fetches, and the refusal names
+what is missing and how to ask for it. `ensureModels` stays the only path that loads
+anything, so an explicit load and a `download: true` read record themselves identically.
+Loaded-ness is per page session on purpose: the bytes survive in IndexedDB, but whether
+they are there is not something the app can ask the cache, and a remembered "yes" that
+turned out to be wrong would put the silent download back in the one place it was removed.
+
+# Still out of scope
+
+- **Cyrillic, Thai, Arabic.** Now a data change rather than a design one — a `MODELS`
+  entry plus a dictionary URL, per the same PP-OCRv5 naming — but each needs its own
+  end-to-end check before being claimed.
+
+---
+
 # Appendix — YAAR changes this work suggests
 
 ### Phase 3 will want a window-capture → OCR path

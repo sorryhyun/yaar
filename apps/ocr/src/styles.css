@@ -12,6 +12,15 @@
   margin-left: auto;
 }
 
+/* A toggle, so it has to look pressed rather than merely hovered — a ghost button that
+   only changed on hover would leave the assist's state invisible while the pointer is
+   anywhere else. */
+.ocr-toggle-on {
+  color: var(--yaar-accent);
+  border-color: var(--yaar-accent);
+  background: color-mix(in srgb, var(--yaar-accent) 14%, transparent);
+}
+
 .ocr-stage {
   position: relative;
   overflow: auto;
