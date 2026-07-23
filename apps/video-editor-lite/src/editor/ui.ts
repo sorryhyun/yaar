@@ -70,6 +70,8 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
 
   // ─── Refs ────────────────────────────────────────────────────────────────
   let root!: HTMLDivElement;
+  let leftSidebar!: HTMLElement;
+  let sidebar!: HTMLElement;
   let modeToggle!: HTMLDivElement;
   let editTabButton!: HTMLButtonElement;
   let createTabButton!: HTMLButtonElement;
@@ -124,22 +126,18 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
 
   // ─── Template ─────────────────────────────────────────────────────────────
   render(() => html`
-    <div ref=${(el: HTMLDivElement) => { root = el; }} class="y-light editor-root">
-
-      <!-- ═══ SIDEBAR ═══ -->
-      <aside class="sidebar">
-        <div ref=${(el: HTMLDivElement) => { modeToggle = el; }} class="sidebar-mode-toggle">
-          <button
-            ref=${(el: HTMLButtonElement) => { editTabButton = el; }}
-            type="button">✂ Edit</button>
-          <button
-            ref=${(el: HTMLButtonElement) => { createTabButton = el; }}
-            type="button">✨ Create</button>
-        </div>
-
+    <div ref=${(el: HTMLDivElement) => { root = el; }} class="editor-root">
+      <div class="sidebar-rail sidebar-rail-left" aria-label="Edit tools">
+        <button ref=${(el: HTMLButtonElement) => { editTabButton = el; }}
+                type="button" class="sidebar-reveal"
+                aria-label="Toggle edit tools" aria-expanded="false" aria-controls="edit-tools">
+          <span aria-hidden="true">✂</span><span class="rail-label">Edit</span>
+        </button>
+      </div>
+      <aside ref=${(el: HTMLElement) => { leftSidebar = el; }} id="edit-tools" class="sidebar sidebar-left" aria-label="Edit tools">
+        <div ref=${(el: HTMLDivElement) => { modeToggle = el; }} class="drawer-heading">Edit tools</div>
         <div class="sidebar-body">
-
-          <!-- Edit mode sidebar -->
+          <!-- Edit tools -->
           <div ref=${(el: HTMLDivElement) => { sidebarEditSection = el; }}
                style="">
             <div class="y-label sb-title">Source</div>
@@ -173,10 +171,21 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
             <div ref=${(el: HTMLDivElement) => { fileList = el; }} class="storage-list"></div>
             <div class="storage-hint">Click a file to load it directly.</div>
           </div>
+        </div>
+      </aside>
 
-          <!-- Create mode sidebar -->
-          <div ref=${(el: HTMLDivElement) => { sidebarCreateSection = el; }}
-               style="display:none">
+      <div class="sidebar-rail sidebar-rail-right" aria-label="Create tools">
+        <button ref=${(el: HTMLButtonElement) => { createTabButton = el; }}
+                type="button" class="sidebar-reveal"
+                aria-label="Toggle create tools" aria-expanded="false" aria-controls="create-tools">
+          <span aria-hidden="true">✨</span><span class="rail-label">Create</span>
+        </button>
+      </div>
+      <aside ref=${(el: HTMLElement) => { sidebar = el; }} id="create-tools" class="sidebar sidebar-right" aria-label="Create tools">
+        <div class="drawer-heading">Create tools</div>
+        <div class="sidebar-body">
+          <!-- Create tools -->
+          <div ref=${(el: HTMLDivElement) => { sidebarCreateSection = el; }}>
             <div class="y-label sb-title">Composition</div>
             <div class="comp-grid">
               <div>
@@ -248,6 +257,13 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
 
       <!-- ═══ MAIN CONTENT ═══ -->
       <main class="editor-main">
+        <header class="editor-topbar">
+          <div>
+            <p class="eyebrow">Video Editor Lite</p>
+            <h1>Make a clean cut.</h1>
+          </div>
+          <div class="topbar-hint"><b>Edit</b> tools live on the left; <b>Create</b> tools live on the right.</div>
+        </header>
 
         <!-- Hidden file input -->
         <input ref=${(el: HTMLInputElement) => { fileInput = el; }}
@@ -350,6 +366,42 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
     </div>
   `, parent as HTMLElement);
 
+  // Both edge rails preview on hover; a click pins the relevant drawer for touch, and focus keeps it reachable by keyboard.
+  const setDrawerPinned = (side: 'left' | 'right', pinned: boolean) => {
+    const button = side === 'left' ? editTabButton : createTabButton;
+    const otherSide = side === 'left' ? 'right' : 'left';
+    const otherButton = side === 'left' ? createTabButton : editTabButton;
+    root.classList.toggle(`${side}-sidebar-pinned`, pinned);
+    button.setAttribute('aria-expanded', String(pinned));
+    if (pinned) {
+      root.classList.remove(`${otherSide}-sidebar-pinned`, `${otherSide}-sidebar-keyboard-open`);
+      otherButton.setAttribute('aria-expanded', 'false');
+    }
+  };
+  editTabButton.addEventListener('click', () =>
+    setDrawerPinned('left', !root.classList.contains('left-sidebar-pinned')),
+  );
+  createTabButton.addEventListener('click', () =>
+    setDrawerPinned('right', !root.classList.contains('right-sidebar-pinned')),
+  );
+  editTabButton.addEventListener('focus', () => root.classList.add('left-sidebar-keyboard-open'));
+  createTabButton.addEventListener('focus', () => root.classList.add('right-sidebar-keyboard-open'));
+  root.addEventListener('focusout', () => {
+    window.setTimeout(() => {
+      if (!root.contains(document.activeElement)) {
+        root.classList.remove('left-sidebar-keyboard-open', 'right-sidebar-keyboard-open');
+      }
+    }, 0);
+  });
+  const closeDrawerOnEscape = (event: KeyboardEvent, side: 'left' | 'right') => {
+    if (event.key !== 'Escape') return;
+    setDrawerPinned(side, false);
+    root.classList.remove(`${side}-sidebar-keyboard-open`);
+    (side === 'left' ? editTabButton : createTabButton).focus();
+  };
+  leftSidebar.addEventListener('keydown', (event) => closeDrawerOnEscape(event, 'left'));
+  sidebar.addEventListener('keydown', (event) => closeDrawerOnEscape(event, 'right'));
+
   // Reactive mode switching — more reliable than attribute bindings on style/class
   let _prevMode: string | null = null;
   createEffect(() => {
@@ -361,23 +413,13 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
     createTabButton.classList.toggle('active', !isEdit);
 
     if (isEdit) {
-      sidebarCreateSection.style.display = 'none';
       createContainer.style.display = 'none';
-      sidebarEditSection.style.display = '';
       editContainer.style.display = '';
-      if (switching) {
-        sectionIn(sidebarEditSection);
-        sectionIn(editContainer);
-      }
+      if (switching) sectionIn(editContainer);
     } else {
-      sidebarEditSection.style.display = 'none';
       editContainer.style.display = 'none';
-      sidebarCreateSection.style.display = '';
       createContainer.style.display = '';
-      if (switching) {
-        sectionIn(sidebarCreateSection);
-        sectionIn(createContainer);
-      }
+      if (switching) sectionIn(createContainer);
     }
     _prevMode = modeStr;
   });
