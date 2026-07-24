@@ -145,12 +145,24 @@ export async function invokeStorage(
   return ok(`Written to yaar://apps/${storagePath.appId}/storage/${storagePath.path}`);
 }
 
-/** Delete a storage file. Null when not a storage URI. */
+/**
+ * Delete a storage file, a directory, or the app's whole storage namespace.
+ * Null when not a storage URI.
+ *
+ * An empty path — `yaar://apps/{appId}/storage/` — names the namespace root, and
+ * deleting it removes the app's subtree along with `storage/apps/{appId}/` itself.
+ * That used to be refused ("Provide a file path to delete"), which quietly made
+ * a whole class of namespace unreclaimable: devtools' throwaway `preview--{id}`
+ * identities belong to no installed app, so nothing lists them and no GC sweeps
+ * them, and `deleteProject`'s cleanup call — the only thing that ever tried —
+ * hit this guard and swallowed the error. The permission check upstream is per
+ * app-namespace and unchanged: a caller allowed to delete the root could already
+ * delete every file under it one at a time, so this adds atomicity, not reach.
+ */
 export async function deleteStorage(resolved: ResolvedUri): Promise<VerbResult | null> {
   const storagePath = parseAppStoragePath(resolved.sourceUri);
   if (!storagePath) return null;
 
-  if (!storagePath.path) return error('Provide a file path to delete.');
   const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
   const result = await storageDelete(prefixedPath);
   if (!result.success) return error(result.error!);
