@@ -5,10 +5,10 @@ import { describe, expect, it } from 'bun:test';
 //
 // `appStateKeys` is read from the app's built `dist/protocol.json`, which CI
 // never produces (it builds shared + compiler, not the apps). The
-// `materialize-app-protocols` preload regenerates it from source before any test
-// process loads a file — early enough to beat the TTL cache in `listApps()`, which
-// a per-file `beforeAll` here could not (another file in the shared --parallel
-// process may cache the empty manifest first). See scripts/run-unit-tests.ts.
+// `materialize-app-protocols` preload (bunfig.toml `[test] preload`) regenerates
+// it from source before any test file loads — early enough to beat the TTL cache
+// in `listApps()`, which a per-file `beforeAll` here could not (another file in
+// the shared --parallel process may cache the empty manifest first).
 import { buildAppAgentProfile } from '../agents/profiles/app-agent.js';
 import { claudeModelToCodex } from '../agents/profiles/model-tiers.js';
 

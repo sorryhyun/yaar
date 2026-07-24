@@ -1,0 +1,7 @@
+# Every `bun test` in this package runs this preload first, awaited before any
+# test file loads. It materializes the `dist/protocol.json` fixtures a few tests
+# read (dock, devtools, memo), which CI never builds — see the module header and
+# src/tests/setup/materialize-app-protocols.ts. Covers all three suites: the unit
+# runner's spawned processes, loopback, and integration.
+[test]
+preload = ["./src/tests/setup/materialize-app-protocols.ts"]
