@@ -11,5 +11,4 @@
 export const SYSTEM_TOOL_NAMES = [
   'mcp__system__reload_cached',
   'mcp__system__list_reload_options',
-  'mcp__system__wait',
 ] as const;
