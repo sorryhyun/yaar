@@ -25,6 +25,14 @@ import { Glob } from 'bun';
 const MAX_CONCURRENT = 4;
 
 /**
+ * Preload run (and awaited) before any test file loads in a spawned process.
+ * `materialize-app-protocols` rebuilds the `dist/protocol.json` fixtures a few
+ * tests read, before the first `listApps()` caches an empty manifest — which a
+ * per-file `beforeAll` cannot guarantee in the shared `--parallel` process.
+ */
+const PRELOAD = ['--preload', './src/tests/setup/materialize-app-protocols.ts'];
+
+/**
  * Does this file install a module mock?
  *
  * Comment lines are dropped first — several files *discuss* `mock.module` in
@@ -94,8 +102,8 @@ console.log(
 
 const outcomes = await pooled(
   [
-    () => run([...pure, '--parallel'], `shared (${pure.length} files)`),
-    ...mocking.map((file) => () => run([file], `isolated: ${file}`)),
+    () => run([...PRELOAD, ...pure, '--parallel'], `shared (${pure.length} files)`),
+    ...mocking.map((file) => () => run([...PRELOAD, file], `isolated: ${file}`)),
   ],
   MAX_CONCURRENT,
 );
