@@ -84,26 +84,6 @@ export function registerBrowserUserProtocol(): void {
       },
     },
     state: {
-      manifest: {
-        description: 'App capabilities',
-        handler: () => ({
-          state: ['tabs', 'activeTab', 'connected'],
-          commands: [
-            'focus',
-            'close',
-            'group',
-            'move',
-            'track',
-            'extract',
-            'screenshot',
-            'click',
-            'type',
-            'scroll',
-            'navigate',
-            'refresh',
-          ],
-        }),
-      },
       tabs: {
         description:
           "The user's real Chrome tabs (id, url, title, active, audible, isSelf, allowed). " +

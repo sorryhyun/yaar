@@ -56,32 +56,6 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
     appId: 'browser',
     name: 'Browser',
     state: {
-      manifest: {
-        description: 'App capabilities',
-        handler: () => ({
-          state: ['currentUrl', 'pageTitle', 'browserId'],
-          commands: [
-            'open',
-            'click',
-            'type',
-            'press',
-            'scroll',
-            'navigate_back',
-            'navigate_forward',
-            'hover',
-            'wait_for',
-            'screenshot',
-            'extract',
-            'extract_images',
-            'html',
-            'annotate',
-            'remove_annotations',
-            'refresh',
-            'clear',
-            'attach',
-          ],
-        }),
-      },
       currentUrl: {
         description: 'Currently displayed URL',
         handler: () => deps.getCurrentUrl(),

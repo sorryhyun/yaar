@@ -1,7 +1,7 @@
 import { createSignal, onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import { invoke, list, read, del, httpFetch, showToast, withLoading } from '@bundled/yaar';
+import { invoke, list, read, del, httpFetch, showToast, withLoading, errMsg } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { JsonRpcResponse, McpConfigResponse } from './schema';
 import './styles.css';
@@ -243,7 +243,7 @@ async function refreshServer(name: string) {
     await loadServers();
     await loadToolsFor(name);
   } catch (err) {
-    showToast(err instanceof Error ? err.message : 'Refresh failed', 'error');
+    showToast(errMsg(err), 'error');
   }
 }
 

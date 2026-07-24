@@ -1,8 +1,7 @@
 export {};
-import DOMPurify from '@bundled/dompurify';
 import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
-import { storage } from '@bundled/yaar';
+import { sanitizeHtml, storage } from '@bundled/yaar';
 import { setState, elPreviewBody } from './state';
 import { basename, formatSize, isImage, isMarkdown, isPdf, isPreviewable, getFileIcon, getExtension } from './helpers';
 import { refreshMountAliases } from './mount-dialog';
@@ -94,17 +93,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
       // Stored file content is untrusted and marked does NOT escape raw HTML,
       // so the parsed fragment must be sanitized before it reaches the DOM.
       // Order: parse -> sanitize whole fragment -> wrap -> insert.
-      // Deviation from the bare frontend MarkdownRenderer baseline: DOMPurify's
-      // default allowlist permits <form> and its controls, so a stored .md file
-      // could render a credential-phishing form that posts to an attacker origin
-      // from inside this app. Markdown never produces form elements, so denying
-      // them costs no fidelity. Everything else stays at DOMPurify defaults.
-      // Note: DOMPurify lifts a forbidden tag's children without re-scanning
-      // them, so a stray <input> can outlive its <form>. That leftover is inert
-      // (no form to submit to, and event attributes are stripped regardless).
-      const htmlContent = DOMPurify.sanitize(marked.parse(content) as string, {
-        FORBID_TAGS: ['form', 'input', 'button', 'select', 'textarea', 'option'],
-      });
+      const htmlContent = sanitizeHtml(marked.parse(content) as string);
       const wrapper = document.createElement('div');
       wrapper.className = 'md-preview';
       wrapper.innerHTML = htmlContent;

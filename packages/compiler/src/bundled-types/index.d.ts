@@ -917,6 +917,59 @@ declare module '@bundled/yaar' {
   ): Promise<T | undefined>;
 
   /**
+   * The generation counter that keeps a slow response from overwriting a newer one.
+   *
+   * ```ts
+   * const guard = createStaleGuard();
+   * const fresh = guard.begin();   // supersedes anything in flight
+   * const post = await fetchPost(id);
+   * if (!fresh()) return;          // a newer load started; drop this one
+   * ```
+   *
+   * `latest()` joins the current generation without superseding it (a secondary
+   * fetch that must be cancelled by the next `begin()` but must not cancel its
+   * siblings). `invalidate()` bumps with no fetch attached, dropping everything
+   * in flight.
+   */
+  export function createStaleGuard(): {
+    begin(): () => boolean;
+    latest(): () => boolean;
+    invalidate(): void;
+  };
+
+  export interface SanitizeHtmlOptions {
+    /** Restrict to an explicit tag allowlist (DOMPurify `ALLOWED_TAGS`). */
+    allowedTags?: string[];
+    /** Restrict to an explicit attribute allowlist (DOMPurify `ALLOWED_ATTR`). */
+    allowedAttr?: string[];
+    /**
+     * Extra tags to forbid. Added to the form-control default — except when
+     * `allowedTags` is given, in which case the allowlist is the whole policy
+     * and this list is the only subtraction from it.
+     */
+    forbidTags?: string[];
+    /** Attributes to forbid (DOMPurify `FORBID_ATTR`). */
+    forbidAttr?: string[];
+  }
+
+  /**
+   * Sanitize untrusted HTML for insertion into an app iframe. Use this rather
+   * than calling DOMPurify directly.
+   *
+   * DOMPurify's own defaults (scripts, event handlers, and `javascript:`/`data:`
+   * URLs already stripped) plus the deviation every YAAR app makes: `form` and
+   * its controls are forbidden, since no foreign content YAAR renders has a
+   * legitimate reason to post, and a form inside the iframe can navigate it or
+   * phish against the app's chrome. That correction applies to DOMPurify's
+   * default allowlist; pass `allowedTags` and your list is the whole policy.
+   *
+   * Call order is always parse -> sanitize the whole fragment -> rewrite ->
+   * insert. Relative URLs survive verbatim; an app that needs them resolved
+   * rewrites the *sanitized* output.
+   */
+  export function sanitizeHtml(html: string, opts?: SanitizeHtmlOptions): string;
+
+  /**
    * Register a keyboard shortcut. Returns a cleanup function.
    *
    * Combo format: modifier keys joined with `+`, e.g. `"ctrl+s"`, `"alt+arrowup"`, `"escape"`.
@@ -932,11 +985,20 @@ declare module '@bundled/yaar' {
    * A failed save is reported (logged, and toasted at most once per 5s) rather
    * than dropped. Pass `label` to name the data in that toast, or `onError` to
    * replace it.
+   *
+   * `revive` runs on the loaded value before it reaches the signal — clamp a
+   * stale value, migrate a renamed key, or `z.safeParse` JSON a previous version
+   * wrote in another shape. It also runs on `fallback` when nothing is stored,
+   * so it must be total; if it throws, the fallback is used and it is logged.
    */
   export function createPersistedSignal<T>(
     key: string,
     fallback: T,
-    options?: { label?: string; onError?: (message: string, error: unknown) => void },
+    options?: {
+      label?: string;
+      onError?: (message: string, error: unknown) => void;
+      revive?: (raw: unknown) => T;
+    },
   ): [get: () => T, set: (v: T | ((prev: T) => T)) => void];
 
   /**

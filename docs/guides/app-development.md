@@ -252,7 +252,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | p5.js | `@bundled/p5` | Creative coding |
 | marked | `@bundled/marked` | Markdown → HTML |
 | Prism | `@bundled/prismjs` | Syntax highlighting |
-| DOMPurify | `@bundled/dompurify` | HTML sanitization (required for untrusted rich content) |
+| DOMPurify | `@bundled/dompurify` | HTML sanitization — call it through `sanitizeHtml` from `@bundled/yaar`, not directly |
 | Zod (Mini) | `@bundled/zod` | Validating untrusted/persisted JSON at trust boundaries (functional Mini API) |
 | mammoth | `@bundled/mammoth` | `.docx` → HTML |
 | diff | `@bundled/diff` | Text diffing |
@@ -405,7 +405,25 @@ const autosave = createAutosave(
 // bind the status chip to autosave.statusLabel()
 ```
 
-For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice.
+For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice. Its `revive` option runs on the loaded value before it reaches the signal — the place to clamp a stored width against the current window, migrate a renamed key, or `z.safeParse` JSON an older version wrote in another shape. It also runs on the fallback when nothing is stored, so keep it total; if it throws, the fallback is used and the failure is logged.
+
+**`createStaleGuard`** — the generation counter that keeps a slow response from overwriting a newer one. Three apps invented this independently, in three different shapes.
+
+```typescript
+import { createStaleGuard } from '@bundled/yaar';
+
+const guard = createStaleGuard();
+
+async function loadPost(id: string) {
+  const fresh = guard.begin();   // supersedes anything already in flight
+  const post = await fetchPost(id);
+  if (!fresh()) return;          // a newer load started; drop this response
+  setState('post', post);
+}
+// guard.latest() joins the current generation without superseding it (a secondary
+// fetch cancelled by the next begin() but not cancelling its siblings);
+// guard.invalidate() bumps with no fetch attached, dropping everything in flight.
+```
 
 ## Runtime Constraints
 
@@ -422,9 +440,9 @@ Compiled apps run in a **browser iframe sandbox**. They are subject to these har
 
 Any HTML an app did not author itself — a Markdown file from storage, a scraped page, an
 RSS feed body, a GitHub README, content round-tripped through `appStorage` — must pass
-through `@bundled/dompurify` before it reaches the DOM. Apps run in an iframe, but that
-iframe holds the app's own storage, credentials, and protocol channel to its agent; an
-injected script owns all of it.
+through **`sanitizeHtml` from `@bundled/yaar`** before it reaches the DOM. Apps run in an
+iframe, but that iframe holds the app's own storage, credentials, and protocol channel to
+its agent; an injected script owns all of it.
 
 Every rich-content pipeline follows this order:
 
@@ -435,9 +453,9 @@ Every rich-content pipeline follows this order:
 5. attach behavior with event listeners — never inline event attributes.
 
 ```typescript
-import DOMPurify from '@bundled/dompurify';
+import { sanitizeHtml } from '@bundled/yaar';
 
-const clean = DOMPurify.sanitize(marked.parse(source) as string);
+const clean = sanitizeHtml(marked.parse(source) as string);
 const doc = new DOMParser().parseFromString(clean, 'text/html');
 rewriteRelativeLinks(doc);       // app logic, on already-safe HTML
 el.innerHTML = doc.body.innerHTML;
@@ -458,13 +476,26 @@ Sanitize at one choke point per pipeline, ideally where foreign content first en
 state, so that every downstream sink is safe by construction. Two overlapping policies are
 worse than one: the next editor will weaken one assuming the other covers it.
 
-`DOMPurify.sanitize(dirty)` with no options is the default policy, matching the OS shell's
-own Markdown and HTML renderers. Pass an options object only when the content type
-genuinely needs a different allowlist — a printable document needs inline `style` that
-prose rendering does not — and comment the reasoning next to it.
+`sanitizeHtml(dirty)` with no options is the default policy: DOMPurify's own defaults —
+which already strip scripts, event handlers, and `javascript:`/`data:` URLs — plus the one
+deviation every YAAR app makes. `form` and its controls are on DOMPurify's default
+`ALLOWED_TAGS`, which is right for a general-purpose sanitizer and wrong for an app iframe:
+no foreign content YAAR renders has a legitimate reason to post, and a form inside the
+iframe can navigate it or phish against the app's chrome. Six apps each discovered that
+separately and wrote the same `FORBID_TAGS` list; it now lives in one place.
 
-Do not hand-roll a sanitizer. Element denylists and `^on` attribute stripping miss
-`<svg>`/`<math>` mutation-XSS, `srcset`, `formaction`, and `xlink:href`.
+Pass an options object (`allowedTags`, `allowedAttr`, `forbidTags`, `forbidAttr`) only when
+the content type genuinely needs a different allowlist — a printable document needs inline
+`style` that prose rendering does not — and comment the reasoning next to it. The no-forms
+correction applies to DOMPurify's *default* allowlist; once you pass `allowedTags`, your
+list is the whole policy and nothing is subtracted from it behind your back. That is why an
+explicit allowlist must simply not name a form control it doesn't want.
+
+Do not call `@bundled/dompurify` directly, and do not hand-roll a sanitizer. Element
+denylists and `^on` attribute stripping miss `<svg>`/`<math>` mutation-XSS, `srcset`,
+`formaction`, and `xlink:href`. Relative URLs survive `sanitizeHtml` verbatim — it neither
+strips nor absolutizes them — so an app that needs them resolved rewrites the *sanitized*
+output, per step 3 above.
 
 ### Two traps that make a sanitizer look like it works
 
@@ -559,7 +590,7 @@ Common mistakes to avoid when building apps:
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
 - **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `@bundled/dompurify` first. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't hand-roll a sanitizer** — an element denylist plus `^on` attribute stripping looks complete and isn't: it misses `<svg>`/`<math>` mutation-XSS, `style`, `srcset`, `formaction`, and `xlink:href`.
 - **Don't generate inline event attributes** — `setAttribute('onerror', ...)` is stripped by any sanitizer, so the behavior it encodes disappears the moment the pipeline is secured. Use `addEventListener` on the inserted node.
@@ -1020,11 +1051,17 @@ command handler, for instance, where an `AppCommandError` is the right outcome.
 `@bundled/yaar` ships the small helpers apps otherwise rewrite. Prefer them over inlining:
 
 ```typescript
-import { errMsg, showToast, withLoading, wait, AppCommandError } from '@bundled/yaar';
+import { errMsg, showToast, withLoading, wait, createStaleGuard, AppCommandError } from '@bundled/yaar';
 
 errMsg(e);                       // not: e instanceof Error ? e.message : String(e)
 showToast('Deleted', 'success'); // 'info' | 'success' | 'error', auto-dismissing
 await wait(200);                 // not: new Promise(r => setTimeout(r, 200))
+
+// A slow response must never overwrite a newer one — not: a hand-rolled `gen` counter.
+const guard = createStaleGuard();
+const fresh = guard.begin();
+const data = await load();
+if (!fresh()) return;
 
 // Sets loading true, runs fn, routes a throw to onError, always clears loading.
 await withLoading(setLoading, () => fetchIssues(), (msg) => showToast(msg, 'error'));

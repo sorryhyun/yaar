@@ -130,7 +130,7 @@ Available via `@bundled/*` imports — no npm install needed:
 | marked | `@bundled/marked` | Markdown parsing |
 | prismjs | `@bundled/prismjs` | Syntax highlighting |
 | mammoth | `@bundled/mammoth` | DOCX parsing |
-| dompurify | `@bundled/dompurify` | HTML sanitization (mandatory for externally-sourced HTML) |
+| dompurify | `@bundled/dompurify` | HTML sanitization — do not import it directly; use `sanitizeHtml` from `@bundled/yaar` |
 | zod | `@bundled/zod` | Zod Mini functional API — validate untrusted/persisted JSON |
 
 The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`.
@@ -148,10 +148,12 @@ The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.
 Always available. Key exports:
 - **Verb API**: `read(uri)`, `list(uri)`, `invoke(uri, params)`, `describe(uri)`, `del(uri)`, `subscribe(uri, callback)`, `stream(uri)`
 - **Utilities**: `showToast(msg, type?)`, `errMsg(err)`, `withLoading(fn)`, `onShortcut(key, fn)`, `defineCommand`, `wait`
+- **Sanitization**: `sanitizeHtml(html, opts?)` — mandatory for externally-sourced HTML. DOMPurify's defaults plus the no-forms deviation; never call DOMPurify directly, never hand-roll
+- **Stale responses**: `createStaleGuard()` — `begin()`/`latest()`/`invalidate()`; use instead of a hand-rolled generation counter when a slow response could overwrite a newer one
 - **Dialogs**: `showAlert`, `showConfirm`, `showPrompt`
 - **Storage**: `appStorage.save(path, content)`, `.trySave(path, content)`, `.read(path)`, `.readJson(path)`, `.readJsonOr(path, fallback)`, `.readBinary(path)`, `.readBlob(path)`, `.list(dirPath?)`, `.remove(path)`
 - **Database**: `appDb` — SQLite-backed collections scoped to the app
-- **Persisted state**: `createPersistedSignal(key, defaultValue)` — Solid.js signal that persists to appStorage; also `createAutosave`, `createCollapsiblePanel`
+- **Persisted state**: `createPersistedSignal(key, defaultValue, opts?)` — Solid.js signal that persists to appStorage; `opts.revive` clamps/migrates/validates the loaded value before it reaches the signal. Also `createAutosave`, `createCollapsiblePanel`
 - **App Protocol**: `app.register({ appId, name, state, commands })`, `app.sendInteraction(message)`
 
 ## Design Tokens (CSS)

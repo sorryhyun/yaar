@@ -326,7 +326,10 @@ const dialogRule: Rule = {
 // Rule 4: marked.parse() reaching innerHTML without an adjacent sanitizer
 // ---------------------------------------------------------------------------
 
-const SANITIZER = /DOMPurify|\bsanitize\b|\bpurify\b|setSafeHtml|safeHtml/i;
+// `sanitizeHtml` (the SDK's single DOMPurify policy) is the expected spelling now, and
+// it does not match a `\bsanitize\b` anchor — the trailing `H` is a word character, so
+// the boundary never lands. Match the whole `sanitiz*` family instead.
+const SANITIZER = /DOMPurify|\bsanitiz\w*|\bpurify\b|setSafeHtml|safeHtml/i;
 
 /**
  * Advisory by design: regex cannot prove dataflow from `marked.parse()` to an
@@ -336,7 +339,7 @@ const SANITIZER = /DOMPurify|\bsanitize\b|\bpurify\b|setSafeHtml|safeHtml/i;
 const markedRule: Rule = {
   id: 'marked-to-innerhtml',
   severity: 'ADVISORY',
-  title: '`marked.parse()` reaching `innerHTML` with no adjacent sanitizer (DOMPurify)',
+  title: '`marked.parse()` reaching `innerHTML` with no adjacent sanitizer (`sanitizeHtml`)',
   scan(code, raw, file) {
     const violations: Violation[] = [];
     const lines = code.split('\n');

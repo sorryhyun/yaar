@@ -5,7 +5,7 @@
 // sign-in flow. Each wraps its I/O in runAction for uniform loading + error
 // handling so the components stay declarative.
 
-import { errMsg, showConfirm, wait } from '@bundled/yaar';
+import { showConfirm, wait, withLoading } from '@bundled/yaar';
 import { SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY, GITHUB_STATUS_POLL_MS } from './constants.js';
 import {
   apiGet,
@@ -54,15 +54,8 @@ export async function runAction(
   action: () => Promise<void>,
   errorPrefix: string,
 ): Promise<void> {
-  setLoading(true);
   setStatus(loadingMsg, false);
-  try {
-    await action();
-  } catch (err: unknown) {
-    setStatus(`${errorPrefix}: ${errMsg(err)}`);
-  } finally {
-    setLoading(false);
-  }
+  await withLoading(setLoading, action, (msg) => setStatus(`${errorPrefix}: ${msg}`));
 }
 
 // ── Marketplace data ───────────────────────────────────────────────
@@ -199,32 +192,34 @@ export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
   const pending = pendingPublish();
   if (!pending) return;
 
-  setConfirmBusy(true);
   setStatus(`Publishing ${pending.app.name}…`, false);
-  try {
-    const outcome = await hostConfirmPublish(
-      pending.app,
-      pending.summary.publicationId,
-      acknowledgeDrift,
-    );
-    if (outcome.published) {
-      setPendingPublish(null);
-      setStatus(outcome.message || `Published ${pending.app.name} to the marketplace`);
-      // Ownership may have just been claimed — refresh so the badge reflects it.
-      await refreshAccount();
-    } else if (outcome.status === 'drift_detected') {
-      setPendingPublish({ ...pending, drift: { changedFiles: outcome.drift?.changedFiles ?? [] } });
-      setStatus('Source changed since prepare — review the changes.');
-    } else {
-      // expired / not_found / error: the freeze is gone or unusable — close and report.
-      setPendingPublish(null);
-      setStatus(outcome.message || 'Publish failed.');
-    }
-  } catch (err: unknown) {
-    setStatus(`Publish failed: ${errMsg(err)}`);
-  } finally {
-    setConfirmBusy(false);
-  }
+  await withLoading(
+    setConfirmBusy,
+    async () => {
+      const outcome = await hostConfirmPublish(
+        pending.app,
+        pending.summary.publicationId,
+        acknowledgeDrift,
+      );
+      if (outcome.published) {
+        setPendingPublish(null);
+        setStatus(outcome.message || `Published ${pending.app.name} to the marketplace`);
+        // Ownership may have just been claimed — refresh so the badge reflects it.
+        await refreshAccount();
+      } else if (outcome.status === 'drift_detected') {
+        setPendingPublish({
+          ...pending,
+          drift: { changedFiles: outcome.drift?.changedFiles ?? [] },
+        });
+        setStatus('Source changed since prepare — review the changes.');
+      } else {
+        // expired / not_found / error: the freeze is gone or unusable — close and report.
+        setPendingPublish(null);
+        setStatus(outcome.message || 'Publish failed.');
+      }
+    },
+    (msg) => setStatus(`Publish failed: ${msg}`),
+  );
 }
 
 /** Dismiss the dialog and discard the host-side freeze (best-effort — it also expires). */
@@ -282,42 +277,40 @@ export async function refreshAccount(): Promise<void> {
  */
 export async function signIn(): Promise<void> {
   if (authBusy()) return;
-  setAuthBusy(true);
-  try {
-    await yaarPost('/api/auth/google/login', AuthLoginSchema);
-    setStatus('Complete sign-in in the browser window that just opened…', false);
+  await withLoading(
+    setAuthBusy,
+    async () => {
+      await yaarPost('/api/auth/google/login', AuthLoginSchema);
+      setStatus('Complete sign-in in the browser window that just opened…', false);
 
-    for (let i = 0; i < 150; i++) {
-      // ~5 min ceiling at 2s
-      await wait(2000);
-      await refreshAccount();
-      const a = account();
-      if (a.signedIn) {
-        setStatus(`Signed in as ${a.email}`);
-        return;
+      for (let i = 0; i < 150; i++) {
+        // ~5 min ceiling at 2s
+        await wait(2000);
+        await refreshAccount();
+        const a = account();
+        if (a.signedIn) {
+          setStatus(`Signed in as ${a.email}`);
+          return;
+        }
+        if (!a.pending) break; // the pending login was cancelled or swept
       }
-      if (!a.pending) break; // the pending login was cancelled or swept
-    }
-    if (!account().signedIn) setStatus('Sign-in did not complete. Try again.');
-  } catch (err: unknown) {
-    setStatus(`Sign-in failed: ${errMsg(err)}`);
-  } finally {
-    setAuthBusy(false);
-  }
+      if (!account().signedIn) setStatus('Sign-in did not complete. Try again.');
+    },
+    (msg) => setStatus(`Sign-in failed: ${msg}`),
+  );
 }
 
 export async function signOut(): Promise<void> {
   if (authBusy()) return;
-  setAuthBusy(true);
-  try {
-    await yaarPost('/api/auth/google/logout');
-    await refreshAccount();
-    setStatus('Signed out');
-  } catch (err: unknown) {
-    setStatus(`Sign-out failed: ${errMsg(err)}`);
-  } finally {
-    setAuthBusy(false);
-  }
+  await withLoading(
+    setAuthBusy,
+    async () => {
+      await yaarPost('/api/auth/google/logout');
+      await refreshAccount();
+      setStatus('Signed out');
+    },
+    (msg) => setStatus(`Sign-out failed: ${msg}`),
+  );
 }
 
 // ── GitHub health polling ────────────────────────────────────────────

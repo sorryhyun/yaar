@@ -2,7 +2,16 @@ export {};
 
 import { createSignal, createMemo, createEffect, onCleanup } from '@bundled/solid-js';
 import { createStore } from '@bundled/solid-js/store';
-import { list, invoke, del, subscribe, stream, showToast, type StreamFrame } from '@bundled/yaar';
+import {
+  list,
+  invoke,
+  del,
+  subscribe,
+  stream,
+  showToast,
+  errMsg,
+  type StreamFrame,
+} from '@bundled/yaar';
 import type {
   AgentStats,
   AgentEntry,
@@ -360,7 +369,7 @@ export async function interruptAgent(agentId: string) {
     await invoke(`yaar://session/agents/${agentId}`, { action: 'interrupt' });
     showToast(`Interrupted ${agentId}`, 'success');
   } catch (err) {
-    showToast(err instanceof Error ? err.message : 'Interrupt failed', 'error');
+    showToast(errMsg(err), 'error');
   }
   await fetchAgents();
   setLastRefresh(new Date());
@@ -371,7 +380,7 @@ export async function closeWindow(windowId: string) {
     await del(`yaar://windows/${windowId}`);
     showToast(`Closed window`, 'success');
   } catch (err) {
-    showToast(err instanceof Error ? err.message : 'Close failed', 'error');
+    showToast(errMsg(err), 'error');
   }
   await fetchWindows();
   setLastRefresh(new Date());
@@ -387,7 +396,7 @@ export async function killAppAgent(appId: string) {
     await del(`yaar://session/agents/${appId}`);
     showToast(`Killed ${appId} agent`, 'success');
   } catch (err) {
-    showToast(err instanceof Error ? err.message : 'Kill failed', 'error');
+    showToast(errMsg(err), 'error');
   }
   await fetchAgents();
   setLastRefresh(new Date());
@@ -402,7 +411,7 @@ export async function closeAppWindows(appId: string) {
     await Promise.all(targets.map((w) => del(`yaar://windows/${w.id}`)));
     showToast(`Closed ${targets.length} window${targets.length === 1 ? '' : 's'}`, 'success');
   } catch (err) {
-    showToast(err instanceof Error ? err.message : 'Close failed', 'error');
+    showToast(errMsg(err), 'error');
   }
   await fetchWindows();
   setLastRefresh(new Date());

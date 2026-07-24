@@ -1,6 +1,6 @@
 # Proposal: Apps Modernization — closing the drift between the apps and the platform
 
-**Status:** Phases 0 and 1 shipped (2026-07-24). Phases 2–5 and the enforcement guards are open.
+**Status:** Phases 0, 1 and 2 shipped (2026-07-24). Phases 3–5 and the enforcement guards are open.
 **Scope:** `apps/*`, `user-apps/*`, `packages/compiler` (new guards), app-dev agent guidance
 **Companion:** [`app_dsl_proposal.md`](./app_dsl_proposal.md) — platform-level changes (defineApp, Zod-first schemas, replay semantics). This proposal is about bringing the *existing* 25 apps up to the conventions the platform already has, and adding enforcement so they stay there.
 
@@ -228,25 +228,145 @@ hand-rolls `new Promise(r => setTimeout(r, ms))`, an ERROR-level `no-promise-sle
 `check:apps` scans only `apps/*/src` — **the 11 user-apps are outside the checker's default
 sweep**, so pass them explicitly when validating a phase.
 
-### Phase 2 — SDK-primitive adoption sweep (1–2 days)
+### Phase 2 — SDK-primitive adoption sweep ✅ **DONE** (2026-07-24)
 
-Per the table above: replace the hand-rolled persisted-signal/panel/loading/errMsg clones with
-their SDK equivalents; delete the two hand-maintained `manifest` state keys. Two small SDK
-*additions* fall out of the sweep, promoting patterns three apps invented independently:
+**Three SDK additions** landed first, since the sweep depends on them
+(`packages/compiler/src/shims/yaar/`, declared in `bundled-types/index.d.ts`):
 
-- `createStaleGuard()` — the generation-counter idiom (dc-comics/github/thesingularity-reader)
-  as one helper: `const fresh = staleGuard(); ... if (!fresh()) return;`
-- `sanitizeHtml(html, opts?)` — one DOMPurify wrapper with the strict-iframe defaults the four
-  bespoke wrappers converge on (forbid `form`/`input`/scripts, strip `javascript:` URLs).
+- **`sanitizeHtml(html, opts?)`** (new `sanitize.ts`) — DOMPurify's defaults plus the
+  no-forms deviation. Six apps had written that `FORBID_TAGS` list, not four: the audit
+  missed storage and slides-lite. **After the sweep, zero apps import `@bundled/dompurify`
+  directly.**
 
-Consolidate the slides-lite/word-lite storage-command twins into a shared helper in the SDK
-(`storageIo` command-group factory) or accept the duplication and note it — decide during
-implementation based on how identical they still are.
+  One sharp edge, found only because an agent checked the "redundant" claim instead of
+  taking it: the form-control default corrects DOMPurify's *default* allowlist, so applying
+  it unconditionally would silently strip a tag an explicit `allowedTags` deliberately
+  named — invisible at the call site, which is the exact trap the guide warns about. When
+  `allowedTags` is passed, that list is now the whole policy. It happens to be a no-op for
+  recent-papers (no form control appears in its allowlist), but that is a fact about its
+  list, not a property of the wrapper.
+
+- **`createStaleGuard()`** (in `ui.ts`) — `begin()` (bump + capture), `latest()` (capture
+  without bumping), `invalidate()` (bump with no fetch attached). Three primitives rather
+  than the proposal's one, because the three apps use three shapes: github reads
+  `const gen = repoGen` in six loaders and bumps once elsewhere (`latest` + `invalidate`),
+  while dc-comics and thesingularity-reader mostly `++fetchVersion` (`begin`). A single
+  `begin()`-only helper would have silently changed github's cancellation semantics.
+
+- **`createPersistedSignal` gained `revive`** — runs on the loaded value before it reaches
+  the signal. Without it the two layout modules could not have been collapsed: their
+  clamp-on-load and `listWidth` migration have nowhere else to live. It is also where
+  Phase 3's `z.safeParse` goes, so that phase now has its hook.
+
+**Swept** — `errMsg` (5 sites: mcp-manager ×1, process-explorer ×4); `withLoading`
+(market-apps' `runAction` rebuilt on it, plus `confirmPublish`/`signIn`/`signOut`);
+`createPersistedSignal` (storage/layout.ts, thesingularity-reader ×3 — layout, navOverlay's
+pin, and `hideSpammer`, whose "can't use createPersistedSignal" comment was true only of the
+read path); `createCollapsiblePanel` (thesingularity-reader navOverlay −35 lines, dc-comics
+navOverlay −26); `createStaleGuard` (github, dc-comics, thesingularity-reader);
+`sanitizeHtml` (6 call sites); both hand-maintained `manifest` state keys deleted.
+Also fixed the ERROR-level `no-promise-sleep` in `dc-comics/src/fetcher.ts` that Phase 1
+found. Net: roughly −180 lines of app code.
+
+**Versions bumped** (marketplace refuses a publish that is not strictly newer):
+thesingularity-reader 2.0.1 → 2.0.2, dc-comics 1.1.2 → 1.1.3, github 1.0.1 → 1.0.2,
+recent-papers 1.1.0 → 1.1.1, slides-lite 1.2.3 → 1.2.4, word-lite 1.0.3 → 1.0.4. The
+`apps/` side is entirely `kind: "system"` now, so nothing there needed one.
+
+**Generator guidance was updated in this phase rather than deferred**, because a primitive
+nothing points at will simply be reinvented: `docs/guides/app-development.md` (the
+"Rendering Untrusted HTML" section now teaches `sanitizeHtml`; new `createStaleGuard` and
+`revive` entries) and `.claude/agents/app-dev.md` — the scaffold that regenerates into every
+new app, which is the lever Phase 0 found actually stops drift.
+
+#### The storage-command twins: accept the duplication (decided)
+
+Not a judgement call about how identical they still are — an SDK-hosted `storageIo` command
+group is **impossible**. `extract-protocol-ast.ts` resolves only *relative* imports within
+the app and hard-errors on a descriptor imported from a package, and equally on a spread of
+a call result. Sharing them would trade a duplicated block for a failed build. Only
+`readStorageFile`/`readStorageFiles` were ever identical anyway; `saveToStorage` and
+`loadFromStorage` are genuinely deck-vs-document specific. The shareable part is the handler
+*bodies*, which are already one-liners over `storage.read` — the duplication that remains is
+the `params` JSON Schema, which must be app-local by design.
+
+#### Four things the audit had wrong, and one thing this phase broke
+
+1. **The `manifest` state key was never in the extracted manifest.** Both extractors already
+   skip a state key by that name (`extract-protocol-ast.ts:954`, `extract-protocol.ts:444`),
+   so the hardcoded arrays only polluted the *runtime* manifest, built by
+   `shared/src/iframe-scripts/app-protocol.ts`, which has **no such skip**. Deleting them was
+   still right, but the extracted-vs-runtime asymmetry is real and survives this phase — a
+   one-line fix that belongs with the enforcement work, since "extracted disagrees with
+   runtime" is the failure mode the compiler exists to prevent.
+2. **`DetailPanel.ts` has no sanitize call** in either dc-comics or thesingularity-reader —
+   only prose mentions. Each app has exactly one choke point (`helpers.ts: processImages`),
+   which is the right shape and the reason the swap was clean.
+3. **thesingularity-reader's `hideSpammer` is not exposed by the protocol** — no state key,
+   no command; its only readers are `PostList` and `SettingsPanel`. The store field was kept
+   anyway (both readers are store-based), but the stated justification was wrong.
+4. **Counts drift.** process-explorer's `errMsg` sites moved 340-382 → 363-411 (count of 4
+   correct); thesingularity-reader's "6 manual `version !==` checks" are actually eight touch
+   points. Re-grep, don't trust line numbers.
+5. **A regression this phase introduced and then fixed.** Collapsing the layout modules moved
+   `reclampPanelWidth` onto a *persisting* setter, so a resize landing before the async load
+   would write a clamped default and supersede the stored width — permanent loss of the
+   user's preference, reachable because a YAAR desktop window fires resize as it opens. Fixed
+   in both apps by making the clamp a property of the *read*: the viewport width is a signal,
+   `panelWidth()` clamps on read, and `revive` no longer clamps. Storage now holds the user's
+   preference and widening the window restores it — better than the pre-phase behavior, and
+   the resize path writes nothing at all.
+
+#### A genuine gap in `createCollapsiblePanel`
+
+dc-comics' `commentsOverlay` could not hand its pin to the SDK. Its pin button sits *inside*
+the hover-opened drawer, so unpinning must not clear the hover flag — but `setPin(false)`
+calls `close()`, which does, snapping the drawer shut under the cursor. Reproducing the
+local behavior needs to read `hovering` at unpin time, and `expanded()` is saturated by
+`pinned()` exactly then; the SDK exposes no `hovering()` accessor and no pin setter that
+skips `open()`/`close()`. The resolution — panel owns hover, app owns pin — is a sound
+decomposition and is behavior-identical, so no SDK change was made. If a second app hits it,
+the fix is a `hovering()` accessor rather than more options on `setPin`.
+
+#### Found by verification, outside the audit's list
+
+Running the checker over `user-apps/` (which its default sweep never touches, per Phase 1's
+note) found **an XSS vector in word-lite**: a user-picked `.docx`, `.md`, or `.html` file went
+straight to `editorEl.innerHTML` unsanitized — and `.html` meant arbitrary markup, in the
+iframe that holds word-lite's storage and its agent channel. Fixed at the two choke points
+(`setEditorFromHtml`, `appendHtmlFragment`), which also covers documents read back from
+storage and the agent's batch-document command; the file handlers now route through them
+instead of assigning `innerHTML` directly. Since everything downstream reads the editor back,
+sanitizing on the way in makes save, export, and the `content` state key safe by construction.
+
+Also noted but **not** changed: `image-edit/src/store.ts` has two more `instanceof Error`
+ternaries (lines 238, 246; the other two return an `Error`, so `errMsg` does not apply). It is
+outside the audit's list, its fallback labels are more specific than `String(e)` would be, and
+touching it forces a version bump for a cosmetic change.
+
+**Verified:** `bun run typecheck` clean across all packages; `bun run build:apps` — 24 apps,
+0 failures; every touched app individually typechecked and compiled, with `dist/protocol.json`
+state/command/event counts identical before and after in all of them; 169 compiler tests pass;
+`check:apps` back to the 2 pre-existing `no-native-dialogs` advisories, and clean over
+`user-apps/` for `no-promise-sleep` and `marked-to-innerhtml` (excel-lite's 5
+`infer-handler-params` errors there are pre-existing and untouched).
+
+One tooling fix the sweep forced: `check:apps`'s `marked-to-innerhtml` rule tested
+`/\bsanitize\b/`, which `sanitizeHtml` cannot match — the trailing `H` is a word character, so
+the boundary never lands — and correct code started failing. Widened to `\bsanitiz\w*`.
+
+**Not verified by exercise:** nothing was driven through the browser. The refactors are
+behavior-preserving and compile-verified, but the pin persistence, the width clamp, the
+stale-guard cancellations, and word-lite's import paths were reasoned about and typechecked,
+not clicked. dc-comics and thesingularity-reader need live external sessions to exercise at
+all.
 
 ### Phase 3 — trust-boundary validation (1–2 days)
 
 Add `@bundled/zod` schemas at every `JSON.parse`/`readJsonOr` of persisted or external data
-(the sites listed under Failure class 1). Convention to adopt everywhere: `readJsonOr` for
+(the sites listed under Failure class 1). Phase 2 built the hook this needs:
+`createPersistedSignal`'s `revive` is where the `safeParse` goes for anything persisted
+through a signal, and it already logs rather than swallowing when it throws. Convention to adopt everywhere: `readJsonOr` for
 "missing file is fine," but the parsed value goes through `z.safeParse` with a logged (not
 silent) fallback — degraded-by-design must be distinguishable from broken. market-apps and
 mcp-manager already model this correctly; copy their shape.
@@ -285,6 +405,17 @@ is the one mechanism that has reliably disciplined AI-generated app code. Add:
 - **silent-catch guard** (warning): `catch` block with an empty body and no comment.
 - **interval-leak guard** (warning): `setInterval` without a paired cleanup (`onCleanup`/
   `clearInterval` in scope).
+- **direct-dompurify guard** (warning, added by Phase 2's finding): an app importing
+  `@bundled/dompurify` instead of `sanitizeHtml`. The count is at zero across all 25 apps as
+  of Phase 2, so this one can be promoted to ERROR immediately.
+- **runtime/extracted manifest symmetry** (one-line fix, not a guard): the runtime manifest
+  builder in `shared/src/iframe-scripts/app-protocol.ts` does not skip a state key named
+  `manifest`, while both extractors do — so an app declaring one makes the two manifests
+  disagree with no signal. Zero apps do today; the fix is to make the runtime skip it too.
+
+Two of these rules already exist in `scripts/check-apps.ts` rather than the compiler, and
+**that checker scans only `apps/*/src` by default** — pass `user-apps` explicitly, or eleven
+of the 25 apps go unswept. Phase 2 found an XSS in word-lite that way.
 
 Plus an `apps/.eslintrc` layer for the rules that fit lint better than the bundler
 (no `window.yaar` direct access — `video-editor-lite/src/editor/storage-utils.ts:11`;

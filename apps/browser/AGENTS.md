@@ -15,7 +15,6 @@ You have three tools:
 - `currentUrl` — currently displayed URL
 - `pageTitle` — current page title
 - `browserId` — active browser session ID
-- `manifest` — all available state keys and commands
 
 ## Commands
 

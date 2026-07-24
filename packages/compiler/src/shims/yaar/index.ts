@@ -50,8 +50,13 @@ export {
   AppCommandError,
   showToast,
   withLoading,
+  createStaleGuard,
   onShortcut,
 } from './ui.js';
+
+// ── HTML sanitization ───────────────────────────────────────────
+export { sanitizeHtml } from './sanitize.js';
+export type { SanitizeHtmlOptions } from './sanitize.js';
 
 // ── Protocol handler context ────────────────────────────────────
 export { createProtocolContext } from './protocol-context.js';

@@ -85,6 +85,46 @@ export async function withLoading<T>(
   }
 }
 
+/**
+ * The generation counter that keeps a slow response from overwriting a newer one.
+ *
+ * Three apps invented this independently (dc-comics `fetchVersion`, github
+ * `repoGen`/`stale()`, thesingularity-reader's six inline `version !==` checks),
+ * with three different shapes for the same two-line idiom.
+ *
+ * ```ts
+ * const guard = createStaleGuard();
+ *
+ * async function loadPost(id: string) {
+ *   const fresh = guard.begin();          // supersedes anything in flight
+ *   const post = await fetchPost(id);
+ *   if (!fresh()) return;                 // a newer load started; drop this one
+ *   setState('post', post);
+ * }
+ * ```
+ *
+ * `begin()` is the common case. `latest()` joins the current generation without
+ * superseding it — for a secondary fetch that must be cancelled by the next
+ * `begin()` but should not cancel its own siblings. `invalidate()` bumps the
+ * generation with no fetch attached, to drop every in-flight response (e.g. the
+ * user switched to a different repo).
+ */
+export function createStaleGuard(): {
+  begin(): () => boolean;
+  latest(): () => boolean;
+  invalidate(): void;
+} {
+  let generation = 0;
+  const at = (gen: number) => () => gen === generation;
+  return {
+    begin: () => at(++generation),
+    latest: () => at(generation),
+    invalidate: () => {
+      generation++;
+    },
+  };
+}
+
 // ── Keyboard shortcuts ───────────────────────────────────────────
 
 /**

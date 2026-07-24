@@ -19,16 +19,36 @@ import { showToast } from './ui.js';
  * A failed save is reported (logged, and toasted at most once per 5s) rather
  * than dropped: the signal keeps the new value, but it is no longer persisted.
  * Pass `label` to name the data in that toast, or `onError` to replace it.
+ *
+ * `revive` runs on the loaded value before it reaches the signal — the place to
+ * clamp a stale value against the current window, migrate a renamed key, or
+ * `z.safeParse` persisted JSON that a previous version wrote in another shape.
+ * It runs on the `fallback` too when nothing is stored, so it must be total;
+ * if it throws, the fallback is used and the error is logged (never silent).
  */
 export function createPersistedSignal<T>(
   key: string,
   fallback: T,
-  options?: { label?: string; onError?: (message: string, error: unknown) => void },
+  options?: {
+    label?: string;
+    onError?: (message: string, error: unknown) => void;
+    revive?: (raw: unknown) => T;
+  },
 ): [() => T, (v: T | ((prev: T) => T)) => void] {
   const [value, setValue] = createSignal<T>(fallback);
   let written = false;
   appStorage.readJsonOr<T>(key, fallback).then((stored) => {
-    if (!written) setValue(() => stored as any);
+    if (written) return;
+    let next = stored as any;
+    if (options?.revive) {
+      try {
+        next = options.revive(stored);
+      } catch (e) {
+        console.error(`[yaar] revive failed for "${key}", using the fallback:`, e);
+        next = fallback;
+      }
+    }
+    setValue(() => next);
   });
   const set = (v: T | ((prev: T) => T)) => {
     written = true;
