@@ -146,10 +146,12 @@ function IframeRenderer({
   // allow-scripts: lets the site run JavaScript
   // allow-forms: lets the site submit forms
   //
-  // An isolated app is cross-origin but still left unsandboxed — the origin swap is
-  // what makes its principal unforgeable (the server refuses a token-less request
-  // from the app origin). Sandboxing the frame to also cut off `window.parent` DOM
-  // reach is the remaining, separate step (docs/architecture/known_gaps.md).
+  // An isolated app is cross-origin but still left unsandboxed. The origin swap makes
+  // its principal unforgeable (the server refuses a token-less request from the app
+  // origin) AND, being a distinct origin, the browser already blocks its `window.parent`
+  // DOM/memory reach. What an unsandboxed cross-origin frame can still do is navigate the
+  // top window (`window.top.location`); sandboxing (dropping allow-top-navigation while
+  // staying cross-origin) is the remaining, separate step (docs/architecture/known_gaps.md).
   const sandbox = appOrigin
     ? customSandbox
     : (customSandbox ??

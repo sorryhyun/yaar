@@ -87,6 +87,34 @@ function loadRootEnv(): void {
 
 loadRootEnv();
 
+/**
+ * Apply the persisted `remote` preference (`config/settings.json`) onto
+ * `process.env.REMOTE`, unless an explicit `REMOTE` env var already set it.
+ *
+ * This is what makes remote mode togglable from the configurations app: the app writes
+ * `remote` into settings.json, and the choice takes effect on the next start. A real
+ * `REMOTE=1` (`make claude`, CI) always wins — we only fill in when the var is unset.
+ *
+ * Read synchronously here because `IS_REMOTE`, and everything derived from it (the bind
+ * address in `main.ts`, the auth gate in `auth.ts`, app-origin isolation), are module-load
+ * constants — the preference has to be resolved before they are evaluated, i.e. before any
+ * async settings read could run. A malformed file falls back to the default (local).
+ */
+function loadPersistedRemote(): void {
+  if (process.env.REMOTE !== undefined) return;
+  const configDir = process.env.YAAR_CONFIG || join(PROJECT_ROOT, 'config');
+  const settingsPath = join(configDir, 'settings.json');
+  if (!existsSync(settingsPath)) return;
+  try {
+    const parsed = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+    if (parsed && parsed.remote === true) process.env.REMOTE = '1';
+  } catch {
+    // Unreadable/malformed settings.json must not crash boot.
+  }
+}
+
+loadPersistedRemote();
+
 const DEFAULT_PORT = getEnvInt('PORT', 8000);
 
 /** Current server port (may differ from default if the default was in use). */
@@ -98,7 +126,15 @@ export function setPort(p: number): void {
   process.env.PORT = String(p);
 }
 
-export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
+/**
+ * Remote mode — token auth, `0.0.0.0` bind, QR access.
+ *
+ * Driven purely by `REMOTE` (env var or the persisted `remote` setting applied above).
+ * **The bundled exe no longer forces this on:** it defaults to local, so a shipped exe
+ * runs single-user on loopback (no token) with app-origin isolation active, and the user
+ * opts into remote from the configurations app when they want network/phone access.
+ */
+export const IS_REMOTE = process.env.REMOTE === '1';
 
 /**
  * App-origin isolation — the origin boundary that makes an app's principal
@@ -110,10 +146,12 @@ export const IS_REMOTE = process.env.REMOTE === '1' || IS_BUNDLED_EXE;
  * so an app can no longer omit its token and be read as the host.
  *
  * **Default on, local mode only.** The localhost/127.0.0.1 trick has no meaning
- * behind a remote tunnel or in the bundled exe (both fold into `IS_REMOTE`), so it
- * is off there. Set `YAAR_APP_ORIGIN_ISOLATION=0` to force it off locally — the one
- * remaining escape it does *not* close is `window.parent` on the still-unsandboxed
- * frame; sandboxing is a later stage.
+ * behind a remote tunnel, so it is off whenever `IS_REMOTE` is set. The bundled exe
+ * now defaults to local (see `IS_REMOTE`), so isolation *is* active in a default exe.
+ * Set `YAAR_APP_ORIGIN_ISOLATION=0` to force it off locally — the one remaining escape
+ * it does *not* close is top-level navigation (`window.top.location`) on the still-
+ * unsandboxed frame; cross-origin already blocks `window.parent` DOM/memory reach, and
+ * sandboxing (to also cut off top-nav) is a later stage.
  */
 export function isAppOriginIsolationEnabled(): boolean {
   return process.env.YAAR_APP_ORIGIN_ISOLATION !== '0' && !IS_REMOTE;

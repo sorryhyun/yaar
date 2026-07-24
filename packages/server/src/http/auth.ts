@@ -35,9 +35,11 @@ export function checkHttpAuth(req: Request, url: URL): Response | null {
   // onnxruntime-web's own .mjs/.wasm artifacts. onnxruntime fetches these itself, from
   // the URL it was handed in `ort.env.wasm.wasmPaths`, and there is no hook to attach a
   // token to those requests — so a gate here does not protect them, it just means
-  // `@bundled/yaar-ml` cannot work at all in REMOTE mode. Every bundled exe is REMOTE
-  // (IS_REMOTE || IS_BUNDLED_EXE), which made that *every installed build*: ORT's import
-  // 401'd and the app rendered a blank window.
+  // `@bundled/yaar-ml` cannot work at all in REMOTE mode. The bundled exe used to force
+  // REMOTE, which made that *every installed build*: ORT's import 401'd and the app
+  // rendered a blank window. The exe now defaults to local (REMOTE decoupled from
+  // IS_BUNDLED_EXE), so ML works out of the box unless the user opts into remote — where
+  // this exemption keeps it working regardless.
   //
   // Safe to open, and narrowly: this prefix reaches one route that serves inert,
   // publicly-published onnxruntime artifacts out of a fixed directory, `basename()`d and
@@ -51,7 +53,7 @@ export function checkHttpAuth(req: Request, url: URL): Response | null {
   // Google's OAuth redirect. It arrives as a top-level browser navigation driven by
   // accounts.google.com, which knows nothing of YAAR's remote token and cannot be made
   // to attach one — so a gate here would not protect the callback, it would mean Google
-  // login could never complete in REMOTE mode (which is every bundled exe).
+  // login could never complete in REMOTE mode.
   //
   // The credential is the `state` parameter, and it is a real one: server-minted from
   // 32 random bytes per login, matched against an in-memory pending map, and deleted on

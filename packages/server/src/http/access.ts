@@ -25,14 +25,16 @@
  * can therefore decline to send its token, spoof `Referer`, or reach `window.parent`
  * directly. No header-based principal closes that; it needs an origin boundary.
  *
- * Behind `YAAR_APP_ORIGIN_ISOLATION` (default off, local mode only) that boundary
+ * Behind `YAAR_APP_ORIGIN_ISOLATION` (default on, local mode only) that boundary
  * exists: installed (`source:'user'`) apps are served from the `127.0.0.1` alias,
  * the desktop from `localhost`. `resolvePrincipal` then stops reading "no token" as
  * "the desktop" *for requests that carry the app origin* — a browser-set `Origin` of
  * the app alias, or a request landing on that alias — and refuses them. Bundled apps
  * and AI-authored HTML stay same-origin (host-authored, not hostile app code) and are
- * unaffected. The remaining reach — `window.parent` on a still-unsandboxed frame — is
- * a later stage's concern. The full gap history is in docs/architecture/known_gaps.md.
+ * unaffected. Being a distinct origin also blocks the isolated app's `window.parent`
+ * DOM/memory reach; the remaining reach — top-level navigation on a still-unsandboxed
+ * frame — is a later stage's concern. The full gap history is in
+ * docs/architecture/known_gaps.md.
  *
  * What this module does buy, today: a network caller cannot reach these routes
  * at all (auth.ts), an app that behaves like an app is confined to what it

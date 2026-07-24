@@ -14,6 +14,12 @@ export interface Settings {
   iconSize: 'small' | 'medium' | 'large';
   theme: 'dark' | 'light';
   allowAllApps: boolean;
+  /**
+   * Remote mode preference. Read at boot by `config/env.ts` (`loadPersistedRemote`) and
+   * applied to `process.env.REMOTE`; an explicit `REMOTE` env var overrides it. Because
+   * `IS_REMOTE` is fixed at module load, a change here only takes effect after a restart.
+   */
+  remote: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -26,6 +32,7 @@ const DEFAULTS: Settings = {
   iconSize: 'medium',
   theme: 'dark',
   allowAllApps: true,
+  remote: false,
 };
 
 export const LANGUAGE_CODES = [
