@@ -5,8 +5,13 @@
  * Output: docs/reference/openapi.yaml
  */
 
-import { readdirSync, writeFileSync } from 'fs';
+import { readdirSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+
+// Single source of truth for the spec version: the root package.json.
+const { version: PKG_VERSION } = JSON.parse(
+  readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf-8'),
+) as { version: string };
 
 import type { EndpointMeta } from '../packages/server/src/http/utils.js';
 
@@ -104,7 +109,7 @@ function generateSpec(): string {
   lines.push('info:');
   lines.push('  title: YAAR Server API');
   lines.push('  description: REST API for the YAAR reactive AI interface server.');
-  lines.push('  version: 0.1.0');
+  lines.push(`  version: ${PKG_VERSION}`);
   lines.push('servers:');
   lines.push('  - url: http://localhost:8000');
   lines.push('    description: Local development server');

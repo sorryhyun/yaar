@@ -1,6 +1,6 @@
 {
   "name": "yaar",
-  "version": "0.1.0",
+  "version": "0.11.5",
   "private": true,
   "type": "module",
   "description": "Reactive AI interface where the AI decides what to show and do next",
@@ -64,6 +64,7 @@
     "build:exe:bundle": "bun scripts/build-exe-bundle.js --target windows",
     "build:exe:bundle:linux": "bun scripts/build-exe-bundle.js --target linux",
     "build:exe:bundle:macos": "bun scripts/build-exe-bundle.js --target macos",
+    "set-version": "bun scripts/set-version.ts",
     "generate:openapi": "bun run scripts/generate-openapi.ts && prettier --write docs/reference/openapi.yaml",
     "check:openapi": "bun run generate:openapi && git diff --exit-code -- docs/reference/openapi.yaml",
     "check:apps": "bun run scripts/check-apps.ts",
