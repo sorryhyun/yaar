@@ -229,7 +229,7 @@ export async function handleCreate(
 
   const appMeta = appId ? await getAppMeta(appId) : null;
 
-  // App-origin isolation (docs/architecture/known_gaps.md): only installed
+  // App-origin isolation (docs/guides/remote_mode.md): only installed
   // (`source:'user'`) apps move to the pinned app origin — bundled apps and
   // AI-authored HTML are host-authored, not the hostile-app threat, and stay
   // same-origin. The frontend does the actual origin swap; here we only mark it.

@@ -84,7 +84,7 @@ You shouldn't have to trust it — the design assumes you don't:
 - **Agent tiers.** The dangerous namespaces (`yaar://session/*`, including real-browser control) are reachable only by the privileged session agent. Everything else is default-deny.
 - **Origin isolation.** Apps are served from a different browser origin than the desktop, so an app can't forge desktop-level requests.
 
-Known honest limitation: app iframes are not yet fully sandboxed, so a *malicious installed app* can still reach the desktop DOM via `window.parent`. Don't install apps you don't trust. Current boundaries and remaining work are tracked in [known gaps](./architecture/known_gaps.md).
+Known honest limitation: the origin boundary only holds in local mode. In **remote mode** (or with `YAAR_APP_ORIGIN_ISOLATION=0`) apps are served same-origin with the desktop, so a *malicious installed app* can reach the desktop DOM via `window.parent`. Don't install apps you don't trust when running remote — see [remote mode → the app-origin boundary](./guides/remote_mode.md#remote-mode-drops-the-app-origin-boundary).
 
 ---
 

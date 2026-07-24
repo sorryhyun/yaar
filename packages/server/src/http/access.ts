@@ -32,9 +32,9 @@
  * the app alias, or a request landing on that alias — and refuses them. Bundled apps
  * and AI-authored HTML stay same-origin (host-authored, not hostile app code) and are
  * unaffected. Being a distinct origin also blocks the isolated app's `window.parent`
- * DOM/memory reach; the remaining reach — top-level navigation on a still-unsandboxed
- * frame — is a later stage's concern. The full gap history is in
- * docs/architecture/known_gaps.md.
+ * DOM/memory reach; top-level navigation — the one reach cross-origin left open — is now
+ * closed by the `ISOLATED_APP_SANDBOX` on isolated frames (IframeRenderer.tsx). The full
+ * gap history is in docs/guides/remote_mode.md.
  *
  * What this module does buy, today: a network caller cannot reach these routes
  * at all (auth.ts), an app that behaves like an app is confined to what it
@@ -140,7 +140,7 @@ function requestCarriesAppOrigin(req: Request, url: URL): boolean {
 export function resolvePrincipal(req: Request, url: URL): Principal | Response {
   const token = extractIframeToken(req, url);
   if (!token) {
-    // App-origin isolation (Stage 2, docs/architecture/known_gaps.md). When the flag
+    // App-origin isolation (Stage 2, docs/guides/remote_mode.md). When the flag
     // is on, "no token" no longer means "the desktop": an installed app served from
     // the 127.0.0.1 alias can omit its token, but it cannot shed the app origin — the
     // browser stamps it on cross-origin calls, and a relative call still lands on that

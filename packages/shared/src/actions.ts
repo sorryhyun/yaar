@@ -116,7 +116,7 @@ export interface WindowState {
   minimized?: boolean;
   /**
    * Serve this app's iframe from the sibling loopback origin (Stage 1 of the
-   * app-origin isolation in docs/architecture/known_gaps.md). Set by the server
+   * app-origin isolation in docs/guides/remote_mode.md). Set by the server
    * only for `source:'user'` apps when YAAR_APP_ORIGIN_ISOLATION is on. The
    * frontend renders the iframe from the other loopback alias so the app becomes
    * cross-origin to the desktop; nothing is enforced on it yet.

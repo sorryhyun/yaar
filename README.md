@@ -153,7 +153,7 @@ Since YAAR lets the AI execute code and communicate with external services, it s
 
 - **App-origin isolation** (on by default, local mode) — installed apps are served from a distinct browser origin (`127.0.0.1` while the desktop stays on `localhost`), so an app can no longer omit its token and be read as the desktop. Set `YAAR_APP_ORIGIN_ISOLATION=0` to disable.
 
-**Known limitation:** app iframes are still not sandboxed, so a *hostile* app can reach the desktop's DOM directly via `window.parent` — origin isolation closes the token-forgery escapes but not that one. Don't install apps you don't trust. See [known gaps](./docs/architecture/known_gaps.md) for the boundary that landed and the sandboxing that remains.
+**Known limitation:** the origin boundary only exists in local mode. In **remote mode** (or with `YAAR_APP_ORIGIN_ISOLATION=0`) apps are served same-origin with the desktop, so a *hostile installed app* can reach the desktop's DOM directly via `window.parent`. Don't install apps you don't trust when running remote. See [remote mode → the app-origin boundary](./docs/guides/remote_mode.md#remote-mode-drops-the-app-origin-boundary).
 
 
 ## Project Structure

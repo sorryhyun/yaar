@@ -24,7 +24,7 @@ interface IframeRendererProps {
   requestId?: string;
   iframeToken?: string;
   /**
-   * App-origin isolation (docs/architecture/known_gaps.md). When set, render this
+   * App-origin isolation (docs/guides/remote_mode.md). When set, render this
    * app from the `127.0.0.1` alias so it is cross-origin to the desktop, and hand it
    * the desktop origin as `__yaar_api` so its SDK still reaches the backend across
    * that boundary. The server refuses a token-less request that carries the app
@@ -36,6 +36,46 @@ interface IframeRendererProps {
 }
 
 type LoadState = 'loading' | 'loaded' | 'error';
+
+/**
+ * The sandbox applied to an app-origin-isolated (cross-origin) app frame.
+ *
+ * Written *subtractively*, on purpose. `sandbox` drops every capability and you
+ * re-add tokens, so a curated minimal set is a foot-gun: the one capability you
+ * forget is the next silent render bug (this is exactly how the DC-comics gallery
+ * lost its images once — a tightening starved a flow nobody re-added). So we re-add
+ * everything an unsandboxed cross-origin frame already had and withhold *only* the
+ * top-navigation family. The single behavioral delta is: an isolated app can no
+ * longer point `window.top.location` at a phishing page and swap the whole desktop
+ * out from under the user (docs/guides/remote_mode.md).
+ *
+ * `allow-same-origin` is what keeps the app its own `127.0.0.1` origin — so
+ * localStorage, cookies, its own `blob:` object-URLs, and the cross-origin `fetch`
+ * to `__yaar_api` all keep working; drop it and *that* is what reintroduces the
+ * DC-comics class of breakage. It is safe here precisely because the frame is
+ * cross-origin to the desktop: it cannot reach `window.parent` to delete its own
+ * sandbox attribute, the escape that makes `allow-scripts allow-same-origin`
+ * dangerous on a *same-origin* frame.
+ *
+ * Deliberately absent: `allow-top-navigation`,
+ * `allow-top-navigation-by-user-activation`,
+ * `allow-top-navigation-to-custom-protocols`. No app legitimately navigates the
+ * top window — the top window *is* the desktop — and none in `apps/` does (a CI
+ * grep guards that).
+ */
+export const ISOLATED_APP_SANDBOX = [
+  'allow-scripts',
+  'allow-same-origin',
+  'allow-forms',
+  'allow-popups',
+  'allow-popups-to-escape-sandbox',
+  'allow-modals',
+  'allow-downloads',
+  'allow-pointer-lock',
+  'allow-orientation-lock',
+  'allow-presentation',
+  'allow-storage-access-by-user-activation',
+].join(' ');
 
 /**
  * The app origin — the `127.0.0.1` loopback alias on the current port — or null
@@ -146,14 +186,14 @@ function IframeRenderer({
   // allow-scripts: lets the site run JavaScript
   // allow-forms: lets the site submit forms
   //
-  // An isolated app is cross-origin but still left unsandboxed. The origin swap makes
-  // its principal unforgeable (the server refuses a token-less request from the app
-  // origin) AND, being a distinct origin, the browser already blocks its `window.parent`
-  // DOM/memory reach. What an unsandboxed cross-origin frame can still do is navigate the
-  // top window (`window.top.location`); sandboxing (dropping allow-top-navigation while
-  // staying cross-origin) is the remaining, separate step (docs/architecture/known_gaps.md).
+  // An isolated app is cross-origin, so the browser already blocks its `window.parent`
+  // DOM/memory reach and the server refuses its token-less requests. The one thing an
+  // unsandboxed cross-origin frame could still do is navigate the top window
+  // (`window.top.location`) and swap the desktop for a phishing page. ISOLATED_APP_SANDBOX
+  // withholds exactly the top-navigation family and keeps every other capability, so that
+  // redirect is the only behavior that changes (docs/guides/remote_mode.md).
   const sandbox = appOrigin
-    ? customSandbox
+    ? (customSandbox ?? ISOLATED_APP_SANDBOX)
     : (customSandbox ??
       (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms allow-same-origin'));
 

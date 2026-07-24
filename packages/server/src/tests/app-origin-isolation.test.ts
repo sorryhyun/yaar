@@ -6,7 +6,7 @@
  * so a hostile app could omit its token and be promoted. Stage 2 closes that: a
  * token-less request that carries the *app* origin is refused, never host.
  *
- * The invariant has two unspoofable faces, one per escape (docs/architecture/known_gaps.md):
+ * The invariant has two unspoofable faces, one per escape (docs/guides/remote_mode.md):
  *   #1  a browser-set `Origin` of the app alias  — a cross-origin, SDK-shaped fetch
  *   #2  a request that lands on the app alias     — a relative fetch from the app
  *

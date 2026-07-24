@@ -164,6 +164,16 @@ When using an external tunnel, the frontend's connection dialog accepts the tunn
 - All API and WebSocket requests include the token
 - No HTTPS by default — use a tunnel (Cloudflare, etc.) for encrypted connections over the internet
 
+### Remote mode drops the app-origin boundary
+
+This is the one security property remote mode trades away, so it's worth stating plainly.
+
+In the default local setup, **app-origin isolation** is on: installed apps are served from a distinct browser origin (`127.0.0.1`) while the desktop stays on `localhost`. Being cross-origin, the browser blocks a hostile app from reaching the desktop's DOM or JS memory through `window.parent`, and isolated app frames are additionally sandboxed so they can't navigate the top window (`window.top.location`) to a phishing page either. A hostile app is confined to what its `app.json` declares.
+
+**Remote mode serves apps same-origin with the desktop** — the `localhost`/`127.0.0.1` loopback-alias split has no meaning once you're reaching the machine over the network, so the origin boundary can't exist. A same-origin frame can't be meaningfully sandboxed against this (`allow-scripts allow-same-origin` lets a frame reach into its own parent and strip its own sandbox attribute), so the sandbox doesn't help here. The consequence: **a malicious installed app can reach the desktop's DOM and JS memory directly.** The same is true in local mode if you explicitly set `YAAR_APP_ORIGIN_ISOLATION=0`.
+
+The backstop in remote mode is the token gating *who can connect at all* — but that says nothing about apps you yourself installed. So: **in remote mode, don't install apps you don't trust.** If you need untrusted apps and the desktop's integrity both, stay in the default local mode where origin isolation is on.
+
 ## Troubleshooting
 
 **"Server not reachable" in connection dialog:**
