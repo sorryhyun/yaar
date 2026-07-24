@@ -31,6 +31,10 @@ export const [loading, setLoading] = createSignal(false);
 export const [hideInstalled, setHideInstalled] = createSignal(false);
 export const [search, setSearch] = createSignal('');
 
+/** Which field the search box filters on, plus an 'official'-only view. */
+export type SearchMode = 'title' | 'author' | 'official';
+export const [searchMode, setSearchMode] = createSignal<SearchMode>('title');
+
 export const [account, setAccount] = createSignal<Account>(SIGNED_OUT_ACCOUNT);
 export const [authBusy, setAuthBusy] = createSignal(false);
 
@@ -227,6 +231,10 @@ export function markInstalledSignal(app: { id: string; name: string }, installed
  * The full card list: every marketplace app, plus apps installed locally that the
  * marketplace has never seen. The latter are what a developer publishes for the
  * first time — without them the UI could show sign-in but never a first Publish.
+ *
+ * Built-in system apps (dock, storage, the marketplace itself, …) are excluded:
+ * they can't be uninstalled or published, so a marketplace card for them is dead
+ * weight. They're kept out of the counts too by filtering at this single source.
  */
 export function displayApps(): DisplayApp[] {
   const market = marketApps();
@@ -246,18 +254,48 @@ export function displayApps(): DisplayApp[] {
       notPublished: true,
       installedVersion: a.version,
     }));
-  return [...marketMapped, ...installedOnly];
+  return [...marketMapped, ...installedOnly].filter((a) => a.kind !== 'system');
 }
 
-/** Apps visible after applying the Hide Installed filter and the search query. */
+/**
+ * The authors treated as first-party ("YAAR Official"). Compared case-insensitively,
+ * so 'YAAR' as it displays in the UI and 'yaar' both match.
+ */
+const OFFICIAL_AUTHORS = ['yaar', 'standingbehindnv@gmail.com'];
+
+/** Whether an app is authored by YAAR / the official publisher. */
+export function isOfficialAuthor(author?: string): boolean {
+  if (!author) return false;
+  return OFFICIAL_AUTHORS.includes(author.trim().toLowerCase());
+}
+
+/**
+ * Apps visible after applying the Hide Installed filter, the search-mode dropdown,
+ * and the search query.
+ *
+ * - 'title'    — query matches name or description (the original behavior).
+ * - 'author'   — query matches the author field instead.
+ * - 'official' — restrict to YAAR-official apps; the query still filters within
+ *                them by name/description.
+ */
 export function visibleApps(): DisplayApp[] {
   let apps = displayApps();
   if (hideInstalled()) apps = apps.filter((a) => !a.installed);
+
+  const mode = searchMode();
+  if (mode === 'official') {
+    apps = apps.filter((a) => isOfficialAuthor(a.author));
+  }
+
   const q = search().trim().toLowerCase();
   if (q) {
-    apps = apps.filter(
-      (a) => a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q),
-    );
+    apps =
+      mode === 'author'
+        ? apps.filter((a) => (a.author ?? '').toLowerCase().includes(q))
+        : apps.filter(
+            (a) =>
+              a.name.toLowerCase().includes(q) || (a.description ?? '').toLowerCase().includes(q),
+          );
   }
   return apps;
 }

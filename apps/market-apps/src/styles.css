@@ -161,6 +161,23 @@ body {
   font-size: 14px;
 }
 
+/* Search-field selector sitting to the left of the search input. */
+.search-mode-select {
+  flex-shrink: 0;
+  font-size: 14px;
+  padding: 7px 10px;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text);
+  cursor: pointer;
+}
+
+.search-mode-select:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+}
+
 /* ── Filter bar ──────────────────────────────────────────────────────────── */
 
 .filter-bar {
@@ -297,6 +314,26 @@ body {
 /* Push-to-marketplace button ("Publish" / "Publish update") — accent outline */
 .publish-btn {
   font-size: 13px;
+}
+
+/* Official badge — a small accent pill next to the title marking YAAR-authored
+   apps. Subtle: it annotates the name, matching the dark theme. */
+.official-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--yaar-sp-1);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1.4;
+  color: var(--yaar-accent);
+  background: color-mix(in srgb, var(--yaar-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yaar-accent) 45%, transparent);
+  border-radius: var(--yaar-radius-full);
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: default;
 }
 
 /* Publisher badge — marks apps the signed-in user published. Deliberately

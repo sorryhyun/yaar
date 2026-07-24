@@ -27,17 +27,21 @@ import {
   hasMarketplaceUpdate,
   hideInstalled,
   installedApps,
+  isOfficialAuthor,
   isSystem,
   lastUpdated,
   loading,
   ownsApp,
   pendingPublish,
   search,
+  searchMode,
   setHideInstalled,
   setSearch,
+  setSearchMode,
   statusText,
   visibleApps,
 } from './store.js';
+import type { SearchMode } from './store.js';
 import { isNewerVersion } from './parsers.js';
 import type { DisplayApp } from './types.js';
 
@@ -105,6 +109,14 @@ export function marketCard(app: DisplayApp) {
       <div class="app-info">
         <div class="app-name">
           ${app.name}${() =>
+            isOfficialAuthor(app.author)
+              ? html`<span
+                  class="official-badge"
+                  title="Official YAAR app"
+                  aria-label="Official YAAR app"
+                  >Official</span
+                >`
+              : ''}${() =>
             ownsApp(app.id)
               ? html`<span
                   class="publisher-badge"
@@ -439,10 +451,26 @@ export function App() {
 
       <!-- Search bar (primary filter) -->
       <div class="search-bar y-surface">
+        <select
+          class="y-select search-mode-select"
+          aria-label="Search field"
+          value=${() => searchMode()}
+          onChange=${(e: Event) =>
+            setSearchMode((e.target as HTMLSelectElement).value as SearchMode)}
+        >
+          <option value="title">Title</option>
+          <option value="author">Author</option>
+          <option value="official">YAAR Official</option>
+        </select>
         <input
           class="y-input search-input"
           type="search"
-          placeholder="Search apps by name or description…"
+          placeholder=${() =>
+            searchMode() === 'author'
+              ? 'Search apps by author…'
+              : searchMode() === 'official'
+                ? 'Filter YAAR official apps…'
+                : 'Search apps by name or description…'}
           aria-label="Search apps"
           value=${() => search()}
           onInput=${(e: Event) => setSearch((e.target as HTMLInputElement).value)}

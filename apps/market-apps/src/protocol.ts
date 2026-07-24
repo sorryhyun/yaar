@@ -17,9 +17,12 @@ import {
   setHideInstalled,
   search,
   setSearch,
+  searchMode,
+  setSearchMode,
   setStatus,
   touch,
 } from './store.js';
+import type { SearchMode } from './store.js';
 import { refreshData } from './actions.js';
 
 if (app) {
@@ -54,6 +57,11 @@ if (app) {
       search: {
         description: 'Current search query filtering the app list by name and description',
         handler: () => search(),
+      },
+      searchMode: {
+        description:
+          "Which field the search filters on: 'title', 'author', or 'official' (YAAR-only view)",
+        handler: () => searchMode(),
       },
     },
     commands: {
@@ -144,6 +152,21 @@ if (app) {
         handler: (p) => {
           setSearch(p.query);
           return { search: search() };
+        },
+      }),
+      setSearchMode: defineCommand({
+        description:
+          "Set the search mode: 'title' (name/description), 'author', or 'official' (YAAR-only)",
+        params: {
+          type: 'object',
+          properties: {
+            mode: { type: 'string', enum: ['title', 'author', 'official'] },
+          },
+          required: ['mode'],
+        },
+        handler: (p) => {
+          setSearchMode(p.mode as SearchMode);
+          return { searchMode: searchMode() };
         },
       }),
       clearData: defineCommand({
