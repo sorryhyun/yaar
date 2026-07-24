@@ -68,8 +68,19 @@ export const ok = (text: string) => ({
   content: [{ type: 'text' as const, text }],
 });
 
-/** Create a successful JSON result (pretty-printed). Only accepts objects/arrays — use ok() for plain text. */
-export const okJson = (data: object) => ok(JSON.stringify(data, null, 2));
+/**
+ * Create a successful JSON result (pretty-printed). Only accepts objects/arrays — use ok() for plain text.
+ *
+ * The text block stays the model-facing channel; `structuredContent` carries the same value
+ * losslessly for programmatic consumers (`POST /api/verb`, non-model MCP clients) so they get
+ * typed data without re-parsing the text. `structuredContent` is object-only per the MCP
+ * contract, so a bare array is left text-only — same trade-off `wrapAppValue` makes — and
+ * still round-trips through `toEnvelope`'s tryParseJson.
+ */
+export const okJson = (data: object) => ({
+  content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
+  ...(Array.isArray(data) ? {} : { structuredContent: data as Record<string, unknown> }),
+});
 
 /** Create an error text result (sets isError: true) */
 export const error = (text: string) => ({
@@ -103,7 +114,17 @@ export const okResource = (uri: string, text: string, mimeType: string): VerbRes
 export const okJsonResource = (uri: string, data: object): VerbResult =>
   okResource(uri, JSON.stringify(data, null, 2), 'application/json');
 
-/** Create a successful result with resource_link blocks for navigable lists. */
+/** Text block a list result carries when it has no children. See `okLinks`. */
+export const EMPTY_LIST_TEXT = '(empty)';
+
+/**
+ * Create a successful result with resource_link blocks for navigable lists.
+ *
+ * `structuredContent` mirrors the same links as typed data for programmatic consumers.
+ * MCP requires it to be an object, so the array rides under `items` — the wrapper a reader
+ * must unwrap. `toEnvelope` (routes/verb.ts) keeps handing apps a flat array, reading the
+ * resource_link blocks; `items` is what an external MCP client sees.
+ */
 export const okLinks = (
   links: Array<{
     uri: string;
@@ -113,20 +134,36 @@ export const okLinks = (
     kind?: string;
     version?: string;
   }>,
-): VerbResult => ({
-  content:
-    links.length === 0
-      ? [{ type: 'text', text: '(empty)' }]
-      : links.map((link) => ({
-          type: 'resource_link' as const,
-          uri: link.uri,
-          name: link.name ?? link.uri,
-          ...(link.description ? { description: link.description } : {}),
-          ...(link.mimeType ? { mimeType: link.mimeType } : {}),
-          ...(link.kind ? { kind: link.kind } : {}),
-          ...(link.version ? { version: link.version } : {}),
-        })),
-});
+): VerbResult => {
+  const items = links.map((link) => ({
+    type: 'resource_link' as const,
+    uri: link.uri,
+    name: link.name ?? link.uri,
+    ...(link.description ? { description: link.description } : {}),
+    ...(link.mimeType ? { mimeType: link.mimeType } : {}),
+    ...(link.kind ? { kind: link.kind } : {}),
+    ...(link.version ? { version: link.version } : {}),
+  }));
+
+  return {
+    content: items.length === 0 ? [{ type: 'text', text: EMPTY_LIST_TEXT }] : items,
+    structuredContent: { items },
+  };
+};
+
+/**
+ * True for an `okLinks([])` result — a list that resolved to no children.
+ *
+ * Identified by the `(empty)` sentinel *and* an empty `items` wrapper together, so it can't
+ * be confused with an app command that happens to return `{ items: [] }` (whose text block is
+ * the serialized object, not the sentinel).
+ */
+export function isEmptyLinkList(result: VerbResult): boolean {
+  const items = result.structuredContent?.items;
+  if (!Array.isArray(items) || items.length > 0) return false;
+  const [block] = result.content;
+  return result.content.length === 1 && block?.type === 'text' && block.text === EMPTY_LIST_TEXT;
+}
 
 /** Prepend a note to a VerbResult (for read/list fallback). */
 export function prependNote(result: VerbResult, note: string): VerbResult {

@@ -12,7 +12,7 @@
 
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
-import { NoActiveSessionError } from '../../handlers/utils.js';
+import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
 import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   requireBundle,
@@ -83,7 +83,7 @@ function tryParseJson(raw: string): unknown {
  * Resource blocks → extract embedded text.
  * Resource link blocks → return as array of link objects.
  */
-function toEnvelope(result: VerbResult): Record<string, unknown> {
+export function toEnvelope(result: VerbResult): Record<string, unknown> {
   // Collect blocks by type
   const textItems: Array<{ type: 'text'; text: string }> = [];
   const images: Array<{ data: string; mimeType: string }> = [];
@@ -139,8 +139,10 @@ function toEnvelope(result: VerbResult): Record<string, unknown> {
     return { ok: false, error: errorTexts.join('\n') };
   }
 
-  // Resource links → return as array of navigable link objects
-  if (links.length > 0) {
+  // Resource links → return as array of navigable link objects. An empty list is an empty
+  // array rather than the `(empty)` placeholder string: a caller that maps over a listing
+  // shouldn't have to special-case "no children" as text.
+  if (links.length > 0 || isEmptyLinkList(result)) {
     const envelope: Record<string, unknown> = { ok: true, data: links };
     if (images.length > 0) envelope.images = images;
     return envelope;
