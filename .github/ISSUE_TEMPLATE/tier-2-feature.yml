@@ -1,0 +1,29 @@
+name: 'Tier 2 · Feature proposal'
+description: A new library, compiler change, new surface (CLI, provider), or other core addition. Discuss here before any PR.
+title: '[feature] '
+labels: ['tier-2', 'enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        New features must be agreed before a PR is opened — see [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md#tier-2--new-features-discuss-before-you-build). Could this live as a YAAR **app** instead of a core change?
+  - type: textarea
+    id: what
+    attributes:
+      label: What & why
+      description: The capability you want and the use case it serves — not just the mechanism.
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where it fits
+      description: Which package / architecture boundary does this touch? Could an app do it instead?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false

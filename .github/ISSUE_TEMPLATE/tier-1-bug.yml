@@ -1,0 +1,33 @@
+name: 'Tier 1 · Bug report'
+description: Something crashes, returns the wrong result, or regressed.
+title: '[bug] '
+labels: ['tier-1', 'bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A fix PR is welcome and must include a test that reproduces the bug — see [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md#tier-1--bug-fixes-pr-welcome-test-required).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you saw vs. what you expected.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Run `make claude-dev`
+        2. Type "..."
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      placeholder: 'v0.11.5 or commit sha'
+    validations:
+      required: false

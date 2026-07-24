@@ -1,0 +1,24 @@
+name: 'Tier 0 · Doc / typo fix'
+description: A typo, stale comment, broken link, or out-of-date doc. Report here — please don't send a PR for these.
+title: '[docs] '
+labels: ['tier-0', 'docs']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Small text fixes are collected as issues and batched by a maintainer — see [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md#tier-0--small-text-fixes-issue-only-no-pr). Thanks for spotting it!
+  - type: input
+    id: location
+    attributes:
+      label: Where
+      description: File and line if you have it.
+      placeholder: 'packages/server/CLAUDE.md:42'
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: What's wrong / what it should say
+      placeholder: "Says 'moniter', should be 'monitor'."
+    validations:
+      required: true
