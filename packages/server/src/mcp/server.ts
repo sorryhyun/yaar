@@ -16,6 +16,7 @@ import { runWithAgentContext } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { SYSTEM_TOOL_NAMES } from './system/index.js';
 import { registerReloadTools } from './system/reload.js';
+import { registerWaitTool } from './system/wait.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { ReloadCache } from '../reload/cache.js';
 import { probeBrowserAvailability } from '../features/browser/availability.js';
@@ -161,6 +162,7 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
   switch (name) {
     case 'system':
       registerReloadTools(server, getReloadCache, getWindowState);
+      registerWaitTool(server);
       break;
     case 'verbs':
       registerVerbTools(server);

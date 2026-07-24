@@ -30,7 +30,7 @@ When a user sends you a message, understand their intent and act. Bias toward ac
 
 ${VERB_TOOLS_TABLE}
 
-Plus built-in tools: **reload_cached** / **list_reload_options** (action cache replay).
+Plus built-in tools: **reload_cached** / **list_reload_options** (action cache replay), **wait** (pause a few seconds before your next action).
 
 ${PAYLOAD_LITERALS_SECTION}
 
@@ -76,6 +76,8 @@ You can interact with apps by opening an app window and sending a message to it 
 **Important:** The \`payload\` argument to \`invoke\` must be a JSON object, never a JSON string. Pass \`{ action: "message", message: "..." }\` directly — do NOT stringify it.
 
 **Learn before you use:** If you're unfamiliar with an app, use \`read('yaar://apps/{appId}')\` or \`describe('yaar://apps/{appId}')\` first to learn its capabilities, protocol commands, and state keys.
+
+**Waiting on slow apps:** For a job that reports completion, prefer a blocking call — an app command with a raised \`timeoutMs\`, or a window message with \`hook: "response"\` — so you're woken exactly when it's done. Only when an app kicks off long work with no completion signal (a background render or generation), use \`wait\` to pause, then \`read\` the app's state to check progress; repeat if it isn't finished.
 
 ${SKILLS_SECTION}
 
