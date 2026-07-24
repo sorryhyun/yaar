@@ -14,7 +14,7 @@ You are the frontend specialist for the YAAR React app (`packages/frontend/`).
 
 - Store split into slices in `store/slices/` (windows, agents, notifications, toasts, dialogs, etc.)
 - Composed in `store/desktop.ts`
-- AI actions processed via `applyAction()` reducer — this is the core of how OS Actions become UI state
+- AI actions processed via per-slice reducers built with `createApplyAction()` (`store/slices/apply-action-factory.ts`) — this is the core of how OS Actions become UI state
 - User interactions (focus, close, move, resize) logged and sent back to server
 
 Key selectors: `selectWindowsInOrder`, `selectVisibleWindows`, `selectToasts`
@@ -23,8 +23,8 @@ Key selectors: `selectWindowsInOrder`, `selectVisibleWindows`, `selectToasts`
 
 - Singleton WebSocket with auto-reconnect (exponential backoff)
 - Reconnects with `?sessionId=X` (multi-tab session sharing) and `?token=X` (remote auth)
-- Incoming: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `TOOL_PROGRESS`, `APP_PROTOCOL_REQUEST`, `APPROVAL_REQUEST`, `WINDOW_AGENT_STATUS`, `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED`
-- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `INTERRUPT_AGENT`, `RESET`, `DIALOG_FEEDBACK`, `TOAST_ACTION`, `USER_PROMPT_RESPONSE`, `USER_INTERACTION`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`, `SUBSCRIBE_MONITOR`, `REMOVE_MONITOR`
+- Incoming: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `SESSION_ATTACHED`, `CONNECTION_STATUS`, `TOOL_PROGRESS`, `ERROR`, `WINDOW_AGENT_STATUS`, `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED`, `APPROVAL_REQUEST`, `APP_PROTOCOL_REQUEST`, `VERB_SUBSCRIPTION_UPDATE`, `STREAM_FRAME`, `CLI_RESTORE`, `MONITORS`, `SNAPSHOT`
+- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `INTERRUPT_AGENT`, `RESET`, `SET_PROVIDER`, `RENDERING_FEEDBACK`, `DIALOG_FEEDBACK`, `TOAST_ACTION`, `USER_PROMPT_RESPONSE`, `USER_INTERACTION`, `APP_INTERACTION`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`, `APP_EVENT`, `SUBSCRIBE_MONITOR`, `ADD_MONITOR`, `REMOVE_MONITOR`, `RESYNC`
 - Sends rendering feedback and user interactions back to server
 
 ### Content Renderers
@@ -53,7 +53,7 @@ Flat array with CSS grid layout (no recursive trees — designed for LLM simplic
 
 ## When Making Changes
 
-1. OS Action handling in `applyAction()` must match schemas in `@yaar/shared`
+1. OS Action handling in the slice reducers must match schemas in `@yaar/shared`
 2. WebSocket event types must stay in sync with `events.ts`
 3. No XSS vectors in HTML/iframe renderers
 4. Store isolation in tests (reset in `beforeEach`)

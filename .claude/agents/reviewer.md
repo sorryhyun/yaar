@@ -18,10 +18,10 @@ You review code changes for correctness, security, and consistency with YAAR's a
 ## YAAR-Specific Checklist
 
 ### Schema / Handler Consistency
-- OS Action schemas in `packages/shared/actions.ts` must match:
+- OS Action schemas in `packages/shared/src/actions.ts` must match:
   - Server MCP tool definitions in `packages/server/src/mcp/`
   - Frontend `applyAction()` reducer in `packages/frontend/src/store/`
-- WebSocket events in `packages/shared/events.ts` must match:
+- WebSocket events in `packages/shared/src/events.ts` must match:
   - Server emit calls in `packages/server/src/session/live-session.ts` and `session/broadcast-center.ts`
   - Frontend hook handlers in `packages/frontend/src/hooks/useAgentConnection.ts`
 
@@ -39,7 +39,7 @@ You review code changes for correctness, security, and consistency with YAAR's a
 ### Async Correctness
 - Agent lifecycle: proper `dispose()` on disconnect
 - Context tape: correct branching for window forks
-- Semaphore: `AgentLimiter` limits respected
+- Semaphore: agent limiter (`agents/limiter.ts`, `getAgentLimiter()`) limits respected
 - BroadcastCenter: no dangling subscriptions
 
 ### Code Quality

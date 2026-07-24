@@ -50,9 +50,11 @@ apps/my-app/
 ```
 
 - **permissions**: Prefix-matching URIs. Without them, verb calls return 403.
-- **bundles**: Opt-in gated SDKs (`yaar-dev`, `yaar-web`).
+- **bundles**: Opt-in gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`).
 - **capture**: `"dom"` (default) or `"canvas"` for canvas-based apps.
 - **createShortcut**: `true` (default) to auto-create desktop icon.
+- **messaging**: `"all"` grants the app agent a `direct_message` tool for cross-app messaging.
+- **controls**: apps this app's agent may drive via `describe`/`query`/`command` with an `appId` param (bundled apps only). String shorthand (`["browser-user"]`) or object form restricting commands (`[{ "appId": "browser-user", "commands": ["navigate"] }]`).
 
 ### appId Rules
 
@@ -109,6 +111,7 @@ Available via `@bundled/*` imports — no npm install needed:
 | solid-js | `@bundled/solid-js` | Reactive UI (createSignal, createEffect, Show, For) |
 | solid-js/html | `@bundled/solid-js/html` | Tagged template HTML (no JSX) |
 | solid-js/web | `@bundled/solid-js/web` | `render()` function |
+| solid-js/store | `@bundled/solid-js/store` | `createStore()` for nested reactive state |
 | uuid | `@bundled/uuid` | `v4()` ID generation |
 | lodash | `@bundled/lodash` | debounce, cloneDeep, groupBy |
 | date-fns | `@bundled/date-fns` | Date formatting/manipulation |
@@ -129,21 +132,28 @@ Available via `@bundled/*` imports — no npm install needed:
 | marked | `@bundled/marked` | Markdown parsing |
 | prismjs | `@bundled/prismjs` | Syntax highlighting |
 | mammoth | `@bundled/mammoth` | DOCX parsing |
+| dompurify | `@bundled/dompurify` | HTML sanitization (mandatory for externally-sourced HTML) |
+| zod | `@bundled/zod` | Zod Mini functional API — validate untrusted/persisted JSON |
+
+The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`.
 
 ### Gated SDKs (require `"bundles"` in app.json)
 
 | SDK | Import | Purpose |
 |-----|--------|---------|
-| yaar-dev | `@bundled/yaar-dev` | compile(), typecheck(), deploy(), bundledLibraries() |
+| yaar-dev | `@bundled/yaar-dev` | compile(), typecheck(), deploy(), bundledLibraries(), per-app git history |
 | yaar-web | `@bundled/yaar-web` | Browser automation: open, click, type, extract |
+| yaar-ml | `@bundled/yaar-ml` | In-browser ONNX inference (see `docs/guides/yaar_ml_runtime.md`) |
 
 ### YAAR SDK (`@bundled/yaar`)
 
 Always available. Key exports:
-- **Verb API**: `read(uri)`, `list(uri)`, `invoke(uri, params)`, `describe(uri)`, `del(uri)`, `subscribe(uri, callback)`
-- **Utilities**: `showToast(msg, type?)`, `errMsg(err)`, `withLoading(fn)`, `onShortcut(key, fn)`
-- **Storage**: `appStorage.save(path, content)`, `appStorage.read(path)`, `appStorage.readJson(path)`, `appStorage.readBinary(path)`, `appStorage.list()`, `appStorage.remove(path)`
-- **Persisted state**: `createPersistedSignal(key, defaultValue)` — Solid.js signal that persists to appStorage
+- **Verb API**: `read(uri)`, `list(uri)`, `invoke(uri, params)`, `describe(uri)`, `del(uri)`, `subscribe(uri, callback)`, `stream(uri)`
+- **Utilities**: `showToast(msg, type?)`, `errMsg(err)`, `withLoading(fn)`, `onShortcut(key, fn)`, `defineCommand`, `wait`
+- **Dialogs**: `showAlert`, `showConfirm`, `showPrompt`
+- **Storage**: `appStorage.save(path, content)`, `.trySave(path, content)`, `.read(path)`, `.readJson(path)`, `.readJsonOr(path, fallback)`, `.readBinary(path)`, `.readBlob(path)`, `.list(dirPath?)`, `.remove(path)`
+- **Database**: `appDb` — SQLite-backed collections scoped to the app
+- **Persisted state**: `createPersistedSignal(key, defaultValue)` — Solid.js signal that persists to appStorage; also `createAutosave`, `createCollapsiblePanel`
 - **App Protocol**: `app.register({ appId, name, state, commands })`, `app.sendInteraction(message)`
 
 ## Design Tokens (CSS)
@@ -159,7 +169,7 @@ All compiled apps get YAAR CSS custom properties and utility classes injected au
 `--yaar-bg`, `--yaar-bg-surface`, `--yaar-text`, `--yaar-text-muted`, `--yaar-accent`, `--yaar-border`, `--yaar-success`, `--yaar-error`
 
 ### Spacing
-`--yaar-sp-1` through `--yaar-sp-4` (4px increments), `--yaar-sp-8` (32px)
+`--yaar-sp-1` through `--yaar-sp-6` (4px increments), `--yaar-sp-8`/`-10`/`-12` (32/40/48px)
 
 ### Layout Classes
 `y-app` (root), `y-flex`, `y-flex-col`, `y-toolbar`, `y-sidebar`, `y-tabs`, `y-modal`, `y-empty` (centered placeholder with `y-empty-icon`)
@@ -196,7 +206,7 @@ render(() => html`
 
 ### Gotchas
 
-- **Empty `html` template literals crash** — use `null` instead of `` html`` ``
+- **Nothing may precede the first tag** — `` html`${x}` ``, `` html`hi ${x}` ``, and `` html`hi` `` crash; `` html`lead <b>x</b>` `` silently drops `lead `. Wrap content in an element or return the accessor directly. The compiler fails the build on these (`solid-html-guard.ts`).
 - **`flex: 1` breaks reactivity** — Solid inserts comment markers that break flex. Use `position: absolute; inset: 0` instead.
 - **Don't pass event handlers as component props** — `html` wraps props in reactive getters, causing handlers to fire during render. Use event delegation on parent DOM elements.
 - **HTML entities inside `${}`** — Solid sets interpolated strings as `textContent`, not `innerHTML`. Use actual Unicode characters (e.g., `📷`), not `&#128247;`.
@@ -248,7 +258,7 @@ After creating/editing an app, you can add these markdown files:
 | `SKILL.md` | App agent | 2nd (appended to generic) | Documentation for simpler apps |
 | `HINT.md` | Monitor agent | Independent | When/why to route tasks to this app |
 
-- **AGENTS.md** must document the 3 tools (query, command, relay) since it replaces the generic prompt
+- **AGENTS.md** must document the 4 tools (describe, query, command, relay) since it replaces the generic prompt
 - **SKILL.md** is auto-generated by deploy for compiled apps; customize for richer docs
 - **HINT.md** should be 1-3 sentences focused on *when to use* the app
 
@@ -288,9 +298,9 @@ const data = await invoke('yaar://http', { url: 'https://api.example.com/data', 
 ## Existing Apps Reference
 
 Look at existing apps in `apps/` for patterns:
-- `apps/falling-blocks/` — Game with canvas capture, Tone.js audio
-- `apps/ai-chat/` — Simple compiled app with SKILL.md
-- `apps/devtools/` — Complex app with full AGENTS.md
-- `apps/browser/` — App with AGENTS.md + HINT.md
+- `apps/memo/` — Simple compiled app with SKILL.md + HINT.md
+- `apps/devtools/` — Complex app with full AGENTS.md; declares `controls` to drive browser-user
+- `apps/browser/` — App with AGENTS.md + SKILL.md + HINT.md
+- `apps/process-explorer/` — Live view via stream subscriptions
 - `apps/configurations/` — Settings UI
 - `apps/storage/` — File browser using verb API

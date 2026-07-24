@@ -14,12 +14,14 @@ You run tests, type checks, and linting after code changes and report the result
 ```bash
 # Unit tests (per package)
 bun run --filter @yaar/frontend test               # Frontend tests
-bun run --filter @yaar/server test                  # Server tests
+bun run --filter @yaar/server test                  # Server tests (unit + loopback + integration)
 bun run --filter @yaar/shared test                  # Shared tests
+bun run --filter @yaar/compiler test                # Compiler tests
 
-# Targeted tests (match pattern)
-bun run --filter @yaar/frontend test -- --test-name-pattern store   # Only store tests
-bun run --filter @yaar/server test -- --test-name-pattern agents    # Only agent tests
+# Targeted tests — run bun test directly in the package with a path or -t pattern
+# (the server's `test` script is a composite; args don't pass through)
+cd packages/server && bun test src/tests/limiter.test.ts
+cd packages/frontend && bun test -t store
 
 # Type checking (all packages)
 bun run typecheck

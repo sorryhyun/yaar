@@ -19,6 +19,7 @@ These are the documentation files you maintain:
 | `packages/server/CLAUDE.md` | Server directory structure, architecture, providers, MCP tools, REST API |
 | `packages/frontend/CLAUDE.md` | Frontend structure, store slices, WebSocket events, renderers |
 | `packages/shared/CLAUDE.md` | Shared types, OS Actions, WebSocket events, Component DSL, Zod patterns |
+| `packages/compiler/CLAUDE.md` | App compiler: bundled libraries, shims, protocol extraction, typecheck |
 
 You also maintain the agent definition files under `.claude/agents/`:
 
@@ -28,6 +29,7 @@ You also maintain the agent definition files under `.claude/agents/`:
 | `.claude/agents/frontend.md` | Frontend agent's architecture summary |
 | `.claude/agents/reviewer.md` | Review checklist |
 | `.claude/agents/tester.md` | Test runner instructions |
+| `.claude/agents/app-dev.md` | App development reference: bundled libraries, SDK exports, design tokens |
 
 ## Process
 

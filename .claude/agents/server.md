@@ -36,9 +36,9 @@ SessionHub (singleton registry)
 
 ### Key Patterns
 
-- **Policy classes**: Complex behavior decomposed into focused policies:
-  - `session-policies/`: `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge`
-  - `context-pool-policies/`: `MainQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `WindowConnectionPolicy`, `MonitorBudgetPolicy`
+- **Policy classes**: Complex behavior decomposed into focused policies (under `agents/`):
+  - `agents/session-policies/`: `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge`
+  - `agents/context-pool-policies/`: `MonitorQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `WindowSubscriptionPolicy`, `MonitorBudgetPolicy`
 - **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections (observer pattern).
 - **Warm Pool** (`providers/warm-pool.ts`): Providers pre-initialized at startup. Auto-replenishes when acquired.
 - **actionEmitter**: Tools emit actions via `actionEmitter.emitAction()`, which broadcasts to frontend and optionally waits for rendering feedback.
@@ -49,8 +49,8 @@ SessionHub (singleton registry)
 Implementing `AITransport` interface:
 - `systemPrompt`, `isAvailable()`, `query(prompt, options)` → async iterable of `StreamMessages`
 - `interrupt()`, `dispose()`, optional `steer(content)` for mid-turn steering
-- Factory in `providers/factory.ts` with `providerLoaders` map
-- Claude uses `@anthropic-ai/claude-agent-sdk` (model: `claude-sonnet-4-6`, Task + WebSearch tools)
+- Factory in `providers/factory.ts` with `providerRegistry` map (re-exports warm-pool helpers)
+- Claude uses `@anthropic-ai/claude-agent-sdk` (default model: `claude-sonnet-5`, Task + WebSearch tools)
 - Codex uses JSON-RPC over WebSocket (`codex app-server --listen ws://`, one connection per provider)
 
 ## Conventions
