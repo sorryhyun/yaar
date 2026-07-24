@@ -124,7 +124,10 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         description: 'Scroll the page',
         params: {
           type: 'object',
-          properties: { direction: { type: 'string', enum: ['up', 'down'] } },
+          properties: {
+            direction: { type: 'string', enum: ['up', 'down'] },
+            amount: { type: 'number', description: 'Pixels to scroll. Default: one viewport.' },
+          },
           required: ['direction'],
         },
         handler: async (p) => web.scroll({ ...p, ...(await bid()) }),
@@ -248,10 +251,25 @@ export function registerBrowserProtocol(deps: BrowserProtocolDeps): void {
         handler: async (p) => web.extractImages({ ...p, ...(await bid()) }),
       }),
       html: defineCommand({
-        description: 'Get raw innerHTML',
+        // The handler spreads the whole bag into web.html, so every option the SDK
+        // accepts has to be declared here or it is rejected as an unknown param —
+        // and includeMeta is the only way to learn which URL the HTML came from.
+        description:
+          'Get page HTML. Default is document.body.innerHTML — a FRAGMENT: no doctype, no ' +
+          '<head>, no <title>. Use includeMeta to get the source URL and title.',
         params: {
           type: 'object',
-          properties: { selector: { type: 'string' } },
+          properties: {
+            selector: { type: 'string' },
+            outerHTML: {
+              type: 'boolean',
+              description: "Include the element's own tag. With no selector, the whole <html>.",
+            },
+            includeMeta: {
+              type: 'boolean',
+              description: 'Return JSON { html, url, title, readyState } instead of a bare string.',
+            },
+          },
         },
         handler: async (p) => web.html({ ...p, ...(await bid()) }),
       }),

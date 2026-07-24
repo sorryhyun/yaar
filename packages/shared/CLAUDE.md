@@ -8,6 +8,13 @@ Shared types between frontend and server.
 - `events.ts` - WebSocket event types, `ClientEventType`/`ServerEventType` constants
 - `components.ts` - Component schemas, types, type guards (Zod v4), `DisplayContent`/`displayContentSchema`
 - `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`)
+  - A command's `params` JSON Schema is **enforced** by the iframe bridge before the handler
+    runs: a missing `required` key or a key absent from `properties` is rejected naming both
+    the wrong keys and the accepted ones. `additionalProperties: true` opts a pass-through
+    command out; a command that declares no `properties` stays free-form. The schema was
+    previously advisory, so an undeclared key was dropped in silence and the handler failed
+    later with a message about its own logic (devtools' `copyFile` called with
+    `{source, destination}` reported "Source and destination are the same path").
 - `yaar-uri.ts` - Shared URI utilities: `parseYaarUri`, `buildYaarUri`, `isYaarUri`, `resolveContentUri`, `extractAppId`, `parseFileUri`, `buildFileUri`, `parseWindowUri`, `buildWindowUri`, `parseBareWindowUri`, `isBareWindowsAuthority`, `expandBraceUri`
 - `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk)
 

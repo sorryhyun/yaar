@@ -152,6 +152,52 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     return label + '. Available ' + noun + ': ' + shown;
   }
 
+  // A command's \`params\` JSON Schema is what the agent is shown in the manifest, but
+  // nothing checked a call against it: an undeclared key was dropped in silence and a
+  // missing required one arrived as undefined. The handler then failed somewhere
+  // downstream with a message about its own logic — copyFile called with
+  // {source, destination} read from/to as undefined and reported "Source and
+  // destination are the same path", which names neither the wrong key nor the right
+  // one. Name the actual mistake here, where the schema is.
+  function paramsError(cmdName, descriptor, params) {
+    var schema = descriptor && descriptor.params;
+    if (!schema || typeof schema !== 'object') return null;
+    var props = schema.properties;
+    if (!props || typeof props !== 'object') return null;
+    var owns = function(bag, k) { return Object.prototype.hasOwnProperty.call(bag, k); };
+
+    // A string or array would enumerate as indices below and report "unknown param: 0, 1, 2".
+    if (typeof params !== 'object' || params === null || Array.isArray(params)) {
+      return cmdName + ': params must be an object, received ' +
+        (Array.isArray(params) ? 'an array' : typeof params) + '.';
+    }
+
+    var missing = [];
+    var required = Array.isArray(schema.required) ? schema.required : [];
+    for (var i = 0; i < required.length; i++) {
+      if (params[required[i]] === undefined) missing.push(required[i]);
+    }
+
+    // additionalProperties: true is the explicit opt-out, for a command that forwards
+    // a free-form bag on to another layer.
+    var unknown = [];
+    if (schema.additionalProperties !== true) {
+      for (var k in params) {
+        if (owns(params, k) && !owns(props, k)) unknown.push(k);
+      }
+    }
+
+    if (!missing.length && !unknown.length) return null;
+
+    var parts = [];
+    if (missing.length) parts.push('missing required param: ' + missing.join(', '));
+    if (unknown.length) parts.push('unknown param: ' + unknown.join(', '));
+    var accepted = memberNames(props);
+    return cmdName + ': ' + parts.join('; ') + '. Accepted params: ' +
+      (accepted.length ? accepted.join(', ') : '(none)') +
+      (required.length ? ' (required: ' + required.join(', ') + ')' : '') + '.';
+  }
+
   // Max serialized eval result, in characters. A result bigger than this is almost
   // always an accident (returning \`document\` or a whole store), and shipping it
   // through the agent's context costs far more than it explains.
@@ -338,13 +384,24 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         }, '*');
         return;
       }
+      // A command whose params are all optional is normally called with none at all, and
+      // postMessage then delivers no params at all. Handed straight to the handler, the
+      // first property read threw "Cannot read properties of undefined" — an error naming
+      // neither the command nor the app, so it reads like a bug in the app's own code.
+      // No params is an empty bag of params.
+      var cmdParams = msg.params || {};
+      var badParams = paramsError(cmdName, registration.commands[cmdName], cmdParams);
+      if (badParams) {
+        window.parent.postMessage({
+          type: 'yaar:app-command-response',
+          requestId: requestId,
+          result: null,
+          error: badParams
+        }, '*');
+        return;
+      }
       try {
-        // A command whose params are all optional is normally called with none at all, and
-        // postMessage then delivers no params at all. Handed straight to the handler, the
-        // first property read threw "Cannot read properties of undefined" — an error naming
-        // neither the command nor the app, so it reads like a bug in the app's own code.
-        // No params is an empty bag of params.
-        var result = registration.commands[cmdName].handler(msg.params || {});
+        var result = registration.commands[cmdName].handler(cmdParams);
         // A command that acts but returns nothing is normal (play, stop, ...). Send
         // null rather than undefined: postMessage drops undefined-valued keys, and the
         // parent bridge reads a response carrying neither result nor error as malformed.

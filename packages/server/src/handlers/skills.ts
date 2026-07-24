@@ -14,9 +14,9 @@
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
 import { okResource, okLinks, error, extractIdFromUri } from './utils.js';
-
-/** Known topic names — kept in sync with skills/index.ts. */
-const TOPIC_NAMES = ['components', 'config', 'marketplace'];
+// Names only — importing topics.js here would pull its `.md` text imports into the
+// static module graph. topics.ts asserts this list matches what it actually serves.
+import { TOPIC_NAMES } from '../features/skills/topic-names.js';
 
 /** Lazily load and resolve a topic's content (with template substitution). */
 async function loadTopic(topic: string): Promise<string | null> {
@@ -44,7 +44,7 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
 
   // ── yaar://skills/* — read a specific topic ──
   registry.register('yaar://skills/*', {
-    description: 'Read a skill topic — reference docs you MUST read before using related tools.',
+    description: `Read a skill topic — reference docs you MUST read before using related tools. Topics: ${TOPIC_NAMES.join(', ')}. Use read, not list; a topic is a document, not a collection.`,
     verbs: ['describe', 'read'],
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {

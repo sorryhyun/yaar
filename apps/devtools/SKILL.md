@@ -17,7 +17,7 @@ Note: devtools ships an `AGENTS.md`, which takes priority over this file for its
 ## Notes
 
 - File commands only see the **active project's sandbox** — they return empty if no project is open
-- Read `yaar://skills/app_dev` before writing app code — bundled libraries, design tokens, anti-patterns
+- Look a library up before writing against it: `command("describeBundledLibrary", { name })` — bundled libraries, design tokens (`name: "design-tokens"`), and SDK signatures
 - Split code across files (`protocol.ts`, `styles.css`, `helpers.ts`, …)
 - Check `query("diagnostics")` and fix errors before deploying
 - Deploys are versioned — a bad one rolls back with `command("gitRestore", { appId, ref: "HEAD~1" })`

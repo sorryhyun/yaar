@@ -8,6 +8,7 @@
 
 import { getAvailableBundledLibraries } from '@yaar/compiler';
 import { MARKET_URL } from '../../config.js';
+import { TOPIC_NAMES } from './topic-names.js';
 
 // Bun text imports — content inlined at build time for exe bundles
 // @ts-expect-error: Bun text import
@@ -23,7 +24,18 @@ export const TOPICS: Record<string, string> = {
   marketplace: marketplaceMd,
 };
 
-export const TOPIC_NAMES = Object.keys(TOPICS);
+export { TOPIC_NAMES };
+
+// The handler advertises TOPIC_NAMES without being able to import this module (see
+// topic-names.ts). Fail loudly at load rather than advertising a topic whose read
+// returns "Unknown topic".
+{
+  const declared = [...TOPIC_NAMES].sort().join(', ');
+  const served = Object.keys(TOPICS).sort().join(', ');
+  if (declared !== served) {
+    throw new Error(`Skill topic drift: TOPIC_NAMES has [${declared}], TOPICS has [${served}]`);
+  }
+}
 
 /**
  * Get the resolved content for a topic, with template substitutions applied.

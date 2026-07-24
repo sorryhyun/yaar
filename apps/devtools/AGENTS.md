@@ -134,7 +134,7 @@ import { v4 as uuid } from '@bundled/uuid';
 import { animate, createTimeline } from '@bundled/anime';
 ```
 
-- **`solid-js`** — reactive UI (`createSignal`, `html`, `render`). Prefer `import './styles.css'` over inline styles.
+- **`solid-js`** — reactive UI, split across three entry points that are easy to confuse. `import { createSignal, createEffect, For, Show } from '@bundled/solid-js'`; `import html from '@bundled/solid-js/html'` (**default** export, not named); `import { render } from '@bundled/solid-js/web'`. Reaching for `render` or `html` on `@bundled/solid-js` is the usual first-compile failure. Prefer `import './styles.css'` over inline styles.
 - **`yaar`** — SDK helpers (`showToast`, `showAlert`, `showConfirm`, `showPrompt`, `errMsg`, `withLoading`, `onShortcut`, `appStorage`, `createPersistedSignal`) and the Verb API. **Always prefer the helper over hand-rolling**: `showToast` over custom toast HTML, `showConfirm` over native `confirm()` (native dialogs block the page *and* any agent driving it), `errMsg` over `err instanceof Error`.
 
 **Gated SDKs** need a `"bundles"` entry in `app.json` to import:
@@ -253,7 +253,7 @@ Verify a split with `manifest` — it diffs the static manifest against what the
 
 ## URI Reference
 
-Verify a URI before writing code against it: `command("inspectUri", { uri })` returns verbs and invoke schema; pass `list: true` to also list children. Works without holding the permission, so it's a cheap way to check a path is real.
+Verify a URI before writing code against it: `command("inspectUri", { uri })` returns verbs and invoke schema; pass `list: true` to list children, or `read: true` to fetch the resource itself. Describe works without holding the permission, so it's a cheap way to check a path is real; `read`/`list` need the permission.
 
 | URI | Verbs | Notes |
 |-----|-------|-------|
@@ -263,7 +263,7 @@ Verify a URI before writing code against it: `command("inspectUri", { uri })` re
 | `yaar://config/` | describe, list, read | `yaar://config/app/{appId}` — read, or `invoke` with `{ config: {...} }` to merge. |
 | `yaar://history/` | describe, list, read | Past session logs. `yaar://history/{id}[/transcript\|/messages]` for detail. |
 | `yaar://http` | describe, invoke | HTTP proxy (SSRF-protected, domain allowlist). |
-| `yaar://skills/{topic}` | describe, read | Reference docs, e.g. `yaar://skills/app_dev`. |
+| `yaar://skills/{topic}` | describe, read | Reference docs. Topics: `components`, `config`, `marketplace`. Fetch with `command("inspectUri", { uri, read: true })` — a topic is a document, so `list` is not one of its verbs. |
 
 There is no `yaar://session/` or `yaar://sessions/` namespace, and `yaar://` itself is not listable — use `yaar://history/` for session logs.
 

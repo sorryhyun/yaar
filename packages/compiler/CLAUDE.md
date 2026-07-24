@@ -158,8 +158,23 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 
 ## Bundled Libraries
 
-`getBundledLibraryDetail(name)` backs the agent-facing `describeBundledLibrary`. Beyond the
-real `@bundled/*` modules it serves **pseudo-libraries** — describable but not importable.
+`getBundledLibraryDetail(name)` backs the agent-facing `describeBundledLibrary`. It slices the
+`declare module '@bundled/<name>…'` blocks out of `bundled-types/index.d.ts` and prepends the
+`Yaar*` declarations they reference. **That resolution is transitive and covers `type` aliases
+as well as `interface`s** — a single `:`-anchored, interface-only pass answered a question
+nobody asked: `app.register(config: YaarAppRegistration)` shipped with no body for that type
+(the reference sits behind `=` in an alias), so `YaarAppStateDescriptor` never appeared and an
+agent had to discover that a state descriptor is `{ description, handler, schema? }` by
+assigning `{}` and reading the compile error.
+
+A module block that is a bare `export * from 'pkg'` tells the caller nothing, since the
+upstream package is not something the agent can open — which is why the four `solid-js` blocks
+carry in-block comments naming what lives in each entry point. **Those comments are part of the
+tool's output; keep them accurate.** Without them `describeBundledLibrary("solid-js")` returned
+four re-export lines, and importing `render`/`html` from `@bundled/solid-js` was the most
+common first-compile failure.
+
+Beyond the real `@bundled/*` modules it serves **pseudo-libraries** — describable but not importable.
 `design-tokens` is one: the tokens ship as injected CSS, so they have no module and no
 `.d.ts`, but an app agent still has to be able to ask what they are. It returns
 `describeDesignTokens()`, generated from `YAAR_DESIGN_TOKENS_CSS`. Before it existed the

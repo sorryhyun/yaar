@@ -8,19 +8,37 @@
 
 // ── Reactivity ───────────────────────────────────────────────────────────────
 
+// Solid's surface is split across four entry points, and `export * from` tells a
+// reader nothing about which one holds what — `describeBundledLibrary("solid-js")`
+// returned exactly these four lines, so an agent told to look a library up before
+// writing against it learned only that the modules exist. Importing `render` or
+// `html` from '@bundled/solid-js' is the single most common first-compile failure.
+// The comments below are part of what that lookup returns; keep them accurate.
+
 declare module '@bundled/solid-js' {
+  // Reactivity and control flow ONLY. `render` and `html` are NOT here.
+  //   createSignal, createEffect, createMemo, createResource, createComputed
+  //   onMount, onCleanup, batch, untrack, on
+  //   createContext, useContext, lazy, Suspense, ErrorBoundary
+  //   For, Show, Index, Switch, Match, Portal(->/web), Dynamic(->/web)
   export * from 'solid-js';
 }
 
 declare module '@bundled/solid-js/html' {
+  // The `html` tagged template — a DEFAULT export, so:
+  //   import html from '@bundled/solid-js/html';
+  // Not `import { html }`, and not from '@bundled/solid-js'.
   export { default } from 'solid-js/html';
 }
 
 declare module '@bundled/solid-js/web' {
+  // DOM entry: render, hydrate, Portal, Dynamic, isServer, template.
+  //   import { render } from '@bundled/solid-js/web';
   export * from 'solid-js/web';
 }
 
 declare module '@bundled/solid-js/store' {
+  // Nested reactive stores: createStore, produce, reconcile, unwrap.
   export * from 'solid-js/store';
 }
 

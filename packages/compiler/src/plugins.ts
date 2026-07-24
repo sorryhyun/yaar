@@ -581,53 +581,79 @@ export function getBundledLibraryDetail(name: string): string | null {
   const blocks: string[] = [];
   let match: RegExpExecArray | null;
   while ((match = modulePattern.exec(content)) !== null) {
-    const start = match.index;
-    let depth = 0;
-    let end = start;
-    for (let i = start; i < content.length; i++) {
-      if (content[i] === '{') depth++;
-      else if (content[i] === '}') {
-        depth--;
-        if (depth === 0) {
-          end = i + 1;
-          break;
-        }
-      }
-    }
-    blocks.push(content.slice(start, end));
+    blocks.push(sliceBraceBlock(content, match.index));
   }
 
   if (blocks.length === 0) return null;
 
-  // For yaar/yaar-dev/yaar-web, also include the preceding interface declarations they reference
-  const moduleText = blocks.join('\n\n');
-  const referencedInterfaces = new Set<string>();
-  const ifaceRefPattern = /:\s*(Yaar\w+)/g;
-  let ifaceMatch: RegExpExecArray | null;
-  while ((ifaceMatch = ifaceRefPattern.exec(moduleText)) !== null) {
-    referencedInterfaces.add(ifaceMatch[1]);
-  }
-
+  // For yaar/yaar-dev/yaar-web, also include the declarations they reference.
+  //
+  // Resolution is transitive and covers `type` aliases as well as `interface`es,
+  // because a single `:`-anchored `interface`-only pass answered the question the
+  // caller did not ask. `app.register(config: YaarAppRegistration)` pulled in nothing
+  // — the reference sits behind `=` in a `export type AppRegistration = ...` alias —
+  // and even reached through `YaarApp`, its body was never rescanned, so
+  // `YaarAppStateDescriptor` never appeared. An agent therefore saw `register()`
+  // naming a type with no body anywhere in the response, and had to discover that a
+  // state descriptor is `{ description, handler, schema? }` by assigning `{}` and
+  // reading the compile error.
   const preambles: string[] = [];
-  for (const ifaceName of referencedInterfaces) {
-    const ifacePattern = new RegExp(`^interface ${ifaceName}[\\s<{]`, 'm');
-    const ifaceStart = content.search(ifacePattern);
-    if (ifaceStart === -1) continue;
-    let depth = 0;
-    let end = ifaceStart;
-    for (let i = ifaceStart; i < content.length; i++) {
-      if (content[i] === '{') depth++;
-      else if (content[i] === '}') {
-        depth--;
-        if (depth === 0) {
-          end = i + 1;
-          break;
-        }
-      }
+  const resolved = new Set<string>();
+  let frontier = collectYaarRefs(blocks.join('\n\n'));
+  while (frontier.length > 0) {
+    const next: string[] = [];
+    for (const name of frontier) {
+      if (resolved.has(name)) continue;
+      resolved.add(name);
+      const decl = extractTypeDeclaration(content, name);
+      if (!decl) continue;
+      preambles.push(decl);
+      next.push(...collectYaarRefs(decl));
     }
-    preambles.push(content.slice(ifaceStart, end));
+    frontier = next;
   }
 
   const parts = preambles.length > 0 ? [...preambles, '', ...blocks] : blocks;
   return parts.join('\n\n');
+}
+
+/** Slice a brace-delimited declaration starting at `start`, balancing nesting. */
+function sliceBraceBlock(content: string, start: number): string {
+  let depth = 0;
+  for (let i = start; i < content.length; i++) {
+    if (content[i] === '{') depth++;
+    else if (content[i] === '}') {
+      depth--;
+      if (depth === 0) return content.slice(start, i + 1);
+    }
+  }
+  return content.slice(start);
+}
+
+/** Every distinct `Yaar*` type name mentioned in a chunk of declaration text. */
+function collectYaarRefs(text: string): string[] {
+  const names = new Set<string>();
+  const pattern = /\bYaar\w+/g;
+  let m: RegExpExecArray | null;
+  while ((m = pattern.exec(text)) !== null) names.add(m[0]);
+  return [...names];
+}
+
+/** Extract a top-level `interface X { ... }` or `type X = ...;` declaration. */
+function extractTypeDeclaration(content: string, name: string): string | null {
+  const ifaceStart = content.search(new RegExp(`^interface ${name}[\\s<{]`, 'm'));
+  if (ifaceStart !== -1) return sliceBraceBlock(content, ifaceStart);
+
+  const alias = new RegExp(`^type ${name}[\\s<=]`, 'm').exec(content);
+  if (!alias) return null;
+  // A type alias runs to the first `;` at brace depth 0 — object-literal and mapped
+  // types nest braces, so the first `;` overall truncates mid-body.
+  let depth = 0;
+  for (let i = alias.index; i < content.length; i++) {
+    const ch = content[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') depth--;
+    else if (ch === ';' && depth === 0) return content.slice(alias.index, i + 1);
+  }
+  return null;
 }
