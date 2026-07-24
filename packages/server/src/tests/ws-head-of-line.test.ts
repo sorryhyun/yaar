@@ -50,8 +50,11 @@ import type { ServerWebSocket } from 'bun';
 let routed: string[] = [];
 /** Held open to stand in for an agent turn that has not finished. */
 let releaseTurn: () => void = () => {};
+/** Whether APP_INTERACTION addresses the active app turn in the queue-policy test. */
+let appTurnBusy = true;
 
 const fakeSession = {
+  hasActiveAppAgentTurn: () => appTurnBusy,
   routeMessage: async (event: { type: string }) => {
     routed.push(event.type);
     // USER_MESSAGE is the frame whose routeMessage awaits an entire agent turn.
@@ -126,6 +129,7 @@ describe('WebSocket head-of-line blocking', () => {
   beforeEach(() => {
     routed = [];
     releaseTurn = () => {};
+    appTurnBusy = true;
   });
 
   it('lets an APP_PROTOCOL_RESPONSE overtake the agent turn that is waiting for it', async () => {
@@ -203,6 +207,46 @@ describe('WebSocket head-of-line blocking', () => {
 
     releaseTurn();
     await settle();
+  });
+
+  it('lets app interactions overtake the queue to steer an active app turn', async () => {
+    const ws = createWs();
+    send(ws, { type: 'USER_MESSAGE', messageId: 'm1', content: 'hi', monitorId: '0' });
+    await settle();
+
+    send(ws, {
+      type: 'APP_INTERACTION',
+      messageId: 'activity-1',
+      windowId: '0/notes',
+      content: '<app_interaction>User edited the title</app_interaction>',
+    });
+    await settle();
+
+    // APP_INTERACTION must reach AppTaskProcessor while the turn is still active; there it
+    // takes the ordinary busy-agent path and steers rather than becoming deferred context.
+    expect(routed).toEqual(['USER_MESSAGE', 'APP_INTERACTION']);
+
+    releaseTurn();
+    await settle();
+  });
+
+  it('keeps app interactions queued when there is no active turn to steer', async () => {
+    const ws = createWs();
+    appTurnBusy = false;
+    send(ws, { type: 'USER_MESSAGE', messageId: 'm1', content: 'hi', monitorId: '0' });
+    send(ws, {
+      type: 'APP_INTERACTION',
+      messageId: 'activity-1',
+      windowId: '0/notes',
+      content: '<app_interaction>User edited the title</app_interaction>',
+    });
+    await settle();
+
+    expect(routed).toEqual(['USER_MESSAGE']);
+
+    releaseTurn();
+    await settle();
+    expect(routed).toEqual(['USER_MESSAGE', 'APP_INTERACTION']);
   });
 
   it('still serializes ordinary frames — RESYNC does not overtake the work before it', async () => {

@@ -61,7 +61,7 @@ export type { Task } from './pool-types.js';
  */
 export class ContextPool implements PoolContext {
   /** This session's key in the SessionHub — distinct from `logSessionId` below. */
-  private readonly sessionId: SessionId;
+  readonly sessionId: SessionId;
   /** The session_logs/ directory name. Names a transcript on disk, not a live session. */
   private logSessionId: string | null = null;
 
@@ -544,6 +544,14 @@ export class ContextPool implements PoolContext {
 
   getTimeline(): InteractionTimeline {
     return this.timeline;
+  }
+
+  /** Whether an app interaction for this window addresses a currently active app turn. */
+  hasActiveAppAgentTurn(windowId: string): boolean {
+    const appId = this.windowState.getAppIdForWindow(windowId);
+    const monitorId = this.windowState.getMonitorForWindow(windowId);
+    if (!appId || !monitorId || isPreviewAppId(appId)) return false;
+    return this.windowQueuePolicy.isProcessing(`app-${monitorId}-${appId}`);
   }
 
   pushUserInteractions(interactions: UserInteraction[]): void {

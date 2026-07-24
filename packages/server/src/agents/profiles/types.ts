@@ -11,6 +11,8 @@ export interface AgentProfile {
   systemPrompt: string;
   allowedTools: string[];
   model?: string;
+  /** App Protocol state keys included in automatic handoff snapshots. */
+  appStateKeys?: string[];
 }
 
 // Inlined to avoid circular dependency: handlers/index → session-hub → live-session → context-pool → monitor-task-processor → profiles → handlers/index

@@ -11,6 +11,7 @@ import { getSessionHub } from '../session/session-hub.js';
 import { getWarmPool } from '../providers/factory.js';
 import { getBroadcastCenter, generateConnectionId } from '../session/broadcast-center.js';
 import {
+  ClientEventType,
   ServerEventType,
   isAnswerEvent,
   isControlEvent,
@@ -154,7 +155,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         // Leave it undefined; routeOne reports the parse failure back to the client.
       }
 
-      // Two kinds of frame jump the queue, for two different reasons.
+      // Three kinds of frame jump the queue, for three different reasons.
       //
       // An answer *must* overtake the frame in front of it, because that frame is what is
       // waiting for it (ANSWER_EVENT_TYPES in @yaar/shared).
@@ -162,7 +163,17 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       // A control frame *may* overtake, because it has no ordering relationship with what
       // it passes and what it passes can be a whole streaming turn — a `USER_MESSAGE`
       // processed inline holds this queue until the model stops (CONTROL_EVENT_TYPES).
-      if (event && (isAnswerEvent(event.type) || isControlEvent(event.type))) {
+      //
+      // An app interaction overtakes only when it addresses an active app turn. That lets
+      // `sendInteraction()` reach AppTaskProcessor in time to steer. When idle it keeps
+      // normal queue order and invokes the app agent when preceding work is finished.
+      const interactionCanSteer =
+        event?.type === ClientEventType.APP_INTERACTION &&
+        getSessionHub().get(ws.data.sessionId!)?.hasActiveAppAgentTurn(event.windowId);
+      if (
+        event &&
+        (isAnswerEvent(event.type) || isControlEvent(event.type) || interactionCanSteer)
+      ) {
         return routeOne(ws, event);
       }
 

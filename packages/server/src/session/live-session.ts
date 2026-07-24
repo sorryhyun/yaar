@@ -574,6 +574,7 @@ export class LiveSession {
       !this.initialized &&
       (event.type === ClientEventType.USER_MESSAGE ||
         event.type === ClientEventType.WINDOW_MESSAGE ||
+        event.type === ClientEventType.APP_INTERACTION ||
         event.type === ClientEventType.COMPONENT_ACTION)
     ) {
       const success = await this.ensureInitialized();
@@ -609,6 +610,11 @@ export class LiveSession {
 
   getPool(): ContextPool | null {
     return this.pool;
+  }
+
+  /** Whether an app interaction can overtake the socket queue to steer its active turn. */
+  hasActiveAppAgentTurn(windowId: string): boolean {
+    return this.pool?.hasActiveAppAgentTurn(windowId) ?? false;
   }
 
   // ── Cleanup ─────────────────────────────────────────────────────────

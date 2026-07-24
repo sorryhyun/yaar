@@ -101,7 +101,7 @@ export function drainPendingQueues({
         send({ type: ClientEventType.USER_MESSAGE, messageId, content, monitorId });
       } else {
         send({
-          type: ClientEventType.WINDOW_MESSAGE,
+          type: ClientEventType.APP_INTERACTION,
           messageId,
           windowId: item.windowId,
           content,

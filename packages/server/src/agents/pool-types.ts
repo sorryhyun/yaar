@@ -14,6 +14,7 @@ import type { InteractionTimeline } from './interaction-timeline.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { SessionLogger } from '../logging/index.js';
 import type { ProviderType } from '../providers/types.js';
+import type { SessionId } from '../session/types.js';
 import type {
   MonitorQueuePolicy,
   WindowQueuePolicy,
@@ -85,6 +86,7 @@ export type PoolStats = AgentPoolStats & {
  * The contract processors depend on — implemented by ContextPool.
  */
 export interface PoolContext {
+  readonly sessionId: SessionId;
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
   readonly timeline: InteractionTimeline;

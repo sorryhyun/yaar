@@ -683,8 +683,9 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     windowId: string,
     request: AppProtocolRequest,
     timeoutMs?: number,
+    sessionId?: string,
   ): Promise<PendingOutcome<AppProtocolResponse>> {
-    const currentSessionId = getSessionId();
+    const currentSessionId = this.resolveSessionId(sessionId);
     if (!currentSessionId) {
       // The pending entry was always created against the caller's session; only the
       // *request* went out unaddressed. Without a session there is no iframe to ask, so

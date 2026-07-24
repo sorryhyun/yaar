@@ -370,6 +370,16 @@ app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection
 
 This posts a `{ type: 'yaar:app-interaction', content, instructions?, toMonitor }` message to the parent, which routes it to the window's agent (or the monitor agent if `toMonitor` is set).
 
+When the window's app agent is idle, `sendInteraction()` invokes it immediately. When that
+agent already has an active turn, the interaction is delivered to the normal steering path
+instead of being accumulated as deferred context.
+
+Use `sendInteraction()` when the interaction itself needs an agent response. Ordinary app
+state changes do not need to emit an interaction merely to keep the next invocation informed:
+YAAR compares all declared App Protocol state at app-agent handoff boundaries and prepends
+`<app_state_since_handoff changed="true|false" />` to the next invocation. This is an
+aggregate net-change signal; the agent queries authoritative state when it needs details.
+
 ### `app.emit(channel, payload)`
 
 Fire-and-forget event on a declared channel (see `events` in `app.register()`). Delivered only to agents that subscribed via `app_subscribe`; undeclared/unsubscribed channels are dropped server-side.

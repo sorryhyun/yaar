@@ -100,6 +100,7 @@ function wrapAppValue(value: unknown): VerbResult {
 async function requireAppReady(
   windowState: WindowStateRegistry,
   windowKey: string,
+  sessionId?: string,
 ): Promise<VerbResult | null> {
   const win = windowState.getWindow(windowKey);
   if (win && !win.appProtocol) {
@@ -108,7 +109,7 @@ async function requireAppReady(
     // and handlers/index.ts do): agent context first, default session outside a turn.
     // Anything else would gate the readiness check on a *different* session's desktop.
     const ready = await actionEmitter.waitForAppReady(
-      getActiveSessionId(),
+      sessionId ?? getActiveSessionId(),
       windowKey,
       deadlines.appReadyMs,
     );
@@ -122,12 +123,51 @@ async function request(
   windowKey: string,
   req: AppProtocolRequest,
   timeoutMs: number,
+  sessionId?: string,
 ): Promise<PendingOutcome<AppProtocolResponse>> {
   const entry = beginRequest(windowKey, req);
   const started = Date.now();
-  const outcome = await actionEmitter.emitAppProtocolRequest(windowKey, req, timeoutMs);
+  const outcome = await actionEmitter.emitAppProtocolRequest(windowKey, req, timeoutMs, sessionId);
   endRequest(entry, valueOf(outcome) ?? null, Date.now() - started);
   return outcome;
+}
+
+/**
+ * Read every declared state key for a handoff snapshot.
+ *
+ * This is server lifecycle work, not an agent tool call: it names the session explicitly
+ * and returns `null` unless the whole snapshot is authoritative. A partial snapshot could
+ * turn one timed-out key into a false "state changed" notice on the next invocation.
+ */
+export async function captureDeclaredAppState(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  stateKeys: readonly string[],
+  sessionId: string,
+): Promise<Record<string, unknown> | null> {
+  const win = windowState.getWindow(windowId);
+  if (!win || win.content.renderer !== 'iframe') return null;
+
+  const key = win.id;
+  const readyErr = await requireAppReady(windowState, key, sessionId);
+  if (readyErr) return null;
+
+  const entries = await Promise.all(
+    [...stateKeys].sort().map(async (stateKey) => {
+      const outcome = await request(
+        key,
+        { kind: 'query', stateKey },
+        deadlines.appQueryMs,
+        sessionId,
+      );
+      if (!outcome.ok) return null;
+      const response = outcome.value;
+      if (response.kind !== 'query' || response.error) return null;
+      return [stateKey, response.data] as const;
+    }),
+  );
+  if (entries.some((entry) => entry === null)) return null;
+  return Object.fromEntries(entries as Array<readonly [string, unknown]>);
 }
 
 /** The message an agent sees when an app never answered. */

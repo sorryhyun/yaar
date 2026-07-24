@@ -205,6 +205,26 @@ describe('handleAppProtocolRequest', () => {
     // app was working.
   });
 
+  it('sends app interactions on the invoke-or-steer channel', () => {
+    const { sent } = openSocket();
+    useDesktopStore.getState().addPendingAppInteraction({
+      windowId: '0/notes',
+      content: '{"event":"status_changed","status":"done"}',
+    });
+
+    const send = (event: unknown) => {
+      (wsManager.ws as WebSocket).send(JSON.stringify(event));
+    };
+    drainPendingQueues({ send: send as never, addCliEntry: (() => {}) as never });
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      type: 'APP_INTERACTION',
+      windowId: '0/notes',
+      content: '<app_interaction>{"event":"status_changed","status":"done"}</app_interaction>',
+    });
+  });
+
   it('reports a missing window element as an error, immediately', () => {
     const { sent } = openSocket();
 

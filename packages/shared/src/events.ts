@@ -47,6 +47,7 @@ export const ClientEventType = {
   TOAST_ACTION: 'TOAST_ACTION',
   USER_PROMPT_RESPONSE: 'USER_PROMPT_RESPONSE',
   USER_INTERACTION: 'USER_INTERACTION',
+  APP_INTERACTION: 'APP_INTERACTION',
   APP_PROTOCOL_RESPONSE: 'APP_PROTOCOL_RESPONSE',
   APP_PROTOCOL_READY: 'APP_PROTOCOL_READY',
   APP_EVENT: 'APP_EVENT',
@@ -188,6 +189,14 @@ export interface UserMessageEvent {
 
 export interface WindowMessageEvent {
   type: typeof ClientEventType.WINDOW_MESSAGE;
+  messageId: string;
+  windowId: string;
+  content: string;
+}
+
+/** Semantic app interaction that invokes an idle app agent or steers its active turn. */
+export interface AppInteractionEvent {
+  type: typeof ClientEventType.APP_INTERACTION;
   messageId: string;
   windowId: string;
   content: string;
@@ -351,6 +360,7 @@ export interface ResyncEvent {
 export type ClientEvent =
   | UserMessageEvent
   | WindowMessageEvent
+  | AppInteractionEvent
   | InterruptEvent
   | InterruptAgentEvent
   | ResetEvent

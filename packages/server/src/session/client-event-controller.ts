@@ -80,6 +80,7 @@ export class ClientEventController {
       [ClientEventType.USER_MESSAGE]: (event, connectionId) =>
         this.handleUserMessage(event, connectionId),
       [ClientEventType.WINDOW_MESSAGE]: (event) => this.handleWindowMessage(event),
+      [ClientEventType.APP_INTERACTION]: (event) => this.handleAppInteraction(event),
       [ClientEventType.COMPONENT_ACTION]: (event) => this.handleComponentAction(event),
       [ClientEventType.INTERRUPT]: () => this.deps.getPool()?.interruptAll(),
       [ClientEventType.RESET]: (_event, connectionId) => this.deps.resetSession(connectionId),
@@ -206,6 +207,18 @@ export class ClientEventController {
 
   private async handleWindowMessage(
     event: ClientEventOf<typeof ClientEventType.WINDOW_MESSAGE>,
+  ): Promise<void> {
+    await this.deps.getPool()?.handleTask({
+      type: 'app',
+      messageId: event.messageId,
+      windowId: event.windowId,
+      content: event.content,
+    });
+  }
+
+  /** App interactions use the normal app task path: invoke when idle, steer when active. */
+  private async handleAppInteraction(
+    event: ClientEventOf<typeof ClientEventType.APP_INTERACTION>,
   ): Promise<void> {
     await this.deps.getPool()?.handleTask({
       type: 'app',

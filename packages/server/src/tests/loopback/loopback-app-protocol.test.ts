@@ -41,7 +41,10 @@ afterEach(async () => {
 async function bootAppSession(opts: { answerWith?: unknown; delayMs?: number } = {}) {
   const h = await boot();
   harness = h;
-  const windowKey = h.seedIframeWindow('ai-chat');
+  const windowKey = h.seedIframeWindow('memo');
+  const appState: Record<string, unknown> = {
+    memos: [],
+  };
 
   // The app registers with the protocol the way a real iframe does — a frame on the wire,
   // not a direct call to `notifyAppReady`. `requireAppReady` is a wait like any other.
@@ -53,15 +56,25 @@ async function bootAppSession(opts: { answerWith?: unknown; delayMs?: number } =
   // The browser: sees the request, answers it with the same requestId, on the same socket.
   h.client.onFrame(ServerEventType.APP_PROTOCOL_REQUEST, async (frame) => {
     if (opts.delayMs) await new Promise((r) => setTimeout(r, opts.delayMs));
+    const response =
+      frame.request.kind === 'query'
+        ? { kind: 'query' as const, data: appState[frame.request.stateKey] }
+        : { kind: 'command' as const, result: opts.answerWith ?? 'pong' };
     await h.client.deliver({
       type: ClientEventType.APP_PROTOCOL_RESPONSE,
       requestId: frame.requestId,
       windowId: frame.windowId,
-      response: { kind: 'command', result: opts.answerWith ?? 'pong' },
+      response,
     });
   });
 
-  return { h, windowKey };
+  return {
+    h,
+    windowKey,
+    setState(stateKey: string, value: unknown) {
+      appState[stateKey] = value;
+    },
+  };
 }
 
 /** A turn whose single tool step is the real `command` handler against the real registry. */
@@ -117,7 +130,9 @@ describe('S1 — an app command completes while the client answers on the same s
       'the app-command turn',
     );
 
-    const requests = h.client.framesOf(ServerEventType.APP_PROTOCOL_REQUEST);
+    const requests = h.client
+      .framesOf(ServerEventType.APP_PROTOCOL_REQUEST)
+      .filter((frame) => frame.request.kind === 'command');
     expect(requests).toHaveLength(1);
     expect(requests[0]!.request).toEqual({ kind: 'command', command: 'ping', params: undefined });
     // The frontend relays the postMessage leg and must not run a clock of its own — this
@@ -158,5 +173,63 @@ describe('S1 — an app command completes while the client answers on the same s
 
     await expectSettlesWithin(turn, 500, 'the app-command turn');
     expect(h.registry.tools[0]!.text).toBe('late but real');
+  });
+
+  it('reports whether declared app state changed after the previous handoff', async () => {
+    const { h, windowKey, setState } = await bootAppSession();
+    h.registry.onTurn(() => [{ kind: 'text', content: 'done' }]);
+
+    await expectSettlesWithin(
+      h.client.deliverAsync({
+        type: ClientEventType.WINDOW_MESSAGE,
+        messageId: 'm1',
+        windowId: windowKey,
+        content: 'first invocation',
+      }),
+      500,
+      'the first app turn and its handoff snapshot',
+    );
+    expect(h.registry.turns[0]!.prompt).not.toContain('<app_state_since_handoff');
+
+    setState('memos', [{ id: 'user-1', title: 'Edited after handoff' }]);
+
+    await expectSettlesWithin(
+      h.client.deliverAsync({
+        type: ClientEventType.WINDOW_MESSAGE,
+        messageId: 'm2',
+        windowId: windowKey,
+        content: 'second invocation',
+      }),
+      500,
+      'the changed-state app turn',
+    );
+    expect(h.registry.turns[1]!.prompt).toContain('<app_state_since_handoff changed="true" />');
+
+    await expectSettlesWithin(
+      h.client.deliverAsync({
+        type: ClientEventType.WINDOW_MESSAGE,
+        messageId: 'm3',
+        windowId: windowKey,
+        content: 'third invocation',
+      }),
+      500,
+      'the unchanged-state app turn',
+    );
+    expect(h.registry.turns[2]!.prompt).toContain('<app_state_since_handoff changed="false" />');
+  });
+
+  it('sendInteraction invokes the app agent when it is idle', async () => {
+    const { h, windowKey } = await bootAppSession();
+    h.registry.onTurn(() => [{ kind: 'text', content: 'handled interaction' }]);
+
+    await h.client.deliver({
+      type: ClientEventType.APP_INTERACTION,
+      messageId: 'activity-1',
+      windowId: windowKey,
+      content: '<app_interaction>User changed status to done</app_interaction>',
+    });
+
+    expect(h.registry.turns).toHaveLength(1);
+    expect(h.registry.turns[0]!.prompt).toContain('User changed status to done');
   });
 });

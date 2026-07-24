@@ -273,3 +273,18 @@ sequenceDiagram
 
 Monitor and app agents run genuinely in parallel; the timeline is what keeps the orchestrator's
 picture of the desktop consistent afterward.
+
+### App state across app-agent handoffs
+
+Immediately before an app agent is released, YAAR reads every state key declared by that
+app's App Protocol and retains one aggregate fingerprint. Before the next invocation, it
+reads the same declared state again and compares the fingerprints. The new prompt receives
+only `<app_state_since_handoff changed="true|false" />`; app data itself is not copied into
+the prompt. A changed agent can query the authoritative state it needs.
+
+This detects user edits, timers, and any other app-state mutation without waking an idle
+agent or requiring the app to emit an event. It reports a net state change, not an event
+history: a value changed and then restored before the next invocation compares unchanged.
+
+`app.sendInteraction()` remains instruction delivery. It invokes an idle app agent or steers
+the active turn; it is not accumulated as handoff state.

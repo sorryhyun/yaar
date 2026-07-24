@@ -19,12 +19,16 @@ import {
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 import { appAgentKey } from './agent-pool.js';
+import { AppStateHandoffStore, formatAppStateHandoffNotice } from './app-state-handoff.js';
+import { captureDeclaredAppState } from '../features/window/app-protocol.js';
 
 export class AppTaskProcessor {
   /** Track the most recent windowId per `{monitorId}::{appId}` (for tool resolution). */
   private activeWindows = new Map<string, string>();
   /** Cached agent profiles per appId (a profile depends only on the app). */
   private profiles = new Map<string, AgentProfile>();
+  /** Fingerprints captured immediately before an app agent is released. */
+  private handoffState = new AppStateHandoffStore();
 
   constructor(private readonly ctx: PoolContext) {}
 
@@ -124,13 +128,17 @@ export class AppTaskProcessor {
         this.profiles.set(appId, profile);
       }
 
+      const stateKeys = profile.appStateKeys ?? [];
+      const stateNotice = await this.buildHandoffNotice(windowId, stateKeys);
+      const prompt = stateNotice ? `${stateNotice}\n\n${task.content}` : task.content;
+
       const { fp } = buildReloadContext(this.ctx, task, {
         currentWindowId: windowId,
       });
       const source = windowSource(windowId);
 
       // Record user message
-      this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
+      this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, prompt, source);
 
       // Capture the app-agent's response text for relaying to the monitor
       let appResponseText = '';
@@ -140,7 +148,7 @@ export class AppTaskProcessor {
         role: agentRole,
         source,
         task,
-        prompt: task.content,
+        prompt,
         fp,
         windowId,
         // The turn runs on the window's monitor, not the sender's — this scopes the
@@ -201,6 +209,7 @@ export class AppTaskProcessor {
           }
         },
         onFinally: async () => {
+          await this.captureHandoffState(windowId, stateKeys);
           await this.sendWindowStatus(windowId, agentRole, 'released');
         },
       });
@@ -256,6 +265,7 @@ export class AppTaskProcessor {
 
     // Clear processing state so the agent isn't stuck in "busy" state
     this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
+    this.handoffState.forget(windowId);
   }
 
   /**
@@ -266,6 +276,7 @@ export class AppTaskProcessor {
     for (const key of this.activeWindows.keys()) {
       if (key.startsWith(prefix)) this.activeWindows.delete(key);
     }
+    this.handoffState.forgetMonitor(monitorId);
   }
 
   /**
@@ -274,6 +285,34 @@ export class AppTaskProcessor {
   disposeAll(): void {
     this.activeWindows.clear();
     this.profiles.clear();
+    this.handoffState.clear();
+  }
+
+  private async buildHandoffNotice(
+    windowId: string,
+    stateKeys: readonly string[],
+  ): Promise<string> {
+    if (stateKeys.length === 0 || !this.handoffState.has(windowId)) return '';
+    const current = await captureDeclaredAppState(
+      this.ctx.windowState,
+      windowId,
+      stateKeys,
+      this.ctx.sessionId,
+    );
+    if (!current) return '';
+    const changed = this.handoffState.changedSinceHandoff(windowId, current);
+    return changed === undefined ? '' : formatAppStateHandoffNotice(changed);
+  }
+
+  private async captureHandoffState(windowId: string, stateKeys: readonly string[]): Promise<void> {
+    if (stateKeys.length === 0) return;
+    const state = await captureDeclaredAppState(
+      this.ctx.windowState,
+      windowId,
+      stateKeys,
+      this.ctx.sessionId,
+    );
+    if (state) this.handoffState.remember(windowId, state);
   }
 
   private async processQueue(processingKey: string): Promise<void> {
