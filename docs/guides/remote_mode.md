@@ -123,6 +123,31 @@ Instead of localhost.run, you can tunnel through your own server:
 
 Auth priority: `privateKeyPath` → `password` → `SSH_AUTH_SOCK` agent.
 
+### Tailscale Serve (managed, tailnet-only)
+
+Instead of a public tunnel, YAAR can expose itself over your [Tailscale](https://tailscale.com) tailnet. Only devices already on your tailnet can reach it — this is network-layer auth, strictly stronger than a public URL gated by a token. It also gives you a real HTTPS certificate (`https://<host>.<tailnet>.ts.net`) with no extra setup.
+
+Create `config/tunnel.json`:
+```json
+{ "service": "tailscale" }
+```
+
+The banner and QR then show the MagicDNS URL:
+```
+║  Tunnel:  https://my-box.tailnet-abc.ts.net/#remote=<token>   (tailnet-only)
+```
+
+**Requirements:**
+- The `tailscale` CLI installed and logged into a tailnet (`tailscale up`). YAAR checks `tailscale status` and falls back to LAN-only if the daemon isn't running.
+- **HTTPS certificates enabled** for the tailnet — turn on MagicDNS and HTTPS Certificates in the [admin console](https://login.tailscale.com/admin/dns). Without this, `serve --https=443` fails and YAAR prints the fix.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `service` | `"tailscale"` | — | Selects the Tailscale Serve provider |
+| `tailscalePath` | string | discovered on `PATH` (and macOS app bundle) | Absolute path to the `tailscale` binary |
+
+**How it differs from the SSH tunnel:** there's no reverse tunnel to manage — `tailscaled` already holds the connection. YAAR just registers a serve rule (`https://…ts.net:443 → http://127.0.0.1:{PORT}`) at startup and turns it off on shutdown. Reconnect/keepalive are the daemon's job, so there's no backoff loop. Because only `tailscaled` (on loopback) and the tailnet reach the server, the public surface is your tailnet, not the whole internet.
+
 ### Tunnel Behavior
 
 - Only activates in remote mode (`REMOTE=1` or bundled exe)
@@ -152,7 +177,7 @@ bore local 8000 --to bore.pub
 ```
 
 **Tailscale:**
-No tunnel needed — devices on your tailnet can connect directly.
+Devices on your tailnet can connect directly to the LAN URL. For a managed setup with an HTTPS MagicDNS URL in the banner/QR, use the built-in [Tailscale Serve](#tailscale-serve-managed-tailnet-only) provider (`config/tunnel.json` → `{ "service": "tailscale" }`) instead.
 
 When using an external tunnel, the frontend's connection dialog accepts the tunnel URL as the server URL.
 

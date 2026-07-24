@@ -29,9 +29,9 @@ import { initSessionHub } from './session/session-hub.js';
 import { setAccessRoleResolver } from './handlers/uri-registry.js';
 import { getAgentRole } from './agents/agent-context.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
-import { loadTunnelConfig, SshTunnel } from './lib/tunnel/index.js';
+import { loadTunnelConfig, createTunnel, type TunnelProvider } from './lib/tunnel/index.js';
 
-let activeTunnel: SshTunnel | null = null;
+let activeTunnel: TunnelProvider | null = null;
 
 /**
  * Initialize all subsystems (storage, MCP, warm pool, session restore).
@@ -84,7 +84,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     const tunnelConfig = loadTunnelConfig();
     if (tunnelConfig?.disabled !== true) {
       const config = tunnelConfig ?? { service: 'localhost.run' as const };
-      const tunnel = new SshTunnel(config, getPort());
+      const tunnel = createTunnel(config, getPort());
       const ok = await tunnel.connect();
       if (ok) {
         activeTunnel = tunnel;
@@ -348,7 +348,7 @@ export async function shutdown(server: Server<any>): Promise<void> {
   }, 5_000);
 
   try {
-    // Close SSH tunnel
+    // Close the active tunnel (SSH reverse tunnel or Tailscale Serve)
     if (activeTunnel) {
       await activeTunnel.shutdown();
       activeTunnel = null;

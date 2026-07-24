@@ -64,6 +64,15 @@ export function loadTunnelConfig(): TunnelConfig | null {
     return { service: 'localhost.run' };
   }
 
+  // Tailscale Serve — no host/username needed; optional binary path override
+  if (parsed.service === 'tailscale') {
+    const config: TunnelConfig = { service: 'tailscale' };
+    if (typeof parsed.tailscalePath === 'string') {
+      config.tailscalePath = resolvePath(parsed.tailscalePath);
+    }
+    return config;
+  }
+
   // Custom SSH server — host and username required
   if (typeof parsed.host !== 'string' || !parsed.host) {
     console.warn('[Tunnel] config/tunnel.json missing required field: host');

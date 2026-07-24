@@ -9,7 +9,7 @@
 
 import { readFileSync } from 'fs';
 import net from 'net';
-import type { TunnelConfig } from './types.js';
+import type { TunnelConfig, TunnelProvider } from './types.js';
 import { findSshKey } from './config.js';
 
 const TAG = '[Tunnel]';
@@ -19,7 +19,7 @@ const RECONNECT_MAX_DELAY = 30_000;
 const SHUTDOWN_TIMEOUT = 3_000;
 const SERVICE_URL_TIMEOUT = 15_000;
 
-export class SshTunnel {
+export class SshTunnel implements TunnelProvider {
   private client: import('ssh2').Client | null = null;
   private localPort: number;
   private config: TunnelConfig;
