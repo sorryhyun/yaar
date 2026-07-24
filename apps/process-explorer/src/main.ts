@@ -350,10 +350,13 @@ function StatusBar() {
   `;
 }
 
+// Registered once at module scope, never from a lifecycle hook: a component
+// remount must not re-register the protocol.
+registerProtocol();
+
 function App() {
   onMount(() => {
     startWatching();
-    registerProtocol();
   });
 
   return html`

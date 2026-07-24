@@ -258,10 +258,13 @@ function App() {
   `;
 }
 
+// Registered once at module scope, never from a lifecycle hook: a component
+// remount must not re-register the protocol.
+registerProtocol();
+
 render(() => {
   onMount(() => {
     loadMemos();
-    registerProtocol();
   });
   return html`<${App} />`;
 }, document.getElementById('app')!);

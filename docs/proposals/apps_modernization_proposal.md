@@ -1,6 +1,6 @@
 # Proposal: Apps Modernization — closing the drift between the apps and the platform
 
-**Status:** Phase 0 shipped (2026-07-24). Phases 1–5 and the enforcement guards are open.
+**Status:** Phases 0 and 1 shipped (2026-07-24). Phases 2–5 and the enforcement guards are open.
 **Scope:** `apps/*`, `user-apps/*`, `packages/compiler` (new guards), app-dev agent guidance
 **Companion:** [`app_dsl_proposal.md`](./app_dsl_proposal.md) — platform-level changes (defineApp, Zod-first schemas, replay semantics). This proposal is about bringing the *existing* 25 apps up to the conventions the platform already has, and adding enforcement so they stay there.
 
@@ -42,7 +42,8 @@ Compounding it, only ~5/25 apps validate JSON at trust boundaries with `@bundled
 
 The server replays recorded app commands on iframe remount (see companion proposal for the
 platform fix). Independent of that, 5 apps tie `app.register()` to component lifecycle, so a
-remount re-registers:
+remount re-registers — **[Phase 1 — done]**, along with a 6th the audit missed
+(thesingularity-reader):
 
 - inside `onMount`: `anima/src/ui/App.ts:49-65`, `dc-comics/src/main.ts:18-24`,
   `memo/src/main.ts:261-266`, `process-explorer` (root component)
@@ -162,13 +163,63 @@ every app with 0 failures; extracted `dist/protocol.json` matches the updated SK
 verified by exercise: the runtime login flow and the dedup suppression were not driven
 through the browser.
 
-### Phase 1 — registration timing (half day)
+### Phase 1 — registration timing ✅ **DONE** (2026-07-24)
 
-Move `app.register()`/`registerProtocol()` to a single module-level call in the 5 lifecycle-tied
-apps (anima, dc-comics, memo, process-explorer, curious-library-vn). Where registration needs
-state that only exists after mount, use the existing `createProtocolContext` seam
-(video-editor-lite already demonstrates the pattern). This is mechanical and eliminates the
-re-register-on-remount class outright.
+Registration moved to a single module-level call in **6** apps — the 5 the audit listed plus
+**thesingularity-reader**, which the audit missed (`src/main.ts:22`, first statement of the
+same `onMount(async …)` shape as dc-comics). Confirm the count before believing the audit's
+list; the grep that finds them all is `app\.register|registerProtocol` across both app roots.
+
+`createProtocolContext` turned out to be unnecessary: every one of the six registers from
+module-scope bindings only (signals, stores, and action functions), so no post-mount state had
+to be threaded. The five no-arg cases were a two-line move each. anima was the only one taking
+deps — its 14-key `ProtocolDeps` literal moved out of `ui/App.ts`'s `onMount` into a new
+`src/app/register.ts` exporting `registerAppProtocol()`, called from `main.ts` at module scope
+(mirroring the existing `installHeadlessHook()` wiring). That also freed six now-unused imports
+from `ui/App.ts` (`registerProtocol`, `batchGenerate`, `lastBatch`, `lastResult`,
+`setLastBatch`, `setLastResult`).
+
+Registering *earlier* than before is safe and was checked, not assumed: `export const app =
+y.app` in the SDK shim reads `window.yaar` at module-eval time, and the compiler injects the
+SDK as inline synchronous `<script>` ahead of the app bundle — which is why the ~16 apps that
+already registered at module scope work. Nothing moved across an `await`, either: in all six,
+the call was the first statement of its hook, so no handler-visible state is initialized any
+later than before.
+
+**Versions bumped:** memo 1.0.0 → 1.0.1, anima 0.2.0 → 0.2.1, dc-comics 1.1.1 → 1.1.2,
+curious-library-vn 1.2.0 → 1.2.1, thesingularity-reader 2.0.0 → 2.0.1. process-explorer is
+`kind: "system"` and stays at 1.1.0.
+
+**Verified:** `bun run typecheck` clean; `bun run build:apps` recompiled exactly the 6 touched
+apps, 0 failures, and their extracted `dist/protocol.json` manifests are unchanged (state /
+command / event counts identical — moving the call does not disturb static extraction).
+
+Runtime, in one dev-server run: all six app bundles were loaded as iframes from a same-origin
+host page with a `yaar:app-ready` listener attached — **6 apps, 6 handshakes, exactly one
+each**, which is the direct observable for "registration fired from module scope." Then memo
+and process-explorer were driven as real desktop windows through the palette; `addMemo` +
+`memos`/`stats` reads round-tripped correctly.
+
+**A trap worth documenting.** The first end-to-end run showed one `addMemo` writing *two* rows
+1 ms apart, with `[AppProtocol] Reply for unknown request … Duplicate reply` in the server log.
+This was not the code change: `make claude-dev` auto-opens its own Chrome at localhost:8000, so
+the driving tab was a **second connection on the same session** (`Connection added … (total: 2)`),
+and both clients relayed the command to their own copy of the iframe. Closing the auto-opened
+window and re-running produced exactly one row and zero duplicate-reply warnings. CLAUDE.md
+warns about driving YAAR from inside YAAR; this is the adjacent hazard — two live desktop
+clients silently double every app command. Check `Connection added … (total: N)` in the server
+log before trusting any app-command observation.
+
+dc-comics, thesingularity-reader, curious-library-vn and anima were not driven through their
+full UI: the first two need external network/auth (the DC gallery, a site login) and anima needs
+WebGPU plus multi-GB weights. Their registration is verified by the app-ready probe above and
+their compile is clean, but their command paths were not exercised.
+
+Unrelated pre-existing violation surfaced while checking: `user-apps/dc-comics/src/fetcher.ts:321`
+hand-rolls `new Promise(r => setTimeout(r, ms))`, an ERROR-level `no-promise-sleep` hit
+(`wait(ms)` from `@bundled/yaar` is the fix). It goes unreported by default because
+`check:apps` scans only `apps/*/src` — **the 11 user-apps are outside the checker's default
+sweep**, so pass them explicitly when validating a phase.
 
 ### Phase 2 — SDK-primitive adoption sweep (1–2 days)
 
