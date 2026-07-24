@@ -3,7 +3,11 @@
  */
 import { describe, it, expect, beforeEach } from 'bun:test';
 import { useDesktopStore } from '../../store/desktop';
-import { selectVisibleWindows, selectWindowsInOrder } from '../../store/selectors';
+import {
+  selectHasMaximizedWindow,
+  selectVisibleWindows,
+  selectWindowsInOrder,
+} from '../../store/selectors';
 
 // Window store keys are scoped by monitorId: "0/w1"
 const key = (id: string) => `0/${id}`;
@@ -21,6 +25,7 @@ describe('Desktop Store', () => {
       activityLog: [],
       providerType: null,
       sessionId: null,
+      activeMonitorId: '0',
     });
   });
 
@@ -258,6 +263,29 @@ describe('Desktop Store', () => {
 
       const inOrder = selectWindowsInOrder(useDesktopStore.getState());
       expect(inOrder.map((w) => w.id)).toEqual([key('w2'), key('w1')]);
+    });
+
+    it('selectHasMaximizedWindow only matches visible fullscreen windows on the active monitor', () => {
+      const { applyAction } = useDesktopStore.getState();
+
+      applyAction({
+        type: 'window.create',
+        windowId: 'w1',
+        title: 'Fullscreen',
+        bounds: { x: 0, y: 0, w: 100, h: 100 },
+        content: { renderer: 'text', data: '' },
+        monitorId: '0',
+      } as Parameters<typeof applyAction>[0]);
+      applyAction({ type: 'window.maximize', windowId: 'w1' });
+
+      expect(selectHasMaximizedWindow(useDesktopStore.getState())).toBe(true);
+
+      useDesktopStore.setState({ activeMonitorId: '1' });
+      expect(selectHasMaximizedWindow(useDesktopStore.getState())).toBe(false);
+
+      useDesktopStore.setState({ activeMonitorId: '0' });
+      applyAction({ type: 'window.minimize', windowId: 'w1' });
+      expect(selectHasMaximizedWindow(useDesktopStore.getState())).toBe(false);
     });
   });
 

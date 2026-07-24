@@ -65,7 +65,7 @@ export function getSnapBounds(zone: SnapZone): WindowBounds {
 
   switch (zone) {
     case 'top':
-      return { x: 0, y: 0, w: vw, h: usableH };
+      return { x: 0, y: 0, w: vw, h: vh };
     case 'left':
       return { x: 0, y: 0, w: halfW, h: usableH };
     case 'right':

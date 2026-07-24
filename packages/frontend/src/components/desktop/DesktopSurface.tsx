@@ -11,7 +11,7 @@
  * - Composition of sub-components
  */
 import { useCallback, useEffect, useState, useRef } from 'react';
-import { useDesktopStore, selectPanelWindows } from '@/store';
+import { useDesktopStore, selectHasMaximizedWindow, selectPanelWindows } from '@/store';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
@@ -38,6 +38,7 @@ import styles from '@/styles/desktop/DesktopSurface.module.css';
 export function DesktopSurface() {
   const setSelectedWindows = useDesktopStore((s) => s.setSelectedWindows);
   const panelWindows = useDesktopStore(useShallow(selectPanelWindows));
+  const hasMaximizedWindow = useDesktopStore(selectHasMaximizedWindow);
   const focusedWindowId = useDesktopStore((s) => s.focusedWindowId);
   const cliMode = useDesktopStore((s) => s.cliMode);
   const switchMonitor = useDesktopStore((s) => s.switchMonitor);
@@ -361,7 +362,9 @@ export function DesktopSurface() {
         onDragLeave={handleDesktopDragLeave}
         onDrop={handleDesktopDrop}
       >
-        <DesktopStatusBar interrupt={interrupt} interruptAgent={interruptAgent} />
+        <div hidden={hasMaximizedWindow}>
+          <DesktopStatusBar interrupt={interrupt} interruptAgent={interruptAgent} />
+        </div>
 
         <DesktopIcons selectedAppIds={selectedAppIds} sendMessage={sendMessage} />
 
@@ -399,7 +402,9 @@ export function DesktopSurface() {
       </div>
 
       <DrawingOverlay />
-      <CommandPalette />
+      <div hidden={hasMaximizedWindow}>
+        <CommandPalette />
+      </div>
       <ToastContainer onToastAction={sendToastAction} />
       <ConfirmDialog />
       <UserPrompt />

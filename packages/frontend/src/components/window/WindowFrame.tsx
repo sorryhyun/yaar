@@ -16,7 +16,6 @@ import { exportContent } from '@/lib/exportContent';
 import { useDragWindow } from '@/hooks/useDragWindow';
 import { useResizeWindow } from '@/hooks/useResizeWindow';
 import { useWindowDrop } from '@/hooks/useWindowDrop';
-import { COMMAND_PALETTE_HEIGHT } from '@/constants/layout';
 import styles from '@/styles/window/WindowFrame.module.css';
 
 interface WindowFrameProps {
@@ -25,6 +24,9 @@ interface WindowFrameProps {
   isFocused: boolean;
   hidden?: boolean;
 }
+
+const TITLE_BAR_DOUBLE_CLICK_MS = 250;
+const TITLE_BAR_CLICK_MOVE_TOLERANCE = 3;
 
 function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProps) {
   const { t } = useTranslation();
@@ -92,6 +94,8 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   } | null>(null);
 
   const frameRef = useRef<HTMLDivElement>(null);
+  const titleBarMouseDownRef = useRef<{ x: number; y: number } | null>(null);
+  const lastTitleBarClickRef = useRef<number | null>(null);
   const listenersRef = useRef<
     Array<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void }>
   >([]);
@@ -138,9 +142,43 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
     (e: React.MouseEvent) => {
       if ((e.target as HTMLElement).closest(`.${styles.controls}`)) return;
       if ((e.target as HTMLElement).closest(`.${styles.widgetClose}`)) return;
+      titleBarMouseDownRef.current = { x: e.clientX, y: e.clientY };
       handleDragStart(e);
     },
     [handleDragStart],
+  );
+
+  const handleTitleBarClick = useCallback(
+    (e: React.MouseEvent) => {
+      if ((e.target as HTMLElement).closest(`.${styles.controls}`)) return;
+      const start = titleBarMouseDownRef.current;
+      titleBarMouseDownRef.current = null;
+      if (
+        !start ||
+        Math.abs(e.clientX - start.x) > TITLE_BAR_CLICK_MOVE_TOLERANCE ||
+        Math.abs(e.clientY - start.y) > TITLE_BAR_CLICK_MOVE_TOLERANCE
+      ) {
+        lastTitleBarClickRef.current = null;
+        return;
+      }
+
+      const now = performance.now();
+      const previousClick = lastTitleBarClickRef.current;
+      lastTitleBarClickRef.current = now;
+      if (previousClick === null) return;
+
+      const elapsed = now - previousClick;
+      if (elapsed <= 0 || elapsed > TITLE_BAR_DOUBLE_CLICK_MS) return;
+
+      lastTitleBarClickRef.current = null;
+      const current = useDesktopStore.getState().windows[window.id];
+      if (!current) return;
+      useDesktopStore.getState().applyAction({
+        type: current.maximized ? 'window.restore' : 'window.maximize',
+        windowId: window.id,
+      });
+    },
+    [window.id],
   );
 
   // Widget drag: combines focus + drag on frame mousedown
@@ -180,10 +218,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       top: 0,
       left: 0,
       width: '100%',
-      // Reserve the palette's footprint. Previously `100%`, so a maximized window
-      // ran full-bleed underneath the palette — the palette only won visually
-      // because its z-index outranks the window's, hiding content behind it.
-      height: `calc(100% - ${COMMAND_PALETTE_HEIGHT}px)`,
+      height: '100%',
       zIndex: zIndex + 100,
     };
   } else if (isWidget) {
@@ -238,7 +273,11 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
 
       {/* Title bar — standard variant only (hidden for frameless) */}
       {!isWidget && !isPanel && !isFrameless && (
-        <div className={styles.titleBar} onMouseDown={handleTitleBarDragStart}>
+        <div
+          className={styles.titleBar}
+          onMouseDown={handleTitleBarDragStart}
+          onClick={handleTitleBarClick}
+        >
           <div className={styles.titleSection}>
             <div className={styles.title}>{window.title}</div>
             {window.locked && (

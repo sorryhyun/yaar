@@ -19,6 +19,7 @@ export {
   selectAllIframeWindows,
   selectWidgetWindows,
   selectPanelWindows,
+  selectHasMaximizedWindow,
   selectToasts,
   selectNotifications,
   selectDialogs,

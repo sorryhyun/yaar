@@ -79,6 +79,18 @@ export const selectWidgetWindows = createCachedWindowSelector(
 
 export const selectPanelWindows = createCachedWindowSelector((w) => w.variant === 'panel');
 
+/** Whether a visible standard window fills the active monitor. */
+export const selectHasMaximizedWindow = (state: DesktopStore): boolean =>
+  Object.values(state.windows).some(
+    (w) =>
+      w != null &&
+      w.maximized &&
+      !w.minimized &&
+      !w.windowStyle &&
+      (!w.variant || w.variant === 'standard') &&
+      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
+  );
+
 export const selectToasts = (state: DesktopStore) => Object.values(state.toasts);
 
 export const selectNotifications = (state: DesktopStore) => Object.values(state.notifications);

@@ -9,9 +9,9 @@ export const TASKBAR_HEIGHT = 36;
  * Vertical space the command palette occupies at the bottom of the viewport:
  * the minimized-tab slot (36) + the input bar (~56) + its bottom margin (12).
  *
- * Maximized windows subtract this so their content never sits under the palette.
- * Re-exported from `@yaar/shared` rather than redeclared: the server's window
- * placement reserves the same strip when centering, and two copies would drift.
+ * Re-exported from `@yaar/shared` rather than redeclared: the server's normal
+ * window placement reserves the same strip when centering, and two copies would
+ * drift. Maximized windows hide the palette and use the full viewport.
  */
 export const COMMAND_PALETTE_HEIGHT = WINDOW_PLACEMENT.paletteInset;
 

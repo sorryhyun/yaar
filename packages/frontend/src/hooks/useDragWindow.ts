@@ -48,29 +48,17 @@ export function useDragWindow({
       const isStandard = !variant || variant === 'standard';
       const canSnap = isStandard && !frameless;
 
-      // Unsnap: if window has previousBounds (snapped) or is maximized, restore original size under cursor
+      // Capture the pre-drag size so top-edge maximize restores to the window's
+      // original bounds rather than its last in-flight drag position.
       const store = useDesktopStore.getState();
       const currentWin = store.windows[windowId];
-      if (currentWin && (currentWin.maximized || currentWin.previousBounds) && isStandard) {
-        const prev = currentWin.previousBounds ?? currentWin.bounds;
-        const restoredW = prev.w;
-        const restoredH = prev.h;
-        // Center restored window horizontally under cursor, keep cursor at titlebar y
-        const restoredX = e.clientX - restoredW / 2;
-        const restoredY = e.clientY - TITLEBAR_CENTER_OFFSET; // middle of titlebar
-        useDesktopStore.setState((s) => {
-          const win = s.windows[windowId];
-          if (win) {
-            win.bounds = { x: restoredX, y: Math.max(0, restoredY), w: restoredW, h: restoredH };
-            win.maximized = false;
-            win.previousBounds = undefined;
-          }
-        });
-        dragOffset.current = {
-          x: e.clientX - restoredX,
-          y: e.clientY - Math.max(0, restoredY),
-        };
-      } else {
+      const shouldRestoreOnDrag =
+        !!currentWin && (currentWin.maximized || !!currentWin.previousBounds) && isStandard;
+      const preDragBounds = {
+        ...(currentWin?.previousBounds ?? currentWin?.bounds ?? bounds),
+      };
+
+      if (!shouldRestoreOnDrag) {
         dragOffset.current = {
           x: e.clientX - bounds.x,
           y: e.clientY - bounds.y,
@@ -91,6 +79,33 @@ export function useDragWindow({
         ) {
           return;
         }
+
+        // A click or double-click must not restore a maximized window. Wait
+        // until the pointer actually moves before restoring it under the cursor.
+        if (!didMove && shouldRestoreOnDrag) {
+          const restoredW = preDragBounds.w;
+          const restoredH = preDragBounds.h;
+          const restoredX = e.clientX - restoredW / 2;
+          const restoredY = Math.max(0, e.clientY - TITLEBAR_CENTER_OFFSET);
+          useDesktopStore.setState((s) => {
+            const win = s.windows[windowId];
+            if (win) {
+              win.bounds = {
+                x: restoredX,
+                y: restoredY,
+                w: restoredW,
+                h: restoredH,
+              };
+              win.maximized = false;
+              win.previousBounds = undefined;
+            }
+          });
+          dragOffset.current = {
+            x: e.clientX - restoredX,
+            y: e.clientY - restoredY,
+          };
+        }
+
         didMove = true;
         const vw =
           typeof globalThis.innerWidth === 'number'
@@ -127,9 +142,17 @@ export function useDragWindow({
         document.documentElement.classList.remove(DRAGGING_CSS_CLASS);
 
         // Snap on drop
-        if (canSnap) {
+        if (canSnap && didMove) {
           const zone = detectSnapZone(e.clientX, e.clientY);
-          if (zone) {
+          if (zone === 'top') {
+            useDesktopStore.setState((s) => {
+              const win = s.windows[windowId];
+              if (win) {
+                win.previousBounds = { ...preDragBounds };
+                win.maximized = true;
+              }
+            });
+          } else if (zone) {
             useDesktopStore.getState().userSnapWindow(windowId, getSnapBounds(zone));
           }
           setSnapPreviewBounds(null);
@@ -142,7 +165,7 @@ export function useDragWindow({
       };
       const cleanup = registerMouseTracking(handleMouseMove, handleMouseUp, listenersRef);
     },
-    [windowId, bounds.x, bounds.y, variant, frameless, listenersRef],
+    [windowId, bounds, variant, frameless, listenersRef],
   );
 
   return { isDragging, snapPreviewBounds, handleDragStart };
