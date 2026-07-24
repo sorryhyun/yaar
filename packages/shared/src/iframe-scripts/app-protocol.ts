@@ -16,8 +16,56 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   var registration = null;
   var aliasMap = {};  // alias → canonical command name
 
+  // Validate the register() shape up front and throw naming the exact missing field.
+  // Without this, a missing appId/name/description silently becomes \`undefined\` in the
+  // manifest, and a missing handler throws a bare "handler is not a function" only when
+  // the state key or command is later invoked — an error that names neither the app nor
+  // the field. The authoring types require these fields; this makes the runtime agree.
+  function validateRegistration(config) {
+    if (!config || typeof config !== 'object') {
+      throw new Error('[yaar] app.register(config) requires a config object { appId, name, state, commands }.');
+    }
+    var problems = [];
+    if (typeof config.appId !== 'string' || !config.appId) {
+      problems.push('missing required field "appId" (a stable string id for this app)');
+    }
+    if (typeof config.name !== 'string' || !config.name) {
+      problems.push('missing required field "name" (the human-readable app name)');
+    }
+    function checkDescriptors(bag, kind, needsHandler) {
+      if (bag == null) return;
+      if (typeof bag !== 'object') {
+        problems.push('"' + kind + '" must be an object mapping names to descriptors');
+        return;
+      }
+      for (var key in bag) {
+        if (!Object.prototype.hasOwnProperty.call(bag, key)) continue;
+        var d = bag[key];
+        var at = kind + '["' + key + '"]';
+        if (!d || typeof d !== 'object') {
+          problems.push(at + ' must be a descriptor object' + (needsHandler ? ' { description, handler }' : ' { description }'));
+          continue;
+        }
+        if (typeof d.description !== 'string' || !d.description) {
+          problems.push(at + ' is missing required field "description"');
+        }
+        if (needsHandler && typeof d.handler !== 'function') {
+          problems.push(at + ' is missing required field "handler" (a function' + (kind === 'state' ? ' returning the state value)' : ' handling the command)'));
+        }
+      }
+    }
+    checkDescriptors(config.state, 'state', true);
+    checkDescriptors(config.commands, 'commands', true);
+    checkDescriptors(config.events, 'events', false);
+    if (problems.length) {
+      var who = (typeof config.appId === 'string' && config.appId) ? ' for app "' + config.appId + '"' : '';
+      throw new Error('[yaar] app.register()' + who + ' is invalid:\\n  - ' + problems.join('\\n  - '));
+    }
+  }
+
   window.yaar.app = {
     register: function(config) {
+      validateRegistration(config);
       registration = config;
       // Build alias lookup map
       aliasMap = {};

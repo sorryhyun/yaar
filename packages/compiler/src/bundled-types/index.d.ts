@@ -753,6 +753,26 @@ declare module '@bundled/yaar' {
   export const windows: YaarWindows;
 
   /**
+   * Importable shapes for `app.register({...})`. Annotate the registration (or a
+   * descriptor map) with these to get completion and a compile-time error naming
+   * any missing field, instead of reverse-engineering the shape from a runtime
+   * failure. The extractor follows a top-level `const`, so this stays extractable:
+   *
+   * ```ts
+   * import { app, type AppRegistration } from '@bundled/yaar';
+   * const registration: AppRegistration = { appId, name, state, commands };
+   * app.register(registration);
+   * ```
+   *
+   * `AppStateDescriptor` is the handler-carrying authoring shape — distinct from the
+   * handler-less manifest type of the same name in `@yaar/shared` (the wire format).
+   */
+  export type AppRegistration = YaarAppRegistration;
+  export type AppStateDescriptor<T = unknown> = YaarAppStateDescriptor<T>;
+  export type AppCommandDescriptor<P = unknown, R = unknown> = YaarAppCommandDescriptor<P, R>;
+  export type AppEventDescriptor = YaarAppEventDescriptor;
+
+  /**
    * Declare a command for `app.register({ commands })`, deriving the handler's
    * parameter type from the `params` JSON Schema.
    *

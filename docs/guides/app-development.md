@@ -744,6 +744,35 @@ export function registerProtocol() {
 }
 ```
 
+### Typing the registration — `AppRegistration` and friends
+
+`@bundled/yaar` exports the authoring shapes so you don't have to reverse-engineer them
+from a runtime failure: `AppRegistration`, `AppStateDescriptor`, `AppCommandDescriptor`,
+`AppEventDescriptor`. Annotate a top-level `const` (the extractor follows it) to get
+completion and a compile-time error naming any missing field:
+
+```typescript
+import { app, type AppRegistration } from '@bundled/yaar';
+
+const registration: AppRegistration = {
+  appId: 'my-app',
+  name: 'My App',
+  state: { items: { description: 'Current items', handler: () => [...items()] } },
+  commands: {},
+};
+//    ^ tsc: a state descriptor missing `handler`, or a registration missing
+//      `appId`/`name`, is flagged here — not at runtime.
+
+app.register(registration);
+```
+
+`AppStateDescriptor` is the handler-carrying authoring shape — do **not** import the
+same-named type from `@yaar/shared`, which is the handler-less *wire manifest* type.
+
+At runtime, `app.register()` also validates the shape and throws an error naming the exact
+missing field (e.g. `state["items"] is missing required field "handler"`), so a malformed
+registration fails loudly at registration time instead of much later on first invocation.
+
 ### `defineCommand` — infer the handler's params from the schema
 
 A command declares its parameter shape twice: once as the `params` JSON Schema the

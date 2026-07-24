@@ -144,7 +144,12 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         for (var i = links.length - 1; i >= 0; i--) links[i].remove();
         // Strip ALL url() except data: URIs from inline styles — any non-data
         // URL in foreignObject-as-image taints the canvas, even same-origin ones.
-        var urlNotData = /url\\s*\\(\\s*["']?(?!data:)[^)]*\\)/g;
+        // The lookahead must swallow the quote/whitespace itself ([\\s"']*), not sit
+        // after it: getComputedStyle() emits url("data:...") WITH double quotes, and a
+        // quote-first pattern (["']?(?!data:)) — or one with a separate \\s* the engine
+        // can backtrack to zero — lets the lookahead pass at the quote and strips the
+        // very data-URI backgrounds we mean to keep.
+        var urlNotData = /url\\s*\\(\\s*(?![\\s"']*data:)[^)]*\\)/g;
         var all = clone.querySelectorAll('*');
         for (var i = 0; i < all.length; i++) {
           try {

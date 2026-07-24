@@ -31,7 +31,7 @@ const DEFAULTS: Settings = {
   accentColor: 'blue',
   iconSize: 'medium',
   theme: 'dark',
-  allowAllApps: true,
+  allowAllApps: false,
   remote: false,
 };
 
