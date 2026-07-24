@@ -2,12 +2,8 @@ export {};
 import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import { AppShell } from './app-shell';
-import {
-  loadProjects,
-  loadBundledLibraries,
-  startConsolePolling,
-} from './project';
-import { registerProtocol } from './protocol';
+import { loadProjects, loadBundledLibraries, startConsolePolling } from './services';
+import { registerProtocol } from './protocol/index';
 
 render(AppShell, document.getElementById('app')!);
 

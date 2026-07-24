@@ -1,8 +1,8 @@
 export {};
 import { For, Show, onMount, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { consoleLogs, addConsoleEntry } from './project';
-import type { ConsoleEntry } from './project';
+import { consoleLogs, type ConsoleEntry } from '../core';
+import { addConsoleEntry } from '../services';
 
 function levelIcon(level: string): string {
   if (level === 'error') return '\u274c';

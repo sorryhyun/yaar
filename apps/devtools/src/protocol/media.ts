@@ -20,8 +20,9 @@
  */
 
 import { AppCommandError, appStorage, defineCommand, errMsg, invoke, storage } from '@bundled/yaar';
-import { activeProject, refreshFiles } from '../project';
-import { projectPath } from '../store';
+import { activeProject } from '../core';
+import { projectPath, base64FromBuffer } from '../lib';
+import { refreshFiles } from '../services';
 
 /** The shared tree. Everything here is relative to the flat storage root. */
 const MEDIA_ROOT = 'media';
@@ -281,13 +282,3 @@ async function toWebP(sourcePath: string): Promise<{ base64: string; bytes: numb
   }
 }
 
-/** ArrayBuffer → base64, chunked so a large image does not blow the argument limit. */
-function base64FromBuffer(buffer: ArrayBuffer): string {
-  const view = new Uint8Array(buffer);
-  const CHUNK = 0x8000;
-  let binary = '';
-  for (let i = 0; i < view.length; i += CHUNK) {
-    binary += String.fromCharCode(...view.subarray(i, i + CHUNK));
-  }
-  return btoa(binary);
-}

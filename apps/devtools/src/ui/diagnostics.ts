@@ -1,8 +1,8 @@
 export {};
 import { createSignal, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { diagnostics, openFile, consoleLogs, clearConsoleLogs } from './project';
-import type { Diagnostic } from './project';
+import { diagnostics, consoleLogs, type Diagnostic } from '../core';
+import { openFile, clearConsoleLogs } from '../services';
 import { ConsolePanel } from './console-panel';
 import { DiffPanel, hasDiff, clearDiff } from './diff-panel';
 

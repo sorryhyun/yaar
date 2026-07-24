@@ -4,7 +4,8 @@ import html from '@bundled/solid-js/html';
 import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
 import { createPersistedSignal } from '@bundled/yaar';
-import { openFilePath, openFileContent, openFileImage, writeFile } from './project';
+import { openFilePath, openFileContent, openFileImage } from '../core';
+import { writeFile } from '../services';
 
 // Register TypeScript grammar (Prism base only has js/css/markup)
 // TypeScript extends JavaScript, so we define it here

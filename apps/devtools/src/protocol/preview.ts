@@ -1,6 +1,6 @@
 import { AppCommandError, defineCommand, errMsg, invoke } from '@bundled/yaar';
-import { previewWindowId, setPreviewWindowId } from '../project';
-import { captureFailureHint, openPreview, previewEvaluate, readPreview } from '../preview';
+import { previewWindowId, setPreviewWindowId } from '../core';
+import { captureFailureHint, openPreview, previewEvaluate, readPreview } from '../services';
 
 export const previewCommands = {
   preview: defineCommand({

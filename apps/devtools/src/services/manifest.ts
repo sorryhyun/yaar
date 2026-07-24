@@ -1,6 +1,7 @@
 export {};
 import { appStorage, invoke, errMsg } from '@bundled/yaar';
-import { activeProject, previewWindowId, projectPath, staticProtocol } from './project';
+import { activeProject, previewWindowId, staticProtocol } from '../core';
+import { projectPath } from '../lib/paths';
 
 // Protocol-manifest inspection: the two truths about an app's protocol and how
 // they are compared. The STATIC manifest is what the compiler extracts from

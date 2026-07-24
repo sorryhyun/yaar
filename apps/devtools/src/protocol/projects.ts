@@ -1,12 +1,6 @@
 import { AppCommandError, defineCommand } from '@bundled/yaar';
-import {
-  activeProject,
-  files,
-  createProject,
-  openProject,
-  deleteProject,
-  cloneApp,
-} from '../project';
+import { activeProject, files } from '../core';
+import { createProject, openProject, deleteProject, cloneApp } from '../services';
 
 export const projectCommands = {
   createProject: defineCommand({

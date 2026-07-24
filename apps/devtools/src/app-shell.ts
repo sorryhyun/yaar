@@ -1,11 +1,11 @@
 export {};
 import { Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { openTabs } from './project';
-import { ProjectToolbar } from './components/project-toolbar';
-import { ProjectTabs } from './components/project-tabs';
-import { StatusBar } from './components/status-bar';
-import { Workspace } from './components/workspace';
+import { openTabs } from './core';
+import { ProjectToolbar } from './ui/project-toolbar';
+import { ProjectTabs } from './ui/project-tabs';
+import { StatusBar } from './ui/status-bar';
+import { Workspace } from './ui/workspace';
 
 /** Composes the focused chrome and workspace components into the IDE layout. */
 export function AppShell() {

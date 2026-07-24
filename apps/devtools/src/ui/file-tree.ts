@@ -1,8 +1,8 @@
 export {};
 import { createSignal, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { files, openFilePath, openFile, activeProject } from './project';
-import type { FileEntry } from './project';
+import { files, openFilePath, activeProject, type FileEntry } from '../core';
+import { openFile } from '../services';
 
 function getFileIcon(path: string): string {
   if (path.endsWith('.ts') || path.endsWith('.tsx')) return '📄';

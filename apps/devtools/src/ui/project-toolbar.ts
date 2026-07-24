@@ -1,14 +1,8 @@
 export {};
 import html from '@bundled/solid-js/html';
 import { app } from '@bundled/yaar';
-import {
-  activeProject,
-  projects,
-  previewUrl,
-  createProject,
-  openProject,
-  compile,
-} from '../project';
+import { activeProject, projects, previewUrl } from '../core';
+import { createProject, openProject, compile } from '../services';
 
 /** Project selection and build actions in the app chrome. */
 export function ProjectToolbar() {

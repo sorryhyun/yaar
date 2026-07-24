@@ -1,5 +1,5 @@
 import { defineCommand } from '@bundled/yaar';
-import { gitHistory, gitDiff, gitRestore, gitCheckpoint } from '../project';
+import { gitHistory, gitDiff, gitRestore, gitCheckpoint } from '../services';
 
 export const gitCommands = {
   gitHistory: defineCommand({

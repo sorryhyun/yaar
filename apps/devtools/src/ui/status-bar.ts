@@ -1,7 +1,7 @@
 export {};
 import { Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { activeProject, compileStatus, statusText } from '../project';
+import { activeProject, compileStatus, statusText } from '../core';
 
 /** Compile state and active-project context shown at the bottom of the workspace. */
 export function StatusBar() {

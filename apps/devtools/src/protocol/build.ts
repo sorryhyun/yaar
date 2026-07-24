@@ -5,13 +5,17 @@ import {
   compileErrors,
   previewUrl,
   previewWindowId,
+  staticProtocol,
+} from '../core';
+import {
   compile,
   typecheck,
   deploy,
-  staticProtocol,
-} from '../project';
-import { openPreview } from '../preview';
-import { getStaticManifest, getRuntimeManifest, diffManifestNames } from '../manifest';
+  openPreview,
+  getStaticManifest,
+  getRuntimeManifest,
+  diffManifestNames,
+} from '../services';
 
 export const buildCommands = {
   compile: defineCommand({

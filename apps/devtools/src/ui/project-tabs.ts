@@ -1,7 +1,8 @@
 export {};
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { activeProject, projects, openTabs, openProject, closeTab } from '../project';
+import { activeProject, projects, openTabs } from '../core';
+import { openProject, closeTab } from '../services';
 
 /** Open-project tabs and their selection/close behavior. */
 export function ProjectTabs() {

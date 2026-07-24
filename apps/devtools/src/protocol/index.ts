@@ -13,14 +13,14 @@ import {
   files,
   bundledLibs,
   consoleLogs,
-} from './project';
-import { projectCommands } from './protocol/projects';
-import { fileCommands } from './protocol/files';
-import { buildCommands } from './protocol/build';
-import { gitCommands } from './protocol/git';
-import { previewCommands } from './protocol/preview';
-import { introspectCommands } from './protocol/introspect';
-import { mediaCommands } from './protocol/media';
+} from '../core';
+import { projectCommands } from './projects';
+import { fileCommands } from './files';
+import { buildCommands } from './build';
+import { gitCommands } from './git';
+import { previewCommands } from './preview';
+import { introspectCommands } from './introspect';
+import { mediaCommands } from './media';
 
 export function registerProtocol() {
   if (!app) return;

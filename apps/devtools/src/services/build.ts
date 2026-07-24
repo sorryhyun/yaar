@@ -5,35 +5,24 @@ import {
   compile as devCompile,
   typecheck as devTypecheck,
   deploy as devDeploy,
-  bundledLibraries,
-  gitHistory as devGitHistory,
-  gitDiff as devGitDiff,
-  gitRestore as devGitRestore,
-  gitCheckpoint as devGitCheckpoint,
 } from '@bundled/yaar-dev';
 import {
   activeProject,
-  projectPath,
   setCompileStatus,
   setCompileErrors,
   setStatusText,
   setPreviewUrl,
   setConsoleLogs,
   setDiagnostics,
-  setBundledLibs,
   setStaticProtocol,
   previewWindowId,
   setPreviewWindowId,
-  type Diagnostic,
-} from './store';
+} from '../core';
+import { projectPath } from '../lib/paths';
+import { parseDiagnostics } from '../lib/parse-diagnostics';
 
-// Everything that talks to the dev server: build, type check, deploy, version
-// history, library listing. Grouped here because they share one trait the file
-// and project operations do not — they are the only callers of @bundled/yaar-dev,
-// and they report their outcome through the compile/diagnostic signals rather
-// than through storage. project.ts re-exports all of it for compatibility.
-
-// ── Dev Operations (call server actions via verb API) ──
+// Build, type check and deploy — the calls that talk to the dev server and
+// report their outcome through the compile/diagnostic signals.
 
 export async function compile(): Promise<void> {
   const proj = activeProject();
@@ -165,77 +154,4 @@ export async function deploy(opts: {
 
   setStatusText(`Deployed as "${name}"`);
   return { appId: result.appId ?? opts.appId, name, ...(previewClosed ? { previewClosed } : {}) };
-}
-
-// ── Version history ──
-//
-// Deploys are snapshotted into a per-app shadow git repo (metadata lives outside
-// the app dir, so the user's own repo is never touched). These target a deployed
-// *app*, not the sandbox project — the boundary is the app directory itself.
-
-export async function gitHistory(appId: string, limit?: number) {
-  const result = await devGitHistory(appId, limit ? { limit } : undefined);
-  if (!result.success) throw new AppCommandError(result.error ?? 'Failed to read history');
-  return result.commits ?? [];
-}
-
-export async function gitDiff(
-  appId: string,
-  opts?: { ref?: string; against?: 'snapshot' | 'repo' },
-) {
-  const result = await devGitDiff(appId, opts);
-  if (!result.success) throw new AppCommandError(result.error ?? 'Failed to diff');
-  return result;
-}
-
-export async function gitRestore(appId: string, ref: string) {
-  setStatusText(`Restoring ${appId} to ${ref}...`);
-  const result = await devGitRestore(appId, ref);
-  if (!result.success) {
-    setStatusText(`Restore failed: ${result.error ?? 'Unknown'}`);
-    throw new AppCommandError(result.error ?? 'Failed to restore');
-  }
-  setStatusText(
-    result.recompiled
-      ? `Restored ${appId} to ${result.ref?.slice(0, 7)}`
-      : `Restored ${appId} (rebuild failed — see compileError)`,
-  );
-  return result;
-}
-
-export async function gitCheckpoint(appId: string, message?: string) {
-  const result = await devGitCheckpoint(appId, message ? { message } : undefined);
-  if (!result.success) throw new AppCommandError(result.error ?? 'Failed to checkpoint');
-  return result.commits?.[0] ?? null;
-}
-
-// ── Bundled Libraries ──
-
-export async function loadBundledLibraries(): Promise<void> {
-  try {
-    const libs = await bundledLibraries();
-    setBundledLibs(libs);
-  } catch {
-    /* non-fatal */
-  }
-}
-
-// ── Diagnostic parsing ──
-
-function parseDiagnostics(raw: string): Diagnostic[] {
-  const lines = raw.split('\n');
-  const result: Diagnostic[] = [];
-  for (const line of lines) {
-    // Match: src/main.ts(12,5): error TS2304: Cannot find name 'x'.
-    const m = line.match(/^(.+?)\((\d+),\d+\):\s*(error|warning)\s+\w+:\s*(.+)/);
-    if (m) {
-      result.push({
-        file: m[1],
-        line: parseInt(m[2], 10),
-        message: m[4],
-        severity: m[3] as 'error' | 'warning',
-      });
-    }
-  }
-  return result;
 }

@@ -1,12 +1,7 @@
 export {};
 import { appStorage, errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
-import {
-  activeProject,
-  previewUrl,
-  previewWindowId,
-  setPreviewWindowId,
-  addConsoleEntry,
-} from './project';
+import { activeProject, previewUrl, previewWindowId, setPreviewWindowId } from '../core';
+import { addConsoleEntry } from './console';
 
 // Preview window mechanics: how it is opened and how pixels are read back out.
 //
