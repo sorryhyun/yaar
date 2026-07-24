@@ -190,6 +190,13 @@ later than before.
 curious-library-vn 1.2.0 → 1.2.1, thesingularity-reader 2.0.0 → 2.0.1. process-explorer is
 `kind: "system"` and stays at 1.1.0.
 
+Follow-up: **memo was reclassified `kind: "system"`** right after this phase, so its bump is
+moot going forward — it no longer publishes through the marketplace (the catalog copy at 1.0.0
+is now orphaned, and install/uninstall of `memo` are refused as protected). That leaves
+**video-editor-lite as the only catalogued app under `apps/`**; every other bundled app is
+`kind: "system"`. Note the Phase 0 paragraph's "seven `kind: system` bundled apps" list is
+stale — there are now 13 of the 14.
+
 **Verified:** `bun run typecheck` clean; `bun run build:apps` recompiled exactly the 6 touched
 apps, 0 failures, and their extracted `dist/protocol.json` manifests are unchanged (state /
 command / event counts identical — moving the call does not disturb static extraction).
