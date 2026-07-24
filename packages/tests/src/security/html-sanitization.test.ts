@@ -4,15 +4,16 @@
  *
  * Apps render HTML they did not author — scraped forum posts, RSS bodies, GitHub
  * READMEs, Markdown files out of storage. Every one of those pipelines runs through
- * `@bundled/dompurify` before the string reaches a DOM sink. These tests pin the two
- * things that can silently break that boundary:
+ * DOMPurify before the string reaches a DOM sink, via the SDK's `sanitizeHtml`.
+ * These tests pin the two things that can silently break that boundary:
  *
  *   1. DOMPurify's behavior on the fixtures the proposal calls out, under the exact
- *      config the apps pass. A dependency bump that changed any of these would
- *      otherwise land silently.
- *   2. That every app still passes that config. The policy is duplicated per app by
- *      design (the proposal defers a shared `@bundled/safe-html` wrapper until the
- *      migrations prove a stable API), and duplicated policy drifts unless pinned.
+ *      config `sanitizeHtml` passes. A dependency bump that changed any of these
+ *      would otherwise land silently.
+ *   2. That the config is still what it says, and that every app still goes through
+ *      it. The policy started duplicated per app; the SDK primitive collapsed the
+ *      copies, so what is pinned now is the one implementation plus the absence of
+ *      any app that reaches around it.
  *
  * ## Why jsdom and not happy-dom
  *
@@ -174,8 +175,8 @@ describe('known gaps are documented, not assumed closed', () => {
 });
 
 /**
- * Every app source file that imports `@bundled/dompurify`, found by scanning rather
- * than by list.
+ * Every app source file that reaches for a sanitizer, found by scanning rather than
+ * by list, split by which one it reached for.
  *
  * This used to be a hardcoded roster of `[app, file]` pairs, which fails in both
  * directions: a *new* app that copies the policy wrong is simply absent from the
@@ -183,10 +184,16 @@ describe('known gaps are documented, not assumed closed', () => {
  * (which is how unbundling `dc-comics` broke it). Discovery closes both — anything
  * that reaches for the sanitizer is held to the policy from its first commit, and
  * an app leaving the tree is a non-event.
+ *
+ * `direct` is the set that imports `@bundled/dompurify` itself. It exists to be
+ * asserted empty: the policy now lives once in the SDK's `sanitizeHtml`, and an app
+ * that goes around it is writing its own config again — the drift this file was
+ * built to catch.
  */
-function findSanitizingAppFiles(): string[] {
+function findSanitizingAppFiles(): { viaSdk: string[]; direct: string[] } {
   const appsDir = join(REPO_ROOT, 'apps');
-  const found: string[] = [];
+  const viaSdk: string[] = [];
+  const direct: string[] = [];
   for (const app of readdirSync(appsDir, { withFileTypes: true })) {
     if (!app.isDirectory()) continue;
     const srcDir = join(appsDir, app.name, 'src');
@@ -195,32 +202,28 @@ function findSanitizingAppFiles(): string[] {
       if (!/\.tsx?$/.test(rel)) continue;
       const abs = join(srcDir, rel);
       if (!statSync(abs).isFile()) continue;
-      if (readFileSync(abs, 'utf8').includes('@bundled/dompurify')) {
-        found.push(join(app.name, 'src', rel));
-      }
+      const src = readFileSync(abs, 'utf8');
+      const file = join(app.name, 'src', rel);
+      if (src.includes('@bundled/dompurify')) direct.push(file);
+      if (/\bsanitizeHtml\b/.test(src) && src.includes('@bundled/yaar')) viaSdk.push(file);
     }
   }
-  return found.sort();
+  return { viaSdk: viaSdk.sort(), direct: direct.sort() };
 }
 
 describe('app sanitize policies have not drifted', () => {
-  // The policy is intentionally duplicated per app rather than shared. Pin it so a
-  // copy cannot quietly diverge — an app that drops `input` from its list starts
-  // orphaning controls instead of removing them.
-  const SANITIZING_FILES = findSanitizingAppFiles();
+  const { viaSdk: SANITIZING_FILES, direct: DIRECT_DOMPURIFY_FILES } = findSanitizingAppFiles();
 
   /**
    * Apps that must never stop sanitizing, by id rather than by file path.
    *
-   * Discovery alone cannot catch an app that deletes its `@bundled/dompurify`
-   * import and starts writing foreign HTML to a DOM sink raw — it would just drop
-   * off the scan and every assertion below would still pass. This floor is what
-   * makes that a failure. Keyed on the app id, not a file, so refactoring inside
-   * the app is free; only unbundling the app itself needs a line removed here.
+   * Discovery alone cannot catch an app that deletes its `sanitizeHtml` import and
+   * starts writing foreign HTML to a DOM sink raw — it would just drop off the scan
+   * and every assertion below would still pass. This floor is what makes that a
+   * failure. Keyed on the app id, not a file, so refactoring inside the app is free;
+   * only unbundling the app itself needs a line removed here.
    */
   const MUST_SANITIZE = ['storage'];
-
-  const canonical = FORBID_FORM_TAGS.map((t) => `'${t}'`).join(', ');
 
   for (const app of MUST_SANITIZE) {
     test(`${app} still sanitizes somewhere in its source`, () => {
@@ -228,12 +231,25 @@ describe('app sanitize policies have not drifted', () => {
     });
   }
 
-  for (const file of SANITIZING_FILES) {
-    test(`${file} uses the canonical FORBID_TAGS list`, () => {
-      const src = readFileSync(join(REPO_ROOT, 'apps', file), 'utf8');
-      expect(src.replace(/\s+/g, ' ')).toContain(`[${canonical}]`);
-    });
-  }
+  test('no app imports @bundled/dompurify directly', () => {
+    // The config below is asserted once, against the shim. An app that constructs
+    // its own DOMPurify call is outside that assertion — which is the state this
+    // file used to pin per-file, and the state the SDK primitive exists to end.
+    expect(DIRECT_DOMPURIFY_FILES).toEqual([]);
+  });
+
+  test('the SDK sanitizer forbids exactly the canonical form tags', () => {
+    // The policy is no longer duplicated per app, so it is pinned where it now
+    // lives. `sanitizeHtml` is the only thing standing between foreign markup and
+    // an app's DOM; dropping `input` from this list starts orphaning controls
+    // instead of removing them, and nothing else in the tree would notice.
+    const shim = readFileSync(
+      join(REPO_ROOT, 'packages/compiler/src/shims/yaar/sanitize.ts'),
+      'utf8',
+    );
+    const canonical = FORBID_FORM_TAGS.map((t) => `'${t}'`).join(', ');
+    expect(shim.replace(/\s+/g, ' ')).toContain(`[${canonical}]`);
+  });
 
   test('no app generates inline event handler attributes', () => {
     // Step 5 of the ordering contract: behavior attaches via addEventListener.

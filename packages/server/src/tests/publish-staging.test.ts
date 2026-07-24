@@ -9,7 +9,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'bun:test';
 import { mkdtemp, mkdir, writeFile, rm, readdir } from 'fs/promises';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import {
@@ -28,6 +28,19 @@ import type { PublishResult } from '../features/apps/publish.js';
 function prepare(appId: string) {
   return preparePublication(appId, { publishedVersionOf: async () => null });
 }
+
+/**
+ * `memo`'s declared version, read from its manifest rather than pinned here.
+ *
+ * The assertion below is that `prepare` reports the app's *own* version, not that
+ * the version is any particular string — hardcoding it made an unrelated version
+ * bump in `apps/memo/app.json` fail this suite.
+ */
+const MEMO_VERSION = (
+  JSON.parse(readFileSync(join(import.meta.dir, '../../../..', 'apps/memo/app.json'), 'utf8')) as {
+    version: string;
+  }
+).version;
 
 let storageRoot: string;
 
@@ -125,7 +138,7 @@ describe('prepare / freeze / cancel (real bundled app: memo)', () => {
 
     const { summary } = prep;
     expect(summary.appId).toBe('memo');
-    expect(summary.version).toBe('1.0.0');
+    expect(summary.version).toBe(MEMO_VERSION);
     expect(summary.artifactSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(summary.manifestSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(summary.byteLength).toBeGreaterThan(0);
@@ -257,7 +270,7 @@ describe('version guard', () => {
       : 0;
 
     const prep = await preparePublication('memo', {
-      publishedVersionOf: async () => '9.9.9', // memo is 1.0.0 → not newer
+      publishedVersionOf: async () => '9.9.9', // above any version memo will declare → not newer
     });
     expect(prep.success).toBe(false);
     if (prep.success) return;
