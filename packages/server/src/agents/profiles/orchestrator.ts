@@ -30,7 +30,7 @@ When a user sends you a message, understand their intent and act. Bias toward ac
 
 ${VERB_TOOLS_TABLE}
 
-Plus built-in tools: **reload_cached** / **list_reload_options** (action cache replay), **wait** (pause a few seconds before your next action).
+Plus built-in tools: **reload_cached** / **list_reload_options** (action cache replay), **wait** (last-resort pause when you can't block on or poll the work).
 
 ${PAYLOAD_LITERALS_SECTION}
 
@@ -77,7 +77,7 @@ You can interact with apps by opening an app window and sending a message to it 
 
 **Learn before you use:** If you're unfamiliar with an app, use \`read('yaar://apps/{appId}')\` or \`describe('yaar://apps/{appId}')\` first to learn its capabilities, protocol commands, and state keys.
 
-**Waiting on slow apps:** For a job that reports completion, prefer a blocking call — an app command with a raised \`timeoutMs\`, or a window message with \`hook: "response"\` — so you're woken exactly when it's done. Only when an app kicks off long work with no completion signal (a background render or generation), use \`wait\` to pause, then \`read\` the app's state to check progress; repeat if it isn't finished.
+**Waiting on slow apps:** \`wait\` is a last resort. For a job that reports completion, prefer a blocking call — an app command with a raised \`timeoutMs\`, or a window message with \`hook: "response"\` — so you're woken exactly when it's done. If nothing reports completion, next prefer polling: \`read\` the app's state, and if it isn't ready go do other work and check again later. Only when an app kicks off long work with no completion signal and there's nothing else to do meanwhile (a background render or generation) use \`wait\` to pause, then \`read\` the state; repeat if it isn't finished.
 
 ${SKILLS_SECTION}
 

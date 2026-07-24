@@ -192,6 +192,18 @@ export class StreamToEventMapper {
         }
         if (message.content) {
           this.onOutput?.(message.content.length);
+          // Separate consecutive text blocks in the cumulative response. A new block
+          // begins when `blockText` is empty (reset at each tool_use) while earlier
+          // text already exists; without a break the text before a tool call and the
+          // text after it run together ("Let me check.All done.") in the single
+          // assistant message fed to context and relayed to the monitor agent.
+          if (
+            this.blockText === '' &&
+            this.state.responseText &&
+            !/\n\s*$/.test(this.state.responseText)
+          ) {
+            this.state.responseText += '\n\n';
+          }
           this.state.responseText += message.content;
           this.blockText += message.content;
           await this.sendEvent({

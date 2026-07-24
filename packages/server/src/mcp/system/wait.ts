@@ -3,10 +3,11 @@
  *
  * Lets an orchestrating agent (monitor / session) yield for a fixed span so a
  * slow background operation with no completion signal can make progress before
- * the agent checks its state again. Prefer a blocking call (an app command with
- * a raised `timeoutMs`, or `hook:"response"`) whenever the operation reports
- * completion directly — `wait` is for fire-and-forget work that finishes on its
- * own with nothing to await.
+ * the agent checks its state again. This is a last resort: prefer a blocking
+ * call (an app command with a raised `timeoutMs`, or `hook:"response"`) that
+ * wakes you exactly when the work is done, and failing that poll the state
+ * directly. `wait` is only for fire-and-forget work you can neither block on
+ * nor poll — nothing to await and no cheaper way to advance.
  */
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -23,12 +24,14 @@ export function registerWaitTool(server: McpServer): void {
     {
       description:
         'Pause for a fixed number of seconds before your next action. ' +
-        'Use this to give a slow background operation time to progress — e.g. after telling an ' +
-        'app to run a long job (a compile, a render, an anima generation) as fire-and-forget, ' +
-        'wait, then read the app state to see whether it finished. ' +
-        'Prefer a blocking call — an app command with a raised timeoutMs, or a window message ' +
-        'with hook:"response" — when the operation reports completion directly; only use wait for ' +
-        `work that finishes on its own with no completion signal to await. Capped at ${MAX_WAIT_SECONDS}s per call.`,
+        'LAST RESORT — reach for wait only when you can neither block on the work nor poll it. ' +
+        'First prefer a blocking call that wakes you exactly when the work is done: an app command ' +
+        'with a raised timeoutMs, or a window message with hook:"response". If nothing reports ' +
+        'completion, next prefer polling — read the state, and if it is not ready act on something ' +
+        'else and check again later. Use wait only for fire-and-forget work that finishes on its own ' +
+        'with no completion signal to await and no cheaper way to make progress — e.g. after kicking ' +
+        'off a long background job (a render, an anima generation), wait, then read the app state to ' +
+        `see whether it finished. Capped at ${MAX_WAIT_SECONDS}s per call.`,
       inputSchema: {
         seconds: z
           .number()
