@@ -8,7 +8,6 @@
     "yaar-web"
   ],
   "variant": "standard",
-  "capture": "canvas",
   "permissions": [
     "yaar://storage/",
     "yaar://windows/"

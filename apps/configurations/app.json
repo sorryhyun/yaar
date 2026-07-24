@@ -7,6 +7,6 @@
   ],
   "version": "1.0.0",
   "author": "YAAR",
-  "description": "No description",
+  "description": "System settings — user profile, wallpaper and accent, desktop shortcuts, event-driven hooks, and allowed HTTP domains.",
   "kind": "system"
 }

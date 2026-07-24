@@ -659,7 +659,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 
 **Ignored fields seen in the wild** — these parse as unknown keys and do nothing:
 
-- `capture` (`"dom"` / `"canvas"`) — present in 19 bundled apps, read by no current code. It once named a screenshot strategy for a `window.capture` tool that has since been removed; the manifest field outlived it.
+- `capture` (`"dom"` / `"canvas"`) — removed from all bundled app manifests (it had spread to 14, not the 19 once reported here); still read by no current code, so it stays ignored if it reappears — e.g. copied from an old app or emitted by an AI-generated manifest. It once named a screenshot strategy for a `window.capture` tool that has since been removed; the manifest field outlived it.
 - `id` and `appId` (`apps/memo`, `apps/music-maker`) — the folder name is always the id. The `appId` passed to `app.register()` in your source is a separate thing and *is* used.
 
 ## App Types

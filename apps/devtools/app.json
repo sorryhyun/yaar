@@ -3,7 +3,6 @@
   "description": "IDE for building and deploying YAAR apps",
   "icon": "🛠️",
   "createShortcut": false,
-  "capture": "dom",
   "agentType": "opus",
   "bundles": [
     "yaar-dev"

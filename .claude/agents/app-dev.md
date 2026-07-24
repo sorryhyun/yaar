@@ -37,7 +37,6 @@ apps/my-app/
   "icon": "🎯",
   "description": "What this app does",
   "run": "dist/index.html",
-  "capture": "dom",
   "version": "1.0.0",
   "author": "YAAR",
   "createShortcut": true,
@@ -51,7 +50,6 @@ apps/my-app/
 
 - **permissions**: Prefix-matching URIs. Without them, verb calls return 403.
 - **bundles**: Opt-in gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`).
-- **capture**: `"dom"` (default) or `"canvas"` for canvas-based apps.
 - **createShortcut**: `true` (default) to auto-create desktop icon.
 - **messaging**: `"all"` grants the app agent a `direct_message` tool for cross-app messaging.
 - **controls**: apps this app's agent may drive via `describe`/`query`/`command` with an `appId` param (bundled apps only). String shorthand (`["browser-user"]`) or object form restricting commands (`[{ "appId": "browser-user", "commands": ["navigate"] }]`).

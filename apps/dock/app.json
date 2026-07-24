@@ -12,7 +12,6 @@
   },
   "variant": "panel",
   "dockEdge": "top",
-  "capture": "dom",
   "permissions": [
     "yaar://http"
   ],

@@ -4,7 +4,6 @@
   "description": "Visual file manager for YAAR storage",
   "run": "dist/index.html",
   "createShortcut": false,
-  "capture": "dom",
   "permissions": [
     "yaar://apps/self/storage/",
     "yaar://storage/"
