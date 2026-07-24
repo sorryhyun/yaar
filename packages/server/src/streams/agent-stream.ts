@@ -29,7 +29,7 @@
  * from the query loop's own lifecycle instead, which makes them identical for
  * both providers and guarantees the pair even when the provider stream doesn't.
  */
-export type AgentStreamKind = 'start' | 'text' | 'thinking' | 'tool' | 'done' | 'error';
+export type AgentStreamKind = 'start' | 'text' | 'thinking' | 'tool' | 'usage' | 'done' | 'error';
 
 export type AgentTurnStatus = 'completed' | 'interrupted';
 
@@ -37,6 +37,31 @@ export interface AgentStartFrameData {
   messageId?: string;
   provider: string;
   monitorId?: string;
+}
+
+/**
+ * Token accounting for the agent, as of this frame.
+ *
+ * Cumulative over the agent's whole life, not the turn — a `start` frame resets
+ * an observer's view of *activity*, and resetting the counter with it would make
+ * the reading useless for anyone who attached mid-session. The turn's own
+ * contribution rides along as `turn` for observers that want a rate.
+ *
+ * Emitted whenever the provider reports usage: once at the end of a turn for
+ * Claude, several times within one for Codex. An observer that only wants the
+ * final figure can read the roster instead — `yaar://session/agents` carries the
+ * same totals per agent.
+ */
+export interface AgentUsageFrameData {
+  inputTokens: number;
+  outputTokens: number;
+  /** `inputTokens + outputTokens` — cache reads and writes excluded. */
+  totalTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  costUsd?: number;
+  /** What this turn alone added, in the same units. */
+  turn?: { inputTokens: number; outputTokens: number; totalTokens: number };
 }
 
 const AGENT_STREAM_RE = /^yaar:\/\/agents\/([^/]+)\/stream$/;

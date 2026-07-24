@@ -242,13 +242,22 @@ function onAgentFrame(id: string, frame: StreamFrame) {
     toolName?: string;
     status?: string;
     error?: string;
+    inputTokens?: number;
+    outputTokens?: number;
   };
   const at = frame.ts;
 
   switch (frame.kind) {
     case 'start':
-      // A new turn: drop last turn's text tail and tool line entirely.
-      setAgentActivity(id, { state: 'responding', updatedAt: at });
+      // A new turn: drop last turn's text tail and tool line entirely — but not
+      // the token total, which is the agent's lifetime figure and not the turn's.
+      // Clearing it would blank the column at every turn start and refill it only
+      // when the provider next reports (turn's end, on Claude).
+      setAgentActivity(id, (prev) => ({
+        state: 'responding',
+        usage: prev?.usage,
+        updatedAt: at,
+      }));
       break;
     case 'tool':
       setAgentActivity(id, (prev) => ({
@@ -265,6 +274,20 @@ function onAgentFrame(id: string, frame: StreamFrame) {
         ...prev,
         state: 'responding',
         text: ((prev?.text ?? '') + (data.delta ?? '')).slice(-TEXT_TAIL_CHARS),
+        updatedAt: at,
+      }));
+      break;
+    case 'usage':
+      // The frame's totals are cumulative for the agent, so this assigns rather
+      // than adds — and it deliberately does *not* touch `state`. Codex reports
+      // usage several times mid-turn and Claude once at the very end; letting
+      // either move the state would make a finished turn look like it resumed.
+      setAgentActivity(id, (prev) => ({
+        ...prev,
+        usage: {
+          inputTokens: data.inputTokens ?? prev?.usage?.inputTokens ?? 0,
+          outputTokens: data.outputTokens ?? prev?.usage?.outputTokens ?? 0,
+        },
         updatedAt: at,
       }));
       break;
@@ -306,7 +329,7 @@ function reconcileStreams(agents: AgentEntry[]) {
     stream(`yaar://agents/${agent.id}/stream`, (frame) => onAgentFrame(agent.id, frame), {
       // `start` and `error` are as load-bearing as the content kinds: one resets
       // the row per turn, the other is a terminal the row would otherwise miss.
-      kinds: ['start', 'text', 'tool', 'done', 'error'],
+      kinds: ['start', 'text', 'tool', 'usage', 'done', 'error'],
     })
       .then((stop) => {
         // Torn down (agent vanished) before the subscription landed — drop it.

@@ -13,7 +13,7 @@ import type { AgentPool } from './agent-pool.js';
 import type { InteractionTimeline } from './interaction-timeline.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import type { SessionLogger } from '../logging/index.js';
-import type { ProviderType } from '../providers/types.js';
+import type { ProviderType, TokenUsage } from '../providers/types.js';
 import type { SessionId } from '../session/types.js';
 import type {
   MonitorQueuePolicy,
@@ -58,6 +58,12 @@ export interface AgentPoolStats {
   appAgents: number;
   ephemeralAgents: number;
   sessionAgent: boolean;
+  /**
+   * Every agent's tokens summed, including agents already disposed — so the
+   * figure only ever grows. `inputTokens` is fresh input; cache reads and writes
+   * are counted separately and excluded from `inputTokens + outputTokens`.
+   */
+  usage: TokenUsage;
 }
 
 /**

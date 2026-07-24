@@ -1,5 +1,22 @@
 export {};
 
+/**
+ * Token consumption for one agent (or the whole session).
+ *
+ * Deliberately narrower than what the server sends: the roster also carries
+ * `cacheReadTokens` / `cacheWriteTokens`, and this app drops them on purpose.
+ * What a reader wants from a process list is the figure that tracks real work
+ * and real cost, and cache reads inflate a total by an order of magnitude
+ * without meaning an order of magnitude more happened.
+ *
+ * `inputTokens` is already cache-free on both providers — the server's mappers
+ * reconcile that — so `inputTokens + outputTokens` is the total we show.
+ */
+export interface AgentUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface AgentStats {
   totalAgents: number;
   idleAgents: number;
@@ -8,6 +25,11 @@ export interface AgentStats {
   appAgents: number;
   ephemeralAgents: number;
   sessionAgent: boolean;
+  /**
+   * Every agent's tokens summed, disposed agents included — so it only grows,
+   * and exceeds the sum of the rows below by whatever the retired ones spent.
+   */
+  usage?: AgentUsage;
   agents: AgentEntry[];
 }
 
@@ -20,6 +42,8 @@ export interface AgentEntry {
   busy: boolean;
   monitorId?: string;
   appId?: string;
+  /** Lifetime tokens for this agent. Optional — an older server won't send it. */
+  usage?: AgentUsage;
 }
 
 /**
@@ -54,6 +78,12 @@ export interface AgentActivity {
   endStatus?: 'completed' | 'interrupted';
   /** Error text from a terminal `error` frame. */
   error?: string;
+  /**
+   * Lifetime tokens, from `usage` frames — the same figure the roster carries,
+   * but arriving as the agent spends them instead of on the next poll. Held here
+   * so a row can prefer the live number and fall back to the roster's.
+   */
+  usage?: AgentUsage;
   /** `frame.ts` of the most recent frame — drives the freshness readout. */
   updatedAt: number;
 }

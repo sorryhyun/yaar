@@ -1,4 +1,4 @@
-import type { StreamMessage } from '../../providers/types.js';
+import type { StreamMessage, TokenUsage } from '../../providers/types.js';
 import { ServerEventType, type ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
 import type { ContextSource } from '../context.js';
@@ -67,6 +67,17 @@ export interface StreamMapperOptions {
   agentInstanceId?: string;
   /** Session the frames belong to — scopes them so session A can't read B. */
   streamSessionId?: string;
+  /**
+   * Fold a provider usage report into the agent's lifetime total, returning that
+   * total. The mapper lives for one turn and the counter must outlive it, so the
+   * accumulator belongs to {@link AgentSession}; the mapper only knows how to
+   * *reach* it. Returning the new total (rather than reading it back through a
+   * second callback) keeps the publish below a pure function of this call.
+   */
+  onUsage?: (
+    usage: TokenUsage,
+    scope: 'turn' | 'session',
+  ) => { total: TokenUsage; delta: TokenUsage };
 }
 
 export class StreamToEventMapper {
@@ -107,6 +118,22 @@ export class StreamToEventMapper {
   private readonly onOutput?: (bytes: number) => void;
   private readonly agentInstanceId?: string;
   private readonly streamSessionId?: string;
+  private readonly onUsage?: (
+    usage: TokenUsage,
+    scope: 'turn' | 'session',
+  ) => { total: TokenUsage; delta: TokenUsage };
+
+  /**
+   * This turn's own share, summed from the deltas the accumulator reports back.
+   *
+   * Summing deltas rather than differencing totals is what makes the figure right
+   * for both providers at once: Codex sends several running totals inside one
+   * turn (so a difference against the first of them undercounts by that first
+   * report), Claude sends exactly one turn-scoped figure. One mapper is one turn,
+   * so these reset for free.
+   */
+  private turnInput = 0;
+  private turnOutput = 0;
 
   constructor(options: StreamMapperOptions) {
     this.role = options.role;
@@ -121,6 +148,33 @@ export class StreamToEventMapper {
     this.onOutput = options.onOutput;
     this.agentInstanceId = options.agentInstanceId;
     this.streamSessionId = options.streamSessionId;
+    this.onUsage = options.onUsage;
+  }
+
+  /**
+   * Fold one provider usage report into the agent's total and publish the result.
+   *
+   * Called for every message that carries `usage`, whatever its type — Codex
+   * hangs it on a dedicated `usage` message mid-turn, Claude on the terminal
+   * `complete`/`error`. Handling it here rather than in the switch is what keeps
+   * those two shapes from becoming two code paths.
+   */
+  private recordUsage(message: StreamMessage): void {
+    if (!message.usage || !this.onUsage) return;
+    const { total, delta } = this.onUsage(message.usage, message.usageScope ?? 'turn');
+    this.turnInput += delta.inputTokens;
+    this.turnOutput += delta.outputTokens;
+    const turnIn = this.turnInput;
+    const turnOut = this.turnOutput;
+    this.emitStreamFrame('usage', {
+      inputTokens: total.inputTokens,
+      outputTokens: total.outputTokens,
+      totalTokens: total.inputTokens + total.outputTokens,
+      cacheReadTokens: total.cacheReadTokens,
+      cacheWriteTokens: total.cacheWriteTokens,
+      ...(total.costUsd !== undefined ? { costUsd: total.costUsd } : {}),
+      turn: { inputTokens: turnIn, outputTokens: turnOut, totalTokens: turnIn + turnOut },
+    });
   }
 
   /**
@@ -185,7 +239,16 @@ export class StreamToEventMapper {
       await this.flushThinking();
     }
 
+    // Before the switch: usage can ride any message type, and on Claude it rides
+    // the very terminal that latches the turn closed — folding it after that
+    // would publish the numbers into an already-finished stream.
+    this.recordUsage(message);
+
     switch (message.type) {
+      // Accounting only; `recordUsage` above already folded and published it.
+      case 'usage':
+        break;
+
       case 'text':
         if (message.sessionId && this.onSessionId) {
           await this.onSessionId(message.sessionId);

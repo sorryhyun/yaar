@@ -42,6 +42,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           appAgents: 0,
           ephemeralAgents: 0,
           sessionAgent: false,
+          usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
           agents: [],
         });
 
@@ -54,6 +55,9 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         appAgents: stats.appAgents,
         ephemeralAgents: stats.ephemeralAgents,
         sessionAgent: stats.sessionAgent,
+        // Session-wide token total, disposed agents included. Per-agent figures ride
+        // on each entry below; the two disagree by exactly the retired agents' share.
+        usage: stats.usage,
         // One entry per live agent — `id` is what `invoke(.../{id}, { action: 'interrupt' })` takes.
         agents: pool.agentPool.listAgents(),
       });

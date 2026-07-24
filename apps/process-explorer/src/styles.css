@@ -152,6 +152,18 @@
 }
 
 /*
+ * Token readout. Tabular figures so a column of rows lines up digit-for-digit —
+ * the whole value of the number here is comparing agents at a glance — and never
+ * the first thing to be ellipsed, since it is the shortest field in the line.
+ */
+.meta-tokens {
+  flex-shrink: 0;
+  font-family: var(--yaar-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--yaar-text-muted);
+}
+
+/*
  * Live activity line, folded from the agent's stream. Sits under the meta line;
  * the tool name reads as a code-ish accent, the text tail as muted body.
  */

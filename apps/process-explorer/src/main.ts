@@ -3,7 +3,7 @@ export {};
 import { onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
-import type { AgentEntry, AgentTurnState, WindowInfo, AppProcess } from './types';
+import type { AgentEntry, AgentTurnState, AgentUsage, WindowInfo, AppProcess } from './types';
 import {
   agentStats,
   agentList,
@@ -60,6 +60,28 @@ function formatAge(ts: number, at: number) {
 function formatTime(date: Date | null) {
   if (!date) return '--';
   return date.toLocaleTimeString();
+}
+
+/** Compact token count — 812, 12.4k, 3.1M. Exact below 1k, where the digits still read. */
+function formatTokens(n: number) {
+  if (n < 1000) return String(n);
+  if (n < 1_000_000) return `${(n / 1000).toFixed(n < 10_000 ? 1 : 0)}k`;
+  return `${(n / 1_000_000).toFixed(1)}M`;
+}
+
+/**
+ * Token line: the cache-excluded total, with the input/output split behind it.
+ *
+ * Total first because it is the one number that answers "how much did this cost";
+ * the split is what you read next when the answer is "a lot" and you want to know
+ * whether it was context or generation. Empty string when nothing has been spent,
+ * so a fresh agent shows no column rather than a row of zeroes.
+ */
+function formatUsage(usage: AgentUsage | undefined) {
+  if (!usage) return '';
+  const total = usage.inputTokens + usage.outputTokens;
+  if (total === 0) return '';
+  return `${formatTokens(total)} tok · ${formatTokens(usage.inputTokens)} in · ${formatTokens(usage.outputTokens)} out`;
 }
 
 // ── Components ───────────────────────────────────────────────
@@ -135,6 +157,10 @@ function AgentRow(props: { agent: AgentEntry }) {
   };
   const errorText = () => act()?.error ?? '';
 
+  // The stream's figure when we have one, the roster's otherwise. Both are the
+  // agent's lifetime total; the stream just gets there first, between polls.
+  const usageText = () => formatUsage(act()?.usage ?? a().usage);
+
   return html`
     <div class="process-row">
       <div class="process-info">
@@ -144,6 +170,11 @@ function AgentRow(props: { agent: AgentEntry }) {
           <div class="process-meta">
             <span style=${() => `color: ${typeBadge(a().type)}`}>${() => a().type}</span>
             <span>${() => (a().busy ? 'busy' : 'idle')}</span>
+            <${Show} when=${usageText}>
+              <span class="meta-tokens" title="Input + output tokens. Cache reads and writes excluded."
+                >${usageText}</span
+              >
+            </>
           </div>
           <${Show} when=${() => act() !== undefined}>
             <div class="process-activity">
@@ -303,9 +334,17 @@ function AppList() {
 }
 
 function StatusBar() {
+  // Session-wide, disposed agents included — so it can exceed the sum of the rows
+  // above, and that gap is the point: it's what the ephemeral agents spent.
+  const sessionUsage = () => formatUsage(agentStats()?.usage);
   return html`
     <div class="status-bar">
       <span>Last refresh: ${() => formatTime(lastRefresh())}</span>
+      <${Show} when=${sessionUsage}>
+        <span class="meta-tokens" title="Session total, including agents already disposed. Cache reads and writes excluded."
+          >${sessionUsage}</span
+        >
+      </>
       <button class="y-btn y-btn-ghost btn-sm" onClick=${() => refreshAll()}>Refresh</button>
     </div>
   `;

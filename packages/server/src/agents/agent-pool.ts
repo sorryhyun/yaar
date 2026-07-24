@@ -17,7 +17,7 @@ import { notifyAgentsChanged } from '../http/subscriptions.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
-import type { AITransport } from '../providers/types.js';
+import type { AITransport, TokenUsage } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
 import type { AgentPoolStats } from './pool-types.js';
 
@@ -59,6 +59,26 @@ export interface AgentEntry {
   busy: boolean;
   monitorId?: string;
   appId?: string;
+  /** Lifetime token consumption. `inputTokens` is fresh input — see {@link TokenUsage}. */
+  usage: TokenUsage;
+}
+
+const ZERO_USAGE: TokenUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
+
+function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  const cost = (a.costUsd ?? 0) + (b.costUsd ?? 0);
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+    ...(cost > 0 ? { costUsd: cost } : {}),
+  };
 }
 
 export class AgentPool {
@@ -99,6 +119,16 @@ export class AgentPool {
 
   /** All agent instanceIds for O(1) lookup. */
   private agentIds = new Set<string>();
+
+  /**
+   * Tokens spent by agents that no longer exist.
+   *
+   * Ephemeral agents are disposed the moment their task ends, and app agents can
+   * be deleted outright — without this, the session total would *shrink* as work
+   * completed, which reads as a bug in the counter rather than the truth about
+   * where the tokens went. Folded at the single dispose chokepoint.
+   */
+  private retiredUsage: TokenUsage = ZERO_USAGE;
 
   /**
    * Where this pool's agents get their providers. Defaults to the global warm pool.
@@ -193,6 +223,8 @@ export class AgentPool {
     { interruptIfRunning = true }: { interruptIfRunning?: boolean } = {},
   ): Promise<void> {
     this.untrackAgent(agent.instanceId);
+    // Before cleanup: the agent's counter goes away with it.
+    this.retiredUsage = addUsage(this.retiredUsage, agent.session.getUsage());
     if (interruptIfRunning && agent.session.isRunning()) {
       await agent.session.interrupt();
     }
@@ -598,12 +630,13 @@ export class AgentPool {
     for (const { agent, type, monitorId, appId } of this.allAgents()) {
       const id = agent.instanceId;
       const busy = this.isBusy(agent);
+      const usage = agent.session.getUsage();
       switch (type) {
         case 'session':
-          entries.push({ id, type, label: 'session', busy });
+          entries.push({ id, type, label: 'session', busy, usage });
           break;
         case 'monitor':
-          entries.push({ id, type, label: `monitor ${monitorId}`, busy, monitorId });
+          entries.push({ id, type, label: `monitor ${monitorId}`, busy, monitorId, usage });
           break;
         case 'app':
           entries.push({
@@ -613,10 +646,11 @@ export class AgentPool {
             busy,
             monitorId,
             appId,
+            usage,
           });
           break;
         case 'ephemeral':
-          entries.push({ id, type, label: agent.currentRole ?? 'ephemeral', busy });
+          entries.push({ id, type, label: agent.currentRole ?? 'ephemeral', busy, usage });
           break;
       }
     }
@@ -632,11 +666,13 @@ export class AgentPool {
     let total = 0;
     let idle = 0;
     let busy = 0;
+    let usage = this.retiredUsage;
 
     for (const { agent } of this.allAgents()) {
       total++;
       if (this.isBusy(agent)) busy++;
       else idle++;
+      usage = addUsage(usage, agent.session.getUsage());
     }
 
     return {
@@ -647,6 +683,7 @@ export class AgentPool {
       appAgents: this.appAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
       sessionAgent: this.sessionAgent !== null,
+      usage,
     };
   }
 

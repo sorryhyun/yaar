@@ -13,6 +13,32 @@ export interface ProviderInfo {
   requiredEnvVars?: string[];
 }
 
+/**
+ * Token consumption, normalized across providers.
+ *
+ * The two SDKs disagree about what "input" means, so the *mappers* reconcile it
+ * and everything downstream reads one meaning: `inputTokens` is **fresh** input —
+ * neither read from the cache nor written to it. Claude already reports it that
+ * way (`input_tokens` excludes both cache counts, which are separate fields);
+ * Codex folds cache reads into `inputTokens`, so its mapper subtracts them, which
+ * is also how Codex itself computes a blended total.
+ *
+ * `inputTokens + outputTokens` is therefore the cache-excluded total — the number
+ * Process Explorer shows. The two cache counts ride along because the
+ * fresh-vs-cache-read ratio is the cheapest signal there is for an agent that is
+ * thrashing its context; nothing displays them yet.
+ */
+export interface TokenUsage {
+  /** Input tokens that were neither a cache read nor a cache write. */
+  inputTokens: number;
+  /** Output tokens, reasoning/thinking included. */
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  /** Provider-reported cost, when it reports one (Claude does; Codex doesn't). */
+  costUsd?: number;
+}
+
 export interface StreamMessage {
   /**
    * `tool_use_start` and `tool_input_delta` are the *parameter-generation* phase
@@ -27,6 +53,12 @@ export interface StreamMessage {
    * `tool_result` still arrives afterwards with the complete output and stays
    * authoritative — the deltas are a live tail, and a provider that cannot
    * produce them (Claude) simply never does.
+   *
+   * `usage` carries token accounting and nothing else. It exists because Codex
+   * reports usage *mid-turn* (`thread/tokenUsage/updated`), where there is no
+   * other message to hang it on; Claude reports it once at the end, so there it
+   * rides on `complete`/`error` instead. Either way the payload is `usage` +
+   * `usageScope`, folded in one place by `StreamToEventMapper`.
    */
   type:
     | 'text'
@@ -36,6 +68,7 @@ export interface StreamMessage {
     | 'tool_use'
     | 'tool_output_delta'
     | 'tool_result'
+    | 'usage'
     | 'complete'
     | 'error';
   /**
@@ -62,6 +95,19 @@ export interface StreamMessage {
   toolUseId?: string;
   error?: string;
   isError?: boolean;
+  /** Token accounting, normalized. Present on `usage`, and on Claude's terminals. */
+  usage?: TokenUsage;
+  /**
+   * What the numbers in `usage` cover — the one thing a consumer cannot guess,
+   * and getting it wrong silently double-counts or undercounts forever.
+   *
+   * `turn` — consumption of *this turn only*; add it to the running total.
+   *   Claude's `result.usage` is this: one per `query()`.
+   * `session` — the provider's own running total for the whole thread; replace
+   *   the running total with it. Codex's `tokenUsage.total` is this, and it
+   *   arrives repeatedly within a single turn.
+   */
+  usageScope?: 'turn' | 'session';
 }
 
 export interface TransportOptions {

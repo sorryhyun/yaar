@@ -112,6 +112,12 @@ mock.module('../agents/agent-session.js', () => {
     getRecordedActions = mock(() => []);
     setOutputCallback = mock(() => {});
     getInstanceId = mock(() => `agent-${Date.now()}`);
+    getUsage = mock(() => ({
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    }));
     getConnectionId = mock(() => 'test-conn');
     getCurrentRole = mock(() => null);
     getCurrentMessageId = mock(() => null);

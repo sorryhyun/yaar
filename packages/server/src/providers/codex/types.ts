@@ -65,6 +65,7 @@ export type { ErrorNotification } from './generated/v2/index.js';
 export type { ItemStartedNotification } from './generated/v2/index.js';
 export type { ItemCompletedNotification } from './generated/v2/index.js';
 export type { CommandExecutionOutputDeltaNotification } from './generated/v2/index.js';
+export type { ThreadTokenUsageUpdatedNotification } from './generated/v2/index.js';
 
 // Account/Auth types (v2 API)
 export type { GetAccountParams } from './generated/v2/index.js';

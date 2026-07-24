@@ -4,9 +4,9 @@
  * Converts Claude Agent SDK messages to StreamMessage format.
  */
 
-import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk';
+import type { SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sdk';
 import { SUBAGENT_TOOL_NAME } from '@yaar/shared';
-import type { StreamMessage } from '../types.js';
+import type { StreamMessage, TokenUsage } from '../types.js';
 import { consumeLastCall } from '../../mcp/tool-call-buffer.js';
 
 /** Track tool_use_id → toolName from content_block_start events */
@@ -20,6 +20,27 @@ interface PendingToolUse {
 }
 const pendingToolUse = new Map<number, PendingToolUse>();
 let currentBlockIndex = -1;
+
+/**
+ * Pull token accounting off the SDK's `result` message — the only message that
+ * carries it, arriving once per `query()`, i.e. once per turn.
+ *
+ * No subtraction here, unlike Codex: the Anthropic API defines `input_tokens` as
+ * the input that was *neither* read from the cache nor used to create one, and
+ * reports those two separately. So the field already means what `TokenUsage`
+ * means by fresh input, and adding the cache counts back in would double-count.
+ */
+function mapResultUsage(msg: SDKResultMessage): TokenUsage | undefined {
+  const u = msg.usage;
+  if (!u) return undefined;
+  return {
+    inputTokens: u.input_tokens ?? 0,
+    outputTokens: u.output_tokens ?? 0,
+    cacheReadTokens: u.cache_read_input_tokens ?? 0,
+    cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
+    costUsd: typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : undefined,
+  };
+}
 
 /**
  * Map a Claude SDK message to a StreamMessage.
@@ -107,14 +128,19 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
       session_id: string;
     };
 
+    // A failed turn still burned tokens, so usage rides the error terminal too —
+    // dropping it there is how a budget readout quietly under-reports.
+    const usage = mapResultUsage(msg as SDKResultMessage);
+    const accounting = usage ? { usage, usageScope: 'turn' as const } : {};
+
     // Check for errors (SDKResultError type)
     if (result.is_error || result.subtype?.startsWith('error')) {
       const errorMessage = result.errors?.join('; ') || 'Unknown SDK error';
       console.error(`[message-mapper] SDK error: ${errorMessage} (subtype: ${result.subtype})`);
-      return { type: 'error', error: errorMessage, sessionId: result.session_id };
+      return { type: 'error', error: errorMessage, sessionId: result.session_id, ...accounting };
     }
 
-    return { type: 'complete', sessionId: result.session_id };
+    return { type: 'complete', sessionId: result.session_id, ...accounting };
   }
 
   // Handle user messages containing tool results

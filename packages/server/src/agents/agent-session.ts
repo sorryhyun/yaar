@@ -5,7 +5,12 @@
  * for one agent. Role is assigned dynamically per-message via handleMessage options.
  */
 
-import type { AITransport, TransportOptions, ProviderType } from '../providers/types.js';
+import type {
+  AITransport,
+  TransportOptions,
+  ProviderType,
+  TokenUsage,
+} from '../providers/types.js';
 import {
   ServerEventType,
   type ServerEvent,
@@ -83,6 +88,21 @@ export class AgentSession {
   private currentMonitorId: string | undefined;
   private onOutput: ((bytes: number) => void) | null = null;
   private broadcastFn: (event: ServerEvent) => void;
+
+  /**
+   * This agent's lifetime token consumption, across every turn it has run.
+   *
+   * Lives here rather than in the per-turn {@link StreamToEventMapper} because
+   * that object is built and thrown away once per turn; a counter kept there
+   * would reset on every message. Read by `AgentPool.listAgents()`, so it reaches
+   * `yaar://session/agents` — and Process Explorer — without a second channel.
+   */
+  private usage: TokenUsage = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
+  };
 
   private providerLifecycle: ProviderLifecycleManager;
   private toolActionBridge: ToolActionBridge;
@@ -167,6 +187,58 @@ export class AgentSession {
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  /** This agent's lifetime token consumption. A copy — callers must not mutate it. */
+  getUsage(): TokenUsage {
+    return { ...this.usage };
+  }
+
+  /**
+   * Fold one provider usage report into the lifetime total.
+   *
+   * The two scopes are not a style difference, they are what each provider
+   * actually reports, and treating either as the other is silently wrong:
+   * Claude's `result.usage` covers only the turn that just ended (add it), while
+   * Codex's `tokenUsage.total` is the thread's running total re-sent several
+   * times per turn (replace with it, or the figure multiplies).
+   *
+   * `Math.max` on the replace path guards the one case where a running total can
+   * appear to go backwards — a resumed or forked thread starts its own count
+   * from zero — which would otherwise credit the agent a negative delta.
+   */
+  recordUsage(
+    usage: TokenUsage,
+    scope: 'turn' | 'session',
+  ): { total: TokenUsage; delta: TokenUsage } {
+    const before = this.usage;
+    const next: TokenUsage =
+      scope === 'turn'
+        ? {
+            inputTokens: before.inputTokens + usage.inputTokens,
+            outputTokens: before.outputTokens + usage.outputTokens,
+            cacheReadTokens: before.cacheReadTokens + usage.cacheReadTokens,
+            cacheWriteTokens: before.cacheWriteTokens + usage.cacheWriteTokens,
+            costUsd: (before.costUsd ?? 0) + (usage.costUsd ?? 0),
+          }
+        : {
+            inputTokens: Math.max(before.inputTokens, usage.inputTokens),
+            outputTokens: Math.max(before.outputTokens, usage.outputTokens),
+            cacheReadTokens: Math.max(before.cacheReadTokens, usage.cacheReadTokens),
+            cacheWriteTokens: Math.max(before.cacheWriteTokens, usage.cacheWriteTokens),
+            costUsd: usage.costUsd ?? before.costUsd,
+          };
+    if (next.costUsd === undefined || next.costUsd === 0) delete next.costUsd;
+    this.usage = next;
+    return {
+      total: { ...next },
+      delta: {
+        inputTokens: next.inputTokens - before.inputTokens,
+        outputTokens: next.outputTokens - before.outputTokens,
+        cacheReadTokens: next.cacheReadTokens - before.cacheReadTokens,
+        cacheWriteTokens: next.cacheWriteTokens - before.cacheWriteTokens,
+      },
+    };
   }
 
   /**
@@ -368,6 +440,7 @@ export class AgentSession {
         onOutput: this.onOutput ?? undefined,
         agentInstanceId: stableAgentId,
         streamSessionId: this.liveSessionId,
+        onUsage: (usage, scope) => this.recordUsage(usage, scope),
       });
       mapper = turnMapper;
 

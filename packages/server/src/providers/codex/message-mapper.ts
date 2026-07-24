@@ -15,6 +15,7 @@ import type {
   ItemStartedNotification,
   ItemCompletedNotification,
   ThreadItem,
+  ThreadTokenUsageUpdatedNotification,
 } from './types.js';
 
 /** Extract the mcpToolCall variant from ThreadItem */
@@ -155,7 +156,6 @@ function mapItemCompleted(p: ItemCompletedNotification): StreamMessage | null {
 const IGNORED_PREFIXES = ['codex/event/', 'fuzzyFileSearch/'];
 
 const IGNORED_METHODS = new Set([
-  'thread/tokenUsage/updated',
   'thread/compacted',
   'account/rateLimits/updated',
   'account/updated',
@@ -208,6 +208,32 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
         return { type: 'error', error: p.turn.error?.message ?? 'Turn failed' };
       }
       return { type: 'complete' };
+    }
+
+    // ========================================================================
+    // Token accounting
+    // ========================================================================
+
+    case 'thread/tokenUsage/updated': {
+      const p = params as ThreadTokenUsageUpdatedNotification;
+      const t = p?.tokenUsage?.total;
+      if (!t) return null;
+      const cacheRead = t.cachedInputTokens ?? 0;
+      return {
+        type: 'usage',
+        usage: {
+          // Codex counts cache reads *inside* `inputTokens`; Claude reports them
+          // beside it. Subtracting here is what makes one number mean one thing
+          // downstream — and it's how Codex computes its own blended total.
+          inputTokens: Math.max(0, (t.inputTokens ?? 0) - cacheRead),
+          outputTokens: t.outputTokens ?? 0,
+          cacheReadTokens: cacheRead,
+          cacheWriteTokens: t.cacheWriteInputTokens ?? 0,
+        },
+        // `total`, not `last` — the thread's running total, re-sent several times
+        // per turn. Adding these up would multiply the real figure.
+        usageScope: 'session',
+      };
     }
 
     // ========================================================================
