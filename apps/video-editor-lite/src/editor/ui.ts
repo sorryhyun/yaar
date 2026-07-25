@@ -142,29 +142,29 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
                style="">
             <div class="y-label sb-title">Source</div>
             <input ref=${(el: HTMLInputElement) => { urlInput = el; }}
-                   type="url" class="sb-input"
+                   type="url" class="y-input sb-input"
                    placeholder="https://example.com/video.mp4"
                    style="margin-bottom:6px;" />
             <div class="sb-row">
               <button ref=${(el: HTMLButtonElement) => { loadUrlButton = el; }}
-                      type="button" class="sb-btn" style="flex:1;">Load URL</button>
+                      type="button" class="y-btn sb-btn" style="flex:1;">Load URL</button>
               <button ref=${(el: HTMLButtonElement) => { pickFileButton = el; }}
-                      type="button" class="sb-btn" style="flex:1;">📁 Local</button>
+                      type="button" class="y-btn sb-btn" style="flex:1;">📁 Local</button>
             </div>
 
-            <hr class="sb-divider" />
+            <hr class="y-divider sb-divider" />
             <div class="y-label sb-title">File Browser</div>
             <div class="sb-row" style="margin-bottom:6px;">
               <input ref=${(el: HTMLInputElement) => { storagePathInput = el; }}
-                     type="text" class="sb-input"
+                     type="text" class="y-input sb-input"
                      placeholder="mounts/lecture-materials"
                      value="mounts/lecture-materials"
                      style="flex:1;min-width:0;" />
               <button ref=${(el: HTMLButtonElement) => { refreshFilesButton = el; }}
-                      type="button" class="sb-btn icon" title="Refresh">↺</button>
+                      type="button" class="y-btn sb-btn icon" title="Refresh">↺</button>
             </div>
             <input ref=${(el: HTMLInputElement) => { fileSearch = el; }}
-                   type="text" class="sb-input"
+                   type="text" class="y-input sb-input"
                    placeholder="🔍  Filter files…"
                    style="margin-bottom:4px;" />
             <div ref=${(el: HTMLDivElement) => { fileListStatus = el; }} class="storage-status"></div>
@@ -191,51 +191,51 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
               <div>
                 <label>Width</label>
                 <input ref=${(el: HTMLInputElement) => { compWidthInput = el; }}
-                       type="number" value="1280" min="100" max="3840" step="1" class="sb-input" />
+                       type="number" value="1280" min="100" max="3840" step="1" class="y-input sb-input" />
               </div>
               <div>
                 <label>Height</label>
                 <input ref=${(el: HTMLInputElement) => { compHeightInput = el; }}
-                       type="number" value="720" min="100" max="2160" step="1" class="sb-input" />
+                       type="number" value="720" min="100" max="2160" step="1" class="y-input sb-input" />
               </div>
               <div>
                 <label>FPS</label>
                 <input ref=${(el: HTMLInputElement) => { compFpsInput = el; }}
-                       type="number" value="30" min="1" max="120" step="1" class="sb-input" />
+                       type="number" value="30" min="1" max="120" step="1" class="y-input sb-input" />
               </div>
               <div>
                 <label>Frames</label>
                 <input ref=${(el: HTMLInputElement) => { compDurationInput = el; }}
-                       type="number" value="150" min="1" step="1" class="sb-input" />
+                       type="number" value="150" min="1" step="1" class="y-input sb-input" />
               </div>
             </div>
 
-            <hr class="sb-divider" />
+            <hr class="y-divider sb-divider" />
             <div class="y-label sb-title" style="display:flex;align-items:center;justify-content:space-between;">
               <span>Layers</span>
               <button
                 ref=${(el: HTMLButtonElement) => { addLayerButton = el; }}
-                type="button" class="sb-btn icon" title="Add Layer" style="padding:2px 8px;font-size:13px;">＋</button>
+                type="button" class="y-btn sb-btn icon" title="Add Layer" style="padding:2px 8px;font-size:13px;">＋</button>
             </div>
             <div ref=${(el: HTMLDivElement) => { layerListEl = el; }} class="layer-list"></div>
 
-            <hr class="sb-divider" />
+            <hr class="y-divider sb-divider" />
             <div class="y-label sb-title">Add Scene</div>
             <div class="comp-grid" style="margin-bottom:6px;">
               <div>
                 <label>Start Frame</label>
                 <input ref=${(el: HTMLInputElement) => { addSceneFromInput = el; }}
-                       type="number" value="0" min="0" step="1" class="sb-input" placeholder="0" />
+                       type="number" value="0" min="0" step="1" class="y-input sb-input" placeholder="0" />
               </div>
               <div>
                 <label>Duration</label>
                 <input ref=${(el: HTMLInputElement) => { addSceneDurInput = el; }}
-                       type="number" min="1" step="1" class="sb-input" placeholder="auto" />
+                       type="number" min="1" step="1" class="y-input sb-input" placeholder="auto" />
               </div>
             </div>
             <div class="sb-row">
               <select ref=${(el: HTMLSelectElement) => { addSceneSelect = el; }}
-                      class="sb-input" style="flex:1;min-width:0;">
+                      class="y-input sb-input" style="flex:1;min-width:0;">
                 <option value="solid">Solid / Gradient</option>
                 <option value="text">Text</option>
                 <option value="shape">Shape</option>
@@ -243,10 +243,10 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
                 <option value="video-clip">Video Clip</option>
               </select>
               <button ref=${(el: HTMLButtonElement) => { addSceneButton = el; }}
-                      type="button" class="sb-btn">+ Add</button>
+                      type="button" class="y-btn sb-btn">+ Add</button>
             </div>
 
-            <hr class="sb-divider" />
+            <hr class="y-divider sb-divider" />
             <div class="y-label sb-title">Scenes</div>
             <div ref=${(el: HTMLDivElement) => { scenePanel = el; }} class="scene-list"></div>
             <div ref=${(el: HTMLDivElement) => { scenePropsPanel = el; }} class="scene-props-panel"></div>
@@ -309,9 +309,9 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
                 </select>
               </div>
               <button ref=${(el: HTMLButtonElement) => { loopButton = el; }}
-                      type="button" disabled>▶ Play Trimmed</button>
+                      type="button" class="y-btn sb-btn" disabled>▶ Play Trimmed</button>
               <button ref=${(el: HTMLButtonElement) => { exportButton = el; }}
-                      type="button" disabled>⬇ Export</button>
+                      type="button" class="y-btn sb-btn" disabled>⬇ Export</button>
             </div>
             <div class="stats-row">
               <span ref=${(el: any) => { timeLabel = el; }} class="chip">Current: 00:00.00</span>
@@ -341,9 +341,9 @@ export function createEditorUI(parent: HTMLElement, store: EditorStore): EditorU
             <div class="panel-title">Playback</div>
             <div class="action-row">
               <button ref=${(el: HTMLButtonElement) => { creatorPlayButton = el; }}
-                      type="button" style="min-width:90px;">▶ Play</button>
+                      type="button" class="y-btn sb-btn" style="min-width:90px;">▶ Play</button>
               <button ref=${(el: HTMLButtonElement) => { creatorExportButton = el; }}
-                      type="button" style="min-width:130px;">⬇ Export WebM</button>
+                      type="button" class="y-btn sb-btn" style="min-width:130px;">⬇ Export WebM</button>
               <div class="grow">
                 <span class="field-label">Frame</span>
                 <input ref=${(el: HTMLInputElement) => { creatorFrameSlider = el; }}

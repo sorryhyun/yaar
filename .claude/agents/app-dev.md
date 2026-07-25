@@ -215,8 +215,38 @@ All compiled apps get YAAR CSS custom properties and utility classes injected au
 ### Component Classes
 `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`, `y-list-item`
 
+### Document-app chrome (toolbars, app bars) — check this before writing a toolbar
+If your app has a title bar or an icon toolbar, these exist and you must not rebuild them:
+`y-appbar` / `y-appbar-actions`, `y-brand` / `y-brand-badge` / `y-brand-name`,
+`y-doc-field` / `y-doc-icon` / `y-doc-input` (the filename field), `y-editbar`,
+`y-tgroup` / `y-tsep`, `y-tbtn` (+ `-text` / `-primary` / `-active`) for 32px icon buttons,
+`y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (+ `-warning` / `-muted`).
+
+**`y-tbtn` is not `y-btn`.** `y-btn` is a bordered, filled, padded text button; `y-tbtn` is a
+32px transparent icon button that only shows a border on hover. A toolbar wants `y-tbtn`.
+Reaching for `y-btn`, finding it doesn't fit, and hand-rolling the transparent variant is a
+real mistake that shipped: excel-lite duplicated `y-tbtn`, `y-tselect`, `y-appbar`,
+`y-doc-field`, `y-tgroup`, `y-tsep`, `y-tlabel` and more, property for property, and carried
+~74 redundant lines of CSS until Phase 4 of `apps_modernization_proposal.md` removed them.
+
+The authoritative inventory is `packages/shared/src/design/app-css.ts`. **Read it before
+writing any chrome CSS**, and diff your rule against the class it resembles — the lists in
+this file are a summary, not the whole set.
+
 ### Typography
-`y-label` (uppercase muted section header), `y-truncate` (single-line), `y-clamp-2`, `y-clamp-3`
+`y-label` (uppercase muted section header), `y-truncate` (single-line), `y-clamp-2`, `y-clamp-3`,
+`y-font-mono` (never hardcode `'Courier New'` — the platform mono face is `--yaar-font-mono`)
+
+### Extending vs overriding
+Co-applying a local class with a `y-*` class is the supported way to add a *delta*
+(`class="y-tbtn tb-btn"` where `.tb-btn` sets only what differs). Re-declaring properties the
+`y-*` class already sets makes the SDK class inert — it looks adopted but contributes nothing,
+and grep cannot see the problem. Keep the modifier to the properties that genuinely differ.
+
+Defining a **new** `--yaar-*` token in your own `:root` is supported. **Redefining one the
+compiler ships is not** — that is a palette fork, and no app does it. Name app-local properties
+with your own prefix (`--pe-*`, `--sl-*`, `--xl-*`) so a reader can tell an extension from an
+override.
 
 ## Solid.js Patterns
 

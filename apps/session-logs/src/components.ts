@@ -22,12 +22,12 @@ export const SessionItem = (s: SessionSummary) => {
       }
       onClick=${() => loadDetail(s.sessionId)}
     >
-      <div class="session-id">
+      <div class="session-id y-font-mono">
         ${() => isCurrent() ? '\u26a1\u00a0' + s.sessionId : s.sessionId}
       </div>
       <div class="session-meta">
         <span class=${() => providerCls(s.provider)}>${() => providerLabel(s.provider)}</span>
-        <span class="session-datetime">${() => formatDateTime(s.createdAt)}</span>
+        <span class="session-datetime y-font-mono">${() => formatDateTime(s.createdAt)}</span>
         <span class="agent-count">🤖 ${() => s.agentCount ?? 0}</span>
       </div>
     </div>
@@ -66,7 +66,7 @@ export const DetailView = () => {
 
       <div class="detail-header">
         <div class="detail-header-top">
-          <div class="detail-session-id">${d.sessionId ?? sid}</div>
+          <div class="detail-session-id y-font-mono">${d.sessionId ?? sid}</div>
           <button
             class="y-btn y-btn-sm y-btn-ghost download-btn"
             onClick=${downloadLog}
@@ -93,12 +93,12 @@ export const DetailView = () => {
 
         <div class="detail-field">
           <div class="y-label field-label">Created</div>
-          <div class="field-value mono">${formatFull(d.createdAt)}</div>
+          <div class="field-value mono y-font-mono">${formatFull(d.createdAt)}</div>
         </div>
 
         <div class="detail-field">
           <div class="y-label field-label">Last Activity</div>
-          <div class="field-value mono">${formatFull(d.lastActivity)}</div>
+          <div class="field-value mono y-font-mono">${formatFull(d.lastActivity)}</div>
         </div>
 
         <div class="detail-field span-2">

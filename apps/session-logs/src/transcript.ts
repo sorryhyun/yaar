@@ -46,7 +46,7 @@ const ContentBlock = (content: string) => html`
   <div class="msg-text">
     <${For} each=${() => segments(content)}>
       ${(seg: Seg) => seg.code
-        ? html`<pre class="msg-code">${seg.text}</pre>`
+        ? html`<pre class="msg-code y-font-mono">${seg.text}</pre>`
         : html`<div class="msg-para">${seg.text}</div>`
       }
     </${For}>
@@ -57,7 +57,7 @@ const ContentBlock = (content: string) => html`
 const Collapsible = (label: string, body: string) => html`
   <details class="msg-collapse">
     <summary class="msg-summary">${label}</summary>
-    <pre class="msg-code">${body}</pre>
+    <pre class="msg-code y-font-mono">${body}</pre>
   </details>
 `;
 
@@ -70,7 +70,7 @@ function MessageBody(m: ParsedMessage) {
       if (!m.content) return null;
       return m.content.length > 280
         ? Collapsible('View result', m.content)
-        : html`<pre class="msg-code">${m.content}</pre>`;
+        : html`<pre class="msg-code y-font-mono">${m.content}</pre>`;
     case 'thinking':
       return m.content ? Collapsible('View reasoning', m.content) : null;
     case 'tool_use':
@@ -78,7 +78,7 @@ function MessageBody(m: ParsedMessage) {
     case 'action':
       return m.action != null ? Collapsible('View payload', pretty(m.action)) : null;
     case 'interaction':
-      return m.interaction ? html`<code class="msg-inline">${m.interaction}</code>` : null;
+      return m.interaction ? html`<code class="msg-inline y-font-mono">${m.interaction}</code>` : null;
     default:
       return m.content ? ContentBlock(m.content) : null;
   }
@@ -96,9 +96,9 @@ export const MessageCard = (m: ParsedMessage) => {
     <div class=${`msg-card ${meta.cls}`}>
       <div class="msg-head">
         <span class="msg-role">${meta.label}</span>
-        ${sub ? html`<span class="msg-sub">${sub}</span>` : null}
-        ${m.agentId ? html`<span class="msg-agent">${m.agentId}</span>` : null}
-        ${m.timestamp ? html`<span class="msg-time">${formatTime(m.timestamp)}</span>` : null}
+        ${sub ? html`<span class="msg-sub y-font-mono">${sub}</span>` : null}
+        ${m.agentId ? html`<span class="msg-agent y-font-mono">${m.agentId}</span>` : null}
+        ${m.timestamp ? html`<span class="msg-time y-font-mono">${formatTime(m.timestamp)}</span>` : null}
       </div>
       <div class="msg-body">${MessageBody(m)}</div>
     </div>
@@ -111,7 +111,7 @@ export const TranscriptSection = () => html`
     <div class="transcript-toolbar">
       <span class="y-label transcript-title">Transcript</span>
       ${() => state.messages && state.messages.length
-        ? html`<span class="msg-count">${state.messages.length} turns</span>`
+        ? html`<span class="msg-count y-font-mono">${state.messages.length} turns</span>`
         : null
       }
     </div>
@@ -125,7 +125,7 @@ export const TranscriptSection = () => html`
           `;
         }
         if (state.transcript) {
-          return html`<pre class="transcript-raw">${state.transcript}</pre>`;
+          return html`<pre class="transcript-raw y-font-mono">${state.transcript}</pre>`;
         }
         return html`<div class="transcript-loading"><span class="y-spinner"></span> Loading transcript…</div>`;
       }}

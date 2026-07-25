@@ -1,4 +1,13 @@
-/* ── Dark theme override ───────────────────────────────────── */
+/*
+ * Local custom property for a color with no `--yaar-*` token equivalent.
+ * app-css.ts exposes only --yaar-border (no hover step) to app iframes, so
+ * the brighter hover edge this app's cards/scrollbar-thumb/ghost-buttons use
+ * has nowhere else to live. Named --pe-*, not --yaar-*, since that prefix is
+ * reserved for the compiler-generated palette.
+ */
+.pe-app {
+  --pe-border-hover: #4a6080;
+}
 
 .pe-app {
   display: flex;
@@ -6,16 +15,8 @@
   position: absolute;
   inset: 0;
   overflow: hidden;
-  background: #111827;
-  color: #e2e8f0;
-  --yaar-bg: #111827;
-  --yaar-bg-surface: #1e293b;
-  --yaar-bg-overlay: #0f172a;
-  --yaar-border: #334155;
-  --yaar-text: #e2e8f0;
-  --yaar-text-muted: #94a3b8;
-  --yaar-card-bg: #1e293b;
-  --yaar-card-border: #334155;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
 }
 
 /* ── Stats bar ────────────────────────────────────────────── */
@@ -35,9 +36,6 @@
   gap: 2px;
   cursor: pointer;
   transition: border-color 0.15s;
-  background: #1e293b;
-  border: 1px solid #334155;
-  color: #e2e8f0;
 }
 
 .stat-card.active {
@@ -45,27 +43,27 @@
 }
 
 .stat-card:hover {
-  background: #273548;
-  border-color: #4a6080;
+  background: var(--yaar-bg-surface-hover);
+  border-color: var(--pe-border-hover);
 }
 
 .stat-value {
   font-size: 1.5rem;
   font-weight: 700;
   line-height: 1;
-  color: #f1f5f9;
+  color: var(--yaar-text);
 }
 
 .stat-label {
   font-size: 0.7rem;
-  color: #94a3b8;
+  color: var(--yaar-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
 
 .stat-sub {
   font-size: 0.7rem;
-  color: #64748b;
+  color: var(--yaar-text-dim);
 }
 
 /* ── Tab content ──────────────────────────────────────────── */
@@ -84,14 +82,14 @@
   width: 6px;
 }
 .tab-content::-webkit-scrollbar-track {
-  background: #111827;
+  background: var(--yaar-bg);
 }
 .tab-content::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--yaar-border);
   border-radius: 3px;
 }
 .tab-content::-webkit-scrollbar-thumb:hover {
-  background: #4a6080;
+  background: var(--pe-border-hover);
 }
 
 /* ── Process rows ─────────────────────────────────────────── */
@@ -101,12 +99,12 @@
   align-items: center;
   gap: var(--yaar-sp-2);
   padding: var(--yaar-sp-2) var(--yaar-sp-3);
-  border-radius: 6px;
-  color: #e2e8f0;
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text);
 }
 
 .process-row:hover {
-  background: #1e293b;
+  background: var(--yaar-bg-surface);
 }
 
 .process-info {
@@ -127,7 +125,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  color: #e2e8f0;
+  color: var(--yaar-text);
 }
 
 /*
@@ -141,7 +139,7 @@
   gap: 8px;
   min-width: 0;
   font-size: 0.75rem;
-  color: #94a3b8;
+  color: var(--yaar-text-muted);
   white-space: nowrap;
   overflow: hidden;
 }
@@ -235,15 +233,15 @@
 }
 
 .dot-ok {
-  background: var(--yaar-success, #22c55e);
+  background: var(--yaar-success);
 }
 
 .dot-warn {
-  background: #f5a623;
+  background: var(--yaar-warning);
 }
 
 .dot-err {
-  background: var(--yaar-error, #ef4444);
+  background: var(--yaar-error);
 }
 
 /* ── Status bar ───────────────────────────────────────────── */
@@ -253,10 +251,10 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--yaar-sp-1) var(--yaar-sp-3);
-  border-top: 1px solid #334155;
+  border-top: 1px solid var(--yaar-border);
   font-size: 0.75rem;
-  color: #64748b;
-  background: #0f172a;
+  color: var(--yaar-text-dim);
+  background: var(--yaar-bg);
 }
 
 /* ── Small button ─────────────────────────────────────────── */
@@ -267,12 +265,11 @@
 }
 
 .btn-danger {
-  color: #f87171;
+  color: var(--yaar-error);
 }
 
 .btn-danger:hover {
-  background: rgba(239, 68, 68, 0.15);
-  color: #fca5a5;
+  background: color-mix(in srgb, var(--yaar-error) 15%, transparent);
 }
 
 /* ── Lock icon ────────────────────────────────────────────── */
@@ -280,35 +277,4 @@
 .lock-icon {
   font-size: 0.75rem;
   opacity: 0.6;
-}
-
-/* ── Badge override for dark theme ───────────────────────── */
-
-.pe-app .y-badge {
-  background: #2d3f55;
-  color: #94a3b8;
-  border: 1px solid #334155;
-}
-
-/* ── Empty state override ─────────────────────────────────── */
-
-.pe-app .y-empty {
-  color: #64748b;
-}
-
-.pe-app .y-empty-icon {
-  color: #334155;
-}
-
-/* ── Refresh button override ──────────────────────────────── */
-
-.pe-app .y-btn-ghost {
-  color: #94a3b8;
-  border-color: #334155;
-}
-
-.pe-app .y-btn-ghost:hover {
-  background: #1e293b;
-  color: #e2e8f0;
-  border-color: #4a6080;
 }

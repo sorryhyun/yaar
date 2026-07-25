@@ -4,6 +4,27 @@
   padding: 0;
 }
 
+:root {
+  /* Role accent colors for transcript message cards (left border + label).
+     --yaar-warning is Primer's #c69026 (a duller, more "caution" amber);
+     the assistant role wants a brighter, more legible gold, so no token
+     fits — kept as a local identity color. */
+  --sl-role-assistant: #f0c060;
+  /* No --yaar-* token has a "thinking/reasoning" role — kept as a local
+     identity color. */
+  --sl-role-thinking: #a371f7;
+  /* No --yaar-* token has a "tool" role distinct from success/error —
+     kept as a local identity color. */
+  --sl-role-tool: #2dd4bf;
+  /* No --yaar-* token has an "action" role — kept as a local identity
+     color (deliberately distinct from --yaar-warning so action and
+     assistant read differently side by side). */
+  --sl-role-action: #ff9f45;
+  /* No --yaar-* token has an "interaction" role — kept as a local
+     identity color. */
+  --sl-role-interaction: #ec6cb9;
+}
+
 body,
 #app {
   height: 100vh;
@@ -125,7 +146,6 @@ body,
 
 .session-id {
   font-size: 11px;
-  font-family: 'Courier New', monospace;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -155,11 +175,12 @@ body,
   white-space: nowrap;
 }
 
-/* claude / anthropic */
+/* claude / anthropic — same identity color as .role-assistant (both are
+   "this came from the Claude/Anthropic assistant") */
 .provider-claude,
 .provider-anthropic {
   background: rgba(205, 157, 57, 0.15);
-  color: #f0c060;
+  color: var(--sl-role-assistant);
   border: 1px solid rgba(205, 157, 57, 0.3);
 }
 
@@ -189,7 +210,6 @@ body,
 
 .session-datetime {
   font-size: 10px;
-  font-family: 'Courier New', monospace;
   color: var(--yaar-text-muted);
   white-space: nowrap;
   overflow: hidden;
@@ -272,7 +292,6 @@ body,
 
 .detail-session-id {
   font-size: 13px;
-  font-family: 'Courier New', monospace;
   font-weight: 600;
   color: var(--yaar-accent);
   word-break: break-all;
@@ -327,7 +346,6 @@ body,
 
 .field-value.mono {
   font-size: 11px;
-  font-family: 'Courier New', monospace;
   letter-spacing: 0.02em;
 }
 
@@ -368,7 +386,6 @@ body,
 .msg-count {
   font-size: 10px;
   color: var(--yaar-text-muted);
-  font-family: 'Courier New', monospace;
 }
 
 .transcript-body {
@@ -402,7 +419,6 @@ body,
 
 .transcript-raw {
   font-size: 11px;
-  font-family: 'Courier New', monospace;
   color: var(--yaar-text-muted);
   white-space: pre-wrap;
   word-break: break-word;
@@ -437,7 +453,6 @@ body,
 
 .msg-sub {
   font-size: 10px;
-  font-family: 'Courier New', monospace;
   color: var(--yaar-text);
   background: rgba(255, 255, 255, 0.06);
   padding: 1px 6px;
@@ -451,7 +466,6 @@ body,
 .msg-agent {
   font-size: 9px;
   color: var(--yaar-text-muted);
-  font-family: 'Courier New', monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -461,7 +475,6 @@ body,
   margin-left: auto;
   font-size: 10px;
   color: var(--yaar-text-muted);
-  font-family: 'Courier New', monospace;
   flex-shrink: 0;
 }
 
@@ -489,7 +502,6 @@ body,
 
 .msg-code {
   font-size: 11px;
-  font-family: 'Courier New', monospace;
   background: var(--yaar-bg);
   border: 1px solid var(--yaar-border);
   border-radius: 4px;
@@ -503,7 +515,6 @@ body,
 
 .msg-inline {
   font-size: 11px;
-  font-family: 'Courier New', monospace;
   background: var(--yaar-bg);
   border: 1px solid var(--yaar-border);
   border-radius: 3px;
@@ -555,24 +566,24 @@ body,
 }
 
 .role-assistant {
-  border-left-color: #f0c060;
+  border-left-color: var(--sl-role-assistant);
 }
 .role-assistant .msg-role {
-  color: #f0c060;
+  color: var(--sl-role-assistant);
 }
 
 .role-thinking {
-  border-left-color: #a371f7;
+  border-left-color: var(--sl-role-thinking);
 }
 .role-thinking .msg-role {
-  color: #a371f7;
+  color: var(--sl-role-thinking);
 }
 
 .role-tool {
-  border-left-color: #2dd4bf;
+  border-left-color: var(--sl-role-tool);
 }
 .role-tool .msg-role {
-  color: #2dd4bf;
+  color: var(--sl-role-tool);
 }
 
 .role-result {
@@ -583,17 +594,17 @@ body,
 }
 
 .role-action {
-  border-left-color: #ff9f45;
+  border-left-color: var(--sl-role-action);
 }
 .role-action .msg-role {
-  color: #ff9f45;
+  color: var(--sl-role-action);
 }
 
 .role-interaction {
-  border-left-color: #ec6cb9;
+  border-left-color: var(--sl-role-interaction);
 }
 .role-interaction .msg-role {
-  color: #ec6cb9;
+  color: var(--sl-role-interaction);
 }
 
 .role-unknown {

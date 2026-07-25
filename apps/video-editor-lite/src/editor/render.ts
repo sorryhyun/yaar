@@ -489,7 +489,7 @@ function makeInput(
   el.type = type;
   el.value = String(value);
   el.dataset.prop = prop;
-  el.className = 'sb-input';
+  el.className = 'y-input sb-input';
   if (extra) Object.assign(el, extra);
   return el;
 }
@@ -501,7 +501,7 @@ function makeSelect(
 ): HTMLSelectElement {
   const el = document.createElement('select');
   el.dataset.prop = prop;
-  el.className = 'sb-input';
+  el.className = 'y-input sb-input';
   for (const opt of options) {
     const o = document.createElement('option');
     o.value = opt.value;
@@ -594,7 +594,7 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
     textInput.type = 'text';
     textInput.value = props.text ?? '';
     textInput.dataset.prop = 'text';
-    textInput.className = 'sb-input';
+    textInput.className = 'y-input sb-input';
     grid.appendChild(makeField('Text', textInput));
     grid.appendChild(
       makeField(
@@ -687,7 +687,7 @@ export function renderScenePropsPanel(panelEl: HTMLDivElement, scene: Scene | nu
     srcInput.type = 'text';
     srcInput.value = props.src ?? '';
     srcInput.dataset.prop = 'src';
-    srcInput.className = 'sb-input';
+    srcInput.className = 'y-input sb-input';
     srcInput.placeholder = 'https://...';
     grid.appendChild(makeField('Source URL', srcInput));
   }

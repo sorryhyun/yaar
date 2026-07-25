@@ -1,6 +1,6 @@
 # Proposal: Apps Modernization — closing the drift between the apps and the platform
 
-**Status:** Phases 0–3 shipped (0–2 on 2026-07-24, 3 on 2026-07-25). Phases 4–5 and the enforcement guards are open.
+**Status:** Phases 0–4 shipped (0–2 on 2026-07-24, 3–4 on 2026-07-25). Phase 5 and the enforcement guards are open.
 **Scope:** `apps/*`, `user-apps/*`, `packages/compiler` (new guards), app-dev agent guidance
 **Companion:** [`app_dsl_proposal.md`](./app_dsl_proposal.md) — platform-level changes (defineApp, Zod-first schemas, replay semantics). This proposal is about bringing the *existing* 25 apps up to the conventions the platform already has, and adding enforcement so they stay there.
 
@@ -529,14 +529,146 @@ log paths were exercised only through standalone zod harnesses against adversari
 (`5`, `"x"`, `[1,2]`, `null`, `{cells:{A1:3}}`, mixed-validity records), confirming each
 lands in the intended branch rather than passing a loose-object check by accident.
 
-### Phase 4 — design-token compliance (2–3 days)
+### Phase 4 — design-token compliance ✅ **DONE** (2026-07-25)
 
-- process-explorer: delete the local token overrides and `y-*` re-skins; theme through tokens.
-- excel-lite, curious-library-vn, recent-papers: adopt `y-btn`/`y-input`/`y-card`/`y-empty`
-  where a 1:1 replacement exists; keep genuinely bespoke layout CSS (grids, timelines).
-- session-logs: lift the 5 role-color hexes into local CSS vars derived from tokens; collapse
-  the 9 repeated `'Courier New'` declarations into one class.
-- video-editor-lite CSS: replace `.sb-btn`/`.sb-input` with `y-*`; keep timeline-specific CSS.
+Six apps swept in parallel (one agent per app group). **No app redefines any `--yaar-*` token
+any more** — `grep -rn -- '--yaar-[a-z0-9-]*\s*:' apps/*/src user-apps/*/src` returns nothing
+outside `var()` reads, which was not true when the phase started.
+
+| App | Result |
+|---|---|
+| process-explorer | Tailwind-slate override block and all three `y-*` re-skins deleted; 43 hexes → **1**, token refs 25 → 44. Now themes entirely through the injected palette. |
+| session-logs | 11 `'Courier New'` declarations → `y-font-mono` at 14 call sites; 5 role colors → named `--sl-role-*` vars. |
+| video-editor-lite (both copies) | `.sb-btn`/`.sb-input`/`.sb-title`/`.sb-divider` now layer `y-btn`/`y-input`/`y-label`/`y-divider` + narrow modifiers for the real deltas. 4 previously unclassed action-row buttons gained classes. |
+| excel-lite | **15 byte-identical local classes deleted** in favour of the SDK document-app family (see below); 570 → 496 lines, hexes 16 → 4. |
+| curious-library-vn | **Zero swaps, by design** — every control is diegetic. Its `--library-*` palette is now a registered exception instead of unexplained drift. |
+| recent-papers | 3 buttons → `y-btn`, 1 input → `y-input`, 4 selects → `y-select`, 2 panels → `y-card`; −18 CSS lines. One hex the audit's CSS-only scan missed (an inline `style` in `main.ts:234`) fixed. |
+
+#### The finding that matters more than the phase: naming the classes narrowed the sweep
+
+excel-lite's first pass concluded **zero adoptable sites** — and was right about the four
+classes this line item named. `y-btn` is a bordered, filled, padded text button; every excel-lite
+button is a 32px transparent icon button. No 1:1 anywhere.
+
+It had nonetheless hand-rolled **a different SDK family, line for line**. `.tb-btn` duplicates
+`.y-tbtn` on every property (`display`, `gap:6px`, `height:32px`, `min-width:32px`,
+`padding:0 7px`, `border:1px solid transparent`, radius, `background:transparent`,
+`color:--yaar-text-muted`, `font-family`), has a **byte-identical** `:hover`, and an `:active`
+whose `rgba(accent, .14)` is exactly what `y-tbtn:active` already ships — the app had even
+introduced an `--xl-accent-rgb` var to re-derive a value the SDK computes for it. `.tb-btn-text`
+is byte-identical to `.y-tbtn-text`. Fourteen more classes were the same story: `.topbar`/
+`y-appbar`, `.brand`/`y-brand`, `.brand-name`/`y-brand-name`, `.header-actions`/
+`y-appbar-actions`, `.doc-meta`/`y-doc-field`, `.tb-group`/`y-tgroup`, `.tb-sep`/`y-tsep`,
+`.tb-label`/`y-tlabel`, `.tb-select`/`y-tselect`, `.tb-btn.active`/`y-tbtn-active`.
+
+That family carries a comment in `app-css.ts` saying it was extracted for "the document apps
+(word-lite, slides-lite)". excel-lite is a document app that never got the memo.
+
+**The lesson for the next sweep: a line item that names specific SDK classes silently scopes
+the audit to those classes.** The instruction has to be "diff this app's CSS against the whole
+`y-*` inventory", not "adopt `y-btn`/`y-input`/`y-card`/`y-empty`". word-lite and slides-lite
+were never checked for the reverse case and should be.
+
+#### A second pattern worth a guard: inert adoption
+
+video-editor-lite was recorded above as having "zero `y-*` usage". False — it already wrote
+`class="y-label sb-title"` at every title site. But `.sb-title` re-declared *every* property
+`y-label` sets, at equal specificity and later in the cascade, so the SDK class contributed
+nothing. Adoption was present and functionally dead.
+
+This is invisible to grep (the class is there), invisible to the compiler (the CSS is valid),
+and invisible to a reviewer skimming markup. Fixing it meant *removing* declarations from the
+local class, not adding a class. **A guard that flags a local class co-applied with a `y-*`
+class while overriding ≥N of its properties would catch it** — worth adding to the enforcement
+list below, since nothing else can see it.
+
+#### Where the line item was not followed, and why
+
+- **session-logs' role colors are not "derived from tokens".** No token carries a
+  "thinking" / "tool-call" / "interaction" role, and `--yaar-warning` (`#c69026`) is a duller
+  caution amber that would make the assistant's voice read as a warning. All five are named
+  `--sl-role-*` vars holding their original hex, each with a comment saying why no token fits.
+  Deduplicated and explained, not tokenized — the honest outcome.
+- **curious-library-vn got no swaps at all.** Grepping for settings/save/load/modal/menu
+  surfaced nothing: the app has no non-diegetic chrome. Its 10 hexes were *already* in local
+  `--library-*` vars and only lacked justification, which they now have, plus an entry in
+  `design_system.md`'s exception registry. It is on the audit's list on a false premise.
+
+#### What the audit had wrong (the streak continues)
+
+- **session-logs has 11 `'Courier New'` declarations, not 9.**
+- **`.sb-btn` does not "rebuild `y-btn` state-for-state".** Its base fill is
+  `--yaar-bg-surface-hover` (pre-highlighted), its hover is a strong `--yaar-accent-emphasis`,
+  and its press is `translateY(1px)` — none of which any `y-btn` variant does. It shares
+  *structure* with `y-btn`, not states, so the swap needed a modifier rather than a deletion.
+- **excel-lite's "5 pre-existing `infer-handler-params` errors" are 0.** Phase 3's command work
+  cleared them; the claim survived in this document as a stale carry-forward from Phase 2.
+- **video-editor-lite's token half was already done** before this phase: 0 hexes, 207 token
+  refs. The "797 lines, zero `y-*`" framing described the component-class gap only.
+- **`design_system.md`'s exception registry was stale in both halves of one bullet.** It
+  grandfathered process-explorer's re-skin (removed by this phase) alongside
+  **`video-viewer-lite`, which does not exist** — that doc line was the only occurrence of the
+  name in the entire repo. The nearest real app, video-editor-lite, defined no tokens at all.
+  Registry rewritten; the "grandfathered, not endorsed" bullet is gone.
+- Line numbers drifted again. process-explorer was the one app whose measurements matched the
+  audit exactly.
+
+#### Visual changes that are real, not just reference changes
+
+The phase's non-goal is "no visual redesigns", but three changes do alter pixels and are
+deliberate:
+
+1. **session-logs' monospace face changes** — `--yaar-font-mono` is `'SF Mono', SFMono-Regular,
+   ui-monospace, Menlo, Consolas, monospace`, not Courier New. Session IDs, timestamps, tool
+   output and the raw transcript all re-render. This is the app ceasing to defect from the
+   design system's mono choice.
+2. **process-explorer moves from Tailwind-slate to GitHub-dark.** That is the entire point of
+   deleting the override.
+3. **excel-lite's primary button and recent-papers' radii shift slightly** — excel-lite's
+   hardcoded `#58a6ff` had drifted from the current `--yaar-accent` (`#539bf5`); recent-papers'
+   hand-rolled 10px/12px radii become the token's 6px. Both are drift corrections.
+
+**Generator guidance updated in-phase** (the third phase running to conclude that a primitive
+nothing points at gets reinvented). The root cause of the excel-lite duplication was located
+precisely: `docs/guides/app-development.md:376` already documents the document-app chrome family
+in full, but `.claude/agents/app-dev.md` — the scaffold that regenerates into every new app, and
+which Phase 0 identified as the lever that actually stops drift — listed only the 11 basic
+component classes and **never mentioned `y-tbtn`, `y-appbar`, `y-tselect` or the rest**. An agent
+reading only the scaffold could not discover them, would try `y-btn` for a toolbar, find it
+doesn't fit, and hand-roll the transparent variant. Exactly what happened. The scaffold now
+carries the chrome family, an explicit "`y-tbtn` is not `y-btn`" warning citing this incident,
+`y-font-mono`, an extend-vs-override section naming the inert-adoption trap, and the rule that
+`app-css.ts` is the authoritative inventory and these lists are a summary.
+
+**Versions bumped:** apps/video-editor-lite 1.2.4 → **1.2.5**, user-apps/video-editor-lite
+1.3.1 → **1.3.2**, excel-lite 1.1.1 → **1.1.2**, curious-library-vn 1.3.0 → **1.3.1**,
+recent-papers 1.2.0 → **1.2.1**. process-explorer and session-logs are `kind: "system"` and
+exempt.
+
+**Verified:** `bun run typecheck` clean across all five packages; `cd apps && bunx tsc --noEmit`
+and `cd user-apps && bunx tsc --noEmit` both clean; `bun run build:apps` — 26 apps, **0
+failures**; every touched app's extracted `dist/protocol.json` state/command/event counts
+identical before and after. `check:apps` is back to exactly the Phase 3 baseline — 2
+`no-native-dialogs` advisories under `apps/`, 9 across `user-apps/`, every ERROR rule at 0 —
+so the sweep introduced no new findings. Independently spot-checked the one failure the
+compiler's guard structurally cannot see: **local custom properties are exempt from
+`--yaar-*` validation**, so a typo'd `--xl-*`/`--sl-*`/`--pe-*` would silently drop its
+declaration. Every local var reference in all six stylesheets resolves to a definition in the
+same file. Every surviving hex is a named var definition, a mask-alpha stop, or inside a
+comment.
+
+Note for the next phase: agents must **not** run `bun run build:apps` concurrently — it sweeps
+every app's `dist/` at once and parallel runs race. A per-app compile wrapper around
+`compileTypeScript` is what made five-way parallelism safe; the full sweep runs once at the end.
+
+**Not verified by exercise:** nothing was driven through a browser. Every visual-equivalence
+claim above is CSS-cascade reasoning (specificity, declaration order, and the fact that
+`transition` is a non-additive shorthand), not a screenshot. Highest-risk if that reasoning is
+wrong: video-editor-lite's `.sb-btn` hover/press (its modifier must re-list
+`background`/`border-color` alongside `transform` because of the shorthand), the four
+video-editor-lite action-row buttons that went from unclassed to `y-btn sb-btn`, and
+`y-tbtn`'s `font-weight:600` now reaching excel-lite's icon buttons. One cosmetic nit left
+open: excel-lite keeps `.topbar` in markup with no remaining CSS rule.
 
 ### Phase 5 — architectural outliers (optional, per-app decision)
 
@@ -559,7 +691,20 @@ is the one mechanism that has reliably disciplined AI-generated app code. Add:
   `onMount` scope. AST-detectable with the same machinery as `mount-guard`.
 - **hex-color guard** (warning): hex literal in app CSS where a `--yaar-*` token has the same
   role; allowlist comment `/* yaar-allow-hex: reason */` for theme swatches (slides-lite's
-  presets are legitimate).
+  presets are legitimate). Phase 4 left the six swept apps at 1/6/0/4/11/0 hexes, all of them
+  either a named local-var definition, a mask-alpha stop, or text inside a comment — so the
+  guard needs to skip comments and `mask-image` to avoid drowning in false positives.
+- **inert-adoption guard** (warning, added by Phase 4's finding): a local class co-applied with
+  a `y-*` class in markup while re-declaring that class's own properties at equal specificity,
+  so the SDK class contributes nothing. video-editor-lite shipped `class="y-label sb-title"`
+  where `.sb-title` overrode every property `y-label` sets. Invisible to grep (the class is
+  present), to the compiler (the CSS is valid), and to markup review — nothing but a
+  property-level diff can see it.
+- **local-custom-prop guard** (warning): the token guard deliberately exempts app-declared
+  names, which means a typo'd `--xl-*`/`--sl-*`/`--pe-*` silently drops its declaration exactly
+  the way an unknown `--yaar-*` would. Phase 4 had to check this by hand. The same
+  declaration/usage machinery already in `design-token-guard.ts` covers it: warn on a `var(--x)`
+  with no fallback and no declaration anywhere in the app.
 - **silent-catch guard** (warning): `catch` block with an empty body and no comment. Phase 3
   cleared the storage/config/external-JSON reads, so what remains is mostly browser-automation
   best-effort calls (`user-apps/thesingularity-reader/src/auth.ts` has ~14 `.catch(() => {})`

@@ -71,13 +71,26 @@ Deviations are legal only if listed here, with a reason:
 - **dc-comics** — dcinside brand orange (`#f7b731`) layered
   over the token base. Brand accents ride on top of, never replace, the system.
 - **slides-lite** — opts into `.y-light` for document-like surfaces.
-- **process-explorer** (Tailwind-slate re-skin) and **video-viewer-lite** (bespoke
-  pale-blue light theme) — *grandfathered, not endorsed*: they redefine `--yaar-*`
-  in `:root`, which is the supported override mechanism, but they diverge from the
-  palette. Candidates for conforming or getting a real reason in this registry.
+- **curious-library-vn** — the `--library-*` palette (deep greens, gold trim, parchment)
+  is the game world's own art direction, not chrome: swapping the OS palette should
+  *not* recolor a visual novel's dialogue panels any more than it should recolor a
+  sprite. Every control in the app is diegetic, which is why it uses no `y-*`
+  component classes and legitimately never will.
 
-Anything else that redefines `--yaar-*` wholesale or ships its own hex palette for
-chrome is drift and gets fixed, not registered.
+The palette-override entry that used to sit here is gone: **no app redefines any
+`--yaar-*` token any more** (`grep -rn -- '--yaar-[a-z0-9-]*\s*:' apps/*/src
+user-apps/*/src` returns nothing outside `var()` reads). process-explorer's
+Tailwind-slate re-skin was removed in Phase 4 of `apps_modernization_proposal.md`,
+and the "video-viewer-lite" it was registered alongside **never existed** — that doc
+line was the only occurrence of the name anywhere in the repo. The real app,
+video-editor-lite, defined no tokens at all.
+
+Defining a *new* `--yaar-*` token in your own `:root` is still supported — the
+compiler's token guard deliberately exempts app-declared names, since that is how
+the palette gets extended. What is drift is redefining one the compiler already
+ships, or shipping a parallel hex palette for chrome. Prefer a non-`--yaar-`
+prefix for app-local properties (`--pe-*` in process-explorer, `--sl-*` in
+session-logs) so a reader can tell an extension from an override at a glance.
 
 ## Where things are
 

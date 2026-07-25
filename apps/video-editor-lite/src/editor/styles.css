@@ -141,7 +141,12 @@ select:focus-visible {
   overflow-y: auto;
   padding: var(--yaar-sp-3);
 }
-.sb-title,
+/* .sb-title is always paired with the SDK's y-label in markup (class="y-label
+   sb-title"); this rule carries only the delta over y-label (block display,
+   local margin rhythm, the dimmer --yaar-text-dim vs y-label's
+   --yaar-text-muted). y-label already supplies font-size/font-weight/
+   text-transform/letter-spacing (.07em vs the .08em this used to hardcode —
+   imperceptible, dropped rather than duplicated). */
 .comp-grid label,
 .props-label {
   display: block;
@@ -152,12 +157,17 @@ select:focus-visible {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
+.sb-title {
+  display: block;
+  margin: var(--yaar-sp-2) 0 var(--yaar-sp-1);
+  color: var(--yaar-text-dim);
+}
 .sb-title:first-child {
   margin-top: 0;
 }
+/* .sb-divider pairs with the SDK's y-divider (class="y-divider sb-divider");
+   the only delta is the wider local margin rhythm (sp-3 vs y-divider's sp-2). */
 .sb-divider {
-  border: 0;
-  border-top: 1px solid var(--yaar-border);
   margin: var(--yaar-sp-3) 0;
 }
 .sb-row {
@@ -165,7 +175,8 @@ select:focus-visible {
   align-items: center;
   gap: var(--yaar-sp-2);
 }
-.sb-input,
+/* Bare input[type=number]/select styling stays local — the SDK has no
+   equivalent tag-level rule, only the .y-input/.y-select classes below. */
 input[type='number'],
 select {
   width: 100%;
@@ -177,41 +188,45 @@ select {
   border-radius: var(--yaar-radius);
   font-size: var(--yaar-text-sm);
 }
-.sb-input:focus,
 input[type='number']:focus,
 select:focus {
   border-color: var(--yaar-accent);
   box-shadow: 0 0 0 2px var(--ve-accent-soft);
   outline: none;
 }
-.sb-btn,
-.action-row button {
+/* .sb-input pairs with the SDK's y-input (class="y-input sb-input"); y-input
+   already supplies width/padding/color/background/border/font-size and the
+   accent focus border. The only delta kept here is the taller min-height and
+   the focus glow this app adds on top. */
+.sb-input {
   min-height: 36px;
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
-  border: 1px solid var(--yaar-border);
-  border-radius: var(--yaar-radius);
-  color: var(--yaar-text);
-  background: var(--yaar-bg-surface-hover);
-  cursor: pointer;
-  font-size: var(--yaar-text-sm);
+}
+.sb-input:focus {
+  box-shadow: 0 0 0 2px var(--ve-accent-soft);
+}
+/* .sb-btn pairs with the SDK's y-btn (class="y-btn sb-btn"). y-btn supplies
+   padding/border/border-radius/color/font-size/cursor/white-space; this app
+   deviates in the base fill (bg-surface-hover, not bg-surface), bold weight,
+   an accent-emphasis hover fill (rather than y-btn's plain hover wash), a
+   translateY press instead of an opacity dip, and the disabled state — none
+   of which the SDK class covers on its own. */
+.sb-btn {
+  min-height: 36px;
   font-weight: 700;
-  white-space: nowrap;
+  background: var(--yaar-bg-surface-hover);
   transition:
     transform var(--yaar-ease),
     background var(--yaar-ease),
     border-color var(--yaar-ease);
 }
-.sb-btn:hover,
-.action-row button:hover {
+.sb-btn:hover {
   background: var(--yaar-accent-emphasis);
   border-color: var(--yaar-accent);
 }
-.sb-btn:active,
-.action-row button:active {
+.sb-btn:active {
   transform: translateY(1px);
 }
-.sb-btn:disabled,
-.action-row button:disabled {
+.sb-btn:disabled {
   cursor: not-allowed;
   opacity: 0.48;
 }
