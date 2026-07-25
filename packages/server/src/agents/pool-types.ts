@@ -56,6 +56,8 @@ export interface AgentPoolStats {
   busyAgents: number;
   monitorAgents: number;
   appAgents: number;
+  /** Tool-less app-spawned personas, across every app and monitor. */
+  personaAgents: number;
   ephemeralAgents: number;
   sessionAgent: boolean;
   /**

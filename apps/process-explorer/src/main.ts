@@ -29,6 +29,9 @@ function typeBadge(type: AgentEntry['type']) {
   const colors: Record<string, string> = {
     monitor: 'var(--yaar-accent)',
     app: 'var(--yaar-success)',
+    // An app's own persona — same family as its app agent, dimmer because a room
+    // of four should read as one app's cast rather than four peers of it.
+    persona: 'color-mix(in srgb, var(--yaar-success) 55%, var(--yaar-text-muted))',
     ephemeral: 'var(--yaar-text-muted)',
     session: '#f5a623',
   };

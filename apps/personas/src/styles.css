@@ -1,0 +1,176 @@
+.rt-root {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: var(--yaar-sp-3);
+  padding: var(--yaar-sp-3);
+  overflow: hidden;
+}
+
+/* ── Cast ─────────────────────────────────────────────── */
+
+.rt-cast {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  overflow-y: auto;
+  padding-right: var(--yaar-sp-1);
+}
+
+.rt-card {
+  border: 1px solid var(--yaar-border);
+  border-radius: 6px;
+  padding: var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+
+.rt-card.active {
+  border-color: var(--yaar-accent);
+}
+
+.rt-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.rt-emoji {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.rt-name {
+  font-weight: 600;
+  flex: 1;
+}
+
+.rt-spin {
+  width: 12px;
+  height: 12px;
+}
+
+.rt-prompt {
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  line-height: 1.45;
+}
+
+.rt-prompt-edit {
+  font-size: 12px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+.rt-card-actions {
+  display: flex;
+  gap: var(--yaar-sp-1);
+}
+
+.rt-card-actions .y-btn {
+  padding: 2px 8px;
+  font-size: 12px;
+}
+
+.rt-error {
+  font-size: 12px;
+  color: var(--yaar-error);
+}
+
+/* ── Room ─────────────────────────────────────────────── */
+
+.rt-room {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.rt-log {
+  position: absolute;
+  inset: 0 0 96px 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-3);
+  padding-right: var(--yaar-sp-2);
+}
+
+.rt-line {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-1);
+}
+
+.rt-line-who {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+}
+
+.rt-line-text {
+  white-space: pre-wrap;
+  line-height: 1.55;
+  border-left: 2px solid var(--yaar-border);
+  padding-left: var(--yaar-sp-3);
+}
+
+.rt-line.mine .rt-line-text {
+  border-left-color: var(--yaar-accent);
+  color: var(--yaar-text);
+}
+
+.rt-line.pending .rt-line-text {
+  color: var(--yaar-text-muted);
+}
+
+.rt-thinking {
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  padding-left: var(--yaar-sp-3);
+}
+
+.rt-thinking summary {
+  cursor: pointer;
+}
+
+.rt-thinking div {
+  white-space: pre-wrap;
+  opacity: 0.75;
+  margin-top: var(--yaar-sp-1);
+}
+
+.rt-hint {
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  max-width: 40ch;
+  text-align: center;
+}
+
+/* ── Compose ──────────────────────────────────────────── */
+
+.rt-compose {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  background: var(--yaar-bg);
+  padding-top: var(--yaar-sp-2);
+}
+
+.rt-compose textarea {
+  resize: none;
+}
+
+.rt-compose-actions {
+  display: flex;
+  gap: var(--yaar-sp-2);
+}

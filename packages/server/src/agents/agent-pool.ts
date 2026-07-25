@@ -5,12 +5,15 @@
  * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
  * - App agents: persistent per (monitor, app), handle app protocol communication
+ * - Persona agents: N per (monitor, app), tool-less, prompt supplied by the app at runtime
  *
  * Used by ContextPool to decouple agent lifecycle from task orchestration.
  */
 
 import { AgentSession } from './agent-session.js';
 import { getAgentLimiter } from './limiter.js';
+import { personaRole } from './profiles/persona.js';
+import { monitorSource } from './context.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { notifyAgentsChanged } from '../http/subscriptions.js';
@@ -38,6 +41,16 @@ function parseAppKey(key: string): { monitorId: string; appId: string } {
 }
 
 /**
+ * Persona agents extend the app key with the persona's own id. The parts are never
+ * parsed back out — {@link PersonaAgent} carries them as fields — so the key only
+ * has to be unique, and `::` still cannot occur in any of the three components
+ * (numeric monitorId, directory-name appId, {@link PERSONA_ID_RE} personaId).
+ */
+export function personaAgentKey(monitorId: string, appId: string, personaId: string): string {
+  return `${monitorId}::${appId}::${personaId}`;
+}
+
+/**
  * Internal pooled agent representation.
  */
 export interface PooledAgent {
@@ -53,14 +66,45 @@ export interface PooledAgent {
 export interface AgentEntry {
   /** instanceId — stable across turns; accepted by `interruptByIdOrRole`. */
   id: string;
-  type: 'session' | 'monitor' | 'app' | 'ephemeral';
+  type: 'session' | 'monitor' | 'app' | 'ephemeral' | 'persona';
   /** Human-readable name: the monitorId, the appId, or the current role. */
   label: string;
   busy: boolean;
   monitorId?: string;
   appId?: string;
+  /** Persona agents only — the id its owning app spawned it under. */
+  personaId?: string;
   /** Lifetime token consumption. `inputTokens` is fresh input — see {@link TokenUsage}. */
   usage: TokenUsage;
+}
+
+/**
+ * A persona agent and the metadata its owning app spawned it with.
+ *
+ * The prompt lives here rather than on the provider because a persona's prompt is
+ * *the persona*: it is replayed as `systemPromptOverride` on every turn, and the
+ * provider's own `systemPrompt` (the generic YAAR one it was warmed with) is never
+ * used. Keeping it on the record also means a busy check, a roster row, and a
+ * respawn all read the same object.
+ */
+export interface PersonaAgent {
+  agent: PooledAgent;
+  monitorId: string;
+  appId: string;
+  personaId: string;
+  /** Verbatim, caller-supplied. Replayed on every turn — see {@link buildPersonaProfile}. */
+  systemPrompt: string;
+  model?: string;
+  createdAt: number;
+  /**
+   * Final assistant text of the last completed turn.
+   *
+   * The `done` stream frame carries the same text, so a live subscriber never needs
+   * this. It exists for the subscriber that *wasn't* live: an iframe that reloaded
+   * mid-turn, or one whose subscription dropped, can `read` the persona and recover
+   * the answer instead of re-asking a question the model already paid for.
+   */
+  lastResponse?: string;
 }
 
 const ZERO_USAGE: TokenUsage = {
@@ -93,6 +137,15 @@ export class AgentPool {
 
   /** Persistent per-app agents, keyed by `{monitorId}::{appId}` (see `appKey`). */
   private appAgents = new Map<string, PooledAgent>();
+
+  /**
+   * Persona agents, keyed by `{monitorId}::{appId}::{personaId}` (see `personaAgentKey`).
+   *
+   * Monitor-scoped for the same reason app agents are: the app that spawned them is
+   * itself scoped to the monitor whose window it runs in, so two monitors running the
+   * same app get two independent casts and neither can name the other's.
+   */
+  private personaAgents = new Map<string, PersonaAgent>();
 
   /** Session agent — lazy singleton for cross-monitor oversight. */
   private sessionAgent: PooledAgent | null = null;
@@ -179,8 +232,8 @@ export class AgentPool {
 
   /**
    * Every live agent, exactly once, in the order every caller here reads them:
-   * session → monitor → app → ephemeral. `listAgents()` and `getStats()` expose
-   * that order, so it is part of the contract, not an implementation detail.
+   * session → monitor → app → persona → ephemeral. `listAgents()` and `getStats()`
+   * expose that order, so it is part of the contract, not an implementation detail.
    *
    * The single traversal is the point: a new agent tier is added here and every
    * roster, lookup, and teardown below sees it. They used to walk the four
@@ -191,6 +244,7 @@ export class AgentPool {
     type: AgentEntry['type'];
     monitorId?: string;
     appId?: string;
+    personaId?: string;
   }> {
     if (this.sessionAgent) yield { agent: this.sessionAgent, type: 'session' };
     for (const [monitorId, agent] of this.monitorAgents) {
@@ -198,6 +252,15 @@ export class AgentPool {
     }
     for (const [key, agent] of this.appAgents) {
       yield { agent, type: 'app', ...parseAppKey(key) };
+    }
+    for (const p of this.personaAgents.values()) {
+      yield {
+        agent: p.agent,
+        type: 'persona',
+        monitorId: p.monitorId,
+        appId: p.appId,
+        personaId: p.personaId,
+      };
     }
     for (const agent of this.ephemeralAgents) yield { agent, type: 'ephemeral' };
   }
@@ -462,6 +525,132 @@ export class AgentPool {
     for (const appId of appIds) {
       await this.disposeAppAgent(monitorId, appId);
     }
+
+    // Not folded into the loop above: a persona is spawned by an app's *iframe*,
+    // which needs no app agent to exist. An app that only ever talks to its personas
+    // has entries here and none in `appAgents`, so walking app agents would reclaim
+    // nothing and leak every slot the monitor's personas hold.
+    await this.disposePersonasForMonitor(monitorId);
+  }
+
+  // ── Persona agents ───────────────────────────────────────────────
+
+  /**
+   * Spawn a persona agent for one app on one monitor.
+   *
+   * Returns null when the global limiter has no slot — the caller surfaces that to
+   * the app as a clean "agent limit reached" rather than a crash, since a room of
+   * four characters plus the standing session/monitor/app trio sits close to the
+   * `MAX_AGENTS` default. The per-app cap (`personas.max` in app.json) is checked by
+   * the caller, which is the layer that can read the manifest.
+   */
+  async spawnPersonaAgent(
+    monitorId: string,
+    appId: string,
+    personaId: string,
+    options: { systemPrompt: string; model?: string },
+  ): Promise<PersonaAgent | null> {
+    const provider = await this.acquireProvider();
+    const agent = await this.createAgentCore(provider ?? undefined);
+    if (!agent) {
+      if (provider) await provider.dispose();
+      return null;
+    }
+
+    const record: PersonaAgent = {
+      agent,
+      monitorId,
+      appId,
+      personaId,
+      systemPrompt: options.systemPrompt,
+      ...(options.model ? { model: options.model } : {}),
+      createdAt: Date.now(),
+    };
+    this.personaAgents.set(personaAgentKey(monitorId, appId, personaId), record);
+    console.log(
+      `[AgentPool] Persona "${personaId}" spawned for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
+    );
+    return record;
+  }
+
+  getPersonaAgent(monitorId: string, appId: string, personaId: string): PersonaAgent | undefined {
+    return this.personaAgents.get(personaAgentKey(monitorId, appId, personaId));
+  }
+
+  /** Every persona one app owns on one monitor, oldest first. */
+  listPersonaAgents(monitorId: string, appId: string): PersonaAgent[] {
+    return [...this.personaAgents.values()]
+      .filter((p) => p.monitorId === monitorId && p.appId === appId)
+      .sort((a, b) => a.createdAt - b.createdAt);
+  }
+
+  /** True while the persona's provider is streaming — one turn at a time per persona. */
+  isPersonaBusy(record: PersonaAgent): boolean {
+    return this.isBusy(record.agent);
+  }
+
+  /**
+   * Run one persona turn, fire and forget.
+   *
+   * Deliberately not routed through `ContextPool`: a persona has no context tape,
+   * no window, and no queue — the app's own scheduler decides who speaks and when,
+   * and the pool's queues exist to serialize things a persona has no share in. What
+   * it does share is the turn machinery, so the answer streams to
+   * `yaar://agents/{instanceId}/stream` exactly like any other agent's, for free.
+   *
+   * The returned promise resolves when the turn ends; callers that want the verb to
+   * return immediately (the app's `message` action does) simply don't await it. The
+   * final text lands on `record.lastResponse` either way.
+   */
+  runPersonaTurn(record: PersonaAgent, content: string, messageId: string): Promise<void> {
+    return record.agent.session.handleMessage(content, {
+      role: personaRole(record.appId, record.personaId),
+      source: monitorSource(record.monitorId),
+      messageId,
+      monitorId: record.monitorId,
+      systemPromptOverride: record.systemPrompt,
+      // The containment. See profiles/persona.ts — an empty allowlist is what stops
+      // a runtime-supplied prompt from reaching a single tool or MCP server.
+      allowedTools: [],
+      ...(record.model ? { model: record.model } : {}),
+      // Not a context tape write — nothing here reaches `ContextTape`. It is the one
+      // callback that hands back the turn's final assistant text, which `read` serves
+      // to an iframe that missed the `done` frame.
+      onContextMessage: (role, text) => {
+        if (role === 'assistant') record.lastResponse = text;
+      },
+    });
+  }
+
+  /** Dispose one persona. Returns false when the app never spawned it. */
+  async disposePersonaAgent(monitorId: string, appId: string, personaId: string): Promise<boolean> {
+    const key = personaAgentKey(monitorId, appId, personaId);
+    const record = this.personaAgents.get(key);
+    if (!record) return false;
+
+    this.personaAgents.delete(key);
+    await this.disposeAgent(
+      record.agent,
+      `Persona "${personaId}" disposed for ${appId} on monitor ${monitorId}`,
+    );
+    return true;
+  }
+
+  /** Dispose every persona one app owns on one monitor. Returns how many died. */
+  async disposePersonasForApp(monitorId: string, appId: string): Promise<number> {
+    const personas = this.listPersonaAgents(monitorId, appId);
+    for (const p of personas) {
+      await this.disposePersonaAgent(monitorId, appId, p.personaId);
+    }
+    return personas.length;
+  }
+
+  /** Dispose every persona on a monitor, whichever app owns it. */
+  async disposePersonasForMonitor(monitorId: string): Promise<void> {
+    const doomed = [...this.personaAgents.values()].filter((p) => p.monitorId === monitorId);
+    for (const p of doomed) {
+      await this.disposePersonaAgent(monitorId, p.appId, p.personaId);
+    }
   }
 
   // ── Session agent ────────────────────────────────────────────────
@@ -555,7 +744,12 @@ export class AgentPool {
     for (const { agent, type } of this.allAgents()) {
       if (agent.instanceId !== agentId) continue;
       // Ephemerals are unprivileged workers spawned by a monitor turn — same tier.
-      return type === 'ephemeral' ? 'monitor' : type;
+      if (type === 'ephemeral') return 'monitor';
+      // Personas are the app tier's own workers. Belt and braces: they run with an
+      // empty tool allowlist, so no MCP request ever arrives carrying one's token,
+      // and if one somehow did it would land in the least-privileged tier there is.
+      if (type === 'persona') return 'app';
+      return type;
     }
     return undefined;
   }
@@ -627,7 +821,7 @@ export class AgentPool {
    */
   listAgents(): AgentEntry[] {
     const entries: AgentEntry[] = [];
-    for (const { agent, type, monitorId, appId } of this.allAgents()) {
+    for (const { agent, type, monitorId, appId, personaId } of this.allAgents()) {
       const id = agent.instanceId;
       const busy = this.isBusy(agent);
       const usage = agent.session.getUsage();
@@ -646,6 +840,18 @@ export class AgentPool {
             busy,
             monitorId,
             appId,
+            usage,
+          });
+          break;
+        case 'persona':
+          entries.push({
+            id,
+            type,
+            label: `${personaId} · ${appId} (monitor ${monitorId})`,
+            busy,
+            monitorId,
+            appId,
+            personaId,
             usage,
           });
           break;
@@ -681,6 +887,7 @@ export class AgentPool {
       busyAgents: busy,
       monitorAgents: this.monitorAgents.size,
       appAgents: this.appAgents.size,
+      personaAgents: this.personaAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
       sessionAgent: this.sessionAgent !== null,
       usage,
@@ -711,6 +918,7 @@ export class AgentPool {
     this.sessionAgent = null;
     this.monitorAgents.clear();
     this.appAgents.clear();
+    this.personaAgents.clear();
     this.ephemeralAgents.clear();
     for (const id of this.agentIds) {
       getSessionHub().unregisterAgent(id);

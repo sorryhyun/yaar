@@ -155,7 +155,9 @@ SessionHub (singleton registry)
         │   ├── Session Agent: PooledAgent | null            ← lazy singleton; cross-monitor oversight + session principal (only tier with yaar://session/* access; the only principal that drives the user's real browser via yaar://session/browser)
         │   ├── Monitor Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
-        │   └── App Agents: Map<appId, PooledAgent>  ← persistent per app
+        │   ├── App Agents: Map<appId, PooledAgent>  ← persistent per app
+        │   └── Persona Agents: Map<monitorId::appId::personaId, PersonaAgent>
+        │        ← N per (monitor, app); tool-less, prompt supplied by the app at runtime
         ├── ContextTape (hierarchical message history)
         │   ├── [main] user/assistant messages
         │   └── [window:id] branch messages
@@ -238,6 +240,24 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 **Monitor ↔ App Agent Communication:**
 - **Monitor → App**: `invoke('yaar://windows/{id}', { action: 'message', message: '...' })` — wraps message in `<monitor:{monitorId}>` tags and routes as an app task via `AppTaskProcessor`. Fire-and-forget; use `hook: 'response'` to get the app agent's reply back.
 - **App → Monitor**: App agent's `relay` tool enqueues a `type: 'monitor'` task. Additionally, app agent responses are pushed to `InteractionTimeline` and drained by the monitor on its next turn.
+
+**Persona agents (`yaar://apps/self/agents`):** an app that declares `"personas": { "max": N }` in its
+app.json (bundled-only, like `controls`/`streams`) may spawn up to N tool-less AI instances, each with
+a system prompt it supplies at runtime and each its own provider session with its own memory. The verb
+surface lives in `handlers/apps/agents-resource.ts` — `list` / `invoke {spawn|message|interrupt}` /
+`read` / `delete` — and is callable from the app's iframe (`POST /api/verb`), never by another app:
+the appId in the URI must equal the appId the *context* says the caller is, which the caller cannot
+forge. `message` returns as soon as the turn is queued, so N personas generate concurrently; the answer
+arrives on the existing `yaar://agents/{instanceId}/stream` feed (needs `"streams": ["agents"]`), whose
+`done` frame carries the turn's final text.
+
+Personas deliberately hold **no tools, no MCP servers, no permissions, and no principal** —
+`buildPersonaProfile` sets `allowedTools: []`, from which `buildSDKOptions` derives an empty MCP set and
+no builtins. That empty array is the whole containment story for a runtime-supplied prompt; `undefined`
+there would mean *every* tool. They bypass `ContextPool` entirely (no tape, no queue — the app's own
+scheduler serializes them) and are reclaimed when the app's last window on the monitor closes, when the
+monitor is removed, or on explicit `delete`. See `docs/proposals/persona_agents_proposal.md` and
+`apps/personas` (Round Table) for the reference consumer.
 
 ## REST API
 

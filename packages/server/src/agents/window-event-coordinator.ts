@@ -131,7 +131,38 @@ export class WindowEventCoordinator {
           err,
         );
       });
+      this.disposePersonasIfLastWindow(appId, monitorId);
     }
+  }
+
+  /**
+   * Reclaim an app's personas once its last window on this monitor is gone.
+   *
+   * App agents survive a window close — the next window reuses the agent and its
+   * context, which is the behavior a user feels as the app remembering them. Personas
+   * cannot follow that rule: a room of four holds four slots out of the global
+   * `MAX_AGENTS` semaphore, and an app that is no longer on screen holding almost
+   * half the machine's agents starves everything else. The app persists what it needs
+   * (appDb/appStorage) and replays it into a respawned persona's first message, which
+   * is the recovery path the ChitChats port was designed around anyway.
+   *
+   * "Last window" is asked of the window registry rather than the app processor's
+   * `activeWindows`, which tracks the most-recently-active window per app and is
+   * cleared by the close above — reading it here would report "no windows left" while
+   * a second window of the same app is still open.
+   */
+  private disposePersonasIfLastWindow(appId: string, monitorId?: string): void {
+    if (!monitorId) return;
+    const stillOpen = this.ctx.windowState
+      .listWindows()
+      .some(
+        (w) => w.appId === appId && this.ctx.windowState.getMonitorForWindow(w.id) === monitorId,
+      );
+    if (stillOpen) return;
+
+    this.ctx.agentPool.disposePersonasForApp(monitorId, appId).catch((err) => {
+      console.error(`[WindowEventCoordinator] Error disposing personas for ${appId}:`, err);
+    });
   }
 
   /**

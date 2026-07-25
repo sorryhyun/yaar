@@ -1,6 +1,7 @@
 # Proposal: Persona Agents — app-spawned AI instances (and a ChitChats-class chat room app)
 
-**Status:** Draft
+**Status:** Phase 1 landed (the primitive). Phase 2/3 (the ChitChats port) not started —
+see [What shipped](#what-shipped) for the delta between this document and the code.
 **Scope:** `packages/server` (agent pool, new verb surface, stream access), `packages/shared` (SDK), one new bundled app (`apps/chitchats`)
 **Driving use case:** porting the feature set of [`chitchats-public`](https://github.com/sorryhyun/chitchats-public) — a multi-character AI chat room — into YAAR as a bundled app.
 
@@ -20,6 +21,31 @@ the user and each other — turn scheduling in the iframe, personas doing the ta
 
 The primitive is the point; the app is the proof. In the OS metaphor, apps (processes)
 finally get threads.
+
+## What shipped
+
+Phase 1 landed close to the design below, in ~600 lines of server code across six files plus
+tests. Where the code differs from this document, the code is right and the difference is here:
+
+| Design (below) | As built | Why |
+|---|---|---|
+| Pool tier keyed `{monitorId}::{appId}::{personaId}` | Same, and the key is never parsed back out — `PersonaAgent` carries `{appId, monitorId, personaId}` as fields | The record shape the multi-window proposal §2 also wants |
+| `spawn` errors when the persona exists | **Idempotent**: hands back the live persona with `reused: true`, ignoring the new prompt | An iframe reload re-runs the app's spawn calls; refusing costs the app its cast, and swapping the prompt under a live conversation rewrites who the persona has been. Delete and respawn to recast |
+| Ownership via `self` resolution | `self` resolution *plus* an appId-in-URI vs. appId-in-context equality check | The permission list says what you may ask for; ownership says whose personas they are. An app cannot forge its context appId, so the second check is the load-bearing one |
+| `done` frame gains `{ text }` | Done — on **every** agent's stream, not just personas | It is the same mapper; an interrupted turn carries its partial text too |
+| Queue-or-reject when busy | **Reject**, with `busy: true` on the envelope | The app's scheduler is the only thing that knows whether a second message is a follow-up or a race |
+| Personas disposed when the app's last window closes | Same, asked of the window registry rather than `AppTaskProcessor.activeWindows` | That map tracks the most-recently-active window and is cleared by the close itself — reading it would report "no windows left" with a second window still open |
+| SDK sugar in `@bundled/yaar` (`yaar.agents.*`) | **Not built.** Apps use `invoke`/`list`/`del` + the existing `yaar.stream()` | The verb calls are already one line each; sugar can follow a second consumer |
+| §1.3 "verify the Claude path drops WebSearch/Task" | Verified and pinned by a test against the real `buildSDKOptions` | `allowedTools: []` yields no MCP servers, no `WebSearch`, no `Task`. `undefined` yields all of them — the test asserts both halves |
+
+Open question 2 (per-persona model tier) is answered by `spawn`'s optional `model`, with no
+default change. Questions 1, 3, 4, and 5 stand as written.
+
+**Not built:** `apps/chitchats` (Phase 2/3). In its place is `apps/personas` ("Round Table"),
+a ~700-line bundled app that is the primitive's proof rather than the ChitChats port: a cast of
+characters, each a persona, all answering one message concurrently with live streaming and a
+thinking fold, persisted in `appDb`. The tape executor, interrupt-weave, `[[skip]]` convergence,
+and per-room scheduling are Phase 2/3 and remain unwritten.
 
 ## Motivation
 

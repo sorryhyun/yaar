@@ -223,7 +223,14 @@ export class StreamToEventMapper {
   finish(status: AgentTurnStatus): void {
     if (this.turnClosed) return;
     this.turnClosed = true;
-    this.emitStreamFrame('done', { status });
+    // The turn's final text rides along so a subscriber that only wants the answer
+    // (an app driving a persona) never has to re-read the resource, and one that
+    // accumulated deltas can reconcile against the authoritative string. Present on
+    // an `interrupted` close too — a half-finished answer is still what was said.
+    this.emitStreamFrame('done', {
+      status,
+      ...(this.state.responseText ? { text: this.state.responseText } : {}),
+    });
   }
 
   /** Close the turn with a terminal `error` frame. Same once-only rule as {@link finish}. */
