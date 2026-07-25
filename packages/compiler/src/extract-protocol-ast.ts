@@ -52,6 +52,19 @@ export interface ProtocolError {
 export interface AstProtocolExtraction {
   protocol: Protocol | null;
   errors: ProtocolError[];
+  /**
+   * Descriptor schema paths (`commands.add.params`) that are not compile-time
+   * constants and are expected to be Zod — the ones `fold-schemas.ts` must fill
+   * in by running the app. Only `defineApp` produces these; the legacy shape has
+   * no default export to read a schema back out of, so a non-constant schema
+   * stays a hard error there.
+   *
+   * Non-empty means `protocol` is *incomplete*, not wrong: every entry is
+   * present, and the listed schemas are absent until the fold supplies them.
+   */
+  pendingFolds: string[];
+  /** True when the manifest came from `export default defineApp({...})`. */
+  usesDefineApp: boolean;
 }
 
 /** Reads a module's text, or null when the path does not exist. */
@@ -248,6 +261,8 @@ function buildScope(ts: TsModule, file: string, text: string): ModuleScope {
 class Extractor {
   private readonly scopes = new Map<string, ModuleScope | null>();
   readonly errors: ProtocolError[] = [];
+  /** See `AstProtocolExtraction.pendingFolds`. */
+  readonly pendingFolds: string[] = [];
 
   constructor(
     private readonly ts: TsModule,
@@ -255,6 +270,20 @@ class Extractor {
   ) {}
 
   // -- diagnostics ---------------------------------------------------------
+
+  /**
+   * Discard every error recorded since `mark`.
+   *
+   * Used for exactly one thing: a descriptor schema that failed to fold
+   * statically and will be handed to the runtime fold instead. The evaluator
+   * reports as it goes, so "try, and on failure defer" needs the report undone —
+   * otherwise adopting a Zod schema would fail the build with a message about a
+   * function call that is not a mistake. Any caller that does not go on to
+   * record a `pendingFolds` entry is dropping a real diagnostic.
+   */
+  rollbackErrors(mark: number): void {
+    this.errors.length = mark;
+  }
 
   error(scope: ModuleScope, node: TsNode, message: string): void {
     const { line, character } = scope.source.getLineAndCharacterOfPosition(node.getStart());
@@ -1008,24 +1037,83 @@ function findDefineAppCall(
   return { args: site.call.arguments[0], scope: site.scope };
 }
 
-/** Copy an optional JSON-object property onto a descriptor. */
+/**
+ * Copy an optional JSON-object property (`params`/`returns`/`schema`) onto a
+ * descriptor.
+ *
+ * `foldable` turns the failure into a deferral: `z.object({...})` is a builder
+ * chain, not a constant, so a static evaluator can only ever report it as
+ * unresolvable. Rather than teach this evaluator Zod's API, the path is recorded
+ * and `fold-schemas.ts` reads the schema off the app it runs. The refusal
+ * property is unchanged — the fold either produces the schema or the build fails
+ * naming this same path.
+ */
 function assignObject(
   extractor: Extractor,
   target: Record<string, unknown>,
   key: string,
   source: Map<string, { value: TsNode; scope: ModuleScope }>,
   label: string,
+  foldable = false,
 ): boolean {
   const entry = source.get(key);
   if (!entry) return true;
+  const mark = extractor.errors.length;
   const value = extractor.evaluate(entry.value, entry.scope, `${label}.${key}`);
-  if (value === undefined) return false;
+  if (value === undefined) {
+    if (!foldable) return false;
+    extractor.rollbackErrors(mark);
+    extractor.pendingFolds.push(`${label}.${key}`);
+    return true;
+  }
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     extractor.error(entry.scope, entry.value, `\`${label}.${key}\`: expected an object`);
     return false;
   }
   target[key] = value;
   return true;
+}
+
+/**
+ * Reject two commands reachable by the same name.
+ *
+ * At runtime the SDK builds one flat alias map and the last registration wins, so
+ * a duplicate does not fail — it makes one command silently unreachable. The
+ * manifest still advertises both, so the agent calls a name that answers with the
+ * wrong handler. Names and aliases share the lookup, which is why a name
+ * colliding with another command's alias is the same defect.
+ */
+function checkAliasCollisions(
+  extractor: Extractor,
+  entries: Array<{ key: string; value: TsNode; scope: ModuleScope }>,
+  commands: Protocol['commands'],
+): void {
+  const owners = new Map<string, { command: string; kind: 'name' | 'alias' }>();
+  const byKey = new Map(entries.map((e) => [e.key, e]));
+
+  const claim = (spelling: string, command: string, kind: 'name' | 'alias'): void => {
+    const held = owners.get(spelling);
+    if (!held) {
+      owners.set(spelling, { command, kind });
+      return;
+    }
+    const site = byKey.get(command);
+    if (!site) return;
+    const taken =
+      held.kind === 'name' ? `command \`${held.command}\`` : `an alias of \`${held.command}\``;
+    const mine = kind === 'name' ? 'a command name' : `an alias of \`${command}\``;
+    extractor.error(
+      site.scope,
+      site.value,
+      `\`commands.${command}\`: \`${spelling}\` is already ${taken} and is also ${mine}; ` +
+        `one name resolves to one command at runtime, so the other becomes unreachable`,
+    );
+  };
+
+  for (const name of Object.keys(commands)) claim(name, name, 'name');
+  for (const [name, descriptor] of Object.entries(commands)) {
+    for (const alias of descriptor.aliases ?? []) claim(alias, name, 'alias');
+  }
 }
 
 /** How a registration shape names the thing that answers a query or a command. */
@@ -1039,6 +1127,12 @@ interface ImplKeys {
 interface BuildOptions {
   /** Method shorthand is legal in this config shape. */
   allowMethods: boolean;
+  /**
+   * A `params`/`returns`/`schema` that is not a constant may be a Zod schema and
+   * is deferred to the runtime fold instead of erroring. Only `defineApp` sets
+   * it — see `assignObject`.
+   */
+  foldable?: boolean;
   /**
    * Require each descriptor to carry its implementation, and under which name.
    * Only `defineApp` sets it: its shape is pinned, so a descriptor missing `run`
@@ -1162,7 +1256,7 @@ function buildProtocol(
       const description = readDescription(props, entry, label);
       if (description === null) continue;
       const descriptor: Record<string, unknown> = { description };
-      if (!assignObject(extractor, descriptor, 'schema', props, label)) continue;
+      if (!assignObject(extractor, descriptor, 'schema', props, label, options.foldable)) continue;
       protocol.state[entry.key] = descriptor as { description: string; schema?: object };
     }
   }
@@ -1213,8 +1307,8 @@ function buildProtocol(
         descriptor.replay = replay;
       }
 
-      if (!assignObject(extractor, descriptor, 'params', props, label)) continue;
-      if (!assignObject(extractor, descriptor, 'returns', props, label)) continue;
+      if (!assignObject(extractor, descriptor, 'params', props, label, options.foldable)) continue;
+      if (!assignObject(extractor, descriptor, 'returns', props, label, options.foldable)) continue;
       protocol.commands[entry.key] = descriptor as {
         description: string;
         aliases?: string[];
@@ -1222,6 +1316,7 @@ function buildProtocol(
         returns?: object;
       };
     }
+    checkAliasCollisions(extractor, commandEntries, protocol.commands);
   }
 
   // -- events --------------------------------------------------------------
@@ -1243,14 +1338,19 @@ function buildProtocol(
 }
 
 /** An extracted protocol, or null when nothing was declared. */
-function finish(extractor: Extractor, protocol: Protocol | null): AstProtocolExtraction {
-  if (extractor.errors.length > 0) return { protocol: null, errors: extractor.errors };
-  if (!protocol) return { protocol: null, errors: [] };
+function finish(
+  extractor: Extractor,
+  protocol: Protocol | null,
+  usesDefineApp = false,
+): AstProtocolExtraction {
+  const rest = { pendingFolds: extractor.pendingFolds, usesDefineApp };
+  if (extractor.errors.length > 0) return { protocol: null, errors: extractor.errors, ...rest };
+  if (!protocol) return { protocol: null, errors: [], ...rest };
   const empty =
     Object.keys(protocol.state).length === 0 &&
     Object.keys(protocol.commands).length === 0 &&
     !protocol.events;
-  return { protocol: empty ? null : protocol, errors: [] };
+  return { protocol: empty ? null : protocol, errors: [], ...rest };
 }
 
 export interface ExtractOptions {
@@ -1290,17 +1390,26 @@ export function extractProtocolFromModules(
   options: ExtractOptions = {},
 ): AstProtocolExtraction {
   const extractor = new Extractor(ts, readFile);
+  /** Every early exit carries the same shape as `finish()`. */
+  const bail = (usesDefineApp = false): AstProtocolExtraction => ({
+    protocol: null,
+    errors: extractor.errors,
+    pendingFolds: extractor.pendingFolds,
+    usesDefineApp,
+  });
+
   const scopes = extractor.moduleGraph(entry);
   // Errors already recorded (an unparseable file) must survive these early
   // exits — a module that failed to parse is exactly the case where "no
   // register() found" is the wrong conclusion to report silently.
-  if (scopes.length === 0) return { protocol: null, errors: extractor.errors };
+  if (scopes.length === 0) return bail();
 
   // Mutual exclusion. Both calls register, the runtime lets exactly one win,
   // and nothing here can tell which — so the manifest would describe an app the
   // iframe may not be running. Keyed on the import rather than on a resolved
   // call so an app mid-migration is caught before the shapes interleave.
-  if (importsDefineApp(scopes)) {
+  const usesDefineApp = importsDefineApp(scopes);
+  if (usesDefineApp) {
     const registers = findAppRegisterCalls(ts, scopes);
     if (registers.length > 0) {
       extractor.error(
@@ -1311,7 +1420,7 @@ export function extractProtocolFromModules(
           'with confidence. Keep the `defineApp` default export and delete the ' +
           '`app.register({...})` call',
       );
-      return { protocol: null, errors: extractor.errors };
+      return bail(true);
     }
   }
 
@@ -1319,11 +1428,13 @@ export function extractProtocolFromModules(
   const defineApp = findDefineAppCall(ts, scopes, extractor);
   // A `defineApp` that was found and rejected must not fall through to the
   // legacy search: that would hide the very failure the errors describe.
-  if (extractor.errors.length > errorsBefore) return { protocol: null, errors: extractor.errors };
-  if (defineApp) return finish(extractor, extractDefineApp(ts, extractor, defineApp, options));
+  if (extractor.errors.length > errorsBefore) return bail(true);
+  if (defineApp) {
+    return finish(extractor, extractDefineApp(ts, extractor, defineApp, options), true);
+  }
 
   const call = findRegisterCall(ts, scopes, extractor);
-  if (!call) return { protocol: null, errors: extractor.errors };
+  if (!call) return bail(usesDefineApp);
 
   const { node: configNode, scope: configScope } = extractor.unwrap(call.args, call.scope);
   if (!ts.isObjectLiteralExpression(configNode)) {
@@ -1333,11 +1444,11 @@ export function extractProtocolFromModules(
       `\`register()\`: argument could not be resolved to an object literal ` +
         `(${extractor.describeNode(configNode)})`,
     );
-    return { protocol: null, errors: extractor.errors };
+    return bail();
   }
 
   const config = extractor.flattenObject(configNode, configScope, 'register');
-  if (config === null) return { protocol: null, errors: extractor.errors };
+  if (config === null) return bail();
 
   return finish(extractor, buildProtocol(ts, extractor, config, { allowMethods: false }));
 }
@@ -1368,6 +1479,10 @@ function extractDefineApp(
   return buildProtocol(ts, extractor, config, {
     allowMethods: true,
     requireImpl: { state: 'get', commands: 'run' },
+    // Only here: the config is reachable at runtime as the entry module's
+    // default export, which is what makes reading a Zod schema back out of the
+    // running app possible at all.
+    foldable: true,
   });
 }
 

@@ -121,8 +121,24 @@ function escapeInlineJs(code: string): string {
 
 /**
  * Generate an HTML wrapper that embeds bundled JavaScript.
+ *
+ * `manifest` is the protocol this build extracted, handed back to the running
+ * app as `window.__yaar_manifest__`. It exists because a Zod `params` is a
+ * schema *object* at runtime, not JSON Schema, and the SDK has no way to convert
+ * one — the conversion happened here, at build time, with the app's own zod. By
+ * giving the folded result back, the manifest the iframe serves and the manifest
+ * on disk are the same bytes by construction rather than by agreement. Apps that
+ * declare plain literals get an identical copy of what they already had.
  */
-export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: string): string {
+export function generateHtmlWrapper(
+  jsCode: string,
+  title: string,
+  sdkCode: string,
+  manifest?: object,
+): string {
+  const manifestScript = manifest
+    ? `\n<script>window.__yaar_manifest__=${escapeInlineJs(JSON.stringify(manifest))};</script>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -130,7 +146,7 @@ export function generateHtmlWrapper(jsCode: string, title: string, sdkCode: stri
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
 <style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:var(--yaar-bg)}#${APP_MOUNT_ID}{height:100%}#${APP_MOUNT_ID}:empty{display:none}body{font-family:${FONT_SANS}}</style>
-<script>${escapeInlineJs(sdkCode)}</script>
+<script>${escapeInlineJs(sdkCode)}</script>${manifestScript}
 </head>
 <body>
 <div id="${APP_MOUNT_ID}"></div>
@@ -278,6 +294,7 @@ export async function compileTypeScript(
     // fail the build instead of shipping a manifest missing commands.
     const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
       appId: await readAppId(sandboxPath),
+      bundles: options.bundles,
     });
     if (extraction.errors.length > 0) {
       return {
@@ -309,7 +326,12 @@ export async function compileTypeScript(
     const sdkCode = await getSdkScripts(minify);
 
     // Generate HTML wrapper with embedded JavaScript
-    const htmlContent = generateHtmlWrapper(jsCode, title, sdkCode);
+    const htmlContent = generateHtmlWrapper(
+      jsCode,
+      title,
+      sdkCode,
+      extraction.protocol ?? undefined,
+    );
 
     // A YAAR app compiles to one self-contained HTML the frontend loads into an
     // iframe; `dataurl`-inlined assets (fonts, images, wasm) land here at +33%

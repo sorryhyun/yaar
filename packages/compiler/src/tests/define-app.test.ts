@@ -182,10 +182,10 @@ describe('defineApp registration', () => {
   });
 
   test('is import-safe with no DOM at all', () => {
-    // Slice D imports an app's entry module in a headless subprocess to fold its
-    // schemas, so `defineApp(...)` at module scope must not throw when there is
-    // no window and no document. If this test starts failing, the guards in
-    // `mountView` were "simplified" away.
+    // The schema fold imports an app's entry module in a DOM-less Worker, so
+    // `defineApp(...)` at module scope must not throw when there is no window
+    // and no document. If this test starts failing, the guards in `mountView`
+    // were "simplified" away.
     (globalThis as any).window = undefined;
     (globalThis as any).document = undefined;
     const errors: string[] = [];
@@ -202,6 +202,150 @@ describe('defineApp registration', () => {
     const { errors } = installStubs({ withSdk: false });
     defineApp({ id: 'orphan', name: 'Orphan' });
     expect(errors.join('\n')).toContain('window.yaar.app is missing');
+  });
+});
+
+// A parsing `params` is two things at once: the contract the agent reads and
+// the parser the call goes through. They come from different places at runtime —
+// the JSON Schema is folded at build time and handed back on
+// `window.__yaar_manifest__`, while the parse happens against the schema object
+// the app still holds — so both halves are pinned here.
+//
+// The schema is hand-written to the Standard Schema spec rather than imported
+// from Zod, because that interface is what `define-app.ts` actually reads:
+// `@bundled/zod` maps to `zod/mini`, whose schemas carry no `.parse` method, and
+// a test written against Zod's surface would pass while the shim read a field
+// nothing else implements. Real Zod is exercised through a compiled app below.
+describe('defineApp parsing params', () => {
+  /** `{ text: string, count?: number }`, as the spec's `validate` sees it. */
+  const AddParams = {
+    '~standard': {
+      version: 1,
+      vendor: 'test',
+      validate(value: any) {
+        const issues = [];
+        if (typeof value?.text !== 'string') {
+          issues.push({ message: 'expected string, got ' + typeof value?.text, path: ['text'] });
+        }
+        if (value?.count !== undefined && typeof value.count !== 'number') {
+          issues.push({ message: 'expected number', path: ['count'] });
+        }
+        // Parsed, not passed through: a schema that strips unknown keys is the
+        // reason `run` gets the validated value rather than the raw bag.
+        return issues.length
+          ? { issues }
+          : { value: value.count === undefined ? { text: value.text } : value };
+      },
+    },
+  };
+
+  /** The build's answer for this app, as `generateHtmlWrapper` injects it. */
+  const FOLDED = {
+    state: {},
+    commands: {
+      add: {
+        description: 'Add',
+        params: {
+          type: 'object',
+          properties: { text: { type: 'string' }, count: { type: 'number' } },
+          required: ['text'],
+        },
+      },
+    },
+  };
+
+  function register(opts: { withManifest?: boolean } = {}) {
+    const stubs = installStubs();
+    if (opts.withManifest) (globalThis as any).window.__yaar_manifest__ = FOLDED;
+    const seen: unknown[] = [];
+    defineApp({
+      id: 'zodapp',
+      name: 'Zod App',
+      commands: {
+        add: {
+          description: 'Add',
+          params: AddParams,
+          // The shim source is `@ts-nocheck` JS, so nothing types `p` here;
+          // the real inference is exercised by the tsc cases below.
+          run: (p: { text: string; count?: number }) => {
+            seen.push(p);
+            return p.text.length;
+          },
+        },
+      },
+    });
+    return { descriptor: stubs.registered[0].commands.add, seen };
+  }
+
+  test('an unknown key is stripped by the schema before run sees it', () => {
+    const { descriptor, seen } = register({ withManifest: true });
+    descriptor.handler({ text: 'hi', stray: 1 }, { replayed: false });
+    expect(seen).toEqual([{ text: 'hi' }]);
+  });
+
+  test('the manifest carries the build-folded JSON Schema, not the schema object', () => {
+    const { descriptor } = register({ withManifest: true });
+    expect(descriptor.params).toEqual(FOLDED.commands.add.params);
+  });
+
+  test('with no build manifest the schema object is omitted rather than serialized', () => {
+    // Showing an agent a serialized Zod internal is worse than showing nothing:
+    // it reads as a contract and describes none.
+    const { descriptor } = register();
+    expect('params' in descriptor).toBe(false);
+  });
+
+  test('run receives the parsed value', () => {
+    const { descriptor, seen } = register({ withManifest: true });
+    expect(descriptor.handler({ text: 'hi' }, { replayed: false })).toBe(2);
+    expect(seen).toEqual([{ text: 'hi' }]);
+  });
+
+  test('a wrong param type is rejected by name, not left to the handler', () => {
+    // The gap this closes: the iframe bridge checks presence and unknown keys,
+    // never declared types, so `{ text: 42 }` reached the handler and failed
+    // somewhere downstream with a message about the handler's own logic.
+    const { descriptor, seen } = register({ withManifest: true });
+    let thrown: unknown;
+    try {
+      descriptor.handler({ text: 42 }, { replayed: false });
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(AppCommandError);
+    expect(String((thrown as Error).message)).toContain('add: invalid params');
+    expect(String((thrown as Error).message)).toContain('text');
+    expect(seen).toEqual([]);
+  });
+
+  test('a command called with no params at all validates against an empty object', () => {
+    // postMessage delivers nothing for a call with no params; handing `undefined`
+    // to a parser reports "expected object, received undefined", which names the
+    // bridge rather than the mistake.
+    const stubs = installStubs();
+    const seen: unknown[] = [];
+    defineApp({
+      id: 'zodapp',
+      name: 'Zod App',
+      commands: {
+        ping: {
+          description: 'Ping',
+          params: {
+            '~standard': {
+              version: 1,
+              vendor: 'test',
+              validate: (value: unknown) => {
+                seen.push(value);
+                return { value: value ?? 'undefined-reached-the-parser' };
+              },
+            },
+          },
+          run: (p: unknown) => p,
+        },
+      },
+    });
+    expect(stubs.registered[0].commands.ping.handler(undefined, { replayed: false })).toEqual({});
+    expect(seen).toEqual([{}]);
   });
 });
 
@@ -351,7 +495,12 @@ afterAll(async () => {
   await Promise.all(sandboxes.map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
-/** Compile `source` as an app and return the emitted `<script type="module">` body. */
+/**
+ * Compile `source` as an app and return the emitted `<script type="module">` body.
+ *
+ * `manifest` is the build's folded protocol, read back out of the injected
+ * `window.__yaar_manifest__` script — the same value the iframe would see.
+ */
 async function compileApp(appId: string, source: string) {
   const sandbox = await mkdtemp(join(tmpdir(), `yaar-define-app-${appId}-`));
   sandboxes.push(sandbox);
@@ -370,7 +519,8 @@ async function compileApp(appId: string, source: string) {
   expect(script).not.toBeNull();
   const modulePath = join(sandbox, 'app.mjs');
   await Bun.write(modulePath, script![1]);
-  return { html, modulePath };
+  const injected = /window\.__yaar_manifest__=(.*?);<\/script>/.exec(html);
+  return { html, modulePath, manifest: injected ? JSON.parse(injected[1]) : undefined };
 }
 
 const IMPERATIVE_APP = `
@@ -424,7 +574,53 @@ export default defineApp({
 });
 `;
 
+// Zod arrives inlined in the bundle, so this is the real library — and the test
+// process never imports `zod/mini` itself, which matters: with that module in
+// the runtime graph, a second `Bun.build()` in the same process fails to read it
+// (Bun 1.3.14), and every compile in this suite would break for a reason that
+// has nothing to do with the code under test.
+const ZOD_APP = `
+import { defineApp } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+
+export default defineApp({
+  id: 'zodapp',
+  name: 'Zod App',
+  commands: {
+    add: {
+      description: 'Add a memo',
+      params: z.object({ text: z.string(), pinned: z.optional(z.boolean()) }),
+      run: (p) => p.text.toUpperCase(),
+    },
+  },
+});
+`;
+
 describe('defineApp in a compiled app', () => {
+  test('a Zod params validates the call and serves JSON Schema to agents', async () => {
+    const { modulePath, manifest } = await compileApp('zodapp', ZOD_APP);
+    const { registered } = installStubs();
+    (globalThis as any).window.__yaar_manifest__ = manifest;
+
+    await import(modulePath);
+
+    // What the agent is shown: the build's fold, not a serialized Zod internal.
+    const descriptor = registered[0].commands.add;
+    expect(descriptor.params).toEqual({
+      type: 'object',
+      properties: { text: { type: 'string' }, pinned: { type: 'boolean' } },
+      required: ['text'],
+    });
+
+    expect(descriptor.handler({ text: 'hi' }, { replayed: false })).toBe('HI');
+
+    // And the type the schema declares is enforced, which the iframe bridge's
+    // presence-only check never did.
+    expect(() => descriptor.handler({ text: 42 }, { replayed: false })).toThrow(
+      /add: invalid params.*text/,
+    );
+  });
+
   test('an imperative { mount } app registers and mounts', async () => {
     const { modulePath } = await compileApp('imperative', IMPERATIVE_APP);
     const { mount, registered } = installStubs();
@@ -570,6 +766,52 @@ describe('defineApp type inference', () => {
       });
     `);
     expect(diagnostics).toEqual([]);
+  });
+
+  test("a Zod params types run's parameter as what the schema parses to", async () => {
+    // The two dialects share one inference site, so the Standard Schema branch
+    // has to win without disturbing the JSON-Schema one. `parsed` is the point:
+    // `run` sees the value *after* defaults and optionality are applied, not the
+    // raw bag the caller sent.
+    const diagnostics = await check(`
+      import { defineApp } from '@bundled/yaar';
+      import * as z from '@bundled/zod';
+      export default defineApp({
+        id: 'demo',
+        name: 'Demo',
+        commands: {
+          write: {
+            description: 'Write',
+            params: z.object({ text: z.string(), times: z.optional(z.number()) }),
+            run: (p) => {
+              const text: string = p.text;
+              const times: number | undefined = p.times;
+              return { text, times };
+            },
+          },
+        },
+      });
+    `);
+    expect(diagnostics).toEqual([]);
+  });
+
+  test('a misspelled key on a Zod params is a compile error', async () => {
+    const diagnostics = await check(`
+      import { defineApp } from '@bundled/yaar';
+      import * as z from '@bundled/zod';
+      export default defineApp({
+        id: 'demo',
+        name: 'Demo',
+        commands: {
+          write: {
+            description: 'Write',
+            params: z.object({ text: z.string() }),
+            run: (p) => p.txt,
+          },
+        },
+      });
+    `);
+    expect(diagnostics.join('\n')).toContain("Property 'txt' does not exist");
   });
 
   test('a misspelled parameter key is a compile error', async () => {

@@ -235,7 +235,12 @@ export async function doDeploy(
     // against, so on a *first* deploy an unresolvable protocol would sail
     // through and install an app whose commands no agent can see.
     try {
-      const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'));
+      // `bundles` matters because extraction may have to *run* the app to fold a
+      // Zod schema, and that build resolves gated SDKs through the same gate the
+      // compile did. Omitting it would fail an app on a permission it has.
+      const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
+        bundles: await readBundles(sandboxPath),
+      });
       if (extraction.errors.length > 0) {
         const error =
           `Protocol extraction failed - the manifest would silently drop entries:\n` +

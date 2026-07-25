@@ -429,7 +429,7 @@ describe('defineApp: absence', () => {
   });
 
   test('an app that neither defines nor registers yields nothing', () => {
-    expect(extract({ 'src/main.ts': `document.title = 'x';` })).toEqual({
+    expect(extract({ 'src/main.ts': `document.title = 'x';` })).toMatchObject({
       protocol: null,
       errors: [],
     });

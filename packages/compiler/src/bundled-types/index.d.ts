@@ -434,11 +434,29 @@ interface YaarAppCommandDefinition<P = Record<string, unknown>, R = unknown> {
 }
 
 /**
- * What a `run` receives as its first argument: the type its own `params` schema
- * describes, or a free-form bag when the command declares no schema (`S` is then
- * inferred as `unknown`, which would otherwise make every property access an error).
+ * The type a Standard Schema produces — Zod v4, Valibot, ArkType.
+ *
+ * `never` when `S` is not one, which is how `YaarAppRunParams` chooses between
+ * the two schema dialects without a second type parameter.
  */
-type YaarAppRunParams<S> = unknown extends S ? Record<string, unknown> : YaarInferSchema<S>;
+type YaarStandardOutput<S> = S extends { '~standard': { types?: { output: infer O } | undefined } }
+  ? O
+  : never;
+
+/**
+ * What a `run` receives as its first argument.
+ *
+ * Three cases, in order: a Zod (or other Standard Schema) `params` gives the type
+ * it *parses to* — `run` is handed the parsed value, so defaults and transforms
+ * have already been applied; a JSON Schema literal is translated by
+ * `YaarInferSchema`; and a command with no schema at all gets a free-form bag,
+ * because `S` is then `unknown` and every property access would otherwise error.
+ */
+type YaarAppRunParams<S> = unknown extends S
+  ? Record<string, unknown>
+  : [YaarStandardOutput<S>] extends [never]
+    ? YaarInferSchema<S>
+    : YaarStandardOutput<S>;
 
 /**
  * The `commands` map, keyed by a *schema* map `S` rather than by the commands
@@ -458,7 +476,11 @@ type YaarAppCommands<S> = {
   [K in keyof S]: {
     description: string;
     aliases?: readonly string[];
-    /** JSON Schema literal. Also the agent-facing contract in the manifest. */
+    /**
+     * The parameter contract: a Zod schema (preferred — it also validates the
+     * call) or a JSON Schema literal. Either way the build folds it into the
+     * agent-facing manifest, and `run`'s parameter is derived from it.
+     */
     params?: S[K];
     returns?: object;
     /** See `YaarAppCommandDescriptor.replay`. */
@@ -914,6 +936,8 @@ declare module '@bundled/yaar' {
    * the build reads. Sugar over `app.register()`, which stays supported.
    *
    * ```ts
+   * import * as z from '@bundled/zod';
+   *
    * export default defineApp({
    *   id: 'memo',                    // must equal app.json's id
    *   name: 'Memo',
@@ -923,7 +947,7 @@ declare module '@bundled/yaar' {
    *   commands: {
    *     addMemo: {
    *       description: 'Create a memo',
-   *       params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+   *       params: z.object({ text: z.string() }),   // or a JSON Schema literal
    *       replay: 'never',           // this one appends; do not re-run it on remount
    *       run: async (p) => ({ id: await createMemo(p.text) }),   // `p.text` is a string
    *     },
@@ -943,6 +967,10 @@ declare module '@bundled/yaar' {
    *   `AppCommandError` with the original kept as `cause`.
    * - **`run`'s parameter type** — derived from that command's `params` schema,
    *   exactly as `defineCommand` does it.
+   * - **Parameter validation** — a Zod `params` is parsed before `run` sees it,
+   *   so a wrong *type* is rejected by name instead of failing somewhere inside
+   *   the handler. A JSON Schema literal is still only checked for presence and
+   *   unknown keys, which is the reason to prefer Zod.
    *
    * `run` also receives `ctx.replayed`; `replay: 'never'` opts a command out of
    * replay entirely. Returns the definition unchanged, so

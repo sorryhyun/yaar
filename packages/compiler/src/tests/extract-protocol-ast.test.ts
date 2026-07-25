@@ -430,9 +430,77 @@ describe('refusal', () => {
   });
 });
 
+// The runtime builds one flat lookup from names and aliases together, and the
+// last registration wins. A duplicate therefore does not fail — it makes one
+// command unreachable while the manifest keeps advertising both, so the agent
+// calls a name that answers with the wrong handler.
+describe('alias collisions', () => {
+  test('two commands claiming the same alias is an error', () => {
+    const { protocol, errors } = extract({
+      'src/main.ts': `${APP}
+        app.register({
+          appId: 'demo', name: 'Demo', state: {},
+          commands: {
+            open: { description: 'Open', aliases: ['go'], handler: () => 1 },
+            navigate: { description: 'Navigate', aliases: ['go'], handler: () => 2 },
+          },
+        });`,
+    });
+
+    expect(protocol).toBeNull();
+    const message = errors.map(formatProtocolError).join('\n');
+    expect(message).toContain('`go` is already an alias of `open`');
+    expect(message).toContain('unreachable');
+  });
+
+  test('an alias shadowing another command name is the same defect', () => {
+    const { errors } = extract({
+      'src/main.ts': `${APP}
+        app.register({
+          appId: 'demo', name: 'Demo', state: {},
+          commands: {
+            open: { description: 'Open', handler: () => 1 },
+            navigate: { description: 'Navigate', aliases: ['open'], handler: () => 2 },
+          },
+        });`,
+    });
+
+    expect(errors.map(formatProtocolError).join('\n')).toContain(
+      '`open` is already command `open`',
+    );
+  });
+
+  test('an alias equal to its own command name is still a collision', () => {
+    const { errors } = extract({
+      'src/main.ts': `${APP}
+        app.register({
+          appId: 'demo', name: 'Demo', state: {},
+          commands: { open: { description: 'Open', aliases: ['open'], handler: () => 1 } },
+        });`,
+    });
+
+    expect(errors).toHaveLength(1);
+  });
+
+  test('distinct aliases across commands are fine', () => {
+    const { errors } = extract({
+      'src/main.ts': `${APP}
+        app.register({
+          appId: 'demo', name: 'Demo', state: {},
+          commands: {
+            open: { description: 'Open', aliases: ['o'], handler: () => 1 },
+            navigate: { description: 'Navigate', aliases: ['n', 'go'], handler: () => 2 },
+          },
+        });`,
+    });
+
+    expect(errors).toEqual([]);
+  });
+});
+
 describe('absence', () => {
   test('no register() call yields no protocol and no errors', () => {
-    expect(extract({ 'src/main.ts': `document.title = 'x';` })).toEqual({
+    expect(extract({ 'src/main.ts': `document.title = 'x';` })).toMatchObject({
       protocol: null,
       errors: [],
     });
@@ -507,7 +575,7 @@ describe('absence', () => {
   });
 
   test('a missing entry file is not an error', () => {
-    expect(extract({}, 'src/main.ts')).toEqual({ protocol: null, errors: [] });
+    expect(extract({}, 'src/main.ts')).toMatchObject({ protocol: null, errors: [] });
   });
 
   test('an import cycle terminates', () => {

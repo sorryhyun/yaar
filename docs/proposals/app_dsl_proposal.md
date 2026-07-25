@@ -1,7 +1,7 @@
 # Proposal: An embedded app DSL — `defineApp()`, Zod-first schemas, replay-safe commands
 
-**Status:** Partially implemented — Part 1, Part 3, and Part 5's extraction half have shipped.
-Parts 2 and 4 are open; see **Next action**.
+**Status:** Partially implemented — Parts 1, 2, 3, and Part 5's extraction half have shipped.
+Part 4 is open, as is migration; see **Next action**.
 **Scope:** `packages/compiler` (shims, AST extractor, guards), `packages/shared` (iframe scripts),
 `packages/server` (command replay), apps (incremental migration)
 **Companion:** [`apps_modernization_proposal.md`](./apps_modernization_proposal.md) — cleanup of the
@@ -30,6 +30,43 @@ per-command replay policy that fixes the platform's worst structural bug. `app.r
 remains supported; `defineApp` is sugar over it plus build-time knowledge.
 
 ## Shipped
+
+**Part 2 — Zod-first schemas.** `params`/`returns`/`schema` accept a Zod schema (or any
+Standard Schema). One declaration now drives four things: the TS type of `run`'s parameter,
+runtime type-deep validation, `dist/protocol.json`, and the manifest the iframe serves.
+
+The fold does not teach the AST evaluator Zod's API — it runs the app. `z.object({...})` is a
+builder chain, so the evaluator *defers* it (records the descriptor path) instead of erroring,
+and `fold-schemas.ts` builds the app together with a generated entry importing `@bundled/zod`,
+then evaluates the default export. Deferral is legal only under `defineApp`, because only
+there is the config reachable at runtime as a default export; `app.register()` keeps the hard
+error. Nothing degrades silently: a schema with no JSON Schema equivalent, an app that throws
+on import, a worker that hangs — each fails the build naming the descriptor path.
+
+Two decisions differ from what this document proposed:
+
+- **A Worker, not a subprocess.** A bundled exe has no `bun` binary to spawn — `process.execPath`
+  there is the YAAR executable, which would relaunch the server. A Worker gives the same
+  separate globals plus a `terminate()` that actually stops a runaway module scope. The
+  `window` stub the proposal predicted is still required and still for the reason predicted.
+- **`__yaar_manifest__` is injected into the page, not exported from the bundle.** A Zod
+  `params` is a schema object at runtime, so the SDK would serve an opaque internal to agents
+  unless the JSON Schema came back from the build. The HTML wrapper carries the extracted
+  manifest as `window.__yaar_manifest__`; `defineApp` reads its schemas for the registration
+  and keeps the schema object for parsing. The manifest the iframe serves and the one on disk
+  are now the same bytes by construction rather than by agreement.
+
+Validation goes through Standard Schema's `~standard.validate`, not Zod's own API:
+`@bundled/zod` maps to `zod/mini`, whose schemas deliberately carry no `.parse` method, and
+the spec interface also admits Valibot and ArkType at no cost.
+
+Degraded (no-`typescript`) mode uses the same fold to produce the *whole* manifest, which lifts
+the refusal to build `defineApp` apps there. `YAAR_NO_TYPESCRIPT=1` reproduces that environment
+on a dev machine; a test asserts both readers return an identical manifest for one app.
+
+Also shipped, the leftover from Part 1: **two commands reachable by the same name or alias is
+a build error.** At runtime the SDK builds one flat lookup and the last registration wins, so a
+duplicate made one command unreachable while the manifest kept advertising both.
 
 **`7808b2b4` — Part 3, replay-safe commands.** A command may declare `replay: 'never'`; a replayed
 command arrives stamped `replayed: true` and reaches the handler as `ctx.replayed`. Commands that
@@ -66,61 +103,18 @@ the prebundled artifact: broken reactivity in exe builds only, with every build 
 
 ## Current state (what remains true)
 
-- **Two parallel schema systems**: `defineCommand` and `defineApp` both take raw JSON-Schema
-  literals (`YaarJsonSchema` with its own TS inference engine, `bundled-types/index.d.ts`) while
-  `@bundled/zod` is the documented tool for validating persisted/external JSON. An app wanting both
-  writes every shape twice with nothing keeping them in sync — and in practice ~20/25 apps resolve
-  the tension by validating nothing.
-- **Schemas must be pure literals** — the extractor folds `params`/`returns`/`schema` to constants
-  and hard-errors on anything computed. So a schema cannot be generated from a Zod schema today,
-  forcing the hand-duplication.
-- **Runtime params validation is presence-only** — `app-protocol.ts` checks `required` and unknown
-  keys against `properties`, but never declared types: a param declared `{type: 'number'}` accepts
-  a string.
-- **Alias collisions are silent** — last-registered alias wins at runtime, and the extractor
-  validates only that `aliases` is an array of strings. Part 1 proposed a build-time error for
-  this; it did not ship with the rest of Part 1.
-- **Bundled-exe mode refuses `defineApp` apps.** The legacy text scanner only knows
-  `app.register({...})`, and emitting "declares no protocol" for an app full of commands is
-  indistinguishable from the truth while being wrong about every one of them, so it fails loudly
-  instead. This makes Part 2's folded-manifest build artifact load-bearing rather than optional.
+- **Two parallel schema systems, now optional rather than forced.** `defineApp` takes either a Zod
+  schema or a JSON-Schema literal; `defineCommand` and `app.register()` still take literals only
+  (`YaarJsonSchema` with its own TS inference engine). An app on the legacy shape that wants
+  validation still writes every shape twice.
+- **`persist` does not exist yet** — the hand-rolled "user edit before load lands wins" race guard
+  is still duplicated across apps, and persisted JSON still has no migration convention. Part 2's
+  runtime `parse` covers command params, not persisted state.
 - **`onClose`/`onCapture` failures are swallowed**; `emit()` to undeclared channels is dropped
   without error.
+- **No app uses `defineApp` yet.** The platform work is done; the migration is not.
 
 ## Design
-
-### Part 2 — Zod-first schemas
-
-`params`/`returns`/`schema` accept a Zod schema. Two consumers:
-
-- **Build time**: the extractor folds `z.*` builder chains via `z.toJSONSchema()` (Zod v4 ships
-  this) into the literal JSON Schema that `protocol.json` and the manifest need. Rather than
-  teaching the AST evaluator Zod's full API, the compiler **executes** the schema expressions in a
-  subprocess — the compiler already runs `Bun.build` + a typecheck pass, and evaluating a
-  side-effect-free schema module is the same trust level. Unresolvable/side-effectful schema
-  expressions stay hard errors, preserving the no-silent-drift property.
-- **Runtime**: `run` handlers receive `schema.parse(params)` output — **type-deep validation**,
-  closing the presence-only gap, with no extra code in the app. Same for `persist` reads.
-
-One schema then drives four things that are today zero-to-two: TS param types (inferred from Zod
-instead of the bespoke `YaarInferSchema` engine), runtime validation, the manifest, and
-persisted-state validation. Plain JSON-Schema literals remain accepted for compat.
-
-**Constraint discovered while shipping Part 1** — the headless fold pass needs a `window` stub, not
-merely an import-safe `defineApp`. `defineApp` already guards its own DOM access (`typeof document`,
-mount-element lookup) precisely so an entry module can be imported without a DOM. But the
-`@bundled/yaar` barrel reaches `window.yaar` at *module scope* in `verbs.ts`, so importing a
-**compiled** entry module headlessly dies before `defineApp` ever runs. Importing the shim source
-directly is fine. The subprocess must therefore stub `window` (and the SDK globals the barrel
-touches) before importing, or the barrel must defer its global access.
-
-Degraded (bundled-exe) mode: compile embeds the folded manifest as a build artifact
-(`__yaar_manifest__` export) at normal build time, and exe mode reads that artifact instead of
-re-extracting — eliminating the two-extractors drift vector for `defineApp` apps entirely, and
-lifting the current refusal.
-
-Also in scope, as the small leftover from Part 1: **alias collision becomes a build-time error**
-instead of silent last-wins.
 
 ### Part 4 — declarative persistence
 
@@ -155,22 +149,13 @@ them are ported.
 
 ## Next action
 
-**Part 2, before porting any app.** Two reasons, in order:
-
-1. Reference ports written against JSON-Schema-literal `params` would have to be rewritten when Zod
-   folding lands — every migrated app touched twice.
-2. Bundled-exe mode currently refuses `defineApp` apps outright, and the folded-manifest artifact is
-   what lifts that.
-
-Suggested order within Part 2: the fold subprocess (with the `window`-stub constraint above) →
-`__yaar_manifest__` build artifact + exe-mode read → Zod accepted in `params`/`returns`/`schema` →
-runtime `parse` → alias-collision build error.
-
-Then migration resumes where the original plan left it:
+**Migration.** The two reasons to hold it are gone: `params` written as Zod today will not be
+rewritten later, and bundled-exe mode no longer refuses `defineApp`.
 
 - Port two reference apps — one simple (memo), one command-heavy (github) — and update the app-dev
-  agent guidance + SKILL templates to emit `defineApp` for all *new* apps. Settle Part 4's
-  `view`/`persist` signature first if Part 4 is landing in the same window.
+  agent guidance + SKILL templates to emit `defineApp` for all *new* apps. Nothing outside the
+  proposal documents `defineApp` yet, so the guidance change is the step that makes it the default.
+  Settle Part 4's `view`/`persist` signature first if Part 4 is landing in the same window.
 - Port remaining apps opportunistically, folding in the companion proposal's phases (a
   registration-timing fix and a `defineApp` port touch the same lines — do them together).
 - A codemod is feasible for the simple cases (top-level `register()` with literal descriptor →
@@ -213,9 +198,13 @@ guarantee:
 - **Docs/SKILL-only fix**: rejected by the evidence — the conventions were documented and the
   primitives existed, yet 25 AI-written apps drifted into five registration idioms and three
   feedback conventions. For generated code, only build-time enforcement holds.
-- **Teach the AST evaluator Zod's API** instead of sandbox-executing schemas: rejected — chasing
-  Zod's surface in a static evaluator is a treadmill; the sandbox already exists and runs app code
-  at the same trust level during typecheck.
+- **Teach the AST evaluator Zod's API** instead of executing schemas: rejected — chasing Zod's
+  surface in a static evaluator is a treadmill, and the build already runs app code at the same
+  trust level during `Bun.build` and typecheck.
+- **A subprocess for the fold** (as originally proposed): rejected once the exe was considered. A
+  compiled Bun executable cannot run a script, and `process.execPath` there is the YAAR binary, so
+  spawning it relaunches the server. A Worker gives the same isolation with a working
+  `terminate()`.
 - **Journal-based exactly-once replay** (SDK persists applied requestIds in `appStorage`):
   considered as a complement; deferred. The per-command policy covers the audited failure cases
   with far less machinery, and the journal can be added later behind the same envelope flag if a
@@ -229,6 +218,10 @@ guarantee:
 - *Does `view` need a non-Solid escape hatch?* — Yes, and it shipped as a first-class case:
   `view: { mount(el) }`. It is what lets imperative apps (excel-lite, video-editor-lite) adopt
   `defineApp` at all.
+- *How does a Zod `params` validate a call without bundling zod into `defineApp`?* — Through
+  Standard Schema's `~standard.validate`, which every Zod v4 schema implements. It also avoids a
+  wrong answer: `zod/mini` schemas have no `.parse` method, so validating through Zod's own API
+  would have missed the exact library `@bundled/zod` resolves to.
 
 ## Open questions
 

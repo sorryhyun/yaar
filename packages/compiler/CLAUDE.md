@@ -26,7 +26,8 @@ src/
 ├── extract-protocol-dir.ts # Protocol extraction entry point — picks AST or text scanner
 ├── extract-protocol-ast.ts # AST protocol extraction: follows relative imports + spreads, hard-errors on the unresolvable
 ├── extract-protocol.ts    # Legacy text scanner — bundled-exe fallback only (no `typescript` there)
-├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode
+├── fold-schemas.ts        # Runs a defineApp app in a Worker to read Zod schemas (and the whole manifest, without `typescript`)
+├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens() (generated token reference)
 ├── build-manifest.ts      # SHA-256 source/app.json hashing for staleness detection
 ├── bundled-types/
@@ -40,6 +41,7 @@ src/
     │   ├── dialogs.ts     # showAlert / showConfirm / showPrompt
     │   ├── ui.ts          # showToast, onShortcut, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms)
+    │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
@@ -54,9 +56,12 @@ src/
 2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve
 3. **Bundle:** `Bun.build()` with 3 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
 4. **SDK injection:** 8 iframe SDK scripts (capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
-5. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + app `<script type="module">`
-6. **Protocol extraction:** AST parse of `app.register({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable (see below)
+5. **Protocol extraction:** AST parse of `defineApp({...})` / `app.register({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable (see below)
+6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
+
+Extraction runs *after* bundling (so genuine build errors keep precedence) and *before* the
+HTML wrap, because the wrapper carries the extracted manifest back into the page.
 
 ## Protocol Extraction
 
@@ -66,14 +71,16 @@ call. **Those two must agree.** The failure that matters is one-sided: a command
 fine but never reaches `dist/protocol.json` is invisible to agents while every build signal
 stays green — one real incident shrank 29 commands to 3.
 
-`extract-protocol-dir.ts` is the entry point and picks between two implementations:
+`extract-protocol-dir.ts` is the entry point and picks between three implementations:
 
-| | `extract-protocol-ast.ts` | `extract-protocol.ts` (legacy) |
-|---|---|---|
-| When | `typescript` loads (normal builds) | bundled-exe mode only |
-| Reach | follows relative imports, `...spreads`, `const` refs, `as const` | one file, literal properties only |
-| Values | constant-folds `+` concatenation anywhere, including inside `params` | `+` inside a `params` block drops the whole block |
-| Unresolvable | **hard build error with `file:line:col`** | warning; blocking ones (`commands:`/`state:`) fail the build |
+| | `extract-protocol-ast.ts` | `fold-schemas.ts` | `extract-protocol.ts` (legacy) |
+|---|---|---|---|
+| When | `typescript` loads (normal builds) | a `defineApp` app whose schema is not a constant, or any `defineApp` app with no `typescript` | no `typescript`, `app.register()` app |
+| Reach | follows relative imports, `...spreads`, `const` refs, `as const` | whatever the app actually evaluates to | one file, literal properties only |
+| Values | constant-folds `+` concatenation anywhere, including inside `params` | `z.toJSONSchema()` of the running schema | `+` inside a `params` block drops the whole block |
+| Unresolvable | **hard build error with `file:line:col`** | **hard build error naming the descriptor path** | warning; blocking ones (`commands:`/`state:`) fail the build |
+
+Set `YAAR_NO_TYPESCRIPT=1` to reproduce a no-`typescript` environment on a dev machine.
 
 Because the AST path resolves spreads, **descriptor maps may be split across files by
 domain** — `commands: { ...fileCommands, ...gitCommands }` where each map lives in its own
@@ -83,9 +90,40 @@ module. This is what the extractor exists to allow; it was the constraint that k
 
 What it refuses, always with a location: a spread of a call result, a descriptor imported
 from a package (resolution is deliberately app-local), a `${...}` template description, a
-missing `description`, a method shorthand, a non-constant `params`/`schema`. One bad entry
+missing `description`, a method shorthand, a non-constant `params`/`schema` (outside
+`defineApp`), and **two commands reachable by the same name or alias**. One bad entry
 rejects the **whole** manifest — a partial manifest is the failure mode, not a consolation
 prize.
+
+### Zod schemas (`fold-schemas.ts`)
+
+`defineApp` accepts a Zod schema wherever a JSON-Schema literal goes. `z.object({...})` is a
+builder chain, not a constant, so the static evaluator *defers* it — records the descriptor
+path and lets the fold resolve it — rather than erroring. Deferral is only legal under
+`defineApp`, because its config is reachable at runtime as the entry module's default export;
+`app.register()` has nothing to read a schema back off, so a non-constant schema stays a hard
+error there.
+
+The fold builds the app together with a generated entry that imports `@bundled/zod` (one zod
+instance, guaranteed by the bundler, in exe mode too), prepends browser-global stubs, and runs
+the result in a **Worker** — separate globals, and a `terminate()` that stops a runaway module
+scope. A subprocess would not work in the bundled exe, where `process.execPath` is the YAAR
+binary. The `window` stub is load-bearing: `@bundled/yaar`'s barrel reads `window.yaar` at
+module scope, so a compiled entry dies on import without it. `document` is stubbed with
+`getElementById → null`, which is what makes `defineApp`'s mount a no-op.
+
+Three consumers, one artifact:
+
+- `dist/protocol.json` gets the folded JSON Schema.
+- `window.__yaar_manifest__` carries the same bytes back into the page, so `defineApp` can
+  serve JSON Schema to agents without bundling `toJSONSchema` into every app.
+- The app keeps the schema object and validates each call through its Standard Schema
+  `~standard.validate` — closing the presence-only gap in `app-protocol.ts`, which never
+  checked a declared *type*. `run` receives the **parsed** value.
+
+Without `typescript` the fold produces the whole manifest rather than just the deferred
+schemas, which is what lets a `defineApp` app build at all in that environment. A
+`fold-schemas.test.ts` case asserts both readers return the identical manifest for one app.
 
 Three rules exist because breaking them produces a manifest that *disagrees with the
 runtime and says nothing about it* — worse than a failed build, since every signal stays

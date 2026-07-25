@@ -18,6 +18,12 @@
 let cached: typeof import('typescript') | null | undefined;
 
 export async function loadTypeScript(): Promise<typeof import('typescript') | null> {
+  // The degraded paths only run where `typescript` is absent, which is nowhere a
+  // developer can reach — so they were only ever exercised by the users who hit
+  // them. This makes that environment reproducible on demand, and is checked
+  // ahead of the memo so it works whatever ran first.
+  if (process.env.YAAR_NO_TYPESCRIPT === '1') return null;
+
   if (cached !== undefined) return cached;
 
   // Bundled-exe path: typescript was embedded at build time (see build-exe-bundle.js).

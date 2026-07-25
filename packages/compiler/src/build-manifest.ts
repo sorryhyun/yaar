@@ -36,9 +36,14 @@ import { join, basename } from 'path';
  * one of these apps is an unsanitized innerHTML sink rather than a cosmetic lag.
  * '13': the yaar-ml shim now pins ORT's log level to 'error', silencing the
  * EP-partition warning every WebGPU session emits. The level is baked into the
- * bundled shim, so an app that does not rebuild keeps printing it.)
+ * bundled shim, so an app that does not rebuild keeps printing it. '14': the
+ * HTML wrapper now carries the extracted manifest as `window.__yaar_manifest__`,
+ * and `defineApp` reads its `params`/`returns`/`schema` from it. An app built
+ * before this has no such script, so a Zod schema would reach agents as an
+ * opaque object; the injected copy is also what keeps the manifest the iframe
+ * serves identical to `dist/protocol.json` rather than merely agreeing with it.)
  */
-export const COMPILER_VERSION = '13';
+export const COMPILER_VERSION = '14';
 
 export interface BuildManifest {
   sourceHash: string;

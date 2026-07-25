@@ -72,14 +72,97 @@ function asCommandError(thrown) {
 }
 
 /**
+ * The manifest this app's build extracted, handed back by the compiler.
+ *
+ * A Zod `params` is a schema object at runtime, and the SDK serves
+ * `registration.commands[x].params` to agents verbatim — so without this the
+ * agent-facing manifest would be a serialized Zod internal instead of JSON
+ * Schema. The conversion cannot happen here (it needs `toJSONSchema`, and
+ * bundling zod into every app to convert schemas most apps do not have is the
+ * wrong trade), so the build does it and returns the result. See
+ * `generateHtmlWrapper`.
+ *
+ * Absent when an app runs from a build that predates this, or in a test that
+ * imports the shim directly — the authored value is then used as-is, which is
+ * exactly today's behavior for a JSON-Schema literal.
+ */
+function buildManifest() {
+  const value = typeof window === 'undefined' ? undefined : window.__yaar_manifest__;
+  return value && typeof value === 'object' ? value : undefined;
+}
+
+/** The build's JSON Schema for one descriptor property, if it has one. */
+function foldedSchema(manifest, section, key, prop) {
+  const bag = manifest && manifest[section];
+  const descriptor = bag && bag[key];
+  const value = descriptor && descriptor[prop];
+  return value && typeof value === 'object' ? value : undefined;
+}
+
+/**
+ * True for a Standard Schema — Zod v4, Valibot, ArkType and anything else that
+ * implements the spec.
+ *
+ * The spec interface is what this file validates through, rather than Zod's own
+ * `parse`: `@bundled/zod` maps to `zod/mini`, whose schemas deliberately carry no
+ * methods (parsing there is `z.parse(schema, value)`), so a `.parse` check would
+ * be false for the very library the docs point apps at.
+ */
+function isStandardSchema(value) {
+  return (
+    !!value &&
+    (typeof value === 'object' || typeof value === 'function') &&
+    !!value['~standard'] &&
+    typeof value['~standard'].validate === 'function'
+  );
+}
+
+/** How many issues a rejection names before it starts summarizing. */
+const MAX_REPORTED_ISSUES = 5;
+
+/** Turn Standard Schema issues into one line an agent can act on. */
+function issuesToMessage(name, issues) {
+  const shown = issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => {
+    const path = (issue.path || [])
+      .map((seg) => (seg && typeof seg === 'object' ? seg.key : seg))
+      .join('.');
+    return (path ? path + ': ' : '') + issue.message;
+  });
+  const extra = issues.length - shown.length;
+  return (
+    name + ': invalid params - ' + shown.join('; ') + (extra > 0 ? ' (and ' + extra + ' more)' : '')
+  );
+}
+
+/**
+ * Take the validated value, or throw naming what was wrong with the call.
+ *
+ * The gap this closes: the iframe bridge checks `required` and unknown keys
+ * against `properties`, but never a declared *type* — a param declared
+ * `{type: 'number'}` accepted a string, and the handler failed further down with
+ * a message about its own logic. A schema that can parse is a schema that can
+ * say so here, where the contract is.
+ */
+function takeValidated(name, outcome) {
+  if (outcome && outcome.issues && outcome.issues.length) {
+    throw new AppCommandError(issuesToMessage(name, outcome.issues));
+  }
+  return outcome ? outcome.value : undefined;
+}
+
+/**
  * Adapt a `run` to the SDK's `handler(params, ctx)` contract.
  *
  * `ctx` is passed straight through — a command replayed at a remounted iframe is
  * indistinguishable from a fresh call otherwise, and `ctx.replayed` is how a
  * handler opts into replay-aware behavior instead of a blanket `replay: 'never'`.
+ *
+ * `validate`, when the command declared a parseable schema, runs first and hands
+ * `run` the *parsed* value — so defaults, coercions and transforms have already
+ * been applied and the handler's parameter is the type its schema describes.
  */
-function wrapRun(run) {
-  return (params, ctx) => {
+function wrapRun(name, run, validate) {
+  const invoke = (params, ctx) => {
     let result;
     try {
       result = run(params, ctx);
@@ -93,10 +176,40 @@ function wrapRun(run) {
     }
     return result;
   };
+
+  return (params, ctx) => {
+    if (!validate) return invoke(params, ctx);
+    // A bare call carries no params at all; `{}` is what a schema of all-optional
+    // fields expects to see, and what the bridge already substitutes downstream.
+    const outcome = validate(params === undefined || params === null ? {} : params);
+    if (outcome && typeof outcome.then === 'function') {
+      return outcome.then((settled) => invoke(takeValidated(name, settled), ctx));
+    }
+    return invoke(takeValidated(name, outcome), ctx);
+  };
+}
+
+/**
+ * Resolve one declared schema to the JSON Schema the manifest should carry.
+ *
+ * Build output wins over the authored value whenever there is one, so a Zod
+ * schema never reaches an agent as an opaque object; a plain literal round-trips
+ * to itself.
+ */
+function manifestSchema(manifest, section, key, prop, authored) {
+  const folded = foldedSchema(manifest, section, key, prop);
+  if (folded !== undefined) return folded;
+  // Without the build's answer, a schema object would serialize as its own
+  // internals. Omitting it costs the agent a contract; showing it costs the
+  // agent a contract *and* misleads.
+  if (isStandardSchema(authored)) return undefined;
+  return authored;
 }
 
 /** Translate the authoring shape into the `app.register()` shape. */
 function toRegistration(definition) {
+  const manifest = buildManifest();
+
   const state = {};
   const sourceState = definition.state || {};
   for (const key of Object.keys(sourceState)) {
@@ -106,7 +219,8 @@ function toRegistration(definition) {
       // Called through the entry so a method-shorthand `get()` keeps its `this`.
       handler: () => entry.get(),
     };
-    if (entry.schema !== undefined) descriptor.schema = entry.schema;
+    const schema = manifestSchema(manifest, 'state', key, 'schema', entry.schema);
+    if (schema !== undefined) descriptor.schema = schema;
     state[key] = descriptor;
   }
 
@@ -114,13 +228,18 @@ function toRegistration(definition) {
   const sourceCommands = definition.commands || {};
   for (const name of Object.keys(sourceCommands)) {
     const entry = sourceCommands[name];
+    const validate = isStandardSchema(entry.params)
+      ? (params) => entry.params['~standard'].validate(params)
+      : undefined;
     const descriptor = {
       description: entry.description,
-      handler: wrapRun((params, ctx) => entry.run(params, ctx)),
+      handler: wrapRun(name, (params, ctx) => entry.run(params, ctx), validate),
     };
     if (entry.aliases !== undefined) descriptor.aliases = entry.aliases;
-    if (entry.params !== undefined) descriptor.params = entry.params;
-    if (entry.returns !== undefined) descriptor.returns = entry.returns;
+    const params = manifestSchema(manifest, 'commands', name, 'params', entry.params);
+    if (params !== undefined) descriptor.params = params;
+    const returns = manifestSchema(manifest, 'commands', name, 'returns', entry.returns);
+    if (returns !== undefined) descriptor.returns = returns;
     // Passed through untouched: the injected SDK reads `replay` to build the
     // `noReplay` list it sends with the ready handshake.
     if (entry.replay !== undefined) descriptor.replay = entry.replay;
