@@ -154,7 +154,7 @@ Always available. Key exports:
 - **Storage**: `appStorage.save(path, content)`, `.trySave(path, content)`, `.read(path)`, `.readJson(path)`, `.readJsonOr(path, fallback)`, `.readBinary(path)`, `.readBlob(path)`, `.list(dirPath?)`, `.remove(path)`
 - **Database**: `appDb` — SQLite-backed collections scoped to the app
 - **Persisted state**: `createPersistedSignal(key, defaultValue, opts?)` — Solid.js signal that persists to appStorage; `opts.revive` clamps/migrates/validates the loaded value before it reaches the signal. Also `createAutosave`, `createCollapsiblePanel`
-- **App Protocol**: `app.register({ appId, name, state, commands })`, `app.sendInteraction(message)`
+- **App Protocol**: `defineApp({ id, name, state, commands, view })` — the entrypoint every new app uses (see below). `app.sendInteraction(message)`, `app.emit(channel, payload)`. `app.register()` is the low-level call `defineApp` wraps; don't call it directly in new code
 
 ## Design Tokens (CSS)
 
@@ -187,22 +187,27 @@ Apps use Solid.js with `html` tagged templates (not JSX).
 ### Basic pattern
 
 ```typescript
-export {};
 import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
+import { defineApp } from '@bundled/yaar';
 import './styles.css';
 
 const [count, setCount] = createSignal(0);
 
-render(() => html`
-  <div class="y-app">
-    <button class="y-btn y-btn-primary" onClick=${() => setCount(c => c + 1)}>
-      Clicked ${count} times
-    </button>
-  </div>
-`, document.getElementById('app')!);
+function App() {
+  return html`
+    <div class="y-app">
+      <button class="y-btn y-btn-primary" onClick=${() => setCount((c) => c + 1)}>
+        Clicked ${count} times
+      </button>
+    </div>
+  `;
+}
+
+export default defineApp({ id: 'my-app', name: 'My App', view: App });
 ```
+
+`defineApp` mounts the view — apps do not call `render()` themselves.
 
 ### Gotchas
 
@@ -212,41 +217,51 @@ render(() => html`
 - **HTML entities inside `${}`** — Solid sets interpolated strings as `textContent`, not `innerHTML`. Use actual Unicode characters (e.g., `📷`), not `&#128247;`.
 - **Closing tags**: `</${Component}>` auto-fixed to `</>` by compiler plugin.
 
-## App Protocol
+## App Protocol — `defineApp()`
 
-For bidirectional agent-iframe communication. Register in `src/protocol.ts`:
+`src/main.ts` ends in exactly one `export default defineApp({...})`. It owns registration
+timing (once, at module scope, before mount), mounting, and the error contract — so an app
+never calls `app.register()` or `render()` itself, and never registers from `onMount()`.
 
 ```typescript
-import { app } from '@bundled/yaar';
+import { defineApp } from '@bundled/yaar';
+import * as z from '@bundled/zod';
 import { items, setItems } from './store';
+import App from './app';
+import './styles.css';
 
-export function registerProtocol() {
-  app.register({
-    appId: 'my-app',
-    name: 'My App',
-    state: {
-      items: {
-        description: 'Current list of items',
-        handler: () => [...items()],
+export default defineApp({
+  id: 'my-app', // must equal app.json's appId — the build checks
+  name: 'My App',
+  state: {
+    items: { description: 'Current list of items', get: () => [...items()] },
+  },
+  commands: {
+    addItem: {
+      description: 'Add an item',
+      params: z.object({ text: z.string() }), // `p.text` is typed and validated
+      replay: 'never', // appends — do not re-run it when the iframe remounts
+      run: (p) => {
+        setItems([...items(), p.text]);
+        return { ok: true };
       },
     },
-    commands: {
-      addItem: {
-        description: 'Add an item. Params: { text: string }',
-        params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-        handler: (p: { text: string }) => {
-          setItems([...items(), p.text]);
-          return { ok: true };
-        },
-      },
-    },
-  });
-}
+  },
+  view: App, // Solid component — or { mount(el) { ... } } for an imperative app
+});
 ```
 
-Call `registerProtocol()` from `main.ts` inside `onMount()` or after `render()`.
-
-The compiler auto-extracts `protocol.json` from source. No need to write it manually.
+- **Schemas**: `params`/`returns`/`schema` take a Zod schema (`@bundled/zod`, the Zod Mini
+  functional API) or a plain JSON Schema literal. Zod is preferred: one declaration types
+  `run`'s parameter, validates the call before `run` sees it, and folds into
+  `dist/protocol.json` at build time.
+- **`replay`**: `'never'` on any command whose effect must not be re-applied when a window's
+  iframe remounts (appends, sends, deletes). Omit it for idempotent commands.
+- **Splitting up**: descriptor maps may live in other modules and be spread in
+  (`commands: { ...fileCommands, ...gitCommands }`) — the extractor resolves imported consts
+  and spreads. The default export itself must stay in `src/main.ts`.
+- The compiler auto-extracts `protocol.json` from source. Never write it by hand, and check
+  your change with `bun scripts/extract-protocol-cli.ts <appId>`.
 
 ## Agent Prompt Files
 

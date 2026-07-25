@@ -1,13 +1,12 @@
 import { createMemo, For, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
+import { defineApp } from '@bundled/yaar';
 import './styles.css';
 
 import { state, setState } from './store';
-import { loadSessions } from './api';
+import { loadSessions, loadDetail } from './api';
 import { getDateKey, formatDateLabel, providerLabel } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
-import { registerProtocol } from './protocol';
 import type { SessionSummary } from './types';
 
 // --- Computed ---
@@ -38,12 +37,11 @@ const groupedSessions = createMemo(() => {
     ] as [string, SessionSummary[]]);
 });
 
-// --- Protocol & Mount ---
-registerProtocol();
-onMount(() => { loadSessions(); });
+// --- Root component ---
+function Root() {
+  onMount(() => { loadSessions(); });
 
-// --- Root render ---
-render(() => html`
+  return html`
   <div class="layout">
 
     <div class="app-header">
@@ -113,4 +111,62 @@ render(() => html`
 
     </div>
   </div>
-`, document.getElementById('app')!);
+  `;
+}
+
+export default defineApp({
+  id: 'session-logs',
+  name: 'Session Logs',
+  state: {
+    sessions: {
+      description: 'List of session summaries (id, provider, date, agentCount)',
+      get: () =>
+        state.sessions.length
+          ? {
+              currentSessionId: state.currentSessionId || null,
+              total: state.sessions.length,
+              sessions: state.sessions,
+            }
+          : null,
+    },
+    selectedSession: {
+      description: 'Currently selected session detail object',
+      get: () => state.detail,
+    },
+    transcript: {
+      description: 'Markdown transcript of the selected session',
+      get: () => state.transcript,
+    },
+    messages: {
+      description: 'Structured parsed messages array for the selected session',
+      get: () =>
+        state.messages ? { count: state.messages.length, messages: state.messages } : null,
+    },
+  },
+  commands: {
+    selectSession: {
+      description: 'Select and load a session by ID (loads transcript and messages)',
+      params: {
+        type: 'object',
+        properties: {
+          sessionId: { type: 'string', description: 'Session ID to load' },
+        },
+        required: ['sessionId'],
+      },
+      run: async (params) => {
+        const sessionId = String(params.sessionId);
+        await loadDetail(sessionId);
+        return { success: true, sessionId };
+      },
+    },
+    refresh: {
+      description: 'Reload the session list from disk',
+      params: { type: 'object', properties: {} },
+      run: async () => {
+        await loadSessions();
+        return { success: true, count: state.sessions.length };
+      },
+    },
+  },
+  view: Root,
+});

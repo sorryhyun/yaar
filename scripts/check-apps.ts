@@ -368,9 +368,10 @@ const markedRule: Rule = {
 
 /**
  * `defineCommand()` derives the handler parameter type from the literal JSON
- * Schema in `params`. A hand-written annotation (`handler: (p: {...}) =>` or
- * `handler: async (p: Record<string, unknown>) =>`) throws that inference away
- * and lets the annotation drift from the schema.
+ * Schema in `params`; `defineApp()` and `defineAppCommand()` do the same for
+ * `run`. A hand-written annotation (`handler: (p: {...}) =>`, `run: async (p:
+ * Record<string, unknown>) =>`) throws that inference away and lets the
+ * annotation drift from the schema.
  *
  * ERROR since the Phase 3 sweep took it to zero. The annotation is not merely
  * redundant — it hides a lossy schema, which is what agents actually read. Every
@@ -382,11 +383,11 @@ const markedRule: Rule = {
 const handlerTypeRule: Rule = {
   id: 'infer-handler-params',
   severity: 'ERROR',
-  title: 'hand-typed command handler params — let `defineCommand` infer from the schema',
+  title: 'hand-typed command handler params — let the schema infer them',
   scan(code, raw, file) {
     const violations: Violation[] = [];
-    // handler: (p: X) =>   /   handler: async (p: X) =>
-    const re = /\bhandler\s*:\s*(?:async\s+)?\(\s*[A-Za-z_$][\w$]*\s*:\s*/g;
+    // handler: (p: X) =>  /  run: async (p: X) =>
+    const re = /\b(?:handler|run)\s*:\s*(?:async\s+)?\(\s*[A-Za-z_$][\w$]*\s*:\s*/g;
     for (const m of code.matchAll(re)) {
       const line = lineOf(code, m.index!);
       const wrapped = isInsideDefineCommand(code, m.index!);
@@ -394,7 +395,7 @@ const handlerTypeRule: Rule = {
         file,
         line,
         message:
-          `annotated handler param${wrapped ? ' inside defineCommand()' : ''} — ` +
+          `annotated handler param${wrapped ? ' inside a define*Command()' : ''} — ` +
           lineTextAt(raw, line),
       });
     }
@@ -402,9 +403,9 @@ const handlerTypeRule: Rule = {
   },
 };
 
-/** True if `index` falls inside the argument list of some `defineCommand(` call. */
+/** True if `index` falls inside the argument list of a `define*Command(` call. */
 function isInsideDefineCommand(code: string, index: number): boolean {
-  for (const m of code.matchAll(/\bdefineCommand\s*\(/g)) {
+  for (const m of code.matchAll(/\bdefine(?:App)?Command\s*\(/g)) {
     const open = m.index! + m[0].length - 1;
     if (open > index) break;
     let depth = 0;

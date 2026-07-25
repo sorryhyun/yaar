@@ -2,7 +2,7 @@ export {};
 
 import { onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
+import { defineApp } from '@bundled/yaar';
 import type { AgentEntry, AgentTurnState, AgentUsage, WindowInfo, AppProcess } from './types';
 import {
   agentStats,
@@ -21,7 +21,6 @@ import {
   killAppAgent,
   closeAppWindows,
 } from './data';
-import { registerProtocol } from './protocol';
 import './styles.css';
 
 // ── Helpers ──────────────────────────────────────────────────
@@ -350,10 +349,6 @@ function StatusBar() {
   `;
 }
 
-// Registered once at module scope, never from a lifecycle hook: a component
-// remount must not re-register the protocol.
-registerProtocol();
-
 function App() {
   onMount(() => {
     startWatching();
@@ -372,4 +367,96 @@ function App() {
   `;
 }
 
-render(App, document.getElementById('app')!);
+export default defineApp({
+  id: 'process-explorer',
+  name: 'Process Explorer',
+
+  state: {
+    stats: {
+      description: 'Overview: agent, window, and running-app counts',
+      get: () => ({
+        agents: agentStats(),
+        windowCount: windows().length,
+        appCount: appProcesses().length,
+        orphanedAppCount: appProcesses().filter((p) => p.orphaned).length,
+      }),
+    },
+    agents: {
+      description: 'List of all agents with type and status',
+      get: () => agentList(),
+    },
+    windows: {
+      description: 'List of all open windows',
+      get: () => windows(),
+    },
+    apps: {
+      description:
+        'Running apps — each with its open windows and its app agent. An app is "orphaned" ' +
+        'when its agent is still alive with no window open, holding a slot and its context.',
+      get: () => appProcesses(),
+    },
+  },
+
+  commands: {
+    refresh: {
+      description: 'Force refresh all data',
+      params: { type: 'object', properties: {} },
+      run: async () => {
+        await refreshAll();
+        return { ok: true };
+      },
+    },
+    interruptAgent: {
+      description: 'Interrupt a running agent by ID',
+      params: {
+        type: 'object',
+        properties: { agentId: { type: 'string' } },
+        required: ['agentId'],
+      },
+      run: async (p) => {
+        await interruptAgent(p.agentId);
+        return { ok: true };
+      },
+    },
+    closeWindow: {
+      description: 'Close a window by ID',
+      params: {
+        type: 'object',
+        properties: { windowId: { type: 'string' } },
+        required: ['windowId'],
+      },
+      run: async (p) => {
+        await closeWindow(p.windowId);
+        return { ok: true };
+      },
+    },
+    killAppAgent: {
+      description:
+        'Dispose an app agent by appId, freeing its slot and dropping its context. The app stays ' +
+        'installed and its windows stay open; the next interaction spawns a fresh agent.',
+      params: {
+        type: 'object',
+        properties: { appId: { type: 'string' } },
+        required: ['appId'],
+      },
+      run: async (p) => {
+        await killAppAgent(p.appId);
+        return { ok: true };
+      },
+    },
+    closeAppWindows: {
+      description: 'Close every open window belonging to an app. Leaves its agent alone.',
+      params: {
+        type: 'object',
+        properties: { appId: { type: 'string' } },
+        required: ['appId'],
+      },
+      run: async (p) => {
+        await closeAppWindows(p.appId);
+        return { ok: true };
+      },
+    },
+  },
+
+  view: App,
+});

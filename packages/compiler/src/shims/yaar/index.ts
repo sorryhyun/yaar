@@ -45,6 +45,7 @@ export { appDb } from './app-db.js';
 // ── Descriptor builders, utilities, toasts, shortcuts ───────────
 export {
   defineCommand,
+  defineAppCommand,
   wait,
   errMsg,
   AppCommandError,

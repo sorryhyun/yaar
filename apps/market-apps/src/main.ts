@@ -1,20 +1,33 @@
 // ── Entry point ─────────────────────────────────────────────────────────
 //
-// Wires the pieces together: mounts the reactive UI (components.ts) and runs
-// startup (load publisher status + marketplace data). All state lives in
-// store.ts, business logic in actions.ts, I/O in api.ts, and App Protocol
-// wiring in protocol.ts.
+// Wires the pieces together: `defineApp()` registers the App Protocol surface
+// and mounts the reactive UI (components.ts). All state lives in store.ts,
+// business logic in actions.ts, I/O in api.ts.
 
 import { onMount } from '@bundled/solid-js';
-import { render } from '@bundled/solid-js/web';
+import html from '@bundled/solid-js/html';
+import { defineApp } from '@bundled/yaar';
 import './styles.css';
-import './protocol.js';
 import { App } from './components.js';
 import { refreshAccount, refreshData, startGithubStatusPolling } from './actions.js';
-
-// ── Mount reactive UI ────────────────────────────────────────────────
-
-render(() => App(), document.getElementById('app')!);
+import {
+  marketApps,
+  setMarketApps,
+  installedApps,
+  setInstalledApps,
+  statusText,
+  lastUpdated,
+  loading,
+  hideInstalled,
+  setHideInstalled,
+  search,
+  setSearch,
+  searchMode,
+  setSearchMode,
+  setStatus,
+  touch,
+} from './store.js';
+import type { SearchMode } from './store.js';
 
 // ── Ambient GitHub health ───────────────────────────────────────────
 //
@@ -27,10 +40,171 @@ render(() => App(), document.getElementById('app')!);
 const stopGithubStatusPolling = startGithubStatusPolling();
 window.addEventListener('pagehide', stopGithubStatusPolling);
 
-// ── Async initialization ────────────────────────────────────────────
+/**
+ * The mounted view. Startup I/O hangs off `onMount` here rather than at module
+ * scope so it runs under the view's owner, exactly as before.
+ */
+function Root() {
+  onMount(() => {
+    // Publisher sign-in and the catalog are independent — neither waits for the other.
+    void refreshAccount();
+    void refreshData();
+  });
+  return html`<${App} />`;
+}
 
-onMount(async () => {
-  // Publisher sign-in and the catalog are independent — neither waits for the other.
-  void refreshAccount();
-  void refreshData();
+export default defineApp({
+  id: 'market-apps',
+  name: 'Market Apps',
+  state: {
+    marketApps: {
+      description: 'Current marketplace app list',
+      get: () => [...marketApps()],
+    },
+    installedApps: {
+      description: 'Current installed app list',
+      get: () => [...installedApps()],
+    },
+    status: {
+      description: 'Status line text',
+      get: () => statusText(),
+    },
+    lastUpdated: {
+      description: 'Last updated local timestamp',
+      get: () => lastUpdated(),
+    },
+    loading: {
+      description: 'Whether network request is in progress',
+      get: () => loading(),
+    },
+    hideInstalled: {
+      description: 'Whether the Hide Installed filter is active',
+      get: () => hideInstalled(),
+    },
+    search: {
+      description: 'Current search query filtering the app list by name and description',
+      get: () => search(),
+    },
+    searchMode: {
+      description:
+        "Which field the search filters on: 'title', 'author', or 'official' (YAAR-only view)",
+      get: () => searchMode(),
+    },
+  },
+  commands: {
+    refresh: {
+      description: 'Fetch the marketplace catalog and the installed-app list',
+      params: { type: 'object', properties: {} },
+      run: async () => {
+        await refreshData();
+        return { marketCount: marketApps().length, installedCount: installedApps().length };
+      },
+    },
+    setData: {
+      description: 'Set marketplace and installed data manually',
+      params: {
+        type: 'object',
+        properties: {
+          marketApps: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                description: { type: 'string' },
+                version: { type: 'string' },
+                author: { type: 'string' },
+                icon: { type: 'string' },
+                installed: { type: 'boolean' },
+              },
+              required: ['id', 'name'],
+            },
+          },
+          installedApps: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' },
+                name: { type: 'string' },
+                hasSkill: { type: 'boolean' },
+                kind: { type: 'string' },
+                version: { type: 'string' },
+              },
+              required: ['id', 'name'],
+            },
+          },
+          status: { type: 'string' },
+        },
+      },
+      run: (p) => {
+        if (p.marketApps) setMarketApps(p.marketApps);
+        if (p.installedApps) setInstalledApps(p.installedApps);
+        if (p.status) setStatus(p.status);
+        else touch();
+        return { marketCount: marketApps().length, installedCount: installedApps().length };
+      },
+    },
+    setStatus: {
+      description: 'Update status line',
+      params: {
+        type: 'object',
+        properties: { status: { type: 'string' } },
+        required: ['status'],
+      },
+      run: (p) => {
+        setStatus(p.status);
+      },
+    },
+    setHideInstalled: {
+      description: 'Toggle the Hide Installed filter on or off',
+      params: {
+        type: 'object',
+        properties: { hide: { type: 'boolean' } },
+        required: ['hide'],
+      },
+      run: (p) => {
+        setHideInstalled(p.hide);
+        return { hideInstalled: hideInstalled() };
+      },
+    },
+    setSearch: {
+      description: 'Set the search query that filters the app list by name and description',
+      params: {
+        type: 'object',
+        properties: { query: { type: 'string' } },
+        required: ['query'],
+      },
+      run: (p) => {
+        setSearch(p.query);
+        return { search: search() };
+      },
+    },
+    setSearchMode: {
+      description:
+        "Set the search mode: 'title' (name/description), 'author', or 'official' (YAAR-only)",
+      params: {
+        type: 'object',
+        properties: {
+          mode: { type: 'string', enum: ['title', 'author', 'official'] },
+        },
+        required: ['mode'],
+      },
+      run: (p) => {
+        setSearchMode(p.mode as SearchMode);
+        return { searchMode: searchMode() };
+      },
+    },
+    clearData: {
+      description: 'Clear all app data',
+      params: { type: 'object', properties: {} },
+      run: () => {
+        setMarketApps([]);
+        setInstalledApps([]);
+        setStatus('Cleared');
+      },
+    },
+  },
+  view: Root,
 });

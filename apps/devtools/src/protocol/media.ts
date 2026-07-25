@@ -19,7 +19,7 @@
  * as base64. Neither path puts them in a transcript.
  */
 
-import { AppCommandError, appStorage, defineCommand, errMsg, invoke, storage } from '@bundled/yaar';
+import { AppCommandError, appStorage, errMsg, invoke, storage, defineAppCommand } from '@bundled/yaar';
 import { activeProject } from '../core';
 import { projectPath, base64FromBuffer } from '../lib';
 import { refreshFiles } from '../services';
@@ -81,7 +81,7 @@ async function listDir(path: string): Promise<MediaEntry[]> {
 }
 
 export const mediaCommands = {
-  listMedia: defineCommand({
+  listMedia: defineAppCommand({
     description:
       'List artifacts other apps have published to the shared media tree ' +
       '(yaar://storage/media/), keyed by producer app. Pass `prefix` to look inside one ' +
@@ -95,7 +95,7 @@ export const mediaCommands = {
         },
       },
     },
-    handler: async (p) => {
+    run: async (p) => {
       const prefix = p.prefix ? mediaPathFrom(String(p.prefix)) : MEDIA_ROOT;
       const top = await listDir(prefix);
 
@@ -123,7 +123,7 @@ export const mediaCommands = {
     },
   }),
 
-  importAsset: defineCommand({
+  importAsset: defineAppCommand({
     description:
       'Copy a file from the shared media tree (yaar://storage/media/) into the active ' +
       'project as a build-time asset, under src/assets/ by default. Returns the import line ' +
@@ -151,7 +151,7 @@ export const mediaCommands = {
       },
       required: ['from'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const proj = activeProject();
       if (!proj) throw new AppCommandError('No active project. Open or create one first.');
 

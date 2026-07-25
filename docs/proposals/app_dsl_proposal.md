@@ -1,7 +1,7 @@
 # Proposal: An embedded app DSL — `defineApp()`, Zod-first schemas, replay-safe commands
 
-**Status:** Partially implemented — Parts 1, 2, 3, and Part 5's extraction half have shipped.
-Part 4 is open, as is migration; see **Next action**.
+**Status:** Partially implemented — Parts 1, 2, 3, Part 5's extraction half, and the migration
+of every bundled app have shipped. Part 4 (`persist`) is open; see **Next action**.
 **Scope:** `packages/compiler` (shims, AST extractor, guards), `packages/shared` (iframe scripts),
 `packages/server` (command replay), apps (incremental migration)
 **Companion:** [`apps_modernization_proposal.md`](./apps_modernization_proposal.md) — cleanup of the
@@ -112,7 +112,25 @@ the prebundled artifact: broken reactivity in exe builds only, with every build 
   runtime `parse` covers command params, not persisted state.
 - **`onClose`/`onCapture` failures are swallowed**; `emit()` to undeclared channels is dropped
   without error.
-- **No app uses `defineApp` yet.** The platform work is done; the migration is not.
+- **Every bundled app that ships source now uses `defineApp`** — all eleven with a protocol
+  (browser, browser-user, devtools, dock, market-apps, memo, process-explorer, search,
+  session-logs, storage, video-editor-lite). Each port was verified by extracting the manifest
+  before and after: byte-identical in every case except memo, which gained the two `replay:
+  'never'` flags it should always have had. `src/protocol.ts` is gone from the apps that had
+  one only to hold a registration; devtools and video-editor-lite keep their split
+  `src/protocol/` maps, which is what the extractor's spread resolution exists to allow.
+- **Migration surfaced one gap and closed it.** `defineApp` infers `run`'s parameter from the
+  `params` at *its own* call site, so a command spread in from another module silently loses
+  that typing — devtools and video-editor-lite each independently hand-rolled the same identity
+  wrapper to get it back. `defineAppCommand` is now an SDK export (`shims/yaar/ui.ts`),
+  trusted by name by `isTransparentWrapper` exactly as `defineCommand` is, and
+  `check-apps.ts`'s `infer-handler-params` rule now scans `run:` as well as `handler:` — it
+  caught two ports that had annotated `run` as `Record<string, unknown>`/`any` the moment it
+  did.
+- **`defineApp` is now the documented default** for new apps: `.claude/agents/app-dev.md`, the
+  compiler-generated App Authoring Contract in `agents/profiles/app-agent.ts`, devtools'
+  `AGENTS.md`, `docs/guides/app-development.md`, and the protocol reference all lead with it;
+  `app.register()` is documented as the low-level call it wraps.
 
 ## Design
 
@@ -149,18 +167,30 @@ them are ported.
 
 ## Next action
 
-**Migration.** The two reasons to hold it are gone: `params` written as Zod today will not be
-rewritten later, and bundled-exe mode no longer refuses `defineApp`.
+**Part 4 — `persist`**, and settle its open design point first: how the view reaches the
+signals. `view: (ctx) => ...` is the cleanest shape but changes every app's signature, and
+there are now eleven of them.
 
-- Port two reference apps — one simple (memo), one command-heavy (github) — and update the app-dev
-  agent guidance + SKILL templates to emit `defineApp` for all *new* apps. Nothing outside the
-  proposal documents `defineApp` yet, so the guidance change is the step that makes it the default.
-  Settle Part 4's `view`/`persist` signature first if Part 4 is landing in the same window.
-- Port remaining apps opportunistically, folding in the companion proposal's phases (a
-  registration-timing fix and a `defineApp` port touch the same lines — do them together).
-- A codemod is feasible for the simple cases (top-level `register()` with literal descriptor →
-  `defineApp`) but the lifecycle-tied apps need eyes; don't over-invest in automation for ~17 call
-  sites.
+**Part 5's residual deletion** is newly unblocked in part: no app registers through
+`findRegisterCall` any more, so its ambiguity machinery has no in-tree caller. Two things still
+hold: `createProtocolContext` (video-editor-lite still uses it, and it remains the supported
+seam under `defineApp` — the context is installed in `view.mount`, which runs after the
+registration `defineApp` performs), and `app.register()` itself, which stays supported
+indefinitely for user-installed apps.
+
+Left behind by the migration, each small and independent:
+
+- **video-editor-lite mounts into `#app` now, not `document.body`** — its `createEditorUI`
+  clears the parent, so mounting on `body` was deleting the wrapper's mount div. Two CSS rules
+  in `editor/styles.css` that were written for `#app > .editor-root` therefore never matched
+  and now do (a 1080px centering on `.editor-main`'s children). It looks like the original
+  intent; nobody has looked at it rendered.
+- **Two teardowns are no-ops** and now have a proper home: `onCleanup(...)` at module scope in
+  browser and browser-user sits outside any reactive root, so it never runs. `defineApp`'s
+  `onClose` is where that belongs.
+- **The schema fold's browser stubs lacked bare `cancelAnimationFrame`** — anime.js calls it at
+  module scope, so any app whose graph reaches anime.js died on import in no-`typescript`
+  (bundled-exe) mode. Fixed; the stub set is still an allowlist that grows on contact.
 
 ### Adjacent, found while shipping Part 3 (not part of this proposal)
 

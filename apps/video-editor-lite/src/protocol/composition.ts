@@ -1,8 +1,8 @@
-import { defineCommand } from '@bundled/yaar';
+import { defineAppCommand } from '@bundled/yaar';
 import { ctl } from './controller';
 
 export const compositionCommands = {
-  createComposition: defineCommand({
+  createComposition: defineAppCommand({
     description:
       'Create a new video composition. Switches to Create mode. Default: 1280x720 @ 30fps, 150 frames (5s).',
     params: {
@@ -15,7 +15,7 @@ export const compositionCommands = {
       },
       additionalProperties: false,
     },
-    handler: (params) =>
+    run: (params) =>
       ctl().createComposition({
         width: typeof params.width === 'number' ? params.width : undefined,
         height: typeof params.height === 'number' ? params.height : undefined,
@@ -24,7 +24,7 @@ export const compositionCommands = {
           typeof params.durationInFrames === 'number' ? params.durationInFrames : undefined,
       }),
   }),
-  addScene: defineCommand({
+  addScene: defineAppCommand({
     description:
       'Add a scene to the composition. Types: solid, text, shape, image, video-clip. Optionally specify a layerId to target a specific layer (default: selected layer).',
     params: {
@@ -45,7 +45,7 @@ export const compositionCommands = {
       required: ['type'],
       additionalProperties: false,
     },
-    handler: (params) =>
+    run: (params) =>
       ctl().addScene({
         type: params.type,
         from: typeof params.from === 'number' ? params.from : undefined,
@@ -58,7 +58,7 @@ export const compositionCommands = {
             : undefined,
       }),
   }),
-  updateScene: defineCommand({
+  updateScene: defineAppCommand({
     description: 'Update an existing scene by ID.',
     params: {
       type: 'object',
@@ -74,7 +74,7 @@ export const compositionCommands = {
       required: ['id'],
       additionalProperties: false,
     },
-    handler: (params) =>
+    run: (params) =>
       ctl().updateScene({
         id: params.id,
         from: typeof params.from === 'number' ? params.from : undefined,
@@ -86,7 +86,7 @@ export const compositionCommands = {
             : undefined,
       }),
   }),
-  removeScene: defineCommand({
+  removeScene: defineAppCommand({
     description: 'Remove a scene by ID.',
     aliases: ['deleteScene'],
     params: {
@@ -95,9 +95,9 @@ export const compositionCommands = {
       required: ['id'],
       additionalProperties: false,
     },
-    handler: (params) => ctl().removeScene({ id: params.id }),
+    run: (params) => ctl().removeScene({ id: params.id }),
   }),
-  reorderScenes: defineCommand({
+  reorderScenes: defineAppCommand({
     description: 'Reorder scenes by providing an array of IDs in the desired order.',
     params: {
       type: 'object',
@@ -105,11 +105,11 @@ export const compositionCommands = {
       required: ['ids'],
       additionalProperties: false,
     },
-    handler: (params) => ctl().reorderScenes({ ids: params.ids }),
+    run: (params) => ctl().reorderScenes({ ids: params.ids }),
   }),
-  getComposition: defineCommand({
+  getComposition: defineAppCommand({
     description: 'Get the current composition state.',
     params: { type: 'object', properties: {}, additionalProperties: false },
-    handler: () => ctl().getComposition(),
+    run: () => ctl().getComposition(),
   }),
 };

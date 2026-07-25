@@ -1,5 +1,5 @@
 export {};
-import { app, defineCommand, invoke, del, list, storage, errMsg } from '@bundled/yaar';
+import { invoke, del, list, storage, errMsg } from '@bundled/yaar';
 import { state, setState } from './store';
 import type { SearchResult, SearchMatch } from './types';
 
@@ -58,7 +58,7 @@ export async function selectResult(index: number) {
 // ── Result normalization ─────────────────────────────────────────────────────
 
 /** Max matches embedded in a single protocol payload. */
-const RESULTS_CAP = 500;
+export const RESULTS_CAP = 500;
 
 /**
  * Grep returns paths relative to the search scope, so a scoped search yields
@@ -96,7 +96,7 @@ function toPlainMatch(m: SearchMatch) {
   };
 }
 
-function sliceMatches(offset: number, limit: number) {
+export function sliceMatches(offset: number, limit: number) {
   const total = state.matches.length;
   const start = Math.max(0, Math.min(offset, total));
   const end = Math.max(start, Math.min(start + limit, total));
@@ -267,202 +267,4 @@ export function clearSearch() {
   setState('previewContent', null);
   setState('previewHighlightLine', null);
   setState('statusText', 'Ready');
-}
-
-export function registerProtocol() {
-  if (!app) return;
-
-  app.register({
-    appId: 'search',
-    name: 'Search',
-    state: {
-      query: {
-        description: 'Current search pattern',
-        handler: () => state.query || null,
-      },
-      results: {
-        description:
-          'Current search results: { matches, total, returned, offset, capped, truncated }. Each match is a plain object with path, line, content, appId. Capped at 500 — use the get-results command for paging beyond that.',
-        handler: () => {
-          if (!state.matches.length) return null;
-          const { items, total } = sliceMatches(0, RESULTS_CAP);
-          return {
-            matches: items,
-            total,
-            returned: items.length,
-            offset: 0,
-            capped: total > items.length,
-            truncated: state.truncated,
-          };
-        },
-      },
-      selected: {
-        description: 'Currently selected result match',
-        handler: () => {
-          if (state.selectedIndex == null) return null;
-          const m = state.matches[state.selectedIndex];
-          return m ? { file: m.file, line: m.line, content: m.content } : null;
-        },
-      },
-      preview: {
-        description: 'File preview content with highlighted line',
-        handler: () =>
-          state.previewPath
-            ? {
-                path: state.previewPath,
-                content: state.previewContent,
-                highlightLine: state.previewHighlightLine,
-              }
-            : null,
-      },
-    },
-    commands: {
-      search: defineCommand({
-        description: 'Run regex search across storage',
-        params: {
-          type: 'object',
-          properties: {
-            pattern: { type: 'string', description: 'Regex pattern to search for' },
-            glob: { type: 'string', description: 'File glob filter (e.g. "*.ts")' },
-            scope: { type: 'string', description: 'Directory scope within storage' },
-          },
-          required: ['pattern'],
-        },
-        handler: async (params) => {
-          const pattern = String(params.pattern);
-          setState('query', pattern);
-          if (params.glob) setState('glob', String(params.glob));
-          if (params.scope != null) setState('scope', String(params.scope));
-          await performSearch(pattern, params.glob, params.scope);
-          return {
-            success: true,
-            matchCount: state.matches.length,
-            truncated: state.truncated,
-          };
-        },
-      }),
-      select: defineCommand({
-        description: 'Select a search result by index to preview the file',
-        params: {
-          type: 'object',
-          properties: {
-            index: { type: 'number', description: 'Zero-based result index' },
-          },
-          required: ['index'],
-        },
-        handler: async (params) => {
-          await selectResult(Number(params.index));
-          return { success: true };
-        },
-      }),
-      'get-results': defineCommand({
-        description: 'Read search results with offset/limit paging',
-        params: {
-          type: 'object',
-          properties: {
-            offset: { type: 'number', description: 'Zero-based start index (default 0)' },
-            limit: { type: 'number', description: 'Max matches to return (default 100, max 500)' },
-          },
-        },
-        handler: (params) => {
-          const offset = Number(params.offset ?? 0) || 0;
-          const rawLimit = Number(params.limit ?? 100) || 100;
-          const limit = Math.max(1, Math.min(rawLimit, RESULTS_CAP));
-          const { items, total, offset: start } = sliceMatches(offset, limit);
-          return {
-            matches: items,
-            total,
-            returned: items.length,
-            offset: start,
-            hasMore: start + items.length < total,
-            truncated: state.truncated,
-          };
-        },
-      }),
-      'clone-app': defineCommand({
-        description:
-          'Clone one or more app sources into storage. appId accepts a plain id, a glob ("*" for every app, "dc-*"), or an array of either. Apps without src/ are skipped rather than failing the batch.',
-        params: {
-          type: 'object',
-          properties: {
-            appId: {
-              description:
-                'App id, glob pattern, or array of ids/globs. "*" clones every installed app.',
-            },
-            destPath: {
-              type: 'string',
-              description: 'Destination path (single app only, default: apps-source/{appId})',
-            },
-          },
-          required: ['appId'],
-        },
-        handler: async (params) => {
-          const spec = params.appId as string | string[];
-          const isBatch =
-            Array.isArray(spec) || String(spec).includes('*') || String(spec).includes('?');
-          if (isBatch) return await cloneApps(spec);
-          const appId = String(spec);
-          const dest = params.destPath ? String(params.destPath) : undefined;
-          const r = await cloneApp(appId, dest);
-          return r.success
-            ? {
-                success: true,
-                requested: 1,
-                cloned: [
-                  {
-                    appId,
-                    filesWritten: r.filesWritten ?? 0,
-                    destPath: r.destPath ?? `apps-source/${appId}`,
-                  },
-                ],
-                skipped: [],
-              }
-            : {
-                success: false,
-                requested: 1,
-                cloned: [],
-                skipped: [{ appId, reason: r.error ?? 'unknown error' }],
-              };
-        },
-      }),
-      'purge-clones': defineCommand({
-        description:
-          'Remove all cloned app sources in one call (default: the entire apps-source/ tree)',
-        params: {
-          type: 'object',
-          properties: {
-            path: { type: 'string', description: 'Path to purge (default: apps-source)' },
-          },
-        },
-        handler: async (params) => {
-          return await purgeClones(params.path ? String(params.path) : undefined);
-        },
-      }),
-      'remove-clone': defineCommand({
-        description: 'Remove a previously cloned app source from storage',
-        params: {
-          type: 'object',
-          properties: {
-            appId: { type: 'string', description: 'App ID that was cloned (e.g. "memo")' },
-            destPath: {
-              type: 'string',
-              description: 'Custom path used during clone (default: apps-source/{appId})',
-            },
-          },
-          required: ['appId'],
-        },
-        handler: async (params) => {
-          return await removeClone(String(params.appId), params.destPath);
-        },
-      }),
-      clear: defineCommand({
-        description: 'Clear search results and preview',
-        params: { type: 'object', properties: {} },
-        handler: () => {
-          clearSearch();
-          return { success: true };
-        },
-      }),
-    },
-  });
 }

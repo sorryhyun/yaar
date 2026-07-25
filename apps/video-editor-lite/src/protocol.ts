@@ -1,9 +1,5 @@
-import { app } from '@bundled/yaar';
-import { setController } from './protocol/controller';
-import { compositionCommands } from './protocol/composition';
-import { layerCommands } from './protocol/layers';
-import { outputCommands } from './protocol/output';
-import { sourceCommands } from './protocol/source';
+import type { AppStateDefinition } from '@bundled/yaar';
+import { ctl } from './protocol/controller';
 import type { Composition } from './core/types';
 import type { SceneProps } from './core/scene-registry';
 
@@ -68,44 +64,35 @@ export interface EditorControllerApi {
   };
 }
 
-export function registerProtocol(controller: EditorControllerApi): void {
-  setController(controller);
-  if (!app || typeof app.register !== 'function') return;
-
-  app.register({
-    appId: 'video-editor-lite',
-    name: 'Video Editor Lite',
-    state: {
-      currentSource: {
-        description: 'Current media source information.',
-        handler: () => controller.getCurrentSource(),
-      },
-      playbackState: {
-        description: 'Playback status including play/pause, loop preview, and rate.',
-        handler: () => controller.getPlaybackState(),
-      },
-      timeline: {
-        description: 'Current playback time and total duration in seconds.',
-        handler: () => controller.getTimeline(),
-      },
-      trimRange: {
-        description: 'Current trim in/out range and selected duration in seconds.',
-        handler: () => controller.getTrimRange(),
-      },
-      composition: {
-        description: 'Current composition state including config and scenes.',
-        handler: () => controller.getComposition(),
-      },
-      layers: {
-        description: 'All layers in the current composition with their scenes.',
-        handler: () => controller.getLayers(),
-      },
-    },
-    commands: {
-      ...sourceCommands,
-      ...compositionCommands,
-      ...outputCommands,
-      ...layerCommands,
-    },
-  });
-}
+/**
+ * The state half of the protocol. Like the command maps in `protocol/`, these
+ * reach the controller through `ctl()` rather than closing over it, so the map
+ * stays a top-level `const` the extractor can read while the controller is
+ * still supplied at mount time.
+ */
+export const editorState = {
+  currentSource: {
+    description: 'Current media source information.',
+    get: () => ctl().getCurrentSource(),
+  },
+  playbackState: {
+    description: 'Playback status including play/pause, loop preview, and rate.',
+    get: () => ctl().getPlaybackState(),
+  },
+  timeline: {
+    description: 'Current playback time and total duration in seconds.',
+    get: () => ctl().getTimeline(),
+  },
+  trimRange: {
+    description: 'Current trim in/out range and selected duration in seconds.',
+    get: () => ctl().getTrimRange(),
+  },
+  composition: {
+    description: 'Current composition state including config and scenes.',
+    get: () => ctl().getComposition(),
+  },
+  layers: {
+    description: 'All layers in the current composition with their scenes.',
+    get: () => ctl().getLayers(),
+  },
+} satisfies Record<string, AppStateDefinition>;

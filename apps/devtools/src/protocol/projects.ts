@@ -1,9 +1,9 @@
-import { AppCommandError, defineCommand } from '@bundled/yaar';
+import { AppCommandError, defineAppCommand } from '@bundled/yaar';
 import { activeProject, files } from '../core';
 import { createProject, openProject, deleteProject, cloneApp } from '../services';
 
 export const projectCommands = {
-  createProject: defineCommand({
+  createProject: defineAppCommand({
     description: 'Create a new project',
     params: {
       type: 'object',
@@ -12,19 +12,19 @@ export const projectCommands = {
       },
       required: ['name'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const id = await createProject(String(p.name));
       return { projectId: id };
     },
   }),
-  openProject: defineCommand({
+  openProject: defineAppCommand({
     description: 'Switch to an existing project',
     params: {
       type: 'object',
       properties: { id: { type: 'string' } },
       required: ['id'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       await openProject(String(p.id));
       const proj = activeProject();
       if (!proj) throw new AppCommandError('Project not found');
@@ -34,18 +34,18 @@ export const projectCommands = {
       };
     },
   }),
-  deleteProject: defineCommand({
+  deleteProject: defineAppCommand({
     description: 'Permanently delete a project and its files. Not undoable.',
     params: {
       type: 'object',
       properties: { id: { type: 'string' } },
       required: ['id'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       await deleteProject(String(p.id));
     },
   }),
-  cloneApp: defineCommand({
+  cloneApp: defineAppCommand({
     description: 'Clone an installed app source into a new project',
     params: {
       type: 'object',
@@ -54,7 +54,7 @@ export const projectCommands = {
       },
       required: ['appId'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const projectId = await cloneApp(String(p.appId));
       const proj = activeProject();
       return {

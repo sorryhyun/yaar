@@ -1,8 +1,8 @@
-import { defineCommand } from '@bundled/yaar';
+import { defineAppCommand } from '@bundled/yaar';
 import { ctl } from './controller';
 
 export const layerCommands = {
-  addLayer: defineCommand({
+  addLayer: defineAppCommand({
     description: 'Add a new layer to the composition. Returns the new layer ID.',
     params: {
       type: 'object',
@@ -15,13 +15,13 @@ export const layerCommands = {
       },
       additionalProperties: false,
     },
-    handler: (params) =>
+    run: (params) =>
       ctl().addLayer({
         name: typeof params.name === 'string' ? params.name : undefined,
         index: typeof params.index === 'number' ? params.index : undefined,
       }),
   }),
-  removeLayer: defineCommand({
+  removeLayer: defineAppCommand({
     description: 'Remove a layer and all its scenes by layer ID. The last layer cannot be removed.',
     aliases: ['deleteLayer'],
     params: {
@@ -32,9 +32,9 @@ export const layerCommands = {
       required: ['id'],
       additionalProperties: false,
     },
-    handler: (params) => ctl().removeLayer({ id: params.id }),
+    run: (params) => ctl().removeLayer({ id: params.id }),
   }),
-  updateLayer: defineCommand({
+  updateLayer: defineAppCommand({
     description: 'Update layer properties: rename, toggle visibility, or toggle lock.',
     params: {
       type: 'object',
@@ -53,7 +53,7 @@ export const layerCommands = {
       required: ['id'],
       additionalProperties: false,
     },
-    handler: (params) =>
+    run: (params) =>
       ctl().updateLayer({
         id: params.id,
         name: typeof params.name === 'string' ? params.name : undefined,
@@ -61,7 +61,7 @@ export const layerCommands = {
         locked: typeof params.locked === 'boolean' ? params.locked : undefined,
       }),
   }),
-  reorderLayers: defineCommand({
+  reorderLayers: defineAppCommand({
     description: 'Reorder all layers. ids[0] = bottom (background), ids[last] = top (foreground).',
     params: {
       type: 'object',
@@ -75,9 +75,9 @@ export const layerCommands = {
       required: ['ids'],
       additionalProperties: false,
     },
-    handler: (params) => ctl().reorderLayers({ ids: params.ids }),
+    run: (params) => ctl().reorderLayers({ ids: params.ids }),
   }),
-  selectLayer: defineCommand({
+  selectLayer: defineAppCommand({
     description: 'Select the active layer. New scenes added via addScene will go into this layer.',
     params: {
       type: 'object',
@@ -87,9 +87,9 @@ export const layerCommands = {
       required: ['id'],
       additionalProperties: false,
     },
-    handler: (params) => ctl().selectLayer({ id: params.id }),
+    run: (params) => ctl().selectLayer({ id: params.id }),
   }),
-  moveSceneToLayer: defineCommand({
+  moveSceneToLayer: defineAppCommand({
     description: 'Move a scene from its current layer to a different layer.',
     params: {
       type: 'object',
@@ -100,7 +100,7 @@ export const layerCommands = {
       required: ['sceneId', 'layerId'],
       additionalProperties: false,
     },
-    handler: (params) =>
+    run: (params) =>
       ctl().moveSceneToLayer({
         sceneId: params.sceneId,
         layerId: params.layerId,

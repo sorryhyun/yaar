@@ -1,4 +1,4 @@
-import { AppCommandError, defineCommand, invoke, wait } from '@bundled/yaar';
+import { AppCommandError, invoke, wait, defineAppCommand } from '@bundled/yaar';
 import {
   diagnostics,
   compileStatus,
@@ -18,7 +18,7 @@ import {
 } from '../services';
 
 export const buildCommands = {
-  compile: defineCommand({
+  compile: defineAppCommand({
     description:
       'Type check and compile the active project; refreshes the preview window if one is ' +
       'open. `built` reflects the bundle, `status` reflects type checking — they can ' +
@@ -32,7 +32,7 @@ export const buildCommands = {
         },
       },
     },
-    handler: async (p) => {
+    run: async (p) => {
       // Typecheck and compile were always run back-to-back as two round trips, and compiling
       // does not typecheck — so it was easy to ship code that built but never type checked.
       // Fold them: check first, build regardless, report both.
@@ -103,13 +103,13 @@ export const buildCommands = {
       };
     },
   }),
-  manifest: defineCommand({
+  manifest: defineAppCommand({
     description:
       'Compare the STATIC manifest (from the last compile) against the RUNTIME manifest ' +
       '(what the open preview actually registered), plus a drift report. Needs a compile ' +
       '(static side) and an open preview (runtime side).',
     params: { type: 'object', properties: {} },
-    handler: async () => {
+    run: async () => {
       const stat = await getStaticManifest();
       const runtime = await getRuntimeManifest();
       const result = {
@@ -150,7 +150,7 @@ export const buildCommands = {
       return { ...result, note: note.trim() };
     },
   }),
-  protocolLog: defineCommand({
+  protocolLog: defineAppCommand({
     description:
       'App Protocol traffic for the preview window: every query/command sent and event ' +
       'emitted, in order, with results and timings.',
@@ -160,7 +160,7 @@ export const buildCommands = {
         limit: { type: 'number', description: 'Max entries, newest last (default 100).' },
       },
     },
-    handler: async (p) => {
+    run: async (p) => {
       const wid = previewWindowId();
       if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
       return await invoke(`yaar://windows/${wid}`, {
@@ -169,7 +169,7 @@ export const buildCommands = {
       });
     },
   }),
-  deploy: defineCommand({
+  deploy: defineAppCommand({
     description:
       'Deploy to apps/. Refuses type errors unless skipTypecheck, and refuses a manifest ' +
       'that drops commands the installed app has unless allowProtocolShrink. Snapshots the ' +
@@ -191,7 +191,7 @@ export const buildCommands = {
       },
       required: ['appId'],
     },
-    handler: async (p) =>
+    run: async (p) =>
       await deploy({
         appId: String(p.appId),
         name: p.name ? String(p.name) : undefined,

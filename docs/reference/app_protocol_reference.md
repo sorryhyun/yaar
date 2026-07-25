@@ -302,6 +302,12 @@ The SDK is available via `@bundled/yaar`. Import `app` and call `app.register()`
 
 Register the app with the protocol. Must be called once.
 
+Apps do not normally call it directly: `defineApp({ id, name, state, commands, view })` is
+the authoring entrypoint and calls `register` for you, with `get`/`run` in place of
+`handler` and Zod accepted wherever a JSON Schema literal goes. See
+[`docs/guides/app-development.md`](../guides/app-development.md#registering-in-your-app--defineapp).
+Everything below is the shape `defineApp` produces and the wire contract both share.
+
 ```typescript
 import { app } from '@bundled/yaar';
 

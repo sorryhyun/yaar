@@ -1,8 +1,8 @@
-import { defineCommand } from '@bundled/yaar';
+import { defineAppCommand } from '@bundled/yaar';
 import { gitHistory, gitDiff, gitRestore, gitCheckpoint } from '../services';
 
 export const gitCommands = {
-  gitHistory: defineCommand({
+  gitHistory: defineAppCommand({
     description: "List a deployed app's version history, newest first. Each deploy is one commit.",
     params: {
       type: 'object',
@@ -12,10 +12,10 @@ export const gitCommands = {
       },
       required: ['appId'],
     },
-    handler: async (p) =>
+    run: async (p) =>
       gitHistory(String(p.appId), typeof p.limit === 'number' ? p.limit : undefined),
   }),
-  gitDiff: defineCommand({
+  gitDiff: defineAppCommand({
     description:
       'Diff a deployed app against a commit. against="snapshot" (default): app\'s own deploy ' +
       'history. against="repo": user\'s git repo (bundled apps only).',
@@ -28,7 +28,7 @@ export const gitCommands = {
       },
       required: ['appId'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const result = await gitDiff(String(p.appId), {
         ref: p.ref ? String(p.ref) : undefined,
         against: p.against === 'repo' ? 'repo' : 'snapshot',
@@ -42,7 +42,7 @@ export const gitCommands = {
       };
     },
   }),
-  gitRestore: defineCommand({
+  gitRestore: defineAppCommand({
     description:
       'Roll a deployed app back to an earlier commit and rebuild it, overwriting current files. ' +
       'Current state is auto-snapshotted first, so this is itself undoable via another gitRestore.',
@@ -57,9 +57,9 @@ export const gitCommands = {
       },
       required: ['appId', 'ref'],
     },
-    handler: async (p) => gitRestore(String(p.appId), String(p.ref)),
+    run: async (p) => gitRestore(String(p.appId), String(p.ref)),
   }),
-  gitCheckpoint: defineCommand({
+  gitCheckpoint: defineAppCommand({
     description: "Snapshot a deployed app's current state as a restorable commit.",
     params: {
       type: 'object',
@@ -69,6 +69,6 @@ export const gitCommands = {
       },
       required: ['appId'],
     },
-    handler: async (p) => gitCheckpoint(String(p.appId), p.message ? String(p.message) : undefined),
+    run: async (p) => gitCheckpoint(String(p.appId), p.message ? String(p.message) : undefined),
   }),
 };

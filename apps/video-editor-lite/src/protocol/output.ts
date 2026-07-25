@@ -1,15 +1,15 @@
-import { defineCommand } from '@bundled/yaar';
+import { defineAppCommand } from '@bundled/yaar';
 import { ctl } from './controller';
 
 export const outputCommands = {
-  preview: defineCommand({
+  preview: defineAppCommand({
     description: 'Switch to Create mode and start playing the composition preview.',
     params: { type: 'object', properties: {}, additionalProperties: false },
-    handler: () => ctl().preview(),
+    run: () => ctl().preview(),
   }),
-  exportVideo: defineCommand({
+  exportVideo: defineAppCommand({
     description: 'Export the composition as a WebM video file.',
     params: { type: 'object', properties: {}, additionalProperties: false },
-    handler: async () => ctl().exportVideo(),
+    run: async () => ctl().exportVideo(),
   }),
 };

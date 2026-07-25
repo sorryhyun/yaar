@@ -1,9 +1,10 @@
-export {};
 import { createSignal, createMemo, Show, For, onMount, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
-import { showToast, errMsg, onShortcut } from '@bundled/yaar';
+import { defineApp, showToast, errMsg, onShortcut } from '@bundled/yaar';
+import * as z from '@bundled/zod';
 import {
+  memos,
+  searchMemosFts,
   selectedId,
   setSelectedId,
   editMode,
@@ -21,7 +22,6 @@ import {
   getFilteredMemos,
   getMemoById,
 } from './store';
-import { registerProtocol } from './protocol';
 import './styles.css';
 
 function formatDate(iso: string): string {
@@ -258,13 +258,52 @@ function App() {
   `;
 }
 
-// Registered once at module scope, never from a lifecycle hook: a component
-// remount must not re-register the protocol.
-registerProtocol();
-
-render(() => {
+function Root() {
   onMount(() => {
     loadMemos();
   });
   return html`<${App} />`;
-}, document.getElementById('app')!);
+}
+
+export default defineApp({
+  id: 'memo',
+  name: 'Memo',
+  state: {
+    // State handlers receive no params — parameterized reads (search, get by
+    // id) are commands or direct yaar://apps/memo/db/memos queries instead.
+    memos: {
+      description: 'All memos',
+      get: () => ({ memos: memos() }),
+    },
+  },
+  commands: {
+    searchMemos: {
+      description: 'Full-text search memos (server-side FTS5), best matches first',
+      params: z.object({ query: z.string(), limit: z.optional(z.number()) }),
+      run: async (p) => ({ memos: await searchMemosFts(p.query, p.limit) }),
+    },
+    addMemo: {
+      description: 'Add a new memo',
+      params: z.object({ title: z.string(), content: z.string() }),
+      // Appends a row — replaying it on remount would duplicate the memo.
+      replay: 'never',
+      run: async (p) => ({ memo: await addMemo(p.title, p.content) }),
+    },
+    updateMemo: {
+      description: 'Update an existing memo',
+      params: z.object({
+        id: z.string(),
+        title: z.optional(z.string()),
+        content: z.optional(z.string()),
+      }),
+      run: async (p) => ({ memo: await updateMemo(p.id, p.title, p.content) }),
+    },
+    deleteMemo: {
+      description: 'Delete a memo by id',
+      params: z.object({ id: z.string() }),
+      replay: 'never',
+      run: async (p) => ({ deleted: await deleteMemo(p.id) }),
+    },
+  },
+  view: Root,
+});

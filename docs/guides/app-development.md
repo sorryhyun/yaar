@@ -691,7 +691,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 **Ignored fields seen in the wild** — these parse as unknown keys and do nothing:
 
 - `capture` (`"dom"` / `"canvas"`) — removed from all bundled app manifests (it had spread to 14, not the 19 once reported here); still read by no current code, so it stays ignored if it reappears — e.g. copied from an old app or emitted by an AI-generated manifest. It once named a screenshot strategy for a `window.capture` tool that has since been removed; the manifest field outlived it.
-- `id` and `appId` (`apps/memo`, `apps/music-maker`) — the folder name is always the id. The `appId` passed to `app.register()` in your source is a separate thing and *is* used.
+- `id` and `appId` (`apps/memo`, `apps/music-maker`) — the folder name is always the id. The `id` passed to `defineApp()` in your source is a separate thing, *is* used, and must match.
 
 ## App Types
 
@@ -738,42 +738,75 @@ Agent → MCP tool → WebSocket → postMessage → Iframe App
 Iframe App → postMessage → WebSocket → MCP tool returns
 ```
 
-### Registering in Your App
+### Registering in Your App — `defineApp()`
 
-Import `app` and `defineCommand` from `@bundled/yaar` and call `app.register()` with state handlers and command handlers.
+`src/main.ts` ends in exactly one `export default defineApp({...})`. That call is the app:
+it registers the protocol (once, at module scope, before the view mounts), mounts the view,
+and normalizes whatever a command throws into an `AppCommandError`. An app using it never
+calls `app.register()` or `render()` itself.
 
 ```typescript
 // src/store.ts
 import { createSignal } from '@bundled/solid-js';
 export const [items, setItems] = createSignal<string[]>([]);
 
-// src/protocol.ts
-import { app, defineCommand } from '@bundled/yaar';
+// src/main.ts
+import { defineApp } from '@bundled/yaar';
+import * as z from '@bundled/zod';
 import { items, setItems } from './store';
+import { App } from './app';
 
-export function registerProtocol() {
-  app.register({
-    appId: 'my-app',
-    name: 'My App',
-    state: {
-      items: {
-        description: 'Current list of items',
-        handler: () => [...items()],  // read signal, return copy
+export default defineApp({
+  id: 'my-app',            // must equal app.json's appId — the build checks
+  name: 'My App',
+  state: {
+    items: {
+      description: 'Current list of items',
+      get: () => [...items()],          // read signal, return copy
+    },
+  },
+  commands: {
+    addItem: {
+      description: 'Add an item',
+      params: z.object({ text: z.string() }),
+      replay: 'never',                  // appends — don't re-run it on iframe remount
+      run: (p) => {                     // p is typed { text: string }, already validated
+        setItems([...items(), p.text]); // immutable signal write, no render() needed
+        return { ok: true };
       },
     },
-    commands: {
-      addItem: defineCommand({
-        description: 'Add an item',
-        params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-        handler: (p) => {                 // p is inferred as { text: string }
-          setItems([...items(), p.text]); // immutable signal write, no render() needed
-          return { ok: true };
-        },
-      }),
-    },
-  });
-}
+  },
+  view: App,               // Solid component — or { mount(el) } for an imperative app
+});
 ```
+
+- **`state.get` / `commands.run`** replace `handler`; everything else (`description`,
+  `params`, `returns`, `aliases`, `events`, `onClose`, `onCapture`) keeps its name.
+- **Schemas.** `params`/`returns`/`schema` take a Zod schema (`@bundled/zod`, the Zod Mini
+  functional API) or a plain JSON Schema literal. Zod is preferred and is the single source
+  of truth: it types `run`'s parameter, validates the call *before* `run` sees it — including
+  the declared types, which the raw bridge never checked — and folds into
+  `dist/protocol.json` at build time via `z.toJSONSchema()`. `run` receives the parsed value,
+  so defaults and coercions have already been applied.
+- **`replay`.** The server re-sends recorded commands when a window's iframe remounts.
+  Declare `replay: 'never'` on any command whose effect must not be applied twice (appends,
+  sends, deletes); omit it for idempotent ones.
+- **`view`.** A Solid component is mounted with `render`; an imperative app that owns its own
+  DOM passes `{ mount(el) { ... } }` and may return a teardown, which runs on window close
+  after `onClose`.
+- **Splitting up.** `state`/`commands` maps may live in other modules and be spread in — see
+  [Splitting a protocol by domain](#splitting-a-protocol-by-domain). The `export default`
+  itself must stay in `src/main.ts`: that is what the build reads back to fold Zod schemas.
+
+`defineApp` registers *authoritatively*, so a second `app.register()` anywhere in the same
+app throws instead of silently overwriting the first.
+
+### The low-level call — `app.register()`
+
+`defineApp` is sugar over `app.register()`, which remains supported for apps that have not
+been migrated. It takes `handler` in place of `get`/`run`, JSON-Schema literals only, and
+leaves registration timing and mounting to the app — register at module scope, never from
+`onMount()` or a component body, or a remount re-registers.
 
 ### Typing the registration — `AppRegistration` and friends
 
@@ -851,18 +884,26 @@ intact:
 ```typescript
 // src/commands/files.ts
 export const fileCommands = {
-  readFile: defineCommand({ description: 'Read a file', params: { ... }, handler }),
+  readFile: { description: 'Read a file', params: { ... }, run: (p: { path: string }) => ... },
 };
 
-// src/protocol.ts
+// src/main.ts
 import { fileCommands } from './commands/files';
 import { gitCommands } from './commands/git';
 
-app.register({
-  appId: 'devtools',
+export default defineApp({
+  id: 'devtools',
+  name: 'DevTools',
   commands: { ...fileCommands, ...gitCommands },
+  view: App,
 });
 ```
+
+One inference caveat, and it is silent: `defineApp` derives each `run`'s parameter type from
+the `params` schema **at the call site**. A command spread in from another module is
+extracted into the manifest exactly as an inline one, but its `run` parameter widens to a
+free-form bag — no error, just weaker types. Annotate those parameters yourself (as above),
+or keep the commands you want inference for inline in the `defineApp({...})` literal.
 
 The limit is static resolvability, and it is enforced rather than tolerated: a spread of a
 **call result** (`...buildCommands()`), a descriptor imported from an npm package, a
@@ -889,19 +930,32 @@ export const { set: setProtocolContext, get: ctx } =
 
 // src/protocol/deck.ts — a plain const, so the extractor reads it
 export const deckCommands = {
-  setDeck: defineCommand({
+  setDeck: {
     description: 'Replace the whole deck',
     params: { ... },
-    handler: (p) => ctx().setDeck(p.deck),
-  }),
+    run: (p: { deck: Deck }) => ctx().setDeck(p.deck),
+  },
 };
 
-// src/protocol.ts
-export function registerProtocol(context: ProtocolContext) {
-  setProtocolContext(context); // before app.register()
-  app.register({ appId: 'slides-lite', commands: { ...deckCommands } });
-}
+// src/main.ts
+export default defineApp({
+  id: 'slides-lite',
+  name: 'Slides',
+  commands: { ...deckCommands },
+  // The imperative escape hatch: the context exists only once the editor is built,
+  // and `mount` is the first moment that is true.
+  view: {
+    mount(el) {
+      const editor = createEditor(el);
+      setProtocolContext(editor.protocolContext);
+      return () => editor.destroy();
+    },
+  },
+});
 ```
+
+`defineApp` registers before it mounts, so the context is installed *after* registration —
+which is fine, because a descriptor only reaches `ctx()` when a command actually runs.
 
 The tradeoff is real and worth stating: the context becomes module state shared by every
 descriptor, so this suits an app that registers once per document — which is the normal
@@ -911,7 +965,7 @@ quietly retargeting the first registration's handlers.
 
 ### Talking Back to the Agent
 
-`app.register()` is how the agent reads *you*. These three APIs are how you reach the agent. See [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md) for full signatures.
+`defineApp`'s `state`/`commands` are how the agent reads *you*. These three APIs are how you reach the agent. See [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md) for full signatures.
 
 **`app.sendInteraction(description)`** — push a free-form message to the agent, typically after a user action inside the iframe. Takes a string, or an object with `instructions` and `toMonitor` (route to the monitor agent instead of this window's app agent) plus arbitrary payload fields.
 
@@ -920,23 +974,23 @@ app.sendInteraction('User clicked Save');
 app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection: text });
 ```
 
-**`app.emit(channel, payload)`** — fire-and-forget event on a channel declared in `app.register({ events })`. Delivered only to agents that subscribed; undeclared or unsubscribed channels are dropped server-side.
+**`app.emit(channel, payload)`** — fire-and-forget event on a channel declared in `defineApp({ events })`. Delivered only to agents that subscribed; undeclared or unsubscribed channels are dropped server-side.
 
 ```typescript
-app.register({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
+defineApp({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
 app.emit('item-added', { text: 'Buy milk' });
 ```
 
-**`onClose`** — an optional hook on the `app.register()` config, invoked when the window is about to be destroyed. Use it to flush unsaved state.
+**`onClose`** — an optional hook on the `defineApp()` config, invoked when the window is about to be destroyed. Use it to flush unsaved state.
 
 ```typescript
-app.register({ /* ... */ onClose: () => saveDraft(editor().value) });
+defineApp({ /* ... */ onClose: () => saveDraft(editor().value) });
 ```
 
-**`onCapture`** — an optional hook on the `app.register()` config, called when the OS captures the window (e.g. an agent reads it). Return a data-URL image to use instead of the default full-window screenshot (DOM + live canvas pixels composited); return `null` to fall back. May be async. Useful when the default capture can't see your content — e.g. a WebGL canvas without `preserveDrawingBuffer`, or state that renders outside the viewport.
+**`onCapture`** — an optional hook on the `defineApp()` config, called when the OS captures the window (e.g. an agent reads it). Return a data-URL image to use instead of the default full-window screenshot (DOM + live canvas pixels composited); return `null` to fall back. May be async. Useful when the default capture can't see your content — e.g. a WebGL canvas without `preserveDrawingBuffer`, or state that renders outside the viewport.
 
 ```typescript
-app.register({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
+defineApp({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
 ```
 
 ### MCP Tools

@@ -1,9 +1,7 @@
 import { createSignal, onMount, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
-import { notifications } from '@bundled/yaar';
+import { defineApp, notifications } from '@bundled/yaar';
 import * as z from '@bundled/zod';
-import { registerDockProtocol } from './protocol';
 import { OpenMeteoResponse, NominatimResponse } from './schema';
 import './styles.css';
 
@@ -207,23 +205,89 @@ function App() {
   `;
 }
 
-// ── Mount ─────────────────────────────────────────────────────────────────────
-render(() => html`<${App} />`, document.getElementById('app')!);
-
-// ── App Protocol ──────────────────────────────────────────────────────────────
-registerDockProtocol({
-  getNowIso:       () => nowIso(),
-  getTimeStr:      () => timeStr(),
-  getDateStr:      () => dateStr(),
-  getWeatherIcon:  () => weatherIcon(),
-  getWeatherTemp:  () => weatherTemp(),
-  getWeatherCity:  () => weatherCity(),
-  getShowPanel:    () => showPanel(),
-  getPanelOpacity: () => panelOpacity(),
-  getPanelBlurPx:  () => panelBlurPx(),
-  setShowPanel:    (v) => setShowPanel(v),
-  setPanelOpacity: (v) => setPanelOpacity(v),
-  setPanelBlurPx:  (v) => setPanelBlurPx(v),
-  renderNow,
-  initWeather,
+// ── App Protocol + Mount ─────────────────────────────────────────────────────
+export default defineApp({
+  id: 'dock',
+  name: 'Dock',
+  state: {
+    nowIso: {
+      description: 'Current time in ISO format',
+      get: () => nowIso(),
+    },
+    display: {
+      description: 'Current displayed date/time text: { time, date }',
+      get: () => ({
+        time: timeStr(),
+        date: dateStr(),
+      }),
+    },
+    appearance: {
+      description: 'Current dock appearance settings: { showPanel, panelOpacity, panelBlurPx }',
+      get: () => ({
+        showPanel: showPanel(),
+        panelOpacity: panelOpacity(),
+        panelBlurPx: panelBlurPx(),
+      }),
+    },
+    weather: {
+      description: 'Current weather data: { icon, temp, city }',
+      get: () => ({
+        icon: weatherIcon(),
+        temp: weatherTemp(),
+        city: weatherCity(),
+      }),
+    },
+  },
+  commands: {
+    refreshNow: {
+      description: 'Force immediate clock refresh. Params: {}',
+      params: { type: 'object', properties: {} },
+      run: () => {
+        renderNow();
+        return { nowIso: nowIso() };
+      },
+    },
+    refreshWeather: {
+      description: 'Force re-fetch weather data. Params: {}',
+      params: { type: 'object', properties: {} },
+      run: async () => {
+        await initWeather();
+        return {
+          weather: {
+            icon: weatherIcon(),
+            temp: weatherTemp(),
+            city: weatherCity(),
+          },
+        };
+      },
+    },
+    setAppearance: {
+      description:
+        'Update dock appearance. Params: { showPanel?: boolean, panelOpacity?: number (0–1), panelBlurPx?: number (0–40) }',
+      params: {
+        type: 'object',
+        properties: {
+          showPanel: { type: 'boolean' },
+          panelOpacity: { type: 'number', minimum: 0, maximum: 1 },
+          panelBlurPx: { type: 'number', minimum: 0, maximum: 40 },
+        },
+      },
+      run: (p) => {
+        if (typeof p?.showPanel === 'boolean') setShowPanel(p.showPanel);
+        if (typeof p?.panelOpacity === 'number')
+          setPanelOpacity(Math.max(0, Math.min(1, p.panelOpacity)));
+        if (typeof p?.panelBlurPx === 'number')
+          setPanelBlurPx(Math.max(0, Math.min(40, p.panelBlurPx)));
+        // Signals are reactive — DOM updates automatically, no applyAppearance() needed
+        return {
+          appearance: {
+            showPanel: showPanel(),
+            panelOpacity: panelOpacity(),
+            panelBlurPx: panelBlurPx(),
+          },
+        };
+      },
+    },
+  },
+  view: App,
 });

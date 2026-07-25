@@ -1,25 +1,33 @@
 export {};
-import { For, Show } from '@bundled/solid-js';
+import { For, Show, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
 import './styles.css';
 import type { StorageEntry } from './types';
 import { state, setState, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody } from './state';
-import { basename, formatSize, getFileIcon } from './helpers';
+import { basename, formatSize, getFileIcon, sanitizeAlias } from './helpers';
 import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
 import { navigate, selectFile, closePreview } from './navigation';
-import { registerProtocol } from './protocol';
-import { panelWidth, setPanelWidth, resetPanelWidth, reclampPanelWidth } from './layout';
+import {
+  panelWidth,
+  setPanelWidth,
+  resetPanelWidth,
+  reclampPanelWidth,
+  maxPanelWidth,
+  MIN_PANEL_WIDTH,
+  DEFAULT_PANEL_WIDTH,
+} from './layout';
 import {
   navOpen,
   navPinned,
   openNav,
+  closeNav,
   scheduleNavClose,
   toggleNavPin,
+  setNavPin,
   setNavResizing,
 } from './navOverlay';
-import { storage, showToast, showConfirm } from '@bundled/yaar';
+import { app, storage, showToast, showConfirm, defineApp } from '@bundled/yaar';
 
 // ── Upload ──────────────────────────────────────────────────────
 
@@ -82,7 +90,12 @@ window.addEventListener('resize', () => reclampPanelWidth());
 
 // ── Template ──────────────────────────────────────────────
 
-const App = () => html`
+const App = () => {
+  onMount(() => {
+    navigate('');
+  });
+
+  return html`
   <!-- Full-window background: the file preview, or a hint when nothing is open -->
   <div class="bg-layer">
     <div class=${() => `preview${state.showPreview ? '' : ' hidden'}`}>
@@ -263,10 +276,138 @@ const App = () => html`
     </div>
   <//>
 `;
+};
 
-render(App, document.getElementById('app')!);
+// ── App Protocol & View ────────────────────────────────────
 
-// ── App Protocol & Init ────────────────────────────────────
+export default defineApp({
+  id: 'storage',
+  name: 'Storage Browser',
+  state: {
+    'current-path': {
+      description: 'Current directory path being viewed',
+      get: () => state.currentPath,
+    },
+    'directory-listing': {
+      description: 'Files and folders in the current directory',
+      get: () =>
+        state.entries.map((e) => ({
+          path: e.path,
+          name: basename(e.path),
+          isDirectory: e.isDirectory,
+          size: e.size,
+        })),
+    },
+    'selected-file': {
+      description: 'Currently selected file path (null if none)',
+      get: () => state.selectedFile,
+    },
+    'mount-aliases': {
+      description: 'Mounted folders available under mounts/',
+      get: () => [...state.mountAliases],
+    },
+    'file-preview': {
+      description: 'Text content of the currently previewed file (null if not text)',
+      get: () => state.previewContent,
+    },
+    layout: {
+      description:
+        'Current layout state. The file preview always fills the whole window as the background; the directory listing lives in a left hover-open overlay panel. navOpen is whether the panel is currently visible, navPinned whether it is pinned open, panelWidth its width in px.',
+      get: () => ({
+        navOpen: navOpen(),
+        navPinned: navPinned(),
+        panelWidth: panelWidth(),
+        minPanelWidth: MIN_PANEL_WIDTH,
+        maxPanelWidth: maxPanelWidth(),
+        defaultPanelWidth: DEFAULT_PANEL_WIDTH,
+      }),
+    },
+  },
+  commands: {
+    navigate: {
+      description: 'Navigate to a directory path',
+      params: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'Directory path to navigate to' } },
+        required: ['path'],
+      },
+      run: (params) => {
+        navigate(String(params.path));
+        return { success: true, path: params.path };
+      },
+    },
+    'select-file': {
+      description: 'Select and preview a file',
+      params: {
+        type: 'object',
+        properties: { path: { type: 'string', description: 'File path to select' } },
+        required: ['path'],
+      },
+      run: (params) => {
+        const entry = state.entries.find((e) => e.path === params.path);
+        if (!entry || entry.isDirectory) return { success: false, error: 'File not found' };
+        selectFile(entry);
+        return { success: true };
+      },
+    },
+    'request-mount': {
+      description: 'Send a mount request for the agent to execute with host permission',
+      params: {
+        type: 'object',
+        properties: {
+          alias: { type: 'string', description: 'Mount alias (example: project-files)' },
+          hostPath: { type: 'string', description: 'Absolute host folder path' },
+          readOnly: { type: 'boolean', description: 'Whether mount should be read-only' },
+        },
+        required: ['alias', 'hostPath'],
+      },
+      run: (params) => {
+        if (!app?.sendInteraction) return { success: false, error: 'Agent bridge unavailable' };
+        app.sendInteraction({
+          event: 'storage_mount_request',
+          source: 'storage',
+          alias: sanitizeAlias(String(params.alias || '')),
+          hostPath: String(params.hostPath || ''),
+          readOnly: Boolean(params.readOnly),
+        });
+        return { success: true };
+      },
+    },
+    'set-layout': {
+      description:
+        'Control the left file-list overlay panel. open opens or closes the panel; pinned toggles pin (pinned keeps it open even when the cursor leaves). panelWidth sets the panel width in px (auto-clamped to 300..70% of the window); reset:true restores the default width. Width is persisted and restored on relaunch.',
+      params: {
+        type: 'object',
+        properties: {
+          open: { type: 'boolean', description: 'true opens the panel, false closes it' },
+          pinned: { type: 'boolean', description: 'true pins the panel open' },
+          panelWidth: { type: 'number', description: 'Panel width in px' },
+          reset: { type: 'boolean', description: 'true resets panel width to the default' },
+        },
+      },
+      run: (params) => {
+        // Pin first: setNavPin(true) implies open, so an explicit open:false
+        // in the same call can still override it.
+        if (typeof params.pinned === 'boolean') setNavPin(params.pinned);
+        if (params.open === true) openNav();
+        else if (params.open === false) closeNav();
 
-registerProtocol();
-navigate('');
+        if (params.reset) {
+          resetPanelWidth();
+        } else if (typeof params.panelWidth === 'number' && Number.isFinite(params.panelWidth)) {
+          setPanelWidth(params.panelWidth);
+        }
+        return { navOpen: navOpen(), navPinned: navPinned(), panelWidth: panelWidth() };
+      },
+    },
+    refresh: {
+      description: 'Refresh the current directory listing',
+      params: { type: 'object', properties: {} },
+      run: () => {
+        navigate(state.currentPath);
+        return { success: true };
+      },
+    },
+  },
+  view: App,
+});

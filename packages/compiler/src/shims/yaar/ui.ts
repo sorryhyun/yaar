@@ -20,6 +20,21 @@
  */
 export const defineCommand = <T>(descriptor: T): T => descriptor;
 
+/**
+ * The `defineApp` counterpart of `defineCommand`, for a command that lives in
+ * another module and is spread into `defineApp({ commands })`.
+ *
+ * `defineApp` derives each `run`'s parameter from the `params` written *at the
+ * call site*, so a command spread in from elsewhere still reaches the manifest
+ * intact but loses that inference — silently, with no error, just a free-form
+ * bag. Wrapping the descriptor here restores it at the point of declaration,
+ * for a Zod `params` (the parsed output type) as well as a JSON Schema literal.
+ *
+ * Identity at runtime, and transparent to the build-time extractor by name —
+ * the same contract as `defineCommand`. Keep the call shape literal.
+ */
+export const defineAppCommand = <T>(descriptor: T): T => descriptor;
+
 // ── Utilities ───────────────────────────────────────────────────
 
 /** Returns a promise that resolves after `ms` milliseconds. */

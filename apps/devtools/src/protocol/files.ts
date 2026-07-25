@@ -1,4 +1,4 @@
-import { AppCommandError, defineCommand, errMsg } from '@bundled/yaar';
+import { AppCommandError, errMsg, defineAppCommand } from '@bundled/yaar';
 import { activeProject } from '../core';
 import { isImagePath, type EditSpec } from '../lib';
 import {
@@ -15,7 +15,7 @@ import {
 import { getMimeType, imageBlocks, type ReadBlock } from './read-blocks';
 
 export const fileCommands = {
-  readFile: defineCommand({
+  readFile: defineAppCommand({
     description:
       'Read one or more files. Does not change editor open state unless openInEditor is set. ' +
       'Image files come back as a viewable image block, not text.',
@@ -35,7 +35,7 @@ export const fileCommands = {
       },
       required: ['path'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const rawPath = p.path;
       const paths: string[] = Array.isArray(rawPath) ? rawPath.map(String) : [String(rawPath)];
       const opts = {
@@ -73,7 +73,7 @@ export const fileCommands = {
       return perFile.flat();
     },
   }),
-  writeFile: defineCommand({
+  writeFile: defineAppCommand({
     description: 'Write content to a file. Objects are serialized as pretty-printed JSON.',
     params: {
       type: 'object',
@@ -85,7 +85,7 @@ export const fileCommands = {
       },
       required: ['path', 'content'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       // `String(content)` turned an object into the literal "[object Object]" and wrote that
       // to disk — silent corruption, and passing an object is the natural thing to do for
       // app.json. Mirrors copyFile/readFileContent, which already guard this way.
@@ -94,7 +94,7 @@ export const fileCommands = {
       await writeFile(String(p.path), content);
     },
   }),
-  editFile: defineCommand({
+  editFile: defineAppCommand({
     description:
       'Edit a file in place. Three modes: (1) search/replace — pass search + replace, first ' +
       'match only. (2) line range — pass startLine/endLine (1-based, inclusive) and anchor ' +
@@ -152,7 +152,7 @@ export const fileCommands = {
       },
       required: ['path'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const normalize = (e: {
         search?: string;
         replace?: string;
@@ -186,18 +186,18 @@ export const fileCommands = {
       }
     },
   }),
-  deleteFile: defineCommand({
+  deleteFile: defineAppCommand({
     description: 'Delete a file',
     params: {
       type: 'object',
       properties: { path: { type: 'string' } },
       required: ['path'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       await deleteFile(String(p.path));
     },
   }),
-  copyFile: defineCommand({
+  copyFile: defineAppCommand({
     description:
       'Copy a file to another path within the active project; destination directories are ' +
       'created automatically. Does NOT delete the original — pair with deleteFile to move.',
@@ -209,7 +209,7 @@ export const fileCommands = {
       },
       required: ['from', 'to'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const from = String(p.from);
       const to = String(p.to);
       if (from === to) throw new AppCommandError('Source and destination are the same path');
@@ -221,7 +221,7 @@ export const fileCommands = {
       }
     },
   }),
-  grep: defineCommand({
+  grep: defineAppCommand({
     description: 'Search file contents with regex across the project',
     params: {
       type: 'object',
@@ -231,7 +231,7 @@ export const fileCommands = {
       },
       required: ['pattern'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const result = await grep(String(p.pattern), p.glob ? String(p.glob) : undefined);
       if (result.matches.length === 0) return 'No matches found.';
       // Group matches by file and return as embedded resource blocks

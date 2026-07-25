@@ -162,6 +162,27 @@ describe('defineApp: reach', () => {
     expect(protocol!.commands.go.description).toBe('Go');
   });
 
+  test('defineAppCommand stays transparent through a spread from another module', () => {
+    // The shape the wrapper exists for: a descriptor declared where its schema
+    // can type its own `run`, spread into the definition from another file.
+    const { protocol, errors } = extract({
+      'src/protocol/files.ts': `import { defineAppCommand } from '@bundled/yaar';
+        export const fileCommands = {
+          readFile: defineAppCommand({ description: 'Read a file', run: () => 1 }),
+        };`,
+      'src/main.ts': `import { defineApp } from '@bundled/yaar';
+        import { fileCommands } from './protocol/files';
+        export default defineApp({
+          id: 'd',
+          name: 'D',
+          commands: { ...fileCommands },
+        });`,
+    });
+
+    expect(errors).toEqual([]);
+    expect(protocol!.commands.readFile.description).toBe('Read a file');
+  });
+
   test('method shorthand is a handler, not a broken descriptor', () => {
     // `run(p) {...}` and `onClose() {...}` are ordinary ways to write these, and
     // neither is a value the manifest reads. The register() path still rejects

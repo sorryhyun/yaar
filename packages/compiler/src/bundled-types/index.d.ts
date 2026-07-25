@@ -472,6 +472,22 @@ type YaarAppRunParams<S> = unknown extends S
  * `unknown`, silently. The failure is invisible (no error, just weaker types), so
  * `define-app.test.ts` asserts on a misspelled key being *rejected*.
  */
+/**
+ * One command as `defineAppCommand` sees it: the same entry shape as
+ * `YaarAppCommands<S>[K]`, with the schema as a standalone parameter so a
+ * descriptor declared outside the `defineApp({...})` literal still types its own
+ * `run`. `R` is preserved so the wrapper returns the descriptor unwidened.
+ */
+interface YaarAppCommandOf<S, R> {
+  description: string;
+  aliases?: readonly string[];
+  params?: S;
+  returns?: object;
+  /** See `YaarAppCommandDescriptor.replay`. */
+  replay?: 'always' | 'never';
+  run: (params: YaarAppRunParams<S>, ctx: YaarAppCommandContext) => R | Promise<R>;
+}
+
 type YaarAppCommands<S> = {
   [K in keyof S]: {
     description: string;
@@ -1035,6 +1051,35 @@ declare module '@bundled/yaar' {
     returns?: object;
     handler: () => R | Promise<R>;
   }): YaarAppCommandDescriptor;
+
+  /**
+   * `defineCommand` for `defineApp` — same purpose, `run` instead of `handler`,
+   * and it accepts a Zod `params` as well as a JSON Schema literal.
+   *
+   * `defineApp` infers each `run`'s parameter from the `params` written *at the
+   * call site*. A command declared in another module and spread into
+   * `defineApp({ commands: { ...fileCommands } })` is still extracted into the
+   * manifest, but its `run` parameter degrades to `Record<string, unknown>` —
+   * silently, since a wider type is not an error. Wrap the descriptor to keep
+   * the schema typing its own handler:
+   *
+   * ```ts
+   * // src/protocol/files.ts
+   * export const fileCommands = {
+   *   editFile: defineAppCommand({
+   *     description: 'Replace a file's contents',
+   *     params: z.object({ path: z.string(), content: z.string() }),
+   *     run: (p) => write(p.path, p.content),   // `p` is typed here, not at the spread
+   *   }),
+   * };
+   * ```
+   *
+   * Identity at runtime; the extractor treats it as transparent by name, exactly
+   * as it does `defineCommand`.
+   */
+  export function defineAppCommand<const S, R>(
+    descriptor: YaarAppCommandOf<S, R>,
+  ): YaarAppCommandOf<S, R>;
 
   /**
    * Create a set-once holder for the runtime context a protocol's handlers need.

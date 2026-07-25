@@ -484,9 +484,9 @@ class Extractor {
     if (bound) return this.isIdentityFunction(bound.node);
 
     // Undeclared in the app, so it is imported from a package the extractor
-    // deliberately does not follow. Only the SDK's documented identity helper
-    // (`shims/yaar/ui.ts`) is trusted by name.
-    return callee.text === 'defineCommand';
+    // deliberately does not follow. Only the SDK's documented identity helpers
+    // (`shims/yaar/ui.ts`) are trusted by name.
+    return callee.text === 'defineCommand' || callee.text === 'defineAppCommand';
   }
 
   /** True for `(d) => d`, `function (d) { return d; }`, and equivalents. */

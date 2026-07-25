@@ -1,8 +1,8 @@
-import { AppCommandError, defineCommand, describe, errMsg, list, read } from '@bundled/yaar';
+import { AppCommandError, describe, errMsg, list, read, defineAppCommand } from '@bundled/yaar';
 import { bundledLibraries } from '@bundled/yaar-dev';
 
 export const introspectCommands = {
-  inspectUri: defineCommand({
+  inspectUri: defineAppCommand({
     description:
       'Inspect a yaar:// URI. Default: describe — returns supported verbs and invoke schema. ' +
       'read: true — returns the resource content (e.g. a yaar://skills/{topic} doc). ' +
@@ -28,7 +28,7 @@ export const introspectCommands = {
     // read a skill topic before writing app code had no command behind it: `list` on
     // a topic URI is not even a verb the handler serves, and the 403 for it read as
     // the doc being off-limits rather than absent.
-    handler: async (p) => {
+    run: async (p) => {
       const uri = String(p.uri);
       try {
         if (p.read) {
@@ -46,7 +46,7 @@ export const introspectCommands = {
       }
     },
   }),
-  describeBundledLibrary: defineCommand({
+  describeBundledLibrary: defineAppCommand({
     description: 'Return type info (methods, interfaces) for a @bundled/* library.',
     params: {
       type: 'object',
@@ -55,7 +55,7 @@ export const introspectCommands = {
       },
       required: ['name'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       try {
         const result = await bundledLibraries(String(p.name));
         return result;

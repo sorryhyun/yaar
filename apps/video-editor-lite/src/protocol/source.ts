@@ -1,8 +1,8 @@
-import { defineCommand } from '@bundled/yaar';
+import { defineAppCommand } from '@bundled/yaar';
 import { ctl } from './controller';
 
 export const sourceCommands = {
-  loadSource: defineCommand({
+  loadSource: defineAppCommand({
     description: 'Load a media source by direct URL or storage path.',
     params: {
       type: 'object',
@@ -12,23 +12,23 @@ export const sourceCommands = {
       },
       additionalProperties: false,
     },
-    handler: (params) =>
+    run: (params) =>
       ctl().loadSource({
         url: typeof params.url === 'string' ? params.url : undefined,
         path: typeof params.path === 'string' ? params.path : undefined,
       }),
   }),
-  play: defineCommand({
+  play: defineAppCommand({
     description: 'Start playback (edit mode: video, create mode: composition preview).',
     params: { type: 'object', properties: {}, additionalProperties: false },
-    handler: async () => ctl().play(),
+    run: async () => ctl().play(),
   }),
-  pause: defineCommand({
+  pause: defineAppCommand({
     description: 'Pause playback.',
     params: { type: 'object', properties: {}, additionalProperties: false },
-    handler: () => ctl().pause(),
+    run: () => ctl().pause(),
   }),
-  seek: defineCommand({
+  seek: defineAppCommand({
     description: 'Seek to an absolute playback time in seconds.',
     params: {
       type: 'object',
@@ -36,12 +36,12 @@ export const sourceCommands = {
       required: ['time'],
       additionalProperties: false,
     },
-    handler: (params) => {
+    run: (params) => {
       const time = typeof params.time === 'number' ? params.time : Number.NaN;
       return ctl().seek(time);
     },
   }),
-  setPlaybackRate: defineCommand({
+  setPlaybackRate: defineAppCommand({
     description: 'Set playback speed. Allowed values: 0.5, 1, 1.5, 2.',
     params: {
       type: 'object',
@@ -49,7 +49,7 @@ export const sourceCommands = {
       required: ['rate'],
       additionalProperties: false,
     },
-    handler: (params) => {
+    run: (params) => {
       const rate = typeof params.rate === 'number' ? params.rate : Number.NaN;
       return ctl().setPlaybackRate(rate);
     },

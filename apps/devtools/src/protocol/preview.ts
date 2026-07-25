@@ -1,14 +1,14 @@
-import { AppCommandError, defineCommand, errMsg, invoke } from '@bundled/yaar';
+import { AppCommandError, errMsg, invoke, defineAppCommand } from '@bundled/yaar';
 import { previewWindowId, setPreviewWindowId } from '../core';
 import { captureFailureHint, openPreview, previewEvaluate, readPreview } from '../services';
 
 export const previewCommands = {
-  preview: defineCommand({
+  preview: defineAppCommand({
     description: 'Open preview window for the compiled app.',
     params: { type: 'object', properties: {} },
-    handler: async () => await openPreview(),
+    run: async () => await openPreview(),
   }),
-  previewScreenshot: defineCommand({
+  previewScreenshot: defineAppCommand({
     description:
       'Screenshot of the running preview. With `info: true`, also returns window ' +
       'geometry/size as a leading text block. Throws on capture failure with `reason`: ' +
@@ -19,7 +19,7 @@ export const previewCommands = {
         info: { type: 'boolean', description: 'Also return window geometry/size.' },
       },
     },
-    handler: async (p) => {
+    run: async (p) => {
       const { images, info } = await readPreview();
       if (images.length === 0) {
         // The server reports *why* the capture produced nothing (window.ts attaches
@@ -45,7 +45,7 @@ export const previewCommands = {
         : imageBlocks;
     },
   }),
-  previewEval: defineCommand({
+  previewEval: defineAppCommand({
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
       'Result is JSON-serialized and capped at 16KB. Preview windows only.',
@@ -61,20 +61,20 @@ export const previewCommands = {
       },
       required: ['expression'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const expression = typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
       if (!expression.trim()) throw new AppCommandError('expression is required.');
       return await previewEvaluate(expression);
     },
   }),
-  previewQuery: defineCommand({
+  previewQuery: defineAppCommand({
     description: 'Query app protocol state from the preview window.',
     params: {
       type: 'object',
       properties: { stateKey: { type: 'string', description: 'State key to query' } },
       required: ['stateKey'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const wid = previewWindowId();
       if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
       try {
@@ -87,7 +87,7 @@ export const previewCommands = {
       }
     },
   }),
-  previewCommand: defineCommand({
+  previewCommand: defineAppCommand({
     description: 'Send an app protocol command to the preview window.',
     params: {
       type: 'object',
@@ -97,7 +97,7 @@ export const previewCommands = {
       },
       required: ['command'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const wid = previewWindowId();
       if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
       try {
@@ -111,7 +111,7 @@ export const previewCommands = {
       }
     },
   }),
-  resizePreview: defineCommand({
+  resizePreview: defineAppCommand({
     description:
       'Resize the preview window to width × height pixels. Unlike `preview`, this does not ' +
       'remount the iframe, so preview state is kept.',
@@ -123,7 +123,7 @@ export const previewCommands = {
       },
       required: ['width', 'height'],
     },
-    handler: async (p) => {
+    run: async (p) => {
       const wid = previewWindowId();
       if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
       const width = Number(p.width);

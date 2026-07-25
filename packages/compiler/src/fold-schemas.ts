@@ -193,6 +193,9 @@ if (typeof globalThis.Element === 'undefined') globalThis.Element = class {};
 if (typeof globalThis.Node === 'undefined') globalThis.Node = class {};
 if (typeof globalThis.customElements === 'undefined') globalThis.customElements = __yaarInert;
 if (typeof globalThis.requestAnimationFrame === 'undefined') globalThis.requestAnimationFrame = () => 0;
+// Bare, not just on window: anime.js calls cancelAnimationFrame at module scope,
+// so an app whose graph reaches it died on import with a ReferenceError.
+if (typeof globalThis.cancelAnimationFrame === 'undefined') globalThis.cancelAnimationFrame = () => {};
 if (typeof globalThis.matchMedia === 'undefined') globalThis.matchMedia = __yaarWindow.matchMedia;
 // --- end stubs ---
 `;
