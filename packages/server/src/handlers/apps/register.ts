@@ -6,8 +6,8 @@
  * a pattern with a wildcard in the middle, such as `yaar://apps/<wildcard>/storage/...`.
  * So the subresources are *not* independently registered.
  * They are an internal composite behind the single `yaar://apps/*` handler, and each
- * verb below tries them in a fixed order — db, then storage, then the app itself —
- * with each resource module returning `null` for a URI it does not own.
+ * verb below tries them in a fixed order — db, then storage, then agents, then the app
+ * itself — with each resource module returning `null` for a URI it does not own.
  *
  * If the registry ever grows middle wildcards, this composite is the thing to delete;
  * the resource modules are already shaped as independent handlers.
@@ -18,6 +18,13 @@ import type { ResolvedUri } from '../uri-resolve.js';
 import { okJson } from '../utils.js';
 import { parseAppDbPath } from './paths.js';
 import { DB_DESCRIBE, handleDbVerb } from './db-resource.js';
+import {
+  describePersonas,
+  readPersonas,
+  listPersonas,
+  invokePersonas,
+  deletePersonas,
+} from './agents-resource.js';
 import {
   describeStorage,
   readStorage,
@@ -43,7 +50,8 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     description:
       'A specific app. Read to load its SKILL.md, invoke to set_badge/install/publish, delete to uninstall. ' +
       'Sub-path /storage/{path} provides app-scoped file storage. ' +
-      'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search).',
+      'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search). ' +
+      "Sub-path /agents[/{personaId}] provides the app's own tool-less persona agents.",
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -76,6 +84,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const storageResult = describeStorage(resolved.sourceUri);
       if (storageResult) return storageResult;
 
+      const personaResult = describePersonas(resolved.sourceUri);
+      if (personaResult) return personaResult;
+
       return describeApplication(resolved);
     },
 
@@ -85,6 +96,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
       const storageResult = await readStorage(resolved);
       if (storageResult) return storageResult;
+
+      const personaResult = await readPersonas(resolved);
+      if (personaResult) return personaResult;
 
       return readApplication(resolved);
     },
@@ -96,6 +110,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const storageResult = await listStorage(resolved);
       if (storageResult) return storageResult;
 
+      const personaResult = await listPersonas(resolved);
+      if (personaResult) return personaResult;
+
       return listApplication();
     },
 
@@ -106,6 +123,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const storageResult = await invokeStorage(resolved, payload);
       if (storageResult) return storageResult;
 
+      const personaResult = await invokePersonas(resolved, payload);
+      if (personaResult) return personaResult;
+
       return invokeApplication(resolved, payload);
     },
 
@@ -115,6 +135,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
       const storageResult = await deleteStorage(resolved);
       if (storageResult) return storageResult;
+
+      const personaResult = await deletePersonas(resolved);
+      if (personaResult) return personaResult;
 
       return deleteApplication(resolved);
     },

@@ -232,6 +232,23 @@ When a user interacts with an app window, a **persistent app agent** is created 
 
 Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (describe/query/command/relay tools), `features/apps/discovery.ts` (`controls` parsing + bundled-only guard).
 
+### Persona Agents (app-spawned AI instances)
+
+An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **persona agents** from its iframe: tool-less AI instances, each with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn.
+
+```ts
+invoke('yaar://apps/self/agents', { action: 'spawn', personaId, systemPrompt, model? })
+// → { personaId, instanceId, streamUri }   — idempotent; an existing persona comes back with reused: true
+invoke(`yaar://apps/self/agents/${id}`, { action: 'message', content })   // returns immediately
+invoke(`yaar://apps/self/agents/${id}`, { action: 'interrupt' })
+stream(streamUri, onFrame)      // start | text | thinking | done (carries final text) | error
+list('yaar://apps/self/agents') // roster + max      del(...) // dispose one, or all
+```
+
+Needs `"yaar://apps/self/agents/"` in `permissions` and `"streams": ["agents"]` to watch them. `message` returns as soon as the turn is queued, so N personas generate concurrently. Personas hold **no tools, no MCP servers, no permissions, and no principal** — the runtime-supplied prompt never gets hands — and are reclaimed when the app's last window on that monitor closes. Persistence is the app's job (`appDb`/`appStorage`); a respawned persona gets its history replayed in its first message.
+
+Key files: `agents/profiles/persona.ts` (tool-less profile), `agents/agent-pool.ts` (`spawnPersonaAgent`/`runPersonaTurn`/dispose), `handlers/apps/agents-resource.ts` (the verb surface + ownership check), `features/apps/discovery.ts` (`personas` parsing). Reference consumer: `apps/personas` (Round Table). Design notes: [`docs/proposals/persona_agents_proposal.md`](./docs/proposals/persona_agents_proposal.md).
+
 ### Compiler & Bundled Libraries
 
 Apps are compiled via Bun into a single self-contained HTML file. Entry point is always `src/main.ts`. The compiler injects design tokens, SDK scripts (capture, storage, verb, app-protocol, etc.), and the bundled code.

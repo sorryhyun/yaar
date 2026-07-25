@@ -339,6 +339,7 @@ export async function getAppMeta(appId: string): Promise<{
   systemApp?: boolean;
   bundles?: string[];
   streams?: string[];
+  personas?: { max: number };
 } | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
@@ -359,6 +360,7 @@ export async function getAppMeta(appId: string): Promise<{
       systemApp?: boolean;
       bundles?: string[];
       streams?: string[];
+      personas?: { max: number };
     } = {};
     if (meta.messaging === 'all') result.messaging = 'all';
     // Only bundled apps may be `system` (see readAppInfo) — an installed app
@@ -391,6 +393,20 @@ export async function getAppMeta(appId: string): Promise<{
     if (Array.isArray(meta.streams) && resolveAppSource(appId) === 'bundled') {
       const streams = meta.streams.filter((s: unknown): s is string => typeof s === 'string');
       if (streams.length > 0) result.streams = streams;
+    }
+    // How many tool-less persona agents this app may run per (monitor, app). Absent
+    // or zero means the app cannot spawn any, which is every existing app.
+    //
+    // Bundled-only, mirroring `controls`/`streams`, though a persona is the better
+    // contained of the three: it holds no principal, no tools, and no cross-app
+    // reach. The gate is here because spawning one costs a real provider process and
+    // a slot out of the global `MAX_AGENTS` semaphore — a marketplace app should not
+    // be able to claim four of them by shipping a line of JSON. Read at spawn time
+    // (not carried on the iframe token) because the ceiling is a per-call quota
+    // rather than a capability, and the token is minted once per window.
+    if (meta.personas && resolveAppSource(appId) === 'bundled') {
+      const max = Number(meta.personas.max);
+      if (Number.isInteger(max) && max > 0) result.personas = { max: Math.min(max, 16) };
     }
     // Check for dist/protocol.json to determine appProtocol support
     try {

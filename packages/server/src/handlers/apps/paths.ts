@@ -64,6 +64,20 @@ export function parseAppStoragePath(uri: string): { appId: string; path: string 
   return { appId: match[1], path };
 }
 
+/**
+ * Parse `yaar://apps/{appId}/agents[/{personaId}]` → { appId, personaId? } or null.
+ *
+ * The persona id is not validated here — a syntactically fine id that no persona
+ * was spawned under is a 404 from the resource, not a parse failure, and the
+ * resource is where the character set is enforced (`PERSONA_ID_RE`) so the error
+ * can say which rule was broken.
+ */
+export function parseAppAgentsPath(uri: string): { appId: string; personaId?: string } | null {
+  const match = uri.match(/^yaar:\/\/apps\/([^/]+)\/agents(?:\/([^/]+))?\/?$/);
+  if (!match) return null;
+  return { appId: match[1], ...(match[2] ? { personaId: match[2] } : {}) };
+}
+
 /** Parse `yaar://apps/{appId}/db[/{collection}[/{docId}]]` or null. */
 export function parseAppDbPath(
   uri: string,

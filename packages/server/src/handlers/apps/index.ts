@@ -27,10 +27,18 @@
  *
  * On disk: storage/apps/{appId}/data.db
  *
+ * App-owned persona agents (see docs/proposals/persona_agents_proposal.md):
+ *   list('yaar://apps/self/agents')                              → roster
+ *   invoke('yaar://apps/self/agents', { action: 'spawn', ... })  → spawn a persona
+ *   invoke('yaar://apps/self/agents/{id}', { action, ... })      → message | interrupt
+ *   read('yaar://apps/self/agents/{id}')                         → busy + last answer
+ *   delete('yaar://apps/self/agents[/{id}]')                     → dispose one | all
+ *
  * Structure — `register.ts` owns dispatch order and is the only file that knows the
  * subresources are a composite rather than separate registrations (the registry has
- * no middle wildcard); `app-resource.ts`, `storage-resource.ts`, and `db-resource.ts`
- * own one resource each; `paths.ts` owns URI parsing and the on-disk layout.
+ * no middle wildcard); `app-resource.ts`, `storage-resource.ts`, `db-resource.ts`, and
+ * `agents-resource.ts` own one resource each; `paths.ts` owns URI parsing and the
+ * on-disk layout.
  */
 
 export { registerAppsHandlers } from './register.js';

@@ -42,7 +42,7 @@ export interface AgentStats {
  * for a badge colour). A fifth tier from a newer server should render as its own
  * name and behave like a monitor agent — not blank the panel.
  */
-export type AgentTier = 'session' | 'monitor' | 'app' | 'ephemeral' | (string & {});
+export type AgentTier = 'session' | 'monitor' | 'app' | 'persona' | 'ephemeral' | (string & {});
 
 export interface AgentEntry {
   /** instanceId — what the interrupt action takes. */
