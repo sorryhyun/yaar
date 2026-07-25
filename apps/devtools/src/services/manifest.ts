@@ -18,7 +18,6 @@ export interface ManifestNames {
 
 export interface StaticManifestResult {
   names: ManifestNames | null;
-  warnings: string[];
   /** Where the static manifest came from, when one was found. */
   source: 'compile' | 'protocol.json' | null;
   /** Why `names` is null, when it is. */
@@ -32,7 +31,7 @@ export interface StaticManifestResult {
 export async function getStaticManifest(): Promise<StaticManifestResult> {
   const fromCompile = staticProtocol();
   if (fromCompile?.reported && fromCompile.protocol) {
-    return { names: fromCompile.protocol, warnings: fromCompile.warnings, source: 'compile' };
+    return { names: fromCompile.protocol, source: 'compile' };
   }
 
   // Fall back to a protocol.json the compiler may have written into the project.
@@ -50,7 +49,6 @@ export async function getStaticManifest(): Promise<StaticManifestResult> {
               commands: Object.keys(parsed.commands ?? {}),
               state: Object.keys(parsed.state ?? {}),
             },
-            warnings: fromCompile?.warnings ?? [],
             source: 'protocol.json',
           };
         }
@@ -67,7 +65,7 @@ export async function getStaticManifest(): Promise<StaticManifestResult> {
         'extraction) and no protocol.json was found in the project — recompile, or update the server.'
       : 'The compiler extracted no protocol from source — the app may not call app.register(), ' +
         'or its registration is not statically visible (spreads/computed keys).';
-  return { names: null, warnings: fromCompile?.warnings ?? [], source: null, reason };
+  return { names: null, source: null, reason };
 }
 
 export interface RuntimeManifestResult {
@@ -80,7 +78,10 @@ export interface RuntimeManifestResult {
 export async function getRuntimeManifest(): Promise<RuntimeManifestResult> {
   const wid = previewWindowId();
   if (!wid) {
-    return { names: null, reason: 'No preview window open — run preview to read the live manifest.' };
+    return {
+      names: null,
+      reason: 'No preview window open — run preview to read the live manifest.',
+    };
   }
   try {
     const manifest = await invoke<{

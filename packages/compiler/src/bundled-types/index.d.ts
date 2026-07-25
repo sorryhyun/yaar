@@ -718,8 +718,6 @@ interface YaarDevCompileResult {
   errors?: string[];
   /** Extracted manifest key names — null when the app registers no protocol. */
   protocol?: { commands: string[]; state: string[] } | null;
-  /** Protocol extraction diagnostics. Blocking ones (commands/state) fail the compile. */
-  protocolWarnings?: string[];
   /** Set on transport/auth failures (4xx/5xx) instead of the compile-result fields. */
   error?: string;
 }

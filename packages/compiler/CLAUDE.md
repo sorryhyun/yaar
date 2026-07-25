@@ -23,9 +23,8 @@ src/
 ├── design-token-guard.ts  # Rejects var(--yaar-*) names that can never resolve
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
-├── extract-protocol-dir.ts # Protocol extraction entry point — picks AST or text scanner
+├── extract-protocol-dir.ts # Protocol extraction entry point — picks the AST reader or the fold
 ├── extract-protocol-ast.ts # AST protocol extraction: follows relative imports + spreads, hard-errors on the unresolvable
-├── extract-protocol.ts    # Legacy text scanner — bundled-exe fallback only (no `typescript` there)
 ├── fold-schemas.ts        # Runs a defineApp app in a Worker to read Zod schemas (and the whole manifest, without `typescript`)
 ├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens() (generated token reference)
@@ -71,16 +70,24 @@ call. **Those two must agree.** The failure that matters is one-sided: a command
 fine but never reaches `dist/protocol.json` is invisible to agents while every build signal
 stays green — one real incident shrank 29 commands to 3.
 
-`extract-protocol-dir.ts` is the entry point and picks between three implementations:
+`extract-protocol-dir.ts` is the entry point and picks between two implementations:
 
-| | `extract-protocol-ast.ts` | `fold-schemas.ts` | `extract-protocol.ts` (legacy) |
-|---|---|---|---|
-| When | `typescript` loads (normal builds) | a `defineApp` app whose schema is not a constant, or any `defineApp` app with no `typescript` | no `typescript`, `app.register()` app |
-| Reach | follows relative imports, `...spreads`, `const` refs, `as const` | whatever the app actually evaluates to | one file, literal properties only |
-| Values | constant-folds `+` concatenation anywhere, including inside `params` | `z.toJSONSchema()` of the running schema | `+` inside a `params` block drops the whole block |
-| Unresolvable | **hard build error with `file:line:col`** | **hard build error naming the descriptor path** | warning; blocking ones (`commands:`/`state:`) fail the build |
+| | `extract-protocol-ast.ts` | `fold-schemas.ts` |
+|---|---|---|
+| When | `typescript` loads (normal builds) | a `defineApp` app whose schema is not a constant, or any `defineApp` app with no `typescript` |
+| Reach | follows relative imports, `...spreads`, `const` refs, `as const` | whatever the app actually evaluates to |
+| Values | constant-folds `+` concatenation anywhere, including inside `params` | `z.toJSONSchema()` of the running schema |
+| Unresolvable | **hard build error with `file:line:col`** | **hard build error naming the descriptor path** |
 
 Set `YAAR_NO_TYPESCRIPT=1` to reproduce a no-`typescript` environment on a dev machine.
+There, an `app.register()` app is **refused** with an error naming the fix, because neither
+reader can see it: there is no AST, and the registration happens while the app's module
+scope builds its UI, which the headless fold cannot run. A third reader used to stand here —
+a brace-matching text scanner — and measuring it against the AST across the bundled apps is
+why it is gone: it returned *nothing at all*, with neither error nor warning, for devtools
+(28 commands) and video-editor-lite (19), both of which split their descriptor maps across
+files with `...spread`. No shipped configuration reaches this path anyway: the exe embeds
+`typescript` (`build-exe-bundle.js`) and a repo install gets it as a devDependency.
 
 Because the AST path resolves spreads, **descriptor maps may be split across files by
 domain** — `commands: { ...fileCommands, ...gitCommands }` where each map lives in its own

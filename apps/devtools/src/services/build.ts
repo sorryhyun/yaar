@@ -38,8 +38,7 @@ export async function compile(): Promise<void> {
       // the compile drift check can compare it against the running preview.
       setStaticProtocol({
         protocol: result.protocol ?? null,
-        warnings: result.protocolWarnings ?? [],
-        reported: result.protocol !== undefined || result.protocolWarnings !== undefined,
+        reported: result.protocol !== undefined,
       });
       batch(() => {
         setCompileStatus('success');

@@ -1,9 +1,9 @@
 /**
  * Extract App Protocol manifest from TypeScript source using the TypeScript AST.
  *
- * This replaces the brace-matching text scanner in `extract-protocol.ts` for every
- * build where the `typescript` module is loadable. The difference that matters is
- * not accuracy on the shapes the old scanner already handled — it is *reach*:
+ * This is the only reader of an `app.register()` protocol. It replaced a
+ * brace-matching text scanner (deleted), and the difference that matters is not
+ * accuracy on the shapes that scanner already handled — it is *reach*:
  *
  *   - descriptor maps may live in other files and arrive via `...spread`;
  *   - a descriptor may be a `const` referenced by name;

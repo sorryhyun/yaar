@@ -82,7 +82,6 @@ export const buildCommands = {
           }
         }
       }
-      const protocolWarnings = staticProtocol()?.warnings ?? [];
 
       return {
         status,
@@ -92,7 +91,6 @@ export const buildCommands = {
         ...(typeErrors > 0 ? { typeErrors } : {}),
         ...(!built && errors.length > 0 ? { errors } : {}),
         ...(diags.length > 0 ? { diagnostics: diags } : {}),
-        ...(protocolWarnings.length > 0 ? { protocolWarnings } : {}),
         ...(manifestDrift
           ? {
               manifestDrift,
@@ -121,12 +119,10 @@ export const buildCommands = {
               source: stat.source,
               commands: stat.names.commands,
               state: stat.names.state,
-              ...(stat.warnings.length > 0 ? { warnings: stat.warnings } : {}),
             }
           : {
               available: false as const,
               reason: stat.reason ?? 'Static manifest unavailable.',
-              ...(stat.warnings.length > 0 ? { warnings: stat.warnings } : {}),
             },
         runtime: runtime.names
           ? {

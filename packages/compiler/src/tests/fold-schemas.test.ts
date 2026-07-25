@@ -309,4 +309,42 @@ describe('without typescript, the running app is the manifest', () => {
     expect(withAst.errors).toEqual([]);
     expect(withoutAst.protocol).toEqual(withAst.protocol);
   });
+
+  test('an app.register() app is refused, not silently emptied', async () => {
+    // The text scanner used to answer here, and measuring it against the AST is
+    // why it is gone: it returned nothing at all for the two bundled apps that
+    // split their descriptor maps across files (devtools, 28 commands;
+    // video-editor-lite, 19) while reporting neither an error nor a warning.
+    // The fold cannot stand in for it either — an app.register() app does its UI
+    // setup at module scope, which a headless import cannot run — so the only
+    // honest answer left is a refusal that names the fix.
+    const dir = await writeApp({
+      'src/main.ts': `import { app } from '@bundled/yaar';
+        app.register({
+          appId: 'folder',
+          commands: { add: { description: 'Add a memo', handler: () => 1 } },
+          state: {},
+        });`,
+    });
+    process.env.YAAR_NO_TYPESCRIPT = '1';
+
+    const result = await extractProtocolFromDir(join(dir, 'src'));
+
+    expect(result.protocol).toBeNull();
+    const message = result.errors.map((e) => e.message).join('\n');
+    expect(message).toContain('typescript');
+    expect(message).toContain('defineApp');
+  });
+
+  test('an app that registers nothing still extracts cleanly', async () => {
+    // Most apps only draw a UI. Turning "declares no protocol" into a build
+    // error would be the refusal above misfiring on every one of them.
+    const dir = await writeApp({ 'src/main.ts': `document.title = 'plain';\nexport {};\n` });
+    process.env.YAAR_NO_TYPESCRIPT = '1';
+
+    const result = await extractProtocolFromDir(join(dir, 'src'));
+
+    expect(result.protocol).toBeNull();
+    expect(result.errors).toEqual([]);
+  });
 });

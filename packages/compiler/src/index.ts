@@ -40,12 +40,6 @@ export {
   type TokenFinding,
 } from './design-token-guard.js';
 export {
-  extractProtocolFromSource,
-  extractProtocolWithDiagnostics,
-  isBlockingProtocolWarning,
-  type ProtocolExtraction,
-} from './extract-protocol.js';
-export {
   extractProtocolFromModules,
   formatProtocolError,
   type AstProtocolExtraction,

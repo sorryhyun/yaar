@@ -14,7 +14,6 @@ import {
   solidHtmlSourcePlugin,
   toForwardSlash,
 } from './plugins.js';
-import { isBlockingProtocolWarning } from './extract-protocol.js';
 import { formatProtocolError } from './extract-protocol-ast.js';
 import { extractProtocolFromDir } from './extract-protocol-dir.js';
 import { getCompilerConfig } from './config.js';
@@ -60,8 +59,6 @@ export interface CompileResult {
   errors?: string[];
   /** Key names written to dist/protocol.json, when the app registers a protocol. */
   protocol?: { commands: string[]; state: string[] };
-  /** Protocol extraction diagnostics. Blocking ones (commands/state) fail the compile. */
-  protocolWarnings?: string[];
 }
 
 /**
@@ -290,8 +287,9 @@ export async function compileTypeScript(
     // Protocol gate — after bundling so genuine build errors keep precedence.
     // A register() whose commands/state only partially parse used to write a
     // silently truncated dist/protocol.json while every other signal stayed
-    // green (one real incident: 29 commands shrank to 3). Blocking warnings
-    // fail the build instead of shipping a manifest missing commands.
+    // green (one real incident: 29 commands shrank to 3). An entry the
+    // extractor cannot resolve fails the build instead of shipping a manifest
+    // missing commands.
     const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
       appId: await readAppId(sandboxPath),
       bundles: options.bundles,
@@ -308,20 +306,6 @@ export async function compileTypeScript(
         ],
       };
     }
-    const blocking = extraction.warnings.filter(isBlockingProtocolWarning);
-    if (blocking.length > 0) {
-      return {
-        success: false,
-        errors: [
-          'Protocol extraction failed — the manifest would silently drop entries:',
-          ...blocking,
-          'Fix hint: spread and computed keys are not statically extractable; write command ' +
-            'entries as literal `name: defineCommand({...})` or `name: {...}` properties.',
-        ],
-        protocolWarnings: extraction.warnings,
-      };
-    }
-
     // Get SDK scripts (minified when minify is enabled)
     const sdkCode = await getSdkScripts(minify);
 
@@ -381,7 +365,6 @@ export async function compileTypeScript(
             },
           }
         : {}),
-      ...(extraction.warnings.length > 0 ? { protocolWarnings: extraction.warnings } : {}),
     };
   } catch (err) {
     let errors: string[];

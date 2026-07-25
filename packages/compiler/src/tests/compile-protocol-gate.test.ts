@@ -193,7 +193,6 @@ describe('compile protocol gate', () => {
 
     expect(result.success).toBe(true);
     expect(result.protocol).toEqual({ commands: ['first', 'third'], state: ['status'] });
-    expect(result.protocolWarnings).toBeUndefined();
 
     const written = JSON.parse(await Bun.file(join(sandbox!, 'dist', 'protocol.json')).text());
     expect(Object.keys(written.commands)).toEqual(['first', 'third']);
@@ -204,7 +203,6 @@ describe('compile protocol gate', () => {
 
     expect(result.success).toBe(true);
     expect(result.protocol).toBeUndefined();
-    expect(result.protocolWarnings).toBeUndefined();
   });
 
   test('an unrelated .register() call is not mistaken for the protocol', async () => {

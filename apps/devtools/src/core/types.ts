@@ -37,8 +37,6 @@ export interface ConsoleEntry {
 export interface StaticProtocolInfo {
   /** Command/state names the compiler extracted, or null when it extracted none. */
   protocol: { commands: string[]; state: string[] } | null;
-  /** Extraction warnings (e.g. entries the static parser could not see). */
-  warnings: string[];
   /** False when the compile response carried no protocol fields at all (older dev API). */
   reported: boolean;
 }

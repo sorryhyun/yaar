@@ -2,22 +2,24 @@
  * Extract an app's protocol manifest from its source directory.
  *
  * This is the single entry point both the compiler and the deploy path use, so
- * a manifest never depends on which caller asked for it. Two extractors sit
- * behind it:
+ * a manifest never depends on which caller asked for it. The AST extractor
+ * (`extract-protocol-ast.ts`) does the work: it follows relative imports and
+ * spreads, so descriptor maps may be split across files, and it reports anything
+ * unresolvable as a hard error.
  *
- *  - the AST extractor (`extract-protocol-ast.ts`), whenever `typescript` loads.
- *    It follows relative imports and spreads, so descriptor maps may be split
- *    across files, and it reports anything unresolvable as a hard error.
- *  - the text scanner (`extract-protocol.ts`), in bundled-exe mode where
- *    `typescript` is absent. It stops at the first spread, so it keeps its
- *    warning-based gate; `degraded` says that this is what ran.
+ * Without `typescript` there is no AST, and the two registration styles part
+ * ways. A `defineApp` app is still readable by *running* it — its manifest is
+ * the entry module's default export — so the schema fold produces the whole
+ * manifest there. An `app.register()` app leaves nothing behind to read — the
+ * call happens while the app's module scope builds its UI, which a headless
+ * import cannot run — so it is refused rather than approximated. `degraded` says
+ * which of the two environments answered.
  */
 
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import type { AppManifest } from '@yaar/shared';
 import { toForwardSlash } from './plugins.js';
-import { extractProtocolWithDiagnostics, type ProtocolExtraction } from './extract-protocol.js';
 import { extractProtocolFromModules, type ProtocolError } from './extract-protocol-ast.js';
 import { loadTypeScript } from './load-typescript.js';
 import { foldAppSchemas, type FoldSuccess } from './fold-schemas.js';
@@ -27,7 +29,9 @@ type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events'>;
 /** Entry candidates, in order. The first that holds a `register()` wins. */
 const ENTRY_FILES = ['main.ts', 'protocol.ts'] as const;
 
-export interface DirExtraction extends ProtocolExtraction {
+export interface DirExtraction {
+  /** The manifest, or null when the app declares no protocol (or was refused). */
+  protocol: Protocol | null;
   /**
    * Constructs the extractor refused to guess at. Non-empty means the caller
    * must fail: a manifest parsed around an unresolvable descriptor is a
@@ -35,7 +39,11 @@ export interface DirExtraction extends ProtocolExtraction {
    * that does not exist.
    */
   errors: ProtocolError[];
-  /** True when the text scanner ran because `typescript` was unavailable. */
+  /**
+   * True when `typescript` was unavailable, so there was no AST to read: a
+   * `defineApp` app was extracted by running it, and an `app.register()` app was
+   * refused.
+   */
   degraded: boolean;
 }
 
@@ -224,7 +232,6 @@ export async function extractProtocolFromDir(
       // caller would otherwise ship an empty manifest as though it were true.
       return {
         protocol: null,
-        warnings: [],
         errors: [
           {
             message: `app sources could not be read (${err instanceof Error ? err.name : 'unknown error'})`,
@@ -261,17 +268,13 @@ export async function extractProtocolFromDir(
       }
       return {
         protocol: errors.length > 0 ? null : result.protocol,
-        warnings: [],
         errors,
         degraded: false,
       };
     }
-    return { protocol: null, warnings: [], errors: [], degraded: false };
+    return { protocol: null, errors: [], degraded: false };
   }
 
-  // A file that produced warnings but no protocol still wins over the next
-  // file: warnings mean a register() call was found and choked, and falling
-  // through would hide exactly the truncation the diagnostics exist to surface.
   for (const file of ENTRY_FILES) {
     let source: string;
     try {
@@ -279,18 +282,14 @@ export async function extractProtocolFromDir(
     } catch {
       continue;
     }
-    // The text scanner only knows `app.register({...})`, so a `defineApp` app
-    // reads as "declares no protocol" here — an answer indistinguishable from
-    // the truth while being wrong about every command the app has. There is no
-    // AST to fall back on without `typescript`, but there is a running app: the
-    // fold builds the entry and asks its default export directly, which is the
-    // registration the iframe will actually serve.
+    // A `defineApp` app survives the missing AST because its manifest is
+    // reachable at runtime: the fold builds the entry and asks its default
+    // export directly, which is the registration the iframe will serve.
     if (/\bdefineApp\s*\(/.test(source)) {
       const fold = await foldAppSchemas({ appPath, bundles: options.bundles });
       if (!fold.ok) {
         return {
           protocol: null,
-          warnings: [],
           errors: [
             {
               message:
@@ -320,15 +319,67 @@ export async function extractProtocolFromDir(
           : [];
       return {
         protocol: mismatch.length > 0 ? null : fold.protocol,
-        warnings: [],
         errors: mismatch,
         degraded: true,
       };
     }
-    const extraction = extractProtocolWithDiagnostics(source);
-    if (extraction.protocol || extraction.warnings.length > 0) {
-      return { ...extraction, errors: [], degraded: true };
-    }
   }
-  return { protocol: null, warnings: [], errors: [], degraded: true };
+
+  // An `app.register()` app has no runtime handle to read — the call happens
+  // while the app's own module scope sets up its UI, which a headless fold
+  // cannot run — and no AST to read it from either. What used to stand in here
+  // was a brace-matching text scanner, and measuring it against the AST across
+  // the bundled apps is why it is gone: it returned *nothing at all* for
+  // devtools (28 commands) and video-editor-lite (19), because both split their
+  // descriptor maps across files with `...spread`. Silence is the one answer
+  // this subsystem must never give, so refusal replaces it.
+  const registers = findRegisterCall(srcDir);
+  if (registers) {
+    return {
+      protocol: null,
+      errors: [
+        {
+          message:
+            'reading an `app.register({...})` protocol needs `typescript`, and it could not ' +
+            'be loaded. Install it (it is a devDependency of this repo, and the bundled ' +
+            'executable embeds it), or register with `defineApp()`, which this environment ' +
+            'can read by running the app',
+          file: registers,
+          line: 1,
+          column: 1,
+        },
+      ],
+      degraded: true,
+    };
+  }
+
+  return { protocol: null, errors: [], degraded: true };
+}
+
+/**
+ * The first source file calling `app.register(`, or null if none does.
+ *
+ * A text test, deliberately: it decides whether the app *claims* a protocol, not
+ * what that protocol is. An app that claims none (most apps only draw a UI) must
+ * keep building without `typescript`; an app that claims one must not build with
+ * its commands missing.
+ */
+function findRegisterCall(srcDir: string): string | null {
+  const rank = (path: string): number => {
+    const index = ENTRY_FILES.findIndex((file) => path === `src/${file}`);
+    return index === -1 ? ENTRY_FILES.length : index;
+  };
+
+  let texts: Map<string, string>;
+  try {
+    texts = readModuleTexts(srcDir);
+  } catch {
+    return null;
+  }
+  // Entry files first, so the error anchors to the file an author would open.
+  const paths = [...texts.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+  for (const path of paths) {
+    if (/\bapp\s*\.\s*register\s*\(/.test(texts.get(path)!)) return path;
+  }
+  return null;
 }

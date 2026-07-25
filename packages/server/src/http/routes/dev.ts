@@ -338,7 +338,6 @@ async function dispatchDevAction(
         return jsonResponse({
           success: false,
           errors: result.errors ?? ['Unknown error'],
-          ...(result.protocolWarnings?.length ? { protocolWarnings: result.protocolWarnings } : {}),
         });
       }
       return jsonResponse({
@@ -347,7 +346,6 @@ async function dispatchDevAction(
         // Manifest key names as extracted, so callers can inspect what the
         // agent will see without deploying. Null when the app registers none.
         protocol: result.protocol ?? null,
-        ...(result.protocolWarnings?.length ? { protocolWarnings: result.protocolWarnings } : {}),
       });
     }
 

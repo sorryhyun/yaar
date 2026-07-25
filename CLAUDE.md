@@ -251,7 +251,7 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 
 The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.
 
-Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/plugins.ts` (bundled library resolution + gated SDK enforcement), `packages/compiler/src/shims/` (yaar.ts, yaar-dev.ts, yaar-web.ts), `packages/compiler/src/extract-protocol.ts` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
+Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/plugins.ts` (bundled library resolution + gated SDK enforcement), `packages/compiler/src/shims/` (yaar.ts, yaar-dev.ts, yaar-web.ts), `packages/compiler/src/extract-protocol-ast.ts` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
 
 ### Design Tokens
 

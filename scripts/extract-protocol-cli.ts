@@ -25,7 +25,8 @@ if (result.errors.length > 0) {
   for (const err of result.errors) console.error(formatProtocolError(err));
   process.exit(1);
 }
-if (result.degraded) console.error('[warn] typescript unavailable — text scanner used');
+if (result.degraded)
+  console.error('[warn] typescript unavailable — only defineApp apps can be extracted');
 
 function sortKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeys);

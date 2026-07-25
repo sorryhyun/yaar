@@ -39,8 +39,6 @@ export function compile(path: string, opts?: { title?: string }) {
     errors?: string[];
     /** Extracted manifest key names — null when the app registers no protocol. */
     protocol?: { commands: string[]; state: string[] } | null;
-    /** Protocol extraction diagnostics. Blocking ones (commands/state) fail the compile. */
-    protocolWarnings?: string[];
   }>('compile', {
     path,
     ...opts,

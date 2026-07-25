@@ -10,8 +10,9 @@
  *              agents while the app still works, which is the worst outcome
  *              available: every signal stays green and the capability is gone.
  *
- * The suite that guards the old text scanner (`extract-protocol.test.ts`) still
- * runs — it is the bundled-exe fallback, where `typescript` is unavailable.
+ * There is no second reader left to guard: the text scanner this replaced is
+ * deleted, and without `typescript` an `app.register()` app is refused outright
+ * (see `fold-schemas.test.ts`).
  */
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
