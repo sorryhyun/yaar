@@ -50,17 +50,23 @@ const nodeShimPlugin: Bun.BunPlugin = {
   },
 };
 
+const SOLID_ENTRIES = ['solid-js', 'solid-js/web', 'solid-js/html', 'solid-js/store'];
+
 /**
- * solid-js sub-packages (html, web, store) must NOT each bundle their own copy of
- * solid-js — that yields duplicate reactive runtimes. Mark the sisters external;
- * at runtime the compiler plugin redirects the bare imports to the shared bundle.
+ * No prebundled artifact may carry its own copy of solid-js — two copies are two
+ * reactive runtimes, and a signal created under one is invisible to a render
+ * effect created under the other. Mark solid external everywhere except in
+ * solid-js's own artifact; at runtime the compiler plugin redirects every bare
+ * `solid-js*` import to the shared bundle (`^solid-js(\/|$)` in `plugins.ts`).
+ *
+ * This started as a rule about solid's sub-packages (html imports web imports
+ * solid) and had to widen: `@bundled/yaar`'s shim imports `solid-js/web` for
+ * `defineApp`'s `render()`, so the yaar artifact would otherwise embed a second
+ * runtime and break reactivity in exe builds only — with no build signal.
  */
 export function solidExternals(name: string): string[] {
-  if (!name.startsWith('solid-js/')) return [];
-  return [
-    'solid-js',
-    ...['solid-js/web', 'solid-js/html', 'solid-js/store'].filter((n) => n !== name),
-  ];
+  if (name === 'solid-js') return [];
+  return SOLID_ENTRIES.filter((n) => n !== name);
 }
 
 /** Resolve the entrypoint a library is prebundled from (shim wins over the npm entry). */

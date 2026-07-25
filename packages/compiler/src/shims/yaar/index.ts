@@ -61,6 +61,9 @@ export type { SanitizeHtmlOptions } from './sanitize.js';
 // ── Protocol handler context ────────────────────────────────────
 export { createProtocolContext } from './protocol-context.js';
 
+// ── The app entrypoint ──────────────────────────────────────────
+export { defineApp } from './define-app.js';
+
 // ── Dialogs ─────────────────────────────────────────────────────
 export { showAlert, showConfirm, showPrompt } from './dialogs.js';
 export type { DialogOptions } from './dialogs.js';

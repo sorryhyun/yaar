@@ -277,12 +277,30 @@ interface YaarAppStateDescriptor<T = unknown> {
   schema?: object;
 }
 
+/** Second argument every command handler receives (see `YaarAppCommandDescriptor.handler`). */
+interface YaarAppCommandContext {
+  /**
+   * True when the server is replaying a command recorded before the iframe
+   * remounted, rather than delivering a fresh call. A handler that wants
+   * replay-aware behaviour reads this; one that is simply not replayable
+   * declares `replay: 'never'` instead.
+   */
+  replayed: boolean;
+}
+
 interface YaarAppCommandDescriptor<P = unknown, R = unknown> {
   description: string;
   aliases?: string[];
-  handler: (params: P) => R | Promise<R>;
+  handler: (params: P, ctx: YaarAppCommandContext) => R | Promise<R>;
   params?: object;
   returns?: object;
+  /**
+   * Replay policy for this command. `'always'` (the default) re-runs it when the
+   * iframe remounts, which is right for state restoration (`navigate`, `setDeck`).
+   * `'never'` skips it, for a command that appends, notifies, or is otherwise
+   * one-shot. The list of `'never'` commands rides the ready handshake.
+   */
+  replay?: 'always' | 'never';
 }
 
 interface YaarAppEventDescriptor {
@@ -382,6 +400,107 @@ interface YaarAppRegistration {
    * of the default window screenshot. Return null/undefined to fall back to
    * the default DOM+canvas composite capture. May be async.
    */
+  onCapture?: () => string | null | undefined | Promise<string | null | undefined>;
+}
+
+// -- defineApp() authoring shape --
+
+/**
+ * One entry of `defineApp({ state })`. Same contract as
+ * `YaarAppStateDescriptor`, with `get` in place of `handler` — the reader is a
+ * getter, not a request handler, and the two names were previously the same word.
+ */
+interface YaarAppStateDefinition<T = unknown> {
+  description: string;
+  /** Optional schema for the value, exported to the agent-facing manifest. */
+  schema?: object;
+  get: () => T | Promise<T>;
+}
+
+/**
+ * The non-inferred shape of one `defineApp({ commands })` entry — what a command
+ * looks like when you are annotating a map by hand rather than letting
+ * `defineApp` derive `run`'s parameter from `params`.
+ */
+interface YaarAppCommandDefinition<P = Record<string, unknown>, R = unknown> {
+  description: string;
+  aliases?: readonly string[];
+  /** JSON Schema literal for the parameters. Extracted into the manifest verbatim. */
+  params?: object;
+  returns?: object;
+  /** See `YaarAppCommandDescriptor.replay`. */
+  replay?: 'always' | 'never';
+  run: (params: P, ctx: YaarAppCommandContext) => R | Promise<R>;
+}
+
+/**
+ * What a `run` receives as its first argument: the type its own `params` schema
+ * describes, or a free-form bag when the command declares no schema (`S` is then
+ * inferred as `unknown`, which would otherwise make every property access an error).
+ */
+type YaarAppRunParams<S> = unknown extends S ? Record<string, unknown> : YaarInferSchema<S>;
+
+/**
+ * The `commands` map, keyed by a *schema* map `S` rather than by the commands
+ * themselves. Each `S[K]` is inferred from that command's `params` literal — a
+ * plain inference site, unlike `run`, which is context-sensitive — and `run`'s
+ * parameter is then derived from it with the same engine `defineCommand` uses.
+ * One schema, written once, types the handler and feeds the manifest.
+ *
+ * Keying on the schemas is what makes this work. The natural spelling — a
+ * self-referential constraint (`C extends YaarAppCommands<C>`) over the command
+ * map — type-checks but infers nothing useful: `C` is resolved before the `const`
+ * modifier narrows `params` to its literal, so every `run` parameter degrades to
+ * `unknown`, silently. The failure is invisible (no error, just weaker types), so
+ * `define-app.test.ts` asserts on a misspelled key being *rejected*.
+ */
+type YaarAppCommands<S> = {
+  [K in keyof S]: {
+    description: string;
+    aliases?: readonly string[];
+    /** JSON Schema literal. Also the agent-facing contract in the manifest. */
+    params?: S[K];
+    returns?: object;
+    /** See `YaarAppCommandDescriptor.replay`. */
+    replay?: 'always' | 'never';
+    run: (params: YaarAppRunParams<S[K]>, ctx: YaarAppCommandContext) => unknown;
+  };
+};
+
+/**
+ * The imperative escape hatch for `view`. An app that owns its own DOM (a
+ * spreadsheet grid, a canvas editor) hands `defineApp` a `mount` instead of a
+ * Solid component; the returned function, if any, is torn down on window close.
+ */
+interface YaarAppView {
+  mount(el: HTMLElement): void | (() => void);
+}
+
+/** A Solid component (called with no props) or the imperative `{ mount }` form. */
+type YaarAppViewLike = YaarAppView | (() => unknown);
+
+/**
+ * The object passed to (and returned by) `defineApp`.
+ *
+ * `S` is the map of per-command `params` schemas and `St` the state map; both are
+ * inferred from the call, so the returned definition keeps the caller's literal
+ * types. The defaults are the hand-annotation fallback (`params` unconstrained,
+ * `run` taking a free-form bag), not what a real `defineApp(...)` call resolves to.
+ */
+interface YaarAppDefinition<
+  S = Record<string, unknown>,
+  St = Record<string, YaarAppStateDefinition>,
+> {
+  /** Must equal the `id` in this app's `app.json`; the build enforces it. */
+  id: string;
+  name: string;
+  state?: St;
+  commands?: YaarAppCommands<S>;
+  /** Channels this app may `app.emit()` on. */
+  events?: Record<string, YaarAppEventDescriptor>;
+  view?: YaarAppViewLike;
+  onClose?: () => void;
+  /** See `YaarAppRegistration.onCapture`. */
   onCapture?: () => string | null | undefined | Promise<string | null | undefined>;
 }
 
@@ -789,6 +908,68 @@ declare module '@bundled/yaar' {
   export type AppStateDescriptor<T = unknown> = YaarAppStateDescriptor<T>;
   export type AppCommandDescriptor<P = unknown, R = unknown> = YaarAppCommandDescriptor<P, R>;
   export type AppEventDescriptor = YaarAppEventDescriptor;
+
+  /**
+   * Register an app and mount its view — the blessed entrypoint, and the shape
+   * the build reads. Sugar over `app.register()`, which stays supported.
+   *
+   * ```ts
+   * export default defineApp({
+   *   id: 'memo',                    // must equal app.json's id
+   *   name: 'Memo',
+   *   state: {
+   *     memoCount: { description: 'Number of saved memos', get: () => memos().length },
+   *   },
+   *   commands: {
+   *     addMemo: {
+   *       description: 'Create a memo',
+   *       params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
+   *       replay: 'never',           // this one appends; do not re-run it on remount
+   *       run: async (p) => ({ id: await createMemo(p.text) }),   // `p.text` is a string
+   *     },
+   *   },
+   *   view: App,                     // Solid component, or { mount(el) } for imperative apps
+   * });
+   * ```
+   *
+   * What it owns, so no app has to decide it again:
+   *
+   * - **Registration timing** — once, at module scope, before the view mounts.
+   *   Registering from `onMount` or a component body re-registers on every
+   *   remount; this cannot.
+   * - **Mounting** — `render(view, #app)`, or `view.mount(#app)`. A `mount` that
+   *   returns a teardown gets it called on window close, after `onClose`.
+   * - **The error contract** — anything `run` throws reaches the agent as an
+   *   `AppCommandError` with the original kept as `cause`.
+   * - **`run`'s parameter type** — derived from that command's `params` schema,
+   *   exactly as `defineCommand` does it.
+   *
+   * `run` also receives `ctx.replayed`; `replay: 'never'` opts a command out of
+   * replay entirely. Returns the definition unchanged, so
+   * `export default defineApp({...})` stays readable by the build.
+   */
+  export function defineApp<
+    const S,
+    const St extends Record<string, YaarAppStateDefinition> = Record<
+      string,
+      YaarAppStateDefinition
+    >,
+  >(definition: YaarAppDefinition<S, St>): YaarAppDefinition<S, St>;
+
+  /** The authoring shapes `defineApp` accepts, for hand-annotating a map. */
+  export type AppDefinition<
+    S = Record<string, unknown>,
+    St = Record<string, YaarAppStateDefinition>,
+  > = YaarAppDefinition<S, St>;
+  export type AppStateDefinition<T = unknown> = YaarAppStateDefinition<T>;
+  export type AppCommandDefinition<
+    P = Record<string, unknown>,
+    R = unknown,
+  > = YaarAppCommandDefinition<P, R>;
+  /** The `{ replayed }` object every `run` receives as its second argument. */
+  export type AppCommandContext = YaarAppCommandContext;
+  /** The imperative `view` form: `{ mount(el) { ... } }`. */
+  export type AppView = YaarAppView;
 
   /**
    * Declare a command for `app.register({ commands })`, deriving the handler's

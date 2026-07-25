@@ -218,6 +218,25 @@ async function readAppSources(srcDir: string): Promise<AppSourceFile[]> {
 }
 
 /**
+ * Read the app's declared id from `app.json`.
+ *
+ * `defineApp({ id })` is checked against it: the id is what the app registers
+ * under at runtime and what `protocol.json` is filed against, so the two
+ * disagreeing produces a manifest nothing else keys on. A sandbox with no
+ * app.json (a scratch compile) has no id to disagree with — undefined skips the
+ * check rather than failing a build that is not wrong about anything.
+ */
+async function readAppId(sandboxPath: string): Promise<string | undefined> {
+  try {
+    const json = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
+    const id = json?.appId;
+    return typeof id === 'string' && id ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Compile TypeScript from a sandbox directory to a bundled HTML file.
  */
 export async function compileTypeScript(
@@ -257,7 +276,9 @@ export async function compileTypeScript(
     // silently truncated dist/protocol.json while every other signal stayed
     // green (one real incident: 29 commands shrank to 3). Blocking warnings
     // fail the build instead of shipping a manifest missing commands.
-    const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'));
+    const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
+      appId: await readAppId(sandboxPath),
+    });
     if (extraction.errors.length > 0) {
       return {
         success: false,

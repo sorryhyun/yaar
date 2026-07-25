@@ -49,10 +49,15 @@ export {
   extractProtocolFromModules,
   formatProtocolError,
   type AstProtocolExtraction,
+  type ExtractOptions,
   type ProtocolError,
   type ReadFile,
 } from './extract-protocol-ast.js';
-export { extractProtocolFromDir, type DirExtraction } from './extract-protocol-dir.js';
+export {
+  extractProtocolFromDir,
+  type DirExtraction,
+  type DirExtractOptions,
+} from './extract-protocol-dir.js';
 export { loadTypeScript } from './load-typescript.js';
 export { YAAR_DESIGN_TOKENS_CSS, describeDesignTokens } from './design-tokens.js';
 export {

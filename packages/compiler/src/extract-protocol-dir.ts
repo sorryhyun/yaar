@@ -58,9 +58,37 @@ function readModuleTexts(srcDir: string): Map<string, string> {
   return texts;
 }
 
+export interface DirExtractOptions {
+  /**
+   * The app's `app.json` `appId`. `defineApp`'s `id` must equal it.
+   *
+   * Left out, it is read from `<srcDir>/../app.json` — every caller lays the app
+   * out that way, and deriving it here means the check holds for the deploy and
+   * tooling paths too, not only for a compile that happens to pass it. A
+   * sandbox with no app.json yields undefined, which skips the check rather than
+   * failing a scratch build that has no id to disagree with.
+   */
+  appId?: string;
+}
+
+/** Read `appId` from the app.json beside `srcDir`, or undefined if there is none. */
+async function readAppJsonId(srcDir: string): Promise<string | undefined> {
+  try {
+    const json = JSON.parse(await Bun.file(join(srcDir, '..', 'app.json')).text());
+    const id = json?.appId;
+    return typeof id === 'string' && id ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Extract the protocol manifest for the app whose sources live in `srcDir`. */
-export async function extractProtocolFromDir(srcDir: string): Promise<DirExtraction> {
+export async function extractProtocolFromDir(
+  srcDir: string,
+  options: DirExtractOptions = {},
+): Promise<DirExtraction> {
   const ts = await loadTypeScript();
+  const appId = options.appId ?? (await readAppJsonId(srcDir));
 
   if (ts) {
     let texts: Map<string, string>;
@@ -88,7 +116,7 @@ export async function extractProtocolFromDir(srcDir: string): Promise<DirExtract
     for (const file of ENTRY_FILES) {
       const entry = `src/${file}`;
       if (!texts.has(entry)) continue;
-      const result = extractProtocolFromModules(ts, entry, readFile);
+      const result = extractProtocolFromModules(ts, entry, readFile, { appId });
       // A register() that was found and rejected must not fall through to the
       // next candidate: that would hide the very failure the errors describe.
       if (result.protocol || result.errors.length > 0) {
@@ -102,14 +130,37 @@ export async function extractProtocolFromDir(srcDir: string): Promise<DirExtract
   // file: warnings mean a register() call was found and choked, and falling
   // through would hide exactly the truncation the diagnostics exist to surface.
   for (const file of ENTRY_FILES) {
+    let source: string;
     try {
-      const source = await Bun.file(join(srcDir, file)).text();
-      const extraction = extractProtocolWithDiagnostics(source);
-      if (extraction.protocol || extraction.warnings.length > 0) {
-        return { ...extraction, errors: [], degraded: true };
-      }
+      source = await Bun.file(join(srcDir, file)).text();
     } catch {
       continue;
+    }
+    // The text scanner only knows `app.register({...})`. A `defineApp` app would
+    // read as "declares no protocol" here, and that answer is indistinguishable
+    // from the truth while being wrong about every command the app has. Refuse
+    // instead: an empty manifest is the failure this module exists to prevent.
+    if (/\bdefineApp\s*\(/.test(source)) {
+      return {
+        protocol: null,
+        warnings: [],
+        errors: [
+          {
+            message:
+              'this app registers with `defineApp()`, which only the AST extractor can read, ' +
+              'and `typescript` is unavailable in this build. Compile it in a normal build ' +
+              'so dist/protocol.json is written from source',
+            file,
+            line: 1,
+            column: 1,
+          },
+        ],
+        degraded: true,
+      };
+    }
+    const extraction = extractProtocolWithDiagnostics(source);
+    if (extraction.protocol || extraction.warnings.length > 0) {
+      return { ...extraction, errors: [], degraded: true };
     }
   }
   return { protocol: null, warnings: [], errors: [], degraded: true };
