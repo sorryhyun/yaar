@@ -35,18 +35,23 @@ const LISTENER_GRACE_MS = 5_000;
  * The desktop witnessed the registration and the iframe is still mounted, so it can simply
  * say it again on reattach — no round trip into the iframes needed. See
  * `resendAppProtocolReady`.
+ *
+ * Maps windowId → the `noReplay` list from that registration's `yaar:app-ready` frame
+ * (undefined when the app opted nothing out). The re-announce must repeat this list
+ * unchanged — it is not re-derived, because a re-announce speaks for an iframe that never
+ * remounted and therefore never sent a fresher one.
  */
-const registeredAppWindows = new Set<string>();
+const registeredAppWindows = new Map<string, string[] | undefined>();
 
 /**
  * Record that an iframe completed the `yaar:app-ready` handshake.
  *
  * Called from the iframe message handlers (`app-events.ts`), which own the inbound
- * postMessage side; the set itself lives here because `resendAppProtocolReady` is its
+ * postMessage side; the map itself lives here because `resendAppProtocolReady` is its
  * reason for existing.
  */
-export function markAppWindowRegistered(windowId: string) {
-  registeredAppWindows.add(windowId);
+export function markAppWindowRegistered(windowId: string, noReplay?: string[]) {
+  registeredAppWindows.set(windowId, noReplay);
 }
 
 /**
@@ -57,7 +62,7 @@ export function markAppWindowRegistered(windowId: string) {
  * already knows about is a no-op, and re-announcing one it forgot is the whole point.
  */
 export function resendAppProtocolReady() {
-  for (const windowId of registeredAppWindows) {
+  for (const [windowId, noReplay] of registeredAppWindows) {
     // Only speak for iframes that are actually still on screen. A window closed while the
     // socket was down would otherwise be announced as ready to a server that has no such
     // window — harmless, but it is a claim we cannot currently witness.
@@ -76,6 +81,10 @@ export function resendAppProtocolReady() {
       // The iframe is the same one that registered; it did not remount and has not lost
       // anything, so the server must not replay its commands at it. See AppProtocolReadyEvent.
       reannounce: true,
+      // Carried unchanged from the original registration — the iframe never remounted, so
+      // there is no fresher list to derive, and dropping it here would tell the server the
+      // app opted nothing out.
+      ...(noReplay ? { noReplay } : {}),
     });
   }
 }

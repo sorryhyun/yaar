@@ -28,12 +28,22 @@ export interface AppWindowMeta {
   windowStyle?: Record<string, string | number>;
 }
 
+/** Shared empty result for `getNoReplayCommands` — nothing may mutate it. */
+const NO_COMMANDS: ReadonlySet<string> = new Set<string>();
+
 /**
  * Window state registry for one connection/session.
  */
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
+  /**
+   * Per window: the command names the *currently registered* app declared
+   * `replay: 'never'` for. Keyed exactly like `appCommands` (resolved key, raw id as
+   * fallback) because the two are read together at replay time — a set filed under one
+   * key while the commands it filters live under another silently filters nothing.
+   */
+  private appNoReplay: Map<string, Set<string>> = new Map();
   private onWindowCloseCallback?: (windowId: string, appId?: string, monitorId?: string) => void;
 
   readonly handleMap: WindowHandleMap;
@@ -155,6 +165,7 @@ export class WindowStateRegistry {
         const owner = this.handleMap.getMonitorId(key) ?? monitorId;
         this.windows.delete(key);
         this.appCommands.delete(key);
+        this.appNoReplay.delete(key);
         this.handleMap.remove(key);
         this.onWindowCloseCallback?.(key, appId, owner);
         break;
@@ -302,9 +313,21 @@ export class WindowStateRegistry {
     return this.getState(windowId);
   }
 
+  /**
+   * The key the per-window app maps (`appCommands`, `appNoReplay`) file a window under.
+   *
+   * Resolved key where the window is known, raw id where it is not — a window may be
+   * addressed before it exists in this registry (a preview created through the iframe
+   * proxy, a restored id), and dropping the record entirely would lose it. Every app map
+   * must use this one function: `recordAppCommand` writing under "0/memo" while
+   * `getNoReplayCommands` reads under "memo" is a filter that quietly never matches.
+   */
+  private appKey(windowId: string): string {
+    return this.resolve(windowId)?.[0] ?? windowId;
+  }
+
   recordAppCommand(windowId: string, request: AppProtocolRequest): void {
-    const resolved = this.resolve(windowId);
-    const key = resolved ? resolved[0] : windowId;
+    const key = this.appKey(windowId);
     let commands = this.appCommands.get(key);
     if (!commands) {
       commands = [];
@@ -314,17 +337,37 @@ export class WindowStateRegistry {
   }
 
   getAppCommands(windowId: string): AppProtocolRequest[] {
-    const resolved = this.resolve(windowId);
-    const key = resolved ? resolved[0] : windowId;
-    return this.appCommands.get(key) ?? [];
+    return this.appCommands.get(this.appKey(windowId)) ?? [];
   }
 
-  setAppProtocol(windowId: string): void {
+  /**
+   * Record that a window's iframe app has registered, and with what replay policy.
+   *
+   * `noReplay` is the set of command names the registration that *just came up* declared
+   * `replay: 'never'` for, and it **replaces** whatever the previous registration said —
+   * an app that dropped the opt-out in a rebuild must not keep being filtered by a policy
+   * it no longer declares. Absent (or empty) therefore *clears* the set rather than
+   * leaving the previous one standing.
+   */
+  setAppProtocol(windowId: string, noReplay?: readonly string[]): void {
     const win = this.getState(windowId);
     if (win) {
       win.appProtocol = true;
       win.updatedAt = Date.now();
     }
+    const key = this.appKey(windowId);
+    if (noReplay && noReplay.length > 0) this.appNoReplay.set(key, new Set(noReplay));
+    else this.appNoReplay.delete(key);
+  }
+
+  /**
+   * Command names the window's current registration opted out of replay.
+   *
+   * Empty for every app that says nothing, which is what keeps `replay` optional: an app
+   * that never heard of the field replays exactly as it always did.
+   */
+  getNoReplayCommands(windowId: string): ReadonlySet<string> {
+    return this.appNoReplay.get(this.appKey(windowId)) ?? NO_COMMANDS;
   }
 
   hasWindow(windowId: string): boolean {
@@ -366,6 +409,7 @@ export class WindowStateRegistry {
   clear(): void {
     this.windows.clear();
     this.appCommands.clear();
+    this.appNoReplay.clear();
     this.handleMap.clear();
   }
 

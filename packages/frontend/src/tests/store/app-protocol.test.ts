@@ -363,6 +363,96 @@ describe('resendAppProtocolReady', () => {
     });
   });
 
+  it('forwards noReplay from the ready message when it is a valid string array', () => {
+    const windowId = 'win-noreplay';
+    const key = toWindowKey(MONITOR_ID, windowId);
+    const { iframe } = createWindowElement(windowId);
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage: mock(() => {}) },
+      writable: false,
+    });
+
+    const { sent } = openSocket();
+    const event = new window.MessageEvent('message', {
+      data: { type: 'yaar:app-ready', noReplay: ['addMemo', 'sendInteraction'] },
+    });
+    Object.defineProperty(event, 'source', { value: iframe.contentWindow, writable: false });
+    window.dispatchEvent(event);
+
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({
+      type: 'APP_PROTOCOL_READY',
+      windowId: key,
+      noReplay: ['addMemo', 'sendInteraction'],
+    });
+  });
+
+  it('omits noReplay when the iframe sends nothing, and drops it if it is not an array of strings', () => {
+    const bareWindowId = 'win-bare';
+    const bareKey = toWindowKey(MONITOR_ID, bareWindowId);
+    const { iframe: bareIframe } = createWindowElement(bareWindowId);
+    Object.defineProperty(bareIframe, 'contentWindow', {
+      value: { postMessage: mock(() => {}) },
+      writable: false,
+    });
+
+    const { sent } = openSocket();
+    announceReady(bareIframe);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]).toMatchObject({ type: 'APP_PROTOCOL_READY', windowId: bareKey });
+    expect(sent[0].noReplay).toBeUndefined();
+
+    // Junk crossing the postMessage boundary — not an array of strings — must not be
+    // forwarded to the server as if it were a legitimate command-name list.
+    const junkWindowId = 'win-junk';
+    const junkKey = toWindowKey(MONITOR_ID, junkWindowId);
+    const { iframe: junkIframe } = createWindowElement(junkWindowId);
+    Object.defineProperty(junkIframe, 'contentWindow', {
+      value: { postMessage: mock(() => {}) },
+      writable: false,
+    });
+    const junkEvent = new window.MessageEvent('message', {
+      data: { type: 'yaar:app-ready', noReplay: { evil: true } },
+    });
+    Object.defineProperty(junkEvent, 'source', {
+      value: junkIframe.contentWindow,
+      writable: false,
+    });
+    window.dispatchEvent(junkEvent);
+
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({ type: 'APP_PROTOCOL_READY', windowId: junkKey });
+    expect(sent[1].noReplay).toBeUndefined();
+  });
+
+  it('repeats the same noReplay list on resendAppProtocolReady', () => {
+    const windowId = 'win-noreplay-resend';
+    const key = toWindowKey(MONITOR_ID, windowId);
+    const { iframe } = createWindowElement(windowId);
+    Object.defineProperty(iframe, 'contentWindow', {
+      value: { postMessage: mock(() => {}) },
+      writable: false,
+    });
+
+    const { sent } = openSocket();
+    const event = new window.MessageEvent('message', {
+      data: { type: 'yaar:app-ready', noReplay: ['addMemo'] },
+    });
+    Object.defineProperty(event, 'source', { value: iframe.contentWindow, writable: false });
+    window.dispatchEvent(event);
+    expect(sent).toHaveLength(1);
+
+    resendAppProtocolReady();
+
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toMatchObject({
+      type: 'APP_PROTOCOL_READY',
+      windowId: key,
+      reannounce: true,
+      noReplay: ['addMemo'],
+    });
+  });
+
   it('says nothing for an app whose window is gone', () => {
     const windowId = 'win-closed';
     const { container, iframe } = createWindowElement(windowId);

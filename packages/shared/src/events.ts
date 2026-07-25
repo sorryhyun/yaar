@@ -302,6 +302,20 @@ export interface AppProtocolReadyEvent {
    * need replaying. Replaying them at an app that never forgot them applies them twice.
    */
   reannounce?: boolean;
+  /**
+   * Canonical names of the commands this registration declares `replay: 'never'` for.
+   *
+   * The policy rides the handshake rather than being read from `dist/protocol.json`
+   * because this frame comes from the registration that is *actually running* in the
+   * iframe. A manifest on disk can disagree with it — the app may have been rebuilt, or
+   * be a devtools preview of uninstalled source — and the disagreement would be silent
+   * and one-sided: the server would replay a command the running app never declared.
+   *
+   * Delivered on every ready, including the re-registration that triggers the replay, so
+   * the list is never stale with respect to the commands being filtered. Absent means the
+   * app opted nothing out.
+   */
+  noReplay?: string[];
 }
 
 /**

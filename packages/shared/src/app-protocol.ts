@@ -25,11 +25,26 @@ export interface AppStateDescriptor {
   schema?: object;
 }
 
+/**
+ * What should happen to this command when a remounted iframe replays the commands
+ * it was sent before (see `AppWindowCoordinator.replayCommands`).
+ *
+ * - `'always'` (the default, and the behavior of every command that says nothing) —
+ *   correct for a command whose whole job is to put the app back in a state the agent
+ *   chose: `navigate`, `setDeck`, `setAppearance`. Running it twice lands in one place.
+ * - `'never'` — the command appends, notifies, or is otherwise one-shot (`addMemo`,
+ *   `sendInteraction`), or the app persists its effect itself and does not need telling
+ *   again. Replaying it double-applies it, which is the failure this field exists for.
+ */
+export type AppCommandReplayPolicy = 'always' | 'never';
+
 export interface AppCommandDescriptor {
   description: string;
   aliases?: string[];
   params?: object;
   returns?: object;
+  /** Omitted means `'always'` — old apps keep today's replay behavior. */
+  replay?: AppCommandReplayPolicy;
 }
 
 /**
@@ -81,6 +96,12 @@ export interface AppCommandRequest {
   requestId: string;
   command: string;
   params?: unknown;
+  /**
+   * This command is being re-sent to an iframe that remounted, not issued fresh by an
+   * agent. Reaches the handler as `ctx.replayed` for the rare command that wants to
+   * behave differently rather than opt out wholesale via `replay: 'never'`.
+   */
+  replayed?: boolean;
 }
 
 export interface AppCommandResponse {
@@ -147,7 +168,7 @@ export type AppProtocolPostMessage =
 export type AppProtocolRequest =
   | { kind: 'manifest' }
   | { kind: 'query'; stateKey: string }
-  | { kind: 'command'; command: string; params?: unknown }
+  | { kind: 'command'; command: string; params?: unknown; replayed?: boolean }
   | { kind: 'eval'; expression: string };
 
 /** Client → Server: iframe's answer */

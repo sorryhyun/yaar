@@ -65,7 +65,13 @@ export class AppWindowCoordinator {
       this.deps.windowState.getWindow(event.windowId)?.id ??
       this.deps.windowState.handleMap.getRawWindowId(event.windowId);
     const wasReady = this.deps.windowState.getWindow(windowKey)?.appProtocol ?? false;
-    this.deps.windowState.setAppProtocol(windowKey);
+    // The replay policy is recorded from the same frame that decides the replay below, and
+    // before it. That ordering is the whole reason this is correct: the commands about to
+    // go out are filtered by the registration that *just came up*, never by the one that
+    // was there before the remount. An app that added `replay: 'never'` in a rebuild is
+    // honoured on the first reload after it, and one that dropped it is not filtered by a
+    // policy it no longer declares (setAppProtocol replaces the set rather than merging).
+    this.deps.windowState.setAppProtocol(windowKey, event.noReplay);
     // Readiness is this session's fact about this session's iframe — a second browser
     // showing the same app on the same monitor has the same window key and a document
     // that has said nothing.
@@ -121,20 +127,50 @@ export class AppWindowCoordinator {
   /**
    * Replay stored app commands to a window that just re-registered.
    * This restores iframe app state after reload or remount.
+   *
+   * Two things a replayed command carries that a fresh one does not:
+   *
+   * - it may be **skipped**, if the running registration declared `replay: 'never'` for it
+   *   (`AppProtocolReadyEvent.noReplay`). Those are the commands that append, notify, or
+   *   are otherwise one-shot; re-sending one does not restore state, it duplicates an
+   *   effect the app has already had.
+   * - it is **stamped** `replayed: true`, so a handler that wants to reconcile against
+   *   state it restored from its own persistence can tell the two apart (`ctx.replayed`)
+   *   instead of having to opt out wholesale.
+   *
+   * Matching is by name, against the set as sent — a list of *spellings to refuse*, not
+   * canonical names to resolve. The server has no alias table (the alias→canonical map
+   * never leaves the iframe), so the SDK sends every spelling of an opted-out command,
+   * canonical name and aliases alike. Erring here is asymmetric, which is why the
+   * spelling-list framing is the right one: a missed skip re-applies a non-idempotent
+   * command, while an over-skip merely leaves a piece of state unrestored.
    */
   private replayCommands(windowId: string): void {
     const commands = this.deps.windowState.getAppCommands(windowId);
     if (commands.length === 0) return;
 
-    console.log(
-      `[AppWindowCoordinator ${this.deps.sessionId}] Replaying ${commands.length} app commands to window ${windowId}`,
+    const noReplay = this.deps.windowState.getNoReplayCommands(windowId);
+    const replayable = commands.filter(
+      (request) => !(request.kind === 'command' && noReplay.has(request.command)),
     );
-    for (let i = 0; i < commands.length; i++) {
+    const skipped = commands.length - replayable.length;
+
+    console.log(
+      `[AppWindowCoordinator ${this.deps.sessionId}] Replaying ${replayable.length} app commands to window ${windowId}` +
+        // Named, not silent: an app author who set `replay: 'never'` has no other way to
+        // see the policy took effect, and a command that vanishes without a word reads
+        // exactly like a command the server forgot to send.
+        (skipped > 0 ? ` (${skipped} skipped by replay:'never')` : ''),
+    );
+    for (let i = 0; i < replayable.length; i++) {
+      const request = replayable[i]!;
       this.deps.broadcast({
         type: ServerEventType.APP_PROTOCOL_REQUEST,
         requestId: `replay-${windowId}-${Date.now()}-${i}`,
         windowId,
-        request: commands[i],
+        // A copy: the stored request is the one the agent originally sent, and it is
+        // replayed again on the next remount. Stamping it in place would rewrite history.
+        request: request.kind === 'command' ? { ...request, replayed: true } : request,
       });
     }
   }

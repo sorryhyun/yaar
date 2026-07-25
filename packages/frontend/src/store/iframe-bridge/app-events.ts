@@ -33,13 +33,25 @@ export function initIframeMessageHandlers() {
   iframeMessages.on('yaar:app-ready', (ctx) => {
     if (!ctx.source) return;
     const { windowId } = ctx.source;
+    // `noReplay` crosses a postMessage boundary from app code — accept it only when it is
+    // unambiguously an array of strings, and drop it silently otherwise rather than forward
+    // junk the server would misinterpret as command names.
+    const rawNoReplay = ctx.data.noReplay;
+    const noReplay =
+      Array.isArray(rawNoReplay) && rawNoReplay.every((v) => typeof v === 'string')
+        ? (rawNoReplay as string[])
+        : undefined;
     // Remember it: the iframe performs this handshake exactly once, but the server may
     // need to hear it more than once (see resendAppProtocolReady).
-    markAppWindowRegistered(windowId);
+    markAppWindowRegistered(windowId, noReplay);
     console.debug(`[AppProtocol] app registered: ${windowId}`);
     // Send APP_PROTOCOL_READY immediately over WebSocket, bypassing the
     // Zustand pending queue to eliminate the subscription-drain latency.
-    sendEvent(wsManager, { type: ClientEventType.APP_PROTOCOL_READY, windowId });
+    sendEvent(wsManager, {
+      type: ClientEventType.APP_PROTOCOL_READY,
+      windowId,
+      ...(noReplay ? { noReplay } : {}),
+    });
   });
 
   iframeMessages.on('yaar:app-interaction', (ctx) => {

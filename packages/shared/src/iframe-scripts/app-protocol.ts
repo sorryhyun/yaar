@@ -66,15 +66,52 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   window.yaar.app = {
     register: function(config) {
       validateRegistration(config);
+      // Two register() calls landing in the same document is not automatically a bug:
+      // five shipped apps register from inside onMount or a bare component body, and a
+      // component that remounts within the same iframe document re-runs that call. Throw
+      // unconditionally here and every one of those apps breaks at runtime with no build
+      // signal the first time React/Solid remounts it. defineApp() is different — it owns
+      // registration timing outright and marks itself authoritative, so a second register()
+      // against an authoritative one is never a remount artifact; it is two apps (or two
+      // defineApp instances) fighting over one iframe, and picking a silent winner would
+      // leave protocol.json describing an app the iframe no longer runs.
+      if (registration) {
+        if (registration.__authoritative) {
+          throw new Error('[yaar] app.register(): "' + registration.appId + '" already holds an authoritative registration (via defineApp()) in this window; "' + config.appId + '" cannot also register here. A window may host exactly one app.');
+        }
+        // warn, not error: this path still works, and the console buffer is readable by
+        // agents (the __console state key). An error-level entry for a benign remount
+        // reads as "this app is broken" to the next agent that debugs it.
+        console.warn('[yaar] app.register(): "' + config.appId + '" is overwriting the prior registration of "' + registration.appId + '" in this window. If this is a remount (onMount/component-body registration re-running), the app still works; if "' + registration.appId + '" and "' + config.appId + '" are two different apps sharing one iframe, only "' + config.appId + '" will answer queries/commands from now on.');
+      }
       registration = config;
-      // Build alias lookup map
+      // Build alias lookup map, and collect the commands this registration opts out of
+      // replay for (see AppCommandDescriptor.replay). The list rides this handshake
+      // instead of being read from dist/protocol.json on the server: this is the
+      // registration actually running in the iframe right now, and a manifest on disk
+      // (stale build, a devtools preview of edited-but-uncompiled source) can disagree
+      // with it. Reading from disk would let the server replay a command this running
+      // app never declared replayable, silently.
       aliasMap = {};
+      var noReplay = [];
       if (config.commands) {
         for (var name in config.commands) {
           var cmd = config.commands[name];
           if (cmd.aliases) {
             for (var i = 0; i < cmd.aliases.length; i++) {
               aliasMap[cmd.aliases[i]] = name;
+            }
+          }
+          // Every spelling, not just the canonical name. The server records a command
+          // request under whatever name the agent called it by, and it has no alias table
+          // to canonicalize with — the alias map never leaves this iframe. Sending only
+          // the canonical name would let \`command("newMemo")\` replay an addMemo that
+          // \`command("addMemo")\` correctly skips, which is the exact double-apply the
+          // policy exists to prevent.
+          if (cmd.replay === 'never') {
+            noReplay.push(name);
+            if (cmd.aliases) {
+              for (var a = 0; a < cmd.aliases.length; a++) noReplay.push(cmd.aliases[a]);
             }
           }
         }
@@ -84,8 +121,11 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       if (typeof config.onCapture === 'function') {
         window.__yaarCaptureProvider = config.onCapture;
       }
-      // Notify parent that this app supports the protocol
-      window.parent.postMessage({ type: 'yaar:app-ready', appId: config.appId }, '*');
+      // Notify parent that this app supports the protocol. noReplay is omitted rather
+      // than sent empty so today's frames stay byte-identical for apps that opt nothing out.
+      var readyMsg = { type: 'yaar:app-ready', appId: config.appId };
+      if (noReplay.length) readyMsg.noReplay = noReplay;
+      window.parent.postMessage(readyMsg, '*');
     },
     sendInteraction: function(description) {
       var content, instructions, toMonitor;
@@ -304,6 +344,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           if (c.aliases) manifest.commands[key].aliases = c.aliases;
           if (c.params) manifest.commands[key].params = c.params;
           if (c.returns) manifest.commands[key].returns = c.returns;
+          if (c.replay) manifest.commands[key].replay = c.replay;
         }
       }
       window.parent.postMessage({
@@ -401,7 +442,11 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         return;
       }
       try {
-        var result = registration.commands[cmdName].handler(cmdParams);
+        // The handler's second argument is context, not another param: a command replayed
+        // at a remounted iframe is indistinguishable from a fresh call otherwise, and a
+        // handler that wants replay-aware behavior instead of a blanket replay: 'never'
+        // has no way to tell them apart.
+        var result = registration.commands[cmdName].handler(cmdParams, { replayed: !!msg.replayed });
         // A command that acts but returns nothing is normal (play, stop, ...). Send
         // null rather than undefined: postMessage drops undefined-valued keys, and the
         // parent bridge reads a response carrying neither result nor error as malformed.
