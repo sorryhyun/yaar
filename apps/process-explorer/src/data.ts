@@ -12,6 +12,14 @@ import {
   errMsg,
   type StreamFrame,
 } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+import {
+  AgentEntrySchema,
+  AgentStatsSchema,
+  InstalledAppSchema,
+  ResourceLinkSchema,
+  WindowInfoSchema,
+} from './schema';
 import type {
   AgentStats,
   AgentEntry,
@@ -89,16 +97,101 @@ export const appProcesses = createMemo<AppProcess[]>(() => {
 /**
  * Adapt a resource_link list — `{ uri, name, description }` — into a flat record.
  * The verb layer returns links for `yaar://windows` and `yaar://apps` alike.
+ *
+ * Returns the validated link, or null when the entry is a direct record (it has
+ * an `id`) or is not a link at all — the caller then tries the direct schema.
  */
-function isResourceLink(entry: any): boolean {
-  return entry && entry.uri && entry.name != null && !entry.id;
+function asResourceLink(entry: unknown) {
+  const parsed = z.safeParse(ResourceLinkSchema, entry);
+  return parsed.success ? parsed.data : null;
+}
+
+/**
+ * Report a failed fetch.
+ *
+ * These fetchers are driven by server-pushed change pings, not a poll, so on a
+ * busy desktop they can run many times a second — a report per failure would be
+ * a wall of toasts and a console filled at the same rate, which is how a console
+ * stops being readable at exactly the moment someone needs to read it. So both
+ * the toast and the log fire on the *transition* into a failing state, which is
+ * the moment a user needs to know the panel has stopped telling the truth, and
+ * again on recovery so the log says when it came back. `startWatching`'s
+ * subscribe() failure reports once for the same reason.
+ *
+ * Per-row validation failures deeper in each fetcher stay unconditional. They
+ * carry the offending row, so collapsing them would cost the only description of
+ * *what* was unreadable, and a roster with a permanently bad row is a server bug
+ * worth being noisy about.
+ */
+const failing = new Set<string>();
+
+function reportFetchFailure(what: string, err: unknown) {
+  if (failing.has(what)) return;
+  failing.add(what);
+  console.error(`[process-explorer] fetching ${what} failed`, err);
+  showToast(`Could not load ${what}: ${errMsg(err)}`, 'error');
+}
+
+function reportFetchOk(what: string) {
+  if (!failing.delete(what)) return;
+  // Only on the transition back — a success is the normal case and says nothing.
+  console.info(`[process-explorer] fetching ${what} recovered`);
 }
 
 async function fetchAgents() {
   try {
-    const data = await list<AgentStats>('yaar://session/agents');
-    if (data) setAgentStats(data);
-  } catch {
+    const raw = await list<unknown>('yaar://session/agents');
+    // A null/absent roster is a normal answer (no agents yet), not a failure.
+    if (raw == null) {
+      reportFetchOk('agents');
+      return;
+    }
+    const parsed = z.safeParse(AgentStatsSchema, raw);
+    if (!parsed.success) {
+      // Issues ride on the error rather than being logged here: this runs once
+      // per change ping, and reportFetchFailure is the thing that knows whether
+      // this failure has already been reported.
+      throw new Error('Malformed agent roster', { cause: parsed.error.issues });
+    }
+    const d = parsed.data;
+    // Rows are parsed individually: an agent the schema cannot read is dropped
+    // and logged, while the rest of the roster — and the counters, which are
+    // fine — still render.
+    const agents: AgentEntry[] = [];
+    for (const entry of d.agents ?? []) {
+      const row = z.safeParse(AgentEntrySchema, entry);
+      if (!row.success) {
+        console.error('[process-explorer] agent entry failed validation', {
+          entry,
+          issues: row.error.issues,
+        });
+        continue;
+      }
+      const a = row.data;
+      agents.push({
+        id: a.id,
+        type: a.type,
+        label: a.label ?? a.id,
+        busy: a.busy ?? false,
+        monitorId: a.monitorId,
+        appId: a.appId,
+        usage: a.usage as AgentEntry['usage'],
+      });
+    }
+    setAgentStats({
+      totalAgents: d.totalAgents ?? 0,
+      idleAgents: d.idleAgents ?? 0,
+      busyAgents: d.busyAgents ?? 0,
+      monitorAgents: d.monitorAgents ?? 0,
+      appAgents: d.appAgents ?? 0,
+      ephemeralAgents: d.ephemeralAgents ?? 0,
+      sessionAgent: d.sessionAgent ?? false,
+      usage: d.usage as AgentStats['usage'],
+      agents,
+    });
+    reportFetchOk('agents');
+  } catch (err) {
+    reportFetchFailure('agents', err);
     setAgentStats(null);
   }
 }
@@ -108,29 +201,54 @@ async function fetchWindows() {
     const raw = await list<unknown[]>('yaar://windows');
     if (!Array.isArray(raw)) {
       setWindows([]);
+      reportFetchOk('windows');
       return;
     }
-    setWindows(
-      raw.map((entry: any) => {
-        if (isResourceLink(entry)) {
-          const id = entry.uri.replace(/^yaar:\/\/windows\//, '');
-          const parts: string[] = (entry.description ?? '').split(', ');
-          const appPart = parts.find((p: string) => p.startsWith('app:'));
-          return {
-            id,
-            uri: entry.uri,
-            title: entry.name,
-            renderer: parts[0] ?? '',
-            size: parts[1] ?? '',
-            position: '',
-            locked: parts.includes('locked'),
-            appId: appPart?.slice(4),
-          } as WindowInfo;
-        }
-        return entry as WindowInfo;
-      }),
-    );
-  } catch {
+    const out: WindowInfo[] = [];
+    for (const entry of raw) {
+      const link = asResourceLink(entry);
+      if (link) {
+        const parts: string[] = (link.description ?? '').split(', ');
+        const appPart = parts.find((p: string) => p.startsWith('app:'));
+        out.push({
+          id: link.uri.replace(/^yaar:\/\/windows\//, ''),
+          uri: link.uri,
+          title: link.name,
+          renderer: parts[0] ?? '',
+          size: parts[1] ?? '',
+          position: '',
+          locked: parts.includes('locked'),
+          appId: appPart?.slice(4),
+        });
+        continue;
+      }
+      const direct = z.safeParse(WindowInfoSchema, entry);
+      if (!direct.success) {
+        // One unreadable row must not blank the list — but it must not be
+        // invisible either, or a renderer crash later is the first symptom.
+        console.error('[process-explorer] window entry failed validation', {
+          entry,
+          issues: direct.error.issues,
+        });
+        continue;
+      }
+      const w = direct.data;
+      out.push({
+        id: w.id,
+        uri: w.uri ?? `yaar://windows/${w.id}`,
+        title: w.title ?? w.id,
+        position: w.position ?? '',
+        size: w.size ?? '',
+        renderer: w.renderer ?? '',
+        locked: w.locked ?? false,
+        lockedBy: w.lockedBy,
+        appId: w.appId,
+      });
+    }
+    setWindows(out);
+    reportFetchOk('windows');
+  } catch (err) {
+    reportFetchFailure('windows', err);
     setWindows([]);
   }
 }
@@ -146,21 +264,38 @@ async function fetchApps() {
     const raw = await list<unknown[]>('yaar://apps');
     if (!Array.isArray(raw)) {
       setInstalledApps([]);
+      reportFetchOk('installed apps');
       return;
     }
-    setInstalledApps(
-      raw.map((entry: any) => {
-        if (isResourceLink(entry)) {
-          return {
-            id: entry.uri.replace(/^yaar:\/\/apps\//, ''),
-            name: entry.name,
-            description: entry.description,
-          } as InstalledApp;
-        }
-        return entry as InstalledApp;
-      }),
-    );
-  } catch {
+    const out: InstalledApp[] = [];
+    for (const entry of raw) {
+      const link = asResourceLink(entry);
+      if (link) {
+        out.push({
+          id: link.uri.replace(/^yaar:\/\/apps\//, ''),
+          name: link.name,
+          description: link.description,
+        });
+        continue;
+      }
+      const direct = z.safeParse(InstalledAppSchema, entry);
+      if (!direct.success) {
+        console.error('[process-explorer] app entry failed validation', {
+          entry,
+          issues: direct.error.issues,
+        });
+        continue;
+      }
+      out.push({
+        id: direct.data.id,
+        name: direct.data.name ?? direct.data.id,
+        description: direct.data.description,
+      });
+    }
+    setInstalledApps(out);
+    reportFetchOk('installed apps');
+  } catch (err) {
+    reportFetchFailure('installed apps', err);
     setInstalledApps([]);
   }
 }

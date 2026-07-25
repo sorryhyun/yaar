@@ -154,6 +154,44 @@ Always available. Key exports:
 - **Storage**: `appStorage.save(path, content)`, `.trySave(path, content)`, `.read(path)`, `.readJson(path)`, `.readJsonOr(path, fallback)`, `.readBinary(path)`, `.readBlob(path)`, `.list(dirPath?)`, `.remove(path)`
 - **Database**: `appDb` — SQLite-backed collections scoped to the app
 - **Persisted state**: `createPersistedSignal(key, defaultValue, opts?)` — Solid.js signal that persists to appStorage; `opts.revive` clamps/migrates/validates the loaded value before it reaches the signal. Also `createAutosave`, `createCollapsiblePanel`
+- **Validation**: `@bundled/zod` (Zod Mini) at every trust boundary — see below
+
+### Validate at trust boundaries
+
+`readJsonOr(path, fallback)` answers "the file is missing" and "the file is garbage" with
+the same value, so a broken app renders identically to a fresh one and the user's data is
+gone with no trace. Anything you read back is untrusted input: persisted JSON (written by
+an older build, hand-edited through the storage app, truncated by a crashed write, or
+written by another live instance), HTTP/SSE responses, `read()` of `yaar://config/*`,
+user-picked files, `evaluate()` round-trips.
+
+**The rule: degraded-by-design must be distinguishable from broken.** Missing file → quiet
+fallback. Malformed record → same fallback, but `console.error` with `parsed.error.issues`
+(and a toast when the user would otherwise be misled about what they are looking at).
+
+- Schemas live in `src/schema.ts` with a header naming *which* boundaries they guard.
+- `@bundled/zod` is **Zod Mini**: `z.optional(x)`, `z.safeParse(Schema, v)` — no `.optional()`
+  or `.parse()` methods.
+- `z.looseObject` so a field added by a newer build survives a round-trip through an older
+  one; validate only the fields the app actually reads.
+- `createPersistedSignal`'s `revive` is where the `safeParse` goes for persisted signals.
+  It also runs on the **fallback** when nothing is stored, so a schema the fallback itself
+  fails logs an error on every fresh install. `revive` validates and migrates — it must not
+  *reinterpret* (clamping a stored width against the current window belongs on the read, or
+  a transiently narrow window overwrites the preference permanently).
+- Prefer per-field recovery over whole-record rejection when the fields are independent.
+- Never toast from a poll or subscription callback — log every failure, surface only the
+  *transition* into failure.
+
+```typescript
+const raw = await appStorage.readJsonOr<unknown>('prefs.json', null);
+if (raw == null) return DEFAULTS;                    // first run — degraded by design
+const parsed = z.safeParse(PrefsSchema, raw);
+if (!parsed.success) {
+  console.error('[myapp] prefs.json failed validation', parsed.error.issues);
+  return DEFAULTS;                                   // broken — but now it says so
+}
+```
 - **App Protocol**: `defineApp({ id, name, state, commands, view })` — the entrypoint every new app uses (see below). `app.sendInteraction(message)`, `app.emit(channel, payload)`. `app.register()` is the low-level call `defineApp` wraps; don't call it directly in new code
 
 ## Design Tokens (CSS)

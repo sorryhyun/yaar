@@ -33,10 +33,21 @@ export interface AgentStats {
   agents: AgentEntry[];
 }
 
+/**
+ * The tier the server assigned an agent.
+ *
+ * Deliberately open rather than a closed union: the vocabulary is the *server's*
+ * to extend, and this app only ever compares against the four it knows (`app`
+ * for the process join, `session` for the stream it must not open, `ephemeral`
+ * for a badge colour). A fifth tier from a newer server should render as its own
+ * name and behave like a monitor agent — not blank the panel.
+ */
+export type AgentTier = 'session' | 'monitor' | 'app' | 'ephemeral' | (string & {});
+
 export interface AgentEntry {
   /** instanceId — what the interrupt action takes. */
   id: string;
-  type: 'session' | 'monitor' | 'app' | 'ephemeral';
+  type: AgentTier;
   /** Human-readable name: the monitorId, the appId, or the current role. */
   label: string;
   busy: boolean;

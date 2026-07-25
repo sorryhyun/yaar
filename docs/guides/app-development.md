@@ -591,7 +591,8 @@ Common mistakes to avoid when building apps:
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
 - **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
-- **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `@bundled/dompurify` first. See [Rendering Untrusted HTML](#rendering-untrusted-html).
+- **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly, which no app imports any more. See [Rendering Untrusted HTML](#rendering-untrusted-html).
+- **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
 - **Don't hand-roll a sanitizer** — an element denylist plus `^on` attribute stripping looks complete and isn't: it misses `<svg>`/`<math>` mutation-XSS, `style`, `srcset`, `formaction`, and `xlink:href`.
 - **Don't generate inline event attributes** — `setAttribute('onerror', ...)` is stripped by any sanitizer, so the behavior it encodes disappears the moment the pipeline is secured. Use `addEventListener` on the inserted node.
 
@@ -1099,6 +1100,68 @@ await appStorage.trySave('draft.json', json, {
 
 Keep `save()` where the caller genuinely handles the throw — propagating to an agent-facing
 command handler, for instance, where an `AppCommandError` is the right outcome.
+
+### Never trust a read either — validate at the boundary
+
+The mirror image of a swallowed save is a swallowed *read*. `readJsonOr(path, fallback)`
+answers "the file isn't there" and "the file is garbage" with the same value, so this:
+
+```typescript
+// Bad — a truncated write, an older build's shape, and a first run are one state.
+const prefs = await appStorage.readJsonOr<Prefs>('prefs.json', DEFAULTS);
+```
+
+renders a broken app identically to a fresh one, and the user's real preferences are gone
+with no trace anywhere. Persisted JSON is **untrusted input**: it was written by an older
+version of your app, hand-edited through the storage app, truncated by a crashed write, or
+produced by another instance running concurrently. So is anything arriving from an HTTP
+response, an SSE frame, a `read()` of a `yaar://config/*` file, a user-picked file, or an
+`evaluate()` round-trip through a page.
+
+Validate it with `@bundled/zod` — **Zod Mini**, the functional API (`z.optional(x)`,
+`z.safeParse(Schema, value)`), not the method chaining of standard Zod. Put the schemas in
+a `src/schema.ts` with a header saying *which* boundaries they guard. Use `z.looseObject`
+so a field added by a newer build survives a round-trip through an older one, and validate
+only the fields the app actually reads:
+
+```typescript
+// src/schema.ts
+import * as z from '@bundled/zod';
+
+export const PrefsSchema = z.looseObject({
+  playbackRate: z.optional(z.number()),
+  lastUrl: z.optional(z.string()),
+});
+```
+
+```typescript
+// Good — "missing" is quiet, "malformed" is loud, and both still render.
+const raw = await appStorage.readJsonOr<unknown>('prefs.json', null);
+if (raw == null) return DEFAULTS;                      // first run — degraded by design
+const parsed = z.safeParse(PrefsSchema, raw);
+if (!parsed.success) {
+  console.error('[myapp] prefs.json failed validation', parsed.error.issues);
+  return DEFAULTS;                                     // broken — but now it says so
+}
+```
+
+The rule is one line: **degraded-by-design must be distinguishable from broken.** A missing
+file is normal and stays silent; a malformed one is logged with `parsed.error.issues`, and
+toasted if the user would otherwise be misled about what they are looking at. Never toast
+from a poll or a subscription callback — log every failure, but surface only the
+*transition* into failure, or you replace one silent bug with a wall of toasts.
+
+For anything persisted through `createPersistedSignal`, `revive` is where the `safeParse`
+goes — it runs on the loaded value before it reaches the signal, and the SDK logs (never
+swallows) if it throws. Two things to get right there: it also runs on the **fallback**
+when nothing is stored, so a schema the fallback itself fails will fire an error on every
+fresh install; and `revive` validates and migrates, it does not *reinterpret* — clamping a
+stored value against the current window belongs on the read, not on the load, or a
+transiently narrow window overwrites the user's preference for good.
+
+When the parse fails, prefer per-field recovery over rejecting the whole record if the
+fields are independent: a drifted `playbackRate` should not cost the user their
+`lastStoragePath`. Reject wholesale only when the fields are load-bearing together.
 
 ### Error handling helpers
 

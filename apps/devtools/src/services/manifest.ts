@@ -1,5 +1,7 @@
 export {};
 import { appStorage, invoke, errMsg } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+import { AppManifestSchema, ProjectProtocolJsonSchema } from '../schema';
 import { activeProject, previewWindowId, staticProtocol } from '../core';
 import { projectPath } from '../lib/paths';
 
@@ -39,15 +41,26 @@ export async function getStaticManifest(): Promise<StaticManifestResult> {
   if (proj) {
     for (const rel of ['dist/protocol.json', 'protocol.json']) {
       try {
-        const parsed = await appStorage.readJsonOr<{
-          state?: Record<string, unknown>;
-          commands?: Record<string, unknown>;
-        } | null>(projectPath(proj.id, rel), null);
-        if (parsed && (parsed.commands || parsed.state)) {
+        const raw = await appStorage.readJsonOr<unknown>(projectPath(proj.id, rel), null);
+        // Absent is the normal case for the first candidate — try the next one.
+        if (raw == null) continue;
+        const parsed = z.safeParse(ProjectProtocolJsonSchema, raw);
+        if (!parsed.success) {
+          // A protocol.json that is there but unreadable is a compiler output we
+          // cannot trust; reporting it as "no manifest" would send the caller
+          // chasing a missing app.register() that is not the problem.
+          console.error(
+            `[devtools] ${rel} failed validation`,
+            projectPath(proj.id, rel),
+            parsed.error.issues,
+          );
+          continue;
+        }
+        if (parsed.data.commands || parsed.data.state) {
           return {
             names: {
-              commands: Object.keys(parsed.commands ?? {}),
-              state: Object.keys(parsed.state ?? {}),
+              commands: Object.keys(parsed.data.commands ?? {}),
+              state: Object.keys(parsed.data.state ?? {}),
             },
             source: 'protocol.json',
           };
@@ -84,20 +97,32 @@ export async function getRuntimeManifest(): Promise<RuntimeManifestResult> {
     };
   }
   try {
-    const manifest = await invoke<{
-      commands?: Record<string, unknown>;
-      state?: Record<string, unknown>;
-    } | null>(`yaar://windows/${wid}`, { action: 'app_query', stateKey: 'manifest' });
-    if (!manifest || typeof manifest !== 'object') {
+    const raw = await invoke<unknown>(`yaar://windows/${wid}`, {
+      action: 'app_query',
+      stateKey: 'manifest',
+    });
+    if (raw == null) {
       return {
         names: null,
         reason: 'Preview returned no manifest — the app may not call app.register().',
       };
     }
+    // The previewed app is arbitrary user code that registered this manifest
+    // itself, so it is no more trustworthy than the protocol.json above: a
+    // `commands` registered as a string would make Object.keys report a manifest
+    // of "0", "1", "2" and the drift diff nonsense.
+    const parsed = z.safeParse(AppManifestSchema, raw);
+    if (!parsed.success) {
+      console.error('[devtools] preview manifest failed validation', parsed.error.issues);
+      return {
+        names: null,
+        reason: 'Preview returned a manifest we cannot read — check its app.register() call.',
+      };
+    }
     return {
       names: {
-        commands: Object.keys(manifest.commands ?? {}),
-        state: Object.keys(manifest.state ?? {}),
+        commands: Object.keys(parsed.data.commands ?? {}),
+        state: Object.keys(parsed.data.state ?? {}),
       },
     };
   } catch (err) {

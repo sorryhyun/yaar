@@ -1,6 +1,8 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, invoke, del } from '@bundled/yaar';
+import { appStorage, invoke, del, errMsg } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+import { ProjectAppJsonSchema } from '../schema';
 import {
   activeProject,
   setActiveProject,
@@ -34,15 +36,26 @@ export async function loadProjects(): Promise<void> {
     for (const dir of dirs) {
       const id = dir.path.replace(/\/$/, '').split('/').pop()!;
       let name = id;
-      const meta = await appStorage.readJsonOr<{ name: string } | null>(
-        `projects/${id}/app.json`,
-        null,
-      );
-      if (meta?.name) name = meta.name;
+      // The project's own app.json — user-written, so validated. A missing file
+      // is normal (the id is a fine name); an unreadable one is logged and then
+      // treated the same way, because one broken project must not hide the rest.
+      const raw = await appStorage.readJsonOr<unknown>(`projects/${id}/app.json`, null);
+      if (raw != null) {
+        const meta = z.safeParse(ProjectAppJsonSchema, raw);
+        if (meta.success) {
+          if (meta.data.name) name = meta.data.name;
+        } else {
+          console.error(`[devtools] projects/${id}/app.json failed validation`, meta.error.issues);
+        }
+      }
       metas.push({ id, name, lastModified: Date.now() });
     }
     setProjects(metas);
-  } catch {
+  } catch (err) {
+    // A failed listing is not "you have no projects" — without this line the
+    // sidebar renders its empty state and the user reaches for New Project.
+    console.error('[devtools] loading projects failed', err);
+    setStatusText(`Could not load projects: ${errMsg(err)}`);
     setProjects([]);
   }
 }

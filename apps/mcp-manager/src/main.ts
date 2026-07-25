@@ -3,7 +3,14 @@ import html from '@bundled/solid-js/html';
 import { render } from '@bundled/solid-js/web';
 import { invoke, list, read, del, httpFetch, showToast, withLoading, errMsg } from '@bundled/yaar';
 import * as z from '@bundled/zod';
-import { JsonRpcResponse, McpConfigResponse } from './schema';
+import {
+  JsonRpcResponse,
+  McpConfigResponse,
+  McpServerStatus,
+  McpStatusListResponse,
+  McpToolInfo,
+  McpToolListResponse,
+} from './schema';
 import './styles.css';
 
 // ── Types ────────────────────────────────────────────────────────
@@ -64,11 +71,31 @@ async function mcpPost(url: string, body: string, sessionId?: string): Promise<R
   return httpFetch(url, { method: 'POST', headers, body });
 }
 
-/** Parse JSON-RPC response from body — handles both direct JSON and SSE format. */
-function parseRpcResponse(body: string): unknown {
-  // Try direct JSON first
+/** JSON.parse that answers "not JSON" with `undefined` instead of throwing. */
+function tryJson(text: string): unknown {
   try {
-    const parsed = z.safeParse(JsonRpcResponse, JSON.parse(body));
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Read the JSON-RPC payload out of a response body — direct JSON or SSE framing.
+ *
+ * Only the *decode* decides which framing this is; everything after it (schema
+ * failure, and a well-formed `error` envelope) throws for the caller. That
+ * separation is the point: the earlier version wrapped the whole direct-JSON
+ * branch in a try whose catch fell through to the SSE scan, so a legitimate
+ * `error.message` from the server — and the schema failure too — was swallowed
+ * and re-reported as the generic "Could not parse MCP response". The server's
+ * own explanation of what went wrong is the most useful thing in the exchange;
+ * it must not be lost to control flow.
+ */
+function parseRpcResponse(body: string): unknown {
+  const direct = tryJson(body);
+  if (direct !== undefined) {
+    const parsed = z.safeParse(JsonRpcResponse, direct);
     if (!parsed.success) {
       console.error('MCP JSON-RPC response failed validation', parsed.error.issues);
       throw new Error('Malformed MCP JSON-RPC response');
@@ -77,26 +104,25 @@ function parseRpcResponse(body: string): unknown {
     if (data.result !== undefined) return data.result;
     if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
     return data;
-  } catch {
-    // Try SSE format: look for "data: {...}" lines
-    for (const line of body.split('\n')) {
-      if (line.startsWith('data: ')) {
-        try {
-          const parsed = z.safeParse(JsonRpcResponse, JSON.parse(line.slice(6)));
-          if (!parsed.success) {
-            console.error('MCP SSE data line failed validation', parsed.error.issues);
-            throw new Error('Malformed MCP SSE payload');
-          }
-          const data = parsed.data;
-          if (data.result !== undefined) return data.result;
-          if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
-        } catch {
-          // skip malformed SSE lines
-        }
-      }
-    }
-    throw new Error('Could not parse MCP response');
   }
+
+  // Not JSON on its own — SSE framing: look for "data: {...}" lines. A line that
+  // does not decode is skipped (an SSE stream legitimately carries other
+  // frames); a line that decodes and *is* an error envelope throws, as above.
+  for (const line of body.split('\n')) {
+    if (!line.startsWith('data: ')) continue;
+    const value = tryJson(line.slice(6));
+    if (value === undefined) continue;
+    const parsed = z.safeParse(JsonRpcResponse, value);
+    if (!parsed.success) {
+      console.error('MCP SSE data line failed validation', parsed.error.issues);
+      continue;
+    }
+    const data = parsed.data;
+    if (data.result !== undefined) return data.result;
+    if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
+  }
+  throw new Error('Could not parse MCP response');
 }
 
 // ── Scanning ─────────────────────────────────────────────────────
@@ -183,9 +209,9 @@ async function startScan() {
 async function loadServers() {
   try {
     // Read config for names/types, and runtime status for state/toolCount
-    const [configRaw, statusData] = await Promise.all([
+    const [configRaw, statusRaw] = await Promise.all([
       read('yaar://config/mcp'),
-      list<{ servers: McpServer[] }>('yaar://mcp'),
+      list<unknown>('yaar://mcp'),
     ]);
     // Validate the persisted config at the trust boundary. A missing config
     // (null/undefined) is normal — treat it as an empty `{}` rather than a
@@ -196,8 +222,27 @@ async function loadServers() {
       throw new Error('Malformed MCP config');
     }
     const configs = configParsed.data.servers ?? {};
-    const statuses = statusData?.servers ?? [];
-    const statusMap = new Map(statuses.map((s) => [s.name, s]));
+
+    // The runtime status list crosses the same boundary as the config and gets
+    // the same treatment. It is only a *decoration* of the config-derived list,
+    // though, so an unreadable status is survivable in a way an unreadable
+    // config is not: the row still renders, as "disconnected".
+    const statusParsed = z.safeParse(McpStatusListResponse, statusRaw ?? {});
+    if (!statusParsed.success) {
+      console.error('[mcp-manager] MCP status list failed validation', statusParsed.error.issues);
+    }
+    const statusMap = new Map<string, z.infer<typeof McpServerStatus>>();
+    for (const entry of statusParsed.success ? (statusParsed.data.servers ?? []) : []) {
+      const row = z.safeParse(McpServerStatus, entry);
+      if (!row.success) {
+        console.error('[mcp-manager] MCP status entry failed validation', {
+          entry,
+          issues: row.error.issues,
+        });
+        continue;
+      }
+      statusMap.set(row.data.name, row.data);
+    }
 
     setServers(
       Object.entries(configs).map(([name, cfg]) => {
@@ -211,7 +256,13 @@ async function loadServers() {
         };
       }),
     );
-  } catch {
+  } catch (err) {
+    // Both failure modes reach here: the read itself failed, or the persisted
+    // config parsed as something we cannot interpret (the throw above). Neither
+    // is "no servers configured" — collapsing them into an empty list made a
+    // broken config render exactly like a fresh install.
+    console.error('[mcp-manager] loading servers failed', err);
+    showToast(`Could not load MCP servers: ${errMsg(err)}`, 'error');
     setServers([]);
   }
 }
@@ -249,9 +300,31 @@ async function refreshServer(name: string) {
 
 async function loadToolsFor(name: string) {
   try {
-    const data = await list<{ tools: McpTool[] }>(`yaar://mcp/${name}`);
-    setServerTools((prev) => ({ ...prev, [name]: data?.tools ?? [] }));
-  } catch {
+    const raw = await list<unknown>(`yaar://mcp/${name}`);
+    const parsed = z.safeParse(McpToolListResponse, raw ?? {});
+    if (!parsed.success) {
+      console.error(`[mcp-manager] tool list for "${name}" failed validation`, parsed.error.issues);
+      throw new Error('Malformed MCP tool list');
+    }
+    const tools: McpTool[] = [];
+    for (const entry of parsed.data.tools ?? []) {
+      const row = z.safeParse(McpToolInfo, entry);
+      if (!row.success) {
+        console.error(`[mcp-manager] tool entry for "${name}" failed validation`, {
+          entry,
+          issues: row.error.issues,
+        });
+        continue;
+      }
+      tools.push({ name: row.data.name, description: row.data.description });
+    }
+    setServerTools((prev) => ({ ...prev, [name]: tools }));
+  } catch (err) {
+    // An empty tool list is a legitimate state (server connected, exposes
+    // nothing), so the failure has to be reported out-of-band or the expanded
+    // row's "No tools or not connected" is the only — and ambiguous — signal.
+    console.error(`[mcp-manager] loading tools for "${name}" failed`, err);
+    showToast(`Could not load tools for "${name}": ${errMsg(err)}`, 'error');
     setServerTools((prev) => ({ ...prev, [name]: [] }));
   }
 }

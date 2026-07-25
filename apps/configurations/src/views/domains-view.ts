@@ -1,9 +1,11 @@
 import { createSignal, onMount, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { read, invoke, del } from '@bundled/yaar';
+import { read, invoke, del, errMsg } from '@bundled/yaar';
+import * as z from '@bundled/zod';
 import { showToast } from '../store';
 import type { DomainsData } from '../types';
 import { onInputHandler } from '../helpers';
+import { DomainsDataSchema } from '../schema';
 
 export function DomainsView() {
   const [data, setData] = createSignal<DomainsData>({ allow_all_domains: false, allowed_domains: [] });
@@ -13,10 +15,17 @@ export function DomainsView() {
 
   const load = async () => {
     try {
-      const raw = await read<DomainsData>('yaar://config/domains');
-      setData(raw);
-    } catch {
-      showToast('Failed to load domains', 'error');
+      const raw = await read<unknown>('yaar://config/domains');
+      const parsed = z.safeParse(DomainsDataSchema, raw);
+      if (!parsed.success) {
+        console.error('[configurations] yaar://config/domains failed validation', parsed.error.issues);
+        showToast('Domain config is malformed — see the console', 'error');
+        return;
+      }
+      setData(parsed.data);
+    } catch (err) {
+      console.error('[configurations] failed to read yaar://config/domains', err);
+      showToast(`Failed to load domains: ${errMsg(err)}`, 'error');
     } finally {
       setLoading(false);
     }

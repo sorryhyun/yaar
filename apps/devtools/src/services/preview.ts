@@ -1,5 +1,7 @@
 export {};
 import { appStorage, errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+import { ProjectAppJsonSchema } from '../schema';
 import { activeProject, previewUrl, previewWindowId, setPreviewWindowId } from '../core';
 import { addConsoleEntry } from './console';
 
@@ -77,11 +79,22 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   // Read project's app.json to get declared permissions for the preview iframe
   let permissions: string[] | undefined;
   if (proj) {
-    const appJson = await appStorage.readJsonOr<{ permissions?: string[] } | null>(
-      `projects/${proj.id}/app.json`,
-      null,
-    );
-    if (Array.isArray(appJson?.permissions)) permissions = appJson.permissions;
+    const raw = await appStorage.readJsonOr<unknown>(`projects/${proj.id}/app.json`, null);
+    if (raw != null) {
+      const appJson = z.safeParse(ProjectAppJsonSchema, raw);
+      if (appJson.success) {
+        permissions = appJson.data.permissions;
+      } else {
+        // Previewing without the declared grants still works — the app just 403s
+        // on its verbs — so this degrades rather than refusing to open. It has to
+        // say so, though: "my app can't read storage in the preview" is otherwise
+        // an unexplainable symptom of a typo in app.json.
+        console.error(
+          `[devtools] projects/${proj.id}/app.json failed validation — previewing with no declared permissions`,
+          appJson.error.issues,
+        );
+      }
+    }
   }
   // Address the window by an explicit, namespaced id. Left to the server, the id is
   // derived by slugging the title — and the title is the project name, so previewing a

@@ -11,7 +11,5 @@ export interface Memo extends MemoDoc {
   id: string;
 }
 
-/** Shape of the legacy memos.json file (pre-appDb). */
-export interface MemoStore {
-  memos: Memo[];
-}
+// The legacy memos.json shape is not declared here: it is untrusted input, so
+// its only description is the runtime schema in ./schema.ts.

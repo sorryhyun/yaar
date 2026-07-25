@@ -5,19 +5,20 @@ import { hooks, setHooks, showToast } from '../store';
 import type { Hook, HookFilter, HookAction } from '../types';
 import { onInputHandler, onChangeHandler } from '../helpers';
 import { loadConfigList } from '../api';
+import { HookSchema } from '../schema';
 
 const EVENTS = ['tool_use', 'launch', 'app:open', 'app:close', 'window:create', 'window:close'];
 
+/** Every hook filter field is `string | string[]` server-side; render either. */
+const describeField = (v: string | string[]): string => (Array.isArray(v) ? v.join('|') : v);
+
 function describeFilter(filter?: HookFilter): string {
   if (!filter) return '(any)';
-  if (filter.toolName) return `toolName: ${filter.toolName}`;
+  if (filter.toolName) return `toolName: ${describeField(filter.toolName)}`;
   const parts: string[] = [];
-  if (filter.verb) parts.push(filter.verb);
-  if (filter.uri) parts.push(filter.uri);
-  if (filter.action) {
-    const a = Array.isArray(filter.action) ? filter.action.join('|') : filter.action;
-    parts.push(`→ ${a}`);
-  }
+  if (filter.verb) parts.push(describeField(filter.verb));
+  if (filter.uri) parts.push(describeField(filter.uri));
+  if (filter.action) parts.push(`→ ${describeField(filter.action)}`);
   return parts.join(' ') || '(any)';
 }
 
@@ -44,7 +45,7 @@ export function HooksView() {
   const [showForm, setShowForm] = createSignal(false);
   const [selected, setSelected] = createSignal<Hook | null>(null);
 
-  const load = () => loadConfigList<Hook>('yaar://config/hooks', 'hooks', setHooks);
+  const load = () => loadConfigList<Hook>('yaar://config/hooks', 'hooks', HookSchema, setHooks, 'hooks');
 
   onMount(load);
 

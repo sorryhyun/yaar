@@ -1,6 +1,6 @@
 # Proposal: Apps Modernization — closing the drift between the apps and the platform
 
-**Status:** Phases 0, 1 and 2 shipped (2026-07-24). Phases 3–5 and the enforcement guards are open.
+**Status:** Phases 0–3 shipped (0–2 on 2026-07-24, 3 on 2026-07-25). Phases 4–5 and the enforcement guards are open.
 **Scope:** `apps/*`, `user-apps/*`, `packages/compiler` (new guards), app-dev agent guidance
 **Companion:** [`app_dsl_proposal.md`](./app_dsl_proposal.md) — platform-level changes (defineApp, Zod-first schemas, replay semantics). This proposal is about bringing the *existing* 25 apps up to the conventions the platform already has, and adding enforcement so they stay there.
 
@@ -19,7 +19,8 @@ capped with new compiler guards so the drift cannot silently return.
 ### Failure class 1 — silent degradation
 
 Roughly 5 of 6 apps per group contain bare `catch {}` blocks that collapse errors into empty
-state: a broken storage backend renders identically to "no data."
+state: a broken storage backend renders identically to "no data." **[Phase 3 — done]** for
+every site below and for the validation gap under it.
 
 - `mcp-manager/src/main.ts:183-217` — config load failure looks like "no servers configured"
 - `configurations/src/api.ts:13-18` — `loadConfigList` swallows all errors to `[]`
@@ -30,7 +31,8 @@ state: a broken storage backend renders identically to "no data."
   the sibling views via `api.ts` do not.
 
 Compounding it, only ~5/25 apps validate JSON at trust boundaries with `@bundled/zod`
-(dock, browser-user, market-apps, mcp-manager, recent-papers). Everyone else duck-types:
+(dock, browser-user, market-apps, mcp-manager, recent-papers). Everyone else duck-types
+— all four sites below fixed in Phase 3:
 
 - `browser/src/sse.ts:90` — `JSON.parse(e.data) as {...}`, no shape check
 - `github/src/storage.ts:56-68` — persisted config parsed with `String((parsed as any)?.owner || '')`
@@ -361,15 +363,171 @@ stale-guard cancellations, and word-lite's import paths were reasoned about and 
 not clicked. dc-comics and thesingularity-reader need live external sessions to exercise at
 all.
 
-### Phase 3 — trust-boundary validation (1–2 days)
+### Phase 3 — trust-boundary validation ✅ **DONE** (2026-07-25)
 
-Add `@bundled/zod` schemas at every `JSON.parse`/`readJsonOr` of persisted or external data
-(the sites listed under Failure class 1). Phase 2 built the hook this needs:
-`createPersistedSignal`'s `revive` is where the `safeParse` goes for anything persisted
-through a signal, and it already logs rather than swallowing when it throws. Convention to adopt everywhere: `readJsonOr` for
-"missing file is fine," but the parsed value goes through `z.safeParse` with a logged (not
-silent) fallback — degraded-by-design must be distinguishable from broken. market-apps and
-mcp-manager already model this correctly; copy their shape.
+The convention now holds across both app roots (the audit's 25 apps have since become 28 —
+14 under `apps/`, 14 under `user-apps/`): `readJsonOr` for "missing file is fine," but
+the parsed value goes through `z.safeParse` with a **logged, not silent** fallback —
+degraded-by-design distinguishable from broken. Schemas live in a per-app `src/schema.ts`
+with a header naming which boundaries it guards; `z.looseObject` throughout, validating only
+the fields the app reads.
+
+**Swept — 12 apps, 12 new/extended `src/schema.ts`:**
+
+| App | Boundary |
+|---|---|
+| browser | SSE frames from `/api/browser/:id/events` (`url`/`title` reach the URL bar, `version` orders them) |
+| configurations | `yaar://config/{shortcuts,hooks,domains,settings}` — the generic `loadConfigList` now takes a schema |
+| process-explorer | verb-API `resource_link` vs direct records for agents/windows/apps |
+| mcp-manager | no schema work (Phase 0 got it right); its two catches now report |
+| memo | the pre-appDb `memos.json` legacy migration |
+| storage, thesingularity-reader | `layout.json` (hand-rolled `typeof` → `safeParse`) |
+| devtools | project-local `app.json` / `protocol.json` — files a *user's in-development app* wrote |
+| video-editor-lite (both copies) | `prefs.json` |
+| github | `github/config.json` |
+| excel-lite | imported workbook JSON |
+| slides-lite | `draft.json` + the storage-read deck parser |
+| word-lite | `draft.json` |
+| ai-chat | `chat.json`, written by *other live instances* — a real cross-process boundary |
+| dc-comics, thesingularity-reader | `settings.json` via `revive` |
+
+**Versions bumped** (final, after the review round below): apps/video-editor-lite 1.2.2 →
+**1.2.4**, ai-chat 1.2.0 → 1.2.1, dc-comics 1.2.0 → **1.2.2**, excel-lite 1.1.0 → 1.1.1,
+github 1.1.0 → **1.1.2**, slides-lite 1.3.0 → **1.3.2**, thesingularity-reader 2.1.0 →
+**2.1.2**, user-apps/video-editor-lite 1.3.0 → 1.3.1, word-lite 1.1.0 → 1.1.1. Everything
+under `apps/` except video-editor-lite is `kind: "system"` and exempt.
+
+**Generator guidance updated in-phase** (again: a convention nothing points at gets
+reinvented) — a new "Never trust a read either — validate at the boundary" section in
+`docs/guides/app-development.md`, a matching anti-pattern bullet, and a "Validate at trust
+boundaries" block in `.claude/agents/app-dev.md`. Also fixed drift found while editing: the
+anti-pattern list still said "run it through `@bundled/dompurify` first", contradicting
+Phase 2's `sanitizeHtml` rule three lines above it.
+
+#### Four things worth knowing before writing the next revive
+
+1. **`revive` runs on the fallback, not on `undefined`.** `createPersistedSignal` calls
+   `readJsonOr(key, fallback)` and hands the result to `revive`, so when nothing is stored
+   `revive` sees the fallback object. A schema the *fallback itself* fails would log an
+   error on every fresh install and every headless compile. (One agent reported this firing
+   for word-lite; it did not reproduce — a forced rebuild of that app is silent.)
+2. **`revive` must not reinterpret.** Both layout modules were the trap Phase 2 already
+   fell into once: converting the hand-rolled `typeof` chain to `safeParse` is where a
+   clamp sneaks back onto the *load* path. It stays on the read (`panelWidth()`). Verified
+   preserved in both storage and thesingularity-reader, along with the latter's
+   `listWidth` → `panelWidth` migration.
+3. **Whole-record rejection is usually the wrong default.** video-editor-lite's prefs and
+   dc-comics' settings recover per field — a drifted `playbackRate` must not cost the user
+   their `lastStorageListPath`, and a `settings.json` predating a field is a legitimate old
+   record, not a broken one. The whole-record `safeParse` is the *detector* (it logs); the
+   recovery is per field. A mechanical conversion would have silently made these
+   all-or-nothing.
+4. **Never log or toast from a loop.** process-explorer's fetchers are driven by server
+   change pings (many per second on a busy desktop) and ai-chat polls every 1.5s. Both now
+   log every failure but surface only the *transition* into a failing state.
+
+#### What the audit had wrong
+
+- **`z.number()` does not accept `NaN`/`±Infinity`** (checked against zod 4.3.6). One
+  schema shipped a redundant `Number.isFinite` refinement justified by the opposite claim;
+  the claim was removed rather than left as a confidently-wrong comment.
+- **excel-lite's `fileAssociations` path is dead.** `app.json` declares
+  `"command": "openFile"` and no such command exists — the audit's "untrusted external
+  input via `fileAssociations`" describes an intent, not a live path. The live untrusted
+  paths (clipboard paste, autosave recovery, `openWorkbookFromStorage`, the `importWorkbook`
+  command) are all validated now; the broken association is its own ticket.
+- **excel-lite's `storageRead(path, 'json')` has no callers** — all three call sites pass
+  `'text'` or `'arraybuffer'`. The parse was made legible anyway and documented as unreached.
+- **mcp-manager is both "already validates correctly" and a Failure-class-1 site**, which
+  is not a contradiction: the schema existed and was doing real work, and `loadServers` then
+  swallowed its own `throw new Error('Malformed MCP config')` one frame later.
+- Line numbers drifted again, as every prior phase found. Re-grep.
+
+#### Bugs found and fixed that the audit did not list
+
+- **excel-lite wiped the sheet before validating.** `importWorkbook` called `pushHistory()`
+  and cleared `cells`/`styles` *first*, so importing a number or an array destroyed the
+  user's workbook and reported success. It now validates before it clears, and returns a
+  boolean the XLSX path and the protocol command both check.
+- **slides-lite could crash on boot.** `normalizeDeck` does `raw.slides?.length ? raw.slides
+  : […]` then `.map`, so a `draft.json` whose `slides` was a truthy non-array (a string)
+  took the whole app down. The schema gates it.
+- **word-lite's storage read bypassed its own sanitizer.** `loadDoc` assigned
+  `editorEl.innerHTML = stored.html` directly, while the comment above `setEditorFromHtml`
+  claimed "a document read back out of storage" routed through it. Sanitized-at-rest rather
+  than live XSS — every *input* path already sanitizes — but `draft.json` is writable by the
+  storage app and by any agent holding that permission, and that path never touched the
+  sanitizer. Both branches now go through `setEditorFromHtml`.
+- **configurations' domains view could crash the first render.** `read()` resolving to null
+  was assigned straight into the signal, and the toggle then read `data().allow_all_domains`.
+
+#### The review round found two criticals — read this before trusting a validation sweep
+
+An adversarial read-only review of the whole sweep caught two defects that compiled,
+typechecked and passed every guard. **Both were schemas that were wrong about the data they
+guarded**, which is the failure mode this phase's tooling cannot see: a schema is only as
+good as the writer's shape, and nothing checks that correspondence.
+
+1. **configurations' `HookSchema` rejected most real hooks.** `HookAction.payload` was typed
+   `z.record(z.string(), z.unknown())`, but the server
+   (`packages/server/src/features/config/hooks.ts:11-13`) declares it `string` for
+   `type: 'interaction'` and `OSAction | OSAction[]` for `type: 'os_action'` — so only the
+   single-object form passed. Every `HookFilter` field is `string | string[]` there too, and
+   the schema said `string`. Combined with **atomic array validation**, one such hook emptied
+   the entire list — including the delete button, the only way a user could have fixed it.
+   Fixed by reading the server's types instead of the app's local ones (which were themselves
+   narrower than the server, and were widened to match), and by switching `loadConfigList` to
+   **per-entry recovery**: a bad row is skipped and reported, the rest render.
+
+2. **video-editor-lite's `revive` rejected whole records while its comments promised per-field
+   recovery.** Two separate comments claimed "a single unreadable preference should cost that
+   preference, not the whole file"; the code did one whole-record `safeParse` and threw. That
+   is a *regression against the hand-rolled `typeof` chain it replaced*, which recovered per
+   field. The `user-apps/` copy of the same app had it right — the whole-record parse used
+   purely as a detector, then per-field recovery — so the fix was to port that policy.
+
+The general lesson: **a mechanical `typeof` → `safeParse` conversion silently converts
+per-field recovery into all-or-nothing.** Check the shape of the recovery, not just the
+presence of a schema.
+
+Also fixed in the same round: devtools' `getRuntimeManifest` still had the exact bug its new
+schema exists to prevent, fifty lines below the fix (`Object.keys` on a string manifest);
+process-explorer's `fetchAgents` rejected the whole roster on one bad row while its two
+sibling fetchers recovered per row, and its closed `type` union meant a *newer server adding
+an agent tier* would blank the panel; memo deleted `memos.json` even when zero rows migrated;
+mcp-manager validated one of the two lists it fetched in the same `Promise.all`, and its
+`parseRpcResponse` swallowed the very error it had just thrown; dc-comics' `subscriptions.ts`
+still had a silent `catch` around its `JSON.parse` *and* wrote the resulting `[]` back over
+the corrupt file; slides-lite logged an error for a legitimate `.txt` import whose content was
+a bare JSON scalar.
+
+**Five comments asserted things that were false.** Four claimed `z.looseObject` means an added
+field "survives a round-trip through an older build" — it survives the *read*; the reviver
+rebuilds an explicit object and the next `set` re-persists that, dropping the key. One claimed
+`readJsonOr<{name: string}>` had produced a project named `undefined`, when the old code fell
+through to the id. All corrected. A confidently-wrong comment is worse than no comment, and
+this phase generated a lot of comments.
+
+**Verified:** `bun run typecheck` clean across all five packages; `cd apps && tsc --noEmit`
+clean; `cd user-apps && tsc --noEmit` clean; `bun run build:apps` — 0 failures, and every
+touched app's extracted `dist/protocol.json` state/command/event counts identical before and
+after. `check:apps` over `apps/` and over each of the 14 `user-apps/` shows only pre-existing
+`no-native-dialogs` advisories (2 in `apps/`, 9 across `user-apps/`) — no new findings. Note
+that `bun run build:apps` **skips `user-apps/video-editor-lite` entirely**: `autoCompileApps`
+dedupes by app id across roots and `apps/` wins, so that copy must be compiled directly.
+
+**Known gaps left open** (all trivial blast radius, recorded so they aren't rediscovered as
+findings): `apps/devtools/src/ui/editor.ts` takes a raw boolean through
+`createPersistedSignal` with no `revive`, and `apps/devtools/src/services/console.ts` sorts
+an unvalidated `invoke<ConsoleEntry[]>` from the previewed app on `a.timestamp`.
+thesingularity-reader's `hide-spammer.json` was the third such site and *was* closed, purely
+because leaving one inconsistent instance is a worse signal to the next reader than the
+toggle is worth.
+
+**Not verified by exercise:** nothing was driven through the browser. The malformed-record
+log paths were exercised only through standalone zod harnesses against adversarial inputs
+(`5`, `"x"`, `[1,2]`, `null`, `{cells:{A1:3}}`, mixed-validity records), confirming each
+lands in the intended branch rather than passing a loose-object check by accident.
 
 ### Phase 4 — design-token compliance (2–3 days)
 
@@ -402,7 +560,11 @@ is the one mechanism that has reliably disciplined AI-generated app code. Add:
 - **hex-color guard** (warning): hex literal in app CSS where a `--yaar-*` token has the same
   role; allowlist comment `/* yaar-allow-hex: reason */` for theme swatches (slides-lite's
   presets are legitimate).
-- **silent-catch guard** (warning): `catch` block with an empty body and no comment.
+- **silent-catch guard** (warning): `catch` block with an empty body and no comment. Phase 3
+  cleared the storage/config/external-JSON reads, so what remains is mostly browser-automation
+  best-effort calls (`user-apps/thesingularity-reader/src/auth.ts` has ~14 `.catch(() => {})`
+  on `web.click`/`web.scroll`, each genuinely optional) — the guard should therefore be a
+  warning with a comment-based opt-out, not an error.
 - **interval-leak guard** (warning): `setInterval` without a paired cleanup (`onCleanup`/
   `clearInterval` in scope).
 - **direct-dompurify guard** (warning, added by Phase 2's finding): an app importing

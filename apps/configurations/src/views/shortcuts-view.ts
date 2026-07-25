@@ -5,6 +5,7 @@ import { shortcuts, setShortcuts, showToast } from '../store';
 import type { Shortcut } from '../types';
 import { onInputHandler } from '../helpers';
 import { loadConfigList } from '../api';
+import { ShortcutSchema } from '../schema';
 
 export function ShortcutsView() {
   // ── Add-form fields ──────────────────────────────────────
@@ -27,7 +28,14 @@ export function ShortcutsView() {
   const [newFolderName, setNewFolderName] = createSignal('');
 
   // ── Data loading ─────────────────────────────────────────
-  const load = () => loadConfigList<Shortcut>('yaar://config/shortcuts', 'shortcuts', setShortcuts);
+  const load = () =>
+    loadConfigList<Shortcut>(
+      'yaar://config/shortcuts',
+      'shortcuts',
+      ShortcutSchema,
+      setShortcuts,
+      'shortcuts',
+    );
   onMount(load);
 
   // ── Derived: all folder names ─────────────────────────────

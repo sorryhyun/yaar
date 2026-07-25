@@ -10,16 +10,21 @@ export interface Shortcut {
   createdAt?: number;
 }
 
+// Mirrors `packages/server/src/features/config/hooks.ts`. Every filter field is
+// `string | string[]` there, and `payload` is a string for `interaction` hooks
+// and an OS Action (or array of them) for `os_action` hooks — never a plain
+// record. These were narrower than the server for both, which meant a hook the
+// server writes routinely did not typecheck as one of ours.
 export interface HookFilter {
-  verb?: string;
-  uri?: string;
+  verb?: string | string[];
+  uri?: string | string[];
   action?: string | string[];
-  toolName?: string;
+  toolName?: string | string[];
 }
 
 export interface HookAction {
   type: string;
-  payload?: Record<string, unknown>;
+  payload?: unknown;
 }
 
 export interface Hook {

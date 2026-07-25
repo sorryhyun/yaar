@@ -5,8 +5,10 @@
  * Depends only on store.ts and token.ts — DOM callbacks (refreshScreenshot) are
  * injected via initSSE() to avoid circular imports with actions.ts.
  */
+import * as z from '@bundled/zod';
 import { setShowScreenshot, setPlaceholderText, updateUrlBar } from './store';
 import { withToken } from './token';
+import { BrowserEventSchema } from './schema';
 
 // ── Injected callbacks ───────────────────────────────────────────────
 
@@ -77,6 +79,9 @@ export function connectSSE(bid: string): void {
   lastVersion = -1;
 
   let sseErrorCount = 0;
+  // A broken server would produce one unusable frame per update, so the warning
+  // is emitted once per connection rather than per frame.
+  let warnedMalformed = false;
   const evtSource = new EventSource(withToken(`/api/browser/${bid}/events`));
   currentEvtSource = evtSource;
   startPolling(bid);
@@ -86,16 +91,39 @@ export function connectSSE(bid: string): void {
       setPlaceholderText('Waiting for navigation...');
     }
     sseErrorCount = 0;
-    try {
-      const data = JSON.parse(e.data) as { url: string; title: string; version: number };
-      if (data.version <= lastVersion) return;
-      lastVersion = data.version;
 
-      if (data.url) updateUrlBar(data.url, data.title);
-      _refreshScreenshot();
-    } catch {
-      // ignore malformed events
+    let raw: unknown;
+    try {
+      raw = JSON.parse(e.data);
+    } catch (err) {
+      if (!warnedMalformed) {
+        warnedMalformed = true;
+        console.warn('[browser] SSE frame is not JSON; ignoring this and any like it.', err);
+      }
+      return;
     }
+
+    // Validate before trusting: `version` orders the frames and `url` goes
+    // straight into the URL bar, so a frame we can't read is skipped loudly
+    // rather than writing `undefined` over a URL the user can see.
+    const parsed = z.safeParse(BrowserEventSchema, raw);
+    if (!parsed.success) {
+      if (!warnedMalformed) {
+        warnedMalformed = true;
+        console.warn(
+          '[browser] SSE frame did not match the expected shape; ignoring this and any like it.',
+          parsed.error.issues,
+        );
+      }
+      return;
+    }
+
+    const data = parsed.data;
+    if (data.version <= lastVersion) return;
+    lastVersion = data.version;
+
+    if (data.url) updateUrlBar(data.url, data.title);
+    _refreshScreenshot();
   };
 
   evtSource.onerror = () => {

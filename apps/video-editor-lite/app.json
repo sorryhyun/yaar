@@ -6,6 +6,6 @@
   "permissions": [
     "yaar://apps/self/storage/"
   ],
-  "version": "1.2.2",
+  "version": "1.2.4",
   "author": "YAAR"
 }

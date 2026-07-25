@@ -13,7 +13,7 @@
 import * as z from '@bundled/zod';
 
 // JSON-RPC 2.0 response envelope, as returned by a remote MCP server either as
-// direct JSON (main.ts:69) or inside an SSE `data:` line (main.ts:78). Both
+// direct JSON or inside an SSE `data:` line (both in `parseRpcResponse`). Both
 // boundaries share this exact shape, so a single schema covers both. The code
 // only ever reads `.result` and `.error.message`.
 const JsonRpcError = z.looseObject({
@@ -28,7 +28,7 @@ export const JsonRpcResponse = z.looseObject({
   error: z.optional(JsonRpcError),
 });
 
-// Persisted MCP config read at main.ts:175 via `read('yaar://config/mcp')`.
+// Persisted MCP config read in `loadServers` via `read('yaar://config/mcp')`.
 // The app reads `.servers` and, per entry, `.type` (with optional `url`/`command`).
 const McpServerConfig = z.looseObject({
   type: z.string(),
@@ -38,4 +38,36 @@ const McpServerConfig = z.looseObject({
 
 export const McpConfigResponse = z.looseObject({
   servers: z.optional(z.record(z.string(), McpServerConfig)),
+});
+
+// Runtime status from `list('yaar://mcp')`, joined against the config above by
+// `name` — so `name` is required (a row without one can never be joined) while
+// every display field is optional and defaulted at the join site.
+//
+// Rows are `unknown` in the envelope and parsed one at a time: a status row the
+// server shapes differently should cost that server its live state, not blank
+// the whole list, which would make every configured server read as
+// "disconnected".
+export const McpServerStatus = z.looseObject({
+  name: z.string(),
+  state: z.optional(z.string()),
+  error: z.optional(z.string()),
+  toolCount: z.optional(z.number()),
+});
+
+export const McpStatusListResponse = z.looseObject({
+  servers: z.optional(z.array(z.unknown())),
+});
+
+// Per-server tool list from `list('yaar://mcp/{name}')`. `name` is what the row
+// renders as, so it is required; `description` is decoration. Same per-row
+// recovery: one odd tool must not empty a server's tool list, which the UI would
+// show as the ambiguous "No tools or not connected".
+export const McpToolInfo = z.looseObject({
+  name: z.string(),
+  description: z.optional(z.string()),
+});
+
+export const McpToolListResponse = z.looseObject({
+  tools: z.optional(z.array(z.unknown())),
 });

@@ -1,6 +1,6 @@
 import { createSignal, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { read, invoke } from '@bundled/yaar';
+import { read, invoke, errMsg } from '@bundled/yaar';
 import { showToast } from '../store';
 import { parseJson, capitalize, onInputHandler, onChangeHandler } from '../helpers';
 
@@ -44,7 +44,12 @@ export function SettingsView() {
         setExtraRaw(JSON.stringify(extra, null, 2));
         setShowExtra(true);
       }
-    } catch {
+    } catch (err) {
+      // Rendering an empty form is the only thing this view can do, but "settings
+      // failed to load" and "no settings are set" must not look identical — the
+      // former would otherwise let a save write an empty config over a good one.
+      console.error('[configurations] failed to read yaar://config/settings', err);
+      showToast(`Couldn't load settings: ${errMsg(err)}`, 'error');
       setData({});
     }
   });

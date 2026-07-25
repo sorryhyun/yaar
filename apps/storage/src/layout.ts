@@ -1,6 +1,8 @@
 export {};
 import { createSignal } from '@bundled/solid-js';
 import { createPersistedSignal } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+import { LayoutPrefsSchema } from './schema';
 
 const KEY = 'layout.json';
 
@@ -26,17 +28,31 @@ export function clampPanelWidth(w: number): number {
 }
 
 /**
- * Validate the loaded value. Deliberately does not clamp: what is stored is the
- * user's preference, and the clamp belongs on the read (see panelWidth) so a
- * temporarily narrow window can't shrink it for good.
+ * Validate the loaded value at the storage trust boundary.
+ *
+ * Deliberately does not clamp: what is stored is the user's preference, and the
+ * clamp belongs on the read (see panelWidth) so a temporarily narrow window
+ * can't shrink it for good.
+ *
+ * A record that fails validation is logged and replaced by the default, so "your
+ * saved width was unreadable" leaves a trace instead of looking exactly like
+ * "you never resized the panel". Nothing *stored at all* is the ordinary first
+ * run and stays silent. A record that merely omits panelWidth is not a failure
+ * either: that is the fallback's own shape on a fresh install.
  */
 function reviveLayout(raw: unknown): LayoutPrefs {
-  const stored = raw as Partial<LayoutPrefs> | null | undefined;
-  const width =
-    typeof stored?.panelWidth === 'number' && Number.isFinite(stored.panelWidth)
-      ? stored.panelWidth
-      : DEFAULT_PANEL_WIDTH;
-  return { panelWidth: width };
+  // Degraded by design, not broken — and `revive` also runs on the fallback
+  // itself, so complaining here would mean an error on every fresh install.
+  if (raw === null || raw === undefined) return { panelWidth: DEFAULT_PANEL_WIDTH };
+  const parsed = z.safeParse(LayoutPrefsSchema, raw);
+  if (!parsed.success) {
+    console.error(
+      `[storage] ${KEY} failed validation, using the default panel width`,
+      parsed.error.issues,
+    );
+    return { panelWidth: DEFAULT_PANEL_WIDTH };
+  }
+  return { panelWidth: parsed.data.panelWidth ?? DEFAULT_PANEL_WIDTH };
 }
 
 const [layout, setLayout] = createPersistedSignal<LayoutPrefs>(
