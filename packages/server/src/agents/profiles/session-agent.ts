@@ -69,5 +69,5 @@ export const SESSION_AGENT_PROFILE: AgentProfile = {
   // Opus for the deputy — it oversees/coordinates across monitors and acts as
   // the user. Mirrors the monitor agent's model choice. Claude-only; Codex has
   // no Claude models, so the call site guards on providerType.
-  model: 'claude-opus-4-8',
+  model: 'claude-opus-5',
 };

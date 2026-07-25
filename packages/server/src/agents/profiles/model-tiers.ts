@@ -11,8 +11,8 @@
 /** Map short agentType names to full model identifiers. */
 export const AGENT_TYPE_MODELS: Record<string, string> = {
   haiku: 'claude-haiku-4-5-20251001',
-  sonnet: 'claude-sonnet-4-6',
-  opus: 'claude-opus-4-8',
+  sonnet: 'claude-sonnet-5',
+  opus: 'claude-opus-5',
 };
 
 /** Resolve an app's `agentType` to the model its agent runs on. */
