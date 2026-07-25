@@ -18,8 +18,18 @@ if (!appId) {
   process.exit(2);
 }
 
-const srcDir = join(import.meta.dir, '..', 'apps', appId, 'src');
-const result = await extractProtocolFromDir(srcDir);
+const appRoot = join(import.meta.dir, '..', 'apps', appId);
+
+// Forwarded for the same reason `compile.ts` forwards it: a Zod `params` defers
+// to the schema fold, and the fold builds a throwaway bundle that must resolve
+// gated SDKs exactly as the app build did. Omitted, this tool refuses any app
+// importing `@bundled/yaar-dev`/`-web`/`-ml` on a gate it already passed — and
+// since this is the acceptance test for protocol refactors, that reads as "this
+// app cannot use Zod params" rather than "this tool forgot an argument".
+const appJson = await Bun.file(join(appRoot, 'app.json'))
+  .json()
+  .catch(() => ({}) as { bundles?: string[] });
+const result = await extractProtocolFromDir(join(appRoot, 'src'), { bundles: appJson.bundles });
 
 if (result.errors.length > 0) {
   for (const err of result.errors) console.error(formatProtocolError(err));
