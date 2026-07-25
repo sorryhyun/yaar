@@ -24,10 +24,14 @@ import { join } from 'path';
 import { AgentPool, personaAgentKey } from '../agents/agent-pool.js';
 import {
   buildPersonaProfile,
+  isPersonaRole,
   personaRole,
   PERSONA_ID_RE,
   MAX_PERSONA_PROMPT_CHARS,
 } from '../agents/profiles/persona.js';
+import { getContextRestoreMessages } from '../logging/context-restore.js';
+import { parseSessionMessages } from '../logging/session-reader.js';
+import { monitorSource } from '../agents/context.js';
 import { assembleSystemPromptForRole } from '../agents/system-prompt.js';
 import { principalRole, runWithAgentContext } from '../agents/agent-context.js';
 import {
@@ -210,8 +214,22 @@ describe('persona lifecycle in AgentPool', () => {
     await pool.cleanup();
   });
 
-  const spawn = (personaId: string, prompt = `You are ${personaId}.`) =>
-    pool.spawnPersonaAgent('0', 'chitchats', personaId, { systemPrompt: prompt });
+  /** A cap high enough not to be the subject — the cap has its own tests below. */
+  const NO_CAP = 8;
+
+  const spawnFor = (
+    monitorId: string,
+    appId: string,
+    personaId: string,
+    prompt: string,
+    max = NO_CAP,
+  ) => pool.spawnPersonaAgent(monitorId, appId, personaId, { systemPrompt: prompt, max });
+
+  /** The record, for the tests whose subject is only that a persona now exists. */
+  const spawn = async (personaId: string, prompt = `You are ${personaId}.`, max = NO_CAP) => {
+    const result = await spawnFor('0', 'chitchats', personaId, prompt, max);
+    return 'record' in result ? result.record : null;
+  };
 
   it('spawns, finds, and lists personas per (monitor, app)', async () => {
     const alice = await spawn('alice');
@@ -230,8 +248,8 @@ describe('persona lifecycle in AgentPool', () => {
 
   it('scopes personas to their app and monitor', async () => {
     await spawn('alice');
-    await pool.spawnPersonaAgent('1', 'chitchats', 'alice', { systemPrompt: 'monitor one alice' });
-    await pool.spawnPersonaAgent('0', 'other-app', 'alice', { systemPrompt: 'other app alice' });
+    await spawnFor('1', 'chitchats', 'alice', 'monitor one alice');
+    await spawnFor('0', 'other-app', 'alice', 'other app alice');
 
     // Same persona id, three independent agents — none of them each other.
     expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(1);
@@ -296,7 +314,7 @@ describe('persona lifecycle in AgentPool', () => {
   it('reclaims a whole cast at once, per app', async () => {
     await spawn('alice');
     await spawn('bob');
-    await pool.spawnPersonaAgent('0', 'other-app', 'carol', { systemPrompt: 'carol' });
+    await spawnFor('0', 'other-app', 'carol', 'carol');
 
     expect(await pool.disposePersonasForApp('0', 'chitchats')).toBe(2);
     expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(0);
@@ -325,6 +343,60 @@ describe('persona lifecycle in AgentPool', () => {
 
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore);
     expect(pool.getStats().personaAgents).toBe(0);
+  });
+
+  // ── Concurrency ──────────────────────────────────────────────────────────
+  //
+  // An app spawns its cast on mount, and `Promise.all(cast.map(spawn))` is the
+  // ordinary way to write that. Every check the spawn makes therefore has to hold
+  // across the await inside it, not just at the moment it was read.
+
+  it('collapses concurrent spawns of one id into a single agent', async () => {
+    const [first, second, third] = await Promise.all([
+      spawnFor('0', 'chitchats', 'alice', 'You are Alice.'),
+      spawnFor('0', 'chitchats', 'alice', 'You are Alice.'),
+      spawnFor('0', 'chitchats', 'alice', 'You are Alice.'),
+    ]);
+
+    expect(first.status).toBe('created');
+    expect(second.status).toBe('reused');
+    expect(third.status).toBe('reused');
+
+    // The failure this pins: three records, two of them in no collection at all —
+    // unreachable by every dispose path *and* by cleanup(), holding a provider and a
+    // MAX_AGENTS slot until the process died.
+    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(1);
+    expect(pool.getStats().personaAgents).toBe(1);
+    expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 1);
+
+    const ids = [first, second, third].map((r) => ('record' in r ? r.record.agent.instanceId : ''));
+    expect(new Set(ids).size).toBe(1);
+  });
+
+  it('holds the per-app cap against a whole cast arriving at once', async () => {
+    const results = await Promise.all(
+      ['alice', 'bob', 'carol', 'dave', 'erin'].map((id) =>
+        spawnFor('0', 'chitchats', id, `You are ${id}.`, 2),
+      ),
+    );
+
+    expect(results.filter((r) => r.status === 'created')).toHaveLength(2);
+    expect(results.filter((r) => r.status === 'at-capacity')).toHaveLength(3);
+    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(2);
+    expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 2);
+  });
+
+  it('reclaims a persona whose spawn was still in flight when its app was torn down', async () => {
+    // The window closes on the same tick the iframe asked for a character. Without
+    // settling the reservation, the sweep finds an empty roster and the persona lands
+    // a moment later with nothing left that knows to reclaim it.
+    const pending = spawnFor('0', 'chitchats', 'alice', 'You are Alice.');
+    const disposed = pool.disposePersonasForApp('0', 'chitchats');
+
+    await Promise.all([pending, disposed]);
+
+    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(0);
+    expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore);
   });
 });
 
@@ -412,6 +484,65 @@ describe('persona verb ownership', () => {
     expect(errorText(await tooLong!)).toContain('limit is');
 
     expect(getAgentLimiter().getCurrentCount()).toBe(slots);
+  });
+});
+
+// ── Context isolation ───────────────────────────────────────────────────────
+
+describe('persona turns stay out of the monitor context', () => {
+  // A persona has no tape and no window, so its turns are logged under the *monitor's*
+  // source — the same one the real user↔monitor conversation uses — and every filter
+  // in context-restore keys on source alone. The role is the only thing that tells
+  // them apart, which is what `isPersonaRole` exists for.
+  const jsonl = (entries: Array<{ type: string; agentId: string; content: string }>) =>
+    entries
+      .map((e, i) =>
+        JSON.stringify({
+          ...e,
+          timestamp: `2026-01-01T00:00:0${i}.000Z`,
+          parentAgentId: null,
+          source: monitorSource('0'),
+        }),
+      )
+      .join('\n');
+
+  it('recognizes a persona role and leaves every other role alone', () => {
+    expect(isPersonaRole(personaRole('chitchats', 'alice'))).toBe(true);
+    // An appId or personaId containing "-" must not break the test either way.
+    expect(isPersonaRole(personaRole('round-table', 'dr-who'))).toBe(true);
+
+    expect(isPersonaRole('app-agent-chitchats')).toBe(false);
+    expect(isPersonaRole('main')).toBe(false);
+    expect(isPersonaRole('session-oversight')).toBe(false);
+    expect(isPersonaRole(null)).toBe(false);
+    expect(isPersonaRole(undefined)).toBe(false);
+  });
+
+  it('drops persona turns from a restore and keeps the real conversation', () => {
+    const messages = parseSessionMessages(
+      jsonl([
+        { type: 'user', agentId: 'main-a1', content: 'what did they think?' },
+        { type: 'user', agentId: personaRole('personas', 'alice'), content: 'turn prompt: alice' },
+        { type: 'assistant', agentId: personaRole('personas', 'alice'), content: 'Alice, curtly.' },
+        { type: 'user', agentId: personaRole('personas', 'bob'), content: 'turn prompt: bob' },
+        { type: 'assistant', agentId: personaRole('personas', 'bob'), content: 'Bob, at length.' },
+        { type: 'assistant', agentId: 'main-a1', content: 'the room is split' },
+      ]),
+    );
+
+    const restored = getContextRestoreMessages(messages);
+
+    // What the leak looked like: six messages, four of them a room's improv replayed
+    // as the user talking to the monitor agent and the monitor agent answering.
+    expect(restored.map((m) => m.content)).toEqual(['what did they think?', 'the room is split']);
+  });
+
+  it("leaves the app agent's own turns in place — only personas are dropped", () => {
+    const messages = parseSessionMessages(
+      jsonl([{ type: 'user', agentId: 'app-agent-personas', content: 'app agent turn' }]),
+    );
+
+    expect(getContextRestoreMessages(messages)).toHaveLength(1);
   });
 });
 

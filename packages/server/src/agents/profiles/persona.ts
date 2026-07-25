@@ -39,7 +39,27 @@ export const PERSONA_ID_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
  * monitor tier *and* staples YAAR's environment section onto its prompt.
  */
 export function personaRole(appId: string, personaId: string): string {
-  return `app-persona-${appId}-${personaId}`;
+  return `${PERSONA_ROLE_PREFIX}${appId}-${personaId}`;
+}
+
+const PERSONA_ROLE_PREFIX = 'app-persona-';
+
+/**
+ * True for a role string minted by {@link personaRole}.
+ *
+ * Exists because the session log is the one place a persona's turn is written down
+ * next to everybody else's, and `logging/context-restore.ts` has to be able to tell
+ * them apart. A persona holds no context tape and no window, so its turns carry the
+ * *monitor's* source — the same source the real user↔monitor conversation uses — and
+ * the restore filter keys on source alone. Without this predicate, reloading a
+ * session replays every character's in-character line into the monitor agent's
+ * history as if the user had said it.
+ *
+ * A prefix test rather than a parse: appIds and personaIds both contain `-`, so
+ * `app-persona-a-b-c` is genuinely ambiguous and nothing downstream needs the parts.
+ */
+export function isPersonaRole(role: string | null | undefined): boolean {
+  return typeof role === 'string' && role.startsWith(PERSONA_ROLE_PREFIX);
 }
 
 /**

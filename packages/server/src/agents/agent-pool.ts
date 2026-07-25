@@ -107,6 +107,21 @@ export interface PersonaAgent {
   lastResponse?: string;
 }
 
+/**
+ * What {@link AgentPool.spawnPersonaAgent} did.
+ *
+ * Four outcomes rather than a nullable record because the verb handler owes the app
+ * four different sentences: `reused` is a success the app should not treat as a new
+ * character, `at-capacity` names its own `personas.max`, and `no-slot` names the
+ * machine's `MAX_AGENTS`. Collapsing the last two into `null` made "close a window"
+ * the advice for a limit only "delete a persona" could clear.
+ */
+export type PersonaSpawnResult =
+  | { status: 'created'; record: PersonaAgent }
+  | { status: 'reused'; record: PersonaAgent }
+  | { status: 'at-capacity' }
+  | { status: 'no-slot' };
+
 const ZERO_USAGE: TokenUsage = {
   inputTokens: 0,
   outputTokens: 0,
@@ -146,6 +161,20 @@ export class AgentPool {
    * same app get two independent casts and neither can name the other's.
    */
   private personaAgents = new Map<string, PersonaAgent>();
+
+  /**
+   * Spawns reserved but not yet landed, keyed like {@link personaAgents}.
+   *
+   * The reservation is written *before* the first await in `spawnPersonaAgent`, which
+   * is what makes that method safe to call concurrently — a second call for the same
+   * persona finds the reservation and joins it instead of starting a second provider.
+   * `monitorId`/`appId` ride along rather than being parsed back out of the key, for
+   * the same reason {@link PersonaAgent} carries them: the key is opaque.
+   */
+  private personaSpawns = new Map<
+    string,
+    { monitorId: string; appId: string; pending: Promise<PersonaAgent | null> }
+  >();
 
   /** Session agent — lazy singleton for cross-monitor oversight. */
   private sessionAgent: PooledAgent | null = null;
@@ -536,15 +565,66 @@ export class AgentPool {
   // ── Persona agents ───────────────────────────────────────────────
 
   /**
-   * Spawn a persona agent for one app on one monitor.
+   * Spawn a persona agent for one app on one monitor, or hand back the one that
+   * already answers to that id.
+   *
+   * Every decision here — does the persona exist, is one already on its way, is the
+   * app at its ceiling — is taken **synchronously, before the first await**. That is
+   * the whole point of the method. The shape it replaces checked existence and the
+   * cap in the verb handler and *then* awaited a provider, so two spawns arriving in
+   * one tick both passed both checks: the second overwrote the first in
+   * `personaAgents`, and the first became an agent in no collection at all —
+   * unreachable by every dispose path and by `cleanup()`, which walks `allAgents()`.
+   * It held a provider process and a `MAX_AGENTS` slot until the process died. An app
+   * spawning its cast with `Promise.all` is the ordinary way to land there, and
+   * `spawn` is documented as safe to re-run on every mount.
+   *
+   * `max` is the app's `personas.max`: the caller reads the manifest, the pool
+   * enforces it, and reservations count toward it so the cap holds under concurrency
+   * too.
+   */
+  async spawnPersonaAgent(
+    monitorId: string,
+    appId: string,
+    personaId: string,
+    options: { systemPrompt: string; model?: string; max: number },
+  ): Promise<PersonaSpawnResult> {
+    const key = personaAgentKey(monitorId, appId, personaId);
+
+    const existing = this.personaAgents.get(key);
+    if (existing) return { status: 'reused', record: existing };
+
+    // A spawn already in flight for this id: join it rather than start a second one.
+    // The joiner gets `reused`, which is the same answer it would have got had it
+    // arrived one tick later and found the record in place.
+    const inFlight = this.personaSpawns.get(key);
+    if (inFlight) {
+      const record = await inFlight.pending;
+      return record ? { status: 'reused', record } : { status: 'no-slot' };
+    }
+
+    if (this.countPersonas(monitorId, appId) >= options.max) return { status: 'at-capacity' };
+
+    const pending = this.createPersonaAgent(monitorId, appId, personaId, options);
+    this.personaSpawns.set(key, { monitorId, appId, pending });
+    try {
+      const record = await pending;
+      return record ? { status: 'created', record } : { status: 'no-slot' };
+    } finally {
+      this.personaSpawns.delete(key);
+    }
+  }
+
+  /**
+   * The spawn itself. Only ever called with a reservation held, which is what makes
+   * the `personaAgents.set` below the only writer for that key.
    *
    * Returns null when the global limiter has no slot — the caller surfaces that to
    * the app as a clean "agent limit reached" rather than a crash, since a room of
    * four characters plus the standing session/monitor/app trio sits close to the
-   * `MAX_AGENTS` default. The per-app cap (`personas.max` in app.json) is checked by
-   * the caller, which is the layer that can read the manifest.
+   * `MAX_AGENTS` default.
    */
-  async spawnPersonaAgent(
+  private async createPersonaAgent(
     monitorId: string,
     appId: string,
     personaId: string,
@@ -571,6 +651,30 @@ export class AgentPool {
       `[AgentPool] Persona "${personaId}" spawned for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
     );
     return record;
+  }
+
+  /** Live personas plus reservations — the number `personas.max` is measured against. */
+  private countPersonas(monitorId: string, appId: string): number {
+    let count = this.listPersonaAgents(monitorId, appId).length;
+    for (const spawn of this.personaSpawns.values()) {
+      if (spawn.monitorId === monitorId && spawn.appId === appId) count++;
+    }
+    return count;
+  }
+
+  /**
+   * Wait out the reservations a teardown is about to sweep past.
+   *
+   * A spawn still inside `acquireProvider` is in no collection yet, so a dispose
+   * sweep walks right by it and the persona lands in `personaAgents` moments after
+   * the app that owns it stopped existing — alive, unreferenced, and holding a slot
+   * until the session ends. Settling first means the sweep sees it.
+   */
+  private async settlePersonaSpawns(
+    match: (spawn: { monitorId: string; appId: string }) => boolean,
+  ): Promise<void> {
+    const pending = [...this.personaSpawns.values()].filter(match).map((s) => s.pending);
+    if (pending.length > 0) await Promise.allSettled(pending);
   }
 
   getPersonaAgent(monitorId: string, appId: string, personaId: string): PersonaAgent | undefined {
@@ -638,6 +742,7 @@ export class AgentPool {
 
   /** Dispose every persona one app owns on one monitor. Returns how many died. */
   async disposePersonasForApp(monitorId: string, appId: string): Promise<number> {
+    await this.settlePersonaSpawns((s) => s.monitorId === monitorId && s.appId === appId);
     const personas = this.listPersonaAgents(monitorId, appId);
     for (const p of personas) {
       await this.disposePersonaAgent(monitorId, appId, p.personaId);
@@ -647,6 +752,7 @@ export class AgentPool {
 
   /** Dispose every persona on a monitor, whichever app owns it. */
   async disposePersonasForMonitor(monitorId: string): Promise<void> {
+    await this.settlePersonaSpawns((s) => s.monitorId === monitorId);
     const doomed = [...this.personaAgents.values()].filter((p) => p.monitorId === monitorId);
     for (const p of doomed) {
       await this.disposePersonaAgent(monitorId, p.appId, p.personaId);
@@ -901,6 +1007,9 @@ export class AgentPool {
    */
   async cleanup(): Promise<void> {
     const limiter = getAgentLimiter();
+    // Before the snapshot: a persona still mid-spawn is in no collection, so it would
+    // land in `personaAgents` after the clear below and outlive the pool that owns it.
+    await this.settlePersonaSpawns(() => true);
     // Snapshot before the first await: the two phases must walk the same roster.
     const allAgents = [...this.allAgents()].map((e) => e.agent);
 

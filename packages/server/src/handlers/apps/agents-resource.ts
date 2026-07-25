@@ -251,37 +251,39 @@ async function spawn(scope: Scope, payload?: Record<string, unknown>): Promise<V
     );
   }
 
-  // Idempotent by design. An iframe reload re-runs the app's spawn calls, and the
-  // personas from before the reload are still alive with their memory intact — the
-  // right answer is to hand back the ones that exist, not to refuse the app its own
-  // cast or to silently reset four conversations. The prompt is deliberately *not*
-  // updated: it is replayed on every turn, so changing it under a live conversation
-  // would rewrite who the persona has been all along. Delete and respawn to recast.
-  const existing = scope.pool().getPersonaAgent(scope.monitorId, scope.appId, personaId);
-  if (existing) {
-    return okJson({ ...personaView(existing, scope.pool()), reused: true });
-  }
-
-  const live = scope.pool().listPersonaAgents(scope.monitorId, scope.appId).length;
-  if (live >= scope.max) {
-    return error(
-      `Persona limit reached: "${scope.appId}" allows ${scope.max} at a time (${live} live). ` +
-        'Delete one first, or raise "personas".max in app.json.',
-    );
-  }
-
-  const record = await scope.pool().spawnPersonaAgent(scope.monitorId, scope.appId, personaId, {
+  // Existence, the per-app cap, and the spawn itself are one atomic decision inside
+  // the pool — deliberately not three steps here. Split across an await, two spawns in
+  // one tick each passed the checks and one of the two agents ended up in no
+  // collection at all, holding a provider and a `MAX_AGENTS` slot forever. This layer
+  // owns the manifest (hence `max`) and the wording; the pool owns the invariant.
+  const result = await scope.pool().spawnPersonaAgent(scope.monitorId, scope.appId, personaId, {
     systemPrompt,
+    max: scope.max,
     ...(model ? { model } : {}),
   });
-  if (!record) {
-    return error(
-      'Agent limit reached — no provider slot is free for a new persona. Close an app window ' +
-        'or delete a persona and try again (raise MAX_AGENTS to make room permanently).',
-    );
-  }
 
-  return okJson(personaView(record, scope.pool()));
+  switch (result.status) {
+    // Idempotent by design. An iframe reload re-runs the app's spawn calls, and the
+    // personas from before the reload are still alive with their memory intact — the
+    // right answer is to hand back the ones that exist, not to refuse the app its own
+    // cast or to silently reset four conversations. The prompt is deliberately *not*
+    // updated: it is replayed on every turn, so changing it under a live conversation
+    // would rewrite who the persona has been all along. Delete and respawn to recast.
+    case 'reused':
+      return okJson({ ...personaView(result.record, scope.pool()), reused: true });
+    case 'created':
+      return okJson(personaView(result.record, scope.pool()));
+    case 'at-capacity':
+      return error(
+        `Persona limit reached: "${scope.appId}" allows ${scope.max} at a time. ` +
+          'Delete one first, or raise "personas".max in app.json.',
+      );
+    case 'no-slot':
+      return error(
+        'Agent limit reached — no provider slot is free for a new persona. Close an app window ' +
+          'or delete a persona and try again (raise MAX_AGENTS to make room permanently).',
+      );
+  }
 }
 
 async function message(scope: Scope, payload?: Record<string, unknown>): Promise<VerbResult> {
