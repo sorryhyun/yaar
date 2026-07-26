@@ -11,7 +11,9 @@ import {
   openRoom,
   roomCast,
   characterOf,
-  promptOf,
+  personaOf,
+  memoryOf,
+  systemPromptOf,
   avatars,
   loadLibrary,
   loadRoom,
@@ -23,7 +25,8 @@ import {
   addCharacter,
   updateCharacter,
   removeCharacter,
-  writePrompt,
+  writePersona,
+  noteRecentEvent,
   saveAvatar,
   appendLine,
   clearTranscript,
@@ -32,6 +35,15 @@ import {
   type Message,
   type Room,
 } from './store';
+import {
+  PERSONA_DOCS,
+  characterTools,
+  findMemory,
+  hasIdentity,
+  type Persona,
+  type PersonaDoc,
+  type PersonaKey,
+} from './persona';
 import { live, spawn, dispose, roster, noteSkip } from './agents';
 import { running, speaker, planFor, runTape, stopTape } from './tape';
 import './styles.css';
@@ -52,49 +64,145 @@ interface StarterCharacter {
   name: string;
   emoji: string;
   priority: number;
-  prompt: string;
+  persona: Partial<Persona>;
 }
 
+/**
+ * The three characters a first-run user meets — and the app's own worked example of the
+ * persona format.
+ *
+ * Written to be read: third person throughout, a nutshell short enough to be a nutshell,
+ * appearance-then-personality bullets, and memory chunks that each stand alone and end in
+ * a present-day thought. A user who opens the editor to see how this is done should find
+ * something worth copying, because the format is the part of this app that has to be
+ * learned. `recentEvents` is deliberately empty: it is the one document the characters
+ * write themselves.
+ */
 const STARTER_CAST: StarterCharacter[] = [
   {
     characterId: 'mara',
     name: 'Mara',
     emoji: '🧭',
     priority: 1,
-    prompt:
-      'You are Mara, and you keep the conversation honest. You answer in two or three ' +
-      'sentences. You listen to what the others just said and you name the thing being ' +
-      'assumed rather than argued. You are warm about it, never sneering, and you would ' +
-      'rather ask the sharp question than deliver the verdict.',
+    persona: {
+      inANutshell:
+        'Mara is a former grant reviewer who spent eleven years reading proposals for a ' +
+        'living and now cannot stop hearing the claim underneath the sentence. She is warm ' +
+        'about it, and she would always rather ask the sharp question than deliver the ' +
+        'verdict.',
+      characteristics: [
+        '## Appearance',
+        '- **Cropped grey hair**: gone grey early and never coloured it',
+        '- **Reading glasses**: pushed up on her head more often than worn',
+        '- **Same green cardigan**: has three of them, will not discuss it',
+        '',
+        '## Personality',
+        '- **Names the assumption**: goes for the thing being assumed rather than argued',
+        '- **Two or three sentences**: says her piece and stops; long answers embarrass her',
+        '- **Warm, never sneering**: the question is sincere even when it lands hard',
+        "- **Asks rather than rules**: will not hand down a verdict she hasn't tested",
+        '- **Allergic to consensus**: goes quiet and suspicious when a room agrees too fast',
+      ].join('\n'),
+      consolidatedMemory: [
+        '## [Eleven_years_reading_proposals]',
+        'Mara sat on a funding panel that read nine hundred proposals a year. She learned ' +
+          'that the strong ones and the weak ones used the same words, and that the ' +
+          'difference was always a single unexamined claim somewhere in the second ' +
+          'paragraph. Finding it became a reflex she cannot switch off in ordinary ' +
+          'conversation.',
+        '',
+        '**Present thought:** "Everyone in this room is arguing about the second paragraph."',
+        '',
+        '## [The_project_she_funded_anyway]',
+        'Once she overrode her own objection because the room was excited and she was ' +
+          'tired. The project failed in a way she had predicted out loud in the meeting. ' +
+          'She keeps the memo she wrote that day and has never told anyone she keeps it.',
+        '',
+        '**Present thought:** "Being right and staying quiet is the same as being wrong."',
+      ].join('\n'),
+    },
   },
   {
     characterId: 'ezra',
     name: 'Ezra',
     emoji: '🔧',
     priority: 0,
-    prompt:
-      'You are Ezra, a builder. You answer in two or three sentences, always in terms of ' +
-      'the smallest thing that could actually be made this week. When someone says ' +
-      'something abstract you ask what it would look like on a screen. You have no ' +
-      'patience for plans with no first step, and you say so plainly.',
+    persona: {
+      inANutshell:
+        'Ezra is a builder who has shipped enough half-finished things to distrust any plan ' +
+        'without a first step. He measures every idea by the smallest version of it that ' +
+        'could exist by Friday.',
+      characteristics: [
+        '## Appearance',
+        '- **Forearms**: scarred from a soldering iron he swears was unplugged',
+        '- **Perpetual notebook**: graph paper, dense, mostly boxes and arrows',
+        '- **Cuffs rolled**: even when there is nothing to build',
+        '',
+        '## Personality',
+        '- **Asks what it looks like on a screen**: turns abstractions into a concrete surface',
+        '- **Two or three sentences**: plain, unhedged, no preamble',
+        '- **No patience for stepless plans**: says so out loud rather than nodding along',
+        '- **Respects a working ugly thing**: prefers it to a beautiful diagram, every time',
+        '- **Goes quiet when interested**: stops arguing and starts sketching',
+      ].join('\n'),
+      consolidatedMemory: [
+        '## [The_two_year_rewrite]',
+        'Ezra spent two years on a rewrite that was cancelled a month before it shipped. ' +
+          'Nothing he built in those two years was ever used by anybody. He learned that ' +
+          'work nobody can touch yet is work that might as well not exist.',
+        '',
+        '**Present thought:** "If it cannot be used this week, it might never be used."',
+      ].join('\n'),
+    },
   },
   {
     characterId: 'juno',
     name: 'Juno',
     emoji: '🌗',
     priority: 0,
-    prompt:
-      'You are Juno, and you think in images. You answer in two or three sentences, ' +
-      'concrete and sensory, and you find the comparison that makes the idea land. You ' +
-      'never explain your own metaphor. If the room has gone dry you say the thing ' +
-      'nobody was willing to say out loud.',
+    persona: {
+      inANutshell:
+        'Juno is a stage lighting designer who thinks in images and finds the comparison ' +
+        'that makes an idea land. She never explains her own metaphors, and she will say ' +
+        'the thing nobody in the room was willing to say out loud.',
+      characteristics: [
+        '## Appearance',
+        '- **Black clothes**: two decades of standing in the wings',
+        '- **Hands always moving**: shapes the thing she is describing while she describes it',
+        '- **Squints at bright rooms**: works in the dark by preference',
+        '',
+        '## Personality',
+        '- **Concrete and sensory**: reaches for an image before an argument',
+        '- **Two or three sentences**: the image, then silence',
+        '- **Never explains the metaphor**: refuses to translate it into plainer words',
+        '- **Says the unsaid thing**: fills a dry room with the uncomfortable sentence',
+        '- **Impatient with abstraction**: goes flat and bored when nothing is visible',
+      ].join('\n'),
+      consolidatedMemory: [
+        '## [Learning_light_in_an_empty_theatre]',
+        'Juno taught herself lighting alone in a four-hundred-seat house at night, with no ' +
+          'actors to aim at. She learned to see the shape of a scene before anyone stood in ' +
+          'it, which is now how she hears an idea: as a thing with edges and a shadow.',
+        '',
+        '**Present thought:** "Describe it to me as a room and I will tell you if it works."',
+      ].join('\n'),
+    },
   },
 ];
+
+/** A one-document patch, built so the key stays typed rather than widening to string. */
+function onePatch(key: PersonaKey, body: string): Partial<Persona> {
+  const patch: Partial<Persona> = {};
+  patch[key] = body;
+  return patch;
+}
 
 function App() {
   const [draft, setDraft] = createSignal('');
   const [max, setMax] = createSignal(4);
   const [editing, setEditing] = createSignal<string | null>(null);
+  /** Which of the four persona documents the open editor is showing. */
+  const [editingDoc, setEditingDoc] = createSignal<PersonaKey>('inANutshell');
   const [showCastPicker, setShowCastPicker] = createSignal(false);
   const [booting, setBooting] = createSignal(true);
 
@@ -128,13 +236,13 @@ function App() {
         showToast(`Only ${max()} characters can be onstage at once`, 'error');
         break;
       }
-      const prompt = promptOf(character.characterId);
-      if (!prompt.trim()) {
-        showToast(`${character.name} has no prompt written yet`, 'error');
+      const persona = personaOf(character.characterId);
+      if (!hasIdentity(persona)) {
+        showToast(`${character.name} has no persona written yet`, 'error');
         continue;
       }
       try {
-        await spawn(character, prompt);
+        await spawn(character, systemPromptOf(character), characterTools(persona, character.name));
       } catch (err) {
         showToast(`${character.name} could not come onstage: ${errMsg(err)}`, 'error');
       }
@@ -211,11 +319,18 @@ function App() {
         name: 'New character',
         emoji: '🎭',
         priority: 0,
-        prompt: 'You are ______. You answer in two or three sentences.\n\nWrite who they are here.',
+        // Third person, because that is the format's first rule and a blank textarea
+        // teaches nobody. The frame that turns this into "you are them" is app-owned.
+        persona: {
+          inANutshell: '______ is a ______ who ______. Right now they are ______.',
+          characteristics:
+            '## Appearance\n- **______**: ______\n\n## Personality\n- **______**: ______',
+        },
       });
       const room = openRoomId();
       if (room) await castInRoom(room, characterId);
       setEditing(characterId);
+      setEditingDoc('inANutshell');
       await syncStage();
     } catch (err) {
       showToast(errMsg(err), 'error');
@@ -275,6 +390,46 @@ function App() {
     </span>
   `;
 
+  /**
+   * The four documents, one tab at a time.
+   *
+   * One at a time rather than four stacked textareas because the sidebar is 260px wide
+   * and a memory file is the long one — a tab strip is what makes room for it to be
+   * legible. The tab is also where the format gets taught: each document carries its own
+   * hint, so the rule for what belongs in it is next to the box it goes in.
+   */
+  const docEditor = (character: Character) => {
+    const current = () => PERSONA_DOCS.find((doc) => doc.key === editingDoc()) ?? PERSONA_DOCS[0];
+
+    return html`
+      <div class="cc-doc-tabs">
+        <${For} each=${() => PERSONA_DOCS}>
+          ${(doc: PersonaDoc) => html`
+            <button
+              class="y-btn y-btn-ghost cc-mini"
+              classList=${() => ({ active: editingDoc() === doc.key })}
+              onClick=${() => setEditingDoc(doc.key)}
+            >
+              ${doc.label}
+            </button>
+          `}
+        </>
+      </div>
+
+      <textarea
+        class="y-input cc-prompt-edit"
+        rows="12"
+        value=${() => personaOf(character.characterId)[current().key]}
+        onChange=${(e: Event) =>
+          writePersona(
+            character.characterId,
+            onePatch(current().key, (e.target as HTMLTextAreaElement).value),
+          )}
+      ></textarea>
+      <div class="cc-editor-note">${() => current().hint}</div>
+    `;
+  };
+
   const editor = (character: Character) => html`
     <div class="cc-editor">
       <div class="cc-editor-row">
@@ -296,16 +451,10 @@ function App() {
         />
       </div>
 
-      <textarea
-        class="y-input cc-prompt-edit"
-        rows="10"
-        value=${() => promptOf(character.characterId)}
-        onChange=${(e: Event) =>
-          writePrompt(character.characterId, (e.target as HTMLTextAreaElement).value)}
-      ></textarea>
+      ${() => docEditor(character)}
       <div class="cc-editor-note">
-        Used verbatim as the system prompt. Takes effect next time this character comes onstage — a
-        live character keeps the prompt it was spawned with.
+        Saved as markdown under <code>characters/${character.characterId}/</code>. Takes effect next
+        time this character comes onstage — a live character keeps the persona it was spawned with.
       </div>
 
       <div class="cc-editor-row">
@@ -585,7 +734,10 @@ export default defineApp({
   name: 'ChitChats',
   state: {
     room: {
-      description: 'The open room: its cast, who is onstage, and the transcript',
+      description:
+        'The open room: its cast, who is onstage, and the transcript. Each cast entry ' +
+        "carries the character's nutshell and its memory subtitles rather than its whole " +
+        'persona — read one character in full with getPersona.',
       get: () => ({
         room: openRoom()
           ? { roomId: openRoom()!.roomId, name: openRoom()!.name, emoji: openRoom()!.emoji }
@@ -597,7 +749,9 @@ export default defineApp({
           emoji: c.emoji,
           priority: c.priority,
           onstage: !!live()[c.characterId],
-          prompt: promptOf(c.characterId),
+          inANutshell: personaOf(c.characterId).inANutshell,
+          memories: memoryOf(c.characterId).map((chunk) => chunk.subtitle),
+          recentEvents: personaOf(c.characterId).recentEvents,
         })),
         speaking: speaker(),
         transcript: transcript().map((m) => ({ speaker: m.speaker, text: m.text })),
@@ -617,38 +771,99 @@ export default defineApp({
     },
     addCharacter: {
       description:
-        'Write a new character into the cast. `prompt` becomes its system prompt verbatim, ' +
-        'so write it in the second person and say how long its answers should be. Pass roomId ' +
-        'to cast it straight into a room.',
+        'Write a new character into the cast. A character is four markdown documents, all ' +
+        'in the THIRD person — the app supplies the frame that turns them into "you are ' +
+        'this person". `inANutshell` is who they are in one to three sentences. ' +
+        '`characteristics` is "## Appearance" then "## Personality" as bullets, timeless ' +
+        'traits only, and should say how long their answers run. `consolidatedMemory` is ' +
+        'standalone "## [subtitle]" chunks, each ending with **Present thought:** "…" — ' +
+        'these are NOT in the prompt; the character opens one with its recall tool, and the ' +
+        'thought is the preview it decides on. Leave `recentEvents` alone: the character ' +
+        'writes that itself. Pass roomId to cast it straight into a room.',
       params: z.object({
         characterId: z.string(),
         name: z.string(),
         emoji: z.string(),
-        prompt: z.string(),
+        inANutshell: z.string(),
+        characteristics: z.optional(z.string()),
+        consolidatedMemory: z.optional(z.string()),
+        recentEvents: z.optional(z.string()),
         priority: z.optional(z.number()),
         roomId: z.optional(z.string()),
       }),
       replay: 'never',
       run: async (p) => {
-        await addCharacter(p);
+        await addCharacter({
+          characterId: p.characterId,
+          name: p.name,
+          emoji: p.emoji,
+          priority: p.priority,
+          persona: {
+            inANutshell: p.inANutshell,
+            characteristics: p.characteristics,
+            consolidatedMemory: p.consolidatedMemory,
+            recentEvents: p.recentEvents,
+          },
+        });
         const roomId = p.roomId ?? openRoomId();
         if (roomId) await castInRoom(roomId, p.characterId);
         return { characterId: p.characterId, castInto: roomId ?? null };
       },
     },
-    setPrompt: {
+    setPersona: {
       description:
-        "Rewrite a character's system prompt. Takes effect the next time it comes onstage — " +
-        'a live character keeps the prompt it was spawned with, because that prompt is ' +
-        'replayed every turn and swapping it would rewrite who the character has been.',
-      params: z.object({ characterId: z.string(), prompt: z.string() }),
+        "Rewrite some of a character's persona documents; the ones you omit are left alone. " +
+        'Same four documents and same third-person rule as addCharacter. Takes effect the ' +
+        'next time the character comes onstage — a live character keeps the persona it was ' +
+        'spawned with, because that prompt and its recall index are replayed every turn and ' +
+        'swapping them would rewrite who the character has been all along.',
+      params: z.object({
+        characterId: z.string(),
+        inANutshell: z.optional(z.string()),
+        characteristics: z.optional(z.string()),
+        consolidatedMemory: z.optional(z.string()),
+        recentEvents: z.optional(z.string()),
+      }),
       run: async (p) => {
-        await writePrompt(p.characterId, p.prompt);
-        return { updated: p.characterId };
+        const patch: Partial<Persona> = {};
+        for (const doc of PERSONA_DOCS) {
+          const body = p[doc.key];
+          if (body !== undefined) patch[doc.key] = body;
+        }
+        if (Object.keys(patch).length === 0) {
+          throw new Error('Give at least one document to write');
+        }
+        await writePersona(p.characterId, patch);
+        return { updated: p.characterId, documents: Object.keys(patch) };
+      },
+    },
+    getPersona: {
+      description:
+        "Read one character's four persona documents in full, plus its memory index and the " +
+        'system prompt they compose into. Use this before rewriting a character, and to ' +
+        'export one.',
+      params: z.object({ characterId: z.string() }),
+      replay: 'never',
+      run: async (p) => {
+        const character = characterOf(p.characterId);
+        if (!character) throw new Error(`No character "${p.characterId}"`);
+        const persona = personaOf(p.characterId);
+        return {
+          characterId: character.characterId,
+          name: character.name,
+          emoji: character.emoji,
+          priority: character.priority,
+          ...persona,
+          memories: memoryOf(p.characterId).map(({ subtitle, thought }) => ({
+            subtitle,
+            thought: thought ?? null,
+          })),
+          systemPrompt: systemPromptOf(character),
+        };
       },
     },
     removeCharacter: {
-      description: 'Delete a character, its prompt document, and its place in every room',
+      description: 'Delete a character, its persona documents, and its place in every room',
       params: z.object({ characterId: z.string() }),
       replay: 'never',
       run: async (p) => {
@@ -699,11 +914,15 @@ export default defineApp({
     },
 
     // ── Character-facing ────────────────────────────────────────────────────
-    // The handler half of the `skip` tool every character is spawned with. Its
-    // description is written for an *operator* reading the protocol; the character
-    // reads a different one, supplied at spawn (`agents.ts`). The `persona:` prefix is
-    // what keeps the two apart — it hides this entry from the app agent's manifest, so
-    // the concierge never reads a script meant for a character.
+    // The handler halves of the tools each character is spawned with. Descriptions here
+    // are written for an *operator* reading the protocol; the character reads different
+    // ones, supplied at spawn (`persona.ts`). The `persona:` prefix is what keeps the two
+    // apart — it hides these entries from the app agent's manifest, so the concierge never
+    // reads a script meant for a character.
+    //
+    // `personaId` is stamped by the server rather than written by the model, which is what
+    // makes these safe as bare writes: a character cannot recall from, or scribble in,
+    // another character's documents.
     'persona:skip': {
       description:
         'Called by a character that declined its turn. Records the decision for the tape; ' +
@@ -713,6 +932,44 @@ export default defineApp({
       run: async (p) => {
         noteSkip(p.personaId);
         return { skipped: p.personaId };
+      },
+    },
+    'persona:recall': {
+      description:
+        'Called by a character opening one chunk of its own consolidated_memory.md by ' +
+        'subtitle. Returns the chunk body with its present-day thought stripped — the ' +
+        'thought was already the preview in the tool description, and handing it back would ' +
+        'have the character read its own caption aloud.',
+      params: z.object({ personaId: z.string(), subtitle: z.string() }),
+      replay: 'never',
+      run: async (p) => {
+        const chunks = memoryOf(p.personaId);
+        const found = findMemory(chunks, p.subtitle);
+        if (!found) {
+          // Naming every subtitle rather than refusing: the tool's own index is elided
+          // when a memory file is long, so a near-miss is a normal call, not an error.
+          return {
+            found: false,
+            subtitle: p.subtitle,
+            available: chunks.map((chunk) => chunk.subtitle),
+          };
+        }
+        return { found: true, subtitle: found.subtitle, memory: found.content };
+      },
+    },
+    'persona:memorize': {
+      description:
+        'Called by a character recording one line in its own recent_events.md. The row is ' +
+        "date-stamped and appended; the tail of that file is in the character's system " +
+        'prompt from its next spawn onward, which is how anything survives the window ' +
+        'closing.',
+      params: z.object({ personaId: z.string(), memory_entry: z.string() }),
+      replay: 'never',
+      run: async (p) => {
+        const entry = p.memory_entry.trim();
+        if (!entry) throw new Error('A memory needs something in it');
+        const row = await noteRecentEvent(p.personaId, entry);
+        return { recorded: row };
       },
     },
   },

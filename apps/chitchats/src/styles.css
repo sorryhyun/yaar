@@ -174,6 +174,19 @@
   flex: none;
 }
 
+/* One tab per persona document. Wraps rather than scrolls — the sidebar is 260px. */
+.cc-doc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--yaar-sp-1);
+}
+
+.cc-doc-tabs .active {
+  background: var(--yaar-bg-surface);
+  border-color: var(--yaar-accent);
+  color: var(--yaar-text);
+}
+
 .cc-prompt-edit {
   width: 100%;
   font-family: var(--yaar-font-mono);
@@ -185,6 +198,11 @@
   color: var(--yaar-text-dim);
   font-size: var(--yaar-text-xs);
   line-height: 1.4;
+}
+
+.cc-editor-note code {
+  font-family: var(--yaar-font-mono);
+  word-break: break-all;
 }
 
 .cc-priority-label {

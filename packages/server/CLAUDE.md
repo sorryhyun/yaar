@@ -262,7 +262,8 @@ builtins — that empty array is the whole containment story for a runtime-suppl
 no queue — the app's own scheduler serializes them) and is reclaimed when the app's last window on
 the monitor closes, when the monitor is removed, or on explicit `delete`. See
 `docs/proposals/agent_hierarchy_proposal.md` for the design, and `apps/personas` (Round Table,
-tool-less) and `apps/chitchats` (rooms with a `skip` tool) for the reference consumers.
+tool-less) and `apps/chitchats` (rooms with `skip`/`recall`/`memorize`, whose persona documents are
+what a reclaimed character is respawned from) for the reference consumers.
 
 **The one channel (`agents/profiles/sub-agent.ts`).** The only capability a sub-agent may be given
 is a reach back into the **owning app's own iframe**. `buildSubAgentProfile` is the one place that

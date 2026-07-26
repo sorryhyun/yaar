@@ -11,16 +11,29 @@
  * Two stores, split by what the data *is* rather than by convenience:
  *
  *   appDb       rows the app queries — rooms, the cast, the transcript
- *   appStorage  the character's own documents — its prompt as markdown, its avatar
+ *   appStorage  the character's own documents — its persona as markdown, its avatar
  *
- * The prompt lives in storage rather than in the row because that is what a character
- * *is*: an editable document the user (or the app agent) writes, one file per character,
- * exportable and diffable. The row holds what a list needs to render without opening
- * every document. Neither copy holds the other's field, so they cannot drift.
+ * The persona lives in storage rather than in the row because that is what a character
+ * *is*: a folder of editable markdown documents the user (or the app agent, or the
+ * character itself through `memorize`) writes — see `persona.ts` for the format and why
+ * it is four files. The row holds what a list needs to render without opening every
+ * document. Neither copy holds the other's field, so they cannot drift.
  */
 
 import { createSignal } from '@bundled/solid-js';
 import { appDb, appStorage } from '@bundled/yaar';
+import {
+  EMPTY_PERSONA,
+  PERSONA_DOCS,
+  appendRecentEvent,
+  buildSystemPrompt,
+  parseConsolidatedMemory,
+  personaDir,
+  personaFrom,
+  recentEventRow,
+  type MemoryChunk,
+  type Persona,
+} from './persona';
 
 // ── Rows ────────────────────────────────────────────────────────────────────
 
@@ -77,13 +90,14 @@ export const [openRoomId, setOpenRoomId] = createSignal<string | null>(null);
 export const [transcript, setTranscript] = createSignal<Message[]>([]);
 
 /**
- * Prompt bodies, keyed by characterId — the storage documents, cached.
+ * Persona documents, keyed by characterId — the storage folders, cached.
  *
  * A signal rather than a plain map because the editor renders them: a save has to
  * repaint the textarea it came from, and a spawn has to read the *saved* text rather
- * than whatever the disk held when the window opened.
+ * than whatever the disk held when the window opened. It is also what `memorize` writes
+ * through, so a character's own diary row is visible to the next spawn without a reload.
  */
-export const [prompts, setPrompts] = createSignal<Record<string, string>>({});
+export const [personas, setPersonas] = createSignal<Record<string, Persona>>({});
 /** Avatar data URLs, keyed by characterId. Absent = render the emoji instead. */
 export const [avatars, setAvatars] = createSignal<Record<string, string>>({});
 
@@ -119,14 +133,14 @@ export async function loadLibrary(): Promise<void> {
   setRooms(roomRows);
   setCast(characterRows);
 
-  // Prompts and avatars are per-character files; fetch them together rather than on
+  // Personas and avatars are per-character files; fetch them together rather than on
   // first render, so the cast list paints once instead of N times.
   await Promise.all(characterRows.map((c) => loadCharacterFiles(c)));
 }
 
 async function loadCharacterFiles(character: Character): Promise<void> {
-  const prompt = await appStorage.read(promptPath(character.characterId)).catch(() => '');
-  if (prompt) setPrompts({ ...prompts(), [character.characterId]: prompt });
+  const persona = await readPersona(character.characterId);
+  setPersonas({ ...personas(), [character.characterId]: persona });
 
   if (!character.avatarPath) return;
   try {
@@ -197,22 +211,55 @@ export async function uncastFromRoom(roomId: string, characterId: string): Promi
 
 // ── Characters ──────────────────────────────────────────────────────────────
 
-function promptPath(characterId: string): string {
-  return `characters/${characterId}/character.md`;
+function docPath(characterId: string, file: string): string {
+  return `${personaDir(characterId)}/${file}`;
+}
+
+/**
+ * The single document every character used to be, before the format was four.
+ *
+ * Kept only as a migration source: a character written by an earlier version of this app
+ * has one freeform second-person prompt and no folder structure. Its body becomes the
+ * nutshell — the section that is injected verbatim — so the character keeps behaving
+ * exactly as it did, and splitting it properly is something the user can do later, or
+ * never.
+ */
+const LEGACY_PROMPT_FILE = 'character.md';
+
+/** Read one character's persona folder, migrating a legacy single-document character. */
+async function readPersona(characterId: string): Promise<Persona> {
+  const read = (file: string) => appStorage.read(docPath(characterId, file)).catch(() => '');
+  const bodies = await Promise.all(PERSONA_DOCS.map((doc) => read(doc.file)));
+
+  const persona = { ...EMPTY_PERSONA };
+  PERSONA_DOCS.forEach((doc, index) => {
+    persona[doc.key] = bodies[index];
+  });
+  if (PERSONA_DOCS.some((doc) => persona[doc.key].trim())) return persona;
+
+  const legacy = (await read(LEGACY_PROMPT_FILE)).trim();
+  if (!legacy) return persona;
+
+  persona.inANutshell = legacy;
+  await appStorage.save(docPath(characterId, PERSONA_DOCS[0].file), legacy);
+  // Only once the new document is on disk: a stale duplicate nothing reads is worse than
+  // no duplicate, because the next person to edit it would watch nothing happen.
+  await appStorage.remove(docPath(characterId, LEGACY_PROMPT_FILE)).catch(() => {});
+  return persona;
 }
 
 export interface CharacterInput {
   characterId: string;
   name: string;
   emoji: string;
-  prompt: string;
+  persona: Partial<Persona>;
   priority?: number;
 }
 
 export async function addCharacter(input: CharacterInput): Promise<Character> {
   const existing = characterOf(input.characterId);
   if (existing) {
-    await writePrompt(input.characterId, input.prompt);
+    await writePersona(input.characterId, input.persona);
     return existing;
   }
 
@@ -223,9 +270,9 @@ export async function addCharacter(input: CharacterInput): Promise<Character> {
     priority: input.priority ?? 0,
     createdAt: Date.now(),
   };
-  // The document first: a row pointing at a prompt that failed to write is a character
+  // The documents first: a row pointing at a persona that failed to write is a character
   // that spawns with nothing to be.
-  await writePrompt(input.characterId, input.prompt);
+  await writePersona(input.characterId, personaFrom(input.persona));
   const _id = await charactersC.insert(doc);
   const stored: Character = { ...doc, _id };
   setCast([...cast(), stored]);
@@ -252,17 +299,59 @@ export async function removeCharacter(characterId: string): Promise<void> {
   for (const room of rooms()) {
     if (room.characterIds.includes(characterId)) await uncastFromRoom(room.roomId, characterId);
   }
-  await appStorage.remove(promptPath(characterId)).catch(() => {});
+  for (const doc of PERSONA_DOCS) {
+    await appStorage.remove(docPath(characterId, doc.file)).catch(() => {});
+  }
   if (existing?.avatarPath) await appStorage.remove(existing.avatarPath).catch(() => {});
+
+  const next = { ...personas() };
+  delete next[characterId];
+  setPersonas(next);
 }
 
-export function promptOf(characterId: string): string {
-  return prompts()[characterId] ?? '';
+export function personaOf(characterId: string): Persona {
+  return personas()[characterId] ?? EMPTY_PERSONA;
 }
 
-export async function writePrompt(characterId: string, prompt: string): Promise<void> {
-  await appStorage.save(promptPath(characterId), prompt);
-  setPrompts({ ...prompts(), [characterId]: prompt });
+/** This character's memory chunks, parsed from whatever is currently saved. */
+export function memoryOf(characterId: string): MemoryChunk[] {
+  return parseConsolidatedMemory(personaOf(characterId).consolidatedMemory);
+}
+
+/** The composed system prompt one character would be spawned with right now. */
+export function systemPromptOf(character: Character): string {
+  return buildSystemPrompt(character.name, personaOf(character.characterId));
+}
+
+/**
+ * Save some of a character's documents.
+ *
+ * Only the keys present are written, so the editor saving one textarea does not rewrite
+ * the diary the character is meanwhile appending to.
+ */
+export async function writePersona(characterId: string, patch: Partial<Persona>): Promise<void> {
+  for (const doc of PERSONA_DOCS) {
+    const body = patch[doc.key];
+    if (body === undefined) continue;
+    await appStorage.save(docPath(characterId, doc.file), body);
+  }
+  setPersonas({ ...personas(), [characterId]: { ...personaOf(characterId), ...patch } });
+}
+
+/**
+ * Append one row to a character's diary, as its own `memorize` tool.
+ *
+ * Returns the row so the caller can hand it back to the character as the tool's result —
+ * seeing what it just wrote is what keeps it from writing the same line twice.
+ *
+ * No locking, and none needed: the tape gives exactly one character the floor at a time,
+ * so two `memorize` calls cannot interleave within a room.
+ */
+export async function noteRecentEvent(characterId: string, entry: string): Promise<string> {
+  const when = new Date();
+  const recentEvents = appendRecentEvent(personaOf(characterId).recentEvents, entry, when);
+  await writePersona(characterId, { recentEvents });
+  return recentEventRow(entry, when);
 }
 
 /**

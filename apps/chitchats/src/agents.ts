@@ -12,16 +12,20 @@
  * contract, and it is what makes concurrency possible at all); the promise resolves
  * later, off the stream's terminal frame. The tape executor is the only caller.
  *
- * The other difference is `skip`. Characters are spawned with one tool, and calling it
- * dispatches `persona:skip` to this very iframe — see `main.ts`, which registers the
- * handler that calls {@link noteSkip}. A character that declines therefore produces an
- * *event*, not a string this file has to recognize.
+ * The other difference is the tools. Characters are spawned with `skip`, `memorize`, and
+ * — when they have a memory file — `recall`; calling any of them dispatches
+ * `persona:{name}` to this very iframe, where `main.ts` registers the handlers. A
+ * character that declines its turn therefore produces an *event*, not a string this file
+ * has to recognize, and a character that remembers something writes a real file. What the
+ * tool list *is* belongs to `persona.ts` (it is derived from the persona's documents); the
+ * spawn call is all this file knows about it.
  */
 
 import { createSignal } from '@bundled/solid-js';
 import { invoke, list, del, stream, type StreamFrame } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import type { Character } from './store';
+import type { CharacterTool } from './persona';
 import {
   FrameDataSchema,
   PersonaHandleSchema,
@@ -29,24 +33,6 @@ import {
   parseOrThrow,
   type Roster,
 } from './schema';
-
-/**
- * The one tool every character gets.
- *
- * Descriptions here are written *to the character*, in the second person, because that
- * is who reads them — the operator-voice description of the same handler lives in the
- * `persona:skip` command descriptor in `main.ts`. One string cannot serve both audiences
- * without being wrong for one of them, which is why the two are written separately.
- */
-const CHARACTER_TOOLS = [
-  {
-    name: 'skip',
-    description:
-      'Say nothing this turn. Call this when the others have covered it, when the ' +
-      'question is not for you, or when staying quiet is what your character would do. ' +
-      'Do not also write a reply — calling this IS your turn.',
-  },
-];
 
 /** How long a turn may go without a single frame before the tape gives up on it. */
 const TURN_IDLE_TIMEOUT_MS = 120_000;
@@ -186,15 +172,23 @@ function onFrame(characterId: string, frame: StreamFrame): void {
  * Idempotent on the server — spawning a personaId that already exists hands back the
  * live one with its memory intact — which is what makes an iframe reload cheap: call
  * this for every character in the room on mount and the room comes back as it was.
+ *
+ * That idempotence is also why an edited persona only takes effect on the *next* spawn:
+ * the prompt and the tool list are fixed for a live sub-agent's lifetime, so a rewritten
+ * memory file does not re-index the `recall` tool of a character already onstage.
  */
-export async function spawn(character: Character, systemPrompt: string): Promise<void> {
+export async function spawn(
+  character: Character,
+  systemPrompt: string,
+  tools: CharacterTool[],
+): Promise<void> {
   const result = parseOrThrow(
     PersonaHandleSchema,
     await invoke('yaar://apps/self/agents', {
       action: 'spawn',
       personaId: character.characterId,
       systemPrompt,
-      tools: CHARACTER_TOOLS,
+      tools,
     }),
     'spawn',
   );
