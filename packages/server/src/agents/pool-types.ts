@@ -56,7 +56,13 @@ export interface AgentPoolStats {
   busyAgents: number;
   monitorAgents: number;
   appAgents: number;
-  /** Tool-less app-spawned personas, across every app and monitor. */
+  /**
+   * App-tier sub-agents, across every app and monitor.
+   *
+   * Named for the one kind that exists (`persona` — the tool-less `compute` grade),
+   * which is also the wire name. A second kind splits this into per-kind counts;
+   * until then a total and a name that matches the manifest field beats a rename.
+   */
   personaAgents: number;
   ephemeralAgents: number;
   sessionAgent: boolean;

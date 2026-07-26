@@ -28,7 +28,9 @@ function getPool() {
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
   // ── yaar://session/agents — list all agents ──
   registry.register('yaar://session/agents', {
-    description: 'List all active agents (session, monitor, app, ephemeral).',
+    description:
+      'List all active agents (session, monitor, app, sub-agent, ephemeral), flat and as ' +
+      'the ownership tree they form.',
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
@@ -40,10 +42,12 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           busyAgents: 0,
           monitorAgents: 0,
           appAgents: 0,
+          personaAgents: 0,
           ephemeralAgents: 0,
           sessionAgent: false,
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
           agents: [],
+          tree: [],
         });
 
       const stats = pool.getStats();
@@ -53,6 +57,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         busyAgents: stats.busyAgents,
         monitorAgents: stats.monitorAgents,
         appAgents: stats.appAgents,
+        personaAgents: stats.personaAgents,
         ephemeralAgents: stats.ephemeralAgents,
         sessionAgent: stats.sessionAgent,
         // Session-wide token total, disposed agents included. Per-agent figures ride
@@ -60,6 +65,12 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         usage: stats.usage,
         // One entry per live agent — `id` is what `invoke(.../{id}, { action: 'interrupt' })` takes.
         agents: pool.agentPool.listAgents(),
+        // The same agents nested by ownership: session → monitor → app → sub-agent.
+        // Each tier's key extends its owner's, and disposing an owner disposes its
+        // subtree, so the nesting is also the teardown order. A node with `id: null`
+        // is an owner slot nobody occupies — an app whose personas exist but whose own
+        // agent was never needed.
+        tree: pool.agentPool.agentTree(),
       });
     },
   });

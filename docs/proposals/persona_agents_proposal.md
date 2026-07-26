@@ -2,6 +2,8 @@
 
 **Status:** Phase 1 landed (the primitive). Phase 2/3 (the ChitChats port) not started —
 see [What shipped](#what-shipped) for the delta between this document and the code.
+**Reframed by:** [`agent_hierarchy_proposal.md`](./agent_hierarchy_proposal.md) — the agent-tree
+redesign, in which the persona primitive is the `compute` grade of app-tier sub-agents.
 **Scope:** `packages/server` (agent pool, new verb surface, stream access), `packages/shared` (SDK), one new bundled app (`apps/chitchats`)
 **Driving use case:** porting the feature set of [`chitchats-public`](https://github.com/sorryhyun/chitchats-public) — a multi-character AI chat room — into YAAR as a bundled app.
 

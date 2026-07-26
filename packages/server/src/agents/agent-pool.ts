@@ -1,11 +1,23 @@
 /**
  * AgentPool - manages agents with role-based lifecycle.
  *
+ * The collections below are a **tree**, not four independent registries — see
+ * `docs/proposals/agent_hierarchy_proposal.md`:
+ *
+ *   session agent                       (1 per session)   cross-monitor oversight
+ *   └─ monitor agent                    `monitorId`       the desktop's hands
+ *      └─ app agent                     `monitorId::appId`   the process's main thread
+ *         └─ sub-agent                  `monitorId::appId::subId`   worker threads
+ *
+ * Each tier's key extends its owner's, each is addressed through its owner, and
+ * disposal cascades downward. Personas are the first *kind* of sub-agent: the
+ * tool-less, caller-prompted `compute` grade (`SubAgentKind`).
+ *
  * Agent types:
  * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
  * - App agents: persistent per (monitor, app), handle app protocol communication
- * - Persona agents: N per (monitor, app), tool-less, prompt supplied by the app at runtime
+ * - Sub-agents: N per (monitor, app), tool-less, prompt supplied by the app at runtime
  *
  * Used by ContextPool to decouple agent lifecycle from task orchestration.
  */
@@ -41,14 +53,17 @@ function parseAppKey(key: string): { monitorId: string; appId: string } {
 }
 
 /**
- * Persona agents extend the app key with the persona's own id. The parts are never
- * parsed back out — {@link PersonaAgent} carries them as fields — so the key only
- * has to be unique, and `::` still cannot occur in any of the three components
- * (numeric monitorId, directory-name appId, {@link PERSONA_ID_RE} personaId).
+ * Sub-agents extend the app key with their own id. The parts are never parsed back
+ * out — {@link SubAgent} carries them as fields — so the key only has to be unique,
+ * and `::` still cannot occur in any of the three components (numeric monitorId,
+ * directory-name appId, {@link PERSONA_ID_RE} subId).
  */
-export function personaAgentKey(monitorId: string, appId: string, personaId: string): string {
-  return `${monitorId}::${appId}::${personaId}`;
+export function subAgentKey(monitorId: string, appId: string, subId: string): string {
+  return `${monitorId}::${appId}::${subId}`;
 }
+
+/** The `compute`-grade spelling of {@link subAgentKey}. Same function, wire-era name. */
+export const personaAgentKey = subAgentKey;
 
 /**
  * Internal pooled agent representation.
@@ -72,14 +87,110 @@ export interface AgentEntry {
   busy: boolean;
   monitorId?: string;
   appId?: string;
-  /** Persona agents only — the id its owning app spawned it under. */
-  personaId?: string;
+  /** Sub-agents only — the id its owning app spawned it under. */
+  subId?: string;
   /** Lifetime token consumption. `inputTokens` is fresh input — see {@link TokenUsage}. */
   usage: TokenUsage;
 }
 
 /**
- * A persona agent and the metadata its owning app spawned it with.
+ * One node of the roster rendered as the tree it already is — see {@link buildAgentTree}.
+ *
+ * `id` is null for a **vacant owner slot**: ownership follows the key, not the
+ * instance, so an app's sub-agents hang under `monitorId::appId` whether or not that
+ * app ever grew an agent of its own (a persona is spawned by an app's *iframe*, which
+ * needs no app agent to exist).
+ */
+export interface AgentTreeNode {
+  /** instanceId, or null when this node is an owner slot with nobody in it. */
+  id: string | null;
+  type: AgentEntry['type'];
+  label: string;
+  busy?: boolean;
+  children?: AgentTreeNode[];
+}
+
+/**
+ * Re-shape a flat roster into the ownership tree, session at the root.
+ *
+ * Nothing here is new information — every entry already carries its `monitorId`,
+ * `appId`, and `subId`, so the parentage was always in the data. This states it,
+ * which is the whole point: a reader of `yaar://session/agents` should be able to see
+ * that disposing a monitor takes its apps and their sub-agents with it.
+ *
+ * Ephemerals sit at the root: they are monitor-tier helpers keyed by nothing (the
+ * one anomaly the tree hasn't absorbed yet), so there is no owner to place them under.
+ */
+export function buildAgentTree(entries: AgentEntry[]): AgentTreeNode[] {
+  const roots: AgentTreeNode[] = [];
+  const monitorNodes = new Map<string, AgentTreeNode>();
+  const appNodes = new Map<string, AgentTreeNode>();
+
+  const kids = (node: AgentTreeNode): AgentTreeNode[] => (node.children ??= []);
+  const leaf = (e: AgentEntry): AgentTreeNode => ({
+    id: e.id,
+    type: e.type,
+    label: e.label,
+    busy: e.busy,
+  });
+  /** Fill a slot that was created vacant, keeping its place among its siblings. */
+  const occupy = (node: AgentTreeNode, e: AgentEntry): void => {
+    node.id = e.id;
+    node.label = e.label;
+    node.busy = e.busy;
+  };
+
+  // Pulled out first so monitors have somewhere to attach regardless of roster order.
+  const sessionEntry = entries.find((e) => e.type === 'session');
+  const sessionNode = sessionEntry ? leaf(sessionEntry) : undefined;
+  if (sessionNode) roots.push(sessionNode);
+  const topLevel = (): AgentTreeNode[] => (sessionNode ? kids(sessionNode) : roots);
+
+  const monitorSlot = (monitorId: string): AgentTreeNode => {
+    let node = monitorNodes.get(monitorId);
+    if (!node) {
+      node = { id: null, type: 'monitor', label: `monitor ${monitorId}` };
+      monitorNodes.set(monitorId, node);
+      topLevel().push(node);
+    }
+    return node;
+  };
+  const appSlot = (monitorId: string, appId: string): AgentTreeNode => {
+    const key = appAgentKey(monitorId, appId);
+    let node = appNodes.get(key);
+    if (!node) {
+      node = { id: null, type: 'app', label: `${appId} (monitor ${monitorId})` };
+      appNodes.set(key, node);
+      kids(monitorSlot(monitorId)).push(node);
+    }
+    return node;
+  };
+
+  for (const e of entries) {
+    if (e === sessionEntry) continue;
+    if (e.type === 'monitor' && e.monitorId) occupy(monitorSlot(e.monitorId), e);
+    else if (e.type === 'app' && e.monitorId && e.appId) occupy(appSlot(e.monitorId, e.appId), e);
+    else if (e.type === 'persona' && e.monitorId && e.appId)
+      kids(appSlot(e.monitorId, e.appId)).push(leaf(e));
+    // Ephemerals, and anything missing the ids that would place it, stay at the top.
+    else topLevel().push(leaf(e));
+  }
+
+  return roots;
+}
+
+/**
+ * The grades of sub-agent the tree can mint. Exactly one today.
+ *
+ * A grade is a *capability* menu entry, written once in `agents/profiles/` and
+ * merely **selected** at spawn — never composed by the caller. `'persona'` is the
+ * `compute` grade: receives text, returns text, holds nothing. A second kind adds a
+ * member here and a profile builder there; it does not add a pool tier.
+ */
+export type SubAgentKind = 'persona';
+
+/**
+ * A sub-agent and the metadata its owning app spawned it with.
  *
  * The prompt lives here rather than on the provider because a persona's prompt is
  * *the persona*: it is replayed as `systemPromptOverride` on every turn, and the
@@ -87,11 +198,22 @@ export interface AgentEntry {
  * used. Keeping it on the record also means a busy check, a roster row, and a
  * respawn all read the same object.
  */
-export interface PersonaAgent {
+interface SubAgentBase {
   agent: PooledAgent;
   monitorId: string;
   appId: string;
-  personaId: string;
+  /**
+   * The sub-id its owning app spawned it under — the last component of
+   * {@link subAgentKey}.
+   *
+   * Grade-neutral on purpose: a `protocol`-grade sub-agent is no more a "persona"
+   * than a persona is, and the field that identifies a node within its owner should
+   * not name one kind. The *wire* keeps `personaId`
+   * (`yaar://apps/self/agents/{personaId}`, the spawn param, every response body) —
+   * that is shipped format, and `handlers/apps/agents-resource.ts` is the one place
+   * the two spellings meet.
+   */
+  subId: string;
   /** Verbatim, caller-supplied. Replayed on every turn — see {@link buildPersonaProfile}. */
   systemPrompt: string;
   model?: string;
@@ -106,6 +228,21 @@ export interface PersonaAgent {
    */
   lastResponse?: string;
 }
+
+/** The `compute`-grade sub-agent: tool-less, prompt supplied by the app at runtime. */
+export interface PersonaAgent extends SubAgentBase {
+  kind: 'persona';
+}
+
+/**
+ * Any sub-agent, whatever its grade.
+ *
+ * A union of one today. It exists so the `kind` discriminator has somewhere to
+ * discriminate *to* when a second grade lands — code that must handle every grade
+ * says `SubAgent`, code that means the tool-less one says `PersonaAgent`, and the
+ * compiler tells the difference apart the day it matters.
+ */
+export type SubAgent = PersonaAgent;
 
 /**
  * What {@link AgentPool.spawnPersonaAgent} did.
@@ -154,26 +291,27 @@ export class AgentPool {
   private appAgents = new Map<string, PooledAgent>();
 
   /**
-   * Persona agents, keyed by `{monitorId}::{appId}::{personaId}` (see `personaAgentKey`).
+   * Sub-agents, keyed by `{monitorId}::{appId}::{subId}` (see `subAgentKey`) — the
+   * app tier's children, one key-extension down.
    *
    * Monitor-scoped for the same reason app agents are: the app that spawned them is
    * itself scoped to the monitor whose window it runs in, so two monitors running the
    * same app get two independent casts and neither can name the other's.
    */
-  private personaAgents = new Map<string, PersonaAgent>();
+  private subAgents = new Map<string, SubAgent>();
 
   /**
-   * Spawns reserved but not yet landed, keyed like {@link personaAgents}.
+   * Spawns reserved but not yet landed, keyed like {@link subAgents}.
    *
    * The reservation is written *before* the first await in `spawnPersonaAgent`, which
    * is what makes that method safe to call concurrently — a second call for the same
-   * persona finds the reservation and joins it instead of starting a second provider.
+   * sub-agent finds the reservation and joins it instead of starting a second provider.
    * `monitorId`/`appId` ride along rather than being parsed back out of the key, for
-   * the same reason {@link PersonaAgent} carries them: the key is opaque.
+   * the same reason {@link SubAgent} carries them: the key is opaque.
    */
-  private personaSpawns = new Map<
+  private subAgentSpawns = new Map<
     string,
-    { monitorId: string; appId: string; pending: Promise<PersonaAgent | null> }
+    { monitorId: string; appId: string; pending: Promise<SubAgent | null> }
   >();
 
   /** Session agent — lazy singleton for cross-monitor oversight. */
@@ -273,7 +411,7 @@ export class AgentPool {
     type: AgentEntry['type'];
     monitorId?: string;
     appId?: string;
-    personaId?: string;
+    subId?: string;
   }> {
     if (this.sessionAgent) yield { agent: this.sessionAgent, type: 'session' };
     for (const [monitorId, agent] of this.monitorAgents) {
@@ -282,13 +420,13 @@ export class AgentPool {
     for (const [key, agent] of this.appAgents) {
       yield { agent, type: 'app', ...parseAppKey(key) };
     }
-    for (const p of this.personaAgents.values()) {
+    for (const p of this.subAgents.values()) {
       yield {
         agent: p.agent,
-        type: 'persona',
+        type: p.kind,
         monitorId: p.monitorId,
         appId: p.appId,
-        personaId: p.personaId,
+        subId: p.subId,
       };
     }
     for (const agent of this.ephemeralAgents) yield { agent, type: 'ephemeral' };
@@ -562,7 +700,7 @@ export class AgentPool {
     await this.disposePersonasForMonitor(monitorId);
   }
 
-  // ── Persona agents ───────────────────────────────────────────────
+  // ── Sub-agents (today: the `persona` kind) ───────────────────────
 
   /**
    * Spawn a persona agent for one app on one monitor, or hand back the one that
@@ -573,7 +711,7 @@ export class AgentPool {
    * the whole point of the method. The shape it replaces checked existence and the
    * cap in the verb handler and *then* awaited a provider, so two spawns arriving in
    * one tick both passed both checks: the second overwrote the first in
-   * `personaAgents`, and the first became an agent in no collection at all —
+   * `subAgents`, and the first became an agent in no collection at all —
    * unreachable by every dispose path and by `cleanup()`, which walks `allAgents()`.
    * It held a provider process and a `MAX_AGENTS` slot until the process died. An app
    * spawning its cast with `Promise.all` is the ordinary way to land there, and
@@ -589,15 +727,15 @@ export class AgentPool {
     personaId: string,
     options: { systemPrompt: string; model?: string; max: number },
   ): Promise<PersonaSpawnResult> {
-    const key = personaAgentKey(monitorId, appId, personaId);
+    const key = subAgentKey(monitorId, appId, personaId);
 
-    const existing = this.personaAgents.get(key);
+    const existing = this.subAgents.get(key);
     if (existing) return { status: 'reused', record: existing };
 
     // A spawn already in flight for this id: join it rather than start a second one.
     // The joiner gets `reused`, which is the same answer it would have got had it
     // arrived one tick later and found the record in place.
-    const inFlight = this.personaSpawns.get(key);
+    const inFlight = this.subAgentSpawns.get(key);
     if (inFlight) {
       const record = await inFlight.pending;
       return record ? { status: 'reused', record } : { status: 'no-slot' };
@@ -606,18 +744,18 @@ export class AgentPool {
     if (this.countPersonas(monitorId, appId) >= options.max) return { status: 'at-capacity' };
 
     const pending = this.createPersonaAgent(monitorId, appId, personaId, options);
-    this.personaSpawns.set(key, { monitorId, appId, pending });
+    this.subAgentSpawns.set(key, { monitorId, appId, pending });
     try {
       const record = await pending;
       return record ? { status: 'created', record } : { status: 'no-slot' };
     } finally {
-      this.personaSpawns.delete(key);
+      this.subAgentSpawns.delete(key);
     }
   }
 
   /**
    * The spawn itself. Only ever called with a reservation held, which is what makes
-   * the `personaAgents.set` below the only writer for that key.
+   * the `subAgents.set` below the only writer for that key.
    *
    * Returns null when the global limiter has no slot — the caller surfaces that to
    * the app as a clean "agent limit reached" rather than a crash, since a room of
@@ -638,15 +776,16 @@ export class AgentPool {
     }
 
     const record: PersonaAgent = {
+      kind: 'persona',
       agent,
       monitorId,
       appId,
-      personaId,
+      subId: personaId,
       systemPrompt: options.systemPrompt,
       ...(options.model ? { model: options.model } : {}),
       createdAt: Date.now(),
     };
-    this.personaAgents.set(personaAgentKey(monitorId, appId, personaId), record);
+    this.subAgents.set(subAgentKey(monitorId, appId, personaId), record);
     console.log(
       `[AgentPool] Persona "${personaId}" spawned for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
     );
@@ -656,7 +795,7 @@ export class AgentPool {
   /** Live personas plus reservations — the number `personas.max` is measured against. */
   private countPersonas(monitorId: string, appId: string): number {
     let count = this.listPersonaAgents(monitorId, appId).length;
-    for (const spawn of this.personaSpawns.values()) {
+    for (const spawn of this.subAgentSpawns.values()) {
       if (spawn.monitorId === monitorId && spawn.appId === appId) count++;
     }
     return count;
@@ -666,24 +805,24 @@ export class AgentPool {
    * Wait out the reservations a teardown is about to sweep past.
    *
    * A spawn still inside `acquireProvider` is in no collection yet, so a dispose
-   * sweep walks right by it and the persona lands in `personaAgents` moments after
+   * sweep walks right by it and the persona lands in `subAgents` moments after
    * the app that owns it stopped existing — alive, unreferenced, and holding a slot
    * until the session ends. Settling first means the sweep sees it.
    */
   private async settlePersonaSpawns(
     match: (spawn: { monitorId: string; appId: string }) => boolean,
   ): Promise<void> {
-    const pending = [...this.personaSpawns.values()].filter(match).map((s) => s.pending);
+    const pending = [...this.subAgentSpawns.values()].filter(match).map((s) => s.pending);
     if (pending.length > 0) await Promise.allSettled(pending);
   }
 
   getPersonaAgent(monitorId: string, appId: string, personaId: string): PersonaAgent | undefined {
-    return this.personaAgents.get(personaAgentKey(monitorId, appId, personaId));
+    return this.subAgents.get(subAgentKey(monitorId, appId, personaId));
   }
 
   /** Every persona one app owns on one monitor, oldest first. */
   listPersonaAgents(monitorId: string, appId: string): PersonaAgent[] {
-    return [...this.personaAgents.values()]
+    return [...this.subAgents.values()]
       .filter((p) => p.monitorId === monitorId && p.appId === appId)
       .sort((a, b) => a.createdAt - b.createdAt);
   }
@@ -708,7 +847,7 @@ export class AgentPool {
    */
   runPersonaTurn(record: PersonaAgent, content: string, messageId: string): Promise<void> {
     return record.agent.session.handleMessage(content, {
-      role: personaRole(record.appId, record.personaId),
+      role: personaRole(record.appId, record.subId),
       source: monitorSource(record.monitorId),
       messageId,
       monitorId: record.monitorId,
@@ -728,11 +867,11 @@ export class AgentPool {
 
   /** Dispose one persona. Returns false when the app never spawned it. */
   async disposePersonaAgent(monitorId: string, appId: string, personaId: string): Promise<boolean> {
-    const key = personaAgentKey(monitorId, appId, personaId);
-    const record = this.personaAgents.get(key);
+    const key = subAgentKey(monitorId, appId, personaId);
+    const record = this.subAgents.get(key);
     if (!record) return false;
 
-    this.personaAgents.delete(key);
+    this.subAgents.delete(key);
     await this.disposeAgent(
       record.agent,
       `Persona "${personaId}" disposed for ${appId} on monitor ${monitorId}`,
@@ -745,7 +884,7 @@ export class AgentPool {
     await this.settlePersonaSpawns((s) => s.monitorId === monitorId && s.appId === appId);
     const personas = this.listPersonaAgents(monitorId, appId);
     for (const p of personas) {
-      await this.disposePersonaAgent(monitorId, appId, p.personaId);
+      await this.disposePersonaAgent(monitorId, appId, p.subId);
     }
     return personas.length;
   }
@@ -753,9 +892,9 @@ export class AgentPool {
   /** Dispose every persona on a monitor, whichever app owns it. */
   async disposePersonasForMonitor(monitorId: string): Promise<void> {
     await this.settlePersonaSpawns((s) => s.monitorId === monitorId);
-    const doomed = [...this.personaAgents.values()].filter((p) => p.monitorId === monitorId);
+    const doomed = [...this.subAgents.values()].filter((p) => p.monitorId === monitorId);
     for (const p of doomed) {
-      await this.disposePersonaAgent(monitorId, p.appId, p.personaId);
+      await this.disposePersonaAgent(monitorId, p.appId, p.subId);
     }
   }
 
@@ -927,7 +1066,7 @@ export class AgentPool {
    */
   listAgents(): AgentEntry[] {
     const entries: AgentEntry[] = [];
-    for (const { agent, type, monitorId, appId, personaId } of this.allAgents()) {
+    for (const { agent, type, monitorId, appId, subId } of this.allAgents()) {
       const id = agent.instanceId;
       const busy = this.isBusy(agent);
       const usage = agent.session.getUsage();
@@ -953,11 +1092,11 @@ export class AgentPool {
           entries.push({
             id,
             type,
-            label: `${personaId} · ${appId} (monitor ${monitorId})`,
+            label: `${subId} · ${appId} (monitor ${monitorId})`,
             busy,
             monitorId,
             appId,
-            personaId,
+            subId,
             usage,
           });
           break;
@@ -967,6 +1106,17 @@ export class AgentPool {
       }
     }
     return entries;
+  }
+
+  /**
+   * The same roster, nested by ownership — see {@link buildAgentTree}.
+   *
+   * `listAgents()` stays flat because that is what every existing consumer indexes,
+   * interrupts, and filters over. This is the other view of the identical data, for
+   * the reader who needs to see whose child is whose.
+   */
+  agentTree(): AgentTreeNode[] {
+    return buildAgentTree(this.listAgents());
   }
 
   // ── Stats ──────────────────────────────────────────────────────────
@@ -993,7 +1143,7 @@ export class AgentPool {
       busyAgents: busy,
       monitorAgents: this.monitorAgents.size,
       appAgents: this.appAgents.size,
-      personaAgents: this.personaAgents.size,
+      personaAgents: this.subAgents.size,
       ephemeralAgents: this.ephemeralAgents.size,
       sessionAgent: this.sessionAgent !== null,
       usage,
@@ -1008,7 +1158,7 @@ export class AgentPool {
   async cleanup(): Promise<void> {
     const limiter = getAgentLimiter();
     // Before the snapshot: a persona still mid-spawn is in no collection, so it would
-    // land in `personaAgents` after the clear below and outlive the pool that owns it.
+    // land in `subAgents` after the clear below and outlive the pool that owns it.
     await this.settlePersonaSpawns(() => true);
     // Snapshot before the first await: the two phases must walk the same roster.
     const allAgents = [...this.allAgents()].map((e) => e.agent);
@@ -1027,7 +1177,7 @@ export class AgentPool {
     this.sessionAgent = null;
     this.monitorAgents.clear();
     this.appAgents.clear();
-    this.personaAgents.clear();
+    this.subAgents.clear();
     this.ephemeralAgents.clear();
     for (const id of this.agentIds) {
       getSessionHub().unregisterAgent(id);

@@ -240,10 +240,7 @@ describe('persona lifecycle in AgentPool', () => {
     expect(alice!.agent.instanceId).not.toBe(bob!.agent.instanceId);
 
     expect(pool.getPersonaAgent('0', 'chitchats', 'alice')?.systemPrompt).toBe('You are alice.');
-    expect(pool.listPersonaAgents('0', 'chitchats').map((p) => p.personaId)).toEqual([
-      'alice',
-      'bob',
-    ]);
+    expect(pool.listPersonaAgents('0', 'chitchats').map((p) => p.subId)).toEqual(['alice', 'bob']);
   });
 
   it('scopes personas to their app and monitor', async () => {
@@ -288,7 +285,7 @@ describe('persona lifecycle in AgentPool', () => {
     expect(entry?.type).toBe('persona');
     expect(entry?.appId).toBe('chitchats');
     expect(entry?.monitorId).toBe('0');
-    expect(entry?.personaId).toBe('alice');
+    expect(entry?.subId).toBe('alice');
     expect(pool.getStats().personaAgents).toBe(1);
     // The roster is what `interruptByIdOrRole` and the monitor lookup read from.
     expect(pool.hasAgent(alice!.agent.instanceId)).toBe(true);

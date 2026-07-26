@@ -156,8 +156,9 @@ SessionHub (singleton registry)
         │   ├── Monitor Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
         │   ├── App Agents: Map<appId, PooledAgent>  ← persistent per app
-        │   └── Persona Agents: Map<monitorId::appId::personaId, PersonaAgent>
-        │        ← N per (monitor, app); tool-less, prompt supplied by the app at runtime
+        │   └── Sub-agents: Map<monitorId::appId::subId, SubAgent>
+        │        ← N per (monitor, app); today's sole kind is `persona` — tool-less,
+        │          prompt supplied by the app at runtime
         ├── ContextTape (hierarchical message history)
         │   ├── [main] user/assistant messages
         │   └── [window:id] branch messages
@@ -258,6 +259,18 @@ there would mean *every* tool. They bypass `ContextPool` entirely (no tape, no q
 scheduler serializes them) and are reclaimed when the app's last window on the monitor closes, when the
 monitor is removed, or on explicit `delete`. See `docs/proposals/persona_agents_proposal.md` and
 `apps/personas` (Round Table) for the reference consumer.
+
+In the pool a persona is a **sub-agent**: the `kind: 'persona'` member of `SubAgent`, living in
+`subAgents` under `subAgentKey(monitorId, appId, subId)`. That key extends the app agent's, which
+extends the monitor's — the four collections are one tree (session → monitor → app → sub-agent),
+addressed through the owner and torn down with it. `buildAgentTree()` renders the flat roster in
+that shape, and `list('yaar://session/agents')` returns both views (`agents` flat, `tree` nested;
+a `tree` node with `id: null` is an owner slot nobody occupies — an app whose personas exist but
+whose own agent was never needed). In the pool the id field is the grade-neutral `subId`; the
+**wire** keeps `personaId` (URI segment, spawn param, response bodies), and
+`handlers/apps/agents-resource.ts` is the one place the two spellings meet — read `p.subId`, emit
+`personaId`. See [`docs/proposals/agent_hierarchy_proposal.md`](../../docs/proposals/agent_hierarchy_proposal.md)
+for the four laws every new node must satisfy.
 
 ## REST API
 

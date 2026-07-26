@@ -73,10 +73,17 @@ const DESCRIBE = {
   },
 };
 
-/** What a persona looks like over the wire. Same shape from `list` and `read`. */
+/**
+ * What a persona looks like over the wire. Same shape from `list` and `read`.
+ *
+ * This function, and the `personaId` reads below it, are where the pool's
+ * grade-neutral `subId` becomes the wire's `personaId`. The translation lives here
+ * on purpose: `personaId` is shipped format that a second grade will not change, and
+ * a field named for one kind has no business inside the pool's record.
+ */
 function personaView(p: PersonaAgent, pool: AgentPool): Record<string, unknown> {
   return {
-    personaId: p.personaId,
+    personaId: p.subId,
     instanceId: p.agent.instanceId,
     streamUri: buildAgentStreamUri(p.agent.instanceId),
     busy: pool.isPersonaBusy(p),
@@ -225,7 +232,7 @@ export async function invokePersonas(
       const record = requirePersona(scope);
       if ('content' in record) return record;
       await record.agent.session.interrupt();
-      return okJson({ personaId: record.personaId, interrupted: true });
+      return okJson({ personaId: record.subId, interrupted: true });
     }
     default:
       return error(`Unknown action "${action}". Use "spawn", "message", or "interrupt".`);
@@ -300,8 +307,8 @@ async function message(scope: Scope, payload?: Record<string, unknown>): Promise
   // the envelope so the caller can branch without parsing the sentence.
   if (scope.pool().isPersonaBusy(record)) {
     return {
-      ...error(`Persona "${record.personaId}" is still answering. Interrupt it or wait for done.`),
-      structuredContent: { busy: true, personaId: record.personaId },
+      ...error(`Persona "${record.subId}" is still answering. Interrupt it or wait for done.`),
+      structuredContent: { busy: true, personaId: record.subId },
     };
   }
 
@@ -314,12 +321,12 @@ async function message(scope: Scope, payload?: Record<string, unknown>): Promise
     .pool()
     .runPersonaTurn(record, content, taskId)
     .catch((err: unknown) => {
-      console.error(`[personas] turn failed for ${record.appId}/${record.personaId}:`, err);
+      console.error(`[personas] turn failed for ${record.appId}/${record.subId}:`, err);
     });
 
   return okJson({
     taskId,
-    personaId: record.personaId,
+    personaId: record.subId,
     instanceId: record.agent.instanceId,
     streamUri: buildAgentStreamUri(record.agent.instanceId),
   });
