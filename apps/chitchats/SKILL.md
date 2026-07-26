@@ -45,7 +45,9 @@ her", so a second-person document fights the frame instead of filling it.
   prompt.** The subtitles and their present-day thoughts ride in the character's `recall`
   tool, and the chunk body arrives only when the character opens it — which is what lets a
   character have more history than would fit in a prompt replayed every turn. Each chunk
-  must read on its own: no "as mentioned above", no reading order.
+  must read on its own: no "as mentioned above", no reading order. (`**지금 드는 생각:**` is
+  the desktop app's marker for that same line and is parsed identically — leave it as it is
+  in a character ported from there, such as 프리렌.)
 - **`recentEvents`** (`recent_events.md`) — **leave this alone.** The character writes it
   itself, one date-stamped line per turn it decided to remember, through its `memorize`
   tool. The tail of it is in every prompt, which is how anything survives the window

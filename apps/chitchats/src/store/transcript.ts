@@ -48,6 +48,12 @@ export async function clearTranscript(): Promise<void> {
  * This is also where a room stops being N monologues: it is called per speaker *during*
  * the tape, after the previous speaker's line has already landed in the transcript, so
  * each character genuinely hears the one before it.
+ *
+ * The `<conversation_so_far>` wrapper and the closing instruction are the desktop app's
+ * `conversation_context` block (`../chitchats-public/backend/providers/claude/prompts.yaml`).
+ * The instruction is deliberately *not* "do not narrate": the system prompt asks for one
+ * or two action beats in italics, and a turn instruction that forbids them would make the
+ * character disobey one of the two on every single turn.
  */
 export function turnPrompt(character: Character, sinceSeq: number): string {
   const fresh = transcript().filter((m) => m.seq > sinceSeq && m.speaker !== character.characterId);
@@ -61,8 +67,10 @@ export function turnPrompt(character: Character, sinceSeq: number): string {
       : fresh.map((m) => `${label(m.speaker)}: ${m.text}`).join('\n');
 
   return (
-    `${heard}\n\n` +
-    `Reply as ${character.name}, in one short paragraph. Do not narrate, do not prefix ` +
-    `your name. If you have nothing worth adding, call the skip tool instead of saying so.`
+    `<conversation_so_far>\n${heard}\n</conversation_so_far>\n\n` +
+    `Reply as ${character.name}: one conversational turn, at most a couple of sentences ` +
+    `and one or two action beats. Do not prefix your name, and do not reveal your ` +
+    `internal thinking. If you have nothing worth adding, call the skip tool instead of ` +
+    `saying so.`
   );
 }

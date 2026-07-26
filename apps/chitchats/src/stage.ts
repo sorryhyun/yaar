@@ -7,7 +7,7 @@
  * The views call in here; nothing in here reaches back out to a view.
  */
 
-import { showToast, errMsg } from '@bundled/yaar';
+import { appStorage, showToast, errMsg } from '@bundled/yaar';
 
 import {
   rooms,
@@ -27,7 +27,7 @@ import { characterTools, hasIdentity } from './persona';
 import { live, spawn, dispose, roster } from './agents';
 import { running, planFor, runTape, stopTape } from './tape';
 import { max, setMax, setEditing, setEditingDoc, setBooting } from './ui/state';
-import { STARTER_ROOM, STARTER_CAST } from './starter';
+import { STARTER_ROOMS } from './starter';
 
 // ── Stage management ────────────────────────────────────────────────
 
@@ -166,17 +166,56 @@ export async function newRoom() {
 
 // ── Boot ─────────────────────────────────────────────────────────
 
+/**
+ * Which starter rooms have already been offered, one `roomId` per line.
+ *
+ * A plain "seed only when the library is empty" check can only ever seed a first-run
+ * user, so a room added to `STARTER_ROOMS` after release would never reach anybody who
+ * had opened the app once. The ledger makes each room's offer independent: it is seeded
+ * the first time its id shows up here and never again — which is also what keeps a room
+ * the user deliberately deleted from growing back on the next boot.
+ */
+const SEEDED_ROOMS_FILE = 'seeded-rooms.txt';
+
+/**
+ * Put any starter room the user has not been offered yet into the library.
+ *
+ * A room whose id already exists is recorded and skipped rather than written: an
+ * upgrading user's Green Room holds *their* Mara, and `addCharacter` on an existing id
+ * rewrites that character's documents.
+ */
+async function seedStarterRooms(): Promise<void> {
+  const ledger = await appStorage.read(SEEDED_ROOMS_FILE).catch(() => '');
+  const seeded = new Set(
+    ledger
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+
+  const fresh = STARTER_ROOMS.filter((room) => !seeded.has(room.roomId));
+  if (fresh.length === 0) return;
+
+  const known = new Set(rooms().map((room) => room.roomId));
+  for (const { cast, ...room } of fresh) {
+    seeded.add(room.roomId);
+    if (known.has(room.roomId)) continue;
+
+    await createRoom(room);
+    for (const person of cast) {
+      await addCharacter(person);
+      await castInRoom(room.roomId, person.characterId);
+    }
+  }
+
+  // Last, so a seed that threw halfway is retried rather than recorded as delivered.
+  await appStorage.save(SEEDED_ROOMS_FILE, `${[...seeded].join('\n')}\n`);
+}
+
 export async function boot() {
   try {
     await loadLibrary();
-
-    if (rooms().length === 0) {
-      await createRoom(STARTER_ROOM);
-      for (const person of STARTER_CAST) {
-        await addCharacter(person);
-        await castInRoom(STARTER_ROOM.roomId, person.characterId);
-      }
-    }
+    await seedStarterRooms();
 
     const state = await roster();
     setMax(state.max);
