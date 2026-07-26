@@ -12,6 +12,7 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
+import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { beginRequest, endRequest } from './protocol-log.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
@@ -208,7 +209,11 @@ export async function handleAppQuery(
     if (response.kind !== 'manifest') return error('Unexpected response kind.');
     if (response.error) return error(response.error);
     if (response.manifest) enrichManifestWithUris(response.manifest, win.id, windowState.handleMap);
-    return wrapAppValue(response.manifest);
+    // The live manifest comes from the iframe, so the disk-side filter in
+    // `discovery.ts` never saw it: strip persona-audience commands here too, for the
+    // same reason — they are described to the sub-agent in character voice at spawn,
+    // and an app agent reading that description reads the wrong script.
+    return wrapAppValue(response.manifest ? withoutPersonaCommands(response.manifest) : null);
   }
 
   const outcome = await request(key, { kind: 'query', stateKey }, deadlines.appQueryMs);

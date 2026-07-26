@@ -2,7 +2,7 @@
 
 **Status:** Redesign of [`persona_agents_proposal.md`](./persona_agents_proposal.md) around an
 explicit hierarchy. Phase 1 of that proposal (the persona primitive) is landed and is, in
-this document's terms, the `compute` grade of app-tier sub-agents — nothing shipped changes.
+this document's terms, a tool-less app-tier sub-agent — nothing shipped changes.
 This document names the tree the code already runs, states its laws, and specifies the shape
 any future multi-agent capability must take, so the next request ("can my app have a judge
 with read access?", "can the monitor spawn helpers?") is answered by placing a node in the
@@ -12,8 +12,14 @@ tree rather than by designing a new pool tier from scratch.
 |---|---|
 | Phase 0 — docs: the four laws, the tree, the triage rule | **landed** |
 | Phase 1 — `kind` discriminator, `SubAgent`/`subAgents`/`subId`, tree-shaped roster | **landed** |
-| Phase 2 — `subagents` manifest alias, `grade` spawn param, the `protocol` grade | not started; gated on a consumer |
+| Phase 2 — `subagents` manifest alias, `grade` spawn param, the `protocol` grade | landed, then **collapsed** — see [Amendment](#amendment-the-menu-collapses-to-one-entry) |
 | Phase 3 — ephemeral fold-in, budget split (`MAX_SUBAGENTS`) | not started; opportunistic |
+
+> **Read the [Amendment](#amendment-the-menu-collapses-to-one-entry) before Part 2.** The grade
+> menu shipped and was then reduced to a single capability set: the two grades differed only
+> in whether the tool list was empty, so `grade` and the `grades` manifest field are gone.
+> Part 2 below is kept as the record of why the menu was built and what it cost — it no longer
+> describes the code.
 
 **Scope:** conceptual reframing (docs + light mechanical renames in `packages/server`);
 optional generalization phases gated on real consumers.
@@ -31,9 +37,9 @@ session agent                        (1 per session)     cross-monitor oversight
 
 Each tier's pool key extends its owner's key (`monitorId` → `monitorId::appId` →
 `monitorId::appId::subId`), each tier is addressed *through* its owner, and disposal cascades
-downward. Personas are the first **kind** of sub-agent — the tool-less, caller-prompted,
-`compute` grade. The redesign makes the tree the unit of design: one set of laws, a fixed
-menu of capability grades, and a slot at every tier for future growth.
+downward. Personas are the tool-less, caller-prompted case of a sub-agent. The redesign makes
+the tree the unit of design: one set of laws, one place capabilities are written, and a slot at
+every tier for future growth.
 
 In the OS metaphor the original proposal opened: processes got threads. This document writes
 down the threading model.
@@ -53,8 +59,9 @@ different feature.
 
 2. **Descent never adds capability.** A child's capability set is a subset of its owner's,
    and each step down strips more than it keeps. The app agent holds the app's principal and
-   its full toolset; a sub-agent holds no principal and whatever its *grade* leaves — for the
-   shipped `compute` grade, nothing. Cross-app grants (`controls`, `direct_message`) never
+   its full toolset; a sub-agent holds no principal and, at most, a named subset of the
+   protocol commands its owner could already issue — often nothing at all. Cross-app grants
+   (`controls`, `direct_message`) never
    descend: they are grants to the process's main thread, not to the process.
 
 3. **Prompts descend toward runtime; capabilities stay at install time.** Going down the
@@ -81,14 +88,47 @@ different feature.
 | session | — (singleton) | constant | full session toolset | first message | `sessionAgent` |
 | monitor | `monitorId` | constant + `HINT.md` injections | monitor toolset | monitor creation | `monitorAgents` |
 | app | `monitorId::appId` | install-time disk (`AGENTS.md`/`SKILL.md`) | `describe`/`query`/`command`/`relay` (+`direct_message`, +`controls`), app principal | first window interaction | `appAgents` |
-| sub-agent | `monitorId::appId::subId` | **runtime, verbatim** | grade menu (today: `compute` = none) | owning app, `yaar://apps/self/agents` | `subAgents` |
+| sub-agent | `monitorId::appId::subId` | **runtime, verbatim** | one channel to its own iframe, under app-declared tool names — or nothing | owning app, `yaar://apps/self/agents` | `subAgents` |
 
 One anomaly the table exposes: **ephemeral agents** are monitor-tier helpers that predate
 the model — spawned only as a busy-monitor fallback (`createEphemeral()`, called solely from
 `monitor-task-processor.ts`), reusing the monitor's own profile, keyed by nothing. In tree
-terms they are monitor-tier sub-agents of a degenerate grade ("same as owner"). Folding them
+terms they are monitor-tier sub-agents with a degenerate capability set ("same as owner"). Folding them
 in is Phase 3 material, not v1 — but the tree already has their slot, which is the argument
 for the tree.
+
+## Amendment: the menu collapses to one entry
+
+Phase 2 shipped a two-entry grade menu (`compute`, `protocol`) and a `grade` spawn param
+gated on a `grades` list in the manifest. It has since been reduced to **one capability set**:
+`grade`, `grades`, `SubAgentKind`, `GRADE_TO_KIND`, and the separate `compute` profile
+(`agents/profiles/persona.ts`) are gone. A sub-agent is spawned with `tools` or without them,
+and `agents/profiles/sub-agent.ts` holds the single profile builder.
+
+**Why.** The two grades were the same profile with a different argument. `buildPersonaProfile`
+returned `allowedTools: []`; `buildProtocolSubAgentProfile` returned
+`tools.map(subAgentToolName)`, which for an empty list *is* `[]`. Every other field matched.
+The menu was therefore a menu of one function with one parameter, and the `grade` param, the
+`grades` manifest field, the kind discriminator, the two role prefixes, and the two spawn
+paths existed to select between two values of that parameter. No shipping app passed `grade`.
+
+**What was traded away, explicitly.** The manifest no longer records whether an app's
+sub-agents can have hands. `"personas": { "max": 4 }` used to parse to `grades: ["compute"]`
+and made "this app's characters are tool-less" checkable from app.json alone; now `{ max: 4 }`
+permits both, and `apps/personas` (Round Table, still tool-less in fact) is *permitted* to
+declare tools at spawn. Law 3 survives — capabilities are still written once in
+`agents/profiles/` and never composed at the call site — but its install-time half is now
+enforced only by the shape of what a caller may pass (names over one bridge), not by a
+per-app declaration. If a future app needs "characters that provably cannot act", the way
+back is not to restore grades but to make the manifest field a **tool allowlist**, which is
+the thing an app author would actually want to write.
+
+**What is unchanged.** The reach itself, and every law. A sub-agent still holds no principal,
+no YAAR verbs, and no cross-app grants; its tools are still `mcp__subagent__*` only, still
+land in its owning app's own iframe as `persona:{name}`, still carry a server-stamped
+`personaId`, and are still a strict subset of what the app agent above it could issue. The
+`app-persona-` role prefix is now the single one, so `isSubAgentRole` tests one string and
+the restore filter behaves exactly as before.
 
 ## Design
 
@@ -98,18 +138,14 @@ The landed `PersonaAgent` record already carried `{monitorId, appId, personaId}`
 with an opaque key — the exact record shape the multi-window proposal §2 wants. Part 1 was
 recognition, not construction:
 
-- `SubAgent` is the union of sub-agent kinds; `PersonaAgent` is its sole member, an
-  interface carrying `kind: 'persona'` (the `compute` grade). Both are exported from
-  `agents/agent-pool.ts`; every existing call site still says `PersonaAgent` and compiles
-  unchanged. `SubAgentKind` is the grade menu's type.
+- `SubAgent` is the record type, in `agents/agent-pool.ts`. (Phase 2 briefly made it a
+  union discriminated by `kind`; the Amendment collapsed it back to one interface.)
 - `personaAgents` map → `subAgents`, `personaSpawns` → `subAgentSpawns` — same key scheme,
-  same atomic spawn-reservation machinery. `personaAgentKey` → `subAgentKey`, with the old
-  name kept as an exported alias (the persona suite imports it).
-- Method names on the pool (`spawnPersonaAgent`, `runPersonaTurn`, …) are unchanged:
-  they are the `compute` grade's API, and a second grade adds siblings rather than
-  renaming these.
-- The record's id field is `subId`, not `personaId` — grade-neutral, since a
-  `protocol`-grade sub-agent is no more a "persona" than the field it would inherit. The
+  same atomic spawn-reservation machinery. `personaAgentKey` → `subAgentKey`.
+- Pool methods are `spawnSubAgent`, `runSubAgentTurn`, `getSubAgent`, `listSubAgents`,
+  `disposeSubAgent(sForApp|sForMonitor)`. The `…Persona…` spellings were kept as one-line
+  aliases through Phase 2 and removed with the Amendment, having acquired no callers.
+- The record's id field is `subId`, not `personaId`. The
   roster (`AgentEntry`) follows suit. The **wire** keeps `personaId` everywhere
   (`yaar://apps/self/agents/{personaId}`, the spawn param, every response body), and
   `handlers/apps/agents-resource.ts` is the single place the two spellings meet.
@@ -129,7 +165,7 @@ reading the renamed record field (`p.subId`, `entry?.subId`); every behavioral a
 — spawn/reuse/at-capacity/no-slot, tool-lessness, ownership refusals, teardown — is
 untouched, and the wire-facing assertions still say `personaId`.
 
-### Part 2 — the grade menu (the actual generalization; build on demand) — not started
+### Part 2 — the grade menu (the actual generalization) — **landed, then superseded**
 
 The manifest generalizes, with the shipped field as a permanent alias:
 
@@ -139,7 +175,10 @@ The manifest generalizes, with the shipped field as a permanent alias:
 
 `"personas": { "max": N }` ≡ `"subagents": { "max": N, "grades": ["compute"] }`, forever —
 it is shipped wire format. Both parse in `features/apps/discovery.ts`, bundled-only, exactly
-as today.
+as today, and normalize to **one** internal field (`AppMeta.subagents`) so no consumer has to
+know which spelling an app used. An unknown grade name is dropped rather than rejected: a
+manifest on disk outlives any one YAAR build, and naming a grade this build doesn't have
+should cost that grade, not the app's whole cast.
 
 Each grade is one profile builder in `agents/profiles/` — written once, at install time of
 *YAAR*, not of the app. Spawn selects by name and refuses grades absent from the manifest:
@@ -147,7 +186,7 @@ Each grade is one profile builder in `agents/profiles/` — written once, at ins
 | Grade | Hands | Principal | Gate | Status |
 |---|---|---|---|---|
 | `compute` | none — receives text, returns text | none | bundled + manifest | **shipped** (today's persona) |
-| `protocol` | exactly one channel: dispatch to the **owning app's iframe** through the app-protocol bridge, dressed as app-defined tools (`skip`, `excuse`, `recall`, `memorize`, …) | none | bundled + manifest | designed below; first named consumer is the ChitChats port (Phase 3's `[[skip]]` convention and memory tools) |
+| `protocol` | exactly one channel: dispatch to the **owning app's iframe** through the app-protocol bridge, dressed as app-defined tools (`skip`, `excuse`, `recall`, `memorize`, …) | none | bundled + manifest | **shipped** (`profiles/sub-agent.ts` + `mcp/sub-agent/`); no app uses it yet |
 
 Rules that keep law 2 structural rather than aspirational:
 
@@ -187,11 +226,16 @@ invoke('yaar://apps/self/agents', {
   to the *app agent* in operator voice ("`persona_memorize` — write a character memory
   row"); the sub-agent needs character voice ("Save a lasting fact you learned about
   someone"). One description string cannot serve both without being wrong for one of them.
-  The handler side still lives in the protocol (the iframe registers
-  `persona:{toolName}` commands, or commands flagged `audience: "persona"`), and
-  `describe` hides that flag's entries from the app agent's manifest so nobody reads the
-  wrong script. The server stamps `personaId` into every dispatched payload — the iframe
-  must know *which* character is remembering.
+  The handler side still lives in the protocol: the iframe registers `persona:{toolName}`
+  commands, and `features/apps/persona-commands.ts` hides those entries from every
+  agent-facing manifest — at the disk read (`discovery.ts`, which covers `describe`, the
+  skill doc, and the HINT/manifest injections) and at the live manifest query
+  (`handleAppQuery`). The prefix carries the audience flag rather than an
+  `audience: "persona"` field on `AppCommandDescriptor`: it needs no shared-type,
+  compiler, or SDK change, and the filter is one predicate instead of a schema. The
+  server stamps `personaId` into every dispatched payload, **last**, so it wins over an
+  argument of the same name — the iframe must know which character is remembering, and a
+  model that can name one could otherwise write another's.
 - **Why tools instead of output sentinels.** The original proposal's `[[skip]]` is a parse
   hoping to be a signal; a `skip` tool *is* the signal. And `recall` cannot be a sentinel
   at all — it needs a result fed back into the turn mid-generation, which only the tool
@@ -207,13 +251,60 @@ invoke('yaar://apps/self/agents', {
   verbs would be a different animal and would carry a user prompt — see open question 1.)
 - **Failure shape.** No open window → the tool call returns an error result and the turn
   continues; the bridge timeout applies as it does for the app agent's `command`. Caps
-  mirror the prompt guard: a max tool count and a max chars across names, descriptions,
-  and schemas (`MAX_PERSONA_PROMPT_CHARS`'s sibling).
+  mirror the prompt guard: `MAX_SUB_AGENT_TOOLS` (12) and `MAX_SUB_AGENT_TOOL_CHARS`
+  (6 000) across names, descriptions, and parameter descriptions —
+  `MAX_PERSONA_PROMPT_CHARS`'s siblings, and for the same reason (tool definitions are
+  replayed every turn). Unlike the app agent's cross-app path, a tool call **never
+  launches** a window: "the app isn't on screen" is not an invitation to put it there
+  because a character decided to remember something.
 - **Subsumes the earlier sketches.** A previous draft of this table carried `reader` and
   `worker` grades that borrowed subsets of YAAR verbs. Every use case they served ("read
   my own state", "operate my own window") is expressible as an app-defined tool with the
   iframe as executor, at strictly smaller YAAR surface — the app writes the handler and
   decides what "operate" means. They are dropped from the menu.
+
+#### What Phase 2 actually landed, where it differs from the sketch above
+
+*(Superseded by the [Amendment](#amendment-the-menu-collapses-to-one-entry) — this subsection
+describes the two-grade code as it shipped, not as it stands.)*
+
+- **The grade menu is one module.** `agents/profiles/sub-agent.ts` holds the grade
+  names, the grade→kind map, the tool-spec parser and its caps, the `protocol` role
+  prefix, and both profile builders. `buildSubAgentProfile(record)` is the menu lookup,
+  and **every** sub-agent turn goes through it (`AgentPool.runSubAgentTurn` reads the
+  turn's `allowedTools` and prompt off the profile). The menu is therefore load-bearing
+  on every turn rather than documentation: the pool has no branch that assembles a tool
+  list, and a new grade cannot be reached without adding a case to that switch.
+- **Two spellings, one mapping.** The wire says `grade` (`compute` | `protocol`); the
+  pool record says `kind` (`persona` | `protocol`). They differ for exactly one entry,
+  because "persona" is shipped vocabulary — the URI segment, the spawn param, the
+  `app-persona-` role prefix. `GRADE_TO_KIND`/`gradeOfKind` are the only translation,
+  next to `subId`↔`personaId` in spirit but not in place (that one stays in
+  `handlers/apps/agents-resource.ts`).
+- **A `subagent` MCP namespace.** The `protocol` grade needs per-agent tools, and MCP
+  servers are built per (namespace, client session) inside `runWithAgentContext` — so
+  `mcp/sub-agent/` resolves the caller's record (`AgentPool.findSubAgentForAgent`, keyed
+  off the agent *token*, never a claim) and registers exactly that record's tools. It is
+  the only namespace in YAAR whose tool list depends on who is connecting; for everyone
+  else it registers nothing, and nobody else's allowlist names it, so nobody else even
+  connects it. `CORE_SERVERS` grew one entry.
+- **A sibling role prefix, registered with all three consumers.** `app-protocol-`
+  (law 3's requirement, met literally): `assembleSystemPromptForRole` returns it verbatim
+  because it is under `app-`, `principalRole()` files it in the `app` tier, and the
+  restore filter now asks `isSubAgentRole` — which knows both prefixes — where it used to
+  ask `isPersonaRole`. A grade whose turns leaked into the monitor's restored context
+  would replay a room's improv as the user talking.
+- **The pool generalized without renaming its API.** `spawnSubAgent`, `runSubAgentTurn`,
+  `getSubAgent`, `listSubAgents`, `disposeSubAgent(sForApp|sForMonitor)` are the
+  grade-generic methods; the `…Persona…` names remain as one-line spellings of them, so
+  the shipped persona suite passes with no assertion changed. One cap, one sweep, one
+  limiter slot per node, whatever the grade.
+- **No app consumer yet.** The capability landed on its tests rather than on the
+  ChitChats port: the loopback suite (`loopback-subagent-protocol.test.ts`) drives a real
+  tool call through the real bridge into a real iframe response. The first app to want
+  `skip`/`memorize` writes the handlers and declares
+  `"subagents": { "max": N, "grades": ["protocol"] }`; nothing further is needed from the
+  server.
 
 **What deliberately does not exist at any grade:** YAAR tools at spawn — no grade lets a
 runtime caller select verbs, `relay`, `direct_message`, `controls`, or `yaar://` access,
@@ -271,11 +362,11 @@ Phased so each step has value alone and none is forced:
   map, `subId` record field, tree-shaped `yaar://session/agents` output. No wire change, no
   behavior change; the persona suite's assertions are unchanged and `agent-tree.test.ts`
   pins the new shape.
-- **Phase 2 (on demand) — not started:** `subagents` manifest alias + `grade` spawn param + the
-  `protocol` grade, landing with its consumer (the ChitChats port, or `apps/personas`
-  growing memory). The grade's profile builder, the persona-audience protocol flag, and a
-  reach test (a `protocol` sub-agent's transport options carry exactly the one bridge
-  tool set, nothing of YAAR's) land together.
+- **Phase 2 — landed:** `subagents` manifest alias + `grade` spawn param + the `protocol`
+  grade, its profile builder, the `subagent` MCP namespace, the `persona:` command
+  convention, and the tests. It landed *without* its consumer — the capability is inert
+  until an app declares the grade, so waiting for the ChitChats port would have been
+  waiting for nothing. Wire and behavior for every existing app are unchanged.
 - **Phase 3 (opportunistic) — not started:** ephemeral fold-in; budget split. Each is
   independently droppable.
 
@@ -288,13 +379,19 @@ Phased so each step has value alone and none is forced:
   shapes: nesting per tier, disjoint subtrees for two monitors running one app, vacant
   owner slots (app agent absent, monitor agent absent), ephemerals at the root, and a
   session entry that arrives out of roster order.
-- Phase 2 additions (`protocol` grade) — not written: reach assertion — a `protocol` sub-agent's
-  transport options carry the bridge tools it was spawned with and nothing else, even when
-  the owning app declares `controls`/`direct_message`; manifest refusal (`grade` not
-  declared → error naming the manifest); loopback — spawn with tools → tool call reaches
-  the iframe stamped with `personaId` → reply lands as the tool result; `describe` from the
-  app agent omits persona-audience commands; no-window and bridge-timeout tool calls return
-  errors without killing the turn.
+- Phase 2 (done, then amended), in two files. `src/tests/sub-agent.test.ts` — the role (`app`
+  tier, prompt untouched, `isSubAgentRole`); the profile, both ways (declared tools become
+  `mcp__subagent__*`; no tools becomes `[]`, never `undefined`); reach, twice — through the
+  real `buildSDKOptions` (one MCP server, `subagent`, and no builtins; *zero* servers when
+  tool-less) and on a live turn of a sub-agent whose owning app declares `controls`, which
+  must not descend; tool-spec validation and caps; the manifest gate (`personas` reads as the
+  ceiling; a malformed tool list is refused without spending an agent slot; an app that
+  declared no ceiling is refused outright); one cap and one sweep shared whether or not there
+  are tools; the tree placement. `src/tests/loopback/loopback-subagent-protocol.test.ts` — the round
+  trip through the real bridge: `persona:{tool}` reaches the iframe stamped with
+  `personaId` (and the stamp wins over a forged argument), a no-arg tool arrives as the
+  signal it is, a silent app and a closed window come back as tool *errors* rather than a
+  dead turn, and the app agent's manifest omits the persona-audience commands.
 - Law tests — partly covered, per-tier rather than tier-generic. The persona suite already
   pins key uniqueness across all three scoping components ("persona key"), cascade disposal
   with slots freed ("reclaims personas when their monitor goes away", "releases every slot
@@ -327,7 +424,8 @@ Phased so each step has value alone and none is forced:
 
 ## Open questions
 
-1. **Will any grade ever need real YAAR verbs?** The `protocol` grade has a named consumer
+1. **Will any grade ever need real YAAR verbs?** (Still open, and still the tripwire — the
+   `protocol` grade shipped without needing one.) It has a named consumer waiting
    (ChitChats memory + skip) and covers every "persona with tools" case on the table by
    routing through the app. If a case ever genuinely needs YAAR verbs in a sub-agent's
    hands — not reachable via an app handler — that grade would be a different animal:

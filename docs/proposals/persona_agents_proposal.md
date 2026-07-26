@@ -3,7 +3,12 @@
 **Status:** Phase 1 landed (the primitive). Phase 2/3 (the ChitChats port) not started —
 see [What shipped](#what-shipped) for the delta between this document and the code.
 **Reframed by:** [`agent_hierarchy_proposal.md`](./agent_hierarchy_proposal.md) — the agent-tree
-redesign, in which the persona primitive is the `compute` grade of app-tier sub-agents.
+redesign, in which a persona is a tool-less app-tier sub-agent. That document's Phase 2 has
+since landed and been amended: `"personas": { "max": N }` and `"subagents": { "max": N }` are
+the same declaration (both spellings parse, forever), and a sub-agent may optionally be spawned
+with `tools` — app-defined names that dispatch to the app's own iframe as `persona:{name}` —
+which is what the ChitChats port's `[[skip]]` convention and memory tools below should use
+instead of parsing markers out of prose. Nothing in this document's shipped surface changed.
 **Scope:** `packages/server` (agent pool, new verb surface, stream access), `packages/shared` (SDK), one new bundled app (`apps/chitchats`)
 **Driving use case:** porting the feature set of [`chitchats-public`](https://github.com/sorryhyun/chitchats-public) — a multi-character AI chat room — into YAAR as a bundled app.
 
@@ -163,7 +168,7 @@ personaAgents: Map<`${monitorId}::${appId}::${personaId}`, PooledAgent>
   for the same reason; if both land, coordinate on the record shape).
 - **Profile is caller-supplied and minimal.** `buildPersonaProfile(systemPrompt, model?)`:
   the given system prompt verbatim, **no MCP tools, no verb access, no window tools** — a
-  persona is compute-only. It receives text, thinks, returns text. This is the key safety
+  persona is spawned without tools. It receives text, thinks, returns text. This is the key safety
   property: a runtime-supplied system prompt never gets hands. (Providers must be started
   tool-less — `TransportOptions` already carries tool config; verify the Claude path drops
   WebSearch/Task for persona profiles.)
@@ -298,7 +303,7 @@ bleed and no parallel streams. Skippable if we're confident in the UX.)*
   you the whole way. Rejected.
 - **Personas as full app agents with tools**: strictly more capable, but runtime-supplied
   system prompts with OS hands is a real escalation surface, and no persona use case on
-  the table needs tools. Start compute-only; a gated `tools` opt-in can come later if a
+  the table needs tools. Start tool-less; the spawn-time `tools` list can come later if a
   use case demands it.
 - **Standalone ChitChats beside YAAR** (status quo): works today, but duplicates provider
   pools, auth, streaming, and storage that YAAR maintains anyway, and YAAR gets no

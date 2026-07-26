@@ -37,17 +37,28 @@ import { parseAppAgentsPath } from './paths.js';
 import { getAppId, requireMonitorId } from '../../agents/agent-context.js';
 import { getAppMeta } from '../../features/apps/discovery.js';
 import { buildAgentStreamUri } from '../../streams/agent-stream.js';
-import { MAX_PERSONA_PROMPT_CHARS, PERSONA_ID_RE } from '../../agents/profiles/persona.js';
-import type { AgentPool, PersonaAgent } from '../../agents/agent-pool.js';
+import {
+  parseToolSpec,
+  toolSpecChars,
+  MAX_SUB_AGENT_PROMPT_CHARS,
+  MAX_SUB_AGENT_TOOLS,
+  MAX_SUB_AGENT_TOOL_CHARS,
+  SUB_AGENT_ID_RE,
+  type SubAgentToolSpec,
+} from '../../agents/profiles/sub-agent.js';
+import type { AgentPool, SubAgent } from '../../agents/agent-pool.js';
 import { genId } from '../../lib/ids.js';
 
 const DESCRIBE = {
   description:
-    "This app's persona agents — tool-less AI instances with a system prompt you supply at " +
+    'This app\'s sub-agents ("personas") — AI instances with a system prompt you supply at ' +
     'runtime. Each is a real provider session with its own conversation memory, and each ' +
     'streams token-by-token at yaar://agents/{instanceId}/stream (subscribe with mode:"stream"; ' +
-    'requires "streams": ["agents"] in app.json). Requires "personas": { "max": N } in app.json. ' +
-    'Personas hold no tools, no permissions, and no principal: they receive text and return text.',
+    'requires "streams": ["agents"] in app.json). Requires "personas": { "max": N } — or ' +
+    '"subagents": { "max": N } — in app.json. None of them hold YAAR verbs, permissions, or a ' +
+    'principal. Spawned without "tools" one receives text and returns text; spawned with them ' +
+    'it may call each declared tool, which is dispatched to YOUR OWN iframe as the command ' +
+    'persona:{toolName} (with personaId in params) and answers with whatever your handler returns.',
   verbs: ['read', 'list', 'invoke', 'delete'],
   invokeSchema: {
     type: 'object',
@@ -57,18 +68,27 @@ const DESCRIBE = {
         type: 'string',
         enum: ['spawn', 'message', 'interrupt'],
         description:
-          'spawn (on the collection) creates a persona; message/interrupt address one persona.',
+          'spawn (on the collection) creates a sub-agent; message/interrupt address one.',
       },
       personaId: {
         type: 'string',
-        description: 'For spawn: the id to register the persona under. [A-Za-z0-9_-], max 64.',
+        description: 'For spawn: the id to register the sub-agent under. [A-Za-z0-9_-], max 64.',
       },
       systemPrompt: {
         type: 'string',
-        description: "For spawn: the persona's system prompt, used verbatim.",
+        description: "For spawn: the sub-agent's system prompt, used verbatim.",
+      },
+      tools: {
+        type: 'array',
+        description:
+          'For spawn: the tools this sub-agent may call, each { name, description, input?: ' +
+          '{ param: "string"|"number"|"boolean"|"object"|"array" } }. Calling one sends ' +
+          'persona:{name} to your iframe; register a handler for it. Omit for a tool-less ' +
+          'sub-agent that just receives text and returns text.',
+        items: { type: 'object' },
       },
       model: { type: 'string', description: 'For spawn: optional model override.' },
-      content: { type: 'string', description: 'For message: the text to send to the persona.' },
+      content: { type: 'string', description: 'For message: the text to send to the sub-agent.' },
     },
   },
 };
@@ -76,19 +96,20 @@ const DESCRIBE = {
 /**
  * What a persona looks like over the wire. Same shape from `list` and `read`.
  *
- * This function, and the `personaId` reads below it, are where the pool's
- * grade-neutral `subId` becomes the wire's `personaId`. The translation lives here
- * on purpose: `personaId` is shipped format that a second grade will not change, and
- * a field named for one kind has no business inside the pool's record.
+ * This function, and the `personaId` reads below it, are where the pool's `subId`
+ * becomes the wire's `personaId`. The translation lives here on purpose: `personaId`
+ * is shipped format, and the pool's own field should not be named for the URI that
+ * happens to address it.
  */
-function personaView(p: PersonaAgent, pool: AgentPool): Record<string, unknown> {
+function personaView(p: SubAgent, pool: AgentPool): Record<string, unknown> {
   return {
     personaId: p.subId,
     instanceId: p.agent.instanceId,
     streamUri: buildAgentStreamUri(p.agent.instanceId),
-    busy: pool.isPersonaBusy(p),
+    busy: pool.isSubAgentBusy(p),
     createdAt: p.createdAt,
     ...(p.model ? { model: p.model } : {}),
+    ...(p.tools.length > 0 ? { tools: p.tools.map((t) => t.name) } : {}),
     ...(p.lastResponse !== undefined ? { lastResponse: p.lastResponse } : {}),
   };
 }
@@ -138,8 +159,8 @@ async function resolveScope(uri: string): Promise<Scope | VerbResult | null> {
   }
 
   const meta = await getAppMeta(parsed.appId);
-  const max = meta?.personas?.max ?? 0;
-  if (max <= 0) {
+  const declared = meta?.subagents;
+  if (!declared || declared.max <= 0) {
     return error(
       `App "${parsed.appId}" may not spawn personas. Add "personas": { "max": N } to its ` +
         'app.json (bundled apps only).',
@@ -157,7 +178,7 @@ async function resolveScope(uri: string): Promise<Scope | VerbResult | null> {
       if (!pool) throw new NoActiveSessionError();
       return pool.agentPool;
     },
-    max,
+    max: declared.max,
   };
 }
 
@@ -167,11 +188,11 @@ function isVerbResult(value: Scope | VerbResult): value is VerbResult {
 }
 
 /** Look up the addressed persona, or the error explaining that it isn't there. */
-function requirePersona(scope: Scope): PersonaAgent | VerbResult {
+function requirePersona(scope: Scope): SubAgent | VerbResult {
   if (!scope.personaId) {
     return error('This action addresses one persona: yaar://apps/self/agents/{personaId}.');
   }
-  const record = scope.pool().getPersonaAgent(scope.monitorId, scope.appId, scope.personaId);
+  const record = scope.pool().getSubAgent(scope.monitorId, scope.appId, scope.personaId);
   if (!record) {
     return error(
       `No persona "${scope.personaId}" — spawn it first with ` +
@@ -191,7 +212,7 @@ export async function listPersonas(resolved: ResolvedUri): Promise<VerbResult | 
   if (scope === null) return null;
   if (isVerbResult(scope)) return scope;
 
-  const personas = scope.pool().listPersonaAgents(scope.monitorId, scope.appId);
+  const personas = scope.pool().listSubAgents(scope.monitorId, scope.appId);
   return okJson({
     max: scope.max,
     personas: personas.map((p) => personaView(p, scope.pool())),
@@ -239,12 +260,41 @@ export async function invokePersonas(
   }
 }
 
+/** Validate the spawn's tool list, or explain what's wrong with it. */
+function resolveTools(raw: unknown): SubAgentToolSpec[] | VerbResult {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw)) return error('"tools" must be an array of { name, description }.');
+  if (raw.length > MAX_SUB_AGENT_TOOLS) {
+    return error(`"tools" has ${raw.length} entries; the limit is ${MAX_SUB_AGENT_TOOLS}.`);
+  }
+
+  const tools: SubAgentToolSpec[] = [];
+  const seen = new Set<string>();
+  for (const entry of raw) {
+    const parsed = parseToolSpec(entry);
+    if ('error' in parsed) return error(`Invalid "tools": ${parsed.error}`);
+    if (seen.has(parsed.tool.name)) {
+      return error(`Invalid "tools": duplicate tool name "${parsed.tool.name}".`);
+    }
+    seen.add(parsed.tool.name);
+    tools.push(parsed.tool);
+  }
+
+  // The sibling of the prompt cap, and there for the same reason: tool definitions are
+  // replayed on every turn, so a novel in a description is a per-message cost.
+  const chars = toolSpecChars(tools);
+  if (chars > MAX_SUB_AGENT_TOOL_CHARS) {
+    return error(`"tools" spends ${chars} chars; the limit is ${MAX_SUB_AGENT_TOOL_CHARS}.`);
+  }
+  return tools;
+}
+
 async function spawn(scope: Scope, payload?: Record<string, unknown>): Promise<VerbResult> {
   const personaId = typeof payload?.personaId === 'string' ? payload.personaId.trim() : '';
   const systemPrompt = typeof payload?.systemPrompt === 'string' ? payload.systemPrompt : '';
   const model = typeof payload?.model === 'string' && payload.model ? payload.model : undefined;
 
-  if (!PERSONA_ID_RE.test(personaId)) {
+  if (!SUB_AGENT_ID_RE.test(personaId)) {
     return error(
       `Invalid personaId "${personaId}". Use letters, digits, "_" or "-" (max 64, must start alphanumeric).`,
     );
@@ -252,20 +302,25 @@ async function spawn(scope: Scope, payload?: Record<string, unknown>): Promise<V
   if (!systemPrompt.trim()) {
     return error('"systemPrompt" is required — it is what makes the persona a persona.');
   }
-  if (systemPrompt.length > MAX_PERSONA_PROMPT_CHARS) {
+  if (systemPrompt.length > MAX_SUB_AGENT_PROMPT_CHARS) {
     return error(
-      `"systemPrompt" is ${systemPrompt.length} chars; the limit is ${MAX_PERSONA_PROMPT_CHARS}.`,
+      `"systemPrompt" is ${systemPrompt.length} chars; the limit is ${MAX_SUB_AGENT_PROMPT_CHARS}.`,
     );
   }
+
+  const tools = resolveTools(payload?.tools);
+  if (!Array.isArray(tools)) return tools;
 
   // Existence, the per-app cap, and the spawn itself are one atomic decision inside
   // the pool — deliberately not three steps here. Split across an await, two spawns in
   // one tick each passed the checks and one of the two agents ended up in no
   // collection at all, holding a provider and a `MAX_AGENTS` slot forever. This layer
-  // owns the manifest (hence `max`) and the wording; the pool owns the invariant.
-  const result = await scope.pool().spawnPersonaAgent(scope.monitorId, scope.appId, personaId, {
+  // owns the manifest (hence `max`) and the wording; the pool owns the invariant, and
+  // `profiles/sub-agent.ts` owns what a sub-agent can touch.
+  const result = await scope.pool().spawnSubAgent(scope.monitorId, scope.appId, personaId, {
     systemPrompt,
     max: scope.max,
+    ...(tools.length > 0 ? { tools } : {}),
     ...(model ? { model } : {}),
   });
 
@@ -305,7 +360,7 @@ async function message(scope: Scope, payload?: Record<string, unknown>): Promise
   // whether a second message is a follow-up worth waiting for or a race worth
   // dropping. Queueing here would decide that for it, invisibly. `busy: true` is on
   // the envelope so the caller can branch without parsing the sentence.
-  if (scope.pool().isPersonaBusy(record)) {
+  if (scope.pool().isSubAgentBusy(record)) {
     return {
       ...error(`Persona "${record.subId}" is still answering. Interrupt it or wait for done.`),
       structuredContent: { busy: true, personaId: record.subId },
@@ -319,7 +374,7 @@ async function message(scope: Scope, payload?: Record<string, unknown>): Promise
   // only catches a throw before the stream opens.
   void scope
     .pool()
-    .runPersonaTurn(record, content, taskId)
+    .runSubAgentTurn(record, content, taskId)
     .catch((err: unknown) => {
       console.error(`[personas] turn failed for ${record.appId}/${record.subId}:`, err);
     });
@@ -338,11 +393,11 @@ export async function deletePersonas(resolved: ResolvedUri): Promise<VerbResult 
   if (isVerbResult(scope)) return scope;
 
   if (!scope.personaId) {
-    const disposed = await scope.pool().disposePersonasForApp(scope.monitorId, scope.appId);
+    const disposed = await scope.pool().disposeSubAgentsForApp(scope.monitorId, scope.appId);
     return okJson({ disposed });
   }
 
-  const ok = await scope.pool().disposePersonaAgent(scope.monitorId, scope.appId, scope.personaId);
+  const ok = await scope.pool().disposeSubAgent(scope.monitorId, scope.appId, scope.personaId);
   if (!ok) return error(`No persona "${scope.personaId}" to delete.`);
   return okJson({ personaId: scope.personaId, disposed: 1 });
 }

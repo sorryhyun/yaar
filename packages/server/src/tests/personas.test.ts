@@ -21,14 +21,14 @@ import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from
 import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-import { AgentPool, personaAgentKey } from '../agents/agent-pool.js';
+import { AgentPool, subAgentKey } from '../agents/agent-pool.js';
 import {
-  buildPersonaProfile,
-  isPersonaRole,
-  personaRole,
-  PERSONA_ID_RE,
-  MAX_PERSONA_PROMPT_CHARS,
-} from '../agents/profiles/persona.js';
+  buildSubAgentProfile,
+  isSubAgentRole,
+  subAgentRole,
+  SUB_AGENT_ID_RE,
+  MAX_SUB_AGENT_PROMPT_CHARS,
+} from '../agents/profiles/sub-agent.js';
 import { getContextRestoreMessages } from '../logging/context-restore.js';
 import { parseSessionMessages } from '../logging/session-reader.js';
 import { monitorSource } from '../agents/context.js';
@@ -79,7 +79,11 @@ function fakeProvider(recorded: Recorded[]): AITransport {
 
 describe('persona profile', () => {
   it('carries the caller prompt verbatim and no tools at all', () => {
-    const profile = buildPersonaProfile('chitchats', 'alice', 'You are Alice. You are curt.');
+    const profile = buildSubAgentProfile({
+      appId: 'chitchats',
+      subId: 'alice',
+      systemPrompt: 'You are Alice. You are curt.',
+    });
 
     expect(profile.systemPrompt).toBe('You are Alice. You are curt.');
     expect(profile.allowedTools).toEqual([]);
@@ -87,20 +91,25 @@ describe('persona profile', () => {
   });
 
   it('passes a model override through when one is given', () => {
-    const profile = buildPersonaProfile('chitchats', 'bob', 'You are Bob.', 'claude-haiku-4-5');
+    const profile = buildSubAgentProfile({
+      appId: 'chitchats',
+      subId: 'bob',
+      systemPrompt: 'You are Bob.',
+      model: 'claude-haiku-4-5',
+    });
     expect(profile.model).toBe('claude-haiku-4-5');
   });
 
   it('places the persona in the unprivileged app tier via its role prefix', () => {
-    expect(personaRole('chitchats', 'alice')).toStartWith('app-');
-    expect(principalRole(personaRole('chitchats', 'alice'))).toBe('app');
+    expect(subAgentRole('chitchats', 'alice')).toStartWith('app-');
+    expect(principalRole(subAgentRole('chitchats', 'alice'))).toBe('app');
   });
 
   it('assembles the prompt untouched — no environment, memory, or scope section', async () => {
     const prompt = 'You are Alice. You are curt.';
     const assembled = await assembleSystemPromptForRole(
       prompt,
-      personaRole('chitchats', 'alice'),
+      subAgentRole('chitchats', 'alice'),
       'claude',
       '0',
     );
@@ -110,7 +119,7 @@ describe('persona profile', () => {
 
   it('accepts sane persona ids and rejects ids that would break keys or URIs', () => {
     for (const good of ['alice', 'A1', 'grumpy-pirate', 'x_y-9']) {
-      expect(PERSONA_ID_RE.test(good)).toBe(true);
+      expect(SUB_AGENT_ID_RE.test(good)).toBe(true);
     }
     for (const bad of [
       '',
@@ -121,12 +130,12 @@ describe('persona profile', () => {
       'colon:colon',
       'a'.repeat(65),
     ]) {
-      expect(PERSONA_ID_RE.test(bad)).toBe(false);
+      expect(SUB_AGENT_ID_RE.test(bad)).toBe(false);
     }
   });
 
   it('caps the prompt well above any real character sheet', () => {
-    expect(MAX_PERSONA_PROMPT_CHARS).toBeGreaterThan(10_000);
+    expect(MAX_SUB_AGENT_PROMPT_CHARS).toBeGreaterThan(10_000);
   });
 });
 
@@ -153,7 +162,8 @@ describe('persona tool-lessness (through the real SDK options builder)', () => {
 
   it('connects no MCP server and enables no builtin tool', () => {
     const sdk = optionsFor(
-      buildPersonaProfile('chitchats', 'alice', 'You are Alice.').allowedTools,
+      buildSubAgentProfile({ appId: 'chitchats', subId: 'alice', systemPrompt: 'You are Alice.' })
+        .allowedTools,
     );
 
     expect(sdk.allowedTools).toEqual([]);
@@ -223,7 +233,7 @@ describe('persona lifecycle in AgentPool', () => {
     personaId: string,
     prompt: string,
     max = NO_CAP,
-  ) => pool.spawnPersonaAgent(monitorId, appId, personaId, { systemPrompt: prompt, max });
+  ) => pool.spawnSubAgent(monitorId, appId, personaId, { systemPrompt: prompt, max });
 
   /** The record, for the tests whose subject is only that a persona now exists. */
   const spawn = async (personaId: string, prompt = `You are ${personaId}.`, max = NO_CAP) => {
@@ -239,8 +249,8 @@ describe('persona lifecycle in AgentPool', () => {
     expect(bob).not.toBeNull();
     expect(alice!.agent.instanceId).not.toBe(bob!.agent.instanceId);
 
-    expect(pool.getPersonaAgent('0', 'chitchats', 'alice')?.systemPrompt).toBe('You are alice.');
-    expect(pool.listPersonaAgents('0', 'chitchats').map((p) => p.subId)).toEqual(['alice', 'bob']);
+    expect(pool.getSubAgent('0', 'chitchats', 'alice')?.systemPrompt).toBe('You are alice.');
+    expect(pool.listSubAgents('0', 'chitchats').map((p) => p.subId)).toEqual(['alice', 'bob']);
   });
 
   it('scopes personas to their app and monitor', async () => {
@@ -249,17 +259,17 @@ describe('persona lifecycle in AgentPool', () => {
     await spawnFor('0', 'other-app', 'alice', 'other app alice');
 
     // Same persona id, three independent agents — none of them each other.
-    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(1);
-    expect(pool.listPersonaAgents('1', 'chitchats')).toHaveLength(1);
-    expect(pool.listPersonaAgents('0', 'other-app')).toHaveLength(1);
-    expect(pool.getPersonaAgent('0', 'chitchats', 'alice')?.systemPrompt).toBe('You are alice.');
-    expect(pool.getPersonaAgent('1', 'chitchats', 'alice')?.systemPrompt).toBe('monitor one alice');
-    expect(pool.getPersonaAgent('2', 'chitchats', 'alice')).toBeUndefined();
+    expect(pool.listSubAgents('0', 'chitchats')).toHaveLength(1);
+    expect(pool.listSubAgents('1', 'chitchats')).toHaveLength(1);
+    expect(pool.listSubAgents('0', 'other-app')).toHaveLength(1);
+    expect(pool.getSubAgent('0', 'chitchats', 'alice')?.systemPrompt).toBe('You are alice.');
+    expect(pool.getSubAgent('1', 'chitchats', 'alice')?.systemPrompt).toBe('monitor one alice');
+    expect(pool.getSubAgent('2', 'chitchats', 'alice')).toBeUndefined();
   });
 
   it('runs a turn with the persona prompt and an empty tool list', async () => {
     const alice = await spawn('alice', 'You are Alice. You are curt.');
-    await pool.runPersonaTurn(alice!, 'Bob said hello.', 'task-1');
+    await pool.runSubAgentTurn(alice!, 'Bob said hello.', 'task-1');
 
     expect(recorded).toHaveLength(1);
     expect(recorded[0].prompt).toBe('Bob said hello.');
@@ -273,7 +283,7 @@ describe('persona lifecycle in AgentPool', () => {
     const alice = await spawn('alice');
     expect(alice!.lastResponse).toBeUndefined();
 
-    await pool.runPersonaTurn(alice!, 'question', 'task-1');
+    await pool.runSubAgentTurn(alice!, 'question', 'task-1');
 
     expect(alice!.lastResponse).toBe('answer to question');
   });
@@ -299,12 +309,12 @@ describe('persona lifecycle in AgentPool', () => {
     await spawn('bob');
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 2);
 
-    expect(await pool.disposePersonaAgent('0', 'chitchats', 'alice')).toBe(true);
+    expect(await pool.disposeSubAgent('0', 'chitchats', 'alice')).toBe(true);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 1);
-    expect(pool.getPersonaAgent('0', 'chitchats', 'alice')).toBeUndefined();
+    expect(pool.getSubAgent('0', 'chitchats', 'alice')).toBeUndefined();
 
     // Disposing one that was never spawned is a no-op, not a double release.
-    expect(await pool.disposePersonaAgent('0', 'chitchats', 'alice')).toBe(false);
+    expect(await pool.disposeSubAgent('0', 'chitchats', 'alice')).toBe(false);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 1);
   });
 
@@ -313,10 +323,10 @@ describe('persona lifecycle in AgentPool', () => {
     await spawn('bob');
     await spawnFor('0', 'other-app', 'carol', 'carol');
 
-    expect(await pool.disposePersonasForApp('0', 'chitchats')).toBe(2);
-    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(0);
+    expect(await pool.disposeSubAgentsForApp('0', 'chitchats')).toBe(2);
+    expect(pool.listSubAgents('0', 'chitchats')).toHaveLength(0);
     // Another app's personas are not collateral.
-    expect(pool.listPersonaAgents('0', 'other-app')).toHaveLength(1);
+    expect(pool.listSubAgents('0', 'other-app')).toHaveLength(1);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 1);
   });
 
@@ -329,7 +339,7 @@ describe('persona lifecycle in AgentPool', () => {
 
     await pool.disposeAppAgentsForMonitor('0');
 
-    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(0);
+    expect(pool.listSubAgents('0', 'chitchats')).toHaveLength(0);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore);
   });
 
@@ -362,7 +372,7 @@ describe('persona lifecycle in AgentPool', () => {
     // The failure this pins: three records, two of them in no collection at all —
     // unreachable by every dispose path *and* by cleanup(), holding a provider and a
     // MAX_AGENTS slot until the process died.
-    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(1);
+    expect(pool.listSubAgents('0', 'chitchats')).toHaveLength(1);
     expect(pool.getStats().personaAgents).toBe(1);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 1);
 
@@ -379,7 +389,7 @@ describe('persona lifecycle in AgentPool', () => {
 
     expect(results.filter((r) => r.status === 'created')).toHaveLength(2);
     expect(results.filter((r) => r.status === 'at-capacity')).toHaveLength(3);
-    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(2);
+    expect(pool.listSubAgents('0', 'chitchats')).toHaveLength(2);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 2);
   });
 
@@ -388,11 +398,11 @@ describe('persona lifecycle in AgentPool', () => {
     // settling the reservation, the sweep finds an empty roster and the persona lands
     // a moment later with nothing left that knows to reclaim it.
     const pending = spawnFor('0', 'chitchats', 'alice', 'You are Alice.');
-    const disposed = pool.disposePersonasForApp('0', 'chitchats');
+    const disposed = pool.disposeSubAgentsForApp('0', 'chitchats');
 
     await Promise.all([pending, disposed]);
 
-    expect(pool.listPersonaAgents('0', 'chitchats')).toHaveLength(0);
+    expect(pool.listSubAgents('0', 'chitchats')).toHaveLength(0);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore);
   });
 });
@@ -475,7 +485,7 @@ describe('persona verb ownership', () => {
       invokePersonas(uri('yaar://apps/personas/agents'), {
         action: 'spawn',
         personaId: 'alice',
-        systemPrompt: 'x'.repeat(MAX_PERSONA_PROMPT_CHARS + 1),
+        systemPrompt: 'x'.repeat(MAX_SUB_AGENT_PROMPT_CHARS + 1),
       }),
     );
     expect(errorText(await tooLong!)).toContain('limit is');
@@ -490,7 +500,7 @@ describe('persona turns stay out of the monitor context', () => {
   // A persona has no tape and no window, so its turns are logged under the *monitor's*
   // source — the same one the real user↔monitor conversation uses — and every filter
   // in context-restore keys on source alone. The role is the only thing that tells
-  // them apart, which is what `isPersonaRole` exists for.
+  // them apart, which is what `isSubAgentRole` exists for.
   const jsonl = (entries: Array<{ type: string; agentId: string; content: string }>) =>
     entries
       .map((e, i) =>
@@ -504,25 +514,29 @@ describe('persona turns stay out of the monitor context', () => {
       .join('\n');
 
   it('recognizes a persona role and leaves every other role alone', () => {
-    expect(isPersonaRole(personaRole('chitchats', 'alice'))).toBe(true);
+    expect(isSubAgentRole(subAgentRole('chitchats', 'alice'))).toBe(true);
     // An appId or personaId containing "-" must not break the test either way.
-    expect(isPersonaRole(personaRole('round-table', 'dr-who'))).toBe(true);
+    expect(isSubAgentRole(subAgentRole('round-table', 'dr-who'))).toBe(true);
 
-    expect(isPersonaRole('app-agent-chitchats')).toBe(false);
-    expect(isPersonaRole('main')).toBe(false);
-    expect(isPersonaRole('session-oversight')).toBe(false);
-    expect(isPersonaRole(null)).toBe(false);
-    expect(isPersonaRole(undefined)).toBe(false);
+    expect(isSubAgentRole('app-agent-chitchats')).toBe(false);
+    expect(isSubAgentRole('main')).toBe(false);
+    expect(isSubAgentRole('session-oversight')).toBe(false);
+    expect(isSubAgentRole(null)).toBe(false);
+    expect(isSubAgentRole(undefined)).toBe(false);
   });
 
   it('drops persona turns from a restore and keeps the real conversation', () => {
     const messages = parseSessionMessages(
       jsonl([
         { type: 'user', agentId: 'main-a1', content: 'what did they think?' },
-        { type: 'user', agentId: personaRole('personas', 'alice'), content: 'turn prompt: alice' },
-        { type: 'assistant', agentId: personaRole('personas', 'alice'), content: 'Alice, curtly.' },
-        { type: 'user', agentId: personaRole('personas', 'bob'), content: 'turn prompt: bob' },
-        { type: 'assistant', agentId: personaRole('personas', 'bob'), content: 'Bob, at length.' },
+        { type: 'user', agentId: subAgentRole('personas', 'alice'), content: 'turn prompt: alice' },
+        {
+          type: 'assistant',
+          agentId: subAgentRole('personas', 'alice'),
+          content: 'Alice, curtly.',
+        },
+        { type: 'user', agentId: subAgentRole('personas', 'bob'), content: 'turn prompt: bob' },
+        { type: 'assistant', agentId: subAgentRole('personas', 'bob'), content: 'Bob, at length.' },
         { type: 'assistant', agentId: 'main-a1', content: 'the room is split' },
       ]),
     );
@@ -572,20 +586,22 @@ describe('personas manifest field', () => {
     rmSync(installedDir, { recursive: true, force: true });
   });
 
+  // The field normalizes to `subagents` — `"personas": { max }` is the older spelling
+  // of it, and stays valid forever (see features/apps/discovery.ts).
   it('is honored for a bundled app that declares it', async () => {
-    expect((await getAppMeta('personas'))?.personas).toEqual({ max: 4 });
+    expect((await getAppMeta('personas'))?.subagents).toEqual({ max: 4 });
   });
 
   it('is absent for every app that does not declare it', async () => {
-    expect((await getAppMeta('memo'))?.personas).toBeUndefined();
-    expect((await getAppMeta('process-explorer'))?.personas).toBeUndefined();
+    expect((await getAppMeta('memo'))?.subagents).toBeUndefined();
+    expect((await getAppMeta('process-explorer'))?.subagents).toBeUndefined();
   });
 
   it('is ignored for an installed app, however it spells it', async () => {
     const meta = await getAppMeta(INSTALLED_ID);
 
     expect(meta).not.toBeNull();
-    expect(meta?.personas).toBeUndefined();
+    expect(meta?.subagents).toBeUndefined();
     // Same rule as `streams`, and for the same reason — asserted here so the two
     // gates cannot drift apart unnoticed.
     expect(meta?.streams).toBeUndefined();
@@ -595,10 +611,10 @@ describe('personas manifest field', () => {
 describe('persona key', () => {
   it('is unique across all three scoping components', () => {
     const keys = new Set([
-      personaAgentKey('0', 'chitchats', 'alice'),
-      personaAgentKey('1', 'chitchats', 'alice'),
-      personaAgentKey('0', 'other', 'alice'),
-      personaAgentKey('0', 'chitchats', 'bob'),
+      subAgentKey('0', 'chitchats', 'alice'),
+      subAgentKey('1', 'chitchats', 'alice'),
+      subAgentKey('0', 'other', 'alice'),
+      subAgentKey('0', 'chitchats', 'bob'),
     ]);
     expect(keys.size).toBe(4);
   });

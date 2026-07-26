@@ -232,9 +232,9 @@ When a user interacts with an app window, a **persistent app agent** is created 
 
 Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (describe/query/command/relay tools), `features/apps/discovery.ts` (`controls` parsing + bundled-only guard).
 
-### Persona Agents (app-spawned AI instances)
+### Sub-agents / Persona Agents (app-spawned AI instances)
 
-An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **persona agents** from its iframe: tool-less AI instances, each with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn.
+An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **sub-agents** from its iframe: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. Spawned without `tools` a sub-agent is tool-less — it receives text and returns text — which is the "persona" case the URI and the spawn param are named for.
 
 ```ts
 invoke('yaar://apps/self/agents', { action: 'spawn', personaId, systemPrompt, model? })
@@ -245,9 +245,21 @@ stream(streamUri, onFrame)      // start | text | thinking | done (carries final
 list('yaar://apps/self/agents') // roster + max      del(...) // dispose one, or all
 ```
 
-Needs `"yaar://apps/self/agents/"` in `permissions` and `"streams": ["agents"]` to watch them. `message` returns as soon as the turn is queued, so N personas generate concurrently. Personas hold **no tools, no MCP servers, no permissions, and no principal** — the runtime-supplied prompt never gets hands — and are reclaimed when the app's last window on that monitor closes. Persistence is the app's job (`appDb`/`appStorage`); a respawned persona gets its history replayed in its first message.
+Needs `"yaar://apps/self/agents/"` in `permissions` and `"streams": ["agents"]` to watch them. `message` returns as soon as the turn is queued, so N sub-agents generate concurrently. They hold **no YAAR verbs, no permissions, and no principal** — the runtime-supplied prompt never gets YAAR's hands — and are reclaimed when the app's last window on that monitor closes. Persistence is the app's job (`appDb`/`appStorage`); a respawned persona gets its history replayed in its first message.
 
-Key files: `agents/profiles/persona.ts` (tool-less profile), `agents/agent-pool.ts` (`spawnPersonaAgent`/`runPersonaTurn`/dispose), `handlers/apps/agents-resource.ts` (the verb surface + ownership check), `features/apps/discovery.ts` (`personas` parsing). Reference consumer: `apps/personas` (Round Table). Design notes: [`docs/proposals/persona_agents_proposal.md`](./docs/proposals/persona_agents_proposal.md).
+**Tools.** The one thing a sub-agent may be given is a channel back to *your own app's iframe*, dressed in tool names you declare at spawn:
+
+```ts
+invoke('yaar://apps/self/agents', { action: 'spawn', personaId: 'alice', systemPrompt,
+  tools: [{ name: 'skip', description: 'Decline this turn.' },
+          { name: 'memorize', description: 'Save a lasting fact.', input: { fact: 'string' } }] })
+// alice calling `memorize` → your iframe receives command `persona:memorize`
+//   with params { fact, personaId: 'alice' }; whatever your handler returns is the tool result.
+```
+
+Register `persona:{toolName}` commands in `app.register({ commands })` to answer them; they are hidden from the *app agent's* `describe`/manifest, since their spawn-time descriptions are written for a character, not an operator. The names are prompt material only — every one of them is `mcp__subagent__{name}` and lands in your own iframe, so no tool list reaches a YAAR verb, another app, `relay`, `direct_message`, or `controls`. Omit `tools` and the allowlist is `[]`, which connects no MCP server at all.
+
+Key files: `agents/profiles/sub-agent.ts` (the profile — the one place capabilities are decided), `agents/agent-pool.ts` (`spawnSubAgent`/`runSubAgentTurn`/dispose), `mcp/sub-agent/` (the one channel), `features/apps/persona-commands.ts` (`persona:` convention), `handlers/apps/agents-resource.ts` (the verb surface + ownership check), `features/apps/discovery.ts` (`subagents`/`personas` parsing). Reference consumer: `apps/personas` (Round Table, tool-less). Design notes: [`docs/proposals/agent_hierarchy_proposal.md`](./docs/proposals/agent_hierarchy_proposal.md) (the tree) and [`docs/proposals/persona_agents_proposal.md`](./docs/proposals/persona_agents_proposal.md) (the original primitive).
 
 ### Compiler & Bundled Libraries
 

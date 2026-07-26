@@ -10,6 +10,7 @@ import type { AppManifest, FileAssociation } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
+import { withoutPersonaCommands } from './persona-commands.js';
 
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
@@ -51,6 +52,43 @@ export interface ControlEntry {
   appId: string;
   /** If set, only these commands may be issued to the target app. Omit = all commands. */
   commands?: string[];
+}
+
+/**
+ * How many sub-agents an app may run per (monitor, app).
+ *
+ * Two spellings, one meaning — `"personas": { "max": N }` and
+ * `"subagents": { "max": N }` are the same declaration, and both stay valid forever:
+ * `personas` is shipped wire format, and an app that only wants a cast of characters
+ * should not have to relearn the word for it.
+ */
+export interface SubAgentsEntry {
+  max: number;
+}
+
+/** Nobody gets a cast of thousands: a sub-agent is a provider process. */
+const MAX_SUB_AGENTS_PER_APP = 16;
+
+/**
+ * Parse `subagents` / `personas` from app.json. Returns undefined for an app that
+ * declares neither, or declares one with a nonsense `max` — "may not spawn any" is
+ * the answer for every app that has not asked, which is nearly all of them.
+ *
+ * Extra keys are ignored rather than rejected: the manifest is data on disk that
+ * outlives any one YAAR build, so an app.json still carrying a field a past version
+ * read should degrade to "the parts I understand" rather than to "cannot spawn".
+ */
+function parseSubAgents(meta: {
+  subagents?: unknown;
+  personas?: unknown;
+}): SubAgentsEntry | undefined {
+  const raw = (meta.subagents ?? meta.personas) as { max?: unknown } | undefined;
+  if (!raw || typeof raw !== 'object') return undefined;
+
+  const max = Number(raw.max);
+  if (!Number.isInteger(max) || max <= 0) return undefined;
+
+  return { max: Math.min(max, MAX_SUB_AGENTS_PER_APP) };
 }
 
 /** Parse `controls` from app.json, supporting string shorthand and object form. */
@@ -203,7 +241,12 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   // Load dist/protocol.json (implies appProtocol support)
   try {
     const protocolContent = await Bun.file(join(appPath, 'dist', 'protocol.json')).text();
-    protocol = JSON.parse(protocolContent);
+    // Persona-audience commands are stripped here, at the one place the protocol is
+    // read off disk, so every agent-facing reader downstream (`describe`, the skill
+    // doc, the app agent's manifest) is filtered by construction rather than by each
+    // remembering to. They are the sub-agent's half of the protocol and are described
+    // to it in its own voice at spawn — see `persona-commands.ts`.
+    protocol = withoutPersonaCommands(JSON.parse(protocolContent));
   } catch {
     // No protocol.json
   }
@@ -339,7 +382,7 @@ export async function getAppMeta(appId: string): Promise<{
   systemApp?: boolean;
   bundles?: string[];
   streams?: string[];
-  personas?: { max: number };
+  subagents?: SubAgentsEntry;
 } | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
@@ -360,7 +403,7 @@ export async function getAppMeta(appId: string): Promise<{
       systemApp?: boolean;
       bundles?: string[];
       streams?: string[];
-      personas?: { max: number };
+      subagents?: SubAgentsEntry;
     } = {};
     if (meta.messaging === 'all') result.messaging = 'all';
     // Only bundled apps may be `system` (see readAppInfo) — an installed app
@@ -394,19 +437,20 @@ export async function getAppMeta(appId: string): Promise<{
       const streams = meta.streams.filter((s: unknown): s is string => typeof s === 'string');
       if (streams.length > 0) result.streams = streams;
     }
-    // How many tool-less persona agents this app may run per (monitor, app). Absent
-    // or zero means the app cannot spawn any, which is every existing app.
+    // How many sub-agents this app may run per (monitor, app) —
+    // spelled `subagents` or `personas`. Absent means the app cannot spawn any, which
+    // is every existing app but one.
     //
-    // Bundled-only, mirroring `controls`/`streams`, though a persona is the better
-    // contained of the three: it holds no principal, no tools, and no cross-app
-    // reach. The gate is here because spawning one costs a real provider process and
-    // a slot out of the global `MAX_AGENTS` semaphore — a marketplace app should not
-    // be able to claim four of them by shipping a line of JSON. Read at spawn time
-    // (not carried on the iframe token) because the ceiling is a per-call quota
-    // rather than a capability, and the token is minted once per window.
-    if (meta.personas && resolveAppSource(appId) === 'bundled') {
-      const max = Number(meta.personas.max);
-      if (Number.isInteger(max) && max > 0) result.personas = { max: Math.min(max, 16) };
+    // Bundled-only, mirroring `controls`/`streams`, though a sub-agent is the better
+    // contained of the three: it holds no principal, no YAAR verbs, and no cross-app
+    // reach. The gate is here because spawning one costs a real provider
+    // process and a slot out of the global `MAX_AGENTS` semaphore — a marketplace app
+    // should not be able to claim four of them by shipping a line of JSON. Read at
+    // spawn time (not carried on the iframe token) because the ceiling is a per-call
+    // quota rather than a capability, and the token is minted once per window.
+    if (resolveAppSource(appId) === 'bundled') {
+      const subagents = parseSubAgents(meta);
+      if (subagents) result.subagents = subagents;
     }
     // Check for dist/protocol.json to determine appProtocol support
     try {

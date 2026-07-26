@@ -122,6 +122,7 @@ src/
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
 │   ├── system/           # Always-active: reload_cached, list_reload_options
+│   ├── sub-agent/        # A sub-agent's one channel — per-caller tool list
 │   └── index.ts          # Re-exports for server, system tools, verb tools
 ├── features/             # Domain business logic (imported by handlers/)
 │   ├── apps/             # App listing, skill loading, marketplace, badge
@@ -157,8 +158,8 @@ SessionHub (singleton registry)
         │   ├── Ephemeral Agents (temporary, no context)
         │   ├── App Agents: Map<appId, PooledAgent>  ← persistent per app
         │   └── Sub-agents: Map<monitorId::appId::subId, SubAgent>
-        │        ← N per (monitor, app); today's sole kind is `persona` — tool-less,
-        │          prompt supplied by the app at runtime
+        │        ← N per (monitor, app), prompt supplied by the app at runtime;
+        │          tool-less, or holding one channel to its own app's iframe
         ├── ContextTape (hierarchical message history)
         │   ├── [main] user/assistant messages
         │   └── [window:id] branch messages
@@ -225,12 +226,13 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 ## Tools (MCP)
 
-The active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`) are `system`, `verbs`, `app`, and `messaging`. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
+The active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`) are `system`, `verbs`, `app`, `messaging`, and `subagent`. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
 
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching to `handlers/` via `yaar://` URIs |
 | `mcp/system/` | system | reload_cached, list_reload_options |
+| `mcp/sub-agent/` | subagent | app-defined tools of the *calling* sub-agent — the only namespace whose tool list depends on who connects; empty for everyone else |
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
 
@@ -242,32 +244,45 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 - **Monitor → App**: `invoke('yaar://windows/{id}', { action: 'message', message: '...' })` — wraps message in `<monitor:{monitorId}>` tags and routes as an app task via `AppTaskProcessor`. Fire-and-forget; use `hook: 'response'` to get the app agent's reply back.
 - **App → Monitor**: App agent's `relay` tool enqueues a `type: 'monitor'` task. Additionally, app agent responses are pushed to `InteractionTimeline` and drained by the monitor on its next turn.
 
-**Persona agents (`yaar://apps/self/agents`):** an app that declares `"personas": { "max": N }` in its
-app.json (bundled-only, like `controls`/`streams`) may spawn up to N tool-less AI instances, each with
-a system prompt it supplies at runtime and each its own provider session with its own memory. The verb
+**Sub-agents / persona agents (`yaar://apps/self/agents`):** an app that declares
+`"personas": { "max": N }` — or, identically, `"subagents": { "max": N }` — in its app.json
+(bundled-only, like `controls`/`streams`) may spawn up to N AI instances, each with a system
+prompt it supplies at runtime and each its own provider session with its own memory. The verb
 surface lives in `handlers/apps/agents-resource.ts` — `list` / `invoke {spawn|message|interrupt}` /
 `read` / `delete` — and is callable from the app's iframe (`POST /api/verb`), never by another app:
 the appId in the URI must equal the appId the *context* says the caller is, which the caller cannot
-forge. `message` returns as soon as the turn is queued, so N personas generate concurrently; the answer
-arrives on the existing `yaar://agents/{instanceId}/stream` feed (needs `"streams": ["agents"]`), whose
-`done` frame carries the turn's final text.
+forge. `message` returns as soon as the turn is queued, so N sub-agents generate concurrently; the
+answer arrives on the existing `yaar://agents/{instanceId}/stream` feed (needs `"streams": ["agents"]`),
+whose `done` frame carries the turn's final text.
 
-Personas deliberately hold **no tools, no MCP servers, no permissions, and no principal** —
-`buildPersonaProfile` sets `allowedTools: []`, from which `buildSDKOptions` derives an empty MCP set and
-no builtins. That empty array is the whole containment story for a runtime-supplied prompt; `undefined`
-there would mean *every* tool. They bypass `ContextPool` entirely (no tape, no queue — the app's own
-scheduler serializes them) and are reclaimed when the app's last window on the monitor closes, when the
-monitor is removed, or on explicit `delete`. See `docs/proposals/persona_agents_proposal.md` and
-`apps/personas` (Round Table) for the reference consumer.
+Sub-agents deliberately hold **no YAAR verbs, no permissions, and no principal**. A spawn with no
+`tools` gets `allowedTools: []`, from which `buildSDKOptions` derives an empty MCP set and no
+builtins — that empty array is the whole containment story for a runtime-supplied prompt, since
+`undefined` there would mean *every* tool. Every sub-agent bypasses `ContextPool` entirely (no tape,
+no queue — the app's own scheduler serializes them) and is reclaimed when the app's last window on
+the monitor closes, when the monitor is removed, or on explicit `delete`. See
+`docs/proposals/persona_agents_proposal.md` and `apps/personas` (Round Table) for the reference
+consumer.
 
-In the pool a persona is a **sub-agent**: the `kind: 'persona'` member of `SubAgent`, living in
-`subAgents` under `subAgentKey(monitorId, appId, subId)`. That key extends the app agent's, which
-extends the monitor's — the four collections are one tree (session → monitor → app → sub-agent),
-addressed through the owner and torn down with it. `buildAgentTree()` renders the flat roster in
-that shape, and `list('yaar://session/agents')` returns both views (`agents` flat, `tree` nested;
-a `tree` node with `id: null` is an owner slot nobody occupies — an app whose personas exist but
-whose own agent was never needed). In the pool the id field is the grade-neutral `subId`; the
-**wire** keeps `personaId` (URI segment, spawn param, response bodies), and
+**The one channel (`agents/profiles/sub-agent.ts`).** The only capability a sub-agent may be given
+is a reach back into the **owning app's own iframe**. `buildSubAgentProfile` is the one place that
+is decided, and it runs on every sub-agent turn, so the turn's `allowedTools` come from the profile
+and never from the call site. The allowlist is *derived* from the declared tool names
+(`mcp__subagent__{name}`), never taken from the caller, so `buildSDKOptions` connects exactly one
+MCP server; each of its tools becomes one app-protocol command (`persona:{name}`) to the app's
+active window on its own monitor, with `personaId` stamped last so a model cannot answer as another
+character. No window → an error *result*, never a launched window and never a dead turn. Grants to
+the app *agent* (`controls`, `direct_message`) do not descend. Commands named `persona:*` are hidden
+from the app agent's `describe`/manifest (`features/apps/persona-commands.ts`) because their
+spawn-time descriptions are written for a character, not an operator.
+
+In the pool a sub-agent lives in `subAgents` under `subAgentKey(monitorId, appId, subId)`. That key
+extends the app agent's, which extends the monitor's — the four collections are one tree (session →
+monitor → app → sub-agent), addressed through the owner and torn down with it. `buildAgentTree()`
+renders the flat roster in that shape, and `list('yaar://session/agents')` returns both views
+(`agents` flat, `tree` nested; a `tree` node with `id: null` is an owner slot nobody occupies — an
+app whose personas exist but whose own agent was never needed). In the pool the id field is `subId`;
+the **wire** keeps `personaId` (URI segment, spawn param, response bodies), and
 `handlers/apps/agents-resource.ts` is the one place the two spellings meet — read `p.subId`, emit
 `personaId`. See [`docs/proposals/agent_hierarchy_proposal.md`](../../docs/proposals/agent_hierarchy_proposal.md)
 for the four laws every new node must satisfy.

@@ -10,21 +10,24 @@
  *         └─ sub-agent                  `monitorId::appId::subId`   worker threads
  *
  * Each tier's key extends its owner's, each is addressed through its owner, and
- * disposal cascades downward. Personas are the first *kind* of sub-agent: the
- * tool-less, caller-prompted `compute` grade (`SubAgentKind`).
+ * disposal cascades downward. A sub-agent's capabilities are written once in
+ * `profiles/sub-agent.ts` and never composed at the call site: it holds one channel
+ * to its own app's iframe, wearing whatever tool names the app declared at spawn, or
+ * no tools at all.
  *
  * Agent types:
  * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
  * - App agents: persistent per (monitor, app), handle app protocol communication
- * - Sub-agents: N per (monitor, app), tool-less, prompt supplied by the app at runtime
+ * - Sub-agents: N per (monitor, app), prompt supplied by the app at runtime
  *
  * Used by ContextPool to decouple agent lifecycle from task orchestration.
  */
 
 import { AgentSession } from './agent-session.js';
 import { getAgentLimiter } from './limiter.js';
-import { personaRole } from './profiles/persona.js';
+import { buildSubAgentProfile, subAgentRole } from './profiles/sub-agent.js';
+import type { SubAgentToolSpec } from './profiles/sub-agent.js';
 import { monitorSource } from './context.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';
@@ -62,9 +65,6 @@ export function subAgentKey(monitorId: string, appId: string, subId: string): st
   return `${monitorId}::${appId}::${subId}`;
 }
 
-/** The `compute`-grade spelling of {@link subAgentKey}. Same function, wire-era name. */
-export const personaAgentKey = subAgentKey;
-
 /**
  * Internal pooled agent representation.
  */
@@ -81,6 +81,10 @@ export interface PooledAgent {
 export interface AgentEntry {
   /** instanceId — stable across turns; accepted by `interruptByIdOrRole`. */
   id: string;
+  /**
+   * Which tier. `persona` is the sub-agent tier's spelling — shipped vocabulary, and
+   * the same word the URI segment and the spawn param use.
+   */
   type: 'session' | 'monitor' | 'app' | 'ephemeral' | 'persona';
   /** Human-readable name: the monitorId, the appId, or the current role. */
   label: string;
@@ -180,16 +184,6 @@ export function buildAgentTree(entries: AgentEntry[]): AgentTreeNode[] {
 }
 
 /**
- * The grades of sub-agent the tree can mint. Exactly one today.
- *
- * A grade is a *capability* menu entry, written once in `agents/profiles/` and
- * merely **selected** at spawn — never composed by the caller. `'persona'` is the
- * `compute` grade: receives text, returns text, holds nothing. A second kind adds a
- * member here and a profile builder there; it does not add a pool tier.
- */
-export type SubAgentKind = 'persona';
-
-/**
  * A sub-agent and the metadata its owning app spawned it with.
  *
  * The prompt lives here rather than on the provider because a persona's prompt is
@@ -198,7 +192,7 @@ export type SubAgentKind = 'persona';
  * used. Keeping it on the record also means a busy check, a roster row, and a
  * respawn all read the same object.
  */
-interface SubAgentBase {
+export interface SubAgent {
   agent: PooledAgent;
   monitorId: string;
   appId: string;
@@ -206,15 +200,12 @@ interface SubAgentBase {
    * The sub-id its owning app spawned it under — the last component of
    * {@link subAgentKey}.
    *
-   * Grade-neutral on purpose: a `protocol`-grade sub-agent is no more a "persona"
-   * than a persona is, and the field that identifies a node within its owner should
-   * not name one kind. The *wire* keeps `personaId`
-   * (`yaar://apps/self/agents/{personaId}`, the spawn param, every response body) —
-   * that is shipped format, and `handlers/apps/agents-resource.ts` is the one place
-   * the two spellings meet.
+   * The *wire* keeps `personaId` (`yaar://apps/self/agents/{personaId}`, the spawn
+   * param, every response body) — that is shipped format, and
+   * `handlers/apps/agents-resource.ts` is the one place the two spellings meet.
    */
   subId: string;
-  /** Verbatim, caller-supplied. Replayed on every turn — see {@link buildPersonaProfile}. */
+  /** Verbatim, caller-supplied. Replayed on every turn — see {@link buildSubAgentProfile}. */
   systemPrompt: string;
   model?: string;
   createdAt: number;
@@ -227,25 +218,19 @@ interface SubAgentBase {
    * the answer instead of re-asking a question the model already paid for.
    */
   lastResponse?: string;
-}
-
-/** The `compute`-grade sub-agent: tool-less, prompt supplied by the app at runtime. */
-export interface PersonaAgent extends SubAgentBase {
-  kind: 'persona';
+  /**
+   * The app-defined tools this sub-agent was spawned with; empty for a tool-less one.
+   *
+   * Prompt material plus a dispatch table, not a capability list — see
+   * `profiles/sub-agent.ts`. The reach is fixed by the profile (one channel to the
+   * owning app's own iframe); this only decides how many names it answers to and what
+   * each one is *called* when it lands there (`persona:{name}`).
+   */
+  tools: SubAgentToolSpec[];
 }
 
 /**
- * Any sub-agent, whatever its grade.
- *
- * A union of one today. It exists so the `kind` discriminator has somewhere to
- * discriminate *to* when a second grade lands — code that must handle every grade
- * says `SubAgent`, code that means the tool-less one says `PersonaAgent`, and the
- * compiler tells the difference apart the day it matters.
- */
-export type SubAgent = PersonaAgent;
-
-/**
- * What {@link AgentPool.spawnPersonaAgent} did.
+ * What {@link AgentPool.spawnSubAgent} did.
  *
  * Four outcomes rather than a nullable record because the verb handler owes the app
  * four different sentences: `reused` is a success the app should not treat as a new
@@ -253,11 +238,24 @@ export type SubAgent = PersonaAgent;
  * machine's `MAX_AGENTS`. Collapsing the last two into `null` made "close a window"
  * the advice for a limit only "delete a persona" could clear.
  */
-export type PersonaSpawnResult =
-  | { status: 'created'; record: PersonaAgent }
-  | { status: 'reused'; record: PersonaAgent }
+export type SubAgentSpawnResult =
+  | { status: 'created'; record: SubAgent }
+  | { status: 'reused'; record: SubAgent }
   | { status: 'at-capacity' }
   | { status: 'no-slot' };
+
+/**
+ * What one spawn asks for: the prompt that makes the node, the tools it may dispatch
+ * to its own app, and the app's own ceiling.
+ *
+ * Omitting `tools` is the plain case — a sub-agent that receives text and returns text.
+ */
+export interface SpawnSubAgentOptions {
+  systemPrompt: string;
+  model?: string;
+  max: number;
+  tools?: SubAgentToolSpec[];
+}
 
 const ZERO_USAGE: TokenUsage = {
   inputTokens: 0,
@@ -303,8 +301,8 @@ export class AgentPool {
   /**
    * Spawns reserved but not yet landed, keyed like {@link subAgents}.
    *
-   * The reservation is written *before* the first await in `spawnPersonaAgent`, which
-   * is what makes that method safe to call concurrently — a second call for the same
+   * The reservation is written *before* the first await in {@link AgentPool.spawnSubAgent},
+   * which is what makes that method safe to call concurrently — a second call for the same
    * sub-agent finds the reservation and joins it instead of starting a second provider.
    * `monitorId`/`appId` ride along rather than being parsed back out of the key, for
    * the same reason {@link SubAgent} carries them: the key is opaque.
@@ -423,7 +421,7 @@ export class AgentPool {
     for (const p of this.subAgents.values()) {
       yield {
         agent: p.agent,
-        type: p.kind,
+        type: 'persona',
         monitorId: p.monitorId,
         appId: p.appId,
         subId: p.subId,
@@ -697,14 +695,14 @@ export class AgentPool {
     // which needs no app agent to exist. An app that only ever talks to its personas
     // has entries here and none in `appAgents`, so walking app agents would reclaim
     // nothing and leak every slot the monitor's personas hold.
-    await this.disposePersonasForMonitor(monitorId);
+    await this.disposeSubAgentsForMonitor(monitorId);
   }
 
-  // ── Sub-agents (today: the `persona` kind) ───────────────────────
+  // ── Sub-agents ───────────────────────────────────────────────────
 
   /**
-   * Spawn a persona agent for one app on one monitor, or hand back the one that
-   * already answers to that id.
+   * Spawn a sub-agent for one app on one monitor, or hand back the one that already
+   * answers to that id.
    *
    * Every decision here — does the persona exist, is one already on its way, is the
    * app at its ceiling — is taken **synchronously, before the first await**. That is
@@ -717,17 +715,18 @@ export class AgentPool {
    * spawning its cast with `Promise.all` is the ordinary way to land there, and
    * `spawn` is documented as safe to re-run on every mount.
    *
-   * `max` is the app's `personas.max`: the caller reads the manifest, the pool
+   * `max` is the app's `subagents.max`: the caller reads the manifest, the pool
    * enforces it, and reservations count toward it so the cap holds under concurrency
-   * too.
+   * too. The cap is per (monitor, app) and counts every sub-agent, tool-bearing or
+   * not — a slot is a provider process either way.
    */
-  async spawnPersonaAgent(
+  async spawnSubAgent(
     monitorId: string,
     appId: string,
-    personaId: string,
-    options: { systemPrompt: string; model?: string; max: number },
-  ): Promise<PersonaSpawnResult> {
-    const key = subAgentKey(monitorId, appId, personaId);
+    subId: string,
+    options: SpawnSubAgentOptions,
+  ): Promise<SubAgentSpawnResult> {
+    const key = subAgentKey(monitorId, appId, subId);
 
     const existing = this.subAgents.get(key);
     if (existing) return { status: 'reused', record: existing };
@@ -741,9 +740,9 @@ export class AgentPool {
       return record ? { status: 'reused', record } : { status: 'no-slot' };
     }
 
-    if (this.countPersonas(monitorId, appId) >= options.max) return { status: 'at-capacity' };
+    if (this.countSubAgents(monitorId, appId) >= options.max) return { status: 'at-capacity' };
 
-    const pending = this.createPersonaAgent(monitorId, appId, personaId, options);
+    const pending = this.createSubAgent(monitorId, appId, subId, options);
     this.subAgentSpawns.set(key, { monitorId, appId, pending });
     try {
       const record = await pending;
@@ -762,12 +761,12 @@ export class AgentPool {
    * four characters plus the standing session/monitor/app trio sits close to the
    * `MAX_AGENTS` default.
    */
-  private async createPersonaAgent(
+  private async createSubAgent(
     monitorId: string,
     appId: string,
-    personaId: string,
-    options: { systemPrompt: string; model?: string },
-  ): Promise<PersonaAgent | null> {
+    subId: string,
+    options: SpawnSubAgentOptions,
+  ): Promise<SubAgent | null> {
     const provider = await this.acquireProvider();
     const agent = await this.createAgentCore(provider ?? undefined);
     if (!agent) {
@@ -775,26 +774,28 @@ export class AgentPool {
       return null;
     }
 
-    const record: PersonaAgent = {
-      kind: 'persona',
+    const tools = options.tools ?? [];
+    const record: SubAgent = {
       agent,
       monitorId,
       appId,
-      subId: personaId,
+      subId,
       systemPrompt: options.systemPrompt,
+      tools,
       ...(options.model ? { model: options.model } : {}),
       createdAt: Date.now(),
     };
-    this.subAgents.set(subAgentKey(monitorId, appId, personaId), record);
+    this.subAgents.set(subAgentKey(monitorId, appId, subId), record);
     console.log(
-      `[AgentPool] Persona "${personaId}" spawned for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
+      `[AgentPool] Sub-agent "${subId}" (${tools.length} tools) spawned for ${appId} ` +
+        `on monitor ${monitorId}: ${agent.instanceId}`,
     );
     return record;
   }
 
-  /** Live personas plus reservations — the number `personas.max` is measured against. */
-  private countPersonas(monitorId: string, appId: string): number {
-    let count = this.listPersonaAgents(monitorId, appId).length;
+  /** Live sub-agents plus reservations — the number `subagents.max` is measured against. */
+  private countSubAgents(monitorId: string, appId: string): number {
+    let count = this.listSubAgents(monitorId, appId).length;
     for (const spawn of this.subAgentSpawns.values()) {
       if (spawn.monitorId === monitorId && spawn.appId === appId) count++;
     }
@@ -816,45 +817,68 @@ export class AgentPool {
     if (pending.length > 0) await Promise.allSettled(pending);
   }
 
-  getPersonaAgent(monitorId: string, appId: string, personaId: string): PersonaAgent | undefined {
-    return this.subAgents.get(subAgentKey(monitorId, appId, personaId));
+  getSubAgent(monitorId: string, appId: string, subId: string): SubAgent | undefined {
+    return this.subAgents.get(subAgentKey(monitorId, appId, subId));
   }
 
-  /** Every persona one app owns on one monitor, oldest first. */
-  listPersonaAgents(monitorId: string, appId: string): PersonaAgent[] {
+  /**
+   * The sub-agent one MCP request is coming from, or undefined for every other
+   * caller.
+   *
+   * The `subagent` MCP namespace is the one door whose *tool list* depends on who is
+   * knocking (an app-defined set, fixed at spawn), so it needs the record behind the
+   * agent token rather than just its id. Every other namespace registers the same
+   * tools for everyone and never asks.
+   */
+  findSubAgentForAgent(agentId: string): SubAgent | undefined {
+    for (const record of this.subAgents.values()) {
+      if (record.agent.instanceId === agentId) return record;
+    }
+    return undefined;
+  }
+
+  /** Every sub-agent one app owns on one monitor, oldest first, whatever the grade. */
+  listSubAgents(monitorId: string, appId: string): SubAgent[] {
     return [...this.subAgents.values()]
       .filter((p) => p.monitorId === monitorId && p.appId === appId)
       .sort((a, b) => a.createdAt - b.createdAt);
   }
 
-  /** True while the persona's provider is streaming — one turn at a time per persona. */
-  isPersonaBusy(record: PersonaAgent): boolean {
+  /** True while the sub-agent's provider is streaming — one turn at a time, each. */
+  isSubAgentBusy(record: SubAgent): boolean {
     return this.isBusy(record.agent);
   }
 
   /**
-   * Run one persona turn, fire and forget.
+   * Run one sub-agent turn, fire and forget.
    *
-   * Deliberately not routed through `ContextPool`: a persona has no context tape,
+   * Deliberately not routed through `ContextPool`: a sub-agent has no context tape,
    * no window, and no queue — the app's own scheduler decides who speaks and when,
-   * and the pool's queues exist to serialize things a persona has no share in. What
+   * and the pool's queues exist to serialize things a sub-agent has no share in. What
    * it does share is the turn machinery, so the answer streams to
    * `yaar://agents/{instanceId}/stream` exactly like any other agent's, for free.
    *
    * The returned promise resolves when the turn ends; callers that want the verb to
    * return immediately (the app's `message` action does) simply don't await it. The
    * final text lands on `record.lastResponse` either way.
+   *
+   * The turn's hands come from {@link buildSubAgentProfile} and never from this
+   * method. That is the shape law 3 asks for: the pool knows a record's declared tool
+   * *names* and nothing about what a sub-agent may touch, so there is no branch here
+   * that could be widened into "…and also these tools".
    */
-  runPersonaTurn(record: PersonaAgent, content: string, messageId: string): Promise<void> {
+  runSubAgentTurn(record: SubAgent, content: string, messageId: string): Promise<void> {
+    const profile = buildSubAgentProfile(record);
     return record.agent.session.handleMessage(content, {
-      role: personaRole(record.appId, record.subId),
+      role: subAgentRole(record.appId, record.subId),
       source: monitorSource(record.monitorId),
       messageId,
       monitorId: record.monitorId,
-      systemPromptOverride: record.systemPrompt,
-      // The containment. See profiles/persona.ts — an empty allowlist is what stops
-      // a runtime-supplied prompt from reaching a single tool or MCP server.
-      allowedTools: [],
+      systemPromptOverride: profile.systemPrompt,
+      // The containment. See profiles/sub-agent.ts — this allowlist is what decides
+      // which MCP servers the process even connects to (none when the sub-agent has
+      // no tools, the `subagent` namespace alone when it has some).
+      allowedTools: profile.allowedTools,
       ...(record.model ? { model: record.model } : {}),
       // Not a context tape write — nothing here reaches `ContextTape`. It is the one
       // callback that hands back the turn's final assistant text, which `read` serves
@@ -865,36 +889,36 @@ export class AgentPool {
     });
   }
 
-  /** Dispose one persona. Returns false when the app never spawned it. */
-  async disposePersonaAgent(monitorId: string, appId: string, personaId: string): Promise<boolean> {
-    const key = subAgentKey(monitorId, appId, personaId);
+  /** Dispose one sub-agent. Returns false when the app never spawned it. */
+  async disposeSubAgent(monitorId: string, appId: string, subId: string): Promise<boolean> {
+    const key = subAgentKey(monitorId, appId, subId);
     const record = this.subAgents.get(key);
     if (!record) return false;
 
     this.subAgents.delete(key);
     await this.disposeAgent(
       record.agent,
-      `Persona "${personaId}" disposed for ${appId} on monitor ${monitorId}`,
+      `Sub-agent "${subId}" disposed for ${appId} on monitor ${monitorId}`,
     );
     return true;
   }
 
-  /** Dispose every persona one app owns on one monitor. Returns how many died. */
-  async disposePersonasForApp(monitorId: string, appId: string): Promise<number> {
+  /** Dispose every sub-agent one app owns on one monitor. Returns how many died. */
+  async disposeSubAgentsForApp(monitorId: string, appId: string): Promise<number> {
     await this.settlePersonaSpawns((s) => s.monitorId === monitorId && s.appId === appId);
-    const personas = this.listPersonaAgents(monitorId, appId);
-    for (const p of personas) {
-      await this.disposePersonaAgent(monitorId, appId, p.subId);
+    const doomed = this.listSubAgents(monitorId, appId);
+    for (const p of doomed) {
+      await this.disposeSubAgent(monitorId, appId, p.subId);
     }
-    return personas.length;
+    return doomed.length;
   }
 
-  /** Dispose every persona on a monitor, whichever app owns it. */
-  async disposePersonasForMonitor(monitorId: string): Promise<void> {
+  /** Dispose every sub-agent on a monitor, whichever app owns it. */
+  async disposeSubAgentsForMonitor(monitorId: string): Promise<void> {
     await this.settlePersonaSpawns((s) => s.monitorId === monitorId);
     const doomed = [...this.subAgents.values()].filter((p) => p.monitorId === monitorId);
     for (const p of doomed) {
-      await this.disposePersonaAgent(monitorId, p.appId, p.subId);
+      await this.disposeSubAgent(monitorId, p.appId, p.subId);
     }
   }
 
@@ -990,9 +1014,11 @@ export class AgentPool {
       if (agent.instanceId !== agentId) continue;
       // Ephemerals are unprivileged workers spawned by a monitor turn — same tier.
       if (type === 'ephemeral') return 'monitor';
-      // Personas are the app tier's own workers. Belt and braces: they run with an
-      // empty tool allowlist, so no MCP request ever arrives carrying one's token,
-      // and if one somehow did it would land in the least-privileged tier there is.
+      // Sub-agents are the app tier's own workers, and the tier they land in is the
+      // least-privileged one there is. It is load-bearing for a tool-bearing one,
+      // whose tool calls *do* arrive over MCP carrying its token: the role is what
+      // the `session-principal` gate reads, so a sub-agent asking for
+      // `yaar://session/*` is refused by the same check that refuses its app.
       if (type === 'persona') return 'app';
       return type;
     }

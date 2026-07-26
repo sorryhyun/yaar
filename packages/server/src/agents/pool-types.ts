@@ -59,9 +59,9 @@ export interface AgentPoolStats {
   /**
    * App-tier sub-agents, across every app and monitor.
    *
-   * Named for the one kind that exists (`persona` — the tool-less `compute` grade),
-   * which is also the wire name. A second kind splits this into per-kind counts;
-   * until then a total and a name that matches the manifest field beats a rename.
+   * Named `persona` because that is the wire name for this tier — the URI segment, the
+   * spawn param, and the manifest field all say it. A total under the name the manifest
+   * uses beats a rename that would have to be mirrored on the wire.
    */
   personaAgents: number;
   ephemeralAgents: number;

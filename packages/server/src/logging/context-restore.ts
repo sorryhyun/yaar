@@ -6,7 +6,7 @@ import {
   windowSource,
   extractWindowId,
 } from '../agents/context.js';
-import { isPersonaRole } from '../agents/profiles/persona.js';
+import { isSubAgentRole } from '../agents/profiles/sub-agent.js';
 
 export interface ContextRestorePolicy {
   mode: 'full' | 'monitor_and_selected_windows' | 'summarize_old_windows';
@@ -24,15 +24,15 @@ function toContextMessage(msg: ParsedMessage): ContextMessage | null {
     return null;
   }
 
-  // Persona turns are logged, but they are not part of anybody's context.
+  // Sub-agent turns are logged, but they are not part of anybody's context.
   //
-  // A persona has no tape and no window, so its turns carry the *monitor's* source —
+  // A sub-agent has no tape and no window, so its turns carry the *monitor's* source —
   // the same one the real user↔monitor conversation uses — and every filter below
   // keys on source alone. Kept, a four-character room would come back from a restore
   // as the monitor agent's own history: every turn prompt the app fed each character
   // read as the user talking, every in-character reply read as the monitor answering.
   // The log still holds them; the CLI panel and the session-logs app still show them.
-  if (isPersonaRole(msg.agentId)) return null;
+  if (isSubAgentRole(msg.agentId)) return null;
 
   const source: ContextSource =
     typeof msg.source === 'string' && msg.source.startsWith('yaar://')

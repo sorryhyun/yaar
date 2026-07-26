@@ -24,9 +24,19 @@ import { registerVerbTools, VERB_TOOL_NAMES } from '../handlers/index.js';
 import { getActiveSession } from '../handlers/utils.js';
 import { registerAppAgentTools } from './app-agent/index.js';
 import { registerMessagingTools, MESSAGING_TOOL_NAMES } from './messaging/index.js';
+import { registerSubAgentTools } from './sub-agent/index.js';
+import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 
-/** Core MCP servers (always active). */
-export const CORE_SERVERS = ['system', 'verbs', 'app', 'messaging'] as const;
+/**
+ * Core MCP servers (always active).
+ *
+ * `subagent` is active like the rest but empty for almost everyone: its tools are
+ * whatever the *calling* sub-agent was spawned with, so it registers nothing for a
+ * caller that is not one — or is one that was spawned with no tools (see
+ * `mcp/sub-agent/`). No other agent's tool allowlist names it, so no other agent
+ * connects it in the first place.
+ */
+export const CORE_SERVERS = ['system', 'verbs', 'app', 'messaging', SUB_AGENT_MCP_SERVER] as const;
 export type McpServerName = (typeof CORE_SERVERS)[number];
 
 /**
@@ -170,6 +180,9 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
       break;
     case 'messaging':
       registerMessagingTools(server);
+      break;
+    case SUB_AGENT_MCP_SERVER:
+      registerSubAgentTools(server);
       break;
   }
 
