@@ -1,42 +1,40 @@
-import { createSignal, onMount, For, Show } from '@bundled/solid-js';
+import { createSignal, createMemo, onMount, onCleanup, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
-import { invoke, list, read, del, httpFetch, showToast, withLoading, errMsg } from '@bundled/yaar';
+import {
+  defineApp,
+  invoke,
+  list,
+  read,
+  subscribe,
+  showToast,
+  showConfirm,
+  withLoading,
+  errMsg,
+} from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import {
-  JsonRpcResponse,
   McpConfigResponse,
   McpServerStatus,
   McpStatusListResponse,
   McpToolInfo,
   McpToolListResponse,
 } from './schema';
+import { deriveName, probePort, probeUrl, type DiscoveredServer, type McpTool } from './mcp';
 import './styles.css';
 
-// ── Types ────────────────────────────────────────────────────────
+// ── Types ────────────────────────────────────────────────
 
 interface McpServer {
   name: string;
   type: string;
+  /** From the persisted config; dedupes scan results against what's configured. */
+  url?: string;
   state: string;
   error?: string;
   toolCount?: number;
 }
 
-interface McpTool {
-  name: string;
-  description?: string;
-}
-
-interface DiscoveredServer {
-  url: string;
-  port: number;
-  serverName?: string;
-  serverVersion?: string;
-  tools: McpTool[];
-}
-
-// ── State ────────────────────────────────────────────────────────
+// ── State ────────────────────────────────────────────────
 
 const [servers, setServers] = createSignal<McpServer[]>([]);
 const [scanHost, setScanHost] = createSignal('127.0.0.1');
@@ -50,165 +48,94 @@ const [loading, setLoading] = createSignal(false);
 const [expandedServer, setExpandedServer] = createSignal<string | null>(null);
 const [serverTools, setServerTools] = createSignal<Record<string, McpTool[]>>({});
 
-// ── MCP JSON-RPC helpers ─────────────────────────────────────────
+// Add-by-URL probe
+const [probeInput, setProbeInput] = createSignal('');
+const [probing, setProbing] = createSignal(false);
+const [probeResult, setProbeResult] = createSignal<DiscoveredServer | null>(null);
 
-let rpcId = 0;
+/** URLs already registered — a scan hit matching one of these is not news. */
+const configuredUrls = createMemo(
+  () => new Set(servers().map((s) => s.url).filter((u): u is string => !!u)),
+);
 
-function jsonRpcRequest(method: string, params?: Record<string, unknown>) {
-  return JSON.stringify({ jsonrpc: '2.0', id: ++rpcId, method, params: params ?? {} });
-}
+const visibleDiscovered = createMemo(() =>
+  discovered().filter((d) => !configuredUrls().has(d.url)),
+);
 
-function jsonRpcNotification(method: string) {
-  return JSON.stringify({ jsonrpc: '2.0', method });
-}
-
-async function mcpPost(url: string, body: string, sessionId?: string): Promise<Response> {
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    Accept: 'application/json, text/event-stream',
-  };
-  if (sessionId) headers['mcp-session-id'] = sessionId;
-  return httpFetch(url, { method: 'POST', headers, body });
-}
-
-/** JSON.parse that answers "not JSON" with `undefined` instead of throwing. */
-function tryJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return undefined;
-  }
-}
-
-/**
- * Read the JSON-RPC payload out of a response body — direct JSON or SSE framing.
- *
- * Only the *decode* decides which framing this is; everything after it (schema
- * failure, and a well-formed `error` envelope) throws for the caller. That
- * separation is the point: the earlier version wrapped the whole direct-JSON
- * branch in a try whose catch fell through to the SSE scan, so a legitimate
- * `error.message` from the server — and the schema failure too — was swallowed
- * and re-reported as the generic "Could not parse MCP response". The server's
- * own explanation of what went wrong is the most useful thing in the exchange;
- * it must not be lost to control flow.
- */
-function parseRpcResponse(body: string): unknown {
-  const direct = tryJson(body);
-  if (direct !== undefined) {
-    const parsed = z.safeParse(JsonRpcResponse, direct);
-    if (!parsed.success) {
-      console.error('MCP JSON-RPC response failed validation', parsed.error.issues);
-      throw new Error('Malformed MCP JSON-RPC response');
-    }
-    const data = parsed.data;
-    if (data.result !== undefined) return data.result;
-    if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
-    return data;
-  }
-
-  // Not JSON on its own — SSE framing: look for "data: {...}" lines. A line that
-  // does not decode is skipped (an SSE stream legitimately carries other
-  // frames); a line that decodes and *is* an error envelope throws, as above.
-  for (const line of body.split('\n')) {
-    if (!line.startsWith('data: ')) continue;
-    const value = tryJson(line.slice(6));
-    if (value === undefined) continue;
-    const parsed = z.safeParse(JsonRpcResponse, value);
-    if (!parsed.success) {
-      console.error('MCP SSE data line failed validation', parsed.error.issues);
-      continue;
-    }
-    const data = parsed.data;
-    if (data.result !== undefined) return data.result;
-    if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
-  }
-  throw new Error('Could not parse MCP response');
-}
-
-// ── Scanning ─────────────────────────────────────────────────────
+// ── Scanning ─────────────────────────────────────────────
 
 const BATCH_SIZE = 20;
 
-/** Try to probe a single port. Returns DiscoveredServer on success, null on failure. */
-async function probePort(host: string, port: number, path: string): Promise<DiscoveredServer | null> {
-  const url = `http://${host}:${port}${path}`;
-  try {
-    const initRes = await mcpPost(
-      url,
-      jsonRpcRequest('initialize', {
-        protocolVersion: '2025-03-26',
-        capabilities: {},
-        clientInfo: { name: 'yaar-mcp-manager', version: '1.0.0' },
-      }),
-    );
-    // httpFetch does not throw on 4xx/5xx — a non-MCP service answering on this
-    // port is a normal scan outcome, not an error.
-    if (!initRes.ok) return null;
-    // The body is either JSON or an SSE stream; parseRpcResponse handles both,
-    // so read it as text rather than committing to res.json().
-    const initResult = parseRpcResponse(await initRes.text()) as {
-      serverInfo?: { name?: string; version?: string };
-    };
-    // Headers.get() is case-insensitive, unlike the plain-object lookup this replaced.
-    const sessionId = initRes.headers.get('mcp-session-id') ?? undefined;
-
-    await mcpPost(url, jsonRpcNotification('notifications/initialized'), sessionId);
-
-    const toolsRes = await mcpPost(url, jsonRpcRequest('tools/list'), sessionId);
-    const toolsResult = parseRpcResponse(await toolsRes.text()) as {
-      tools?: Array<{ name: string; description?: string }>;
-    };
-
-    return {
-      url,
-      port,
-      serverName: initResult.serverInfo?.name,
-      serverVersion: initResult.serverInfo?.version,
-      tools: (toolsResult.tools ?? []).map((t) => ({ name: t.name, description: t.description })),
-    };
-  } catch {
-    return null;
-  }
-}
-
-async function startScan() {
+async function startScan(): Promise<DiscoveredServer[]> {
   const host = scanHost().trim();
   const from = scanFrom();
   const to = scanTo();
   const path = scanPath().trim() || '/mcp';
-  if (!host || from > to) return;
+  if (!host) throw new Error('Host is required');
+  if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
+    throw new Error(`Invalid port range ${from}-${to}`);
+  }
 
   setScanning(true);
   setDiscovered([]);
   const found: DiscoveredServer[] = [];
 
-  for (let batchStart = from; batchStart <= to; batchStart += BATCH_SIZE) {
-    const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, to);
-    setScanProgress(`Scanning ports ${batchStart}-${batchEnd} of ${from}-${to}...`);
+  try {
+    for (let batchStart = from; batchStart <= to; batchStart += BATCH_SIZE) {
+      const batchEnd = Math.min(batchStart + BATCH_SIZE - 1, to);
+      setScanProgress(`Scanning ports ${batchStart}-${batchEnd} of ${from}-${to}...`);
 
-    const promises: Promise<DiscoveredServer | null>[] = [];
-    for (let port = batchStart; port <= batchEnd; port++) {
-      promises.push(probePort(host, port, path));
-    }
+      const promises: Promise<DiscoveredServer | null>[] = [];
+      for (let port = batchStart; port <= batchEnd; port++) {
+        promises.push(probePort(host, port, path));
+      }
 
-    const results = await Promise.all(promises);
-    for (const r of results) {
-      if (r) {
-        found.push(r);
-        setDiscovered([...found]);
+      for (const r of await Promise.all(promises)) {
+        if (r && !found.some((f) => f.url === r.url)) {
+          found.push(r);
+          setDiscovered([...found]);
+        }
       }
     }
+  } finally {
+    setScanning(false);
   }
 
-  setScanProgress(found.length > 0 ? `Found ${found.length} server(s)` : 'No MCP servers found');
-  setScanning(false);
+  const fresh = found.filter((f) => !configuredUrls().has(f.url));
+  const skipped = found.length - fresh.length;
+  setScanProgress(
+    found.length === 0
+      ? 'No MCP servers found'
+      : `Found ${found.length} server(s)${skipped > 0 ? ` (${skipped} already configured)` : ''}`,
+  );
+  return fresh;
 }
 
-// ── API ──────────────────────────────────────────────────────────
+async function runProbe() {
+  const url = probeInput().trim();
+  if (!url) return;
+  setProbing(true);
+  setProbeResult(null);
+  try {
+    const result = await probeUrl(url);
+    if (!result) {
+      showToast('No MCP server responded at that URL', 'error');
+      return;
+    }
+    setProbeResult(result);
+  } catch (err) {
+    console.error('[mcp-manager] probe failed', err);
+    showToast(`Probe failed: ${errMsg(err)}`, 'error');
+  } finally {
+    setProbing(false);
+  }
+}
+
+// ── API ─────────────────────────────────────────────────
 
 async function loadServers() {
   try {
-    // Read config for names/types, and runtime status for state/toolCount
+    // Read config for names/types/urls, and runtime status for state/toolCount
     const [configRaw, statusRaw] = await Promise.all([
       read('yaar://config/mcp'),
       list<unknown>('yaar://mcp'),
@@ -250,6 +177,7 @@ async function loadServers() {
         return {
           name,
           type: cfg.type,
+          url: cfg.url,
           state: status?.state ?? 'disconnected',
           error: status?.error,
           toolCount: status?.toolCount,
@@ -267,40 +195,38 @@ async function loadServers() {
   }
 }
 
-async function addDiscovered(server: DiscoveredServer) {
-  const name = server.serverName || `mcp-${server.port}`;
-  await withLoading(setLoading, async () => {
-    await invoke('yaar://config/mcp', { name, config: { type: 'http', url: server.url } });
-    await invoke('yaar://mcp', { action: 'reload' });
-    showToast(`Added "${name}"`, 'success');
-    setDiscovered((prev) => prev.filter((s) => s.url !== server.url));
-    await loadServers();
+/**
+ * Register a server through the gateway.
+ *
+ * `yaar://mcp` action:'add' writes the config *and* connects in one step; the
+ * older path wrote `yaar://config/mcp` then fired a separate 'reload', which
+ * left a window where the config and the live gateway disagreed.
+ */
+async function addServerByUrl(url: string, name?: string): Promise<string> {
+  const finalName = (name ?? '').trim() || deriveName(url);
+  await invoke('yaar://mcp', {
+    action: 'add',
+    name: finalName,
+    config: { type: 'http', url },
   });
+  await loadServers();
+  return finalName;
 }
 
-async function removeServer(name: string) {
-  await withLoading(setLoading, async () => {
-    await del(`yaar://config/mcp/${name}`);
-    await invoke('yaar://mcp', { action: 'reload' });
-    showToast(`Removed "${name}"`, 'success');
-    await loadServers();
-  });
+async function removeServerByName(name: string): Promise<void> {
+  await invoke('yaar://mcp', { action: 'remove', name });
+  await loadServers();
 }
 
-async function refreshServer(name: string) {
-  try {
-    await invoke('yaar://mcp', { action: 'refresh', name });
-    showToast(`Refreshed "${name}"`, 'success');
-    await loadServers();
-    await loadToolsFor(name);
-  } catch (err) {
-    showToast(errMsg(err), 'error');
-  }
+async function refreshServerByName(name: string): Promise<void> {
+  await invoke('yaar://mcp', { action: 'refresh', name });
+  await loadServers();
+  await loadToolsFor(name);
 }
 
 async function loadToolsFor(name: string) {
   try {
-    const raw = await list<unknown>(`yaar://mcp/${name}`);
+    const raw = await list<unknown>(`yaar://mcp/${encodeURIComponent(name)}`);
     const parsed = z.safeParse(McpToolListResponse, raw ?? {});
     if (!parsed.success) {
       console.error(`[mcp-manager] tool list for "${name}" failed validation`, parsed.error.issues);
@@ -329,6 +255,40 @@ async function loadToolsFor(name: string) {
   }
 }
 
+// ── UI actions ─────────────────────────────────────────────
+
+async function addDiscovered(server: DiscoveredServer) {
+  await withLoading(setLoading, async () => {
+    const name = await addServerByUrl(server.url, server.serverName);
+    showToast(`Added "${name}"`, 'success');
+    setDiscovered((prev) => prev.filter((s) => s.url !== server.url));
+    if (probeResult()?.url === server.url) setProbeResult(null);
+  });
+}
+
+/** UI remove path: confirm first. The agent command calls the core directly. */
+async function confirmRemove(name: string) {
+  const ok = await showConfirm(`Remove "${name}" from your MCP servers?`, {
+    title: 'Remove MCP server',
+    okLabel: 'Remove',
+    danger: true,
+  });
+  if (!ok) return;
+  await withLoading(setLoading, async () => {
+    await removeServerByName(name);
+    showToast(`Removed "${name}"`, 'success');
+  });
+}
+
+async function refreshServer(name: string) {
+  try {
+    await refreshServerByName(name);
+    showToast(`Refreshed "${name}"`, 'success');
+  } catch (err) {
+    showToast(errMsg(err), 'error');
+  }
+}
+
 function toggleExpand(name: string) {
   if (expandedServer() === name) {
     setExpandedServer(null);
@@ -340,7 +300,7 @@ function toggleExpand(name: string) {
   }
 }
 
-// ── Helpers ──────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────
 
 function stateDot(state: string) {
   if (state === 'connected') return 'dot dot-ok';
@@ -348,12 +308,91 @@ function stateDot(state: string) {
   return 'dot dot-err';
 }
 
-// ── Components ───────────────────────────────────────────────────
+// ── Components ────────────────────────────────────────────
+
+function ToolList(tools: () => McpTool[]) {
+  return html`
+    <ul class="tool-list">
+      <${For} each=${tools}>
+        ${(tool: McpTool) => html`
+          <li class="tool-item">
+            <span class="tool-name">${tool.name}</span>
+            <${Show} when=${tool.description}>
+              <span class="tool-desc">${tool.description}</span>
+            </>
+          </li>
+        `}
+      </>
+    </ul>
+  `;
+}
+
+function DiscoveredCard(server: DiscoveredServer) {
+  return html`
+    <div class="y-card discovered-card">
+      <div class="discovered-row">
+        <span class="dot dot-ok"></span>
+        <div class="server-info">
+          <strong>
+            ${server.serverName ??
+            (server.port != null ? `Port ${server.port}` : deriveName(server.url))}
+          </strong>
+          <${Show} when=${server.serverVersion}>
+            <span class="version">v${server.serverVersion}</span>
+          </>
+          <${Show} when=${server.protocolVersion}>
+            <span class="proto-badge">MCP ${server.protocolVersion}</span>
+          </>
+          <span class="tool-count">
+            ${server.tools.length} tool${server.tools.length !== 1 ? 's' : ''}
+          </span>
+          <span class="server-url">${server.url}</span>
+        </div>
+        <button
+          class="y-btn y-btn-primary y-btn-sm"
+          onClick=${() => addDiscovered(server)}
+          disabled=${loading}
+        >
+          Add
+        </button>
+      </div>
+      <${Show} when=${server.tools.length > 0}>
+        ${() => ToolList(() => server.tools)}
+      </>
+    </div>
+  `;
+}
+
+function ProbeSection() {
+  return html`
+    <section class="section">
+      <h2 class="y-label">Add a server by URL</h2>
+      <div class="probe-row">
+        <input
+          class="y-input probe-input"
+          type="text"
+          placeholder="http://127.0.0.1:3999/mcp"
+          value=${probeInput}
+          onInput=${(e: InputEvent) => setProbeInput((e.target as HTMLInputElement).value)}
+          onKeyDown=${(e: KeyboardEvent) => {
+            if (e.key === 'Enter') runProbe();
+          }}
+        />
+        <button class="y-btn y-btn-primary" onClick=${runProbe} disabled=${probing}>
+          ${() => (probing() ? 'Probing...' : 'Probe')}
+        </button>
+      </div>
+      <${Show} when=${probeResult}>
+        ${() => DiscoveredCard(probeResult()!)}
+      </>
+    </section>
+  `;
+}
 
 function ScanSection() {
   return html`
     <section class="section">
-      <h2 class="y-label">Scan for MCP Servers</h2>
+      <h2 class="y-label">Scan for MCP servers</h2>
 
       <div class="scan-fields">
         <div class="scan-field">
@@ -395,55 +434,20 @@ function ScanSection() {
         <div class="scan-field scan-field-btn">
           <button
             class="y-btn y-btn-primary"
-            onClick=${startScan}
+            onClick=${() => startScan().catch((err) => showToast(errMsg(err), 'error'))}
             disabled=${scanning}
           >
-            ${() => scanning() ? 'Scanning...' : 'Scan'}
+            ${() => (scanning() ? 'Scanning...' : 'Scan')}
           </button>
         </div>
       </div>
 
       <${Show} when=${scanProgress}>
-        <div class=${() => scanning() ? 'scan-progress' : 'scan-done'}>${scanProgress}</div>
+        <div class=${() => (scanning() ? 'scan-progress' : 'scan-done')}>${scanProgress}</div>
       </>
 
-      <${For} each=${discovered}>
-        ${(server: DiscoveredServer) => html`
-          <div class="y-card discovered-card">
-            <div class="discovered-row">
-              <span class="dot dot-ok"></span>
-              <div class="server-info">
-                <strong>${server.serverName ?? `Port ${server.port}`}</strong>
-                <${Show} when=${server.serverVersion}>
-                  <span class="version">v${server.serverVersion}</span>
-                </>
-                <span class="tool-count">${server.tools.length} tool${server.tools.length !== 1 ? 's' : ''}</span>
-                <span class="server-url">${server.url}</span>
-              </div>
-              <button
-                class="y-btn y-btn-primary btn-sm"
-                onClick=${() => addDiscovered(server)}
-                disabled=${loading}
-              >
-                Add
-              </button>
-            </div>
-            <${Show} when=${() => server.tools.length > 0}>
-              <ul class="tool-list">
-                <${For} each=${() => server.tools}>
-                  ${(tool: McpTool) => html`
-                    <li class="tool-item">
-                      <span class="tool-name">${tool.name}</span>
-                      <${Show} when=${tool.description}>
-                        <span class="tool-desc">${tool.description}</span>
-                      </>
-                    </li>
-                  `}
-                </>
-              </ul>
-            </>
-          </div>
-        `}
+      <${For} each=${visibleDiscovered}>
+        ${(server: DiscoveredServer) => DiscoveredCard(server)}
       </>
     </section>
   `;
@@ -453,8 +457,8 @@ function ServerList() {
   return html`
     <section class="section">
       <div class="section-header">
-        <h2 class="y-label">Configured Servers</h2>
-        <button class="y-btn y-btn-ghost btn-sm" onClick=${loadServers}>Reload</button>
+        <h2 class="y-label">Configured servers</h2>
+        <span class="live-hint">live</span>
       </div>
 
       <${Show} when=${() => servers().length === 0}>
@@ -467,10 +471,7 @@ function ServerList() {
       <${For} each=${servers}>
         ${(server: McpServer) => html`
           <div class="y-card server-card">
-            <div
-              class="y-list-item server-row"
-              onClick=${() => toggleExpand(server.name)}
-            >
+            <div class="y-list-item server-row" onClick=${() => toggleExpand(server.name)}>
               <span class=${() => stateDot(server.state)}></span>
               <div class="server-info">
                 <strong>${server.name}</strong>
@@ -484,12 +485,12 @@ function ServerList() {
               </div>
               <div class="server-actions" onClick=${(e: Event) => e.stopPropagation()}>
                 <button
-                  class="y-btn y-btn-ghost btn-sm"
+                  class="y-btn y-btn-ghost y-btn-sm"
                   onClick=${() => refreshServer(server.name)}
                 >Refresh</button>
                 <button
-                  class="y-btn y-btn-ghost y-btn-danger btn-sm"
-                  onClick=${() => removeServer(server.name)}
+                  class="y-btn y-btn-danger y-btn-sm"
+                  onClick=${() => confirmRemove(server.name)}
                 >Remove</button>
               </div>
             </div>
@@ -500,18 +501,7 @@ function ServerList() {
                   when=${() => (serverTools()[server.name]?.length ?? 0) > 0}
                   fallback=${html`<div class="no-tools">No tools or not connected</div>`}
                 >
-                  <ul class="tool-list">
-                    <${For} each=${() => serverTools()[server.name] ?? []}>
-                      ${(tool: McpTool) => html`
-                        <li class="tool-item">
-                          <span class="tool-name">${tool.name}</span>
-                          <${Show} when=${tool.description}>
-                            <span class="tool-desc">${tool.description}</span>
-                          </>
-                        </li>
-                      `}
-                    </>
-                  </ul>
+                  ${() => ToolList(() => serverTools()[server.name] ?? [])}
                 </>
               </div>
             </>
@@ -525,14 +515,125 @@ function ServerList() {
 function App() {
   onMount(() => {
     loadServers();
+
+    // Live status: the gateway pings this URI whenever a server connects,
+    // disconnects or its tool cache changes. Replaces the old manual Reload
+    // button, which was the only way to notice a state change.
+    let unsubscribe: (() => void) | undefined;
+    let disposed = false;
+    subscribe('yaar://mcp', () => {
+      loadServers();
+    })
+      .then((fn) => {
+        if (disposed) fn();
+        else unsubscribe = fn;
+      })
+      .catch((err) => {
+        console.error('[mcp-manager] live status subscription failed', err);
+      });
+
+    onCleanup(() => {
+      disposed = true;
+      unsubscribe?.();
+    });
   });
 
   return html`
     <div class="y-app mcp-app">
+      <${ProbeSection} />
       <${ScanSection} />
       <${ServerList} />
     </div>
   `;
 }
 
-render(() => html`<${App} />`, document.getElementById('app')!);
+// ── App Protocol ───────────────────────────────────────────
+
+export default defineApp({
+  id: 'mcp-manager',
+  name: 'MCP Manager',
+  state: {
+    servers: {
+      description:
+        'Configured MCP servers with live connection state, type, url and tool count.',
+      get: () => servers(),
+    },
+    discovered: {
+      description:
+        'MCP servers found by the most recent scan or probe that are not yet configured.',
+      get: () => visibleDiscovered(),
+    },
+  },
+  commands: {
+    scan: {
+      description:
+        'Scan a host/port range for MCP servers. Returns servers that are not already configured.',
+      params: z.object({
+        host: z.optional(z.string()),
+        from: z.optional(z.number()),
+        to: z.optional(z.number()),
+        path: z.optional(z.string()),
+      }),
+      replay: 'never',
+      run: async (p) => {
+        if (p.host !== undefined) setScanHost(p.host);
+        if (p.from !== undefined) setScanFrom(p.from);
+        if (p.to !== undefined) setScanTo(p.to);
+        if (p.path !== undefined) setScanPath(p.path);
+        const found = await startScan();
+        return {
+          found: found.length,
+          servers: found.map((s) => ({
+            url: s.url,
+            name: s.serverName,
+            version: s.serverVersion,
+            protocolVersion: s.protocolVersion,
+            toolCount: s.tools.length,
+          })),
+        };
+      },
+    },
+    addServer: {
+      description:
+        'Probe an MCP server URL and register it. Fails without adding if nothing MCP-shaped answers.',
+      params: z.object({ url: z.string(), name: z.optional(z.string()) }),
+      replay: 'never',
+      run: async (p) => {
+        const probed = await probeUrl(p.url);
+        if (!probed) throw new Error(`No MCP server responded at ${p.url}`);
+        const name = await addServerByUrl(p.url, p.name ?? probed.serverName);
+        return {
+          name,
+          url: p.url,
+          protocolVersion: probed.protocolVersion,
+          tools: probed.tools.map((t) => t.name),
+        };
+      },
+    },
+    removeServer: {
+      description: 'Unregister a configured MCP server by name.',
+      params: z.object({ name: z.string() }),
+      replay: 'never',
+      run: async (p) => {
+        await removeServerByName(p.name);
+        return { removed: p.name };
+      },
+    },
+    refreshServer: {
+      description: 'Force-refresh the tool cache and connection state for one configured server.',
+      params: z.object({ name: z.string() }),
+      replay: 'never',
+      run: async (p) => {
+        await refreshServerByName(p.name);
+        const server = servers().find((s) => s.name === p.name);
+        return {
+          name: p.name,
+          state: server?.state ?? 'unknown',
+          toolCount: server?.toolCount,
+          tools: (serverTools()[p.name] ?? []).map((t) => t.name),
+        };
+      },
+    },
+  },
+  view: App,
+});

@@ -28,8 +28,38 @@ export const JsonRpcResponse = z.looseObject({
   error: z.optional(JsonRpcError),
 });
 
+// ── Remote MCP server results ────────────────────────────────────
+//
+// These two sit behind `parseRpcResponse`, which only guarantees "some JSON-RPC
+// result came back". The result *payload* is still whatever a remote server
+// chose to send, so it gets validated rather than cast — the `as` casts these
+// replaced were unchecked assertions about an untrusted peer.
+
+// `initialize` result. `protocolVersion` is what the server negotiated down to;
+// the app echoes it back in the MCP-Protocol-Version header on every subsequent
+// request, so reading it correctly matters more than any display field.
+export const McpInitializeResult = z.looseObject({
+  protocolVersion: z.optional(z.string()),
+  serverInfo: z.optional(
+    z.looseObject({
+      name: z.optional(z.string()),
+      version: z.optional(z.string()),
+    }),
+  ),
+});
+
+// `tools/list` result from a remote server. Rows stay `unknown` and are parsed
+// one at a time with `McpToolInfo` below, so one malformed tool costs that tool
+// and not the whole list.
+export const McpToolsListResult = z.looseObject({
+  tools: z.optional(z.array(z.unknown())),
+});
+
+// ── YAAR gateway / persisted config ──────────────────────────────
+
 // Persisted MCP config read in `loadServers` via `read('yaar://config/mcp')`.
 // The app reads `.servers` and, per entry, `.type` (with optional `url`/`command`).
+// `url` is also what dedupes a scan result against an already-configured server.
 const McpServerConfig = z.looseObject({
   type: z.string(),
   url: z.optional(z.string()),

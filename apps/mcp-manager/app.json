@@ -1,14 +1,15 @@
 {
   "icon": "🔌",
   "name": "MCP Manager",
-  "description": "Discover and manage external MCP servers",
+  "description": "Discover, probe and manage external MCP servers",
   "run": "dist/index.html",
   "permissions": [
     "yaar://mcp/",
     "yaar://http/",
     "yaar://config/mcp/"
   ],
-  "version": "1.0.0",
+  "version": "2.0.0",
   "author": "YAAR",
-  "kind": "system"
+  "kind": "system",
+  "id": "mcp-manager"
 }
