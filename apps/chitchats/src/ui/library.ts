@@ -24,7 +24,6 @@ import {
   cast,
   openRoom,
   openRoomId,
-  renameRoom,
   removeRoom,
   castInRoom,
   uncastFromRoom,
@@ -32,7 +31,7 @@ import {
   type Room,
 } from '../store';
 import { live, dispose } from '../agents';
-import { editing, setEditing } from './state';
+import { editing, setEditing, libraryView, setLibraryView } from './state';
 import { face } from './views';
 import { editor } from './editor';
 import { switchRoom, newRoom, newCharacter, syncStage } from '../stage';
@@ -58,6 +57,8 @@ export function charactersSidebar() {
       classList=${() => ({
         expanded: charactersExpanded(),
         pinned: charactersPinned(),
+        'view-rooms': libraryView() === 'rooms',
+        'view-characters': libraryView() === 'characters',
       })}
       onMouseEnter=${openCharacters}
       onMouseLeave=${scheduleCharactersClose}
@@ -65,7 +66,24 @@ export function charactersSidebar() {
       <div class="cc-edge cc-edge-left" title="Characters"></div>
       <div class="cc-panel">
         <div class="cc-panel-head">
-          <span class="y-label">Characters</span>
+          <div class="cc-library-tabs" role="tablist" aria-label="Sidebar list">
+            <button
+              class="y-btn y-btn-ghost cc-library-tab"
+              classList=${() => ({ active: libraryView() === 'rooms' })}
+              aria-pressed=${() => libraryView() === 'rooms'}
+              onClick=${() => setLibraryView('rooms')}
+            >
+              Rooms
+            </button>
+            <button
+              class="y-btn y-btn-ghost cc-library-tab"
+              classList=${() => ({ active: libraryView() === 'characters' })}
+              aria-pressed=${() => libraryView() === 'characters'}
+              onClick=${() => setLibraryView('characters')}
+            >
+              Characters
+            </button>
+          </div>
           <button
             class="cc-pin"
             classList=${() => ({ active: charactersPinned() })}
@@ -89,15 +107,7 @@ export function charactersSidebar() {
                 onClick=${() => switchRoom(room.roomId)}
               >
                 <span class="cc-emoji">${room.emoji}</span>
-                <input
-                  class="cc-room-name y-truncate"
-                  value=${room.name}
-                  onClick=${(e: Event) => e.stopPropagation()}
-                  onChange=${(e: Event) => {
-                    const name = (e.target as HTMLInputElement).value.trim();
-                    if (name) void renameRoom(room.roomId, name);
-                  }}
-                />
+                <span class="cc-room-name y-truncate" title=${room.name}>${room.name}</span>
                 <button
                   class="y-btn y-btn-ghost cc-mini"
                   onClick=${async (e: Event) => {

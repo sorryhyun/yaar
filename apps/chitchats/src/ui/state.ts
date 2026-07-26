@@ -24,6 +24,9 @@ export const [max, setMax] = createSignal(4);
 /** The characterId whose editor is open, or null. */
 export const [editing, setEditing] = createSignal<string | null>(null);
 
+/** Which collection the left sidebar displays. */
+export const [libraryView, setLibraryView] = createSignal<'rooms' | 'characters'>('rooms');
+
 /** Which of the four persona documents the open editor is showing. */
 export const [editingDoc, setEditingDoc] = createSignal<PersonaKey>('inANutshell');
 

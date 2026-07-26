@@ -194,7 +194,7 @@
 
 .cc-side-left .cc-panel {
   left: 0;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   border-right: 1px solid var(--yaar-border);
   transform: translateX(-10px);
 }
@@ -245,19 +245,43 @@
   opacity: 1;
 }
 
-/* Rooms are capped rather than shared evenly: the library below is the long list. */
-.cc-panel-rooms {
-  padding: var(--yaar-sp-2);
-  max-height: 220px;
-  overflow-y: auto;
-  border-bottom: 1px solid var(--yaar-border);
+/* The sidebar displays one collection at a time, so the active list uses the full panel. */
+.cc-side-left .cc-panel {
+  grid-template-rows: auto minmax(0, 1fr);
 }
 
+.cc-panel-rooms,
 .cc-panel-library,
 .cc-panel-cast {
   padding: var(--yaar-sp-2);
   min-height: 0;
   overflow-y: auto;
+}
+
+.cc-side.view-rooms .cc-panel-library,
+.cc-side.view-characters .cc-panel-rooms {
+  display: none;
+}
+
+.cc-library-tabs {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+}
+
+.cc-library-tab {
+  min-height: 24px;
+  padding: 0 var(--yaar-sp-2);
+  color: var(--yaar-text-muted);
+}
+
+.cc-library-tab.active {
+  background: var(--yaar-accent-emphasis);
+  color: var(--yaar-text);
+}
+
+.cc-library-tab.active:hover {
+  background: var(--yaar-accent-emphasis-hover);
 }
 
 .cc-side-head {
@@ -281,21 +305,10 @@
 }
 
 .cc-room-name {
-  flex: 0 1 auto;
-  width: 100%;
+  flex: 1 1 auto;
   min-width: 0;
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: var(--yaar-radius-sm);
-  color: inherit;
-  font: inherit;
   padding: 2px var(--yaar-sp-1);
-}
-
-.cc-room-name:hover,
-.cc-room-name:focus {
-  border-color: var(--yaar-border);
-  outline: none;
+  color: inherit;
 }
 
 /* ── Cast cards ─────────────────────────────────────────────────── */

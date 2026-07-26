@@ -16,7 +16,7 @@ import { Show, createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 
 import { openRoom, renameRoom } from '../store';
-import { max } from './state';
+import { max, setLibraryView } from './state';
 import {
   charactersPinned,
   openCharacters,
@@ -57,7 +57,10 @@ export function topbar(ctx: TopbarContext) {
         title="The character library — hover to peek, click to keep it open"
         onMouseEnter=${openCharacters}
         onMouseLeave=${scheduleCharactersClose}
-        onClick=${() => toggleCharactersPin()}
+        onClick=${() => {
+          setLibraryView('characters');
+          toggleCharactersPin();
+        }}
       >
         🎭 Characters
       </button>
