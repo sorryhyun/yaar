@@ -1,0 +1,16 @@
+{
+  "icon": "💬",
+  "name": "ChitChats",
+  "description": "Rooms of AI characters who answer you one at a time, each hearing what the last one said",
+  "run": "dist/index.html",
+  "permissions": [
+    "yaar://apps/self/agents/",
+    "yaar://apps/self/db/",
+    "yaar://apps/self/storage/"
+  ],
+  "streams": ["agents"],
+  "personas": { "max": 4 },
+  "version": "1.0.0",
+  "author": "YAAR",
+  "kind": "system"
+}

@@ -1,9 +1,10 @@
 # Proposal: The Agent Tree — sub-agents as the general shape of multi-agent apps
 
-**Status:** Redesign of [`persona_agents_proposal.md`](./persona_agents_proposal.md) around an
-explicit hierarchy. Phase 1 of that proposal (the persona primitive) is landed and is, in
-this document's terms, a tool-less app-tier sub-agent — nothing shipped changes.
-This document names the tree the code already runs, states its laws, and specifies the shape
+**Status:** Redesign, around an explicit hierarchy, of the persona-agents proposal that came
+before it — that document has been deleted, having shipped in full: its primitive is landed and
+is, in this document's terms, a tool-less app-tier sub-agent, and its ChitChats port is
+`apps/chitchats`. This document is now the standing design record for the whole tree.
+It names the tree the code already runs, states its laws, and specifies the shape
 any future multi-agent capability must take, so the next request ("can my app have a judge
 with read access?", "can the monitor spawn helpers?") is answered by placing a node in the
 tree rather than by designing a new pool tier from scratch.
@@ -186,7 +187,7 @@ Each grade is one profile builder in `agents/profiles/` — written once, at ins
 | Grade | Hands | Principal | Gate | Status |
 |---|---|---|---|---|
 | `compute` | none — receives text, returns text | none | bundled + manifest | **shipped** (today's persona) |
-| `protocol` | exactly one channel: dispatch to the **owning app's iframe** through the app-protocol bridge, dressed as app-defined tools (`skip`, `excuse`, `recall`, `memorize`, …) | none | bundled + manifest | **shipped** (`profiles/sub-agent.ts` + `mcp/sub-agent/`); no app uses it yet |
+| `protocol` | exactly one channel: dispatch to the **owning app's iframe** through the app-protocol bridge, dressed as app-defined tools (`skip`, `excuse`, `recall`, `memorize`, …) | none | bundled + manifest | **shipped** (`profiles/sub-agent.ts` + `mcp/sub-agent/`); `apps/chitchats` is the first consumer |
 
 Rules that keep law 2 structural rather than aspirational:
 
@@ -299,12 +300,11 @@ describes the two-grade code as it shipped, not as it stands.)*
   grade-generic methods; the `…Persona…` names remain as one-line spellings of them, so
   the shipped persona suite passes with no assertion changed. One cap, one sweep, one
   limiter slot per node, whatever the grade.
-- **No app consumer yet.** The capability landed on its tests rather than on the
-  ChitChats port: the loopback suite (`loopback-subagent-protocol.test.ts`) drives a real
-  tool call through the real bridge into a real iframe response. The first app to want
-  `skip`/`memorize` writes the handlers and declares
-  `"subagents": { "max": N, "grades": ["protocol"] }`; nothing further is needed from the
-  server.
+- **It landed before its consumer.** The capability shipped on its tests — the loopback
+  suite (`loopback-subagent-protocol.test.ts`) drives a real tool call through the real
+  bridge into a real iframe response — and `apps/chitchats` arrived after, spawning its
+  characters with a `skip` tool and answering `persona:skip` from its own iframe. Nothing
+  further was needed from the server, which was the claim.
 
 **What deliberately does not exist at any grade:** YAAR tools at spawn — no grade lets a
 runtime caller select verbs, `relay`, `direct_message`, `controls`, or `yaar://` access,
@@ -425,9 +425,11 @@ Phased so each step has value alone and none is forced:
 ## Open questions
 
 1. **Will any grade ever need real YAAR verbs?** (Still open, and still the tripwire — the
-   `protocol` grade shipped without needing one.) It has a named consumer waiting
-   (ChitChats memory + skip) and covers every "persona with tools" case on the table by
-   routing through the app. If a case ever genuinely needs YAAR verbs in a sub-agent's
+   `protocol` grade shipped without needing one.) ChitChats' `skip` is the first consumer
+   and wanted nothing more; its character memory (`memorize`/`recall`) is unwritten and is
+   the next test of the question, since both are app handlers over appDb rather than YAAR
+   verbs. The channel covers every "persona with tools" case on the table by routing
+   through the app. If a case ever genuinely needs YAAR verbs in a sub-agent's
    hands — not reachable via an app handler — that grade would be a different animal:
    user permission prompt at first spawn, per-verb subset of the app agent's toolset,
    and its own proposal. Do not build it for symmetry; this question is the tripwire.

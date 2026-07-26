@@ -1,0 +1,318 @@
+/*
+ * Two columns: a sidebar that owns rooms and cast, and the room itself.
+ *
+ * Every scrolling region is `position: absolute; inset: 0` inside a relative parent
+ * rather than `flex: 1` — a flex child that grows breaks Solid's reactivity in this
+ * runtime (see the Solid gotchas in the root CLAUDE.md), and every list here is
+ * reactive.
+ */
+
+.cc-root {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  height: 100%;
+  overflow: hidden;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  font-family: var(--yaar-font);
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+.cc-side {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  border-right: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  overflow: hidden;
+}
+
+.cc-side-section {
+  padding: var(--yaar-sp-2);
+  overflow-y: auto;
+}
+
+.cc-side-section + .cc-side-section {
+  border-top: 1px solid var(--yaar-border);
+}
+
+.cc-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+  margin-bottom: var(--yaar-sp-2);
+}
+
+.cc-mini {
+  padding: 0 var(--yaar-sp-2);
+  font-size: var(--yaar-text-xs);
+  min-height: 22px;
+}
+
+.cc-room {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.cc-room-name {
+  flex: 0 1 auto;
+  width: 100%;
+  min-width: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--yaar-radius-sm);
+  color: inherit;
+  font: inherit;
+  padding: 2px var(--yaar-sp-1);
+}
+
+.cc-room-name:hover,
+.cc-room-name:focus {
+  border-color: var(--yaar-border);
+  outline: none;
+}
+
+/* ── Cast cards ──────────────────────────────────────────────────────────── */
+
+.cc-cast {
+  position: relative;
+}
+
+.cc-picker {
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  margin-bottom: var(--yaar-sp-2);
+  overflow: hidden;
+}
+
+.cc-card {
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-2);
+  margin-bottom: var(--yaar-sp-2);
+  background: var(--yaar-bg);
+  opacity: 0.65;
+  transition:
+    opacity 120ms var(--yaar-ease),
+    border-color 120ms var(--yaar-ease);
+}
+
+.cc-card.live {
+  opacity: 1;
+}
+
+.cc-card.speaking {
+  border-color: var(--yaar-accent);
+}
+
+.cc-card-head {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.cc-name {
+  font-weight: 600;
+  min-width: 0;
+}
+
+.cc-card-actions {
+  display: flex;
+  gap: var(--yaar-sp-1);
+  margin-top: var(--yaar-sp-2);
+}
+
+.cc-error {
+  margin-top: var(--yaar-sp-2);
+  color: var(--yaar-error);
+  font-size: var(--yaar-text-xs);
+}
+
+/* ── Faces ───────────────────────────────────────────────────────────────── */
+
+.cc-face {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+}
+
+.cc-emoji {
+  font-size: var(--yaar-text-lg);
+  line-height: 1;
+}
+
+.cc-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--yaar-radius-full);
+  object-fit: cover;
+  display: block;
+}
+
+/* ── Character editor ────────────────────────────────────────────────────── */
+
+.cc-editor {
+  margin-top: var(--yaar-sp-2);
+  display: grid;
+  gap: var(--yaar-sp-2);
+}
+
+.cc-editor-row {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  align-items: center;
+}
+
+.cc-emoji-input {
+  width: 48px;
+  text-align: center;
+  flex: none;
+}
+
+.cc-prompt-edit {
+  width: 100%;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  resize: vertical;
+}
+
+.cc-editor-note {
+  color: var(--yaar-text-dim);
+  font-size: var(--yaar-text-xs);
+  line-height: 1.4;
+}
+
+.cc-priority-label {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  margin: 0;
+}
+
+.cc-priority {
+  width: 56px;
+}
+
+/* A file input is unstylable; the label is the button and the input hides inside it. */
+.cc-upload {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.cc-upload input[type='file'] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* ── Room ────────────────────────────────────────────────────────────────── */
+
+.cc-main {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.cc-log {
+  position: relative;
+  overflow-y: auto;
+  padding: var(--yaar-sp-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-4);
+}
+
+.cc-line {
+  max-width: 62ch;
+}
+
+.cc-line.mine {
+  align-self: flex-end;
+  text-align: right;
+}
+
+.cc-line-who {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-xs);
+  margin-bottom: var(--yaar-sp-1);
+}
+
+.cc-line.mine .cc-line-who {
+  justify-content: flex-end;
+}
+
+.cc-line-text {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  white-space: pre-wrap;
+  line-height: 1.5;
+  text-align: left;
+}
+
+.cc-line.mine .cc-line-text {
+  background: var(--yaar-accent-emphasis);
+  border-color: transparent;
+  color: #fff;
+}
+
+.cc-line.pending .cc-line-text {
+  border-style: dashed;
+  color: var(--yaar-text-muted);
+}
+
+.cc-thinking {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  margin-bottom: var(--yaar-sp-1);
+}
+
+.cc-thinking summary {
+  cursor: pointer;
+}
+
+.cc-thinking div {
+  white-space: pre-wrap;
+  padding: var(--yaar-sp-1) 0;
+  max-height: 160px;
+  overflow-y: auto;
+}
+
+.cc-hint {
+  color: var(--yaar-text-dim);
+  font-size: var(--yaar-text-sm);
+  max-width: 42ch;
+  line-height: 1.5;
+}
+
+/* ── Compose ─────────────────────────────────────────────────────────────── */
+
+.cc-compose {
+  border-top: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  padding: var(--yaar-sp-2);
+  display: grid;
+  gap: var(--yaar-sp-2);
+}
+
+.cc-compose textarea {
+  width: 100%;
+  resize: none;
+}
+
+.cc-compose-actions {
+  display: flex;
+  gap: var(--yaar-sp-2);
+}
