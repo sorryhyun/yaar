@@ -19,8 +19,8 @@ import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { BUNDLED_LIBRARIES, toForwardSlash } from '../plugins.js';
-import { prebundleLibrary } from '../prebundle.js';
+import { BUNDLED_LIBRARIES, BUNDLED_SHIMS, toForwardSlash } from '../plugins.js';
+import { prebundleLibrary, resolvePrebundleEntrypoint } from '../prebundle.js';
 
 // Each case pays for a real prebundle (some libraries are megabytes) plus a
 // consumer Bun.build(). Big libs (p5, three, mammoth) dominate the cost.
@@ -72,4 +72,22 @@ describe('prebundle completeness', () => {
       }
     });
   }
+
+  /**
+   * dompurify is the only bundled library that is also a dependency of another
+   * build in this same process: `@bundled/yaar`'s `sanitizeHtml` imports it, so
+   * every app compile in `define-app.test.ts` / `fold-schemas.test.ts` loads the
+   * same `dist/purify.es.mjs` the prebundle above would otherwise have used as an
+   * *entrypoint*. Bun's bundler does not survive one file playing both roles: the
+   * later compiles die with `EISDIR reading file: ".../purify.es.mjs"` on a file
+   * that is not a directory. `shims/dompurify.ts` demotes it to an inner module.
+   *
+   * Guarded here rather than left to the suites it breaks, because the damage is
+   * ordering- and timing-dependent: dropping the shim reproduces most of the
+   * time, not every time, and lands as 15 unexplained failures in files that pass
+   * when run alone.
+   */
+  test('dompurify prebundles through its shim, never as the npm file itself', () => {
+    expect(resolvePrebundleEntrypoint('dompurify')).toBe(BUNDLED_SHIMS.dompurify);
+  });
 });
