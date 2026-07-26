@@ -17,7 +17,7 @@ Agent calls invoke(window, { action: 'app_query' | 'app_command' }) or a scoped 
   → tool returns result to agent
 ```
 
-An app opts in by setting `"appProtocol": true` in its `app.json` and calling `app.register()` (imported from `@bundled/yaar`) inside the iframe.
+An app opts in by setting `"appProtocol": true` in its `app.json` and registering with `export default defineApp({...})` (imported from `@bundled/yaar`) inside the iframe.
 
 ---
 
@@ -38,7 +38,7 @@ Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`
 
 | Call | Description |
 |------|-------------|
-| `invoke('yaar://windows/{windowId}', { action: 'app_query', stateKey? })` | Read a state key, or the manifest if `stateKey` is omitted (defaults to `'manifest'`). The reserved key `'__console'` pulls the app's console-capture buffer (`window.__YAAR_CONSOLE`) directly from the injected app-protocol script — it works even when the app never called `app.register()` and bypasses the app-ready wait (used by devtools to read a preview app's console logs). |
+| `invoke('yaar://windows/{windowId}', { action: 'app_query', stateKey? })` | Read a state key, or the manifest if `stateKey` is omitted (defaults to `'manifest'`). The reserved key `'__console'` pulls the app's console-capture buffer (`window.__YAAR_CONSOLE`) directly from the injected app-protocol script — it works even when the app never registered and bypasses the app-ready wait (used by devtools to read a preview app's console logs). |
 | `invoke('yaar://windows/{windowId}', { action: 'app_command', command, params?, timeoutMs? })` | Execute a command. Optional `timeoutMs` overrides how long the server waits for the app to respond (default 30s, clamped to a max of 180s) — raise it for slow commands like a compile or a deploy. |
 | `invoke('yaar://windows/{windowId}', { action: 'app_eval', expression })` | Evaluate a JS expression inside the iframe and return its JSON-serialized result (capped at 16KB). Refused everywhere except devtools preview windows (`devtools-preview-{projectId}`) — a disposable sandbox devtools just built from source, where eval grants nothing beyond what editing-and-recompiling already would. |
 
@@ -211,7 +211,7 @@ Arbitrary expression evaluation, dispatched only to devtools preview windows —
 
 ### Close
 
-Fire-and-forget, sent right before the window is destroyed (no response expected). The SDK invokes the app's `onClose()` handler (from `app.register()`), if any.
+Fire-and-forget, sent right before the window is destroyed (no response expected). The SDK invokes the app's `onClose()` handler (from `defineApp()`), if any.
 
 **Notification** (parent → iframe):
 ```json
@@ -265,7 +265,7 @@ Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, pa
 
 ### Client → Server: `APP_PROTOCOL_READY`
 
-Sent when an iframe app calls `app.register()` (from `@bundled/yaar`).
+Sent when an iframe app registers via `defineApp()` (from `@bundled/yaar`).
 
 ```typescript
 {
@@ -296,22 +296,24 @@ Sent when an app emits on a declared channel via `app.emit(channel, payload)`. T
 
 ## Iframe SDK
 
-The SDK is available via `@bundled/yaar`. Import `app` and call `app.register()` / `app.sendInteraction()` / `app.emit()`. Under the hood, the protocol script (`IFRAME_APP_PROTOCOL_SCRIPT` in `packages/shared/src/iframe-scripts/app-protocol.ts`) is automatically injected into every iframe's `<head>` by the `IframeRenderer` component.
+The SDK is available via `@bundled/yaar`. Import `defineApp` to register, and `app` for `app.sendInteraction()` / `app.emit()`. Under the hood, the protocol script (`IFRAME_APP_PROTOCOL_SCRIPT` in `packages/shared/src/iframe-scripts/app-protocol.ts`) is automatically injected into every iframe's `<head>` by the `IframeRenderer` component.
 
-### `app.register(config)`
+### The registration shape
 
-Register the app with the protocol. Must be called once.
-
-Apps do not normally call it directly: `defineApp({ id, name, state, commands, view })` is
-the authoring entrypoint and calls `register` for you, with `get`/`run` in place of
-`handler` and Zod accepted wherever a JSON Schema literal goes. See
+`export default defineApp({ id, name, state, commands, view })` is the one authoring
+entrypoint; it registers once at module scope, before mounting the view. See
 [`docs/guides/app-development.md`](../guides/app-development.md#registering-in-your-app--defineapp).
-Everything below is the shape `defineApp` produces and the wire contract both share.
+The former low-level `app.register()` is removed — its registration entry is now private to
+`defineApp`, and calling the public name throws.
+
+Below is the registration `defineApp` produces, which is also the wire contract. Authoring
+differs in three places: `id` rather than `appId`, `get` rather than a state `handler`, `run`
+rather than a command `handler` — and `params`/`schema` may be a Zod schema as well as a JSON
+Schema literal.
 
 ```typescript
-import { app } from '@bundled/yaar';
-
-app.register({
+// The wire shape. In your app you write `defineApp({ id, ... get, ... run })`.
+{
   appId: 'my-app',
   name: 'My App',
 
@@ -356,7 +358,7 @@ app.register({
     // full-window screenshot. May be async.
     return myCanvas.toDataURL('image/png');
   },
-});
+}
 ```
 
 On registration the SDK sends `{ type: 'yaar:app-ready', appId }` to the parent so the server knows the app supports the protocol.
@@ -388,7 +390,7 @@ aggregate net-change signal; the agent queries authoritative state when it needs
 
 ### `app.emit(channel, payload)`
 
-Fire-and-forget event on a declared channel (see `events` in `app.register()`). Delivered only to agents that subscribed via `app_subscribe`; undeclared/unsubscribed channels are dropped server-side.
+Fire-and-forget event on a declared channel (see `events` in `defineApp()`). Delivered only to agents that subscribed via `app_subscribe`; undeclared/unsubscribed channels are dropped server-side.
 
 ```typescript
 import { app } from '@bundled/yaar';
@@ -458,17 +460,17 @@ When an iframe app reloads (e.g., due to HMR or navigation), the server detects 
 A minimal spreadsheet app:
 
 ```typescript
-import { app } from '@bundled/yaar';
+import { defineApp } from '@bundled/yaar';
 
 const cells = {};
 
-app.register({
-  appId: 'sheet',
+export default defineApp({
+  id: 'sheet',
   name: 'Sheet',
   state: {
     cells: {
       description: 'All cell values keyed by address',
-      handler: () => ({ ...cells }),
+      get: () => ({ ...cells }),
     },
   },
   commands: {
@@ -481,9 +483,8 @@ app.register({
         },
         required: ['cells'],
       },
-      handler: (params) => {
+      run: (params) => {
         Object.assign(cells, params.cells);
-        render();
         return { ok: true, count: Object.keys(params.cells).length };
       },
     },

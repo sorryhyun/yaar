@@ -367,7 +367,7 @@ const markedRule: Rule = {
 // ---------------------------------------------------------------------------
 
 /**
- * `defineCommand()` derives the handler parameter type from the literal JSON
+ * `defineAppCommand()` derives the `run` parameter type from the literal JSON
  * Schema in `params`; `defineApp()` and `defineAppCommand()` do the same for
  * `run`. A hand-written annotation (`handler: (p: {...}) =>`, `run: async (p:
  * Record<string, unknown>) =>`) throws that inference away and lets the

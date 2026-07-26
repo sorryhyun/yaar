@@ -13,16 +13,16 @@
  * });
  * ```
  *
- * It is sugar over `app.register()` plus build-time legibility, and it owns the
- * three things every app was re-deciding by hand:
+ * It is the only way an app registers — the iframe SDK's registration entry is
+ * private (`__registerApp`) and this is its one caller — and it owns the three
+ * things every app used to re-decide by hand:
  *
  * - **Registration timing.** Exactly once, at module scope, before the view
- *   mounts. Five shipped apps register from `onMount` or a bare component body,
- *   which re-runs on remount; the SDK's per-window guard cannot reject those
- *   (they are legitimate remounts), so it only rejects a second registration
- *   landing on an *authoritative* one. `__authoritative: true` below is that
- *   opt-in: a `defineApp` app declares that this window is its own and a second
- *   `register()` is two apps fighting over one iframe, not a remount.
+ *   mounts. Apps used to call `app.register()` from `onMount` or a bare
+ *   component body, which re-runs on remount, so the SDK had to tolerate a
+ *   second registration and guess whether it was a remount or two apps sharing
+ *   an iframe. With this the only caller, that ambiguity is gone: a second
+ *   registration is unconditionally an error.
  * - **Mounting.** `render(view, #app)` — or `view.mount(#app)` for imperative
  *   apps — instead of every app repeating the lookup and the `!`.
  * - **The `run` error contract.** A thrown plain `Error` becomes an
@@ -30,8 +30,7 @@
  *
  * The authoring shape is deliberately *not* the registration shape: `get`/`run`
  * read better than `handler`/`handler`, and the translation happens here so the
- * build-time extractor gets one canonical object literal to read instead of
- * hunting for whichever `register()` call executed last.
+ * build-time extractor gets one canonical object literal to read.
  */
 
 import { render } from 'solid-js/web';
@@ -206,7 +205,7 @@ function manifestSchema(manifest, section, key, prop, authored) {
   return authored;
 }
 
-/** Translate the authoring shape into the `app.register()` shape. */
+/** Translate the authoring shape into the registration shape the iframe SDK serves. */
 function toRegistration(definition) {
   const manifest = buildManifest();
 
@@ -251,7 +250,6 @@ function toRegistration(definition) {
     name: definition.name,
     state,
     commands,
-    __authoritative: true,
   };
   if (definition.events !== undefined) registration.events = definition.events;
   if (definition.onCapture !== undefined) registration.onCapture = definition.onCapture;
@@ -315,7 +313,9 @@ export function defineApp(definition) {
 
   const app = sdkApp();
   if (app) {
-    app.register(registration);
+    // The private entry, not `app.register` — that name now only throws, to catch
+    // pre-defineApp app source reaching for it.
+    app.__registerApp(registration);
   } else if (typeof window !== 'undefined') {
     // A browser with no SDK is a real defect (the app-protocol script is injected
     // ahead of app code by the compiler, so it cannot lose the race). No window at

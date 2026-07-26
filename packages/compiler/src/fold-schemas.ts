@@ -159,7 +159,9 @@ const __yaarDocument = __yaarStub({
   cookie: '',
 });
 const __yaarWindow = __yaarStub({
-  yaar: __yaarStub({ app: __yaarStub({ register: () => {}, emit: () => {}, sendInteraction: () => {} }) }),
+  // __registerApp is defineApp's private entry — named explicitly so the fold
+  // exercises the same call the iframe does, rather than the inert catch-all.
+  yaar: __yaarStub({ app: __yaarStub({ __registerApp: () => {}, emit: () => {}, sendInteraction: () => {} }) }),
   document: __yaarDocument,
   location: { href: 'https://yaar.invalid/', origin: 'https://yaar.invalid', protocol: 'https:', host: 'yaar.invalid', hostname: 'yaar.invalid', pathname: '/', search: '', hash: '' },
   navigator: { userAgent: 'yaar-schema-fold', language: 'en-US', languages: ['en-US'] },

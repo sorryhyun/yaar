@@ -47,7 +47,7 @@ export function createProtocolContext(label) {
       if (!isSet) {
         throw new Error(
           `${label}: protocol context read before it was set. ` +
-            `Call the setter at the top of registerProtocol(), before app.register().`,
+            `Call the setter at module scope, before defineApp().`,
         );
       }
       return current;

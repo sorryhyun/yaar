@@ -228,9 +228,9 @@ describe('a fold that cannot answer fails the build', () => {
     expect(errors).toContain('threw while being imported');
   });
 
-  test('a non-constant schema in an app.register() app is still a hard error', async () => {
-    // No default export to read a schema back off, so there is nothing to defer
-    // to — the refusal has to stay where it was.
+  test('an app.register() app is refused before any schema is folded', async () => {
+    // `register()` is gone from the runtime, so there is no deferral to attempt:
+    // the build stops at the call itself, naming the migration.
     const result = await compileApp({
       'src/main.ts': `import { app } from '@bundled/yaar';
         import * as z from '@bundled/zod';
@@ -245,7 +245,9 @@ describe('a fold that cannot answer fails the build', () => {
     });
 
     expect(result.success).toBe(false);
-    expect((result.errors ?? []).join('\n')).toContain('commands.add.params');
+    const errors = (result.errors ?? []).join('\n');
+    expect(errors).toContain('`app.register({...})` has been removed');
+    expect(errors).toContain('defineApp');
   });
 });
 
@@ -310,14 +312,16 @@ describe('without typescript, the running app is the manifest', () => {
     expect(withoutAst.protocol).toEqual(withAst.protocol);
   });
 
-  test('an app.register() app is refused, not silently emptied', async () => {
-    // The text scanner used to answer here, and measuring it against the AST is
-    // why it is gone: it returned nothing at all for the two bundled apps that
-    // split their descriptor maps across files (devtools, 28 commands;
-    // video-editor-lite, 19) while reporting neither an error nor a warning.
-    // The fold cannot stand in for it either — an app.register() app does its UI
-    // setup at module scope, which a headless import cannot run — so the only
-    // honest answer left is a refusal that names the fix.
+  test('an app.register() app is refused here too, not silently emptied', async () => {
+    // Without the AST there is no extractor to refuse the call, and the fold
+    // cannot stand in for it either — an app.register() app does its UI setup at
+    // module scope, which a headless import cannot run. A text scan for the call
+    // is what keeps this environment's answer the same as the AST path's: the
+    // one answer it must never give is silence. (It gave exactly that once: the
+    // brace-matching scanner that used to *read* protocols here returned nothing
+    // at all for the two bundled apps splitting descriptor maps across files —
+    // devtools, 28 commands; video-editor-lite, 19 — with neither error nor
+    // warning.)
     const dir = await writeApp({
       'src/main.ts': `import { app } from '@bundled/yaar';
         app.register({
@@ -332,7 +336,7 @@ describe('without typescript, the running app is the manifest', () => {
 
     expect(result.protocol).toBeNull();
     const message = result.errors.map((e) => e.message).join('\n');
-    expect(message).toContain('typescript');
+    expect(message).toContain('`app.register({...})` has been removed');
     expect(message).toContain('defineApp');
   });
 

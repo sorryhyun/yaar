@@ -38,7 +38,7 @@ src/
     │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
     │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)
     │   ├── dialogs.ts     # showAlert / showConfirm / showPrompt
-    │   ├── ui.ts          # showToast, onShortcut, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineCommand
+    │   ├── ui.ts          # showToast, onShortcut, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms)
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
@@ -55,7 +55,7 @@ src/
 2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve
 3. **Bundle:** `Bun.build()` with 3 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
 4. **SDK injection:** 8 iframe SDK scripts (capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
-5. **Protocol extraction:** AST parse of `defineApp({...})` / `app.register({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable (see below)
+5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable (see below)
 6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
 
@@ -65,8 +65,8 @@ HTML wrap, because the wrapper carries the extracted manifest back into the page
 ## Protocol Extraction
 
 The manifest an agent reads is built from source at compile time, while the manifest the
-app actually serves is built at runtime by the iframe SDK from the same `app.register({...})`
-call. **Those two must agree.** The failure that matters is one-sided: a command that runs
+app actually serves is built at runtime by the iframe SDK from the same `defineApp({...})`
+config. **Those two must agree.** The failure that matters is one-sided: a command that runs
 fine but never reaches `dist/protocol.json` is invisible to agents while every build signal
 stays green — one real incident shrank 29 commands to 3.
 
@@ -80,14 +80,17 @@ stays green — one real incident shrank 29 commands to 3.
 | Unresolvable | **hard build error with `file:line:col`** | **hard build error naming the descriptor path** |
 
 Set `YAAR_NO_TYPESCRIPT=1` to reproduce a no-`typescript` environment on a dev machine.
-There, an `app.register()` app is **refused** with an error naming the fix, because neither
-reader can see it: there is no AST, and the registration happens while the app's module
-scope builds its UI, which the headless fold cannot run. A third reader used to stand here —
-a brace-matching text scanner — and measuring it against the AST across the bundled apps is
-why it is gone: it returned *nothing at all*, with neither error nor warning, for devtools
-(28 commands) and video-editor-lite (19), both of which split their descriptor maps across
-files with `...spread`. No shipped configuration reaches this path anyway: the exe embeds
-`typescript` (`build-exe-bundle.js`) and a repo install gets it as a devDependency.
+A third reader used to stand there — a brace-matching text scanner — and measuring it against
+the AST across the bundled apps is why it is gone: it returned *nothing at all*, with neither
+error nor warning, for devtools (28 commands) and video-editor-lite (19), both of which split
+their descriptor maps across files with `...spread`. No shipped configuration reaches this
+path anyway: the exe embeds `typescript` (`build-exe-bundle.js`) and a repo install gets it as
+a devDependency.
+
+`app.register({...})` is **removed**, and both readers refuse it by name rather than reporting
+"declares no protocol" — the AST path from the call site, the no-`typescript` path from a text
+scan. Silence is the one answer this subsystem must never give, and an app whose commands
+vanish from the manifest while the build stays green is exactly that.
 
 Because the AST path resolves spreads, **descriptor maps may be split across files by
 domain** — `commands: { ...fileCommands, ...gitCommands }` where each map lives in its own
@@ -106,10 +109,9 @@ prize.
 
 `defineApp` accepts a Zod schema wherever a JSON-Schema literal goes. `z.object({...})` is a
 builder chain, not a constant, so the static evaluator *defers* it — records the descriptor
-path and lets the fold resolve it — rather than erroring. Deferral is only legal under
-`defineApp`, because its config is reachable at runtime as the entry module's default export;
-`app.register()` has nothing to read a schema back off, so a non-constant schema stays a hard
-error there.
+path and lets the fold resolve it — rather than erroring. Deferral is sound because
+`defineApp`'s config is reachable at runtime as the entry module's default export, which is
+what makes reading a schema back off the running app possible at all.
 
 The fold builds the app together with a generated entry that imports `@bundled/zod` (one zod
 instance, guaranteed by the bundler, in exe mode too), prepends browser-global stubs, and runs
@@ -136,17 +138,19 @@ Three rules exist because breaking them produces a manifest that *disagrees with
 runtime and says nothing about it* — worse than a failed build, since every signal stays
 green:
 
-- **Which `register`.** `register` is a common method name (`Chart.register(...registerables)`
-  ships in a bundled app today), so the receiver must be the SDK's `app` object — the bare
-  `app` identifier or a member chain ending in `.app`. Anything else is considered only if
-  its argument resolves to an object literal carrying `appId`/`commands`/`state`, and **two
-  such candidates is a hard error**, not a first-match pick.
-- **Which wrappers are transparent.** `defineCommand({...})` is stepped over because the
-  shim's `defineCommand` is the identity function; so is `defineAppCommand`, its `run`-shaped
-  counterpart for descriptors declared outside the `defineApp({...})` literal. Any callee this
-  app *declares* must prove it — resolve to `(d) => d` or equivalent — including one named
-  `defineCommand`.
-  A wrapper that decorates its argument would otherwise be reported pre-decoration.
+- **Which `defineApp`.** The call must be the SDK's — a named import from `@bundled/yaar`
+  (aliases included) or a `*.defineApp(...)` member call, and its result must be the entry
+  module's default export. An app declaring its own `defineApp` is not matched: it resolves
+  locally, so it is that app's function. The mirror rule guards the removed shape: `register`
+  is a common method name (`Chart.register(...registerables)` ships in a bundled app today),
+  so only a call whose receiver is the SDK's `app` object — the bare `app` identifier or a
+  member chain ending in `.app` — is refused as a leftover registration.
+- **Which wrappers are transparent.** `defineAppCommand({...})` is stepped over because the
+  shim's `defineAppCommand` is the identity function — it exists for descriptors declared
+  outside the `defineApp({...})` literal, which otherwise lose `run`'s parameter typing. Any
+  callee this app *declares* must prove it — resolve to `(d) => d` or equivalent — including
+  one named `defineAppCommand`. A wrapper that decorates its argument would otherwise be
+  reported pre-decoration.
 - **Which bindings are readable.** `const` only, and lexical scope is honored (a local
   shadowing a module binding wins). A `let`, a parameter, or a destructured binding is
   unreadable and errors rather than falling back to a same-named module binding.
@@ -210,10 +214,12 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 `declare module '@bundled/<name>…'` blocks out of `bundled-types/index.d.ts` and prepends the
 `Yaar*` declarations they reference. **That resolution is transitive and covers `type` aliases
 as well as `interface`s** — a single `:`-anchored, interface-only pass answered a question
-nobody asked: `app.register(config: YaarAppRegistration)` shipped with no body for that type
-(the reference sits behind `=` in an alias), so `YaarAppStateDescriptor` never appeared and an
-agent had to discover that a state descriptor is `{ description, handler, schema? }` by
-assigning `{}` and reading the compile error.
+nobody asked: the old `app.register(config: YaarAppRegistration)` shipped with no body for
+that type (the reference sat behind `=` in an alias), so `YaarAppStateDescriptor` never
+appeared and an agent had to discover that a state descriptor is `{ description, handler,
+schema? }` by assigning `{}` and reading the compile error. `register()` is gone, but
+`defineApp`'s `YaarAppDefinition` -> `YaarAppCommands` -> `YaarAppRunParams` chain has the
+same depth.
 
 A module block that is a bare `export * from 'pkg'` tells the caller nothing, since the
 upstream package is not something the agent can open — which is why the four `solid-js` blocks
@@ -246,7 +252,7 @@ agents exists* are generated from one source (asserted by a test).
 
 Shims wrap npm packages with compatibility fixes or SDK wrappers:
 
-- **`yaar/`** — thin wrapper over `window.yaar` global. Split into internal modules for ownership; `index.ts` is the sole entry and `BUNDLED_SHIMS` points at it. The split is internal only — there are no `@bundled/yaar/*` subpath imports, and the declared type surface stays a single `declare module '@bundled/yaar'` in `bundled-types/index.d.ts`. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`, plus `trySave` — reports the failure and resolves `false` instead of throwing, so callers can withhold a "Saved" UI), `appDb` (SQLite-backed collections via `yaar://apps/self/db/*` — insert/find/search/update/remove with Mongo-style filters, plus `createReactiveCollection` for a query-tracking Solid signal), `createPersistedSignal` (Solid signal auto-synced to storage via `trySave`, with a `revive` hook that clamps/migrates/validates the loaded value before it reaches the signal), `createCollapsiblePanel` (headless hover-expand + pin sidebar/overlay state machine — visibility, grace-period fold, persisted pin, resize-suppression; app owns the markup), `createAutosave` (headless dirty/debounced-save/save-status lifecycle with an editSeq guard so a stale save never clears the dirty flag), `defineCommand`, `defineAppCommand` (the `run`-shaped counterpart, for a command declared in another module and spread into `defineApp({ commands })` — `defineApp` infers `run`'s parameter only from a `params` at its own call site, so a spread-in command otherwise loses that typing silently), `createProtocolContext` (set-once holder letting statically-declared descriptors reach a context supplied at registration time — the supported alternative to a `buildCommands(ctx)` factory, which the extractor refuses), `onShortcut`, `showToast`, `withLoading`, `errMsg`, `wait`, `createStaleGuard` (the generation counter that keeps a slow response from overwriting a newer one — `begin`/`latest`/`invalidate`), `sanitizeHtml` (the single DOMPurify policy: its defaults plus the no-forms deviation every app was writing by hand; apps must not import `@bundled/dompurify` directly), `AppCommandError`
+- **`yaar/`** — thin wrapper over `window.yaar` global. Split into internal modules for ownership; `index.ts` is the sole entry and `BUNDLED_SHIMS` points at it. The split is internal only — there are no `@bundled/yaar/*` subpath imports, and the declared type surface stays a single `declare module '@bundled/yaar'` in `bundled-types/index.d.ts`. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`, plus `trySave` — reports the failure and resolves `false` instead of throwing, so callers can withhold a "Saved" UI), `appDb` (SQLite-backed collections via `yaar://apps/self/db/*` — insert/find/search/update/remove with Mongo-style filters, plus `createReactiveCollection` for a query-tracking Solid signal), `createPersistedSignal` (Solid signal auto-synced to storage via `trySave`, with a `revive` hook that clamps/migrates/validates the loaded value before it reaches the signal), `createCollapsiblePanel` (headless hover-expand + pin sidebar/overlay state machine — visibility, grace-period fold, persisted pin, resize-suppression; app owns the markup), `createAutosave` (headless dirty/debounced-save/save-status lifecycle with an editSeq guard so a stale save never clears the dirty flag), `defineApp` (the one registration entrypoint), `defineAppCommand` (for a command declared in another module and spread into `defineApp({ commands })` — `defineApp` infers `run`'s parameter only from a `params` at its own call site, so a spread-in command otherwise loses that typing silently), `createProtocolContext` (set-once holder letting statically-declared descriptors reach a context supplied at registration time — the supported alternative to a `buildCommands(ctx)` factory, which the extractor refuses), `onShortcut`, `showToast`, `withLoading`, `errMsg`, `wait`, `createStaleGuard` (the generation counter that keeps a slow response from overwriting a newer one — `begin`/`latest`/`invalidate`), `sanitizeHtml` (the single DOMPurify policy: its defaults plus the no-forms deviation every app was writing by hand; apps must not import `@bundled/dompurify` directly), `AppCommandError`
 - **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy, plus per-app version history (`gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint`) backed by a shadow git repo per app
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4

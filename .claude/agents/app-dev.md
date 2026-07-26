@@ -147,7 +147,7 @@ The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.
 
 Always available. Key exports:
 - **Verb API**: `read(uri)`, `list(uri)`, `invoke(uri, params)`, `describe(uri)`, `del(uri)`, `subscribe(uri, callback)`, `stream(uri)`
-- **Utilities**: `showToast(msg, type?)`, `errMsg(err)`, `withLoading(fn)`, `onShortcut(key, fn)`, `defineCommand`, `wait`
+- **Utilities**: `showToast(msg, type?)`, `errMsg(err)`, `withLoading(fn)`, `onShortcut(key, fn)`, `defineAppCommand`, `wait`
 - **Sanitization**: `sanitizeHtml(html, opts?)` — mandatory for externally-sourced HTML. DOMPurify's defaults plus the no-forms deviation; never call DOMPurify directly, never hand-roll
 - **Stale responses**: `createStaleGuard()` — `begin()`/`latest()`/`invalidate()`; use instead of a hand-rolled generation counter when a slow response could overwrite a newer one
 - **Dialogs**: `showAlert`, `showConfirm`, `showPrompt`
@@ -192,7 +192,7 @@ if (!parsed.success) {
   return DEFAULTS;                                   // broken — but now it says so
 }
 ```
-- **App Protocol**: `defineApp({ id, name, state, commands, view })` — the entrypoint every new app uses (see below). `app.sendInteraction(message)`, `app.emit(channel, payload)`. `app.register()` is the low-level call `defineApp` wraps; don't call it directly in new code
+- **App Protocol**: `defineApp({ id, name, state, commands, view })` — the one entrypoint (see below). `app.sendInteraction(message)`, `app.emit(channel, payload)`. `app.register()` has been removed; calling it fails the build
 
 ## Design Tokens (CSS)
 
@@ -289,7 +289,7 @@ export default defineApp({ id: 'my-app', name: 'My App', view: App });
 
 `src/main.ts` ends in exactly one `export default defineApp({...})`. It owns registration
 timing (once, at module scope, before mount), mounting, and the error contract — so an app
-never calls `app.register()` or `render()` itself, and never registers from `onMount()`.
+never calls `render()` itself, and never registers from `onMount()`.
 
 ```typescript
 import { defineApp } from '@bundled/yaar';

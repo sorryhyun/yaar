@@ -182,7 +182,7 @@ sequenceDiagram
 
 ## 앱 프로토콜: 에이전트가 iframe과 대화하는 방법
 
-앱은 iframe이 로드될 때 `@bundled/yaar`의 `app.register(manifest)`를 호출해 자기 서술적
+앱은 iframe이 로드될 때 `@bundled/yaar`의 `defineApp({...})`을 통해 자기 서술적
 계약(조회할 상태 키, 실행할 명령)을 등록합니다. 서버는 **윈도우 키별로** 준비 상태를
 `WindowStateRegistry`에 저장하며, `query`/`command`는 등록될 때까지 최대 5초
 (`requireAppReady`) 기다린 뒤 실패 처리됩니다.
@@ -209,7 +209,7 @@ sequenceDiagram
 윈도우는 **모니터 범위의 키**(`win.id`)로 주소를 지정하며, AI가 사용하는 원시 id는 절대
 사용하지 않습니다: 같은 앱이 두 모니터에서 열려 있으면 원시 id를 공유하게 되는데, 프론트엔드는
 *유저*가 보고 있는 모니터를 기준으로 원시 id를 해석합니다. 내장된 `__console` 상태 키는
-주입된 프로토콜 스크립트가 응답하므로 `app.register()` 호출 전에도 동작합니다.
+주입된 프로토콜 스크립트가 응답하므로 앱이 등록되기 전에도 동작합니다.
 
 ## ContextTape: 계층적 메시지 이력
 

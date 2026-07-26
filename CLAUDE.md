@@ -257,7 +257,7 @@ invoke('yaar://apps/self/agents', { action: 'spawn', personaId: 'alice', systemP
 //   with params { fact, personaId: 'alice' }; whatever your handler returns is the tool result.
 ```
 
-Register `persona:{toolName}` commands in `app.register({ commands })` to answer them; they are hidden from the *app agent's* `describe`/manifest, since their spawn-time descriptions are written for a character, not an operator. The names are prompt material only — every one of them is `mcp__subagent__{name}` and lands in your own iframe, so no tool list reaches a YAAR verb, another app, `relay`, `direct_message`, or `controls`. Omit `tools` and the allowlist is `[]`, which connects no MCP server at all.
+Register `persona:{toolName}` commands in `defineApp({ commands })` to answer them; they are hidden from the *app agent's* `describe`/manifest, since their spawn-time descriptions are written for a character, not an operator. The names are prompt material only — every one of them is `mcp__subagent__{name}` and lands in your own iframe, so no tool list reaches a YAAR verb, another app, `relay`, `direct_message`, or `controls`. Omit `tools` and the allowlist is `[]`, which connects no MCP server at all.
 
 Key files: `agents/profiles/sub-agent.ts` (the profile — the one place capabilities are decided), `agents/agent-pool.ts` (`spawnSubAgent`/`runSubAgentTurn`/dispose), `mcp/sub-agent/` (the one channel), `features/apps/persona-commands.ts` (`persona:` convention), `handlers/apps/agents-resource.ts` (the verb surface + ownership check), `features/apps/discovery.ts` (`subagents`/`personas` parsing). Reference consumers: `apps/personas` (Round Table — tool-less, whole cast answers at once) and `apps/chitchats` (rooms that take turns, with a `skip` tool). Design notes: [`docs/proposals/agent_hierarchy_proposal.md`](./docs/proposals/agent_hierarchy_proposal.md) (the tree).
 
@@ -275,7 +275,7 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 - **Parsing**: `@bundled/marked`, `@bundled/prismjs`, `@bundled/mammoth`
 - **Sanitization**: `@bundled/dompurify` (mandatory for any externally-sourced HTML)
 - **Validation**: `@bundled/zod` (Zod Mini functional API — validate untrusted/persisted JSON at trust boundaries)
-- **YAAR SDK**: `@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `app.register()`, `appStorage`, `appDb` (SQLite collections), etc.
+- **YAAR SDK**: `@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `defineApp()`, `appStorage`, `appDb` (SQLite collections), etc.
 - **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy, plus per-app version history: gitHistory/gitDiff/gitRestore/gitCheckpoint), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/guides/yaar_ml_runtime.md`](./docs/guides/yaar_ml_runtime.md))
 
 The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.

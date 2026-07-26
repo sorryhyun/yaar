@@ -24,7 +24,7 @@ import {
 const LISTENER_GRACE_MS = 5_000;
 
 /**
- * Windows whose iframe has announced `yaar:app-ready` — i.e. called `app.register()`.
+ * Windows whose iframe has announced `yaar:app-ready` — i.e. registered via `defineApp()`.
  *
  * The server tracks App Protocol readiness in its own WindowStateRegistry, fed by this
  * handshake, which each iframe performs exactly once at registration. The session survives

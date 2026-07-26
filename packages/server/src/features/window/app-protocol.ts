@@ -196,7 +196,7 @@ export async function handleAppQuery(
 
   // '__console' is a built-in state key answered by the injected app-protocol
   // script (reads the console-capture buffer) — it works even when the app
-  // never called app.register(), so don't wait for app-ready.
+  // never registered, so don't wait for app-ready.
   if (stateKey !== '__console') {
     const readyErr = await requireAppReady(windowState, key);
     if (readyErr) return readyErr;
@@ -282,7 +282,7 @@ export async function handleAppEval(
   }
 
   // No requireAppReady: the eval responder is part of the injected app-protocol
-  // script and answers whether or not the app ever called app.register(). Waiting
+  // script and answers whether or not the app ever registered. Waiting
   // on readiness would make eval unusable for exactly the broken-app case it is
   // most useful for. (Same reasoning as the built-in `__console` state key.)
   const outcome = await request(win.id, { kind: 'eval', expression }, deadlines.appQueryMs);

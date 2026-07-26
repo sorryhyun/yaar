@@ -54,7 +54,7 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 **`protocolLog`'s canonical use: duplicate emits, ordering, or "did that handler fire"** — an app that emits an event twice looks identical to one that emits once until you look at the log instead of the source.
 
-**`previewQuery`/`previewCommand` only work once the preview has called `app.register()`.**
+**`previewQuery`/`previewCommand` only work once the preview app has registered via `defineApp()`.**
 
 **`manifest`'s drift cause is narrower than its description implies.** Spreads and imported descriptor maps are resolved by the compiler and no longer cause drift — the remaining causes are a descriptor built at runtime (rejected as a build error now, not silent) or a stale static side, so recompile before trusting a report. `compile` runs the same check automatically whenever a preview is open, surfacing `manifestDrift` in its result as a warning, never a build failure.
 
@@ -210,7 +210,7 @@ return parsed.data; // typed, no cast
 
 Scope it to boundaries: external HTTP responses, and persisted JSON whose shape has changed
 across app versions. Do **not** validate ordinary internal state, and do **not** use Zod as
-a second schema language for the App Protocol — `defineCommand()` params are JSON-Schema-first
+a second schema language for the App Protocol — `defineAppCommand()` params are JSON-Schema-first
 and agents read that JSON Schema, not a Zod type. See `apps/recent-papers/src/schema.ts` for
 a worked example.
 
@@ -241,7 +241,7 @@ When the user says *"use the dragon image I generated in anima"* or *"the logo I
 
 ## App Protocol & Verb API
 
-To make a deployed app agent-controllable, end `src/main.ts` with one `export default defineApp({ id, name, state, commands, view })` from `@bundled/yaar`. It registers once at module scope before mounting and mounts the view, so the app never calls `app.register()` or `render()` itself: state entries use `get`, commands use `run`, and `params` may be a Zod schema (`@bundled/zod`) or a JSON Schema literal. Declare `replay: 'never'` on any command whose effect must not be re-applied when the iframe remounts. `view: { mount(el) }` is the escape hatch for an app that owns its own DOM. See `describeBundledLibrary({ name: "yaar" })` for the exact types.
+To make a deployed app agent-controllable, end `src/main.ts` with one `export default defineApp({ id, name, state, commands, view })` from `@bundled/yaar`. It registers once at module scope before mounting and mounts the view, so the app never calls `render()` itself: state entries use `get`, commands use `run`, and `params` may be a Zod schema (`@bundled/zod`) or a JSON Schema literal. Declare `replay: 'never'` on any command whose effect must not be re-applied when the iframe remounts. `view: { mount(el) }` is the escape hatch for an app that owns its own DOM. See `describeBundledLibrary({ name: "yaar" })` for the exact types.
 
 Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `list`, `invoke`, `describe`, `del`. For HTTP from an iframe, proxy through the server to avoid CORS: `invoke('yaar://http', { url, method?, headers?, body?, redirect? })`.
 

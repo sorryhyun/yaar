@@ -285,7 +285,7 @@ export async function compileTypeScript(
     const jsCode = await compileWithBun(entryPoint, minify, options.bundles);
 
     // Protocol gate — after bundling so genuine build errors keep precedence.
-    // A register() whose commands/state only partially parse used to write a
+    // A registration whose commands/state only partially parse used to write a
     // silently truncated dist/protocol.json while every other signal stayed
     // green (one real incident: 29 commands shrank to 3). An entry the
     // extractor cannot resolve fails the build instead of shipping a manifest

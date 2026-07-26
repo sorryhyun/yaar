@@ -50,7 +50,7 @@ export interface Deadlines {
   appCommandMs: number;
   /** Floor under a caller-supplied command timeout — a command needs *some* room. */
   appCommandMinMs: number;
-  /** How long a command waits for the iframe to call `app.register()`. `waitForAppReady`. */
+  /** How long a command waits for the iframe to register via `defineApp()`. `waitForAppReady`. */
   appReadyMs: number;
   /** Default life of a confirm/permission dialog before it is withdrawn and denied. */
   dialogMs: number;

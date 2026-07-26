@@ -638,7 +638,7 @@ apps/my-app/
 **실전에서 보이지만 무시되는 필드** — 알 수 없는 키로 파싱되어 아무 동작도 하지 않습니다:
 
 - `capture` (`"dom"` / `"canvas"`) — 번들 앱 19개에 존재하지만 현재 코드에서는 읽지 않습니다. 한때 이미 제거된 `window.capture` 도구용 스크린샷 전략을 지정했으나, 그 도구가 사라진 뒤에도 매니페스트 필드만 남았습니다.
-- `id`와 `appId` (`apps/memo`, `apps/music-maker`) — id는 항상 폴더 이름입니다. 소스 코드에서 `app.register()`에 넘기는 `appId`는 별개이며 실제로 *사용됩니다*.
+- `id`와 `appId` (`apps/memo`, `apps/music-maker`) — id는 항상 폴더 이름입니다. 소스 코드에서 `defineApp()`에 넘기는 `id`는 별개이며 실제로 *사용되고*, app.json의 `appId`와 일치해야 합니다.
 
 ## 앱 유형
 
@@ -685,65 +685,82 @@ apps/weather/
 iframe 앱 → postMessage → WebSocket → MCP 도구 응답
 ```
 
-### 앱에서 등록하기
+### 앱에서 등록하기 — `defineApp()`
 
-`@bundled/yaar`에서 `app`과 `defineCommand`를 import하고 `app.register()`로 상태 핸들러와 명령 핸들러를 등록합니다.
+`src/main.ts`는 정확히 하나의 `export default defineApp({...})`로 끝납니다. 그 호출이 곧 앱입니다: 프로토콜을 등록하고(모듈 스코프에서 한 번, 뷰를 마운트하기 전에), 뷰를 마운트하고, 명령이 던진 무엇이든 `AppCommandError`로 정규화합니다. 앱이 직접 `render()`를 부르는 일은 없습니다.
 
 ```typescript
 // src/store.ts
 import { createSignal } from '@bundled/solid-js';
 export const [items, setItems] = createSignal<string[]>([]);
 
-// src/protocol.ts
-import { app, defineCommand } from '@bundled/yaar';
+// src/main.ts
+import { defineApp } from '@bundled/yaar';
+import * as z from '@bundled/zod';
 import { items, setItems } from './store';
+import { App } from './app';
 
-export function registerProtocol() {
-  app.register({
-    appId: 'my-app',
-    name: 'My App',
-    state: {
-      items: {
-        description: '현재 아이템 목록',
-        handler: () => [...items()],  // 시그널 읽기, 복사본 반환
+export default defineApp({
+  id: 'my-app',                       // app.json의 appId와 반드시 일치
+  name: 'My App',
+  state: {
+    items: {
+      description: '현재 아이템 목록',
+      get: () => [...items()],        // 시그널 읽기, 복사본 반환
+    },
+  },
+  commands: {
+    addItem: {
+      description: '아이템 추가',
+      params: z.object({ text: z.string() }),   // 또는 JSON Schema 리터럴
+      run: (p) => {                   // p는 { text: string }로 추론됨
+        setItems([...items(), p.text]); // 불변 시그널 쓰기, render() 불필요
+        return { ok: true };
       },
     },
-    commands: {
-      addItem: defineCommand({
-        description: '아이템 추가',
-        params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-        handler: (p) => {                 // p는 { text: string }로 추론됨
-          setItems([...items(), p.text]); // 불변 시그널 쓰기, render() 불필요
-          return { ok: true };
-        },
-      }),
-    },
-  });
-}
+  },
+  view: App,
+});
 ```
 
-### `defineCommand` — 스키마로부터 핸들러의 params를 추론하기
+> **`app.register()`에서 이전하기.** 저수준 `app.register({...})` 호출과 그 타입들
+> (`AppRegistration` / `AppStateDescriptor` / `AppCommandDescriptor`), 그리고 `defineCommand`는
+> 모두 제거되었습니다. 아직 `register()`를 호출하는 앱은 이전 방법을 담은 메시지와 함께 빌드가
+> 실패합니다. 옮기는 방법: `appId`는 `id`로, `state` 항목의 `handler`는 `get`으로, 명령의
+> `handler`는 `run`으로 바꾸고, 호출 전체를 `src/main.ts`의 `export default`로 만드세요.
+> 등록 시점과 마운트는 더 이상 앱의 문제가 아닙니다 — `onMount()` 래퍼와 직접 부르던 `render()`를
+> 지우세요.
 
-명령은 파라미터 형태를 두 번 선언합니다: 에이전트가 읽는 `params` JSON Schema로 한 번, 핸들러의 TypeScript 타입으로 한 번. 이 둘을 동기화해 주는 장치가 없으므로, `handler: (p: { text: string })`는 `content`라고 말하는 스키마에도 아무렇지 않게 컴파일되고, 이 불일치는 에이전트가 명령을 호출할 때야 드러납니다.
+### `defineAppCommand` — 스키마로부터 `run`의 params를 추론하기
 
-`defineCommand`는 스키마로부터 핸들러의 파라미터 타입을 유도해, 스키마를 단일 진실 공급원(single source of truth)으로 만듭니다:
+명령은 파라미터 형태를 두 번 선언합니다: 에이전트가 읽는 `params` 스키마로 한 번, `run`의 TypeScript 타입으로 한 번. `defineApp({...})` 리터럴 안에서는 이 둘이 이미 묶여 있습니다 — `defineApp`은 각 `run`의 파라미터를 그 호출 지점에 쓰인 `params`로부터 유도하므로, `text`라고 말하는 스키마에 대해 `p.txt`를 쓰면 컴파일 에러입니다.
+
+`defineAppCommand`는 리터럴 *바깥에* 선언된 명령에 대해 그것을 복원합니다:
 
 ```typescript
-addItem: defineCommand({
-  description: 'Add an item',
-  params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-  handler: (p) => setItems([...items(), p.txt]),
-  //                                       ^^^ 컴파일 에러: 'text'를 쓰려던 것 아닌가요?
-})
+// src/protocol/items.ts
+import { defineAppCommand } from '@bundled/yaar';
+import * as z from '@bundled/zod';
+
+export const itemCommands = {
+  addItem: defineAppCommand({
+    description: 'Add an item',
+    params: z.object({ text: z.string() }),
+    run: (p) => setItems([...items(), p.txt]),
+    //                                   ^^^ 컴파일 에러: 'text'를 쓰려던 것 아닌가요?
+  }),
+};
 ```
 
-런타임에서는 아무 일도 하지 않는 항등 함수(identity function)입니다 — 그래서 `dist/protocol.json`과 에이전트가 보는 모든 것은 그대로입니다. 오직 컴파일러가 핸들러를 검사하게 만들기 위해서만 존재합니다.
+런타임에서는 아무 일도 하지 않는 항등 함수(identity function)입니다 — 그래서 `dist/protocol.json`과 에이전트가 보는 모든 것은 그대로입니다. 오직 컴파일러가 `run`을 검사하게 만들기 위해서만 존재합니다.
+
+Zod 스키마(권장 — 호출 검증까지 해 줍니다)와 JSON Schema 리터럴을 모두 받습니다.
 
 추론되는 것: `enum`(리터럴 유니언으로), `string` / `number` / `integer` / `boolean` / `null`, `array` + `items`, 그리고 임의로 중첩된 `object` + `properties` / `required`. `required`에 없는 키는 옵셔널로 추론됩니다. `properties`가 없고 `additionalProperties` 스키마만 있는 `object`는 딕셔너리입니다: `{ type: 'object', additionalProperties: { type: 'string' } }`는 `Record<string, string>`으로 추론됩니다. 그냥 `{ type: 'object' }`는 `Record<string, unknown>`으로 추론됩니다.
 
-추론되지 않는 것: `anyOf`, `oneOf`, `$ref`와 그 밖의 키워드는 `unknown`으로 추론됩니다. 그런 핸들러의 파라미터는 직접 타입을 명시하거나, 그 명령을 `defineCommand` 없는 평범한 객체 리터럴로 남겨두세요 — `defineCommand`를 쓰지 않은 디스크립터도 예전과 똑같이 동작하며, 두 형태는 하나의 `commands` 블록 안에서 자유롭게 섞일 수 있습니다.
+추론되지 않는 것: `anyOf`, `oneOf`, `$ref`와 그 밖의 키워드는 `unknown`으로 추론됩니다. 그런 `run`의 파라미터는 직접 타입을 명시하거나, 그 명령을 래퍼 없는 평범한 객체 리터럴로 남겨두세요 — 래퍼를 쓰지 않은 디스크립터도 매니페스트에는 똑같이 도달하며, 두 형태는 하나의 `commands` 블록 안에서 자유롭게 섞일 수 있습니다.
 
-호출 형태는 리터럴로 유지하세요 — `defineCommand({ ... })`가 인라인 객체를 감싸는 형태여야 합니다. 빌드 타임 프로토콜 추출기는 평가기가 아니라 소스 파서입니다: 단일 식별자 호출을 그대로 지나쳐 디스크립터를 찾으므로, 계산된 콜리(computed callee)는 빌드를 실패시킵니다.
+호출 형태는 리터럴로 유지하세요 — `defineAppCommand({ ... })`가 인라인 객체를 감싸는 형태여야 합니다. 빌드 타임 프로토콜 추출기는 평가기가 아니라 소스 파서입니다: 단일 식별자 호출을 그대로 지나쳐 디스크립터를 찾으므로, 계산된 콜리(computed callee)는 빌드를 실패시킵니다.
 
 #### 도메인별로 프로토콜 나누기
 
@@ -752,16 +769,19 @@ addItem: defineCommand({
 ```typescript
 // src/commands/files.ts
 export const fileCommands = {
-  readFile: defineCommand({ description: 'Read a file', params: { ... }, handler }),
+  readFile: defineAppCommand({ description: 'Read a file', params: { ... }, run }),
 };
 
-// src/protocol.ts
+// src/main.ts
+import { defineApp } from '@bundled/yaar';
 import { fileCommands } from './commands/files';
 import { gitCommands } from './commands/git';
 
-app.register({
-  appId: 'devtools',
+export default defineApp({
+  id: 'devtools',
+  name: 'DevTools',
   commands: { ...fileCommands, ...gitCommands },
+  view: App,
 });
 ```
 
@@ -769,7 +789,7 @@ app.register({
 
 #### 핸들러에 런타임 컨텍스트가 필요할 때
 
-정적 분석 가능성과 등록별(per-registration) 컨텍스트는 서로 반대 방향으로 당깁니다: 디스크립터 맵은 최상위 `const`여야 하므로 `registerProtocol(ctx)`의 파라미터를 클로저로 잡을 수 없고, 이를 `buildCommands(ctx)` 팩토리로 끌어올리면 추출기가 정확히 거부하는 그 호출 결과가 되어버립니다. `createProtocolContext`가 그 이음매입니다 — 디스크립터는 정적으로 남고, 컨텍스트는 등록 시점에 설치되며, 핸들러는 접근자를 통해 그것에 닿습니다:
+정적 분석 가능성과 등록별(per-registration) 컨텍스트는 서로 반대 방향으로 당깁니다: 디스크립터 맵은 최상위 `const`여야 하므로 `buildProtocol(ctx)`의 파라미터를 클로저로 잡을 수 없고, 이를 `buildCommands(ctx)` 팩토리로 끌어올리면 추출기가 정확히 거부하는 그 호출 결과가 되어버립니다. `createProtocolContext`가 그 이음매입니다 — 디스크립터는 정적으로 남고, 컨텍스트는 등록 시점에 설치되며, 핸들러는 접근자를 통해 그것에 닿습니다:
 
 ```typescript
 // src/protocol/context.ts
@@ -780,25 +800,28 @@ export const { set: setProtocolContext, get: ctx } =
 
 // src/protocol/deck.ts — 평범한 const이므로 추출기가 읽을 수 있음
 export const deckCommands = {
-  setDeck: defineCommand({
+  setDeck: defineAppCommand({
     description: 'Replace the whole deck',
     params: { ... },
-    handler: (p) => ctx().setDeck(p.deck),
+    run: (p) => ctx().setDeck(p.deck),
   }),
 };
 
-// src/protocol.ts
-export function registerProtocol(context: ProtocolContext) {
-  setProtocolContext(context); // app.register() 이전에
-  app.register({ appId: 'slides-lite', commands: { ...deckCommands } });
-}
+// src/main.ts
+setProtocolContext(context); // defineApp() 이전에
+export default defineApp({
+  id: 'slides-lite',
+  name: 'Slides',
+  commands: { ...deckCommands },
+  view: App,
+});
 ```
 
 이 트레이드오프는 실재하며 짚어둘 가치가 있습니다: 컨텍스트는 모든 디스크립터가 공유하는 모듈 상태가 되므로, 문서 하나당 한 번 등록하는 앱 — 즉 일반적인 경우 — 에 적합합니다. 양쪽 경계 모두 조용히 넘어가지 않고 시끄럽게 실패합니다: `set()` 전에 `get()`을 부르면 `undefined`를 반환하는 대신 throw하고, *다른* 컨텍스트로 `set()`을 두 번 부르면 첫 등록의 핸들러를 조용히 다시 겨냥하는 대신 throw합니다.
 
 ### 에이전트에게 말 걸기
 
-`app.register()`는 에이전트가 *당신을* 읽는 방법입니다. 다음 세 API는 당신이 에이전트에게 닿는 방법입니다. 전체 시그니처는 [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md)를 참조하세요.
+`defineApp()`의 `state`/`commands`는 에이전트가 *당신을* 읽는 방법입니다. 다음 세 API는 당신이 에이전트에게 닿는 방법입니다. 전체 시그니처는 [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md)를 참조하세요.
 
 **`app.sendInteraction(description)`** — 자유 형식 메시지를 에이전트에게 보냅니다. 보통 iframe 안에서 사용자 액션이 일어난 뒤에 씁니다. 문자열을 받거나, `instructions`와 `toMonitor`(이 윈도우의 앱 에이전트 대신 모니터 에이전트로 라우팅)에 임의의 페이로드 필드를 더한 객체를 받습니다.
 
@@ -807,23 +830,23 @@ app.sendInteraction('User clicked Save');
 app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection: text });
 ```
 
-**`app.emit(channel, payload)`** — `app.register({ events })`로 선언된 채널에 fire-and-forget 이벤트를 보냅니다. 구독한 에이전트에게만 전달되며, 선언되지 않았거나 구독되지 않은 채널은 서버 측에서 폐기됩니다.
+**`app.emit(channel, payload)`** — `defineApp({ events })`로 선언된 채널에 fire-and-forget 이벤트를 보냅니다. 구독한 에이전트에게만 전달되며, 선언되지 않았거나 구독되지 않은 채널은 서버 측에서 폐기됩니다.
 
 ```typescript
-app.register({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
+defineApp({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
 app.emit('item-added', { text: 'Buy milk' });
 ```
 
-**`onClose`** — `app.register()` 설정의 선택적 훅으로, 윈도우가 파괴되기 직전에 호출됩니다. 저장되지 않은 상태를 플러시하는 데 쓰세요.
+**`onClose`** — `defineApp()` 설정의 선택적 훅으로, 윈도우가 파괴되기 직전에 호출됩니다. 저장되지 않은 상태를 플러시하는 데 쓰세요.
 
 ```typescript
-app.register({ /* ... */ onClose: () => saveDraft(editor().value) });
+defineApp({ /* ... */ onClose: () => saveDraft(editor().value) });
 ```
 
-**`onCapture`** — `app.register()` 설정의 선택적 훅으로, OS가 윈도우를 캡처할 때(예: 에이전트가 읽을 때) 호출됩니다. 기본 전체 윈도우 스크린샷(DOM + 라이브 캔버스 픽셀 합성) 대신 사용할 data-URL 이미지를 반환하세요. 기본 동작으로 되돌리려면 `null`을 반환하세요. async여도 됩니다. 기본 캡처가 콘텐츠를 볼 수 없을 때 유용합니다 — 예를 들어 `preserveDrawingBuffer`가 없는 WebGL 캔버스나, 뷰포트 밖에 렌더링되는 상태 등.
+**`onCapture`** — `defineApp()` 설정의 선택적 훅으로, OS가 윈도우를 캡처할 때(예: 에이전트가 읽을 때) 호출됩니다. 기본 전체 윈도우 스크린샷(DOM + 라이브 캔버스 픽셀 합성) 대신 사용할 data-URL 이미지를 반환하세요. 기본 동작으로 되돌리려면 `null`을 반환하세요. async여도 됩니다. 기본 캡처가 콘텐츠를 볼 수 없을 때 유용합니다 — 예를 들어 `preserveDrawingBuffer`가 없는 WebGL 캔버스나, 뷰포트 밖에 렌더링되는 상태 등.
 
 ```typescript
-app.register({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
+defineApp({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
 ```
 
 ### MCP 도구

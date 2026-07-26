@@ -1,23 +1,19 @@
 /**
- * Protocol extraction from `export default defineApp({...})`.
+ * Protocol extraction from `export default defineApp({...})`, the one
+ * registration shape.
  *
- * The `app.register()` path locates the registration by heuristic — which
- * receiver is the SDK's `app`, which of two shaped candidates is real. Under
- * `defineApp` there is nothing to guess: the default export's config object *is*
- * the protocol. This suite pins that, and pins the three ways the new shape can
- * still lie about the running app:
+ * Nothing here is guessed at: the default export's config object *is* the
+ * protocol. This suite pins that, and pins the two ways the shape can still lie
+ * about the running app:
  *
- *   ID       — `id` must equal the app.json `appId`, because the id is what the
- *              app registers under and what protocol.json is filed against.
- *   EXCLUSION— `defineApp` plus `app.register()` is two registrations; the
- *              manifest can describe only one and cannot tell which wins.
- *   REPLAY   — `replay: 'never'` must reach the manifest, or the server replays
- *              a command the app opted out of on every iframe remount.
+ *   ID     — `id` must equal the app.json `appId`, because the id is what the
+ *            app registers under and what protocol.json is filed against.
+ *   REPLAY — `replay: 'never'` must reach the manifest, or the server replays a
+ *            command the app opted out of on every iframe remount.
  *
- * The reach the legacy path has (spreads across modules, `const` refs, identity
- * wrappers) is shared code, and is re-asserted here rather than assumed: it is
- * the property that lets a protocol be split by domain, and losing it silently
- * costs commands.
+ * The extractor's general reach (spreads across modules, `const` refs, identity
+ * wrappers) is exercised in `extract-protocol-ast.test.ts`; the cases re-asserted
+ * here are the ones whose spelling is `defineApp`-specific.
  */
 import { afterEach, describe, expect, test } from 'bun:test';
 import { mkdir, mkdtemp, rm } from 'fs/promises';
@@ -148,20 +144,6 @@ describe('defineApp: reach', () => {
     expect(Object.keys(protocol!.commands)).toEqual(['go']);
   });
 
-  test('defineCommand stays transparent', () => {
-    const { protocol, errors } = extract({
-      'src/main.ts': `import { defineApp, defineCommand } from '@bundled/yaar';
-        export default defineApp({
-          id: 'd',
-          name: 'D',
-          commands: { go: defineCommand({ description: 'Go', run: () => 1 }) },
-        });`,
-    });
-
-    expect(errors).toEqual([]);
-    expect(protocol!.commands.go.description).toBe('Go');
-  });
-
   test('defineAppCommand stays transparent through a spread from another module', () => {
     // The shape the wrapper exists for: a descriptor declared where its schema
     // can type its own `run`, spread into the definition from another file.
@@ -185,8 +167,7 @@ describe('defineApp: reach', () => {
 
   test('method shorthand is a handler, not a broken descriptor', () => {
     // `run(p) {...}` and `onClose() {...}` are ordinary ways to write these, and
-    // neither is a value the manifest reads. The register() path still rejects
-    // method shorthand, where it means a pseudo-descriptor.
+    // neither is a value the manifest reads.
     const { protocol, errors } = extract({
       'src/main.ts': `${IMPORT}
         export default defineApp({
@@ -292,8 +273,11 @@ describe('defineApp: id', () => {
   });
 });
 
-describe('defineApp: mutual exclusion with app.register()', () => {
-  test('importing defineApp and calling app.register() is an error', () => {
+// `app.register()` is removed from the platform. A `defineApp` app that still
+// carries one is refused rather than half-read: only one of the two would run,
+// and the manifest cannot say which.
+describe('defineApp: a leftover app.register() call', () => {
+  test('a defineApp app that also calls app.register() is refused', () => {
     expectRejected(
       {
         'src/main.ts': `import { defineApp, app } from '@bundled/yaar';
@@ -303,7 +287,7 @@ describe('defineApp: mutual exclusion with app.register()', () => {
           });
           app.register({ appId: 'd', name: 'D', commands: {} });`,
       },
-      'both register the app',
+      'has been removed',
     );
   });
 
@@ -321,7 +305,7 @@ describe('defineApp: mutual exclusion with app.register()', () => {
             commands: { go: { description: 'Go', run: () => 1 } },
           });`,
       },
-      'both register the app',
+      'has been removed',
     );
   });
 });
@@ -431,22 +415,20 @@ describe('defineApp: refusal', () => {
 
 describe('defineApp: absence', () => {
   test("an app's own defineApp is not the SDK's", () => {
-    // It resolves locally, so it is this app's function. Whatever it does, the
-    // registration it performs is found the legacy way or not at all.
+    // It resolves locally, so it is this app's function, not a registration.
+    // Reading its argument would put a manifest on an app that declares none.
     const { protocol, errors } = extract({
       'src/main.ts': `
-        const app = { register(_c: unknown): void {} };
         function defineApp<T>(config: T): T { return config; }
-        const instance = defineApp({ id: 'd' });
-        void instance;
-        app.register({
-          appId: 'd', name: 'D',
-          commands: { go: { description: 'Go', handler: () => 1 } },
-        });`,
+        const instance = defineApp({
+          id: 'd', name: 'D',
+          commands: { go: { description: 'Go', run: () => 1 } },
+        });
+        void instance;`,
     });
 
     expect(errors).toEqual([]);
-    expect(Object.keys(protocol!.commands)).toEqual(['go']);
+    expect(protocol).toBeNull();
   });
 
   test('an app that neither defines nor registers yields nothing', () => {
@@ -454,97 +436,6 @@ describe('defineApp: absence', () => {
       protocol: null,
       errors: [],
     });
-  });
-});
-
-describe('app.register() is unchanged', () => {
-  const APP = `const app = { register(_c: unknown): void {} };`;
-
-  test('a legacy registration extracts exactly as before', () => {
-    const { protocol, errors } = extract(
-      {
-        'src/main.ts': `${APP}
-        app.register({
-          appId: 'demo',
-          name: 'Demo',
-          state: { status: { description: 'Status', handler: () => 'ok' } },
-          commands: {
-            ping: {
-              description: 'Ping',
-              aliases: ['p'],
-              params: { type: 'object', properties: { n: { type: 'number' } } },
-              returns: { type: 'string' },
-              handler: () => 'pong',
-            },
-          },
-          events: { tick: { description: 'A tick' } },
-        });`,
-      },
-      // A known app id must not change what the legacy path extracts: it has no
-      // `id` field to check, and inventing one would fail every existing app.
-      { appId: 'demo' },
-    );
-
-    expect(errors).toEqual([]);
-    expect(protocol).toEqual({
-      state: { status: { description: 'Status' } },
-      commands: {
-        ping: {
-          description: 'Ping',
-          aliases: ['p'],
-          params: { type: 'object', properties: { n: { type: 'number' } } },
-          returns: { type: 'string' },
-        },
-      },
-      events: { tick: { description: 'A tick' } },
-    });
-  });
-
-  test('an app.json id that disagrees with the legacy appId is not an error', () => {
-    // The check belongs to `defineApp`, whose `id` the runtime registers under.
-    // Applying it here would fail apps that ship today.
-    const { protocol, errors } = extract(
-      {
-        'src/main.ts': `${APP}
-          app.register({
-            appId: 'something-else', name: 'D',
-            commands: { go: { description: 'Go', handler: () => 1 } },
-          });`,
-      },
-      { appId: 'demo' },
-    );
-
-    expect(errors).toEqual([]);
-    expect(Object.keys(protocol!.commands)).toEqual(['go']);
-  });
-
-  test('method shorthand in a legacy descriptor is still rejected', () => {
-    expectRejected(
-      {
-        'src/main.ts': `${APP}
-          app.register({
-            appId: 'd', name: 'D',
-            commands: { go: { description: 'Go', handler() { return 1; } } },
-          });`,
-      },
-      'method shorthand is not a descriptor',
-    );
-  });
-
-  test('a legacy command may declare a replay policy and it reaches the manifest', () => {
-    // The iframe runtime reads `replay` off whatever registration it is handed,
-    // `defineApp` or not. A manifest that dropped it here would let the server
-    // replay a command the running app opted out of.
-    const { protocol, errors } = extract({
-      'src/main.ts': `${APP}
-        app.register({
-          appId: 'd', name: 'D',
-          commands: { add: { description: 'Add', replay: 'never', handler: () => 1 } },
-        });`,
-    });
-
-    expect(errors).toEqual([]);
-    expect(protocol!.commands.add.replay).toBe('never');
   });
 });
 

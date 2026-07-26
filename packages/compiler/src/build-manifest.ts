@@ -41,9 +41,16 @@ import { join, basename } from 'path';
  * and `defineApp` reads its `params`/`returns`/`schema` from it. An app built
  * before this has no such script, so a Zod schema would reach agents as an
  * opaque object; the injected copy is also what keeps the manifest the iframe
- * serves identical to `dist/protocol.json` rather than merely agreeing with it.)
+ * serves identical to `dist/protocol.json` rather than merely agreeing with it.
+ * '15': `app.register()` was removed — registration moved to `defineApp`'s
+ * private `__registerApp` entry, and the public name now throws. Both halves of
+ * that pair are baked into a dist (the injected app-protocol script and the
+ * bundled `defineApp` shim), so an old build is self-consistent and would keep
+ * running its removed registration path indefinitely. Forcing the rebuild is
+ * what makes an unmigrated app fail loudly, with the extractor naming the fix,
+ * instead of quietly outliving the removal.)
  */
-export const COMPILER_VERSION = '14';
+export const COMPILER_VERSION = '15';
 
 export interface BuildManifest {
   sourceHash: string;
