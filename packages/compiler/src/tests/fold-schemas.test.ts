@@ -340,6 +340,23 @@ describe('without typescript, the running app is the manifest', () => {
     expect(message).toContain('defineApp');
   });
 
+  test("an app's own object named `app` is left alone here too", async () => {
+    // The AST path resolves the receiver to the SDK's `app`; with no typescript
+    // to resolve with, the import is the proxy. Both readers must answer alike,
+    // and neither may fail a build over a local object that shares the name.
+    const dir = await writeApp({
+      'src/main.ts': `const registry = { register(_c: unknown): void {} };
+        const app = registry;
+        app.register({ hooks: {} });
+        export {};\n`,
+    });
+    process.env.YAAR_NO_TYPESCRIPT = '1';
+
+    const result = await extractProtocolFromDir(join(dir, 'src'));
+
+    expect(result.errors).toEqual([]);
+  });
+
   test('an app that registers nothing still extracts cleanly', async () => {
     // Most apps only draw a UI. Turning "declares no protocol" into a build
     // error would be the refusal above misfiring on every one of them.

@@ -144,8 +144,10 @@ green:
   module's default export. An app declaring its own `defineApp` is not matched: it resolves
   locally, so it is that app's function. The mirror rule guards the removed shape: `register`
   is a common method name (`Chart.register(...registerables)` ships in a bundled app today),
-  so only a call whose receiver is the SDK's `app` object — the bare `app` identifier or a
-  member chain ending in `.app` — is refused as a leftover registration.
+  so only a call whose receiver *resolves* to the SDK's `app` object — the `app` binding
+  imported from `@bundled/yaar` (aliases included), an `app` the app neither declares nor
+  imports, or a member chain ending in `.app` — is refused as a leftover registration. An
+  app's own `const app = registry` is left alone; the name is not the test.
 - **Which wrappers are transparent.** `defineAppCommand({...})` is stepped over because the
   shim's `defineAppCommand` is the identity function — it exists for descriptors declared
   outside the `defineApp({...})` literal, which otherwise lose `run`'s parameter typing. Any

@@ -835,6 +835,24 @@ function defaultExportExpression(ts: TsModule, scope: ModuleScope): TsExpression
 }
 
 /**
+ * True when the identifier `name` names the SDK's `app` object in `scope`.
+ *
+ * The named import is the canonical spelling and is matched exactly, aliases
+ * included (`import { app as sdkApp }`). A name this app neither declares nor
+ * imports is taken as the SDK's too, because the legacy shape reached `app`
+ * through paths the module index does not bind — `const { app } = window.yaar`
+ * among them — and missing those would let an unmigrated app build green. What
+ * that leaves uncaught is a *non*-module-scope `const app = …`, which the scope
+ * model cannot see; the module-scope declaration, which is what a library object
+ * named `app` actually looks like, resolves locally and is left alone.
+ */
+function isSdkAppReceiver(scope: ModuleScope, name: string): boolean {
+  const ref = scope.imports.get(name);
+  if (ref) return ref.imported === 'app' && ref.specifier === YAAR_SDK_SPECIFIER;
+  return name === 'app' && !scope.locals.has('app');
+}
+
+/**
  * The first `app.register(...)` call in the graph, if any — the removed
  * registration shape.
  *
@@ -844,9 +862,14 @@ function defaultExportExpression(ts: TsModule, scope: ModuleScope): TsExpression
  * manifest — the exact silent truncation this module exists to prevent.
  *
  * `register` is a common method name — `Chart.register(...registerables)` sits
- * in a bundled app today — so the receiver must be the SDK's `app` object: the
- * bare `app` identifier, or a member chain ending in `.app` (`window.yaar.app`).
- * Matching every `.register` call would fail the build on an unrelated library.
+ * in a bundled app today — so the receiver must be the SDK's `app` object, and
+ * it is resolved the same way `isDefineAppCall` resolves its callee rather than
+ * matched on spelling: the `app` binding imported from '@bundled/yaar' (aliases
+ * included), an `app` this app neither declares nor imports (a global the
+ * extractor cannot see), or a member chain ending in `.app` (`window.yaar.app`).
+ * An app that declares its own `app` — `const app = registry` — is left alone;
+ * that object is not the SDK's, so refusing it would fail a valid build with a
+ * migration notice for an API it never called.
  */
 function findAppRegisterCall(
   ts: TsModule,
@@ -862,9 +885,9 @@ function findAppRegisterCall(
         node.expression.name.text === 'register'
       ) {
         const receiver = node.expression.expression;
-        const isApp =
-          (ts.isIdentifier(receiver) && receiver.text === 'app') ||
-          (ts.isPropertyAccessExpression(receiver) && receiver.name.text === 'app');
+        const isApp = ts.isIdentifier(receiver)
+          ? isSdkAppReceiver(scope, receiver.text)
+          : ts.isPropertyAccessExpression(receiver) && receiver.name.text === 'app';
         if (isApp) found = { node, scope };
       }
       ts.forEachChild(node, visit);

@@ -356,6 +356,13 @@ export async function extractProtocolFromDir(
  * A text test, deliberately: it decides whether the app *claims* a protocol the
  * platform no longer serves, not what that protocol is. An app that claims none
  * (most apps only draw a UI) must keep building.
+ *
+ * `app` must still be the SDK's, the way the AST path resolves its receiver, so
+ * the two readers answer alike: the file has to import `app` from
+ * '@bundled/yaar' or spell the call through the global (`window.yaar.app`). A
+ * file with its own `app` — `const app = registry; app.register({ hooks: {} })`
+ * — is not this app's registration and must not fail the build. Without a
+ * binding resolver the import is the closest available proxy for the same rule.
  */
 function findRegisterCall(srcDir: string): string | null {
   const rank = (path: string): number => {
@@ -372,7 +379,26 @@ function findRegisterCall(srcDir: string): string | null {
   // Entry files first, so the error anchors to the file an author would open.
   const paths = [...texts.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
   for (const path of paths) {
-    if (/\bapp\s*\.\s*register\s*\(/.test(texts.get(path)!)) return path;
+    const text = texts.get(path)!;
+    if (/\byaar\s*\.\s*app\s*\.\s*register\s*\(/.test(text)) return path;
+    if (/\bapp\s*\.\s*register\s*\(/.test(text) && importsSdkApp(text)) return path;
   }
   return null;
+}
+
+/**
+ * True when `text` binds `app` from '@bundled/yaar' — `import { app }`, or a
+ * destructure off the namespace. Deliberately not a parser: it stands in for the
+ * AST path's receiver resolution in the one environment that has no `typescript`
+ * to resolve with.
+ */
+function importsSdkApp(text: string): boolean {
+  const namedImport = /import\s*\{([^}]*)\}\s*from\s*['"]@bundled\/yaar['"]/g;
+  for (const match of text.matchAll(namedImport)) {
+    const binds = match[1]
+      .split(',')
+      .some((clause) => /^\s*app\s*(?:as\s+\w+\s*)?$/.test(clause.replace(/\/\/.*$/, '')));
+    if (binds) return true;
+  }
+  return /\bconst\s*\{[^}]*\bapp\b[^}]*\}\s*=\s*(?:window\s*\.\s*)?yaar\b/.test(text);
 }

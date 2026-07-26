@@ -491,8 +491,7 @@ describe('alias collisions', () => {
 describe('removed app.register()', () => {
   test('an app.register() call is refused with the migration named', () => {
     const { protocol, errors } = extract({
-      'src/main.ts': `
-        const app = { register(_c: unknown): void {} };
+      'src/main.ts': `import { app } from '@bundled/yaar';
         app.register({
           appId: 'd', name: 'D',
           commands: { go: { description: 'Go', handler: () => 1 } },
@@ -508,8 +507,7 @@ describe('removed app.register()', () => {
 
   test('a register() call in any module is caught, not just the entry', () => {
     const { errors } = extract({
-      'src/protocol.ts': `
-        const app = { register(_c: unknown): void {} };
+      'src/protocol.ts': `import { app } from '@bundled/yaar';
         export function registerProtocol() {
           app.register({ appId: 'd', name: 'D', commands: {} });
         }`,
@@ -520,10 +518,31 @@ describe('removed app.register()', () => {
     expect(errors[0].file).toBe('src/protocol.ts');
   });
 
+  test('an aliased SDK import is caught, since the binding is what decides', () => {
+    const { errors } = extract({
+      'src/main.ts': `import { app as sdkApp } from '@bundled/yaar';
+        sdkApp.register({ appId: 'd', name: 'D', commands: {} });`,
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toContain('has been removed');
+  });
+
+  test('an `app` this app neither declares nor imports is caught', () => {
+    // `const { app } = window.yaar` is not indexed as a binding, and was a real
+    // way to reach the removed API. Missing it would build green with no manifest.
+    const { errors } = extract({
+      'src/main.ts': `const { app } = (window as any).yaar;
+        app.register({ appId: 'd', name: 'D', commands: {} });`,
+    });
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0].message).toContain('has been removed');
+  });
+
   test('it wins over a defineApp in the same app, since only one can run', () => {
     const { protocol, errors } = extract({
-      'src/main.ts': `${IMPORT}
-        const app = { register(_c: unknown): void {} };
+      'src/main.ts': `import { defineApp, app } from '@bundled/yaar';
         app.register({ appId: 'd', name: 'D', commands: {} });
         export default defineApp({
           id: 'd', name: 'D',
@@ -547,6 +566,37 @@ describe('removed app.register()', () => {
 
     expect(errors).toEqual([]);
     expect(protocol).toBeNull();
+  });
+
+  test("an app's own object named `app` is left alone", () => {
+    // The receiver is resolved, not spelled: a local `app` is not the SDK's, so
+    // refusing it would fail a valid build with a migration notice for an API
+    // this app never called.
+    const { protocol, errors } = extract({
+      'src/main.ts': `
+        const registry = { register(_c: unknown): void {} };
+        const app = registry;
+        app.register({ hooks: {} });`,
+    });
+
+    expect(errors).toEqual([]);
+    expect(protocol).toBeNull();
+  });
+
+  test('a local `app` still loses to a real defineApp registration', () => {
+    // The guard stepping aside must hand the app back to the reader, not drop it.
+    const { protocol, errors } = extract({
+      'src/main.ts': `${IMPORT}
+        const app = { register(_c: unknown): void {} };
+        app.register({ plugins: [] });
+        export default defineApp({
+          id: 'd', name: 'D',
+          commands: { go: { description: 'Go', run: () => 1 } },
+        });`,
+    });
+
+    expect(errors).toEqual([]);
+    expect(protocol?.commands?.go?.description).toBe('Go');
   });
 
   test('a registration-shaped call on a non-`app` receiver is left alone', () => {
