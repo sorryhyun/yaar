@@ -20,7 +20,8 @@ function appDbUri(path: string): string {
  *
  * Filters are Mongo-style: exact match `{ status: 'active' }`, operators
  * `{ age: { $gt: 18 } }` ($gt/$gte/$lt/$lte/$ne/$in/$exists), array contains
- * `{ tags: 'intro' }`. Requires `yaar://apps/self/db/` in app.json permissions.
+ * `{ tags: 'intro' }`. No permission declaration needed — every app is granted its own
+ * `yaar://apps/self/db/` at token mint.
  */
 class CollectionHandle {
   constructor(name) {
@@ -109,8 +110,7 @@ export const appDb = {
    * Returns `[docs, { insert, update, remove, refresh, dispose }]` where
    * `docs()` is a signal holding the current query results. Mutations made
    * through the returned helpers refresh the signal; changes made elsewhere
-   * (another window, the agent) arrive via a verb subscription when the app
-   * has read permission on `yaar://apps/self/db/`.
+   * (another window, the agent) arrive via a verb subscription.
    */
   createReactiveCollection(name, options) {
     const handle = new CollectionHandle(name);

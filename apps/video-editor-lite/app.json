@@ -3,9 +3,6 @@
   "name": "Video Editor Lite",
   "description": "Video editor with multi-layer composition system, timeline, trim, and WebM export",
   "run": "dist/index.html",
-  "permissions": [
-    "yaar://apps/self/storage/"
-  ],
-  "version": "1.2.5",
+  "version": "1.2.6",
   "author": "YAAR"
 }

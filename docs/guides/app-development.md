@@ -552,7 +552,7 @@ cross-origin requests are refused with a 403. Both `"yaar://http"` and `"yaar://
 work.
 
 ```json
-{ "permissions": ["yaar://apps/self/storage/", "yaar://http"] }
+{ "permissions": ["yaar://http"] }
 ```
 
 **Prefer `httpFetch` over `invoke('yaar://http', …)`.** The verb form returns YAAR's
@@ -1208,7 +1208,8 @@ For structured records, each app also gets a SQLite database at `storage/apps/{a
 counting, pagination, and full-text search server-side — no more load-all-JSON-and-filter.
 Binary blobs and simple single files should stay on `appStorage`; the two coexist.
 
-Requires `"yaar://apps/self/db/"` in the app's `app.json` permissions.
+No permission declaration needed — an app's own storage, database, and personas are
+granted to it automatically.
 
 ### From App Code (`@bundled/yaar`)
 

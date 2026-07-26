@@ -143,7 +143,7 @@ Set up event-driven automation with `config/hooks.json`. Automatically execute a
 Since YAAR lets the AI execute code and communicate with external services, it ships with multiple security layers.
 
 - **A single access chokepoint** — every HTTP route resolves its caller to a principal (the desktop `host`, or an `app`) and names the `yaar://` URI and verb it is about to perform, all through the same check. Routes never invent their own permission logic.
-- **Scoped app permissions** — an app is confined to the `permissions` in its `app.json`, plus its own storage (`yaar://apps/self/storage/`).
+- **Scoped app permissions** — an app is confined to the `permissions` in its `app.json`, plus its own namespace (`yaar://apps/self/…` — storage, database, personas), which is granted automatically.
 - **Gated SDK doors** — endpoints for `yaar-dev` / `yaar-web` / `yaar-ml` are re-verified server-side, because a compile-time gate says nothing about a hand-written `fetch()`.
 - **Agent tiers** — `yaar://session/*` (including the door that drives your real Chrome) is reachable only by the session agent; everything else is denied by default.
 - **Domain allowlist + SSRF protection** — only domains listed in `config/curl_allowed_domains.yaml` are permitted, new ones require user approval, and requests are blocked from being redirected at internal network addresses.

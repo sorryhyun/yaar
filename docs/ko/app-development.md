@@ -500,7 +500,7 @@ const items = await res.json();
 오리진 요청은 403 으로 거부됩니다. `"yaar://http"` 와 `"yaar://http/"` 둘 다 동작합니다.
 
 ```json
-{ "permissions": ["yaar://apps/self/storage/", "yaar://http"] }
+{ "permissions": ["yaar://http"] }
 ```
 
 **`invoke('yaar://http', …)` 보다 `httpFetch` 를 쓰세요.** verb 형태는 `Response` 가 아니라
@@ -1012,7 +1012,7 @@ delete('yaar://apps/my-app/storage/data.json')
 
 구조화된 레코드를 위해 각 앱은 `storage/apps/{appId}/data.db`에 SQLite 데이터베이스도 갖습니다(설계: [`docs/guides/sqlite.md`](./sqlite.md)). `appStorage`와 달리 쿼리, 카운팅, 페이지네이션, 전문 검색(full-text search)을 서버 측에서 지원하므로, 더 이상 JSON을 통째로 불러와 필터링할 필요가 없습니다. 바이너리 blob과 단순한 단일 파일은 계속 `appStorage`에 두세요. 둘은 공존합니다.
 
-앱의 `app.json` 권한에 `"yaar://apps/self/db/"`가 필요합니다.
+권한 선언은 필요 없습니다 — 앱 자신의 스토리지, 데이터베이스, 페르소나는 자동으로 부여됩니다.
 
 ### 앱 코드에서 (`@bundled/yaar`)
 

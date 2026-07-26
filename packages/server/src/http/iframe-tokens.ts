@@ -14,6 +14,34 @@ import { clearJar, jarKey } from '../features/http/cookie-jar.js';
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/**
+ * The app's own namespace, granted to every app at mint time.
+ *
+ * A permission list exists to say what an app may reach *beyond itself*. These three
+ * URIs are the app itself — `self` is resolved against the token's own appId
+ * (`resolveSelf` in access.ts), so an entry here can never name another app no matter
+ * what the iframe asks for. Declaring them in app.json was therefore a ritual that
+ * could only be got wrong: an app that forgot `yaar://apps/self/db/` got a 403 from
+ * `appDb` for a database only it can see.
+ *
+ * None of the three is the real gate on what it unlocks:
+ * - `storage/` and `db/` are per-app subtrees on disk (`storage/apps/{appId}/`);
+ *   reaching another app's needs that app's id in the URI, which `resolveSelf` never
+ *   produces and the permission check still refuses.
+ * - `agents/` is guarded twice over by the resource itself — `resolveScope` requires
+ *   the URI's appId to equal the appId the *context* says the caller is, and spawning
+ *   at all requires `"personas": { "max": N }` in the manifest, which `getAppMeta`
+ *   honours for bundled apps only. Watching them still needs `"streams": ["agents"]`.
+ *
+ * Cross-app access is untouched: `yaar://apps/other/db/` in an app.json still means
+ * what it meant, and still has to be written out.
+ */
+const SELF_GRANTS = [
+  'yaar://apps/self/storage/',
+  'yaar://apps/self/db/',
+  'yaar://apps/self/agents/',
+];
+
 interface TokenEntry {
   windowId: string;
   sessionId: string;
@@ -153,15 +181,14 @@ export async function generateAppIframeToken(
   const appMeta = appId ? await getAppMeta(appId) : null;
   let permissions = explicitPermissions ?? appMeta?.permissions ?? [];
 
-  // Auto-grant app-scoped storage access — every app can read/write its own storage
+  // Auto-grant the app's own namespace (see SELF_GRANTS).
   if (appId) {
-    const selfStorageUri = 'yaar://apps/self/storage/';
-    const hasStoragePerm = permissions.some((p) => {
-      const uri = typeof p === 'string' ? p : p.uri;
-      return uri === selfStorageUri || uri.startsWith(selfStorageUri);
-    });
-    if (!hasStoragePerm) {
-      permissions = [...permissions, selfStorageUri];
+    for (const grant of SELF_GRANTS) {
+      const held = permissions.some((p) => {
+        const uri = typeof p === 'string' ? p : p.uri;
+        return uri === grant || uri.startsWith(grant);
+      });
+      if (!held) permissions = [...permissions, grant];
     }
   }
 

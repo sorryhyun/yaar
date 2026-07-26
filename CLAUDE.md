@@ -245,7 +245,7 @@ stream(streamUri, onFrame)      // start | text | thinking | done (carries final
 list('yaar://apps/self/agents') // roster + max      del(...) // dispose one, or all
 ```
 
-Needs `"yaar://apps/self/agents/"` in `permissions` and `"streams": ["agents"]` to watch them. `message` returns as soon as the turn is queued, so N sub-agents generate concurrently. They hold **no YAAR verbs, no permissions, and no principal** — the runtime-supplied prompt never gets YAAR's hands — and are reclaimed when the app's last window on that monitor closes. Persistence is the app's job (`appDb`/`appStorage`); a respawned persona gets its history replayed in its first message.
+Needs `"streams": ["agents"]` to watch them (the `yaar://apps/self/` namespace itself is auto-granted — no `permissions` entry). `message` returns as soon as the turn is queued, so N sub-agents generate concurrently. They hold **no YAAR verbs, no permissions, and no principal** — the runtime-supplied prompt never gets YAAR's hands — and are reclaimed when the app's last window on that monitor closes. Persistence is the app's job (`appDb`/`appStorage`); a respawned persona gets its history replayed in its first message.
 
 **Tools.** The one thing a sub-agent may be given is a channel back to *your own app's iframe*, dressed in tool names you declare at spawn:
 

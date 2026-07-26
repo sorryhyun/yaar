@@ -79,7 +79,7 @@ You shouldn't have to trust it — the design assumes you don't:
 
 - **Scoped filesystem.** The AI's file access is confined to `storage/`, `config/`, `apps/`, and `session_logs/` by default. Outside folders must be explicitly mounted (read-only supported).
 - **One access gate.** Every HTTP route resolves *who is calling* (desktop vs. app principal) and *what URI + verb* they want, through the same check. Routes don't invent their own permission logic.
-- **App permission scopes.** An app touches its own storage (`yaar://apps/self/storage/`) plus whatever `app.json` declares — nothing else.
+- **App permission scopes.** An app touches its own namespace (`yaar://apps/self/…` — storage, database, personas), granted automatically, plus whatever `app.json` declares — nothing else.
 - **Network allowlist + SSRF guard.** Outbound HTTP is limited to domains in `config/curl_allowed_domains.yaml`; new domains require your approval; internal-network addresses are blocked.
 - **Agent tiers.** The dangerous namespaces (`yaar://session/*`, including real-browser control) are reachable only by the privileged session agent. Everything else is default-deny.
 - **Origin isolation.** Apps are served from a different browser origin than the desktop, so an app can't forge desktop-level requests.

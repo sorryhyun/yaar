@@ -291,7 +291,7 @@ Apps declare which URIs they can access in `app.json`:
 
 ```json
 {
-  "permissions": ["yaar://apps/self/storage/", "yaar://storage/"]
+  "permissions": ["yaar://storage/"]
 }
 ```
 

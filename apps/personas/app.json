@@ -3,10 +3,9 @@
   "name": "Round Table",
   "description": "A room of AI characters that answer you at the same time, each with its own mind",
   "run": "dist/index.html",
-  "permissions": ["yaar://apps/self/agents/", "yaar://apps/self/db/"],
   "streams": ["agents"],
   "personas": { "max": 4 },
-  "version": "1.0.0",
+  "version": "1.0.1",
   "author": "YAAR",
   "kind": "system"
 }

@@ -647,8 +647,7 @@ interface YaarAppDb {
   /**
    * Reactive Solid.js binding for a collection query: `docs()` is a signal
    * holding the current results; helper mutations refresh it, and external
-   * changes arrive via a verb subscription (requires read permission on
-   * `yaar://apps/self/db/`).
+   * changes arrive via a verb subscription.
    */
   createReactiveCollection<T extends object = Record<string, unknown>>(
     name: string,
@@ -885,7 +884,7 @@ declare module '@bundled/yaar' {
   /**
    * App-scoped SQLite database (wraps yaar://apps/self/db/ verbs).
    * Structured collections with Mongo-style filters and full-text search.
-   * Requires `yaar://apps/self/db/` in app.json permissions.
+   * Granted to every app automatically — no app.json permission entry needed.
    */
   export const appDb: YaarAppDb;
 
