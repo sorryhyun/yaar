@@ -9,9 +9,9 @@
  * The bundled exe is the exception: `build-exe-bundle.js` statically imports
  * `typescript` into the generated entry (so Bun embeds it) and stashes the
  * module on `globalThis.__YAAR_TYPESCRIPT`. The runtime-assembled import below
- * is invisible to Bun's compiler, so without the stash the exe could not read an
- * `app.register()` protocol at all — that reader is the AST, and it is the only
- * one.
+ * is invisible to Bun's compiler, so without the stash the exe would fall back
+ * to the schema fold for every app, reading each manifest by running the app
+ * rather than from its AST.
  *
  * The result is memoized, including the failure: a missing module does not
  * become available later, and retrying costs a rejected dynamic import per file.

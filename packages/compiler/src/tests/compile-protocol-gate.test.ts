@@ -50,68 +50,61 @@ async function compileSource(source: string) {
   return compileFiles({ 'src/main.ts': source });
 }
 
-// A local stand-in for app.register — a @bundled import would drag the whole SDK
-// into the test. The binding must still be named `app`: the extractor looks for
-// the SDK's app object specifically, so an unrelated `Chart.register(...)` in a
-// real app is not mistaken for a protocol registration.
-const PRELUDE = `
-const app = { register(_config: unknown): void {} };
-const sharedCommands = { extra: { description: 'Extra', handler: () => 0 } };
-void sharedCommands;
+// The real SDK import, not a stand-in: this suite is about what a *compile*
+// produces, so the registration has to be the one the extractor actually keys
+// on (`defineApp` imported from '@bundled/yaar').
+const PRELUDE = `import { defineApp } from '@bundled/yaar';
+const sharedCommands = { extra: { description: 'Extra', run: () => 0 } };
 `;
 
 const SPREAD = `${PRELUDE}
-app.register({
-  appId: 'demo',
+export default defineApp({
+  id: 'demo',
   name: 'Demo',
   commands: {
-    first: { description: 'First', handler: () => 1 },
+    first: { description: 'First', run: () => 1 },
     ...sharedCommands,
-    third: { description: 'Third', handler: () => 3 },
+    third: { description: 'Third', run: () => 3 },
   },
 });
-export {};
 `;
 
 const UNRESOLVABLE = `${PRELUDE}
 function buildCommands() {
-  return { generated: { description: 'Generated', handler: () => 0 } };
+  return { generated: { description: 'Generated', run: () => 0 } };
 }
-app.register({
-  appId: 'demo',
+export default defineApp({
+  id: 'demo',
   name: 'Demo',
   commands: {
-    first: { description: 'First', handler: () => 1 },
+    first: { description: 'First', run: () => 1 },
     ...buildCommands(),
   },
 });
-export {};
 `;
 
 const NO_DESCRIPTION = `${PRELUDE}
-app.register({
-  appId: 'demo',
+export default defineApp({
+  id: 'demo',
   name: 'Demo',
   commands: {
-    silent: { handler: () => 1 },
+    silent: { run: () => 1 },
   },
 });
-export {};
 `;
 
 const CLEAN = `${PRELUDE}
-app.register({
-  appId: 'demo',
+export default defineApp({
+  id: 'demo',
   name: 'Demo',
   state: {
-    status: { description: 'Status', handler: () => 'ok' },
+    status: { description: 'Status', get: () => 'ok' },
   },
   commands: {
-    first: { description: 'First', handler: () => 1 },
-    third: { description: 'Third', handler: () => 3 },
+    first: { description: 'First', run: () => 1 },
+    third: { description: 'Third', run: () => 3 },
   },
 });
-export {};
 `;
 
 describe('compile protocol gate', () => {
@@ -134,19 +127,18 @@ describe('compile protocol gate', () => {
           readFile: {
             description: 'Read a file from disk, ' + 'returning its text',
             params: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] },
-            handler: (_p: { path: string }) => '',
+            run: (_p: { path: string }) => '',
           },
         };
       `,
       'src/main.ts': `
-        const app = { register(_config: unknown): void {} };
+        import { defineApp } from '@bundled/yaar';
         import { fileCommands } from './commands/files';
-        app.register({
-          appId: 'demo',
+        export default defineApp({
+          id: 'demo',
           name: 'Demo',
-          commands: { ...fileCommands, ping: { description: 'Ping', handler: () => 'pong' } },
+          commands: { ...fileCommands, ping: { description: 'Ping', run: () => 'pong' } },
         });
-        export {};
       `,
     });
 
@@ -188,7 +180,7 @@ describe('compile protocol gate', () => {
     expect(await Bun.file(join(sandbox!, 'dist', 'protocol.json')).exists()).toBe(false);
   });
 
-  test('a clean register() compiles and reports the manifest summary', async () => {
+  test('a clean registration compiles and reports the manifest summary', async () => {
     const result = await compileSource(CLEAN);
 
     expect(result.success).toBe(true);
@@ -198,19 +190,37 @@ describe('compile protocol gate', () => {
     expect(Object.keys(written.commands)).toEqual(['first', 'third']);
   });
 
-  test('no register() call compiles with no protocol summary', async () => {
+  test('an app that registers nothing compiles with no protocol summary', async () => {
     const result = await compileSource(`document.title = 'plain';\nexport {};\n`);
 
     expect(result.success).toBe(true);
     expect(result.protocol).toBeUndefined();
   });
 
-  test('an unrelated .register() call is not mistaken for the protocol', async () => {
+  test('an unrelated .register() call does not disturb the manifest', async () => {
+    // `Chart.register(...registerables)` ships in a bundled app today. Only a
+    // call on the SDK's `app` object means the removed registration shape.
     const result = await compileSource(`
+      import { defineApp } from '@bundled/yaar';
       const Chart = { register(..._parts: unknown[]): void {} };
       const registerables = [1, 2, 3];
       Chart.register(...registerables);
-      const app = { register(_config: unknown): void {} };
+      export default defineApp({
+        id: 'demo',
+        name: 'Demo',
+        commands: { ping: { description: 'Ping', run: () => 'pong' } },
+      });
+    `);
+
+    expect(result.success).toBe(true);
+    expect(result.protocol?.commands).toEqual(['ping']);
+  });
+
+  test('fails the build on a leftover app.register() call, naming the migration', async () => {
+    // Without this the app would compile green with an empty manifest: every
+    // command it answers would be invisible to agents.
+    const result = await compileSource(`
+      import { app } from '@bundled/yaar';
       app.register({
         appId: 'demo',
         name: 'Demo',
@@ -219,7 +229,10 @@ describe('compile protocol gate', () => {
       export {};
     `);
 
-    expect(result.success).toBe(true);
-    expect(result.protocol?.commands).toEqual(['ping']);
+    expect(result.success).toBe(false);
+    const errors = (result.errors ?? []).join('\n');
+    expect(errors).toContain('`app.register({...})` has been removed');
+    expect(errors).toContain('defineApp');
+    expect(await Bun.file(join(sandbox!, 'dist', 'protocol.json')).exists()).toBe(false);
   });
 });

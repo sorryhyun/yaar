@@ -37,7 +37,8 @@ function installWith(commands: Record<string, unknown>) {
   } as Record<string, unknown>;
 
   new Function('window', IFRAME_APP_PROTOCOL_SCRIPT)(window);
-  (window.yaar as { app: { register: (c: unknown) => void } }).app.register({
+  // The private entry `defineApp` calls; `app.register()` only throws now.
+  (window.yaar as { app: { __registerApp: (c: unknown) => void } }).app.__registerApp({
     appId: 'demo',
     name: 'Demo',
     commands,

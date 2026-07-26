@@ -1,11 +1,11 @@
 /**
  * `defineApp()` is the blessed app entrypoint: it translates one authoring
- * object into an `app.register()` call and mounts the view.
+ * object into the iframe SDK's private registration call and mounts the view.
  *
  * Three things are worth testing and none of them are testable the same way:
  *
  * 1. **The translation** (`get`/`run` -> `handler`, the `AppCommandError`
- *    contract, `replay` passthrough, `__authoritative`). Tested against the
+ *    contract, `replay` passthrough). Tested against the
  *    *compiled artifact*, not the shim source — an app never runs the source,
  *    and the interesting failure mode is a bundler-shaped one.
  * 2. **That `render` resolves.** The shim imports `solid-js/web` by its bare
@@ -15,8 +15,7 @@
  *    function actually get called by solid's `render`.
  * 3. **The types.** `run`'s parameter is derived from that command's own
  *    `params` schema. Nothing else in the suite would notice that silently
- *    degrading to `unknown`, so these cases run the real `tsc`, like
- *    `define-command.test.ts`.
+ *    degrading to `unknown`, so these cases run the real `tsc`.
  */
 import {
   afterAll,
@@ -95,7 +94,13 @@ function installStubs(opts: { withMountElement?: boolean; withSdk?: boolean } = 
   const errors: string[] = [];
 
   (globalThis as any).window = withSdk
-    ? { yaar: { app: { register: (config: Record<string, any>) => void registered.push(config) } } }
+    ? {
+        yaar: {
+          app: {
+            __registerApp: (config: Record<string, any>) => void registered.push(config),
+          },
+        },
+      }
     : {};
   (globalThis as any).document = {
     getElementById: (id: string) => (id === APP_MOUNT_ID && withMountElement ? mount : null),
@@ -113,7 +118,7 @@ afterEach(() => {
 });
 
 describe('defineApp registration', () => {
-  test('translates the authoring shape into an authoritative registration', () => {
+  test('translates the authoring shape into the registration the SDK serves', () => {
     const { registered } = installStubs();
 
     const definition = defineApp({
@@ -143,10 +148,6 @@ describe('defineApp registration', () => {
     const config = registered[0];
     expect(config.appId).toBe('memo');
     expect(config.name).toBe('Memo');
-    // The opt-in to the SDK's strict double-register guard. Without it a second
-    // register() in this window would silently win.
-    expect(config.__authoritative).toBe(true);
-
     // `get` -> `handler`, `run` -> `handler`; everything else rides along.
     expect(config.state.memoCount.description).toBe('Number of saved memos');
     expect(config.state.memoCount.schema).toEqual({ type: 'number' });
@@ -630,7 +631,6 @@ describe('defineApp in a compiled app', () => {
     expect(registered).toHaveLength(1);
     const config = registered[0];
     expect(config.appId).toBe('imperative');
-    expect(config.__authoritative).toBe(true);
     expect(config.commands.setText.replay).toBe('never');
 
     // Mounted through the real bundle, into the real mount id.

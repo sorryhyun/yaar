@@ -271,13 +271,7 @@ declare module '@bundled/tone' {
 
 // -- App Protocol --
 
-interface YaarAppStateDescriptor<T = unknown> {
-  description: string;
-  handler: () => T | Promise<T>;
-  schema?: object;
-}
-
-/** Second argument every command handler receives (see `YaarAppCommandDescriptor.handler`). */
+/** Second argument every command `run` receives (see `YaarAppCommandDefinition.run`). */
 interface YaarAppCommandContext {
   /**
    * True when the server is replaying a command recorded before the iframe
@@ -288,27 +282,12 @@ interface YaarAppCommandContext {
   replayed: boolean;
 }
 
-interface YaarAppCommandDescriptor<P = unknown, R = unknown> {
-  description: string;
-  aliases?: string[];
-  handler: (params: P, ctx: YaarAppCommandContext) => R | Promise<R>;
-  params?: object;
-  returns?: object;
-  /**
-   * Replay policy for this command. `'always'` (the default) re-runs it when the
-   * iframe remounts, which is right for state restoration (`navigate`, `setDeck`).
-   * `'never'` skips it, for a command that appends, notifies, or is otherwise
-   * one-shot. The list of `'never'` commands rides the ready handshake.
-   */
-  replay?: 'always' | 'never';
-}
-
 interface YaarAppEventDescriptor {
   /** Human-readable description of when this channel fires (shown to the agent). */
   description: string;
 }
 
-// -- JSON Schema → TypeScript inference (used by defineCommand) --
+// -- JSON Schema → TypeScript inference (used by defineApp/defineAppCommand) --
 
 /**
  * Structural constraint for a `params` / `schema` JSON Schema literal.
@@ -385,30 +364,11 @@ type YaarInferSchema<S> = S extends { enum: readonly (infer E)[] }
               ? YaarInferObject<S>
               : unknown;
 
-interface YaarAppRegistration {
-  appId: string;
-  name: string;
-  state: Record<string, YaarAppStateDescriptor>;
-  commands: Record<string, YaarAppCommandDescriptor>;
-  /** Declared event channels this app may emit via `app.emit(channel, payload)`. */
-  events?: Record<string, YaarAppEventDescriptor>;
-  /** Fire-and-forget callback invoked when the app window is closed. */
-  onClose?: () => void;
-  /**
-   * Custom capture handler. When the OS captures this window (e.g. an agent
-   * reads it), the returned data-URL image (`data:image/...`) is used instead
-   * of the default window screenshot. Return null/undefined to fall back to
-   * the default DOM+canvas composite capture. May be async.
-   */
-  onCapture?: () => string | null | undefined | Promise<string | null | undefined>;
-}
-
 // -- defineApp() authoring shape --
 
 /**
- * One entry of `defineApp({ state })`. Same contract as
- * `YaarAppStateDescriptor`, with `get` in place of `handler` — the reader is a
- * getter, not a request handler, and the two names were previously the same word.
+ * One entry of `defineApp({ state })`. The reader is a getter, not a request
+ * handler, hence `get` rather than the `handler` the wire-level descriptor uses.
  */
 interface YaarAppStateDefinition<T = unknown> {
   description: string;
@@ -428,7 +388,12 @@ interface YaarAppCommandDefinition<P = Record<string, unknown>, R = unknown> {
   /** JSON Schema literal for the parameters. Extracted into the manifest verbatim. */
   params?: object;
   returns?: object;
-  /** See `YaarAppCommandDescriptor.replay`. */
+  /**
+   * Replay policy for this command. `'always'` (the default) re-runs it when the
+   * iframe remounts, which is right for state restoration (`navigate`, `setDeck`).
+   * `'never'` skips it, for a command that appends, notifies, or is otherwise
+   * one-shot. The list of `'never'` commands rides the ready handshake.
+   */
   replay?: 'always' | 'never';
   run: (params: P, ctx: YaarAppCommandContext) => R | Promise<R>;
 }
@@ -462,7 +427,7 @@ type YaarAppRunParams<S> = unknown extends S
  * The `commands` map, keyed by a *schema* map `S` rather than by the commands
  * themselves. Each `S[K]` is inferred from that command's `params` literal — a
  * plain inference site, unlike `run`, which is context-sensitive — and `run`'s
- * parameter is then derived from it with the same engine `defineCommand` uses.
+ * parameter is then derived from it with the same engine `defineAppCommand` uses.
  * One schema, written once, types the handler and feeds the manifest.
  *
  * Keying on the schemas is what makes this work. The natural spelling — a
@@ -483,7 +448,7 @@ interface YaarAppCommandOf<S, R> {
   aliases?: readonly string[];
   params?: S;
   returns?: object;
-  /** See `YaarAppCommandDescriptor.replay`. */
+  /** See `YaarAppCommandDefinition.replay`. */
   replay?: 'always' | 'never';
   run: (params: YaarAppRunParams<S>, ctx: YaarAppCommandContext) => R | Promise<R>;
 }
@@ -499,7 +464,7 @@ type YaarAppCommands<S> = {
      */
     params?: S[K];
     returns?: object;
-    /** See `YaarAppCommandDescriptor.replay`. */
+    /** See `YaarAppCommandDefinition.replay`. */
     replay?: 'always' | 'never';
     run: (params: YaarAppRunParams<S[K]>, ctx: YaarAppCommandContext) => unknown;
   };
@@ -537,13 +502,18 @@ interface YaarAppDefinition<
   /** Channels this app may `app.emit()` on. */
   events?: Record<string, YaarAppEventDescriptor>;
   view?: YaarAppViewLike;
+  /** Fire-and-forget callback invoked when the app window is closed. */
   onClose?: () => void;
-  /** See `YaarAppRegistration.onCapture`. */
+  /**
+   * Custom capture handler. When the OS captures this window (e.g. an agent
+   * reads it), the returned data-URL image (`data:image/...`) is used instead
+   * of the default window screenshot. Return null/undefined to fall back to
+   * the default DOM+canvas composite capture. May be async.
+   */
   onCapture?: () => string | null | undefined | Promise<string | null | undefined>;
 }
 
 interface YaarApp {
-  register(config: YaarAppRegistration): void;
   sendInteraction(
     description:
       | string
@@ -926,28 +896,14 @@ declare module '@bundled/yaar' {
   export const windows: YaarWindows;
 
   /**
-   * Importable shapes for `app.register({...})`. Annotate the registration (or a
-   * descriptor map) with these to get completion and a compile-time error naming
-   * any missing field, instead of reverse-engineering the shape from a runtime
-   * failure. The extractor follows a top-level `const`, so this stays extractable:
-   *
-   * ```ts
-   * import { app, type AppRegistration } from '@bundled/yaar';
-   * const registration: AppRegistration = { appId, name, state, commands };
-   * app.register(registration);
-   * ```
-   *
-   * `AppStateDescriptor` is the handler-carrying authoring shape — distinct from the
-   * handler-less manifest type of the same name in `@yaar/shared` (the wire format).
+   * The event-channel shape for `defineApp({ events })`, for hand-annotating a
+   * map declared outside the call.
    */
-  export type AppRegistration = YaarAppRegistration;
-  export type AppStateDescriptor<T = unknown> = YaarAppStateDescriptor<T>;
-  export type AppCommandDescriptor<P = unknown, R = unknown> = YaarAppCommandDescriptor<P, R>;
   export type AppEventDescriptor = YaarAppEventDescriptor;
 
   /**
-   * Register an app and mount its view — the blessed entrypoint, and the shape
-   * the build reads. Sugar over `app.register()`, which stays supported.
+   * Register an app and mount its view — the one entrypoint, and the shape the
+   * build reads.
    *
    * ```ts
    * import * as z from '@bundled/zod';
@@ -980,7 +936,7 @@ declare module '@bundled/yaar' {
    * - **The error contract** — anything `run` throws reaches the agent as an
    *   `AppCommandError` with the original kept as `cause`.
    * - **`run`'s parameter type** — derived from that command's `params` schema,
-   *   exactly as `defineCommand` does it.
+   *   exactly as `defineAppCommand` does it for a descriptor declared elsewhere.
    * - **Parameter validation** — a Zod `params` is parsed before `run` sees it,
    *   so a wrong *type* is rejected by name instead of failing somewhere inside
    *   the handler. A JSON Schema literal is still only checked for presence and
@@ -1014,47 +970,8 @@ declare module '@bundled/yaar' {
   export type AppView = YaarAppView;
 
   /**
-   * Declare a command for `app.register({ commands })`, deriving the handler's
-   * parameter type from the `params` JSON Schema.
-   *
-   * The schema stays a plain literal — it is still the agent-facing contract and
-   * is still extracted into `dist/protocol.json` at build time. What goes away is
-   * the second, unchecked declaration of the same shape:
-   *
-   * ```ts
-   * // before — schema and annotation drift apart silently
-   * focus: {
-   *   description: 'Focus a tab',
-   *   params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
-   *   handler: (p: { tabId: number }) => bridge.focus(p.tabId),
-   * }
-   *
-   * // after — `p` is inferred as `{ tabId: number }`; `p.tabld` is a compile error
-   * focus: defineCommand({
-   *   description: 'Focus a tab',
-   *   params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
-   *   handler: (p) => bridge.focus(p.tabId),
-   * })
-   * ```
-   */
-  export function defineCommand<const S extends YaarJsonSchema, R>(descriptor: {
-    description: string;
-    aliases?: readonly string[];
-    params: S;
-    returns?: object;
-    handler: (params: YaarInferSchema<S>) => R | Promise<R>;
-  }): YaarAppCommandDescriptor;
-  /** Parameterless variant — the handler receives nothing. */
-  export function defineCommand<R>(descriptor: {
-    description: string;
-    aliases?: readonly string[];
-    returns?: object;
-    handler: () => R | Promise<R>;
-  }): YaarAppCommandDescriptor;
-
-  /**
-   * `defineCommand` for `defineApp` — same purpose, `run` instead of `handler`,
-   * and it accepts a Zod `params` as well as a JSON Schema literal.
+   * Declare a command outside the `defineApp({...})` literal, keeping the
+   * `params` schema typing its own `run`.
    *
    * `defineApp` infers each `run`'s parameter from the `params` written *at the
    * call site*. A command declared in another module and spread into
@@ -1074,8 +991,9 @@ declare module '@bundled/yaar' {
    * };
    * ```
    *
-   * Identity at runtime; the extractor treats it as transparent by name, exactly
-   * as it does `defineCommand`.
+   * Accepts a Zod `params` as well as a JSON Schema literal. Identity at
+   * runtime; the extractor treats it as transparent by name, so keep the call
+   * shape literal — a single identifier wrapping the descriptor object.
    */
   export function defineAppCommand<const S, R>(
     descriptor: YaarAppCommandOf<S, R>,

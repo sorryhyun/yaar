@@ -112,7 +112,7 @@ const ROWS: DeadRow[] = [
 
   {
     what: 'an app command to an app that never registers at all',
-    // No seed: the iframe never called `app.register()` — it crashed on load, or it is not
+    // No seed: the iframe never registered — it crashed on load, or it is not
     // a protocol app. The command never even gets asked.
     block(_h, s, ctx) {
       const done = handleAppCommand(ctx.windowState, s.windowKey, { command: 'ping' });

@@ -4,7 +4,7 @@
 // `protocol.json` belong to the app the user is currently developing — written
 // by the user's editor, by a clone of an arbitrary installed app, or by a
 // compiler run that may have failed halfway — and the runtime manifest is
-// whatever the previewed app handed back from its own `app.register()` call.
+// whatever the previewed app handed back from its own `defineApp()` config.
 //
 // Treating them as trusted (`readJsonOr<{ name: string }>` and friends) meant a
 // truncated protocol.json produced a manifest of garbage keys, indistinguishable
@@ -59,6 +59,6 @@ export const ProjectProtocolJsonSchema = ManifestShapeSchema;
  *
  * Same shape, equally untrusted, and untrusted for a *stronger* reason: the
  * project's protocol.json at least came from the compiler, while this one is
- * whatever arbitrary in-development code passed to `app.register()`.
+ * whatever arbitrary in-development code passed to `defineApp()`.
  */
 export const AppManifestSchema = ManifestShapeSchema;

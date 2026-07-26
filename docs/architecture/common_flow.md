@@ -184,7 +184,7 @@ sequenceDiagram
 ## App Protocol: How an Agent Talks to an Iframe
 
 Apps register a self-describing contract — state keys to query, commands to invoke — by calling
-`app.register(manifest)` from `@bundled/yaar` when the iframe loads. The server stores readiness
+`defineApp({...})` from `@bundled/yaar` when the iframe loads. The server stores readiness
 **per window key** in `WindowStateRegistry`; `query`/`command` wait up to 5s for registration
 (`requireAppReady`) before failing.
 
@@ -210,7 +210,7 @@ sequenceDiagram
 Windows are addressed by their **monitor-scoped key** (`win.id`), never the raw AI-facing id: the
 same app open on two monitors shares a raw id, and the frontend resolves raw ids by whichever
 monitor the *user* is viewing. The built-in `__console` state key is answered by the injected
-protocol script and works even before `app.register()`.
+protocol script and works even before the app registers.
 
 ## ContextTape: Hierarchical Message History
 

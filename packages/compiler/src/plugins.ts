@@ -591,13 +591,14 @@ export function getBundledLibraryDetail(name: string): string | null {
   //
   // Resolution is transitive and covers `type` aliases as well as `interface`es,
   // because a single `:`-anchored `interface`-only pass answered the question the
-  // caller did not ask. `app.register(config: YaarAppRegistration)` pulled in nothing
-  // — the reference sits behind `=` in a `export type AppRegistration = ...` alias —
-  // and even reached through `YaarApp`, its body was never rescanned, so
-  // `YaarAppStateDescriptor` never appeared. An agent therefore saw `register()`
-  // naming a type with no body anywhere in the response, and had to discover that a
-  // state descriptor is `{ description, handler, schema? }` by assigning `{}` and
-  // reading the compile error.
+  // caller did not ask. The case that forced it was the old `app.register(config:
+  // YaarAppRegistration)`: the reference sat behind `=` in an `export type
+  // AppRegistration = ...` alias, so it pulled in nothing, and even reaching through
+  // `YaarApp` never rescanned that body. An agent therefore saw a signature naming a
+  // type with no body anywhere in the response, and had to discover the descriptor
+  // shape by assigning `{}` and reading the compile error. `register()` is gone, but
+  // `defineApp`'s `YaarAppDefinition` -> `YaarAppCommands` -> `YaarAppRunParams` chain
+  // has the same depth.
   const preambles: string[] = [];
   const resolved = new Set<string>();
   let frontier = collectYaarRefs(blocks.join('\n\n'));

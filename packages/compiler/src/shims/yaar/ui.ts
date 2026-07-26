@@ -2,36 +2,28 @@
 // It is compiled by the Bun plugin for @bundled/yaar imports.
 /**
  * Toasts, keyboard shortcuts, and the small app-facing utilities
- * (`errMsg`, `wait`, `withLoading`, `AppCommandError`, `defineCommand`).
+ * (`errMsg`, `wait`, `withLoading`, `AppCommandError`, `defineAppCommand`).
  */
 
 // ── App Protocol descriptor builders ─────────────────────────────
 
 /**
- * Identity at runtime — the descriptor is passed to `app.register()` untouched.
- * All the work happens in the type declarations (`bundled-types/index.d.ts`),
- * which infer the handler's parameter type from the `params` JSON Schema.
- *
- * Keep the call shape `defineCommand({ ... })` — a single identifier wrapping
- * the descriptor literal. The build-time extractor treats that as transparent
- * (matching this function), but it is a parser, not an evaluator: a computed
- * callee is a hard build error rather than a silently dropped command. The
- * descriptor itself may live in another module and be spread in.
- */
-export const defineCommand = <T>(descriptor: T): T => descriptor;
-
-/**
- * The `defineApp` counterpart of `defineCommand`, for a command that lives in
- * another module and is spread into `defineApp({ commands })`.
+ * Restore `run`'s parameter typing for a command declared outside the
+ * `defineApp({...})` literal.
  *
  * `defineApp` derives each `run`'s parameter from the `params` written *at the
- * call site*, so a command spread in from elsewhere still reaches the manifest
- * intact but loses that inference — silently, with no error, just a free-form
- * bag. Wrapping the descriptor here restores it at the point of declaration,
- * for a Zod `params` (the parsed output type) as well as a JSON Schema literal.
+ * call site*, so a command spread in from another module still reaches the
+ * manifest intact but loses that inference — silently, with no error, just a
+ * free-form bag. Wrapping the descriptor here restores it at the point of
+ * declaration, for a Zod `params` (the parsed output type) as well as a JSON
+ * Schema literal.
  *
- * Identity at runtime, and transparent to the build-time extractor by name —
- * the same contract as `defineCommand`. Keep the call shape literal.
+ * Identity at runtime; all the work happens in the type declarations
+ * (`bundled-types/index.d.ts`). Keep the call shape literal — a single
+ * identifier wrapping the descriptor object. The build-time extractor treats
+ * that as transparent (matching this function), but it is a parser, not an
+ * evaluator: a computed callee is a hard build error rather than a silently
+ * dropped command.
  */
 export const defineAppCommand = <T>(descriptor: T): T => descriptor;
 

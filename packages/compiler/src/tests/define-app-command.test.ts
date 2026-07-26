@@ -4,9 +4,12 @@ import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
 /**
- * `defineCommand` has no runtime behaviour to test — it is an identity function.
- * Its entire value is the type-level derivation of a handler's parameter from the
- * `params` JSON Schema, which nothing else in the suite would notice breaking.
+ * `defineAppCommand` has no runtime behaviour to test — it is an identity
+ * function. Its entire value is the type-level derivation of `run`'s parameter
+ * from the `params` JSON Schema, which nothing else in the suite would notice
+ * breaking. (The same `YaarInferSchema` engine types every command written
+ * inline in a `defineApp({...})` literal, so this is where that engine is
+ * pinned.)
  *
  * So these tests run the real `tsc` over fixture sources and assert on the
  * diagnostics. They are slower than the rest of the suite by design: a cheaper test
@@ -63,18 +66,18 @@ async function check(source: string): Promise<string[]> {
 }
 
 beforeAll(async () => {
-  sandbox = await mkdtemp(join(tmpdir(), 'yaar-define-command-'));
+  sandbox = await mkdtemp(join(tmpdir(), 'yaar-define-app-command-'));
 });
 
 afterAll(async () => {
   await rm(sandbox, { recursive: true, force: true });
 });
 
-describe('defineCommand type inference', () => {
+describe('defineAppCommand type inference', () => {
   test('infers primitives, enums, arrays, nested objects and optionality', async () => {
     const diagnostics = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({
         description: 'Everything at once',
         params: {
           type: 'object',
@@ -93,7 +96,7 @@ describe('defineCommand type inference', () => {
           },
           required: ['tabId'],
         },
-        handler: (p) => {
+        run: (p) => {
           const tabId: number = p.tabId;
           const title: string = p.title;
           const force: boolean = p.force;
@@ -110,11 +113,11 @@ describe('defineCommand type inference', () => {
 
   test('a misspelled parameter key is a compile error', async () => {
     const diagnostics = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({
         description: 'Focus a tab',
         params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
-        handler: (p) => p.tabld,
+        run: (p) => p.tabld,
       });
     `);
     expect(diagnostics.join('\n')).toContain("Property 'tabld' does not exist");
@@ -122,11 +125,11 @@ describe('defineCommand type inference', () => {
 
   test('a parameter used at the wrong type is a compile error', async () => {
     const diagnostics = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({
         description: 'Focus a tab',
         params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
-        handler: (p) => { const s: string = p.tabId; return s; },
+        run: (p) => { const s: string = p.tabId; return s; },
       });
     `);
     expect(diagnostics.join('\n')).toContain('Type');
@@ -135,21 +138,21 @@ describe('defineCommand type inference', () => {
 
   test('an enum becomes a literal union: widening is fine, narrowing is an error', async () => {
     const widened = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({
         description: 'Set mode',
         params: { type: 'object', properties: { mode: { enum: ['fast', 'slow'] } }, required: ['mode'] },
-        handler: (p) => { const m: 'fast' | 'slow' | 'medium' = p.mode; return m; },
+        run: (p) => { const m: 'fast' | 'slow' | 'medium' = p.mode; return m; },
       });
     `);
     expect(widened).toEqual([]);
 
     const narrowed = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({
         description: 'Set mode',
         params: { type: 'object', properties: { mode: { enum: ['fast', 'slow'] } }, required: ['mode'] },
-        handler: (p) => { const m: 'fast' = p.mode; return m; },
+        run: (p) => { const m: 'fast' = p.mode; return m; },
       });
     `);
     expect(narrowed.join('\n')).toContain('not assignable to type \'"fast"\'');
@@ -157,8 +160,8 @@ describe('defineCommand type inference', () => {
 
   test('additionalProperties describes a dictionary', async () => {
     const diagnostics = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({
         description: 'Set cells',
         params: {
           type: 'object',
@@ -169,7 +172,7 @@ describe('defineCommand type inference', () => {
           },
           required: ['cells'],
         },
-        handler: (p) => {
+        run: (p) => {
           const cells: Record<string, string> = p.cells;
           const counts: Record<string, number> = p.counts;
           const loose: Record<string, unknown> = p.loose;
@@ -180,25 +183,25 @@ describe('defineCommand type inference', () => {
     expect(diagnostics).toEqual([]);
   });
 
-  test('the parameterless overload accepts a nullary handler', async () => {
+  test('a command with no params accepts a nullary run', async () => {
     const diagnostics = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({ description: 'Refresh', handler: () => 1 });
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({ description: 'Refresh', run: () => 1 });
     `);
     expect(diagnostics).toEqual([]);
   });
 
   test('an unsupported keyword degrades to unknown rather than a wrong type', async () => {
     const diagnostics = await check(`
-      import { defineCommand } from '@bundled/yaar';
-      export const cmd = defineCommand({
+      import { defineAppCommand } from '@bundled/yaar';
+      export const cmd = defineAppCommand({
         description: 'Union param',
         params: {
           type: 'object',
           properties: { value: { oneOf: [{ type: 'string' }, { type: 'number' }] } },
           required: ['value'],
         },
-        handler: (p) => { const v: unknown = p.value; return v; },
+        run: (p) => { const v: unknown = p.value; return v; },
       });
     `);
     expect(diagnostics).toEqual([]);

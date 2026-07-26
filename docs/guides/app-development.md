@@ -743,8 +743,8 @@ Iframe App → postMessage → WebSocket → MCP tool returns
 
 `src/main.ts` ends in exactly one `export default defineApp({...})`. That call is the app:
 it registers the protocol (once, at module scope, before the view mounts), mounts the view,
-and normalizes whatever a command throws into an `AppCommandError`. An app using it never
-calls `app.register()` or `render()` itself.
+and normalizes whatever a command throws into an `AppCommandError`. An app never calls
+`render()` itself.
 
 ```typescript
 // src/store.ts
@@ -799,80 +799,59 @@ export default defineApp({
   [Splitting a protocol by domain](#splitting-a-protocol-by-domain). The `export default`
   itself must stay in `src/main.ts`: that is what the build reads back to fold Zod schemas.
 
-`defineApp` registers *authoritatively*, so a second `app.register()` anywhere in the same
-app throws instead of silently overwriting the first.
+`defineApp` is the only way to register: the iframe SDK's registration entry is private and
+this is its one caller. A second `defineApp()` in the same window throws rather than silently
+overwriting the first.
 
-### The low-level call — `app.register()`
+> **Migrating off `app.register()`.** The low-level `app.register({...})` call and its
+> `AppRegistration` / `AppStateDescriptor` / `AppCommandDescriptor` types are gone, as is
+> `defineCommand`. An app that still calls `register()` fails the build with the migration in
+> the message. To port one: `appId` becomes `id`, each `state` entry's `handler` becomes
+> `get`, each command's `handler` becomes `run`, and the whole call becomes the
+> `export default` of `src/main.ts`. Registration timing and mounting stop being the app's
+> problem — drop any `onMount()` wrapper and any `render()` call of your own.
 
-`defineApp` is sugar over `app.register()`, which remains supported for apps that have not
-been migrated. It takes `handler` in place of `get`/`run`, JSON-Schema literals only, and
-leaves registration timing and mounting to the app — register at module scope, never from
-`onMount()` or a component body, or a remount re-registers.
+### `defineAppCommand` — infer `run`'s params from the schema
 
-### Typing the registration — `AppRegistration` and friends
+A command declares its parameter shape twice: once as the `params` schema the agent reads,
+once as `run`'s TypeScript type. Inside a `defineApp({...})` literal the two are already tied
+together — `defineApp` derives each `run`'s parameter from the `params` written at that call
+site, so `p.txt` against a schema that says `text` is a compile error.
 
-`@bundled/yaar` exports the authoring shapes so you don't have to reverse-engineer them
-from a runtime failure: `AppRegistration`, `AppStateDescriptor`, `AppCommandDescriptor`,
-`AppEventDescriptor`. Annotate a top-level `const` (the extractor follows it) to get
-completion and a compile-time error naming any missing field:
+`defineAppCommand` restores that for a command declared *outside* the literal:
 
 ```typescript
-import { app, type AppRegistration } from '@bundled/yaar';
+// src/protocol/items.ts
+import { defineAppCommand } from '@bundled/yaar';
+import * as z from '@bundled/zod';
 
-const registration: AppRegistration = {
-  appId: 'my-app',
-  name: 'My App',
-  state: { items: { description: 'Current items', handler: () => [...items()] } },
-  commands: {},
+export const itemCommands = {
+  addItem: defineAppCommand({
+    description: 'Add an item',
+    params: z.object({ text: z.string() }),
+    run: (p) => setItems([...items(), p.txt]),
+    //                                   ^^^ compile error: did you mean 'text'?
+  }),
 };
-//    ^ tsc: a state descriptor missing `handler`, or a registration missing
-//      `appId`/`name`, is flagged here — not at runtime.
-
-app.register(registration);
-```
-
-`AppStateDescriptor` is the handler-carrying authoring shape — do **not** import the
-same-named type from `@yaar/shared`, which is the handler-less *wire manifest* type.
-
-At runtime, `app.register()` also validates the shape and throws an error naming the exact
-missing field (e.g. `state["items"] is missing required field "handler"`), so a malformed
-registration fails loudly at registration time instead of much later on first invocation.
-
-### `defineCommand` — infer the handler's params from the schema
-
-A command declares its parameter shape twice: once as the `params` JSON Schema the
-agent reads, once as the handler's TypeScript type. Nothing keeps the two in sync, so
-`handler: (p: { text: string })` will happily compile against a schema that says
-`content`, and the mismatch only shows up when an agent calls the command.
-
-`defineCommand` derives the handler's parameter type from the schema, making the schema
-the single source of truth:
-
-```typescript
-addItem: defineCommand({
-  description: 'Add an item',
-  params: { type: 'object', properties: { text: { type: 'string' } }, required: ['text'] },
-  handler: (p) => setItems([...items(), p.txt]),
-  //                                       ^^^ compile error: did you mean 'text'?
-})
 ```
 
 It is a runtime no-op — an identity function — so `dist/protocol.json` and everything the
-agent sees are unchanged. It exists purely to make the compiler check the handler.
+agent sees are unchanged. It exists purely to make the compiler check `run`.
 
-What it infers: `enum` (as a literal union), `string` / `number` / `integer` / `boolean` /
-`null`, `array` + `items`, and `object` + `properties` / `required`, nested arbitrarily.
-Keys absent from `required` are inferred optional. An `object` with no `properties` but an
-`additionalProperties` schema is a dictionary: `{ type: 'object', additionalProperties: {
-type: 'string' } }` infers `Record<string, string>`. A bare `{ type: 'object' }` infers
-`Record<string, unknown>`.
+It accepts a Zod schema (preferred — it also validates the call) or a JSON Schema literal.
+From a JSON Schema it infers: `enum` (as a literal union), `string` / `number` / `integer` /
+`boolean` / `null`, `array` + `items`, and `object` + `properties` / `required`, nested
+arbitrarily. Keys absent from `required` are inferred optional. An `object` with no
+`properties` but an `additionalProperties` schema is a dictionary: `{ type: 'object',
+additionalProperties: { type: 'string' } }` infers `Record<string, string>`. A bare
+`{ type: 'object' }` infers `Record<string, unknown>`.
 
 What it doesn't: `anyOf`, `oneOf`, `$ref` and other keywords infer as `unknown`. Annotate
-that handler's parameter explicitly, or leave the command as a plain object literal —
-descriptors without `defineCommand` still work exactly as before, and the two forms mix
+that `run` parameter explicitly, or leave the command as a plain object literal — descriptors
+without the wrapper still reach the manifest exactly the same way, and the two forms mix
 freely within one `commands` block.
 
-Keep the call shape literal — `defineCommand({ ... })` wrapping an inline object. The
+Keep the call shape literal — `defineAppCommand({ ... })` wrapping an inline object. The
 build-time protocol extractor is a source parser, not an evaluator: it steps over a single
 identifier call to find the descriptor, and a computed callee fails the build.
 
@@ -903,8 +882,9 @@ export default defineApp({
 One inference caveat, and it is silent: `defineApp` derives each `run`'s parameter type from
 the `params` schema **at the call site**. A command spread in from another module is
 extracted into the manifest exactly as an inline one, but its `run` parameter widens to a
-free-form bag — no error, just weaker types. Annotate those parameters yourself (as above),
-or keep the commands you want inference for inline in the `defineApp({...})` literal.
+free-form bag — no error, just weaker types. Wrap those descriptors in `defineAppCommand`
+(above), annotate the parameters yourself, or keep the commands you want inference for inline
+in the `defineApp({...})` literal.
 
 The limit is static resolvability, and it is enforced rather than tolerated: a spread of a
 **call result** (`...buildCommands()`), a descriptor imported from an npm package, a

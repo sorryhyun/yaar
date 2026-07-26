@@ -1,10 +1,15 @@
 /**
- * Inline JS that provides `window.yaar.app.register()`.
+ * Inline JS backing an app's protocol surface in its iframe.
  *
- * Apps call register() with state handlers and command handlers.
- * The SDK listens for postMessage requests from the parent and dispatches
- * to registered handlers. On registration it sends `yaar:app-ready` so
- * the parent knows the app supports the protocol.
+ * Registration is internal: `defineApp()` is the only caller, through
+ * `window.yaar.app.__registerApp()`. The SDK listens for postMessage requests
+ * from the parent and dispatches to the registered handlers. On registration it
+ * sends `yaar:app-ready` so the parent knows the app supports the protocol.
+ *
+ * `app.register()` used to be the public way in, and an app could call it from
+ * anywhere — including a component body that remounts. That is gone: the double
+ * underscore is the contract, and the public name survives only to throw a
+ * message naming `defineApp` rather than a bare "not a function".
  */
 export const IFRAME_APP_PROTOCOL_SCRIPT = `
 (function() {
@@ -16,14 +21,18 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
   var registration = null;
   var aliasMap = {};  // alias → canonical command name
 
-  // Validate the register() shape up front and throw naming the exact missing field.
+  // Validate the registration shape up front and throw naming the exact missing field.
   // Without this, a missing appId/name/description silently becomes \`undefined\` in the
   // manifest, and a missing handler throws a bare "handler is not a function" only when
   // the state key or command is later invoked — an error that names neither the app nor
   // the field. The authoring types require these fields; this makes the runtime agree.
+  //
+  // \`defineApp\` builds this shape, so a failure here is a defect in the definition the
+  // app handed it — the field names below are the registration's, and defineApp's
+  // \`state\`/\`commands\` keys map onto them one-for-one.
   function validateRegistration(config) {
     if (!config || typeof config !== 'object') {
-      throw new Error('[yaar] app.register(config) requires a config object { appId, name, state, commands }.');
+      throw new Error('[yaar] defineApp(): registration must be an object { appId, name, state, commands }.');
     }
     var problems = [];
     if (typeof config.appId !== 'string' || !config.appId) {
@@ -59,30 +68,27 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     checkDescriptors(config.events, 'events', false);
     if (problems.length) {
       var who = (typeof config.appId === 'string' && config.appId) ? ' for app "' + config.appId + '"' : '';
-      throw new Error('[yaar] app.register()' + who + ' is invalid:\\n  - ' + problems.join('\\n  - '));
+      throw new Error('[yaar] defineApp()' + who + ' is invalid:\\n  - ' + problems.join('\\n  - '));
     }
   }
 
   window.yaar.app = {
-    register: function(config) {
+    // The public name, kept only to explain itself. An app reaching for it is either
+    // pre-defineApp source or a copied snippet; either way the useful answer names the
+    // replacement, which a missing property cannot do.
+    register: function() {
+      throw new Error('[yaar] app.register() has been removed. Register with \`export default defineApp({ id, name, state, commands, view })\` from "@bundled/yaar" instead - it registers before it mounts and is the shape the build reads.');
+    },
+    // defineApp's private call path. It owns registration timing outright: exactly one
+    // call, at module scope, before the view mounts. That is why a second registration is
+    // an unconditional error here — it can no longer be a component-body remount re-running
+    // register(), only two apps (or two defineApp calls) fighting over one iframe, and
+    // picking a silent winner would leave protocol.json describing an app the iframe no
+    // longer runs.
+    __registerApp: function(config) {
       validateRegistration(config);
-      // Two register() calls landing in the same document is not automatically a bug:
-      // five shipped apps register from inside onMount or a bare component body, and a
-      // component that remounts within the same iframe document re-runs that call. Throw
-      // unconditionally here and every one of those apps breaks at runtime with no build
-      // signal the first time React/Solid remounts it. defineApp() is different — it owns
-      // registration timing outright and marks itself authoritative, so a second register()
-      // against an authoritative one is never a remount artifact; it is two apps (or two
-      // defineApp instances) fighting over one iframe, and picking a silent winner would
-      // leave protocol.json describing an app the iframe no longer runs.
       if (registration) {
-        if (registration.__authoritative) {
-          throw new Error('[yaar] app.register(): "' + registration.appId + '" already holds an authoritative registration (via defineApp()) in this window; "' + config.appId + '" cannot also register here. A window may host exactly one app.');
-        }
-        // warn, not error: this path still works, and the console buffer is readable by
-        // agents (the __console state key). An error-level entry for a benign remount
-        // reads as "this app is broken" to the next agent that debugs it.
-        console.warn('[yaar] app.register(): "' + config.appId + '" is overwriting the prior registration of "' + registration.appId + '" in this window. If this is a remount (onMount/component-body registration re-running), the app still works; if "' + registration.appId + '" and "' + config.appId + '" are two different apps sharing one iframe, only "' + config.appId + '" will answer queries/commands from now on.');
+        throw new Error('[yaar] defineApp(): "' + registration.appId + '" is already registered in this window; "' + config.appId + '" cannot also register here. A window may host exactly one app, and defineApp() must be called exactly once at module scope.');
       }
       registration = config;
       // Build alias lookup map, and collect the commands this registration opts out of
@@ -357,7 +363,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
 
     if (msg.type === 'yaar:app-query-request') {
       // Reserved built-in state key: expose the console-capture buffer without
-      // requiring app.register(). Lets tooling (e.g. devtools) read a preview
+      // requiring the app to register. Lets tooling (e.g. devtools) read a preview
       // app's console output over the app protocol.
       if (msg.stateKey === '__console') {
         window.parent.postMessage({

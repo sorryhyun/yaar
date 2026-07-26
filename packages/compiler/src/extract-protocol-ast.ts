@@ -1,9 +1,13 @@
 /**
  * Extract App Protocol manifest from TypeScript source using the TypeScript AST.
  *
- * This is the only reader of an `app.register()` protocol. It replaced a
- * brace-matching text scanner (deleted), and the difference that matters is not
- * accuracy on the shapes that scanner already handled — it is *reach*:
+ * The registration shape is `export default defineApp({...})`, and only that.
+ * The config object *is* the protocol, so there is nothing to locate by
+ * heuristic — an app still calling the removed `app.register({...})` is refused
+ * by name (see `findAppRegisterCall`) rather than reported as declaring no
+ * protocol at all, which is the silent outcome this module exists to prevent.
+ *
+ * What the AST buys over the brace-matching text scanner it replaced is *reach*:
  *
  *   - descriptor maps may live in other files and arrive via `...spread`;
  *   - a descriptor may be a `const` referenced by name;
@@ -21,8 +25,8 @@
  *
  * Module resolution is deliberately limited to *relative* imports within the app.
  * A descriptor reached through `node_modules` or a path alias is an error rather
- * than a silent skip. `defineCommand({...})` is transparent because the shim's
- * `defineCommand` is the identity function; any other wrapper must be provably
+ * than a silent skip. `defineAppCommand({...})` is transparent because the shim's
+ * `defineAppCommand` is the identity function; any other wrapper must be provably
  * an identity function in this app, or it is an error (see
  * `isTransparentWrapper`).
  */
@@ -55,16 +59,13 @@ export interface AstProtocolExtraction {
   /**
    * Descriptor schema paths (`commands.add.params`) that are not compile-time
    * constants and are expected to be Zod — the ones `fold-schemas.ts` must fill
-   * in by running the app. Only `defineApp` produces these; the legacy shape has
-   * no default export to read a schema back out of, so a non-constant schema
-   * stays a hard error there.
+   * in by running the app. Deferral is possible at all only because `defineApp`'s
+   * config is reachable at runtime as the entry module's default export.
    *
    * Non-empty means `protocol` is *incomplete*, not wrong: every entry is
    * present, and the listed schemas are absent until the fold supplies them.
    */
   pendingFolds: string[];
-  /** True when the manifest came from `export default defineApp({...})`. */
-  usesDefineApp: boolean;
 }
 
 /** Reads a module's text, or null when the path does not exist. */
@@ -467,7 +468,7 @@ class Extractor {
    * with the pre-decoration text — a manifest that disagrees with the runtime
    * and gives no sign of it.
    *
-   * Two things qualify. `defineCommand` is the SDK's declared identity helper
+   * Two things qualify. `defineAppCommand` is the SDK's declared identity helper
    * (`shims/yaar/ui.ts`), which apps import from a package the extractor
    * deliberately will not follow. Anything else must resolve, inside this app,
    * to a literal identity function.
@@ -476,17 +477,17 @@ class Extractor {
     // Anything this app declares must prove itself, whatever it is named. The
     // name check below is trusted only for a callee that resolves to nothing
     // here — i.e. one that came from a package. Trusting the bare name first
-    // would let a locally-declared `function defineCommand` that decorates its
-    // argument pass unexamined, which is the exact hole this method closes for
-    // every other name.
+    // would let a locally-declared `function defineAppCommand` that decorates
+    // its argument pass unexamined, which is the exact hole this method closes
+    // for every other name.
     const bound = this.resolveIdentifier(callee, scope);
     if (bound === 'shadowed') return false;
     if (bound) return this.isIdentityFunction(bound.node);
 
     // Undeclared in the app, so it is imported from a package the extractor
-    // deliberately does not follow. Only the SDK's documented identity helpers
-    // (`shims/yaar/ui.ts`) are trusted by name.
-    return callee.text === 'defineCommand' || callee.text === 'defineAppCommand';
+    // deliberately does not follow. Only the SDK's documented identity helper
+    // (`shims/yaar/ui.ts`) is trusted by name.
+    return callee.text === 'defineAppCommand';
   }
 
   /** True for `(d) => d`, `function (d) { return d; }`, and equivalents. */
@@ -511,7 +512,7 @@ class Extractor {
 
   /**
    * Strip the wrappers that do not change a value: parentheses, `as const`,
-   * `satisfies`, non-null `!`, and identity calls such as `defineCommand({...})`.
+   * `satisfies`, non-null `!`, and identity calls such as `defineAppCommand({...})`.
    *
    * Sets `shadowed` when resolution hit a local binding it could not read; the
    * node is returned unresolved so the caller reports it with a location.
@@ -676,19 +677,16 @@ class Extractor {
    * recorded. A partial result is never returned: a half-read `commands` block
    * is exactly the silent truncation this module exists to prevent.
    *
-   * `allowMethods` records a method shorthand as an entry instead of rejecting
-   * it. `defineApp` config uses it: `onClose() {...}` and `run(p) {...}` are
-   * ordinary ways to write a lifecycle hook and a handler, and neither is a
-   * value the manifest reads. It stays off for `app.register()`, where the
-   * rejection message is the documented fix for `ping() {...}`-shaped
-   * pseudo-descriptors.
+   * A method shorthand is recorded as an entry rather than rejected:
+   * `onClose() {...}` and `run(p) {...}` are ordinary ways to write a lifecycle
+   * hook and a handler in a `defineApp` config, and neither is a value the
+   * manifest reads.
    */
   flattenObject(
     literal: TsObjectLiteral,
     scope: ModuleScope,
     label: string,
     depth = 0,
-    allowMethods = false,
   ): Array<{ key: string; value: TsNode; scope: ModuleScope }> | null {
     const ts = this.ts;
     if (depth > 16) {
@@ -713,7 +711,7 @@ class Extractor {
           failed = true;
           continue;
         }
-        const nested = this.flattenObject(target, targetScope, label, depth + 1, allowMethods);
+        const nested = this.flattenObject(target, targetScope, label, depth + 1);
         if (nested === null) {
           failed = true;
           continue;
@@ -749,22 +747,12 @@ class Extractor {
       }
 
       if (ts.isMethodDeclaration(prop)) {
-        if (allowMethods) {
-          const key = this.propertyKey(prop.name, scope, label);
-          if (key === null) {
-            failed = true;
-            continue;
-          }
-          entries.push({ key, value: prop, scope });
+        const key = this.propertyKey(prop.name, scope, label);
+        if (key === null) {
+          failed = true;
           continue;
         }
-        this.error(
-          scope,
-          prop,
-          `\`${label}\`: method shorthand is not a descriptor; write ` +
-            `\`name: { description, handler }\` or \`name: defineCommand({...})\``,
-        );
-        failed = true;
+        entries.push({ key, value: prop, scope });
         continue;
       }
 
@@ -798,92 +786,6 @@ class Extractor {
 }
 
 // ---------------------------------------------------------------------------
-// Section parsing
-// ---------------------------------------------------------------------------
-
-/**
- * Find the app's `app.register({...})` call in any module reachable from the entry.
- *
- * `register` is a common method name — `Chart.register(...registerables)` sits in
- * a bundled app today — so the receiver must be the SDK's `app` object: the bare
- * `app` identifier, or a member chain ending in `.app` (`window.yaar.app`).
- * Matching every `.register` call made an unrelated library call the extraction
- * target and failed the build.
- *
- * A receiver we can't attribute is not silently accepted either: candidates whose
- * argument already resolves to an object literal are taken as a fallback, so an
- * app that aliases the SDK object still works, while an unrelated call (whose
- * argument is a spread or a function) is passed over.
- */
-function findRegisterCall(
-  ts: TsModule,
-  scopes: ModuleScope[],
-  extractor: Extractor,
-): { args: TsExpression; scope: ModuleScope } | null {
-  const isAppReceiver = (receiver: TsExpression): boolean => {
-    if (ts.isIdentifier(receiver)) return receiver.text === 'app';
-    if (ts.isPropertyAccessExpression(receiver)) return receiver.name.text === 'app';
-    return false;
-  };
-
-  const fallbacks: Array<{ args: TsExpression; scope: ModuleScope }> = [];
-
-  for (const scope of scopes) {
-    const candidates: Array<{ args: TsExpression; isApp: boolean }> = [];
-    const visit = (node: TsNode): void => {
-      if (
-        ts.isCallExpression(node) &&
-        ts.isPropertyAccessExpression(node.expression) &&
-        node.expression.name.text === 'register' &&
-        node.arguments.length >= 1 &&
-        !ts.isSpreadElement(node.arguments[0])
-      ) {
-        candidates.push({
-          args: node.arguments[0],
-          isApp: isAppReceiver(node.expression.expression),
-        });
-      }
-      ts.forEachChild(node, visit);
-    };
-    ts.forEachChild(scope.source, visit);
-
-    for (const candidate of candidates) {
-      if (candidate.isApp) return { args: candidate.args, scope };
-      // A fallback must actually look like a registration. Accepting any object
-      // literal let an unrelated `plugin.register({ hooks })` win the search and
-      // the real protocol go unreported, with no error to show for it.
-      const { node } = extractor.unwrap(candidate.args, scope);
-      if (!ts.isObjectLiteralExpression(node)) continue;
-      const names = new Set(
-        node.properties
-          .map((p) => (p.name && ts.isIdentifier(p.name) ? p.name.text : null))
-          .filter((n): n is string => n !== null),
-      );
-      if (names.has('appId') || names.has('commands') || names.has('state')) {
-        fallbacks.push({ args: candidate.args, scope });
-      }
-    }
-  }
-
-  // One unambiguous candidate is a usable guess. Two is not: picking the first
-  // silently discards a real registration, with nothing to show that a choice
-  // was even made. Ambiguity is a question for the author, not a coin flip.
-  if (fallbacks.length > 1) {
-    const first = fallbacks[0];
-    extractor.error(
-      first.scope,
-      first.args,
-      `found ${fallbacks.length} registration-shaped \`.register({...})\` calls and none ` +
-        `on the SDK's \`app\` object, so which one declares the protocol is ambiguous; ` +
-        `call \`app.register({...})\` on the object imported from '@bundled/yaar'`,
-    );
-    return null;
-  }
-
-  return fallbacks[0] ?? null;
-}
-
-// ---------------------------------------------------------------------------
 // defineApp
 // ---------------------------------------------------------------------------
 
@@ -896,26 +798,16 @@ function isDefineAppImport(scope: ModuleScope, name: string): boolean {
   return !!ref && ref.imported === 'defineApp' && ref.specifier === YAAR_SDK_SPECIFIER;
 }
 
-/** True when any module in the graph imports the SDK's `defineApp`. */
-function importsDefineApp(scopes: ModuleScope[]): boolean {
-  for (const scope of scopes) {
-    for (const ref of scope.imports.values()) {
-      if (ref.imported === 'defineApp' && ref.specifier === YAAR_SDK_SPECIFIER) return true;
-    }
-  }
-  return false;
-}
-
 /**
  * True for a call this app makes to the SDK's `defineApp`.
  *
  * The named import is the canonical spelling and is matched exactly, aliases
  * included (`import { defineApp as makeApp }`). A `*.defineApp(...)` member call
  * is also taken, because a namespace import (`import * as yaar`) is not indexed
- * as a binding and would otherwise slip past into the legacy path — which finds
- * no `register()` and reports *no protocol at all*, the silent outcome this
- * module exists to prevent. An app that declares its own `defineApp` is not
- * matched: it resolves locally, so it is that app's function, not the SDK's.
+ * as a binding and would otherwise slip past and be reported as *no protocol at
+ * all*, the silent outcome this module exists to prevent. An app that declares
+ * its own `defineApp` is not matched: it resolves locally, so it is that app's
+ * function, not the SDK's.
  */
 function isDefineAppCall(ts: TsModule, node: TsNode, scope: ModuleScope): boolean {
   if (!ts.isCallExpression(node)) return false;
@@ -942,39 +834,77 @@ function defaultExportExpression(ts: TsModule, scope: ModuleScope): TsExpression
   return null;
 }
 
-/** Every `app.register(...)` call in the graph — the legacy registration shape. */
-function findAppRegisterCalls(
+/**
+ * True when the identifier `name` names the SDK's `app` object in `scope`.
+ *
+ * The named import is the canonical spelling and is matched exactly, aliases
+ * included (`import { app as sdkApp }`). A name this app neither declares nor
+ * imports is taken as the SDK's too, because the legacy shape reached `app`
+ * through paths the module index does not bind — `const { app } = window.yaar`
+ * among them — and missing those would let an unmigrated app build green. What
+ * that leaves uncaught is a *non*-module-scope `const app = …`, which the scope
+ * model cannot see; the module-scope declaration, which is what a library object
+ * named `app` actually looks like, resolves locally and is left alone.
+ */
+function isSdkAppReceiver(scope: ModuleScope, name: string): boolean {
+  const ref = scope.imports.get(name);
+  if (ref) return ref.imported === 'app' && ref.specifier === YAAR_SDK_SPECIFIER;
+  return name === 'app' && !scope.locals.has('app');
+}
+
+/**
+ * The first `app.register(...)` call in the graph, if any — the removed
+ * registration shape.
+ *
+ * This is a migration guard, not a reader. `register()` no longer exists at
+ * runtime, so an app still calling it would otherwise extract to *no protocol at
+ * all* and build green while every one of its commands went missing from the
+ * manifest — the exact silent truncation this module exists to prevent.
+ *
+ * `register` is a common method name — `Chart.register(...registerables)` sits
+ * in a bundled app today — so the receiver must be the SDK's `app` object, and
+ * it is resolved the same way `isDefineAppCall` resolves its callee rather than
+ * matched on spelling: the `app` binding imported from '@bundled/yaar' (aliases
+ * included), an `app` this app neither declares nor imports (a global the
+ * extractor cannot see), or a member chain ending in `.app` (`window.yaar.app`).
+ * An app that declares its own `app` — `const app = registry` — is left alone;
+ * that object is not the SDK's, so refusing it would fail a valid build with a
+ * migration notice for an API it never called.
+ */
+function findAppRegisterCall(
   ts: TsModule,
   scopes: ModuleScope[],
-): Array<{ node: TsNode; scope: ModuleScope }> {
-  const out: Array<{ node: TsNode; scope: ModuleScope }> = [];
+): { node: TsNode; scope: ModuleScope } | null {
   for (const scope of scopes) {
+    let found: { node: TsNode; scope: ModuleScope } | null = null;
     const visit = (node: TsNode): void => {
       if (
+        !found &&
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
         node.expression.name.text === 'register'
       ) {
         const receiver = node.expression.expression;
-        const isApp =
-          (ts.isIdentifier(receiver) && receiver.text === 'app') ||
-          (ts.isPropertyAccessExpression(receiver) && receiver.name.text === 'app');
-        if (isApp) out.push({ node, scope });
+        const isApp = ts.isIdentifier(receiver)
+          ? isSdkAppReceiver(scope, receiver.text)
+          : ts.isPropertyAccessExpression(receiver) && receiver.name.text === 'app';
+        if (isApp) found = { node, scope };
       }
       ts.forEachChild(node, visit);
     };
     ts.forEachChild(scope.source, visit);
+    if (found) return found;
   }
-  return out;
+  return null;
 }
 
 /**
  * Find the app's `defineApp({...})` registration.
  *
- * Unlike `findRegisterCall` there is nothing to guess at: the shape is pinned,
- * so the config argument of the one `defineApp` call — reached from the entry
- * module's default export — *is* the protocol. Everything else is refused with
- * a location rather than resolved by heuristic.
+ * There is nothing to guess at: the shape is pinned, so the config argument of
+ * the one `defineApp` call — reached from the entry module's default export —
+ * *is* the protocol. Everything else is refused with a location rather than
+ * resolved by heuristic.
  *
  * Returns null with no error when this app does not use `defineApp` at all;
  * callers must check `extractor.errors` to tell that apart from a rejection.
@@ -996,9 +926,9 @@ function findDefineAppCall(
   }
   if (calls.length === 0) return null;
 
-  // Two calls is two registrations. The runtime now throws on the second one
-  // (an authoritative registration cannot be replaced), so shipping a manifest
-  // built from either would describe an app the iframe refuses to run.
+  // Two calls is two registrations. The runtime throws on the second one — a
+  // window hosts exactly one app — so shipping a manifest built from either
+  // would describe an app the iframe refuses to run.
   if (calls.length > 1) {
     extractor.error(
       calls[1].scope,
@@ -1041,12 +971,15 @@ function findDefineAppCall(
  * Copy an optional JSON-object property (`params`/`returns`/`schema`) onto a
  * descriptor.
  *
- * `foldable` turns the failure into a deferral: `z.object({...})` is a builder
- * chain, not a constant, so a static evaluator can only ever report it as
- * unresolvable. Rather than teach this evaluator Zod's API, the path is recorded
- * and `fold-schemas.ts` reads the schema off the app it runs. The refusal
- * property is unchanged — the fold either produces the schema or the build fails
- * naming this same path.
+ * A value that will not fold statically is *deferred* rather than rejected:
+ * `z.object({...})` is a builder chain, not a constant, so a static evaluator can
+ * only ever report it as unresolvable. Rather than teach this evaluator Zod's
+ * API, the path is recorded and `fold-schemas.ts` reads the schema off the app it
+ * runs. The refusal property is unchanged — the fold either produces the schema
+ * or the build fails naming this same path. Deferral is sound because
+ * `defineApp`'s config is reachable at runtime as the entry module's default
+ * export, which is what makes reading a schema back out of the running app
+ * possible at all.
  */
 function assignObject(
   extractor: Extractor,
@@ -1054,14 +987,12 @@ function assignObject(
   key: string,
   source: Map<string, { value: TsNode; scope: ModuleScope }>,
   label: string,
-  foldable = false,
 ): boolean {
   const entry = source.get(key);
   if (!entry) return true;
   const mark = extractor.errors.length;
   const value = extractor.evaluate(entry.value, entry.scope, `${label}.${key}`);
   if (value === undefined) {
-    if (!foldable) return false;
     extractor.rollbackErrors(mark);
     extractor.pendingFolds.push(`${label}.${key}`);
     return true;
@@ -1116,45 +1047,19 @@ function checkAliasCollisions(
   }
 }
 
-/** How a registration shape names the thing that answers a query or a command. */
-interface ImplKeys {
-  /** Property carrying the state getter — `handler` (register) or `get` (defineApp). */
-  state: string;
-  /** Property carrying the command handler — `handler` (register) or `run` (defineApp). */
-  commands: string;
-}
-
-interface BuildOptions {
-  /** Method shorthand is legal in this config shape. */
-  allowMethods: boolean;
-  /**
-   * A `params`/`returns`/`schema` that is not a constant may be a Zod schema and
-   * is deferred to the runtime fold instead of erroring. Only `defineApp` sets
-   * it — see `assignObject`.
-   */
-  foldable?: boolean;
-  /**
-   * Require each descriptor to carry its implementation, and under which name.
-   * Only `defineApp` sets it: its shape is pinned, so a descriptor missing `run`
-   * is a typo the build can name, not an authoring style.
-   */
-  requireImpl?: ImplKeys;
-}
+/** The property each `defineApp` descriptor carries its implementation under. */
+const IMPL_KEYS = { state: 'get', commands: 'run' } as const;
 
 /**
- * Turn a flattened registration config into the manifest.
+ * Turn a flattened `defineApp({...})` config into the manifest.
  *
- * Shared by `app.register({...})` and `defineApp({...})`: the two differ in how
- * the registration is *located* and in what the handler property is called, not
- * in how descriptors are read. Spreads, `const` refs, and identity wrappers
- * resolve identically for both, and anything unresolvable is an error either
- * way.
+ * Spreads, `const` refs, and identity wrappers resolve here, and anything
+ * unresolvable is an error rather than an omission.
  */
 function buildProtocol(
   ts: TsModule,
   extractor: Extractor,
   config: Array<{ key: string; value: TsNode; scope: ModuleScope }>,
-  options: BuildOptions,
 ): Protocol {
   const sections = new Map(config.map((e) => [e.key, e]));
   const protocol: Protocol = { state: {}, commands: {} };
@@ -1175,7 +1080,7 @@ function buildProtocol(
       );
       return null;
     }
-    return extractor.flattenObject(node, scope, name, 0, options.allowMethods);
+    return extractor.flattenObject(node, scope, name);
   };
 
   /** Resolve one descriptor to its own property map. */
@@ -1193,7 +1098,7 @@ function buildProtocol(
       );
       return null;
     }
-    const props = extractor.flattenObject(node, scope, label, 0, options.allowMethods);
+    const props = extractor.flattenObject(node, scope, label);
     if (props === null) return null;
     return new Map(props.map((p) => [p.key, { value: p.value, scope: p.scope }]));
   };
@@ -1206,10 +1111,9 @@ function buildProtocol(
     props: Map<string, { value: TsNode; scope: ModuleScope }>,
     entry: { value: TsNode; scope: ModuleScope },
     label: string,
-    kind: keyof ImplKeys,
+    kind: keyof typeof IMPL_KEYS,
   ): boolean => {
-    if (!options.requireImpl) return true;
-    const key = options.requireImpl[kind];
+    const key = IMPL_KEYS[kind];
     if (props.has(key)) return true;
     extractor.error(
       entry.scope,
@@ -1256,7 +1160,7 @@ function buildProtocol(
       const description = readDescription(props, entry, label);
       if (description === null) continue;
       const descriptor: Record<string, unknown> = { description };
-      if (!assignObject(extractor, descriptor, 'schema', props, label, options.foldable)) continue;
+      if (!assignObject(extractor, descriptor, 'schema', props, label)) continue;
       protocol.state[entry.key] = descriptor as { description: string; schema?: object };
     }
   }
@@ -1307,8 +1211,8 @@ function buildProtocol(
         descriptor.replay = replay;
       }
 
-      if (!assignObject(extractor, descriptor, 'params', props, label, options.foldable)) continue;
-      if (!assignObject(extractor, descriptor, 'returns', props, label, options.foldable)) continue;
+      if (!assignObject(extractor, descriptor, 'params', props, label)) continue;
+      if (!assignObject(extractor, descriptor, 'returns', props, label)) continue;
       protocol.commands[entry.key] = descriptor as {
         description: string;
         aliases?: string[];
@@ -1368,16 +1272,10 @@ export interface ExtractOptions {
  * Extract the app protocol manifest starting from `entry`, following relative
  * imports. `readFile` must return null for paths that do not exist.
  *
- * Two registration shapes are recognized, in order:
- *
- *  - `export default defineApp({...})` — the config object *is* the protocol,
- *    located rather than guessed at;
- *  - `app.register({...})` — the legacy shape, located by `findRegisterCall`'s
- *    receiver rule and ambiguity handling.
- *
- * An app that does both is refused: two registrations means the manifest can
- * only describe one of them, and which one the iframe ends up running is not
- * something this file can see.
+ * One registration shape is recognized: `export default defineApp({...})`, whose
+ * config object *is* the protocol. An app still calling the removed
+ * `app.register({...})` is refused by name rather than reported as declaring
+ * nothing.
  *
  * `protocol` is null only when no registration was found at all. When `errors`
  * is non-empty the caller must fail the build: a manifest that parsed around an
@@ -1391,66 +1289,35 @@ export function extractProtocolFromModules(
 ): AstProtocolExtraction {
   const extractor = new Extractor(ts, readFile);
   /** Every early exit carries the same shape as `finish()`. */
-  const bail = (usesDefineApp = false): AstProtocolExtraction => ({
+  const bail = (): AstProtocolExtraction => ({
     protocol: null,
     errors: extractor.errors,
     pendingFolds: extractor.pendingFolds,
-    usesDefineApp,
   });
 
   const scopes = extractor.moduleGraph(entry);
   // Errors already recorded (an unparseable file) must survive these early
   // exits — a module that failed to parse is exactly the case where "no
-  // register() found" is the wrong conclusion to report silently.
+  // registration found" is the wrong conclusion to report silently.
   if (scopes.length === 0) return bail();
 
-  // Mutual exclusion. Both calls register, the runtime lets exactly one win,
-  // and nothing here can tell which — so the manifest would describe an app the
-  // iframe may not be running. Keyed on the import rather than on a resolved
-  // call so an app mid-migration is caught before the shapes interleave.
-  const usesDefineApp = importsDefineApp(scopes);
-  if (usesDefineApp) {
-    const registers = findAppRegisterCalls(ts, scopes);
-    if (registers.length > 0) {
-      extractor.error(
-        registers[0].scope,
-        registers[0].node,
-        'this app imports `defineApp` and also calls `app.register({...})`; both register ' +
-          'the app and only one can win at runtime, so the manifest cannot describe either ' +
-          'with confidence. Keep the `defineApp` default export and delete the ' +
-          '`app.register({...})` call',
-      );
-      return bail(true);
-    }
-  }
-
-  const errorsBefore = extractor.errors.length;
-  const defineApp = findDefineAppCall(ts, scopes, extractor);
-  // A `defineApp` that was found and rejected must not fall through to the
-  // legacy search: that would hide the very failure the errors describe.
-  if (extractor.errors.length > errorsBefore) return bail(true);
-  if (defineApp) {
-    return finish(extractor, extractDefineApp(ts, extractor, defineApp, options), true);
-  }
-
-  const call = findRegisterCall(ts, scopes, extractor);
-  if (!call) return bail(usesDefineApp);
-
-  const { node: configNode, scope: configScope } = extractor.unwrap(call.args, call.scope);
-  if (!ts.isObjectLiteralExpression(configNode)) {
+  const legacy = findAppRegisterCall(ts, scopes);
+  if (legacy) {
     extractor.error(
-      call.scope,
-      call.args,
-      `\`register()\`: argument could not be resolved to an object literal ` +
-        `(${extractor.describeNode(configNode)})`,
+      legacy.scope,
+      legacy.node,
+      '`app.register({...})` has been removed. Register with `export default defineApp({ id, ' +
+        "name, state, commands, view })` from '@bundled/yaar': move each `state` entry's " +
+        "`handler` to `get`, each command's `handler` to `run`, and `appId` to `id`",
     );
     return bail();
   }
 
-  const config = extractor.flattenObject(configNode, configScope, 'register');
-  if (config === null) return bail();
+  const defineApp = findDefineAppCall(ts, scopes, extractor);
+  if (extractor.errors.length > 0) return bail();
+  if (!defineApp) return bail();
 
-  return finish(extractor, buildProtocol(ts, extractor, config, { allowMethods: false }));
+  return finish(extractor, extractDefineApp(ts, extractor, defineApp, options));
 }
 
 /** Read the protocol out of a located `defineApp({...})` config. */
@@ -1471,19 +1338,12 @@ function extractDefineApp(
     return null;
   }
 
-  const config = extractor.flattenObject(configNode, configScope, 'defineApp', 0, true);
+  const config = extractor.flattenObject(configNode, configScope, 'defineApp');
   if (config === null) return null;
 
   checkAppId(extractor, config, site, options.appId);
 
-  return buildProtocol(ts, extractor, config, {
-    allowMethods: true,
-    requireImpl: { state: 'get', commands: 'run' },
-    // Only here: the config is reachable at runtime as the entry module's
-    // default export, which is what makes reading a Zod schema back out of the
-    // running app possible at all.
-    foldable: true,
-  });
+  return buildProtocol(ts, extractor, config);
 }
 
 /**

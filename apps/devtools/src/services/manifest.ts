@@ -9,7 +9,7 @@ import { projectPath } from '../lib/paths';
 // they are compared. The STATIC manifest is what the compiler extracts from
 // source (what agents will see after deploy — literal entries only); the
 // RUNTIME manifest is what the running preview actually registered via
-// app.register(). Drift between them means an entry is reached via a spread or
+// defineApp(). Drift between them means an entry is reached via a spread or
 // computed key: it runs fine but is invisible to agents. Shared by the
 // `manifest` command and the best-effort drift check inside `compile`.
 
@@ -48,7 +48,7 @@ export async function getStaticManifest(): Promise<StaticManifestResult> {
         if (!parsed.success) {
           // A protocol.json that is there but unreadable is a compiler output we
           // cannot trust; reporting it as "no manifest" would send the caller
-          // chasing a missing app.register() that is not the problem.
+          // chasing a missing defineApp() that is not the problem.
           console.error(
             `[devtools] ${rel} failed validation`,
             projectPath(proj.id, rel),
@@ -76,7 +76,7 @@ export async function getStaticManifest(): Promise<StaticManifestResult> {
     : !fromCompile.reported
       ? 'The compile response did not include a static protocol (the dev API may predate ' +
         'extraction) and no protocol.json was found in the project — recompile, or update the server.'
-      : 'The compiler extracted no protocol from source — the app may not call app.register(), ' +
+      : 'The compiler extracted no protocol from source — the app may not export a defineApp() default, ' +
         'or its registration is not statically visible (spreads/computed keys).';
   return { names: null, source: null, reason };
 }
@@ -104,7 +104,7 @@ export async function getRuntimeManifest(): Promise<RuntimeManifestResult> {
     if (raw == null) {
       return {
         names: null,
-        reason: 'Preview returned no manifest — the app may not call app.register().',
+        reason: 'Preview returned no manifest — the app may not export a defineApp() default.',
       };
     }
     // The previewed app is arbitrary user code that registered this manifest
@@ -116,7 +116,7 @@ export async function getRuntimeManifest(): Promise<RuntimeManifestResult> {
       console.error('[devtools] preview manifest failed validation', parsed.error.issues);
       return {
         names: null,
-        reason: 'Preview returned a manifest we cannot read — check its app.register() call.',
+        reason: 'Preview returned a manifest we cannot read — check its defineApp() config.',
       };
     }
     return {

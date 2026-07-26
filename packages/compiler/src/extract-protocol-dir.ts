@@ -7,13 +7,10 @@
  * spreads, so descriptor maps may be split across files, and it reports anything
  * unresolvable as a hard error.
  *
- * Without `typescript` there is no AST, and the two registration styles part
- * ways. A `defineApp` app is still readable by *running* it — its manifest is
- * the entry module's default export — so the schema fold produces the whole
- * manifest there. An `app.register()` app leaves nothing behind to read — the
- * call happens while the app's module scope builds its UI, which a headless
- * import cannot run — so it is refused rather than approximated. `degraded` says
- * which of the two environments answered.
+ * Without `typescript` there is no AST, but a `defineApp` app is still readable
+ * by *running* it — its manifest is the entry module's default export — so the
+ * schema fold produces the whole manifest there. `degraded` says which of the
+ * two environments answered.
  */
 
 import { readFileSync } from 'fs';
@@ -26,7 +23,7 @@ import { foldAppSchemas, type FoldSuccess } from './fold-schemas.js';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events'>;
 
-/** Entry candidates, in order. The first that holds a `register()` wins. */
+/** Entry candidates, in order. The first that holds a registration wins. */
 const ENTRY_FILES = ['main.ts', 'protocol.ts'] as const;
 
 export interface DirExtraction {
@@ -40,9 +37,8 @@ export interface DirExtraction {
    */
   errors: ProtocolError[];
   /**
-   * True when `typescript` was unavailable, so there was no AST to read: a
-   * `defineApp` app was extracted by running it, and an `app.register()` app was
-   * refused.
+   * True when `typescript` was unavailable, so there was no AST to read and the
+   * manifest came from running the app instead.
    */
   degraded: boolean;
 }
@@ -248,7 +244,7 @@ export async function extractProtocolFromDir(
       const entry = `src/${file}`;
       if (!texts.has(entry)) continue;
       const result = extractProtocolFromModules(ts, entry, readFile, { appId });
-      // A register() that was found and rejected must not fall through to the
+      // A registration that was found and rejected must not fall through to the
       // next candidate: that would hide the very failure the errors describe.
       if (!result.protocol && result.errors.length === 0) continue;
 
@@ -325,14 +321,12 @@ export async function extractProtocolFromDir(
     }
   }
 
-  // An `app.register()` app has no runtime handle to read — the call happens
-  // while the app's own module scope sets up its UI, which a headless fold
-  // cannot run — and no AST to read it from either. What used to stand in here
-  // was a brace-matching text scanner, and measuring it against the AST across
-  // the bundled apps is why it is gone: it returned *nothing at all* for
-  // devtools (28 commands) and video-editor-lite (19), because both split their
-  // descriptor maps across files with `...spread`. Silence is the one answer
-  // this subsystem must never give, so refusal replaces it.
+  // No `defineApp`, so nothing the fold can read. If the app is still calling the
+  // removed `app.register({...})`, say so rather than reporting no protocol:
+  // silence is the one answer this subsystem must never give, and an app whose
+  // commands vanish from the manifest while the build stays green is exactly the
+  // failure it exists to prevent. The AST path refuses the same call with the same
+  // reasoning, so both environments answer alike.
   const registers = findRegisterCall(srcDir);
   if (registers) {
     return {
@@ -340,10 +334,10 @@ export async function extractProtocolFromDir(
       errors: [
         {
           message:
-            'reading an `app.register({...})` protocol needs `typescript`, and it could not ' +
-            'be loaded. Install it (it is a devDependency of this repo, and the bundled ' +
-            'executable embeds it), or register with `defineApp()`, which this environment ' +
-            'can read by running the app',
+            '`app.register({...})` has been removed. Register with `export default ' +
+            "defineApp({ id, name, state, commands, view })` from '@bundled/yaar': move each " +
+            "`state` entry's `handler` to `get`, each command's `handler` to `run`, and " +
+            '`appId` to `id`',
           file: registers,
           line: 1,
           column: 1,
@@ -359,10 +353,16 @@ export async function extractProtocolFromDir(
 /**
  * The first source file calling `app.register(`, or null if none does.
  *
- * A text test, deliberately: it decides whether the app *claims* a protocol, not
- * what that protocol is. An app that claims none (most apps only draw a UI) must
- * keep building without `typescript`; an app that claims one must not build with
- * its commands missing.
+ * A text test, deliberately: it decides whether the app *claims* a protocol the
+ * platform no longer serves, not what that protocol is. An app that claims none
+ * (most apps only draw a UI) must keep building.
+ *
+ * `app` must still be the SDK's, the way the AST path resolves its receiver, so
+ * the two readers answer alike: the file has to import `app` from
+ * '@bundled/yaar' or spell the call through the global (`window.yaar.app`). A
+ * file with its own `app` — `const app = registry; app.register({ hooks: {} })`
+ * — is not this app's registration and must not fail the build. Without a
+ * binding resolver the import is the closest available proxy for the same rule.
  */
 function findRegisterCall(srcDir: string): string | null {
   const rank = (path: string): number => {
@@ -379,7 +379,26 @@ function findRegisterCall(srcDir: string): string | null {
   // Entry files first, so the error anchors to the file an author would open.
   const paths = [...texts.keys()].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
   for (const path of paths) {
-    if (/\bapp\s*\.\s*register\s*\(/.test(texts.get(path)!)) return path;
+    const text = texts.get(path)!;
+    if (/\byaar\s*\.\s*app\s*\.\s*register\s*\(/.test(text)) return path;
+    if (/\bapp\s*\.\s*register\s*\(/.test(text) && importsSdkApp(text)) return path;
   }
   return null;
+}
+
+/**
+ * True when `text` binds `app` from '@bundled/yaar' — `import { app }`, or a
+ * destructure off the namespace. Deliberately not a parser: it stands in for the
+ * AST path's receiver resolution in the one environment that has no `typescript`
+ * to resolve with.
+ */
+function importsSdkApp(text: string): boolean {
+  const namedImport = /import\s*\{([^}]*)\}\s*from\s*['"]@bundled\/yaar['"]/g;
+  for (const match of text.matchAll(namedImport)) {
+    const binds = match[1]
+      .split(',')
+      .some((clause) => /^\s*app\s*(?:as\s+\w+\s*)?$/.test(clause.replace(/\/\/.*$/, '')));
+    if (binds) return true;
+  }
+  return /\bconst\s*\{[^}]*\bapp\b[^}]*\}\s*=\s*(?:window\s*\.\s*)?yaar\b/.test(text);
 }

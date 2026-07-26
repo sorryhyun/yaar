@@ -35,7 +35,7 @@ function buildAuthoringContract(): string {
 ### Entrypoint
 Write \`src/main.ts\` as one \`export default defineApp({ id, name, state, commands, view })\`
 from \`@bundled/yaar\`. It owns registration (once, at module scope, before mount), mounting,
-and the error contract, so an app never calls \`app.register()\` or \`render()\` itself. State
+and the error contract, so an app never calls \`render()\` itself. State
 entries use \`get\`, commands use \`run\`; \`params\` may be a Zod schema (\`@bundled/zod\`) or a
 JSON Schema literal. An imperative app passes \`view: { mount(el) { ... } }\` instead of a
 Solid component.

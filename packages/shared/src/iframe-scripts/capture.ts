@@ -5,7 +5,7 @@
  * Capture always aims to return a full "window screenshot" — the document as
  * rendered, with live canvas pixels composited in place:
  *   0. App-defined provider (`window.__yaarCaptureProvider`, wired from
- *      `app.register({ onCapture })`) — the app decides what to return
+ *      `defineApp({ onCapture })`) — the app decides what to return
  *   1. Composite screenshot: DOM via foreignObject SVG, with each <canvas>
  *      swapped for an <img> carrying its current pixels
  *   2. Fallback: largest <canvas> alone (only if the composite render fails)
@@ -286,7 +286,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
     if (!e.data || e.data.type !== 'yaar:capture-request') return;
     var requestId = e.data.requestId;
 
-    // Tier 0: app-defined capture provider (app.register({ onCapture }) or a
+    // Tier 0: app-defined capture provider (defineApp({ onCapture }) or a
     // directly assigned window.__yaarCaptureProvider). Must return a data-URL
     // image (string), sync or async; anything else falls back to the default.
     var provider = window.__yaarCaptureProvider;
