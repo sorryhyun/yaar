@@ -27,8 +27,5 @@ export const [editing, setEditing] = createSignal<string | null>(null);
 /** Which of the four persona documents the open editor is showing. */
 export const [editingDoc, setEditingDoc] = createSignal<PersonaKey>('inANutshell');
 
-/** Whether the "add someone to the room" list is expanded. */
-export const [showCastPicker, setShowCastPicker] = createSignal(false);
-
 /** True until the first load settles — suppresses the empty state during boot. */
 export const [booting, setBooting] = createSignal(true);
