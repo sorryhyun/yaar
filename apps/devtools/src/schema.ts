@@ -12,7 +12,12 @@
 // risk: the old reader started from `let name = id` and only overwrote it on a
 // truthy `meta.name`. What the app.json schema tightens is `permissions` — a
 // value handed straight to window creation as a grant list, which the old code
-// guarded with a bare `Array.isArray`, so an array of non-strings went through.)
+// guarded with a bare `Array.isArray`, so an array of arbitrary junk went through.)
+//
+// Tightening it is only safe if it matches what an app.json may actually say —
+// the first version accepted `string[]` alone and so declared every app that
+// narrows a grant to `{ uri, verbs }` invalid. A boundary schema narrower than
+// the format it guards is not strictness, it is a false negative.
 //
 // Loose on purpose: an app.json carries far more than the two fields devtools
 // reads (icon, version, bundles, controls...), and none of it should have to be
@@ -24,18 +29,40 @@
 import * as z from '@bundled/zod';
 
 /**
+ * One entry in an app.json `permissions` list. Both forms the server accepts:
+ * a bare URI prefix, or `{ uri, verbs }` restricting the grant to some verbs
+ * (`PermissionEntry` in `packages/server/src/http/access.ts`). Accepting only
+ * the string form here rejected every cloned app that had ever narrowed a
+ * grant — a real, common app.json read as corrupt, and the clone previewed
+ * with no permissions at all.
+ *
+ * `verbs` stays `z.string()` rather than an enum of the five verbs: this is a
+ * boundary check on someone else's file, and an unknown verb is the server's to
+ * reject, not devtools' reason to discard the whole project's grants.
+ */
+const PermissionEntrySchema = z.union([
+  z.string(),
+  z.looseObject({
+    uri: z.string(),
+    verbs: z.optional(z.array(z.string())),
+  }),
+]);
+
+export type PermissionEntry = z.infer<typeof PermissionEntrySchema>;
+
+/**
  * A project's `app.json`, as far as devtools reads it: `name` for the project
  * list, `permissions` for the preview iframe.
  *
  * Both are optional — a project whose app.json has neither is perfectly normal
  * (createProject writes only `name`, and most projects declare no permissions),
  * so their absence is not a validation failure. What this rejects is a non-object
- * file, or a `permissions` that is not a list of strings — the latter matters
- * because the value is handed straight to window creation as a grant list.
+ * file, or a `permissions` that is not a list of grant entries — the latter
+ * matters because the value is handed straight to window creation as a grant list.
  */
 export const ProjectAppJsonSchema = z.looseObject({
   name: z.optional(z.string()),
-  permissions: z.optional(z.array(z.string())),
+  permissions: z.optional(z.array(PermissionEntrySchema)),
 });
 
 /**

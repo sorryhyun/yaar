@@ -1,7 +1,7 @@
 export {};
 import { appStorage, errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
 import * as z from '@bundled/zod';
-import { ProjectAppJsonSchema } from '../schema';
+import { ProjectAppJsonSchema, type PermissionEntry } from '../schema';
 import { activeProject, previewUrl, previewWindowId, setPreviewWindowId } from '../core';
 import { addConsoleEntry } from './console';
 
@@ -77,7 +77,7 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   const proj = activeProject();
   const name = proj?.name ?? 'Preview';
   // Read project's app.json to get declared permissions for the preview iframe
-  let permissions: string[] | undefined;
+  let permissions: PermissionEntry[] | undefined;
   if (proj) {
     const raw = await appStorage.readJsonOr<unknown>(`projects/${proj.id}/app.json`, null);
     if (raw != null) {

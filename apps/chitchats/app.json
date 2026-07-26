@@ -3,8 +3,12 @@
   "name": "ChitChats",
   "description": "Rooms of AI characters who answer you one at a time, each hearing what the last one said",
   "run": "dist/index.html",
-  "streams": ["agents"],
-  "personas": { "max": 4 },
+  "streams": [
+    "agents"
+  ],
+  "personas": {
+    "max": 4
+  },
   "version": "1.0.1",
   "author": "YAAR",
   "kind": "system"
