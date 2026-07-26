@@ -501,6 +501,16 @@ interface YaarAppDefinition<
   commands?: YaarAppCommands<S>;
   /** Channels this app may `app.emit()` on. */
   events?: Record<string, YaarAppEventDescriptor>;
+  /**
+   * Declarative keyboard shortcuts: combo → declared command name, e.g.
+   * `{ ArrowRight: 'nextPage', 'Ctrl+s': 'save' }`. Modifiers: Ctrl/Meta/Alt/
+   * Shift (Ctrl also matches Cmd); the key part is a `KeyboardEvent.key` name,
+   * case-insensitive. The bound command runs with no params, so its `params`
+   * must be absent or all-optional. Combos without Ctrl/Meta/Alt are suppressed
+   * while an editable element has focus. The shell's own combos (Shift+Tab,
+   * Ctrl+1-9, Ctrl+W, Ctrl+R, F5) are reserved — the build rejects them.
+   */
+  keybindings?: Record<string, string>;
   view?: YaarAppViewLike;
   /** Fire-and-forget callback invoked when the app window is closed. */
   onClose?: () => void;

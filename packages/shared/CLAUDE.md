@@ -7,7 +7,7 @@ Shared types between frontend and server.
 - `actions.ts` - OS Actions DSL (includes `WindowState` with `appProtocol?: boolean`)
 - `events.ts` - WebSocket event types, `ClientEventType`/`ServerEventType` constants
 - `components.ts` - Component schemas, types, type guards (Zod v4), `DisplayContent`/`displayContentSchema`
-- `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`)
+- `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`), plus keybinding combo helpers (`normalizeKeybinding`, `listKeybindingIssues`, `RESERVED_KEYBINDINGS`) shared by both protocol readers
   - A command's `params` JSON Schema is **enforced** by the iframe bridge before the handler
     runs: a missing `required` key or a key absent from `properties` is rejected naming both
     the wrong keys and the accepted ones. `additionalProperties: true` opts a pass-through

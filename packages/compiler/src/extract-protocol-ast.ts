@@ -32,6 +32,7 @@
  */
 
 import type { AppManifest } from '@yaar/shared';
+import { listKeybindingIssues } from '@yaar/shared';
 
 type TsModule = typeof import('typescript');
 type TsNode = import('typescript').Node;
@@ -39,7 +40,7 @@ type TsExpression = import('typescript').Expression;
 type TsSourceFile = import('typescript').SourceFile;
 type TsObjectLiteral = import('typescript').ObjectLiteralExpression;
 
-type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events'>;
+type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
 
 /** A construct the extractor refused to guess at, with where to find it. */
 export interface ProtocolError {
@@ -1223,6 +1224,54 @@ function buildProtocol(
     checkAliasCollisions(extractor, commandEntries, protocol.commands);
   }
 
+  // -- keybindings ---------------------------------------------------------
+  // Runs after commands so bindings can be checked against the declared names.
+  // Entries are plain `combo: 'commandName'` strings, not descriptor objects,
+  // so this resolves values directly instead of going through descriptorProps.
+  const kbSection = sections.get('keybindings');
+  if (kbSection) {
+    const { node, scope } = extractor.unwrap(kbSection.value, kbSection.scope);
+    if (!ts.isObjectLiteralExpression(node)) {
+      extractor.error(
+        kbSection.scope,
+        kbSection.value,
+        `\`keybindings\`: could not be resolved to an object literal ` +
+          `(${extractor.describeNode(node)})`,
+      );
+    } else {
+      const entries = extractor.flattenObject(node, scope, 'keybindings');
+      if (entries) {
+        const keybindings: Record<string, string> = {};
+        const entryNodes = new Map<string, { value: TsNode; scope: ModuleScope }>();
+        for (const entry of entries) {
+          const label = `keybindings.${entry.key}`;
+          const value = extractor.evaluate(entry.value, entry.scope, label);
+          if (value === undefined) continue;
+          if (typeof value !== 'string') {
+            extractor.error(
+              entry.scope,
+              entry.value,
+              `\`${label}\`: expected a command name string`,
+            );
+            continue;
+          }
+          keybindings[entry.key] = value;
+          entryNodes.set(entry.key, { value: entry.value, scope: entry.scope });
+        }
+        // Semantic checks live in @yaar/shared so the fold path rejects identically.
+        for (const { combo, issue } of listKeybindingIssues(
+          keybindings,
+          Object.keys(protocol.commands),
+        )) {
+          const at = entryNodes.get(combo);
+          if (at) extractor.error(at.scope, at.value, `\`keybindings.${combo}\`: ${issue}`);
+          delete keybindings[combo];
+        }
+        if (Object.keys(keybindings).length > 0) protocol.keybindings = keybindings;
+      }
+    }
+  }
+
   // -- events --------------------------------------------------------------
   const eventEntries = sectionEntries('events');
   if (eventEntries && eventEntries.length > 0) {
@@ -1253,7 +1302,8 @@ function finish(
   const empty =
     Object.keys(protocol.state).length === 0 &&
     Object.keys(protocol.commands).length === 0 &&
-    !protocol.events;
+    !protocol.events &&
+    !protocol.keybindings;
   return { protocol: empty ? null : protocol, errors: [], ...rest };
 }
 

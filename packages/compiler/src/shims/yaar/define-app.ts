@@ -34,7 +34,7 @@
  */
 
 import { render } from 'solid-js/web';
-import { AppCommandError } from './ui.js';
+import { AppCommandError, parseShortcut, shortcutMatches } from './ui.js';
 
 /**
  * The id of the mount element the compiler's HTML wrapper emits.
@@ -253,7 +253,87 @@ function toRegistration(definition) {
   };
   if (definition.events !== undefined) registration.events = definition.events;
   if (definition.onCapture !== undefined) registration.onCapture = definition.onCapture;
+  if (definition.keybindings !== undefined) registration.keybindings = definition.keybindings;
   return registration;
+}
+
+/**
+ * True when dispatching a bare (modifier-less) combo would steal a key an
+ * editable element is using — arrows move the cursor, letters type. Combos
+ * carrying Ctrl/Meta/Alt still fire there, matching how every desktop app
+ * treats e.g. Ctrl+S in a text field.
+ */
+function isEditableTarget(target) {
+  if (!target) return false;
+  if (target.isContentEditable) return true;
+  const tag = target.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+/**
+ * Wire `keybindings: { combo: commandName }` to the registered command handlers.
+ *
+ * One listener for the whole table, dispatching through the same wrapped
+ * handler the iframe bridge calls — so a keypress and an agent `command` run
+ * identical validation and error normalization. The build gate is what rejects
+ * bad combos and unknown commands with a location; the checks here only keep a
+ * directly-imported shim (tests, old builds) from silently binding nothing.
+ *
+ * Returns the cleanup, or undefined when nothing was installed.
+ */
+function installKeybindings(keybindings, commands) {
+  if (
+    !keybindings ||
+    typeof window === 'undefined' ||
+    typeof document === 'undefined' ||
+    typeof window.addEventListener !== 'function'
+  ) {
+    return undefined;
+  }
+
+  const bindings = [];
+  for (const combo of Object.keys(keybindings)) {
+    const command = keybindings[combo];
+    const parsed = parseShortcut(combo);
+    if (!parsed) {
+      console.error(`[yaar] defineApp keybindings: unparseable combo "${combo}"`);
+      continue;
+    }
+    const descriptor = commands[command];
+    if (!descriptor) {
+      console.error(
+        `[yaar] defineApp keybindings: "${combo}" is bound to "${command}", which is not a declared command`,
+      );
+      continue;
+    }
+    const bare = !parsed.ctrl && !parsed.meta && !parsed.alt;
+    bindings.push({ parsed, bare, combo, handler: descriptor.handler });
+  }
+  if (bindings.length === 0) return undefined;
+
+  const listener = (e) => {
+    for (const binding of bindings) {
+      if (!shortcutMatches(binding.parsed, e)) continue;
+      if (binding.bare && isEditableTarget(e.target)) return;
+      e.preventDefault();
+      let result;
+      try {
+        result = binding.handler(undefined, { replayed: false });
+      } catch (err) {
+        console.error(`[yaar] keybinding "${binding.combo}" failed:`, err);
+        return;
+      }
+      if (result && typeof result.then === 'function') {
+        result.then(undefined, (err) => {
+          console.error(`[yaar] keybinding "${binding.combo}" failed:`, err);
+        });
+      }
+      return;
+    }
+  };
+
+  window.addEventListener('keydown', listener);
+  return () => window.removeEventListener('keydown', listener);
 }
 
 /**
@@ -299,6 +379,7 @@ export function defineApp(definition) {
   }
 
   let cleanup;
+  let removeKeybindings;
   const registration = toRegistration(definition);
   // Composed rather than assigned: a `{ mount }` view returning a teardown means
   // that teardown should run on window close, and the app's own onClose must
@@ -307,6 +388,7 @@ export function defineApp(definition) {
     try {
       if (typeof definition.onClose === 'function') definition.onClose();
     } finally {
+      if (typeof removeKeybindings === 'function') removeKeybindings();
       if (typeof cleanup === 'function') cleanup();
     }
   };
@@ -328,6 +410,7 @@ export function defineApp(definition) {
     );
   }
 
+  removeKeybindings = installKeybindings(definition.keybindings, registration.commands);
   cleanup = mountView(definition.view);
   return definition;
 }

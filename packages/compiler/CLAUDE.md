@@ -40,7 +40,7 @@ src/
     │   ├── dialogs.ts     # showAlert / showConfirm / showPrompt
     │   ├── ui.ts          # showToast, onShortcut, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms)
-    │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation
+    │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])

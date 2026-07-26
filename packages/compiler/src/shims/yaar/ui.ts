@@ -134,6 +134,55 @@ export function createStaleGuard(): {
 
 // ── Keyboard shortcuts ───────────────────────────────────────────
 
+/** A combo parsed into the shape `shortcutMatches` checks against a KeyboardEvent. */
+export interface ParsedShortcut {
+  key: string;
+  ctrl: boolean;
+  meta: boolean;
+  alt: boolean;
+  shift: boolean;
+}
+
+/**
+ * Parse `"ctrl+s"` / `"alt+arrowup"` / `"escape"` into a `ParsedShortcut`.
+ * Returns null for a combo that can never match: an unknown modifier token, a
+ * missing key, or a modifier-only combo. Shared by `onShortcut` and
+ * `defineApp({ keybindings })` so the two never disagree on combo grammar.
+ */
+export function parseShortcut(combo: string): ParsedShortcut | null {
+  const parts = combo.split('+').map((p) => p.trim().toLowerCase());
+  const key = parts.pop();
+  if (!key || key === 'ctrl' || key === 'meta' || key === 'alt' || key === 'shift') return null;
+  const mods = new Set(parts);
+  for (const part of parts) {
+    if (part !== 'ctrl' && part !== 'meta' && part !== 'alt' && part !== 'shift') return null;
+  }
+  return {
+    key,
+    ctrl: mods.has('ctrl'),
+    meta: mods.has('meta'),
+    alt: mods.has('alt'),
+    shift: mods.has('shift'),
+  };
+}
+
+/**
+ * True when the event is exactly this combo: the key matches case-insensitively,
+ * every required modifier is down, and no unrequired one is (`ctrl` matches both
+ * Ctrl and Cmd for cross-platform shortcuts).
+ */
+export function shortcutMatches(parsed: ParsedShortcut, e: KeyboardEvent): boolean {
+  if (e.key.toLowerCase() !== parsed.key) return false;
+  if (parsed.ctrl && !e.ctrlKey && !e.metaKey) return false;
+  if (parsed.meta && !e.metaKey) return false;
+  if (parsed.alt && !e.altKey) return false;
+  if (parsed.shift && !e.shiftKey) return false;
+  if (!parsed.ctrl && !parsed.meta && (e.ctrlKey || e.metaKey)) return false;
+  if (!parsed.alt && e.altKey) return false;
+  if (!parsed.shift && e.shiftKey) return false;
+  return true;
+}
+
 /**
  * Register a keyboard shortcut. Returns a cleanup function.
  *
@@ -144,25 +193,14 @@ export function createStaleGuard(): {
  * `ctrl` matches both Ctrl and Cmd (Meta) for cross-platform shortcuts.
  */
 export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): () => void {
-  const parts = combo.toLowerCase().split('+');
-  const key = parts.pop()!;
-  const mods = new Set(parts);
+  const parsed = parseShortcut(combo);
+  if (!parsed) {
+    console.error(`[yaar] onShortcut: unparseable combo "${combo}"`);
+    return () => {};
+  }
 
   const listener = (e: KeyboardEvent) => {
-    if (e.key.toLowerCase() !== key) return;
-    const needCtrl = mods.has('ctrl');
-    const needMeta = mods.has('meta');
-    const needAlt = mods.has('alt');
-    const needShift = mods.has('shift');
-    // ctrl matches both ctrlKey and metaKey for cross-platform
-    if (needCtrl && !e.ctrlKey && !e.metaKey) return;
-    if (needMeta && !e.metaKey) return;
-    if (needAlt && !e.altKey) return;
-    if (needShift && !e.shiftKey) return;
-    // Ensure no unexpected modifiers are pressed (unless required)
-    if (!needCtrl && !needMeta && (e.ctrlKey || e.metaKey)) return;
-    if (!needAlt && e.altKey) return;
-    if (!needShift && e.shiftKey) return;
+    if (!shortcutMatches(parsed, e)) return;
     e.preventDefault();
     handler(e);
   };

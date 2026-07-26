@@ -68,6 +68,15 @@ export async function loadAppSkillWithManifest(appId: string): Promise<string | 
             .join('\n'),
       );
     }
+    const keybindings = app.protocol.keybindings;
+    if (keybindings && Object.keys(keybindings).length) {
+      sections.push(
+        '### Keybindings\n' +
+          Object.entries(keybindings)
+            .map(([combo, command]) => `- \`${combo}\` → \`${command}\``)
+            .join('\n'),
+      );
+    }
     if (sections.length) {
       result += '\n\n## Protocol\n\n' + sections.join('\n\n');
     }

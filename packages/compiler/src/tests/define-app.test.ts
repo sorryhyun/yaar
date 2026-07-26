@@ -863,3 +863,144 @@ describe('defineApp type inference', () => {
     expect(diagnostics.join('\n')).toContain('description');
   });
 });
+
+describe('defineApp keybindings', () => {
+  /** installStubs plus a window that records its keydown listeners. */
+  function installKeyStubs() {
+    const stubs = installStubs();
+    const listeners: Array<(e: any) => void> = [];
+    (globalThis as any).window.addEventListener = (type: string, fn: (e: any) => void) => {
+      if (type === 'keydown') listeners.push(fn);
+    };
+    (globalThis as any).window.removeEventListener = (_type: string, fn: (e: any) => void) => {
+      const at = listeners.indexOf(fn);
+      if (at >= 0) listeners.splice(at, 1);
+    };
+    const press = (key: string, init: Record<string, unknown> = {}) => {
+      const event = {
+        key,
+        ctrlKey: false,
+        metaKey: false,
+        altKey: false,
+        shiftKey: false,
+        target: { tagName: 'DIV', isContentEditable: false },
+        defaultPrevented: false,
+        preventDefault() {
+          event.defaultPrevented = true;
+        },
+        ...init,
+      };
+      for (const fn of [...listeners]) fn(event);
+      return event;
+    };
+    return { ...stubs, listeners, press };
+  }
+
+  test('a matching keydown runs the bound command and claims the event', () => {
+    const { press } = installKeyStubs();
+    const calls: string[] = [];
+    defineApp({
+      id: 'pager',
+      name: 'Pager',
+      commands: {
+        nextPage: { description: 'Turn forward', run: () => void calls.push('next') },
+        save: { description: 'Save', run: () => void calls.push('save') },
+      },
+      keybindings: { ArrowRight: 'nextPage', 'Ctrl+s': 'save' },
+    });
+
+    const arrow = press('ArrowRight');
+    expect(calls).toEqual(['next']);
+    expect(arrow.defaultPrevented).toBe(true);
+
+    // Modifier discipline comes from shortcutMatches: Ctrl+ArrowRight is a
+    // different chord, not a sloppier ArrowRight.
+    press('ArrowRight', { ctrlKey: true });
+    expect(calls).toEqual(['next']);
+
+    press('s', { ctrlKey: true });
+    expect(calls).toEqual(['next', 'save']);
+  });
+
+  test('bare combos yield to editable elements; modifier combos do not', () => {
+    const { press } = installKeyStubs();
+    const calls: string[] = [];
+    defineApp({
+      id: 'pager',
+      name: 'Pager',
+      commands: {
+        nextPage: { description: 'Turn forward', run: () => void calls.push('next') },
+        save: { description: 'Save', run: () => void calls.push('save') },
+      },
+      keybindings: { ArrowRight: 'nextPage', 'Ctrl+s': 'save' },
+    });
+
+    const inInput = press('ArrowRight', { target: { tagName: 'INPUT', isContentEditable: false } });
+    expect(calls).toEqual([]);
+    // Not claimed either — the input keeps its cursor movement.
+    expect(inInput.defaultPrevented).toBe(false);
+
+    press('s', { ctrlKey: true, target: { tagName: 'INPUT', isContentEditable: false } });
+    expect(calls).toEqual(['save']);
+
+    press('ArrowRight', { target: { tagName: 'DIV', isContentEditable: true } });
+    expect(calls).toEqual(['save']);
+  });
+
+  test('the registration carries keybindings and onClose removes the listener', () => {
+    const { registered, listeners, press } = installKeyStubs();
+    const calls: string[] = [];
+    defineApp({
+      id: 'pager',
+      name: 'Pager',
+      commands: { nextPage: { description: 'Turn forward', run: () => void calls.push('next') } },
+      keybindings: { ArrowRight: 'nextPage' },
+    });
+
+    // The bridge serves the manifest from the registration, so the map must ride along.
+    expect(registered[0].keybindings).toEqual({ ArrowRight: 'nextPage' });
+    expect(listeners).toHaveLength(1);
+
+    registered[0].onClose();
+    expect(listeners).toHaveLength(0);
+    press('ArrowRight');
+    expect(calls).toEqual([]);
+  });
+
+  test('a bad entry is reported and skipped, not thrown', () => {
+    // The build gate is what rejects these with a source location; the runtime
+    // check only keeps a directly-imported shim from silently binding nothing.
+    const { errors, listeners } = installKeyStubs();
+    defineApp({
+      id: 'pager',
+      name: 'Pager',
+      commands: { nextPage: { description: 'Turn forward', run: () => 1 } },
+      keybindings: { 'Hyper+x': 'nextPage', ArrowRight: 'missing' },
+    });
+
+    expect(errors.join('\n')).toContain('unparseable combo "Hyper+x"');
+    expect(errors.join('\n')).toContain('not a declared command');
+    // Nothing valid remained, so no listener was installed at all.
+    expect(listeners).toHaveLength(0);
+  });
+
+  test('a throwing handler is contained and reported', () => {
+    const { errors, press } = installKeyStubs();
+    defineApp({
+      id: 'pager',
+      name: 'Pager',
+      commands: {
+        boom: {
+          description: 'Fail',
+          run: () => {
+            throw new Error('nope');
+          },
+        },
+      },
+      keybindings: { 'Ctrl+b': 'boom' },
+    });
+
+    expect(() => press('b', { ctrlKey: true })).not.toThrow();
+    expect(errors.join('\n')).toContain('keybinding "Ctrl+b" failed');
+  });
+});

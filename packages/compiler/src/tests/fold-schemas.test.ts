@@ -267,6 +267,7 @@ describe('without typescript, the running app is the manifest', () => {
         },
       },
       events: { added: { description: 'A memo landed' } },
+      keybindings: { 'Ctrl+Enter': 'add' },
     });`;
 
   test('a defineApp app extracts through the fold instead of being refused', async () => {
@@ -288,6 +289,27 @@ describe('without typescript, the running app is the manifest', () => {
     });
     expect(result.protocol!.state.count).toEqual({ description: 'How many' });
     expect(result.protocol!.events).toEqual({ added: { description: 'A memo landed' } });
+    expect(result.protocol!.keybindings).toEqual({ 'Ctrl+Enter': 'add' });
+  });
+
+  test('a keybinding bound to an unknown command is refused without typescript too', async () => {
+    // The semantic checks live in @yaar/shared precisely so this path cannot
+    // accept a binding the AST path would reject.
+    const dir = await writeApp({
+      'src/main.ts': `${HEAD}
+        export default defineApp({
+          id: 'folder',
+          name: 'Folder',
+          commands: { add: { description: 'Add', run: () => 1 } },
+          keybindings: { ArrowUp: 'missing' },
+        });`,
+    });
+    process.env.YAAR_NO_TYPESCRIPT = '1';
+
+    const result = await extractProtocolFromDir(join(dir, 'src'));
+
+    expect(result.protocol).toBeNull();
+    expect(result.errors.map((e) => e.message).join('\n')).toContain('not a declared command');
   });
 
   test('the app.json id check survives the loss of the AST path', async () => {

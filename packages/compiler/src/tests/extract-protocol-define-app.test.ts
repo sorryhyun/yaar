@@ -495,3 +495,60 @@ describe('the app id reaches the extractor from app.json', () => {
     expect(Object.keys(result.protocol!.commands)).toEqual(['addMemo']);
   });
 });
+
+describe('defineApp: keybindings', () => {
+  /** A minimal app whose `keybindings` value is the variable under test. */
+  const app = (keybindings: string) => ({
+    'src/main.ts': `${IMPORT}
+      export default defineApp({
+        id: 'pager',
+        name: 'Pager',
+        commands: {
+          nextPage: { description: 'Turn forward', run: () => 1 },
+          prevPage: { description: 'Turn back', run: () => 1 },
+          save: { description: 'Save', aliases: ['persist'], run: () => 1 },
+        },
+        keybindings: ${keybindings},
+      });`,
+  });
+
+  test('combos reach the manifest in their authored spelling', () => {
+    const { protocol, errors } = extract(
+      app(`{ ArrowRight: 'nextPage', ArrowLeft: 'prevPage', 'Ctrl+s': 'save' }`),
+    );
+
+    expect(errors).toEqual([]);
+    expect(protocol!.keybindings).toEqual({
+      ArrowRight: 'nextPage',
+      ArrowLeft: 'prevPage',
+      'Ctrl+s': 'save',
+    });
+  });
+
+  test('binding an undeclared command is refused, and an alias does not count', () => {
+    // The runtime dispatches by command name; a binding the dispatcher cannot
+    // resolve is a shortcut that silently does nothing.
+    expectRejected(app(`{ ArrowRight: 'missing' }`), 'not a declared command name');
+    expectRejected(app(`{ 'Ctrl+p': 'persist' }`), 'not a declared command name');
+  });
+
+  test('a combo the OS shell owns is refused', () => {
+    // The shell handles these before the app sees them (DesktopSurface + the
+    // contextmenu iframe script), so the binding could never fire.
+    expectRejected(app(`{ 'Shift+Tab': 'nextPage' }`), 'reserved by the OS shell');
+    expectRejected(app(`{ 'ctrl+2': 'nextPage' }`), 'reserved by the OS shell');
+  });
+
+  test('an unparseable combo is refused', () => {
+    expectRejected(app(`{ 'Hyper+x': 'nextPage' }`), 'unparseable combo');
+    expectRejected(app(`{ 'Ctrl+Shift': 'nextPage' }`), 'unparseable combo');
+  });
+
+  test('two spellings of the same chord are refused as duplicates', () => {
+    expectRejected(app(`{ 'Ctrl+s': 'save', 'ctrl+S': 'nextPage' }`), 'duplicates');
+  });
+
+  test('a non-string binding is refused', () => {
+    expectRejected(app(`{ ArrowRight: 7 }`), 'expected a command name string');
+  });
+});

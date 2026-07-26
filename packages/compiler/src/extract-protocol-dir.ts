@@ -21,7 +21,7 @@ import { extractProtocolFromModules, type ProtocolError } from './extract-protoc
 import { loadTypeScript } from './load-typescript.js';
 import { foldAppSchemas, type FoldSuccess } from './fold-schemas.js';
 
-type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events'>;
+type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
 
 /** Entry candidates, in order. The first that holds a registration wins. */
 const ENTRY_FILES = ['main.ts', 'protocol.ts'] as const;

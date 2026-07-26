@@ -33,6 +33,7 @@
 import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import type { AppManifest } from '@yaar/shared';
+import { listKeybindingIssues } from '@yaar/shared';
 import {
   bundledLibraryPluginBun,
   cssFilePlugin,
@@ -41,7 +42,7 @@ import {
   toForwardSlash,
 } from './plugins.js';
 
-type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events'>;
+type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
 
 export interface FoldSuccess {
   ok: true;
@@ -305,6 +306,21 @@ function buildProtocol(definition) {
     if (Object.keys(events).length > 0) protocol.events = events;
   }
 
+  // Combos and command names are checked host-side (listKeybindingIssues) so the
+  // fold and the AST reader reject identically; here only the shape is read.
+  if (definition.keybindings) {
+    const keybindings = {};
+    for (const key of Object.keys(definition.keybindings)) {
+      const command = definition.keybindings[key];
+      if (typeof command !== 'string') {
+        problems.push('keybindings.' + key + ': expected a command name string');
+        continue;
+      }
+      keybindings[key] = command;
+    }
+    if (Object.keys(keybindings).length > 0) protocol.keybindings = keybindings;
+  }
+
   return protocol;
 }
 
@@ -443,6 +459,18 @@ export async function foldAppSchemas(options: FoldOptions): Promise<FoldResult> 
     }
     if (reply.problems && reply.problems.length > 0) {
       return { ok: false, error: asAscii(reply.problems.join('\n')) };
+    }
+    if (reply.protocol.keybindings) {
+      const issues = listKeybindingIssues(
+        reply.protocol.keybindings,
+        Object.keys(reply.protocol.commands),
+      );
+      if (issues.length > 0) {
+        return {
+          ok: false,
+          error: asAscii(issues.map((i) => `keybindings.${i.combo}: ${i.issue}`).join('\n')),
+        };
+      }
     }
 
     return {

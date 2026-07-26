@@ -797,6 +797,18 @@ export default defineApp({
 - **`view`.** A Solid component is mounted with `render`; an imperative app that owns its own
   DOM passes `{ mount(el) { ... } }` and may return a teardown, which runs on window close
   after `onClose`.
+- **`keybindings`.** Declarative keyboard shortcuts, mapping a combo to a declared command
+  name: `keybindings: { ArrowRight: 'nextPage', 'Ctrl+s': 'save' }`. The combo grammar is
+  `[Ctrl+][Meta+][Alt+][Shift+]Key` with `KeyboardEvent.key` names, case-insensitive;
+  `Ctrl` also matches `Cmd`. The bound command runs with no params, so its `params` must be
+  absent or all-optional. Dispatch happens inside the iframe while the window has focus;
+  combos without Ctrl/Meta/Alt are suppressed when an editable element has focus, so a bare
+  `ArrowRight` never steals cursor movement from an input. The build rejects a binding to an
+  undeclared command, an unparseable combo, two spellings of one chord, and the shell's
+  reserved combos (`Shift+Tab`, `Ctrl+1-9`, `Ctrl+W`, `Ctrl+R`, `F5`). Bindings appear in
+  `dist/protocol.json` and the manifest, so agents can tell users about them. For a shortcut
+  that needs an argument or does not correspond to a command, use the imperative
+  `onShortcut(combo, handler)` from `@bundled/yaar` instead.
 - **Splitting up.** `state`/`commands` maps may live in other modules and be spread in — see
   [Splitting a protocol by domain](#splitting-a-protocol-by-domain). The `export default`
   itself must stay in `src/main.ts`: that is what the build reads back to fold Zod schemas.

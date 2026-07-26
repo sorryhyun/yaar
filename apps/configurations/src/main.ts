@@ -1,5 +1,5 @@
 import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
+import { defineApp } from '@bundled/yaar';
 import './styles.css';
 import { activeTab, setActiveTab } from './store';
 import type { Tab } from './types';
@@ -14,6 +14,11 @@ const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'hooks', label: 'Hooks', icon: '🪝' },
   { id: 'domains', label: 'Domains', icon: '🌐' },
 ];
+
+function shiftTab(delta: number) {
+  const idx = TABS.findIndex((t) => t.id === activeTab());
+  setActiveTab(TABS[(idx + delta + TABS.length) % TABS.length].id);
+}
 
 function App() {
   return html`
@@ -41,4 +46,51 @@ function App() {
   `;
 }
 
-render(App, document.getElementById('app')!);
+export default defineApp({
+  id: 'configurations',
+  name: 'Configurations',
+  state: {
+    activeTab: {
+      description: 'The settings tab currently shown: settings, shortcuts, hooks, or domains.',
+      get: () => activeTab(),
+    },
+  },
+  commands: {
+    openTab: {
+      description: 'Switch to a settings tab.',
+      params: {
+        type: 'object',
+        properties: {
+          tab: {
+            type: 'string',
+            enum: ['settings', 'shortcuts', 'hooks', 'domains'],
+            description: 'The tab to show.',
+          },
+        },
+        required: ['tab'],
+      },
+      run: (p) => {
+        const tab = p.tab as Tab;
+        if (!TABS.some((t) => t.id === tab)) {
+          throw new Error(`Unknown tab "${String(p.tab)}" - expected settings | shortcuts | hooks | domains`);
+        }
+        setActiveTab(tab);
+      },
+    },
+    nextTab: {
+      description: 'Cycle to the next settings tab. Also bound to ArrowRight.',
+      replay: 'never',
+      run: () => shiftTab(1),
+    },
+    prevTab: {
+      description: 'Cycle to the previous settings tab. Also bound to ArrowLeft.',
+      replay: 'never',
+      run: () => shiftTab(-1),
+    },
+  },
+  keybindings: {
+    ArrowRight: 'nextTab',
+    ArrowLeft: 'prevTab',
+  },
+  view: App,
+});

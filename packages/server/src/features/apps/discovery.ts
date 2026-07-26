@@ -140,7 +140,7 @@ export interface AppInfo {
   createShortcut?: boolean;
   run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/dist/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
-  protocol?: Pick<AppManifest, 'state' | 'commands'>; // From protocol.json — implies appProtocol support
+  protocol?: Pick<AppManifest, 'state' | 'commands' | 'keybindings'>; // From protocol.json — implies appProtocol support
   fileAssociations?: FileAssociation[];
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
@@ -189,7 +189,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   let createShortcut: boolean | undefined;
   let run: string | undefined;
   let kind: AppKind = 'app';
-  let protocol: Pick<AppManifest, 'state' | 'commands'> | undefined;
+  let protocol: Pick<AppManifest, 'state' | 'commands' | 'keybindings'> | undefined;
   let fileAssociations: FileAssociation[] | undefined;
   let variant: WindowVariantType | undefined;
   let dockEdge: DockEdgeType | undefined;

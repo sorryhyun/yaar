@@ -38,7 +38,10 @@ from \`@bundled/yaar\`. It owns registration (once, at module scope, before moun
 and the error contract, so an app never calls \`render()\` itself. State
 entries use \`get\`, commands use \`run\`; \`params\` may be a Zod schema (\`@bundled/zod\`) or a
 JSON Schema literal. An imperative app passes \`view: { mount(el) { ... } }\` instead of a
-Solid component.
+Solid component. \`keybindings: { 'ArrowRight': 'nextPage', 'Ctrl+s': 'save' }\` binds key
+combos to declared command names (the command runs with no params); combos without
+Ctrl/Meta/Alt are suppressed while an editable element has focus, and the shell's own
+combos (Shift+Tab, Ctrl+1-9, Ctrl+W, Ctrl+R, F5) are rejected at build time.
 
 ### Mount point
 The compiled HTML wrapper contains exactly one mount element: \`<div id="${APP_MOUNT_ID}">\`.

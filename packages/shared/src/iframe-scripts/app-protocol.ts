@@ -336,6 +336,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           manifest.events[evKey] = { description: registration.events[evKey].description };
         }
       }
+      if (registration.keybindings) manifest.keybindings = registration.keybindings;
       if (registration.state) {
         for (var key in registration.state) {
           var s = registration.state[key];
