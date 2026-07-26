@@ -261,9 +261,9 @@ builtins — that empty array is the whole containment story for a runtime-suppl
 `undefined` there would mean *every* tool. Every sub-agent bypasses `ContextPool` entirely (no tape,
 no queue — the app's own scheduler serializes them) and is reclaimed when the app's last window on
 the monitor closes, when the monitor is removed, or on explicit `delete`. See
-[`docs/architecture/agent_tree.md`](../../docs/architecture/agent_tree.md) for the design, and `apps/personas` (Round Table,
-tool-less) and `apps/chitchats` (rooms with `skip`/`recall`/`memorize`, whose persona documents are
-what a reclaimed character is respawned from) for the reference consumers.
+[`docs/architecture/agent_tree.md`](../../docs/architecture/agent_tree.md) for the design, and
+`apps/chitchats` (rooms with `skip`/`recall`/`memorize`, whose persona documents are what a
+reclaimed character is respawned from) for the reference consumer.
 
 **The one channel (`agents/profiles/sub-agent.ts`).** The only capability a sub-agent may be given
 is a reach back into the **owning app's own iframe**. `buildSubAgentProfile` is the one place that

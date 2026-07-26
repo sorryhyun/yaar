@@ -14,8 +14,9 @@
  *
  * "One at a time" is the whole point of the sequence. Each character's prompt is built
  * *after* the previous one's line has landed in the transcript, so the third speaker
- * genuinely hears the first two. Firing them together (which the platform allows, and
- * which Round Table does) produces N answers to the user and zero to each other.
+ * genuinely hears the first two. Firing them together — which the platform allows, since
+ * `message` returns as soon as the turn is queued — produces N answers to the user and
+ * zero to each other.
  */
 
 import { createSignal } from '@bundled/solid-js';

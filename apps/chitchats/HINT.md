@@ -8,7 +8,3 @@ four third-person markdown documents — a nutshell, timeless traits, a chunked 
 character opens with a `recall` tool, and a diary it writes itself with `memorize`. Those
 documents persist, so a character the user comes back to next week remembers the last
 conversation.
-
-For several independent answers to one question at the same instant, Round Table
-(`personas`) is the better fit — it fires its whole cast concurrently and nobody listens
-to anybody.

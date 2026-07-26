@@ -1,14 +1,10 @@
 /**
  * The persona client — everything this app knows about `yaar://apps/self/agents`.
  *
- * Copied from Round Table (`apps/personas/src/agents.ts`) and then bent in one place,
- * which is the difference between the two apps:
- *
- *   Round Table  fires every character at once and never waits for any of them
- *   ChitChats    runs a *tape* — one character at a time, each hearing the last
- *
- * So this file owns something Round Table's does not: {@link sayAndWait}, a turn you
- * can await. `message` still returns the moment the turn is queued (that is the verb's
+ * The verb surface is built for concurrency — every character can be fired at once and
+ * none of them waited on. ChitChats wants the opposite: a *tape*, one character at a
+ * time, each hearing the last. So this file owns {@link sayAndWait}, a turn you can
+ * await. `message` still returns the moment the turn is queued (that is the verb's
  * contract, and it is what makes concurrency possible at all); the promise resolves
  * later, off the stream's terminal frame. The tape executor is the only caller.
  *

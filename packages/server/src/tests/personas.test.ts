@@ -430,22 +430,22 @@ describe('persona verb ownership', () => {
   it('answers null for a URI that belongs to another subresource', async () => {
     // The composite falls through on null — claiming a storage URI here would
     // shadow app storage entirely.
-    expect(await readPersonas(uri('yaar://apps/personas/storage/x.json'))).toBeNull();
-    expect(await invokePersonas(uri('yaar://apps/personas'), { action: 'spawn' })).toBeNull();
-    expect(await deletePersonas(uri('yaar://apps/personas/db/rooms'))).toBeNull();
+    expect(await readPersonas(uri('yaar://apps/chitchats/storage/x.json'))).toBeNull();
+    expect(await invokePersonas(uri('yaar://apps/chitchats'), { action: 'spawn' })).toBeNull();
+    expect(await deletePersonas(uri('yaar://apps/chitchats/db/rooms'))).toBeNull();
   });
 
   it('refuses a caller that is not an app at all', async () => {
     // No appId in context: the desktop, an agent turn, a bare HTTP call. Personas
     // are app-owned and there is no principal above them to inherit one.
-    const result = await listPersonas(uri('yaar://apps/personas/agents'));
+    const result = await listPersonas(uri('yaar://apps/chitchats/agents'));
     expect(errorText(result!)).toContain('app-owned');
   });
 
   it("refuses an app naming another app's personas", async () => {
     // The permission list says what a caller may *ask for*; this says whose personas
     // they are. Both have to agree, and this is the half the app cannot influence.
-    const result = await asApp('memo', () => listPersonas(uri('yaar://apps/personas/agents')));
+    const result = await asApp('memo', () => listPersonas(uri('yaar://apps/chitchats/agents')));
     expect(errorText(await result!)).toContain('cannot reach');
   });
 
@@ -455,8 +455,8 @@ describe('persona verb ownership', () => {
   });
 
   it('rejects an unknown action before it can reach the pool', async () => {
-    const result = await asApp('personas', () =>
-      invokePersonas(uri('yaar://apps/personas/agents'), { action: 'summon' }),
+    const result = await asApp('chitchats', () =>
+      invokePersonas(uri('yaar://apps/chitchats/agents'), { action: 'summon' }),
     );
     expect(errorText(await result!)).toContain('Unknown action');
   });
@@ -464,16 +464,16 @@ describe('persona verb ownership', () => {
   it('rejects a malformed spawn without spending an agent slot', async () => {
     const slots = getAgentLimiter().getCurrentCount();
 
-    const noPrompt = await asApp('personas', () =>
-      invokePersonas(uri('yaar://apps/personas/agents'), {
+    const noPrompt = await asApp('chitchats', () =>
+      invokePersonas(uri('yaar://apps/chitchats/agents'), {
         action: 'spawn',
         personaId: 'alice',
       }),
     );
     expect(errorText(await noPrompt!)).toContain('systemPrompt');
 
-    const badId = await asApp('personas', () =>
-      invokePersonas(uri('yaar://apps/personas/agents'), {
+    const badId = await asApp('chitchats', () =>
+      invokePersonas(uri('yaar://apps/chitchats/agents'), {
         action: 'spawn',
         personaId: 'not a valid id',
         systemPrompt: 'You are Alice.',
@@ -481,8 +481,8 @@ describe('persona verb ownership', () => {
     );
     expect(errorText(await badId!)).toContain('Invalid personaId');
 
-    const tooLong = await asApp('personas', () =>
-      invokePersonas(uri('yaar://apps/personas/agents'), {
+    const tooLong = await asApp('chitchats', () =>
+      invokePersonas(uri('yaar://apps/chitchats/agents'), {
         action: 'spawn',
         personaId: 'alice',
         systemPrompt: 'x'.repeat(MAX_SUB_AGENT_PROMPT_CHARS + 1),
@@ -529,14 +529,22 @@ describe('persona turns stay out of the monitor context', () => {
     const messages = parseSessionMessages(
       jsonl([
         { type: 'user', agentId: 'main-a1', content: 'what did they think?' },
-        { type: 'user', agentId: subAgentRole('personas', 'alice'), content: 'turn prompt: alice' },
+        {
+          type: 'user',
+          agentId: subAgentRole('chitchats', 'alice'),
+          content: 'turn prompt: alice',
+        },
         {
           type: 'assistant',
-          agentId: subAgentRole('personas', 'alice'),
+          agentId: subAgentRole('chitchats', 'alice'),
           content: 'Alice, curtly.',
         },
-        { type: 'user', agentId: subAgentRole('personas', 'bob'), content: 'turn prompt: bob' },
-        { type: 'assistant', agentId: subAgentRole('personas', 'bob'), content: 'Bob, at length.' },
+        { type: 'user', agentId: subAgentRole('chitchats', 'bob'), content: 'turn prompt: bob' },
+        {
+          type: 'assistant',
+          agentId: subAgentRole('chitchats', 'bob'),
+          content: 'Bob, at length.',
+        },
         { type: 'assistant', agentId: 'main-a1', content: 'the room is split' },
       ]),
     );
@@ -589,7 +597,7 @@ describe('personas manifest field', () => {
   // The field normalizes to `subagents` — `"personas": { max }` is the older spelling
   // of it, and stays valid forever (see features/apps/discovery.ts).
   it('is honored for a bundled app that declares it', async () => {
-    expect((await getAppMeta('personas'))?.subagents).toEqual({ max: 4 });
+    expect((await getAppMeta('chitchats'))?.subagents).toEqual({ max: 4 });
   });
 
   it('is absent for every app that does not declare it', async () => {

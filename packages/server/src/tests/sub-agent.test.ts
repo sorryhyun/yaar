@@ -240,7 +240,7 @@ describe('the subagents manifest field', () => {
   it('reads "personas" as the ceiling, spelled the old way', async () => {
     // Shipped wire format: `personas` and `subagents` are the same declaration, and
     // the older spelling stays valid forever.
-    expect((await getAppMeta('personas'))?.subagents).toEqual({ max: 4 });
+    expect((await getAppMeta('chitchats'))?.subagents).toEqual({ max: 4 });
   });
 
   it('rejects a malformed spawn without spending an agent slot', async () => {
@@ -254,8 +254,8 @@ describe('the subagents manifest field', () => {
       })),
       [SKIP, { name: 'skip', description: 'again' }],
     ]) {
-      const result = await asApp('personas', () =>
-        invokePersonas(uri('yaar://apps/personas/agents'), {
+      const result = await asApp('chitchats', () =>
+        invokePersonas(uri('yaar://apps/chitchats/agents'), {
           action: 'spawn',
           personaId: 'alice',
           systemPrompt: 'You are Alice.',
