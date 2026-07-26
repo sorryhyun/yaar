@@ -19,6 +19,7 @@ const domGlobals = [
   'HTMLFormElement',
   'HTMLSelectElement',
   'HTMLTextAreaElement',
+  'HTMLOptionElement',
   'HTMLAnchorElement',
   'HTMLImageElement',
   'HTMLSpanElement',

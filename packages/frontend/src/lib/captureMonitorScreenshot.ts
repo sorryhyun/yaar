@@ -53,6 +53,54 @@ function computedCssText(el: Element): string {
 }
 
 /**
+ * Copy live form state onto the clone as attributes.
+ *
+ * cloneNode(true) copies attributes, not IDL properties, so a value assigned in
+ * JS (`input.value = x`, or a React `value=` binding) is absent from the clone
+ * and the screenshot shows empty fields over a populated UI — the command
+ * palette's own text included. Mirrors `inlineFormState` in the iframe capture
+ * helper (`@yaar/shared/iframe-scripts/capture.ts`); that copy is an injected
+ * ES5 string and cannot import this one.
+ *
+ * Index-paired against the original, so it must run while the two trees are
+ * still identical.
+ */
+export function inlineFormState(clone: HTMLElement, original: HTMLElement) {
+  // Only the tags handled below, so both trees pair on the same element set.
+  const SEL = 'input, textarea, option';
+  const originals = original.querySelectorAll(SEL);
+  const clones = clone.querySelectorAll(SEL);
+  for (let i = 0; i < originals.length && i < clones.length; i++) {
+    const o = originals[i];
+    const c = clones[i];
+    if (o instanceof HTMLInputElement && c instanceof HTMLInputElement) {
+      const type = (o.getAttribute('type') || o.type || 'text').toLowerCase();
+      if (type === 'checkbox' || type === 'radio') {
+        // The attribute is defaultChecked; the property is the live state.
+        if (o.checked) c.setAttribute('checked', '');
+        else c.removeAttribute('checked');
+      } else if (type === 'file') {
+        // No settable serialization — the browser paints its own chrome.
+        continue;
+      } else if (type === 'password') {
+        // Same pixels the browser draws (dots) without carrying the secret
+        // into the serialized clone.
+        c.setAttribute('value', '•'.repeat(o.value.length));
+      } else {
+        c.setAttribute('value', o.value);
+      }
+    } else if (o instanceof HTMLTextAreaElement && c instanceof HTMLTextAreaElement) {
+      // A textarea renders its child text, not a value attribute.
+      c.textContent = o.value;
+    } else if (o instanceof HTMLOptionElement && c instanceof HTMLOptionElement) {
+      // Carries which option the closed <select> displays.
+      if (o.selected) c.setAttribute('selected', '');
+      else c.removeAttribute('selected');
+    }
+  }
+}
+
+/**
  * Capture the full page body via foreignObject SVG.
  *
  * External stylesheets never load inside an SVG-as-image context, so every
@@ -78,6 +126,7 @@ async function captureBodyViaForeignObject(dpr: number): Promise<HTMLCanvasEleme
       if (!c.style || SKIP_STYLE_TAGS.has(c.tagName)) continue;
       c.style.cssText = computedCssText(originals[i]);
     }
+    inlineFormState(clone, docEl);
 
     // Now safe to drop non-renderable nodes (iframes are composited separately
     // from their self-captures; stylesheets can't load in this context anyway).

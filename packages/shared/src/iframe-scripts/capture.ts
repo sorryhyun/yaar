@@ -94,6 +94,58 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
   }
 
   /**
+   * Copy live form state onto the clone as attributes.
+   *
+   * cloneNode(true) copies attributes, not IDL properties. A value assigned in
+   * JS (\`input.value = x\`, or a Solid/React \`value=\` binding, which is a
+   * property assignment) never touches the \`value\` attribute, so the clone
+   * serializes with its *default* — an app that fills its fields at mount
+   * screenshots as a form of empty boxes while the live DOM is populated.
+   * Same for textarea text, option selection, and checkbox/radio state.
+   *
+   * Index-paired against the original like inlineStyles, so it must run while
+   * the clone is still an exact mirror.
+   */
+  function inlineFormState(clone, original) {
+    // Only the tags handled below, so both trees pair on the same element set.
+    var SEL = 'input, textarea, option';
+    var originals = original.querySelectorAll(SEL);
+    var clones = clone.querySelectorAll(SEL);
+    for (var i = 0; i < originals.length && i < clones.length; i++) {
+      try {
+        var o = originals[i];
+        var c = clones[i];
+        var tag = (o.tagName || '').toLowerCase();
+        if (tag === 'input') {
+          var type = (o.getAttribute('type') || o.type || 'text').toLowerCase();
+          if (type === 'checkbox' || type === 'radio') {
+            // The attribute is defaultChecked; the property is the live state.
+            if (o.checked) c.setAttribute('checked', '');
+            else c.removeAttribute('checked');
+          } else if (type === 'file') {
+            // No settable serialization — the browser paints its own chrome.
+            continue;
+          } else if (type === 'password') {
+            // Same pixels the browser draws (dots) without carrying the secret
+            // into the serialized clone.
+            var len = (o.value || '').length;
+            c.setAttribute('value', new Array(len + 1).join('\\u2022'));
+          } else {
+            c.setAttribute('value', o.value == null ? '' : String(o.value));
+          }
+        } else if (tag === 'textarea') {
+          // A textarea renders its child text, not a value attribute.
+          c.textContent = o.value == null ? '' : String(o.value);
+        } else if (tag === 'option') {
+          // Carries which option the closed <select> displays.
+          if (o.selected) c.setAttribute('selected', '');
+          else c.removeAttribute('selected');
+        }
+      } catch(e) {}
+    }
+  }
+
+  /**
    * Inline external resources in a cloned DOM tree so foreignObject renders
    * them correctly (external URLs are blocked inside SVG foreignObject).
    * Fetches each <img> src as a blob and replaces with a data URI.
@@ -234,10 +286,12 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
       }
 
       var clone = docEl.cloneNode(true);
-      // Order matters: inlineStyles/inlineResources pair original and clone
-      // elements by index, so they must run while the clone is still an exact
-      // mirror. Canvas swapping and script removal mutate the clone afterwards.
+      // Order matters: inlineStyles/inlineFormState/inlineResources pair
+      // original and clone elements by index, so they must run while the clone
+      // is still an exact mirror. Canvas swapping and script removal mutate the
+      // clone afterwards.
       inlineStyles(clone, docEl);
+      inlineFormState(clone, docEl);
       inlineResources(clone, docEl).then(function() {
         // Composite canvases: swap each cloned <canvas> for an <img> carrying
         // the live pixels — canvas content never survives cloneNode.
