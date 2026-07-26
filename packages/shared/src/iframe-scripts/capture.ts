@@ -239,6 +239,85 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
   }
 
   /**
+   * Make the clone XML-serializable. XMLSerializer does not guarantee
+   * well-formed XML for an HTML-parsed tree, and the SVG-as-image load is an
+   * XML parse — so markup the live DOM renders fine can still kill the whole
+   * snapshot with 'img-load-error'. Scraped/pasted content is the usual source:
+   *   - comments containing "--" (invalid in an XML comment)
+   *   - fake-namespace elements like <o:p> from Word paste — serialized with an
+   *     unbound prefix, an instant parse error
+   *   - attribute names that are not XML Names (broken markup the HTML parser
+   *     shrugs at), including unbound-prefix attributes like v:shapes
+   *   - control characters outside the XML 1.0 range in text or attributes
+   * Mutates only the clone; must run after the index-paired passes.
+   */
+  function scrubForXml(root) {
+    // XML 1.0 forbids C0 controls other than tab/LF/CR, plus U+FFFE/U+FFFF.
+    // Lone surrogates are handled separately (a paired one is a valid astral char).
+    var badChars = /[\\u0000-\\u0008\\u000B\\u000C\\u000E-\\u001F\\uFFFE\\uFFFF]/g;
+    var loneHigh = /[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF])/g;
+    // After lone highs are gone, every remaining high starts a valid pair —
+    // so a low is legitimate iff a high precedes it: keep pairs, drop bare lows.
+    var lowOrPair = /[\\uD800-\\uDBFF][\\uDC00-\\uDFFF]|[\\uDC00-\\uDFFF]/g;
+    function cleanText(s) {
+      return s
+        .replace(badChars, '')
+        .replace(loneHigh, '')
+        .replace(lowOrPair, function (m) {
+          return m.length === 2 ? m : '';
+        });
+    }
+    // Conservative ASCII XML Name. No colon: a colon in a null-namespace
+    // node's qualified name is a fake prefix the serializer will emit unbound.
+    // Genuinely namespaced nodes (inline SVG, xlink:href) carry a real
+    // namespaceURI and are left alone — the serializer declares those bindings.
+    var validName = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+    var XHTML_NS = 'http://www.w3.org/1999/xhtml';
+
+    // Comments render nothing and PIs don't exist in sane HTML — drop both.
+    var walker = document.createTreeWalker(root, 192 /* COMMENT | PI */, null);
+    var junk = [];
+    while (walker.nextNode()) junk.push(walker.currentNode);
+    for (var i = 0; i < junk.length; i++) {
+      if (junk[i].parentNode) junk[i].parentNode.removeChild(junk[i]);
+    }
+
+    // Reverse order so an invalid element nested in another is unwrapped first.
+    var els = root.querySelectorAll('*');
+    for (var i = els.length - 1; i >= 0; i--) {
+      var el = els[i];
+      var ns = el.namespaceURI;
+      if ((ns == null || ns === XHTML_NS) && !validName.test(el.nodeName || '')) {
+        // Unwrap: keep the content, lose the unserializable tag.
+        var parent = el.parentNode;
+        if (!parent) continue;
+        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+        parent.removeChild(el);
+        continue;
+      }
+      var attrs = el.attributes;
+      for (var j = attrs.length - 1; j >= 0; j--) {
+        var a = attrs[j];
+        try {
+          if (a.namespaceURI == null && a.name !== 'xmlns' && !validName.test(a.name)) {
+            el.removeAttributeNode(a);
+          } else if (a.value) {
+            var cleaned = cleanText(a.value);
+            if (cleaned !== a.value) a.value = cleaned;
+          }
+        } catch (e) {}
+      }
+    }
+
+    var textWalker = document.createTreeWalker(root, 4 /* SHOW_TEXT */, null);
+    while (textWalker.nextNode()) {
+      var t = textWalker.currentNode;
+      var cleanedT = cleanText(t.nodeValue || '');
+      if (cleanedT !== t.nodeValue) t.nodeValue = cleanedT;
+    }
+  }
+
+  /**
    * Snapshot a live canvas to a data URL. Returns null on tainted/empty canvases.
    * WebGL canvases without preserveDrawingBuffer may snapshot blank — that is a
    * platform limitation shared with the old largest-canvas capture.
@@ -310,6 +389,9 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         // Remove scripts from clone (after index-paired passes)
         var scripts = clone.querySelectorAll('script');
         for (var i = scripts.length - 1; i >= 0; i--) scripts[i].remove();
+        // Last mutation before serializing: markup the HTML parser tolerated
+        // but XML rejects would otherwise fail the whole snapshot load.
+        try { scrubForXml(clone); } catch (e) {}
 
         var svg;
         try {

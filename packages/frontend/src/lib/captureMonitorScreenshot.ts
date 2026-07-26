@@ -100,6 +100,79 @@ export function inlineFormState(clone: HTMLElement, original: HTMLElement) {
   }
 }
 
+// XML 1.0 forbids C0 controls other than tab/LF/CR, plus U+FFFE/U+FFFF.
+// eslint-disable-next-line no-control-regex -- matching them is the point
+const XML_BAD_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g;
+const LONE_HIGH_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g;
+// After lone highs are gone, every remaining high starts a valid pair — so a
+// low is legitimate iff a high precedes it: keep pairs, drop bare lows.
+const LOW_OR_PAIR = /[\uD800-\uDBFF][\uDC00-\uDFFF]|[\uDC00-\uDFFF]/g;
+// Conservative ASCII XML Name. No colon: a colon in a null-namespace node's
+// qualified name is a fake prefix the serializer will emit unbound. Genuinely
+// namespaced nodes (inline SVG, xlink:href) carry a real namespaceURI and are
+// left alone — the serializer declares those bindings itself.
+const VALID_XML_NAME = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+const XHTML_NS = 'http://www.w3.org/1999/xhtml';
+
+function cleanXmlText(s: string): string {
+  return s
+    .replace(XML_BAD_CHARS, '')
+    .replace(LONE_HIGH_SURROGATE, '')
+    .replace(LOW_OR_PAIR, (m) => (m.length === 2 ? m : ''));
+}
+
+/**
+ * Make the clone XML-serializable. XMLSerializer does not guarantee well-formed
+ * XML for an HTML-parsed tree, and the SVG-as-image load is an XML parse — so
+ * markup the live DOM renders fine (an `html`-renderer window's content, say)
+ * can still fail the whole snapshot: comments containing `--`, fake-namespace
+ * elements like `<o:p>` from Word paste, attribute names that are not XML
+ * Names, control characters outside the XML range. Mirrors `scrubForXml` in
+ * the iframe capture helper (`@yaar/shared/iframe-scripts/capture.ts`); that
+ * copy is an injected ES5 string and cannot import this one.
+ *
+ * Mutates only the clone; must run after the index-paired passes.
+ */
+export function scrubForXml(root: HTMLElement) {
+  // Comments render nothing and PIs don't exist in sane HTML — drop both.
+  // Numeric whatToShow: NodeFilter is not a global in every DOM (happy-dom).
+  const walker = document.createTreeWalker(root, 192 /* COMMENT | PI */);
+  const junk: Node[] = [];
+  while (walker.nextNode()) junk.push(walker.currentNode);
+  for (const node of junk) node.parentNode?.removeChild(node);
+
+  // Reverse order so an invalid element nested in another is unwrapped first.
+  const els = root.querySelectorAll('*');
+  for (let i = els.length - 1; i >= 0; i--) {
+    const el = els[i];
+    const ns = el.namespaceURI;
+    if ((ns == null || ns === XHTML_NS) && !VALID_XML_NAME.test(el.nodeName)) {
+      // Unwrap: keep the content, lose the unserializable tag.
+      const parent = el.parentNode;
+      if (!parent) continue;
+      while (el.firstChild) parent.insertBefore(el.firstChild, el);
+      parent.removeChild(el);
+      continue;
+    }
+    for (let j = el.attributes.length - 1; j >= 0; j--) {
+      const a = el.attributes[j];
+      if (a.namespaceURI == null && a.name !== 'xmlns' && !VALID_XML_NAME.test(a.name)) {
+        el.removeAttributeNode(a);
+      } else if (a.value) {
+        const cleaned = cleanXmlText(a.value);
+        if (cleaned !== a.value) a.value = cleaned;
+      }
+    }
+  }
+
+  const textWalker = document.createTreeWalker(root, 4 /* SHOW_TEXT */);
+  while (textWalker.nextNode()) {
+    const t = textWalker.currentNode;
+    const cleaned = cleanXmlText(t.nodeValue ?? '');
+    if (cleaned !== t.nodeValue) t.nodeValue = cleaned;
+  }
+}
+
 /**
  * Capture the full page body via foreignObject SVG.
  *
@@ -133,6 +206,9 @@ async function captureBodyViaForeignObject(dpr: number): Promise<HTMLCanvasEleme
     for (const el of clone.querySelectorAll('script, iframe, link[rel="stylesheet"], noscript')) {
       el.remove();
     }
+    // Last mutation before serializing: markup the HTML parser tolerated but
+    // XML rejects would otherwise fail the whole snapshot load.
+    scrubForXml(clone);
 
     const serializer = new XMLSerializer();
     const xhtml = serializer.serializeToString(clone);
