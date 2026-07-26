@@ -682,6 +682,8 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `agentType` | `string` | Override the agent profile used for this app's agent |
 | `messaging` | `"all"` | Lets the app agent `direct_message` other apps/windows, not just monitor/user |
 | `controls` | `(string \| { appId, commands? })[]` | Other apps this app may drive. **Bundled apps only** |
+| `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Bundled apps only** |
+| `personas` / `subagents` | `{ max: number }` | Ceiling on [sub-agents](#sub-agents-personas) this app may spawn per monitor — two spellings, one meaning. Clamped to 16; a non-integer or `≤ 0` reads as "none". **Bundled apps only** |
 | `fileAssociations` | `{ extensions, command, paramKey }[]` | Open matching files by invoking a protocol command |
 | `variant` | `"widget" \| "panel"` | Window variant |
 | `dockEdge` | `"top" \| "bottom"` | Dock the window to a screen edge |
@@ -1277,3 +1279,125 @@ invoke('yaar://apps/memo/db/notes', { action: 'count' })                 → { c
 delete('yaar://apps/memo/db/notes/{id}')                                 → remove document
 delete('yaar://apps/memo/db/notes')                                      → drop collection
 ```
+
+## Sub-agents (Personas)
+
+A **bundled** app that declares `"personas": { "max": N }` can spawn up to N AI instances from
+its iframe, each with a system prompt the app supplies at runtime and each its own provider
+session with its own conversation memory. This is what lets one app run several distinct
+characters *at once* instead of one agent role-playing them in turn.
+
+They are the bottom tier of [the agent tree](../architecture/agent_tree.md): they hold **no YAAR
+verbs, no permissions, and no principal**, so a runtime-supplied prompt never gets YAAR's hands.
+Full verb surface, limits, and response shapes: [URI Reference](../reference/uri_reference.md#app-sub-agents--yaarappsselfagents).
+
+```jsonc
+{
+  "personas": { "max": 4 },   // "subagents": { "max": 4 } is the same declaration
+  "streams": ["agents"],      // required to watch them
+  "kind": "system"            // bundled apps only, like controls/streams
+}
+```
+
+The `yaar://apps/self/` namespace is auto-granted — no `permissions` entry.
+
+### Spawn, message, stream
+
+```typescript
+import { invoke, list, del, stream } from '@bundled/yaar';
+
+const { personaId, instanceId, streamUri, reused } = await invoke('yaar://apps/self/agents', {
+  action: 'spawn',
+  personaId: 'alice',
+  systemPrompt: 'You are Alice, a botanist who answers in short, dry sentences.',
+});
+
+// Frames arrive as the turn generates: start | text | thinking | tool | usage | done | error.
+// The `done` frame carries the turn's final text.
+const stop = await stream(streamUri, (frame) => render(frame), {
+  kinds: ['start', 'text', 'thinking', 'done', 'error'],
+});
+
+// Returns as soon as the turn is *queued* — fire all four and they generate concurrently.
+await invoke(`yaar://apps/self/agents/${personaId}`, { action: 'message', content: 'Hi!' });
+
+await invoke(`yaar://apps/self/agents/${personaId}`, { action: 'interrupt' });
+await list('yaar://apps/self/agents');   // → { max, personas: [...] }
+await del(`yaar://apps/self/agents/${personaId}`);
+```
+
+Three consequences worth designing around:
+
+- **Await the stream, not the verb.** `message` resolves when the turn is queued, so the answer
+  only exists on the stream. Give each turn a watchdog: a character that never produces a frame
+  should cost one slow turn, not hang the room.
+- **Spawn is idempotent, and deliberately does not update the prompt.** An iframe reload re-runs
+  your spawn calls; the personas from before are still alive with their memory intact and come
+  back with `reused: true`. Since the prompt is replayed every turn, rewriting it under a live
+  conversation would rewrite who the persona has been all along — `delete` and respawn to recast.
+- **`message` rejects rather than queues while a persona is mid-turn.** The refusal carries
+  `busy: true` on the envelope. Your app is the scheduler; only it knows whether a second
+  message is a follow-up worth waiting for or a race worth dropping.
+
+### Giving a persona tools
+
+The one capability a sub-agent may be given is a channel back into **your own app's iframe**,
+dressed in tool names you declare at spawn:
+
+```typescript
+await invoke('yaar://apps/self/agents', {
+  action: 'spawn',
+  personaId: 'alice',
+  systemPrompt,
+  tools: [
+    { name: 'skip', description: 'Decline this turn — you have nothing to add.' },
+    { name: 'memorize', description: 'Save a lasting fact you learned about someone.',
+      input: { fact: 'string' } },
+  ],
+});
+```
+
+Alice calling `memorize` dispatches the protocol command `persona:memorize` to your app's active
+window with params `{ fact, personaId: 'alice' }` — the server stamps `personaId` **last**, so a
+model cannot answer as another character. Whatever your handler returns becomes the tool result:
+
+```typescript
+export default defineApp({
+  id: 'my-app',
+  commands: {
+    'persona:memorize': {
+      description: 'Called by a character recording a lasting fact about someone.',
+      params: z.object({ personaId: z.string(), fact: z.string() }),
+      replay: 'never',
+      run: async (p) => ({ recorded: await saveFact(p.personaId, p.fact) }),
+    },
+  },
+});
+```
+
+`persona:*` commands are hidden from the app agent's `describe`/manifest — their spawn-time
+descriptions are written for a character, not an operator, and one description string cannot
+serve both audiences.
+
+Why tools rather than output sentinels: a `skip` tool *is* the signal, where `[[skip]]` in the
+text is a parse hoping to be one. And a lookup like `recall` cannot be a sentinel at all — it
+needs its result fed back mid-generation, which only the tool loop provides.
+
+Limits and edges: 12 tools, 6 000 chars across all names/descriptions (they are replayed every
+turn), 20 000 chars of system prompt. Tool names match `[A-Za-z][A-Za-z0-9_]{0,47}`; `input`
+values are `"string" | "number" | "boolean" | "object" | "array"`. No open window makes a tool
+call return an **error result** — the turn continues, and a persona deciding to remember
+something never launches a window. Omitting `tools` connects no MCP server at all.
+
+### Lifecycle and persistence
+
+Sub-agents are reclaimed when your app's last window on that monitor closes, when the monitor is
+removed, or on explicit `delete` — and none survive the session. **Persistence is your app's
+job** (`appDb`/`appStorage`); a respawned persona gets its history replayed in its system prompt
+or first message. `personas.max` is per (monitor, app) and clamped to 16; each persona also takes
+a global `MAX_AGENTS` slot, so `spawn` can fail with "no provider slot" even under your own cap.
+
+**Reference consumers:** `apps/personas` (Round Table — tool-less, the whole cast answers at
+once) and `apps/chitchats` (rooms that take turns; characters get `skip`, `memorize`, and — when
+their memory file has chunks — `recall`, whose description carries the memory index so the
+backstory is retrieved rather than replayed every turn).

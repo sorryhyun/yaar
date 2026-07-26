@@ -13,16 +13,20 @@ flowchart LR
     FE <-->|WebSocket| LS[LiveSession]
     LS --> CP[ContextPool]
     CP --> MA["Monitor Agent<br/>(one per monitor, max 4)"]
-    CP --> AA["App Agent<br/>(one per appId)"]
+    CP --> AA["App Agent<br/>(one per monitor::app)"]
     CP --> EA["Ephemeral Agent<br/>(overflow, disposable)"]
     CP --> SA["Session Agent<br/>(lazy singleton)"]
     MA & AA & EA & SA -->|OS Actions| LS
     AA <-->|App Protocol| FE
+    AA -.->|owns the subtree| SUB["Sub-agents<br/>(N per monitor::app)"]
+    FE -.->|spawns via yaar://apps/self/agents| SUB
+    SUB -.->|"persona: commands"| FE
 ```
 
-Four agent tiers share one `AgentPool` inside the session's `ContextPool`. Every
-server→frontend event flows through `LiveSession.broadcast()` (monitor-scoped routing via
-`BroadcastCenter`).
+Five agent tiers share one `AgentPool` inside the session's `ContextPool`, and they form an
+ownership tree — session → monitor → app → sub-agent — where each tier's key extends its owner's
+and disposal cascades downward (see [The Agent Tree](./agent_tree.md)). Every server→frontend
+event flows through `LiveSession.broadcast()` (monitor-scoped routing via `BroadcastCenter`).
 
 ## Agent Types
 
@@ -54,10 +58,12 @@ its actions land in the `InteractionTimeline` for the monitor agent's next turn.
 
 ### 3. App Agent — the specialist operator
 
-A persistent agent per `appId` (all windows of one app share it, surviving window close/reopen),
-created on first interaction with an app window and routed through `AppTaskProcessor`.
+A persistent agent per (monitor, app) — all windows of one app on one monitor share it, surviving
+window close/reopen — created on first interaction with an app window and routed through
+`AppTaskProcessor`. Two monitors running the same app get two agents that cannot see each other's
+context.
 
-- **Role**: `app-{appId}-{messageId}`; canonical ID `app-{appId}`
+- **Role**: `app-{appId}-{messageId}`; canonical ID `app-{appId}`; keyed `monitorId::appId`
 - **Context**: first turn bootstraps with the app's prompt (`AGENTS.md` replaces the generic
   prompt, else `SKILL.md` appends to it) + `protocol.json` manifest; later turns reuse the
   provider session
@@ -85,6 +91,29 @@ It is the **exclusive principal for `yaar://session/*`** (enforced centrally in
 - **Role**: `session-{action}-{timestamp}`; provider session continuity across invocations
 - **Tools**: verb tools only (describe/read/list/invoke/delete) — no WebSearch, no Task
 - **No monitor, no windows** — communicates via tool results and relay messages
+
+### 5. Sub-agent — the app's worker thread
+
+N per (monitor, app), spawned by an app's **iframe** — not by any agent — when the app declares
+`"personas": { "max": N }`. Each is a real provider session with its own memory and a system
+prompt the app supplies *at runtime*, which is what lets one app run several distinct characters
+concurrently instead of one agent role-playing them in turn.
+
+- **Role**: `app-persona-{appId}-{subId}`; keyed `monitorId::appId::subId`
+- **Context**: none of YAAR's — every sub-agent bypasses `ContextPool` entirely (no tape, no
+  queue; the app's own scheduler serializes its turns)
+- **Tools**: **no YAAR verbs, no permissions, no principal.** At most one channel back into its
+  *own* app's iframe, under tool names the app declared at spawn: calling one dispatches the
+  protocol command `persona:{name}` to that app's active window. Grants held by the app *agent*
+  (`controls`, `direct_message`) do not descend
+- **URI**: addressed through its owner — `yaar://apps/self/agents/{personaId}`; streams at
+  `yaar://agents/{instanceId}/stream`
+
+Sub-agents are never interaction targets — a window click always goes to the app agent — only
+explicit `message` targets. They are reclaimed when the app's last window on the monitor closes,
+when the monitor is removed, or on explicit `delete`. See [The Agent Tree](./agent_tree.md) for
+the invariants every tier obeys, and the [App Development Guide](../guides/app-development.md#sub-agents-personas)
+for how an app drives them.
 
 > There is no separate "Task Agent" tier in the pool. Delegated research/code work runs as
 > provider-internal subagents (Claude's Task tool) inside the monitor agent's turn; they never

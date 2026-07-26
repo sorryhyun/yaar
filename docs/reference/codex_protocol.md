@@ -269,7 +269,7 @@ codex app-server \
   -c 'approval_policy=never' \
   -c 'project_doc_max_bytes=0' \
   -c 'web_search=disabled' \
-  # MCP servers (YAAR's 4 core namespaces — CORE_SERVERS)
+  # MCP servers (YAAR's 5 core namespaces — CORE_SERVERS)
   -c 'mcp_servers.system.url=http://127.0.0.1:8000/mcp/system' \
   -c 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN' \
   -c 'mcp_servers.verbs.url=http://127.0.0.1:8000/mcp/verbs' \
@@ -277,7 +277,9 @@ codex app-server \
   -c 'mcp_servers.app.url=http://127.0.0.1:8000/mcp/app' \
   -c 'mcp_servers.app.bearer_token_env_var=YAAR_MCP_TOKEN' \
   -c 'mcp_servers.messaging.url=http://127.0.0.1:8000/mcp/messaging' \
-  -c 'mcp_servers.messaging.bearer_token_env_var=YAAR_MCP_TOKEN'
+  -c 'mcp_servers.messaging.bearer_token_env_var=YAAR_MCP_TOKEN' \
+  -c 'mcp_servers.subagent.url=http://127.0.0.1:8000/mcp/subagent' \
+  -c 'mcp_servers.subagent.bearer_token_env_var=YAAR_MCP_TOKEN'
 ```
 
 ### Environment Variables

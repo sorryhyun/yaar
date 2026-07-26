@@ -12,7 +12,7 @@ The `YaarAuthority` type covers nine namespaces:
 
 | Namespace | URI | Description |
 |-----------|-----|-------------|
-| `apps` | `yaar://apps/{appId}` | App content (resolved to iframe URL), app storage, app DB |
+| `apps` | `yaar://apps/{appId}` | App content (resolved to iframe URL), app storage, app DB, an app's own sub-agents |
 | `storage` | `yaar://storage/{path}` | Persistent storage file |
 | `windows` | `yaar://windows/{windowId}` | Windows (monitor inferred from agent context) |
 | `config` | `yaar://config/...` | Settings, hooks, shortcuts, mounts, app credentials |
@@ -21,6 +21,70 @@ The `YaarAuthority` type covers nine namespaces:
 | `history` | `yaar://history/` | Past session logs (list/read) |
 | `skills` | `yaar://skills/{topic}` | Skill topic docs (read before using related tools) |
 | `mcp` | `yaar://mcp/...` | External MCP server gateway (add/remove/refresh servers, call their tools) |
+
+### App sub-agents — `yaar://apps/self/agents`
+
+An app's own sub-agents ("personas") — AI instances whose system prompt the app supplies at
+runtime, each a real provider session with its own conversation memory. **Callable only from the
+app's own iframe** (`POST /api/verb`), never by an agent and never by another app: the appId in
+the URI must equal the appId the calling context says the caller is. Requires
+`"personas": { "max": N }` (or the identical `"subagents": { "max": N }`) in `app.json`, bundled
+apps only. The `yaar://apps/self/` namespace itself is auto-granted — no `permissions` entry.
+
+For the invariants these obey see [The Agent Tree](../architecture/agent_tree.md); for the
+how-to see the [App Development Guide](../guides/app-development.md#sub-agents-personas).
+Handler: `packages/server/src/handlers/apps/agents-resource.ts`.
+
+| Verb | URI | Effect |
+|------|-----|--------|
+| `list` | `yaar://apps/self/agents` | `{ max, personas: [...] }` — the roster |
+| `read` | `yaar://apps/self/agents` | Same as `list` |
+| `read` | `yaar://apps/self/agents/{personaId}` | One sub-agent's status + last answer |
+| `invoke` | `yaar://apps/self/agents` | `{ action: 'spawn', ... }` (see below) |
+| `invoke` | `yaar://apps/self/agents/{personaId}` | `{ action: 'message', content }` or `{ action: 'interrupt' }` |
+| `delete` | `yaar://apps/self/agents/{personaId}` | Dispose one → `{ personaId, disposed: 1 }` |
+| `delete` | `yaar://apps/self/agents` | Dispose all → `{ disposed: N }` |
+
+**`spawn`** — idempotent: an existing `personaId` comes back with `reused: true` and its prompt
+**unchanged** (the prompt is replayed every turn, so rewriting it under a live conversation would
+rewrite who the persona has been all along; delete and respawn to recast).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| `personaId` | `string` | Required. `[A-Za-z0-9][A-Za-z0-9_-]{0,63}` |
+| `systemPrompt` | `string` | Required, used verbatim. Max 20 000 chars |
+| `tools` | `ToolSpec[]` | Optional. Omit for a tool-less sub-agent |
+| `model` | `string` | Optional model override |
+
+A `ToolSpec` is `{ name, description, input?: { param: "string" \| "number" \| "boolean" \| "object" \| "array" } }`.
+`name` and param names match `[A-Za-z][A-Za-z0-9_]{0,47}`. Limits: 12 tools,
+6 000 chars across all names/descriptions/param descriptions (they are replayed every turn).
+Calling a tool dispatches the app-protocol command `persona:{name}` to the app's own active
+window on its own monitor, with `personaId` stamped into the params **last** so it wins over a
+forged argument of the same name; whatever the handler returns becomes the tool result. No open
+window is a tool *error*, not a dead turn — and never launches a window.
+
+**Response shape** (same from `list`, `read`, and `spawn`):
+
+| Field | Notes |
+|-------|-------|
+| `personaId` | The wire spelling of the pool's `subId` |
+| `instanceId` | Agent instance id |
+| `streamUri` | `yaar://agents/{instanceId}/stream` |
+| `busy` | Whether a turn is in flight |
+| `createdAt` | Timestamp |
+| `model`, `tools`, `lastResponse` | Present only when set (`tools` is names only) |
+
+**`message`** returns as soon as the turn is queued (`{ taskId, personaId, instanceId, streamUri }`),
+so N sub-agents generate concurrently. It **rejects rather than queues** when the target is
+mid-turn: the error carries `structuredContent: { busy: true, personaId }` so the caller can
+branch without parsing the sentence. The answer arrives on `streamUri` — frame kinds `start`,
+`text`, `thinking`, `tool`, `usage`, `done` (carries the turn's final text), `error` — which
+requires `"streams": ["agents"]` in `app.json`. `read` is the reconnect fallback.
+
+**Errors** are plain refusals, not retryable 503s: a malformed `personaId` or an over-long
+prompt is answered before the pool is touched. `at-capacity` means the app's own `max` is
+spent; `no-slot` means `MAX_AGENTS` is.
 
 ### Windows — `yaar://windows/{windowId}`
 
@@ -67,7 +131,7 @@ Session-scoped resources. Most of the namespace is **session-principal** — onl
 | URI | Description |
 |-----|-------------|
 | `yaar://session` | Current session info (platform, uptime, stats) |
-| `yaar://session/agents` | All active agents (list) |
+| `yaar://session/agents` | All active agents. `list` returns two views of the same roster: `agents` (flat) and `tree` (nested by ownership — session → monitor → app → sub-agent). A `tree` node with `id: null` is an owner slot nobody occupies, e.g. an app whose sub-agents exist but whose own agent was never needed. See [The Agent Tree](../architecture/agent_tree.md) |
 | `yaar://session/agents/{agentId}` | Agent by instance ID — read for info; invoke with `{ action: 'interrupt' }` (any agent) or `{ action: 'relay', message }` (only on `.../monitor` — hands a message from an app/window agent back to its monitor agent); delete disposes the session agent (`id === 'session'`) or an app agent (by instanceId or appId) |
 | `yaar://session/agents/session` | The session agent itself (invoke with `audit` / `coordinate` / `query`) |
 | `yaar://session/monitors/{monitorId}` | Monitor status and control (see below) |
@@ -164,7 +228,7 @@ One MCP tool per verb, served from the `verbs` namespace:
 | `invoke` | `{ uri, payload? }` |
 | `delete` | `{ uri }` |
 
-Active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`): `system`, `verbs`, `app`, `messaging`.
+Active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`): `system`, `verbs`, `app`, `messaging`, `subagent`.
 
 ---
 

@@ -2,7 +2,7 @@
  * AgentPool - manages agents with role-based lifecycle.
  *
  * The collections below are a **tree**, not four independent registries — see
- * `docs/proposals/agent_hierarchy_proposal.md`:
+ * `docs/architecture/agent_tree.md`:
  *
  *   session agent                       (1 per session)   cross-monitor oversight
  *   └─ monitor agent                    `monitorId`       the desktop's hands

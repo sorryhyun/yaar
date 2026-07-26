@@ -10,9 +10,10 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 |---|---|---|---|
 | Kernel | `LiveSession` + `ContextPool` | `yaar://session` | `session/live-session.ts`, `agents/context-pool.ts` |
 | Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
-| Process types | Main (init), app (daemon), ephemeral (one-shot) | `yaar://agents/{instanceId}` | `agents/profiles.ts` |
+| Process types | Session (root), monitor (init), app (daemon), ephemeral (one-shot), sub-agent (thread) | `yaar://agents/{instanceId}` | `agents/profiles/` |
+| Threading model | The agent tree (key extends owner's, disposal cascades) | — | [`agent_tree.md`](./agent_tree.md) |
 | Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |
-| Syscalls | 5 URI verbs + system tools (4 MCP namespaces) | — | `mcp/server.ts` |
+| Syscalls | 5 URI verbs + system tools (5 MCP namespaces) | — | `mcp/server.ts` |
 | Instruction set | System prompt (~108 lines) | — | `providers/claude/system-prompt.ts` |
 | Boot | `initializeSubsystems()` | — | `lifecycle.ts` |
 | Filesystem | `storage/` + mount system | `yaar://storage/` | `storage/storage-manager.ts`, `storage/mounts.ts` |
@@ -51,12 +52,15 @@ Agents are processes. `AgentPool` manages their lifecycle.
 |---|---|---|---|---|
 | **Session** | `root` / privileged process | Lazy singleton (session lifetime) | (singleton) | `yaar://agents/{instanceId}` |
 | **Monitor** | `init` / PID 1 | Persistent per monitor | `monitorId` | `yaar://agents/{instanceId}` |
-| **App** | Daemon | Persistent per app (session lifetime) | `appId` | `yaar://agents/{instanceId}` |
+| **App** | Daemon | Persistent per app, per monitor | `monitorId::appId` | `yaar://agents/{instanceId}` |
 | **Ephemeral** | One-shot process | Disposed after single task | (none — tracked in a Set) | `yaar://agents/{instanceId}` |
+| **Sub-agent** | Thread of an app process | N per (monitor, app); dies with the app's last window on that monitor | `monitorId::appId::subId` | `yaar://apps/self/agents/{personaId}` |
 
-Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers.
+These are not four independent registries but one **ownership tree** — session → monitor → app → sub-agent — where each tier's key extends its owner's, addressing goes *through* the owner, and disposal cascades downward. `list('yaar://session/agents')` returns both the flat roster and the nested tree. See [`agent_tree.md`](./agent_tree.md) for the four invariants every node obeys and the rule for placing a new one.
 
-Monitor agents can spawn **task subagents** via the `Task` tool (like `fork()`). Subagent profiles are defined in `profiles.ts`: `default`, `web`, `code`, `app`.
+Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers. Sub-agents hold **no principal at all** and, like threads, no capability their owning process lacks: no YAAR verbs, at most a channel back into their own app's iframe.
+
+Monitor agents can also spawn **task subagents** via the `Task` tool (like `fork()`). These are *provider-internal* — YAAR only enables the builtin (`providers/claude/sdk-options.ts`; Codex uses the roles in `profiles/index.ts`, `CODEX_AGENT_ROLES`) and they never enter `AgentPool`. Distinct from the app-spawned **sub-agent** tier above, which does.
 
 Global process limit: `AgentLimiter` enforces `MAX_AGENTS` (default 10).
 
@@ -83,7 +87,7 @@ The primary monitor is never throttled.
 
 ## Syscalls (MCP Tools)
 
-MCP tools are syscalls. A single HTTP MCP server exposes four namespaces (`CORE_SERVERS`: `system`, `verbs`, `app`, `messaging`); the `verbs` namespace carries the 5 generic URI verbs that do most of the work:
+MCP tools are syscalls. A single HTTP MCP server exposes five namespaces (`CORE_SERVERS`: `system`, `verbs`, `app`, `messaging`, `subagent`); the `verbs` namespace carries the 5 generic URI verbs that do most of the work:
 
 | Verb | OS analogy | URI pattern examples |
 |---|---|---|
@@ -92,6 +96,8 @@ MCP tools are syscalls. A single HTTP MCP server exposes four namespaces (`CORE_
 | `list` | readdir / ls | `yaar://windows/`, `yaar://apps/`, `yaar://config/hooks/` |
 | `invoke` | ioctl / exec | `yaar://windows/{id}` (create/update), `yaar://config/app/{id}` |
 | `delete` | unlink / rm | `yaar://storage/{path}`, `yaar://windows/{id}`, `yaar://config/hooks/{id}` |
+
+`subagent` is the one namespace whose tool list depends on *who* is connecting: it registers the app-declared tools of the calling sub-agent and nothing at all for everyone else.
 
 System tools (always active): `reload_cached`, `list_reload_options`. HTTP requests and domain allowlisting also flow through the verb layer (`invoke('yaar://http', ...)`, `invoke('yaar://config/domains', ...)`).
 
@@ -127,7 +133,7 @@ No separate formal ISA document is needed — the prompt itself is concise (~108
  3. (bundled exe) mkdirs        ← apps/, config/
  4. (remote mode) genToken      ← generate remote access token
  5. initSessionHub()            ← create singleton SessionHub
- 6. initMcpServer()             ← register 4 MCP namespaces + bearer token
+ 6. initMcpServer()             ← register 5 MCP namespaces + bearer token
  7. ensureAppShortcut() × N     ← sync desktop shortcuts for installed apps
  8. initWarmPool()              ← detect provider, pre-initialize instances
  9. Session restore             ← reload prior windows + context from logs

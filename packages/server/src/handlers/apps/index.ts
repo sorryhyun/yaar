@@ -27,7 +27,7 @@
  *
  * On disk: storage/apps/{appId}/data.db
  *
- * App-owned persona agents (see docs/proposals/agent_hierarchy_proposal.md):
+ * App-owned persona agents (see docs/architecture/agent_tree.md):
  *   list('yaar://apps/self/agents')                              → roster
  *   invoke('yaar://apps/self/agents', { action: 'spawn', ... })  → spawn a persona
  *   invoke('yaar://apps/self/agents/{id}', { action, ... })      → message | interrupt

@@ -7,7 +7,7 @@
  * off disk (`AGENTS.md`, `SKILL.md`) or out of a constant. A sub-agent inverts that
  * half, which is exactly why the other half — what it can touch — is nailed shut here
  * rather than left to the caller (law 3 in
- * `docs/proposals/agent_hierarchy_proposal.md`: prompts descend toward runtime,
+ * `docs/architecture/agent_tree.md`: prompts descend toward runtime,
  * capabilities stay at install time).
  *
  * The reach is one thing and only one thing:

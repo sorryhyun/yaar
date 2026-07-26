@@ -130,7 +130,7 @@ A dedicated JSON-RPC method that appends input to an in-flight turn:
 
 ### Server Integration
 
-Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the monitor agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/architecture/common_flow.md`](./common_flow.md) for the full concurrency strategy.
+Both are exposed through the same `AITransport.steer?(content)` optional method. `ContextPool.queueMainTask()` tries steer first when the monitor agent is busy, falling back to ephemeral/queue if unsupported or failed. See [`docs/architecture/common_flow.md`](../architecture/common_flow.md) for the full concurrency strategy.
 
 ## Warmup
 
@@ -168,7 +168,7 @@ Codex warmup starts the child process and establishes a dedicated WebSocket conn
 
 ## MCP Integration
 
-Both providers connect to the same MCP tool servers: `CORE_SERVERS` (`mcp/server.ts`) is always active — `system`, `verbs`, `app`, `messaging` (4 namespaces). `verbs` exposes the 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to `handlers/` via `yaar://` URIs; `app` carries the app-agent tools (`describe`/`query`/`command`/`relay`); `messaging` carries cross-app/user messaging tools; `system` carries `reload_cached`/`list_reload_options`.
+Both providers connect to the same MCP tool servers: `CORE_SERVERS` (`mcp/server.ts`) is always active — `system`, `verbs`, `app`, `messaging`, `subagent` (5 namespaces). `verbs` exposes the 5 generic URI verbs (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to `handlers/` via `yaar://` URIs; `app` carries the app-agent tools (`describe`/`query`/`command`/`relay`); `messaging` carries cross-app/user messaging tools; `system` carries `reload_cached`/`list_reload_options`; `subagent` carries the calling [sub-agent](../architecture/agent_tree.md)'s app-declared tools and is empty for every other caller.
 
 ### Claude
 

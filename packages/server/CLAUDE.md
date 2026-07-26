@@ -156,7 +156,7 @@ SessionHub (singleton registry)
         │   ├── Session Agent: PooledAgent | null            ← lazy singleton; cross-monitor oversight + session principal (only tier with yaar://session/* access; the only principal that drives the user's real browser via yaar://session/browser)
         │   ├── Monitor Agents: Map<monitorId, PooledAgent>  ← one per monitor
         │   ├── Ephemeral Agents (temporary, no context)
-        │   ├── App Agents: Map<appId, PooledAgent>  ← persistent per app
+        │   ├── App Agents: Map<monitorId::appId, PooledAgent>  ← persistent per (monitor, app)
         │   └── Sub-agents: Map<monitorId::appId::subId, SubAgent>
         │        ← N per (monitor, app), prompt supplied by the app at runtime;
         │          tool-less, or holding one channel to its own app's iframe
@@ -261,7 +261,7 @@ builtins — that empty array is the whole containment story for a runtime-suppl
 `undefined` there would mean *every* tool. Every sub-agent bypasses `ContextPool` entirely (no tape,
 no queue — the app's own scheduler serializes them) and is reclaimed when the app's last window on
 the monitor closes, when the monitor is removed, or on explicit `delete`. See
-`docs/proposals/agent_hierarchy_proposal.md` for the design, and `apps/personas` (Round Table,
+[`docs/architecture/agent_tree.md`](../../docs/architecture/agent_tree.md) for the design, and `apps/personas` (Round Table,
 tool-less) and `apps/chitchats` (rooms with `skip`/`recall`/`memorize`, whose persona documents are
 what a reclaimed character is respawned from) for the reference consumers.
 
@@ -285,8 +285,8 @@ renders the flat roster in that shape, and `list('yaar://session/agents')` retur
 app whose personas exist but whose own agent was never needed). In the pool the id field is `subId`;
 the **wire** keeps `personaId` (URI segment, spawn param, response bodies), and
 `handlers/apps/agents-resource.ts` is the one place the two spellings meet — read `p.subId`, emit
-`personaId`. See [`docs/proposals/agent_hierarchy_proposal.md`](../../docs/proposals/agent_hierarchy_proposal.md)
-for the four laws every new node must satisfy.
+`personaId`. See [`docs/architecture/agent_tree.md`](../../docs/architecture/agent_tree.md)
+for the four laws every new node must satisfy, and the triage rule for placing a new one.
 
 ## REST API
 
