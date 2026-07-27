@@ -68,7 +68,6 @@ export class ContextPool implements PoolContext {
   // ── PoolContext fields (readonly for processors) ───────────────────
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
-  readonly timeline: InteractionTimeline;
   readonly windowState: WindowStateRegistry;
   readonly contextAssembly = new ContextAssemblyPolicy();
   readonly reloadPolicy: ReloadCachePolicy;
@@ -82,6 +81,15 @@ export class ContextPool implements PoolContext {
   // ── Internal state ────────────────────────────────────────────────
   private broadcastFn: (event: ServerEvent) => void;
   private monitorQueues = new Map<string, MonitorQueuePolicy>();
+  /**
+   * One timeline per monitor — what happened on a desktop is drained into that
+   * desktop's next turn and no other's.
+   *
+   * A single session-wide timeline made every entry belong to whichever monitor spoke
+   * next: monitor 1's agent read (and drained) the windows the user moved on monitor 0,
+   * and monitor 0 never saw them at all.
+   */
+  private timelines = new Map<string, InteractionTimeline>();
   private resetting = false;
   private inflightCount = 0;
   private inflightResolve: (() => void) | null = null;
@@ -115,7 +123,6 @@ export class ContextPool implements PoolContext {
     this.reloadPolicy = new ReloadCachePolicy(reloadCache);
     this.savedThreadIds = savedThreadIds;
     this.contextTape = new ContextTape();
-    this.timeline = new InteractionTimeline();
     if (restoredContext.length > 0) {
       this.contextTape.restore(restoredContext);
       console.log(
@@ -158,6 +165,16 @@ export class ContextPool implements PoolContext {
   }
 
   // ── PoolContext methods ─────────────────────────────────────────────
+
+  /** The timeline for one monitor, created on first use. */
+  timelineFor(monitorId: string): InteractionTimeline {
+    let timeline = this.timelines.get(monitorId);
+    if (!timeline) {
+      timeline = new InteractionTimeline();
+      this.timelines.set(monitorId, timeline);
+    }
+    return timeline;
+  }
 
   getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy {
     let queue = this.monitorQueues.get(monitorId);
@@ -307,6 +324,8 @@ export class ContextPool implements PoolContext {
       );
       this.monitorQueues.delete(monitorId);
     }
+    // Nothing will ever drain this monitor's timeline again.
+    this.timelines.delete(monitorId);
 
     // AgentPool.removeMonitorAgent disposes the monitor's app agents too; drop the
     // processor's window tracking for them so nothing dangles.
@@ -538,8 +557,8 @@ export class ContextPool implements PoolContext {
     return this.contextTape;
   }
 
-  getTimeline(): InteractionTimeline {
-    return this.timeline;
+  getTimeline(monitorId: string): InteractionTimeline {
+    return this.timelineFor(monitorId);
   }
 
   /** Whether an app interaction for this window addresses a currently active app turn. */
@@ -550,10 +569,29 @@ export class ContextPool implements PoolContext {
     return this.windowQueuePolicy.isProcessing(`app-${monitorId}-${appId}`);
   }
 
+  /**
+   * File user interactions on the timeline of the monitor they happened on.
+   *
+   * The monitor is the one the interaction was stamped with (the sending tab looks at
+   * exactly one), falling back to the window's owner. An interaction that names neither
+   * belongs to no desktop we can identify — pushing it to all of them would put monitor
+   * 0's clicks in monitor 1's prompt, which is the leak this scoping exists to close.
+   */
   pushUserInteractions(interactions: UserInteraction[]): void {
     for (const interaction of interactions) {
       if (interaction.type === 'draw') continue;
-      this.timeline.pushUser(interaction);
+      const monitorId =
+        interaction.monitorId ??
+        (interaction.windowId
+          ? this.windowState.getMonitorForWindow(interaction.windowId)
+          : undefined);
+      if (!monitorId) {
+        console.warn(
+          `[ContextPool] Dropping "${interaction.type}" interaction — no monitor could be resolved for it.`,
+        );
+        continue;
+      }
+      this.timelineFor(monitorId).pushUser(interaction);
     }
   }
 
@@ -608,7 +646,7 @@ export class ContextPool implements PoolContext {
       ),
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
-      timelineSize: this.timeline.size,
+      timelineSize: Array.from(this.timelines.values()).reduce((sum, t) => sum + t.size, 0),
       monitorBudget: this.budgetPolicy.getStats(),
     };
   }
@@ -671,7 +709,7 @@ export class ContextPool implements PoolContext {
 
     // 7. Clear remaining state
     this.contextTape.clear();
-    this.timeline.clear();
+    this.timelines.clear();
     this.windowEvents.clear();
     this.appProcessor.disposeAll();
     if (closeWindows) {

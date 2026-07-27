@@ -32,6 +32,8 @@ export interface MonitorRegistryDeps {
   sendTo(connectionId: ConnectionId, event: ServerEvent): void;
   /** Point a connection at a monitor. Replaces whatever it was watching. */
   subscribeConnection(connectionId: ConnectionId, monitorId: string): void;
+  /** The monitor a connection is watching, or undefined before it has said. */
+  connectionMonitor(connectionId: ConnectionId): string | undefined;
   /** Detach every connection watching a monitor that no longer exists. */
   unsubscribeMonitor(monitorId: string): void;
   /** Record a connection's viewport for layout. */
@@ -88,6 +90,17 @@ export class MonitorRegistry {
       monitors: this.list(),
       focus: monitor.id,
     });
+  }
+
+  /**
+   * The monitor a tab is looking at, or undefined before it has subscribed.
+   *
+   * A tab looks at one monitor at a time, so this is what attributes the frames that
+   * carry no monitor of their own — a dismissed toast happened on the desktop the
+   * sender was watching.
+   */
+  watchedBy(connectionId: ConnectionId): string | undefined {
+    return this.deps.connectionMonitor(connectionId);
   }
 
   /** A tab reporting which monitor it is now looking at, and how big its viewport is. */

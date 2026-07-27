@@ -26,11 +26,15 @@ export interface PreparedReloadContext {
 export function buildReloadContext(
   ctx: PoolContext,
   task: Task,
-  options?: { currentWindowId?: string },
+  options?: { currentWindowId?: string; monitorId?: string },
 ): PreparedReloadContext {
-  const windowSnapshot = ctx.windowState.listWindows();
+  // Scoped to the monitor the turn runs on: `<open_windows monitor="1">` that lists
+  // monitor 0's windows is a lie the agent acts on. `task.monitorId` only says who sent
+  // the task, so a caller that has resolved the owning monitor passes it explicitly.
+  const monitorId = options?.monitorId ?? task.monitorId;
+  const windowSnapshot = ctx.windowState.listWindows(monitorId);
   const openWindowsContext = ctx.contextAssembly.formatOpenWindows(windowSnapshot, {
-    monitorId: task.monitorId,
+    monitorId,
     currentWindowId: options?.currentWindowId,
     getRawWindowId: (handle) => ctx.windowState.handleMap.getRawWindowId(handle),
   });

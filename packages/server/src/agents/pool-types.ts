@@ -103,7 +103,6 @@ export interface PoolContext {
   readonly sessionId: SessionId;
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
-  readonly timeline: InteractionTimeline;
   readonly windowState: WindowStateRegistry;
   readonly sharedLogger: SessionLogger | null;
   savedThreadIds?: Record<string, string>;
@@ -118,6 +117,11 @@ export interface PoolContext {
 
   // Methods processors call back into
   getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy;
+  /**
+   * The interaction timeline of one monitor. There is no session-wide timeline: an
+   * entry is drained into the next turn of the desktop it happened on, and no other.
+   */
+  timelineFor(monitorId: string): InteractionTimeline;
   sendEvent(event: ServerEvent): Promise<void>;
   /** Deliver a hook-triggered response notification to the monitor agent. */
   notifyHookResponse(

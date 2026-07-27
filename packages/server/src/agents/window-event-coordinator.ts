@@ -94,9 +94,10 @@ export class WindowEventCoordinator {
       (task) => {
         this.deliver(task);
       },
-      (_sub, framedContent) => {
-        // Buffer mode: drain into the agent's next turn without waking it.
-        this.ctx.timeline.pushRaw(framedContent);
+      (sub, framedContent) => {
+        // Buffer mode: drain into the agent's next turn without waking it — on the
+        // subscriber's own monitor, so another desktop's turn cannot swallow it.
+        this.ctx.timelineFor(sub.subscriberMonitorId).pushRaw(framedContent);
       },
     );
   }

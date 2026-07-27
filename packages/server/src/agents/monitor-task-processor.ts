@@ -186,7 +186,7 @@ export class MonitorTaskProcessor {
       interactions: task.interactions,
       openWindows: openWindowsContext,
       reloadPrefix,
-      timeline: this.ctx.timeline,
+      timeline: this.ctx.timelineFor(monitorId),
     });
     this.ctx.contextAssembly.appendUserMessage(
       this.ctx.contextTape,
@@ -251,7 +251,9 @@ export class MonitorTaskProcessor {
         fp,
         monitorId,
         onAfterRun: (recordedActions) => {
-          this.ctx.timeline.pushAI(ephemeralRole, task.content.slice(0, 100), recordedActions);
+          this.ctx
+            .timelineFor(monitorId)
+            .pushAI(ephemeralRole, task.content.slice(0, 100), recordedActions);
         },
         onFinally: () => {
           agent.session.setOutputCallback(null);

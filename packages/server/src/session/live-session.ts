@@ -203,6 +203,7 @@ export class LiveSession {
       sendTo: (connectionId, event) => this.sendTo(connectionId, event),
       subscribeConnection: (connectionId, monitorId) =>
         getBroadcastCenter().subscribeToMonitor(connectionId, monitorId),
+      connectionMonitor: (connectionId) => getBroadcastCenter().monitorOf(connectionId),
       unsubscribeMonitor: (monitorId) =>
         getBroadcastCenter().unsubscribeMonitor(sessionId, monitorId),
       setViewport: (monitorId, viewport) => this.layoutContext.setViewport(monitorId, viewport),

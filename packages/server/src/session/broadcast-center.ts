@@ -70,6 +70,11 @@ export class BroadcastCenter {
     }
   }
 
+  /** The monitor a connection is watching, or undefined if it has not said yet. */
+  monitorOf(connectionId: ConnectionId): string | undefined {
+    return this.connections.get(connectionId)?.monitorId;
+  }
+
   /**
    * Detach every connection in a session that is watching a now-deleted monitor.
    *

@@ -96,7 +96,8 @@ export class ClientEventController {
       [ClientEventType.APP_EVENT]: (event) => this.deps.appWindows.handleAppEvent(event),
       [ClientEventType.TOAST_ACTION]: (event) => this.handleToastAction(event),
       [ClientEventType.USER_PROMPT_RESPONSE]: (event) => this.handleUserPromptResponse(event),
-      [ClientEventType.USER_INTERACTION]: (event) => this.handleUserInteraction(event),
+      [ClientEventType.USER_INTERACTION]: (event, connectionId) =>
+        this.handleUserInteraction(event, connectionId),
       [ClientEventType.SUBSCRIBE_MONITOR]: (event, connectionId) =>
         this.deps.monitors.subscribe(connectionId, event.monitorId, event.viewport),
       [ClientEventType.ADD_MONITOR]: (_event, connectionId) => this.deps.monitors.add(connectionId),
@@ -332,8 +333,24 @@ export class ClientEventController {
    */
   private async handleUserInteraction(
     event: ClientEventOf<typeof ClientEventType.USER_INTERACTION>,
+    connectionId: ConnectionId,
   ): Promise<void> {
     const logger = this.deps.getSessionLogger();
+
+    // Stamp the monitor before anything is applied: a close removes the window, and
+    // after that there is nothing left to ask which desktop it was on. The window's own
+    // monitor wins where there is one; otherwise it happened on the desktop the sending
+    // tab is watching (a dismissed toast names no window).
+    const watched = this.deps.monitors.watchedBy(connectionId);
+    for (const interaction of event.interactions) {
+      // A create names a window that does not exist yet — asking the registry who owns
+      // that id would answer with another monitor's copy of the same app.
+      const owner =
+        interaction.windowId && interaction.type !== 'window.create'
+          ? this.deps.windowState.getMonitorForWindow(interaction.windowId)
+          : undefined;
+      interaction.monitorId ??= owner ?? watched;
+    }
 
     for (const interaction of event.interactions) {
       logger?.logInteraction(interaction);

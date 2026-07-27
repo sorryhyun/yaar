@@ -134,6 +134,7 @@ export class AppTaskProcessor {
 
       const { fp } = buildReloadContext(this.ctx, task, {
         currentWindowId: windowId,
+        monitorId,
       });
       const source = windowSource(windowId);
 
@@ -183,13 +184,15 @@ export class AppTaskProcessor {
           // carry the response text when no hook will deliver it. Both sinks land in
           // the monitor's next prompt, so including it in both makes the monitor read
           // the app agent's entire response twice, back to back.
-          this.ctx.timeline.pushAI(
-            agentRole,
-            task.content.slice(0, 100),
-            recordedActions,
-            windowId,
-            hookWillFire ? undefined : appResponseText || undefined,
-          );
+          this.ctx
+            .timelineFor(monitorId)
+            .pushAI(
+              agentRole,
+              task.content.slice(0, 100),
+              recordedActions,
+              windowId,
+              hookWillFire ? undefined : appResponseText || undefined,
+            );
 
           // Also append to context tape for logging/debugging
           if (appResponseText && task.monitorId) {

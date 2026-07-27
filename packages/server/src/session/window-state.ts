@@ -295,8 +295,25 @@ export class WindowStateRegistry {
     }
   }
 
-  listWindows(): WindowState[] {
-    return Array.from(this.windows.values());
+  /**
+   * The windows this session is tracking; with a `monitorId`, only that monitor's.
+   *
+   * A monitor is a separate desktop, so a prompt built for one must not describe the
+   * other's windows — an agent on monitor 1 that is handed monitor 0's open windows
+   * will happily update them, and its overlap arithmetic is over rectangles the user
+   * cannot see. Windows on no monitor (the unscoped anomaly `actionKey` warns about,
+   * and pre-monitor restores) are listed for every monitor, since the frontend puts
+   * them on whichever monitor is active.
+   */
+  listWindows(monitorId?: string): WindowState[] {
+    const all = Array.from(this.windows.entries());
+    if (monitorId === undefined) return all.map(([, win]) => win);
+    return all
+      .filter(([handle]) => {
+        const owner = this.handleMap.getMonitorId(handle);
+        return owner === undefined || owner === monitorId;
+      })
+      .map(([, win]) => win);
   }
 
   /**

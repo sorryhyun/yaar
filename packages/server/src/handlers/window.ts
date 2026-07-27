@@ -37,7 +37,7 @@ import {
   handleUnsubscribe,
   handleAppSubscribe,
 } from '../features/window/subscribe.js';
-import { requireMonitorId } from '../agents/agent-context.js';
+import { getMonitorId, requireMonitorId } from '../agents/agent-context.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import { genId } from '../lib/ids.js';
 import { valueOf } from '../session/pending-store.js';
@@ -52,11 +52,14 @@ export function registerWindowHandlers(
   getWindowState: () => WindowStateRegistry,
 ): void {
   const listHandler: ResourceHandler = {
-    description: 'List all open windows.',
+    description: 'List the open windows on your monitor.',
     verbs: ['describe', 'list'],
 
     async list(): Promise<VerbResult> {
-      const windows = getWindowState().listWindows();
+      // The caller's monitor, not the session: an agent may only address windows on
+      // the monitor it runs on, so listing another desktop's windows offers it URIs
+      // that resolve to nothing. Outside a turn (no monitor in context) list them all.
+      const windows = getWindowState().listWindows(getMonitorId());
       if (windows.length === 0) return okLinks([]);
 
       return okLinks(
