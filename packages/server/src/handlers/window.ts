@@ -193,7 +193,9 @@ export function registerWindowHandlers(
         timeoutMs: {
           type: 'number',
           description:
-            'app_command only. How long to wait for the app (default 30s, max 180s). Raise it for slow commands like compile or deploy.',
+            'app_command and app_eval. How long to wait for the app (max 180s; default 30s ' +
+            'for app_command, 5s for app_eval). Raise it for slow commands like compile or ' +
+            'deploy, and for an expression that awaits a promise or sleeps.',
         },
         // protocol_log fields
         limit: {

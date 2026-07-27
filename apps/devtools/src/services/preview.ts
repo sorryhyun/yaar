@@ -199,12 +199,19 @@ function logPreviewEvaluation(kind: 'input' | 'result' | 'error', content: unkno
   });
 }
 
-export async function previewEvaluate(expression: string): Promise<unknown> {
+export async function previewEvaluate(expression: string, timeoutMs?: number): Promise<unknown> {
   const wid = previewWindowId();
   if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
   logPreviewEvaluation('input', expression);
   try {
-    const result = await invoke<unknown>(`yaar://windows/${wid}`, { action: 'app_eval', expression });
+    const result = await invoke<unknown>(`yaar://windows/${wid}`, {
+      action: 'app_eval',
+      expression,
+      // Only when asked for: the server's own default (the app-query deadline) is right
+      // for the structural questions eval is mostly used for, and passing a number here
+      // unconditionally would bury that default under a devtools-local one.
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+    });
     logPreviewEvaluation('result', result);
     return result;
   } catch (err) {

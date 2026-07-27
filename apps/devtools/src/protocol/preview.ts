@@ -48,7 +48,9 @@ export const previewCommands = {
   previewEval: defineAppCommand({
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
-      'Result is JSON-serialized and capped at 16KB. Preview windows only.',
+      'Result is JSON-serialized and capped at 16KB. Preview windows only. An expression ' +
+      'that awaits or sleeps for more than 5s needs `timeoutMs` — and this command\'s own ' +
+      'timeoutMs raised above it, or that one expires first.',
     params: {
       type: 'object',
       properties: {
@@ -58,13 +60,20 @@ export const previewCommands = {
             'JS expression, e.g. "document.querySelectorAll(\'.row\').length" or ' +
             '"getComputedStyle(document.querySelector(\'#app\')).height"',
         },
+        timeoutMs: {
+          type: 'number',
+          description:
+            'How long to wait for the expression to settle (default 5s, max 180s). Raise it ' +
+            'for an expression that awaits a promise, sleeps, or waits on a render.',
+        },
       },
       required: ['expression'],
     },
     run: async (p) => {
       const expression = typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
       if (!expression.trim()) throw new AppCommandError('expression is required.');
-      return await previewEvaluate(expression);
+      const timeoutMs = typeof p.timeoutMs === 'number' ? p.timeoutMs : undefined;
+      return await previewEvaluate(expression, timeoutMs);
     },
   }),
   previewQuery: defineAppCommand({
@@ -88,12 +97,18 @@ export const previewCommands = {
     },
   }),
   previewCommand: defineAppCommand({
-    description: 'Send an app protocol command to the preview window.',
+    description:
+      'Send an app protocol command to the preview window. A command that takes longer than ' +
+      "30s needs `timeoutMs` — and this command's own timeoutMs raised above it.",
     params: {
       type: 'object',
       properties: {
         command: { type: 'string', description: 'Command name' },
         params: { type: 'object', description: 'Command parameters' },
+        timeoutMs: {
+          type: 'number',
+          description: 'How long to wait for the preview app (default 30s, max 180s).',
+        },
       },
       required: ['command'],
     },
@@ -105,6 +120,7 @@ export const previewCommands = {
           action: 'app_command',
           command: String(p.command),
           params: (p.params as Record<string, unknown>) ?? {},
+          ...(typeof p.timeoutMs === 'number' ? { timeoutMs: p.timeoutMs } : {}),
         });
       } catch (err) {
         throw new AppCommandError(`Preview command failed: ${errMsg(err)}`);

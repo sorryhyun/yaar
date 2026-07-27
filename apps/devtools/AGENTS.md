@@ -56,6 +56,8 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 **`previewQuery`/`previewCommand` only work once the preview app has registered via `defineApp()`.**
 
+**A `previewEval` that waits needs two timeouts raised, not one.** The expression is awaited, so anything that sleeps, polls, or waits on a render past 5s needs `timeoutMs` in the params *and* a larger `timeoutMs` on the `previewEval` call itself — the outer one expires first otherwise, and the failure reads the same either way. The alternative, when the wait is long or open-ended: have the expression stash its result on `window` and return immediately, then read that global back in a later, instant eval.
+
 `compile` runs the manifest-drift check automatically whenever a preview is open, surfacing `manifestDrift` in its result as a warning, never a build failure.
 
 **The preview runs under its own principal** (`preview--{projectId}`), so `self`-scoped calls — `appStorage`, `appDb`, permissions — resolve against the project's `app.json` and can be tested here before deploying. Its storage is a throwaway namespace (dies with the project, never touches the live app's data), and it has **no app agent** — you are the agent inside it.

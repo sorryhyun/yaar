@@ -178,6 +178,20 @@ function noAnswer(outcome: { ok: false; reason: 'timeout' | 'cancelled' }, what:
     : `App did not respond to the ${what} (timeout).`;
 }
 
+/**
+ * The deadline for a call that accepts a caller-supplied `timeoutMs`.
+ *
+ * Shared by `app_command` and `app_eval` so the floor and the ceiling are the same
+ * number in both: a caller cannot ask for less room than a call needs to happen at
+ * all, nor for more than the transport can hold open (see MAX_COMMAND_TIMEOUT_MS).
+ */
+function resolveTimeout(payload: Record<string, unknown>, fallbackMs: number): number {
+  const requested = payload.timeoutMs;
+  return typeof requested === 'number' && Number.isFinite(requested)
+    ? Math.min(Math.max(requested, deadlines.appCommandMinMs), MAX_COMMAND_TIMEOUT_MS)
+    : fallbackMs;
+}
+
 /** Handle app_query: query app state or manifest via the app protocol. */
 export async function handleAppQuery(
   windowState: WindowStateRegistry,
@@ -281,12 +295,30 @@ export async function handleAppEval(
     return error('"expression" (non-empty string) is required for app_eval.');
   }
 
+  // An expression is awaited if it returns a promise, so an eval is only *usually* as
+  // instant as a query: `new Promise(r => setTimeout(r, 9000))` is a legitimate thing to
+  // ask a preview, and under the fixed query deadline every such expression came back as
+  // "the app did not respond" — indistinguishable from a preview that had actually died,
+  // and unfixable from the call site because there was no timeout to raise. So the query
+  // deadline is the default here, not the rule: a caller that knows its expression is slow
+  // says so, under the same floor and ceiling as app_command.
+  const timeoutMs = resolveTimeout(payload, deadlines.appQueryMs);
   // No requireAppReady: the eval responder is part of the injected app-protocol
   // script and answers whether or not the app ever registered. Waiting
   // on readiness would make eval unusable for exactly the broken-app case it is
   // most useful for. (Same reasoning as the built-in `__console` state key.)
-  const outcome = await request(win.id, { kind: 'eval', expression }, deadlines.appQueryMs);
-  if (!outcome.ok) return error(noAnswer(outcome, 'eval request'));
+  const outcome = await request(win.id, { kind: 'eval', expression }, timeoutMs);
+  if (!outcome.ok) {
+    if (outcome.reason === 'cancelled')
+      return error('The session ended before the app answered the eval request.');
+    return error(
+      `Preview did not answer the eval within ${(timeoutMs / 1000).toFixed(0)}s. If the ` +
+        'expression is legitimately slow — it awaits a promise, sleeps, or waits on a ' +
+        `render — retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s). ` +
+        'Note that the deadline of whatever call is wrapping this one applies too, so raise ' +
+        'that at the same time.',
+    );
+  }
   const response = outcome.value;
   if (response.kind !== 'eval') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
@@ -316,11 +348,7 @@ export async function handleAppCommand(
     params: payload.params as Record<string, unknown> | undefined,
   };
 
-  const requested = payload.timeoutMs as number | undefined;
-  const timeoutMs =
-    typeof requested === 'number' && Number.isFinite(requested)
-      ? Math.min(Math.max(requested, deadlines.appCommandMinMs), MAX_COMMAND_TIMEOUT_MS)
-      : deadlines.appCommandMs;
+  const timeoutMs = resolveTimeout(payload, deadlines.appCommandMs);
 
   const outcome = await request(key, req, timeoutMs);
   if (!outcome.ok) {

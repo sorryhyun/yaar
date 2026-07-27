@@ -32,7 +32,8 @@ import { ClientEventType, ServerEventType } from '@yaar/shared';
 import { boot, type Harness } from './harness/boot.js';
 import { expectSettlesWithin } from './harness/liveness.js';
 
-const { handleAppCommand, handleAppQuery } = await import('../../features/window/app-protocol.js');
+const { handleAppCommand, handleAppQuery, handleAppEval } =
+  await import('../../features/window/app-protocol.js');
 
 /** The server is prepared to wait this long. */
 const SERVER_DEADLINE = 300;
@@ -59,7 +60,9 @@ function answerSlowly(h: Harness, result: unknown): void {
       response:
         req.request.kind === 'query'
           ? { kind: 'query', data: result }
-          : { kind: 'command', result },
+          : req.request.kind === 'eval'
+            ? { kind: 'eval', value: String(result) }
+            : { kind: 'command', result },
     });
   });
 }
@@ -181,6 +184,78 @@ describe('S6 — an app that is merely slow is heard, not timed out', () => {
 
     expect(h.client.framesOf(ServerEventType.APP_PROTOCOL_REQUEST)[0]!.timeoutMs).toBe(
       CALLER_TIMEOUT,
+    );
+    expect(h.registry.tools[0]!.text).toBe(SLOW_ANSWER);
+  });
+
+  it('an eval that awaits gets the caller’s deadline too, not the query one', async () => {
+    // The eval leg used to be pinned to the app-*query* deadline with no way to raise it,
+    // on the theory that reading a preview is instant. But an eval awaits a promise it is
+    // handed, and `new Promise(r => setTimeout(r, 9000))` is a legitimate question to ask a
+    // preview — so every expression that waited on a render, a fetch or a sleep came back as
+    // "App did not respond to the eval request (timeout)", indistinguishable from a preview
+    // that had actually died and unfixable from the call site.
+    const h = await boot({ deadlines: { appQueryMs: 50, appReadyMs: 300 } });
+    harness = h;
+    // Only a devtools preview may be evaluated at all (`isPreviewWindow`), so the window has
+    // to be one — id and principal both.
+    const windowKey = h.seedIframeWindow('devtools-preview-p1', { appId: 'preview--p1' });
+    answerSlowly(h, SLOW_ANSWER);
+
+    const CALLER_TIMEOUT = 1_000;
+    h.registry.onTurn(() => [
+      {
+        kind: 'tool',
+        name: 'eval',
+        run: (ctx) =>
+          handleAppEval(ctx.windowState, windowKey, {
+            expression: 'new Promise(r => setTimeout(() => r(1), 150))',
+            timeoutMs: CALLER_TIMEOUT,
+          }),
+      },
+    ]);
+
+    const turn = h.client.deliverAsync({
+      type: ClientEventType.USER_MESSAGE,
+      messageId: 'm1',
+      monitorId: '0',
+      content: 'ask the preview something that takes a moment',
+    });
+    await expectSettlesWithin(turn, 3000, 'the turn waiting on a slow eval');
+
+    expect(h.client.framesOf(ServerEventType.APP_PROTOCOL_REQUEST)[0]!.timeoutMs).toBe(
+      CALLER_TIMEOUT,
+    );
+    expect(h.registry.tools[0]!.text).toBe(SLOW_ANSWER);
+    expect(h.registry.tools[0]!.text).not.toMatch(/did not respond|did not answer|timeout/i);
+  });
+
+  it('an eval with no timeout of its own still gets the query deadline', async () => {
+    // The default is not being raised for everyone: eval is mostly used for instant
+    // structural questions, and those must not sit on a 30s clock when the preview is gone.
+    const h = await boot({ deadlines: { appQueryMs: SERVER_DEADLINE, appReadyMs: 300 } });
+    harness = h;
+    const windowKey = h.seedIframeWindow('devtools-preview-p1', { appId: 'preview--p1' });
+    answerSlowly(h, SLOW_ANSWER);
+
+    h.registry.onTurn(() => [
+      {
+        kind: 'tool',
+        name: 'eval',
+        run: (ctx) => handleAppEval(ctx.windowState, windowKey, { expression: 'document.title' }),
+      },
+    ]);
+
+    const turn = h.client.deliverAsync({
+      type: ClientEventType.USER_MESSAGE,
+      messageId: 'm1',
+      monitorId: '0',
+      content: 'ask the preview for its title',
+    });
+    await expectSettlesWithin(turn, 2000, 'the turn waiting on an eval');
+
+    expect(h.client.framesOf(ServerEventType.APP_PROTOCOL_REQUEST)[0]!.timeoutMs).toBe(
+      SERVER_DEADLINE,
     );
     expect(h.registry.tools[0]!.text).toBe(SLOW_ANSWER);
   });
