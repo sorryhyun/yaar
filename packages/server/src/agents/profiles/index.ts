@@ -61,8 +61,8 @@ export function getMonitorTurnOptions(providerType: string): {
   allowedTools?: string[];
 } {
   return providerType === 'codex'
-    ? { model: claudeModelToCodex('claude-opus-4-8'), allowedTools: undefined }
-    : { model: 'claude-opus-4-8', allowedTools: getDeveloperAllowedTools() };
+    ? { model: claudeModelToCodex('claude-opus-5'), allowedTools: undefined }
+    : { model: 'claude-opus-5', allowedTools: getDeveloperAllowedTools() };
 }
 
 // ── Codex agent roles ────────────────────────────────────────────────
