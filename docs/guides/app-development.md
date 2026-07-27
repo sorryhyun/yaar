@@ -622,7 +622,7 @@ Each app gets its own **app agent** when a user interacts with it. The agent's s
 | `AGENTS.md` | **Replaces** the generic base prompt entirely | Apps needing precise agent behavior (e.g., devtools IDE) |
 | `HINT.md` | Injected into the **monitor agent's** system prompt | Routing hints so the orchestrator knows when/how to use the app |
 
-**Priority:** `AGENTS.md` > `SKILL.md`. If both exist, only `AGENTS.md` is used. The `protocol.json` manifest (available state keys and commands) is always appended regardless.
+**Priority:** `AGENTS.md` > `SKILL.md`. If both exist, only `AGENTS.md` is used. The `protocol.json` manifest is always appended regardless: state keys as a name + description list, and each command as a call signature built from its `params` schema — `readFile(path: string|string[], startLine?: number, …)`, with `?` on optional params and enums spelled out as their values. So neither prompt file needs to restate a command's params, and one that does will drift from the schema the app actually validates against. `describe()` still returns the full schema when per-param descriptions matter.
 
 ### HINT.md (orchestrator context)
 

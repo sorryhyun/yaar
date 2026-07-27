@@ -15,6 +15,62 @@ import { APP_MOUNT_ID, describeDesignTokens } from '@yaar/compiler';
 import { resolveAgentModel } from './model-tiers.js';
 import { PAYLOAD_LITERALS_SECTION } from './shared-sections.js';
 
+/** A parameter's declared type, rendered the way a signature reads it. */
+function renderType(prop: unknown): string {
+  if (!prop || typeof prop !== 'object') return 'any';
+  const p = prop as {
+    type?: string | string[];
+    enum?: unknown[];
+    items?: unknown;
+    oneOf?: unknown[];
+    anyOf?: unknown[];
+  };
+
+  // An enum is the one case where the values matter more than the type: a param
+  // documented as `string` when only three strings are accepted invites a fourth.
+  if (Array.isArray(p.enum) && p.enum.length) {
+    const shown = p.enum.slice(0, 6).map((v) => JSON.stringify(v));
+    return shown.join('|') + (p.enum.length > 6 ? '|...' : '');
+  }
+
+  const union = p.oneOf ?? p.anyOf;
+  if (Array.isArray(union) && union.length) {
+    return [...new Set(union.map(renderType))].join('|');
+  }
+
+  if (Array.isArray(p.type)) return p.type.join('|');
+  if (p.type === 'array') return p.items ? `${renderType(p.items)}[]` : 'array';
+  return p.type ?? 'any';
+}
+
+/**
+ * A command rendered as a call signature: `readFile(path: string|string[], lineNum?: boolean)`.
+ *
+ * The manifest below used to carry names and descriptions only, while the params
+ * JSON Schema lived behind a `describe` call — and devtools' AGENTS.md tells its
+ * agent that this manifest *is* the full list, so a param name had to be guessed
+ * or paid for with a round-trip. It got guessed: `readFile({ paths: [...] })`
+ * against a command whose batch form is `path: string[]`, which cost a turn and
+ * an error. A signature is a fraction of the schema's size and answers the two
+ * questions that were being guessed — what is this called, and what shape is it.
+ */
+function renderSignature(name: string, descriptor: unknown): string {
+  const schema = (descriptor as { params?: unknown } | undefined)?.params as
+    | { properties?: Record<string, unknown>; required?: unknown; additionalProperties?: unknown }
+    | undefined;
+  const props = schema?.properties;
+  // No declared params is not the same as "takes none" — say nothing rather than
+  // render `name()` and turn an undocumented command into a documented empty one.
+  if (!props || typeof props !== 'object') return name;
+
+  const required = new Set(Array.isArray(schema?.required) ? (schema.required as string[]) : []);
+  const parts = Object.entries(props).map(
+    ([key, prop]) => `${key}${required.has(key) ? '' : '?'}: ${renderType(prop)}`,
+  );
+  if (schema?.additionalProperties === true) parts.push('...');
+  return `${name}(${parts.join(', ')})`;
+}
+
 /**
  * The parts of the app-authoring contract the compiler owns, stated by the compiler.
  *
@@ -137,10 +193,14 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
 
     if (protocol.commands && Object.keys(protocol.commands).length > 0) {
       systemPrompt += '\n## Available Commands — run with `command(command, params)`\n\n';
+      systemPrompt +=
+        'Signatures below are exact — `?` marks an optional param. Pass params under the ' +
+        'names shown; an undeclared name is rejected, not ignored. `describe()` returns the ' +
+        'full schema with per-param descriptions when a signature leaves you unsure.\n\n';
       for (const [key, desc] of Object.entries(protocol.commands)) {
         const description =
           typeof desc === 'string' ? desc : ((desc as { description?: string })?.description ?? '');
-        systemPrompt += `- \`${key}\`: ${description}\n`;
+        systemPrompt += `- \`${renderSignature(key, desc)}\`: ${description}\n`;
       }
     }
   }
