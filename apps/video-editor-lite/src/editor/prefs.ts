@@ -38,10 +38,9 @@ function field<T>(schema: z.ZodMiniType<T>, value: unknown, fallback: T): T {
  *
  * Recovery is per field, not per record: a drifted `playbackRate` must not cost
  * the user their `lastStorageListPath`, since the fields are independent and a
- * partially readable record is worth more than the defaults — that is also what
- * the hand-rolled `typeof` chain this replaced did. The whole-record `safeParse`
- * therefore serves as the *detector*: it is what makes a broken record loud
- * instead of silently default-shaped, while the field-level parses do the
+ * partially readable record is worth more than the defaults. The whole-record
+ * `safeParse` therefore serves as the *detector*: it is what makes a broken record
+ * loud instead of silently default-shaped, while the field-level parses do the
  * recovery.
  *
  * Two constraints are semantic rather than structural and stay here: the

@@ -375,7 +375,7 @@ render(() => html`
 
 Chrome classes: `y-appbar` / `y-appbar-actions`, `y-brand` / `-badge` / `-name`, `y-doc-field` / `y-doc-icon` / `y-doc-input`, `y-editbar`, `y-tgroup` / `y-tsep`, `y-tbtn` (`-text` / `-primary` / `-active`), `y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (`-warning` / `-muted`). A collapsible sidebar/overlay uses the `y-nav-*` family (`y-nav-root`, `y-nav-panel`, `y-nav-hover-zone`, `y-nav-pin`, `y-nav-resizer`, …).
 
-The skeleton is intentionally a **snippet, not a component** — the SDK never ships `solid-js/html` templates, because a shared component's props would ossify across every consuming app and drag Solid rendering into the SDK's type surface. The chrome you copy is short and yours to edit.
+The skeleton is intentionally a **snippet, not a component**. The chrome you copy is short and yours to edit.
 
 ### Headless behavior primitives
 
@@ -407,7 +407,7 @@ const autosave = createAutosave(
 
 For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice. Its `revive` option runs on the loaded value before it reaches the signal — the place to clamp a stored width against the current window, migrate a renamed key, or `z.safeParse` JSON an older version wrote in another shape. It also runs on the fallback when nothing is stored, so keep it total; if it throws, the fallback is used and the failure is logged.
 
-**`createStaleGuard`** — the generation counter that keeps a slow response from overwriting a newer one. Three apps invented this independently, in three different shapes.
+**`createStaleGuard`** — the generation counter that keeps a slow response from overwriting a newer one.
 
 ```typescript
 import { createStaleGuard } from '@bundled/yaar';
@@ -481,8 +481,8 @@ which already strip scripts, event handlers, and `javascript:`/`data:` URLs — 
 deviation every YAAR app makes. `form` and its controls are on DOMPurify's default
 `ALLOWED_TAGS`, which is right for a general-purpose sanitizer and wrong for an app iframe:
 no foreign content YAAR renders has a legitimate reason to post, and a form inside the
-iframe can navigate it or phish against the app's chrome. Six apps each discovered that
-separately and wrote the same `FORBID_TAGS` list; it now lives in one place.
+iframe can navigate it or phish against the app's chrome. The `FORBID_TAGS` list encoding
+that deviation lives in one place.
 
 Pass an options object (`allowedTags`, `allowedAttr`, `forbidTags`, `forbidAttr`) only when
 the content type genuinely needs a different allowlist — a printable document needs inline
@@ -556,10 +556,9 @@ work.
 ```
 
 **Prefer `httpFetch` over `invoke('yaar://http', …)`.** The verb form returns YAAR's
-internal envelope rather than a `Response`, and every app that reached for it ended up
-hand-writing its own partial copy of that envelope's type — four mutually incompatible
-ones across the repo, for a single upstream contract. Keep the verb form for agent-side
-code, where there is no `window.fetch` to patch.
+internal envelope rather than a `Response`, so hand-rolling a type around it re-types an
+internal contract you don't own. Keep the verb form for agent-side code, where there is
+no `window.fetch` to patch.
 
 **If your app has a login, clear the cookie jar on logout.** Cookies the proxy stores
 live server-side, keyed by (session, app), and nothing else clears them until the iframe
@@ -591,9 +590,9 @@ Common mistakes to avoid when building apps:
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
 - **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
-- **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly, which no app imports any more. See [Rendering Untrusted HTML](#rendering-untrusted-html).
+- **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
-- **Don't hand-roll a sanitizer** — an element denylist plus `^on` attribute stripping looks complete and isn't: it misses `<svg>`/`<math>` mutation-XSS, `style`, `srcset`, `formaction`, and `xlink:href`.
+- **Don't hand-roll a sanitizer** — see [the rule above](#rendering-untrusted-html) for what an element denylist plus `^on` attribute stripping misses.
 - **Don't generate inline event attributes** — `setAttribute('onerror', ...)` is stripped by any sanitizer, so the behavior it encodes disappears the moment the pipeline is secured. Use `addEventListener` on the inserted node.
 
 ### Right Pattern for External Service Integration
@@ -691,10 +690,9 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `windowStyle` | `object` | CSS overrides applied to the window |
 | `defaultWidth` / `defaultHeight` | `number` | Initial window size in px |
 
-**Ignored fields seen in the wild** — these parse as unknown keys and do nothing:
+One gotcha that falls out of that leniency:
 
-- `capture` (`"dom"` / `"canvas"`) — removed from all bundled app manifests (it had spread to 14, not the 19 once reported here); still read by no current code, so it stays ignored if it reappears — e.g. copied from an old app or emitted by an AI-generated manifest. It once named a screenshot strategy for a `window.capture` tool that has since been removed; the manifest field outlived it.
-- `id` and `appId` (`apps/memo`, `apps/music-maker`) — the folder name is always the id. The `id` passed to `defineApp()` in your source is a separate thing, *is* used, and must match.
+- `id` and `appId` (`apps/memo`, `apps/mcp-manager`) — the folder name is always the id. The `id` passed to `defineApp()` in your source is a separate thing, *is* used, and must match.
 
 ## App Types
 
@@ -992,7 +990,7 @@ defineApp({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
 
 | Tool | Description |
 |------|-------------|
-| `invoke('yaar://windows/{id}', { action: 'app_query', key })` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
+| `invoke('yaar://windows/{id}', { action: 'app_query', stateKey })` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
 | `invoke('yaar://windows/{id}', { action: 'app_command', command, params })` | Execute a command on the app |
 | `invoke('yaar://windows/{id}', { action: 'message', message })` | Send a message to the app agent (monitor → app agent delegation). Fire-and-forget — same code path as user interaction. |
 
@@ -1004,7 +1002,7 @@ The `message` action lets **monitor agents delegate tasks to app agents** via th
 
 ```
 invoke('yaar://windows/slides-lite', { action: 'app_query' })
-invoke('yaar://windows/slides-lite', { action: 'app_query', key: 'slideCount' })
+invoke('yaar://windows/slides-lite', { action: 'app_query', stateKey: 'slideCount' })
 invoke('yaar://windows/slides-lite', { action: 'app_command', command: 'setActiveIndex', params: { index: 2 } })
 invoke('yaar://windows/slides-lite', { action: 'message', message: 'Summarize this deck' })
 ```
@@ -1058,7 +1056,7 @@ await appStorage.remove('data.json');
 
 > **`list()` returns no `size` or `modifiedAt`.** Each entry is `{ path, isDirectory, uri, mimeType }`. If you need file sizes or timestamps, use the REST API (`GET /api/storage/{dir}/?list=true`), which returns `StorageEntry` objects with `size` and `modifiedAt`.
 
-> **`readBlob()` on a PDF returns the first page rendered as PNG, not the PDF bytes.** The server converts PDFs to page images on read (`packages/server/src/handlers/apps.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
+> **`readBlob()` on a PDF does not return the PDF bytes.** `readBlob()` takes no options, so the server's page-rasterization opt-in (`pdfPages`) can never fire through this path; the default branch returns the ASCII string `PDF document with N page(s), N bytes.` wrapped in a Blob (`packages/server/src/storage/storage-manager.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
 
 ### Never swallow a failed save
 
@@ -1220,7 +1218,7 @@ delete('yaar://apps/my-app/storage/data.json')
 For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`
 (design: [`docs/guides/sqlite.md`](./sqlite.md)). Unlike `appStorage`, it supports queries,
 counting, pagination, and full-text search server-side — no more load-all-JSON-and-filter.
-Binary blobs and simple single files should stay on `appStorage`; the two coexist.
+Binary blobs and simple single files should stay on `appStorage` — see the design doc above for the full storage-type breakdown.
 
 No permission declaration needed — an app's own storage, database, and personas are
 granted to it automatically.

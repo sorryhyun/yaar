@@ -305,7 +305,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * The outcome distinguishes "the frontend answered" from "the frontend said nothing in
    * time", because those mean different things to different callers and only the caller
    * knows which: a lock veto that never arrives means *proceed*, an iframe that never
-   * reports means *do not tell the agent it rendered*. Both used to arrive here as `null`.
+   * reports means *do not tell the agent it rendered*.
    */
   async emitActionWithFeedback(
     action: OSAction,
@@ -409,9 +409,8 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   /**
    * Show a confirmation dialog and wait for user response.
    *
-   * An unanswered dialog is a denial — but it is now an *explicit* one: the deadline
-   * passes, the dialog leaves the screen, and this returns false because nobody said yes,
-   * not because false was lying around as a default.
+   * An unanswered dialog is a denial — but it is an *explicit* one: the deadline
+   * passes, the dialog leaves the screen, and this returns false because nobody said yes.
    */
   async showConfirmDialog(
     title: string,

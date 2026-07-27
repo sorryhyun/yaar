@@ -58,7 +58,7 @@ Agents are processes. `AgentPool` manages their lifecycle.
 
 These are not four independent registries but one **ownership tree** — session → monitor → app → sub-agent — where each tier's key extends its owner's, addressing goes *through* the owner, and disposal cascades downward. `list('yaar://session/agents')` returns both the flat roster and the nested tree. See [`agent_tree.md`](./agent_tree.md) for the four invariants every node obeys and the rule for placing a new one.
 
-Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers. Sub-agents hold **no principal at all** and, like threads, no capability their owning process lacks: no YAAR verbs, at most a channel back into their own app's iframe.
+Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers. Sub-agents hold no principal at all — see [The Agent Tree](./agent_tree.md) for the full containment rule.
 
 Monitor agents can also spawn **task subagents** via the `Task` tool (like `fork()`). These are *provider-internal* — YAAR only enables the builtin (`providers/claude/sdk-options.ts`; Codex uses the roles in `profiles/index.ts`, `CODEX_AGENT_ROLES`) and they never enter `AgentPool`. Distinct from the app-spawned **sub-agent** tier above, which does.
 
@@ -188,7 +188,7 @@ Four IPC mechanisms:
 
 **`InteractionTimeline`** (`agents/interaction-timeline.ts`) — Unified chronological log of user UI interactions and AI action summaries. Drained into `<timeline>` XML by `ContextAssemblyPolicy` and prepended to the next monitor agent prompt. Deduplicates redundant events (e.g., focus before resize).
 
-**App Protocol** — Bidirectional agent↔iframe communication for apps with `"appProtocol": true`. Commands sent via `emitAppProtocolRequest()`, responses resolved via `resolveAppProtocolResponse()`. See [`app_protocol_reference.md`](../reference/app_protocol_reference.md).
+**App Protocol** — Bidirectional agent↔iframe communication for apps that opt in via `defineApp()` (the compiler extracts a `dist/protocol.json` manifest from the source; its presence, not any `app.json` flag, is what turns support on — `"appProtocol": true` is a legacy field the deploy path strips). Commands sent via `emitAppProtocolRequest()`, responses resolved via `resolveAppProtocolResponse()`. See [`app_protocol_reference.md`](../reference/app_protocol_reference.md).
 
 ---
 

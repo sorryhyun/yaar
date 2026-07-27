@@ -59,9 +59,11 @@ Monitors enable parallel, independent AI workflows: a long background task can r
 
 `activeMonitorId` lives only in the frontend store, one per tab, and is mirrored server-side as the connection's single `BroadcastCenter` subscription (replace-on-set). The server has no session-wide "active monitor" — a session has N connections, so one such field is a category error, and it was last-writer-wins between tabs.
 
-### There is no monitor fallback
+### The server never invents a monitor id for routing
 
-For a **window-scoped** event (`WINDOW_MESSAGE`, `COMPONENT_ACTION`, any `window.*` action) the monitor comes from the window — `WindowStateRegistry.getMonitorForWindow`. For a **user-scoped** event it comes from the connection that sent it. Nothing defaults to `'0'`: a task or action whose monitor cannot be resolved throws (`requireMonitorId`, `ActionEmitter.resolveWindowMonitor`). Guessing is what made a click in a window on monitor 1 run on monitor 0's agent and open its windows there. The findings behind the rule, and the tests that pin it, are in `packages/server/src/tests/monitor-identity.test.ts`.
+For a **window-scoped** event (`WINDOW_MESSAGE`, `COMPONENT_ACTION`, any `window.*` action) the monitor comes from the window — `WindowStateRegistry.getMonitorForWindow`. For a **user-scoped** event it comes from the connection that sent it. On the routing path, a task or action whose monitor cannot be resolved throws (`requireMonitorId`, `ActionEmitter.resolveWindowMonitor`) rather than guessing. Guessing is what made a click in a window on monitor 1 run on monitor 0's agent and open its windows there. The findings behind the rule, and the tests that pin it, are in `packages/server/src/tests/monitor-identity.test.ts`.
+
+This is a routing-path guarantee, not a claim that `'0'` never appears anywhere. `DEFAULT_MONITOR_ID` (`'0'`) is a real, live fallback for *display* purposes on the frontend — e.g. `(w.monitorId ?? DEFAULT_MONITOR_ID)` in `packages/frontend/src/store/selectors.ts` and `desktop.ts`, and in the server's monitor registry, which seeds `monitors[0]` as `DEFAULT_MONITOR_ID` (`packages/server/src/session/monitor-registry.ts`). Those are initialization/rendering defaults, not routing guesses.
 
 ### Server side
 

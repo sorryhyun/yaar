@@ -232,17 +232,13 @@ describe('app sanitize policies have not drifted', () => {
   }
 
   test('no app imports @bundled/dompurify directly', () => {
-    // The config below is asserted once, against the shim. An app that constructs
-    // its own DOMPurify call is outside that assertion — which is the state this
-    // file used to pin per-file, and the state the SDK primitive exists to end.
     expect(DIRECT_DOMPURIFY_FILES).toEqual([]);
   });
 
   test('the SDK sanitizer forbids exactly the canonical form tags', () => {
-    // The policy is no longer duplicated per app, so it is pinned where it now
-    // lives. `sanitizeHtml` is the only thing standing between foreign markup and
-    // an app's DOM; dropping `input` from this list starts orphaning controls
-    // instead of removing them, and nothing else in the tree would notice.
+    // `sanitizeHtml` is the only thing standing between foreign markup and an app's
+    // DOM; dropping `input` from this list starts orphaning controls instead of
+    // removing them, and nothing else in the tree would notice.
     const shim = readFileSync(
       join(REPO_ROOT, 'packages/compiler/src/shims/yaar/sanitize.ts'),
       'utf8',

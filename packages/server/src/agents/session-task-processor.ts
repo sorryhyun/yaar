@@ -38,8 +38,7 @@ export class SessionTaskProcessor {
    */
   async process(task: Task): Promise<void> {
     // The session agent is the user's deputy, so its monitor is the user's — it comes
-    // from the connection that spoke, and arrives on the task. `?? '0'` here meant a
-    // deputy invoked from monitor 1 quietly did its work on monitor 0.
+    // from the connection that spoke, and arrives on the task.
     const monitorId = task.monitorId;
     if (!monitorId) {
       throw new Error(

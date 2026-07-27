@@ -417,29 +417,22 @@ export class CodexProvider extends BaseTransport {
   }
 
   /**
-   * Ensure the thread is set up based on transport options.
-   * Handles three cases: fork from parent, start new, or reuse existing.
-   * Returns true if a new thread was created (caller should yield sessionId).
-   */
-  /**
    * Build a per-thread `mcp_servers` override that pins the caller's identity onto
    * every YAAR MCP server as an `x-agent-token` HTTP header — a credential minted for
    * this agent alone, which the server maps back to its id (mcp/agent-tokens.ts) to
    * resolve session/monitor/window/role context.
    *
-   * This used to send the agent *id* itself, which the server took at face value. All
-   * Codex agents share one app-server process and one bearer token — which lives in
-   * that process's environment as YAAR_MCP_TOKEN — so a model with shell access could
-   * read the token, set the header to the session agent's id, and be the session
-   * agent. A token it cannot mint or guess closes that.
-   *
-   * Why this is required for Codex: all agents share one app-server process and
-   * one HTTP MCP server, so a tool call arriving over HTTP carries no inherent
-   * agent identity. Without the header the server cannot tell overlapping turns
-   * apart — e.g. a monitor agent spawns an app agent (fire-and-forget), and the
-   * app agent resolves the wrong/empty window, so its `app:command`/`app:query`
-   * fail with "no active window context". Stamping identity per-thread means every
-   * tool call self-identifies, eliminating the race at its root.
+   * This is required because all Codex agents share one app-server process and one
+   * HTTP MCP server: a tool call arriving over HTTP carries no inherent agent identity,
+   * so without a per-thread header the server cannot tell overlapping turns apart
+   * (e.g. a monitor agent spawns an app agent fire-and-forget, and the app agent
+   * resolves the wrong/empty window, so its `app:command`/`app:query` fail with "no
+   * active window context"). Sending the agent's *id* directly, rather than a minted
+   * token, would let a model with shell access read the shared bearer token (which
+   * lives in the process environment as `YAAR_MCP_TOKEN`), set the header to the
+   * session agent's id, and be the session agent — a token it cannot mint or guess
+   * closes that. Stamping identity per-thread means every tool call self-identifies,
+   * eliminating the race at its root.
    *
    * We expose the FULL active server set (system+verbs+app) — same as the
    * process-level config — so this override never narrows the agent's tools; the
@@ -472,6 +465,11 @@ export class CodexProvider extends BaseTransport {
     return { servers, signature: `${agentId}:${[...namespaces].sort().join(',')}` };
   }
 
+  /**
+   * Ensure the thread is set up based on transport options.
+   * Handles three cases: fork from parent, start new, or reuse existing.
+   * Returns true if a new thread was created (caller should yield sessionId).
+   */
   private async ensureThread(options: TransportOptions): Promise<boolean> {
     const client = this.client!;
 

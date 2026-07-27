@@ -24,7 +24,9 @@ And practically: LLMs are genuinely good at producing HTML/JS UI. "Respond with 
 
 (There is still a TUI-ish escape hatch: `Shift+Tab` opens a CLI panel that streams the agent's raw reasoning and tool calls, for when you want to watch the machinery.)
 
----### Why build a whole "OS" for what is basically agent orchestration?
+---
+
+### Why build a whole "OS" for what is basically agent orchestration?
 
 Because agent orchestration, done honestly, keeps re-inventing OS problems — so YAAR just borrows the OS answers instead of inventing worse ones ad hoc:
 

@@ -9,9 +9,8 @@ Run a model *inside a YAAR app iframe* — no Python, no install — using WebGP
 browser, so an ML app ships its model and runs anywhere the desktop runs,
 including remote/headless mode.
 
-This is **Tier 1** from [`tier1_inbrowser_models_plan.md`](./tier1_inbrowser_models_plan.md):
-models small enough to download and fit in a browser tab. Frontier models that
-need CUDA/MPS are out of scope (that's the native Tier 2/3 path).
+This targets models small enough to download and fit in a browser tab. Frontier models
+that need CUDA/MPS are out of scope.
 
 The SDK is **gated** — declare it in `app.json`:
 

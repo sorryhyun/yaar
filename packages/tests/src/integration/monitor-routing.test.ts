@@ -14,12 +14,8 @@ const { actionEmitter } = await import('@yaar/server/session/action-emitter');
 
 describe('a window action with no monitor', () => {
   it('fails instead of landing on monitor 0', () => {
-    // resolveWindowMonitor used to end `?? activeMonitorId ?? '0'`: the session's
-    // last-subscribed monitor, then the default. Both were guesses, and the guess was
-    // wrong precisely when it mattered — the window was registered on the monitor the
-    // server picked and rendered on the one the frontend picked, so one app became two
-    // windows. Every window action is now emitted inside an agent turn or an iframe verb
-    // call, and both carry a monitor. One that carries none cannot be placed.
+    // Every window action is emitted inside an agent turn or an iframe verb call, and
+    // both carry a monitor. One that carries none cannot be placed.
     actionEmitter.clearCurrentMonitor();
 
     expect(() => actionEmitter.resolveWindowMonitor('some-session')).toThrow(/monitor/i);

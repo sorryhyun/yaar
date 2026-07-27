@@ -102,10 +102,8 @@ concurrently instead of one agent role-playing them in turn.
 - **Role**: `app-persona-{appId}-{subId}`; keyed `monitorId::appId::subId`
 - **Context**: none of YAAR's — every sub-agent bypasses `ContextPool` entirely (no tape, no
   queue; the app's own scheduler serializes its turns)
-- **Tools**: **no YAAR verbs, no permissions, no principal.** At most one channel back into its
-  *own* app's iframe, under tool names the app declared at spawn: calling one dispatches the
-  protocol command `persona:{name}` to that app's active window. Grants held by the app *agent*
-  (`controls`, `direct_message`) do not descend
+- **Tools**: no YAAR verbs, no permissions, no principal — see [The Agent Tree](./agent_tree.md)
+  for the full containment rule and how an app-declared tool name reaches the app's iframe
 - **URI**: addressed through its owner — `yaar://apps/self/agents/{personaId}`; streams at
   `yaar://agents/{instanceId}/stream`
 

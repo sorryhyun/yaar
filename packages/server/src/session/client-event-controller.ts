@@ -137,10 +137,7 @@ export class ClientEventController {
     event: ClientEventOf<typeof ClientEventType.USER_MESSAGE>,
     connectionId: ConnectionId,
   ): Promise<void> {
-    // A user message's monitor comes from the connection that sent it. The client
-    // always knows which monitor it is on, so `?? '0'` only ever fired when
-    // something upstream had lost it — and then answered with the wrong monitor
-    // rather than saying so.
+    // A user message's monitor comes from the connection that sent it.
     const monitorId = event.monitorId;
     if (!monitorId) {
       this.deps.sendTo(connectionId, {

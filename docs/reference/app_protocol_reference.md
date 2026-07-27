@@ -17,7 +17,10 @@ Agent calls invoke(window, { action: 'app_query' | 'app_command' }) or a scoped 
   → tool returns result to agent
 ```
 
-An app opts in by setting `"appProtocol": true` in its `app.json` and registering with `export default defineApp({...})` (imported from `@bundled/yaar`) inside the iframe.
+An app opts in simply by registering with `export default defineApp({...})` (imported from
+`@bundled/yaar`) inside the iframe — that's the whole signal the compiler and runtime look for.
+(An `"appProtocol": true` field in `app.json` is not read anywhere; the compiler's `deploy.ts`
+strips it as legacy.)
 
 ---
 
@@ -26,7 +29,7 @@ An app opts in by setting `"appProtocol": true` in its `app.json` and registerin
 The core logic (`handleAppQuery` / `handleAppCommand`) is shared by two entry points that differ by _which_ agent is calling and _what surface_ it sees:
 
 - **Monitor/session agent** — an app is just another window. It reaches apps through the same generic `invoke` verb it uses for every window, targeting the window URI explicitly. No app is privileged; it can query/command any open app window.
-- **Persistent app agent** (one per `appId`) — gets a narrow, dedicated tool surface scoped to _its own_ app by default. Reaching another app requires that app's `app.json` `controls` permission (cross-app control).
+- **Persistent app agent** (one per `appId`) — gets a narrow, dedicated tool surface scoped to _its own_ app by default. Reaching another app requires the *calling* app's own `app.json` `controls` list to name that target (cross-app control) — `controls` is read from the caller (`getAppMeta(ownAppId)`), not the target.
 
 Both paths converge on the same executor below, so app-side behavior (readiness wait, command replay, storage interception) is identical regardless of caller.
 
@@ -45,7 +48,7 @@ Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`
 ### Scoped tools (app agents)
 
 Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. These tools:
-- Default to the agent's own window; pass `appId` to target another app permitted via that app's `app.json` `controls` list (see root `CLAUDE.md` "Cross-app control").
+- Default to the agent's own window; pass `appId` to target another app, permitted only when the *calling* app's own `app.json` `controls` list names that target (see root `CLAUDE.md` "Cross-app control").
 - Intercept `stateKey`/`command` values prefixed `storage/` / `storage:` to read/write app-scoped storage directly, bypassing the app protocol entirely (own app only — storage is not cross-app controllable).
 - `command` accepts an optional `timeoutMs` to override the default wait (30s, max 180s) for slow commands like a compile or a deploy.
 
@@ -406,7 +409,6 @@ Apps can declare file types they can open in `app.json`:
 
 ```json
 {
-  "appProtocol": true,
   "fileAssociations": [
     { "extensions": [".csv", ".xlsx"], "command": "openFile", "paramKey": "content" }
   ]
@@ -433,7 +435,7 @@ When a user opens a file with a matching extension, the agent invokes `app_comma
 
 | Method | Description |
 |--------|-------------|
-| `emitAppProtocolRequest(windowId, request, timeoutMs)` | Sends a request through the pipeline and returns a promise that resolves with the response (or `undefined` on timeout). Default timeout: 5000 ms. |
+| `emitAppProtocolRequest(windowId, request, timeoutMs)` | Sends a request through the pipeline and returns a `Promise<PendingOutcome<AppProtocolResponse>>` — `{ ok: true, value }` on response, or `{ ok: false, reason: 'timeout' \| 'cancelled' }` (never a bare `undefined`). Default timeout: 5000 ms. |
 | `resolveAppProtocolResponse(requestId, response)` | Called when the frontend sends `APP_PROTOCOL_RESPONSE`. Resolves the corresponding pending promise. |
 | `waitForAppReady(sessionId, windowId, timeoutMs?)` | Waits for `APP_PROTOCOL_READY` from the frontend, scoped to the caller's session. Returns `true` if the app registered, `false` on timeout. |
 | `notifyAppReady(sessionId, windowId)` | Marks a window as protocol-ready in that session and resolves pending `waitForAppReady()` calls. |
@@ -451,7 +453,11 @@ Tracks per-window protocol state:
 
 ### Command Replay
 
-When an iframe app reloads (e.g., due to HMR or navigation), the server detects a new `APP_PROTOCOL_READY` for a window that was already marked as ready. It then replays all recorded `appCommands` so the app returns to its previous state.
+When an iframe app reloads (e.g., due to HMR or navigation), the server detects a new `APP_PROTOCOL_READY` for a window that was already marked as ready, and replays its recorded `appCommands` so the app returns to its previous state (`AppWindowCoordinator.replayCommands()`). Three refinements on top of that:
+
+- A command whose *currently running* registration declared `replay: 'never'` for it is skipped rather than resent — those are commands that append, notify, or otherwise have a one-shot effect, so resending would duplicate it rather than restore state. The replay policy is read from the registration that just came back up, not the one that was there before the reload.
+- Every command that *is* resent is stamped `replayed: true` on the request, so a handler can read `ctx.replayed` (the second argument to a command handler) to reconcile against state it already restored from its own persistence instead of opting out of replay wholesale.
+- No replay happens at all when the ready event is a `reannounce` (`AppProtocolReadyEvent.reannounce`) — that's the desktop repeating a registration it already witnessed, with the iframe never having remounted, so there's nothing to restore.
 
 ---
 

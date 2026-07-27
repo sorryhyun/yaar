@@ -344,7 +344,7 @@ function buildWhere(filter: Record<string, unknown>): { sql: string; params: unk
 
 ---
 
-## SDK Shim (`packages/compiler/src/shims/yaar.ts`)
+## SDK Shim (`packages/compiler/src/shims/yaar/app-db.ts`)
 
 `appDb`는 shim 안에서 `appStorage`와 나란히 있습니다(발췌 — `createReactiveCollection`을
 포함한 전체 구현은 파일을 참조하세요):
@@ -426,19 +426,15 @@ export const appDb = {
 | 단순한 key-value 설정 | 둘 다 가능 | 단일 파일이면 `appStorage`, 키가 많으면 `appDb` |
 | 앱 자격 증명/토큰 | `appStorage` (파일시스템) | 사람이 직접 열람 가능, 단순한 read/write |
 
-### 충돌 없음 — 병렬 시스템
-
 ```
 storage/apps/{appId}/
-├── data.db              ← NEW: SQLite database (appDb)
-├── draft.json           ← EXISTING: file storage (appStorage)  
+├── data.db              ← SQLite database (appDb)
+├── draft.json           ← file storage (appStorage)
 ├── auth/
-│   └── credentials.json ← EXISTING: file storage (appStorage)
+│   └── credentials.json ← file storage (appStorage)
 └── uploads/
-    └── photo.png        ← EXISTING: file storage (appStorage)
+    └── photo.png        ← file storage (appStorage)
 ```
-
-두 API 모두 동시에 동작합니다. `appStorage`는 `data.db`를 건드리지 않습니다. `appDb`는 `data.db`만 건드립니다. 기존 앱에 대한 마이그레이션이 필요 없습니다.
 
 ### AI 에이전트 접근
 
@@ -457,7 +453,7 @@ read('yaar://apps/memo/db/notes', { filter: { tags: 'important' }, limit: 5 })
 **구현 완료:**
 - 핵심 인프라 — `AppDatabase` 클래스, 풀, 쿼리 빌더(`packages/server/src/db/`),
   `yaar://apps/{appId}/db/*` verb 라우트(`handlers/apps.ts`), `appDb` + `CollectionHandle`
-  SDK shim과 타입 선언(`packages/compiler/src/shims/yaar.ts`,
+  SDK shim과 타입 선언(`packages/compiler/src/shims/yaar/app-db.ts`,
   `bundled-types/index.d.ts`)
 - 전문 검색 — 동기화 트리거가 있는 FTS5 테이블, `collection.search(query)`
 - 반응형 바인딩 — Solid.js를 위한 `appDb.createReactiveCollection`, verb 구독으로 뒷받침되어
@@ -481,7 +477,7 @@ read('yaar://apps/memo/db/notes', { filter: { tags: 'important' }, limit: 5 })
 | 큰 데이터베이스가 앱 삭제 속도를 늦춤 | UX 지연 | 그냥 `rm data.db` — SQLite는 단일 파일 |
 | 필터 문법이 너무 제한적 | 앱에 원시 SQL이 필요 | `appDb.raw(sql, params)` 탈출구 추가 가능(향후 작업) |
 | 열린 데이터베이스로 인한 메모리 사용 | 서버 OOM | LRU eviction이 있는 풀(최대 20개 오픈, 5분 유휴 타임아웃) |
-| 앱 shim에 대한 하위 호환성 깨짐 | 기존 앱이 깨짐 | 순수하게 추가적임 — `appDb`는 신규, `appStorage`는 변경 없음 |
+| 앱 shim에 대한 하위 호환성 깨짐 | 기존 앱이 깨짐 | `appDb`는 신규, `appStorage`는 변경 없음 ([설계 결정](#1-새로운-appdb-api--appstorage를-대체하지-않음) 참고) |
 
 ---
 

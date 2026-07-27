@@ -95,8 +95,8 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
 }
 
 /**
- * Back-compat alias. `HeadlessServerBrowser` was formerly `BrowserPool`;
- * existing call sites and tests may still reference the old name.
+ * Back-compat alias. `HeadlessServerBrowser` was formerly `BrowserPool`; the class
+ * alias is still exercised by `tests/browser-pool.test.ts`.
  *
  * @deprecated Use `HeadlessServerBrowser` (or the `BrowserProvider` interface).
  */
@@ -153,9 +153,10 @@ export function isForceHeadless(): boolean {
 }
 
 /**
- * The active browser provider for back-compat callers (availability probe,
- * lifecycle shutdown, the `yaar://` overview count, and the legacy
- * `/api/browser` route helper). Always the headless sandbox now.
+ * Deprecated alias for `getHeadlessBrowser()`. The former back-compat callers
+ * (availability probe, lifecycle shutdown, the `yaar://` overview count, the legacy
+ * `/api/browser` route helper) have all been moved onto `getHeadlessBrowser()` directly;
+ * this has no production callers left.
  *
  * @deprecated Prefer `getHeadlessBrowser()` / `getLocalBrowser()` by door.
  */

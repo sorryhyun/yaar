@@ -199,10 +199,6 @@ describe('an app protocol request, and the answer to it', () => {
     );
 
     const outcome = await pending;
-    // The old copy asserted this resolved `null`, and production had already stopped doing
-    // that. A `null` answer and a missing answer are the same value, which is how a window
-    // that never rendered got announced to the agent as rendered. There is no default now:
-    // the outcome names which of the three things happened.
     expect(outcome.ok).toBe(false);
     expect(outcome.ok === false && outcome.reason).toBe('timeout');
   });

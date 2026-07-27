@@ -18,7 +18,7 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 
 ```bash
 bun install                      # Install all dependencies
-make dev                         # Start with auto-detected provider (opens at localhost:5173)
+make dev                         # Start with auto-detected provider (single port, default localhost:8000)
 make claude                      # Start with Claude provider (REMOTE=1, serves from port 8000)
 make codex                       # Start with Codex provider (REMOTE=1, serves from port 8000)
 make claude-dev                  # Claude provider without MCP auth (local dev)
@@ -33,7 +33,6 @@ bun run format:check             # Check formatting without writing
 
 # Run individual packages
 make server                                  # Start server only
-make frontend                                # Start frontend only
 
 # Testing
 bun run --filter @yaar/frontend test                 # Run all frontend tests
@@ -115,7 +114,7 @@ yaar/
 ├── apps/                        # Convention-based apps (each folder = one app)
 │   ├── dock/                    # Taskbar/dock panel app
 │   ├── storage/                 # File storage browser app
-│   └── ...                      # Other bundled apps (slides-lite, etc.)
+│   └── ...                      # Other bundled apps (devtools, chitchats, etc.)
 ├── config/                      # User config (git-ignored)
 │   ├── credentials/             # Centralized app credentials (git-ignored)
 │   ├── permissions.json         # Saved permission decisions
@@ -178,10 +177,12 @@ Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
 - **`lib/`** — Standalone utilities with no server internal dependencies:
   - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability)
-  - `bundled-types/` — Per-library `.d.ts` files for `@bundled/*` imports (used by `apps/tsconfig.json`)
-  - `compiler/` — Bun bundler for app development
   - `pdf/` — PDF rendering via poppler
-  - `sandbox/` — Sandboxed JS/TS code execution (node:vm)
+  - `tunnel/` — Tailscale Serve tunnel setup for remote mode
+  - `download/` — chunked file download handling
+  - `ssrf.ts` — SSRF protection (URL validation, safe fetch with redirect following)
+  - `image.ts` — data-URL image parsing
+  - plus single-file utilities: `ids.ts`, `open-url.ts`, `pick-directory.ts`, `format-interaction.ts`, `format-verb-log.ts`, `yaar-uri-server.ts`
 - **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{YYYY-MM-DD_HH-MM-SS}/`
 
 ### Connection Lifecycle
@@ -192,7 +193,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
   → Reconnection: existing LiveSession returned (state preserved)
   → First message → ContextPool initialized → AgentPool created → Warm provider acquired
   → Messages routed: USER_MESSAGE → monitor's main queue (sequential), WINDOW_MESSAGE/COMPONENT_ACTION → monitor agent (plain windows) or AppTaskProcessor (app windows)
-  → App window interaction → persistent app agent created on first interaction (keyed by appId)
+  → App window interaction → persistent app agent created on first interaction (keyed by `monitorId::appId` — one per app per monitor, not shared across monitors)
   → WebSocket disconnects → session stays alive for reconnection
 ```
 
@@ -226,9 +227,9 @@ Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata
 
 ### App Agent Architecture
 
-When a user interacts with an app window, a **persistent app agent** is created (one per `appId`, reused across all windows of that app). App agents have four scoped tools — `describe` (read an app's protocol), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
+When a user interacts with an app window, a **persistent app agent** is created (one per `monitorId::appId`, reused across all windows of that app on that monitor — not shared across monitors). App agents have four scoped tools — `describe` (read an app's protocol), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
 
-**Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window (no permission needed). Passing another app's id targets that app — gated by the caller's `app.json` `controls` list (bundled apps only, mirroring the `kind: "system"` guard). `controls` accepts a string shorthand (`["browser-user"]`) or object form (`[{ "appId": "browser-user", "commands": ["navigate", "click"] }]`) to restrict which commands may be issued. The target app must have an open window (resolved via `pool.getActiveAppWindow`). This is direct synchronous protocol control; contrast with `direct_message` to `app:{id}`, which hands a natural-language request to the other app's own agent. E.g. devtools declares `"controls": ["browser-user"]` to drive the real browser end-to-end. The app's own protocol is injected at boot; controlled apps' protocols are discovered on demand via `describe(appId)`.
+**Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window (no permission needed). Passing another app's id targets that app — gated by the caller's `app.json` `controls` list (bundled apps only, mirroring the `kind: "system"` guard). `controls` accepts a string shorthand (`["browser-user"]`) or object form (`[{ "appId": "browser-user", "commands": ["navigate", "click"] }]`) to restrict which commands may be issued. The target app doesn't need an open window — `resolveTarget` reuses one already open on the caller's monitor, or auto-launches one if none exists. This is direct synchronous protocol control; contrast with `direct_message` to `app:{id}`, which hands a natural-language request to the other app's own agent. E.g. devtools declares `"controls": ["browser-user"]` to drive the real browser end-to-end. The app's own protocol is injected at boot; controlled apps' protocols are discovered on demand via `describe(appId)`.
 
 **Prompt priority:** `AGENTS.md` (full custom prompt, replaces generic) > `SKILL.md` (appended to generic prompt). `protocol.json` manifest is always appended — commands as call signatures rendered from their `params` schema, so a prompt file never has to restate param names — as is a "Controllable Apps" section when `controls` is set. Use `AGENTS.md` for apps like devtools that need precise agent behavior; `SKILL.md` for simpler apps where the generic prompt suffices. `HINT.md` is separate — its content is injected into the **monitor agent's** system prompt (not the app agent's), providing orchestration hints that auto-sync with app install/uninstall.
 
@@ -236,53 +237,19 @@ Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lif
 
 ### Sub-agents / Persona Agents (app-spawned AI instances)
 
-An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **sub-agents** from its iframe: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. Spawned without `tools` a sub-agent is tool-less — it receives text and returns text — which is the "persona" case the URI and the spawn param are named for.
+An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands). Reference consumer: `apps/chitchats`.
 
-```ts
-invoke('yaar://apps/self/agents', { action: 'spawn', personaId, systemPrompt, model? })
-// → { personaId, instanceId, streamUri }   — idempotent; an existing persona comes back with reused: true
-invoke(`yaar://apps/self/agents/${id}`, { action: 'message', content })   // returns immediately
-invoke(`yaar://apps/self/agents/${id}`, { action: 'interrupt' })
-stream(streamUri, onFrame)      // start | text | thinking | done (carries final text) | error
-list('yaar://apps/self/agents') // roster + max      del(...) // dispose one, or all
-```
-
-Needs `"streams": ["agents"]` to watch them (the `yaar://apps/self/` namespace itself is auto-granted — no `permissions` entry). `message` returns as soon as the turn is queued, so N sub-agents generate concurrently. They hold **no YAAR verbs, no permissions, and no principal** — the runtime-supplied prompt never gets YAAR's hands — and are reclaimed when the app's last window on that monitor closes. Persistence is the app's job (`appDb`/`appStorage`); a respawned persona gets its history replayed in its first message.
-
-**Tools.** The one thing a sub-agent may be given is a channel back to *your own app's iframe*, dressed in tool names you declare at spawn:
-
-```ts
-invoke('yaar://apps/self/agents', { action: 'spawn', personaId: 'alice', systemPrompt,
-  tools: [{ name: 'skip', description: 'Decline this turn.' },
-          { name: 'memorize', description: 'Save a lasting fact.', input: { fact: 'string' } }] })
-// alice calling `memorize` → your iframe receives command `persona:memorize`
-//   with params { fact, personaId: 'alice' }; whatever your handler returns is the tool result.
-```
-
-Register `persona:{toolName}` commands in `defineApp({ commands })` to answer them; they are hidden from the *app agent's* `describe`/manifest, since their spawn-time descriptions are written for a character, not an operator. The names are prompt material only — every one of them is `mcp__subagent__{name}` and lands in your own iframe, so no tool list reaches a YAAR verb, another app, `relay`, `direct_message`, or `controls`. Omit `tools` and the allowlist is `[]`, which connects no MCP server at all.
-
-Key files: `agents/profiles/sub-agent.ts` (the profile — the one place capabilities are decided), `agents/agent-pool.ts` (`spawnSubAgent`/`runSubAgentTurn`/dispose), `mcp/sub-agent/` (the one channel), `features/apps/persona-commands.ts` (`persona:` convention), `handlers/apps/agents-resource.ts` (the verb surface + ownership check), `features/apps/discovery.ts` (`subagents`/`personas` parsing). Reference consumer: `apps/chitchats` (rooms that take turns; characters get `skip`, `memorize`, and — when their memory file has chunks — `recall`, whose description carries the memory index so the backstory is retrieved rather than replayed every turn). Design record: [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md) (the tree and its four laws); verb surface: [`docs/reference/uri_reference.md`](./docs/reference/uri_reference.md#app-sub-agents--yaarappsselfagents); how-to: [`docs/guides/app-development.md`](./docs/guides/app-development.md#sub-agents-personas).
+See `packages/server/CLAUDE.md` (Tools/MCP section) for the full verb surface, lifecycle, and containment details, and [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md) for the design record.
 
 ### Compiler & Bundled Libraries
 
 Apps are compiled via Bun into a single self-contained HTML file. Entry point is always `src/main.ts`. The compiler injects design tokens, SDK scripts (capture, storage, verb, app-protocol, etc.), and the bundled code.
 
-**`@bundled/*` imports** — no `npm install` needed. Available libraries:
-- **UI**: `@bundled/solid-js`, `@bundled/solid-js/html`, `@bundled/solid-js/web`, `@bundled/solid-js/store` (preferred framework)
-- **Utilities**: `@bundled/uuid`, `@bundled/lodash`, `@bundled/date-fns`, `@bundled/clsx`, `@bundled/diff`, `@bundled/diff2html`
-- **Graphics/3D**: `@bundled/three`, `@bundled/cannon-es`, `@bundled/konva`, `@bundled/pixi.js`, `@bundled/p5`, `@bundled/matter-js`
-- **Data/Charts**: `@bundled/chart.js`, `@bundled/d3`, `@bundled/xlsx`
-- **Animation**: `@bundled/anime`
-- **Audio**: `@bundled/tone`
-- **Parsing**: `@bundled/marked`, `@bundled/prismjs`, `@bundled/mammoth`
-- **Sanitization**: `@bundled/dompurify` (mandatory for any externally-sourced HTML)
-- **Validation**: `@bundled/zod` (Zod Mini functional API — validate untrusted/persisted JSON at trust boundaries)
-- **YAAR SDK**: `@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `defineApp()`, `appStorage`, `appDb` (SQLite collections), etc.
-- **Gated SDKs** (require `"bundles"` in `app.json`): `@bundled/yaar-dev` (compile, typecheck, deploy, plus per-app version history: gitHistory/gitDiff/gitRestore/gitCheckpoint), `@bundled/yaar-web` (browser automation: open, click, extract, etc.), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/guides/yaar_ml_runtime.md`](./docs/guides/yaar_ml_runtime.md))
+**`@bundled/*` imports** — no `npm install` needed. 30+ libraries across UI (Solid.js), utilities, graphics/3D, data/charts, animation, audio, parsing, sanitization (`dompurify` — mandatory for any externally-sourced HTML), and validation (`zod` Mini functional API). Plus the **YAAR SDK** (`@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `defineApp()`, `appStorage`, `appDb`, etc.) and **gated SDKs** requiring `"bundles"` in `app.json`: `@bundled/yaar-dev` (compile/typecheck/deploy + per-app version history), `@bundled/yaar-web` (browser automation), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/guides/yaar_ml_runtime.md`](./docs/guides/yaar_ml_runtime.md)).
 
-The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries`.
+The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries` (full category breakdown in `packages/compiler/CLAUDE.md`).
 
-Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/bundled/` (registry.ts = the library list, plugins.ts = resolution + gated SDK enforcement), `packages/compiler/src/shims/` (yaar.ts, yaar-dev.ts, yaar-web.ts), `packages/compiler/src/protocol/` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
+Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/bundled/` (registry.ts = the library list, plugins.ts = resolution + gated SDK enforcement), `packages/compiler/src/shims/` (per-library shims, e.g. `yaar/` the SDK barrel, plus `yaar-dev.ts`, `yaar-web.ts`), `packages/compiler/src/protocol/` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
 
 ### Design Tokens
 

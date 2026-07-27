@@ -12,14 +12,14 @@ flowchart LR
     FE <-->|WebSocket| LS[LiveSession]
     LS --> CP[ContextPool]
     CP --> MA["Monitor Agent<br/>(one per monitor, max 4)"]
-    CP --> AA["App Agent<br/>(one per appId)"]
+    CP --> AA["App Agent<br/>(one per monitor::app)"]
     CP --> EA["Ephemeral Agent<br/>(overflow, disposable)"]
     CP --> SA["Session Agent<br/>(lazy singleton)"]
     MA & AA & EA & SA -->|OS Actions| LS
     AA <-->|App Protocol| FE
 ```
 
-네 가지 에이전트 티어가 세션의 `ContextPool` 내부에서 하나의 `AgentPool`을 공유합니다. 서버→프론트엔드로 나가는 모든 이벤트는 `LiveSession.broadcast()`를 거칩니다 (`BroadcastCenter`를 통한 모니터 단위 라우팅).
+다섯 가지 에이전트 티어가 세션의 `ContextPool` 내부에서 하나의 `AgentPool`을 공유합니다. 서버→프론트엔드로 나가는 모든 이벤트는 `LiveSession.broadcast()`를 거칩니다 (`BroadcastCenter`를 통한 모니터 단위 라우팅).
 
 ## 에이전트 유형
 

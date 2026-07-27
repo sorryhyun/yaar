@@ -456,11 +456,8 @@ export class ContextPool implements PoolContext {
           // Plain window → the monitor agent, on the window's OWN monitor.
           //
           // WINDOW_MESSAGE and COMPONENT_ACTION carry no monitorId — the client sends a
-          // windowId, and the window is what knows where it lives. Re-typing the task to
-          // 'monitor' without deriving that left it to `?? '0'` downstream: a click in a
-          // window on monitor 1 ran on monitor 0's agent, streamed into monitor 0's CLI,
-          // and opened its windows there. AppTaskProcessor has always asked the registry;
-          // this path just didn't.
+          // windowId, and the window is what knows where it lives, so the task's monitor
+          // must be derived from the window rather than re-typed as-is.
           await this.monitorProcessor.queueMonitorTask({
             ...task,
             type: 'monitor',
@@ -477,8 +474,7 @@ export class ContextPool implements PoolContext {
    * The monitor a window-scoped task runs on: the one its window is on.
    *
    * There is no fallback. A task naming a window the registry does not know cannot be
-   * placed, and placing it on monitor 0 — which is what `?? '0'` did — is not a
-   * recovery, it is the bug with the evidence removed.
+   * placed.
    */
   private monitorForWindowTask(task: Task): string {
     const monitorId = task.windowId

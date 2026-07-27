@@ -47,23 +47,26 @@ desktop-grade AI-composed UI.
 
 ## Current state (verified)
 
-### The window layer blocks this first
+### The window layer's collision bug is fixed
 
-The draft this replaces assumed the window layer already permitted N windows per app. It does
-not — and this is the **prerequisite**, ahead of any agent work:
+The draft this replaces flagged a real bug in the window layer, which blocked multi-window
+apps outright. That prerequisite is now resolved:
 
-- `deriveWindowId` (`features/window/helpers.ts:19`) is `if (appId) return appId` — the
+- `deriveWindowId` (`features/window/helpers.ts:19`) is still `if (appId) return appId` — the
   `name` and `title` arguments are ignored outright when an appId is present.
-- The launch snippet handed to every agent (`features/dev/helpers.ts:52`) is
-  `invoke('yaar://windows/${appId}', { action: "create" })` — so the raw window ID *is* the
-  appId by convention.
-- Both paths land on the same raw ID, hence the same handle, hence
-  `WindowStateRegistry.handleAction` overwrites the first window's state with the second's.
+- The launch snippet handed to every agent (`agents/profiles/shared-sections.ts:66`) is
+  `invoke('yaar://windows/', { action: "create", title: "My App", appId: "slides-lite", ... })`
+  — so a bare create with no explicit id still derives to the raw appId by convention.
+- Previously, both paths landed on the same raw ID, hence the same handle, hence
+  `WindowStateRegistry.handleAction` overwrote the first window's state with the second's.
 
-An agent *can* dodge this today by choosing an explicit distinct ID
-(`invoke('yaar://windows/pdf-report', { action: "create", appId: "pdf-viewer" })`), but
-nothing tells it to, and every SKILL.md and generated snippet says otherwise. Multi-window is
-unreachable in practice until window IDs are unique per window.
+That last step no longer happens: `handleCreate` (`features/window/create.ts:129-137`) now
+calls `allocateWindowId` (`features/window/helpers.ts:39-46`) whenever the incoming id was
+*derived* rather than caller-named, stepping `appId` → `appId-2` → `appId-3` instead of
+colliding — pinned by `packages/server/src/tests/window-create-collision.test.ts`. Multi-window
+is reachable today without an agent needing to invent a distinct id; the design below is about
+giving `multi` apps deliberate, meaningful per-window ids and per-window agents, not about
+avoiding the overwrite.
 
 ### The agent layer then serializes them
 

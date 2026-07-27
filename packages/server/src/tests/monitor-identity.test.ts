@@ -311,14 +311,9 @@ describe('F-11 — a window-scoped task derives its monitor from the window', ()
   });
 
   it('runs a click in a plain window on monitor 1 on monitor 1’s agent', async () => {
-    // The client's COMPONENT_ACTION / WINDOW_MESSAGE carry no monitorId (events.ts:105-151),
-    // and handleTask re-types a plain window task to 'monitor' without deriving the
-    // monitor from the window (context-pool.ts:447). It then falls to `?? '0'`
-    // (monitor-task-processor.ts:24). So clicking a button in a window on monitor 1
-    // runs on monitor 0's agent, streams into monitor 0's CLI, and any window it opens
-    // lands on monitor 0. The window registry has known the answer the whole time:
-    // getMonitorForWindow('1/notes') === '1'. AppTaskProcessor already asks it
-    // (app-task-processor.ts:36); the plain-window path never does.
+    // COMPONENT_ACTION / WINDOW_MESSAGE carry no monitorId — the window registry
+    // resolves it via getMonitorForWindow, and a plain-window task is re-typed to
+    // 'monitor' with that derived id, so it runs on the window's own monitor.
     await pool.handleTask({
       type: 'app',
       messageId: 'click-1',
@@ -368,7 +363,6 @@ describe('F-12 — a monitor that cannot be resolved is an error, not a default'
   });
 
   it('rejects a monitor task that names no monitor', async () => {
-    // `?? '0'` (monitor-task-processor.ts:24) turns "I don't know" into "monitor 0".
     // A user-scoped task's monitor comes from the connection and is always present;
     // one that arrives without it is a bug upstream, and must say so.
     await expect(
@@ -377,26 +371,22 @@ describe('F-12 — a monitor that cannot be resolved is an error, not a default'
   });
 
   it('rejects a window task whose window is not registered', async () => {
-    // No window → no monitor to derive. Today this silently lands on monitor 0.
+    // No window → no monitor to derive, and no default to fall back to.
     await expect(
       pool.handleTask({ type: 'app', messageId: 'm2', windowId: 'ghost', content: 'hello' }),
     ).rejects.toThrow(/monitor|window/i);
   });
 
   it('rejects a session task that names no monitor', async () => {
-    // context-pool.ts:355 — the third `?? '0'`.
     await expect(
       pool.handleSessionTask({ type: 'session', messageId: 'm3', content: 'hello' }),
     ).rejects.toThrow(/monitor/i);
   });
 
   it('reports the session agent’s monitor for the turn it is running', async () => {
-    // findMonitorForAgent() looks in monitorAgents and appAgents (agent-pool.ts:441)
-    // — the session agent is in neither, so it returns undefined, and every downstream
-    // `getMonitorId() ?? '0'` (e.g. handlers/window.ts:184) puts its windows on monitor 0.
-    // Meanwhile the emitter stamps the outbound ACTIONS event with activeMonitorId. The
-    // window is registered on one monitor and its event delivered to another — one turn,
-    // two answers. The session agent runs on a monitor like everyone else; say which.
+    // findMonitorForAgent() looks in monitorAgents and appAgents — the session agent is
+    // in neither, so it borrows sessionAgentMonitorId, pinned to the monitor of the turn
+    // it is running. The session agent runs on a monitor like everyone else; say which.
     await pool.createMonitorAgent('1');
     await pool.handleSessionTask({
       type: 'session',

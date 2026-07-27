@@ -1,17 +1,12 @@
-# Self Inspection (Verb Mode)
+# Self Inspection
 
-A deep diagnostic suite that stress-tests YAAR's verb layer — identical coverage to Self Inspection but using **only the 5 generic verbs** (`describe`, `read`, `list`, `invoke`, `delete`) against `yaar://` URIs.
+A deep diagnostic suite that stress-tests YAAR's verb layer, using **only the 5 generic verbs** (`describe`, `read`, `list`, `invoke`, `delete`) against `yaar://` URIs.
 
 ## Launch
 
 This is a pure-skill app — no iframe or compiled code. Follow the instructions below using verb tools directly.
 
 When the user opens this app or says "run verb inspection", "run verb diagnostics", or "verb self-test", run all checks below and produce the report.
-
-**Important:** Verb mode must be enabled (`verbMode: true` in settings). If it's not, enable it first:
-```
-invoke('yaar://config/settings', { verbMode: true })
-```
 
 ---
 
@@ -39,7 +34,7 @@ Test the root resource and namespace enumeration:
 
 ```
 read('yaar://')                    # should return session overview (sessionId, platform, etc.)
-list('yaar://')                    # should return all 6 URI namespaces (apps, storage, windows, config, browser, sessions)
+list('yaar://')                    # should return all 7 URI namespaces (apps, storage, windows, config, session, user, history)
 list('yaar://config/')             # should return config sections (settings, hooks, shortcuts, mounts, app)
 ```
 
@@ -180,47 +175,46 @@ delete('yaar://windows/si-v-memo')
 
 **PASS** if all read-back values match expectations.
 
-### 8. App Protocol Round-Trip (Slides)
+### 8. App Protocol Round-Trip (Video Editor Lite)
 
-Open Slides Lite, set a deck, read it back:
+Open Video Editor Lite, build a composition, read it back:
 
 ```
-invoke('yaar://windows/si-v-slides', { action: "create", title: "Slides Lite", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
+invoke('yaar://windows/si-v-video', { action: "create", title: "Video Editor Lite", appId: "video-editor-lite", renderer: "iframe", content: "yaar://apps/video-editor-lite" })
 ```
 
 Wait for ready, then:
 ```
-invoke('yaar://windows/si-v-slides', { action: "app_command", command: "setDeck", params: { "deck": { "title": "Self Inspection Test", "themeId": "midnight-dark", "aspectRatio": "16:9", "fontSize": "md", "activeIndex": 0, "slides": [{ "layout": "title", "title": "Test Deck", "body": "This is a self-inspection test." }, { "layout": "bullets", "title": "Second", "body": "one\ntwo" }] } } })
-invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "title" })       # should be "Self Inspection Test"
-invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "slideCount" })  # should be 2
-invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "theme" })       # should be "midnight-dark"
-invoke('yaar://windows/si-v-slides', { action: "app_command", command: "setActiveIndex", params: { "index": 1 } })
-invoke('yaar://windows/si-v-slides', { action: "app_query", stateKey: "activeSlide" }) # title should be "Second"
-delete('yaar://windows/si-v-slides')
+invoke('yaar://windows/si-v-video', { action: "app_command", command: "createComposition", params: { "width": 1280, "height": 720, "fps": 30, "durationInFrames": 150 } })
+invoke('yaar://windows/si-v-video', { action: "app_command", command: "addScene", params: { "type": "text", "durationInFrames": 90, "props": { "text": "Self Inspection Test" } } })
+invoke('yaar://windows/si-v-video', { action: "app_query", stateKey: "composition" })  # should show 1 scene of type "text"
+invoke('yaar://windows/si-v-video', { action: "app_query", stateKey: "layers" })       # should show 1 layer containing the new scene
+delete('yaar://windows/si-v-video')
 ```
 
-**PASS** if title, slideCount, theme, and activeSlide match expectations.
+**PASS** if the composition and layers reflect the created scene.
 
-### 9. Cross-App Data Flow (Storage → Slides)
+### 9. Cross-App Data Flow (Storage → Video Editor Lite)
 
-Write structured data to storage via invoke, then import it into Slides via App Protocol:
+Write a scene definition to storage via invoke, then import it into Video Editor Lite via App Protocol:
 
 ```
-invoke('yaar://storage/_si-v-test-data.json', { action: "write", content: "{\"title\":\"Imported Deck\",\"themeId\":\"ocean\",\"aspectRatio\":\"16:9\",\"fontSize\":\"md\",\"activeIndex\":0,\"slides\":[{\"layout\":\"title\",\"title\":\"Product\",\"body\":\"Widget\"},{\"layout\":\"bullets\",\"title\":\"Price\",\"body\":\"9.99\"}]}" })
+invoke('yaar://storage/_si-v-test-data.json', { action: "write", content: "{\"type\":\"text\",\"durationInFrames\":60,\"props\":{\"text\":\"Imported Scene\"}}" })
 read('yaar://storage/_si-v-test-data.json')     # verify JSON is readable
 ```
 
-Open Slides and import:
+Open Video Editor Lite and import:
 ```
-invoke('yaar://windows/si-v-cross', { action: "create", title: "Cross-App Test", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
+invoke('yaar://windows/si-v-cross', { action: "create", title: "Cross-App Test", appId: "video-editor-lite", renderer: "iframe", content: "yaar://apps/video-editor-lite" })
 ```
 
 Wait for ready, then import the data you read from storage:
 ```
-invoke('yaar://windows/si-v-cross', { action: "app_command", command: "setDeck", params: { "deck": <parsed JSON from storage read> } })
-invoke('yaar://windows/si-v-cross', { action: "app_query", stateKey: "deck" })
+invoke('yaar://windows/si-v-cross', { action: "app_command", command: "createComposition", params: {} })
+invoke('yaar://windows/si-v-cross', { action: "app_command", command: "addScene", params: <parsed JSON from storage read> })
+invoke('yaar://windows/si-v-cross', { action: "app_query", stateKey: "composition" })
 ```
-Verify title="Imported Deck", themeId="ocean", and slides[1].body="9.99".
+Verify the composition contains one scene of type "text" with the imported text "Imported Scene".
 
 Cleanup:
 ```
@@ -228,7 +222,7 @@ delete('yaar://windows/si-v-cross')
 delete('yaar://storage/_si-v-test-data.json')
 ```
 
-**PASS** if imported data matches the original JSON.
+**PASS** if the imported scene data matches the original JSON.
 
 ### 10. Shortcut Create/Delete via Config URI
 
@@ -305,30 +299,30 @@ Open 3 App Protocol apps simultaneously and interact with all of them:
 
 ```
 invoke('yaar://windows/si-v-multi-memo', { action: "create", title: "Multi: Memo", appId: "memo", renderer: "iframe", content: "yaar://apps/memo" })
-invoke('yaar://windows/si-v-multi-slides', { action: "create", title: "Multi: Slides", appId: "slides-lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
-invoke('yaar://windows/si-v-multi-img', { action: "create", title: "Multi: Images", appId: "image-viewer", renderer: "iframe", content: "yaar://apps/image-viewer" })
+invoke('yaar://windows/si-v-multi-video', { action: "create", title: "Multi: Video", appId: "video-editor-lite", renderer: "iframe", content: "yaar://apps/video-editor-lite" })
+invoke('yaar://windows/si-v-multi-proc', { action: "create", title: "Multi: Process Explorer", appId: "process-explorer", renderer: "iframe", content: "yaar://apps/process-explorer" })
 ```
 
 Wait for all 3 to be ready, then interact with each:
 
 ```
 invoke('yaar://windows/si-v-multi-memo', { action: "app_command", command: "addMemo", params: { "title": "Multi", "content": "Multi-app test" } })
-invoke('yaar://windows/si-v-multi-slides', { action: "app_command", command: "setDeck", params: { "deck": { "title": "Multi-app test", "themeId": "classic-light", "aspectRatio": "16:9", "fontSize": "md", "activeIndex": 0, "slides": [{ "layout": "title", "title": "Multi", "body": "test" }] } } })
-invoke('yaar://windows/si-v-multi-img', { action: "app_command", command: "setLayout", params: { "mode": "grid", "columns": 3 } })
+invoke('yaar://windows/si-v-multi-video', { action: "app_command", command: "createComposition", params: {} })
+invoke('yaar://windows/si-v-multi-proc', { action: "app_command", command: "refresh", params: {} })
 ```
 
 Query each to verify:
 ```
-invoke('yaar://windows/si-v-multi-memo', { action: "app_query", stateKey: "memos" })     # contains "Multi-app test"
-invoke('yaar://windows/si-v-multi-slides', { action: "app_query", stateKey: "title" })   # "Multi-app test"
-invoke('yaar://windows/si-v-multi-img', { action: "app_query", stateKey: "layout" })     # mode = "grid"
+invoke('yaar://windows/si-v-multi-memo', { action: "app_query", stateKey: "memos" })        # contains "Multi-app test"
+invoke('yaar://windows/si-v-multi-video', { action: "app_query", stateKey: "composition" }) # composition config present
+invoke('yaar://windows/si-v-multi-proc', { action: "app_query", stateKey: "stats" })        # stats returned
 ```
 
 Close all:
 ```
 delete('yaar://windows/si-v-multi-memo')
-delete('yaar://windows/si-v-multi-slides')
-delete('yaar://windows/si-v-multi-img')
+delete('yaar://windows/si-v-multi-video')
+delete('yaar://windows/si-v-multi-proc')
 ```
 
 **PASS** if all 3 apps respond correctly to commands and queries simultaneously.
@@ -377,10 +371,10 @@ After all checks, create a markdown window with the results:
 ```
 invoke('yaar://windows/self-inspection-report', {
   action: "create",
-  title: "Self Inspection Report (Verb Mode)",
+  title: "Self Inspection Report",
   width: 750, height: 750,
   renderer: "markdown",
-  content: "# Self Inspection Report (Verb Mode)\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock metadata correct, owner update allowed, unlock cleared |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Excel) | PASS | setCells/query/clearRange verified |\n| 8 | App Protocol (Word) | PASS | setContent/title/stats verified |\n| 9 | Cross-App Data Flow | PASS | storage → excel import verified |\n| 10 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 11 | Component Update | PASS | layout replaced successfully |\n| 12 | Storage Directories | PASS | nested dirs and listing verified |\n| 13 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 14 | Monitor-as-Resource | PASS | monitor status returned |\n| 15 | Agents Discovery | PASS | agent list/read verified |\n| 16 | User Notifications | PASS | notification shown |\n\n**Result: X/16 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #14, #15 |\n| list | #2, #3, #12, #15 |\n| invoke | #3–#13, #16 |\n| delete | #3–#5, #9, #10, #12, #13 |"
+  content: "# Self Inspection Report\n\n| # | Check | Status | Details |\n|---|-------|--------|---------|\n| 1 | Describe & Discovery | PASS | 7/7 resources described |\n| 2 | Session Root & Namespaces | PASS | root read + 2 list calls verified |\n| 3 | Multi-Renderer Windows | PASS | 5/5 renderers created |\n| 4 | Content Updates | PASS | append/prepend/replace verified |\n| 5 | Window Lock/Unlock | PASS | lock metadata correct, owner update allowed, unlock cleared |\n| 6 | Form Submission | PASS | received username, color fields |\n| 7 | App Protocol (Memo) | PASS | addMemo/updateMemo/deleteMemo verified |\n| 8 | App Protocol (Video Editor Lite) | PASS | createComposition/addScene/getComposition verified |\n| 9 | Cross-App Data Flow | PASS | storage → video-editor-lite scene import verified |\n| 10 | Shortcuts via Config URI | PASS | create/list/remove verified |\n| 11 | Component Update | PASS | layout replaced successfully |\n| 12 | Storage Directories | PASS | nested dirs and listing verified |\n| 13 | Multi-App Simultaneous | PASS | 3 apps commanded simultaneously |\n| 14 | Monitor-as-Resource | PASS | monitor status returned |\n| 15 | Agents Discovery | PASS | agent list/read verified |\n| 16 | User Notifications | PASS | notification shown |\n\n**Result: X/16 checks passed**\n\n### Verb Coverage\n| Verb | Tested In |\n|------|-----------|\n| describe | #1 |\n| read | #2, #4, #5, #14, #15 |\n| list | #2, #3, #12, #15 |\n| invoke | #3–#13, #16 |\n| delete | #3–#5, #9, #10, #12, #13 |"
 })
 ```
 

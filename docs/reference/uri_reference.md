@@ -29,7 +29,10 @@ runtime, each a real provider session with its own conversation memory. **Callab
 app's own iframe** (`POST /api/verb`), never by an agent and never by another app: the appId in
 the URI must equal the appId the calling context says the caller is. Requires
 `"personas": { "max": N }` (or the identical `"subagents": { "max": N }`) in `app.json`, bundled
-apps only. The `yaar://apps/self/` namespace itself is auto-granted — no `permissions` entry.
+apps only. The `yaar://apps/self/storage/`, `yaar://apps/self/db/`, and `yaar://apps/self/agents/`
+subtrees are auto-granted (`SELF_GRANTS` in `http/iframe-tokens.ts`) — no `permissions` entry
+needed for those specifically. (Other `apps/self/...` resources, and the app resource itself,
+are not auto-granted.)
 
 For the invariants these obey see [The Agent Tree](../architecture/agent_tree.md); for the
 how-to see the [App Development Guide](../guides/app-development.md#sub-agents-personas).
@@ -136,8 +139,13 @@ Session-scoped resources. Most of the namespace is **session-principal** — onl
 | `yaar://session/agents/session` | The session agent itself (invoke with `audit` / `coordinate` / `query`) |
 | `yaar://session/monitors/{monitorId}` | Monitor status and control (see below) |
 | `yaar://session/browser` | The user's real Chrome (the only door to it) |
-| `yaar://session/logs` | Session logs |
 | `yaar://session/context` | Context state |
+
+Past session logs are **not** under `yaar://session/...` — they're the separate top-level
+`history` namespace (see [URI Space](#uri-space) above): `list('yaar://history/')` for links,
+`read('yaar://history/')` for summaries, and `read('yaar://history/{id}')` /
+`read('yaar://history/{id}/transcript')` / `read('yaar://history/{id}/messages')` for detail.
+Handler: `packages/server/src/handlers/history.ts`.
 
 **Monitor control** (`yaar://session/monitors/{id}`):
 
@@ -287,9 +295,12 @@ registry.register('yaar://session/agents/*', {
 **Window content** — `content` fields use `yaar://` URIs; the server resolves them to API paths before sending to the frontend:
 
 ```
-create({ uri: "slides-lite", title: "Slides Lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
-create({ uri: "report", title: "Q4 Report", renderer: "iframe", content: "yaar://storage/reports/q4.pdf" })
+invoke('yaar://windows/', { action: "create", title: "Slides Lite", renderer: "iframe", content: "yaar://apps/slides-lite" })
+invoke('yaar://windows/', { action: "create", title: "Q4 Report", renderer: "iframe", content: "yaar://storage/reports/q4.pdf" })
 ```
+
+(There is no `uri` field in the create payload — `handleCreate` derives the window id from
+`appId`/`name`/`title` via `deriveWindowId`, and the `content` field carries the `yaar://` URI.)
 
 **Desktop shortcuts** — shortcuts use `yaar://` URIs as their `target`; `extractAppId()` parses app identity from it.
 
@@ -366,7 +377,10 @@ The verb route (`POST /api/verb`) enforces this:
 3. Check URI against permissions: exact match or prefix match (entries ending in `/`)
 4. No match → 403
 
-Apps with no `permissions` field get zero verb access by default.
+Apps with no `permissions` field still get the auto-granted `yaar://apps/self/{storage,db,agents}/`
+subtrees (`SELF_GRANTS`), and `describe` is always allowed on any URI regardless of permissions
+(metadata-only). Everything else — `read`/`list`/`invoke`/`delete` on any other resource — needs
+an explicit `permissions` entry.
 
 ### `yaar://apps/self/` Resolution
 

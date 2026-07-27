@@ -86,9 +86,12 @@ nouns. Two alternatives were weighed and rejected:
   not the cost. The cost is that tool-lessness becomes a runtime flag on a shared type, checked
   at four sites (allowlist derivation, `AppTaskProcessor` routing, prompt assembly, restore
   filtering) instead of nailed shut in one profile. The tree keeps the distinction structural.
-- **Arbitrary tool lists at spawn.** Maximal flexibility, and exactly the escalation surface
-  law 3 exists to prevent: a runtime-supplied prompt that also picks its own tools is a
-  confused-deputy factory. Rejected permanently, not deferred.
+- **Caller-chosen YAAR tools at spawn.** Maximal flexibility, and exactly the escalation surface
+  law 3 exists to prevent: a runtime-supplied prompt that also picks which YAAR verbs it gets is
+  a confused-deputy factory. Rejected permanently, not deferred. What *is* selectable at spawn is
+  a named tool list that resolves to one channel back into the app's own iframe
+  (`SubAgentToolSpec`, capped at `MAX_SUB_AGENT_TOOLS`) — never a YAAR verb, `relay`,
+  `direct_message`, or `controls`.
 
 ## Placing a new node
 
@@ -103,18 +106,15 @@ When a request arrives for a new kind of agent, answer these in order:
    If the caller needs to *compose* capabilities, law 3 says no.
 4. **Does it die with its owner?** If it needs to outlive one, it is storage, not an agent.
 
-**What deliberately does not exist at any tier:** YAAR verbs selected by a runtime caller;
-`relay`, `direct_message`, `controls`, or `yaar://` access in a sub-agent's hands; and
-sub-agents spawning sub-agents — the tree is four tiers deep, not N, because a node spawning its
-own children is an escalation ladder with no owner semantics. An app-defined tool list is not an
-exception to this: every entry is a name over one channel to the app's own iframe.
+Sub-agents spawning sub-agents is the other thing that doesn't exist: the tree is four tiers
+deep, not N, because a node spawning its own children is an escalation ladder with no owner
+semantics.
 
-The tripwire question is whether any sub-agent will ever need *real* YAAR verbs rather than an
-app handler standing in front of them. So far none has — everything asked for ("read my own
-state", "operate my own window") is expressible as an app-defined tool with the iframe as
-executor, at strictly smaller YAAR surface. If a case ever genuinely needs verbs in a
-sub-agent's hands, that is a different animal: user permission prompt at first spawn, per-verb
-subset of the app agent's toolset, and its own design doc. Do not build it for symmetry.
+If a case ever genuinely needs real YAAR verbs in a sub-agent's hands — everything asked for so
+far ("read my own state", "operate my own window") has been expressible as an app-defined tool
+with the iframe as executor instead — that is a different animal from what's shipped: a user
+permission prompt at first spawn, a per-verb subset of the app agent's toolset, and its own
+design doc. Do not build it for symmetry.
 
 ## Budgets
 

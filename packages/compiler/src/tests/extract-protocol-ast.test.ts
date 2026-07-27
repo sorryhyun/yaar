@@ -487,10 +487,9 @@ describe('alias collisions', () => {
   });
 });
 
-// `app.register()` is gone from the runtime. An app still calling it would
-// otherwise extract to *no protocol at all* and build green with every command
-// missing from the manifest — the exact silent truncation this module exists to
-// prevent — so it is refused by name, with the migration in the message.
+// `app.register()` is gone from the runtime; see `findAppRegisterCall` in
+// extract-protocol-ast.ts for why it is refused by name rather than silently
+// extracting to no protocol.
 describe('removed app.register()', () => {
   test('an app.register() call is refused with the migration named', () => {
     const { protocol, errors } = extract({

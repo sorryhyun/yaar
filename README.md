@@ -75,7 +75,7 @@ The whole desktop is an input surface, not just the text box:
 
 ## What's Different?
 
-- **Everything runs on just 5 tools.** Every resource — windows, files, apps, config — is a `yaar://` URI, and five generic verbs operate on all of them. Agents discover capabilities at runtime via `describe`, so the system prompt stays under 8K tokens whether you have 3 apps installed or 100.
+- **Everything runs on just 5 tools.** Every resource — windows, files, apps, config — is a `yaar://` URI, and five generic verbs operate on all of them. Agents discover capabilities at runtime via `describe`, so the system prompt stays flat whether you have 3 apps installed or 100 (see the [FAQ](./docs/faq.md#how-does-the-agent-actually-access-things-does-it-have-50-tools) for the concrete token budget).
 
   ```
   describe · read · list · invoke · delete

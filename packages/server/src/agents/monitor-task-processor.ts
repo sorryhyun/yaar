@@ -14,14 +14,8 @@ import { monitorSource } from './context.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
 
 /**
- * The monitor a task runs on. Required.
- *
- * This was `task.monitorId ?? '0'`, repeated at four call sites. Every one of them was
- * reached by tasks that genuinely knew their monitor and by tasks that had lost it, and
- * the default made those two indistinguishable — a user message from monitor 1 and a
- * click in a window on monitor 1 both arrived on monitor 0's agent, and nothing said so.
- * A task without a monitor is a routing bug upstream; it must be loud where it is made,
- * not quietly rehomed here.
+ * The monitor a task runs on. Required — a task without a monitor is a routing bug
+ * upstream; it must be loud where it is made, not quietly rehomed here.
  */
 function monitorOf(task: Task): string {
   if (!task.monitorId) {

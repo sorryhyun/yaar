@@ -228,7 +228,7 @@ DELETE /api/storage/documents/old.pdf
 
 **Response:** `{ "ok": true, "path": "documents/old.pdf" }`
 
-**Status codes:** 200, 404 (not found), 403 (path traversal, read-only mount, or app lacks permission for the resource).
+**Status codes:** 200, 500 (file not found or delete failed — `errorResponse()` defaults to 500 when no status is passed, unlike GET's explicit 404), 403 (path traversal, read-only mount, or app lacks permission for the resource).
 
 ---
 
@@ -418,7 +418,9 @@ Non-image files are uploaded to `storage/files/` with sanitized filenames.
 
 **Source:** `packages/shared/src/iframe-scripts/storage-sdk.ts` (`IFRAME_STORAGE_SDK_SCRIPT`)
 
-Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `storage` for raw). The underlying SDK is injected automatically:
+Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `storage` for raw). The underlying SDK is injected automatically.
+
+`storage` (raw, `window.yaar.storage` — dispatches straight to `/api/storage/*`):
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
@@ -427,6 +429,20 @@ Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `s
 | `list` | `(dirPath?) → Promise<StorageEntry[]>` | List directory contents. |
 | `remove` | `(path) → Promise<{ok, path}>` | Delete file. |
 | `url` | `(path) → string` | Get the HTTP URL: `/api/storage/{path}`. |
+
+`appStorage` (app-scoped, `packages/compiler/src/shims/yaar/app-storage.ts` — wraps the `yaar://apps/self/storage/` verbs, a different shape from `storage` above):
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `save` | `(path, content, options?) → Promise<void>` | Write a string; `options.encoding` is `'utf-8'` (default) or `'base64'`. |
+| `trySave` | `(path, content, options?) → Promise<boolean>` | `save()` that reports failure instead of throwing — resolves whether the write landed. Toasts the failure (throttled to once per 5s per path) unless `options.onError` is given. |
+| `read` | `(path) → Promise<string>` | Read file as text. |
+| `readJson` | `(path) → Promise<T>` | Read and parse JSON; throws if the file is missing or unparseable. |
+| `readJsonOr` | `(path, fallback) → Promise<T>` | `readJson`, but returns `fallback` instead of throwing. |
+| `readBinary` | `(path) → Promise<{data, mimeType, encoding}>` | Read raw bytes; `encoding` is `'base64'` for image reads, `'text'` otherwise. |
+| `readBlob` | `(path) → Promise<Blob>` | `readBinary`, decoded into a `Blob`. |
+| `list` | `(dirPath?) → Promise<YaarAppStorageEntry[]>` | Each entry is `{ path, isDirectory, uri, mimeType? }` — not the raw `storage.list()` shape above. |
+| `remove` | `(path) → Promise<void>` | Delete file. |
 
 ---
 

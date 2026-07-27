@@ -18,37 +18,20 @@ bun run test                   # Unit suite, then the loopback suite, then integ
 2. `src/tests/loopback` — the loopback integration harness (see `tests/loopback/harness/`).
 3. `src/integration`.
 
-**The unit suite is itself partitioned by process.** `scripts/run-unit-tests.ts` reads every
-file under `src/tests` and asks one question: does it call `mock.module`? Files that do get a
-process each; everything else shares one `--parallel` process. The isolated processes run
-concurrently with one another, so the wall-clock is close to a single shared run.
-
-The partition is computed from source on every run — there is no list to maintain. Add a
-`mock.module` to a file and it is isolated automatically; remove the last one and it rejoins
-the shared process. Prose *mentioning* `mock.module` doesn't count (comment lines are stripped
-before the match), which is why the loopback harness's long explanation of why it avoids mocks
-doesn't isolate anything.
-
-This exists because `--parallel` runs files concurrently **in one process**, and `mock.module`
-is process-global with no teardown. A stub is therefore visible to every concurrently-running
-file that imports the same specifier, and which one wins is a race rather than an order. That
-race shipped a red CI: four files stub `agents/profiles/index.js` with a `buildAppAgentProfile`
-returning no `model`, and `app-agent-model.test.ts` — which asserts on the real one — passed
-locally and failed in CI on identical code.
+**The unit suite is itself partitioned by process.** `scripts/run-unit-tests.ts` computes the
+split from source on every run: any file that calls `mock.module` gets its own process (still
+run concurrently with the rest), everything else shares one `--parallel` process — because
+`mock.module` is process-global with no teardown, so a stub is otherwise visible to every
+concurrently-running file that imports the same specifier. Full rationale, including the CI
+incident that forced this, is in that file's header comment.
 
 The loopback harness runs the real stack end to end — `createWsHandlers` → `SessionHub` →
 `LiveSession` → `ContextPool` → `AgentSession` → `actionEmitter` → `PendingStore` — with
-exactly two fakes: the browser (`FakeClient`, whose frames go through the real `message()`
-handler) and the model (`ScriptedProvider`, whose turn is a script that `await`s a real tool
-between yields). It exists because the deadlock that broke every app command lived *between*
-units — a turn awaiting a client reply that was queued behind the frame that started the turn —
-and a test that mocks either side cannot see it.
+exactly two fakes: the browser (`FakeClient`) and the model (`ScriptedProvider`). It needs its
+own process for the same `mock.module`-is-process-global reason. Full rationale, including the
+deadlock this exists to catch, is in `tests/loopback/harness/boot.ts`'s header comment.
 
-That is also why it needs its own process. `mock.module` is process-global, has no teardown,
-and **`mock.restore()` cannot undo it once the real module has been loaded**. Five files in
-`src/tests` replace `AgentSession` with a stub whose `handleMessage` resolves instantly; in a
-shared process, that stub would hollow the harness out and every loopback test would pass while
-proving nothing. Two rules follow:
+Two rules follow:
 
 - **Never add `mock.module` under `src/tests/loopback/`.** The harness substitutes through real
   seams instead: the provider via `ContextPool`'s `acquireProvider`, the logger via the
@@ -102,10 +85,11 @@ src/
 │   ├── context-pool.ts   # ContextPool — unified task orchestration
 │   ├── context.ts        # ContextTape — hierarchical message history
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore
-│   ├── session.ts        # AgentSession + AsyncLocalStorage (getAgentId, getSessionId)
+│   ├── agent-session.ts  # AgentSession + AsyncLocalStorage (getAgentId, getSessionId)
 │   ├── monitor-task-processor.ts / app-task-processor.ts / session-task-processor.ts
 │   ├── window-event-coordinator.ts  # subscription/notification fan-out + window-close teardown
-│   ├── interaction-timeline.ts / pool-types.ts / profiles.ts / turn-helpers.ts
+│   ├── interaction-timeline.ts / pool-types.ts / turn-helpers.ts
+│   ├── profiles/         # app-agent, session-agent, sub-agent, orchestrator, model-tiers, shared-sections, types, index (barrel)
 │   ├── session-policies/       # StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge
 │   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends
@@ -169,7 +153,7 @@ SessionHub (singleton registry)
         └── Policies (MonitorQueue per monitor, WindowQueue, ContextAssembly, ...)
 ```
 
-`LiveSession` is the aggregate root (605 lines, down from 1,044). It owns four collaborators, each reached only through it and given narrow callbacks rather than the session itself:
+`LiveSession` is the aggregate root. It owns four collaborators, each reached only through it and given narrow callbacks rather than the session itself:
 
 - `MonitorRegistry` — the authoritative monitor list, id minting (lowest free non-negative integer), `MAX_MONITORS` enforcement, per-connection monitor subscription + viewport, and monitor removal (unsubscribes watchers, then removes the monitor agent).
 - `ClientEventController` — owns the total `ClientEventRoutes` table and every frame handler. `LiveSession.routeMessage()` is still the public entry: it lazily initializes the pool and settles message-id acceptance, then delegates to `ClientEventRouter`.

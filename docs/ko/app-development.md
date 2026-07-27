@@ -404,7 +404,7 @@ const autosave = createAutosave(
 
 앱이 직접 작성하지 않은 HTML — 스토리지에서 읽은 마크다운, 스크래핑한 페이지, RSS 피드
 본문, GitHub README, `appStorage` 를 거쳐 되돌아온 콘텐츠 — 은 DOM 에 닿기 전에 반드시
-`@bundled/dompurify` 를 통과해야 합니다. 앱은 iframe 안에서 실행되지만, 그 iframe 은 앱
+**`@bundled/yaar`의 `sanitizeHtml`** 을 통과해야 합니다. 앱은 iframe 안에서 실행되지만, 그 iframe 은 앱
 자신의 스토리지, 자격 증명, 에이전트와의 프로토콜 채널을 쥐고 있습니다. 주입된 스크립트는
 그 전부를 장악합니다.
 
@@ -417,9 +417,9 @@ const autosave = createAutosave(
 5. 인라인 이벤트 속성이 아니라 이벤트 리스너로 동작을 연결한다.
 
 ```typescript
-import DOMPurify from '@bundled/dompurify';
+import { sanitizeHtml } from '@bundled/yaar';
 
-const clean = DOMPurify.sanitize(marked.parse(source) as string);
+const clean = sanitizeHtml(marked.parse(source) as string);
 const doc = new DOMParser().parseFromString(clean, 'text/html');
 rewriteRelativeLinks(doc);       // 이미 안전한 HTML 위에서 도는 앱 로직
 el.innerHTML = doc.body.innerHTML;
@@ -440,13 +440,14 @@ attachImageFallbacks(el);        // 삽입 후 addEventListener
 가장 좋습니다. 그래야 하위의 모든 싱크가 구조적으로 안전해집니다. 정책이 두 겹으로 겹치는
 것은 한 겹보다 나쁩니다 — 다음 편집자가 다른 쪽이 막아준다고 믿고 한쪽을 느슨하게 만듭니다.
 
-옵션 없는 `DOMPurify.sanitize(dirty)` 가 기본 정책이며, OS 셸의 마크다운/HTML 렌더러와
+옵션 없는 `sanitizeHtml(dirty)` 가 기본 정책이며, OS 셸의 마크다운/HTML 렌더러와
 동일합니다. 콘텐츠 종류가 정말로 다른 허용 목록을 필요로 할 때만 — 인쇄용 문서는 산문
 렌더링에 필요 없는 인라인 `style` 이 필요합니다 — 옵션 객체를 넘기고, 그 이유를 옆에
 주석으로 남기세요.
 
-새니타이저를 직접 만들지 마세요. 엘리먼트 차단 목록과 `^on` 속성 제거는 `<svg>`/`<math>`
-뮤테이션 XSS, `srcset`, `formaction`, `xlink:href` 를 놓칩니다.
+`@bundled/dompurify` 를 직접 호출하지 말고, 새니타이저를 직접 만들지도 마세요. 엘리먼트
+차단 목록과 `^on` 속성 제거는 `<svg>`/`<math>` 뮤테이션 XSS, `srcset`, `formaction`,
+`xlink:href` 를 놓칩니다.
 
 ### 새니타이저가 동작하는 것처럼 보이게 만드는 두 가지 함정
 
@@ -635,10 +636,9 @@ apps/my-app/
 | `windowStyle` | `object` | 윈도우에 적용할 CSS 오버라이드 |
 | `defaultWidth` / `defaultHeight` | `number` | 초기 윈도우 크기(px) |
 
-**실전에서 보이지만 무시되는 필드** — 알 수 없는 키로 파싱되어 아무 동작도 하지 않습니다:
+그 관대함에서 나오는 함정 하나:
 
-- `capture` (`"dom"` / `"canvas"`) — 번들 앱 19개에 존재하지만 현재 코드에서는 읽지 않습니다. 한때 이미 제거된 `window.capture` 도구용 스크린샷 전략을 지정했으나, 그 도구가 사라진 뒤에도 매니페스트 필드만 남았습니다.
-- `id`와 `appId` (`apps/memo`, `apps/music-maker`) — id는 항상 폴더 이름입니다. 소스 코드에서 `defineApp()`에 넘기는 `id`는 별개이며 실제로 *사용되고*, app.json의 `appId`와 일치해야 합니다.
+- `id`와 `appId` (`apps/memo`, `apps/mcp-manager`) — id는 항상 폴더 이름입니다. 소스 코드에서 `defineApp()`에 넘기는 `id`는 별개이며 실제로 *사용되고*, app.json의 `appId`와 일치해야 합니다.
 
 ## 앱 유형
 
@@ -919,7 +919,7 @@ await appStorage.remove('data.json');
 
 > **`list()`는 `size`나 `modifiedAt`을 반환하지 않습니다.** 각 항목은 `{ path, isDirectory, uri, mimeType }`입니다. 파일 크기나 타임스탬프가 필요하면 REST API(`GET /api/storage/{dir}/?list=true`)를 사용하세요. 이는 `size`와 `modifiedAt`을 포함하는 `StorageEntry` 객체를 반환합니다.
 
-> **PDF에 대한 `readBlob()`은 PDF 바이트가 아니라 첫 페이지를 PNG로 렌더링한 것을 반환합니다.** 서버는 읽기 시점에 PDF를 페이지 이미지로 변환합니다(`packages/server/src/handlers/apps.ts`). 원본 바이트가 필요하면 REST URL을 직접 fetch하세요 — 앱 범위 파일은 `/api/storage/apps/{appId}/{path}`에 있습니다.
+> **PDF에 대한 `readBlob()`은 PDF 바이트를 반환하지 않습니다.** `readBlob()`은 옵션을 받지 않으므로, 서버의 페이지 래스터화 옵트인(`pdfPages`)은 이 경로에서 절대 작동하지 않습니다. 기본 분기는 `PDF document with N page(s), N bytes.`라는 ASCII 문자열을 Blob으로 감싸 반환합니다(`packages/server/src/storage/storage-manager.ts`). 원본 바이트가 필요하면 REST URL을 직접 fetch하세요 — 앱 범위 파일은 `/api/storage/apps/{appId}/{path}`에 있습니다.
 
 ### 저장 실패를 삼키지 마세요
 

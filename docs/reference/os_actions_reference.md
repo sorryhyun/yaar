@@ -192,9 +192,9 @@ Capture a window's content as a PNG screenshot.
 |-------|------|----------|
 | `type` | `'window.capture'` | yes |
 | `windowId` | `string` | yes |
-| `requestId` | `string` | no |
+| `requestId` | `string` | required in practice |
 
-Async operation. Sends a `yaar:capture-request` postMessage to the window's iframe and awaits a `yaar:capture-response` (2s timeout); the injected capture script handles canvas and DOM (via `foreignObject`) capture using the browser's native CSS engine. There is no fallback tier — if the iframe doesn't respond in time, or responds with no image data, capture fails outright. Returns base64 PNG via `RENDERING_FEEDBACK` (`success: true, imageData`) on success, or `success: false` with an `error`/`captureFailure` reason (e.g. `no-response`) on failure.
+Async operation. Sends a `yaar:capture-request` postMessage to the window's iframe and awaits a `yaar:capture-response` (2s timeout); the injected capture script handles canvas and DOM (via `foreignObject`) capture using the browser's native CSS engine. There is no fallback tier — if the iframe doesn't respond in time, or responds with no image data, capture fails outright. Returns base64 PNG via `RENDERING_FEEDBACK` (`success: true, imageData`) on success, or `success: false` with an `error`/`captureFailure` reason (e.g. `no-response`) on failure. `requestId` is typed optional but is not: `packages/frontend/src/store/desktop.ts`'s handler only calls `captureWindow` `if (requestId)` — an action sent without it returns early with no capture and no warning.
 
 ---
 
@@ -413,13 +413,20 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 
 #### Component Types
 
+The tables below give each field's type per the narrower, component-specific TypeScript types in
+`component-types.ts` (what a well-formed component should have). The actual validating schema
+(`componentSchema` in `components.ts`) is flatter and more permissive: every field across every
+component type is `z.string()`/etc. `.optional()` except `type` itself, so a request missing e.g.
+`button.label` or `image.src` is not rejected at validation time — the `Required` column reflects
+the TS-type intent, not a runtime guarantee.
+
 **button**
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | `'button'` | yes | |
-| `label` | `string` | yes | Button text |
-| `action` | `string` | yes | Message sent to agent on click |
+| `label` | `string` | yes* | Button text |
+| `action` | `string` | yes* | Message sent to agent on click |
 | `variant` | `'primary' \| 'secondary' \| 'ghost' \| 'danger'` | no | |
 | `size` | `'sm' \| 'md' \| 'lg'` | no | |
 | `icon` | `string` | no | Icon name |
@@ -432,7 +439,7 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | `'input'` | yes | |
-| `name` | `string` | yes | Field name in form data |
+| `name` | `string` | yes* | Field name in form data |
 | `formId` | `string` | no | Form ID (referenced by button `submitForm`) |
 | `label` | `string` | no | |
 | `placeholder` | `string` | no | |
@@ -446,8 +453,8 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | `'select'` | yes | |
-| `name` | `string` | yes | Field name in form data |
-| `options` | `{ value: string; label: string }[]` | yes | |
+| `name` | `string` | yes* | Field name in form data |
+| `options` | `{ value: string; label: string }[]` | yes* | |
 | `formId` | `string` | no | |
 | `label` | `string` | no | |
 | `defaultValue` | `string` | no | |
@@ -459,7 +466,7 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | `'text'` | yes | |
-| `content` | `string` | yes | Text content |
+| `content` | `string` | yes* | Text content |
 | `variant` | `'body' \| 'heading' \| 'subheading' \| 'caption' \| 'code'` | no | |
 | `color` | `'default' \| 'muted' \| 'accent' \| 'success' \| 'warning' \| 'error'` | no | |
 | `textAlign` | `'left' \| 'center' \| 'right'` | no | |
@@ -469,7 +476,7 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | `'badge'` | yes | |
-| `label` | `string` | yes | |
+| `label` | `string` | yes* | |
 | `variant` | `'default' \| 'success' \| 'warning' \| 'error' \| 'info'` | no | |
 
 **progress**
@@ -477,7 +484,7 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | `'progress'` | yes | |
-| `value` | `number` | yes | 0–100 |
+| `value` | `number` | yes* | 0–100 |
 | `label` | `string` | no | |
 | `variant` | `'default' \| 'success' \| 'warning' \| 'error'` | no | |
 | `showValue` | `boolean` | no | Show percentage text |
@@ -487,10 +494,12 @@ A `WindowContent` is `{ renderer: string; data: unknown }`. The `renderer` field
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `type` | `'image'` | yes | |
-| `src` | `string` | yes | Source URL |
+| `src` | `string` | yes* | Source URL |
 | `width` | `number \| string` | no | Width in px or CSS value |
 | `height` | `number \| string` | no | Height in px or CSS value |
 | `fit` | `'contain' \| 'cover' \| 'fill'` | no | Object fit mode |
+
+\* Required by the TS type; the runtime schema accepts the component without it (see note above).
 
 ---
 

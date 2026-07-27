@@ -5,8 +5,8 @@ Agent-controlled headless Chrome browser. The browser app agent is a specialist 
 ## Launch
 Open this app in an iframe window:
 ```
-create({
-  uri: "browser",
+invoke('yaar://windows/browser', {
+  action: "create",
   title: "Browser",
   renderer: "iframe",
   content: "yaar://apps/browser"

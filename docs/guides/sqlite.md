@@ -343,7 +343,7 @@ function buildWhere(filter: Record<string, unknown>): { sql: string; params: unk
 
 ---
 
-## SDK Shim (`packages/compiler/src/shims/yaar.ts`)
+## SDK Shim (`packages/compiler/src/shims/yaar/app-db.ts`)
 
 `appDb` lives alongside `appStorage` in the shim (abridged — see the file for the full
 implementation including `createReactiveCollection`):
@@ -425,19 +425,15 @@ export const appDb = {
 | Simple key-value config | Either | `appStorage` for single files, `appDb` for many keys |
 | App credentials/tokens | `appStorage` (filesystem) | Human-inspectable, simple read/write |
 
-### No conflict — parallel systems
-
 ```
 storage/apps/{appId}/
-├── data.db              ← NEW: SQLite database (appDb)
-├── draft.json           ← EXISTING: file storage (appStorage)  
+├── data.db              ← SQLite database (appDb)
+├── draft.json           ← file storage (appStorage)
 ├── auth/
-│   └── credentials.json ← EXISTING: file storage (appStorage)
+│   └── credentials.json ← file storage (appStorage)
 └── uploads/
-    └── photo.png        ← EXISTING: file storage (appStorage)
+    └── photo.png        ← file storage (appStorage)
 ```
-
-Both APIs work simultaneously. `appStorage` doesn't touch `data.db`. `appDb` only touches `data.db`. No migration needed for existing apps.
 
 ### AI agent access
 
@@ -456,7 +452,7 @@ This is a major upgrade — the agent can now search and filter app data without
 **Implemented:**
 - Core infrastructure — `AppDatabase` class, pool, query builder (`packages/server/src/db/`),
   `yaar://apps/{appId}/db/*` verb routes (`handlers/apps.ts`), `appDb` + `CollectionHandle`
-  SDK shim and type declarations (`packages/compiler/src/shims/yaar.ts`,
+  SDK shim and type declarations (`packages/compiler/src/shims/yaar/app-db.ts`,
   `bundled-types/index.d.ts`)
 - Full-text search — FTS5 tables with sync triggers, `collection.search(query)`
 - Reactive bindings — `appDb.createReactiveCollection` for Solid.js, backed by verb
@@ -480,7 +476,7 @@ This is a major upgrade — the agent can now search and filter app data without
 | Large databases slow down app uninstall | UX lag | Just `rm data.db` — SQLite is a single file |
 | Filter syntax too limited | Apps need raw SQL | Could add `appDb.raw(sql, params)` escape hatch (future work) |
 | Memory usage from open databases | Server OOM | Pool with LRU eviction (max 20 open, 5min idle timeout) |
-| Breaking change to app shim | Existing apps break | Purely additive — `appDb` is new, `appStorage` unchanged |
+| Breaking change to app shim | Existing apps break | `appDb` is new; `appStorage` is unchanged (see [Design Decisions](#1-new-appdb-api--dont-replace-appstorage)) |
 
 ---
 

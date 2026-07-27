@@ -55,9 +55,6 @@ describe('F-15 — a timeout is never observable as a success', () => {
     const outcome = await store.create('req-1', { timeoutMs: 5 });
 
     expect(outcome).toEqual({ ok: false, reason: 'timeout' });
-    // The old store resolved this with a `defaultValue` the caller had to invent, so the
-    // caller received something shaped exactly like a real answer.
-    expect(outcome.ok).toBe(false);
   });
 
   it('reports an answered entry as an answer', async () => {
@@ -92,7 +89,6 @@ describe('F-15 — a timeout is never observable as a success', () => {
       '0',
     );
 
-    expect(outcome.ok).toBe(false);
     expect(outcome).toEqual({ ok: false, reason: 'timeout' });
   });
 
@@ -223,8 +219,8 @@ describe('F-17 — an expired dialog leaves the screen', () => {
       10,
     );
 
-    // Unanswered means denied — that part was already true. What is new is that the user
-    // is not left looking at a live dialog for a request that has already been refused.
+    // Unanswered means denied, and the user is not left looking at a live dialog for a
+    // request that has already been refused.
     expect(await answered).toBe(false);
     await settle(5);
 

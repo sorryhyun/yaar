@@ -7,8 +7,9 @@
  * top-level tabs in that browser, with the user's real cookies, logins, and
  * sessions — no re-auth, no second Chrome process.
  *
- * Phase 2 (dev / power-user): opt in with `YAAR_BROWSER_PROVIDER=local`. The
- * companion-extension productization and full auto-selection come later.
+ * Reached only through `getLocalBrowser()` (the session-agent door,
+ * `yaar://session/browser`), which auto-attaches whenever a debuggable Chrome is
+ * reachable — there is no env var to opt in with.
  *
  * It reuses every bit of CDP/session plumbing from `CdpBrowserProvider`; the
  * only differences are:
@@ -67,7 +68,7 @@ export class LocalUserBrowser extends CdpBrowserProvider {
       throw new Error(
         `Could not reach the user's Chrome on 127.0.0.1:${this.debugPort}. ` +
           `Launch Chrome with --remote-debugging-port=${this.debugPort} ` +
-          `(or set CHROME_DEBUG_PORT), or unset YAAR_BROWSER_PROVIDER to use the headless browser.`,
+          `(or set CHROME_DEBUG_PORT), or use the sandbox door (POST /api/browser) instead.`,
       );
     }
     this.connected = true;

@@ -183,6 +183,7 @@ inspecting `p.turn?.status` in `message-mapper.ts`.
 | `item/completed` | `StreamMessage { type: 'tool_result' }` (or `null`) | Item finalized — same `item.type` dispatch as `item/started`, mapping to the matching tool-result message |
 | `turn/completed` | `StreamMessage { type: 'complete' }` or `{ type: 'error' }` | Turn finished — `status: 'failed'` or `'interrupted'` maps to `error`, otherwise `complete` |
 | `error` | `StreamMessage { type: 'error' }` | Protocol error |
+| `item/commandExecution/outputDelta` | `StreamMessage { type: 'tool_output_delta' }` | Live tail of a running command's output — not the authoritative result (`item/commandExecution/completed`'s `aggregatedOutput` still is), so not fed back into context or the transcript |
 
 ### Events We Skip
 
@@ -191,7 +192,7 @@ inspecting `p.turn?.status` in `message-mapper.ts`.
 | `turn/started` | No content to yield |
 | `item/agentMessage/completed` | Already streamed via deltas |
 | `item/reasoning/completed`, `item/reasoning/summaryTextDelta`, `item/reasoning/summaryTextCompleted`, `item/reasoning/summaryPartAdded` | Reasoning lifecycle/summary events — not needed beyond the `textDelta` stream |
-| `item/mcpToolCall/progress`, `item/commandExecution/outputDelta`, `item/commandExecution/terminalInteraction` | Sub-item progress — the coarser `item/started`/`item/completed` pair already covers these tool calls |
+| `item/mcpToolCall/progress`, `item/commandExecution/terminalInteraction` | Sub-item progress — the coarser `item/started`/`item/completed` pair already covers these tool calls |
 | `codex/event/*`, `fuzzyFileSearch/*` | Internal telemetry |
 
 ### Dead Notification Cases (defensive, unreachable)

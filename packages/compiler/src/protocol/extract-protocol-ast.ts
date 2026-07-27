@@ -3,9 +3,7 @@
  *
  * The registration shape is `export default defineApp({...})`, and only that.
  * The config object *is* the protocol, so there is nothing to locate by
- * heuristic — an app still calling the removed `app.register({...})` is refused
- * by name (see `findAppRegisterCall`) rather than reported as declaring no
- * protocol at all, which is the silent outcome this module exists to prevent.
+ * heuristic. See `findAppRegisterCall` for the removed `app.register({...})` guard.
  *
  * What the AST buys over the brace-matching text scanner it replaced is *reach*:
  *
@@ -613,9 +611,8 @@ export interface ExtractOptions {
  * imports. `readFile` must return null for paths that do not exist.
  *
  * One registration shape is recognized: `export default defineApp({...})`, whose
- * config object *is* the protocol. An app still calling the removed
- * `app.register({...})` is refused by name rather than reported as declaring
- * nothing.
+ * config object *is* the protocol. See `findAppRegisterCall` for the removed
+ * `app.register({...})` guard.
  *
  * `protocol` is null only when no registration was found at all. When `errors`
  * is non-empty the caller must fail the build: a manifest that parsed around an

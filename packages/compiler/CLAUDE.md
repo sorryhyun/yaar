@@ -59,15 +59,18 @@ src/
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     ├── anime.ts           # v3→v4 easing name compat wrapper
     ├── dompurify.ts       # keeps purify.es.mjs off the entrypoint slot (see below)
-    └── uuid.ts            # re-export barrel workaround (see below)
+    ├── uuid.ts            # re-export barrel workaround (see below)
+    ├── zod.ts             # re-export barrel workaround for zod/mini (see below)
+    ├── lodash.ts          # re-export barrel workaround for lodash-es (see below)
+    └── pixi.ts            # re-export barrel workaround for pixi.js (see below)
 ```
 
 ## Compilation Flow
 
 1. **Entry:** `compileTypeScript(sandboxPath, options)` — expects `src/main.ts`
 2. **Token guard:** `scanTokens()` over every `src/**/*.{ts,tsx,css}` — fails the build before bundling if any `var(--yaar-*)` can never resolve
-3. **Bundle:** `Bun.build()` with 3 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
-4. **SDK injection:** 8 iframe SDK scripts (capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
+3. **Bundle:** `Bun.build()` with 4 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
+4. **SDK injection:** 9 iframe SDK scripts (ime-guard, capture, storage, verbs, fetch-proxy, app-protocol, notifications, windows, console) minified once and cached
 5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable (see below)
 6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
@@ -92,13 +95,11 @@ stays green — one real incident shrank 29 commands to 3.
 | Values | constant-folds `+` concatenation anywhere, including inside `params` | `z.toJSONSchema()` of the running schema |
 | Unresolvable | **hard build error with `file:line:col`** | **hard build error naming the descriptor path** |
 
-Set `YAAR_NO_TYPESCRIPT=1` to reproduce a no-`typescript` environment on a dev machine.
-A third reader used to stand there — a brace-matching text scanner — and measuring it against
-the AST across the bundled apps is why it is gone: it returned *nothing at all*, with neither
-error nor warning, for devtools (28 commands) and video-editor-lite (19), both of which split
-their descriptor maps across files with `...spread`. No shipped configuration reaches this
-path anyway: the exe embeds `typescript` (`build-exe-bundle.js`) and a repo install gets it as
-a devDependency.
+Set `YAAR_NO_TYPESCRIPT=1` to reproduce a no-`typescript` environment on a dev machine. A third
+reader — a brace-matching text scanner — used to stand there and was removed after it returned
+*nothing at all*, with neither error nor warning, for apps that split their descriptor maps
+across files with `...spread`. No shipped configuration reaches this path anyway: the exe
+embeds `typescript` (`build-exe-bundle.js`) and a repo install gets it as a devDependency.
 
 `app.register({...})` is **removed**, and both readers refuse it by name rather than reporting
 "declares no protocol" — the AST path from the call site, the no-`typescript` path from a text
@@ -108,9 +109,9 @@ vanish from the manifest while the build stays green is exactly that. Both raise
 
 Because the AST path resolves spreads, **descriptor maps may be split across files by
 domain** — `commands: { ...fileCommands, ...gitCommands }` where each map lives in its own
-module. This is what the extractor exists to allow; it was the constraint that kept
-`devtools/src/protocol.ts` at 963 lines. See
-[`docs/proposals/app_protocol_manifest_proposal.md`](../../docs/proposals/app_protocol_manifest_proposal.md).
+module. This is what the extractor exists to allow; it is why `apps/devtools/src/protocol/`
+(build.ts, files.ts, git.ts, introspect.ts, media.ts, preview.ts, projects.ts, read-blocks.ts)
+can split its descriptor map across files instead of one large module.
 
 What it refuses, always with a location: a spread of a call result, a descriptor imported
 from a package (resolution is deliberately app-local), a `${...}` template description, a
@@ -232,14 +233,10 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 `getBundledLibraryDetail(name)` (in `bundled/describe-library.ts`) backs the agent-facing
 `describeBundledLibrary`. It slices the
 `declare module '@bundled/<name>…'` blocks out of `bundled-types/index.d.ts` and prepends the
-`Yaar*` declarations they reference. **That resolution is transitive and covers `type` aliases
-as well as `interface`s** — a single `:`-anchored, interface-only pass answered a question
-nobody asked: the old `app.register(config: YaarAppRegistration)` shipped with no body for
-that type (the reference sat behind `=` in an alias), so `YaarAppStateDescriptor` never
-appeared and an agent had to discover that a state descriptor is `{ description, handler,
-schema? }` by assigning `{}` and reading the compile error. `register()` is gone, but
-`defineApp`'s `YaarAppDefinition` -> `YaarAppCommands` -> `YaarAppRunParams` chain has the
-same depth.
+`Yaar*` declarations they reference, transitively and covering `type` aliases as well as
+`interface`s — `register()` is gone, but `defineApp`'s `YaarAppDefinition` -> `YaarAppCommands`
+-> `YaarAppRunParams` chain has the same depth. See `describe-library.ts`'s header comment for
+why transitive resolution matters here.
 
 A module block that is a bare `export * from 'pkg'` tells the caller nothing, since the
 upstream package is not something the agent can open — which is why the four `solid-js` blocks

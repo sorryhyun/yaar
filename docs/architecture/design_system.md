@@ -68,17 +68,13 @@ Deviations are legal only if listed here, with a reason:
 
 - **dock** — translucent glass panel, no `y-*` classes. Deliberate: the dock is
   meta-chrome floating over the wallpaper. Uses the glass-tier overlay tokens.
-- **dc-comics** — dcinside brand orange (`#f7b731`) layered
-  over the token base. Brand accents ride on top of, never replace, the system.
-- **slides-lite** — opts into `.y-light` for document-like surfaces.
-- **curious-library-vn** — the `--library-*` palette (deep greens, gold trim, parchment)
-  is the game world's own art direction, not chrome: swapping the OS palette should
-  *not* recolor a visual novel's dialogue panels any more than it should recolor a
-  sprite. Every control in the app is diegetic, which is why it uses no `y-*`
-  component classes and legitimately never will.
+
+No other bundled app currently has an exception. The registry above is the
+mechanism, not a target list — add an entry here when an app genuinely needs
+one, with the same reasoning shown for dock.
 
 **No app redefines a `--yaar-*` token**, and the registry above holds no exception for
-one. To check: `grep -rn -- '--yaar-[a-z0-9-]*\s*:' apps/*/src user-apps/*/src` should
+one. To check: `grep -rn -- '--yaar-[a-z0-9-]*\s*:' apps/*/src` should
 return nothing outside `var()` reads.
 
 Defining a *new* `--yaar-*` token in your own `:root` is still supported — the

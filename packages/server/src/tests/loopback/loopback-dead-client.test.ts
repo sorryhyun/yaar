@@ -21,9 +21,7 @@
  *      `{dismissed: true, timedOut: true}` is not a user declining. The bug this whole suite
  *      exists for was a wait that ended at its deadline and was reported as the app being
  *      broken; the fix is not that waits never time out — it is that a timeout is *named* as
- *      one, at the call site, so nobody downstream mistakes silence for an answer. (See the
- *      `PendingOutcome` header: there is no `defaultValue` any more, precisely so that no
- *      caller can accidentally hand the agent a plausible-looking value it invented.)
+ *      one, at the call site, so nobody downstream mistakes silence for an answer.
  *
  * And then the fourth thing, which is the actual "wedge" in the title: after all that, the
  * *next* `USER_MESSAGE` on the same socket must run. A dead client costs one turn, not the

@@ -258,18 +258,21 @@ Both providers emit the same `StreamMessage` types but map from different source
 
 ### Claude (`message-mapper.ts`)
 
-Maps from Agent SDK message types:
-- `assistant` / `partial_message` → `text` (content deltas)
-- `result` → `complete` (with session_id)
-- Thinking blocks → `thinking`
+Maps from Agent SDK message types. Content deltas arrive as `stream_event` messages wrapping
+Anthropic API `content_block_delta` events, not as a top-level `partial_message` type:
+- `stream_event` with `content_block_delta` / `text_delta` → `text` (content chunks)
+- `stream_event` with `content_block_delta` / `thinking_delta` → `thinking`
+- `stream_event` with `content_block_start` / `content_block_stop` (tool_use blocks) → `tool_use_start` / `tool_use`
+- `result` → `complete` (with session_id), or `error` if `is_error`/an error subtype
+- `assistant` → session-id-only carrier; its text was already streamed via `stream_event`
 
 ### Codex (`message-mapper.ts`)
 
 Maps from JSON-RPC notification methods:
-- `message/delta` → `text` (content chunks)
-- `turn/completed` → `complete`
-- `turn/failed` / `error` → `error`
-- `agent/thinking` → `thinking`
+- `item/agentMessage/delta` → `text` (content chunks)
+- `item/reasoning/textDelta` → `thinking`
+- `turn/completed` → `complete`, or `error` when `turn.status` is `'failed'`/`'interrupted'` (there is no separate `turn/failed` method)
+- `error` → `error`
 
 ## Error Recovery
 
@@ -277,7 +280,11 @@ Maps from JSON-RPC notification methods:
 
 - Abort controller for interruption (`this.createAbortController()`)
 - Errors caught and yielded as `error` StreamMessage
-- No auto-retry
+- Three auto-retry paths in `session-provider.ts`: the persistent stream ending before any
+  message came back retries fresh with a new session (no `resume`); a stale-session error
+  detected mid-turn on the main persistent-session path retries without `resume`; the same
+  stale-session retry exists on the fork-turn path. Claude and Codex are not asymmetric here —
+  both retry around session/thread invalidation.
 
 ### Codex
 

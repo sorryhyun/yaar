@@ -322,12 +322,9 @@ export async function extractProtocolFromDir(
     }
   }
 
-  // No `defineApp`, so nothing the fold can read. If the app is still calling the
-  // removed `app.register({...})`, say so rather than reporting no protocol:
-  // silence is the one answer this subsystem must never give, and an app whose
-  // commands vanish from the manifest while the build stays green is exactly the
-  // failure it exists to prevent. The AST path refuses the same call with the same
-  // reasoning, so both environments answer alike.
+  // No `defineApp`, so nothing the fold can read. Check for the removed
+  // `app.register({...})` (see `findAppRegisterCall` in extract-protocol-ast.ts for the
+  // guard's rationale) before reporting no protocol at all.
   const registers = findRegisterCall(srcDir, options.sources);
   if (registers) {
     return {
