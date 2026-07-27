@@ -19,8 +19,13 @@ import { describe, expect, setDefaultTimeout, test } from 'bun:test';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { BUNDLED_LIBRARIES, BUNDLED_SHIMS, toForwardSlash } from '../plugins.js';
-import { prebundleLibrary, resolvePrebundleEntrypoint } from '../prebundle.js';
+import {
+  BUNDLED_LIBRARIES,
+  BUNDLED_SHIMS,
+  prebundleLibrary,
+  resolvePrebundleEntrypoint,
+  toForwardSlash,
+} from '../index.js';
 
 // Each case pays for a real prebundle (some libraries are megabytes) plus a
 // consumer Bun.build(). Big libs (p5, three, mammoth) dominate the cost.

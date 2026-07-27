@@ -19,6 +19,8 @@
  * render target is flagged; a computed target is left alone.
  */
 
+import { createAppSourceFile } from './ts-source.js';
+
 /** The id of the mount element `generateHtmlWrapper` emits. The single source of truth. */
 export const APP_MOUNT_ID = 'app';
 
@@ -106,11 +108,13 @@ function resolveTargetId(ts: TsModule, target: TsExpression, sf: TsSourceFile): 
 }
 
 /**
- * Walk `source` for `render(component, target)` calls whose target is a literal
- * lookup of an element the compiler never emits.
+ * Walk an already-parsed source file for `render(component, target)` calls whose
+ * target is a literal lookup of an element the compiler never emits.
+ *
+ * Takes a `SourceFile` rather than text so the bundler plugin, which runs this
+ * and the solid-html guard over the same file, pays for one parse instead of two.
  */
-export function scanMountTargets(ts: TsModule, source: string, fileName: string): MountFinding[] {
-  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+export function scanMountTargetsIn(ts: TsModule, sf: TsSourceFile): MountFinding[] {
   const findings: MountFinding[] = [];
 
   const visit = (node: TsNode): void => {
@@ -137,6 +141,11 @@ export function scanMountTargets(ts: TsModule, source: string, fileName: string)
 
   visit(sf);
   return findings;
+}
+
+/** Parse `source` and scan it. */
+export function scanMountTargets(ts: TsModule, source: string, fileName: string): MountFinding[] {
+  return scanMountTargetsIn(ts, createAppSourceFile(ts, fileName, source));
 }
 
 /**

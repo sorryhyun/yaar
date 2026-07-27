@@ -501,6 +501,16 @@ afterAll(async () => {
  *
  * `manifest` is the build's folded protocol, read back out of the injected
  * `window.__yaar_manifest__` script — the same value the iframe would see.
+ *
+ * The extracted module is written to a directory of its own, created *after* the
+ * compile, and that is load-bearing. Bun (1.3.14) caches a directory's entries
+ * the first time it resolves a module from it, and never rechecks: a file added
+ * to that directory afterwards is invisible to `import()`, which fails with
+ * `Cannot find module <path> from ''` while the file sits on disk with the right
+ * bytes. Compiling a `defineApp` app whose schema is a Zod builder runs the
+ * schema fold, which resolves a Worker under the sandbox and so caches the
+ * sandbox itself — writing `app.mjs` there made only the Zod case unimportable.
+ * A fresh directory has no cached listing to be stale.
  */
 async function compileApp(appId: string, source: string) {
   const sandbox = await mkdtemp(join(tmpdir(), `yaar-define-app-${appId}-`));
@@ -518,7 +528,9 @@ async function compileApp(appId: string, source: string) {
   const html = await Bun.file(join(sandbox, 'dist', 'index.html')).text();
   const script = /<script type="module">([\s\S]*?)<\/script>/.exec(html);
   expect(script).not.toBeNull();
-  const modulePath = join(sandbox, 'app.mjs');
+  const moduleDir = await mkdtemp(join(tmpdir(), `yaar-define-app-mod-${appId}-`));
+  sandboxes.push(moduleDir);
+  const modulePath = join(moduleDir, 'app.mjs');
   await Bun.write(modulePath, script![1]);
   const injected = /window\.__yaar_manifest__=(.*?);<\/script>/.exec(html);
   return { html, modulePath, manifest: injected ? JSON.parse(injected[1]) : undefined };

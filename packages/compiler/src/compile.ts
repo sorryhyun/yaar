@@ -7,13 +7,7 @@
 
 import { mkdir, readdir, stat } from 'fs/promises';
 import { join } from 'path';
-import {
-  bundledLibraryPluginBun,
-  cssFilePlugin,
-  assetDataUrlPlugin,
-  solidHtmlSourcePlugin,
-  toForwardSlash,
-} from './plugins.js';
+import { buildAppBundle, formatBuildLogs } from './build-app.js';
 import { formatProtocolError } from './extract-protocol-ast.js';
 import { extractProtocolFromDir } from './extract-protocol-dir.js';
 import { getCompilerConfig } from './config.js';
@@ -75,9 +69,10 @@ export function getSandboxPath(sandboxId: string): string {
 const LARGE_BUNDLE_WARN_BYTES = 5_000_000;
 
 /**
- * Minified SDK scripts cache. Populated lazily on first compile.
+ * Minified SDK scripts cache. Populated lazily on first compile. Only the
+ * minified form is cached — the raw form is an array join.
  */
-let sdkScriptsCache: { raw: string; minified: string } | null = null;
+let minifiedSdkScripts: string | null = null;
 
 function getRawSdkScripts(): string {
   return [
@@ -94,14 +89,13 @@ function getRawSdkScripts(): string {
   ].join('\n');
 }
 
-async function getSdkScripts(minify: boolean): Promise<string> {
-  if (!sdkScriptsCache) {
-    const raw = getRawSdkScripts();
+function getSdkScripts(minify: boolean): string {
+  if (!minify) return getRawSdkScripts();
+  if (minifiedSdkScripts === null) {
     const transpiler = new Bun.Transpiler({ minifyWhitespace: true });
-    const minified = transpiler.transformSync(raw).trim();
-    sdkScriptsCache = { raw, minified };
+    minifiedSdkScripts = transpiler.transformSync(getRawSdkScripts()).trim();
   }
-  return minify ? sdkScriptsCache.minified : sdkScriptsCache.raw;
+  return minifiedSdkScripts;
 }
 
 /**
@@ -174,30 +168,14 @@ async function compileWithBun(
   minify: boolean,
   bundles?: string[],
 ): Promise<string> {
-  const result = await Bun.build({
-    entrypoints: [toForwardSlash(entryPoint)],
-    minify,
-    format: 'esm',
-    target: 'browser',
-    // Resolve with { success: false, logs } instead of throwing, so errors
-    // keep their file/line/column positions (the catch path loses them).
-    throw: false,
-    plugins: [
-      bundledLibraryPluginBun(bundles),
-      cssFilePlugin(),
-      assetDataUrlPlugin(),
-      solidHtmlSourcePlugin(),
-    ],
-  });
+  const result = await buildAppBundle(entryPoint, { minify, bundles });
 
   if (!result.success) {
-    const errors = result.logs
-      .filter((l) => l.level === 'error' || l.level === 'warning')
-      .map((l) => {
-        const pos = l.position;
-        const loc = pos ? `${pos.file ?? entryPoint}:${pos.line}:${pos.column}: ` : '';
-        return `${loc}${l.message || String(l)}`;
-      });
+    const errors = formatBuildLogs(result.logs, {
+      includeWarnings: true,
+      withPosition: true,
+      fallbackFile: entryPoint,
+    });
     throw new Error(errors.join('\n') || `Bun.build() failed for ${entryPoint}`);
   }
 
@@ -228,25 +206,6 @@ async function readAppSources(srcDir: string): Promise<AppSourceFile[]> {
       text: await Bun.file(join(srcDir, rel)).text(),
     })),
   );
-}
-
-/**
- * Read the app's declared id from `app.json`.
- *
- * `defineApp({ id })` is checked against it: the id is what the app registers
- * under at runtime and what `protocol.json` is filed against, so the two
- * disagreeing produces a manifest nothing else keys on. A sandbox with no
- * app.json (a scratch compile) has no id to disagree with — undefined skips the
- * check rather than failing a build that is not wrong about anything.
- */
-async function readAppId(sandboxPath: string): Promise<string | undefined> {
-  try {
-    const json = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
-    const id = json?.appId;
-    return typeof id === 'string' && id ? id : undefined;
-  } catch {
-    return undefined;
-  }
 }
 
 /**
@@ -290,8 +249,10 @@ export async function compileTypeScript(
     // green (one real incident: 29 commands shrank to 3). An entry the
     // extractor cannot resolve fails the build instead of shipping a manifest
     // missing commands.
+    // `appId` is left out on purpose: `extractProtocolFromDir` derives it from
+    // the app.json beside `src/`, so the `defineApp({ id })` check holds for the
+    // deploy and tooling callers too, not only for a compile that passes it.
     const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
-      appId: await readAppId(sandboxPath),
       bundles: options.bundles,
     });
     if (extraction.errors.length > 0) {
@@ -307,7 +268,7 @@ export async function compileTypeScript(
       };
     }
     // Get SDK scripts (minified when minify is enabled)
-    const sdkCode = await getSdkScripts(minify);
+    const sdkCode = getSdkScripts(minify);
 
     // Generate HTML wrapper with embedded JavaScript
     const htmlContent = generateHtmlWrapper(

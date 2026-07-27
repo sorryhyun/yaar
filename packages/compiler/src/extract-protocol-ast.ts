@@ -77,6 +77,20 @@ export function formatProtocolError(err: ProtocolError): string {
   return `${err.file}:${err.line}:${err.column}: ${err.message}`;
 }
 
+/**
+ * What both readers say about the removed `app.register({...})`.
+ *
+ * The whole design intent is that the AST path and the no-`typescript` path
+ * refuse the removed shape *alike* — they find it differently (a resolved call
+ * receiver vs. a text scan), but an author must not be able to tell which
+ * environment answered. Two copy-pasted literals were the weakest possible way
+ * to hold that.
+ */
+export const APP_REGISTER_REMOVED_MESSAGE =
+  '`app.register({...})` has been removed. Register with `export default defineApp({ id, ' +
+  "name, state, commands, view })` from '@bundled/yaar': move each `state` entry's " +
+  "`handler` to `get`, each command's `handler` to `run`, and `appId` to `id`";
+
 // ---------------------------------------------------------------------------
 // Module graph
 // ---------------------------------------------------------------------------
@@ -1291,12 +1305,8 @@ function buildProtocol(
 }
 
 /** An extracted protocol, or null when nothing was declared. */
-function finish(
-  extractor: Extractor,
-  protocol: Protocol | null,
-  usesDefineApp = false,
-): AstProtocolExtraction {
-  const rest = { pendingFolds: extractor.pendingFolds, usesDefineApp };
+function finish(extractor: Extractor, protocol: Protocol | null): AstProtocolExtraction {
+  const rest = { pendingFolds: extractor.pendingFolds };
   if (extractor.errors.length > 0) return { protocol: null, errors: extractor.errors, ...rest };
   if (!protocol) return { protocol: null, errors: [], ...rest };
   const empty =
@@ -1353,13 +1363,7 @@ export function extractProtocolFromModules(
 
   const legacy = findAppRegisterCall(ts, scopes);
   if (legacy) {
-    extractor.error(
-      legacy.scope,
-      legacy.node,
-      '`app.register({...})` has been removed. Register with `export default defineApp({ id, ' +
-        "name, state, commands, view })` from '@bundled/yaar': move each `state` entry's " +
-        "`handler` to `get`, each command's `handler` to `run`, and `appId` to `id`",
-    );
+    extractor.error(legacy.scope, legacy.node, APP_REGISTER_REMOVED_MESSAGE);
     return bail();
   }
 

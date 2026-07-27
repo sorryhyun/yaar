@@ -34,13 +34,7 @@ import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import type { AppManifest } from '@yaar/shared';
 import { listKeybindingIssues } from '@yaar/shared';
-import {
-  bundledLibraryPluginBun,
-  cssFilePlugin,
-  assetDataUrlPlugin,
-  solidHtmlSourcePlugin,
-  toForwardSlash,
-} from './plugins.js';
+import { buildAppBundle, formatBuildLogs } from './build-app.js';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
 
@@ -421,27 +415,13 @@ export async function foldAppSchemas(options: FoldOptions): Promise<FoldResult> 
     await mkdir(foldDir, { recursive: true });
     await Bun.write(entryPath, FOLD_ENTRY_SOURCE);
 
-    const built = await Bun.build({
-      entrypoints: [toForwardSlash(entryPath)],
-      // Unminified: this bundle is never shipped, and a readable stack is the
-      // difference between "the app threw" and knowing where.
-      minify: false,
-      format: 'esm',
-      target: 'browser',
-      throw: false,
-      plugins: [
-        bundledLibraryPluginBun(bundles),
-        cssFilePlugin(),
-        assetDataUrlPlugin(),
-        solidHtmlSourcePlugin(),
-      ],
-    });
+    // The same build the compiler runs, minus minification — this bundle is
+    // never shipped, and a readable stack is the difference between "the app
+    // threw" and knowing where.
+    const built = await buildAppBundle(entryPath, { minify: false, bundles });
 
     if (!built.success || !built.outputs[0]) {
-      const logs = built.logs
-        .filter((l) => l.level === 'error')
-        .map((l) => l.message || String(l))
-        .join('; ');
+      const logs = formatBuildLogs(built.logs).join('; ');
       return {
         ok: false,
         error: asAscii(`the app could not be bundled for folding: ${logs || 'no output produced'}`),

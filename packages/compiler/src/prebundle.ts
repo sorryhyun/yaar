@@ -23,6 +23,7 @@ import {
   resolveBrowserEntry,
   toForwardSlash,
 } from './plugins.js';
+import { formatBuildLogs } from './build-app.js';
 
 /** Where devDependencies for bundled libraries are installed (this package). */
 const ANCHOR = toForwardSlash(fileURLToPath(new URL('.', import.meta.url)));
@@ -95,9 +96,7 @@ export async function prebundleLibrary(name: string): Promise<string> {
     external: solidExternals(name),
   });
   if (!result.success) {
-    const errors = result.logs
-      .filter((l) => l.level === 'error')
-      .map((l) => l.message || String(l));
+    const errors = formatBuildLogs(result.logs);
     throw new Error(errors.join('\n') || `Bun.build() failed for @bundled/${name}`);
   }
   return await result.outputs[0].text();

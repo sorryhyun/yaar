@@ -27,7 +27,7 @@
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { relative, resolve } from 'path';
-import { BUNDLED_LIBRARIES } from '../packages/compiler/src/plugins.ts';
+import { BUNDLED_LIBRARIES } from '../packages/compiler/src/index.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..');
 const BUNDLED_LIBRARY_DOCS = [

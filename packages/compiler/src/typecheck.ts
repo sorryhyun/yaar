@@ -8,6 +8,7 @@ import { readFile, unlink } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { getCompilerConfig } from './config.js';
 import { GATED_BUNDLED_LIBRARIES, toForwardSlash } from './plugins.js';
+import { loadTypeScript } from './load-typescript.js';
 
 export interface TypecheckResult {
   success: boolean;
@@ -41,12 +42,13 @@ async function writeAllowedBundledTypes(
 
   // Keep one canonical declaration file for docs and editor tooling. For a
   // sandbox typecheck, remove only ambient modules the app did not opt into.
-  // The runtime-assembled import keeps TypeScript out of the standalone exe.
-  const specifier = ['type', 'script'].join('');
-  const imported = (await import(specifier)) as {
-    default?: typeof import('typescript');
-  } & typeof import('typescript');
-  const ts = imported.default ?? imported;
+  // Without `typescript` there is nothing to slice the declarations with, so the
+  // canonical file stands — the same conservative answer exe mode already gives,
+  // where `typecheckSandbox` returns before ever reaching here. The tsconfig's
+  // `paths` still points every denied bundle at a directory that does not exist.
+  const ts = await loadTypeScript();
+  if (!ts) return sourcePath;
+
   const source = await readFile(sourcePath, 'utf8');
   const sourceFile = ts.createSourceFile(
     sourcePath,

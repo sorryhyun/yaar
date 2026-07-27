@@ -16,8 +16,10 @@ bun run dev              # Watch mode
 src/
 ├── index.ts               # Barrel exports
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
+├── build-app.ts           # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs
 ├── plugins.ts             # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
 ├── prebundle.ts           # prebundleLibrary(name) — shared by scripts/prebundle-libs.js and the completeness test
+├── ts-source.ts           # createAppSourceFile() — one parse per file, handed to both guards
 ├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
 ├── mount-guard.ts         # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
 ├── design-token-guard.ts  # Rejects var(--yaar-*) names that can never resolve
@@ -91,7 +93,8 @@ a devDependency.
 `app.register({...})` is **removed**, and both readers refuse it by name rather than reporting
 "declares no protocol" — the AST path from the call site, the no-`typescript` path from a text
 scan. Silence is the one answer this subsystem must never give, and an app whose commands
-vanish from the manifest while the build stays green is exactly that.
+vanish from the manifest while the build stays green is exactly that. Both raise the same
+`APP_REGISTER_REMOVED_MESSAGE`, so an author cannot tell which environment answered.
 
 Because the AST path resolves spreads, **descriptor maps may be split across files by
 domain** — `commands: { ...fileCommands, ...gitCommands }` where each map lives in its own

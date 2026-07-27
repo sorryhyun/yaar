@@ -15,6 +15,8 @@
  * false positives from nested templates or multi-line markup.
  */
 
+import { createAppSourceFile } from './ts-source.js';
+
 /** The comment marker solid substitutes for each `${...}` expression. */
 const MARKER = '<!--#-->';
 
@@ -99,13 +101,16 @@ export interface SolidHtmlFinding extends SolidHtmlDefect {
 type TsModule = typeof import('typescript');
 
 /**
- * Walk `source` for `` html`...` `` tagged templates and classify each one.
+ * Walk an already-parsed source file for `` html`...` `` tagged templates and
+ * classify each one.
  *
- * Uses the TypeScript AST rather than a regex so nested templates and `${}`
- * expressions containing braces or backticks are handled exactly.
+ * Takes a `SourceFile` rather than text so the bundler plugin, which runs this
+ * and the mount guard over the same file, pays for one parse instead of two.
  */
-export function scanSource(ts: TsModule, source: string, fileName: string): SolidHtmlFinding[] {
-  const sf = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+export function scanSourceFile(
+  ts: TsModule,
+  sf: import('typescript').SourceFile,
+): SolidHtmlFinding[] {
   const findings: SolidHtmlFinding[] = [];
 
   const visit = (node: import('typescript').Node): void => {
@@ -131,6 +136,16 @@ export function scanSource(ts: TsModule, source: string, fileName: string): Soli
 
   visit(sf);
   return findings;
+}
+
+/**
+ * Parse `source` and scan it.
+ *
+ * Uses the TypeScript AST rather than a regex so nested templates and `${}`
+ * expressions containing braces or backticks are handled exactly.
+ */
+export function scanSource(ts: TsModule, source: string, fileName: string): SolidHtmlFinding[] {
+  return scanSourceFile(ts, createAppSourceFile(ts, fileName, source));
 }
 
 /** Render findings as a compile error body. */

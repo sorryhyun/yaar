@@ -9,10 +9,11 @@
 import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { scanSource, formatFindings } from './solid-html-guard.js';
-import { scanMountTargets, formatMountFindings } from './mount-guard.js';
+import { scanSourceFile, formatFindings } from './solid-html-guard.js';
+import { scanMountTargetsIn, formatMountFindings } from './mount-guard.js';
 import { describeDesignTokens } from './design-tokens.js';
 import { loadTypeScript } from './load-typescript.js';
+import { createAppSourceFile } from './ts-source.js';
 
 /**
  * Normalize a file path to use forward slashes.
@@ -35,6 +36,22 @@ const DEBUG_BUNDLED_LIBRARIES = process.env.YAAR_DEBUG_BUNDLED_LIBS === '1';
 
 function debugBundledLibrary(message: string): void {
   if (DEBUG_BUNDLED_LIBRARIES) console.log(message);
+}
+
+/**
+ * The libraries `build-exe-bundle.js` embedded into the standalone binary, or
+ * undefined outside it. Every resolution strategy consults this first, so its
+ * presence is also how the plugins know they are running inside the exe.
+ */
+function getEmbeddedLibs(): Record<string, string> | undefined {
+  return (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
+    | Record<string, string>
+    | undefined;
+}
+
+/** True inside the standalone exe, where shim `.ts` sources are not on disk. */
+function isExeMode(): boolean {
+  return getEmbeddedLibs() !== undefined;
 }
 
 /**
@@ -154,6 +171,39 @@ export function resolveBrowserEntry(npmName: string, fromDir: string): string | 
 }
 
 /**
+ * Resolve an npm package to a browser build under `node_modules`, or null.
+ *
+ * The ladder is `resolveBrowserEntry` (reads the exports map) then
+ * `Bun.resolveSync` (runtime conditions), and the SSR rejection between them is
+ * why it belongs in one place: on Windows the first step can fail while the
+ * second picks the node condition, handing an app `solid-js/dist/server.js` — a
+ * second, non-reactive runtime, with no build signal. Both callers need that
+ * guard, and it must not end up in only one of them.
+ *
+ * `label` names the import in the debug log. `null` means unresolved; each
+ * caller decides what that costs.
+ */
+function resolveNpmBrowserPath(npmName: string, label: string): string | null {
+  const browserPath = resolveBrowserEntry(npmName, PLUGIN_DIR);
+  if (browserPath) {
+    debugBundledLibrary(`[bundled-lib] ${label} → browser entry ${browserPath}`);
+    return browserPath;
+  }
+
+  try {
+    const resolved = toForwardSlash(Bun.resolveSync(npmName, PLUGIN_DIR));
+    if (CONDITIONAL_EXPORT_LIBS.includes(npmName) && resolved.includes('/server.')) {
+      debugBundledLibrary(`[bundled-lib] ${label} → REJECTED SSR build ${resolved}`);
+      return null;
+    }
+    debugBundledLibrary(`[bundled-lib] ${label} → Bun.resolveSync ${resolved}`);
+    return resolved;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Bun plugin that resolves @bundled/* imports.
  *
  * Resolution strategies (in order):
@@ -165,9 +215,7 @@ export function resolveBrowserEntry(npmName: string, fromDir: string): string | 
  */
 export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugin {
   // Log bundled libs state once at plugin creation time
-  const embeddedLibsSnapshot = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
-    | Record<string, string>
-    | undefined;
+  const embeddedLibsSnapshot = getEmbeddedLibs();
   debugBundledLibrary(
     `[bundled-lib] plugin init: __YAAR_BUNDLED_LIBS is ${
       embeddedLibsSnapshot === undefined
@@ -198,9 +246,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         }
         // Strategy 1: embedded libs (production exe) — checked first because
         // shim source paths don't exist inside the bundled executable.
-        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
-          | Record<string, string>
-          | undefined;
+        const embeddedLibs = getEmbeddedLibs();
         if (embeddedLibs?.[libName]) {
           debugBundledLibrary(
             `[bundled-lib] @bundled/${libName} → embedded (namespace=${NAMESPACE})`,
@@ -212,39 +258,15 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         // Skip in exe mode — shim .ts sources aren't usable as Bun.build() input
         // inside the embedded filesystem (paths like B:/~BUN/root/shims/yaar.ts).
         // In exe mode, shims are pre-bundled and must be in __YAAR_BUNDLED_LIBS.
-        const isExeMode = embeddedLibs !== undefined;
-        if (BUNDLED_SHIMS[libName] && !isExeMode) {
+        if (BUNDLED_SHIMS[libName] && !isExeMode()) {
           debugBundledLibrary(`[bundled-lib] @bundled/${libName} → shim ${BUNDLED_SHIMS[libName]}`);
           return { path: BUNDLED_SHIMS[libName] };
         }
 
-        // Strategy 3: node_modules (dev) — first try browser-aware resolution
-        // (Bun.resolveSync uses runtime/node conditions which gives SSR builds
-        // for packages like solid-js), then fall back to Bun.resolveSync for
-        // packages without conditional exports.
-        const npmName = BUNDLED_LIBRARIES[libName];
-        const browserPath = resolveBrowserEntry(npmName, PLUGIN_DIR);
-        if (browserPath) {
-          debugBundledLibrary(`[bundled-lib] @bundled/${libName} → browser entry ${browserPath}`);
-          return { path: browserPath };
-        }
-
-        try {
-          const resolved = toForwardSlash(Bun.resolveSync(npmName, PLUGIN_DIR));
-          // Guard: reject SSR builds for libs with browser/node conditional exports.
-          // On Windows, resolveBrowserEntry can fail while Bun.resolveSync picks the
-          // node condition (e.g. solid-js/dist/server.js instead of dist/solid.js).
-          if (CONDITIONAL_EXPORT_LIBS.includes(npmName) && resolved.includes('/server.')) {
-            debugBundledLibrary(
-              `[bundled-lib] @bundled/${libName} → REJECTED SSR build ${resolved}`,
-            );
-            throw new Error(`Resolved SSR build for ${npmName}, need browser build`);
-          }
-          debugBundledLibrary(`[bundled-lib] @bundled/${libName} → Bun.resolveSync ${resolved}`);
-          return { path: resolved };
-        } catch {
-          // fall through to namespace for disk-based resolution
-        }
+        // Strategy 3: node_modules (dev). Unresolved falls through to the
+        // namespace, where onLoad tries the disk-based exe layout.
+        const resolved = resolveNpmBrowserPath(BUNDLED_LIBRARIES[libName], `@bundled/${libName}`);
+        if (resolved) return { path: resolved };
 
         debugBundledLibrary(
           `[bundled-lib] @bundled/${libName} → fallback namespace (will try disk/embedded in onLoad)`,
@@ -265,9 +287,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         // The prebundled solid-js sub-packages (html, web, store) have solid-js
         // marked as external, so their bare `import 'solid-js'` statements need
         // to resolve to the shared prebundled bundle.
-        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
-          | Record<string, string>
-          | undefined;
+        const embeddedLibs = getEmbeddedLibs();
         if (embeddedLibs?.[libName]) {
           debugBundledLibrary(
             `[bundled-lib] bare ${libName} (from ${args.importer}) → embedded (namespace=${NAMESPACE})`,
@@ -275,42 +295,21 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
           return { path: libName, namespace: NAMESPACE };
         }
 
-        // Dev mode: resolve browser entry from node_modules
-        const browserPath = resolveBrowserEntry(libName, PLUGIN_DIR);
-        if (browserPath) {
-          debugBundledLibrary(
-            `[bundled-lib] bare ${libName} (from ${args.importer}) → browser entry ${browserPath}`,
-          );
-          return { path: browserPath };
-        }
-        try {
-          const resolved = toForwardSlash(Bun.resolveSync(libName, PLUGIN_DIR));
-          // Reject SSR builds — see guard in @bundled/* resolver above
-          if (resolved.includes('/server.')) {
-            debugBundledLibrary(
-              `[bundled-lib] bare ${libName} (from ${args.importer}) → REJECTED SSR build ${resolved}`,
-            );
-            return undefined;
-          }
-          debugBundledLibrary(
-            `[bundled-lib] bare ${libName} (from ${args.importer}) → Bun.resolveSync ${resolved}`,
-          );
-          return { path: resolved };
-        } catch {
-          debugBundledLibrary(
-            `[bundled-lib] bare ${libName} (from ${args.importer}) → UNRESOLVED (returning undefined)`,
-          );
-          return undefined;
-        }
+        // Dev mode: resolve browser entry from node_modules. Unresolved hands the
+        // import back to Bun's default resolver.
+        const label = `bare ${libName} (from ${args.importer})`;
+        const resolved = resolveNpmBrowserPath(libName, label);
+        if (resolved) return { path: resolved };
+
+        debugBundledLibrary(`[bundled-lib] ${label} → UNRESOLVED (returning undefined)`);
+        return undefined;
       });
 
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: Bun.OnLoadArgs) => {
         const libName = args.path;
 
         // Strategy 1: embedded libs (production exe)
-        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
-          | Record<string, string>
-          | undefined;
+        const embeddedLibs = getEmbeddedLibs();
         if (embeddedLibs?.[libName]) {
           const filePath = embeddedLibs[libName];
           debugBundledLibrary(`[bundled-lib] onLoad ${libName} → embedded file ${filePath}`);
@@ -371,10 +370,7 @@ export function cssFilePlugin(): Bun.BunPlugin {
         if (!matchingLib) return undefined;
 
         // Exe mode: check embedded CSS libs (pre-bundled as JS style-injectors)
-        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
-          | Record<string, string>
-          | undefined;
-        if (embeddedLibs?.[args.path]) {
+        if (getEmbeddedLibs()?.[args.path]) {
           return { path: args.path, namespace: CSS_NAMESPACE };
         }
 
@@ -388,9 +384,7 @@ export function cssFilePlugin(): Bun.BunPlugin {
 
       // Load pre-bundled CSS-as-JS from embedded libs (exe mode)
       build.onLoad({ filter: /.*/, namespace: CSS_NAMESPACE }, async (args: Bun.OnLoadArgs) => {
-        const embeddedLibs = (globalThis as Record<string, unknown>).__YAAR_BUNDLED_LIBS as
-          | Record<string, string>
-          | undefined;
+        const embeddedLibs = getEmbeddedLibs();
         if (embeddedLibs?.[args.path]) {
           const contents = await Bun.file(embeddedLibs[args.path]).text();
           return { contents, loader: 'js' };
@@ -506,12 +500,15 @@ export function solidHtmlSourcePlugin(): Bun.BunPlugin {
         if (mayHaveTemplates || mayMount) {
           const ts = await loadTs();
           if (ts) {
+            // One parse for both guards — a file that matches both gates used to
+            // be handed to `ts.createSourceFile` twice over identical text.
+            const sourceFile = createAppSourceFile(ts, filePath, rewritten);
             if (mayHaveTemplates) {
-              const findings = scanSource(ts, rewritten, filePath);
+              const findings = scanSourceFile(ts, sourceFile);
               if (findings.length > 0) throw new Error(formatFindings(filePath, findings));
             }
             if (mayMount) {
-              const mounts = scanMountTargets(ts, rewritten, filePath);
+              const mounts = scanMountTargetsIn(ts, sourceFile);
               if (mounts.length > 0) throw new Error(formatMountFindings(filePath, mounts));
             }
           }

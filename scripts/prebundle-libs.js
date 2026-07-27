@@ -23,8 +23,7 @@ const outDir = join(rootDir, 'dist', 'bundled-libs');
 // The canonical library map and the shared per-library build (Bun resolves .ts directly).
 // `prebundleLibrary` routes shim-backed names (uuid, zod, lodash, pixi.js, yaar*) through
 // their shim and everything else through the npm browser entry — one code path for both.
-const { BUNDLED_LIBRARIES } = await import('../packages/compiler/src/plugins.ts');
-const { prebundleLibrary } = await import('../packages/compiler/src/prebundle.ts');
+const { BUNDLED_LIBRARIES, prebundleLibrary } = await import('../packages/compiler/src/index.ts');
 
 mkdirSync(outDir, { recursive: true });
 

@@ -9,14 +9,22 @@ export {
 } from './compile.js';
 export { typecheckSandbox, type TypecheckOptions, type TypecheckResult } from './typecheck.js';
 export {
+  ASSET_MIME_TYPES,
   BUNDLED_LIBRARIES,
+  BUNDLED_SHIMS,
   GATED_BUNDLED_LIBRARIES,
   getAvailableBundledLibraries,
   getBundledLibraryDetail,
+  resolveBrowserEntry,
+  toForwardSlash,
   bundledLibraryPluginBun,
   cssFilePlugin,
+  assetDataUrlPlugin,
   solidHtmlSourcePlugin,
 } from './plugins.js';
+// The exe's per-library build. `scripts/prebundle-libs.js` and the completeness
+// test both go through here, so the module can move without touching either.
+export { prebundleLibrary, resolvePrebundleEntrypoint, solidExternals } from './prebundle.js';
 export {
   classifyTemplate,
   scanSource,
@@ -40,6 +48,7 @@ export {
   type TokenFinding,
 } from './design-token-guard.js';
 export {
+  APP_REGISTER_REMOVED_MESSAGE,
   extractProtocolFromModules,
   formatProtocolError,
   type AstProtocolExtraction,

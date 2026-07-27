@@ -17,7 +17,11 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import type { AppManifest } from '@yaar/shared';
 import { toForwardSlash } from './plugins.js';
-import { extractProtocolFromModules, type ProtocolError } from './extract-protocol-ast.js';
+import {
+  APP_REGISTER_REMOVED_MESSAGE,
+  extractProtocolFromModules,
+  type ProtocolError,
+} from './extract-protocol-ast.js';
 import { loadTypeScript } from './load-typescript.js';
 import { foldAppSchemas, type FoldSuccess } from './fold-schemas.js';
 
@@ -331,18 +335,7 @@ export async function extractProtocolFromDir(
   if (registers) {
     return {
       protocol: null,
-      errors: [
-        {
-          message:
-            '`app.register({...})` has been removed. Register with `export default ' +
-            "defineApp({ id, name, state, commands, view })` from '@bundled/yaar': move each " +
-            "`state` entry's `handler` to `get`, each command's `handler` to `run`, and " +
-            '`appId` to `id`',
-          file: registers,
-          line: 1,
-          column: 1,
-        },
-      ],
+      errors: [{ message: APP_REGISTER_REMOVED_MESSAGE, file: registers, line: 1, column: 1 }],
       degraded: true,
     };
   }
