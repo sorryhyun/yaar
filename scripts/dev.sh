@@ -38,6 +38,22 @@ if [ "$PORT" != "$REQUESTED_PORT" ]; then
   echo "Port $REQUESTED_PORT in use, using $PORT instead"
 fi
 
+# In remote mode every endpoint needs the remote token, so the tab we open has to carry
+# it as `#remote=<token>` or it lands on the connection dialog. The token is normally
+# minted inside the server, which is too late for us and unreadable from here anyway
+# (the endpoint that would report it is behind the same token). So mint it *here* and let
+# the server adopt it via YAAR_REMOTE_TOKEN — the URL is then known before the server
+# starts. Honors an externally-set value, so a caller can pin the token.
+if [ -n "$REMOTE" ] && [ "$REMOTE" != "0" ] && [ -z "${YAAR_REMOTE_TOKEN:-}" ]; then
+  if command -v openssl >/dev/null 2>&1; then
+    YAAR_REMOTE_TOKEN="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=')"
+  else
+    # base64url alphabet only — this rides in a URL fragment.
+    YAAR_REMOTE_TOKEN="$(LC_ALL=C tr -dc 'A-Za-z0-9_-' < /dev/urandom | head -c 43)"
+  fi
+  export YAAR_REMOTE_TOKEN
+fi
+
 # Build shared and compiler packages first (needed by other packages)
 echo "Building shared package..."
 bun run --filter @yaar/shared build
@@ -122,7 +138,14 @@ launch_chrome_when_ready() {
   reap_stale_chrome "$pidfile" "$port"
   # chrome.exe can't interpret MSYS /c/... paths — convert on Git Bash.
   command -v cygpath >/dev/null 2>&1 && profile="$(cygpath -w "$profile")"
+  # Two URLs, deliberately: the readiness probe must stay a bare origin (a fragment is
+  # client-side only, but the token would end up in curl's argv for no benefit), while the
+  # tab we hand to Chrome carries the token so remote mode opens a live desktop instead of
+  # the connection dialog. Always localhost, never the tunnel/LAN address — this browser is
+  # on the same machine as the server.
   local url="http://localhost:${PORT:-8000}"
+  local open_url="$url"
+  [ -n "${YAAR_REMOTE_TOKEN:-}" ] && open_url="${url}/#remote=${YAAR_REMOTE_TOKEN}"
 
   # WebGPU is off by default in Linux Chrome (its Vulkan backend is
   # soft-blocklisted), which breaks yaar-ml/anima inference with "Failed to get
@@ -153,7 +176,7 @@ launch_chrome_when_ready() {
     # If a Chrome with this profile is already running, this just opens a tab in
     # it and exits; otherwise it starts a fresh instance with the debug port.
     exec "$bin" --remote-debugging-port="${port}" --user-data-dir="${profile}" \
-      --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${url}" >/dev/null 2>&1
+      --no-first-run --no-default-browser-check "${gpu_flags[@]}" "${open_url}" >/dev/null 2>&1
   ) &
   CHROME_PID=$!
   # exec (above) replaces the subshell in place, so CHROME_PID becomes the Chrome

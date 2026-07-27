@@ -13,6 +13,7 @@ import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
 import { requireHost, resolvePrincipal } from '../access.js';
+import { IS_REMOTE } from '../../config.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -24,9 +25,13 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
 ];
 
 export async function handleApiRoutes(req: Request, url: URL): Promise<Response | null> {
-  // Health check
+  // Health check. `remote` tells an unauthenticated client whether reachability implies
+  // access: /health is auth-exempt, so a bare visit to a REMOTE=1 server gets a 200 here
+  // and used to be read as "local, no token needed" — after which every /api call 401'd
+  // and the WS upgrade was refused, with no dialog to recover through. The flag is the
+  // one bit a caller with no token is allowed to learn, and it names nothing secret.
   if (url.pathname === '/health' && req.method === 'GET') {
-    return jsonResponse({ status: 'ok' });
+    return jsonResponse({ status: 'ok', remote: IS_REMOTE });
   }
 
   // List available providers + active provider info

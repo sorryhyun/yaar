@@ -8,8 +8,35 @@ import { IS_REMOTE } from '../config.js';
 
 let remoteToken: string | null = null;
 
-/** Generate and store a new remote access token. */
+/**
+ * Minimum length for a launcher-supplied token. A random 32-byte token is 43 base64url
+ * chars; anything materially shorter is a typo or a placeholder, and the default tunnel
+ * (localhost.run) puts a *public* URL in front of this token, so a weak one is not a
+ * local-only mistake. Under the floor we ignore the value and mint a real one.
+ */
+const MIN_SUPPLIED_TOKEN_LENGTH = 32;
+
+/**
+ * Generate and store a new remote access token.
+ *
+ * `YAAR_REMOTE_TOKEN` lets the *launcher* choose the token instead. This exists because
+ * the token is otherwise unknowable until the server is already up: the connect URL needs
+ * `#remote=<token>`, and a script that wants to open a browser on that URL cannot ask for
+ * it (every endpoint that would tell it is — correctly — behind the same token). Having
+ * dev.sh mint the token and pass it down keeps the secret out of a file on disk and out of
+ * the server's stdout, and needs no auth exemption. See scripts/dev.sh.
+ */
 export function generateRemoteToken(): string {
+  const supplied = process.env.YAAR_REMOTE_TOKEN;
+  if (supplied && supplied.length >= MIN_SUPPLIED_TOKEN_LENGTH) {
+    remoteToken = supplied;
+    return remoteToken;
+  }
+  if (supplied) {
+    console.warn(
+      `[Auth] Ignoring YAAR_REMOTE_TOKEN: shorter than ${MIN_SUPPLIED_TOKEN_LENGTH} characters. Generating a random token instead.`,
+    );
+  }
   remoteToken = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
   return remoteToken;
 }

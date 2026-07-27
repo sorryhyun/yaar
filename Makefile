@@ -16,12 +16,14 @@ dev:
 	@./scripts/dev.sh
 
 # Run with Claude provider (remote mode - accessible over network with auth)
+# LAUNCH_CHROME=1 opens the local desktop for you, as in claude-dev — in remote mode the
+# tab carries #remote=<token> so it connects without a manual paste.
 claude:
-	@REMOTE=1 ./scripts/dev.sh claude
+	@REMOTE=1 LAUNCH_CHROME=1 ./scripts/dev.sh claude
 
 # Run with Codex provider (remote mode - accessible over network with auth)
 codex:
-	@REMOTE=1 ./scripts/dev.sh codex
+	@REMOTE=1 LAUNCH_CHROME=1 ./scripts/dev.sh codex
 
 # Run with Claude provider in app window (simulates exe from source)
 claude-windows:

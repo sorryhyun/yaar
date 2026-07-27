@@ -53,6 +53,8 @@ bun run build:exe:bundle:macos   # Build macOS executable
 - `MAX_AGENTS` - Global agent limit (default: 10)
 - `MCP_SKIP_AUTH` - Skip MCP authentication for local development
 - `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/guides/remote_mode.md`
+- `YAAR_REMOTE_TOKEN` - Use this remote-mode token instead of a freshly minted one (lets a launcher know the `#remote=<token>` URL up front). Ignored under 32 chars.
+- `LAUNCH_CHROME` - `1` opens a local debuggable Chrome on the desktop once the server is up (set by `make claude`/`make claude-dev`)
 - `CLAUDE_CODE_PATH` - Absolute path to the `claude` binary. Overrides discovery (bundled exe → `~/.local/bin/claude` → `PATH`).
 - `CLAUDE_CODE_OAUTH_TOKEN` - Inherited by the spawned `claude` CLI for non-interactive auth (alternative to `claude login`).
 

@@ -53,12 +53,24 @@ These bind to `127.0.0.1` with no token authentication, same as before.
 ## How Auth Works
 
 - `REMOTE=1` env var enables remote mode
-- Server generates a random 32-byte base64url token at startup
+- Server generates a random 32-byte base64url token at startup — a **fresh one per start**, so a saved connection from a previous run needs the new token (rescan the QR)
 - Server binds to `0.0.0.0` (all interfaces) instead of `127.0.0.1`
 - All HTTP endpoints require `Authorization: Bearer <token>` header or `?token=` query param
 - WebSocket upgrades require `?token=` query param
-- `/health` endpoint is always exempt (for connection testing)
+- `/health` endpoint is always exempt (for connection testing), and answers `{ status, remote }` — `remote: true` tells a client with no token that reachability does *not* imply access, so it shows the connection dialog instead of connecting unauthenticated
 - CORS allows any origin in remote mode (vs localhost-only in local mode)
+
+### `YAAR_REMOTE_TOKEN` (launcher-supplied token)
+
+Set `YAAR_REMOTE_TOKEN` and the server adopts it instead of minting one. This exists so a
+*launcher* can know the connect URL before the server exists: `#remote=<token>` is required to
+open a working tab, and nothing can ask the server for the token (every endpoint that would
+answer is behind that same token). `scripts/dev.sh` mints one in remote mode and exports it,
+which is how `make claude` can open a browser straight onto an authenticated desktop.
+
+Values shorter than 32 characters are ignored with a warning and a random token is used
+instead — the default tunnel exposes a public URL, so a weak token here is not a local-only
+mistake.
 
 ## Built-in Tunnel (Auto)
 

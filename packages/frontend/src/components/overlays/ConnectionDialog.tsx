@@ -64,7 +64,12 @@ export function ConnectionDialog({ onConnected }: ConnectionDialogProps) {
     if (saved) {
       setServerUrl(saved.serverUrl);
       setToken(saved.token);
+      return;
     }
+    // Otherwise we were served *by* the server we need to authenticate against (a bare
+    // visit to a remote-mode server), so its URL is this origin — only the token is
+    // missing. Prefill it rather than making the user retype their own address.
+    setServerUrl(window.location.origin);
   }, [testAndConnect]);
 
   const handleSubmit = useCallback(
