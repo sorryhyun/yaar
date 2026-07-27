@@ -3,8 +3,10 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "pretest": "bun run ../../scripts/ensure-deps-built.ts shared compiler",
     "test": "bun test",
     "bench": "bun run src/benchmarks/context-tape.bench.ts && bun run src/benchmarks/fingerprint.bench.ts && bun run src/benchmarks/startup.bench.ts",
+    "pretypecheck": "bun run ../../scripts/ensure-deps-built.ts shared compiler",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

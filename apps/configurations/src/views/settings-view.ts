@@ -4,7 +4,7 @@ import { read, invoke, errMsg } from '@bundled/yaar';
 import { showToast } from '../store';
 import { parseJson, capitalize, onInputHandler, onChangeHandler } from '../helpers';
 
-const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize'];
+const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize', 'remote'];
 
 // Accent-picker swatch colors — content, not theming: each swatch must show its
 // own fixed preset color, so var(--yaar-accent) (the *current* accent) cannot be
@@ -161,6 +161,16 @@ export function SettingsView() {
               html`<option value=${v}>${capitalize(v)}</option>`
             )}
           </select>
+        </div>
+        <div class="s-row s-row-toggle">
+          <div>
+            <label class="s-label">Remote Access <span class="s-hint">Restart required</span></label>
+            <div class="s-hint-block">
+              Serve over your Tailscale tailnet. Needs the <code>tailscale</code> daemon
+              logged in. A <code>REMOTE</code> env var overrides this.
+            </div>
+          </div>
+          ${() => Toggle('remote')}
         </div>
         <div class="s-row s-row-toggle">
           <div>

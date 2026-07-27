@@ -41,7 +41,7 @@
     },
     "packages/compiler": {
       "name": "@yaar/compiler",
-      "version": "0.11.5",
+      "version": "0.12.0",
       "dependencies": {
         "@yaar/shared": "workspace:*",
       },
@@ -82,7 +82,7 @@
     },
     "packages/frontend": {
       "name": "@yaar/frontend",
-      "version": "0.11.5",
+      "version": "0.12.0",
       "dependencies": {
         "@yaar/shared": "workspace:*",
         "dompurify": "catalog:",
@@ -116,7 +116,7 @@
     },
     "packages/server": {
       "name": "@yaar/server",
-      "version": "0.11.5",
+      "version": "0.12.0",
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.3.219",
         "@modelcontextprotocol/sdk": "1.29.0",
@@ -145,7 +145,7 @@
     },
     "packages/shared": {
       "name": "@yaar/shared",
-      "version": "0.11.5",
+      "version": "0.12.0",
       "dependencies": {
         "zod": "catalog:",
       },

@@ -24,7 +24,6 @@ class FakeClient extends EventEmitter {
   readonly requests: Array<{ method: string; params: unknown }> = [];
   private turnStarts = 0;
 
-   
   async request(method: string, params?: any): Promise<any> {
     this.requests.push({ method, params });
     switch (method) {

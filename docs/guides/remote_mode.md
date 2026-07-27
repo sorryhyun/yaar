@@ -32,6 +32,18 @@ server is reachable from this machine only — there is no LAN fallback, by desi
 
 If `qrcode-terminal` is installed, a QR code is also printed for easy mobile scanning.
 
+## Turning Remote Mode On
+
+The tunnel is part of remote mode, so it only comes up when remote mode is on. Two ways:
+
+| How | Scope | Takes effect |
+|-----|-------|--------------|
+| `REMOTE=1` env var (`make claude` / `make codex`) | That one run | Immediately |
+| **Remote Access** toggle in the configurations app (`remote: true` in `config/settings.json`) | Every run | Next restart |
+
+The env var wins when both are set. `make dev`, `make claude-dev`, `make codex-dev` and the
+bundled exe are local. `IS_REMOTE` is read once at module load, hence the restart.
+
 ## Connecting
 
 Three ways to connect from another device:
@@ -58,7 +70,7 @@ These bind to `127.0.0.1` with no token authentication, same as before.
 
 ## How Auth Works
 
-- `REMOTE=1` env var enables remote mode
+- `REMOTE=1` env var enables remote mode, as does a persisted `remote: true` ([both](#turning-remote-mode-on))
 - Server generates a random 32-byte base64url token at startup — a **fresh one per start**, so a saved connection from a previous run needs the new token (rescan the QR)
 - Server is bound to `127.0.0.1`, always — `tailscaled` reaches it over loopback, so a LAN bind buys nothing and YAAR never opens one ([why](#why-there-is-no-lan-mode))
 - All HTTP endpoints require `Authorization: Bearer <token>` header or `?token=` query param
@@ -130,7 +142,7 @@ If the second rule fails to register (e.g. the port is refused), YAAR logs it, l
 
 ### Tunnel Behavior
 
-- Only activates in remote mode (`REMOTE=1` or bundled exe)
+- Only activates in remote mode ([how to turn it on](#turning-remote-mode-on)); the bundled exe no longer forces it
 - The serve rules are registered *after* the HTTP sockets are listening, so they always point at the port actually bound (remote mode walks upward from `PORT` if it's taken)
 - On success, the banner and QR code use the MagicDNS URL instead of the loopback URL
 - If registration fails on startup (daemon down, no HTTPS certs), a warning is logged and the server continues [localhost-only](#why-there-is-no-lan-mode) — never silently LAN-wide
@@ -205,6 +217,10 @@ One consequence worth knowing: an isolated app's calls authenticate with its own
 - Check that the server is running and the URL is correct
 - On the `…ts.net` URL: is Tailscale actually **on** for the client device? The VPN toggle being off is the usual cause — the name won't even resolve. The host machine also has to be awake with `tailscaled` running
 - If the banner shows `Tunnel: none`, no other device can reach this server at all — fix the tunnel (below); there is no LAN URL to fall back to
+
+**No remote banner at all, and no tunnel:**
+- Remote mode is off. Use `make claude`, or turn on **Remote Access** in the configurations app and restart ([both](#turning-remote-mode-on))
+- Toggle on but still local? It's read once at boot (restart), and an explicit `REMOTE` env var overrides it
 
 **Banner shows `Tunnel: none`:**
 - `tailscale status` — if the daemon isn't running or isn't logged in, YAAR starts localhost-only and says so
