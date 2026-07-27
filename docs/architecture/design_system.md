@@ -77,13 +77,9 @@ Deviations are legal only if listed here, with a reason:
   sprite. Every control in the app is diegetic, which is why it uses no `y-*`
   component classes and legitimately never will.
 
-The palette-override entry that used to sit here is gone: **no app redefines any
-`--yaar-*` token any more** (`grep -rn -- '--yaar-[a-z0-9-]*\s*:' apps/*/src
-user-apps/*/src` returns nothing outside `var()` reads). process-explorer's
-Tailwind-slate re-skin was removed in Phase 4 of `apps_modernization_proposal.md`,
-and the "video-viewer-lite" it was registered alongside **never existed** — that doc
-line was the only occurrence of the name anywhere in the repo. The real app,
-video-editor-lite, defined no tokens at all.
+**No app redefines a `--yaar-*` token**, and the registry above holds no exception for
+one. To check: `grep -rn -- '--yaar-[a-z0-9-]*\s*:' apps/*/src user-apps/*/src` should
+return nothing outside `var()` reads.
 
 Defining a *new* `--yaar-*` token in your own `:root` is still supported — the
 compiler's token guard deliberately exempts app-declared names, since that is how

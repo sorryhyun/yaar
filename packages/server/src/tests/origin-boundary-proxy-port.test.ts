@@ -1,11 +1,10 @@
 /**
- * App-origin isolation over a remote transport (Phase 3 of the Tailscale migration).
+ * App-origin isolation over a remote transport.
  *
- * Remote mode used to have no origin boundary at all: `localhost` vs `127.0.0.1` means
- * nothing once you reach the machine over a network, so a hostile installed app was
- * same-origin with the desktop and could read its DOM and JS memory. Tailscale Serve
- * gives the split back as two ports on one *stable* MagicDNS name — distinct browser
- * origins, since the same-origin policy separates on port too.
+ * `localhost` vs `127.0.0.1` means nothing once you reach the machine over a network,
+ * so remote mode gets its split from Tailscale Serve instead: two ports on one *stable*
+ * MagicDNS name — distinct browser origins, since the same-origin policy separates on
+ * port too.
  *
  * The load-bearing detail these rows lock down: over a proxy the server cannot read
  * the addressed origin off the request. `url.hostname`/`url.port` describe the loopback
