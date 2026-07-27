@@ -346,6 +346,16 @@ body,
   margin-top: 2px;
 }
 
+/* Hints that name a binary or env var (e.g. `tailscale`, REMOTE) set it in code. */
+.s-hint-block code {
+  font-family: var(--yaar-font-mono);
+  font-size: 10px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
 /* Consolidated input/select styles */
 .s-input,
 .s-select {

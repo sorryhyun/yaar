@@ -9,8 +9,10 @@
     "dev": "bun --watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "bun src/main.ts",
+    "pretypecheck": "bun run ../../scripts/ensure-deps-built.ts shared compiler",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
+    "pretest": "bun run ../../scripts/ensure-deps-built.ts shared compiler",
     "test": "bun run scripts/run-unit-tests.ts && bun test src/tests/loopback && bun test src/integration"
   },
   "dependencies": {

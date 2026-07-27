@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prebuild": "bun run ../../scripts/ensure-deps-built.ts shared",
     "build": "tsc && bun build.ts",
     "lint": "eslint src",
+    "pretypecheck": "bun run ../../scripts/ensure-deps-built.ts shared",
     "typecheck": "tsc --noEmit",
+    "pretest": "bun run ../../scripts/ensure-deps-built.ts shared",
     "test": "bun test"
   },
   "dependencies": {
