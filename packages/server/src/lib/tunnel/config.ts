@@ -2,7 +2,7 @@
  * Load and validate tunnel configuration from config/tunnel.json.
  */
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
 import { getConfigDir } from '../../config.js';
@@ -15,27 +15,29 @@ export function resolvePath(p: string): string {
   return p;
 }
 
-/** Try to find an SSH key on the local machine. */
-export function findSshKey(): Buffer | null {
-  const candidates = [
-    join(homedir(), '.ssh', 'id_ed25519'),
-    join(homedir(), '.ssh', 'id_rsa'),
-    join(homedir(), '.ssh', 'id_ecdsa'),
-  ];
-  for (const p of candidates) {
-    try {
-      if (existsSync(p)) return readFileSync(p);
-    } catch {
-      /* skip */
-    }
-  }
-  return null;
-}
+/** Keys only the removed SSH tunnel ever understood. */
+const SSH_ONLY_KEYS = [
+  'host',
+  'username',
+  'privateKeyPath',
+  'password',
+  'remotePort',
+  'remoteHost',
+  'publicHost',
+  'publicHttps',
+];
 
 /**
  * Load tunnel config from config/tunnel.json.
- * Returns null if file is missing. Returns the parsed config otherwise.
- * For service mode (`{ "service": "localhost.run" }`), host/username are not required.
+ *
+ * Returns null when the file is missing or says nothing usable — the caller then
+ * falls back to the default transport (Tailscale Serve). `{ "disabled": true }` is
+ * the one way to ask for no tunnel at all.
+ *
+ * A config left over from the SSH tunnel (`{ "service": "localhost.run" }`, or a
+ * custom SSH server) is refused loudly rather than silently honored: those requested
+ * a *public* URL, and quietly swapping in a tailnet-only one — or quietly ignoring the
+ * file and doing the same — would be a change of posture the user never asked for.
  */
 export function loadTunnelConfig(): TunnelConfig | null {
   const configPath = join(getConfigDir(), 'tunnel.json');
@@ -59,58 +61,40 @@ export function loadTunnelConfig(): TunnelConfig | null {
     return { disabled: true };
   }
 
-  // Service mode — no host/username needed
-  if (parsed.service === 'localhost.run') {
-    return { service: 'localhost.run' };
+  // Legacy SSH config — the transport is gone.
+  const legacyKey = SSH_ONLY_KEYS.find((k) => k in parsed);
+  if (parsed.service === 'localhost.run' || legacyKey) {
+    console.warn(
+      `[Tunnel] config/tunnel.json asks for the SSH tunnel (${
+        parsed.service === 'localhost.run' ? 'service: "localhost.run"' : `"${legacyKey}"`
+      }), which YAAR no longer supports — using Tailscale Serve instead. ` +
+        'Replace it with { "service": "tailscale" }, or { "disabled": true } to run with no tunnel.',
+    );
+    return { service: 'tailscale' };
   }
 
-  // Tailscale Serve — no host/username needed; optional binary path override
-  if (parsed.service === 'tailscale') {
-    const config: TunnelConfig = { service: 'tailscale' };
-    if (typeof parsed.tailscalePath === 'string') {
-      config.tailscalePath = resolvePath(parsed.tailscalePath);
+  if (parsed.service !== undefined && parsed.service !== 'tailscale') {
+    console.warn(
+      `[Tunnel] Unknown service "${String(parsed.service)}" in config/tunnel.json — using Tailscale Serve.`,
+    );
+  }
+
+  const config: TunnelConfig = { service: 'tailscale' };
+  if (typeof parsed.tailscalePath === 'string') {
+    config.tailscalePath = resolvePath(parsed.tailscalePath);
+  }
+  // The app-origin port must be a real port and must not collide with the desktop's
+  // own :443 rule — same port means same origin, which is the one thing the second
+  // rule exists to avoid.
+  if (typeof parsed.appOriginPort === 'number') {
+    const port = parsed.appOriginPort;
+    if (Number.isInteger(port) && port > 0 && port < 65536 && port !== 443) {
+      config.appOriginPort = port;
+    } else {
+      console.warn(
+        `[Tunnel] Ignoring appOriginPort ${port}: must be an integer in 1–65535 and not 443`,
+      );
     }
-    // The app-origin port must be a real port and must not collide with the desktop's
-    // own :443 rule — same port means same origin, which is the one thing the second
-    // rule exists to avoid.
-    if (typeof parsed.appOriginPort === 'number') {
-      const port = parsed.appOriginPort;
-      if (Number.isInteger(port) && port > 0 && port < 65536 && port !== 443) {
-        config.appOriginPort = port;
-      } else {
-        console.warn(
-          `[Tunnel] Ignoring appOriginPort ${port}: must be an integer in 1–65535 and not 443`,
-        );
-      }
-    }
-    return config;
   }
-
-  // Custom SSH server — host and username required
-  if (typeof parsed.host !== 'string' || !parsed.host) {
-    console.warn('[Tunnel] config/tunnel.json missing required field: host');
-    return null;
-  }
-  if (typeof parsed.username !== 'string' || !parsed.username) {
-    console.warn('[Tunnel] config/tunnel.json missing required field: username');
-    return null;
-  }
-
-  const config: TunnelConfig = {
-    host: parsed.host,
-    username: parsed.username,
-  };
-
-  if (typeof parsed.port === 'number') config.port = parsed.port;
-  if (typeof parsed.password === 'string') config.password = parsed.password;
-  if (typeof parsed.remotePort === 'number') config.remotePort = parsed.remotePort;
-  if (typeof parsed.remoteHost === 'string') config.remoteHost = parsed.remoteHost;
-  if (typeof parsed.publicHost === 'string') config.publicHost = parsed.publicHost;
-  if (typeof parsed.publicHttps === 'boolean') config.publicHttps = parsed.publicHttps;
-
-  if (typeof parsed.privateKeyPath === 'string') {
-    config.privateKeyPath = resolvePath(parsed.privateKeyPath);
-  }
-
   return config;
 }

@@ -130,7 +130,7 @@ Create multiple **virtual desktops (monitors)** to organize your work. Each moni
 
 ### Remote Access
 
-Running with `make claude` or `make codex` automatically enables remote mode. A QR code is printed to the terminal — scan it with your phone for automatic token authentication and instant connection. SSH tunneling allows access from external networks. See the [Remote Access Guide](./docs/guides/remote_mode.md) for details.
+Running with `make claude` or `make codex` automatically enables remote mode. A QR code is printed to the terminal — scan it with your phone for automatic token authentication and instant connection. Access from outside your network goes over [Tailscale Serve](https://tailscale.com): any device on your tailnet can connect (no shared wifi needed), and nothing off it can. See the [Remote Access Guide](./docs/guides/remote_mode.md) for details.
 
 
 ### Hooks

@@ -15,6 +15,10 @@ interface RemoteInfo {
   tunnelUrl?: string | null;
 }
 
+function isLoopback(url: string | undefined): boolean {
+  return !!url && (url.includes('//127.0.0.1') || url.includes('//localhost'));
+}
+
 export function QrCodeModal({ onClose }: { onClose: () => void }) {
   const [info, setInfo] = useState<RemoteInfo | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
@@ -80,7 +84,10 @@ export function QrCodeModal({ onClose }: { onClose: () => void }) {
                 </div>
               )}
               <div className={styles.urlRow}>
-                <span className={styles.urlLabel}>LAN</span>
+                {/* Under the default (Tailscale) tunnel the server stays on loopback, so this
+                    row is the local URL, not a LAN one — calling it "LAN" would advertise an
+                    address no other device can reach. */}
+                <span className={styles.urlLabel}>{isLoopback(info.lanUrl) ? 'Local' : 'LAN'}</span>
                 <span className={styles.urlValue}>{info.lanUrl}</span>
               </div>
               <button className={styles.copyButton} onClick={handleCopy}>

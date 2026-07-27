@@ -14,12 +14,10 @@ export interface TunnelProvider {
   shutdown(): Promise<void>;
   /**
    * The two public origins this transport serves, when it can host a *second*
-   * origin for isolated app iframes (Phase 3) — null when it cannot, or when the
-   * second rule failed to register.
+   * origin for isolated app iframes — null when the second rule failed to register.
    *
-   * A transport that can only publish one origin (the SSH tunnel: one ephemeral
-   * subdomain) simply omits this method, and app-origin isolation stays off over
-   * that transport exactly as before.
+   * A transport that can only publish one origin (an ephemeral-subdomain service,
+   * say) simply omits this method, and app-origin isolation stays off over it.
    */
   originBoundary?(): OriginPair | null;
 }
@@ -36,38 +34,28 @@ export interface OriginPair {
   appOrigin: string;
 }
 
+/**
+ * Tunnel configuration, as read from `config/tunnel.json`.
+ *
+ * Tailscale Serve is the only transport YAAR ships. The SSH reverse tunnel
+ * (`localhost.run` and custom SSH servers) was removed: an ephemeral public URL
+ * gated by a bearer token is a weaker posture than tailnet membership, and it
+ * could never anchor the second stable origin that app-origin isolation needs.
+ */
 export interface TunnelConfig {
-  /** Use a managed tunnel service instead of a custom SSH server */
-  service?: 'localhost.run' | 'tailscale';
+  /** The transport. Only `tailscale` exists; the field is kept for forward compat. */
+  service?: 'tailscale';
   /** Disable auto-tunneling (only meaningful in config/tunnel.json) */
   disabled?: boolean;
-  /** SSH server hostname (required for custom server, ignored for service) */
-  host?: string;
-  /** SSH port (default: 22) */
-  port?: number;
-  /** SSH username (required for custom server, ignored for service) */
-  username?: string;
-  /** Path to private key (~ resolved to homedir) */
-  privateKeyPath?: string;
-  /** Password auth fallback */
-  password?: string;
-  /** Port on remote server to forward (default: same as local PORT) */
-  remotePort?: number;
-  /** Bind address on remote server (default: "0.0.0.0") */
-  remoteHost?: string;
-  /** Public hostname for constructing the URL (default: same as host) */
-  publicHost?: string;
-  /** Use https:// in the public URL (default: false) */
-  publicHttps?: boolean;
-  /** Path to the `tailscale` binary (default: discovered on PATH). Tailscale service only. */
+  /** Path to the `tailscale` binary (default: discovered on PATH). */
   tailscalePath?: string;
   /**
-   * Public HTTPS port the *app* origin is served on (default: 8443). Tailscale only.
+   * Public HTTPS port the *app* origin is served on (default: 8443).
    *
    * A second `tailscale serve` rule on the same MagicDNS name but a different port
-   * is what gives app-origin isolation a distinct browser origin over the network
-   * (Phase 3). 8443 is the default because Funnel also permits it, so a later
-   * `mode: "funnel"` needs no different number.
+   * is what gives app-origin isolation a distinct browser origin over the network.
+   * 8443 is the default because Funnel also permits it, so a later `mode: "funnel"`
+   * needs no different number.
    */
   appOriginPort?: number;
 }

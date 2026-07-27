@@ -21,7 +21,6 @@
     "node-poppler": "^9.1.1",
     "onnxruntime-web": "catalog:",
     "qrcode-terminal": "^0.12.0",
-    "ssh2": "^1.17.0",
     "ws": "^8.18.0",
     "yaml": "^2.8.2",
     "zod": "catalog:"
@@ -30,7 +29,6 @@
     "@eslint/js": "catalog:",
     "@types/node": "catalog:",
     "@types/qrcode-terminal": "^0.12.2",
-    "@types/ssh2": "^1.15.5",
     "@types/ws": "^8.5.13",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",

@@ -1,9 +1,9 @@
 /**
  * Tailscale Serve tunnel.
  *
- * Unlike {@link SshTunnel}, this owns no transport of its own — `tailscaled`
- * already holds the tunnel and manages its resilience. `tailscale serve` just
- * registers a proxy rule with the local daemon:
+ * This owns no transport of its own — `tailscaled` already holds the tunnel and
+ * manages its resilience. `tailscale serve` just registers a proxy rule with the
+ * local daemon:
  *
  *     https://<host>.<tailnet>.ts.net:443  →  http://127.0.0.1:<port>
  *

@@ -40,8 +40,7 @@ import { generateRemoteToken, getRemoteToken } from './http/auth.js';
 import {
   loadTunnelConfig,
   createTunnel,
-  tunnelIsLoopbackOnly,
-  tunnelSupportsAppOrigin,
+  DEFAULT_TUNNEL,
   type TunnelConfig,
   type TunnelProvider,
 } from './lib/tunnel/index.js';
@@ -102,13 +101,13 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   }
 
   // Generate auth token for remote mode, and decide which tunnel we're bringing up
-  // (defaults to localhost.run if no config). The connect itself happens in
-  // startTunnel(), after the sockets exist.
+  // (Tailscale Serve unless config/tunnel.json disables it). The connect itself
+  // happens in startTunnel(), after the sockets exist.
   if (IS_REMOTE) {
     generateRemoteToken();
     const tunnelConfig = loadTunnelConfig();
     if (tunnelConfig?.disabled !== true) {
-      plannedTunnel = tunnelConfig ?? { service: 'localhost.run' as const };
+      plannedTunnel = tunnelConfig ?? DEFAULT_TUNNEL;
     }
   }
 
@@ -189,11 +188,10 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 /**
  * The address the main HTTP socket binds to.
  *
- * Remote mode has always opened `0.0.0.0` because the SSH tunnel is best-effort in
- * front of it: lose the tunnel and you still have the LAN URL. A loopback-only
- * transport inverts that — `tailscaled` reaches YAAR at `127.0.0.1`, so the LAN bind
- * adds reachability the user did not ask for. Under one, only the tailnet (via the
- * daemon) and localhost get in.
+ * `tailscaled` reaches YAAR at `127.0.0.1`, so under the tunnel a LAN bind adds
+ * reachability nobody asked for: only the tailnet (via the daemon) and localhost
+ * should get in. Remote mode with the tunnel *disabled* is the one case that still
+ * opens `0.0.0.0` — there the LAN URL is the only way in, which is the point.
  *
  * Decided from the *chosen* transport, not from whether it connected: someone who
  * asked for tailnet-only should not silently get their whole LAN exposed on a bearer
@@ -202,7 +200,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
  */
 export function getBindHostname(): string {
   if (!IS_REMOTE) return '127.0.0.1';
-  if (plannedTunnel && tunnelIsLoopbackOnly(plannedTunnel)) return '127.0.0.1';
+  if (plannedTunnel) return '127.0.0.1'; // Tailscale Serve — loopback is all the daemon needs
   return '0.0.0.0';
 }
 
@@ -213,14 +211,12 @@ export function getBindHostname(): string {
  * origins, and over a proxy the only unspoofable way to attribute a request to one of
  * them is *which local socket it arrived on* (`http/origin-boundary.ts`). So the second
  * public port gets its own listener rather than sharing the desktop's.
+ *
+ * Tailscale can publish that second origin (a stable MagicDNS name on another port);
+ * a transport that can't would answer false here.
  */
 export function wantsAppOriginSocket(): boolean {
-  return (
-    IS_REMOTE &&
-    isAppOriginIsolationRequested() &&
-    plannedTunnel !== null &&
-    tunnelSupportsAppOrigin(plannedTunnel)
-  );
+  return IS_REMOTE && isAppOriginIsolationRequested() && plannedTunnel !== null;
 }
 
 /**
@@ -238,10 +234,11 @@ export async function startTunnel(appLocalPort: number | null): Promise<void> {
 
   const tunnel = createTunnel(plannedTunnel, getPort(), appLocalPort);
   if (!(await tunnel.connect())) {
+    // Localhost-only, never LAN-only: the bind followed the transport we *chose*, and a
+    // daemon that failed to come up is not consent to expose the LAN. `{ "disabled": true }`
+    // in config/tunnel.json is how you ask for the LAN URL on purpose.
     console.warn(
-      getBindHostname() === '127.0.0.1'
-        ? '[Tunnel] Could not establish tunnel — localhost-only (this transport does not bind the LAN)'
-        : '[Tunnel] Could not establish tunnel — LAN-only mode',
+      '[Tunnel] Could not establish tunnel — localhost-only (set { "disabled": true } in config/tunnel.json for the LAN URL)',
     );
     return;
   }
@@ -444,7 +441,7 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
   }, 5_000);
 
   try {
-    // Close the active tunnel (SSH reverse tunnel or Tailscale Serve)
+    // Drop the Tailscale serve rules
     if (activeTunnel) {
       await activeTunnel.shutdown();
       activeTunnel = null;

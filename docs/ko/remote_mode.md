@@ -17,14 +17,20 @@ make codex    # Codex 프로바이더로 시작 (원격 모드)
 ╔══════════════════════════════════════════════════╗
 ║              YAAR Remote Mode                   ║
 ╠══════════════════════════════════════════════════╣
-║  Server:  http://192.168.1.100:8000
+║  Server:  http://127.0.0.1:8000  (loopback only — no LAN)
+║  Tunnel:  https://my-box.tailnet-abc.ts.net/#remote=<token>
 ║  Token:   <random-token>
 ╠══════════════════════════════════════════════════╣
-║  Connect: http://192.168.1.100:8000/#remote=<token>
+║  Connect: https://my-box.tailnet-abc.ts.net/#remote=<token>
 ╚══════════════════════════════════════════════════╝
 ```
 
 `qrcode-terminal`이 설치되어 있으면 모바일에서 쉽게 스캔할 수 있도록 QR code도 함께 출력됩니다.
+
+원격 모드는 기본적으로 [Tailscale Serve](#내장-터널-tailscale-serve)로 터널링합니다. 따라서 connect URL은
+tailnet에 속한 기기라면 (같은 wifi가 아니어도) 어디서든 닿을 수 있고, 그 밖에서는 어디서도 닿을 수 없습니다.
+`tailscale` 데몬이 없으면 터널 없이 루프백 URL만 표시됩니다 — LAN 폴백은
+[Tailscale 없이 실행하기](#tailscale-없이-실행하기)를 보세요.
 
 ## 접속하기
 
@@ -54,97 +60,52 @@ make dev          # 프로바이더 자동 감지, 로컬 전용
 
 - `REMOTE=1` 환경 변수가 원격 모드를 활성화합니다
 - 서버가 시작 시 무작위 32바이트 base64url 토큰을 생성합니다
-- 서버가 `127.0.0.1` 대신 `0.0.0.0`(모든 인터페이스)에 바인딩됩니다 — 단, [Tailscale Serve](#lan-바인딩-없음)에서는 루프백에 머뭅니다
+- 기본값인 [Tailscale 터널](#lan-바인딩-없음)에서는 서버가 `127.0.0.1`에 그대로 머뭅니다 — `tailscaled`가 루프백으로 접근하므로 LAN 바인딩은 얻는 것 없이 노출만 늘립니다. 터널을 [비활성화](#tailscale-없이-실행하기)한 경우에만 `0.0.0.0`(모든 인터페이스)에 바인딩됩니다
 - 모든 HTTP 엔드포인트는 `Authorization: Bearer <token>` 헤더 또는 `?token=` 쿼리 파라미터를 요구합니다
 - WebSocket 업그레이드는 `?token=` 쿼리 파라미터를 요구합니다
 - `/health` 엔드포인트는 (연결 테스트를 위해) 항상 예외입니다
 - 원격 모드에서는 CORS가 모든 오리진을 허용합니다(로컬 모드는 localhost만 허용)
 
-## 내장 터널 (자동)
+## 내장 터널 (Tailscale Serve)
 
-원격 모드에서 YAAR는 [localhost.run](https://localhost.run)을 통해 SSH 리버스 터널을 자동으로 구성합니다 — 별도 설정도, 가입도, 추가 바이너리도 필요 없습니다. 서버를 시작하고 어디서든 QR code를 스캔하기만 하면 됩니다.
+원격 모드에서 YAAR는 [Tailscale](https://tailscale.com) tailnet을 통해 자신을 노출합니다. 이미 tailnet에 속한 기기만 접근할 수 있으므로 — 토큰으로만 막는 공개 URL보다 엄격히 강한 네트워크 계층 인증입니다. 같은 wifi일 필요는 없습니다: tailnet에 로그인되어 있으면 LTE든 외부 네트워크든 그대로 연결됩니다. 추가 설정 없이 실제 HTTPS 인증서(`https://<host>.<tailnet>.ts.net`)도 얻고, 리모트 모드에서 [앱 오리진 격리](#네트워크-너머의-앱-오리진-격리)를 유지하는 유일한 방법이기도 합니다.
 
-**요구 사항:** 머신에 SSH 키(`~/.ssh/id_ed25519`, `id_rsa`, 또는 `id_ecdsa`)가 있어야 합니다. 대부분의 개발 머신에는 이미 있습니다. 없다면 `ssh-keygen`을 실행하세요.
+이것이 기본값이라 `config/tunnel.json`은 없어도 됩니다. 이 파일은 터널을 끄거나 세부 설정을 바꿀 때만 필요합니다.
 
-### 동작 방식
-
-1. 서버가 원격 모드로 시작 → 디스크(또는 SSH 에이전트)에서 SSH 키를 감지
-2. SSH로 `localhost.run`에 연결해 리버스 터널을 요청
-3. `localhost.run`이 공개 HTTPS URL을 할당(예: `https://abc123.lhr.life`)
-4. 배너와 QR code에 터널 URL이 표시됨 — 외부 클라이언트는 이를 통해 연결
-5. 터널 연결이 실패하면(SSH 키 없음, 인터넷 없음) 서버는 LAN 전용 모드로 계속 동작
-
-### 터널 배너
-
-```
-╔══════════════════════════════════════════════════╗
-║              YAAR Remote Mode                   ║
-╠══════════════════════════════════════════════════╣
-║  Server:  http://192.168.1.100:8000
-║  Tunnel:  https://abc123.lhr.life/#remote=<token>
-║  Token:   <random-token>
-╠══════════════════════════════════════════════════╣
-║  Connect: https://abc123.lhr.life/#remote=<token>   ← QR encodes this
-╚══════════════════════════════════════════════════╝
-```
-
-### 자동 터널 비활성화
-
-`config/tunnel.json`을 생성하세요:
-```json
-{ "disabled": true }
-```
-
-### 커스텀 SSH 서버
-
-localhost.run 대신, 자신의 서버를 통해 터널링할 수도 있습니다:
-
-```json
-{
-  "host": "myserver.com",
-  "username": "deploy",
-  "privateKeyPath": "~/.ssh/id_ed25519",
-  "remotePort": 8000,
-  "publicHost": "myserver.com"
-}
-```
-
-| 필드 | 타입 | 기본값 | 설명 |
-|-------|------|---------|-------------|
-| `host` | string | **(필수)** | SSH 서버 호스트명 |
-| `port` | number | `22` | SSH 포트 |
-| `username` | string | **(필수)** | SSH 사용자명 |
-| `privateKeyPath` | string | — | 개인 키 경로(`~`는 홈 디렉터리로 해석됨) |
-| `password` | string | — | 비밀번호 인증 폴백 |
-| `remotePort` | number | 로컬 `PORT`와 동일 | 원격 서버에서 포워딩할 포트 |
-| `remoteHost` | string | `"0.0.0.0"` | 원격 서버의 바인딩 주소 |
-| `publicHost` | string | `host`와 동일 | 공개 URL에 사용할 호스트명 |
-| `publicHttps` | boolean | `false` | 공개 URL에 `https://` 사용 여부 |
-
-인증 우선순위: `privateKeyPath` → `password` → `SSH_AUTH_SOCK` 에이전트.
-
-### Tailscale Serve (관리형, tailnet 전용)
-
-공개 터널 대신, [Tailscale](https://tailscale.com) tailnet을 통해 YAAR를 노출할 수 있습니다. 이미 tailnet에 속한 기기만 접근할 수 있으므로 — 토큰으로만 막는 공개 URL보다 엄격히 강한 네트워크 계층 인증입니다. 추가 설정 없이 실제 HTTPS 인증서(`https://<host>.<tailnet>.ts.net`)도 얻고, 리모트 모드에서 [앱 오리진 격리](#네트워크-너머의-앱-오리진-격리)를 유지하는 **유일한** 전송 방식입니다.
-
-`config/tunnel.json`을 만드세요:
 ```json
 { "service": "tailscale" }
 ```
 
+> **제거됨:** 이전 버전은 `localhost.run`으로 가는 SSH 리버스 터널을 기본값으로 썼고, 자체 SSH 서버로도 터널링할 수 있었습니다. 둘 다 `ssh2` 의존성과 함께 제거됐습니다. 베어러 토큰 하나로 막는 임시 공개 URL은 YAAR가 제공하던 가장 약한 자세였고, 매번 바뀌는 서브도메인은 앱 격리에 필요한 두 번째 안정적인 오리진을 지탱할 수 없었습니다. 두 방식 중 하나를 요청하는 `tunnel.json`은 경고와 함께 거부되고 Tailscale이 대신 사용됩니다. 공개 URL이 필요하다면 터널을 끄고 [외부 도구](#외부-터널링-대안)를 쓰세요.
+
+**요구 사항:**
+- `tailscale` CLI가 설치되어 tailnet에 로그인되어 있어야 합니다(`tailscale up`). YAAR는 `tailscale status`를 확인하고, 데몬이 없으면 터널 없이 계속 동작합니다.
+- tailnet에 **HTTPS 인증서**가 활성화되어 있어야 합니다([관리 콘솔](https://login.tailscale.com/admin/dns)에서 MagicDNS와 HTTPS Certificates 켜기). 그렇지 않으면 `serve --https=443`이 실패하고 YAAR가 해결 방법을 출력합니다.
+
 | 필드 | 타입 | 기본값 | 설명 |
 |-------|------|---------|-------------|
-| `service` | `"tailscale"` | — | Tailscale Serve 프로바이더 선택 |
+| `service` | `"tailscale"` | `"tailscale"` | 전송 방식. 유일하게 허용되는 값 |
+| `disabled` | boolean | `false` | 터널 없이 원격 모드 실행(아래 참고) |
 | `tailscalePath` | string | `PATH`에서 탐색(macOS 앱 번들 포함) | `tailscale` 바이너리의 절대 경로 |
 | `appOriginPort` | number | `8443` | 격리된 **앱 오리진**을 제공할 공개 HTTPS 포트. 443은 사용할 수 없음 |
 
-**요구 사항:** `tailscale` CLI가 설치되어 tailnet에 로그인되어 있어야 하고(`tailscale up`), tailnet에 **HTTPS 인증서**가 활성화되어 있어야 합니다([관리 콘솔](https://login.tailscale.com/admin/dns)에서 MagicDNS와 HTTPS Certificates 켜기). 그렇지 않으면 `serve --https=443`이 실패하고 YAAR가 해결 방법을 출력합니다.
+**동작 방식:** 관리할 터널이 따로 없습니다 — 연결은 이미 `tailscaled`가 쥐고 있습니다. YAAR는 HTTP 소켓이 열린 뒤 serve 규칙(`https://…ts.net:443 → http://127.0.0.1:{PORT}`)을 등록하고 종료 시 해제할 뿐입니다. 재연결과 keepalive는 데몬의 몫이므로 YAAR 쪽에는 백오프 루프가 없습니다.
 
 #### LAN 바인딩 없음
 
-`REMOTE=1`은 보통 `0.0.0.0`에 바인딩하지만, Tailscale에서는 `tailscaled`가 `127.0.0.1`로 YAAR에 접근하므로 LAN 바인딩은 불필요한 노출일 뿐입니다. 따라서 YAAR는 **루프백에 머물며**, tailnet(데몬 경유)과 이 기기만 연결할 수 있습니다.
+`tailscaled`가 `127.0.0.1`로 YAAR에 접근하므로 LAN 바인딩은 불필요한 노출일 뿐입니다. 따라서 YAAR는 **루프백에 머물며**, tailnet(데몬 경유)과 이 기기만 연결할 수 있습니다.
 
-이 판단은 터널이 실제로 연결됐는지가 아니라 `tunnel.json`의 의도를 따릅니다. `tailscaled`가 꺼져 있으면 LAN 전용이 아니라 **localhost 전용**이 됩니다 — tailnet 전용을 요청한 사용자가 데몬이 안 떠 있다는 이유로 LAN 전체를 베어러 토큰 하나에 노출당해서는 안 되기 때문입니다.
+이 판단은 터널이 실제로 연결됐는지가 아니라 요청한 전송 방식을 따릅니다. `tailscaled`가 꺼져 있으면 LAN 전용이 아니라 **localhost 전용**이 됩니다 — tailnet 전용으로 돌리는 사용자가 데몬이 안 떠 있다는 이유로 LAN 전체를 베어러 토큰 하나에 노출당해서는 안 되기 때문입니다.
+
+#### Tailscale 없이 실행하기
+
+LAN URL이 필요하다면 — 토큰 인증은 그대로 두고 터널 없이 `0.0.0.0`에 바인딩 — `config/tunnel.json`에서 터널을 끄세요:
+
+```json
+{ "disabled": true }
+```
+
+그러면 배너와 QR에 `http://<lan-ip>:8000/#remote=<token>`이 표시되고, 토큰을 가진 같은 네트워크의 기기라면 접속할 수 있습니다. 네트워크 밖에서 닿아야 한다면 [외부 터널](#외부-터널링-대안)과 함께 쓰세요. 이 모드에서는 앱 오리진 격리가 꺼집니다([아래](#앱-오리진-격리)).
 
 #### 네트워크 너머의 앱 오리진 격리
 
@@ -155,22 +116,24 @@ https://my-box.tailnet-abc.ts.net        → http://127.0.0.1:8000   데스크�
 https://my-box.tailnet-abc.ts.net:8443   → http://127.0.0.1:8001   설치된 앱
 ```
 
-포트가 다르면 브라우저 오리진이 다르므로(동일 출처 정책은 포트도 구분함), 설치된 앱 iframe은 로컬의 `localhost`/`127.0.0.1`과 똑같이 다시 데스크톱과 크로스 오리진이 됩니다. MagicDNS 이름은 안정적이지만 localhost.run의 서브도메인은 매번 바뀌므로, 이것이 가능한 전송 방식은 Tailscale뿐입니다.
+포트가 다르면 브라우저 오리진이 다르므로(동일 출처 정책은 포트도 구분함), 설치된 앱 iframe은 로컬의 `localhost`/`127.0.0.1`과 똑같이 다시 데스크톱과 크로스 오리진이 됩니다. 이것이 가능하려면 호스트 이름이 안정적이어야 합니다 — MagicDNS 이름은 재시작해도 그대로이므로 두 오리진이 모두 살아남고, 데스크톱이 브라우저에 두 번째 오리진의 URL을 건넬 수 있습니다.
 
 두 공개 포트를 의도적으로 **서로 다른 두 로컬 소켓**에 연결합니다. 프록시 뒤에서는 브라우저가 어느 오리진을 호출했는지 서버가 읽을 수 없기 때문에(`Host`와 `X-Forwarded-*`는 프록시의 주장일 뿐), 위조할 수 없는 *요청이 도착한 소켓*으로 판단합니다. 두 번째 규칙 등록이 실패하면 데스크톱 터널은 유지하고 격리만 끈 상태로 동작합니다.
 
 ### 터널 동작
 
 - 원격 모드(`REMOTE=1` 또는 번들 실행 파일)에서만 활성화됩니다
-- 연결에 성공하면 배너와 QR code가 LAN URL 대신 터널 URL을 사용합니다
-- 시작 시 연결에 실패하면 경고가 로그에 남고 서버는 LAN 전용으로 계속 동작합니다 — [루프백 바인딩 전송](#lan-바인딩-없음)에서는 localhost 전용
-- 성공 후 연결이 끊기면 지수 백오프(1초 → 최대 30초)로 자동 재연결합니다
-- 종료 시(`Ctrl+C`) 3초 타임아웃으로 터널이 정상적으로 닫힙니다
-- Keepalive: 15초 간격, 최대 3회 하트비트 누락까지 허용
+- serve 규칙은 HTTP 소켓이 열린 *뒤에* 등록되므로 항상 실제로 바인딩된 포트를 가리킵니다(`PORT`가 사용 중이면 위로 올라가며 탐색)
+- 등록에 성공하면 배너와 QR code가 루프백 URL 대신 MagicDNS URL을 사용합니다
+- 시작 시 실패하면(데몬 꺼짐, HTTPS 인증서 없음) 경고를 남기고 [localhost 전용](#lan-바인딩-없음)으로 계속 동작합니다 — 조용히 LAN 전체로 열리는 일은 없습니다
+- 재연결과 keepalive는 YAAR가 아니라 `tailscaled`의 몫입니다: 링크가 끊겨도 알아서 복구되고 serve 규칙은 그대로 유지됩니다
+- 종료 시(`Ctrl+C`) 두 serve 규칙이 모두 해제됩니다
 
 ## 외부 터널링 (대안)
 
-내장 터널 없이 LAN을 넘어선 접속이 필요하다면 외부 도구를 사용하세요:
+tailnet에 없는 사람과 공유해야 해서 진짜 공개 URL이 필요하다면, 내장 터널을 끄고(`{ "disabled": true }`)
+외부 도구를 앞에 두세요. 그러면 원격 모드가 LAN에 바인딩하고 도구가 그쪽으로 접근합니다. 이 구성에서는
+[앱 오리진 격리](#앱-오리진-격리)가 꺼진다는 점을 유의하세요.
 
 **Cloudflare Tunnel(권장):**
 ```bash
@@ -187,8 +150,7 @@ ssh -R 8000:localhost:8000 your-server.com
 bore local 8000 --to bore.pub
 ```
 
-**Tailscale:**
-같은 tailnet에 속한 기기는 LAN URL로 바로 연결할 수 있습니다. 배너/QR에 HTTPS MagicDNS URL이 나오는 관리형 설정을 원하면 내장 [Tailscale Serve](#tailscale-serve-관리형-tailnet-전용) 프로바이더(`config/tunnel.json` → `{ "service": "tailscale" }`)를 사용하세요.
+**Tailscale Funnel:** 이미 쓰고 있는 tailnet 구성을 공개적으로 열고 싶다면 `tailscale funnel`이 Tailscale다운 답입니다 — 다만 YAAR가 관리하지 않으며, Funnel로 연 데스크톱은 다시 토큰 하나로 막는 공개 URL이 됩니다.
 
 외부 터널을 사용할 때, 프론트엔드의 연결 대화상자는 터널 URL을 서버 URL로 그대로 받아들입니다.
 
@@ -198,7 +160,7 @@ bore local 8000 --to bore.pub
 - 토큰은 URL 해시 프래그먼트(`#remote=token`)로 전달되는데, 브라우저는 이를 서버로 **전송하지 않으므로** 클라이언트 측에만 머뭅니다
 - 프론트엔드는 재연결을 위해 연결 정보를 localStorage에 저장합니다
 - 모든 API 및 WebSocket 요청에 토큰이 포함됩니다
-- 기본적으로 HTTPS는 사용되지 않습니다 — 인터넷을 통한 암호화된 연결이 필요하면 터널(Cloudflare 등)을 사용하세요
+- HTTPS는 터널에서 옵니다: 기본 Tailscale 구성은 MagicDNS 이름에 대한 실제 인증서를 제공하고, WireGuard가 구간을 암호화합니다. 터널을 끄면 LAN URL은 평문 `http://`이므로, 네트워크 밖으로 내보내기 전에 외부 터널을 앞에 두세요
 
 ### 앱 오리진 격리
 
@@ -209,13 +171,12 @@ bore local 8000 --to bore.pub
 | 전송 방식 | 오리진 분리 | 악성 앱 격리 |
 |-----------|--------------|--------------|
 | 로컬(기본) | `localhost` / `127.0.0.1` | ✅ |
-| **Tailscale Serve** | `…ts.net` / `…ts.net:8443` ([위 참고](#네트워크-너머의-앱-오리진-격리)) | ✅ |
-| localhost.run(리모트 기본) | 없음 — 서브도메인이 매번 바뀜 | ❌ |
-| 자체 SSH 서버 / 외부 터널 | 없음 | ❌ |
+| **Tailscale Serve**(리모트 기본) | `…ts.net` / `…ts.net:8443` ([위 참고](#네트워크-너머의-앱-오리진-격리)) | ✅ |
+| 터널 비활성화 — LAN / 외부 터널 | 없음 — 호스트 하나, 포트 하나 | ❌ |
 
 경계가 존재할 수 없는 경우 **앱은 데스크톱과 같은 오리진(same-origin)으로 제공됩니다.** same-origin 프레임은 이에 대해 의미 있게 샌드박스할 수 없습니다(`allow-scripts allow-same-origin`이면 프레임이 자신의 부모에 접근해 자기 샌드박스 속성을 제거할 수 있음). 결과적으로 **악성 설치 앱이 데스크톱의 DOM과 JS 메모리에 직접 접근할 수 있습니다.** 로컬 모드에서 `YAAR_APP_ORIGIN_ISOLATION=0`을 설정한 경우에도 마찬가지입니다.
 
-그때의 방어선은 *누가 연결할 수 있는가*를 통제하는 토큰뿐이며, 이는 본인이 직접 설치한 앱에 대해서는 아무것도 보장하지 않습니다. 그러므로 경계가 없는 전송 방식에서는 **신뢰하지 않는 앱을 설치하지 마세요.** 신뢰할 수 없는 앱과 데스크톱 무결성이 모두 필요하다면 Tailscale Serve를 쓰거나 로컬 모드를 유지하세요.
+그때의 방어선은 *누가 연결할 수 있는가*를 통제하는 토큰뿐이며, 이는 본인이 직접 설치한 앱에 대해서는 아무것도 보장하지 않습니다. 그러므로 터널을 끈 상태에서는 **신뢰하지 않는 앱을 설치하지 마세요.** 신뢰할 수 없는 앱과 데스크톱 무결성이 모두 필요하다면 Tailscale 터널을 켜 두거나 로컬 모드를 유지하세요.
 
 알아 둘 점 하나: 격리된 앱의 요청은 리모트 토큰이 아니라 자신의 **iframe 토큰**으로 인증합니다. 애초에 리모트 토큰은 헤더가 아니라 `Referer`에서 읽혔고, 그것은 앱이 same-origin일 때만 통했습니다(기본 리퍼러 정책은 크로스 오리진 `Referer`를 오리진만 남기고 잘라냅니다). iframe 토큰은 어차피 더 좁은 자격 증명입니다 — 서버가 발급하고, 창과 앱 하나에 묶여 있으며, 만료되고, 여전히 앱이 선언한 권한의 통제를 받습니다.
 
@@ -223,8 +184,13 @@ bore local 8000 --to bore.pub
 
 **연결 대화상자에 "Server not reachable"이 표시될 때:**
 - 서버가 실행 중인지, URL이 올바른지 확인하세요
-- 방화벽이 서버 포트(기본값 8000)로의 연결을 허용하는지 확인하세요
-- 클라이언트 기기에서 서버 IP로 ping을 시도해 보세요
+- `…ts.net` URL이라면: 접속하는 기기에서 Tailscale이 실제로 **켜져** 있나요? VPN 토글이 꺼져 있는 게 가장 흔한 원인이며, 이 경우 이름 자체가 해석되지 않습니다. 서버 머신도 깨어 있고 `tailscaled`가 돌고 있어야 합니다
+- 터널을 끈 상태라면: 방화벽이 서버 포트(기본값 8000)로의 연결을 허용하는지 확인하고, 클라이언트 기기에서 서버 IP로 ping을 시도해 보세요
+
+**배너에 `Tunnel:` 줄이 없을 때:**
+- `tailscale status` — 데몬이 꺼져 있거나 로그인되어 있지 않으면 YAAR는 localhost 전용으로 시작하며 그 사실을 출력합니다
+- 데몬이 정상이라면 대개 HTTPS 인증서가 없는 경우입니다: [관리 콘솔](https://login.tailscale.com/admin/dns)에서 MagicDNS와 HTTPS Certificates를 켜세요. YAAR가 `serve` 오류를 그대로 출력합니다
+- 의도적으로 Tailscale을 쓰지 않는 거라면 [터널을 끄고](#tailscale-없이-실행하기) LAN URL을 사용하세요
 
 **"Invalid token":**
 - 토큰은 서버가 재시작될 때마다 재생성됩니다 — 터미널에서 새 토큰을 확인하세요

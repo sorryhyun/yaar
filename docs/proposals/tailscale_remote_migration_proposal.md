@@ -10,8 +10,14 @@ factor*.
 The migration was deliberately phased, and **all three phases have landed**: a managed
 `TailscaleTunnel` provider (Phase 1), a loopback-only bind under Serve (Phase 2), and app-origin
 isolation preserved over the network (Phase 3) — the follow-ups that turn a transport swap into a
-genuine security upgrade. Tailscale remains opt-in via `config/tunnel.json`; `localhost.run` is
-still the zero-install default and behaves exactly as before.
+genuine security upgrade.
+
+> **Superseded on the last point (2026-07-27).** §6 argued for keeping `localhost.run` as the
+> zero-install default; that was reversed once the three phases were in. The SSH tunnel — the
+> `localhost.run` service *and* the custom-SSH mode — has been **deleted**, along with the `ssh2`
+> dependency, and Tailscale Serve is now the default with no config file needed. The remaining
+> fallback is `{ "disabled": true }`: remote mode on `0.0.0.0` with no tunnel, for a LAN or an
+> external tool. Read §5's "still the default" column as history. Everything else below stands.
 
 ---
 
@@ -190,8 +196,11 @@ existing deployment still gets until it opts in.
 
 ## 6. Non-goals and tradeoffs
 
-- **Not removing localhost.run.** It stays the zero-install default for users who genuinely want
-  scan-from-any-phone and accept the public-URL model. Tailscale is opt-in via config.
+- ~~**Not removing localhost.run.** It stays the zero-install default for users who genuinely want
+  scan-from-any-phone and accept the public-URL model. Tailscale is opt-in via config.~~
+  **Reversed** — see the note at the top: the SSH tunnel was removed and Tailscale is the default.
+  Keeping a public-URL transport around meant the weakest posture stayed the one users landed on by
+  accident, and it was the only reason `TunnelConfig` still carried SSH auth fields.
 - **Not adding Funnel** in this proposal. If public access with Tailscale's HTTPS is ever wanted, a
   `mode: "funnel"` on the same provider is a small follow-up — but it re-inherits the public-surface
   and same-origin-app tradeoffs, so it's explicitly out of scope here.
