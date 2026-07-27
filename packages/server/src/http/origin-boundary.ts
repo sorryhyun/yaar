@@ -10,9 +10,9 @@
  *   `Origin` of the alias, or by landing on the alias (`url.hostname`).
  * - **`proxy-port`** (Tailscale Serve). One stable MagicDNS name, two public HTTPS
  *   ports (`:443` desktop, `:8443` apps) — distinct origins, since the same-origin
- *   policy separates on port too. This is the mode that finally gives remote mode an
- *   origin boundary; `localhost`/`127.0.0.1` means nothing over a network, and
- *   localhost.run's rotating subdomain can't anchor a second origin at all.
+ *   policy separates on port too. This is how remote mode gets a boundary at all:
+ *   `localhost`/`127.0.0.1` means nothing once you reach the machine over a network,
+ *   and a second origin needs a hostname that survives a restart.
  *
  * `proxy-port` cannot read the addressed origin off the request: `url.hostname` and
  * `url.port` describe the *local* socket the proxy dialed, and `Host` /

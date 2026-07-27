@@ -184,14 +184,9 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 /**
  * The address the main HTTP socket binds to: always loopback, in every mode.
  *
- * `tailscaled` reaches YAAR at `127.0.0.1`, so the tunnel needs nothing else, and the
- * one configuration that ever wanted `0.0.0.0` — remote mode with the tunnel disabled —
- * no longer exists. That mode published one host on one port, which cannot carry the
- * app-origin boundary; a LAN bind is not something YAAR offers to reach it.
- *
- * So a failed Tailscale tunnel means localhost-only, never LAN-only: someone who asked
- * for tailnet-only must not silently get their whole LAN exposed on a bearer token
- * because `tailscaled` was down.
+ * `tailscaled` reaches YAAR at `127.0.0.1`, so the tunnel needs nothing else. A failed
+ * tunnel therefore leaves the server localhost-only — the daemon being down is not
+ * consent to expose a wider surface on a bearer token.
  */
 export function getBindHostname(): string {
   return '127.0.0.1';
@@ -227,8 +222,6 @@ export async function startTunnel(appLocalPort: number | null): Promise<void> {
 
   const tunnel = createTunnel(plannedTunnel, getPort(), appLocalPort);
   if (!(await tunnel.connect())) {
-    // Localhost-only, and there is no LAN URL to offer instead: a daemon that failed to
-    // come up is not consent to expose the LAN on a bearer token.
     console.warn(
       '[Tunnel] Could not establish tunnel — localhost-only. Check `tailscale status` and that MagicDNS + HTTPS Certificates are enabled.',
     );
@@ -246,11 +239,9 @@ export async function startTunnel(appLocalPort: number | null): Promise<void> {
     installProxyPortBoundary(boundary.desktopOrigin, boundary.appOrigin);
   }
   // No boundary means the desktop rule came up but the app-origin one didn't (the tunnel
-  // warns, naming the port). Deliberately *not* falling back to the loopback alias: the
-  // desktop is reachable at the MagicDNS name now, and a browser there resolves no
-  // `127.0.0.1` of ours. The frontend agrees — `siblingLoopbackOrigin()` derives an alias
-  // only on `localhost` — so installing that boundary would have the server enforcing a
-  // split the browser never joined. A boundary the browser can't reach is worse than none.
+  // warns, naming the port). Deliberately *not* falling back to the loopback alias: a
+  // browser on the MagicDNS name resolves no `127.0.0.1` of ours, so that boundary would
+  // be one the server enforces and the browser never joins.
 }
 
 /**
@@ -307,10 +298,7 @@ export async function initWarmProviders(): Promise<void> {
  * The URL this server is directly reachable at, tunnel aside.
  *
  * Always the loopback address, because {@link getBindHostname} is: nothing outside this
- * machine can reach the port, so printing a LAN URL (or putting one in the QR) would be
- * advertising an address that refuses to connect. The LAN-IP lookup this used to do —
- * including a WSL2 PowerShell shell-out for the real Windows address — went with the
- * tunnel-off mode that was the only caller able to bind `0.0.0.0`.
+ * machine can reach the port, so any other address would refuse to connect.
  */
 function getDirectUrl(): string {
   return `http://127.0.0.1:${getPort()}`;
@@ -350,7 +338,7 @@ export async function printBanner(server: Server<any>): Promise<void> {
     console.log('╔══════════════════════════════════════════════════╗');
     console.log('║              YAAR Remote Mode                   ║');
     console.log('╠══════════════════════════════════════════════════╣');
-    console.log(`║  Server:  ${serverUrl}  (loopback only — no LAN)`);
+    console.log(`║  Server:  ${serverUrl}  (loopback only)`);
     if (tunnelUrl) {
       console.log(`║  Tunnel:  ${tunnelUrl}`);
     } else {

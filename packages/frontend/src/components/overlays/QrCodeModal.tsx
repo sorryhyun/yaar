@@ -84,9 +84,8 @@ export function QrCodeModal({ onClose }: { onClose: () => void }) {
                 </div>
               )}
               <div className={styles.urlRow}>
-                {/* Under the default (Tailscale) tunnel the server stays on loopback, so this
-                    row is the local URL, not a LAN one — calling it "LAN" would advertise an
-                    address no other device can reach. */}
+                {/* Labelled from the address itself: the server stays on loopback, so this
+                    is normally the local URL rather than a LAN one. */}
                 <span className={styles.urlLabel}>{isLoopback(info.lanUrl) ? 'Local' : 'LAN'}</span>
                 <span className={styles.urlValue}>{info.lanUrl}</span>
               </div>

@@ -17,7 +17,7 @@ The server will print a connection banner:
 ╔══════════════════════════════════════════════════╗
 ║              YAAR Remote Mode                   ║
 ╠══════════════════════════════════════════════════╣
-║  Server:  http://127.0.0.1:8000  (loopback only — no LAN)
+║  Server:  http://127.0.0.1:8000  (loopback only)
 ║  Tunnel:  https://my-box.tailnet-abc.ts.net/#remote=<token>
 ║  Token:   <random-token>
 ╠══════════════════════════════════════════════════╣
@@ -26,9 +26,8 @@ The server will print a connection banner:
 ```
 
 Remote mode tunnels over [Tailscale Serve](#built-in-tunnel-tailscale-serve), so the connect URL
-is reachable from any device on your tailnet and from nowhere else. That is the only transport:
-remote mode is Tailscale or nothing. Without the `tailscale` daemon there is no tunnel and the
-server is reachable from this machine only — there is no LAN fallback, by design ([why](#why-there-is-no-lan-mode)).
+is reachable from any device on your tailnet and from nowhere else. Without the `tailscale`
+daemon there's no tunnel, and the server stays reachable from this machine only.
 
 If `qrcode-terminal` is installed, a QR code is also printed for easy mobile scanning.
 
@@ -66,16 +65,16 @@ make codex-dev    # Codex, local only, no MCP auth
 make dev          # Auto-detect provider, local only
 ```
 
-These bind to `127.0.0.1` with no token authentication, same as before.
+These bind to `127.0.0.1` with no token authentication.
 
 ## How Auth Works
 
 - `REMOTE=1` env var enables remote mode, as does a persisted `remote: true` ([both](#turning-remote-mode-on))
 - Server generates a random 32-byte base64url token at startup — a **fresh one per start**, so a saved connection from a previous run needs the new token (rescan the QR)
-- Server is bound to `127.0.0.1`, always — `tailscaled` reaches it over loopback, so a LAN bind buys nothing and YAAR never opens one ([why](#why-there-is-no-lan-mode))
+- Server binds to `127.0.0.1` in every mode; `tailscaled` reaches it over loopback
 - All HTTP endpoints require `Authorization: Bearer <token>` header or `?token=` query param
 - WebSocket upgrades require `?token=` query param
-- `/health` endpoint is always exempt (for connection testing), and answers `{ status, remote }` — `remote: true` tells a client with no token that reachability does *not* imply access, so it shows the connection dialog instead of connecting unauthenticated
+- `/health` is always exempt (for connection testing), and answers `{ status, remote }` — `remote: true` tells a client with no token that reachability does *not* imply access, so it shows the connection dialog instead of connecting unauthenticated
 - CORS allows any origin in remote mode (vs localhost-only in local mode)
 
 ### `YAAR_REMOTE_TOKEN` (launcher-supplied token)
@@ -86,21 +85,17 @@ open a working tab, and nothing can ask the server for the token (every endpoint
 answer is behind that same token). `scripts/dev.sh` mints one in remote mode and exports it,
 which is how `make claude` can open a browser straight onto an authenticated desktop.
 
-Values shorter than 32 characters are ignored with a warning and a random token is used
-instead — remote mode hands the token to every device that can reach the server (your whole
-tailnet), so a weak token here is not a local-only mistake.
+Values shorter than 32 characters are ignored with a warning and a random token is used instead.
 
 ## Built-in Tunnel (Tailscale Serve)
 
-In remote mode, YAAR exposes itself over your [Tailscale](https://tailscale.com) tailnet. Only devices already on your tailnet can reach it — this is network-layer auth, strictly stronger than a public URL gated by a token. It also gives you a real HTTPS certificate (`https://<host>.<tailnet>.ts.net`) with no extra setup, and it is the only way remote mode keeps [app-origin isolation](#app-origin-isolation-over-the-network).
+In remote mode, YAAR exposes itself over your [Tailscale](https://tailscale.com) tailnet. Only devices already on your tailnet can reach it — network-layer auth, strictly stronger than a public URL gated by a token. It also gives you a real HTTPS certificate (`https://<host>.<tailnet>.ts.net`) with no extra setup, and it's what carries [app-origin isolation](#app-origin-isolation-over-the-network) over the network.
 
-This is the default and needs no `config/tunnel.json`. The file exists only to tune the tunnel — it can no longer turn it off.
+This is the default and needs no `config/tunnel.json`. The file exists to tune the tunnel:
 
 ```json
 { "service": "tailscale" }
 ```
-
-> **Removed:** earlier versions defaulted to an SSH reverse tunnel via `localhost.run` (and could tunnel through a custom SSH server), and offered `{ "disabled": true }` to run remote mode on the LAN with no tunnel at all. All three are gone, along with the `ssh2` dependency. An ephemeral public URL held shut by a bearer token was the weakest posture YAAR offered, and neither a rotating subdomain nor a bare LAN address could anchor the second stable origin app isolation needs — `{ "disabled": true }` was the last configuration in which a hostile installed app could reach the desktop's DOM ([below](#app-origin-isolation)). A `tunnel.json` still asking for any of them is refused with a warning and Tailscale is used instead; for a public URL, put an [external tool](#external-tunneling-alternatives) in front.
 
 **Requirements:**
 - The `tailscale` CLI installed and logged into a tailnet (`tailscale up`). YAAR checks `tailscale status` and continues without a tunnel if the daemon isn't running.
@@ -108,33 +103,26 @@ This is the default and needs no `config/tunnel.json`. The file exists only to t
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
-| `service` | `"tailscale"` | `"tailscale"` | The transport. Only value accepted |
+| `service` | `"tailscale"` | `"tailscale"` | The transport |
 | `tailscalePath` | string | discovered on `PATH` (and macOS app bundle) | Absolute path to the `tailscale` binary |
 | `appOriginPort` | number | `8443` | Public HTTPS port the isolated **app origin** is served on (see below). Must not be 443 |
 
-**How it works:** there's no tunnel to manage — `tailscaled` already holds the connection. YAAR registers a serve rule (`https://…ts.net:443 → http://127.0.0.1:{PORT}`) once the HTTP socket is listening and turns it off on shutdown. Reconnect and keepalive are the daemon's job, so there's no backoff loop in YAAR. Because only `tailscaled` (on loopback) and the tailnet reach the server, the public surface is your tailnet, not the whole internet.
+**How it works:** there's no tunnel to manage — `tailscaled` already holds the connection. YAAR registers a serve rule (`https://…ts.net:443 → http://127.0.0.1:{PORT}`) once the HTTP socket is listening and turns it off on shutdown. Reconnect and keepalive are the daemon's job, so there's no backoff loop in YAAR.
 
-#### Why there is no LAN mode
+**Reach:** the server stays on loopback, so what can connect is your tailnet (through the daemon) plus this machine — not the whole internet, and not your LAN. If you want YAAR reachable some other way, put an [external tunnel](#external-tunneling-alternatives) in front of the loopback port.
 
-`tailscaled` reaches YAAR at `127.0.0.1`, so a LAN bind buys nothing and YAAR **stays on loopback** in every mode: only the tailnet (through the daemon) and this machine can connect.
-
-YAAR used to offer a LAN bind via `{ "disabled": true }` and no longer does. Two reasons, and the second is the decisive one:
-
-- A LAN URL on plain `http://` held shut by a bearer token is a much weaker posture than tailnet membership, for no capability the tailnet doesn't already give you (including from off-network — you don't need to be on the same wifi).
-- **It could not carry the app-origin boundary.** That boundary is two browser origins over one server; one host on one port publishes exactly one. So installed apps were served same-origin with the desktop, and a hostile one could read the desktop's DOM and JS memory. Removing the mode is what makes app-origin isolation unconditional.
-
-If `tailscaled` is down you therefore get **this machine only** — not a LAN fallback. Someone running tailnet-only should not silently have their whole LAN exposed on a bearer token because a daemon wasn't running. Isolated apps keep their boundary in that state too: the server is loopback-only, which is exactly where the local `localhost`/`127.0.0.1` split works, so YAAR falls back to that rather than to no boundary.
+> **Upgrading from an older config:** earlier versions used an SSH reverse tunnel via `localhost.run` (or a custom SSH server), and accepted `{ "disabled": true }` to run with no tunnel. Both are gone, along with the `ssh2` dependency. A `tunnel.json` still asking for either is refused with a warning and Tailscale is used instead; replace it with `{ "service": "tailscale" }`.
 
 #### App-origin isolation over the network
 
-Tailscale is what lets remote mode have an origin boundary at all — it [used to be dropped](#app-origin-isolation) over the network. YAAR registers a **second** serve rule on the same MagicDNS name but a different port:
+YAAR registers a **second** serve rule on the same MagicDNS name but a different port:
 
 ```
 https://my-box.tailnet-abc.ts.net        → http://127.0.0.1:8000   the desktop
 https://my-box.tailnet-abc.ts.net:8443   → http://127.0.0.1:8001   installed apps
 ```
 
-Different port means a different browser origin (the same-origin policy separates on port), so installed (`source:'user'`) app iframes are cross-origin to the desktop again, exactly as `localhost`/`127.0.0.1` achieves locally. A stable hostname is what makes this possible at all — a MagicDNS name is the same on every start, so both origins survive a restart and the desktop can hand the browser a URL for the second one.
+Different port means a different browser origin (the same-origin policy separates on port), so installed (`source:'user'`) app iframes are cross-origin to the desktop, exactly as `localhost`/`127.0.0.1` achieves locally. A stable hostname is what makes this possible — a MagicDNS name is the same on every start, so both origins survive a restart and the desktop can hand the browser a URL for the second one.
 
 The two public ports point at **two different local sockets** on purpose. Behind a proxy the server cannot read which origin the browser addressed — `Host` and `X-Forwarded-*` are the proxy's word — so it reads *which socket the request arrived on* instead, which nothing can forge. The app-origin socket is loopback-only and its port never appears in a URL.
 
@@ -142,18 +130,18 @@ If the second rule fails to register (e.g. the port is refused), YAAR logs it, l
 
 ### Tunnel Behavior
 
-- Only activates in remote mode ([how to turn it on](#turning-remote-mode-on)); the bundled exe no longer forces it
+- Only activates in remote mode ([how to turn it on](#turning-remote-mode-on))
 - The serve rules are registered *after* the HTTP sockets are listening, so they always point at the port actually bound (remote mode walks upward from `PORT` if it's taken)
 - On success, the banner and QR code use the MagicDNS URL instead of the loopback URL
-- If registration fails on startup (daemon down, no HTTPS certs), a warning is logged and the server continues [localhost-only](#why-there-is-no-lan-mode) — never silently LAN-wide
+- If registration fails on startup (daemon down, no HTTPS certs), a warning is logged and the server continues localhost-only
 - Reconnects and keepalive belong to `tailscaled`, not YAAR: a dropped link comes back on its own and the serve rules stay registered
 - On shutdown (`Ctrl+C`), both serve rules are torn down
 
 ## External Tunneling (Alternatives)
 
 If you need a genuinely public URL — sharing with someone who isn't on your tailnet — run an
-external tool on this machine and point it at the loopback port. The built-in tunnel stays on
-(it can't be turned off) and simply coexists: both reach the same server.
+external tool on this machine and point it at the loopback port. The built-in tunnel stays up
+and simply coexists: both reach the same server.
 
 Two caveats specific to going public this way:
 
@@ -188,13 +176,13 @@ When using an external tunnel, the frontend's connection dialog accepts the tunn
 - Token is transmitted in the URL hash fragment (`#remote=token`), which is **not sent to the server** by the browser — it stays client-side
 - The frontend stores the connection in localStorage for reconnection
 - All API and WebSocket requests include the token
-- HTTPS comes from the tunnel: Tailscale serves a real certificate for the MagicDNS name, and WireGuard encrypts the hop regardless. Nothing leaves the machine unencrypted — there is no plain-`http://` LAN mode any more
+- HTTPS comes from the tunnel: Tailscale serves a real certificate for the MagicDNS name, and WireGuard encrypts the hop regardless. Nothing leaves the machine unencrypted
 
 ### App-origin isolation
 
 **App-origin isolation** serves installed (`source:'user'`) apps from a distinct browser origin from the desktop. Being cross-origin, the browser blocks a hostile app from reaching the desktop's DOM or JS memory through `window.parent`, and isolated app frames are additionally sandboxed so they can't navigate the top window (`window.top.location`) to a phishing page either. A hostile app is confined to what its `app.json` declares. It is on by default; `YAAR_APP_ORIGIN_ISOLATION=0` turns it off.
 
-The boundary is just "two browser origins over one server", and **every transport YAAR ships can publish two** — which is why tunnel-off remote mode was removed rather than documented:
+The boundary is just "two browser origins over one server", and every transport YAAR ships publishes two:
 
 | Transport | Origin split | Hostile-app containment |
 |-----------|--------------|-------------------------|
@@ -205,18 +193,18 @@ The boundary is just "two browser origins over one server", and **every transpor
 Two states still leave apps same-origin with the desktop, and both are things you switch on yourself:
 
 - `YAAR_APP_ORIGIN_ISOLATION=0`, which turns the whole mechanism off.
-- The tailnet desktop rule registering but the **app** rule failing (a refused `:8443`). YAAR logs this and runs with isolation off rather than pointing your browser at an origin it can't reach — a boundary the browser can't reach is worse than none. Set `appOriginPort` to a port that works.
+- The tailnet desktop rule registering but the **app** rule failing (a refused `:8443`). YAAR logs this and runs with isolation off rather than pointing your browser at an origin it can't reach. Set `appOriginPort` to a port that works.
 
 In either state a same-origin frame can't be meaningfully sandboxed either (`allow-scripts allow-same-origin` lets a frame reach into its own parent and strip its own sandbox attribute), so the sandbox doesn't help, and **a malicious installed app can reach the desktop's DOM and JS memory directly.** The token gating *who can connect at all* says nothing about apps you yourself installed. So in those two states: **don't install apps you don't trust.**
 
-One consequence worth knowing: an isolated app's calls authenticate with its own **iframe token**, not the remote token. They never carried the remote token in a header — it was read out of `Referer`, which only worked while apps were same-origin, since the default referrer policy trims a cross-origin `Referer` down to a bare origin. An iframe token is the narrower credential anyway: server-minted, bound to one window and app, expiring, and still subject to the app's declared permissions.
+One consequence worth knowing: an isolated app's calls authenticate with its own **iframe token**, not the remote token. An iframe token is the narrower credential anyway: server-minted, bound to one window and app, expiring, and still subject to the app's declared permissions.
 
 ## Troubleshooting
 
 **"Server not reachable" in connection dialog:**
 - Check that the server is running and the URL is correct
 - On the `…ts.net` URL: is Tailscale actually **on** for the client device? The VPN toggle being off is the usual cause — the name won't even resolve. The host machine also has to be awake with `tailscaled` running
-- If the banner shows `Tunnel: none`, no other device can reach this server at all — fix the tunnel (below); there is no LAN URL to fall back to
+- If the banner shows `Tunnel: none`, no other device can reach this server — fix the tunnel (below)
 
 **No remote banner at all, and no tunnel:**
 - Remote mode is off. Use `make claude`, or turn on **Remote Access** in the configurations app and restart ([both](#turning-remote-mode-on))
@@ -225,7 +213,7 @@ One consequence worth knowing: an isolated app's calls authenticate with its own
 **Banner shows `Tunnel: none`:**
 - `tailscale status` — if the daemon isn't running or isn't logged in, YAAR starts localhost-only and says so
 - If the daemon is fine, the failure is usually missing HTTPS certificates: enable MagicDNS + HTTPS Certificates in the [admin console](https://login.tailscale.com/admin/dns). YAAR prints the exact `serve` error
-- Deliberately not using Tailscale? Then you want local mode (`make dev` / `make claude-dev`), not remote mode — remote mode has no other transport ([why](#why-there-is-no-lan-mode))
+- Not using Tailscale at all? Use local mode (`make dev` / `make claude-dev`), or put an [external tunnel](#external-tunneling-alternatives) in front of the loopback port
 
 **"Invalid token":**
 - Tokens are regenerated on each server restart — get the new token from the terminal
