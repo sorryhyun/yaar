@@ -31,13 +31,14 @@ const SSH_ONLY_KEYS = [
  * Load tunnel config from config/tunnel.json.
  *
  * Returns null when the file is missing or says nothing usable — the caller then
- * falls back to the default transport (Tailscale Serve). `{ "disabled": true }` is
- * the one way to ask for no tunnel at all.
+ * falls back to the default transport (Tailscale Serve). There is no longer any way
+ * to ask for *no* transport: remote mode is Tailscale Serve or nothing.
  *
  * A config left over from the SSH tunnel (`{ "service": "localhost.run" }`, or a
- * custom SSH server) is refused loudly rather than silently honored: those requested
- * a *public* URL, and quietly swapping in a tailnet-only one — or quietly ignoring the
- * file and doing the same — would be a change of posture the user never asked for.
+ * custom SSH server), or the removed `{ "disabled": true }`, is refused loudly rather
+ * than silently honored: those requested a *public* or LAN URL, and quietly swapping in
+ * a tailnet-only one — or quietly ignoring the file and doing the same — would be a
+ * change of posture the user never asked for.
  */
 export function loadTunnelConfig(): TunnelConfig | null {
   const configPath = join(getConfigDir(), 'tunnel.json');
@@ -56,9 +57,19 @@ export function loadTunnelConfig(): TunnelConfig | null {
     return null;
   }
 
-  // Explicit disable
+  // Tunnel-off remote mode — removed. It bound 0.0.0.0 and published one host on one
+  // port, which is the only shape that cannot carry the app-origin boundary, so a
+  // hostile installed app could reach the desktop's DOM. Refused rather than ignored:
+  // it asked for a LAN URL, and coming up tailnet-only without a word would be a
+  // narrower posture than the user configured.
   if (parsed.disabled === true) {
-    return { disabled: true };
+    console.warn(
+      '[Tunnel] config/tunnel.json asks to run with no tunnel ({ "disabled": true }), ' +
+        'which YAAR no longer supports — using Tailscale Serve instead. That mode could ' +
+        'not publish a second browser origin, so app-origin isolation was off in it. ' +
+        'For a public URL, put an external tunnel in front of the tailnet address.',
+    );
+    return { service: 'tailscale' };
   }
 
   // Legacy SSH config — the transport is gone.
@@ -68,7 +79,7 @@ export function loadTunnelConfig(): TunnelConfig | null {
       `[Tunnel] config/tunnel.json asks for the SSH tunnel (${
         parsed.service === 'localhost.run' ? 'service: "localhost.run"' : `"${legacyKey}"`
       }), which YAAR no longer supports — using Tailscale Serve instead. ` +
-        'Replace it with { "service": "tailscale" }, or { "disabled": true } to run with no tunnel.',
+        'Replace it with { "service": "tailscale" }.',
     );
     return { service: 'tailscale' };
   }

@@ -1,11 +1,16 @@
 /**
  * `config/tunnel.json` parsing.
  *
- * The part worth pinning is what happens to a config written for the *removed* SSH
- * tunnel. A stale `{ "service": "localhost.run" }` — or a custom SSH server — asked for
- * a public URL; silently honoring the file is impossible (the transport is gone) and
- * silently ignoring it would swap the user's posture without a word. So it warns and
- * falls through to the default, and the warning is the contract.
+ * The part worth pinning is what happens to a config asking for something YAAR removed:
+ * the SSH tunnel (`{ "service": "localhost.run" }` or a custom SSH server), or tunnel-off
+ * remote mode (`{ "disabled": true }`). Each asked for a *public* or LAN URL; silently
+ * honoring the file is impossible (neither transport exists) and silently ignoring it
+ * would swap the user's posture without a word. So each warns and falls through to the
+ * default, and the warning is the contract.
+ *
+ * Every path through this function now returns Tailscale or null. There is deliberately
+ * no config that yields "no transport" — that was the last shape in which remote mode
+ * ran without an app-origin boundary.
  */
 
 import { describe, expect, test } from 'bun:test';
@@ -63,9 +68,13 @@ describe('loadTunnelConfig', () => {
     });
   });
 
-  test('explicit disable is preserved — it is the one way to ask for no tunnel', () => {
+  test('a request for no tunnel warns and falls back to Tailscale', () => {
     withConfigDir('{ "disabled": true }', (dir) => {
-      expect(loadFrom(dir).config).toEqual({ disabled: true });
+      const { config, warnings } = loadFrom(dir);
+      // Tunnel-off remote mode bound 0.0.0.0 and published one host on one port — the
+      // only shape that cannot carry the app-origin boundary. Refused, not ignored.
+      expect(config).toEqual({ service: 'tailscale' });
+      expect(warnings.join('\n')).toContain('disabled');
     });
   });
 
@@ -101,9 +110,13 @@ describe('loadTunnelConfig', () => {
     });
   });
 
-  test('disable wins over a legacy SSH config — the user asked for no tunnel at all', () => {
+  test('a disabled + legacy SSH config still lands on Tailscale, warning about the disable', () => {
     withConfigDir('{ "disabled": true, "host": "myserver.com" }', (dir) => {
-      expect(loadFrom(dir).config).toEqual({ disabled: true });
+      const { config, warnings } = loadFrom(dir);
+      expect(config).toEqual({ service: 'tailscale' });
+      // The disable is checked first, so that is the warning the user gets — it is the
+      // one that explains why they aren't getting the LAN URL they configured.
+      expect(warnings.join('\n')).toContain('disabled');
     });
   });
 

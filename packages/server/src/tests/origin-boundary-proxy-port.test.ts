@@ -20,6 +20,7 @@ import { appHtmlCsp } from '../http/csp.js';
 import {
   desktopRedirectTarget,
   getOriginBoundary,
+  installLoopbackAliasBoundary,
   installProxyPortBoundary,
   isolatedAppOrigin,
   isOriginBoundaryActive,
@@ -60,6 +61,23 @@ describe('proxy-port origin boundary', () => {
       appOrigin: APP,
     });
     expect(isOriginBoundaryActive()).toBe(true);
+  });
+
+  it('falls back to the loopback alias when the tunnel never came up', () => {
+    // Now that tunnel-off remote mode is gone, a failed tunnel is the *only* way remote
+    // mode ends up with no transport — and it leaves the server loopback-only, which is
+    // exactly where `localhost`/`127.0.0.1` works. `isAppOriginIsolationEnabled()` still
+    // answers false under IS_REMOTE, so the lifecycle installs this explicitly rather
+    // than letting the environment fall through to `off`.
+    process.env.YAAR_APP_ORIGIN_ISOLATION = '1';
+    installLoopbackAliasBoundary();
+    expect(getOriginBoundary()).toEqual({ mode: 'loopback-alias' });
+    expect(isOriginBoundaryActive()).toBe(true);
+    // The frontend derives the sibling alias from its own location in this mode; the
+    // server must not name one, or it would pin a port the document was not served on.
+    expect(isolatedAppOrigin()).toBeNull();
+    // And the split is enforced: a token-less request wearing the app alias is not the host.
+    expect(isHost(resolve('http://127.0.0.1:8000/api/settings'))).toBe(false);
   });
 
   it('states the app origin, because the client cannot derive it', () => {

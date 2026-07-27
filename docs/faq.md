@@ -82,9 +82,7 @@ You shouldn't have to trust it — the design assumes you don't:
 - **App permission scopes.** An app touches its own namespace (`yaar://apps/self/…` — storage, database, personas), granted automatically, plus whatever `app.json` declares — nothing else.
 - **Network allowlist + SSRF guard.** Outbound HTTP is limited to domains in `config/curl_allowed_domains.yaml`; new domains require your approval; internal-network addresses are blocked.
 - **Agent tiers.** The dangerous namespaces (`yaar://session/*`, including real-browser control) are reachable only by the privileged session agent. Everything else is default-deny.
-- **Origin isolation.** Apps are served from a different browser origin than the desktop, so an app can't forge desktop-level requests.
-
-Known honest limitation: the origin boundary only holds in local mode. In **remote mode** (or with `YAAR_APP_ORIGIN_ISOLATION=0`) apps are served same-origin with the desktop, so a *malicious installed app* can reach the desktop DOM via `window.parent`. Don't install apps you don't trust when running remote — see [remote mode → the app-origin boundary](./guides/remote_mode.md#remote-mode-drops-the-app-origin-boundary).
+- **Origin isolation.** Apps are served from a different browser origin than the desktop, so an app can't forge desktop-level requests and the browser blocks its `window.parent` reach into the desktop — `localhost` / `127.0.0.1` locally, `…ts.net` / `…ts.net:8443` over Tailscale. See [remote mode → app-origin isolation](./guides/remote_mode.md#app-origin-isolation).
 
 ---
 

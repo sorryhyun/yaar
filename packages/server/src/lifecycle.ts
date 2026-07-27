@@ -4,9 +4,7 @@
 
 import type { Server } from 'bun';
 import { mkdir, stat as fsStat } from 'fs/promises';
-import { readFileSync } from 'fs';
 import { join } from 'path';
-import { networkInterfaces } from 'os';
 import { ensureStorageDir, loadMounts } from './storage/index.js';
 import { initMcpServer } from './mcp/server.js';
 import { listApps } from './features/apps/discovery.js';
@@ -30,7 +28,7 @@ import {
   getPort,
   isAppOriginIsolationRequested,
 } from './config.js';
-import { installProxyPortBoundary } from './http/origin-boundary.js';
+import { installProxyPortBoundary, installLoopbackAliasBoundary } from './http/origin-boundary.js';
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/session-hub.js';
@@ -49,11 +47,11 @@ let activeTunnel: TunnelProvider | null = null;
 
 /**
  * The tunnel we intend to bring up, resolved in `initializeSubsystems` and connected
- * later in {@link startTunnel} — null when remote mode is off or the tunnel is disabled.
+ * later in {@link startTunnel} — null exactly when remote mode is off.
  *
  * Resolving the config and connecting are separate steps because the sockets sit between
- * them: the bind address depends on which transport was *chosen* (below), and a Tailscale
- * serve rule can only be pointed at a socket that is already listening.
+ * them: the app-origin socket is opened only when a transport can publish a second origin,
+ * and a Tailscale serve rule can only be pointed at a socket that is already listening.
  */
 let plannedTunnel: TunnelConfig | null = null;
 
@@ -100,15 +98,13 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     ]);
   }
 
-  // Generate auth token for remote mode, and decide which tunnel we're bringing up
-  // (Tailscale Serve unless config/tunnel.json disables it). The connect itself
-  // happens in startTunnel(), after the sockets exist.
+  // Generate auth token for remote mode, and resolve the tunnel we're bringing up.
+  // Remote mode is Tailscale Serve or nothing — config/tunnel.json only tunes it, and
+  // can no longer turn it off. The connect itself happens in startTunnel(), after the
+  // sockets exist.
   if (IS_REMOTE) {
     generateRemoteToken();
-    const tunnelConfig = loadTunnelConfig();
-    if (tunnelConfig?.disabled !== true) {
-      plannedTunnel = tunnelConfig ?? DEFAULT_TUNNEL;
-    }
+    plannedTunnel = loadTunnelConfig() ?? DEFAULT_TUNNEL;
   }
 
   // Dev mode: build frontend and start file watcher with live reload
@@ -186,22 +182,19 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 }
 
 /**
- * The address the main HTTP socket binds to.
+ * The address the main HTTP socket binds to: always loopback, in every mode.
  *
- * `tailscaled` reaches YAAR at `127.0.0.1`, so under the tunnel a LAN bind adds
- * reachability nobody asked for: only the tailnet (via the daemon) and localhost
- * should get in. Remote mode with the tunnel *disabled* is the one case that still
- * opens `0.0.0.0` — there the LAN URL is the only way in, which is the point.
+ * `tailscaled` reaches YAAR at `127.0.0.1`, so the tunnel needs nothing else, and the
+ * one configuration that ever wanted `0.0.0.0` — remote mode with the tunnel disabled —
+ * no longer exists. That mode published one host on one port, which cannot carry the
+ * app-origin boundary; a LAN bind is not something YAAR offers to reach it.
  *
- * Decided from the *chosen* transport, not from whether it connected: someone who
- * asked for tailnet-only should not silently get their whole LAN exposed on a bearer
- * token because `tailscaled` was down. A failed Tailscale tunnel falls back to
- * localhost-only, not LAN-only.
+ * So a failed Tailscale tunnel means localhost-only, never LAN-only: someone who asked
+ * for tailnet-only must not silently get their whole LAN exposed on a bearer token
+ * because `tailscaled` was down.
  */
 export function getBindHostname(): string {
-  if (!IS_REMOTE) return '127.0.0.1';
-  if (plannedTunnel) return '127.0.0.1'; // Tailscale Serve — loopback is all the daemon needs
-  return '0.0.0.0';
+  return '127.0.0.1';
 }
 
 /**
@@ -212,11 +205,11 @@ export function getBindHostname(): string {
  * them is *which local socket it arrived on* (`http/origin-boundary.ts`). So the second
  * public port gets its own listener rather than sharing the desktop's.
  *
- * Tailscale can publish that second origin (a stable MagicDNS name on another port);
- * a transport that can't would answer false here.
+ * Local mode needs no second socket — there the two origins are two hostnames on the
+ * same one (`localhost`/`127.0.0.1`).
  */
 export function wantsAppOriginSocket(): boolean {
-  return IS_REMOTE && isAppOriginIsolationRequested() && plannedTunnel !== null;
+  return IS_REMOTE && isAppOriginIsolationRequested();
 }
 
 /**
@@ -234,12 +227,16 @@ export async function startTunnel(appLocalPort: number | null): Promise<void> {
 
   const tunnel = createTunnel(plannedTunnel, getPort(), appLocalPort);
   if (!(await tunnel.connect())) {
-    // Localhost-only, never LAN-only: the bind followed the transport we *chose*, and a
-    // daemon that failed to come up is not consent to expose the LAN. `{ "disabled": true }`
-    // in config/tunnel.json is how you ask for the LAN URL on purpose.
+    // Localhost-only, and there is no LAN URL to offer instead: a daemon that failed to
+    // come up is not consent to expose the LAN on a bearer token.
     console.warn(
-      '[Tunnel] Could not establish tunnel — localhost-only (set { "disabled": true } in config/tunnel.json for the LAN URL)',
+      '[Tunnel] Could not establish tunnel — localhost-only. Check `tailscale status` and that MagicDNS + HTTPS Certificates are enabled.',
     );
+    // Nothing outside this machine can reach the server now, which is precisely where the
+    // `localhost`/`127.0.0.1` split *does* work — so the degraded path keeps a boundary
+    // instead of running with none. Without this, `isAppOriginIsolationEnabled()` answers
+    // false under IS_REMOTE and an installed app would be same-origin with the desktop.
+    if (isAppOriginIsolationRequested()) installLoopbackAliasBoundary();
     return;
   }
   activeTunnel = tunnel;
@@ -248,6 +245,12 @@ export async function startTunnel(appLocalPort: number | null): Promise<void> {
   if (boundary) {
     installProxyPortBoundary(boundary.desktopOrigin, boundary.appOrigin);
   }
+  // No boundary means the desktop rule came up but the app-origin one didn't (the tunnel
+  // warns, naming the port). Deliberately *not* falling back to the loopback alias: the
+  // desktop is reachable at the MagicDNS name now, and a browser there resolves no
+  // `127.0.0.1` of ours. The frontend agrees — `siblingLoopbackOrigin()` derives an alias
+  // only on `localhost` — so installing that boundary would have the server enforcing a
+  // split the browser never joined. A boundary the browser can't reach is worse than none.
 }
 
 /**
@@ -300,56 +303,17 @@ export async function initWarmProviders(): Promise<void> {
   }
 }
 
-function getLanIp(): string {
-  // WSL2: the Linux network interfaces have a NAT'd 172.x IP that's unreachable
-  // from other devices. Ask Windows for the real LAN IP via PowerShell.
-  if (isWsl()) {
-    try {
-      const result = Bun.spawnSync(
-        [
-          'powershell.exe',
-          '-NoProfile',
-          '-c',
-          "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '172.*' -and $_.IPAddress -notlike '169.*' -and $_.PrefixOrigin -ne 'WellKnown' } | Select-Object -ExpandProperty IPAddress -First 1",
-        ],
-        { timeout: 5000, stdio: ['ignore', 'pipe', 'ignore'] },
-      );
-      const out = result.stdout.toString().trim();
-      if (out) return out;
-    } catch {
-      // PowerShell not available or timed out — fall through
-    }
-  }
-
-  const nets = networkInterfaces();
-  for (const name of Object.keys(nets)) {
-    for (const net of nets[name] ?? []) {
-      if (net.family === 'IPv4' && !net.internal) {
-        return net.address;
-      }
-    }
-  }
-  return '127.0.0.1';
-}
-
-function isWsl(): boolean {
-  try {
-    return readFileSync('/proc/version', 'utf-8').toLowerCase().includes('microsoft');
-  } catch {
-    return false;
-  }
-}
-
 /**
  * The URL this server is directly reachable at, tunnel aside.
  *
- * Under a loopback-only transport that is *not* the LAN IP — nothing outside this
+ * Always the loopback address, because {@link getBindHostname} is: nothing outside this
  * machine can reach the port, so printing a LAN URL (or putting one in the QR) would be
- * advertising an address that refuses to connect.
+ * advertising an address that refuses to connect. The LAN-IP lookup this used to do —
+ * including a WSL2 PowerShell shell-out for the real Windows address — went with the
+ * tunnel-off mode that was the only caller able to bind `0.0.0.0`.
  */
 function getDirectUrl(): string {
-  const host = getBindHostname() === '127.0.0.1' ? '127.0.0.1' : getLanIp();
-  return `http://${host}:${getPort()}`;
+  return `http://127.0.0.1:${getPort()}`;
 }
 
 /**
@@ -379,7 +343,6 @@ export async function printBanner(server: Server<any>): Promise<void> {
   if (IS_REMOTE) {
     const token = getRemoteToken()!;
     const serverUrl = getDirectUrl();
-    const loopbackOnly = getBindHostname() === '127.0.0.1';
     const tunnelUrl = activeTunnel?.isConnected() ? activeTunnel.getPublicUrl(token) : null;
     const connectUrl = tunnelUrl ?? `${serverUrl}/#remote=${token}`;
 
@@ -387,9 +350,13 @@ export async function printBanner(server: Server<any>): Promise<void> {
     console.log('╔══════════════════════════════════════════════════╗');
     console.log('║              YAAR Remote Mode                   ║');
     console.log('╠══════════════════════════════════════════════════╣');
-    console.log(`║  Server:  ${serverUrl}${loopbackOnly ? '  (loopback only — no LAN)' : ''}`);
+    console.log(`║  Server:  ${serverUrl}  (loopback only — no LAN)`);
     if (tunnelUrl) {
       console.log(`║  Tunnel:  ${tunnelUrl}`);
+    } else {
+      // No tunnel means nothing off this machine can connect at all — say so where the
+      // connect URL is, rather than leaving a loopback URL looking like a remote one.
+      console.log('║  Tunnel:  none — this machine only (see [Tunnel] warnings above)');
     }
     console.log(`║  Token:   ${token}`);
     console.log('╠══════════════════════════════════════════════════╣');

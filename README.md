@@ -151,9 +151,7 @@ Since YAAR lets the AI execute code and communicate with external services, it s
 - **Remembered permissions** — allow/deny decisions persisted in `config/permissions.json`
 - **Path validation** — guards against path traversal attacks
 
-- **App-origin isolation** (on by default, local mode) — installed apps are served from a distinct browser origin (`127.0.0.1` while the desktop stays on `localhost`), so an app can no longer omit its token and be read as the desktop. Set `YAAR_APP_ORIGIN_ISOLATION=0` to disable.
-
-**Known limitation:** the origin boundary only exists in local mode. In **remote mode** (or with `YAAR_APP_ORIGIN_ISOLATION=0`) apps are served same-origin with the desktop, so a *hostile installed app* can reach the desktop's DOM directly via `window.parent`. Don't install apps you don't trust when running remote. See [remote mode → the app-origin boundary](./docs/guides/remote_mode.md#remote-mode-drops-the-app-origin-boundary).
+- **App-origin isolation** (on by default, every mode) — installed apps are served from a distinct browser origin, so an app can no longer omit its token and be read as the desktop, and the browser blocks its `window.parent` reach into the desktop's DOM and JS memory. Locally that's `127.0.0.1` while the desktop stays on `localhost`; over the network Tailscale Serve publishes the same pair as `…ts.net` and `…ts.net:8443`. Set `YAAR_APP_ORIGIN_ISOLATION=0` to disable.
 
 
 ## Project Structure

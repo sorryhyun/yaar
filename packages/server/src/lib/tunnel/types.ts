@@ -37,16 +37,18 @@ export interface OriginPair {
 /**
  * Tunnel configuration, as read from `config/tunnel.json`.
  *
- * Tailscale Serve is the only transport YAAR ships. The SSH reverse tunnel
- * (`localhost.run` and custom SSH servers) was removed: an ephemeral public URL
- * gated by a bearer token is a weaker posture than tailnet membership, and it
- * could never anchor the second stable origin that app-origin isolation needs.
+ * Tailscale Serve is the only transport YAAR ships, and remote mode is not
+ * offered without it. The SSH reverse tunnel (`localhost.run` and custom SSH
+ * servers) was removed: an ephemeral public URL gated by a bearer token is a
+ * weaker posture than tailnet membership, and it could never anchor the second
+ * stable origin that app-origin isolation needs. `{ "disabled": true }` went the
+ * same way and for the same reason — one host on one port publishes no second
+ * origin, so it was the last configuration in which a hostile installed app
+ * could reach the desktop's DOM.
  */
 export interface TunnelConfig {
   /** The transport. Only `tailscale` exists; the field is kept for forward compat. */
   service?: 'tailscale';
-  /** Disable auto-tunneling (only meaningful in config/tunnel.json) */
-  disabled?: boolean;
   /** Path to the `tailscale` binary (default: discovered on PATH). */
   tailscalePath?: string;
   /**

@@ -53,6 +53,22 @@ export function installProxyPortBoundary(desktopOrigin: string, appOrigin: strin
   installed = { mode: 'proxy-port', desktopOrigin, appOrigin };
 }
 
+/**
+ * Install the loopback-alias boundary explicitly.
+ *
+ * The environment implies this one already in local mode, so the only caller that needs
+ * it is remote mode whose tunnel did not come up: `isAppOriginIsolationEnabled()` is
+ * deliberately false under `IS_REMOTE` (the `localhost`/`127.0.0.1` split means nothing
+ * over a network), which used to leave that fallback with **no** boundary at all.
+ *
+ * But a remote server whose tunnel failed is not reachable over a network — it stays on
+ * loopback, and nothing outside the machine can connect. Locally is exactly where the
+ * alias split does work, so the degraded path gets the local boundary rather than none.
+ */
+export function installLoopbackAliasBoundary(): void {
+  installed = LOOPBACK_ALIAS;
+}
+
 /** Drop any installed boundary, falling back to the environment. Tests only. */
 export function resetOriginBoundary(): void {
   installed = null;
