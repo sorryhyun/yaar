@@ -24,8 +24,8 @@ import {
   extractProtocolFromModules,
   formatProtocolError,
   type ExtractOptions,
-} from '../extract-protocol-ast.js';
-import { extractProtocolFromDir } from '../extract-protocol-dir.js';
+} from '../protocol/extract-protocol-ast.js';
+import { extractProtocolFromDir } from '../protocol/extract-protocol-dir.js';
 
 /** Extract from an in-memory module map rooted at `src/main.ts`. */
 function extract(files: Record<string, string>, options: ExtractOptions = {}) {

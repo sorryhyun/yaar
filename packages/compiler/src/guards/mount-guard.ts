@@ -19,7 +19,15 @@
  * render target is flagged; a computed target is left alone.
  */
 
-import { createAppSourceFile } from './ts-source.js';
+import {
+  createAppSourceFile,
+  findFirst,
+  formatGuardFindings,
+  positionOf,
+  snippetOf,
+  walk,
+  type GuardLabel,
+} from './guard-report.js';
 
 /** The id of the mount element `generateHtmlWrapper` emits. The single source of truth. */
 export const APP_MOUNT_ID = 'app';
@@ -90,21 +98,14 @@ function resolveTargetId(ts: TsModule, target: TsExpression, sf: TsSourceFile): 
   if (!ts.isIdentifier(expr)) return null;
   const name = expr.text;
 
-  let found: string | null = null;
-  const visit = (node: TsNode): void => {
-    if (
-      found === null &&
-      ts.isVariableDeclaration(node) &&
-      ts.isIdentifier(node.name) &&
-      node.name.text === name &&
-      node.initializer
-    ) {
-      found = lookupId(ts, unwrap(ts, node.initializer), sf);
-    }
-    if (found === null) ts.forEachChild(node, visit);
-  };
-  visit(sf);
-  return found;
+  return findFirst(ts, sf, (node) =>
+    ts.isVariableDeclaration(node) &&
+    ts.isIdentifier(node.name) &&
+    node.name.text === name &&
+    node.initializer
+      ? lookupId(ts, unwrap(ts, node.initializer), sf)
+      : null,
+  );
 }
 
 /**
@@ -117,29 +118,23 @@ function resolveTargetId(ts: TsModule, target: TsExpression, sf: TsSourceFile): 
 export function scanMountTargetsIn(ts: TsModule, sf: TsSourceFile): MountFinding[] {
   const findings: MountFinding[] = [];
 
-  const visit = (node: TsNode): void => {
+  walk(ts, sf, (node) => {
     if (
-      ts.isCallExpression(node) &&
-      ts.isIdentifier(node.expression) &&
-      node.expression.text === 'render' &&
-      node.arguments.length >= 2
+      !ts.isCallExpression(node) ||
+      !ts.isIdentifier(node.expression) ||
+      node.expression.text !== 'render' ||
+      node.arguments.length < 2
     ) {
-      const target = node.arguments[1];
-      const id = resolveTargetId(ts, target, sf);
-      if (id !== null && id !== APP_MOUNT_ID) {
-        const { line, character } = sf.getLineAndCharacterOfPosition(target.getStart(sf));
-        findings.push({
-          line: line + 1,
-          column: character + 1,
-          id,
-          snippet: target.getText(sf).replace(/\s+/g, ' ').slice(0, 72),
-        });
-      }
+      return;
     }
-    ts.forEachChild(node, visit);
-  };
 
-  visit(sf);
+    const target = node.arguments[1];
+    const id = resolveTargetId(ts, target, sf);
+    if (id !== null && id !== APP_MOUNT_ID) {
+      findings.push({ ...positionOf(target, sf), id, snippet: snippetOf(target, sf) });
+    }
+  });
+
   return findings;
 }
 
@@ -148,20 +143,23 @@ export function scanMountTargets(ts: TsModule, source: string, fileName: string)
   return scanMountTargetsIn(ts, createAppSourceFile(ts, fileName, source));
 }
 
+const LABEL: GuardLabel = { label: 'app mount point', noun: 'bad render target' };
+
 /**
  * Render findings as a compile error body.
  *
- * ASCII only: this message reaches the user through Bun's plugin error path,
- * which mangles non-ASCII bytes (an em dash arrives as `â`).
+ * ASCII only, like every guard message -- see `guard-report.ts`.
  */
 export function formatMountFindings(fileName: string, findings: MountFinding[]): string {
-  const lines = findings.map(
-    (f) =>
-      `${fileName}:${f.line}:${f.column}: ${f.snippet}\n` +
-      `  problem: there is no #${f.id} element. The compiler renders exactly one mount point, ` +
-      `#${APP_MOUNT_ID}, so this lookup returns null and the app mounts nothing.\n` +
-      `  fix:     render(App, document.getElementById('${APP_MOUNT_ID}')!)`,
+  return formatGuardFindings(
+    fileName,
+    LABEL,
+    findings.map((f) => ({
+      ...f,
+      problem:
+        `there is no #${f.id} element. The compiler renders exactly one mount point, ` +
+        `#${APP_MOUNT_ID}, so this lookup returns null and the app mounts nothing.`,
+      fix: `render(App, document.getElementById('${APP_MOUNT_ID}')!)`,
+    })),
   );
-  const n = findings.length;
-  return `app mount point: ${n} bad render target${n === 1 ? '' : 's'}\n\n${lines.join('\n\n')}`;
 }

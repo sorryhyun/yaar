@@ -1,36 +1,31 @@
 /**
  * Bun plugins for the app compiler.
  *
- * Provides bundled library support via @bundled/* imports.
- * In bundled exe mode, resolves from embedded or disk-based pre-bundled files.
- * In dev mode, resolves from node_modules via Bun.resolveSync().
+ * Four `onResolve`/`onLoad` hooks, and nothing else: `@bundled/*` resolution,
+ * CSS-as-`<style>`, binary assets as `data:` URIs, and the solid-js/html source
+ * rewrite that also runs the two runtime-contract guards. *What* the bundled
+ * libraries are lives in `registry.ts`; how one is described to an agent lives in
+ * `describe-library.ts`.
+ *
+ * In bundled exe mode, libraries resolve from embedded or disk-based pre-bundled
+ * files. In dev mode, they resolve from node_modules via Bun.resolveSync().
  */
 
-import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
-import { fileURLToPath } from 'url';
-import { scanSourceFile, formatFindings } from './solid-html-guard.js';
-import { scanMountTargetsIn, formatMountFindings } from './mount-guard.js';
-import { describeDesignTokens } from './design-tokens.js';
-import { loadTypeScript } from './load-typescript.js';
-import { createAppSourceFile } from './ts-source.js';
-
-/**
- * Normalize a file path to use forward slashes.
- * On Windows, path.join/resolve produce backslashes which can cause
- * Bun.build() plugin resolution failures ("AggregateError: Bundle failed").
- */
-export const toForwardSlash = (p: string): string => p.replace(/\\/g, '/');
-
-/** Directory of this file — inside packages/compiler, where devDependencies are installed. */
-const PLUGIN_DIR = toForwardSlash(dirname(fileURLToPath(import.meta.url)));
-
-/**
- * Shim source directory — always points to src/shims/ regardless of whether
- * this code runs from src/ (dev) or dist/ (built). Shim files are .ts sources
- * consumed by Bun.build(), so they must resolve to the original source location.
- */
-const SHIMS_DIR = toForwardSlash(join(PLUGIN_DIR.replace(/\/dist$/, '/src'), 'shims'));
+import { MODULE_ROOT, SHIMS_DIR } from '../paths.js';
+import { scanSourceFile, formatFindings } from '../guards/solid-html-guard.js';
+import { scanMountTargetsIn, formatMountFindings } from '../guards/mount-guard.js';
+import { loadTypeScript } from '../load-typescript.js';
+import { createAppSourceFile } from '../guards/guard-report.js';
+import { readThrough, type AppSourceCache } from '../build/source-cache.js';
+import {
+  BUNDLED_LIBRARIES,
+  BUNDLED_SHIMS,
+  CONDITIONAL_EXPORT_LIBS,
+  GATED_BUNDLED_LIBRARIES,
+  resolveBrowserEntry,
+  toForwardSlash,
+} from './registry.js';
 
 const DEBUG_BUNDLED_LIBRARIES = process.env.YAAR_DEBUG_BUNDLED_LIBS === '1';
 
@@ -55,122 +50,6 @@ function isExeMode(): boolean {
 }
 
 /**
- * Local shim files that wrap npm libraries with compatibility fixes.
- * When a @bundled/* import matches a shim, it resolves to the shim file
- * instead of the npm package directly.
- */
-export const BUNDLED_SHIMS: Record<string, string> = {
-  anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
-  dompurify: toForwardSlash(join(SHIMS_DIR, 'dompurify.ts')),
-  lodash: toForwardSlash(join(SHIMS_DIR, 'lodash.ts')),
-  'pixi.js': toForwardSlash(join(SHIMS_DIR, 'pixi.ts')),
-  uuid: toForwardSlash(join(SHIMS_DIR, 'uuid.ts')),
-  zod: toForwardSlash(join(SHIMS_DIR, 'zod.ts')),
-  // The yaar SDK is split into internal modules; index.ts is the barrel entry.
-  // onResolve returns this path verbatim, so it must name a file, not a directory.
-  yaar: toForwardSlash(join(SHIMS_DIR, 'yaar', 'index.ts')),
-  'yaar-dev': toForwardSlash(join(SHIMS_DIR, 'yaar-dev.ts')),
-  'yaar-web': toForwardSlash(join(SHIMS_DIR, 'yaar-web.ts')),
-  'yaar-ml': toForwardSlash(join(SHIMS_DIR, 'yaar-ml.ts')),
-};
-
-/**
- * Libraries with browser/node conditional exports that need consistent resolution.
- * Bare imports of these from within bundled code must resolve to the same path as
- * the @bundled/* aliased imports to prevent duplicate module copies.
- */
-const CONDITIONAL_EXPORT_LIBS = ['solid-js', 'solid-js/web', 'solid-js/html', 'solid-js/store'];
-
-/**
- * Map of @bundled/* import names to actual npm module paths.
- * These libraries are installed as devDependencies and bundled into apps.
- * `null` = internal library (resolved from server source, not npm).
- */
-export const BUNDLED_LIBRARIES: Record<string, string> = {
-  'solid-js': 'solid-js',
-  'solid-js/html': 'solid-js/html',
-  'solid-js/web': 'solid-js/web',
-  'solid-js/store': 'solid-js/store',
-  uuid: 'uuid',
-  lodash: 'lodash-es',
-  'date-fns': 'date-fns',
-  clsx: 'clsx',
-  anime: 'animejs',
-  konva: 'konva',
-  three: 'three',
-  'cannon-es': 'cannon-es',
-  xlsx: '@e965/xlsx',
-  'chart.js': 'chart.js',
-  d3: 'd3',
-  diff: 'diff',
-  diff2html: 'diff2html',
-  dompurify: 'dompurify',
-  'matter-js': 'matter-js',
-  tone: 'tone',
-  'pixi.js': 'pixi.js',
-  p5: 'p5',
-  mammoth: 'mammoth',
-  marked: 'marked',
-  prismjs: 'prismjs',
-  zod: 'zod/mini',
-  yaar: 'yaar',
-  'yaar-dev': 'yaar-dev',
-  'yaar-web': 'yaar-web',
-  'yaar-ml': 'yaar-ml',
-};
-
-export const GATED_BUNDLED_LIBRARIES = Object.freeze(
-  Object.keys(BUNDLED_LIBRARIES).filter((name) => name.startsWith('yaar-')),
-);
-
-/**
- * Resolve a npm package to its browser entry point by reading package.json exports.
- *
- * Bun.resolveSync() uses runtime (node/bun) conditions, which for packages like
- * solid-js resolves to the SSR build (dist/server.js) instead of the browser build
- * (dist/solid.js). This helper reads the exports map and picks the browser condition.
- */
-export function resolveBrowserEntry(npmName: string, fromDir: string): string | null {
-  // Split 'solid-js/web' → pkg='solid-js', subpath='./web'
-  const parts = npmName.split('/');
-  const isScoped = npmName.startsWith('@');
-  const pkgName = isScoped ? parts.slice(0, 2).join('/') : parts[0];
-  const subpath =
-    parts.length > (isScoped ? 2 : 1) ? './' + parts.slice(isScoped ? 2 : 1).join('/') : '.';
-
-  try {
-    const pkgJsonPath = Bun.resolveSync(`${pkgName}/package.json`, fromDir);
-    const pkgDir = toForwardSlash(dirname(pkgJsonPath));
-    const pkgJson = JSON.parse(readFileSync(pkgJsonPath, 'utf-8'));
-
-    const exportEntry = pkgJson.exports?.[subpath];
-    if (!exportEntry) return null;
-
-    // Prefer browser > default import condition.
-    // The browser condition can be a string or nested object with import/default.
-    const browser = exportEntry.browser;
-    if (browser) {
-      const entry = typeof browser === 'string' ? browser : (browser.import ?? browser.default);
-      if (entry) return toForwardSlash(join(pkgDir, entry));
-    }
-
-    // Fallback: use the top-level import/default condition.
-    // For solid-js, the top-level `import` points to the browser build (dist/solid.js),
-    // while node/worker/deno conditions point to server.js. If the browser condition
-    // failed to resolve (e.g. on Windows where Bun.resolveSync may behave differently),
-    // the top-level import is still the correct browser build.
-    const topImport = exportEntry.import ?? exportEntry.default;
-    if (typeof topImport === 'string' && !topImport.includes('server')) {
-      return toForwardSlash(join(pkgDir, topImport));
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Resolve an npm package to a browser build under `node_modules`, or null.
  *
  * The ladder is `resolveBrowserEntry` (reads the exports map) then
@@ -184,14 +63,14 @@ export function resolveBrowserEntry(npmName: string, fromDir: string): string | 
  * caller decides what that costs.
  */
 function resolveNpmBrowserPath(npmName: string, label: string): string | null {
-  const browserPath = resolveBrowserEntry(npmName, PLUGIN_DIR);
+  const browserPath = resolveBrowserEntry(npmName, MODULE_ROOT);
   if (browserPath) {
     debugBundledLibrary(`[bundled-lib] ${label} → browser entry ${browserPath}`);
     return browserPath;
   }
 
   try {
-    const resolved = toForwardSlash(Bun.resolveSync(npmName, PLUGIN_DIR));
+    const resolved = toForwardSlash(Bun.resolveSync(npmName, MODULE_ROOT));
     if (CONDITIONAL_EXPORT_LIBS.includes(npmName) && resolved.includes('/server.')) {
       debugBundledLibrary(`[bundled-lib] ${label} → REJECTED SSR build ${resolved}`);
       return null;
@@ -221,7 +100,7 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
       embeddedLibsSnapshot === undefined
         ? 'undefined'
         : `set (${Object.keys(embeddedLibsSnapshot).length} libs: ${Object.keys(embeddedLibsSnapshot).slice(0, 5).join(', ')}...)`
-    }, PLUGIN_DIR=${PLUGIN_DIR}, SHIMS_DIR=${SHIMS_DIR}`,
+    }, MODULE_ROOT=${MODULE_ROOT}, SHIMS_DIR=${SHIMS_DIR}`,
   );
 
   return {
@@ -376,7 +255,7 @@ export function cssFilePlugin(): Bun.BunPlugin {
 
         // Dev mode: resolve from compiler's node_modules
         try {
-          return { path: toForwardSlash(Bun.resolveSync(args.path, PLUGIN_DIR)) };
+          return { path: toForwardSlash(Bun.resolveSync(args.path, MODULE_ROOT)) };
         } catch {
           return undefined;
         }
@@ -483,7 +362,7 @@ export function assetDataUrlPlugin(): Bun.BunPlugin {
  * specifier is assembled at runtime. When unavailable, the guard is skipped but
  * the closing-tag rewrite still runs.
  */
-export function solidHtmlSourcePlugin(): Bun.BunPlugin {
+export function solidHtmlSourcePlugin(sources?: AppSourceCache): Bun.BunPlugin {
   const loadTs = loadTypeScript;
 
   return {
@@ -491,7 +370,10 @@ export function solidHtmlSourcePlugin(): Bun.BunPlugin {
     setup(build: Bun.PluginBuilder) {
       build.onLoad({ filter: /\.tsx?$/ }, async (args: Bun.OnLoadArgs) => {
         const filePath = toForwardSlash(args.path);
-        const text = await Bun.file(filePath).text();
+        // Through the compile's cache when there is one: the token guard read
+        // most of these files already, and this hook must still return the
+        // (possibly rewritten) contents either way.
+        const text = await readThrough(sources, filePath);
         const rewritten = text.replace(/<\/\$\{([^}]+)\}>/g, '</>');
 
         // Cheap text gates so the TS parser only runs on files that could match.
@@ -522,137 +404,4 @@ export function solidHtmlSourcePlugin(): Bun.BunPlugin {
       });
     },
   };
-}
-
-/**
- * Get the list of available bundled libraries.
- */
-export function getAvailableBundledLibraries(): string[] {
-  return Object.keys(BUNDLED_LIBRARIES).filter((k) => !k.includes('/'));
-}
-
-// Lazily cached .d.ts content
-let _dtsContent: string | null = null;
-
-function loadDtsContent(): string {
-  if (_dtsContent == null) {
-    // Always resolve from src/ — the .d.ts lives there, not in dist/
-    const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-    const dtsPath = join(pkgRoot, 'src', 'bundled-types', 'index.d.ts');
-    _dtsContent = readFileSync(dtsPath, 'utf-8');
-  }
-  return _dtsContent;
-}
-
-/**
- * Pseudo-libraries: describable, but not importable.
- *
- * The design tokens are injected as CSS, so they have no `@bundled/*` module and
- * no `.d.ts` block — yet an app agent has to be able to ask what they are. Before
- * this existed, the app prompt told agents to call
- * `describeBundledLibrary({ name: 'design-tokens' })`, which fell through to
- * `null`: the agent asked for the token list, got nothing, and invented plausible
- * names (`--yaar-space-2`) that silently render to nothing.
- */
-const PSEUDO_LIBRARIES: Record<string, () => string> = {
-  'design-tokens': describeDesignTokens,
-};
-
-/**
- * Get detailed type information for a specific bundled library.
- * Extracts the `declare module '@bundled/...'` block(s) from the .d.ts file,
- * plus any preceding interface/type declarations that the module references.
- */
-export function getBundledLibraryDetail(name: string): string | null {
-  const pseudo = PSEUDO_LIBRARIES[name];
-  if (pseudo) return pseudo();
-
-  if (!(name in BUNDLED_LIBRARIES) && !name.includes('/')) return null;
-
-  const content = loadDtsContent();
-
-  // Collect all `declare module '@bundled/<name>...'` blocks
-  const modulePattern = new RegExp(
-    `^declare module '@bundled/${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:/[^']*)?'\\s*\\{`,
-    'gm',
-  );
-  const blocks: string[] = [];
-  let match: RegExpExecArray | null;
-  while ((match = modulePattern.exec(content)) !== null) {
-    blocks.push(sliceBraceBlock(content, match.index));
-  }
-
-  if (blocks.length === 0) return null;
-
-  // For yaar/yaar-dev/yaar-web, also include the declarations they reference.
-  //
-  // Resolution is transitive and covers `type` aliases as well as `interface`es,
-  // because a single `:`-anchored `interface`-only pass answered the question the
-  // caller did not ask. The case that forced it was the old `app.register(config:
-  // YaarAppRegistration)`: the reference sat behind `=` in an `export type
-  // AppRegistration = ...` alias, so it pulled in nothing, and even reaching through
-  // `YaarApp` never rescanned that body. An agent therefore saw a signature naming a
-  // type with no body anywhere in the response, and had to discover the descriptor
-  // shape by assigning `{}` and reading the compile error. `register()` is gone, but
-  // `defineApp`'s `YaarAppDefinition` -> `YaarAppCommands` -> `YaarAppRunParams` chain
-  // has the same depth.
-  const preambles: string[] = [];
-  const resolved = new Set<string>();
-  let frontier = collectYaarRefs(blocks.join('\n\n'));
-  while (frontier.length > 0) {
-    const next: string[] = [];
-    for (const name of frontier) {
-      if (resolved.has(name)) continue;
-      resolved.add(name);
-      const decl = extractTypeDeclaration(content, name);
-      if (!decl) continue;
-      preambles.push(decl);
-      next.push(...collectYaarRefs(decl));
-    }
-    frontier = next;
-  }
-
-  const parts = preambles.length > 0 ? [...preambles, '', ...blocks] : blocks;
-  return parts.join('\n\n');
-}
-
-/** Slice a brace-delimited declaration starting at `start`, balancing nesting. */
-function sliceBraceBlock(content: string, start: number): string {
-  let depth = 0;
-  for (let i = start; i < content.length; i++) {
-    if (content[i] === '{') depth++;
-    else if (content[i] === '}') {
-      depth--;
-      if (depth === 0) return content.slice(start, i + 1);
-    }
-  }
-  return content.slice(start);
-}
-
-/** Every distinct `Yaar*` type name mentioned in a chunk of declaration text. */
-function collectYaarRefs(text: string): string[] {
-  const names = new Set<string>();
-  const pattern = /\bYaar\w+/g;
-  let m: RegExpExecArray | null;
-  while ((m = pattern.exec(text)) !== null) names.add(m[0]);
-  return [...names];
-}
-
-/** Extract a top-level `interface X { ... }` or `type X = ...;` declaration. */
-function extractTypeDeclaration(content: string, name: string): string | null {
-  const ifaceStart = content.search(new RegExp(`^interface ${name}[\\s<{]`, 'm'));
-  if (ifaceStart !== -1) return sliceBraceBlock(content, ifaceStart);
-
-  const alias = new RegExp(`^type ${name}[\\s<=]`, 'm').exec(content);
-  if (!alias) return null;
-  // A type alias runs to the first `;` at brace depth 0 — object-literal and mapped
-  // types nest braces, so the first `;` overall truncates mid-body.
-  let depth = 0;
-  for (let i = alias.index; i < content.length; i++) {
-    const ch = content[i];
-    if (ch === '{') depth++;
-    else if (ch === '}') depth--;
-    else if (ch === ';' && depth === 0) return content.slice(alias.index, i + 1);
-  }
-  return null;
 }

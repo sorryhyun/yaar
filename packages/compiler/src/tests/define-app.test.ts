@@ -31,8 +31,8 @@ import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import { compileTypeScript } from '../compile.js';
 import { initCompiler } from '../config.js';
-import { APP_MOUNT_ID } from '../mount-guard.js';
-import { prebundleLibrary } from '../prebundle.js';
+import { APP_MOUNT_ID } from '../guards/mount-guard.js';
+import { prebundleLibrary } from '../bundled/prebundle.js';
 import { defineApp } from '../shims/yaar/define-app.js';
 import { AppCommandError } from '../shims/yaar/ui.js';
 

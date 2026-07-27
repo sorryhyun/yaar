@@ -209,7 +209,7 @@ AI는 이 모든 것을 `yaar://skills/marketplace` 참조 토픽(`read('yaar://
 
 ## 번들 라이브러리
 
-`@bundled/*` import로 사용 가능 — npm install 불필요. 신뢰할 수 있는 목록은 `packages/compiler/src/plugins.ts`의 `BUNDLED_LIBRARIES`이며, `GET /api/dev/bundled-libraries`에서도 제공됩니다.
+`@bundled/*` import로 사용 가능 — npm install 불필요. 신뢰할 수 있는 목록은 `packages/compiler/src/bundled/registry.ts`의 `BUNDLED_LIBRARIES`이며, `GET /api/dev/bundled-libraries`에서도 제공됩니다.
 
 | 라이브러리 | import 경로 | 용도 |
 |-----------|------------|------|

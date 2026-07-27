@@ -18,7 +18,10 @@
  */
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
-import { extractProtocolFromModules, formatProtocolError } from '../extract-protocol-ast.js';
+import {
+  extractProtocolFromModules,
+  formatProtocolError,
+} from '../protocol/extract-protocol-ast.js';
 
 /** Extract from an in-memory module map rooted at `src/main.ts`. */
 function extract(files: Record<string, string>, entry = 'src/main.ts') {

@@ -17,16 +17,12 @@
  * prebundled artifact to prove no such drop slipped through.
  */
 import { fileURLToPath } from 'url';
-import {
-  BUNDLED_LIBRARIES,
-  BUNDLED_SHIMS,
-  resolveBrowserEntry,
-  toForwardSlash,
-} from './plugins.js';
-import { formatBuildLogs } from './build-app.js';
+import { BUNDLED_LIBRARIES, BUNDLED_SHIMS, resolveBrowserEntry } from './registry.js';
+import { MODULE_ROOT } from '../paths.js';
+import { formatBuildLogs } from '../build/build-app.js';
 
 /** Where devDependencies for bundled libraries are installed (this package). */
-const ANCHOR = toForwardSlash(fileURLToPath(new URL('.', import.meta.url)));
+const ANCHOR = MODULE_ROOT;
 
 /**
  * Some browser builds `require` Node builtins that don't exist in the browser.

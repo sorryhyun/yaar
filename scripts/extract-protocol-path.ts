@@ -9,8 +9,10 @@
  * ones. Same extraction pass, path instead of id.
  */
 
-import { extractProtocolFromDir } from '../packages/compiler/src/extract-protocol-dir.ts';
-import { formatProtocolError } from '../packages/compiler/src/extract-protocol-ast.ts';
+import {
+  extractProtocolFromDir,
+  formatProtocolError,
+} from '../packages/compiler/src/index.ts';
 import { isAbsolute, join, resolve } from 'node:path';
 
 const appDir = process.argv[2];

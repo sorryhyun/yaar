@@ -14,8 +14,9 @@ import {
   cssFilePlugin,
   assetDataUrlPlugin,
   solidHtmlSourcePlugin,
-  toForwardSlash,
-} from './plugins.js';
+} from '../bundled/plugins.js';
+import { toForwardSlash } from '../bundled/registry.js';
+import type { AppSourceCache } from './source-cache.js';
 
 export interface AppBuildOptions {
   /**
@@ -26,6 +27,12 @@ export interface AppBuildOptions {
   minify: boolean;
   /** `app.json`'s `bundles`, gating the `@bundled/yaar-*` SDKs. */
   bundles?: string[];
+  /**
+   * The compile's source cache, so the solid-html hook reads a file the token
+   * guard already read from memory. Absent — as in the fold's throwaway build,
+   * which bundles a generated entry — every read goes to disk as before.
+   */
+  sources?: AppSourceCache;
 }
 
 /** Bundle an app entry point. Resolves on failure too — inspect `.success`. */
@@ -45,7 +52,7 @@ export async function buildAppBundle(
       bundledLibraryPluginBun(options.bundles),
       cssFilePlugin(),
       assetDataUrlPlugin(),
-      solidHtmlSourcePlugin(),
+      solidHtmlSourcePlugin(options.sources),
     ],
   });
 }

@@ -13,22 +13,25 @@
  * two environments answered.
  */
 
-import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import type { AppManifest } from '@yaar/shared';
-import { toForwardSlash } from './plugins.js';
+import { toForwardSlash } from '../bundled/registry.js';
+import { AppSourceCache } from '../build/source-cache.js';
 import {
   APP_REGISTER_REMOVED_MESSAGE,
   extractProtocolFromModules,
   type ProtocolError,
 } from './extract-protocol-ast.js';
-import { loadTypeScript } from './load-typescript.js';
+import { loadTypeScript } from '../load-typescript.js';
 import { foldAppSchemas, type FoldSuccess } from './fold-schemas.js';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
 
 /** Entry candidates, in order. The first that holds a registration wins. */
 const ENTRY_FILES = ['main.ts', 'protocol.ts'] as const;
+
+/** Extensions `resolveModulePath` will try — anything a specifier could name. */
+const MODULE_EXTENSIONS = /\.(ts|tsx|mts|js|jsx)$/;
 
 export interface DirExtraction {
   /** The manifest, or null when the app declares no protocol (or was refused). */
@@ -52,22 +55,10 @@ export interface DirExtraction {
  * root (`src/foo.ts`) so extractor diagnostics name a path the author
  * recognizes.
  */
-function readModuleTexts(srcDir: string): Map<string, string> {
-  const texts = new Map<string, string>();
+function readModuleTexts(srcDir: string, sources?: AppSourceCache): Map<string, string> {
   // Matches the extensions `resolveModulePath` will try, so a specifier that
   // resolves in principle can also be read.
-  const entries = new Bun.Glob('**/*.{ts,tsx,mts,js,jsx}').scanSync({
-    cwd: srcDir,
-    onlyFiles: true,
-  });
-  for (const rel of entries) {
-    try {
-      texts.set(toForwardSlash(join('src', rel)), readFileSync(join(srcDir, rel), 'utf8'));
-    } catch {
-      // Unreadable file — the bundler reports it far better than we can.
-    }
-  }
-  return texts;
+  return (sources ?? new AppSourceCache(srcDir)).collect(MODULE_EXTENSIONS);
 }
 
 export interface DirExtractOptions {
@@ -88,6 +79,12 @@ export interface DirExtractOptions {
    * already passed.
    */
   bundles?: string[];
+  /**
+   * The caller's per-compile source cache. `compileTypeScript` passes the one it
+   * already filled for the token guard; the deploy and tooling paths pass none
+   * and this reads the directory itself.
+   */
+  sources?: AppSourceCache;
 }
 
 /**
@@ -225,7 +222,7 @@ export async function extractProtocolFromDir(
   if (ts) {
     let texts: Map<string, string>;
     try {
-      texts = readModuleTexts(srcDir);
+      texts = readModuleTexts(srcDir, options.sources);
     } catch (err) {
       // Not the same as "this app declares no protocol", and must not report as
       // it: an unreadable source directory is a failure to *look*, and the
@@ -331,7 +328,7 @@ export async function extractProtocolFromDir(
   // commands vanish from the manifest while the build stays green is exactly the
   // failure it exists to prevent. The AST path refuses the same call with the same
   // reasoning, so both environments answer alike.
-  const registers = findRegisterCall(srcDir);
+  const registers = findRegisterCall(srcDir, options.sources);
   if (registers) {
     return {
       protocol: null,
@@ -357,7 +354,7 @@ export async function extractProtocolFromDir(
  * — is not this app's registration and must not fail the build. Without a
  * binding resolver the import is the closest available proxy for the same rule.
  */
-function findRegisterCall(srcDir: string): string | null {
+function findRegisterCall(srcDir: string, sources?: AppSourceCache): string | null {
   const rank = (path: string): number => {
     const index = ENTRY_FILES.findIndex((file) => path === `src/${file}`);
     return index === -1 ? ENTRY_FILES.length : index;
@@ -365,7 +362,7 @@ function findRegisterCall(srcDir: string): string | null {
 
   let texts: Map<string, string>;
   try {
-    texts = readModuleTexts(srcDir);
+    texts = readModuleTexts(srcDir, sources);
   } catch {
     return null;
   }

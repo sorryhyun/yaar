@@ -7,7 +7,7 @@
 import { readFile, unlink } from 'fs/promises';
 import { dirname, join, resolve } from 'path';
 import { getCompilerConfig } from './config.js';
-import { GATED_BUNDLED_LIBRARIES, toForwardSlash } from './plugins.js';
+import { GATED_BUNDLED_LIBRARIES, toForwardSlash } from './bundled/registry.js';
 import { loadTypeScript } from './load-typescript.js';
 
 export interface TypecheckResult {

@@ -14,23 +14,33 @@ bun run dev              # Watch mode
 
 ```
 src/
-├── index.ts               # Barrel exports
+├── index.ts               # Barrel exports — the whole public surface, deep imports are internal
 ├── compile.ts             # Core: Bun.build() → HTML wrapper with embedded JS + SDKs
-├── build-app.ts           # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs
-├── plugins.ts             # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
-├── prebundle.ts           # prebundleLibrary(name) — shared by scripts/prebundle-libs.js and the completeness test
-├── ts-source.ts           # createAppSourceFile() — one parse per file, handed to both guards
-├── solid-html-guard.ts    # Classifies broken solid-js/html templates (AST-based, fails the build)
-├── mount-guard.ts         # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
-├── design-token-guard.ts  # Rejects var(--yaar-*) names that can never resolve
-├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── typecheck.ts           # tsc integration (loose mode, 30s timeout)
-├── extract-protocol-dir.ts # Protocol extraction entry point — picks the AST reader or the fold
-├── extract-protocol-ast.ts # AST protocol extraction: follows relative imports + spreads, hard-errors on the unresolvable
-├── fold-schemas.ts        # Runs a defineApp app in a Worker to read Zod schemas (and the whole manifest, without `typescript`)
+├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
+├── paths.ts               # MODULE_ROOT / PACKAGE_ROOT / SHIMS_DIR — the one src-vs-dist derivation
 ├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens() (generated token reference)
-├── build-manifest.ts      # SHA-256 source/app.json hashing for staleness detection
+├── build/
+│   ├── build-app.ts       # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs
+│   ├── source-cache.ts    # AppSourceCache — one read of each source file per compile, never across two
+│   └── build-manifest.ts  # SHA-256 source/app.json hashing for staleness detection
+├── bundled/
+│   ├── registry.ts        # BUNDLED_LIBRARIES / BUNDLED_SHIMS / GATED_* / resolveBrowserEntry — data, no Bun API
+│   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
+│   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent (+ design-tokens pseudo-library)
+│   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/prebundle-libs.js and the completeness test
+├── guards/
+│   ├── guard-report.ts    # createAppSourceFile/walk/snippet/format — the shape all three guards share (ASCII rule lives here)
+│   ├── solid-html-guard.ts # Classifies broken solid-js/html templates (AST-based, fails the build)
+│   ├── mount-guard.ts     # APP_MOUNT_ID + rejects render() into an element the wrapper never emits
+│   └── design-token-guard.ts # Rejects var(--yaar-*) names that can never resolve
+├── protocol/
+│   ├── extract-protocol-dir.ts   # Protocol extraction entry point — picks the AST reader or the fold
+│   ├── extract-protocol-ast.ts   # What `defineApp` means: locate the call, build the manifest, public entry points
+│   ├── protocol-extractor.ts     # The reader: resolve a name, unwrap a value, flatten an object literal
+│   ├── protocol-module-graph.ts  # Specifier resolution + per-module binding index (ModuleScope), ProtocolError
+│   └── fold-schemas.ts    # Runs a defineApp app in a Worker to read Zod schemas (and the whole manifest, without `typescript`)
 ├── bundled-types/
 │   └── index.d.ts         # Type declarations for all @bundled/* imports
 └── shims/
@@ -73,9 +83,9 @@ config. **Those two must agree.** The failure that matters is one-sided: a comma
 fine but never reaches `dist/protocol.json` is invisible to agents while every build signal
 stays green — one real incident shrank 29 commands to 3.
 
-`extract-protocol-dir.ts` is the entry point and picks between two implementations:
+`protocol/extract-protocol-dir.ts` is the entry point and picks between two implementations:
 
-| | `extract-protocol-ast.ts` | `fold-schemas.ts` |
+| | the AST reader (`extract-protocol-ast.ts` over `protocol-extractor.ts` / `protocol-module-graph.ts`) | `fold-schemas.ts` |
 |---|---|---|
 | When | `typescript` loads (normal builds) | a `defineApp` app whose schema is not a constant, or any `defineApp` app with no `typescript` |
 | Reach | follows relative imports, `...spreads`, `const` refs, `as const` | whatever the app actually evaluates to |
@@ -109,7 +119,7 @@ missing `description`, a method shorthand, a non-constant `params`/`schema` (out
 rejects the **whole** manifest — a partial manifest is the failure mode, not a consolation
 prize.
 
-### Zod schemas (`fold-schemas.ts`)
+### Zod schemas (`protocol/fold-schemas.ts`)
 
 `defineApp` accepts a Zod schema wherever a JSON-Schema literal goes. `z.object({...})` is a
 builder chain, not a constant, so the static evaluator *defers* it — records the descriptor
@@ -170,9 +180,9 @@ each derives its expectation from the compiler's own output so it cannot drift.
 
 | Guard | Rejects | Why tsc can't |
 |---|---|---|
-| `solid-html-guard.ts` | `html` templates that drop text or throw a stackless `SyntaxError` | the template is parsed at runtime by `new Function` |
-| `mount-guard.ts` | `render(App, document.getElementById('root'))` — any id but `APP_MOUNT_ID` | `getElementById('root')!` is perfectly well-typed |
-| `design-token-guard.ts` | `var(--yaar-space-2)` — a token the compiler never defines | CSS custom properties are untyped strings |
+| `guards/solid-html-guard.ts` | `html` templates that drop text or throw a stackless `SyntaxError` | the template is parsed at runtime by `new Function` |
+| `guards/mount-guard.ts` | `render(App, document.getElementById('root'))` — any id but `APP_MOUNT_ID` | `getElementById('root')!` is perfectly well-typed |
+| `guards/design-token-guard.ts` | `var(--yaar-space-2)` — a token the compiler never defines | CSS custom properties are untyped strings |
 
 - **Mount:** `APP_MOUNT_ID` is the single source of truth — `generateHtmlWrapper` emits
   `<div id="${APP_MOUNT_ID}">` and the guard checks against the same constant. Scoped to
@@ -185,9 +195,12 @@ each derives its expectation from the compiler's own output so it cannot drift.
   raw Levenshtein puts `--yaar-bg-hover` closer to `--yaar-border` (5 edits) than to the
   token actually meant, `--yaar-bg-surface-hover` (8).
 - Guard messages must be **ASCII**: those raised from a Bun plugin pass through an error
-  path that mangles non-ASCII bytes (an em dash arrives as `â`).
+  path that mangles non-ASCII bytes (an em dash arrives as `â`). The rule, the walk, the
+  snippet, and the `path:line:col` / `problem:` / `fix:` rendering live once in
+  `guards/guard-report.ts`; `guard-report.test.ts` asserts the ASCII half. Each guard keeps
+  its own headline (`solid-js/html: 2 broken templates`) — parameterized, not unified.
 
-## Bun Plugins (`plugins.ts`)
+## Bun Plugins (`bundled/plugins.ts`)
 
 **`bundledLibraryPluginBun(allowedBundles)`** — resolves `@bundled/*` imports with priority:
 1. Embedded (`globalThis.__YAAR_BUNDLED_LIBS` for standalone exe)
@@ -216,7 +229,8 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 
 ## Bundled Libraries
 
-`getBundledLibraryDetail(name)` backs the agent-facing `describeBundledLibrary`. It slices the
+`getBundledLibraryDetail(name)` (in `bundled/describe-library.ts`) backs the agent-facing
+`describeBundledLibrary`. It slices the
 `declare module '@bundled/<name>…'` blocks out of `bundled-types/index.d.ts` and prepends the
 `Yaar*` declarations they reference. **That resolution is transitive and covers `type` aliases
 as well as `interface`s** — a single `:`-anchored, interface-only pass answered a question
@@ -274,6 +288,7 @@ Shims wrap npm packages with compatibility fixes or SDK wrappers:
 ## Key Patterns
 
 - **Lazy SDK caching:** SDK scripts minified on first compile, reused for all subsequent compiles
+- **One read per compile:** `compileTypeScript` creates an `AppSourceCache` and threads it through the token guard, the bundler's source hook, and protocol extraction — three full reads of `src/` became one (80 of 134 reads avoided on `apps/devtools`). It is scoped to the call: a cache that outlived a compile would hand `dev.ts`'s recompile the previous edit's source, green all the way
 - **Refusal over omission:** protocol extraction fails the build rather than emitting a manifest it had to guess around
 - **`</script` escaping:** `generateHtmlWrapper` escapes `</script` sequences in JS to prevent premature tag closing
 - **Deterministic hashing:** Source hash computed from sorted file list for consistent staleness detection

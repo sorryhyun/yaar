@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'bun:test';
 import ts from 'typescript';
-import { classifyTemplate, scanSource, type SolidHtmlDefectKind } from '../solid-html-guard.js';
+import {
+  classifyTemplate,
+  scanSource,
+  type SolidHtmlDefectKind,
+} from '../guards/solid-html-guard.js';
 
 /**
  * Every expectation below was verified against the real solid-js browser build,

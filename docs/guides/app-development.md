@@ -227,7 +227,7 @@ The AI reaches all of this through the `yaar://skills/marketplace` reference top
 
 ## Bundled Libraries
 
-Available via `@bundled/*` imports — no npm install needed. The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`, also served at `GET /api/dev/bundled-libraries`.
+Available via `@bundled/*` imports — no npm install needed. The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries`.
 
 | Library | Import Path | Purpose |
 |---------|------------|---------|

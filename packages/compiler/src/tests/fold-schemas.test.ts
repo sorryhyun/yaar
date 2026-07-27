@@ -21,7 +21,7 @@ import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 import { compileTypeScript } from '../compile.js';
 import { initCompiler } from '../config.js';
-import { extractProtocolFromDir } from '../extract-protocol-dir.js';
+import { extractProtocolFromDir } from '../protocol/extract-protocol-dir.js';
 
 setDefaultTimeout(60_000);
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { knownTokens, scanTokens, suggestToken } from '../design-token-guard.js';
+import { knownTokens, scanTokens, suggestToken } from '../guards/design-token-guard.js';
 import { describeDesignTokens } from '../design-tokens.js';
 
 const file = (text: string, path = 'src/main.ts') => ({ path, text });

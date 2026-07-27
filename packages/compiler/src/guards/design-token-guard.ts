@@ -19,7 +19,8 @@
  *     which is the documented way to extend the palette.
  */
 
-import { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
+import { YAAR_DESIGN_TOKENS_CSS } from '../design-tokens.js';
+import { guardHeadline, type GuardLabel } from './guard-report.js';
 
 /** Matches a custom-property *declaration*: `--yaar-foo:` */
 const DECL_RE = /(--yaar-[a-z0-9-]+)\s*:/gi;
@@ -161,7 +162,14 @@ export function scanTokens(files: AppSourceFile[]): TokenFinding[] {
   return findings;
 }
 
-/** Render findings as a compile error body. */
+const LABEL: GuardLabel = { label: 'design tokens', noun: 'undefined token' };
+
+/**
+ * Render findings as a compile error body.
+ *
+ * The per-finding shape is this guard's own — one file set, no snippet, a single
+ * `fix` line — so only the headline comes from `guard-report.ts`.
+ */
 export function formatTokenFindings(findings: TokenFinding[]): string {
   const lines = findings.map((f) => {
     const fix = f.suggestion
@@ -169,9 +177,8 @@ export function formatTokenFindings(findings: TokenFinding[]): string {
       : `no such token — see the YAAR design tokens, or give it a fallback: var(${f.token}, <value>)`;
     return `${f.path}:${f.line}:${f.column}: var(${f.token})\n  ${fix}`;
   });
-  const n = findings.length;
   return (
-    `design tokens: ${n} undefined token${n === 1 ? '' : 's'}\n\n` +
+    `${guardHeadline(LABEL, findings.length)}\n\n` +
     `${lines.join('\n\n')}\n\n` +
     `An undefined custom property makes the whole declaration drop at render time — ` +
     `the app compiles, then shows no spacing/background where you expected it.`

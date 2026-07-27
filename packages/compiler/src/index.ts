@@ -9,22 +9,28 @@ export {
 } from './compile.js';
 export { typecheckSandbox, type TypecheckOptions, type TypecheckResult } from './typecheck.js';
 export {
-  ASSET_MIME_TYPES,
   BUNDLED_LIBRARIES,
   BUNDLED_SHIMS,
   GATED_BUNDLED_LIBRARIES,
   getAvailableBundledLibraries,
-  getBundledLibraryDetail,
   resolveBrowserEntry,
   toForwardSlash,
+} from './bundled/registry.js';
+export { getBundledLibraryDetail } from './bundled/describe-library.js';
+export {
+  ASSET_MIME_TYPES,
   bundledLibraryPluginBun,
   cssFilePlugin,
   assetDataUrlPlugin,
   solidHtmlSourcePlugin,
-} from './plugins.js';
+} from './bundled/plugins.js';
 // The exe's per-library build. `scripts/prebundle-libs.js` and the completeness
 // test both go through here, so the module can move without touching either.
-export { prebundleLibrary, resolvePrebundleEntrypoint, solidExternals } from './prebundle.js';
+export {
+  prebundleLibrary,
+  resolvePrebundleEntrypoint,
+  solidExternals,
+} from './bundled/prebundle.js';
 export {
   classifyTemplate,
   scanSource,
@@ -32,13 +38,13 @@ export {
   type SolidHtmlDefect,
   type SolidHtmlDefectKind,
   type SolidHtmlFinding,
-} from './solid-html-guard.js';
+} from './guards/solid-html-guard.js';
 export {
   APP_MOUNT_ID,
   scanMountTargets,
   formatMountFindings,
   type MountFinding,
-} from './mount-guard.js';
+} from './guards/mount-guard.js';
 export {
   knownTokens,
   suggestToken,
@@ -46,7 +52,7 @@ export {
   formatTokenFindings,
   type AppSourceFile,
   type TokenFinding,
-} from './design-token-guard.js';
+} from './guards/design-token-guard.js';
 export {
   APP_REGISTER_REMOVED_MESSAGE,
   extractProtocolFromModules,
@@ -55,12 +61,12 @@ export {
   type ExtractOptions,
   type ProtocolError,
   type ReadFile,
-} from './extract-protocol-ast.js';
+} from './protocol/extract-protocol-ast.js';
 export {
   extractProtocolFromDir,
   type DirExtraction,
   type DirExtractOptions,
-} from './extract-protocol-dir.js';
+} from './protocol/extract-protocol-dir.js';
 export { loadTypeScript } from './load-typescript.js';
 export { YAAR_DESIGN_TOKENS_CSS, describeDesignTokens } from './design-tokens.js';
 export {
@@ -71,4 +77,4 @@ export {
   computeAppJsonHash,
   COMPILER_VERSION,
   type BuildManifest,
-} from './build-manifest.js';
+} from './build/build-manifest.js';

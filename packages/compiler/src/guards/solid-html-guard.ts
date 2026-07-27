@@ -15,7 +15,14 @@
  * false positives from nested templates or multi-line markup.
  */
 
-import { createAppSourceFile } from './ts-source.js';
+import {
+  createAppSourceFile,
+  formatGuardFindings,
+  positionOf,
+  snippetOf,
+  walk,
+  type GuardLabel,
+} from './guard-report.js';
 
 /** The comment marker solid substitutes for each `${...}` expression. */
 const MARKER = '<!--#-->';
@@ -82,8 +89,7 @@ export function classifyTemplate(statics: readonly string[]): SolidHtmlDefect | 
       kind: 'lone-expression',
       problem:
         'the only top-level node is the expression, so solid emits `.firstChild` with no parent and `new Function` throws a SyntaxError',
-      // ASCII only: this reaches the user through Bun's plugin error path, which
-      // mangles non-ASCII bytes (an em dash arrives as `â`).
+      // ASCII only, like every guard message -- see `guard-report.ts`.
       fix: 'return the accessor directly instead of wrapping it (`() => x` rather than html`${x}`), or give the template markup',
     };
   }
@@ -113,28 +119,20 @@ export function scanSourceFile(
 ): SolidHtmlFinding[] {
   const findings: SolidHtmlFinding[] = [];
 
-  const visit = (node: import('typescript').Node): void => {
-    if (ts.isTaggedTemplateExpression(node) && node.tag.getText(sf) === 'html') {
-      const tpl = node.template;
-      const statics = ts.isNoSubstitutionTemplateLiteral(tpl)
-        ? [tpl.text]
-        : [tpl.head.text, ...tpl.templateSpans.map((s) => s.literal.text)];
+  walk(ts, sf, (node) => {
+    if (!ts.isTaggedTemplateExpression(node) || node.tag.getText(sf) !== 'html') return;
 
-      const defect = classifyTemplate(statics);
-      if (defect) {
-        const { line, character } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
-        findings.push({
-          ...defect,
-          line: line + 1,
-          column: character + 1,
-          snippet: node.getText(sf).replace(/\s+/g, ' ').slice(0, 72),
-        });
-      }
+    const tpl = node.template;
+    const statics = ts.isNoSubstitutionTemplateLiteral(tpl)
+      ? [tpl.text]
+      : [tpl.head.text, ...tpl.templateSpans.map((s) => s.literal.text)];
+
+    const defect = classifyTemplate(statics);
+    if (defect) {
+      findings.push({ ...defect, ...positionOf(node, sf), snippet: snippetOf(node, sf) });
     }
-    ts.forEachChild(node, visit);
-  };
+  });
 
-  visit(sf);
   return findings;
 }
 
@@ -148,13 +146,9 @@ export function scanSource(ts: TsModule, source: string, fileName: string): Soli
   return scanSourceFile(ts, createAppSourceFile(ts, fileName, source));
 }
 
+const LABEL: GuardLabel = { label: 'solid-js/html', noun: 'broken template' };
+
 /** Render findings as a compile error body. */
 export function formatFindings(fileName: string, findings: SolidHtmlFinding[]): string {
-  const lines = findings.map(
-    (f) =>
-      `${fileName}:${f.line}:${f.column}: ${f.snippet}\n` +
-      `  problem: ${f.problem}\n` +
-      `  fix:     ${f.fix}`,
-  );
-  return `solid-js/html: ${findings.length} broken template${findings.length === 1 ? '' : 's'}\n\n${lines.join('\n\n')}`;
+  return formatGuardFindings(fileName, LABEL, findings);
 }

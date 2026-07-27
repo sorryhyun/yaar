@@ -34,7 +34,7 @@ import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import type { AppManifest } from '@yaar/shared';
 import { listKeybindingIssues } from '@yaar/shared';
-import { buildAppBundle, formatBuildLogs } from './build-app.js';
+import { buildAppBundle, formatBuildLogs } from '../build/build-app.js';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
 

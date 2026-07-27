@@ -5,18 +5,19 @@
  * Uses Bun.build() and Bun.Transpiler for compilation.
  */
 
-import { mkdir, readdir, stat } from 'fs/promises';
+import { mkdir, stat } from 'fs/promises';
 import { join } from 'path';
-import { buildAppBundle, formatBuildLogs } from './build-app.js';
-import { formatProtocolError } from './extract-protocol-ast.js';
-import { extractProtocolFromDir } from './extract-protocol-dir.js';
+import { buildAppBundle, formatBuildLogs } from './build/build-app.js';
+import { AppSourceCache } from './build/source-cache.js';
+import { formatProtocolError } from './protocol/extract-protocol-ast.js';
+import { extractProtocolFromDir } from './protocol/extract-protocol-dir.js';
 import { getCompilerConfig } from './config.js';
 import {
   computeSourceHash,
   computeAppJsonHash,
   writeBuildManifest,
   COMPILER_VERSION,
-} from './build-manifest.js';
+} from './build/build-manifest.js';
 import {
   IFRAME_IME_GUARD_SCRIPT,
   IFRAME_CAPTURE_HELPER_SCRIPT,
@@ -30,8 +31,12 @@ import {
   FONT_SANS,
 } from '@yaar/shared';
 import { YAAR_DESIGN_TOKENS_CSS } from './design-tokens.js';
-import { scanTokens, formatTokenFindings, type AppSourceFile } from './design-token-guard.js';
-import { APP_MOUNT_ID } from './mount-guard.js';
+import {
+  scanTokens,
+  formatTokenFindings,
+  type AppSourceFile,
+} from './guards/design-token-guard.js';
+import { APP_MOUNT_ID } from './guards/mount-guard.js';
 
 /**
  * Get the sandbox directory path.
@@ -166,9 +171,10 @@ function escapeHtml(text: string): string {
 async function compileWithBun(
   entryPoint: string,
   minify: boolean,
-  bundles?: string[],
+  bundles: string[] | undefined,
+  sources: AppSourceCache,
 ): Promise<string> {
-  const result = await buildAppBundle(entryPoint, { minify, bundles });
+  const result = await buildAppBundle(entryPoint, { minify, bundles, sources });
 
   if (!result.success) {
     const errors = formatBuildLogs(result.logs, {
@@ -197,15 +203,8 @@ const TOKEN_SCAN_EXTENSIONS = /\.(tsx?|css)$/;
  * undefined. Reading the directory (rather than following imports) also covers
  * `.css` files, which the bundler hands to a different loader.
  */
-async function readAppSources(srcDir: string): Promise<AppSourceFile[]> {
-  const entries = await readdir(srcDir, { recursive: true });
-  const files = entries.filter((rel) => TOKEN_SCAN_EXTENSIONS.test(rel));
-  return Promise.all(
-    files.map(async (rel) => ({
-      path: join('src', rel),
-      text: await Bun.file(join(srcDir, rel)).text(),
-    })),
-  );
+function readAppSources(sources: AppSourceCache): AppSourceFile[] {
+  return [...sources.collect(TOKEN_SCAN_EXTENSIONS)].map(([path, text]) => ({ path, text }));
 }
 
 /**
@@ -230,6 +229,11 @@ export async function compileTypeScript(
     };
   }
 
+  // One read of each source file for the whole compile: the token guard, the
+  // bundler's source hook, and protocol extraction all go through it. Scoped to
+  // this call on purpose -- see `source-cache.ts`.
+  const sources = new AppSourceCache(join(sandboxPath, 'src'));
+
   try {
     // Ensure dist directory exists
     await mkdir(distDir, { recursive: true });
@@ -237,11 +241,11 @@ export async function compileTypeScript(
     // Reject tokens that can never resolve, before paying for a bundle.
     // (The mount guard runs inside solidHtmlSourcePlugin, which already has the
     // parsed source of every reachable file.)
-    const tokenFindings = scanTokens(await readAppSources(join(sandboxPath, 'src')));
+    const tokenFindings = scanTokens(readAppSources(sources));
     if (tokenFindings.length > 0) throw new Error(formatTokenFindings(tokenFindings));
 
     // Bundle TypeScript to JavaScript
-    const jsCode = await compileWithBun(entryPoint, minify, options.bundles);
+    const jsCode = await compileWithBun(entryPoint, minify, options.bundles, sources);
 
     // Protocol gate — after bundling so genuine build errors keep precedence.
     // A registration whose commands/state only partially parse used to write a
@@ -254,6 +258,7 @@ export async function compileTypeScript(
     // deploy and tooling callers too, not only for a compile that passes it.
     const extraction = await extractProtocolFromDir(join(sandboxPath, 'src'), {
       bundles: options.bundles,
+      sources,
     });
     if (extraction.errors.length > 0) {
       return {

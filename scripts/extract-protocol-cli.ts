@@ -8,8 +8,10 @@
  * descriptors, extract after, diff.
  */
 
-import { extractProtocolFromDir } from '../packages/compiler/src/extract-protocol-dir.ts';
-import { formatProtocolError } from '../packages/compiler/src/extract-protocol-ast.ts';
+import {
+  extractProtocolFromDir,
+  formatProtocolError,
+} from '../packages/compiler/src/index.ts';
 import { join } from 'node:path';
 
 const appId = process.argv[2];
