@@ -84,7 +84,27 @@ function maybeGzip(
   return Bun.gzipSync(new Uint8Array(body));
 }
 
+/** The path prefixes this file owns. Anything else belongs to a later handler. */
+function ownsPath(pathname: string): boolean {
+  return (
+    pathname.startsWith('/api/pdf/') ||
+    pathname.startsWith('/api/apps/') ||
+    pathname.startsWith('/api/storage')
+  );
+}
+
 export async function handleFileRoutes(req: Request, url: URL): Promise<Response | null> {
+  // Claim the path *before* resolving the caller. This handler runs just ahead of
+  // static.ts, so it sees every frontend asset request on its way past — and
+  // `resolvePrincipal` refuses a token-less request that carries the app origin. A
+  // principal resolved for a path this file doesn't own turned that refusal into a
+  // 403 on public frontend assets: an origin-isolated app (any `source:'user'` app,
+  // served from 127.0.0.1) fetches `/NanumSquareNeoOTF-Rg.otf` for the @font-face
+  // block the compiler injects, a CSS-initiated font fetch cannot attach an iframe
+  // token, and the font 403'd instead of falling through to static.ts — which serves
+  // it unauthenticated by design (`isStaticAsset`).
+  if (!ownsPath(url.pathname)) return null;
+
   const principal = resolvePrincipal(req, url);
   if (principal instanceof Response) return principal;
 
