@@ -30,8 +30,12 @@ import { relative, resolve } from 'path';
 import { BUNDLED_LIBRARIES } from '../packages/compiler/src/index.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..');
+/**
+ * Docs that enumerate the `@bundled/*` surface and must match it exactly.
+ * The root `CLAUDE.md` is deliberately absent: it summarizes the surface and
+ * points at `BUNDLED_LIBRARIES` rather than restating every import.
+ */
 const BUNDLED_LIBRARY_DOCS = [
-  'CLAUDE.md',
   'packages/compiler/CLAUDE.md',
   'docs/guides/app-development.md',
   'docs/ko/app-development.md',
