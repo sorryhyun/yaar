@@ -176,20 +176,47 @@ export async function noteRecentEvent(characterId: string, entry: string): Promi
 }
 
 /**
- * Store an uploaded avatar and show it immediately.
+ * Store a character's picture and show it immediately.
  *
- * The extension rides in the path because that is what the storage layer reads the
- * mime type off on the way back out — a bare `avatar` file returns as text and would
+ * The bytes arrive already squared — `avatar.ts` owns the canvas pass, so this stays a
+ * write. The extension rides in the path because that is what the storage layer reads
+ * the mime type off on the way back out: a bare `avatar` file returns as text and would
  * render as a broken image.
  */
 export async function saveAvatar(
   characterId: string,
   base64: string,
   mimeType: string,
-): Promise<void> {
+): Promise<string> {
   const ext = mimeType.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'png';
   const path = `characters/${characterId}/avatar.${ext}`;
+  const previous = characterOf(characterId)?.avatarPath;
+
   await appStorage.save(path, base64, { encoding: 'base64' });
   await updateCharacter(characterId, { avatarPath: path });
   setAvatars({ ...avatars(), [characterId]: `data:${mimeType};base64,${base64}` });
+
+  // Last, and only once the new file is on disk: a picture uploaded as a .jpg over an
+  // older .png would otherwise leave the previous file orphaned in storage forever.
+  if (previous && previous !== path) await appStorage.remove(previous).catch(() => {});
+  return path;
+}
+
+/**
+ * Take a character's picture away, falling the whole UI back to its emoji.
+ *
+ * The row keeps an empty `avatarPath` rather than losing the key: `update` is a shallow
+ * merge, so an `undefined` would be dropped from the patch and the old path would
+ * survive in the stored document. Empty is falsy everywhere the path is read, which is
+ * the same thing a character written before avatars existed looks like.
+ */
+export async function clearAvatar(characterId: string): Promise<void> {
+  const existing = characterOf(characterId);
+  if (!existing) throw new Error(`No character "${characterId}"`);
+  if (existing.avatarPath) await appStorage.remove(existing.avatarPath).catch(() => {});
+  await updateCharacter(characterId, { avatarPath: '' });
+
+  const next = { ...avatars() };
+  delete next[characterId];
+  setAvatars(next);
 }

@@ -27,6 +27,15 @@ export const [editing, setEditing] = createSignal<string | null>(null);
 /** Which collection the left sidebar displays. */
 export const [libraryView, setLibraryView] = createSignal<'rooms' | 'characters'>('rooms');
 
+/**
+ * The left sidebar's filter box.
+ *
+ * One box for both lists rather than one per tab: the sidebar shows a single collection
+ * at a time, so a per-tab filter would be a filter the user cannot see the effect of.
+ * Typing here narrows the rooms *and* the cast, and switching tabs keeps the needle.
+ */
+export const [libraryFilter, setLibraryFilter] = createSignal('');
+
 /** Which of the four persona documents the open editor is showing. */
 export const [editingDoc, setEditingDoc] = createSignal<PersonaKey>('inANutshell');
 

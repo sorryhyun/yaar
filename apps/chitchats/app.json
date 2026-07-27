@@ -9,7 +9,16 @@
   "personas": {
     "max": 4
   },
-  "version": "1.0.1",
+  "version": "1.1.0",
   "author": "YAAR",
-  "kind": "system"
+  "kind": "system",
+  "permissions": [
+    {
+      "uri": "yaar://storage/",
+      "verbs": [
+        "read",
+        "list"
+      ]
+    }
+  ]
 }

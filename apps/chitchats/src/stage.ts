@@ -7,7 +7,7 @@
  * The views call in here; nothing in here reaches back out to a view.
  */
 
-import { appStorage, showToast, errMsg } from '@bundled/yaar';
+import { appStorage, showToast, showPrompt, errMsg } from '@bundled/yaar';
 
 import {
   rooms,
@@ -20,9 +20,10 @@ import {
   createRoom,
   castInRoom,
   addCharacter,
-  saveAvatar,
+  clearAvatar,
   appendLine,
 } from './store';
+import { blobToDataUrl, setAvatarFrom } from './avatar';
 import { characterTools, hasIdentity } from './persona';
 import { live, spawn, dispose, roster } from './agents';
 import { running, planFor, runTape, stopTape } from './tape';
@@ -103,29 +104,55 @@ export async function send(text: string) {
 
 // ── Cast editing ──────────────────────────────────────────────────
 
+/**
+ * A picture chosen from the file picker.
+ *
+ * The input is cleared before the awaits rather than after: picking the same file twice
+ * in a row fires no `change` event if the value is still sitting there, which reads as
+ * the app ignoring the second attempt.
+ */
 export async function onAvatarPicked(characterId: string, event: Event) {
   const input = event.target as HTMLInputElement;
   const file = input.files?.[0];
+  input.value = '';
   if (!file) return;
 
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error('could not read that file'));
-    reader.readAsDataURL(file);
-  }).catch((err: unknown) => {
-    showToast(errMsg(err), 'error');
-    return '';
-  });
-  if (!dataUrl) return;
-
-  const base64 = dataUrl.slice(dataUrl.indexOf(',') + 1);
   try {
-    await saveAvatar(characterId, base64, file.type || 'image/png');
+    await setAvatarFrom(characterId, { dataUrl: await blobToDataUrl(file) });
   } catch (err) {
     showToast(errMsg(err), 'error');
   }
-  input.value = '';
+}
+
+/**
+ * A picture that already exists in storage — typically something Anima generated.
+ *
+ * A prompt rather than a browser: the shared media tree is other apps' output keyed by
+ * producer, and a picker over it would be a second file manager living inside a 280px
+ * sidebar. The path is what the producing app tells the user anyway.
+ */
+export async function onAvatarFromStorage(characterId: string) {
+  const path = await showPrompt(
+    'Path to an image already in storage — for example media/anima/dragon.png, or a full yaar://storage/… path.',
+    { title: 'Picture from storage', placeholder: 'media/…', okLabel: 'Use it' },
+  );
+  if (!path?.trim()) return;
+
+  try {
+    await setAvatarFrom(characterId, { imagePath: path });
+    showToast('Picture set', 'success');
+  } catch (err) {
+    showToast(errMsg(err), 'error');
+  }
+}
+
+/** Drop a character's picture; everything falls back to its emoji. */
+export async function onAvatarRemoved(characterId: string) {
+  try {
+    await clearAvatar(characterId);
+  } catch (err) {
+    showToast(errMsg(err), 'error');
+  }
 }
 
 export async function newCharacter() {

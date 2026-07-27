@@ -5,11 +5,12 @@
  * avatar) that live on the character row rather than in its persona folder.
  */
 
-import { For } from '@bundled/solid-js';
+import { For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { showConfirm } from '@bundled/yaar';
 
 import {
+  avatars,
   personaOf,
   writePersona,
   updateCharacter,
@@ -19,7 +20,7 @@ import {
 import { PERSONA_DOCS, type Persona, type PersonaDoc, type PersonaKey } from '../persona';
 import { dispose } from '../agents';
 import { editingDoc, setEditingDoc, setEditing } from './state';
-import { onAvatarPicked } from '../stage';
+import { onAvatarPicked, onAvatarFromStorage, onAvatarRemoved } from '../stage';
 
 /** A one-document patch, built so the key stays typed rather than widening to string. */
 function onePatch(key: PersonaKey, body: string): Partial<Persona> {
@@ -68,6 +69,69 @@ const docEditor = (character: Character) => {
   `;
 };
 
+/**
+ * The picture, and the three ways to change it.
+ *
+ * The slot is itself the file picker — clicking a face to replace it is the gesture
+ * every other app has taught — and the buttons beside it are the two things a click on
+ * the slot cannot express. `Remove` only exists while there is something to remove, so
+ * the row is two buttons wide on a character that has never had a picture, which is
+ * what keeps it inside a 280px sidebar.
+ */
+const avatarBlock = (character: Character) => {
+  const src = () => avatars()[character.characterId];
+
+  return html`
+    <div class="cc-avatar-row">
+      <label class="cc-avatar-slot" title="Choose a picture">
+        <${Show}
+          when=${src}
+          fallback=${() => html`<span class="cc-slot-emoji">${() => character.emoji}</span>`}
+        >
+          <img class="cc-slot-img" src=${src} alt="" />
+        </>
+        <input
+          type="file"
+          accept="image/*"
+          onChange=${(e: Event) => onAvatarPicked(character.characterId, e)}
+        />
+      </label>
+
+      <div class="cc-avatar-side">
+        <div class="cc-avatar-actions">
+          <label class="y-btn y-btn-ghost cc-mini cc-upload">
+            Upload
+            <input
+              type="file"
+              accept="image/*"
+              onChange=${(e: Event) => onAvatarPicked(character.characterId, e)}
+            />
+          </label>
+          <button
+            class="y-btn y-btn-ghost cc-mini"
+            title="Use an image already in storage, such as one Anima generated"
+            onClick=${() => onAvatarFromStorage(character.characterId)}
+          >
+            From storage
+          </button>
+          <${Show} when=${src}>
+            <button
+              class="y-btn y-btn-ghost cc-mini"
+              title="Go back to the emoji"
+              onClick=${() => onAvatarRemoved(character.characterId)}
+            >
+              Remove
+            </button>
+          </>
+        </div>
+        <div class="cc-editor-note">
+          Cropped square to 256×256. Without a picture, the emoji is the face.
+        </div>
+      </div>
+    </div>
+  `;
+};
+
 export const editor = (character: Character) => html`
   <div class="cc-editor">
     <div class="cc-editor-row">
@@ -108,15 +172,9 @@ export const editor = (character: Character) => html`
             })}
         />
       </label>
-      <label class="y-btn y-btn-ghost cc-upload">
-        Avatar
-        <input
-          type="file"
-          accept="image/*"
-          onChange=${(e: Event) => onAvatarPicked(character.characterId, e)}
-        />
-      </label>
     </div>
+
+    ${() => avatarBlock(character)}
 
     <div class="cc-editor-row">
       <button class="y-btn y-btn-primary" onClick=${() => setEditing(null)}>Done</button>

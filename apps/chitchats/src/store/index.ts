@@ -69,14 +69,7 @@ export {
   type MessageDoc,
 } from './state';
 
-export {
-  loadRoom,
-  createRoom,
-  removeRoom,
-  renameRoom,
-  castInRoom,
-  uncastFromRoom,
-} from './rooms';
+export { loadRoom, createRoom, removeRoom, renameRoom, castInRoom, uncastFromRoom } from './rooms';
 
 export {
   addCharacter,
@@ -85,6 +78,7 @@ export {
   writePersona,
   noteRecentEvent,
   saveAvatar,
+  clearAvatar,
   type CharacterInput,
 } from './characters';
 

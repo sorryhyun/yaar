@@ -7,4 +7,6 @@ time. Its `addCharacter` command casts someone on request ("make me a grumpy pir
 four third-person markdown documents — a nutshell, timeless traits, a chunked backstory the
 character opens with a `recall` tool, and a diary it writes itself with `memorize`. Those
 documents persist, so a character the user comes back to next week remembers the last
-conversation.
+conversation. A character can also wear a profile picture instead of its emoji: `setAvatar`
+takes any image already in storage, so "draw her and use it as her face" is a portrait from
+Anima and one more call.

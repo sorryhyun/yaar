@@ -24,6 +24,7 @@ import {
   cast,
   openRoom,
   openRoomId,
+  personaOf,
   removeRoom,
   castInRoom,
   uncastFromRoom,
@@ -31,7 +32,14 @@ import {
   type Room,
 } from '../store';
 import { live, dispose } from '../agents';
-import { editing, setEditing, libraryView, setLibraryView } from './state';
+import {
+  editing,
+  setEditing,
+  libraryView,
+  setLibraryView,
+  libraryFilter,
+  setLibraryFilter,
+} from './state';
 import { face } from './views';
 import { editor } from './editor';
 import { switchRoom, newRoom, newCharacter, syncStage } from '../stage';
@@ -45,8 +53,31 @@ import {
 } from './panels';
 
 /** Whether the open room has this character cast. Read inside a tracking scope. */
-const inOpenRoom = (characterId: string) =>
-  (openRoom()?.characterIds ?? []).includes(characterId);
+const inOpenRoom = (characterId: string) => (openRoom()?.characterIds ?? []).includes(characterId);
+
+/** What is currently typed in the filter box, folded for comparison. */
+const needle = () => libraryFilter().trim().toLowerCase();
+
+/** Case-insensitive substring match across whatever a row can cheaply be found by. */
+const matches = (...fields: (string | undefined)[]) => {
+  const query = needle();
+  if (!query) return true;
+  return fields.some((field) => (field ?? '').toLowerCase().includes(query));
+};
+
+/**
+ * The two filtered lists.
+ *
+ * Plain accessors rather than memos: they are read inside `For`, which is already a
+ * tracking scope, and a `createMemo` at module scope has no reactive owner. A character
+ * is findable by its emoji and by its nutshell as well as its name — both are already
+ * in memory (the row and the persona cache), so neither costs a read.
+ */
+const shownRooms = () => rooms().filter((room) => matches(room.name, room.emoji));
+const shownCast = () =>
+  cast().filter((character) =>
+    matches(character.name, character.emoji, personaOf(character.characterId).inANutshell),
+  );
 
 export function charactersSidebar() {
   onCleanup(cancelCharactersClose);
@@ -94,12 +125,33 @@ export function charactersSidebar() {
           </button>
         </div>
 
+        <div class="cc-search">
+          <input
+            class="y-input cc-search-input"
+            type="text"
+            placeholder="Filter rooms and characters…"
+            aria-label="Filter rooms and characters"
+            value=${libraryFilter}
+            onInput=${(e: Event) => setLibraryFilter((e.target as HTMLInputElement).value)}
+          />
+          <${Show} when=${() => libraryFilter() !== ''}>
+            <button
+              class="cc-search-clear"
+              title="Clear the filter"
+              aria-label="Clear the filter"
+              onClick=${() => setLibraryFilter('')}
+            >
+              ✕
+            </button>
+          </>
+        </div>
+
         <div class="cc-panel-rooms">
           <div class="y-label cc-side-head">
             <span>Rooms</span>
             <button class="y-btn y-btn-ghost cc-mini" onClick=${newRoom}>+</button>
           </div>
-          <${For} each=${rooms}>
+          <${For} each=${shownRooms}>
             ${(room: Room) => html`
               <div
                 class="y-list-item cc-room"
@@ -122,17 +174,21 @@ export function charactersSidebar() {
               </div>
             `}
           </>
+
+          <${Show} when=${() => needle() !== '' && shownRooms().length === 0}>
+            <div class="cc-hint cc-no-match">No rooms match that.</div>
+          </>
         </div>
 
         <div class="cc-panel-library">
           <div class="y-label cc-side-head">
-            <span>Everyone · ${() => cast().length}</span>
+            <span>Everyone · ${() => shownCast().length}</span>
             <button class="y-btn y-btn-ghost cc-mini" title="Write a new character" onClick=${newCharacter}>
               +
             </button>
           </div>
 
-          <${For} each=${cast}>
+          <${For} each=${shownCast}>
             ${(character: Character) => {
               const here = () => inOpenRoom(character.characterId);
               const onstage = () => !!live()[character.characterId];
@@ -194,6 +250,10 @@ export function charactersSidebar() {
                 </div>
               `;
             }}
+          </>
+
+          <${Show} when=${() => needle() !== '' && shownCast().length === 0}>
+            <div class="cc-hint cc-no-match">No characters match that.</div>
           </>
         </div>
       </div>

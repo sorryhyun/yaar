@@ -26,12 +26,14 @@ import {
   uncastFromRoom,
   addCharacter,
   removeCharacter,
+  clearAvatar,
   writePersona,
   noteRecentEvent,
   appendLine,
   nextSeq,
 } from './store';
 import { PERSONA_DOCS, findMemory, type Persona } from './persona';
+import { setAvatarFrom } from './avatar';
 import { live, dispose, noteSkip } from './agents';
 import { running, speaker, planFor, runTape } from './tape';
 
@@ -40,7 +42,8 @@ export const appState = {
     description:
       'The open room: its cast, who is onstage, and the transcript. Each cast entry ' +
       "carries the character's nutshell and its memory subtitles rather than its whole " +
-      'persona — read one character in full with getPersona.',
+      'persona — read one character in full with getPersona. `avatarPath` is where the ' +
+      "character's profile picture is stored, or null when it is rendered as its emoji.",
     get: () => ({
       room: openRoom()
         ? { roomId: openRoom()!.roomId, name: openRoom()!.name, emoji: openRoom()!.emoji }
@@ -50,6 +53,7 @@ export const appState = {
         characterId: c.characterId,
         name: c.name,
         emoji: c.emoji,
+        avatarPath: c.avatarPath || null,
         priority: c.priority,
         onstage: !!live()[c.characterId],
         inANutshell: personaOf(c.characterId).inANutshell,
@@ -83,7 +87,8 @@ export const roomCommands = {
       'standalone "## [subtitle]" chunks, each ending with **Present thought:** "…" — ' +
       'these are NOT in the prompt; the character opens one with its recall tool, and the ' +
       'thought is the preview it decides on. Leave `recentEvents` alone: the character ' +
-      'writes that itself. Pass roomId to cast it straight into a room.',
+      'writes that itself. Pass roomId to cast it straight into a room, and avatarPath to ' +
+      'give it a profile picture from an image already in storage (see setAvatar).',
     params: z.object({
       characterId: z.string(),
       name: z.string(),
@@ -94,6 +99,7 @@ export const roomCommands = {
       recentEvents: z.optional(z.string()),
       priority: z.optional(z.number()),
       roomId: z.optional(z.string()),
+      avatarPath: z.optional(z.string()),
     }),
     replay: 'never' as const,
     run: async (p) => {
@@ -111,7 +117,19 @@ export const roomCommands = {
       });
       const roomId = p.roomId ?? openRoomId();
       if (roomId) await castInRoom(roomId, p.characterId);
-      return { characterId: p.characterId, castInto: roomId ?? null };
+
+      // A picture that would not load is not a reason to throw away a character that is
+      // already written: report it and leave the emoji standing.
+      let avatar: string | null = null;
+      let avatarError: string | null = null;
+      if (p.avatarPath) {
+        try {
+          avatar = await setAvatarFrom(p.characterId, { imagePath: p.avatarPath });
+        } catch (err) {
+          avatarError = err instanceof Error ? err.message : String(err);
+        }
+      }
+      return { characterId: p.characterId, castInto: roomId ?? null, avatar, avatarError };
     },
   },
   setPersona: {
@@ -156,6 +174,7 @@ export const roomCommands = {
         characterId: character.characterId,
         name: character.name,
         emoji: character.emoji,
+        avatarPath: character.avatarPath || null,
         priority: character.priority,
         ...persona,
         memories: memoryOf(p.characterId).map(({ subtitle, thought }) => ({
@@ -164,6 +183,39 @@ export const roomCommands = {
         })),
         systemPrompt: systemPromptOf(character),
       };
+    },
+  },
+  setAvatar: {
+    description:
+      'Give a character a profile picture. Pass imagePath for an image already in ' +
+      'storage — a shared path such as media/anima/dragon.png (or the full ' +
+      'yaar://storage/media/… form), or a path in this app own storage — or dataUrl for a ' +
+      'data:image/…;base64,… string. Either way the image is centre-cropped to a 256×256 ' +
+      'PNG and copied into this app storage, so the picture survives the source file being ' +
+      'deleted. It then replaces the emoji everywhere the character appears.',
+    params: z.object({
+      characterId: z.string(),
+      imagePath: z.optional(z.string()),
+      dataUrl: z.optional(z.string()),
+    }),
+    replay: 'never' as const,
+    run: async (p) => {
+      const avatarPath = await setAvatarFrom(p.characterId, {
+        imagePath: p.imagePath,
+        dataUrl: p.dataUrl,
+      });
+      return { characterId: p.characterId, avatarPath };
+    },
+  },
+  clearAvatar: {
+    description:
+      "Remove a character's profile picture and delete the stored image. The character " +
+      'goes back to being rendered as its emoji.',
+    params: z.object({ characterId: z.string() }),
+    replay: 'never' as const,
+    run: async (p) => {
+      await clearAvatar(p.characterId);
+      return { characterId: p.characterId, avatarPath: null };
     },
   },
   removeCharacter: {
