@@ -21,11 +21,20 @@ interface Call {
   init?: RequestInit;
 }
 
-/** Install the proxy over a stub `window`, and report where each call landed. */
-function installProxy(href = 'http://localhost:8000/api/apps/ocr/dist/index.html') {
+/**
+ * Install the proxy over a stub `window`, and report where each call landed.
+ *
+ * `globalToken` is what an injected `<script>window.__YAAR_TOKEN__=...</script>`
+ * would have left behind; pass null to model a page where nothing injected one
+ * and the token rides only in the URL.
+ */
+function installProxy(
+  href = 'http://localhost:8000/api/apps/ocr/dist/index.html',
+  globalToken: string | null = 'tok-123',
+) {
   const real: Call[] = [];
   const window = {
-    __YAAR_TOKEN__: 'tok-123',
+    ...(globalToken === null ? {} : { __YAAR_TOKEN__: globalToken }),
     fetch(input: unknown, init?: RequestInit) {
       real.push({ url: String((input as { url?: string })?.url ?? input), init });
       // Shaped like /api/fetch's envelope so the proxy path can finish unwrapping it;
@@ -35,13 +44,15 @@ function installProxy(href = 'http://localhost:8000/api/apps/ocr/dist/index.html
       );
     },
   } as Record<string, unknown>;
-  const location = { search: '', origin: new URL(href).origin, href };
+  const location = { search: new URL(href).search, origin: new URL(href).origin, href };
 
   // `window` and `location` are parameters, so they shadow Bun's globals inside.
   new Function('window', 'location', IFRAME_FETCH_PROXY_SCRIPT)(window, location);
 
   const proxied = window.fetch as (input: unknown, init?: RequestInit) => Promise<Response>;
   return {
+    /** The stub window, so a test can inject a token after the script installed. */
+    window,
     /** Calls that reached the real fetch (i.e. were not routed through the proxy). */
     real,
     /** Where a URL ended up: the real fetch's target. */
@@ -95,5 +106,50 @@ describe('iframe fetch proxy — URL classification', () => {
     const call = await p.go('/api/storage/apps/self/x.json');
     expect(call.url).toBe('/api/storage/apps/self/x.json');
     expect(new Headers(call.init?.headers).get('X-Iframe-Token')).toBe('tok-123');
+  });
+});
+
+/**
+ * The proxy used to read `window.__YAAR_TOKEN__` once, at install, and never look
+ * at the `__yaar_token` URL param itself. It worked only because `verb-sdk` is
+ * listed ahead of it at both injection sites (`compiler/src/compile.ts` and
+ * `IframeRenderer.tsx`) and back-filled the global from the URL on its way past.
+ * Reordering those arrays — or injecting the proxy on its own — silently dropped
+ * the token from every cross-origin fetch, with nothing to point at the cause.
+ *
+ * These pin the load order out of the contract: the proxy is installed alone,
+ * with no `verb-sdk` ahead of it.
+ */
+describe('iframe fetch proxy — token discovery, standalone', () => {
+  const WITH_URL_TOKEN =
+    'http://localhost:8000/api/apps/ocr/dist/index.html?__yaar_token=tok-from-url';
+
+  it('picks up a URL-only token with no verb-sdk present', async () => {
+    const p = installProxy(WITH_URL_TOKEN, null);
+    const call = await p.go('/api/storage/apps/self/x.json');
+    expect(new Headers(call.init?.headers).get('X-Iframe-Token')).toBe('tok-from-url');
+  });
+
+  it('sends the URL-only token on the proxied cross-origin path too', async () => {
+    const p = installProxy(WITH_URL_TOKEN, null);
+    const call = await p.go('https://example.com/thing.json');
+    expect(call.url).toBe('/api/fetch');
+    expect(new Headers(call.init?.headers).get('X-Iframe-Token')).toBe('tok-from-url');
+  });
+
+  it('prefers a token injected after install over the one in the URL', async () => {
+    // The token is read per call, not snapshotted, so the dev-preview path — which
+    // injects `window.__YAAR_TOKEN__` into a page whose URL carries no token — works
+    // whichever side of the SDK scripts the injection lands on.
+    const p = installProxy(undefined, null);
+    p.window.__YAAR_TOKEN__ = 'tok-injected-late';
+    const call = await p.go('/api/storage/apps/self/x.json');
+    expect(new Headers(call.init?.headers).get('X-Iframe-Token')).toBe('tok-injected-late');
+  });
+
+  it('sends no token header when neither the URL nor the global carries one', async () => {
+    const p = installProxy(undefined, null);
+    const call = await p.go('/api/storage/apps/self/x.json');
+    expect(call.init?.headers).toBeUndefined();
   });
 });

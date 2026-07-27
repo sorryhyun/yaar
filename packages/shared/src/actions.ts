@@ -98,17 +98,11 @@ export interface WindowContent {
 }
 
 /**
- * Window state representation used by both server and frontend.
+ * Presentation fields shared by a window's persisted state and its creation action — the
+ * chrome/placement flags and origin-isolation settings that mean the same thing in both.
  */
-export interface WindowState {
-  id: string;
-  title: string;
-  bounds: WindowBounds;
-  content: WindowContent;
-  locked: boolean;
-  lockedBy?: string;
+export interface WindowPresentation {
   appId?: string;
-  appProtocol?: boolean;
   variant?: WindowVariant;
   dockEdge?: 'top' | 'bottom';
   frameless?: boolean;
@@ -127,26 +121,31 @@ export interface WindowState {
    * computes the sibling loopback alias itself.
    */
   appOrigin?: string;
+}
+
+/**
+ * Window state representation used by both server and frontend.
+ */
+export interface WindowState extends WindowPresentation {
+  id: string;
+  title: string;
+  bounds: WindowBounds;
+  content: WindowContent;
+  locked: boolean;
+  lockedBy?: string;
+  appProtocol?: boolean;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface WindowCreateAction {
+export interface WindowCreateAction extends WindowPresentation {
   type: 'window.create';
   windowId: string;
   title: string;
   bounds: WindowBounds;
   content: WindowContent;
   requestId?: string; // For tracking iframe load feedback
-  appId?: string;
-  variant?: WindowVariant;
-  dockEdge?: 'top' | 'bottom';
-  frameless?: boolean;
-  windowStyle?: Record<string, string | number>;
-  minimized?: boolean;
   iframeToken?: string; // Token for iframe route restriction
-  isolateOrigin?: boolean; // Serve from the isolated app origin (see WindowState.isolateOrigin)
-  appOrigin?: string; // Exact origin to use when the client can't derive it (see WindowState.appOrigin)
 }
 
 export interface WindowCloseAction {

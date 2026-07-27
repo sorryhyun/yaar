@@ -5,12 +5,11 @@
  * so iframe apps can read other windows' content (read-only).
  * Reimplemented over the verb SDK (POST /api/verb).
  */
+import { installGuard, YAAR_NAMESPACE } from './prelude.js';
 export const IFRAME_WINDOWS_SDK_SCRIPT = `
 (function() {
-  if (window.__yaarWindowsInstalled) return;
-  window.__yaarWindowsInstalled = true;
-
-  window.yaar = window.yaar || {};
+  ${installGuard('__yaarWindowsInstalled')}
+  ${YAAR_NAMESPACE}
 
   window.yaar.windows = {
     read: function(windowId) {

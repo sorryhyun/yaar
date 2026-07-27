@@ -5,36 +5,25 @@
  * that dispatch to POST /api/verb with the iframe token header.
  * Uses the same yaar:// URI pattern the agent uses via MCP.
  */
+import { APP_MSG } from '../app-protocol.js';
+import {
+  API_BOOTSTRAP,
+  installGuard,
+  RESPONSE_FROM_PROXY,
+  TOKEN_HEADERS,
+  YAAR_NAMESPACE,
+} from './prelude.js';
+
 export const IFRAME_VERB_SDK_SCRIPT = `
 (function() {
-  if (window.__yaarVerbInstalled) return;
-  window.__yaarVerbInstalled = true;
+  ${installGuard('__yaarVerbInstalled')}
+  ${YAAR_NAMESPACE}
+  ${API_BOOTSTRAP}
+  ${TOKEN_HEADERS}
+  ${RESPONSE_FROM_PROXY}
 
-  window.yaar = window.yaar || {};
-
-  // Read token from URL query param (available immediately for compiled apps)
-  // before handleLoad injects __YAAR_TOKEN__ via script injection.
-  try {
-    var sp = new URLSearchParams(location.search);
-    var urlToken = sp.get('__yaar_token');
-    if (urlToken && !window.__YAAR_TOKEN__) window.__YAAR_TOKEN__ = urlToken;
-  } catch(e) {}
-
-  // App-origin isolation (Stage 1): when this app is served from the sibling
-  // loopback origin, its API calls must target the desktop origin so they cross
-  // the origin boundary. \`__yaar_api\` carries that base; absent (bundled apps,
-  // flag off), API_BASE stays '' and every call below is relative as before.
-  var API_BASE = '';
-  try {
-    var _b = new URLSearchParams(location.search).get('__yaar_api');
-    if (_b && /^https?:\\/\\/[a-zA-Z0-9.:_-]+$/.test(_b)) API_BASE = _b.replace(/\\/$/, '');
-  } catch(e) {}
-
-  function tokenHeaders() {
-    var t = window.__YAAR_TOKEN__ || '';
-    var h = { 'Content-Type': 'application/json' };
-    if (t) h['X-Iframe-Token'] = t;
-    return h;
+  function jsonHeaders() {
+    return tokenHeaders({ 'Content-Type': 'application/json' });
   }
 
   // An app's iframe boots on its own clock: it can fire session-scoped verbs before
@@ -57,7 +46,7 @@ export const IFRAME_VERB_SDK_SCRIPT = `
     attempt = attempt || 0;
     return fetch(API_BASE + '/api/verb', {
       method: 'POST',
-      headers: tokenHeaders(),
+      headers: jsonHeaders(),
       body: JSON.stringify(body)
     }).then(function(res) {
       return res.json().then(function(envelope) {
@@ -84,12 +73,11 @@ export const IFRAME_VERB_SDK_SCRIPT = `
 
   // ── Reactive subscriptions ──
   var __yaarSubs = {};
-  var __yaarSubCounter = 0;
 
   window.addEventListener('message', function(e) {
     if (!e.data) return;
     // Change ping: callback gets the URI string, app re-reads the resource.
-    if (e.data.type === 'yaar:subscription-update') {
+    if (e.data.type === '${APP_MSG.subscriptionUpdate}') {
       var id = e.data.subscriptionId;
       if (__yaarSubs[id]) {
         try { __yaarSubs[id](e.data.uri); } catch(err) {}
@@ -97,7 +85,7 @@ export const IFRAME_VERB_SDK_SCRIPT = `
       return;
     }
     // Stream frame: callback gets the whole frame ({ uri, seq, kind, data, ts }).
-    if (e.data.type === 'yaar:stream-frame') {
+    if (e.data.type === '${APP_MSG.streamFrame}') {
       var sid = e.data.subscriptionId;
       if (__yaarSubs[sid]) {
         try { __yaarSubs[sid](e.data.frame); } catch(err) {}
@@ -109,12 +97,11 @@ export const IFRAME_VERB_SDK_SCRIPT = `
   // Register a subscription and route its server-assigned id to a callback.
   // \`body\` carries the mode ('change' for subscribe, 'stream' for stream).
   function openSubscription(uri, callback, body) {
-    var headers = tokenHeaders();
     body.uri = uri;
     body.action = 'subscribe';
     return fetch(API_BASE + '/api/verb/subscribe', {
       method: 'POST',
-      headers: headers,
+      headers: jsonHeaders(),
       body: JSON.stringify(body)
     }).then(function(res) {
       return res.json();
@@ -126,7 +113,7 @@ export const IFRAME_VERB_SDK_SCRIPT = `
         delete __yaarSubs[serverId];
         return fetch(API_BASE + '/api/verb/subscribe', {
           method: 'POST',
-          headers: headers,
+          headers: jsonHeaders(),
           body: JSON.stringify({ action: 'unsubscribe', subscriptionId: serverId })
         }).then(function() {});
       };
@@ -155,20 +142,7 @@ export const IFRAME_VERB_SDK_SCRIPT = `
     }
     return window.yaar.invoke('yaar://http', payload).then(function(data) {
       if (typeof data === 'string') data = JSON.parse(data);
-      var body;
-      if (data.bodyEncoding === 'base64') {
-        var bin = atob(data.body);
-        var bytes = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        body = bytes.buffer;
-      } else {
-        body = data.body;
-      }
-      return new Response(body, {
-        status: data.status,
-        statusText: data.statusText,
-        headers: data.headers
-      });
+      return responseFromProxyPayload(data);
     });
   };
 })();

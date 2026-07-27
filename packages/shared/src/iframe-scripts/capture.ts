@@ -28,6 +28,7 @@
  * The reason field is what makes a null terminal for the parent — a bare null
  * from an older compiled-in handler stays ignorable. See iframe-bridge/capture.ts.
  */
+import { APP_MSG } from '../app-protocol.js';
 export const IFRAME_CAPTURE_HELPER_SCRIPT = `
 (function() {
   // Hot-upgrade: remove previous handler so only the latest version responds
@@ -37,7 +38,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
 
   function respond(requestId, imageData, reason) {
     window.parent.postMessage({
-      type: 'yaar:capture-response',
+      type: '${APP_MSG.captureResponse}',
       requestId: requestId,
       imageData: imageData,
       // Only attach a reason to failures — a successful response is unchanged.
@@ -419,7 +420,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
   }
 
   function handler(e) {
-    if (!e.data || e.data.type !== 'yaar:capture-request') return;
+    if (!e.data || e.data.type !== '${APP_MSG.captureRequest}') return;
     var requestId = e.data.requestId;
 
     // Tier 0: app-defined capture provider (defineApp({ onCapture }) or a

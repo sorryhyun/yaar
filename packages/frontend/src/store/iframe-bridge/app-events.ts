@@ -26,8 +26,7 @@ export function consumeIframeDragSource() {
 /**
  * Register iframe message handlers via the centralized router.
  *
- * Handles: yaar:app-ready, yaar:app-interaction, yaar:click,
- * yaar:contextmenu, yaar:drag-start.
+ * Handles: yaar:app-ready, yaar:app-interaction, yaar:app-event, yaar:drag-start.
  */
 export function initIframeMessageHandlers() {
   iframeMessages.on('yaar:app-ready', (ctx) => {

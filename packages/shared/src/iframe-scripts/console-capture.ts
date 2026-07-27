@@ -4,10 +4,11 @@
  * Overrides console.log/warn/error/info to post messages to the parent frame.
  * DevTools can listen for these messages to display console output.
  */
+import { APP_MSG } from '../app-protocol.js';
+import { installGuard } from './prelude.js';
 export const IFRAME_CONSOLE_CAPTURE_SCRIPT = `
 (function() {
-  if (window.__yaarConsoleInstalled) return;
-  window.__yaarConsoleInstalled = true;
+  ${installGuard('__yaarConsoleInstalled')}
 
   var MAX_ENTRIES = 200;
   var MAX_ARG_LEN = 1000;
@@ -38,7 +39,7 @@ export const IFRAME_CONSOLE_CAPTURE_SCRIPT = `
     window.__YAAR_CONSOLE.push(entry);
     if (window.__YAAR_CONSOLE.length > MAX_ENTRIES) window.__YAAR_CONSOLE.shift();
     try {
-      window.parent.postMessage({ type: 'yaar:console', level: level, args: entry.args, timestamp: entry.timestamp }, '*');
+      window.parent.postMessage({ type: '${APP_MSG.console}', level: level, args: entry.args, timestamp: entry.timestamp }, '*');
     } catch (e) {}
   }
 

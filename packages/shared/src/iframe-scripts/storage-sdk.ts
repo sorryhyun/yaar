@@ -4,33 +4,24 @@
  * Provides window.yaar.storage with save/read/list/remove/url methods
  * that dispatch to the /api/storage REST endpoints.
  */
+import {
+  API_BOOTSTRAP,
+  installGuard,
+  JSON_ERROR_UNWRAP,
+  TOKEN_HEADERS,
+  YAAR_NAMESPACE,
+} from './prelude.js';
+
 export const IFRAME_STORAGE_SDK_SCRIPT = `
 (function() {
-  if (window.__yaarStorageInstalled) return;
-  window.__yaarStorageInstalled = true;
+  ${installGuard('__yaarStorageInstalled')}
+  ${YAAR_NAMESPACE}
+  ${API_BOOTSTRAP}
+  ${TOKEN_HEADERS}
+  ${JSON_ERROR_UNWRAP}
 
   function encodePath(p) {
     return p.split('/').map(encodeURIComponent).join('/');
-  }
-
-  window.yaar = window.yaar || {};
-
-  var iframeToken = '';
-  var API_BASE = '';
-  try {
-    var sp = new URLSearchParams(location.search);
-    iframeToken = sp.get('__yaar_token') || '';
-    // App-origin isolation (Stage 1): target the desktop origin for /api calls
-    // when this app is served cross-origin. Empty otherwise → relative as before.
-    var _b = sp.get('__yaar_api');
-    if (_b && /^https?:\\/\\/[a-zA-Z0-9.:_-]+$/.test(_b)) API_BASE = _b.replace(/\\/$/, '');
-  } catch(e) {}
-
-  function tokenHeaders(extra) {
-    var h = extra || {};
-    var t = window.__YAAR_TOKEN__ || iframeToken;
-    if (t) h['X-Iframe-Token'] = t;
-    return h;
   }
 
   window.yaar.storage = {
@@ -52,11 +43,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
         headers: tokenHeaders(),
         body: body
       }).then(function(res) {
-        if (!res.ok) {
-          return res.json().catch(function() { return { error: res.statusText }; }).then(function(err) {
-            throw new Error(err.error || 'Save failed');
-          });
-        }
+        if (!res.ok) return throwJsonError(res, 'Save failed');
         return res.json();
       });
     },
@@ -65,11 +52,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       return fetch(API_BASE + '/api/storage/' + encodePath(path), {
         headers: tokenHeaders()
       }).then(function(res) {
-        if (!res.ok) {
-          return res.json().catch(function() { return { error: res.statusText }; }).then(function(err) {
-            throw new Error(err.error || 'Read failed');
-          });
-        }
+        if (!res.ok) return throwJsonError(res, 'Read failed');
         if (mode === 'blob') return res.blob();
         if (mode === 'arraybuffer') return res.arrayBuffer();
         if (mode === 'json') return res.json();
@@ -85,11 +68,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       return fetch(API_BASE + '/api/storage/' + p + '?list=true', {
         headers: tokenHeaders()
       }).then(function(res) {
-        if (!res.ok) {
-          return res.json().catch(function() { return { error: res.statusText }; }).then(function(err) {
-            throw new Error(err.error || 'List failed');
-          });
-        }
+        if (!res.ok) return throwJsonError(res, 'List failed');
         return res.json();
       });
     },
@@ -98,11 +77,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
         method: 'DELETE',
         headers: tokenHeaders()
       }).then(function(res) {
-        if (!res.ok) {
-          return res.json().catch(function() { return { error: res.statusText }; }).then(function(err) {
-            throw new Error(err.error || 'Delete failed');
-          });
-        }
+        if (!res.ok) return throwJsonError(res, 'Delete failed');
         return res.json();
       });
     },
@@ -115,7 +90,7 @@ export const IFRAME_STORAGE_SDK_SCRIPT = `
       // accepts the __yaar_token query param for exactly this case; only this builder
       // never sent it.
       var base = API_BASE + '/api/storage/' + encodePath(path);
-      var t = window.__YAAR_TOKEN__ || iframeToken;
+      var t = yaarToken();
       return t ? base + '?__yaar_token=' + encodeURIComponent(t) : base;
     }
   };

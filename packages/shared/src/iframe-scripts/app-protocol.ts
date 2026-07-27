@@ -11,12 +11,13 @@
  * underscore is the contract, and the public name survives only to throw a
  * message naming `defineApp` rather than a bare "not a function".
  */
+import { APP_MSG } from '../app-protocol.js';
+import { installGuard, YAAR_NAMESPACE } from './prelude.js';
+
 export const IFRAME_APP_PROTOCOL_SCRIPT = `
 (function() {
-  if (window.__yaarAppProtocolInstalled) return;
-  window.__yaarAppProtocolInstalled = true;
-
-  window.yaar = window.yaar || {};
+  ${installGuard('__yaarAppProtocolInstalled')}
+  ${YAAR_NAMESPACE}
 
   var registration = null;
   var aliasMap = {};  // alias → canonical command name
@@ -129,7 +130,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       }
       // Notify parent that this app supports the protocol. noReplay is omitted rather
       // than sent empty so today's frames stay byte-identical for apps that opt nothing out.
-      var readyMsg = { type: 'yaar:app-ready', appId: config.appId };
+      var readyMsg = { type: '${APP_MSG.ready}', appId: config.appId };
       if (noReplay.length) readyMsg.noReplay = noReplay;
       window.parent.postMessage(readyMsg, '*');
     },
@@ -147,7 +148,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         content = JSON.stringify(payload);
       }
       window.parent.postMessage({
-        type: 'yaar:app-interaction',
+        type: '${APP_MSG.interaction}',
         content: content,
         instructions: instructions,
         toMonitor: !!toMonitor
@@ -158,7 +159,7 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       // that subscribed to this channel; undeclared channels are dropped server-side.
       if (typeof channel !== 'string' || !channel) return;
       window.parent.postMessage({
-        type: 'yaar:app-event',
+        type: '${APP_MSG.event}',
         channel: channel,
         payload: payload
       }, '*');
@@ -276,6 +277,47 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     return text;
   }
 
+  // Every answer this SDK sends is the same frame — a type, the requestId it is
+  // answering, and one payload — so it is written once here rather than at each
+  // of the dozen return points below.
+  function reply(type, requestId, payload) {
+    payload.type = type;
+    payload.requestId = requestId;
+    window.parent.postMessage(payload, '*');
+  }
+
+  /**
+   * Run \`produce\` and answer with whatever it does: return a value, return a
+   * thenable, or throw. \`key\` is the field the value lands in ('data' for a
+   * query, 'result' for a command); a failure sends that key as null plus an
+   * \`error\` string, which is the shape the parent bridge reads.
+   *
+   * The try wraps the reply as well as the call, not just the call: a handler
+   * returning something structured-clone cannot carry makes postMessage itself
+   * throw, and that has to come back as an error rather than as silence the
+   * parent can only wait out.
+   */
+  function settle(type, requestId, key, produce, mapValue) {
+    function succeed(value) {
+      var p = {};
+      p[key] = mapValue ? mapValue(value) : value;
+      reply(type, requestId, p);
+    }
+    function fail(err) {
+      var p = {};
+      p[key] = null;
+      p.error = String(err);
+      reply(type, requestId, p);
+    }
+    try {
+      var out = produce();
+      if (out && typeof out.then === 'function') out.then(succeed).catch(fail);
+      else succeed(out);
+    } catch (err) {
+      fail(err);
+    }
+  }
+
   window.addEventListener('message', function(e) {
     if (!e.data || !e.data.type) return;
     var msg = e.data;
@@ -284,43 +326,39 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     // Arbitrary expression evaluation. Reaching this handler at all means the server
     // already checked the window is a devtools preview (handleAppEval) — the iframe
     // cannot verify that itself, so the gate lives on the side that knows.
-    if (msg.type === 'yaar:app-eval-request') {
-      var reply = function(payload) {
-        payload.type = 'yaar:app-eval-response';
-        payload.requestId = requestId;
-        window.parent.postMessage(payload, '*');
+    if (msg.type === '${APP_MSG.evalRequest}') {
+      // Not settle(): an eval failure sends \`error\` alone, with no null-valued
+      // companion key, and its message is unwrapped from the Error rather than
+      // stringified whole.
+      var answerEval = function(payload) { reply('${APP_MSG.evalResponse}', requestId, payload); };
+      var evalFailed = function(err) {
+        answerEval({ error: String(err && err.message || err) });
       };
       try {
         // Indirect eval: runs in global scope, so the expression sees the app's
         // globals rather than this function's locals.
         var out = (0, eval)(msg.expression);
         if (out && typeof out.then === 'function') {
-          out.then(function(v) { reply({ value: serializeEvalValue(v) }); })
-             .catch(function(err) { reply({ error: String(err && err.message || err) }); });
+          out.then(function(v) { answerEval({ value: serializeEvalValue(v) }); }).catch(evalFailed);
         } else {
-          reply({ value: serializeEvalValue(out) });
+          answerEval({ value: serializeEvalValue(out) });
         }
       } catch (err) {
-        reply({ error: String(err && err.message || err) });
+        evalFailed(err);
       }
       return;
     }
 
-    if (msg.type === 'yaar:app-close') {
+    if (msg.type === '${APP_MSG.close}') {
       if (registration && typeof registration.onClose === 'function') {
         try { registration.onClose(); } catch (_) {}
       }
       return;
     }
 
-    if (msg.type === 'yaar:app-manifest-request') {
+    if (msg.type === '${APP_MSG.manifestRequest}') {
       if (!registration) {
-        window.parent.postMessage({
-          type: 'yaar:app-manifest-response',
-          requestId: requestId,
-          manifest: null,
-          error: 'No app registered'
-        }, '*');
+        reply('${APP_MSG.manifestResponse}', requestId, { manifest: null, error: 'No app registered' });
         return;
       }
       // Build manifest: strip handlers, expose only descriptions + schemas
@@ -354,82 +392,40 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
           if (c.replay) manifest.commands[key].replay = c.replay;
         }
       }
-      window.parent.postMessage({
-        type: 'yaar:app-manifest-response',
-        requestId: requestId,
-        manifest: manifest
-      }, '*');
+      reply('${APP_MSG.manifestResponse}', requestId, { manifest: manifest });
       return;
     }
 
-    if (msg.type === 'yaar:app-query-request') {
+    if (msg.type === '${APP_MSG.queryRequest}') {
       // Reserved built-in state key: expose the console-capture buffer without
       // requiring the app to register. Lets tooling (e.g. devtools) read a preview
       // app's console output over the app protocol.
       if (msg.stateKey === '__console') {
-        window.parent.postMessage({
-          type: 'yaar:app-query-response',
-          requestId: requestId,
-          data: window.__YAAR_CONSOLE || []
-        }, '*');
+        reply('${APP_MSG.queryResponse}', requestId, { data: window.__YAAR_CONSOLE || [] });
         return;
       }
       if (!registration || !registration.state || !registration.state[msg.stateKey]) {
-        window.parent.postMessage({
-          type: 'yaar:app-query-response',
-          requestId: requestId,
+        reply('${APP_MSG.queryResponse}', requestId, {
           data: null,
           error: memberError('state', msg.stateKey)
-        }, '*');
+        });
         return;
       }
-      try {
-        var result = registration.state[msg.stateKey].handler();
-        // Handle async handlers
-        if (result && typeof result.then === 'function') {
-          result.then(function(data) {
-            window.parent.postMessage({
-              type: 'yaar:app-query-response',
-              requestId: requestId,
-              data: data
-            }, '*');
-          }).catch(function(err) {
-            window.parent.postMessage({
-              type: 'yaar:app-query-response',
-              requestId: requestId,
-              data: null,
-              error: String(err)
-            }, '*');
-          });
-        } else {
-          window.parent.postMessage({
-            type: 'yaar:app-query-response',
-            requestId: requestId,
-            data: result
-          }, '*');
-        }
-      } catch (err) {
-        window.parent.postMessage({
-          type: 'yaar:app-query-response',
-          requestId: requestId,
-          data: null,
-          error: String(err)
-        }, '*');
-      }
+      settle('${APP_MSG.queryResponse}', requestId, 'data', function() {
+        return registration.state[msg.stateKey].handler();
+      });
       return;
     }
 
-    if (msg.type === 'yaar:app-command-request') {
+    if (msg.type === '${APP_MSG.commandRequest}') {
       var cmdName = msg.command;
       // Resolve alias to canonical command name
       if (aliasMap[cmdName]) cmdName = aliasMap[cmdName];
       if (!registration || !registration.commands || !registration.commands[cmdName]) {
-        window.parent.postMessage({
-          type: 'yaar:app-command-response',
-          requestId: requestId,
+        reply('${APP_MSG.commandResponse}', requestId, {
           result: null,
           error: memberError('command', msg.command)
-        }, '*');
+        });
         return;
       }
       // A command whose params are all optional is normally called with none at all, and
@@ -440,55 +436,20 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       var cmdParams = msg.params || {};
       var badParams = paramsError(cmdName, registration.commands[cmdName], cmdParams);
       if (badParams) {
-        window.parent.postMessage({
-          type: 'yaar:app-command-response',
-          requestId: requestId,
-          result: null,
-          error: badParams
-        }, '*');
+        reply('${APP_MSG.commandResponse}', requestId, { result: null, error: badParams });
         return;
       }
-      try {
+      // A command that acts but returns nothing is normal (play, stop, ...). Send
+      // null rather than undefined: postMessage drops undefined-valued keys, and the
+      // parent bridge reads a response carrying neither result nor error as malformed.
+      var asResult = function(data) { return data === undefined ? null : data; };
+      settle('${APP_MSG.commandResponse}', requestId, 'result', function() {
         // The handler's second argument is context, not another param: a command replayed
         // at a remounted iframe is indistinguishable from a fresh call otherwise, and a
         // handler that wants replay-aware behavior instead of a blanket replay: 'never'
         // has no way to tell them apart.
-        var result = registration.commands[cmdName].handler(cmdParams, { replayed: !!msg.replayed });
-        // A command that acts but returns nothing is normal (play, stop, ...). Send
-        // null rather than undefined: postMessage drops undefined-valued keys, and the
-        // parent bridge reads a response carrying neither result nor error as malformed.
-        var asResult = function(data) { return data === undefined ? null : data; };
-        // Handle async handlers
-        if (result && typeof result.then === 'function') {
-          result.then(function(data) {
-            window.parent.postMessage({
-              type: 'yaar:app-command-response',
-              requestId: requestId,
-              result: asResult(data)
-            }, '*');
-          }).catch(function(err) {
-            window.parent.postMessage({
-              type: 'yaar:app-command-response',
-              requestId: requestId,
-              result: null,
-              error: String(err)
-            }, '*');
-          });
-        } else {
-          window.parent.postMessage({
-            type: 'yaar:app-command-response',
-            requestId: requestId,
-            result: asResult(result)
-          }, '*');
-        }
-      } catch (err) {
-        window.parent.postMessage({
-          type: 'yaar:app-command-response',
-          requestId: requestId,
-          result: null,
-          error: String(err)
-        }, '*');
-      }
+        return registration.commands[cmdName].handler(cmdParams, { replayed: !!msg.replayed });
+      }, asResult);
       return;
     }
   });

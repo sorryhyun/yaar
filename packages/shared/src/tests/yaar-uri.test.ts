@@ -4,6 +4,7 @@ import {
   parseBareWindowUri,
   resolveContentUri,
   expandBraceUri,
+  extractAppId,
 } from '../yaar-uri.js';
 
 // ============ Window URIs (yaar://windows/) ============
@@ -31,6 +32,15 @@ describe('parseBareWindowUri', () => {
 
   it('returns null for non-yaar URI', () => {
     expect(parseBareWindowUri('https://example.com')).toBeNull();
+  });
+
+  it('treats a trailing slash after the windowId as an empty (absent) subPath', () => {
+    // splitFirst('my-win/') → ['my-win', ''] — the '' tail is normalized to undefined here,
+    // same as the no-slash case, unlike resolveContentUri's `rest` which keeps '' as-is.
+    expect(parseBareWindowUri('yaar://windows/my-win/')).toEqual({
+      windowId: 'my-win',
+      subPath: undefined,
+    });
   });
 });
 
@@ -124,6 +134,30 @@ describe('resolveContentUri', () => {
 
   it('resolves shared storage URIs unchanged', () => {
     expect(resolveContentUri('yaar://storage/notes/a.md')).toBe('/api/storage/notes/a.md');
+  });
+
+  it('keeps the trailing slash for a bare app id with a trailing slash', () => {
+    // splitFirst('anima/') → ['anima', ''] — an empty (not undefined) rest, so this does NOT
+    // take the no-slash `/dist/index.html` branch; it falls through to the generic app route.
+    expect(resolveContentUri('yaar://apps/anima/')).toBe('/api/apps/anima/');
+  });
+});
+
+describe('extractAppId', () => {
+  it('extracts the app id when the URI has no further subpath', () => {
+    expect(extractAppId('yaar://apps/anima')).toBe('anima');
+  });
+
+  it('extracts just the app id when a subpath follows', () => {
+    expect(extractAppId('yaar://apps/anima/dist/index.html')).toBe('anima');
+  });
+
+  it('extracts the app id even with a trailing slash', () => {
+    expect(extractAppId('yaar://apps/anima/')).toBe('anima');
+  });
+
+  it('returns null for a non-apps authority', () => {
+    expect(extractAppId('yaar://storage/anima')).toBeNull();
   });
 });
 

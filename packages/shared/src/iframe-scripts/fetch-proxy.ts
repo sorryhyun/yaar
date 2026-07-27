@@ -5,38 +5,30 @@
  * POST /api/fetch, which enforces the domain allowlist.
  * Same-origin and relative URLs pass through to the real fetch.
  */
+import { API_BOOTSTRAP, installGuard, RESPONSE_FROM_PROXY } from './prelude.js';
+
 export const IFRAME_FETCH_PROXY_SCRIPT = `
 (function() {
-  if (window.__yaarFetchProxyInstalled) return;
-  window.__yaarFetchProxyInstalled = true;
+  ${installGuard('__yaarFetchProxyInstalled')}
+  ${API_BOOTSTRAP}
+  ${RESPONSE_FROM_PROXY}
 
   var realFetch = window.fetch.bind(window);
-  var iframeToken = window.__YAAR_TOKEN__ || '';
 
   // Extract sessionId from URL params for domain permission dialogs
   var sessionId = '';
-  // App-origin isolation (Stage 1): the backend the SDK talks to. When this app is
-  // served from the sibling loopback origin, API calls (including our own proxy
-  // endpoint) must target the desktop origin. Empty otherwise → relative as before.
-  var API_BASE = '';
-  var API_ORIGIN = '';
   try {
-    var sp = new URLSearchParams(location.search);
-    var raw = sp.get('sessionId') || '';
+    var raw = new URLSearchParams(location.search).get('sessionId') || '';
     if (/^[a-zA-Z0-9_-]+$/.test(raw)) sessionId = raw;
-    var _b = sp.get('__yaar_api');
-    if (_b && /^https?:\\/\\/[a-zA-Z0-9.:_-]+$/.test(_b)) {
-      API_BASE = _b.replace(/\\/$/, '');
-      try { API_ORIGIN = new URL(API_BASE).origin; } catch(e) {}
-    }
   } catch(e) {}
 
   // Add X-Iframe-Token to same-origin requests for route restriction
   function addTokenHeader(input, init) {
-    if (!iframeToken) return realFetch(input, init);
+    var token = yaarToken();
+    if (!token) return realFetch(input, init);
     var newInit = Object.assign({}, init || {});
     var headers = new Headers(newInit.headers || {});
-    headers.set('X-Iframe-Token', iframeToken);
+    headers.set('X-Iframe-Token', token);
     newInit.headers = headers;
     return realFetch(input, newInit);
   }
@@ -116,7 +108,8 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
       if (redirect === 'manual') payload.redirect = 'manual';
 
       var proxyHeaders = { 'Content-Type': 'application/json' };
-      if (iframeToken) proxyHeaders['X-Iframe-Token'] = iframeToken;
+      var token = yaarToken();
+      if (token) proxyHeaders['X-Iframe-Token'] = token;
 
       return realFetch(API_BASE + '/api/fetch', {
         method: 'POST',
@@ -130,22 +123,7 @@ export const IFRAME_FETCH_PROXY_SCRIPT = `
         });
       }
       return proxyRes.json();
-    }).then(function(data) {
-      var body;
-      if (data.bodyEncoding === 'base64') {
-        var bin = atob(data.body);
-        var bytes = new Uint8Array(bin.length);
-        for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        body = bytes.buffer;
-      } else {
-        body = data.body;
-      }
-      return new Response(body, {
-        status: data.status,
-        statusText: data.statusText,
-        headers: data.headers
-      });
-    });
+    }).then(responseFromProxyPayload);
   };
 })();
 `;

@@ -5,12 +5,12 @@
  * so compiled apps can reactively track the parent's notification state.
  * Parent pushes updates via `yaar:notifications-update` postMessages.
  */
+import { APP_MSG } from '../app-protocol.js';
+import { installGuard, YAAR_NAMESPACE } from './prelude.js';
 export const IFRAME_NOTIFICATIONS_SDK_SCRIPT = `
 (function() {
-  if (window.__yaarNotificationsInstalled) return;
-  window.__yaarNotificationsInstalled = true;
-
-  window.yaar = window.yaar || {};
+  ${installGuard('__yaarNotificationsInstalled')}
+  ${YAAR_NAMESPACE}
 
   var items = [];
   var callbacks = [];
@@ -22,7 +22,7 @@ export const IFRAME_NOTIFICATIONS_SDK_SCRIPT = `
   }
 
   window.addEventListener('message', function(e) {
-    if (!e.data || e.data.type !== 'yaar:notifications-update') return;
+    if (!e.data || e.data.type !== '${APP_MSG.notificationsUpdate}') return;
     items = Array.isArray(e.data.items) ? e.data.items : [];
     notify();
   });

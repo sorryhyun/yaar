@@ -7,10 +7,11 @@
  * 3. Left click — posts `yaar:click` so parent can dismiss overlays
  * 4. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
  */
+import { APP_MSG } from '../app-protocol.js';
+import { installGuard } from './prelude.js';
 export const IFRAME_CONTEXTMENU_SCRIPT = `
 (function() {
-  if (window.__yaarContextMenuInstalled) return;
-  window.__yaarContextMenuInstalled = true;
+  ${installGuard('__yaarContextMenuInstalled')}
 
   // Right-click drawing forwarding — the parent uses right-button drag for
   // freehand drawing, but pointer events don't cross iframe boundaries.
@@ -25,7 +26,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     rightPointerId = e.pointerId;
     try { e.target.setPointerCapture(e.pointerId); } catch(ex) {}
     window.parent.postMessage({
-      type: 'yaar:arrow-drag-start',
+      type: '${APP_MSG.arrowDragStart}',
       clientX: e.clientX,
       clientY: e.clientY
     }, '*');
@@ -34,7 +35,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
   document.addEventListener('pointermove', function(e) {
     if (!rightDragging || e.pointerId !== rightPointerId) return;
     window.parent.postMessage({
-      type: 'yaar:arrow-drag-move',
+      type: '${APP_MSG.arrowDragMove}',
       clientX: e.clientX,
       clientY: e.clientY
     }, '*');
@@ -45,7 +46,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     rightDragging = false;
     rightPointerId = -1;
     window.parent.postMessage({
-      type: 'yaar:arrow-drag-end',
+      type: '${APP_MSG.arrowDragEnd}',
       clientX: e.clientX,
       clientY: e.clientY
     }, '*');
@@ -53,7 +54,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
 
   // Left click — notify parent so it can dismiss overlays, etc.
   document.addEventListener('click', function() {
-    window.parent.postMessage({ type: 'yaar:click' }, '*');
+    window.parent.postMessage({ type: '${APP_MSG.click}' }, '*');
   });
 
   // Always suppress the native context menu inside iframes.
@@ -71,7 +72,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     if (!dominated) return;
     e.preventDefault();
     window.parent.postMessage({
-      type: 'yaar:keydown',
+      type: '${APP_MSG.keydown}',
       key: e.key,
       shiftKey: e.shiftKey,
       ctrlKey: e.ctrlKey,
@@ -98,7 +99,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
     }
     if (!text) return;
     window.parent.postMessage({
-      type: 'yaar:drag-start',
+      type: '${APP_MSG.dragStart}',
       text: text
     }, '*');
   });

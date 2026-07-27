@@ -27,10 +27,10 @@
  * (as a composing keydown), so swallowing it would force users to press Enter
  * twice to submit — the guard would introduce the very annoyance it prevents.
  */
+import { installGuard } from './prelude.js';
 export const IFRAME_IME_GUARD_SCRIPT = `
 (function() {
-  if (window.__yaarImeGuardInstalled) return;
-  window.__yaarImeGuardInstalled = true;
+  ${installGuard('__yaarImeGuardInstalled')}
   if (/Win/.test(navigator.platform)) return;
 
   window.addEventListener('keydown', function(e) {

@@ -164,33 +164,92 @@ export function listKeybindingIssues(
 
 // ── PostMessage types (parent ↔ iframe) ─────────────────────────────
 
+/**
+ * Every `yaar:*` postMessage type, in one place.
+ *
+ * These names were declared three times over — as raw strings inside the
+ * injected iframe scripts, as TS literal types below, and as a hand-written
+ * union in the frontend's `iframeMessageRouter`, whose comment claimed the
+ * scripts "can't participate in the type system". They can: the scripts are
+ * template literals, so a name reaches them by interpolation. The drift that
+ * claim allowed was already visible — `yaar:contextmenu` sat in the frontend
+ * union and in two doc comments while no script posted it and no handler
+ * listened for it.
+ *
+ * A name belongs here once something actually sends or receives it. Adding a
+ * name nothing posts is how the phantom got in.
+ */
+export const APP_MSG = {
+  // App protocol, parent → iframe request / iframe → parent response.
+  manifestRequest: 'yaar:app-manifest-request',
+  manifestResponse: 'yaar:app-manifest-response',
+  queryRequest: 'yaar:app-query-request',
+  queryResponse: 'yaar:app-query-response',
+  commandRequest: 'yaar:app-command-request',
+  commandResponse: 'yaar:app-command-response',
+  evalRequest: 'yaar:app-eval-request',
+  evalResponse: 'yaar:app-eval-response',
+  /** Parent → iframe, fire-and-forget, just before the window is destroyed. */
+  close: 'yaar:app-close',
+
+  // Iframe → parent, fire-and-forget.
+  ready: 'yaar:app-ready',
+  interaction: 'yaar:app-interaction',
+  event: 'yaar:app-event',
+
+  // Self-capture (iframe-scripts/capture.ts).
+  captureRequest: 'yaar:capture-request',
+  captureResponse: 'yaar:capture-response',
+
+  // Pointer and keyboard forwarding out of the iframe
+  // (iframe-scripts/contextmenu.ts) — events do not cross the frame boundary,
+  // so the parent is told about the ones it owns.
+  click: 'yaar:click',
+  dragStart: 'yaar:drag-start',
+  arrowDragStart: 'yaar:arrow-drag-start',
+  arrowDragMove: 'yaar:arrow-drag-move',
+  arrowDragEnd: 'yaar:arrow-drag-end',
+  keydown: 'yaar:keydown',
+
+  // Console capture (iframe-scripts/console-capture.ts).
+  console: 'yaar:console',
+
+  // Parent → iframe pushes.
+  notificationsUpdate: 'yaar:notifications-update',
+  subscriptionUpdate: 'yaar:subscription-update',
+  streamFrame: 'yaar:stream-frame',
+} as const;
+
+/** Any `yaar:*` postMessage type. */
+export type AppMessageType = (typeof APP_MSG)[keyof typeof APP_MSG];
+
 export interface AppManifestRequest {
-  type: 'yaar:app-manifest-request';
+  type: typeof APP_MSG.manifestRequest;
   requestId: string;
 }
 
 export interface AppManifestResponse {
-  type: 'yaar:app-manifest-response';
+  type: typeof APP_MSG.manifestResponse;
   requestId: string;
   manifest: AppManifest | null;
   error?: string;
 }
 
 export interface AppQueryRequest {
-  type: 'yaar:app-query-request';
+  type: typeof APP_MSG.queryRequest;
   requestId: string;
   stateKey: string;
 }
 
 export interface AppQueryResponse {
-  type: 'yaar:app-query-response';
+  type: typeof APP_MSG.queryResponse;
   requestId: string;
   data: unknown;
   error?: string;
 }
 
 export interface AppCommandRequest {
-  type: 'yaar:app-command-request';
+  type: typeof APP_MSG.commandRequest;
   requestId: string;
   command: string;
   params?: unknown;
@@ -203,7 +262,7 @@ export interface AppCommandRequest {
 }
 
 export interface AppCommandResponse {
-  type: 'yaar:app-command-response';
+  type: typeof APP_MSG.commandResponse;
   requestId: string;
   result: unknown;
   error?: string;
@@ -219,13 +278,13 @@ export interface AppCommandResponse {
  * recompile, read, remove, recompile loop that question otherwise costs.
  */
 export interface AppEvalRequest {
-  type: 'yaar:app-eval-request';
+  type: typeof APP_MSG.evalRequest;
   requestId: string;
   expression: string;
 }
 
 export interface AppEvalResponse {
-  type: 'yaar:app-eval-response';
+  type: typeof APP_MSG.evalResponse;
   requestId: string;
   /** JSON-serialized result, size-capped with an explicit truncation marker. */
   value?: string;
@@ -234,7 +293,7 @@ export interface AppEvalResponse {
 
 /** Fire-and-forget notification sent to iframe before window is destroyed. */
 export interface AppCloseNotification {
-  type: 'yaar:app-close';
+  type: typeof APP_MSG.close;
 }
 
 /**
@@ -243,7 +302,7 @@ export interface AppCloseNotification {
  * iframe → windowId (the iframe doesn't know its own windowId).
  */
 export interface AppEventMessage {
-  type: 'yaar:app-event';
+  type: typeof APP_MSG.event;
   channel: string;
   payload: unknown;
 }

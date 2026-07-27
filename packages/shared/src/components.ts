@@ -21,6 +21,15 @@ import {
   TEXT_COLORS,
   TEXT_VARIANTS,
 } from './component-types.js';
+import type {
+  BadgeComponent,
+  ButtonComponent,
+  ImageComponent,
+  InputComponent,
+  ProgressComponent,
+  SelectComponent,
+  TextComponent,
+} from './component-types.js';
 
 // Re-exported so `components.ts` stays the one place that describes the whole DSL for anyone
 // reading it top to bottom; the barrel takes the values from `component-types.js` directly.
@@ -99,6 +108,30 @@ const baseFields = {
     .optional()
     .describe('select: Required options array'),
 } as const;
+
+// ============ Cross-file consistency check (component-types.ts ↔ baseFields) ============
+//
+// `baseFields` above and the seven hand-written component types in `component-types.ts` describe
+// the same props from two directions on purpose (flat Zod schema for the LLM vs. narrow renderer
+// types) — see CLAUDE.md's Export Strategy. The existing `satisfies` bindings on the *_VARIANTS
+// arrays only cross-check enum value lists, so a whole *prop* added to one side and forgotten on
+// the other was silent. This binds each component type's own keys to `keyof typeof baseFields`:
+// if a prop exists on a component type but has no baseFields entry, the corresponding
+// `AssertPropsCovered<...>` line below fails to compile with "does not satisfy the constraint".
+//
+// This direction only (component type → baseFields), not the reverse: baseFields is a deliberate
+// superset covering every component's props in one flat object, so most components leave most
+// baseFields keys unused — that is not drift, just the flat-schema design, so it isn't checked.
+type BaseFieldKey = keyof typeof baseFields;
+type AssertPropsCovered<K extends BaseFieldKey> = K;
+
+type _ButtonPropsCovered = AssertPropsCovered<keyof Omit<ButtonComponent, 'type'>>;
+type _InputPropsCovered = AssertPropsCovered<keyof Omit<InputComponent, 'type'>>;
+type _SelectPropsCovered = AssertPropsCovered<keyof Omit<SelectComponent, 'type'>>;
+type _TextPropsCovered = AssertPropsCovered<keyof Omit<TextComponent, 'type'>>;
+type _BadgePropsCovered = AssertPropsCovered<keyof Omit<BadgeComponent, 'type'>>;
+type _ProgressPropsCovered = AssertPropsCovered<keyof Omit<ProgressComponent, 'type'>>;
+type _ImagePropsCovered = AssertPropsCovered<keyof Omit<ImageComponent, 'type'>>;
 
 // ============ Component Schema (flat, no recursion) ============
 

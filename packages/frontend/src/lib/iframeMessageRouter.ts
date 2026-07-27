@@ -10,15 +10,17 @@
  *   import { iframeMessages } from '@/lib/iframeMessageRouter';
  *
  *   // Persistent subscription (returns unsubscribe function)
- *   const off = iframeMessages.on('yaar:contextmenu', (ctx) => {
+ *   const off = iframeMessages.on('yaar:arrow-drag-start', (ctx) => {
  *     if (!ctx.source) return;
  *     const { x, y } = ctx.source.toViewport(ctx.data.clientX, ctx.data.clientY);
- *     showContextMenu(x, y, ctx.source.windowId);
+ *     beginStroke(x, y, ctx.source.windowId);
  *   });
  *
  * One-shot request/response patterns (app protocol, iframe capture) are NOT
  * handled here — they have their own lifecycle with timeouts and requestIds.
  */
+import type { APP_MSG } from '@yaar/shared';
+
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 
 // ─── Types ─────────────────────────────────────────────────────────────
@@ -47,31 +49,34 @@ export interface IframeMessageContext {
 export type IframeMessageHandler = (ctx: IframeMessageContext) => void;
 
 /**
- * Known `yaar:*` message types sent by iframe-injected scripts.
+ * The `yaar:*` message types this router serves.
  *
- * Constrains the `on()` method so typos are caught at compile time.
- * The iframe scripts themselves are raw JS strings (template literals)
- * and can't participate in the type system — this union covers only
- * the parent-side handler registrations.
+ * Constrains the `on()` method so typos are caught at compile time. The names
+ * come from `APP_MSG` in `@yaar/shared`, which is also what the iframe scripts
+ * interpolate — they are template literals, so they do participate in the type
+ * system, and the hand-written union that used to sit here had already drifted:
+ * it listed `'yaar:contextmenu'`, which no script posts and no handler listens
+ * for. That name is gone.
  *
- * One-shot request/response types (yaar:app-*-response, yaar:capture-response)
- * are NOT included — they use direct `window.addEventListener` with timeouts.
+ * This is deliberately a subset of `APP_MSG`. One-shot request/response types
+ * (`yaar:app-*-response`, `yaar:capture-response`) are NOT routed here — they
+ * use direct `window.addEventListener` with requestIds and timeouts.
  */
-export type YaarMessageType =
-  // IFRAME_CONTEXTMENU_SCRIPT (capture-helper.ts)
-  | 'yaar:click'
-  | 'yaar:contextmenu'
-  | 'yaar:drag-start'
-  // Right-click drawing forwarded from iframes
-  | 'yaar:arrow-drag-start'
-  | 'yaar:arrow-drag-move'
-  | 'yaar:arrow-drag-end'
-  // Keyboard shortcuts forwarded from focused iframes
-  | 'yaar:keydown'
-  // IFRAME_APP_PROTOCOL_SCRIPT (app-protocol.ts)
-  | 'yaar:app-ready'
-  | 'yaar:app-interaction'
-  | 'yaar:app-event';
+type RoutedMessageKey =
+  // IFRAME_CONTEXTMENU_SCRIPT — clicks, right-click drawing, cross-window drags,
+  // and the shortcuts a focused iframe forwards back out to the shell.
+  | 'click'
+  | 'dragStart'
+  | 'arrowDragStart'
+  | 'arrowDragMove'
+  | 'arrowDragEnd'
+  | 'keydown'
+  // IFRAME_APP_PROTOCOL_SCRIPT — the fire-and-forget iframe → parent messages.
+  | 'ready'
+  | 'interaction'
+  | 'event';
+
+export type YaarMessageType = (typeof APP_MSG)[RoutedMessageKey];
 
 // ─── Router singleton ──────────────────────────────────────────────────
 

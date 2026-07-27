@@ -40,7 +40,27 @@ export interface ParsedYaarUri {
   path: string;
 }
 
-const YAAR_RE = /^yaar:\/\/(apps|storage|windows|config|session|user|history|skills|mcp)\/(.*)$/;
+// Single source of truth for the authority list — the regex alternation below is derived from
+// this array so the two can never drift (previously `YAAR_RE` re-listed the same nine strings by
+// hand). `satisfies readonly YaarAuthority[]` keeps every entry a valid authority; order is kept
+// identical to the `YaarAuthority` union above for readability, though it has no effect on
+// matching here since none of these words is a prefix of another (if that ever changes, the
+// longer/more-specific alternative must be listed first so it wins the leftmost-alternative match).
+const AUTHORITIES = [
+  'apps',
+  'storage',
+  'windows',
+  'config',
+  'session',
+  'user',
+  'history',
+  'skills',
+  'mcp',
+] as const satisfies readonly YaarAuthority[];
+
+// None of the authority strings contain regex-special characters, so no escaping is needed here;
+// if that ever changes, escape each entry before joining.
+const YAAR_RE = new RegExp(`^yaar://(${AUTHORITIES.join('|')})/(.*)$`);
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);
@@ -54,6 +74,23 @@ export function buildYaarUri(authority: YaarAuthority, path: string): string {
 
 export function isYaarUri(uri: string): boolean {
   return YAAR_RE.test(uri);
+}
+
+/**
+ * Split a path at its first '/' into a [head, tail] pair.
+ *
+ *   splitFirst('a/b/c')  → ['a', 'b/c']
+ *   splitFirst('a/')     → ['a', '']       (trailing slash → empty tail, NOT undefined)
+ *   splitFirst('a')      → ['a', undefined] (no slash → no tail; head is the whole input)
+ *
+ * Callers that want an empty trailing tail treated the same as "no tail" must normalize
+ * themselves (e.g. `tail || undefined`) — that normalization is caller-specific, not part of
+ * this helper's contract (see `parseBareWindowUri`, which does exactly that for `subPath`).
+ */
+function splitFirst(path: string): [string, string | undefined] {
+  const slashIdx = path.indexOf('/');
+  if (slashIdx === -1) return [path, undefined];
+  return [path.slice(0, slashIdx), path.slice(slashIdx + 1)];
 }
 
 /**
@@ -75,10 +112,8 @@ export function resolveContentUri(uri: string): string | null {
   if (!parsed) return null;
   switch (parsed.authority) {
     case 'apps': {
-      const slashIdx = parsed.path.indexOf('/');
-      if (slashIdx === -1) return `/api/apps/${parsed.path}/dist/index.html`;
-      const appId = parsed.path.slice(0, slashIdx);
-      const rest = parsed.path.slice(slashIdx + 1);
+      const [appId, rest] = splitFirst(parsed.path);
+      if (rest === undefined) return `/api/apps/${appId}/dist/index.html`;
       if (rest === 'storage' || rest.startsWith('storage/')) {
         const filePath = rest.slice('storage'.length).replace(/^\//, '');
         return `/api/storage/apps/${appId}${filePath ? `/${filePath}` : ''}`;
@@ -136,8 +171,7 @@ export function isPreviewAppId(appId: string | undefined | null): boolean {
 export function extractAppId(uri: string): string | null {
   const parsed = parseYaarUri(uri);
   if (parsed?.authority === 'apps') {
-    const slashIdx = parsed.path.indexOf('/');
-    return slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
+    return splitFirst(parsed.path)[0];
   }
   return null;
 }
@@ -220,11 +254,6 @@ export function parseBareWindowUri(uri: string): ParsedBareWindowUri | null {
 
   if (!parsed.path) return { windowId: '' }; // bare yaar://windows/ → monitor-level
 
-  const slashIdx = parsed.path.indexOf('/');
-  if (slashIdx === -1) return { windowId: parsed.path };
-
-  return {
-    windowId: parsed.path.slice(0, slashIdx),
-    subPath: parsed.path.slice(slashIdx + 1) || undefined,
-  };
+  const [windowId, subPath] = splitFirst(parsed.path);
+  return { windowId, subPath: subPath || undefined };
 }
