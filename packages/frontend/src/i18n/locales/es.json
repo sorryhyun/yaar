@@ -110,7 +110,7 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "Cargando\u2026"
+    "status": "Cargando…"
   },
   "window": {
     "lockedBy": "Bloqueado por: {{agent}}",

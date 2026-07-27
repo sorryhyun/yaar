@@ -5,15 +5,20 @@ import { consoleLogs, type ConsoleEntry } from '../core';
 import { addConsoleEntry } from '../services';
 
 function levelIcon(level: string): string {
-  if (level === 'error') return '\u274c';
-  if (level === 'warn') return '\u26a0\ufe0f';
-  if (level === 'info') return '\u2139\ufe0f';
-  return '\u25cf';
+  if (level === 'error') return '❌';
+  if (level === 'warn') return '⚠️';
+  if (level === 'info') return 'ℹ️';
+  return '●';
 }
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
-  return d.toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return d.toLocaleTimeString([], {
+    hour12: false,
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
 }
 
 export function ConsolePanel() {

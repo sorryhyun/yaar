@@ -86,7 +86,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
       try {
         await fsStat(m.hostPath);
       } catch {
-        console.warn(`Mount "${m.alias}" \u2192 ${m.hostPath} \u2014 host path not found`);
+        console.warn(`Mount "${m.alias}" → ${m.hostPath} — host path not found`);
       }
     }
     console.log(`Loaded ${mounts.length} mount(s)`);
@@ -384,27 +384,17 @@ export async function printBanner(server: Server<any>): Promise<void> {
     const connectUrl = tunnelUrl ?? `${serverUrl}/#remote=${token}`;
 
     console.log('');
-    console.log(
-      '\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557',
-    );
-    console.log('\u2551              YAAR Remote Mode                   \u2551');
-    console.log(
-      '\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563',
-    );
-    console.log(
-      `\u2551  Server:  ${serverUrl}${loopbackOnly ? '  (loopback only \u2014 no LAN)' : ''}`,
-    );
+    console.log('╔══════════════════════════════════════════════════╗');
+    console.log('║              YAAR Remote Mode                   ║');
+    console.log('╠══════════════════════════════════════════════════╣');
+    console.log(`║  Server:  ${serverUrl}${loopbackOnly ? '  (loopback only — no LAN)' : ''}`);
     if (tunnelUrl) {
-      console.log(`\u2551  Tunnel:  ${tunnelUrl}`);
+      console.log(`║  Tunnel:  ${tunnelUrl}`);
     }
-    console.log(`\u2551  Token:   ${token}`);
-    console.log(
-      '\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563',
-    );
-    console.log(`\u2551  Connect: ${connectUrl}`);
-    console.log(
-      '\u255a\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255d',
-    );
+    console.log(`║  Token:   ${token}`);
+    console.log('╠══════════════════════════════════════════════════╣');
+    console.log(`║  Connect: ${connectUrl}`);
+    console.log('╚══════════════════════════════════════════════════╝');
     console.log('');
 
     // Print QR code if available

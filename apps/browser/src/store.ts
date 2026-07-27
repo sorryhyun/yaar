@@ -36,17 +36,20 @@ export const [placeholderText, setPlaceholderText] = createSignal('Waiting for n
 
 // ── Derived state ─────────────────────────────────────────────────────
 
-export interface LockState { cls: string; icon: string; }
+export interface LockState {
+  cls: string;
+  icon: string;
+}
 
 export function getLockState(url: string): LockState {
   if (url === 'about:blank') return { cls: 'lock hidden', icon: '' };
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'https:'
-      ? { cls: 'lock', icon: '\uD83D\uDD12' }  // 🔒
-      : { cls: 'lock insecure', icon: '\uD83D\uDD13' };  // 🔓
+      ? { cls: 'lock', icon: '🔒' }
+      : { cls: 'lock insecure', icon: '🔓' };
   } catch {
-    return { cls: 'lock insecure', icon: '\uD83D\uDD13' };  // 🔓
+    return { cls: 'lock insecure', icon: '🔓' };
   }
 }
 

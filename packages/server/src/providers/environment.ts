@@ -81,7 +81,7 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
   if (mounts.length > 0) {
     const mountLines = [...mounts]
       .sort((a, b) => (a.alias < b.alias ? -1 : a.alias > b.alias ? 1 : 0))
-      .map((m) => `  - mounts/${m.alias}/ \u2192 ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`);
+      .map((m) => `  - mounts/${m.alias}/ → ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`);
     lines.push(`- Mounts:\n${mountLines.join('\n')}`);
   }
 

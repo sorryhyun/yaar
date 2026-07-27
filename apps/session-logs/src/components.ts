@@ -3,27 +3,20 @@ import type { SessionSummary } from './types';
 import { state } from './store';
 import { loadDetail } from './api';
 import { TranscriptSection } from './transcript';
-import {
-  formatDateTime,
-  formatFull,
-  durationBetween,
-  providerLabel,
-  providerCls,
-} from './utils';
+import { formatDateTime, formatFull, durationBetween, providerLabel, providerCls } from './utils';
 
 export const SessionItem = (s: SessionSummary) => {
-  const isActive  = () => state.selectedId === s.sessionId;
+  const isActive = () => state.selectedId === s.sessionId;
   const isCurrent = () => state.currentSessionId === s.sessionId;
 
   return html`
     <div
       class=${() =>
-        `y-list-item session-item${isActive() ? ' active' : ''}${isCurrent() ? ' current-session' : ''}`
-      }
+        `y-list-item session-item${isActive() ? ' active' : ''}${isCurrent() ? ' current-session' : ''}`}
       onClick=${() => loadDetail(s.sessionId)}
     >
       <div class="session-id y-font-mono">
-        ${() => isCurrent() ? '\u26a1\u00a0' + s.sessionId : s.sessionId}
+        ${() => (isCurrent() ? '⚡\u00a0' + s.sessionId : s.sessionId)}
       </div>
       <div class="session-meta">
         <span class=${() => providerCls(s.provider)}>${() => providerLabel(s.provider)}</span>
@@ -46,7 +39,7 @@ export const DetailView = () => {
   const d = state.detail;
   if (!d) return null;
 
-  const sid       = state.selectedId ?? '';
+  const sid = state.selectedId ?? '';
   const isCurrent = state.currentSessionId === sid;
 
   const downloadLog = () => {
@@ -63,7 +56,6 @@ export const DetailView = () => {
 
   return html`
     <div class="detail-content">
-
       <div class="detail-header">
         <div class="detail-header-top">
           <div class="detail-session-id y-font-mono">${d.sessionId ?? sid}</div>
@@ -72,13 +64,14 @@ export const DetailView = () => {
             onClick=${downloadLog}
             disabled=${() => !state.transcript}
             title="Download transcript"
-          >⬇ Download</button>
+          >
+            ⬇ Download
+          </button>
         </div>
         ${isCurrent ? html`<span class="current-chip">⚡ Current Session</span>` : null}
       </div>
 
       <div class="detail-grid">
-
         <div class="detail-field">
           <div class="y-label field-label">Provider</div>
           <div class="field-value">
@@ -105,11 +98,9 @@ export const DetailView = () => {
           <div class="y-label field-label">Duration</div>
           <div class="field-value">⏱ ${durationBetween(d.createdAt, d.lastActivity)}</div>
         </div>
-
       </div>
 
       ${TranscriptSection()}
-
     </div>
   `;
 };

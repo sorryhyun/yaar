@@ -19,7 +19,7 @@ function ProblemsPanel() {
       <${For} each=${diagnostics}>
         ${(d: Diagnostic) => html`
           <div class=${`diagnostics-item ${d.severity}`} onClick=${() => openFile(d.file)}>
-            <span class="diag-icon">${d.severity === 'error' ? '\u274c' : '\u26a0\ufe0f'}</span>
+            <span class="diag-icon">${d.severity === 'error' ? '❌' : '⚠️'}</span>
             <span class="diag-location y-text-xs">${d.file}:${d.line}</span>
             <span class="diag-message y-text-xs">${d.message}</span>
           </div>
@@ -39,7 +39,9 @@ export function DiagnosticsPanel() {
         >
           Problems
           <${Show} when=${() => diagnostics().length > 0}>
-            <span class="diagnostics-count y-badge y-badge-error">${() => diagnostics().length}</span>
+            <span class="diagnostics-count y-badge y-badge-error"
+              >${() => diagnostics().length}</span
+            >
           <//>
         </button>
         <button
@@ -57,11 +59,13 @@ export function DiagnosticsPanel() {
         >
           Diff
           <${Show} when=${hasDiff}>
-            <span class="diagnostics-count y-badge">\u2022</span>
+            <span class="diagnostics-count y-badge">•</span>
           <//>
         </button>
         <${Show} when=${() => activeBottomTab() === 'console' && consoleLogs().length > 0}>
-          <button class="bottom-tab-action y-text-xs" onClick=${() => clearConsoleLogs()}>Clear</button>
+          <button class="bottom-tab-action y-text-xs" onClick=${() => clearConsoleLogs()}>
+            Clear
+          </button>
         <//>
         <${Show} when=${() => activeBottomTab() === 'diff' && hasDiff()}>
           <button class="bottom-tab-action y-text-xs" onClick=${() => clearDiff()}>Clear</button>

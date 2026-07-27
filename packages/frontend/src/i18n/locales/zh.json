@@ -110,7 +110,7 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "加载中\u2026"
+    "status": "加载中…"
   },
   "window": {
     "lockedBy": "锁定者：{{agent}}",
