@@ -23,7 +23,7 @@ import { storageUriForPath } from '../../http/access.js';
 import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
-import { APP_ORIGIN_ISOLATION } from '../../config.js';
+import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
 import {
   formatWindowRef,
   deriveWindowId,
@@ -234,7 +234,16 @@ export async function handleCreate(
   // AI-authored HTML are host-authored, not the hostile-app threat, and stay
   // same-origin. The frontend does the actual origin swap; here we only mark it.
   const isolateOrigin =
-    APP_ORIGIN_ISOLATION && renderer === 'iframe' && !!appId && resolveAppSource(appId) === 'user';
+    isOriginBoundaryActive() &&
+    renderer === 'iframe' &&
+    !!appId &&
+    resolveAppSource(appId) === 'user';
+
+  // Locally the frontend derives the app origin itself (only the browser knows which
+  // port served the document — a dev proxy is not the API port). Over a `proxy-port`
+  // boundary the origin is a published address the server chose, so state it: the
+  // client has no way to compute `https://<magic-dns>:8443` from where it is standing.
+  const appOrigin = isolateOrigin ? isolatedAppOrigin() : null;
 
   const osAction: OSAction = {
     type: 'window.create',
@@ -245,6 +254,7 @@ export async function handleCreate(
     ...getAppMetaOverrides(appMeta),
     ...(appId ? { appId } : {}),
     ...(isolateOrigin ? { isolateOrigin: true } : {}),
+    ...(appOrigin ? { appOrigin } : {}),
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {

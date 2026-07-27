@@ -70,6 +70,19 @@ export function loadTunnelConfig(): TunnelConfig | null {
     if (typeof parsed.tailscalePath === 'string') {
       config.tailscalePath = resolvePath(parsed.tailscalePath);
     }
+    // The app-origin port must be a real port and must not collide with the desktop's
+    // own :443 rule — same port means same origin, which is the one thing the second
+    // rule exists to avoid.
+    if (typeof parsed.appOriginPort === 'number') {
+      const port = parsed.appOriginPort;
+      if (Number.isInteger(port) && port > 0 && port < 65536 && port !== 443) {
+        config.appOriginPort = port;
+      } else {
+        console.warn(
+          `[Tunnel] Ignoring appOriginPort ${port}: must be an integer in 1–65535 and not 443`,
+        );
+      }
+    }
     return config;
   }
 

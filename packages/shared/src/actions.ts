@@ -115,13 +115,18 @@ export interface WindowState {
   windowStyle?: Record<string, string | number>;
   minimized?: boolean;
   /**
-   * Serve this app's iframe from the sibling loopback origin (Stage 1 of the
-   * app-origin isolation in docs/guides/remote_mode.md). Set by the server
-   * only for `source:'user'` apps when YAAR_APP_ORIGIN_ISOLATION is on. The
-   * frontend renders the iframe from the other loopback alias so the app becomes
-   * cross-origin to the desktop; nothing is enforced on it yet.
+   * Serve this app's iframe from the isolated app origin, so it is cross-origin to
+   * the desktop (app-origin isolation, docs/guides/remote_mode.md). Set by the server
+   * only for `source:'user'` apps, and only while an origin boundary is in force.
    */
   isolateOrigin?: boolean;
+  /**
+   * The exact origin to serve the isolated iframe from, when the client cannot derive
+   * it (a remote transport publishing two ports on one hostname). Absent locally,
+   * where only the browser knows which port served the desktop and the frontend
+   * computes the sibling loopback alias itself.
+   */
+  appOrigin?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -140,7 +145,8 @@ export interface WindowCreateAction {
   windowStyle?: Record<string, string | number>;
   minimized?: boolean;
   iframeToken?: string; // Token for iframe route restriction
-  isolateOrigin?: boolean; // Serve from the sibling loopback origin (see WindowState.isolateOrigin)
+  isolateOrigin?: boolean; // Serve from the isolated app origin (see WindowState.isolateOrigin)
+  appOrigin?: string; // Exact origin to use when the client can't derive it (see WindowState.appOrigin)
 }
 
 export interface WindowCloseAction {

@@ -7,9 +7,11 @@ default remote story to **Tailscale Serve**: the machine is reachable only by de
 your tailnet, over a real HTTPS certificate, with the token demoted from *sole gate* to *second
 factor*.
 
-The migration is deliberately phased. **Phase 1 has landed** (a managed `TailscaleTunnel` provider,
-opt-in via config); Phases 2 and 3 are the follow-ups that turn a transport swap into a genuine
-security upgrade.
+The migration was deliberately phased, and **all three phases have landed**: a managed
+`TailscaleTunnel` provider (Phase 1), a loopback-only bind under Serve (Phase 2), and app-origin
+isolation preserved over the network (Phase 3) — the follow-ups that turn a transport swap into a
+genuine security upgrade. Tailscale remains opt-in via `config/tunnel.json`; `localhost.run` is
+still the zero-install default and behaves exactly as before.
 
 ---
 
@@ -26,8 +28,9 @@ phone. But every one of those properties cuts the other way:
 | No HTTPS guarantee | The docs say "no HTTPS by default"; encryption depends on whatever the tunnel service happens to terminate. |
 | Same-origin apps | Remote mode **drops app-origin isolation** — over the network the `localhost`/`127.0.0.1` split is meaningless, so a hostile installed app can reach the desktop's DOM and JS memory. |
 
-The last row is the scariest and the least visible. It's stated plainly in
-[`remote_mode.md`](../guides/remote_mode.md): *in remote mode, don't install apps you don't trust.*
+The last row is the scariest and the least visible, and it is what Phase 3 closes — but only under
+Serve. On `localhost.run` it still holds, and [`remote_mode.md`](../guides/remote_mode.md) still says
+so plainly: *on a boundary-less transport, don't install apps you don't trust.*
 
 ## 2. Tailscale is network-layer auth, not a public URL
 
@@ -55,17 +58,22 @@ The lifecycle only ever touches a tunnel through four methods — `connect()`, `
 explicit (`lib/tunnel/types.ts`) so implementations are interchangeable:
 
 ```
-lifecycle.ts  →  createTunnel(config, port)  →  TunnelProvider
-                                                 ├── SshTunnel        (service: "localhost.run", default)
-                                                 └── TailscaleTunnel  (service: "tailscale")
+lifecycle.ts  →  createTunnel(config, port, appPort?)  →  TunnelProvider
+                                                           ├── SshTunnel        (service: "localhost.run", default)
+                                                           └── TailscaleTunnel  (service: "tailscale")
 ```
+
+Phase 3 added one optional method, `originBoundary()` — the two public origins this transport
+publishes, or null. `SshTunnel` simply omits it, which is how "no origin boundary over this
+transport" is expressed without a capability flag.
 
 `TailscaleTunnel` is dramatically simpler than `SshTunnel`, because **`tailscaled` already owns the
 tunnel and its resilience**. There is no ssh2 client, no reverse TCP piping, no keepalive, and no
 exponential-backoff reconnect. `tailscale serve` just registers a proxy rule with the local daemon:
 
 ```
-https://<host>.<tailnet>.ts.net:443   →   http://127.0.0.1:<PORT>
+https://<host>.<tailnet>.ts.net:443    →   http://127.0.0.1:<PORT>       the desktop
+https://<host>.<tailnet>.ts.net:8443   →   http://127.0.0.1:<APP_PORT>   installed apps (Phase 3)
 ```
 
 so the "tunnel" is pure CLI orchestration:
@@ -73,16 +81,17 @@ so the "tunnel" is pure CLI orchestration:
 ```
 connect():
   1. `tailscale status --json`  → daemon up? (BackendState == "Running")  read Self.DNSName
-  2. `tailscale serve --https=443 off`             (clear any stale rule we left)
-  3. `tailscale serve --bg --https=443 http://127.0.0.1:<PORT>`
-getPublicUrl(t): https://<magicDns>/#remote=<t>
-shutdown():      `tailscale serve --https=443 off`
+  2. registerServeRule(443,  PORT)       — `serve --https=443 off`, then `serve --bg --https=443 …`
+  3. registerServeRule(8443, APP_PORT)   — only when an app-origin socket was opened; non-fatal
+getPublicUrl(t):  https://<magicDns>/#remote=<t>
+originBoundary(): { desktop: https://<magicDns>, app: https://<magicDns>:8443 } | null
+shutdown():       `serve --https=443 off`, `serve --https=8443 off`
 ```
 
 Config is data-driven via the existing `config/tunnel.json`:
 
 ```json
-{ "service": "tailscale" }
+{ "service": "tailscale", "appOriginPort": 8443 }
 ```
 
 ### 3.1 Failure posture
@@ -94,9 +103,10 @@ Each precondition surfaces a targeted fix rather than a generic "LAN-only":
 | `tailscale` binary absent | "Install Tailscale or set `tailscalePath` in `config/tunnel.json`" |
 | `BackendState != Running` | "Run `tailscale up` to log into your tailnet" |
 | `serve --https=443` cert error | "Enable MagicDNS + HTTPS Certificates in the admin console" |
+| `serve --https=8443` refused | "Set `appOriginPort` in `config/tunnel.json`" — desktop stays up, isolation off |
 
-Any failure falls back to LAN-only, exactly like the SSH tunnel — remote is best-effort, never a
-hard boot dependency.
+Any failure is non-fatal — remote is best-effort, never a hard boot dependency. It falls back to
+**localhost-only** rather than LAN-only, though; see Phase 2 for why that differs from the SSH tunnel.
 
 ## 4. The phased roadmap
 
@@ -108,28 +118,63 @@ Unit-tested via an injectable `CommandRunner` (no real daemon needed). `localhos
 default, so nothing regresses. Files: `lib/tunnel/{types,config,index,tailscale-tunnel}.ts`,
 `lifecycle.ts`, `src/tests/tailscale-tunnel.test.ts`, `docs/guides/remote_mode.md`.
 
-### Phase 2 — Loopback-only bind under Serve (pending)
+### Phase 2 — Loopback-only bind under Serve ✅ (landed)
 
-Today `REMOTE=1` binds `0.0.0.0` because the SSH tunnel connects in from outside. Under Serve,
-`tailscaled` reaches YAAR at `127.0.0.1` — so when `service === "tailscale"` we can keep the
-**loopback bind and drop LAN exposure entirely**. Only the tailnet (via the daemon) and localhost
-get in. This is a behavior change (no more plain-LAN access from a device that isn't on the
-tailnet), gated strictly on the Tailscale service, which is why it's separated from Phase 1.
+`REMOTE=1` binds `0.0.0.0` because the SSH tunnel is best-effort in front of it: lose the tunnel and
+the LAN URL still works. Under Serve, `tailscaled` reaches YAAR at `127.0.0.1`, so the LAN bind is
+pure extra surface — `getBindHostname()` keeps the **loopback bind and drops LAN exposure entirely**
+when `service === "tailscale"`. Only the tailnet (via the daemon) and localhost get in.
 
-### Phase 3 — Preserve app-origin isolation over remote (pending, the payoff)
+One decision worth recording, because it contradicts §3.1 as originally written: the bind is chosen
+from the *configured intent*, not from whether the tunnel came up. A user who asked for tailnet-only
+should not silently get their whole LAN exposed on a bearer token because `tailscaled` was down. So
+the Tailscale failure fallback is **localhost-only, not LAN-only**, and the banner says so. (This
+also resolves an ordering problem: the tunnel now connects *after* the sockets bind — necessary for
+Phase 3, and a latent fix, since the serve rule used to be registered against `getPort()` before the
+port-in-use walk could move it.)
 
-This is why Serve, and not Funnel or localhost.run. The reason remote mode drops origin isolation
-is that it loses the two-hostname split that keeps `source:'user'` app iframes cross-origin to the
-desktop. Tailscale gives that split back as **stable MagicDNS names**: serve the desktop and the app
-iframes on distinct hostnames (or distinct Serve paths/ports), and the browser's same-origin policy
-re-erects the boundary over the network — a hostile installed app is once again confined to what its
-`app.json` declares. localhost.run's rotating subdomains can't anchor this; only a stable-hostname
-transport can. Landing Phase 3 would let us **delete the "remote drops origin isolation" caveat**
-from `remote_mode.md` — the single biggest security win of the whole migration.
+### Phase 3 — App-origin isolation over remote ✅ (landed, the payoff)
+
+This is why Serve, and not Funnel or localhost.run. Remote mode dropped origin isolation because it
+lost the two-hostname split that keeps `source:'user'` app iframes cross-origin to the desktop.
+Tailscale gives that split back as a **stable MagicDNS name plus a second port** — a port difference
+is an origin difference to the same-origin policy:
+
+```
+https://my-box.tailnet-abc.ts.net        → http://127.0.0.1:8000   the desktop
+https://my-box.tailnet-abc.ts.net:8443   → http://127.0.0.1:8001   installed apps
+```
+
+**Why two local sockets, not one.** The enforcement in `resolvePrincipal` needs to know which origin
+the browser addressed, and behind a proxy it cannot: `url.hostname`/`url.port` describe the loopback
+hop `tailscaled` dialed, and `Host`/`X-Forwarded-*` are the proxy's word rather than the browser's.
+The `Origin` header covers cross-origin calls but not same-origin GETs, which carry none — and those
+reach the same routes. So each public port gets its own local socket and its own `fetch` handler; the
+app-origin one runs inside `runOnAppOriginSocket()`, and "which socket did this arrive on" is
+unforgeable by construction.
+
+Three seams generalized to make this fit:
+
+- **`http/origin-boundary.ts`** — the new single place that knows *where* the two origins are
+  (`loopback-alias` | `proxy-port` | `off`) and answers the two questions consumers had been
+  answering with hardcoded hostname comparisons: does this request carry the app origin, and where
+  does a desktop document that landed on it get redirected. `access.ts`, `csp.ts`, `server.ts` and
+  `features/window/create.ts` all route through it now.
+- **The app origin is server-stated over `proxy-port`.** Locally the frontend must derive it (only
+  the browser knows which port served the document — a dev proxy isn't the API port), so
+  `window.create` carries an optional `appOrigin` used only when the client cannot compute it.
+- **An iframe token is now a credential at the remote-auth gate.** An app's SDK calls never carried
+  the remote token in a header; `extractToken` read it out of `Referer`, which worked *only* because
+  apps were same-origin. Put an app on its own origin and the default referrer policy trims `Referer`
+  to a bare origin. The alternative to accepting the iframe token was not "apps authenticate some
+  other way", it was "every call an isolated app makes 401s".
+
+A failed second rule is not fatal: the desktop tunnel stands and isolation stays off, because a
+boundary the browser cannot reach is worse than none.
 
 ## 5. Security model, before and after
 
-| | localhost.run (today) | Tailscale Serve (P1) | + loopback bind (P2) | + origin isolation (P3) |
+| | localhost.run (still the default) | Tailscale Serve (P1) | + loopback bind (P2) | + origin isolation (P3) |
 |--|--|--|--|--|
 | Who can reach the port | whole internet | tailnet only | tailnet only | tailnet only |
 | LAN exposure | yes (`0.0.0.0`) | yes (`0.0.0.0`) | **no (loopback)** | no |
@@ -139,6 +184,9 @@ from `remote_mode.md` — the single biggest security win of the whole migration
 
 The token never goes away — defense in depth — but under Serve a leaked token is no longer
 catastrophic, because the attacker also has to be a device you personally admitted to your tailnet.
+
+The rightmost column is what shipped for `{ "service": "tailscale" }`; the leftmost is what every
+existing deployment still gets until it opts in.
 
 ## 6. Non-goals and tradeoffs
 
@@ -151,16 +199,20 @@ catastrophic, because the attacker also has to be a device you personally admitt
   device. For a single-user AI desktop reached from your own phone/laptop this is a one-time cost;
   for sharing with others it's a genuine barrier, and Funnel (or staying on localhost.run) is the
   honest answer there.
-- **CLI-syntax risk.** The provider's `serve` invocation and `Self.DNSName` parsing are validated
-  against fakes, not a live `tailscaled`. One real run on a tailnet-joined machine should gate any
-  reliance on Phase 1 in production.
+- **CLI-syntax risk — still open.** The provider's `serve` invocations (now two rules) and
+  `Self.DNSName` parsing are validated against fakes, not a live `tailscaled`. Nothing here has been
+  exercised against a real tailnet, so one real run should gate any production reliance — see §7.
+- **A second HTTPS port must be permitted on the tailnet.** Serve allows arbitrary ports, but 8443 is
+  the default because Funnel also accepts it, so a later `mode: "funnel"` needs no different number.
+  A refused port degrades to isolation-off, not to a broken desktop.
 
 ## 7. Rollout
 
-1. **Phase 1 is committed** and inert by default — no existing deployment changes behavior until a
-   user writes `{ "service": "tailscale" }`.
-2. Dogfood on a tailnet-joined dev machine; confirm the banner URL, the serve rule, and clean
-   teardown on `Ctrl+C`.
-3. Land Phase 2 (loopback bind) once Serve is confirmed working end to end.
-4. Land Phase 3 (origin isolation over MagicDNS) as its own reviewed change, and rewrite the
-   `remote_mode.md` security section to match.
+1. **All three phases are committed** and inert by default — no existing deployment changes behavior
+   until a user writes `{ "service": "tailscale" }`.
+2. **Not yet dogfooded on a real tailnet.** On a tailnet-joined machine, confirm: the banner URL and
+   the `(loopback only — no LAN)` marker; `tailscale serve status` showing *both* rules; an installed
+   app rendering from `:8443` with working storage/verb calls (the iframe-token auth path); and clean
+   teardown of both rules on `Ctrl+C`.
+3. If the second rule is refused on 8443, confirm `appOriginPort` selects another and that the
+   fallback (desktop up, isolation off) is what actually happens.

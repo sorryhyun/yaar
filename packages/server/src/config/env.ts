@@ -145,16 +145,24 @@ export const IS_REMOTE = process.env.REMOTE === '1';
  * and `resolvePrincipal` refuses a token-less request that carries the app origin,
  * so an app can no longer omit its token and be read as the host.
  *
- * **Default on, local mode only.** The localhost/127.0.0.1 trick has no meaning
- * behind a remote tunnel, so it is off whenever `IS_REMOTE` is set. The bundled exe
- * now defaults to local (see `IS_REMOTE`), so isolation *is* active in a default exe.
- * Set `YAAR_APP_ORIGIN_ISOLATION=0` to force it off locally — the one remaining escape
- * it does *not* close is top-level navigation (`window.top.location`) on the still-
- * unsandboxed frame; cross-origin already blocks `window.parent` DOM/memory reach, and
- * sandboxing (to also cut off top-nav) is a later stage.
+ * **Default on.** `YAAR_APP_ORIGIN_ISOLATION=0` forces it off; that switch is what
+ * {@link isAppOriginIsolationRequested} reports, and it governs *both* ways of getting
+ * a boundary.
+ *
+ * This predicate is only the **loopback-alias** way — the `localhost`/`127.0.0.1`
+ * split, which has no meaning over a network and so is local-mode only. Remote mode
+ * gets a boundary from the transport instead (two Tailscale Serve ports pointed at two
+ * local sockets), installed at runtime by the lifecycle. Ask
+ * `http/origin-boundary.ts` which boundary is actually in force; this function does not
+ * know about the remote one.
  */
 export function isAppOriginIsolationEnabled(): boolean {
-  return process.env.YAAR_APP_ORIGIN_ISOLATION !== '0' && !IS_REMOTE;
+  return isAppOriginIsolationRequested() && !IS_REMOTE;
+}
+
+/** Has the user left app-origin isolation switched on? (Independent of transport.) */
+export function isAppOriginIsolationRequested(): boolean {
+  return process.env.YAAR_APP_ORIGIN_ISOLATION !== '0';
 }
 
 export const APP_ORIGIN_ISOLATION = isAppOriginIsolationEnabled();

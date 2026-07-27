@@ -84,3 +84,62 @@ describe('IframeRenderer sandbox wiring', () => {
     expect(iframe?.getAttribute('sandbox')).toBeNull();
   });
 });
+
+/**
+ * App-origin isolation over a remote transport (Phase 3 of the Tailscale migration).
+ *
+ * There, the two origins are two ports on one hostname (`https://box.ts.net` and
+ * `https://box.ts.net:8443`) and nothing standing on the client can compute the second
+ * from the first — so the server names it on the create action and we obey. The
+ * sibling-loopback derivation is the *fallback*, not the rule.
+ */
+describe('IframeRenderer — server-named app origin', () => {
+  const originalHref = window.location.href;
+  const APP_ORIGIN = 'https://box.tailnet-abc.ts.net:8443';
+
+  beforeEach(() => {
+    setUrl('https://box.tailnet-abc.ts.net/');
+    useDesktopStore.setState({ sessionId: 'sess-1', notifications: {} });
+  });
+
+  afterEach(() => {
+    cleanup();
+    setUrl(originalHref);
+  });
+
+  it('serves the frame from the origin the server named, and sandboxes it', () => {
+    const { container } = render(
+      <MemoizedIframeRenderer
+        data="/api/apps/notes/index.html"
+        isolateOrigin
+        appOrigin={APP_ORIGIN}
+        iframeToken="tok-1"
+      />,
+    );
+    const src = container.querySelector('iframe')?.getAttribute('src') ?? '';
+    expect(src).toStartWith(`${APP_ORIGIN}/api/apps/notes/index.html`);
+    // The desktop origin rides along as __yaar_api — without it the app's SDK would call
+    // its own origin and never reach the backend.
+    expect(new URL(src).searchParams.get('__yaar_api')).toBe('https://box.tailnet-abc.ts.net');
+    expect(new URL(src).searchParams.get('__yaar_token')).toBe('tok-1');
+    expect(container.querySelector('iframe')?.getAttribute('sandbox')).toBe(ISOLATED_APP_SANDBOX);
+  });
+
+  it('does not isolate without the server mark, even given an origin', () => {
+    const { container } = render(
+      <MemoizedIframeRenderer data="/api/apps/notes/index.html" appOrigin={APP_ORIGIN} />,
+    );
+    const src = container.querySelector('iframe')?.getAttribute('src') ?? '';
+    expect(src).not.toContain(':8443');
+  });
+
+  it('stays same-origin off localhost when the server named nothing', () => {
+    // The old behavior, and why Phase 3 needed the server to speak up: the
+    // sibling-loopback trick has nothing to derive from here.
+    const { container } = render(
+      <MemoizedIframeRenderer data="/api/apps/notes/index.html" isolateOrigin />,
+    );
+    const src = container.querySelector('iframe')?.getAttribute('src') ?? '';
+    expect(src).toStartWith('/api/apps/notes/index.html');
+  });
+});

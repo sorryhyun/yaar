@@ -8,6 +8,7 @@
 
 import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/server.js';
 import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
+import { desktopRedirectTarget, runOnAppOriginSocket } from './origin-boundary.js';
 
 // ── Dev reload SSE handler (set by dev-bundler.ts) ──────────────────
 let _devReloadHandler: (() => Response) | null = null;
@@ -93,7 +94,27 @@ function isPublicRoute(method: string, pathname: string): boolean {
   return publicRoutes.some((r) => r.method === method && r.pattern.test(pathname));
 }
 
-export function createFetchHandler() {
+export interface FetchHandlerOptions {
+  /**
+   * This handler serves the **app-origin socket** (`http/origin-boundary.ts`).
+   *
+   * Under a `proxy-port` boundary the two public origins are two Tailscale Serve
+   * ports pointed at two local sockets, and *which socket a request arrived on* is
+   * the only unspoofable way to tell which origin the browser addressed — `Host`
+   * and `X-Forwarded-*` come from the proxy. Giving each socket its own handler is
+   * how that fact reaches `resolvePrincipal`, however deep in a route it runs.
+   */
+  appOriginSocket?: boolean;
+}
+
+export function createFetchHandler(options: FetchHandlerOptions = {}) {
+  const handle = createFetchHandlerInner();
+  if (!options.appOriginSocket) return handle;
+  return (req: Request, server: import('bun').Server<WsData>) =>
+    runOnAppOriginSocket(() => handle(req, server));
+}
+
+function createFetchHandlerInner() {
   return async (req: Request, server: import('bun').Server<WsData>) => {
     const url = new URL(req.url, `http://localhost:${getPort()}`);
 
@@ -124,22 +145,16 @@ export function createFetchHandler() {
       return new Response('Bridge upgrade failed', { status: 500 });
     }
 
-    // App-origin isolation (Stage 2): pin the desktop to localhost. Installed apps
-    // are served from 127.0.0.1, and resolvePrincipal now refuses a token-less
-    // request that lands on that alias — so the desktop must never live there, or its
-    // own (legitimately token-less) requests would be refused too. A top-level
-    // *document* navigation that lands on 127.0.0.1 is the human's desktop; send it to
-    // localhost. App iframe documents (Sec-Fetch-Dest: iframe) carry a token and are
-    // left alone; so are API/asset calls (not documents).
-    if (
-      APP_ORIGIN_ISOLATION &&
-      url.hostname === '127.0.0.1' &&
-      req.method === 'GET' &&
-      req.headers.get('sec-fetch-dest') === 'document'
-    ) {
-      const port = url.port ? `:${url.port}` : '';
-      const target = `http://localhost${port}${url.pathname}${url.search}`;
-      return new Response(null, { status: 302, headers: { Location: target } });
+    // App-origin isolation: pin the desktop to its own origin. Isolated apps live on
+    // the app origin, and resolvePrincipal refuses a token-less request that carries
+    // it — so the desktop must never live there, or its own (legitimately token-less)
+    // requests would be refused too. A top-level *document* navigation that lands on
+    // the app origin is the human's desktop; send it back. App iframe documents
+    // (Sec-Fetch-Dest: iframe) carry a token and are left alone; so are API/asset
+    // calls (not documents).
+    if (req.method === 'GET' && req.headers.get('sec-fetch-dest') === 'document') {
+      const target = desktopRedirectTarget(url);
+      if (target) return new Response(null, { status: 302, headers: { Location: target } });
     }
 
     // CORS headers

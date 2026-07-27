@@ -17,7 +17,7 @@ import type { ActiveAgentSnapshot, OSAction } from '@yaar/shared';
 import type { SessionId } from './types.js';
 import type { SurfaceRegistry } from './surface-state.js';
 import type { WindowStateRegistry } from './window-state.js';
-import { refreshIframeTokens } from '../logging/window-restore.js';
+import { refreshRestoredWindowActions } from '../logging/window-restore.js';
 
 /** The subset of a pooled agent this snapshot reports. Narrowed so the pool stays out. */
 export interface SnapshotAgent {
@@ -39,11 +39,13 @@ export class SessionSnapshotService {
   constructor(private readonly deps: SessionSnapshotDeps) {}
 
   /**
-   * The session's windows as `window.create` actions, with fresh iframe tokens.
+   * The session's windows as `window.create` actions, with the per-run fields re-derived.
    *
    * The tokens are reminted rather than reused: the ones baked into the original action
    * are as old as the window, and a reconnecting client that renders a stale token gets an
-   * iframe that cannot call a single verb.
+   * iframe that cannot call a single verb. The app-origin marks are derived for the same
+   * reason — they are not window state (this rebuild has never carried them), they are a
+   * property of the boundary currently in force. See `refreshRestoredWindowActions`.
    */
   async windowActions(): Promise<OSAction[]> {
     const windows = this.deps.windowState.listWindows();
@@ -60,7 +62,7 @@ export class SessionSnapshotService {
       ...(win.minimized ? { minimized: win.minimized } : {}),
       ...(win.appId ? { appId: win.appId } : {}),
     }));
-    return refreshIframeTokens(actions, this.deps.sessionId);
+    return refreshRestoredWindowActions(actions, this.deps.sessionId);
   }
 
   /** Windows, live surfaces, and the agents currently working. */

@@ -25,12 +25,20 @@ interface IframeRendererProps {
   iframeToken?: string;
   /**
    * App-origin isolation (docs/guides/remote_mode.md). When set, render this
-   * app from the `127.0.0.1` alias so it is cross-origin to the desktop, and hand it
+   * app from a distinct origin so it is cross-origin to the desktop, and hand it
    * the desktop origin as `__yaar_api` so its SDK still reaches the backend across
    * that boundary. The server refuses a token-less request that carries the app
    * origin, so an isolated app can no longer pass as the host.
    */
   isolateOrigin?: boolean;
+  /**
+   * The origin to isolate *to*, when the server had to name it: a remote transport
+   * publishes the two origins as two ports on one hostname (`https://box.ts.net` and
+   * `https://box.ts.net:8443`), and nothing here can compute the second from the
+   * first. Absent, we derive the sibling loopback alias locally — which only the
+   * browser can do correctly, since the desktop's port is not necessarily the API's.
+   */
+  appOrigin?: string;
   onRenderSuccess?: () => void;
   onRenderError?: (error: string, url: string) => void;
 }
@@ -118,6 +126,7 @@ function IframeRenderer({
   requestId,
   iframeToken,
   isolateOrigin,
+  appOrigin: serverAppOrigin,
   onRenderSuccess,
   onRenderError,
 }: IframeRendererProps) {
@@ -126,14 +135,18 @@ function IframeRenderer({
   const sessionId = useDesktopStore((s) => s.sessionId);
   const customSandbox = typeof data === 'object' ? data.sandbox : undefined;
 
-  // App-origin isolation: resolve to the pinned app origin (127.0.0.1). Only when
-  // the server marked this app (source:'user'), the content is a relative desktop
-  // path, and we're actually on localhost (not remote). Null means "not isolated"
-  // and every path below falls back to the same-origin behavior.
-  const appOrigin =
-    isolateOrigin && !getRemoteConnection() && resolved.startsWith('/')
-      ? siblingLoopbackOrigin()
-      : null;
+  // The desktop's own origin — the API base an isolated app is handed as __yaar_api.
+  // Remote mode's `serverUrl` is the desktop origin; locally it is this page.
+  const desktopOrigin = getRemoteConnection()?.serverUrl ?? window.location.origin;
+
+  // App-origin isolation: resolve to the app origin, only when the server marked this
+  // app (source:'user'). Either the server named the origin (a remote transport that
+  // publishes both), or we derive the sibling loopback alias from a same-origin path.
+  // Null means "not isolated" and every path below falls back to same-origin behavior.
+  const appOrigin = !isolateOrigin
+    ? null
+    : (serverAppOrigin ??
+      (!getRemoteConnection() && resolved.startsWith('/') ? siblingLoopbackOrigin() : null));
 
   // Lock sessionId at mount time so late CONNECTION_STATUS doesn't re-render the iframe.
   // If sessionId isn't available yet, pick it up once and freeze.
@@ -147,18 +160,20 @@ function IframeRenderer({
   // iframeToken: read by the verb SDK at init time (before handleLoad injects __YAAR_TOKEN__)
   const url = (() => {
     const sid = sessionIdRef.current;
-    // Isolated app: build an absolute URL on the sibling origin, and hand the app
-    // the desktop origin as __yaar_api so its baked-in SDK calls the backend across
-    // the boundary. The token still rides in the query (the app reads it there).
+    // Isolated app: build an absolute URL on the app origin, and hand the app the
+    // desktop origin as __yaar_api so its baked-in SDK calls the backend across the
+    // boundary. The token still rides in the query (the app reads it there), as does
+    // the remote token that `resolveAssetUrl` already appended in remote mode — the
+    // path+query is carried over wholesale and only the origin is swapped.
     if (appOrigin) {
       try {
-        const u = new URL(resolved, window.location.origin);
+        const u = new URL(resolved, desktopOrigin);
         if (sid && !u.searchParams.has('sessionId')) u.searchParams.set('sessionId', sid);
         if (iframeToken && !u.searchParams.has('__yaar_token')) {
           u.searchParams.set('__yaar_token', iframeToken);
         }
         if (!u.searchParams.has('__yaar_api')) {
-          u.searchParams.set('__yaar_api', window.location.origin);
+          u.searchParams.set('__yaar_api', new URL(desktopOrigin).origin);
         }
         return `${appOrigin}${u.pathname}${u.search}`;
       } catch {

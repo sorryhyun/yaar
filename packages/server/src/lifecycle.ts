@@ -22,16 +22,41 @@ import {
   createSession,
   SessionLogger,
 } from './logging/index.js';
-import { PROJECT_ROOT, IS_BUNDLED_EXE, IS_REMOTE, IS_DEV, getPort } from './config.js';
+import {
+  PROJECT_ROOT,
+  IS_BUNDLED_EXE,
+  IS_REMOTE,
+  IS_DEV,
+  getPort,
+  isAppOriginIsolationRequested,
+} from './config.js';
+import { installProxyPortBoundary } from './http/origin-boundary.js';
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub } from './session/session-hub.js';
 import { setAccessRoleResolver } from './handlers/uri-registry.js';
 import { getAgentRole } from './agents/agent-context.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
-import { loadTunnelConfig, createTunnel, type TunnelProvider } from './lib/tunnel/index.js';
+import {
+  loadTunnelConfig,
+  createTunnel,
+  tunnelIsLoopbackOnly,
+  tunnelSupportsAppOrigin,
+  type TunnelConfig,
+  type TunnelProvider,
+} from './lib/tunnel/index.js';
 
 let activeTunnel: TunnelProvider | null = null;
+
+/**
+ * The tunnel we intend to bring up, resolved in `initializeSubsystems` and connected
+ * later in {@link startTunnel} — null when remote mode is off or the tunnel is disabled.
+ *
+ * Resolving the config and connecting are separate steps because the sockets sit between
+ * them: the bind address depends on which transport was *chosen* (below), and a Tailscale
+ * serve rule can only be pointed at a socket that is already listening.
+ */
+let plannedTunnel: TunnelConfig | null = null;
 
 /**
  * Initialize all subsystems (storage, MCP, warm pool, session restore).
@@ -76,21 +101,14 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     ]);
   }
 
-  // Generate auth token for remote mode
+  // Generate auth token for remote mode, and decide which tunnel we're bringing up
+  // (defaults to localhost.run if no config). The connect itself happens in
+  // startTunnel(), after the sockets exist.
   if (IS_REMOTE) {
     generateRemoteToken();
-
-    // Attempt SSH tunnel (defaults to localhost.run if no config)
     const tunnelConfig = loadTunnelConfig();
     if (tunnelConfig?.disabled !== true) {
-      const config = tunnelConfig ?? { service: 'localhost.run' as const };
-      const tunnel = createTunnel(config, getPort());
-      const ok = await tunnel.connect();
-      if (ok) {
-        activeTunnel = tunnel;
-      } else {
-        console.warn('[Tunnel] Could not establish tunnel — LAN-only mode');
-      }
+      plannedTunnel = tunnelConfig ?? { service: 'localhost.run' as const };
     }
   }
 
@@ -166,6 +184,73 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   }
 
   return options;
+}
+
+/**
+ * The address the main HTTP socket binds to.
+ *
+ * Remote mode has always opened `0.0.0.0` because the SSH tunnel is best-effort in
+ * front of it: lose the tunnel and you still have the LAN URL. A loopback-only
+ * transport inverts that — `tailscaled` reaches YAAR at `127.0.0.1`, so the LAN bind
+ * adds reachability the user did not ask for. Under one, only the tailnet (via the
+ * daemon) and localhost get in.
+ *
+ * Decided from the *chosen* transport, not from whether it connected: someone who
+ * asked for tailnet-only should not silently get their whole LAN exposed on a bearer
+ * token because `tailscaled` was down. A failed Tailscale tunnel falls back to
+ * localhost-only, not LAN-only.
+ */
+export function getBindHostname(): string {
+  if (!IS_REMOTE) return '127.0.0.1';
+  if (plannedTunnel && tunnelIsLoopbackOnly(plannedTunnel)) return '127.0.0.1';
+  return '0.0.0.0';
+}
+
+/**
+ * Should a second, app-origin socket be opened?
+ *
+ * This is app-origin isolation over a remote transport: the boundary needs two browser
+ * origins, and over a proxy the only unspoofable way to attribute a request to one of
+ * them is *which local socket it arrived on* (`http/origin-boundary.ts`). So the second
+ * public port gets its own listener rather than sharing the desktop's.
+ */
+export function wantsAppOriginSocket(): boolean {
+  return (
+    IS_REMOTE &&
+    isAppOriginIsolationRequested() &&
+    plannedTunnel !== null &&
+    tunnelSupportsAppOrigin(plannedTunnel)
+  );
+}
+
+/**
+ * Bring the planned tunnel up, now that the sockets are listening.
+ *
+ * `appLocalPort` is the app-origin socket's port, or null if there isn't one. When the
+ * transport confirms it published both origins, the proxy-port origin boundary is
+ * installed and isolated apps start rendering cross-origin over the network.
+ *
+ * Never fatal: a tunnel that won't come up leaves the server reachable at whatever the
+ * bind address allows, exactly as before.
+ */
+export async function startTunnel(appLocalPort: number | null): Promise<void> {
+  if (!plannedTunnel) return;
+
+  const tunnel = createTunnel(plannedTunnel, getPort(), appLocalPort);
+  if (!(await tunnel.connect())) {
+    console.warn(
+      getBindHostname() === '127.0.0.1'
+        ? '[Tunnel] Could not establish tunnel — localhost-only (this transport does not bind the LAN)'
+        : '[Tunnel] Could not establish tunnel — LAN-only mode',
+    );
+    return;
+  }
+  activeTunnel = tunnel;
+
+  const boundary = tunnel.originBoundary?.() ?? null;
+  if (boundary) {
+    installProxyPortBoundary(boundary.desktopOrigin, boundary.appOrigin);
+  }
 }
 
 /**
@@ -259,6 +344,18 @@ function isWsl(): boolean {
 }
 
 /**
+ * The URL this server is directly reachable at, tunnel aside.
+ *
+ * Under a loopback-only transport that is *not* the LAN IP — nothing outside this
+ * machine can reach the port, so printing a LAN URL (or putting one in the QR) would be
+ * advertising an address that refuses to connect.
+ */
+function getDirectUrl(): string {
+  const host = getBindHostname() === '127.0.0.1' ? '127.0.0.1' : getLanIp();
+  return `http://${host}:${getPort()}`;
+}
+
+/**
  * Get remote connection info for display in the frontend UI.
  * Returns null if not in remote mode.
  */
@@ -271,11 +368,9 @@ export function getRemoteInfo(): {
   if (!IS_REMOTE) return null;
   const token = getRemoteToken();
   if (!token) return null;
-  const lanIp = getLanIp();
-  const lanUrl = `http://${lanIp}:${getPort()}`;
-  const lanConnectUrl = `${lanUrl}/#remote=${token}`;
+  const lanUrl = getDirectUrl();
   const tunnelUrl = activeTunnel?.isConnected() ? activeTunnel.getPublicUrl(token) : null;
-  const connectUrl = tunnelUrl ?? lanConnectUrl;
+  const connectUrl = tunnelUrl ?? `${lanUrl}/#remote=${token}`;
   return { connectUrl, token, lanUrl, tunnelUrl };
 }
 
@@ -286,11 +381,10 @@ export async function printBanner(server: Server<any>): Promise<void> {
 
   if (IS_REMOTE) {
     const token = getRemoteToken()!;
-    const lanIp = getLanIp();
-    const serverUrl = `http://${lanIp}:${port}`;
-    const lanConnectUrl = `${serverUrl}/#remote=${token}`;
+    const serverUrl = getDirectUrl();
+    const loopbackOnly = getBindHostname() === '127.0.0.1';
     const tunnelUrl = activeTunnel?.isConnected() ? activeTunnel.getPublicUrl(token) : null;
-    const connectUrl = tunnelUrl ?? lanConnectUrl;
+    const connectUrl = tunnelUrl ?? `${serverUrl}/#remote=${token}`;
 
     console.log('');
     console.log(
@@ -300,7 +394,9 @@ export async function printBanner(server: Server<any>): Promise<void> {
     console.log(
       '\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563',
     );
-    console.log(`\u2551  Server:  ${serverUrl}`);
+    console.log(
+      `\u2551  Server:  ${serverUrl}${loopbackOnly ? '  (loopback only \u2014 no LAN)' : ''}`,
+    );
     if (tunnelUrl) {
       console.log(`\u2551  Tunnel:  ${tunnelUrl}`);
     }
@@ -336,7 +432,7 @@ export async function printBanner(server: Server<any>): Promise<void> {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function shutdown(server: Server<any>): Promise<void> {
+export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]): Promise<void> {
   console.log('\nShutting down...');
 
   // Hard deadline: force-kill the process if graceful shutdown takes too long.
@@ -385,6 +481,7 @@ export async function shutdown(server: Server<any>): Promise<void> {
     await getWarmPool().cleanup();
 
     server.stop();
+    for (const extra of alsoStop) extra.stop();
   } catch (err) {
     console.error('Error during shutdown:', err);
   }

@@ -54,7 +54,7 @@ These bind to `127.0.0.1` with no token authentication, same as before.
 
 - `REMOTE=1` env var enables remote mode
 - Server generates a random 32-byte base64url token at startup — a **fresh one per start**, so a saved connection from a previous run needs the new token (rescan the QR)
-- Server binds to `0.0.0.0` (all interfaces) instead of `127.0.0.1`
+- Server binds to `0.0.0.0` (all interfaces) instead of `127.0.0.1` — except under [Tailscale Serve](#no-lan-bind), which stays on loopback
 - All HTTP endpoints require `Authorization: Bearer <token>` header or `?token=` query param
 - WebSocket upgrades require `?token=` query param
 - `/health` endpoint is always exempt (for connection testing), and answers `{ status, remote }` — `remote: true` tells a client with no token that reachability does *not* imply access, so it shows the connection dialog instead of connecting unauthenticated
@@ -137,7 +137,7 @@ Auth priority: `privateKeyPath` → `password` → `SSH_AUTH_SOCK` agent.
 
 ### Tailscale Serve (managed, tailnet-only)
 
-Instead of a public tunnel, YAAR can expose itself over your [Tailscale](https://tailscale.com) tailnet. Only devices already on your tailnet can reach it — this is network-layer auth, strictly stronger than a public URL gated by a token. It also gives you a real HTTPS certificate (`https://<host>.<tailnet>.ts.net`) with no extra setup.
+Instead of a public tunnel, YAAR can expose itself over your [Tailscale](https://tailscale.com) tailnet. Only devices already on your tailnet can reach it — this is network-layer auth, strictly stronger than a public URL gated by a token. It also gives you a real HTTPS certificate (`https://<host>.<tailnet>.ts.net`) with no extra setup, and it is the **only** transport under which remote mode keeps [app-origin isolation](#app-origin-isolation-over-the-network).
 
 Create `config/tunnel.json`:
 ```json
@@ -146,25 +146,49 @@ Create `config/tunnel.json`:
 
 The banner and QR then show the MagicDNS URL:
 ```
+║  Server:  http://127.0.0.1:8000  (loopback only — no LAN)
 ║  Tunnel:  https://my-box.tailnet-abc.ts.net/#remote=<token>   (tailnet-only)
 ```
 
 **Requirements:**
-- The `tailscale` CLI installed and logged into a tailnet (`tailscale up`). YAAR checks `tailscale status` and falls back to LAN-only if the daemon isn't running.
+- The `tailscale` CLI installed and logged into a tailnet (`tailscale up`). YAAR checks `tailscale status` and continues without a tunnel if the daemon isn't running.
 - **HTTPS certificates enabled** for the tailnet — turn on MagicDNS and HTTPS Certificates in the [admin console](https://login.tailscale.com/admin/dns). Without this, `serve --https=443` fails and YAAR prints the fix.
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `service` | `"tailscale"` | — | Selects the Tailscale Serve provider |
 | `tailscalePath` | string | discovered on `PATH` (and macOS app bundle) | Absolute path to the `tailscale` binary |
+| `appOriginPort` | number | `8443` | Public HTTPS port the isolated **app origin** is served on (see below). Must not be 443 |
 
 **How it differs from the SSH tunnel:** there's no reverse tunnel to manage — `tailscaled` already holds the connection. YAAR just registers a serve rule (`https://…ts.net:443 → http://127.0.0.1:{PORT}`) at startup and turns it off on shutdown. Reconnect/keepalive are the daemon's job, so there's no backoff loop. Because only `tailscaled` (on loopback) and the tailnet reach the server, the public surface is your tailnet, not the whole internet.
+
+#### No LAN bind
+
+`REMOTE=1` normally binds `0.0.0.0` so the LAN URL works even if the tunnel fails. Under Tailscale, `tailscaled` reaches YAAR at `127.0.0.1`, so the LAN bind buys nothing and YAAR **stays on loopback**: only the tailnet (through the daemon) and this machine can connect.
+
+This is decided from your `tunnel.json`, not from whether the tunnel came up. If `tailscaled` is down you get **localhost-only**, not LAN-only — someone who asked for tailnet-only should not silently have their whole LAN exposed on a bearer token because a daemon wasn't running. If you want the LAN fallback, use the SSH tunnel or set `{ "disabled": true }` and tunnel externally.
+
+#### App-origin isolation over the network
+
+Tailscale is what lets remote mode keep the origin boundary that [used to be dropped](#app-origin-isolation). YAAR registers a **second** serve rule on the same MagicDNS name but a different port:
+
+```
+https://my-box.tailnet-abc.ts.net        → http://127.0.0.1:8000   the desktop
+https://my-box.tailnet-abc.ts.net:8443   → http://127.0.0.1:8001   installed apps
+```
+
+Different port means a different browser origin (the same-origin policy separates on port), so installed (`source:'user'`) app iframes are cross-origin to the desktop again, exactly as `localhost`/`127.0.0.1` achieves locally. Only Tailscale can do this: MagicDNS names are stable, while localhost.run's subdomain rotates every start and can never anchor a second origin.
+
+The two public ports point at **two different local sockets** on purpose. Behind a proxy the server cannot read which origin the browser addressed — `Host` and `X-Forwarded-*` are the proxy's word — so it reads *which socket the request arrived on* instead, which nothing can forge. The app-origin socket is loopback-only and its port never appears in a URL.
+
+If the second rule fails to register (e.g. the port is refused), YAAR logs it, leaves the desktop tunnel up, and runs with isolation off — a boundary the browser can't reach would be worse than none. Set `appOriginPort` to pick a different port. `YAAR_APP_ORIGIN_ISOLATION=0` switches the whole thing off, here as locally.
 
 ### Tunnel Behavior
 
 - Only activates in remote mode (`REMOTE=1` or bundled exe)
+- The tunnel comes up *after* the HTTP sockets are listening, so it always points at the port actually bound (remote mode walks upward from `PORT` if it's taken)
 - On success, the banner and QR code use the tunnel URL instead of the LAN URL
-- If connection fails on startup, a warning is logged and the server continues in LAN-only mode
+- If connection fails on startup, a warning is logged and the server continues LAN-only — or localhost-only under a [loopback-bound transport](#no-lan-bind)
 - If connection drops after success, auto-reconnects with exponential backoff (1s → 30s max)
 - On shutdown (`Ctrl+C`), the tunnel is closed gracefully with a 3s timeout
 - Keepalive: 15s interval, 3 max missed heartbeats
@@ -201,15 +225,24 @@ When using an external tunnel, the frontend's connection dialog accepts the tunn
 - All API and WebSocket requests include the token
 - No HTTPS by default — use a tunnel (Cloudflare, etc.) for encrypted connections over the internet
 
-### Remote mode drops the app-origin boundary
+### App-origin isolation
 
-This is the one security property remote mode trades away, so it's worth stating plainly.
+**App-origin isolation** serves installed (`source:'user'`) apps from a distinct browser origin from the desktop. Being cross-origin, the browser blocks a hostile app from reaching the desktop's DOM or JS memory through `window.parent`, and isolated app frames are additionally sandboxed so they can't navigate the top window (`window.top.location`) to a phishing page either. A hostile app is confined to what its `app.json` declares. It is on by default; `YAAR_APP_ORIGIN_ISOLATION=0` turns it off.
 
-In the default local setup, **app-origin isolation** is on: installed apps are served from a distinct browser origin (`127.0.0.1`) while the desktop stays on `localhost`. Being cross-origin, the browser blocks a hostile app from reaching the desktop's DOM or JS memory through `window.parent`, and isolated app frames are additionally sandboxed so they can't navigate the top window (`window.top.location`) to a phishing page either. A hostile app is confined to what its `app.json` declares.
+Whether remote mode has a boundary at all **depends on the transport**, because the boundary is just "two browser origins over one server" and not every transport can publish two:
 
-**Remote mode serves apps same-origin with the desktop** — the `localhost`/`127.0.0.1` loopback-alias split has no meaning once you're reaching the machine over the network, so the origin boundary can't exist. A same-origin frame can't be meaningfully sandboxed against this (`allow-scripts allow-same-origin` lets a frame reach into its own parent and strip its own sandbox attribute), so the sandbox doesn't help here. The consequence: **a malicious installed app can reach the desktop's DOM and JS memory directly.** The same is true in local mode if you explicitly set `YAAR_APP_ORIGIN_ISOLATION=0`.
+| Transport | Origin split | Hostile-app containment |
+|-----------|--------------|-------------------------|
+| Local (default) | `localhost` / `127.0.0.1` | ✅ |
+| **Tailscale Serve** | `…ts.net` / `…ts.net:8443` ([above](#app-origin-isolation-over-the-network)) | ✅ |
+| localhost.run (default remote) | none — the subdomain rotates every start | ❌ |
+| Custom SSH server / external tunnel | none | ❌ |
 
-The backstop in remote mode is the token gating *who can connect at all* — but that says nothing about apps you yourself installed. So: **in remote mode, don't install apps you don't trust.** If you need untrusted apps and the desktop's integrity both, stay in the default local mode where origin isolation is on.
+Where the boundary can't exist, **apps are served same-origin with the desktop.** A same-origin frame can't be meaningfully sandboxed against this either (`allow-scripts allow-same-origin` lets a frame reach into its own parent and strip its own sandbox attribute), so the sandbox doesn't help. The consequence: **a malicious installed app can reach the desktop's DOM and JS memory directly.** The same is true locally with `YAAR_APP_ORIGIN_ISOLATION=0`.
+
+The only backstop in that case is the token gating *who can connect at all* — which says nothing about apps you yourself installed. So on a boundary-less transport: **don't install apps you don't trust.** If you need untrusted apps and the desktop's integrity both, use Tailscale Serve or stay local.
+
+One consequence worth knowing: an isolated app's calls authenticate with its own **iframe token**, not the remote token. They never carried the remote token in a header — it was read out of `Referer`, which only worked while apps were same-origin, since the default referrer policy trims a cross-origin `Referer` down to a bare origin. An iframe token is the narrower credential anyway: server-minted, bound to one window and app, expiring, and still subject to the app's declared permissions.
 
 ## Troubleshooting
 

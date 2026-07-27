@@ -24,7 +24,7 @@ export {
   readSessionMessages,
   parseSessionMessages,
 } from './session-reader.js';
-export { getWindowRestoreActions, refreshIframeTokens } from './window-restore.js';
+export { getWindowRestoreActions, refreshRestoredWindowActions } from './window-restore.js';
 export { getContextRestoreMessages, FULL_RESTORE_POLICY } from './context-restore.js';
 export type { ContextRestorePolicy } from './context-restore.js';
 export { getCliRestoreEntries } from './cli-restore.js';

@@ -12,6 +12,28 @@ export interface TunnelProvider {
   getPublicUrl(token: string): string;
   /** Tear the tunnel down (best-effort, bounded). */
   shutdown(): Promise<void>;
+  /**
+   * The two public origins this transport serves, when it can host a *second*
+   * origin for isolated app iframes (Phase 3) — null when it cannot, or when the
+   * second rule failed to register.
+   *
+   * A transport that can only publish one origin (the SSH tunnel: one ephemeral
+   * subdomain) simply omits this method, and app-origin isolation stays off over
+   * that transport exactly as before.
+   */
+  originBoundary?(): OriginPair | null;
+}
+
+/**
+ * A desktop origin and the distinct origin isolated app iframes are served from.
+ *
+ * These are *browser* origins, so a difference in scheme, host, **or port** is
+ * enough for the same-origin policy to separate them — which is what lets one
+ * Tailscale MagicDNS name carry both (`:443` and `:8443`).
+ */
+export interface OriginPair {
+  desktopOrigin: string;
+  appOrigin: string;
 }
 
 export interface TunnelConfig {
@@ -39,4 +61,13 @@ export interface TunnelConfig {
   publicHttps?: boolean;
   /** Path to the `tailscale` binary (default: discovered on PATH). Tailscale service only. */
   tailscalePath?: string;
+  /**
+   * Public HTTPS port the *app* origin is served on (default: 8443). Tailscale only.
+   *
+   * A second `tailscale serve` rule on the same MagicDNS name but a different port
+   * is what gives app-origin isolation a distinct browser origin over the network
+   * (Phase 3). 8443 is the default because Funnel also permits it, so a later
+   * `mode: "funnel"` needs no different number.
+   */
+  appOriginPort?: number;
 }

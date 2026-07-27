@@ -12,26 +12,26 @@ import {
   compileAppsAndSyncShortcuts,
   shutdown,
   printBanner,
+  getBindHostname,
+  wantsAppOriginSocket,
+  startTunnel,
 } from './lifecycle.js';
 import { IS_REMOTE, getPort, setPort, TRANSPORT_IDLE_TIMEOUT_S } from './config.js';
 
 const MAX_PORT_ATTEMPTS = 20;
 
-async function startup() {
-  const wsOptions = await initializeSubsystems();
-  const fetch = createFetchHandler();
-  const websocket = createWsHandlers(wsOptions);
-  const hostname = IS_REMOTE ? '0.0.0.0' : '127.0.0.1';
-  const preferredPort = getPort();
-
-  let server!: ReturnType<typeof Bun.serve<WsData>>;
+/** Bind a socket, walking upward from `preferredPort` past anything already in use. */
+function serveFromFirstFreePort(
+  preferredPort: number,
+  hostname: string,
+  fetch: ReturnType<typeof createFetchHandler>,
+  websocket: ReturnType<typeof createWsHandlers>,
+): { server: ReturnType<typeof Bun.serve<WsData>>; port: number } {
   let lastError: unknown;
-  let bound = false;
-
   for (let attempt = 0; attempt < MAX_PORT_ATTEMPTS; attempt++) {
     const port = preferredPort + attempt;
     try {
-      server = Bun.serve<WsData>({
+      const server = Bun.serve<WsData>({
         port,
         hostname,
         // The outer bound on every server-side deadline (see MAX_REQUEST_DEADLINE_MS).
@@ -40,12 +40,7 @@ async function startup() {
         fetch,
         websocket,
       });
-      if (port !== preferredPort) {
-        console.log(`Port ${preferredPort} in use, using ${port} instead`);
-        setPort(port);
-      }
-      bound = true;
-      break;
+      return { server, port };
     } catch (err) {
       lastError = err;
       if (
@@ -57,12 +52,45 @@ async function startup() {
       throw err; // non-port error, rethrow
     }
   }
+  throw new Error(
+    `Could not find a free port in range ${preferredPort}–${preferredPort + MAX_PORT_ATTEMPTS - 1}: ${lastError}`,
+  );
+}
 
-  if (!bound) {
-    throw new Error(
-      `Could not find a free port in range ${preferredPort}–${preferredPort + MAX_PORT_ATTEMPTS - 1}: ${lastError}`,
-    );
+async function startup() {
+  const wsOptions = await initializeSubsystems();
+  const websocket = createWsHandlers(wsOptions);
+  const hostname = getBindHostname();
+  const preferredPort = getPort();
+
+  const { server, port } = serveFromFirstFreePort(
+    preferredPort,
+    hostname,
+    createFetchHandler(),
+    websocket,
+  );
+  if (port !== preferredPort) {
+    console.log(`Port ${preferredPort} in use, using ${port} instead`);
+    setPort(port);
   }
+
+  // The app-origin socket (app-origin isolation over a remote transport). Always
+  // loopback: the tunnel's second public port is what reaches it, and the *only* thing
+  // this socket exists to prove is which origin the browser addressed — see
+  // http/origin-boundary.ts. Its own port never appears in a URL, so it just takes the
+  // first free one above the desktop's.
+  const appOrigin = wantsAppOriginSocket()
+    ? serveFromFirstFreePort(
+        port + 1,
+        '127.0.0.1',
+        createFetchHandler({ appOriginSocket: true }),
+        websocket,
+      )
+    : null;
+
+  // Bring the tunnel up now that both sockets are listening — a serve rule can only
+  // point at a port that is already accepting.
+  await startTunnel(appOrigin?.port ?? null);
 
   await printBanner(server);
 
@@ -90,7 +118,7 @@ async function startup() {
   function handleShutdown() {
     if (shutdownInProgress) return;
     shutdownInProgress = true;
-    shutdown(server).catch((err) => {
+    shutdown(server, ...(appOrigin ? [appOrigin.server] : [])).catch((err) => {
       console.error('Shutdown error:', err);
       process.exit(1);
     });

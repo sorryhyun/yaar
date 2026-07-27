@@ -13,7 +13,7 @@ import {
   readSessionMessages,
   parseSessionMessages,
   getWindowRestoreActions,
-  refreshIframeTokens,
+  refreshRestoredWindowActions,
   getContextRestoreMessages,
 } from '../../logging/index.js';
 import type { ContextRestorePolicy } from '../../logging/index.js';
@@ -103,7 +103,7 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
       }
       const messages = parseSessionMessages(messagesJsonl);
       const rawActions = getWindowRestoreActions(messages);
-      const restoreActions = await refreshIframeTokens(rawActions, sessionId);
+      const restoreActions = await refreshRestoredWindowActions(rawActions, sessionId);
       const contextMessages = getContextRestoreMessages(messages, policy);
       return jsonResponse({ actions: restoreActions, contextMessages });
     } catch {

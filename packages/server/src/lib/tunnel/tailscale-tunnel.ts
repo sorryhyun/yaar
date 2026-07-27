@@ -18,10 +18,13 @@
  */
 
 import { execFile } from 'child_process';
-import type { TunnelConfig, TunnelProvider } from './types.js';
+import type { OriginPair, TunnelConfig, TunnelProvider } from './types.js';
 
 const TAG = '[Tunnel]';
 const COMMAND_TIMEOUT = 15_000;
+
+/** Public HTTPS port the isolated app origin is served on when none is configured. */
+export const DEFAULT_APP_ORIGIN_PORT = 8443;
 
 export interface CommandResult {
   code: number;
@@ -62,11 +65,26 @@ export class TailscaleTunnel implements TunnelProvider {
   private bin: string | null = null;
   private magicDns: string | null = null;
   private connected = false;
+  /** Local socket that receives app-origin traffic, or null when not isolating. */
+  private appLocalPort: number | null;
+  /** Public port the app-origin rule was actually registered on (null if it isn't). */
+  private appServePort: number | null = null;
 
-  constructor(config: TunnelConfig, localPort: number, runner: CommandRunner = defaultRunner) {
+  constructor(
+    config: TunnelConfig,
+    localPort: number,
+    runner: CommandRunner = defaultRunner,
+    appLocalPort: number | null = null,
+  ) {
     this.config = config;
     this.localPort = localPort;
     this.run = runner;
+    this.appLocalPort = appLocalPort;
+  }
+
+  /** Public HTTPS port the app origin is served on. */
+  private get appOriginPort(): number {
+    return this.config.appOriginPort ?? DEFAULT_APP_ORIGIN_PORT;
   }
 
   /** Find a runnable `tailscale` binary and confirm the daemon is up. */
@@ -115,29 +133,63 @@ export class TailscaleTunnel implements TunnelProvider {
     }
     this.magicDns = dnsName;
 
-    // Clear any stale serve rule we may have left on :443 (non-destructive to
-    // other ports), then register the proxy in the background.
-    await this.run(this.bin, ['serve', '--https=443', 'off']);
-    const target = `http://127.0.0.1:${this.localPort}`;
-    const serve = await this.run(this.bin, ['serve', '--bg', '--https=443', target]);
-
-    if (serve.code !== 0) {
-      const detail = `${serve.stderr}\n${serve.stdout}`.toLowerCase();
-      if (detail.includes('https') || detail.includes('cert')) {
-        console.warn(
-          `${TAG} \`tailscale serve\` failed — HTTPS certificates are not enabled for this tailnet. Enable MagicDNS + HTTPS in the Tailscale admin console (https://login.tailscale.com/admin/dns), then restart.`,
-        );
-      } else {
-        console.warn(
-          `${TAG} \`tailscale serve\` failed: ${serve.stderr.trim() || serve.stdout.trim()}`,
-        );
-      }
-      return false;
-    }
+    if (!(await this.registerServeRule(443, this.localPort))) return false;
 
     this.connected = true;
     console.log(`${TAG} Tunnel: https://${this.magicDns} (tailnet-only)`);
+
+    // Phase 3: a second rule on a different public port, pointed at a *different*
+    // local socket. Different port means a different browser origin, which is what
+    // re-erects the app-origin boundary over the network; the distinct local socket
+    // is how the server attributes a request to one side of it without trusting a
+    // proxy-supplied header. Failure here is not fatal — the desktop is already up,
+    // and the boundary simply stays off, as it is on every other transport.
+    if (this.appLocalPort !== null) {
+      if (await this.registerServeRule(this.appOriginPort, this.appLocalPort)) {
+        this.appServePort = this.appOriginPort;
+        console.log(
+          `${TAG} Isolated app origin: https://${this.magicDns}:${this.appOriginPort} (app-origin isolation active over Tailscale)`,
+        );
+      } else {
+        console.warn(
+          `${TAG} Could not serve the isolated app origin on :${this.appOriginPort} — apps will be same-origin with the desktop. Set "appOriginPort" in config/tunnel.json to use a different port.`,
+        );
+      }
+    }
+
     return true;
+  }
+
+  /**
+   * Point `https://<magicDns>:<publicPort>` at `http://127.0.0.1:<localPort>`.
+   *
+   * Clears any stale rule we left on that port first — `serve off` for one port is
+   * non-destructive to the others, so this never disturbs a rule the user set up
+   * themselves on a different port.
+   */
+  private async registerServeRule(publicPort: number, localPort: number): Promise<boolean> {
+    if (!this.bin) return false;
+    const flag = `--https=${publicPort}`;
+    await this.run(this.bin, ['serve', flag, 'off']);
+    const serve = await this.run(this.bin, [
+      'serve',
+      '--bg',
+      flag,
+      `http://127.0.0.1:${localPort}`,
+    ]);
+    if (serve.code === 0) return true;
+
+    const detail = `${serve.stderr}\n${serve.stdout}`.toLowerCase();
+    if (detail.includes('https') || detail.includes('cert')) {
+      console.warn(
+        `${TAG} \`tailscale serve ${flag}\` failed — HTTPS certificates are not enabled for this tailnet. Enable MagicDNS + HTTPS in the Tailscale admin console (https://login.tailscale.com/admin/dns), then restart.`,
+      );
+    } else {
+      console.warn(
+        `${TAG} \`tailscale serve ${flag}\` failed: ${serve.stderr.trim() || serve.stdout.trim()}`,
+      );
+    }
+    return false;
   }
 
   isConnected(): boolean {
@@ -148,9 +200,26 @@ export class TailscaleTunnel implements TunnelProvider {
     return `https://${this.magicDns}/#remote=${token}`;
   }
 
+  /**
+   * The origin pair, once both serve rules are up. Null when the app rule is not
+   * registered — the caller must then leave the boundary off rather than guess a
+   * hostname the browser would never reach.
+   */
+  originBoundary(): OriginPair | null {
+    if (!this.connected || !this.magicDns || this.appServePort === null) return null;
+    return {
+      desktopOrigin: `https://${this.magicDns}`,
+      appOrigin: `https://${this.magicDns}:${this.appServePort}`,
+    };
+  }
+
   async shutdown(): Promise<void> {
     this.connected = false;
     if (!this.bin) return;
     await this.run(this.bin, ['serve', '--https=443', 'off']);
+    if (this.appServePort !== null) {
+      await this.run(this.bin, ['serve', `--https=${this.appServePort}`, 'off']);
+      this.appServePort = null;
+    }
   }
 }

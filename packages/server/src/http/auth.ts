@@ -5,6 +5,7 @@
 
 import { extname } from 'path';
 import { IS_REMOTE } from '../config.js';
+import { validateIframeToken } from './iframe-tokens.js';
 
 let remoteToken: string | null = null;
 
@@ -96,7 +97,38 @@ export function checkHttpAuth(req: Request, url: URL): Response | null {
   const token = extractToken(req, url);
   if (token === remoteToken) return null;
 
+  // A valid iframe token is its own credential, and a narrower one than the remote
+  // token: server-minted, bound to one window and app, expiring, and still subject to
+  // the whole permission gate in access.ts once past here.
+  //
+  // Accepting it is what makes app-origin isolation possible over a remote transport.
+  // The `Referer` fallback in extractToken is how an app's calls used to carry the
+  // remote token, and it only ever worked because apps were *same-origin* with the
+  // desktop — the moment an app sits on its own origin, the default referrer policy
+  // trims the Referer to a bare origin and the token in it is gone. So the alternative
+  // to this is not "apps authenticate some other way", it is "an isolated app's every
+  // call 401s".
+  if (hasValidIframeToken(req, url)) return null;
+
   return Response.json({ error: 'Unauthorized' }, { status: 401 });
+}
+
+/**
+ * Is the caller presenting an iframe token that checks out?
+ *
+ * Both spellings, matching `access.ts`: the header the SDK sends, and the query
+ * parameter a subresource that cannot set headers (`<img src>`, `EventSource`) rides
+ * on. This says nothing about *what* the caller may reach — that is
+ * `requirePermission`'s job — only that it is a real, live app identity rather than an
+ * anonymous network caller.
+ *
+ * Exported for tests, like `isStaticAsset`: `IS_REMOTE` is fixed at module load, so the
+ * predicate is the honest unit under test rather than a process with REMOTE=1 in its
+ * environment.
+ */
+export function hasValidIframeToken(req: Request, url: URL): boolean {
+  const token = req.headers.get('x-iframe-token') ?? url.searchParams.get('__yaar_token');
+  return !!token && !!validateIframeToken(token);
 }
 
 /**

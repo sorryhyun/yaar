@@ -2,6 +2,8 @@ import type { OSAction } from '@yaar/shared';
 import { applyContentOperation, extractAppId } from '@yaar/shared';
 import type { ParsedMessage } from './types.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
+import { isolatedAppOrigin, isOriginBoundaryActive } from '../http/origin-boundary.js';
+import { resolveAppSource } from '../features/apps/roots.js';
 
 /** Extract appId from resolved paths like /api/apps/{appId}/... */
 function extractAppIdFromPath(path: string): string | null {
@@ -103,11 +105,23 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
 }
 
 /**
- * Generate fresh iframe tokens for restored window.create actions.
- * Stale tokens from session logs won't be in the server's token map,
- * so iframe apps would get 403 on every verb call without this.
+ * Re-derive the per-run fields of `window.create` actions that are being replayed
+ * rather than freshly emitted — a restored session log, or the snapshot a reconnecting
+ * client is handed.
+ *
+ * Both fields are properties of *this* run, not of the window:
+ *
+ * - **The iframe token.** A stale token from a session log isn't in the server's token
+ *   map, so the app would get a 403 on every verb call.
+ * - **The app-origin marks** (`isolateOrigin` / `appOrigin`). These depend on the
+ *   boundary currently in force (`http/origin-boundary.ts`), which is a function of the
+ *   transport this run chose — so a log written locally must not tell a Tailscale run to
+ *   use `127.0.0.1`, and vice versa. Deriving them here also closes a live gap: the
+ *   reconnect snapshot rebuilds each action from `WindowStateRegistry`, which never
+ *   carried the marks at all, so **every open app window silently lost its origin
+ *   isolation on a page refresh.**
  */
-export async function refreshIframeTokens(
+export async function refreshRestoredWindowActions(
   actions: OSAction[],
   sessionId: string,
 ): Promise<OSAction[]> {
@@ -123,9 +137,20 @@ export async function refreshIframeTokens(
       // the id — carry it onto the token rather than making the verb route re-derive it.
       const slashIdx = action.windowId.indexOf('/');
       const monitorId = slashIdx > 0 ? action.windowId.slice(0, slashIdx) : undefined;
+
+      // Same rule as features/window/create.ts: only installed (`source:'user'`) apps
+      // move to the app origin. Stripped rather than merged, so a mark from another run
+      // cannot survive into one whose boundary is off.
+      const isolateOrigin =
+        isOriginBoundaryActive() && !!appId && resolveAppSource(appId) === 'user';
+      const appOrigin = isolateOrigin ? isolatedAppOrigin() : null;
+
+      const { isolateOrigin: _stale, appOrigin: _staleOrigin, ...rest } = action;
       return {
-        ...action,
+        ...rest,
         iframeToken: await generateAppIframeToken(action.windowId, sessionId, { appId, monitorId }),
+        ...(isolateOrigin ? { isolateOrigin: true } : {}),
+        ...(appOrigin ? { appOrigin } : {}),
       };
     }),
   );

@@ -25,16 +25,20 @@
  * can therefore decline to send its token, spoof `Referer`, or reach `window.parent`
  * directly. No header-based principal closes that; it needs an origin boundary.
  *
- * Behind `YAAR_APP_ORIGIN_ISOLATION` (default on, local mode only) that boundary
- * exists: installed (`source:'user'`) apps are served from the `127.0.0.1` alias,
- * the desktop from `localhost`. `resolvePrincipal` then stops reading "no token" as
- * "the desktop" *for requests that carry the app origin* — a browser-set `Origin` of
- * the app alias, or a request landing on that alias — and refuses them. Bundled apps
- * and AI-authored HTML stay same-origin (host-authored, not hostile app code) and are
- * unaffected. Being a distinct origin also blocks the isolated app's `window.parent`
- * DOM/memory reach; top-level navigation — the one reach cross-origin left open — is now
- * closed by the `ISOLATED_APP_SANDBOX` on isolated frames (IframeRenderer.tsx). The full
- * gap history is in docs/guides/remote_mode.md.
+ * Behind `YAAR_APP_ORIGIN_ISOLATION` (default on) that boundary exists: installed
+ * (`source:'user'`) apps are served from a distinct origin, the desktop from its own.
+ * `resolvePrincipal` then stops reading "no token" as "the desktop" *for requests that
+ * carry the app origin* and refuses them. Bundled apps and AI-authored HTML stay
+ * same-origin (host-authored, not hostile app code) and are unaffected. Being a
+ * distinct origin also blocks the isolated app's `window.parent` DOM/memory reach;
+ * top-level navigation — the one reach cross-origin left open — is now closed by the
+ * `ISOLATED_APP_SANDBOX` on isolated frames (IframeRenderer.tsx).
+ *
+ * *Which* two origins those are is the transport's business, not this module's:
+ * `localhost`/`127.0.0.1` locally, two Tailscale Serve ports over the network. This
+ * module asks `origin-boundary.ts` one question — does this request carry the app
+ * origin — and that module knows how to answer it in either mode. The full gap history
+ * is in docs/guides/remote_mode.md.
  *
  * What this module does buy, today: a network caller cannot reach these routes
  * at all (auth.ts), an app that behaves like an app is confined to what it
@@ -43,7 +47,7 @@
  */
 
 import type { Verb } from '../handlers/uri-registry.js';
-import { isAppOriginIsolationEnabled, APP_ORIGIN_HOST } from '../config.js';
+import { requestCarriesAppOrigin } from './origin-boundary.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { errorResponse } from './utils.js';
 
@@ -97,37 +101,6 @@ function extractIframeToken(req: Request, url: URL): string | null {
   return req.headers.get('x-iframe-token') ?? url.searchParams.get('__yaar_token');
 }
 
-function hostnameOf(value: string | null): string | null {
-  if (!value) return null;
-  try {
-    return new URL(value).hostname;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Does this request carry the isolated-app origin (Stage 2)?
- *
- * With app-origin isolation on, the desktop is pinned to `localhost` and installed
- * apps to `127.0.0.1` (the same socket, a distinct browser origin). A request wears
- * the app origin one of two ways, and both are unspoofable by app code:
- *
- * - **A browser-set `Origin` header of the app alias.** The app's SDK calls the
- *   desktop origin cross-origin, so the browser attaches `Origin: http://127.0.0.1:PORT`.
- *   A hostile app doing the same `fetch()` *without* a token wears the same Origin —
- *   that is what pins it as an app rather than the host.
- * - **Landing on the app alias itself.** A relative `fetch('/api/...')` from an app
- *   stays on `127.0.0.1`, sends no `Origin` header, and would otherwise read as the
- *   host. The request host (`url.hostname`) catches it. The desktop never lands here
- *   because a document that does is redirected to localhost (http/server.ts).
- */
-function requestCarriesAppOrigin(req: Request, url: URL): boolean {
-  if (hostnameOf(req.headers.get('origin')) === APP_ORIGIN_HOST) return true;
-  if (url.hostname === APP_ORIGIN_HOST) return true;
-  return false;
-}
-
 /**
  * Resolve the caller of a request to a principal.
  *
@@ -140,14 +113,13 @@ function requestCarriesAppOrigin(req: Request, url: URL): boolean {
 export function resolvePrincipal(req: Request, url: URL): Principal | Response {
   const token = extractIframeToken(req, url);
   if (!token) {
-    // App-origin isolation (Stage 2, docs/guides/remote_mode.md). When the flag
-    // is on, "no token" no longer means "the desktop": an installed app served from
-    // the 127.0.0.1 alias can omit its token, but it cannot shed the app origin — the
-    // browser stamps it on cross-origin calls, and a relative call still lands on that
-    // alias. Either way the request is an app trying to pass as the host, so it is
-    // refused rather than promoted. Absent the flag this branch is inert and behavior
-    // is exactly as before.
-    if (isAppOriginIsolationEnabled() && requestCarriesAppOrigin(req, url)) {
+    // App-origin isolation (docs/guides/remote_mode.md). With a boundary in force,
+    // "no token" no longer means "the desktop": an isolated app can omit its token,
+    // but it cannot shed the app origin — the browser stamps it on cross-origin calls,
+    // and a same-origin call still lands on the app side of the boundary. Either way
+    // the request is an app trying to pass as the host, so it is refused rather than
+    // promoted. With no boundary this is inert and behavior is exactly as before.
+    if (requestCarriesAppOrigin(req, url)) {
       return errorResponse('App-origin request must present a valid iframe token', 403);
     }
     return { kind: 'host' };

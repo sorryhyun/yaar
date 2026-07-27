@@ -6,14 +6,13 @@
  * proxy, where the domain allowlist applies.
  *
  * Under app-origin isolation that one directive is too tight. The app document is
- * served from the app alias (`127.0.0.1`) while its baked-in SDKs address the
- * desktop origin (`localhost`) handed to them as `__yaar_api` — so `'self'` blocks
- * the app from reaching its own backend, `/api/fetch` included. Both loopback
- * aliases at the serving port are named, which keeps the policy correct whichever
- * side of the boundary the document was served from.
+ * served from the *app* origin while its baked-in SDKs address the *desktop* origin
+ * handed to them as `__yaar_api` — so `'self'` blocks the app from reaching its own
+ * backend, `/api/fetch` included. Naming both sides of the boundary keeps the policy
+ * correct whichever one the document came from.
  *
- * Widening to the sibling alias grants no new reach: both names resolve to this
- * same loopback socket, and every route behind them still runs the iframe-token and
+ * Widening to the other side of the boundary grants no new reach: it is the same
+ * server, and every route behind either origin still runs the iframe-token and
  * permission checks in `http/access.ts`.
  *
  * `blob:` and `data:` are named because `'self'` does not cover them — CSP matches
@@ -31,7 +30,8 @@
  * untouched.
  */
 
-import { APP_ORIGIN_ISOLATION, APP_ORIGIN_HOST, DESKTOP_ORIGIN_HOST, getPort } from '../config.js';
+import { APP_ORIGIN_HOST, DESKTOP_ORIGIN_HOST, getPort } from '../config.js';
+import { getOriginBoundary } from './origin-boundary.js';
 
 const BASE = "connect-src 'self' blob: data:";
 
@@ -51,7 +51,17 @@ function servingPort(req: Request): number {
 }
 
 export function appHtmlCsp(req: Request): string {
-  if (!APP_ORIGIN_ISOLATION) return BASE;
-  const port = servingPort(req);
-  return `${BASE} http://${DESKTOP_ORIGIN_HOST}:${port} http://${APP_ORIGIN_HOST}:${port}`;
+  const boundary = getOriginBoundary();
+  switch (boundary.mode) {
+    case 'off':
+      return BASE;
+    case 'loopback-alias': {
+      const port = servingPort(req);
+      return `${BASE} http://${DESKTOP_ORIGIN_HOST}:${port} http://${APP_ORIGIN_HOST}:${port}`;
+    }
+    case 'proxy-port':
+      // Both origins are published addresses the server itself chose — no Host to
+      // second-guess, and no dev proxy in front of a tunnel.
+      return `${BASE} ${boundary.desktopOrigin} ${boundary.appOrigin}`;
+  }
 }
