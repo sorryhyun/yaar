@@ -28,39 +28,6 @@ delete('yaar://apps/memo/db/memos/{id}')                → delete a memo
 invoke('yaar://apps/memo/db/memos', { action: 'count' })
 ```
 
-## App Protocol (when a window is open)
-
-### Query: memos
-Get all memos:
-```
-app_query stateKey="memos"
-```
-Returns: `{ memos: [{ id, title, content, createdAt, updatedAt }] }`
-
-### Command: searchMemos
-Full-text search (server-side FTS5):
-```
-app_command command="searchMemos" params={ query: "keyword" }
-```
-
-### Command: addMemo
-Save a new note:
-```
-app_command command="addMemo" params={ title: "Note Title", content: "Note content here" }
-```
-
-### Command: updateMemo
-Update an existing note:
-```
-app_command command="updateMemo" params={ id: "...", content: "Updated content" }
-```
-
-### Command: deleteMemo
-Delete a note:
-```
-app_command command="deleteMemo" params={ id: "..." }
-```
-
 ## Usage Pattern
 - To read or search memos, go straight to the database — `invoke('yaar://apps/memo/db/memos', { action: 'search', query: '...' })`. No window required.
 - Open a window only when the user wants to *see* the memos: `invoke('yaar://windows/', { appId: 'memo', renderer: 'iframe', content: 'yaar://apps/memo' })`
