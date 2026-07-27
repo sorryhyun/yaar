@@ -1,8 +1,28 @@
 export * from './actions.js';
 export * from './events.js';
-export * from './components.js';
 export * from './app-protocol.js';
-export * from './bridge.js';
+
+// The Component DSL and the extension bridge both carry Zod schemas. The barrel exposes only
+// their Zod-free half — value lists, narrow types, guards — plus type-only re-exports of what
+// the schemas infer. The schemas themselves live behind `@yaar/shared/schemas`, so importing
+// this barrel from the browser does not bundle Zod. See `schemas.ts`.
+export * from './component-types.js';
+export type { ComponentLayout, DisplayContent } from './components.js';
+export type {
+  BridgeTab,
+  BridgeHello,
+  BridgeTabs,
+  BridgeCommandAction,
+  BridgeCommand,
+  BridgeContent,
+  BridgeCommandResult,
+  BridgeActivity,
+  BridgeEventChannel,
+  BridgeEvent,
+  BridgeMessage,
+  BridgeServerMessage,
+  BridgeFidelity,
+} from './bridge.js';
 
 /** Unique session identifier. */
 export type SessionId = string;
@@ -46,10 +66,8 @@ export {
   previewAppId,
   isPreviewAppId,
   parseFileUri,
-  buildFileUri,
   type ParsedBareWindowUri,
   parseBareWindowUri,
-  isBareWindowsAuthority,
   expandBraceUri,
 } from './yaar-uri.js';
 export * from './design/index.js';

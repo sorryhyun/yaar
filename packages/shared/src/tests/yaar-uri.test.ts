@@ -2,7 +2,6 @@ import { describe, it, expect } from 'bun:test';
 import {
   parseYaarUri,
   parseBareWindowUri,
-  isBareWindowsAuthority,
   resolveContentUri,
   expandBraceUri,
 } from '../yaar-uri.js';
@@ -32,17 +31,6 @@ describe('parseBareWindowUri', () => {
 
   it('returns null for non-yaar URI', () => {
     expect(parseBareWindowUri('https://example.com')).toBeNull();
-  });
-});
-
-describe('isBareWindowsAuthority', () => {
-  it('returns true for yaar://windows/ URIs', () => {
-    expect(isBareWindowsAuthority('yaar://windows/my-win')).toBe(true);
-    expect(isBareWindowsAuthority('yaar://windows/')).toBe(true);
-  });
-
-  it('returns false for non-yaar URIs', () => {
-    expect(isBareWindowsAuthority('https://example.com')).toBe(false);
   });
 });
 

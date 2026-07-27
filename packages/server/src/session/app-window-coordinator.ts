@@ -13,7 +13,8 @@
  * only one of them has said it registered.
  */
 
-import { BRIDGE_APP_ID, ServerEventType, type ServerEvent } from '@yaar/shared';
+import { ServerEventType, type ServerEvent } from '@yaar/shared';
+import { BRIDGE_APP_ID } from '@yaar/shared/schemas';
 import type { ClientEventType } from '@yaar/shared';
 import type { ClientEventOf } from './client-event-router.js';
 import type { AppProtocolRequestData } from './emitter-channels.js';

@@ -304,10 +304,10 @@ resolveContentUri('yaar://apps/slides-lite')      // -> '/api/apps/slides-lite/d
 resolveContentUri('yaar://storage/docs/file.txt') // -> '/api/storage/docs/file.txt'
 
 parseFileUri('yaar://storage/docs/file.txt')      // -> { authority: 'storage', path: 'docs/file.txt' }
-buildFileUri('storage', 'docs/file.txt')          // -> 'yaar://storage/docs/file.txt'
 
 parseYaarUri('yaar://apps/storage')               // -> { authority: 'apps', path: 'storage' }
 buildYaarUri('apps', 'slides-lite')               // -> 'yaar://apps/slides-lite'
+buildYaarUri('storage', 'docs/file.txt')          // -> 'yaar://storage/docs/file.txt'
 extractAppId('yaar://apps/slides-lite')           // -> 'slides-lite'
 ```
 

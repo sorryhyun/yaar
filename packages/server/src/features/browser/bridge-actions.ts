@@ -10,7 +10,7 @@
  * silently-callable agent capability.
  */
 
-import { BRIDGE_CONTENT_MAX_CHARS } from '@yaar/shared';
+import { BRIDGE_CONTENT_MAX_CHARS } from '@yaar/shared/schemas';
 import { getBridgeHub, type BrowserTab } from './bridge.js';
 import {
   enforceTabControlGuard,

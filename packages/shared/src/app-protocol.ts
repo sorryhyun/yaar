@@ -83,8 +83,10 @@ const KEYBINDING_MODIFIERS = ['ctrl', 'meta', 'alt', 'shift'] as const;
  * the injected contextmenu iframe script forwards them out of app iframes — so
  * an app binding one would never fire (or worse, fire *and* close the window).
  * The build rejects them; keep in sync with `iframe-scripts/contextmenu.ts`.
+ *
+ * Internal: reachable only through `listKeybindingIssues`, the one exported entry point.
  */
-export const RESERVED_KEYBINDINGS: ReadonlySet<string> = new Set([
+const RESERVED_KEYBINDINGS: ReadonlySet<string> = new Set([
   'shift+tab',
   'ctrl+w',
   'ctrl+r',
@@ -97,8 +99,10 @@ export const RESERVED_KEYBINDINGS: ReadonlySet<string> = new Set([
  * `"ctrl+shift+arrowright"` form (lowercase, modifiers in fixed order).
  * Returns null for a combo that can never match: an unknown modifier token, a
  * missing key, or a modifier-only combo like `"Ctrl+Shift"`.
+ *
+ * Internal: reachable only through `listKeybindingIssues`, the one exported entry point.
  */
-export function normalizeKeybinding(combo: string): string | null {
+function normalizeKeybinding(combo: string): string | null {
   const parts = combo.split('+').map((p) => p.trim().toLowerCase());
   const key = parts.pop();
   if (!key) return null;

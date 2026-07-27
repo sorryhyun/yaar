@@ -13,7 +13,7 @@
 
 import type { ServerWebSocket } from 'bun';
 import type { WsData } from './server.js';
-import { bridgeMessageSchema, BRIDGE_PROTOCOL_VERSION } from '@yaar/shared';
+import { bridgeMessageSchema, BRIDGE_PROTOCOL_VERSION } from '@yaar/shared/schemas';
 import { getBridgeHub } from '../features/browser/bridge.js';
 import { actionEmitter } from '../session/action-emitter.js';
 

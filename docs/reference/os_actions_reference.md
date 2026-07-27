@@ -541,25 +541,14 @@ type OSAction =
   | DesktopAction;
 ```
 
-## Type Guards
-
-| Function | Checks |
-|----------|--------|
-| `isWindowAction(action)` | `type` starts with `'window.'` |
-| `isNotificationAction(action)` | `type` starts with `'notification.'` |
-| `isToastAction(action)` | `type` starts with `'toast.'` |
-| `isDialogAction(action)` | `type` starts with `'dialog.'` |
-| `isUserPromptAction(action)` | `type` starts with `'user.prompt.'` |
-| `isAppAction(action)` | `type` starts with `'app.'` |
-
 ## Validation Helpers
+
+Narrowing an `OSAction` is done by discriminating on `type` directly (`action.type.startsWith('window.')`,
+or a `switch` on the literal) — the family-level `is*Action` guards were removed once no caller used them.
 
 | Function | Purpose |
 |----------|---------|
-| `isTableContentData(value)` | Checks `{ headers: string[], rows: string[][] }` shape |
-| `isIframeContentData(value)` | Checks for URL string or `{ url, sandbox? }` object |
-| `isComponentLayout(value)` | Checks for `{ components: [...] }` shape |
-| `isWindowContentData(renderer, value)` | Validates data matches the renderer type |
+| `isWindowContentData(renderer, value)` | Validates data matches the renderer type (dispatches to the internal table / iframe / component shape checks) |
 | `isContentUpdateOperationValid(renderer, op)` | Validates an update operation is legal for the renderer |
 | `applyContentOperation(currentData, op)` | Applies a content update operation to existing data (shared by live window state and session restore) |
 

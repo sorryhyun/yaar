@@ -21,7 +21,7 @@ import {
   BRIDGE_COMMAND_MIN_VERSION,
   BRIDGE_CONTENT_MIN_VERSION,
   BRIDGE_INTERACT_MIN_VERSION,
-} from '@yaar/shared';
+} from '@yaar/shared/schemas';
 import { isYaarOriginUrl } from './guards.js';
 
 /** Minimal socket surface the hub needs — just enough to write frames back to the extension. */

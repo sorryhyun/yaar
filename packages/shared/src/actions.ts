@@ -438,32 +438,6 @@ export type OSAction =
   | AppAction
   | DesktopAction;
 
-// ============ Type Guards ============
-
-export function isWindowAction(action: OSAction): action is WindowAction {
-  return action.type.startsWith('window.');
-}
-
-export function isNotificationAction(action: OSAction): action is NotificationAction {
-  return action.type.startsWith('notification.');
-}
-
-export function isToastAction(action: OSAction): action is ToastAction {
-  return action.type.startsWith('toast.');
-}
-
-export function isDialogAction(action: OSAction): action is DialogAction {
-  return action.type.startsWith('dialog.');
-}
-
-export function isUserPromptAction(action: OSAction): action is UserPromptAction {
-  return action.type.startsWith('user.prompt.');
-}
-
-export function isAppAction(action: OSAction): action is AppAction {
-  return action.type.startsWith('app.');
-}
-
 // ============ Runtime Validation Helpers ============
 
 export interface TableContentData {
@@ -479,7 +453,7 @@ export interface IframeContentData {
 const isStringArray = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string');
 
-export function isTableContentData(value: unknown): value is TableContentData {
+function isTableContentData(value: unknown): value is TableContentData {
   if (!value || typeof value !== 'object') return false;
   const data = value as { headers?: unknown; rows?: unknown };
   return (
@@ -489,7 +463,7 @@ export function isTableContentData(value: unknown): value is TableContentData {
   );
 }
 
-export function isIframeContentData(value: unknown): value is string | IframeContentData {
+function isIframeContentData(value: unknown): value is string | IframeContentData {
   if (typeof value === 'string') return true;
   if (!value || typeof value !== 'object') return false;
   const data = value as { url?: unknown; sandbox?: unknown };
@@ -498,7 +472,7 @@ export function isIframeContentData(value: unknown): value is string | IframeCon
   );
 }
 
-export function isComponentLayout(value: unknown): value is ComponentLayout {
+function isComponentLayout(value: unknown): value is ComponentLayout {
   return (
     typeof value === 'object' &&
     value !== null &&

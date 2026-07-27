@@ -200,15 +200,6 @@ export function parseFileUri(uri: string): ParsedFileUri | null {
   return null;
 }
 
-/**
- * Build a yaar:// file-operation URI.
- *
- *   buildFileUri('storage', 'docs/file.txt')       → 'yaar://storage/docs/file.txt'
- */
-export function buildFileUri(_authority: 'storage', path: string): string {
-  return `yaar://storage/${path}`;
-}
-
 // ============ Window URIs (yaar://windows/) ============
 
 export interface ParsedBareWindowUri {
@@ -236,12 +227,4 @@ export function parseBareWindowUri(uri: string): ParsedBareWindowUri | null {
     windowId: parsed.path.slice(0, slashIdx),
     subPath: parsed.path.slice(slashIdx + 1) || undefined,
   };
-}
-
-/**
- * Whether this is a bare `yaar://windows/` URI (with or without a windowId).
- */
-export function isBareWindowsAuthority(uri: string): boolean {
-  const parsed = parseYaarUri(uri);
-  return parsed?.authority === 'windows';
 }

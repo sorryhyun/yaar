@@ -1,97 +1,56 @@
 import { describe, it, expect } from 'bun:test';
-import {
-  isWindowAction,
-  isNotificationAction,
-  isToastAction,
-  isDialogAction,
-  isTableContentData,
-  isIframeContentData,
-  isComponentLayout,
-  isWindowContentData,
-  isContentUpdateOperationValid,
-  type OSAction,
-} from '../actions.js';
+import { isWindowContentData, isContentUpdateOperationValid } from '../actions.js';
 
-describe('Type Guards', () => {
-  const windowAction: OSAction = {
-    type: 'window.create',
-    windowId: 'w1',
-    title: 'T',
-    bounds: { x: 0, y: 0, w: 100, h: 100 },
-    content: { renderer: 'text', data: '' },
-  };
-  const notifAction: OSAction = { type: 'notification.show', id: 'n1', title: 'T', body: 'B' };
-  const toastAction: OSAction = { type: 'toast.show', id: 't1', message: 'M' };
-  const dialogAction: OSAction = { type: 'dialog.confirm', id: 'd1', title: 'T', message: 'M' };
-
-  it('isWindowAction', () => {
-    expect(isWindowAction(windowAction)).toBe(true);
-    expect(isWindowAction(notifAction)).toBe(false);
-  });
-
-  it('isNotificationAction', () => {
-    expect(isNotificationAction(notifAction)).toBe(true);
-    expect(isNotificationAction(windowAction)).toBe(false);
-  });
-
-  it('isToastAction', () => {
-    expect(isToastAction(toastAction)).toBe(true);
-    expect(isToastAction(windowAction)).toBe(false);
-  });
-
-  it('isDialogAction', () => {
-    expect(isDialogAction(dialogAction)).toBe(true);
-    expect(isDialogAction(windowAction)).toBe(false);
-  });
-});
-
+// The per-renderer shape guards (table / iframe / component) are module-internal; they are
+// exercised here through `isWindowContentData`, the one exported entry point that dispatches
+// to them.
 describe('Runtime Validation', () => {
-  describe('isTableContentData', () => {
+  describe('table content shape', () => {
     it('accepts valid table data', () => {
-      expect(isTableContentData({ headers: ['A', 'B'], rows: [['1', '2']] })).toBe(true);
+      expect(isWindowContentData('table', { headers: ['A', 'B'], rows: [['1', '2']] })).toBe(true);
     });
 
     it('accepts empty table', () => {
-      expect(isTableContentData({ headers: [], rows: [] })).toBe(true);
+      expect(isWindowContentData('table', { headers: [], rows: [] })).toBe(true);
     });
 
     it('rejects invalid inputs', () => {
-      expect(isTableContentData(null)).toBe(false);
-      expect(isTableContentData('string')).toBe(false);
-      expect(isTableContentData({ headers: [1], rows: [] })).toBe(false);
-      expect(isTableContentData({ headers: [], rows: [[1]] })).toBe(false);
+      expect(isWindowContentData('table', null)).toBe(false);
+      expect(isWindowContentData('table', 'string')).toBe(false);
+      expect(isWindowContentData('table', { headers: [1], rows: [] })).toBe(false);
+      expect(isWindowContentData('table', { headers: [], rows: [[1]] })).toBe(false);
     });
   });
 
-  describe('isIframeContentData', () => {
+  describe('iframe content shape', () => {
     it('accepts string URL', () => {
-      expect(isIframeContentData('https://example.com')).toBe(true);
+      expect(isWindowContentData('iframe', 'https://example.com')).toBe(true);
     });
 
     it('accepts object with url', () => {
-      expect(isIframeContentData({ url: 'https://example.com' })).toBe(true);
-      expect(isIframeContentData({ url: 'https://example.com', sandbox: 'allow-scripts' })).toBe(
-        true,
-      );
+      expect(isWindowContentData('iframe', { url: 'https://example.com' })).toBe(true);
+      expect(
+        isWindowContentData('iframe', { url: 'https://example.com', sandbox: 'allow-scripts' }),
+      ).toBe(true);
     });
 
     it('rejects invalid inputs', () => {
-      expect(isIframeContentData(null)).toBe(false);
-      expect(isIframeContentData(42)).toBe(false);
-      expect(isIframeContentData({ url: 123 })).toBe(false);
+      expect(isWindowContentData('iframe', null)).toBe(false);
+      expect(isWindowContentData('iframe', 42)).toBe(false);
+      expect(isWindowContentData('iframe', { url: 123 })).toBe(false);
     });
   });
 
-  describe('isComponentLayout', () => {
+  describe('component layout shape', () => {
     it('accepts valid layout', () => {
-      expect(isComponentLayout({ components: [] })).toBe(true);
-      expect(isComponentLayout({ components: [{ type: 'button' }] })).toBe(true);
+      expect(isWindowContentData('component', { components: [] })).toBe(true);
+      expect(isWindowContentData('component', { components: [{ type: 'button' }] })).toBe(true);
     });
 
     it('rejects invalid inputs', () => {
-      expect(isComponentLayout(null)).toBe(false);
-      expect(isComponentLayout({})).toBe(false);
-      expect(isComponentLayout({ components: 'not-array' })).toBe(false);
+      expect(isWindowContentData('component', null)).toBe(false);
+      expect(isWindowContentData('component', {})).toBe(false);
+      expect(isWindowContentData('component', { components: 'not-array' })).toBe(false);
     });
   });
 

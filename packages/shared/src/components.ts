@@ -1,70 +1,35 @@
 /**
- * Component DSL - Flat schema for LLM simplicity.
+ * Component DSL — the Zod half. Flat schema for LLM simplicity.
  * No recursion, no containers. Components are a flat array with grid layout.
+ *
+ * The value lists and the narrow renderer-facing types live in `component-types.ts`, which imports
+ * no Zod; this file derives the schemas from them. Import from `@yaar/shared/schemas` to reach the
+ * schemas — the package barrel deliberately exposes only the Zod-free half plus these inferred
+ * types, so the frontend does not bundle Zod.
  */
 
 import { z } from 'zod';
+import {
+  BADGE_VARIANTS,
+  BUTTON_VARIANTS,
+  COMPONENT_TYPES,
+  GAP_VALUES,
+  INPUT_VARIANTS,
+  PROGRESS_VARIANTS,
+  SIZE_VALUES,
+  TEXT_ALIGNMENTS,
+  TEXT_COLORS,
+  TEXT_VARIANTS,
+} from './component-types.js';
 
-// ============ Canonical Enum Values ============
-// Single source of truth for the DSL enum value lists. The Zod schemas below derive from
-// these arrays (via z.enum), and the hand-written component types are bound to them via
-// `satisfies` checks. The frontend ComponentRenderer imports these instead of re-declaring.
-
-export const GAP_VALUES = ['none', 'sm', 'md', 'lg'] as const;
-export const SIZE_VALUES = ['sm', 'md', 'lg'] as const;
-export const BUTTON_VARIANTS = [
-  'primary',
-  'secondary',
-  'ghost',
-  'danger',
-] as const satisfies readonly NonNullable<ButtonComponent['variant']>[];
-export const INPUT_VARIANTS = [
-  'text',
-  'email',
-  'password',
-  'number',
-  'url',
-] as const satisfies readonly NonNullable<InputComponent['variant']>[];
-export const TEXT_VARIANTS = [
-  'body',
-  'heading',
-  'subheading',
-  'caption',
-  'code',
-] as const satisfies readonly NonNullable<TextComponent['variant']>[];
-export const TEXT_COLORS = [
-  'default',
-  'muted',
-  'accent',
-  'success',
-  'warning',
-  'error',
-] as const satisfies readonly NonNullable<TextComponent['color']>[];
-export const TEXT_ALIGNMENTS = ['left', 'center', 'right'] as const satisfies readonly NonNullable<
-  TextComponent['textAlign']
->[];
-export const BADGE_VARIANTS = [
-  'default',
-  'success',
-  'warning',
-  'error',
-  'info',
-] as const satisfies readonly NonNullable<BadgeComponent['variant']>[];
-export const PROGRESS_VARIANTS = [
-  'default',
-  'success',
-  'warning',
-  'error',
-] as const satisfies readonly NonNullable<ProgressComponent['variant']>[];
+// Re-exported so `components.ts` stays the one place that describes the whole DSL for anyone
+// reading it top to bottom; the barrel takes the values from `component-types.js` directly.
+export * from './component-types.js';
 
 // ============ Shared Enums ============
 
 const gapEnum = z.enum(GAP_VALUES);
 const sizeEnum = z.enum(SIZE_VALUES);
-
-// ============ Component Types (leaf only) ============
-
-const componentTypes = ['button', 'input', 'select', 'text', 'badge', 'progress', 'image'] as const;
 
 // ============ Base Fields ============
 
@@ -139,7 +104,7 @@ const baseFields = {
 
 /** Single flat component schema — no children, no containers */
 export const componentSchema = z.object({
-  type: z.enum(componentTypes),
+  type: z.enum(COMPONENT_TYPES),
   ...baseFields,
 });
 
@@ -179,9 +144,9 @@ export const componentLayoutSchema = z.object({
  * Display content schema - for markdown, html, text, table, iframe (no components).
  * Used by create_window and update_window tools.
  */
-export const displayRendererSchema = z.enum(['markdown', 'html', 'text', 'iframe', 'table']);
+const displayRendererSchema = z.enum(['markdown', 'html', 'text', 'iframe', 'table']);
 
-export const displayDataSchema = z.union([
+const displayDataSchema = z.union([
   z.string().describe('Content string (markdown text, HTML, plain text, or URL for iframe)'),
   z
     .object({
@@ -198,120 +163,9 @@ export const displayContentSchema = z.object({
   ),
 });
 
-// ============ TypeScript Types ============
-
-type Size = 'sm' | 'md' | 'lg';
-
-export type ButtonComponent = {
-  type: 'button';
-  label: string;
-  action: string;
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  size?: Size;
-  disabled?: boolean;
-  icon?: string;
-  parallel?: boolean;
-  submitForm?: string;
-};
-
-export type InputComponent = {
-  type: 'input';
-  name: string;
-  formId?: string;
-  label?: string;
-  placeholder?: string;
-  defaultValue?: string;
-  variant?: 'text' | 'email' | 'password' | 'number' | 'url';
-  rows?: number;
-  disabled?: boolean;
-};
-
-export type SelectComponent = {
-  type: 'select';
-  name: string;
-  formId?: string;
-  label?: string;
-  options: { value: string; label: string }[];
-  defaultValue?: string;
-  placeholder?: string;
-  disabled?: boolean;
-};
-
-export type TextComponent = {
-  type: 'text';
-  content: string;
-  variant?: 'body' | 'heading' | 'subheading' | 'caption' | 'code';
-  color?: 'default' | 'muted' | 'accent' | 'success' | 'warning' | 'error';
-  textAlign?: 'left' | 'center' | 'right';
-};
-
-export type BadgeComponent = {
-  type: 'badge';
-  label: string;
-  variant?: 'default' | 'success' | 'warning' | 'error' | 'info';
-};
-
-export type ProgressComponent = {
-  type: 'progress';
-  value: number;
-  label?: string;
-  variant?: 'default' | 'success' | 'warning' | 'error';
-  showValue?: boolean;
-};
-
-export type ImageComponent = {
-  type: 'image';
-  src: string;
-  width?: number | string;
-  height?: number | string;
-  fit?: 'contain' | 'cover' | 'fill';
-};
-
-/** Union of all component types */
-export type Component =
-  | ButtonComponent
-  | InputComponent
-  | SelectComponent
-  | TextComponent
-  | BadgeComponent
-  | ProgressComponent
-  | ImageComponent;
+// ============ Inferred Types ============
 
 /** Component layout: flat array + grid config */
 export type ComponentLayout = z.infer<typeof componentLayoutSchema>;
 
 export type DisplayContent = z.infer<typeof displayContentSchema>;
-
-// ============ Type Guards ============
-
-export function isComponent(node: unknown): node is Component {
-  return typeof node === 'object' && node !== null && 'type' in node;
-}
-
-export function isButtonComponent(node: Component): node is ButtonComponent {
-  return node.type === 'button';
-}
-
-export function isTextComponent(node: Component): node is TextComponent {
-  return node.type === 'text';
-}
-
-export function isBadgeComponent(node: Component): node is BadgeComponent {
-  return node.type === 'badge';
-}
-
-export function isProgressComponent(node: Component): node is ProgressComponent {
-  return node.type === 'progress';
-}
-
-export function isImageComponent(node: Component): node is ImageComponent {
-  return node.type === 'image';
-}
-
-export function isInputComponent(node: Component): node is InputComponent {
-  return node.type === 'input';
-}
-
-export function isSelectComponent(node: Component): node is SelectComponent {
-  return node.type === 'select';
-}

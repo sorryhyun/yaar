@@ -7,11 +7,11 @@ import {
   type OSAction,
   type ComponentLayout,
   type WindowBounds,
-  componentLayoutSchema,
   extractAppId,
   WINDOW_PLACEMENT,
   cascadeWindowBounds,
 } from '@yaar/shared';
+import { componentLayoutSchema } from '@yaar/shared/schemas';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { okJson, error, validateRelativePath } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';

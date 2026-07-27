@@ -140,7 +140,8 @@ mock.module('../agents/agent-session.js', () => {
 
 const { LiveSession } = await import('../session/live-session.js');
 
-import { bridgeMessageSchema, BRIDGE_PROTOCOL_VERSION, type OSAction } from '@yaar/shared';
+import type { OSAction } from '@yaar/shared';
+import { bridgeMessageSchema, BRIDGE_PROTOCOL_VERSION } from '@yaar/shared/schemas';
 import { handleBridgeMessage } from '../websocket/bridge-handlers.js';
 import { resetBroadcastCenter } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';

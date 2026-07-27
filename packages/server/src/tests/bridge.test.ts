@@ -14,7 +14,7 @@ import {
   BRIDGE_PROTOCOL_VERSION,
   BRIDGE_COMMAND_MIN_VERSION,
   BRIDGE_CONTENT_MIN_VERSION,
-} from '@yaar/shared';
+} from '@yaar/shared/schemas';
 import { getBridgeHub, type BridgeSocket } from '../features/browser/bridge.js';
 import {
   enforceTabControlGuard,
