@@ -37,7 +37,7 @@ Windows (PowerShell): `irm https://github.com/sorryhyun/yaar/releases/latest/dow
 
 **특정 버전 / 설치 경로 변경:**
 ```bash
-VERSION=v0.11.5 curl -fsSL ... | bash    # 특정 버전 (기본: 최신)
+VERSION=v0.12.0 curl -fsSL ... | bash    # 특정 버전 (기본: 최신)
 INSTALL_DIR=/usr/local/bin curl -fsSL ... | bash  # 설치 경로 (기본: ~/.local/bin)
 ```
 
