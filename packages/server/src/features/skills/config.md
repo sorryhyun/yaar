@@ -29,6 +29,7 @@ invoke('yaar://config/settings', { language: "en", onboardingCompleted: true })
 |-------|------|-------------|
 | `language` | string | Language code: en, ko, ja, zh, es, fr, de, pt, ru, ar, hi, it, nl, pl, tr, vi, th, id, sv, uk |
 | `onboardingCompleted` | boolean | Mark onboarding as completed |
+| `remote` | boolean | Remote mode (phone/other-device access). Takes effect on next restart — see `yaar://skills/remote` |
 
 ## Hooks
 

@@ -4,6 +4,10 @@
 
 Remote mode lets you access YAAR from other devices on your network (phone, tablet, another PC) with token-based authentication.
 
+> **Setting this up for the first time?** Just ask YAAR — "help me open this on my phone". It reads
+> `yaar://skills/remote` and walks you through installing Tailscale on both devices step by step.
+> This page is the reference; that skill is the walkthrough.
+
 ## Quick Start
 
 ```bash

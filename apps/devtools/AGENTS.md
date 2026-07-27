@@ -261,7 +261,7 @@ Verify a URI before writing code against it: `command("inspectUri", { uri })` re
 | `yaar://storage/` | describe, read, list, invoke, del | Files. `invoke` actions: `write`, `edit`, `grep`. |
 | `yaar://windows/` | describe, list | Open windows. |
 | `yaar://http` | describe, invoke | HTTP proxy (SSRF-protected, domain allowlist). |
-| `yaar://skills/{topic}` | describe, read | Reference docs. Topics: `components`, `config`, `marketplace`. Fetch with `command("inspectUri", { uri, read: true })` — a topic is a document, so `list` is not one of its verbs. |
+| `yaar://skills/{topic}` | describe, read | Reference docs. Topics: `components`, `config`, `marketplace`, `remote`. Fetch with `command("inspectUri", { uri, read: true })` — a topic is a document, so `list` is not one of its verbs. |
 
 `yaar://session/` exists and `yaar://` itself is listable, but both are session-principal-only — an app agent (this one included) gets a 403 on either. Devtools also holds no permission for `yaar://config/` or `yaar://history/`, so neither is usable here even though both exist elsewhere.
 

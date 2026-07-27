@@ -150,7 +150,8 @@ read('yaar://skills/components')   # load a specific skill
 Available skills:
 - **components** — REQUIRED before using renderer: 'component'. Contains layout patterns and types
 - **config** — Configuration system (hooks, settings, shortcuts, mounts, domains)
-- **marketplace** — App marketplace API for browsing and installing apps`;
+- **marketplace** — App marketplace API for browsing and installing apps
+- **remote** — REQUIRED before helping a user reach YAAR from a phone or another computer. Tailscale install walkthrough (both devices) and remote-mode setup`;
 
 export const USER_PROMPTS_SECTION = `## User Prompts
 

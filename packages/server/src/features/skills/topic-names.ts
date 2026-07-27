@@ -9,6 +9,6 @@
  * and either way the only symptom is an agent told to read a document that is not
  * there. `topics.ts` now asserts the two agree at load.
  */
-export const TOPIC_NAMES = ['components', 'config', 'marketplace'] as const;
+export const TOPIC_NAMES = ['components', 'config', 'marketplace', 'remote'] as const;
 
 export type TopicName = (typeof TOPIC_NAMES)[number];

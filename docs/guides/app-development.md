@@ -69,7 +69,7 @@ See [Publishing to the Marketplace](#publishing-to-the-marketplace) for the full
 | Verb | URI | Description |
 |------|-----|-------------|
 | `list` | `yaar://skills` | List available skill topics |
-| `read` | `yaar://skills/{topic}` | Load reference docs (`components`, `config`, `marketplace`) |
+| `read` | `yaar://skills/{topic}` | Load reference docs (`components`, `config`, `marketplace`, `remote`) |
 
 ## Development Workflow in Detail
 

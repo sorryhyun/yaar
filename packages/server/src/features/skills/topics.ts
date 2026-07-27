@@ -17,11 +17,14 @@ import componentsMd from './components.md' with { type: 'text' };
 import configMd from './config.md' with { type: 'text' };
 // @ts-expect-error: Bun text import
 import marketplaceMd from './marketplace.md' with { type: 'text' };
+// @ts-expect-error: Bun text import
+import remoteMd from './remote.md' with { type: 'text' };
 
 export const TOPICS: Record<string, string> = {
   components: componentsMd,
   config: configMd,
   marketplace: marketplaceMd,
+  remote: remoteMd,
 };
 
 export { TOPIC_NAMES };

@@ -69,7 +69,7 @@ YAAR에서는 AI에게 무엇을 만들지 말하면 AI가 앱을 만듭니다. 
 | 동사 | URI | 설명 |
 |------|-----|------|
 | `list` | `yaar://skills` | 사용 가능한 스킬 토픽 목록 |
-| `read` | `yaar://skills/{topic}` | 참조 문서 로드 (`components`, `config`, `marketplace`) |
+| `read` | `yaar://skills/{topic}` | 참조 문서 로드 (`components`, `config`, `marketplace`, `remote`) |
 
 ## 개발 워크플로우 상세
 
