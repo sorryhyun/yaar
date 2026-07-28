@@ -33,7 +33,7 @@ jobs:
             echo "::warning::Draft targets '$COMMITISH' (not a branch); skipping version bump."
           fi
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.target.outputs.branch != ''
         with:
           ref: ${{ steps.target.outputs.branch }}

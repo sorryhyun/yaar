@@ -19,7 +19,11 @@ jobs:
   # base_ref covers pull_request (the branch being merged INTO); ref covers a
   # direct push to main. Neither is set for the other event, so the pair is
   # exactly "is main involved?".
-  check:
+  #
+  # A reusable workflow always reports as "<caller job> / <called job>", so this
+  # job id is half of the status-check name branch protection matches on: `ci /
+  # check`. Renaming it silently detaches any required-check rule — don't.
+  ci:
     uses: ./.github/workflows/checks.yml
     with:
       full: ${{ github.base_ref == 'main' || github.ref == 'refs/heads/main' }}
