@@ -430,6 +430,32 @@ async function loadPost(id: string) {
 // guard.invalidate() bumps with no fetch attached, dropping everything in flight.
 ```
 
+**`createKeyState`** — held-key tracking for continuous input, the input half of a game loop.
+Declarative `keybindings` and `onShortcut` fire discrete actions on keydown; smooth movement
+instead samples held state every animation frame:
+
+```typescript
+import { createKeyState } from '@bundled/yaar';
+
+const keys = createKeyState({ preventDefault: ['arrowup', 'arrowdown', ' '] });
+
+function frame(dt: number) {
+  if (keys.has('w') || keys.has('arrowup')) player.y -= speed * dt;
+  if (keys.has('d') || keys.has('arrowright')) player.x += speed * dt;
+}
+// keys.has('KeyW') matches the physical key on any layout; keys.has('w') matches
+// what the layout typed. keys.dispose() from onClose removes the listeners.
+```
+
+It gets the fiddly parts right by default: OS auto-repeat is ignored, held state clears on
+window blur and tab-hide (alt-tabbing with `w` held must not leave the player running
+forever), releases are keyed by `e.code` so a modifier changing `e.key` mid-hold (Alt+W
+reports `∑` on macOS) can never leave a stuck key, and presses landing in an editable
+element are skipped (typing "w" into a chat box doesn't move the player; pass
+`ignoreEditable: false` to opt out). The rule of thumb for game input: discrete action
+(pause, inventory, rotate) → declarative `keybindings`, agent-visible and validated;
+continuous movement → `createKeyState` + your `requestAnimationFrame` loop.
+
 ## Runtime Constraints
 
 Compiled apps run in a **browser iframe sandbox**. They are subject to these hard constraints:
@@ -594,7 +620,7 @@ Common mistakes to avoid when building apps:
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
 - **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
 - **Don't hand-roll a sanitizer** — see [the rule above](#rendering-untrusted-html) for what an element denylist plus `^on` attribute stripping misses.
@@ -811,7 +837,9 @@ export default defineApp({
   reserved combos (`Shift+Tab`, `Ctrl+1-9`, `Ctrl+W`, `Ctrl+R`, `F5`). Bindings appear in
   `dist/protocol.json` and the manifest, so agents can tell users about them. For a shortcut
   that needs an argument or does not correspond to a command, use the imperative
-  `onShortcut(combo, handler)` from `@bundled/yaar` instead.
+  `onShortcut(combo, handler)` from `@bundled/yaar` instead. Both fire discrete actions on
+  keydown — for held-key movement (WASD in a game loop), use `createKeyState` instead of
+  binding movement commands to keys.
 - **Splitting up.** `state`/`commands` maps may live in other modules and be spread in — see
   [Splitting a protocol by domain](#splitting-a-protocol-by-domain). The `export default`
   itself must stay in `src/main.ts`: that is what the build reads back to fold Zod schemas.

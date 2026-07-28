@@ -52,7 +52,9 @@ export {
   withLoading,
   createStaleGuard,
   onShortcut,
+  createKeyState,
 } from './ui.js';
+export type { KeyState, KeyStateOptions } from './ui.js';
 
 // ── HTML sanitization ───────────────────────────────────────────
 export { sanitizeHtml } from './sanitize.js';

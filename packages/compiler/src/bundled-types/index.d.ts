@@ -1243,6 +1243,45 @@ declare module '@bundled/yaar' {
    */
   export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): () => void;
 
+  export interface KeyStateOptions {
+    /**
+     * Keys whose default browser action is suppressed — e.g. `['arrowup', ' ']`
+     * so movement keys never scroll the window. Matched against `e.key` or
+     * `e.code`, case-insensitive.
+     */
+    preventDefault?: string[];
+    /**
+     * Skip presses landing in an editable element (input, textarea, select,
+     * contenteditable), so typing "w" into a chat box never moves the player.
+     * Defaults to true. Releases are always processed.
+     */
+    ignoreEditable?: boolean;
+  }
+
+  export interface KeyState {
+    /**
+     * True while `key` is held. Matched against `KeyboardEvent.key` (`'w'`,
+     * `'arrowleft'`, `' '`) or `KeyboardEvent.code` (`'KeyW'`, `'Space'` —
+     * layout-independent), case-insensitive.
+     */
+    has(key: string): boolean;
+    /** Forget everything currently held (keys stay untracked until re-pressed). */
+    clear(): void;
+    /** Remove all listeners and clear the held set. */
+    dispose(): void;
+  }
+
+  /**
+   * Track which keys are held right now — the input half of a game loop.
+   * Declarative `keybindings` / `onShortcut` fire discrete actions on keydown;
+   * continuous movement instead samples `keys.has('w')` every animation frame.
+   *
+   * Handles the fiddly parts: OS auto-repeat ignored, held state cleared on
+   * window blur and tab-hide (no stuck keys after alt-tab), releases keyed by
+   * `e.code` so a modifier changing `e.key` mid-hold never wedges a key.
+   */
+  export function createKeyState(options?: KeyStateOptions): KeyState;
+
   /**
    * Create a Solid.js signal that auto-persists to appStorage.
    * The signal starts with `fallback` and updates once the stored value loads.

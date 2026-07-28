@@ -184,6 +184,20 @@ export function shortcutMatches(parsed: ParsedShortcut, e: KeyboardEvent): boole
 }
 
 /**
+ * True when dispatching a bare (modifier-less) combo would steal a key an
+ * editable element is using — arrows move the cursor, letters type. Combos
+ * carrying Ctrl/Meta/Alt still fire there, matching how every desktop app
+ * treats e.g. Ctrl+S in a text field.
+ */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  if (!target) return false;
+  const el = target as HTMLElement;
+  if (el.isContentEditable) return true;
+  const tag = el.tagName;
+  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+}
+
+/**
  * Register a keyboard shortcut. Returns a cleanup function.
  *
  * Combo format: modifier keys joined with `+`, e.g. `"ctrl+s"`, `"alt+arrowup"`, `"escape"`.
@@ -207,4 +221,101 @@ export function onShortcut(combo: string, handler: (e: KeyboardEvent) => void): 
 
   window.addEventListener('keydown', listener);
   return () => window.removeEventListener('keydown', listener);
+}
+
+// ── Continuous key state (game input) ────────────────────────────
+
+export interface KeyStateOptions {
+  /**
+   * Keys whose default browser action is suppressed while the tracker is
+   * installed — e.g. `['arrowup', 'arrowdown', ' ']` so a game's movement keys
+   * never scroll the window. Matched against `e.key` or `e.code`,
+   * case-insensitive.
+   */
+  preventDefault?: string[];
+  /**
+   * Skip presses that land in an editable element (input, textarea, select,
+   * contenteditable), so typing "w" into a chat box never moves the player.
+   * Defaults to true. Releases are always processed.
+   */
+  ignoreEditable?: boolean;
+}
+
+export interface KeyState {
+  /**
+   * True while `key` is held. Matched against `KeyboardEvent.key`
+   * (`'w'`, `'arrowleft'`, `' '`) or `KeyboardEvent.code` (`'KeyW'`,
+   * `'Space'` — layout-independent), case-insensitive.
+   */
+  has(key: string): boolean;
+  /** Forget everything currently held (keys stay untracked until re-pressed). */
+  clear(): void;
+  /** Remove all listeners and clear the held set. */
+  dispose(): void;
+}
+
+/**
+ * Track which keys are held right now — the input half of a game loop.
+ *
+ * Declarative `keybindings` and `onShortcut` fire discrete actions on keydown;
+ * continuous movement instead samples held state every frame:
+ *
+ * ```ts
+ * const keys = createKeyState({ preventDefault: ['arrowup', 'arrowdown', ' '] });
+ * function frame(dt: number) {
+ *   if (keys.has('w') || keys.has('arrowup')) player.y -= speed * dt;
+ *   if (keys.has('d') || keys.has('arrowright')) player.x += speed * dt;
+ * }
+ * ```
+ *
+ * Gets the fiddly parts right by default: OS auto-repeat is ignored, held state
+ * clears on window blur and tab-hide (alt-tabbing with `w` held must not leave
+ * the player running forever), and releases are keyed by `e.code` so a modifier
+ * changing `e.key` mid-hold (Alt+W reports `'∑'` on macOS) can never leave a
+ * stuck key. `has('KeyW')` matches the physical key on any layout; `has('w')`
+ * matches what the layout typed at press time.
+ */
+export function createKeyState(options: KeyStateOptions = {}): KeyState {
+  const ignoreEditable = options.ignoreEditable !== false;
+  const prevent = new Set((options.preventDefault ?? []).map((k) => k.toLowerCase()));
+  /** lowercased `e.code` → lowercased `e.key` recorded at press time */
+  const held = new Map<string, string>();
+
+  const codeOf = (e: KeyboardEvent) => (e.code || e.key).toLowerCase();
+
+  const onKeyDown = (e: KeyboardEvent) => {
+    if (prevent.has(e.key.toLowerCase()) || prevent.has(codeOf(e))) e.preventDefault();
+    if (e.repeat) return;
+    if (ignoreEditable && isEditableTarget(e.target)) return;
+    held.set(codeOf(e), e.key.toLowerCase());
+  };
+  const onKeyUp = (e: KeyboardEvent) => {
+    held.delete(codeOf(e));
+  };
+  const clear = () => held.clear();
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') clear();
+  };
+
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', clear);
+  document.addEventListener('visibilitychange', onVisibility);
+
+  return {
+    has(key: string): boolean {
+      const q = key.toLowerCase();
+      if (held.has(q)) return true;
+      for (const pressed of held.values()) if (pressed === q) return true;
+      return false;
+    },
+    clear,
+    dispose() {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', clear);
+      document.removeEventListener('visibilitychange', onVisibility);
+      clear();
+    },
+  };
 }

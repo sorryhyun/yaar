@@ -34,7 +34,7 @@
  */
 
 import { render } from 'solid-js/web';
-import { AppCommandError, parseShortcut, shortcutMatches } from './ui.js';
+import { AppCommandError, isEditableTarget, parseShortcut, shortcutMatches } from './ui.js';
 
 /**
  * The id of the mount element the compiler's HTML wrapper emits.
@@ -255,19 +255,6 @@ function toRegistration(definition) {
   if (definition.onCapture !== undefined) registration.onCapture = definition.onCapture;
   if (definition.keybindings !== undefined) registration.keybindings = definition.keybindings;
   return registration;
-}
-
-/**
- * True when dispatching a bare (modifier-less) combo would steal a key an
- * editable element is using — arrows move the cursor, letters type. Combos
- * carrying Ctrl/Meta/Alt still fire there, matching how every desktop app
- * treats e.g. Ctrl+S in a text field.
- */
-function isEditableTarget(target) {
-  if (!target) return false;
-  if (target.isContentEditable) return true;
-  const tag = target.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
 }
 
 /**
