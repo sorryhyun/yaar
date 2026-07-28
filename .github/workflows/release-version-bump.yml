@@ -42,6 +42,8 @@ jobs:
 
       - uses: oven-sh/setup-bun@v2
         if: steps.target.outputs.branch != ''
+        with:
+          bun-version-file: .bun-version
 
       - run: bun install --frozen-lockfile
         if: steps.target.outputs.branch != ''

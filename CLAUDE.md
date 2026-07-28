@@ -210,7 +210,10 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - `make dev` runs `scripts/dev.sh` which: builds shared package first → starts server (serves both API and frontend on single port)
 - Git branch: uses `master` (not `main`)
 - **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
-- **CI** (`.github/workflows/ci.yml`): `bun install` → build shared → typecheck → test (runs on push/PR to master)
+- **CI** (`.github/workflows/ci.yml`): thin caller for `.github/workflows/checks.yml` — install → build shared + compiler → typecheck → test → check:docs → check:openapi. Runs on push/PR to master.
+- **`checks.yml`** is the one definition of "is this tree good?", shared by CI and release so the two cannot drift. Its `full` input gates the release-only extras (lint, format:check, check:apps); CI leaves it at the default `false` to keep the per-push loop fast. A check that should guard every PR goes in the baseline; one that need only hold at ship time goes behind `full`.
+- **Release** (`.github/workflows/release.yml`): `resolve` pins the tag's SHA and asserts `package.json` matches the tag → `verify` runs `checks.yml` with `full: true` against that SHA → `release` builds and smoke-tests the artifacts. This matters because `release-version-bump.yml` pushes with `GITHUB_TOKEN`, which deliberately does not trigger workflows, so the released commit is otherwise never checked at all.
+- **Bun version**: CI/release pin the version in `.bun-version` (via setup-bun's `bun-version-file`). `engines.bun` states the supported *floor*; the two are intentionally different numbers.
 
 ### Subagent Model Selection
 

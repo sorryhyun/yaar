@@ -6,40 +6,12 @@ on:
   pull_request:
     branches: [master]
 
+permissions:
+  contents: read
+
 jobs:
+  # Baseline gate only (`full` defaults to false) — the same steps this workflow
+  # ran inline before checks.yml existed. The heavier release-only checks are
+  # added by release.yml so the per-push loop stays fast.
   check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # full history so doc-freshness can compare commit timestamps
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.3.14
-
-      - run: bun install --frozen-lockfile
-
-      - name: Build shared
-        run: bun run --filter @yaar/shared build
-
-      - name: Build compiler
-        run: bun run --filter @yaar/compiler build
-
-      - name: Typecheck
-        run: bun run typecheck
-
-      - name: Test
-        run: bun run --filter '*' test
-
-      # Warns when a reference doc's **Source:** file changed after the doc's last
-      # update. Broken pointers and bundled-library list drift still fail the check.
-      # Run `bun run check:docs:strict` when stale-source warnings should also fail.
-      - name: Check doc freshness
-        run: bun run check:docs
-
-      # Regenerates docs/reference/openapi.yaml from the route files' PUBLIC_ENDPOINTS
-      # and fails if it differs from the committed spec. The pre-commit hook keeps this
-      # in sync automatically; this catches commits made with --no-verify.
-      - name: Check OpenAPI spec is in sync
-        run: bun run check:openapi
+    uses: ./.github/workflows/checks.yml

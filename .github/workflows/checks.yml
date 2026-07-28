@@ -1,0 +1,91 @@
+name: Checks
+
+# The single definition of "is this tree good?". Called by ci.yml (per push/PR)
+# and by release.yml (against the exact tagged commit). Keeping one copy is the
+# point: the release gate must be a strict superset of the PR gate, which is not
+# something two hand-maintained step lists stay true to for long.
+#
+# The baseline runs everywhere. `full: true` adds the slower checks that would
+# tax every push for little benefit but must not be skipped when shipping a
+# binary to users.
+on:
+  workflow_call:
+    inputs:
+      ref:
+        description: 'Commit SHA (or ref) to check out. Defaults to the caller default.'
+        type: string
+        required: false
+      full:
+        description: 'Also run the release-only checks (lint, formatting, app rules).'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          fetch-depth: 0 # full history so doc-freshness can compare commit timestamps
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
+
+      - name: Report commit under test
+        run: |
+          echo "Checking $(git rev-parse HEAD)"
+          echo "Bun $(bun --version)  |  full=${{ inputs.full }}"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Build shared
+        run: bun run --filter @yaar/shared build
+
+      - name: Build compiler
+        run: bun run --filter @yaar/compiler build
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Test
+        run: bun run --filter '*' test
+
+      # Warns when a reference doc's **Source:** file changed after the doc's last
+      # update. Broken pointers and bundled-library list drift still fail the check.
+      # Run `bun run check:docs:strict` when stale-source warnings should also fail.
+      - name: Check doc freshness
+        run: bun run check:docs
+
+      # Regenerates docs/reference/openapi.yaml from the route files' PUBLIC_ENDPOINTS
+      # and fails if it differs from the committed spec. The pre-commit hook keeps this
+      # in sync automatically; this catches commits made with --no-verify.
+      - name: Check OpenAPI spec is in sync
+        run: bun run check:openapi
+
+      # ── Release-only from here down ───────────────────────────────────────
+      # Pre-commit hooks already run Prettier + ESLint --fix over staged files, so
+      # on a normal push these are near-tautological. They are not guaranteed on a
+      # commit made with --no-verify, and the release commit is exactly that: the
+      # bump workflow writes it from CI with no hooks in play.
+
+      - name: Lint
+        if: inputs.full
+        run: bun run lint
+
+      - name: Check formatting
+        if: inputs.full
+        run: bun run format:check
+
+      # ERROR-level app rules only. The ADVISORY rules in check-apps.ts are
+      # deliberately not release blockers — the script's own convention is that a
+      # rule gets promoted to ERROR once it reaches zero, and gating on advisories
+      # would invert that. Swap in check:apps:strict to gate on advisories too.
+      - name: Check apps
+        if: inputs.full
+        run: bun run check:apps

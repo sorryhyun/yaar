@@ -8,12 +8,68 @@ permissions:
   contents: write
 
 jobs:
+  # Pin the exact commit the tag points at, ONCE, and hand that SHA to every
+  # downstream job. Two reasons this is a job and not an inline `ref:`:
+  #
+  #  1. release-version-bump.yml pushes the version commit with GITHUB_TOKEN,
+  #     which by design does not trigger workflows — so the commit being
+  #     released has never been through CI. Something has to check it, and it
+  #     has to be *this* commit, not "whatever the tag resolves to right now".
+  #  2. verify and build must agree. Resolving the tag independently in each job
+  #     leaves a window where a moved tag ships artifacts that were never tested.
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.pin.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - name: Pin released commit
+        id: pin
+        run: |
+          sha="$(git rev-parse HEAD)"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Releasing $sha"
+
+      # The bump workflow syncs package.json to the tag, but nothing verifies the
+      # push landed before "Publish" was clicked. If the maintainer publishes a
+      # draft faster than the bump commit lands, the tag points at the *previous*
+      # version and the artifacts silently carry the wrong number. Fail loudly.
+      - name: Verify version matches tag
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          want="${TAG#v}"
+          got="$(jq -r .version package.json)"
+          if [ "$want" != "$got" ]; then
+            echo "::error::Tag $TAG expects version $want but package.json has $got."
+            echo "The release-version-bump commit probably did not land before publish."
+            exit 1
+          fi
+          echo "package.json version $got matches tag $TAG"
+
+  # Everything a pull request runs, plus the release-only checks, against the
+  # tagged SHA. See checks.yml.
+  verify:
+    needs: resolve
+    uses: ./.github/workflows/checks.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+      full: true
+
   release:
+    needs: [resolve, verify]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.sha }}
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: .bun-version
 
       - uses: actions/setup-node@v4
         with:
@@ -64,6 +120,61 @@ jobs:
         run: |
           bun scripts/build-exe-bundle.js --target linux --arch x64
           mv dist/yaar dist/yaar-linux-x64
+
+      # Boot the artifact we are about to publish, in the layout users actually
+      # get (binary + sibling apps/ extracted from the tarball), and prove it
+      # serves. A green typecheck says nothing about whether the embedded
+      # frontend assets or the apps archive survived bundling.
+      #
+      # linux-x64 is the only target the runner can execute natively; the other
+      # four come out of the same build script, so this covers the shared risk.
+      - name: Smoke test Linux x64 artifact
+        env:
+          SMOKE_PORT: 8123
+        run: |
+          set -euo pipefail
+          work="$(mktemp -d)"
+          cp dist/yaar-linux-x64 "$work/yaar"
+          chmod +x "$work/yaar"
+          tar -xzf dist/yaar-apps.tar.gz -C "$work"
+          test -d "$work/apps" || { echo "::error::apps/ missing from yaar-apps.tar.gz"; exit 1; }
+
+          export YAAR_CONFIG="$work/config" YAAR_STORAGE="$work/storage"
+          export PORT="$SMOKE_PORT" MCP_SKIP_AUTH=1
+          "$work/yaar" > "$work/boot.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+
+          base="http://127.0.0.1:$SMOKE_PORT"
+          up=""
+          for _ in $(seq 1 60); do
+            if ! kill -0 "$pid" 2>/dev/null; then
+              echo "::error::yaar exited during boot"; cat "$work/boot.log"; exit 1
+            fi
+            if curl -fsS "$base/health" -o "$work/health.json"; then up=1; break; fi
+            sleep 1
+          done
+          if [ -z "$up" ]; then
+            echo "::error::/health never responded within 60s"; cat "$work/boot.log"; exit 1
+          fi
+
+          # No Claude/Codex CLI on the runner: warm-pool init fails and is logged
+          # rather than fatal, so a serving /health is the correct expectation.
+          jq -e '.status == "ok"' "$work/health.json" > /dev/null \
+            || { echo "::error::unexpected /health body: $(cat "$work/health.json")"; exit 1; }
+
+          # Embedded frontend assets survived bundling.
+          curl -fsS "$base/" -o "$work/index.html"
+          grep -qi '<div id="root"' "$work/index.html" \
+            || { echo "::error::/ did not serve the frontend shell"; head -c 500 "$work/index.html"; exit 1; }
+
+          # The sibling apps/ archive is readable by the binary.
+          curl -fsS "$base/api/apps" -o "$work/apps.json"
+          count="$(jq '.apps | length' "$work/apps.json")"
+          [ "$count" -gt 0 ] \
+            || { echo "::error::/api/apps returned $count apps"; cat "$work/apps.json"; exit 1; }
+
+          echo "Smoke test passed: /health ok, frontend served, $count apps discovered."
 
       - name: Build Linux arm64
         run: |
