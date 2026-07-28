@@ -3,3 +3,9 @@
 # every package's `bun test` starts from the same pinned environment.
 [test]
 preload = ["../../scripts/test-env.ts"]
+
+# `tsc` emits `dist/**/*.test.js` next to the real sources, so a bare `bun test`
+# here collected all 14 tests twice — once from `src`, once from a stale compiled
+# copy that fails. The `test` script sidesteps it by scoping to `src/tests`; this
+# makes the unscoped form agree instead of quietly disagreeing.
+pathIgnorePatterns = ["**/dist/**"]

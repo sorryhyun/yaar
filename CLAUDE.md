@@ -53,6 +53,25 @@ throwaway temp dirs, and the root `.env` is skipped. So a test run describes the
 machine — in particular, toggling remote mode on in the configurations app (which persists
 `remote: true` to `config/settings.json`) no longer changes what the suite asserts.
 
+**`bun test <path>` works from the repo root too.** Bun picks `bunfig.toml` by *current
+directory*, not by the test file's package, so a root-launched run used to load no preload at
+all and report silently wrong results — the same class of failure `test-env.ts` exists to
+prevent. The root `bunfig.toml` closes that: it preloads `test-env.ts`, then
+`scripts/test-preload-root.ts`, which loads whatever setup the anchored package needs on top
+(frontend's happy-dom globals, the server's `dist/protocol.json` fixtures). It dispatches
+rather than loading both because a global DOM would change what the *compiler* tests see —
+`shims/yaar/define-app.ts` branches on `typeof window`. It also runs that package's own
+`pretest` (`bun run` executes npm lifecycle hooks; `bun test` executes none), so a root run
+builds `@yaar/shared`/`@yaar/compiler` instead of testing whatever `dist/` was lying around —
+~25ms when already fresh. Both root and package bunfigs carry `pathIgnorePatterns` for
+`**/dist/**`: `tsc` emits compiled `.test.js` copies next to the sources, and an unscoped run
+was collecting each compiler test twice, the stale copy failing.
+
+A **repo-wide** bare `bun test` from the root is still not supported — the suites are
+partitioned across processes on purpose (`mock.module` is process-global; see
+`packages/server/scripts/run-unit-tests.ts`), and one process cannot hold both the DOM and
+no-DOM worlds. Use `bun run test`, which is also what CI runs.
+
 ## Environment Variables
 
 - `PROVIDER` - Force a specific AI provider (`claude` or `codex`). Auto-detected if not set.

@@ -1,0 +1,25 @@
+# Root `bun test`. Bun picks bunfig.toml by *current directory*, so this file is
+# what a test run launched from the repo root gets — and until it existed, such a
+# run got no preload at all: the environment was the developer's, and results were
+# silently wrong rather than red. Every package has its own bunfig for runs whose
+# cwd is inside the package (what `bun run test` and CI use); this is the root's
+# equivalent, and it exists to make `bun test <path>` from here mean the same thing
+# the package's own run means.
+
+[test]
+# Preloads run in order, awaited, before any test file loads. `test-env.ts` must
+# stay first — it pins the environment before `config/env.ts` can freeze
+# `IS_REMOTE` from settings.json or .env. `test-preload-root.ts` then loads
+# whatever setup the *anchored package* needs on top; see its header for why that
+# cannot simply be "load everything", and why a repo-wide `bun test` from here is
+# still not the supported way to run the whole suite (use `bun run test`).
+preload = ["./scripts/test-env.ts", "./scripts/test-preload-root.ts"]
+
+# Build output is not a test suite. `tsc` emits `dist/**/*.test.js` alongside the
+# real sources, so a path-scoped run collected each compiler test twice — once from
+# `src`, once from a stale compiled copy — and the copies failed. That is why the
+# package scripts scope collection by hand (`bun test src/tests`); ignoring the
+# build output instead makes the unscoped form correct too, so
+# `bun test packages/compiler` from here now matches `bun run test` exactly:
+# 14 files, not 28.
+pathIgnorePatterns = ["**/dist/**", "**/node_modules/**"]

@@ -9,3 +9,8 @@
 # process (src/tests/remote), loopback, and integration.
 [test]
 preload = ["../../scripts/test-env.ts", "./src/tests/setup/materialize-app-protocols.ts"]
+
+# Build output is not a test suite: `tsc` emits compiled `.test.js` copies under
+# `dist/`, and a stale one is worse than no test at all. The suite scripts scope
+# their paths by hand; this makes an ad-hoc `bun test <path>` safe too.
+pathIgnorePatterns = ["**/dist/**"]
