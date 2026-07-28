@@ -2,16 +2,24 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches: [main, dev]
   pull_request:
-    branches: [master]
+    branches: [main, dev]
 
 permissions:
   contents: read
 
 jobs:
-  # Baseline gate only (`full` defaults to false) — the same steps this workflow
-  # ran inline before checks.yml existed. The heavier release-only checks are
-  # added by release.yml so the per-push loop stays fast.
+  # Two bars, one definition (see checks.yml):
+  #
+  #   dev   → baseline. The inner loop stays fast.
+  #   main  → full. `main` is the branch developers clone, so promoting into it
+  #           runs the same checks a release does, minus the artifact steps.
+  #
+  # base_ref covers pull_request (the branch being merged INTO); ref covers a
+  # direct push to main. Neither is set for the other event, so the pair is
+  # exactly "is main involved?".
   check:
     uses: ./.github/workflows/checks.yml
+    with:
+      full: ${{ github.base_ref == 'main' || github.ref == 'refs/heads/main' }}

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Small text fixes are collected as issues and batched by a maintainer — see [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md#tier-0--small-text-fixes-issue-only-no-pr). Thanks for spotting it!
+        Small text fixes are collected as issues and batched by a maintainer — see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#tier-0--small-text-fixes-issue-only-no-pr). Thanks for spotting it!
   - type: input
     id: location
     attributes:

@@ -76,7 +76,7 @@ a maintainer will help find a testable seam.
 
 **PR checklist for Tier 1:**
 
-- [ ] A new test that fails on `master` and passes with your fix
+- [ ] A new test that fails on `main` and passes with your fix
 - [ ] `bun run typecheck` passes
 - [ ] `make lint` passes
 - [ ] The relevant package's test suite passes
@@ -139,12 +139,16 @@ bun run format:check     # Prettier — bun run format to fix
 ```
 
 CI (`.github/workflows/ci.yml`) runs `bun install` → build shared → typecheck →
-test on every push and PR to `master`. A pre-commit hook (Husky + lint-staged)
-auto-applies Prettier and ESLint fixes to staged files.
+test on every push and PR to `dev` or `main`. Merging into `main` additionally
+runs lint, formatting, and the app rules, since `main` is the branch people
+clone. A pre-commit hook (Husky + lint-staged) auto-applies Prettier and ESLint
+fixes to staged files, so those extra checks should already be satisfied.
 
 ## Conventions
 
-- **Branch:** work off `master` (this repo uses `master`, not `main`).
+- **Branch:** work off `dev` and open your PR against `dev`. `main` is the
+  stable branch — it is what `git clone` gives you and what releases are cut
+  from, so it only ever receives merges from `dev`.
 - **Commits:** Conventional Commits — `feat(...)`, `fix(...)`, `chore(...)`,
   `docs(...)`, matching the existing history.
 - **TypeScript:** strict mode, ESM everywhere. Server imports use `.js`

@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        New features must be agreed before a PR is opened — see [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md#tier-2--new-features-discuss-before-you-build). Could this live as a YAAR **app** instead of a core change?
+        New features must be agreed before a PR is opened — see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#tier-2--new-features-discuss-before-you-build). Could this live as a YAAR **app** instead of a core change?
   - type: textarea
     id: what
     attributes:

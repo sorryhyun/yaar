@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        A fix PR is welcome and must include a test that reproduces the bug — see [CONTRIBUTING.md](../blob/master/CONTRIBUTING.md#tier-1--bug-fixes-pr-welcome-test-required).
+        A fix PR is welcome and must include a test that reproduces the bug — see [CONTRIBUTING.md](../blob/main/CONTRIBUTING.md#tier-1--bug-fixes-pr-welcome-test-required).
   - type: textarea
     id: what
     attributes:
