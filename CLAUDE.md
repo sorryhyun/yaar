@@ -38,12 +38,20 @@ make server                                  # Start server only
 bun run --filter @yaar/frontend test                 # Run all frontend tests
 bun run --filter @yaar/server test                    # Run all server tests
 bun run --filter @yaar/shared test                    # Run all shared tests
+bun run --filter @yaar/tests test                     # Run integration/security tests
 
 # Standalone executable (requires Bun)
 bun run build:exe                # Build Windows executable
 bun run build:exe:bundle:linux   # Build Linux executable
 bun run build:exe:bundle:macos   # Build macOS executable
 ```
+
+Every package's `bun test` preloads `scripts/test-env.ts` first (wired in each `bunfig.toml`),
+which pins the environment before the server's `config/env.ts` can read it: `YAAR_*` and the
+knobs below are scrubbed, `REMOTE` is set explicitly, `YAAR_CONFIG`/`YAAR_STORAGE` point at
+throwaway temp dirs, and the root `.env` is skipped. So a test run describes the code, not the
+machine — in particular, toggling remote mode on in the configurations app (which persists
+`remote: true` to `config/settings.json`) no longer changes what the suite asserts.
 
 ## Environment Variables
 

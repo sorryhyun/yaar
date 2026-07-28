@@ -47,12 +47,17 @@ export const CONFIG_MODULE_DIR = __dirname;
  * The real environment always wins: `PORT=9000 make claude-dev` and a test's YAAR_CONFIG
  * must not lose to a stale file on disk. That also keeps this a no-op in CI.
  *
+ * `YAAR_SKIP_DOTENV=1` skips the file entirely. That is `scripts/test-env.ts` — a test run
+ * pins every knob explicitly, and "fill in what is unset" is exactly the door a developer's
+ * `.env` would otherwise walk back through after the scrub.
+ *
  * Deliberately a small parser rather than a dependency: `KEY=VALUE`, `#` comments,
  * optional `export ` prefix, optional surrounding quotes. Values are taken literally
  * to the end of the line — no inline-comment stripping, since a `#` inside an
  * unquoted secret is far likelier than a trailing comment on a credential.
  */
 function loadRootEnv(): void {
+  if (process.env.YAAR_SKIP_DOTENV === '1') return;
   const envPath = join(PROJECT_ROOT, '.env');
   if (!existsSync(envPath)) return;
 

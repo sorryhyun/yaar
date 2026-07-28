@@ -1,7 +1,11 @@
-# Every `bun test` in this package runs this preload first, awaited before any
-# test file loads. It materializes the `dist/protocol.json` fixtures a few tests
-# read (dock, devtools, memo), which CI never builds — see the module header and
-# src/tests/setup/materialize-app-protocols.ts. Covers all three suites: the unit
-# runner's spawned processes, loopback, and integration.
+# Preloads run in order, awaited, before any test file loads — and both entries need that.
+# `test-env.ts` (repo root, shared by every package) pins the environment before
+# `config/env.ts` can freeze `IS_REMOTE` from the developer's settings.json or .env, and
+# points YAAR_CONFIG/YAAR_STORAGE at throwaway dirs. `materialize-app-protocols.ts` then
+# writes the `dist/protocol.json` fixtures a few tests read (dock, devtools, memo), which CI
+# never builds — see the module header and src/tests/setup/materialize-app-protocols.ts.
+#
+# Covers every suite in this package: the unit runner's spawned processes, the remote-mode
+# process (src/tests/remote), loopback, and integration.
 [test]
-preload = ["./src/tests/setup/materialize-app-protocols.ts"]
+preload = ["../../scripts/test-env.ts", "./src/tests/setup/materialize-app-protocols.ts"]

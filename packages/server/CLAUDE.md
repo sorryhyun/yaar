@@ -12,11 +12,30 @@ bun run test                   # Unit suite, then the loopback suite, then integ
 
 ## Tests
 
-`bun run test` runs three suites in **separate Bun processes**, and the split is load-bearing:
+`bun run test` runs four suites in **separate Bun processes**, and the split is load-bearing:
 
 1. `src/tests` — unit/component tests, via `scripts/run-unit-tests.ts`.
-2. `src/tests/loopback` — the loopback integration harness (see `tests/loopback/harness/`).
-3. `src/integration`.
+2. `src/tests/remote` — the `REMOTE=1` suite, run with `YAAR_TEST_REMOTE=1`.
+3. `src/tests/loopback` — the loopback integration harness (see `tests/loopback/harness/`).
+4. `src/integration`.
+
+**Every suite starts from a pinned environment**, not the developer's. `scripts/test-env.ts` is
+preloaded (`bunfig.toml`, first entry, shared by every package in the repo) before any test file
+— and therefore before `config/env.ts` freezes `IS_REMOTE`. It scrubs every `YAAR_*` var and the
+documented knobs (`REMOTE`, `PORT`, `PROVIDER`, `MCP_SKIP_AUTH`, …), pins `REMOTE` explicitly,
+points `YAAR_CONFIG`/`YAAR_STORAGE` at throwaway temp dirs, and sets `YAAR_SKIP_DOTENV`. Without
+it a developer who had toggled remote mode on in the configurations app ran the whole suite in
+remote mode: `settings.json` fed `loadPersistedRemote()`, and `http-routing.test.ts` /
+`app-origin-isolation.test.ts` failed locally while passing in CI, which has no such file.
+
+`YAAR_TEST_REMOTE=1` is the one opt-in, and it necessarily scopes to a **whole process**:
+`IS_REMOTE` is a module-load constant, so a local-mode process cannot assert anything about the
+remote gate — `checkHttpAuth` returns `null` on its first line and every assertion passes
+regardless. That vacuity is not hypothetical; see the header of
+`packages/tests/src/integration/ml-runtime-remote-auth.test.ts`. Hence the pairing: local-mode
+rows in `app-origin-isolation.test.ts` and `http-routing.test.ts`, remote-mode rows in
+`src/tests/remote/remote-mode.test.ts`, each asserting its own `IS_REMOTE` up front so a broken
+wiring fails loudly instead of quietly passing.
 
 **The unit suite is itself partitioned by process.** `scripts/run-unit-tests.ts` computes the
 split from source on every run: any file that calls `mock.module` gets its own process (still
@@ -31,8 +50,12 @@ exactly two fakes: the browser (`FakeClient`) and the model (`ScriptedProvider`)
 own process for the same `mock.module`-is-process-global reason. Full rationale, including the
 deadlock this exists to catch, is in `tests/loopback/harness/boot.ts`'s header comment.
 
-Two rules follow:
+Three rules follow:
 
+- **A test never depends on the machine it runs on.** If a behavior is decided by an env var,
+  a `config/` file, or a path, pin it in the test (or add it to the scrub list in
+  `scripts/test-env.ts`) rather than inheriting whatever the developer has. A suite that only
+  passes on a clean checkout is a suite that will fail on someone's laptop and pass in review.
 - **Never add `mock.module` under `src/tests/loopback/`.** The harness substitutes through real
   seams instead: the provider via `ContextPool`'s `acquireProvider`, the logger via the
   `sessionLogger` option, the deadlines via `setDeadlinesForTest()` (`config.ts`), the config
@@ -53,6 +76,8 @@ client can only answer over a socket the server is holding is a deadlock waiting
 - `MCP_SKIP_AUTH` - Skip MCP auth (`1` for local dev), `REMOTE` - Enable remote mode (`1`)
 - `YAAR_REMOTE_TOKEN` - Adopt this remote token instead of minting one, so a launcher can build the `#remote=<token>` URL before the server starts (`scripts/dev.sh` does this for `make claude`). Under 32 chars it is ignored with a warning — remote mode hands the token to every device that can reach the server. See `http/auth.ts`.
 - `YAAR_STORAGE` / `YAAR_CONFIG` - Override storage/config directory paths
+- `YAAR_SKIP_DOTENV` - `1` skips loading the root `.env` in `config/env.ts`. Set by `scripts/test-env.ts`: a test run pins every knob explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk back through.
+- `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test-env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
 - `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop. **Enforcing:** `resolvePrincipal` refuses a token-less request that carries the app origin, and `http/server.ts` redirects a desktop document that lands there back to the desktop origin. Closes the token-forgery escapes; being cross-origin also blocks `window.parent` DOM/memory reach, and top-level navigation is closed by the sandbox on isolated frames — see [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
   **Which two origins** is `http/origin-boundary.ts`'s business, and the one place to ask: `loopback-alias` (local — desktop `localhost`, apps `127.0.0.1`, one socket) | `proxy-port` (Tailscale Serve — one MagicDNS name, `:443` desktop / `:8443` apps, **two local sockets**) | `off`. The env var is only the switch; `isAppOriginIsolationEnabled()` in `config/env.ts` answers for the loopback-alias way alone and is local-mode only. The `proxy-port` boundary is installed at runtime by `lifecycle.startTunnel()` once the transport confirms both origins are live. Over a proxy the addressed origin is unreadable from the request (`url.port` is the loopback hop, `Host`/`X-Forwarded-*` are the proxy's word), so the app-origin socket gets its own `createFetchHandler({ appOriginSocket: true })` running inside `runOnAppOriginSocket()` — which socket a request arrived on is unforgeable. `window.create` carries `appOrigin` only in that mode, since the client cannot derive `https://host:8443`; locally the frontend must derive the alias itself (a dev proxy's port is not the API's).
 - `MONITOR_MAX_CONCURRENT` (default: 2), `MONITOR_MAX_ACTIONS_PER_MIN` (30), `MONITOR_MAX_OUTPUT_PER_MIN` (50000) - Background monitor budget limits

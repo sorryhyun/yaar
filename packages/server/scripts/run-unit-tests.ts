@@ -17,6 +17,10 @@
  *
  * The partition is computed from the source on every run. There is no list to
  * keep in sync: add a `mock.module` to a file and it is isolated automatically.
+ *
+ * Two directories are skipped here because they are whole-process suites the package's
+ * test script runs separately: `loopback/` (its own harness) and `remote/` (needs
+ * `YAAR_TEST_REMOTE=1`, since `IS_REMOTE` is a module-load constant).
  */
 
 import { Glob } from 'bun';
@@ -77,6 +81,7 @@ const glob = new Glob('src/tests/**/*.test.ts');
 const all: string[] = [];
 for await (const file of glob.scan('.')) {
   if (file.includes('/loopback/')) continue; // own suite, own process
+  if (file.includes('/remote/')) continue; // needs REMOTE=1 for the whole process
   all.push(file);
 }
 all.sort();

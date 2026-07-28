@@ -1,32 +1,51 @@
 /**
- * Integration tests: HTTP routing, CORS, auth, and 404 fallback.
+ * Integration tests: HTTP routing, CORS, auth, and 404 fallback — **in local mode**.
  *
  * Uses checkHttpAuth and createFetchHandler directly — no Bun.serve() needed.
+ *
+ * Local mode is not an accident of the environment here, it is the subject: `IS_REMOTE` is a
+ * module-load constant, and it used to be whatever the developer's `config/settings.json` had
+ * persisted, so this file failed on a machine that had toggled remote mode on and passed in
+ * CI. `scripts/test-env.ts` (preloaded via bunfig) now pins `REMOTE=0` for the process, and
+ * the guard below fails loudly rather than silently if that ever stops holding.
+ *
+ * The remote half of the same surface — where the gate actually gates — is
+ * `packages/server/src/tests/remote/remote-mode.test.ts`, which runs in its own `REMOTE=1`
+ * process for the same module-load-constant reason.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { checkHttpAuth, generateRemoteToken, isStaticAsset } from '@yaar/server/http/auth';
 import { checkWsAuth } from '@yaar/server/http/auth';
+import { IS_REMOTE } from '@yaar/server/config/env';
+
+// ── the premise every case below rests on ──────────────────────────────────
+
+describe('test environment', () => {
+  it('runs in local mode, independent of the developer’s settings.json', () => {
+    expect(IS_REMOTE).toBe(false);
+  });
+});
 
 // ── checkHttpAuth ──────────────────────────────────────────────────────────
 
 describe('checkHttpAuth', () => {
   it('allows all requests when IS_REMOTE is false (local dev)', () => {
-    // IS_REMOTE defaults to false in test environment (no REMOTE=1 env var)
     const req = new Request('http://localhost:8000/api/apps');
     const url = new URL('http://localhost:8000/api/apps');
     const result = checkHttpAuth(req, url);
     expect(result).toBeNull(); // null = authorized
   });
 
-  it('requires token when IS_REMOTE is true', () => {
+  it('is a no-op even for a request that does present a token', () => {
+    // Local mode short-circuits before the token is ever compared. That a *valid* token is
+    // accepted, and an absent or wrong one refused, is only observable under REMOTE=1 —
+    // asserted in packages/server/src/tests/remote/remote-mode.test.ts.
     const token = generateRemoteToken();
-    // With a valid token in Authorization header
     const withToken = new Request('http://localhost:8000/api/apps', {
       headers: { authorization: `Bearer ${token}` },
     });
     const url = new URL('http://localhost:8000/api/apps');
-    // IS_REMOTE is still false in test (process.env.REMOTE not set), so auth is no-op
     const result = checkHttpAuth(withToken, url);
     expect(result).toBeNull();
   });
@@ -47,11 +66,13 @@ describe('checkWsAuth', () => {
     expect(checkWsAuth(url)).toBe(true);
   });
 
-  it('allows ws connections with matching token', () => {
+  it('allows ws connections regardless of the token in local mode', () => {
     const token = generateRemoteToken();
     const url = new URL(`ws://localhost:8000/ws?token=${token}`);
-    // Still local mode, so always true regardless of token
     expect(checkWsAuth(url)).toBe(true);
+    // Local mode does not read the token at all — a wrong one is just as fine here, and
+    // only remote-mode.test.ts can tell the two apart.
+    expect(checkWsAuth(new URL('ws://localhost:8000/ws?token=wrong'))).toBe(true);
   });
 });
 

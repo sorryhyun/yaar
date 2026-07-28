@@ -12,10 +12,18 @@
  *
  * These rows lock both, plus the two things that must NOT change: the desktop is
  * still host, and a well-behaved app (one that presents its token) is still an app.
+ *
+ * **Local mode is the premise, not a coincidence.** This is the `loopback-alias` boundary,
+ * which `isAppOriginIsolationEnabled()` reports only when `!IS_REMOTE` — so under REMOTE=1
+ * every row here reads `host` and the file is vacuous. It used to become vacuous by accident
+ * on a developer machine whose `config/settings.json` had `remote: true`; `scripts/test-env.ts`
+ * pins the mode now, and the guard below says so out loud. The remote transport's boundary
+ * (`proxy-port`) is covered in `remote/remote-mode.test.ts`.
  */
 import { describe, it, expect, afterEach } from 'bun:test';
 import { resolvePrincipal } from '../http/access.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
+import { IS_REMOTE } from '../config.js';
 
 const FLAG = 'YAAR_APP_ORIGIN_ISOLATION';
 
@@ -30,6 +38,10 @@ afterEach(() => {
 });
 
 describe('app-origin isolation (Stage 2 enforcement)', () => {
+  it('runs in local mode, where the loopback-alias boundary exists at all', () => {
+    expect(IS_REMOTE).toBe(false);
+  });
+
   describe('explicitly disabled (=0) — inert, behavior is exactly as before', () => {
     it('reads a token-less request landing on 127.0.0.1 as the host', () => {
       process.env[FLAG] = '0';
