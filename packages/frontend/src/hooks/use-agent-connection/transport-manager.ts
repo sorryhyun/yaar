@@ -3,8 +3,11 @@ import type { ClientEvent } from '@/types';
 export interface WsManager {
   ws: WebSocket | null;
   attached: boolean;
+  stopped: boolean;
   reconnectAttempts: number;
   reconnectTimeout: number | null;
+  /** Wall-clock ms at which the pending reconnect fires, for a countdown in the UI. */
+  nextRetryAt: number | null;
   listeners: Set<() => void>;
   getSnapshot: () => boolean;
   subscribe: (listener: () => void) => () => void;
@@ -12,16 +15,37 @@ export interface WsManager {
   getSocket: () => WebSocket | null;
 }
 
-export const RECONNECT_DELAY = 3000;
-export const MAX_RECONNECT_ATTEMPTS = 5;
+/** First retry lands quickly; the delay then doubles up to the ceiling. */
+export const RECONNECT_BASE_DELAY = 1000;
+/**
+ * The ceiling the backoff settles at, and the rate at which retries then continue
+ * indefinitely. Retrying forever at 30s is what lets a laptop that slept through a
+ * server restart come back on its own; the old policy gave up after 5 tries in 15
+ * seconds and left the tab permanently dead with no way back but a reload.
+ */
+export const RECONNECT_MAX_DELAY = 30000;
+
+/**
+ * Delay before retry number `attempts` (0-based), with jitter.
+ *
+ * Jitter is ±25%: without it every tab that lost the same server comes back at the
+ * same instant and hammers it in lockstep as it starts.
+ */
+export function reconnectDelay(attempts: number, random: () => number = Math.random): number {
+  const capped = Math.min(RECONNECT_BASE_DELAY * 2 ** attempts, RECONNECT_MAX_DELAY);
+  return Math.round(capped * (0.75 + random() * 0.5));
+}
 
 export function createWsManager() {
   const wsManager = {
     ws: null as WebSocket | null,
     /** Set once the server answers with SESSION_ATTACHED — see markAttached(). */
     attached: false,
+    /** The user (or unmount) asked us to stay down. Cleared by connect(). */
+    stopped: false,
     reconnectAttempts: 0,
     reconnectTimeout: null as number | null,
+    nextRetryAt: null as number | null,
     listeners: new Set<() => void>(),
 
     /**
@@ -64,21 +88,49 @@ export function sendEvent(
   return true;
 }
 
-export function shouldReconnect(closeCode: number, reconnectAttempts: number): boolean {
-  return closeCode !== 1000 && reconnectAttempts < MAX_RECONNECT_ATTEMPTS;
+/**
+ * Whether a closed socket should be retried.
+ *
+ * Only two things stop it: a clean close (1000 — the server or `disconnect()` said
+ * we are done) and an explicit `stopped`. There is no attempt ceiling: an
+ * unreachable server is a condition that ends, and the backoff above is what keeps
+ * an indefinite retry cheap.
+ */
+export function shouldReconnect(closeCode: number, stopped: boolean): boolean {
+  return closeCode !== 1000 && !stopped;
 }
 
 /**
  * The server answered the join with SESSION_ATTACHED: the socket now carries a session.
  *
- * This — not transport open — is what makes the connection usable and what refills the
- * retry budget. A server that accepts a socket and immediately drops it never gets here,
- * so it exhausts the budget instead of being retried forever.
+ * This — not transport open — is what makes the connection usable and what resets the
+ * backoff. A server that accepts a socket and immediately drops it never gets here, so
+ * it keeps backing off toward the ceiling rather than reconnecting in a tight loop.
  */
 export function markAttached(wsManager: ReturnType<typeof createWsManager>): void {
   wsManager.attached = true;
   wsManager.reconnectAttempts = 0;
+  wsManager.nextRetryAt = null;
   wsManager.notify();
+}
+
+/**
+ * Cancel any pending retry and reconnect now — the "Retry" button's entry point.
+ * Resets the backoff so a user-driven retry is immediate, not 30 seconds away.
+ */
+export function retryNow(
+  wsManager: ReturnType<typeof createWsManager>,
+  reconnect: () => void,
+): void {
+  if (wsManager.reconnectTimeout !== null) {
+    clearTimeout(wsManager.reconnectTimeout);
+    wsManager.reconnectTimeout = null;
+  }
+  wsManager.stopped = false;
+  wsManager.reconnectAttempts = 0;
+  wsManager.nextRetryAt = null;
+  wsManager.notify();
+  reconnect();
 }
 
 export interface SocketHandlers {
@@ -135,12 +187,16 @@ export function openSocket(
     wsManager.notify();
     handlers.onClose(event);
 
-    if (shouldReconnect(event.code, wsManager.reconnectAttempts)) {
+    if (shouldReconnect(event.code, wsManager.stopped)) {
+      const delay = reconnectDelay(wsManager.reconnectAttempts);
       wsManager.reconnectAttempts++;
-      wsManager.reconnectTimeout = setTimeout(
-        handlers.reconnect,
-        RECONNECT_DELAY,
-      ) as unknown as number;
+      wsManager.nextRetryAt = Date.now() + delay;
+      wsManager.reconnectTimeout = setTimeout(() => {
+        wsManager.reconnectTimeout = null;
+        wsManager.nextRetryAt = null;
+        handlers.reconnect();
+      }, delay) as unknown as number;
+      wsManager.notify();
     }
   };
 

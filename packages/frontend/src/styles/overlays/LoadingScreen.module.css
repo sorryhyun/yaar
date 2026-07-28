@@ -30,3 +30,32 @@
   animation: pulse 2s ease-in-out infinite;
   font-family: var(--font-sans);
 }
+
+/* The stalled view: the error itself, verbatim, so a failure is diagnosable
+   without opening the console. */
+.detail {
+  margin-top: var(--space-2);
+  max-width: 32rem;
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-family: var(--font-mono);
+  text-align: center;
+  word-break: break-word;
+}
+
+.retryButton {
+  margin-top: var(--space-4);
+  padding: var(--space-2) var(--space-5);
+  font-size: var(--text-base);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+  background: var(--bg-overlay-light);
+  border: var(--border-subtle);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.retryButton:hover {
+  background: var(--bg-overlay-hover);
+}

@@ -110,7 +110,9 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "加载中…"
+    "status": "加载中…",
+    "stalled": "服务器无响应，正在重试…",
+    "retry": "重试"
   },
   "window": {
     "lockedBy": "锁定者：{{agent}}",
@@ -174,5 +176,9 @@
       "newAgent": "这个助手应该做什么？",
       "message": "输入您的消息..."
     }
+  },
+  "desktop": {
+    "iconsLoadFailed": "无法加载应用。",
+    "retry": "重试"
   }
 }

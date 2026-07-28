@@ -110,7 +110,9 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "Chargement…"
+    "status": "Chargement…",
+    "stalled": "Le serveur ne répond pas. Nouvelles tentatives en cours…",
+    "retry": "Réessayer"
   },
   "window": {
     "lockedBy": "Verrouillé par : {{agent}}",
@@ -174,5 +176,9 @@
       "newAgent": "Que doit faire cet agent ?",
       "message": "Tapez votre message..."
     }
+  },
+  "desktop": {
+    "iconsLoadFailed": "Impossible de charger vos applications.",
+    "retry": "Réessayer"
   }
 }

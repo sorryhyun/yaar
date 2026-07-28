@@ -14,10 +14,10 @@ import type { ClientEvent, AppProtocolRequest, StreamFrame } from '@/types';
 import { ClientEventType, ServerEventType } from '@/types';
 import {
   wsManager,
-  MAX_RECONNECT_ATTEMPTS,
   sendEvent,
   openSocket,
   markAttached,
+  retryNow,
   dispatchServerEvent,
   generateActionId,
   generateMessageId,
@@ -204,6 +204,10 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   );
 
   const connect = useCallback(() => {
+    // Any call to connect() is an intent to be online, so it lifts the stop set by
+    // disconnect(); without this a reconnect after an explicit disconnect would be
+    // refused by shouldReconnect() forever.
+    wsManager.stopped = false;
     const socket = openSocket(wsManager, () => new WebSocket(buildWsUrl()), {
       onOpen: () => {
         const activeMonitorId = useDesktopStore.getState().activeMonitorId;
@@ -238,7 +242,8 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
       clearTimeout(wsManager.reconnectTimeout);
       wsManager.reconnectTimeout = null;
     }
-    wsManager.reconnectAttempts = MAX_RECONNECT_ATTEMPTS;
+    wsManager.nextRetryAt = null;
+    wsManager.stopped = true;
 
     if (wsManager.ws?.readyState === WebSocket.OPEN) {
       wsManager.ws.close(1000, 'User disconnect');
@@ -410,11 +415,15 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
   });
   useMonitorSync();
 
+  /** Cancel the pending backoff and reconnect immediately. */
+  const retryConnection = useCallback(() => retryNow(wsManager, connect), [connect]);
+
   return {
     isConnected,
     isConnecting,
     connect,
     disconnect,
+    retryConnection,
     sendMessage,
     sendWindowMessage,
     sendComponentAction,

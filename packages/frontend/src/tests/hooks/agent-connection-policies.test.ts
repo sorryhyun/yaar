@@ -5,7 +5,10 @@ import {
   shouldReconnect,
   openSocket,
   markAttached,
-  MAX_RECONNECT_ATTEMPTS,
+  retryNow,
+  reconnectDelay,
+  RECONNECT_BASE_DELAY,
+  RECONNECT_MAX_DELAY,
 } from '@/hooks/use-agent-connection/transport-manager';
 import { dispatchServerEvent } from '@/hooks/use-agent-connection/server-event-dispatcher';
 
@@ -95,9 +98,24 @@ describe('transport manager', () => {
   });
 
   it('computes reconnect eligibility', () => {
-    expect(shouldReconnect(1006, 0)).toBe(true);
-    expect(shouldReconnect(1000, 0)).toBe(false);
-    expect(shouldReconnect(1006, 5)).toBe(false);
+    expect(shouldReconnect(1006, false)).toBe(true);
+    expect(shouldReconnect(1000, false)).toBe(false);
+    // An explicit disconnect() stops it; a dirty close never does, however many
+    // attempts have already gone by — retries are indefinite by design.
+    expect(shouldReconnect(1006, true)).toBe(false);
+  });
+
+  it('backs off exponentially, with jitter, up to a ceiling', () => {
+    const noJitter = () => 0.5;
+    expect(reconnectDelay(0, noJitter)).toBe(RECONNECT_BASE_DELAY);
+    expect(reconnectDelay(1, noJitter)).toBe(RECONNECT_BASE_DELAY * 2);
+    expect(reconnectDelay(4, noJitter)).toBe(RECONNECT_BASE_DELAY * 16);
+    // Ceiling, and it stays there forever rather than growing unboundedly.
+    expect(reconnectDelay(20, noJitter)).toBe(RECONNECT_MAX_DELAY);
+
+    // Jitter spreads ±25% so tabs that lost the same server don't return in lockstep.
+    expect(reconnectDelay(3, () => 0)).toBe(RECONNECT_BASE_DELAY * 8 * 0.75);
+    expect(reconnectDelay(3, () => 1)).toBe(RECONNECT_BASE_DELAY * 8 * 1.25);
   });
 });
 
@@ -142,14 +160,17 @@ describe('socket lifecycle', () => {
     expect(staleHandlers.onError).not.toHaveBeenCalled();
   });
 
-  it('exhausts the retry limit when sockets open and close without attaching', () => {
+  it('keeps retrying past 15s of an unavailable server, then recovers', () => {
     const wsManager = createWsManager();
     const handlers = createSocketHandlers();
     let scheduledReconnects = 0;
+    let simulatedElapsedMs = 0;
 
     // A server that accepts a socket and immediately drops it, never sending
     // SESSION_ATTACHED — transport open alone must not refill the retry budget.
-    for (let i = 0; i < MAX_RECONNECT_ATTEMPTS + 2; i++) {
+    // The old policy gave up after 5 fixed 3s attempts, i.e. at the 15s mark;
+    // keep failing well past that and the retries must still be scheduled.
+    for (let i = 0; i < 12; i++) {
       const fake = createFakeSocket();
       expect(openSocket(wsManager, () => asSocket(fake), handlers)).not.toBeNull();
 
@@ -158,25 +179,62 @@ describe('socket lifecycle', () => {
       fake.readyState = WebSocket.CLOSED;
       fake.onclose?.(closeEvent(1006));
 
-      if (wsManager.reconnectTimeout !== null) {
-        scheduledReconnects++;
-        clearTimeout(wsManager.reconnectTimeout);
-        wsManager.reconnectTimeout = null;
-      }
+      expect(wsManager.reconnectTimeout).not.toBeNull();
+      scheduledReconnects++;
+      simulatedElapsedMs += reconnectDelay(i, () => 0.5);
+      clearTimeout(wsManager.reconnectTimeout!);
+      wsManager.reconnectTimeout = null;
     }
 
-    expect(wsManager.reconnectAttempts).toBe(MAX_RECONNECT_ATTEMPTS);
-    expect(scheduledReconnects).toBe(MAX_RECONNECT_ATTEMPTS);
+    expect(scheduledReconnects).toBe(12);
+    expect(wsManager.reconnectAttempts).toBe(12);
+    expect(simulatedElapsedMs).toBeGreaterThan(15_000);
+
+    // The server comes back: the next socket attaches, and the budget resets so a
+    // later blip starts from a fast retry rather than the 30s ceiling.
+    const good = createFakeSocket();
+    expect(openSocket(wsManager, () => asSocket(good), handlers)).not.toBeNull();
+    good.readyState = WebSocket.OPEN;
+    good.onopen?.(new Event('open'));
+    markAttached(wsManager);
+
+    expect(wsManager.getSnapshot()).toBe(true);
+    expect(wsManager.reconnectAttempts).toBe(0);
+    expect(wsManager.nextRetryAt).toBeNull();
   });
 
-  it('refills the retry budget only once the session attaches', () => {
+  it('retryNow cancels the pending backoff and reconnects immediately', () => {
+    const wsManager = createWsManager();
+    const handlers = createSocketHandlers();
+    const fake = createFakeSocket();
+    openSocket(wsManager, () => asSocket(fake), handlers);
+    fake.readyState = WebSocket.CLOSED;
+    fake.onclose?.(closeEvent(1006));
+
+    expect(wsManager.reconnectTimeout).not.toBeNull();
+    wsManager.reconnectAttempts = 9; // deep into the backoff
+
+    const reconnect = mock(() => {});
+    retryNow(wsManager, reconnect);
+
+    expect(reconnect).toHaveBeenCalledOnce();
+    expect(wsManager.reconnectTimeout).toBeNull();
+    expect(wsManager.nextRetryAt).toBeNull();
+    expect(wsManager.reconnectAttempts).toBe(0);
+    expect(wsManager.stopped).toBe(false);
+  });
+
+  it('resets the backoff only once the session attaches', () => {
     const wsManager = createWsManager();
     wsManager.reconnectAttempts = 4;
+    wsManager.nextRetryAt = Date.now() + 16_000;
 
     markAttached(wsManager);
 
+    // The next drop retries fast again instead of inheriting a deep backoff.
     expect(wsManager.reconnectAttempts).toBe(0);
-    expect(shouldReconnect(1006, wsManager.reconnectAttempts)).toBe(true);
+    expect(wsManager.nextRetryAt).toBeNull();
+    expect(shouldReconnect(1006, wsManager.stopped)).toBe(true);
   });
 
   it('reports connected only once the socket is bound to a session', () => {

@@ -16,6 +16,7 @@ import { useAgentConnection } from '@/hooks/useAgentConnection';
 import { iframeMessages } from '@/lib/iframeMessageRouter';
 import { QueueAwareComponentActionProvider } from '@/contexts/ComponentActionContext';
 import { filterImageFiles, uploadImages, uploadFiles, isExternalFileDrag } from '@/lib/uploadImage';
+import { runLocalToastAction } from '@/lib/localToastActions';
 import { WINDOW_ID_DATA_ATTR } from '@/constants/layout';
 import { WindowManager } from './WindowManager';
 import { WindowFrame } from '../window/WindowFrame';
@@ -405,7 +406,13 @@ export function DesktopSurface() {
       <div hidden={hasMaximizedWindow}>
         <CommandPalette />
       </div>
-      <ToastContainer onToastAction={sendToastAction} />
+      {/* Frontend-raised toasts (e.g. "Retry" on a failed app launch) carry no
+          server-side event, so try the local registry before the WebSocket. */}
+      <ToastContainer
+        onToastAction={(toastId, eventId) => {
+          if (!runLocalToastAction(eventId)) sendToastAction(toastId, eventId);
+        }}
+      />
       <ConfirmDialog />
       <UserPrompt />
     </>

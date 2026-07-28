@@ -6,8 +6,10 @@
  * mini-grid of the first 4 child icons (iPhone-style).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
 import { apiFetch, resolveAssetUrl } from '@/lib/api';
+import { registerLocalToastAction } from '@/lib/localToastActions';
 import type { DesktopShortcut, OSAction } from '@yaar/shared';
 import { extractAppId, WINDOW_PLACEMENT, cascadeWindowBounds } from '@yaar/shared';
 import { toWindowKey } from '@/store/helpers'; // Used for user-initiated window creation
@@ -46,6 +48,7 @@ interface DerivedFolder {
 }
 
 export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps) {
+  const { t } = useTranslation();
   const appsVersion = useDesktopStore((s) => s.appsVersion);
   const appBadges = useDesktopStore((s) => s.appBadges);
   const shortcuts = useDesktopStore((s) => s.shortcuts);
@@ -66,15 +69,21 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
     cooldownTimer.current = setTimeout(() => setCooldownId(null), 1000);
   }, []);
 
-  // Fetch available apps on mount and when appsVersion changes (after deploy)
-  const fetchedVersionRef = useRef(-1);
+  // Fetch available apps on mount and when appsVersion changes (after deploy).
+  // `loadState` separates "still fetching" and "the fetch failed" from "you really
+  // have no shortcuts" — all three used to render as an empty desktop, so a network
+  // failure was indistinguishable from an intentionally bare one.
+  const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const fetchedVersionRef = useRef<number | null>(null);
   useEffect(() => {
-    if (fetchedVersionRef.current === appsVersion) return;
+    if (fetchedVersionRef.current === appsVersion && reloadNonce === 0) return;
     fetchedVersionRef.current = appsVersion;
     async function fetchApps() {
       try {
         const response = await apiFetch('/api/apps');
-        if (response.ok) {
+        if (!response.ok) throw new Error(`/api/apps responded ${response.status}`);
+        {
           const data = await response.json();
           setApps(data.apps || []);
           setOnboardingCompleted(!!data.onboardingCompleted);
@@ -94,28 +103,35 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
             useDesktopStore.getState().applyServerSettings(appearance);
           }
         }
+        setLoadState('ready');
       } catch (err) {
         console.error('Failed to fetch apps:', err);
+        setLoadState('error');
       }
     }
     fetchApps();
-  }, [appsVersion]);
+  }, [appsVersion, reloadNonce]);
 
   // Fetch shortcuts on mount and when appsVersion changes (after deploy/install/delete)
   useEffect(() => {
     async function fetchShortcuts() {
       try {
         const response = await apiFetch('/api/shortcuts');
-        if (response.ok) {
-          const data = await response.json();
-          useDesktopStore.getState().setShortcuts(data.shortcuts || []);
-        }
+        if (!response.ok) throw new Error(`/api/shortcuts responded ${response.status}`);
+        const data = await response.json();
+        useDesktopStore.getState().setShortcuts(data.shortcuts || []);
       } catch (err) {
         console.error('Failed to fetch shortcuts:', err);
+        setLoadState('error');
       }
     }
     fetchShortcuts();
-  }, [appsVersion]);
+  }, [appsVersion, reloadNonce]);
+
+  const retryLoad = useCallback(() => {
+    setLoadState('loading');
+    setReloadNonce((n) => n + 1);
+  }, []);
 
   const handleShortcutClick = useCallback(
     (shortcut: DesktopShortcut) => {
@@ -146,7 +162,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
             store.applyActions(actions);
           } else {
             // Request iframe token from server so verb SDK can resolve `self`
-            const openWindow = (iframeToken?: string) => {
+            const openWindow = (iframeToken: string) => {
               const content = { renderer: 'iframe' as const, data: app.run! };
               const w = app.defaultWidth ?? WINDOW_PLACEMENT.defaultWidth;
               const h = app.defaultHeight ?? WINDOW_PLACEMENT.defaultHeight;
@@ -168,7 +184,7 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
                   bounds,
                   content,
                   appId: app.id,
-                  ...(iframeToken ? { iframeToken } : {}),
+                  iframeToken,
                   ...(app.variant && app.variant !== 'standard' ? { variant: app.variant } : {}),
                   ...(app.dockEdge ? { dockEdge: app.dockEdge } : {}),
                   ...(app.frameless ? { frameless: true } : {}),
@@ -191,21 +207,48 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
                 ],
               }));
             };
-            apiFetch('/api/iframe-token', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                windowId: app.id,
-                sessionId: store.sessionId,
-                appId: app.id,
-                // The monitor this icon was clicked on. Everything the app then does
-                // through /api/verb acts on it — including opening further windows.
-                monitorId,
-              }),
-            })
-              .then((res) => res.json())
-              .then(({ token }) => openWindow(token))
-              .catch(() => openWindow());
+            // A window opened without a token can never call /api/verb — every
+            // request 403s for the life of the tab, and iframeTokenRefresh only
+            // revisits windows that already have one. So a failed mint must not
+            // produce a half-working window; it fails visibly and offers a retry.
+            const launch = () => {
+              apiFetch('/api/iframe-token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  windowId: app.id,
+                  sessionId: store.sessionId,
+                  appId: app.id,
+                  // The monitor this icon was clicked on. Everything the app then does
+                  // through /api/verb acts on it — including opening further windows.
+                  monitorId,
+                }),
+              })
+                .then(async (res) => {
+                  if (!res.ok) throw new Error(`iframe-token request failed (${res.status})`);
+                  const { token } = await res.json();
+                  if (typeof token !== 'string' || !token) {
+                    throw new Error('iframe-token response carried no token');
+                  }
+                  openWindow(token);
+                })
+                .catch((err) => {
+                  console.error(`Failed to open "${app.name}":`, err);
+                  const eventId = `app-launch-retry-${app.id}-${Date.now()}`;
+                  registerLocalToastAction(eventId, launch);
+                  useDesktopStore.getState().applyActions([
+                    {
+                      type: 'toast.show',
+                      id: eventId,
+                      message: `Couldn't open "${app.name}" — the session may have expired.`,
+                      variant: 'error',
+                      action: { label: 'Retry', eventId },
+                      duration: 10000,
+                    },
+                  ]);
+                });
+            };
+            launch();
           }
           return;
         }
@@ -338,6 +381,19 @@ export function DesktopIcons({ selectedAppIds, sendMessage }: DesktopIconsProps)
       </div>
     );
   };
+
+  if (loadState === 'error' && renderItems.length === 0) {
+    return (
+      <div className={styles.desktopIcons}>
+        <div className={styles.iconsError}>
+          <span className={styles.iconsErrorText}>{t('desktop.iconsLoadFailed')}</span>
+          <button className={styles.iconsRetryButton} onClick={retryLoad}>
+            {t('desktop.retry')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.desktopIcons}>

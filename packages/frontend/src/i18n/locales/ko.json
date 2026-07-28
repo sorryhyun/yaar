@@ -110,7 +110,9 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "로딩 중…"
+    "status": "로딩 중…",
+    "stalled": "서버가 응답하지 않습니다. 재연결을 계속 시도합니다…",
+    "retry": "다시 시도"
   },
   "window": {
     "lockedBy": "잠금: {{agent}}",
@@ -171,5 +173,9 @@
       "newAgent": "이 에이전트가 무엇을 해야 하나요?",
       "message": "메시지를 입력하세요..."
     }
+  },
+  "desktop": {
+    "iconsLoadFailed": "앱을 불러오지 못했습니다.",
+    "retry": "다시 시도"
   }
 }

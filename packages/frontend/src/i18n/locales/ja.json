@@ -110,7 +110,9 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "読み込み中…"
+    "status": "読み込み中…",
+    "stalled": "サーバーが応答しません。再接続を試行中…",
+    "retry": "再試行"
   },
   "window": {
     "lockedBy": "ロック中: {{agent}}",
@@ -174,5 +176,9 @@
       "newAgent": "このエージェントに何をさせますか？",
       "message": "メッセージを入力してください..."
     }
+  },
+  "desktop": {
+    "iconsLoadFailed": "アプリを読み込めませんでした。",
+    "retry": "再試行"
   }
 }

@@ -110,7 +110,9 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "Wird geladen…"
+    "status": "Wird geladen…",
+    "stalled": "Der Server antwortet nicht. Erneute Verbindungsversuche laufen…",
+    "retry": "Erneut versuchen"
   },
   "window": {
     "lockedBy": "Gesperrt von: {{agent}}",
@@ -174,5 +176,9 @@
       "newAgent": "Was soll dieser Agent tun?",
       "message": "Nachricht eingeben..."
     }
+  },
+  "desktop": {
+    "iconsLoadFailed": "Apps konnten nicht geladen werden.",
+    "retry": "Erneut versuchen"
   }
 }

@@ -111,7 +111,9 @@
   },
   "loading": {
     "title": "YAAR OS",
-    "status": "Loading…"
+    "status": "Loading…",
+    "stalled": "The server isn't responding. Still retrying…",
+    "retry": "Retry"
   },
   "window": {
     "lockedBy": "Locked by: {{agent}}",
@@ -176,5 +178,9 @@
       "newAgent": "What should this agent do?",
       "message": "Type your message..."
     }
+  },
+  "desktop": {
+    "iconsLoadFailed": "Couldn't load your apps.",
+    "retry": "Retry"
   }
 }
