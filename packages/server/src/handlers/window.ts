@@ -154,6 +154,8 @@ export function registerWindowHandlers(
         renderer: {
           type: 'string',
           enum: ['markdown', 'html', 'text', 'table', 'iframe', 'component'],
+          description:
+            'markdown also draws ```mermaid fenced blocks as diagrams — prefer it over describing a flow in prose.',
         },
         content: {},
         x: {

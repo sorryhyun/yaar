@@ -183,6 +183,39 @@
   padding: 0;
 }
 
+/* Mermaid blocks — see lib/mermaid.ts. Until hydration swaps in an SVG the block
+   is the `pre` the fence produced, so `pending` needs no rules of its own. */
+.markdown [data-yaar-mermaid] {
+  margin: 0 0 0.75em;
+}
+
+.markdown [data-yaar-mermaid='ready'] {
+  background: var(--bg-dark-overlay);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  overflow-x: auto;
+}
+
+/* The source stays in the DOM so a theme change can redraw from it. */
+.markdown [data-yaar-mermaid='ready'] > pre {
+  display: none;
+}
+
+.markdown [data-yaar-mermaid] svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+/* A diagram is normally invalid while its fence is still streaming in, so the
+   failure reads as a note under the source rather than as an error state. */
+.markdown [data-yaar-mermaid='error'] > [data-yaar-mermaid-out] {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  margin-top: var(--space-1);
+}
+
 .markdown strong {
   font-weight: 600;
 }

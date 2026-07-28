@@ -82,6 +82,7 @@ delete('yaar://windows/my-window')
 
 **Update operations:** append, prepend, replace, insertAt, clear
 **Renderers:** markdown, html, text, table, component, iframe
+**Diagrams:** a \`\`\`mermaid fence inside markdown content renders as a themed diagram (flowchart, sequence, state, ER, gantt, class, pie). When the answer is a flow, a sequence, or a hierarchy, draw it instead of describing it in prose — no app needed.
 **App Protocol:** For iframe apps, use \`app_query\` and \`app_command\` actions on the window URI.
 **Message:** Send a message to an app window's agent via the \`message\` action.
 **Subscribe:** Watch for window changes (content, interaction, close, lock, unlock, move, resize, title).

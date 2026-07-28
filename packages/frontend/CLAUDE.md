@@ -64,7 +64,7 @@ src/
 
 | Renderer | Data Type | Description |
 |----------|-----------|-------------|
-| `markdown` | `string` | Markdown to HTML |
+| `markdown` | `string` | Markdown to HTML. ` ```mermaid ` fences hydrate into diagrams — `lib/markdown.ts` emits a placeholder, `lib/mermaid.ts` draws it from a lazily-imported 3.3 MB chunk |
 | `table` | `{headers, rows}` | Table rendering |
 | `html` | `string` | Raw HTML |
 | `text` | `string` | Plain text |

@@ -19,6 +19,7 @@
     "i18next": "^25.8.11",
     "immer": "^11.0.3",
     "marked": "catalog:",
+    "mermaid": "catalog:",
     "qrcode": "^1.5.4",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
