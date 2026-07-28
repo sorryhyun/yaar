@@ -76,17 +76,24 @@ function PromptBox({
       {hasOptions && (
         <div className={styles.options}>
           {prompt.options!.map((opt) => (
-            <div
+            // A <label> so the whole row activates the one control inside it. The row
+            // used to carry its own onClick alongside the input's onChange, so a click
+            // that landed on the input ran toggleOption twice and cancelled itself out.
+            <label
               key={opt.value}
               className={styles.option}
               data-selected={selected.has(opt.value)}
-              onClick={() => toggleOption(opt.value)}
             >
               <input
                 type={prompt.multiSelect ? 'checkbox' : 'radio'}
                 className={styles.optionRadio}
                 checked={selected.has(opt.value)}
-                onChange={() => toggleOption(opt.value)}
+                // onClick, not onChange: a radio that is already checked fires no
+                // change event, and single-select here allows clicking again to
+                // deselect. Keyboard activation dispatches a click too, so this
+                // covers Space/Enter on the focused input.
+                onClick={() => toggleOption(opt.value)}
+                onChange={() => {}}
                 name={`prompt-${prompt.id}`}
               />
               <div className={styles.optionContent}>
@@ -95,7 +102,7 @@ function PromptBox({
                   <span className={styles.optionDescription}>{opt.description}</span>
                 )}
               </div>
-            </div>
+            </label>
           ))}
         </div>
       )}
