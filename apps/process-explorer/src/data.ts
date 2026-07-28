@@ -388,6 +388,8 @@ function onAgentFrame(id: string, frame: StreamFrame) {
     error?: string;
     inputTokens?: number;
     outputTokens?: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
   };
   const at = frame.ts;
 
@@ -423,14 +425,16 @@ function onAgentFrame(id: string, frame: StreamFrame) {
       break;
     case 'usage':
       // The frame's totals are cumulative for the agent, so this assigns rather
-      // than adds — and it deliberately does *not* touch `state`. Codex reports
-      // usage several times mid-turn and Claude once at the very end; letting
-      // either move the state would make a finished turn look like it resumed.
+      // than adds — and it deliberately does *not* touch `state`. Both providers
+      // now report usage several times mid-turn; letting that move the state
+      // would make a finished turn look like it resumed.
       setAgentActivity(id, (prev) => ({
         ...prev,
         usage: {
           inputTokens: data.inputTokens ?? prev?.usage?.inputTokens ?? 0,
           outputTokens: data.outputTokens ?? prev?.usage?.outputTokens ?? 0,
+          cacheReadTokens: data.cacheReadTokens ?? prev?.usage?.cacheReadTokens ?? 0,
+          cacheWriteTokens: data.cacheWriteTokens ?? prev?.usage?.cacheWriteTokens ?? 0,
         },
         updatedAt: at,
       }));

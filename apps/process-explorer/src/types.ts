@@ -3,18 +3,22 @@ export {};
 /**
  * Token consumption for one agent (or the whole session).
  *
- * Deliberately narrower than what the server sends: the roster also carries
- * `cacheReadTokens` / `cacheWriteTokens`, and this app drops them on purpose.
- * What a reader wants from a process list is the figure that tracks real work
- * and real cost, and cache reads inflate a total by an order of magnitude
- * without meaning an order of magnitude more happened.
+ * All four fields, and the cache ones are not optional decoration. Both
+ * providers report `inputTokens` as the input that was *neither* read from the
+ * cache nor used to create one — so under Claude Code's caching it is a
+ * near-constant handful of tokens while the actual context rides in
+ * `cacheReadTokens`. A measured turn: 10 fresh input against 18,751 cache-read.
+ * Showing the fresh figure alone rendered that as "55 tok · 10 in · 45 out",
+ * which is not what a process list means by "in".
  *
- * `inputTokens` is already cache-free on both providers — the server's mappers
- * reconcile that — so `inputTokens + outputTokens` is the total we show.
+ * So the input side is the sum of all three. `inputRead()` in `main.ts` is the
+ * one place that sum is taken; nothing should add these fields by hand.
  */
 export interface AgentUsage {
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
 export interface AgentStats {

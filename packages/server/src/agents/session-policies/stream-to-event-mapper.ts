@@ -77,6 +77,7 @@ export interface StreamMapperOptions {
   onUsage?: (
     usage: TokenUsage,
     scope: 'turn' | 'session',
+    sessionCostUsd?: number,
   ) => { total: TokenUsage; delta: TokenUsage };
 }
 
@@ -121,6 +122,7 @@ export class StreamToEventMapper {
   private readonly onUsage?: (
     usage: TokenUsage,
     scope: 'turn' | 'session',
+    sessionCostUsd?: number,
   ) => { total: TokenUsage; delta: TokenUsage };
 
   /**
@@ -154,14 +156,19 @@ export class StreamToEventMapper {
   /**
    * Fold one provider usage report into the agent's total and publish the result.
    *
-   * Called for every message that carries `usage`, whatever its type — Codex
-   * hangs it on a dedicated `usage` message mid-turn, Claude on the terminal
-   * `complete`/`error`. Handling it here rather than in the switch is what keeps
-   * those two shapes from becoming two code paths.
+   * Called for every message that carries `usage`, whatever its type — both
+   * providers now hang it on a dedicated `usage` message mid-turn, and Claude
+   * additionally settles the remainder on the terminal `complete`/`error`.
+   * Handling it here rather than in the switch is what keeps those shapes from
+   * becoming several code paths.
    */
   private recordUsage(message: StreamMessage): void {
     if (!message.usage || !this.onUsage) return;
-    const { total, delta } = this.onUsage(message.usage, message.usageScope ?? 'turn');
+    const { total, delta } = this.onUsage(
+      message.usage,
+      message.usageScope ?? 'turn',
+      message.sessionCostUsd,
+    );
     this.turnInput += delta.inputTokens;
     this.turnOutput += delta.outputTokens;
     const turnIn = this.turnInput;

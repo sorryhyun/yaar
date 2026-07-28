@@ -21,32 +21,138 @@ interface PendingToolUse {
 const pendingToolUse = new Map<number, PendingToolUse>();
 let currentBlockIndex = -1;
 
+/** The wire shape of an Anthropic usage block, as it appears on every carrier below. */
+interface RawUsage {
+  input_tokens?: number;
+  output_tokens?: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+const ZERO_USAGE: TokenUsage = {
+  inputTokens: 0,
+  outputTokens: 0,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
+};
+
 /**
- * Pull token accounting off the SDK's `result` message — the only message that
- * carries it, arriving once per `query()`, i.e. once per turn.
+ * Normalize one wire usage block.
  *
  * No subtraction here, unlike Codex: the Anthropic API defines `input_tokens` as
  * the input that was *neither* read from the cache nor used to create one, and
  * reports those two separately. So the field already means what `TokenUsage`
  * means by fresh input, and adding the cache counts back in would double-count.
+ * Under Claude Code's caching that leaves `inputTokens` at a near-constant ~10
+ * while `cacheReadTokens` carries the context — a consumer that wants "how much
+ * input did this turn read" must sum all three, which is what Process Explorer
+ * now does.
  */
-function mapResultUsage(msg: SDKResultMessage): TokenUsage | undefined {
-  const u = msg.usage;
+function mapUsage(u: RawUsage | undefined): TokenUsage | undefined {
   if (!u) return undefined;
   return {
     inputTokens: u.input_tokens ?? 0,
     outputTokens: u.output_tokens ?? 0,
     cacheReadTokens: u.cache_read_input_tokens ?? 0,
     cacheWriteTokens: u.cache_creation_input_tokens ?? 0,
-    costUsd: typeof msg.total_cost_usd === 'number' ? msg.total_cost_usd : undefined,
   };
+}
+
+function addUsage(a: TokenUsage, b: TokenUsage): TokenUsage {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    cacheReadTokens: a.cacheReadTokens + b.cacheReadTokens,
+    cacheWriteTokens: a.cacheWriteTokens + b.cacheWriteTokens,
+  };
+}
+
+/**
+ * Turns one turn's usage reports into a stream of *deltas*.
+ *
+ * Claude hangs its authoritative figure on the `result` message, which arrives
+ * when the turn is already over — so an agent's token column stayed blank for
+ * exactly as long as it was busy, and on a first turn showed nothing at all.
+ * The numbers are in fact known throughout: every `message_start` carries the
+ * whole input side of an assistant message, and its `message_delta` carries the
+ * final output. This folds those into a running total and reports what changed,
+ * so the counter moves live and still lands on the `result` figure.
+ *
+ * Deltas rather than totals because {@link AgentSession} accumulates across
+ * turns and cannot tell a re-report from new spend. A turn holds many assistant
+ * messages (one per tool round-trip), each of which *supersedes* its own earlier
+ * figure while *adding* to its predecessors' — hence the settled/in-flight split.
+ *
+ * One tracker is one turn, so nothing has to be reset. It is passed in rather
+ * than held at module scope: agents run concurrently through this same function,
+ * and a shared accumulator would credit one agent's tokens to another.
+ */
+export class TurnUsageTracker {
+  /** Assistant messages already finished this turn — their figures are final. */
+  private settled: TokenUsage = ZERO_USAGE;
+  /** The in-flight assistant message's own figure, superseded as it grows. */
+  private inFlight: TokenUsage = ZERO_USAGE;
+  /** What has already been reported, so the next report is only what is new. */
+  private emitted: TokenUsage = ZERO_USAGE;
+
+  /** A new assistant message began — the previous one's figure is now settled. */
+  begin(usage: TokenUsage): void {
+    this.settled = addUsage(this.settled, this.inFlight);
+    this.inFlight = usage;
+  }
+
+  /** The in-flight assistant message reported again (output grew). */
+  update(usage: TokenUsage): void {
+    this.inFlight = usage;
+  }
+
+  /** The turn ended; `total` is the provider's authoritative figure for it. */
+  settle(total: TokenUsage): void {
+    this.settled = total;
+    this.inFlight = ZERO_USAGE;
+  }
+
+  /**
+   * What has been spent since the last call, or `undefined` if nothing moved.
+   *
+   * Clamped at zero per field: a mid-turn sum can momentarily exceed the
+   * `result` figure (a sub-agent's messages stream through here but may not be
+   * in the parent's total), and a negative delta would credit tokens back.
+   */
+  take(): TokenUsage | undefined {
+    const running = addUsage(this.settled, this.inFlight);
+    const next: TokenUsage = {
+      inputTokens: Math.max(this.emitted.inputTokens, running.inputTokens),
+      outputTokens: Math.max(this.emitted.outputTokens, running.outputTokens),
+      cacheReadTokens: Math.max(this.emitted.cacheReadTokens, running.cacheReadTokens),
+      cacheWriteTokens: Math.max(this.emitted.cacheWriteTokens, running.cacheWriteTokens),
+    };
+    const delta: TokenUsage = {
+      inputTokens: next.inputTokens - this.emitted.inputTokens,
+      outputTokens: next.outputTokens - this.emitted.outputTokens,
+      cacheReadTokens: next.cacheReadTokens - this.emitted.cacheReadTokens,
+      cacheWriteTokens: next.cacheWriteTokens - this.emitted.cacheWriteTokens,
+    };
+    this.emitted = next;
+    if (
+      delta.inputTokens === 0 &&
+      delta.outputTokens === 0 &&
+      delta.cacheReadTokens === 0 &&
+      delta.cacheWriteTokens === 0
+    )
+      return undefined;
+    return delta;
+  }
 }
 
 /**
  * Map a Claude SDK message to a StreamMessage.
  * Returns null for messages that should be skipped.
+ *
+ * `turn` is the caller's per-turn usage accumulator; omit it and the mid-turn
+ * token reports are simply not produced (the `result` figure still is).
  */
-export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
+export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): StreamMessage | null {
   // Log important message types (skip noisy stream_event)
   const msgType = (msg as { type: string; subtype?: string }).type;
   const msgSubtype = (msg as { subtype?: string }).subtype;
@@ -115,7 +221,7 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
   }
 
   if (msg.type === 'stream_event') {
-    return mapStreamEvent(msg.event);
+    return mapStreamEvent(msg.event, turn);
   }
 
   if (msg.type === 'result') {
@@ -129,9 +235,31 @@ export function mapClaudeMessage(msg: SDKMessage): StreamMessage | null {
     };
 
     // A failed turn still burned tokens, so usage rides the error terminal too —
-    // dropping it there is how a budget readout quietly under-reports.
-    const usage = mapResultUsage(msg as SDKResultMessage);
-    const accounting = usage ? { usage, usageScope: 'turn' as const } : {};
+    // dropping it there is how a budget readout quietly under-reports. What rides
+    // is the *remainder* the mid-turn reports have not already claimed, which on a
+    // turn that streamed normally is nothing at all.
+    const resultMsg = msg as SDKResultMessage;
+    const total = mapUsage(resultMsg.usage);
+    let usage: TokenUsage | undefined;
+    if (turn) {
+      if (total) turn.settle(total);
+      usage = turn.take();
+    } else {
+      usage = total;
+    }
+    // `total_cost_usd` is the *session's* running cost, not this turn's — measured:
+    // three one-word turns reported 0.0084 → 0.0109 → 0.0137. It therefore cannot
+    // ride the turn-scoped token delta, which is summed; `AgentSession.recordUsage`
+    // rebases it instead. Carried on its own field so the two cannot be confused.
+    const cost =
+      typeof resultMsg.total_cost_usd === 'number'
+        ? { sessionCostUsd: resultMsg.total_cost_usd }
+        : {};
+    const accounting = usage
+      ? { usage, usageScope: 'turn' as const, ...cost }
+      : Object.keys(cost).length
+        ? { usage: { ...ZERO_USAGE }, usageScope: 'turn' as const, ...cost }
+        : {};
 
     // Check for errors (SDKResultError type)
     if (result.is_error || result.subtype?.startsWith('error')) {
@@ -180,7 +308,7 @@ function countEscapeSpellings(rawJson: string): StreamMessage['toolInputEscapes'
 /**
  * Map a stream event to a StreamMessage.
  */
-function mapStreamEvent(event: unknown): StreamMessage | null {
+function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage | null {
   if (!event || typeof event !== 'object') return null;
 
   const evt = event as {
@@ -188,7 +316,25 @@ function mapStreamEvent(event: unknown): StreamMessage | null {
     index?: number;
     delta?: unknown;
     content_block?: unknown;
+    message?: { usage?: RawUsage };
+    usage?: RawUsage;
   };
+
+  // The turn's token counter, live. `message_start` carries the whole input side
+  // of an assistant message (fresh, cache-read and cache-write alike) before a
+  // single token is generated; `message_delta` carries that message's final
+  // output. Both are per-message figures the tracker folds into a turn total —
+  // see {@link TurnUsageTracker} for why this is reported as a delta.
+  if (turn && (evt.type === 'message_start' || evt.type === 'message_delta')) {
+    const usage = mapUsage(evt.type === 'message_start' ? evt.message?.usage : evt.usage);
+    if (usage) {
+      if (evt.type === 'message_start') turn.begin(usage);
+      else turn.update(usage);
+      const delta = turn.take();
+      if (delta) return { type: 'usage', usage: delta, usageScope: 'turn' };
+    }
+    return null;
+  }
 
   if (evt.type === 'content_block_start') {
     const block = evt.content_block as { type: string; name?: string; id?: string } | undefined;

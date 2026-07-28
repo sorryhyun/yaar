@@ -219,16 +219,29 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       const t = p?.tokenUsage?.total;
       if (!t) return null;
       const cacheRead = t.cachedInputTokens ?? 0;
+      const cacheWrite = t.cacheWriteInputTokens ?? 0;
       return {
         type: 'usage',
         usage: {
-          // Codex counts cache reads *inside* `inputTokens`; Claude reports them
-          // beside it. Subtracting here is what makes one number mean one thing
-          // downstream — and it's how Codex computes its own blended total.
-          inputTokens: Math.max(0, (t.inputTokens ?? 0) - cacheRead),
+          // Codex counts the cache figures *inside* `inputTokens`; Claude reports
+          // them beside it. Subtracting here is what makes one number mean one
+          // thing downstream: on both providers `inputTokens` is the fresh
+          // remainder, and the whole input a turn read is the sum of all three.
+          //
+          // That `cachedInputTokens` is a subset is measured — a real turn
+          // reported inputTokens 17816 / cachedInputTokens 17152 / outputTokens 6
+          // against totalTokens 17822, i.e. `total = input + output` with the
+          // cache figure already folded in. `cacheWriteInputTokens` is assumed to
+          // sit inside it the same way, which no observation can currently
+          // confirm because Codex reports 0 for it on every model YAAR has seen
+          // (OpenAI's caching is implicit and bills no separate write). The
+          // assumption is falsifiable with one sample: if a nonzero cache write
+          // ever appears alongside `totalTokens !== inputTokens + outputTokens`,
+          // it is beside `inputTokens` and this subtraction must drop it.
+          inputTokens: Math.max(0, (t.inputTokens ?? 0) - cacheRead - cacheWrite),
           outputTokens: t.outputTokens ?? 0,
           cacheReadTokens: cacheRead,
-          cacheWriteTokens: t.cacheWriteInputTokens ?? 0,
+          cacheWriteTokens: cacheWrite,
         },
         // `total`, not `last` — the thread's running total, re-sent several times
         // per turn. Adding these up would multiply the real figure.

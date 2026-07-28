@@ -195,23 +195,45 @@ export class AgentSession {
   }
 
   /**
+   * Cost already banked from provider streams that have since been replaced, and
+   * the last figure the current one reported. See {@link recordUsage}.
+   */
+  private costBankedUsd = 0;
+  private costLastReportUsd = 0;
+
+  /**
    * Fold one provider usage report into the lifetime total.
    *
    * The two scopes are not a style difference, they are what each provider
    * actually reports, and treating either as the other is silently wrong:
-   * Claude's `result.usage` covers only the turn that just ended (add it), while
-   * Codex's `tokenUsage.total` is the thread's running total re-sent several
-   * times per turn (replace with it, or the figure multiplies).
+   * Claude's token figures cover only what has been spent since its last report
+   * (add them), while Codex's `tokenUsage.total` is the thread's running total
+   * re-sent several times per turn (replace with it, or the figure multiplies).
    *
    * `Math.max` on the replace path guards the one case where a running total can
    * appear to go backwards — a resumed or forked thread starts its own count
    * from zero — which would otherwise credit the agent a negative delta.
+   *
+   * `sessionCostUsd` obeys neither scope, which is why it is a separate
+   * argument. Claude's `total_cost_usd` is the *session's* running cost even on
+   * a message whose token figures are the turn's alone — measured at 0.0084 →
+   * 0.0109 → 0.0137 across three turns — so adding it inflates the figure
+   * quadratically. It is rebased instead: normally the newest report replaces
+   * the last, and a report that has gone *backwards* means the provider stream
+   * was reopened (a fresh CLI process counts from zero), so the previous
+   * stream's final figure is banked and the new one accumulates on top.
    */
   recordUsage(
     usage: TokenUsage,
     scope: 'turn' | 'session',
+    sessionCostUsd?: number,
   ): { total: TokenUsage; delta: TokenUsage } {
     const before = this.usage;
+    if (sessionCostUsd !== undefined) {
+      if (sessionCostUsd < this.costLastReportUsd) this.costBankedUsd += this.costLastReportUsd;
+      this.costLastReportUsd = sessionCostUsd;
+    }
+    const costUsd = this.costBankedUsd + this.costLastReportUsd;
     const next: TokenUsage =
       scope === 'turn'
         ? {
@@ -219,14 +241,14 @@ export class AgentSession {
             outputTokens: before.outputTokens + usage.outputTokens,
             cacheReadTokens: before.cacheReadTokens + usage.cacheReadTokens,
             cacheWriteTokens: before.cacheWriteTokens + usage.cacheWriteTokens,
-            costUsd: (before.costUsd ?? 0) + (usage.costUsd ?? 0),
+            costUsd,
           }
         : {
             inputTokens: Math.max(before.inputTokens, usage.inputTokens),
             outputTokens: Math.max(before.outputTokens, usage.outputTokens),
             cacheReadTokens: Math.max(before.cacheReadTokens, usage.cacheReadTokens),
             cacheWriteTokens: Math.max(before.cacheWriteTokens, usage.cacheWriteTokens),
-            costUsd: usage.costUsd ?? before.costUsd,
+            costUsd,
           };
     if (next.costUsd === undefined || next.costUsd === 0) delete next.costUsd;
     this.usage = next;
@@ -440,7 +462,7 @@ export class AgentSession {
         onOutput: this.onOutput ?? undefined,
         agentInstanceId: stableAgentId,
         streamSessionId: this.liveSessionId,
-        onUsage: (usage, scope) => this.recordUsage(usage, scope),
+        onUsage: (usage, scope, sessionCostUsd) => this.recordUsage(usage, scope, sessionCostUsd),
       });
       mapper = turnMapper;
 

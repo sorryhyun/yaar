@@ -8,7 +8,7 @@
 import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
 import { BaseTransport } from '../base-transport.js';
 import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
-import { mapClaudeMessage } from './message-mapper.js';
+import { mapClaudeMessage, TurnUsageTracker } from './message-mapper.js';
 import { createInputChannel, type InputChannel } from './input-channel.js';
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
@@ -271,6 +271,8 @@ export class ClaudeSessionProvider extends BaseTransport {
     session.busy = true;
     this.currentQuery = session.stream;
     let messageCount = 0;
+    // One tracker per turn — the stream outlives the turn, the accumulator must not.
+    const turnUsage = new TurnUsageTracker();
     try {
       await session.mcpReady;
       session.turnsProcessed++;
@@ -298,7 +300,7 @@ export class ClaudeSessionProvider extends BaseTransport {
 
         this.captureSessionId(msg, options);
 
-        const mapped = mapClaudeMessage(msg);
+        const mapped = mapClaudeMessage(msg, turnUsage);
         if (!mapped) continue;
 
         // Detect stale session error and retry without resume
@@ -416,6 +418,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       this.currentQuery = stream;
       void this.waitForMcpConnected(stream, sdkOptions).finally(releaseMcpGate);
       let messageCount = 0;
+      const turnUsage = new TurnUsageTracker();
 
       for await (const msg of stream) {
         messageCount++;
@@ -423,7 +426,7 @@ export class ClaudeSessionProvider extends BaseTransport {
 
         this.captureSessionId(msg, options);
 
-        const mapped = mapClaudeMessage(msg);
+        const mapped = mapClaudeMessage(msg, turnUsage);
         if (mapped) {
           // Detect stale session error and retry without resume
           if (isStaleSessionError(mapped)) {

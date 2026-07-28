@@ -72,7 +72,19 @@ function formatTokens(n: number) {
 }
 
 /**
- * Token line: the cache-excluded total, with the input/output split behind it.
+ * Everything the agent read as input: fresh tokens plus the cached context.
+ *
+ * The one place those three fields are summed — see {@link AgentUsage}. Reading
+ * `inputTokens` alone reports ~10 for a turn that actually took 18k of context
+ * through the model, because under prompt caching that field means only the
+ * remainder that was neither read from nor written to the cache.
+ */
+function inputRead(usage: AgentUsage) {
+  return usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+}
+
+/**
+ * Token line: the total, with the input/output split behind it.
  *
  * Total first because it is the one number that answers "how much did this cost";
  * the split is what you read next when the answer is "a lot" and you want to know
@@ -81,9 +93,10 @@ function formatTokens(n: number) {
  */
 function formatUsage(usage: AgentUsage | undefined) {
   if (!usage) return '';
-  const total = usage.inputTokens + usage.outputTokens;
+  const input = inputRead(usage);
+  const total = input + usage.outputTokens;
   if (total === 0) return '';
-  return `${formatTokens(total)} tok · ${formatTokens(usage.inputTokens)} in · ${formatTokens(usage.outputTokens)} out`;
+  return `${formatTokens(total)} tok · ${formatTokens(input)} in · ${formatTokens(usage.outputTokens)} out`;
 }
 
 // ── Components ───────────────────────────────────────────────
@@ -173,7 +186,7 @@ function AgentRow(props: { agent: AgentEntry }) {
             <span style=${() => `color: ${typeBadge(a().type)}`}>${() => a().type}</span>
             <span>${() => (a().busy ? 'busy' : 'idle')}</span>
             <${Show} when=${usageText}>
-              <span class="meta-tokens" title="Input + output tokens. Cache reads and writes excluded."
+              <span class="meta-tokens" title="Input + output tokens. Input includes cached context (cache reads and writes)."
                 >${usageText}</span
               >
             </>

@@ -52,6 +52,10 @@ export const ResourceLinkSchema = z.looseObject({
 const AgentUsageSchema = z.looseObject({
   inputTokens: z.optional(z.number()),
   outputTokens: z.optional(z.number()),
+  // Not optional decoration — see AgentUsage in types.ts. Under prompt caching
+  // these carry the input side almost entirely, and `inputTokens` alone is ~10.
+  cacheReadTokens: z.optional(z.number()),
+  cacheWriteTokens: z.optional(z.number()),
 });
 
 export const AgentEntrySchema = z.looseObject({

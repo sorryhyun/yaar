@@ -40,7 +40,7 @@ describe('provider delta parity — Claude', () => {
     }) as unknown as SDKMessage;
 
   it('normalizes text_delta events into ordered incremental text messages', () => {
-    const mapped = ['Hel', 'lo ', 'world'].map(textDelta).map(mapClaudeMessage);
+    const mapped = ['Hel', 'lo ', 'world'].map(textDelta).map((m) => mapClaudeMessage(m));
     expect(textContent(mapped)).toEqual(['Hel', 'lo ', 'world']);
   });
 

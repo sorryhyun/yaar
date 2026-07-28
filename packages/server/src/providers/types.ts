@@ -106,8 +106,22 @@ export interface StreamMessage {
    * `session` — the provider's own running total for the whole thread; replace
    *   the running total with it. Codex's `tokenUsage.total` is this, and it
    *   arrives repeatedly within a single turn.
+   *
+   * Note that `turn` on Claude no longer means "once, at the end": the mapper
+   * reports deltas as the turn runs, so several turn-scoped reports may arrive
+   * before the terminal. Summing them is still the correct handling.
    */
   usageScope?: 'turn' | 'session';
+  /**
+   * The provider's running cost for the *whole session*, in USD.
+   *
+   * Deliberately not `usage.costUsd`, and deliberately not covered by
+   * `usageScope`: Claude's `total_cost_usd` is cumulative even on a message
+   * whose token figures are the turn's alone, so one scope cannot describe
+   * both. Summing this field is always wrong — see `AgentSession.recordUsage`,
+   * which rebases it instead.
+   */
+  sessionCostUsd?: number;
 }
 
 export interface TransportOptions {
