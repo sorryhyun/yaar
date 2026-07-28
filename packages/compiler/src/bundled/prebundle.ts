@@ -1,7 +1,7 @@
 /**
  * Prebundle a single `@bundled/*` library into one self-contained ESM string.
  *
- * This is the exact build the exe ships: `scripts/prebundle-libs.js` writes the
+ * This is the exact build the exe ships: `scripts/build/prebundle-libs.js` writes the
  * result of `prebundleLibrary(name)` to `dist/bundled-libs/<name>.js`, and those
  * files are embedded into the standalone binary. Sharing this one function
  * between the build script and the prebundle-completeness test means the test
@@ -26,7 +26,7 @@ const ANCHOR = MODULE_ROOT;
 
 /**
  * Some browser builds `require` Node builtins that don't exist in the browser.
- * Stub them so the bundle resolves — mirrors the plugin in prebundle-libs.js.
+ * Stub them so the bundle resolves — mirrors the plugin in build/prebundle-libs.js.
  */
 const nodeShimPlugin: Bun.BunPlugin = {
   name: 'node-shim',

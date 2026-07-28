@@ -10,10 +10,10 @@
  * you a rule is ready for promotion.
  *
  * Usage:
- *   bun run scripts/check-apps.ts             # scan every app
- *   bun run scripts/check-apps.ts apps/memo   # scan specific apps or files
- *   bun run scripts/check-apps.ts --quiet     # only print violations
- *   bun run scripts/check-apps.ts --strict    # fail on advisory rules too
+ *   bun run scripts/check/apps.ts             # scan every app
+ *   bun run scripts/check/apps.ts apps/memo   # scan specific apps or files
+ *   bun run scripts/check/apps.ts --quiet     # only print violations
+ *   bun run scripts/check/apps.ts --strict    # fail on advisory rules too
  *
  * Exit code: 1 if any ERROR rule has violations (or any rule, under --strict).
  *
@@ -25,7 +25,7 @@
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
 
-const REPO_ROOT = resolve(import.meta.dir, '..');
+const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const APPS_DIR = join(REPO_ROOT, 'apps');
 const SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
 

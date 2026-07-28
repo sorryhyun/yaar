@@ -2,7 +2,7 @@
  * Regenerates the checked-in, generated stylesheets from the canonical token
  * data in packages/shared/src/design/.
  *
- *   bun scripts/gen-design-tokens.ts
+ *   bun scripts/codegen/design-tokens.ts
  *
  * Currently emits:
  *   - packages/frontend/src/styles/base/tokens.css (OS shell)
@@ -12,8 +12,8 @@
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildShellTokensCss } from '../packages/shared/src/design/shell-css.ts';
+import { buildShellTokensCss } from '../../packages/shared/src/design/shell-css.ts';
 
-const target = join(import.meta.dir, '../packages/frontend/src/styles/base/tokens.css');
+const target = join(import.meta.dir, '../../packages/frontend/src/styles/base/tokens.css');
 writeFileSync(target, buildShellTokensCss());
 console.log(`wrote ${target}`);

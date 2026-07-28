@@ -6,7 +6,7 @@
  * Local mode is not an accident of the environment here, it is the subject: `IS_REMOTE` is a
  * module-load constant, and it used to be whatever the developer's `config/settings.json` had
  * persisted, so this file failed on a machine that had toggled remote mode on and passed in
- * CI. `scripts/test-env.ts` (preloaded via bunfig) now pins `REMOTE=0` for the process, and
+ * CI. `scripts/test/env.ts` (preloaded via bunfig) now pins `REMOTE=0` for the process, and
  * the guard below fails loudly rather than silently if that ever stops holding.
  *
  * The remote half of the same surface — where the gate actually gates — is
@@ -152,7 +152,7 @@ describe('/api/version', () => {
     expect(res?.status).toBe(200);
 
     const body = (await res!.json()) as Record<string, unknown>;
-    // Not asserted against a literal: set-version.ts rewrites it every release,
+    // Not asserted against a literal: release/set-version.ts rewrites it every release,
     // and a test that has to be edited to cut a release is a test that will be
     // edited wrongly. The shape and the sentinel are what matter.
     expect(typeof body.version).toBe('string');

@@ -24,7 +24,7 @@ export {
   assetDataUrlPlugin,
   solidHtmlSourcePlugin,
 } from './bundled/plugins.js';
-// The exe's per-library build. `scripts/prebundle-libs.js` and the completeness
+// The exe's per-library build. `scripts/build/prebundle-libs.js` and the completeness
 // test both go through here, so the module can move without touching either.
 export {
   prebundleLibrary,

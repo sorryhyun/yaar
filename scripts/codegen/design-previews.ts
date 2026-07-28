@@ -1,7 +1,7 @@
 /**
  * Generates preview cards for the "YAAR Design System" project on claude.ai/design.
  *
- *   bun scripts/gen-design-previews.ts     → dist/design-previews/
+ *   bun scripts/codegen/design-previews.ts     → dist/design-previews/
  *
  * Renders from the SAME generators that style the product (@yaar/shared design
  * module), so the published previews cannot drift from what ships. Upload is done
@@ -10,10 +10,10 @@
  */
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { buildAppTokensCss } from '../packages/shared/src/design/app-css.ts';
-import { buildShellTokensCss } from '../packages/shared/src/design/shell-css.ts';
+import { buildAppTokensCss } from '../../packages/shared/src/design/app-css.ts';
+import { buildShellTokensCss } from '../../packages/shared/src/design/shell-css.ts';
 
-const OUT = join(import.meta.dir, '../dist/design-previews');
+const OUT = join(import.meta.dir, '../../dist/design-previews');
 mkdirSync(join(OUT, 'previews'), { recursive: true });
 
 // Strip @font-face — the OTF files are served by the YAAR server, not claude.ai.
@@ -44,7 +44,7 @@ const SHELL_MODULES = [
   'packages/frontend/src/styles/window/renderers.module.css',
 ];
 const shellModuleCss = SHELL_MODULES.map((p) =>
-  readFileSync(join(import.meta.dir, '..', p), 'utf8'),
+  readFileSync(join(import.meta.dir, '..', '..', p), 'utf8'),
 ).join('\n');
 
 function page(opts: { group: string; title: string; body: string; light?: boolean }): string {

@@ -4,7 +4,7 @@
 
 set -e
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../.."
 
 # Parse provider argument
 PROVIDER_ARG=""
@@ -15,7 +15,7 @@ fi
 
 # Pick a free port up front so the server, the browser tab we open, and the
 # "running at" banner all agree. The server has its own EADDRINUSE fallback, but
-# dev.sh can't see which port it landed on — so if 8000 is busy the server would
+# dev/start.sh can't see which port it landed on — so if 8000 is busy the server would
 # quietly move to 8001 while we still open the browser at 8000 (hitting whatever
 # else is on 8000). Choosing here and passing it via PORT (honored by getPort())
 # keeps both sides in sync.

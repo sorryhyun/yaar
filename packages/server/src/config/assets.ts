@@ -87,7 +87,7 @@ export function getMlRuntimeDir(): string | null {
  * Resolve one onnxruntime-web artifact by file name to a path `Bun.file()` can read.
  *
  * A standalone exe has no `node_modules` and nothing beside it on disk, so the build
- * embeds the artifacts into the binary (`build-exe-bundle.js`) and hands their
+ * embeds the artifacts into the binary (`build/exe-bundle.js`) and hands their
  * `/$bunfs/` paths over on `globalThis.__YAAR_ML_RUNTIME`, exactly as it does for the
  * frontend. Shipping them as a side-car directory instead would break the moment the
  * binary was moved somewhere else.

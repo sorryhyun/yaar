@@ -2,14 +2,14 @@
 # Opens a standalone Chrome/Edge --app window, then keeps the server running.
 # Press Ctrl+C to stop.
 #
-# Usage: powershell -File scripts/dev-windows.ps1 [claude|codex]
+# Usage: powershell -File scripts/dev/start-windows.ps1 [claude|codex]
 
 param(
     [string]$Provider = "claude"
 )
 
 $ErrorActionPreference = "Stop"
-$Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
+$Root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
 Set-Location $Root
 
 Write-Host "Using provider: $Provider"

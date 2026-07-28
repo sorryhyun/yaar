@@ -14,10 +14,10 @@
  * the only way to set it.
  *
  * Every launcher that opens a *visible* Chrome for a human to use YAAR in wants exactly
- * this set, and there are three of them (`scripts/dev.sh`, `exe-entry.ts`, and the
+ * this set, and there are three of them (`scripts/dev/start.sh`, `exe-entry.ts`, and the
  * headless pool in `chrome.ts`, which adds its own).
  *
- * `scripts/dev.sh` is bash and cannot import this; it keeps its own copy. Change one,
+ * `scripts/dev/start.sh` is bash and cannot import this; it keeps its own copy. Change one,
  * change both.
  */
 export const LINUX_WEBGPU_FLAGS = [

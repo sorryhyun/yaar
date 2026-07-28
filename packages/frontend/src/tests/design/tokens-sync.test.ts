@@ -6,7 +6,7 @@ import { buildShellTokensCss } from '@yaar/shared';
 /**
  * tokens.css is a generated file checked into the repo. If this fails, someone
  * edited it by hand or changed the token data without regenerating:
- *   bun scripts/gen-design-tokens.ts
+ *   bun scripts/codegen/design-tokens.ts
  */
 describe('shell design tokens', () => {
   test('tokens.css matches the @yaar/shared generator output', () => {

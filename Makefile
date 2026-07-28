@@ -13,35 +13,35 @@ DESIGN_PREVIEW_PORT ?= 4321
 
 # Run both server and frontend (auto-select provider)
 dev:
-	@./scripts/dev.sh
+	@./scripts/dev/start.sh
 
 # Run with Claude provider (remote mode - accessible over network with auth)
 # LAUNCH_CHROME=1 opens the local desktop for you, as in claude-dev — in remote mode the
 # tab carries #remote=<token> so it connects without a manual paste.
 claude:
-	@REMOTE=1 LAUNCH_CHROME=1 ./scripts/dev.sh claude
+	@REMOTE=1 LAUNCH_CHROME=1 ./scripts/dev/start.sh claude
 
 # Run with Codex provider (remote mode - accessible over network with auth)
 codex:
-	@REMOTE=1 LAUNCH_CHROME=1 ./scripts/dev.sh codex
+	@REMOTE=1 LAUNCH_CHROME=1 ./scripts/dev/start.sh codex
 
 # Run with Claude provider in app window (simulates exe from source)
 claude-windows:
-	@powershell -ExecutionPolicy Bypass -File scripts/dev-windows.ps1 -Provider claude
+	@powershell -ExecutionPolicy Bypass -File scripts/dev/start-windows.ps1 -Provider claude
 
 # Run with Codex provider in app window (simulates exe from source)
 codex-windows:
-	@powershell -ExecutionPolicy Bypass -File scripts/dev-windows.ps1 -Provider codex
+	@powershell -ExecutionPolicy Bypass -File scripts/dev/start-windows.ps1 -Provider codex
 
 # Run with Claude provider (dev mode - no MCP auth)
 # LAUNCH_CHROME=1 starts a local debuggable Chrome (dedicated profile) so the
 # session agent's real-browser door (yaar://session/browser) can attach.
 claude-dev:
-	@MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev.sh claude
+	@MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev/start.sh claude
 
 # Run with Codex provider (dev mode - no MCP auth)
 codex-dev:
-	@MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev.sh codex
+	@MCP_SKIP_AUTH=1 LAUNCH_CHROME=1 ./scripts/dev/start.sh codex
 
 # Run server only (also serves frontend in dev mode)
 server:
@@ -50,11 +50,11 @@ server:
 # Install all dependencies
 install:
 	bun install
-	@./scripts/setup-webgpu-linux.sh
+	@./scripts/dev/setup-webgpu-linux.sh
 
 # Enable WebGPU in local Chrome/Chromium profiles (Linux only; no-op elsewhere)
 webgpu:
-	@./scripts/setup-webgpu-linux.sh
+	@./scripts/dev/setup-webgpu-linux.sh
 
 # Lint all packages
 lint:
@@ -92,18 +92,18 @@ bench:
 # headless Chrome to open apps, sample the whole process tree per phase, and
 # write bench/report.md. Override apps: make claude-bench APPS=market-apps,memo
 claude-bench:
-	@bun scripts/bench-claude.ts $(if $(APPS),--apps $(APPS),) $(if $(SETTLE),--settle $(SETTLE),) $(BENCH_ARGS)
+	@bun scripts/bench/claude.ts $(if $(APPS),--apps $(APPS),) $(if $(SETTLE),--settle $(SETTLE),) $(BENCH_ARGS)
 
 # Regenerate Codex app-server TypeScript types
 # Post-processes imports to add .js extensions required by ESM resolution
 codex-types:
-	bun scripts/generate-codex-types.js $(CODEX_BIN)
+	bun scripts/codegen/codex-types.js $(CODEX_BIN)
 
 # Regenerate design tokens + browsable preview cards from packages/shared/src/design.
 # Both generators read the real token module, so previews cannot drift from what ships.
 design:
-	bun scripts/gen-design-tokens.ts
-	bun scripts/gen-design-previews.ts
+	bun scripts/codegen/design-tokens.ts
+	bun scripts/codegen/design-previews.ts
 
 # Serve the generated preview cards for visual review — no server, no `make dev`.
 # file:// is blocked by browser automation, so review over http.

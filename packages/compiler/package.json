@@ -12,11 +12,11 @@
     }
   },
   "scripts": {
-    "prebuild": "bun run ../../scripts/ensure-deps-built.ts shared",
+    "prebuild": "bun run ../../scripts/build/ensure-deps-built.ts shared",
     "build": "tsc",
-    "pretest": "bun run ../../scripts/ensure-deps-built.ts shared",
+    "pretest": "bun run ../../scripts/build/ensure-deps-built.ts shared",
     "test": "bun test src/tests",
-    "pretypecheck": "bun run ../../scripts/ensure-deps-built.ts shared",
+    "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared",
     "typecheck": "tsc --noEmit",
     "dev": "tsc --watch"
   },

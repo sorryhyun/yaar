@@ -2,7 +2,7 @@
  * Every prebundled `@bundled/*` library survives being consumed by an app.
  *
  * The exe embeds one prebundled ESM file per bundled library (see
- * `prebundle.ts` / `scripts/prebundle-libs.js`). A class of library — pure
+ * `prebundle.ts` / `scripts/build/prebundle-libs.js`). A class of library — pure
  * re-export barrels like `uuid`, `zod/mini`, `lodash-es` — bundles into an
  * artifact whose `export { ... }` list references identifiers Bun dropped or
  * renamed. The prebundle itself *succeeds*, so the breakage is invisible until

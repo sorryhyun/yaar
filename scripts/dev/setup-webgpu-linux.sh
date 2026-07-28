@@ -87,11 +87,11 @@ fi
 # Vulkan adapters — crbug.com/42251215 — even when the driver supports fp16).
 # Dawn toggles have no chrome://flags entry, so we can't persist it in Local
 # State like the flags above; it must be on the command line. The Chrome that
-# dev.sh launches (LAUNCH_CHROME=1) and the headless sandbox already pass it.
+# dev/start.sh launches (LAUNCH_CHROME=1) and the headless sandbox already pass it.
 if lspci 2>/dev/null | grep -qi "vga.*nvidia\|3d.*nvidia"; then
   echo ""
   echo "NVIDIA GPU detected: fp16 (shader-f16) additionally requires launching"
   echo "Chrome with --enable-dawn-features=vulkan_enable_f16_on_nvidia."
-  echo "YAAR's own browsers (dev.sh LAUNCH_CHROME=1, headless sandbox) pass this"
+  echo "YAAR's own browsers (dev/start.sh LAUNCH_CHROME=1, headless sandbox) pass this"
   echo "automatically; add it to the launch command if you use your own Chrome."
 fi

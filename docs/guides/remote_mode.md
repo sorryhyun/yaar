@@ -86,7 +86,7 @@ These bind to `127.0.0.1` with no token authentication.
 Set `YAAR_REMOTE_TOKEN` and the server adopts it instead of minting one. This exists so a
 *launcher* can know the connect URL before the server exists: `#remote=<token>` is required to
 open a working tab, and nothing can ask the server for the token (every endpoint that would
-answer is behind that same token). `scripts/dev.sh` mints one in remote mode and exports it,
+answer is behind that same token). `scripts/dev/start.sh` mints one in remote mode and exports it,
 which is how `make claude` can open a browser straight onto an authenticated desktop.
 
 Values shorter than 32 characters are ignored with a warning and a random token is used instead.

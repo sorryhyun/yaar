@@ -1,14 +1,25 @@
-# Preloads run in order, awaited, before any test file loads — and both entries need that.
-# `test-env.ts` (repo root, shared by every package) pins the environment before
+# Preloads run in order, awaited, before any test file loads — and each entry needs that.
+# `test/env.ts` (repo root, shared by every package) pins the environment before
 # `config/env.ts` can freeze `IS_REMOTE` from the developer's settings.json or .env, and
 # points YAAR_CONFIG/YAAR_STORAGE at throwaway dirs. `materialize-app-protocols.ts` then
 # writes the `dist/protocol.json` fixtures a few tests read (dock, devtools, memo), which CI
 # never builds — see the module header and src/tests/setup/materialize-app-protocols.ts.
 #
-# Covers every suite in this package: the unit runner's spawned processes, the remote-mode
-# process (src/tests/remote), loopback, and integration.
+# `partition-guard.ts` is the third because this package is the one whose suite does not fit
+# in a single process: `bun test src/tests` looks like a reasonable thing to type and quietly
+# is not — it puts the loopback harness, the mocking files, and the plain units together. The
+# guard stops such a run and prints the command for each partition. It also double-checks
+# `scripts/run-tests.ts`, whose own child processes each hold exactly one partition by
+# construction; if that ever stops being true, this is what says so.
+#
+# Covers every process in this package: the runner's spawned groups (units, remote, loopback,
+# integration, and one per mocking file) and any ad-hoc `bun test <path>`.
 [test]
-preload = ["../../scripts/test-env.ts", "./src/tests/setup/materialize-app-protocols.ts"]
+preload = [
+  "../../scripts/test/env.ts",
+  "./src/tests/setup/materialize-app-protocols.ts",
+  "../../scripts/test/partition-guard.ts",
+]
 
 # Build output is not a test suite: `tsc` emits compiled `.test.js` copies under
 # `dist/`, and a stale one is worse than no test at all. The suite scripts scope

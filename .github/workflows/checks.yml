@@ -82,7 +82,7 @@ jobs:
         if: inputs.full
         run: bun run format:check
 
-      # ERROR-level app rules only. The ADVISORY rules in check-apps.ts are
+      # ERROR-level app rules only. The ADVISORY rules in check/apps.ts are
       # deliberately not release blockers — the script's own convention is that a
       # rule gets promoted to ERROR once it reaches zero, and gating on advisories
       # would invert that. Swap in check:apps:strict to gate on advisories too.

@@ -4,16 +4,27 @@
 # silently wrong rather than red. Every package has its own bunfig for runs whose
 # cwd is inside the package (what `bun run test` and CI use); this is the root's
 # equivalent, and it exists to make `bun test <path>` from here mean the same thing
-# the package's own run means.
+# the package's own run means — or, where it cannot, to say so instead of guessing.
 
 [test]
-# Preloads run in order, awaited, before any test file loads. `test-env.ts` must
+# Preloads run in order, awaited, before any test file loads. `test/env.ts` must
 # stay first — it pins the environment before `config/env.ts` can freeze
-# `IS_REMOTE` from settings.json or .env. `test-preload-root.ts` then loads
+# `IS_REMOTE` from settings.json or .env. `test/preload-root.ts` then loads
 # whatever setup the *anchored package* needs on top; see its header for why that
-# cannot simply be "load everything", and why a repo-wide `bun test` from here is
-# still not the supported way to run the whole suite (use `bun run test`).
-preload = ["./scripts/test-env.ts", "./scripts/test-preload-root.ts"]
+# cannot simply be "load everything".
+#
+# `test/partition-guard.ts` covers what neither of those can. A preload can fix an
+# environment; it cannot split a process, and some test files must not share one —
+# `bun test packages/server` from here reported 86 failures against a green tree
+# because it put the remote suite, the mocking files, and the socket-bound suites
+# in a single process. The guard refuses such a run and names the command that
+# works, so a repo-wide `bun test` from the root is now an error rather than a
+# wrong answer. Use `bun run test`, which is also what CI runs.
+preload = [
+  "./scripts/test/env.ts",
+  "./scripts/test/preload-root.ts",
+  "./scripts/test/partition-guard.ts",
+]
 
 # Build output is not a test suite. `tsc` emits `dist/**/*.test.js` alongside the
 # real sources, so a path-scoped run collected each compiler test twice — once from

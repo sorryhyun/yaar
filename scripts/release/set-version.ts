@@ -1,7 +1,7 @@
 /**
  * Set the project version across all files that carry a version literal.
  *
- * Usage: bun scripts/set-version.ts <version>   (leading "v" is stripped)
+ * Usage: bun scripts/release/set-version.ts <version>   (leading "v" is stripped)
  *
  * Updates:
  *   - root package.json + every packages/ * /package.json that has a version
@@ -15,7 +15,7 @@ import { join } from 'path';
 
 const raw = process.argv[2];
 if (!raw) {
-  console.error('Usage: bun scripts/set-version.ts <version>');
+  console.error('Usage: bun scripts/release/set-version.ts <version>');
   process.exit(1);
 }
 
@@ -25,7 +25,7 @@ if (!/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
   process.exit(1);
 }
 
-const root = join(import.meta.dir, '..');
+const root = join(import.meta.dir, '..', '..');
 
 /** Replace only the first `"version": "..."` line, preserving all other formatting. */
 function bumpPackageJson(path: string): boolean {

@@ -17,9 +17,9 @@
  * compileTypeScript would throw "compiler not configured".
  */
 
-import { initCompiler } from '../packages/compiler/dist/index.js';
-import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../packages/server/src/config.ts';
-import { autoCompileApps } from '../packages/server/src/features/apps/auto-compile.ts';
+import { initCompiler } from '../../packages/compiler/dist/index.js';
+import { PROJECT_ROOT, IS_BUNDLED_EXE } from '../../packages/server/src/config.ts';
+import { autoCompileApps } from '../../packages/server/src/features/apps/auto-compile.ts';
 
 initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: IS_BUNDLED_EXE });
 

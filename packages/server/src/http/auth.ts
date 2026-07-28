@@ -24,8 +24,8 @@ const MIN_SUPPLIED_TOKEN_LENGTH = 32;
  * the token is otherwise unknowable until the server is already up: the connect URL needs
  * `#remote=<token>`, and a script that wants to open a browser on that URL cannot ask for
  * it (every endpoint that would tell it is — correctly — behind the same token). Having
- * dev.sh mint the token and pass it down keeps the secret out of a file on disk and out of
- * the server's stdout, and needs no auth exemption. See scripts/dev.sh.
+ * dev/start.sh mint the token and pass it down keeps the secret out of a file on disk and out of
+ * the server's stdout, and needs no auth exemption. See scripts/dev/start.sh.
  */
 export function generateRemoteToken(): string {
   const supplied = process.env.YAAR_REMOTE_TOKEN;

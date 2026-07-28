@@ -9,7 +9,7 @@
  * Measures four things per phase (boot-idle → desktop-open → per-app):
  *   - server RSS / JS heap        (SIGUSR2 handler in main.ts → server.log)
  *   - server CPU flamegraph        (bun --cpu-prof-md, flushed on exit)
- *   - server-tree subprocesses     (scripts/bench-resources.ts: claude CLI + any
+ *   - server-tree subprocesses     (scripts/bench/resources.ts: claude CLI + any
  *                                   headless Chrome the app spawns via yaar-web)
  *   - frontend Chrome              (the .yaar-chrome-bench profile, isolated so
  *                                   the sampler's `chrome` group == YAAR's UI)
@@ -17,14 +17,14 @@
  *
  * Usage:
  *   make claude-bench
- *   bun scripts/bench-claude.ts --apps market-apps,thesingularity-reader
- *   bun scripts/bench-claude.ts --settle 5 --headful --keep-open
+ *   bun scripts/bench/claude.ts --apps market-apps,thesingularity-reader
+ *   bun scripts/bench/claude.ts --settle 5 --headful --keep-open
  */
 
 import { Cdp } from './lib/cdp.ts';
 
 const HERE = new URL('.', import.meta.url).pathname;
-const REPO = new URL('../', import.meta.url).pathname;
+const REPO = new URL('../../', import.meta.url).pathname;
 const BENCH = `${REPO}bench`;
 const PHASE_FILE = '/tmp/yaar-bench-phase';
 const CHROME_PROFILE_DIR = `${process.env.HOME}/.yaar-chrome-bench`;
@@ -340,7 +340,7 @@ async function main() {
   sampler = Bun.spawn(
     [
       'bun',
-      `${HERE}bench-resources.ts`,
+      `${HERE}resources.ts`,
       '--interval',
       String(INTERVAL_S),
       '--out',

@@ -2,7 +2,7 @@
  * Generator for the OS shell stylesheet (`packages/frontend/src/styles/base/tokens.css`).
  *
  * The emitted file is checked in but GENERATED — regenerate with
- * `bun scripts/gen-design-tokens.ts`; a frontend test asserts it is in sync.
+ * `bun scripts/codegen/design-tokens.ts`; a frontend test asserts it is in sync.
  *
  * Shell CSS addresses color only through the semantic names emitted here
  * (`--color-accent`, `--color-danger`, …) plus the explicitly decorative
@@ -38,7 +38,7 @@ export function buildShellTokensCss(): string {
  * Design Tokens — GENERATED FILE, DO NOT EDIT.
  *
  * Source of truth: packages/shared/src/design/tokens.ts (GitHub-dark palette).
- * Regenerate with: bun scripts/gen-design-tokens.ts
+ * Regenerate with: bun scripts/codegen/design-tokens.ts
  */
 
 ${FONT_FACE_CSS}

@@ -59,7 +59,7 @@ console.log(out);
 - **런타임 아티팩트.** onnxruntime-web은 런타임에 자신의 `.wasm` 바이너리를 로드합니다.
   SDK는 `ort.env.wasm.wasmPaths`를 정적 라우트인 `/api/ml-runtime/`(불변, 강하게 캐시됨)로
   지정합니다. 개발 모드에서는 설치된 `onnxruntime-web/dist`에서 서빙되며, 독립 실행형 exe는
-  `node_modules`가 없으므로 `build-exe-bundle.js`가 SDK가 고정하는 세 가지 아티팩트
+  `node_modules`가 없으므로 `build/exe-bundle.js`가 SDK가 고정하는 세 가지 아티팩트
   (`ort.webgpu.bundle.min.mjs` + asyncify `.mjs`/`.wasm` 쌍, 약 24MB)를 바이너리 안에
   내장하고 라우트는 거기서 서빙합니다. `YAAR_ML_RUNTIME_DIR`가 둘 다 오버라이드합니다.
   shim에서 `ORT_URL`이나 백엔드를 바꾸면, 빌드 스크립트의 `ML_RUNTIME_ARTIFACTS`도 맞춰

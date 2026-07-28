@@ -19,7 +19,7 @@
 
 import { join } from 'path';
 
-const ROOT = join(import.meta.dir, '..');
+const ROOT = join(import.meta.dir, '..', '..');
 
 const raw = process.argv[2];
 if (!raw) {

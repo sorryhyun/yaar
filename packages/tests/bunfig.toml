@@ -1,6 +1,6 @@
 # Every `bun test` here loads server modules through the tsconfig `paths` mapping
 # (@yaar/server/* → ../server/src/*), so `config/env.ts` resolves the server's mode in *this*
 # process. The shared preload pins that mode instead of inheriting it from the developer's
-# config/settings.json or .env — see scripts/test-env.ts.
+# config/settings.json or .env — see scripts/test/env.ts.
 [test]
-preload = ["../../scripts/test-env.ts"]
+preload = ["../../scripts/test/env.ts"]

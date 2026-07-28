@@ -16,7 +16,7 @@
  * **Local mode is the premise, not a coincidence.** This is the `loopback-alias` boundary,
  * which `isAppOriginIsolationEnabled()` reports only when `!IS_REMOTE` — so under REMOTE=1
  * every row here reads `host` and the file is vacuous. It used to become vacuous by accident
- * on a developer machine whose `config/settings.json` had `remote: true`; `scripts/test-env.ts`
+ * on a developer machine whose `config/settings.json` had `remote: true`; `scripts/test/env.ts`
  * pins the mode now, and the guard below says so out loud. The remote transport's boundary
  * (`proxy-port`) is covered in `remote/remote-mode.test.ts`.
  */

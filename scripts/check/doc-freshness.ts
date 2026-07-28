@@ -14,10 +14,10 @@
  * exist (definitely wrong).
  *
  * Usage:
- *   bun run scripts/check-doc-freshness.ts            # check every markdown file under docs/
- *   bun run scripts/check-doc-freshness.ts docs/x.md  # check specific docs
- *   bun run scripts/check-doc-freshness.ts --quiet     # only print problems
- *   bun run scripts/check-doc-freshness.ts --strict    # fail on stale sources too
+ *   bun run scripts/check/doc-freshness.ts            # check every markdown file under docs/
+ *   bun run scripts/check/doc-freshness.ts docs/x.md  # check specific docs
+ *   bun run scripts/check/doc-freshness.ts --quiet     # only print problems
+ *   bun run scripts/check/doc-freshness.ts --strict    # fail on stale sources too
  *
  * Exit code: 1 for broken pointers or bundled-library list drift. Stale sources
  * are advisory unless --strict is passed, since a source file may change in a
@@ -27,9 +27,9 @@
 import { execFileSync } from 'child_process';
 import { existsSync, readFileSync } from 'fs';
 import { relative, resolve } from 'path';
-import { BUNDLED_LIBRARIES } from '../packages/compiler/src/index.ts';
+import { BUNDLED_LIBRARIES } from '../../packages/compiler/src/index.ts';
 
-const REPO_ROOT = resolve(import.meta.dir, '..');
+const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 /**
  * Docs that enumerate the `@bundled/*` surface and must match it exactly.
  * The root `CLAUDE.md` is deliberately absent: it summarizes the surface and

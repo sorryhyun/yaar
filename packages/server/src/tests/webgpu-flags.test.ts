@@ -11,7 +11,7 @@
  * headless one — they must not drift into two unrelated lists. And that it never
  * acquires `--disable-vulkan-surface`, which is the trap: it reads like a companion to
  * the other Vulkan flags, and it would disable the surface a visible window presents
- * through. `scripts/dev.sh` holds a bash copy this cannot reach; its comment carries
+ * through. `scripts/dev/start.sh` holds a bash copy this cannot reach; its comment carries
  * the pointer.
  */
 import { describe, it, expect } from 'bun:test';
@@ -19,7 +19,7 @@ import { LINUX_WEBGPU_FLAGS, LINUX_WEBGPU_FLAGS_HEADLESS } from '../lib/browser/
 
 describe('LINUX_WEBGPU_FLAGS', () => {
   it('turns WebGPU on and lifts the NVIDIA fp16 hold', () => {
-    // The three dev.sh has passed all along, and the exe now passes too.
+    // The three dev/start.sh has passed all along, and the exe now passes too.
     expect(LINUX_WEBGPU_FLAGS).toEqual([
       '--enable-unsafe-webgpu',
       '--enable-features=Vulkan',

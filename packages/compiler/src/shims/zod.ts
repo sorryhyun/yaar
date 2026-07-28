@@ -3,7 +3,7 @@
  *
  * `@bundled/zod` maps to `zod/mini`, whose browser entry (`mini/index.js`) is a
  * nested `export * from …` barrel. Prebundling that file directly (exe build,
- * `scripts/prebundle-libs.js`) makes Bun emit an `export { … }` list whose
+ * `scripts/build/prebundle-libs.js`) makes Bun emit an `export { … }` list whose
  * identifiers were dropped/renamed out from under it, producing an artifact
  * whose exports reference undeclared names:
  *

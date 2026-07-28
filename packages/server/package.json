@@ -9,11 +9,11 @@
     "dev": "bun --watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "bun src/main.ts",
-    "pretypecheck": "bun run ../../scripts/ensure-deps-built.ts shared compiler",
+    "pretypecheck": "bun run ../../scripts/build/ensure-deps-built.ts shared compiler",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "eslint src",
-    "pretest": "bun run ../../scripts/ensure-deps-built.ts shared compiler",
-    "test": "bun run scripts/run-unit-tests.ts && YAAR_TEST_REMOTE=1 bun test src/tests/remote/ && bun test src/tests/loopback && bun test src/integration"
+    "pretest": "bun run ../../scripts/build/ensure-deps-built.ts shared compiler",
+    "test": "bun run scripts/run-tests.ts"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.219",

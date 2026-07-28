@@ -2,7 +2,7 @@
 /**
  * Cross-platform Codex type generation script.
  *
- * Usage: bun scripts/generate-codex-types.js [codex-binary]
+ * Usage: bun scripts/codegen/codex-types.js [codex-binary]
  *
  * 1. Removes packages/server/src/providers/codex/generated/
  * 2. Runs `<codex-bin> app-server generate-ts`
@@ -16,7 +16,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = join(__dirname, '..');
+const rootDir = join(__dirname, '..', '..');
 const outDir = join(rootDir, 'packages', 'server', 'src', 'providers', 'codex', 'generated');
 const codexBin = process.argv[2] || 'codex';
 

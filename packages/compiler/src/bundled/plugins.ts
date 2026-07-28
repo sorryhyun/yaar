@@ -34,7 +34,7 @@ function debugBundledLibrary(message: string): void {
 }
 
 /**
- * The libraries `build-exe-bundle.js` embedded into the standalone binary, or
+ * The libraries `build/exe-bundle.js` embedded into the standalone binary, or
  * undefined outside it. Every resolution strategy consults this first, so its
  * presence is also how the plugins know they are running inside the exe.
  */

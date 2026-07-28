@@ -3,8 +3,8 @@
  * Build standalone executable with frontend assets embedded via Bun.
  *
  * Usage:
- *   bun scripts/build-exe-bundle.js --target windows
- *   bun scripts/build-exe-bundle.js --target linux
+ *   bun scripts/build/exe-bundle.js --target windows
+ *   bun scripts/build/exe-bundle.js --target linux
  *
  * Generates a temporary entry point that imports all frontend dist files
  * and pre-bundled libraries using `with { type: "file" }`, which tells Bun
@@ -21,7 +21,7 @@ import { join, dirname, relative, basename } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = join(__dirname, '..');
+const rootDir = join(__dirname, '..', '..');
 
 // ── Parse CLI args ───────────────────────────────────────────────────
 
@@ -255,7 +255,7 @@ const entrypoint = relative(rootDir, generatedEntry);
 
 // The binary has to carry its own version: PROJECT_ROOT for an exe is whatever
 // directory the user dropped it in, so config/env.ts has no package.json to read
-// there. Sourced from the same root package.json `scripts/set-version.ts` stamps,
+// there. Sourced from the same root package.json `scripts/release/set-version.ts` stamps,
 // which is what release.yml asserts against the tag.
 const pkgVersion = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8')).version;
 const defines = [

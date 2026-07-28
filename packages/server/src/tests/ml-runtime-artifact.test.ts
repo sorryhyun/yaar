@@ -14,7 +14,7 @@
  * per *artifact* and not per *directory* — `/$bunfs/` paths don't share a parent worth
  * naming, and there is no directory to hand back.
  *
- * The real guard against a repeat is in `build-exe-bundle.js`, which now exits non-zero
+ * The real guard against a repeat is in `build/exe-bundle.js`, which now exits non-zero
  * rather than emitting a runtime-less binary. These tests pin the resolution order it
  * feeds.
  */

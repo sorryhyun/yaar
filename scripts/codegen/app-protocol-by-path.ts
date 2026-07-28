@@ -1,9 +1,9 @@
 /**
  * Print the extracted protocol manifest for an app at an arbitrary path.
  *
- * Usage: bun scripts/extract-protocol-path.ts <appDir>     # e.g. user-apps/word-lite
+ * Usage: bun scripts/codegen/app-protocol-by-path.ts <appDir>     # e.g. user-apps/word-lite
  *
- * `extract-protocol-cli.ts` resolves ids against `apps/` only; user-installed
+ * `app-protocol-by-id.ts` resolves ids against `apps/` only; user-installed
  * apps live in the git-ignored `user-apps/` root, and porting them to
  * `defineApp` needs the same extract-before / extract-after diff as the bundled
  * ones. Same extraction pass, path instead of id.
@@ -12,16 +12,16 @@
 import {
   extractProtocolFromDir,
   formatProtocolError,
-} from '../packages/compiler/src/index.ts';
+} from '../../packages/compiler/src/index.ts';
 import { isAbsolute, join, resolve } from 'node:path';
 
 const appDir = process.argv[2];
 if (!appDir) {
-  console.error('usage: bun scripts/extract-protocol-path.ts <appDir>');
+  console.error('usage: bun scripts/codegen/app-protocol-by-path.ts <appDir>');
   process.exit(2);
 }
 
-const root = isAbsolute(appDir) ? appDir : resolve(import.meta.dir, '..', appDir);
+const root = isAbsolute(appDir) ? appDir : resolve(import.meta.dir, '..', '..', appDir);
 
 // `bundles` is forwarded for the same reason `compile.ts` forwards it: a Zod
 // `params` defers to the schema fold, and the fold builds a throwaway bundle

@@ -1,5 +1,5 @@
-# Preloads run in order. `test-env.ts` (repo root, shared by every package) pins the
+# Preloads run in order. `test/env.ts` (repo root, shared by every package) pins the
 # environment so a test run describes the code and not the developer's machine — see
-# scripts/test-env.ts. `test-setup.ts` then installs the happy-dom globals.
+# scripts/test/env.ts. `test-setup.ts` then installs the happy-dom globals.
 [test]
-preload = ["../../scripts/test-env.ts", "./src/tests/test-setup.ts"]
+preload = ["../../scripts/test/env.ts", "./src/tests/test-setup.ts"]

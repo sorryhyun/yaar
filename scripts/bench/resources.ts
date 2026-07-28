@@ -12,9 +12,9 @@
  * (`ps -o cputime`) between consecutive snapshots — NOT ps's lifetime %cpu.
  *
  * Usage:
- *   bun scripts/bench-resources.ts                       # auto-find server, sample forever
- *   bun scripts/bench-resources.ts --interval 1 --out bench.csv
- *   bun scripts/bench-resources.ts --port 8000 --chrome-profile .yaar-chrome
+ *   bun scripts/bench/resources.ts                       # auto-find server, sample forever
+ *   bun scripts/bench/resources.ts --interval 1 --out bench.csv
+ *   bun scripts/bench/resources.ts --port 8000 --chrome-profile .yaar-chrome
  *
  * Mark a phase boundary from another shell while it runs:
  *   echo "app-launch:market" > /tmp/yaar-bench-phase

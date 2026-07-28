@@ -3,7 +3,7 @@
  *
  * `@bundled/lodash` maps to `lodash-es`, whose entry (`lodash.js`) is nothing but
  * `export { default as add } from './add.js'` lines. Prebundling that file
- * directly (exe build, `scripts/prebundle-libs.js`) makes Bun emit an
+ * directly (exe build, `scripts/build/prebundle-libs.js`) makes Bun emit an
  * `export { ... }` list whose identifiers were dropped/renamed out from under it,
  * collapsing the whole library to a ~4.7 KB stub whose exports reference
  * undeclared names. The prebundle still *succeeds*, so the breakage only surfaces

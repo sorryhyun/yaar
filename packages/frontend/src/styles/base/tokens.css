@@ -2,7 +2,7 @@
  * Design Tokens — GENERATED FILE, DO NOT EDIT.
  *
  * Source of truth: packages/shared/src/design/tokens.ts (GitHub-dark palette).
- * Regenerate with: bun scripts/gen-design-tokens.ts
+ * Regenerate with: bun scripts/codegen/design-tokens.ts
  */
 
 @font-face{font-family:'NanumSquareNeo';src:url('/NanumSquareNeoOTF-Lt.otf') format('opentype');font-weight:300;font-style:normal;font-display:swap}

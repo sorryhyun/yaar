@@ -55,8 +55,8 @@ function resolveVersion(): string {
  *
  * The exe gets the compile-time define; `bun run` reads PROJECT_ROOT/package.json,
  * where the repo is right there and a constant baked at some earlier build would
- * be free to go stale. `scripts/set-version.ts` stamps that package.json and
- * `scripts/build-exe-bundle.js` reads the same file for the define, so the two
+ * be free to go stale. `scripts/release/set-version.ts` stamps that package.json and
+ * `scripts/build/exe-bundle.js` reads the same file for the define, so the two
  * paths agree by construction.
  *
  * `0.0.0-unknown` means neither source answered — a build that lost the define,
@@ -68,7 +68,7 @@ export const YAAR_VERSION: string = resolveVersion();
  * Load `PROJECT_ROOT/.env` into `process.env`.
  *
  * Bun auto-loads `.env` from the *current working directory*, and the server is never
- * started from the repo root: `scripts/dev.sh` runs `bun run --filter @yaar/server dev`,
+ * started from the repo root: `scripts/dev/start.sh` runs `bun run --filter @yaar/server dev`,
  * whose cwd is `packages/server/`. So the root `.env` — the one file the README and
  * CLAUDE.md tell you to put credentials in — was silently never read, and every var in
  * it read back as undefined. Anchoring to PROJECT_ROOT instead of cwd fixes that for
@@ -78,7 +78,7 @@ export const YAAR_VERSION: string = resolveVersion();
  * The real environment always wins: `PORT=9000 make claude-dev` and a test's YAAR_CONFIG
  * must not lose to a stale file on disk. That also keeps this a no-op in CI.
  *
- * `YAAR_SKIP_DOTENV=1` skips the file entirely. That is `scripts/test-env.ts` — a test run
+ * `YAAR_SKIP_DOTENV=1` skips the file entirely. That is `scripts/test/env.ts` — a test run
  * pins every knob explicitly, and "fill in what is unset" is exactly the door a developer's
  * `.env` would otherwise walk back through after the scrub.
  *

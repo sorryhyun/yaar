@@ -1,7 +1,7 @@
 /**
  * Print an app's extracted protocol manifest to stdout as sorted JSON.
  *
- * Usage: bun scripts/extract-protocol-cli.ts <appId>
+ * Usage: bun scripts/codegen/app-protocol-by-id.ts <appId>
  *
  * This is the same extraction pass the compiler runs, without the bundle step —
  * it is the fast acceptance test for protocol refactors: extract before, move
@@ -11,16 +11,16 @@
 import {
   extractProtocolFromDir,
   formatProtocolError,
-} from '../packages/compiler/src/index.ts';
+} from '../../packages/compiler/src/index.ts';
 import { join } from 'node:path';
 
 const appId = process.argv[2];
 if (!appId) {
-  console.error('usage: bun scripts/extract-protocol-cli.ts <appId>');
+  console.error('usage: bun scripts/codegen/app-protocol-by-id.ts <appId>');
   process.exit(2);
 }
 
-const appRoot = join(import.meta.dir, '..', 'apps', appId);
+const appRoot = join(import.meta.dir, '..', '..', 'apps', appId);
 
 // Forwarded for the same reason `compile.ts` forwards it: a Zod `params` defers
 // to the schema fold, and the fold builds a throwaway bundle that must resolve

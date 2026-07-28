@@ -20,7 +20,7 @@ waiting to drift.
 | TS code needing a color (canvas, QR, error boundaries) | imports `PALETTE_DARK` / `alpha()` from `@yaar/shared` |
 
 To change the visual language: edit `packages/shared/src/design/tokens.ts`, run
-`bun scripts/gen-design-tokens.ts`, commit both. Tests enforce the rest.
+`bun scripts/codegen/design-tokens.ts`, commit both. Tests enforce the rest.
 
 ## Decisions
 
@@ -87,7 +87,7 @@ session-logs) so a reader can tell an extension from an override at a glance.
 ## Where things are
 
 - Canonical data + generators: `packages/shared/src/design/`
-- Regeneration: `bun scripts/gen-design-tokens.ts`
+- Regeneration: `bun scripts/codegen/design-tokens.ts`
 - Sync test: `packages/frontend/src/tests/design/tokens-sync.test.ts`
 - Token reference for agents/humans: `describeDesignTokens()` in
   `@yaar/compiler`, served at `GET /api/dev/bundled-libraries` (name

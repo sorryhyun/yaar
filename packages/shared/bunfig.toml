@@ -1,5 +1,5 @@
 # Shared preload: a test run describes the code, not the developer's machine. See
-# scripts/test-env.ts. Nothing here reads the server's config today; it is wired anyway so
+# scripts/test/env.ts. Nothing here reads the server's config today; it is wired anyway so
 # every package's `bun test` starts from the same pinned environment.
 [test]
-preload = ["../../scripts/test-env.ts"]
+preload = ["../../scripts/test/env.ts"]

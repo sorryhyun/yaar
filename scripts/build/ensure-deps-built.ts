@@ -8,13 +8,13 @@
  * commands that need `dist/` build it themselves. Rebuilds only when `dist/` is missing
  * or older than the newest source file.
  *
- * Usage: bun run scripts/ensure-deps-built.ts shared compiler
+ * Usage: bun run scripts/build/ensure-deps-built.ts shared compiler
  */
 
 import { existsSync, mkdirSync, readdirSync, rmSync, statSync } from 'fs';
 import { join } from 'path';
 
-const ROOT = join(import.meta.dir, '..');
+const ROOT = join(import.meta.dir, '..', '..');
 
 /** Packages this script knows how to build, and the artifact that proves it ran. */
 const TARGETS: Record<string, { dir: string; artifact: string }> = {

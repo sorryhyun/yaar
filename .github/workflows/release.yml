@@ -97,7 +97,7 @@ jobs:
 
       - name: Build Windows x64
         run: |
-          bun scripts/build-exe-bundle.js --target windows --arch x64
+          bun scripts/build/exe-bundle.js --target windows --arch x64
           mv dist/yaar.exe dist/yaar-windows-x64.exe
 
       - name: Sign Windows executable
@@ -119,7 +119,7 @@ jobs:
 
       - name: Build Linux x64
         run: |
-          bun scripts/build-exe-bundle.js --target linux --arch x64
+          bun scripts/build/exe-bundle.js --target linux --arch x64
           mv dist/yaar dist/yaar-linux-x64
 
       # Boot the artifact we are about to publish, in the layout users actually
@@ -179,17 +179,17 @@ jobs:
 
       - name: Build Linux arm64
         run: |
-          bun scripts/build-exe-bundle.js --target linux --arch arm64
+          bun scripts/build/exe-bundle.js --target linux --arch arm64
           mv dist/yaar dist/yaar-linux-arm64
 
       - name: Build macOS x64
         run: |
-          bun scripts/build-exe-bundle.js --target macos --arch x64
+          bun scripts/build/exe-bundle.js --target macos --arch x64
           mv dist/yaar dist/yaar-macos-x64
 
       - name: Build macOS arm64 (Apple Silicon)
         run: |
-          bun scripts/build-exe-bundle.js --target macos --arch arm64
+          bun scripts/build/exe-bundle.js --target macos --arch arm64
           mv dist/yaar dist/yaar-macos-arm64
 
       # A manifest of what this release actually contains, generated after every

@@ -1,7 +1,7 @@
 /**
  * Generate OpenAPI 3.1 YAML spec from all route files' PUBLIC_ENDPOINTS.
  *
- * Usage: bun run scripts/generate-openapi.ts
+ * Usage: bun run scripts/codegen/openapi.ts
  * Output: docs/reference/openapi.yaml
  */
 
@@ -10,24 +10,24 @@ import { join } from 'path';
 
 // Single source of truth for the spec version: the root package.json.
 const { version: PKG_VERSION } = JSON.parse(
-  readFileSync(join(import.meta.dir, '..', 'package.json'), 'utf-8'),
+  readFileSync(join(import.meta.dir, '..', '..', 'package.json'), 'utf-8'),
 ) as { version: string };
 
-import type { EndpointMeta } from '../packages/server/src/http/utils.js';
+import type { EndpointMeta } from '../../packages/server/src/http/utils.js';
 
 // Import PUBLIC_ENDPOINTS from all route files
-import { PUBLIC_ENDPOINTS as API_PUBLIC } from '../packages/server/src/http/routes/api.js';
-import { PUBLIC_ENDPOINTS as AUTH_PUBLIC } from '../packages/server/src/http/routes/auth.js';
-import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from '../packages/server/src/http/routes/bridge.js';
-import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from '../packages/server/src/http/routes/browser.js';
-import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from '../packages/server/src/http/routes/dev.js';
-import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from '../packages/server/src/http/routes/files.js';
-import { PUBLIC_ENDPOINTS as ML_RUNTIME_PUBLIC } from '../packages/server/src/http/routes/ml-runtime.js';
-import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from '../packages/server/src/http/routes/proxy.js';
-import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from '../packages/server/src/http/routes/sessions.js';
-import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from '../packages/server/src/http/routes/settings.js';
-import { PUBLIC_ENDPOINTS as SHORTCUTS_PUBLIC } from '../packages/server/src/http/routes/shortcuts.js';
-import { PUBLIC_ENDPOINTS as VERB_PUBLIC } from '../packages/server/src/http/routes/verb.js';
+import { PUBLIC_ENDPOINTS as API_PUBLIC } from '../../packages/server/src/http/routes/api.js';
+import { PUBLIC_ENDPOINTS as AUTH_PUBLIC } from '../../packages/server/src/http/routes/auth.js';
+import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from '../../packages/server/src/http/routes/bridge.js';
+import { PUBLIC_ENDPOINTS as BROWSER_PUBLIC } from '../../packages/server/src/http/routes/browser.js';
+import { PUBLIC_ENDPOINTS as DEV_PUBLIC } from '../../packages/server/src/http/routes/dev.js';
+import { PUBLIC_ENDPOINTS as FILES_PUBLIC } from '../../packages/server/src/http/routes/files.js';
+import { PUBLIC_ENDPOINTS as ML_RUNTIME_PUBLIC } from '../../packages/server/src/http/routes/ml-runtime.js';
+import { PUBLIC_ENDPOINTS as PROXY_PUBLIC } from '../../packages/server/src/http/routes/proxy.js';
+import { PUBLIC_ENDPOINTS as SESSIONS_PUBLIC } from '../../packages/server/src/http/routes/sessions.js';
+import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from '../../packages/server/src/http/routes/settings.js';
+import { PUBLIC_ENDPOINTS as SHORTCUTS_PUBLIC } from '../../packages/server/src/http/routes/shortcuts.js';
+import { PUBLIC_ENDPOINTS as VERB_PUBLIC } from '../../packages/server/src/http/routes/verb.js';
 
 const ALL_ENDPOINTS: EndpointMeta[] = [
   ...API_PUBLIC,
@@ -62,14 +62,14 @@ const WIRED_ROUTE_FILES = new Set([
   'verb.ts',
 ]);
 const SKIPPED_ROUTE_FILES = new Set(['index.ts', 'static.ts']);
-const routesDir = join(import.meta.dir, '..', 'packages', 'server', 'src', 'http', 'routes');
+const routesDir = join(import.meta.dir, '..', '..', 'packages', 'server', 'src', 'http', 'routes');
 const actualRouteFiles = readdirSync(routesDir).filter((f) => f.endsWith('.ts'));
 const unwired = actualRouteFiles.filter(
   (f) => !WIRED_ROUTE_FILES.has(f) && !SKIPPED_ROUTE_FILES.has(f),
 );
 if (unwired.length > 0) {
   console.error(
-    `generate-openapi: found route file(s) not wired into ALL_ENDPOINTS: ${unwired.join(', ')}\n` +
+    `codegen/openapi: found route file(s) not wired into ALL_ENDPOINTS: ${unwired.join(', ')}\n` +
       `Add a PUBLIC_ENDPOINTS import for each and list it in WIRED_ROUTE_FILES.`,
   );
   process.exit(1);
@@ -170,6 +170,6 @@ function generateSpec(): string {
 }
 
 const spec = generateSpec();
-const outPath = join(import.meta.dir, '..', 'docs', 'reference', 'openapi.yaml');
+const outPath = join(import.meta.dir, '..', '..', 'docs', 'reference', 'openapi.yaml');
 writeFileSync(outPath, spec, 'utf-8');
 console.log(`OpenAPI spec written to ${outPath} (${ALL_ENDPOINTS.length} endpoints)`);

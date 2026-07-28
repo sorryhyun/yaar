@@ -329,7 +329,7 @@ export default defineApp({
   (`commands: { ...fileCommands, ...gitCommands }`) — the extractor resolves imported consts
   and spreads. The default export itself must stay in `src/main.ts`.
 - The compiler auto-extracts `protocol.json` from source. Never write it by hand, and check
-  your change with `bun scripts/extract-protocol-cli.ts <appId>`.
+  your change with `bun scripts/codegen/app-protocol-by-id.ts <appId>`.
 
 ## Agent Prompt Files
 

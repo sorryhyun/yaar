@@ -29,7 +29,7 @@ src/
 │   ├── registry.ts        # BUNDLED_LIBRARIES / BUNDLED_SHIMS / GATED_* / resolveBrowserEntry — data, no Bun API
 │   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
 │   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent (+ design-tokens pseudo-library)
-│   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/prebundle-libs.js and the completeness test
+│   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/build/prebundle-libs.js and the completeness test
 ├── guards/
 │   ├── guard-report.ts    # createAppSourceFile/walk/snippet/format — the shape all three guards share (ASCII rule lives here)
 │   ├── solid-html-guard.ts # Classifies broken solid-js/html templates (AST-based, fails the build)
@@ -99,7 +99,7 @@ Set `YAAR_NO_TYPESCRIPT=1` to reproduce a no-`typescript` environment on a dev m
 reader — a brace-matching text scanner — used to stand there and was removed after it returned
 *nothing at all*, with neither error nor warning, for apps that split their descriptor maps
 across files with `...spread`. No shipped configuration reaches this path anyway: the exe
-embeds `typescript` (`build-exe-bundle.js`) and a repo install gets it as a devDependency.
+embeds `typescript` (`build/exe-bundle.js`) and a repo install gets it as a devDependency.
 
 `app.register({...})` is **removed**, and both readers refuse it by name rather than reporting
 "declares no protocol" — the AST path from the call site, the no-`typescript` path from a text

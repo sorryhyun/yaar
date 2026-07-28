@@ -3,7 +3,7 @@
  * tests structurally cannot reach.
  *
  * **This whole directory runs in its own process**, spawned by the package's test script with
- * `YAAR_TEST_REMOTE=1` (scripts/test-env.ts turns that into `REMOTE=1` before `config/env.ts`
+ * `YAAR_TEST_REMOTE=1` (scripts/test/env.ts turns that into `REMOTE=1` before `config/env.ts`
  * loads). `IS_REMOTE` is a module-load constant, so remote mode is a property of a *process*,
  * never of a test: `checkHttpAuth`'s first line returns `null` when it is false, and every
  * assertion below would pass no matter what the gate did. `ml-runtime-remote-auth.test.ts`

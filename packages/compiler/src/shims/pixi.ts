@@ -3,7 +3,7 @@
  *
  * pixi.js's browser entry (`lib/index.mjs`) is a barrel of `export { … } from
  * './…'` re-exports (plus side-effect `import './…/init.mjs'` registrations).
- * Prebundling it directly (exe build, `scripts/prebundle-libs.js`) makes Bun
+ * Prebundling it directly (exe build, `scripts/build/prebundle-libs.js`) makes Bun
  * emit `export { … }` lists whose identifiers were dropped/renamed, collapsing
  * the library to a ~16 KB stub and failing later, when an app imports
  * `@bundled/pixi.js`, with:

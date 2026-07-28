@@ -7,19 +7,31 @@ TypeScript WebSocket server with pluggable AI providers.
 ```bash
 bun run dev                    # Start server with Bun (--watch)
 bun run build                  # Build for production
-bun run test                   # Unit suite, then the loopback suite, then integration
+bun run test                   # Every suite, each in the process it needs
 ```
 
 ## Tests
 
-`bun run test` runs four suites in **separate Bun processes**, and the split is load-bearing:
+`bun run test` is `scripts/run-tests.ts`. It globs **every** `*.test.ts` under `src/`, groups
+them by `scripts/test/partitions.ts`, and spawns one process per group — concurrently, and
+reporting all of them, so a unit failure no longer hides whether the other suites passed. Today
+that is 94 files in 17 processes:
 
-1. `src/tests` — unit/component tests, via `scripts/run-unit-tests.ts`.
-2. `src/tests/remote` — the `REMOTE=1` suite, run with `YAAR_TEST_REMOTE=1`.
-3. `src/tests/loopback` — the loopback integration harness (see `tests/loopback/harness/`).
-4. `src/integration`.
+1. `units` — one `--parallel` process for the plain unit/component tests.
+2. `remote` — `src/tests/remote/`, with `REMOTE=1` pinned for the whole process.
+3. `loopback` — `src/tests/loopback/`, the loopback harness (see `tests/loopback/harness/`).
+4. `integration` — `src/integration/`.
+5. one process per file that calls `mock.module` (13 of them).
 
-**Every suite starts from a pinned environment**, not the developer's. `scripts/test-env.ts` is
+The glob is `src/**`, not `src/tests/**` plus a hardcoded `src/integration`: a test file written
+next to the module it covers used to be collected by nothing and reported by nothing.
+
+The split is load-bearing, and `scripts/test/partition-guard.ts` (third preload in `bunfig.toml`)
+enforces it rather than trusting it — `bun test src/tests` looks reasonable and quietly mixes the
+mocking files into the shared process, so the guard stops the run and prints the right command.
+See `scripts/test/partitions.ts` for each partition's rationale.
+
+**Every suite starts from a pinned environment**, not the developer's. `scripts/test/env.ts` is
 preloaded (`bunfig.toml`, first entry, shared by every package in the repo) before any test file
 — and therefore before `config/env.ts` freezes `IS_REMOTE`. It scrubs every `YAAR_*` var and the
 documented knobs (`REMOTE`, `PORT`, `PROVIDER`, `MCP_SKIP_AUTH`, …), pins `REMOTE` explicitly,
@@ -28,7 +40,10 @@ it a developer who had toggled remote mode on in the configurations app ran the 
 remote mode: `settings.json` fed `loadPersistedRemote()`, and `http-routing.test.ts` /
 `app-origin-isolation.test.ts` failed locally while passing in CI, which has no such file.
 
-`YAAR_TEST_REMOTE=1` is the one opt-in, and it necessarily scopes to a **whole process**:
+`YAAR_TEST_REMOTE=1` is how that is carried, but `src/tests/remote/` **is** the opt-in: `test/env.ts`
+sets the var itself when the first collected file lives there, so running one of those files by
+path (`bun test packages/server/src/tests/remote/…`, the obvious move after a red CI line) cannot
+silently become a local-mode run. It necessarily scopes to a **whole process**:
 `IS_REMOTE` is a module-load constant, so a local-mode process cannot assert anything about the
 remote gate — `checkHttpAuth` returns `null` on its first line and every assertion passes
 regardless. That vacuity is not hypothetical; see the header of
@@ -37,24 +52,25 @@ rows in `app-origin-isolation.test.ts` and `http-routing.test.ts`, remote-mode r
 `src/tests/remote/remote-mode.test.ts`, each asserting its own `IS_REMOTE` up front so a broken
 wiring fails loudly instead of quietly passing.
 
-**The unit suite is itself partitioned by process.** `scripts/run-unit-tests.ts` computes the
-split from source on every run: any file that calls `mock.module` gets its own process (still
-run concurrently with the rest), everything else shares one `--parallel` process — because
+**The unit suite is itself partitioned by process.** The split is computed from source on every
+run, so there is no list to keep in sync: any file that calls `mock.module` gets its own process
+(still run concurrently with the rest), everything else shares one `--parallel` process — because
 `mock.module` is process-global with no teardown, so a stub is otherwise visible to every
 concurrently-running file that imports the same specifier. Full rationale, including the CI
-incident that forced this, is in that file's header comment.
+incident that forced this, is in `scripts/test/partitions.ts`.
 
 The loopback harness runs the real stack end to end — `createWsHandlers` → `SessionHub` →
 `LiveSession` → `ContextPool` → `AgentSession` → `actionEmitter` → `PendingStore` — with
 exactly two fakes: the browser (`FakeClient`) and the model (`ScriptedProvider`). It needs its
-own process for the same `mock.module`-is-process-global reason. Full rationale, including the
-deadlock this exists to catch, is in `tests/loopback/harness/boot.ts`'s header comment.
+own process, and a sequential one: run the 80 non-remote files together under `--parallel` and
+45 fail, because this suite and `src/integration` bind real sockets. Full rationale, including
+the deadlock this exists to catch, is in `tests/loopback/harness/boot.ts`'s header comment.
 
 Three rules follow:
 
 - **A test never depends on the machine it runs on.** If a behavior is decided by an env var,
   a `config/` file, or a path, pin it in the test (or add it to the scrub list in
-  `scripts/test-env.ts`) rather than inheriting whatever the developer has. A suite that only
+  `scripts/test/env.ts`) rather than inheriting whatever the developer has. A suite that only
   passes on a clean checkout is a suite that will fail on someone's laptop and pass in review.
 - **Never add `mock.module` under `src/tests/loopback/`.** The harness substitutes through real
   seams instead: the provider via `ContextPool`'s `acquireProvider`, the logger via the
@@ -74,10 +90,10 @@ client can only answer over a socket the server is holding is a deadlock waiting
 - `PROVIDER` - Force provider (`claude` or `codex`). Auto-detected if not set.
 - `PORT` - Server port (default: 8000), `MAX_AGENTS` - Global agent limit (default: 10)
 - `MCP_SKIP_AUTH` - Skip MCP auth (`1` for local dev), `REMOTE` - Enable remote mode (`1`)
-- `YAAR_REMOTE_TOKEN` - Adopt this remote token instead of minting one, so a launcher can build the `#remote=<token>` URL before the server starts (`scripts/dev.sh` does this for `make claude`). Under 32 chars it is ignored with a warning — remote mode hands the token to every device that can reach the server. See `http/auth.ts`.
+- `YAAR_REMOTE_TOKEN` - Adopt this remote token instead of minting one, so a launcher can build the `#remote=<token>` URL before the server starts (`scripts/dev/start.sh` does this for `make claude`). Under 32 chars it is ignored with a warning — remote mode hands the token to every device that can reach the server. See `http/auth.ts`.
 - `YAAR_STORAGE` / `YAAR_CONFIG` - Override storage/config directory paths
-- `YAAR_SKIP_DOTENV` - `1` skips loading the root `.env` in `config/env.ts`. Set by `scripts/test-env.ts`: a test run pins every knob explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk back through.
-- `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test-env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
+- `YAAR_SKIP_DOTENV` - `1` skips loading the root `.env` in `config/env.ts`. Set by `scripts/test/env.ts`: a test run pins every knob explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk back through.
+- `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test/env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
 - `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop. **Enforcing:** `resolvePrincipal` refuses a token-less request that carries the app origin, and `http/server.ts` redirects a desktop document that lands there back to the desktop origin. Closes the token-forgery escapes; being cross-origin also blocks `window.parent` DOM/memory reach, and top-level navigation is closed by the sandbox on isolated frames — see [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
   **Which two origins** is `http/origin-boundary.ts`'s business, and the one place to ask: `loopback-alias` (local — desktop `localhost`, apps `127.0.0.1`, one socket) | `proxy-port` (Tailscale Serve — one MagicDNS name, `:443` desktop / `:8443` apps, **two local sockets**) | `off`. The env var is only the switch; `isAppOriginIsolationEnabled()` in `config/env.ts` answers for the loopback-alias way alone and is local-mode only. The `proxy-port` boundary is installed at runtime by `lifecycle.startTunnel()` once the transport confirms both origins are live. Over a proxy the addressed origin is unreadable from the request (`url.port` is the loopback hop, `Host`/`X-Forwarded-*` are the proxy's word), so the app-origin socket gets its own `createFetchHandler({ appOriginSocket: true })` running inside `runOnAppOriginSocket()` — which socket a request arrived on is unforgeable. `window.create` carries `appOrigin` only in that mode, since the client cannot derive `https://host:8443`; locally the frontend must derive the alias itself (a dev proxy's port is not the API's).
 - `MONITOR_MAX_CONCURRENT` (default: 2), `MONITOR_MAX_ACTIONS_PER_MIN` (30), `MONITOR_MAX_OUTPUT_PER_MIN` (50000) - Background monitor budget limits
