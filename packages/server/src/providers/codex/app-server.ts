@@ -26,6 +26,7 @@ import {
   STORAGE_DIR,
 } from '../../config.js';
 import { CODEX_AGENT_ROLES, codexRoleToToml } from '../../agents/profiles/index.js';
+import { assertSupportedCodex, CodexVersionError } from './version.js';
 import type {
   InitializeParams,
   InitializeResponse,
@@ -167,7 +168,16 @@ export class AppServer extends EventEmitter {
     await this.spawnProcess();
 
     // Connect the control client + initialize (retry loop until server is ready)
-    await this.connectControlClient();
+    try {
+      await this.connectControlClient();
+    } catch (err) {
+      // Nothing upstream calls stop() on a failed start, so a process spawned here would
+      // otherwise outlive the failure and keep holding the WS port — leaving the next boot
+      // to blame `killStaleProcess`. Matters most for the version check, which fails on the
+      // very first attempt and would strand a fully-launched app-server every time.
+      await this.stop().catch(() => {});
+      throw err;
+    }
   }
 
   /**
@@ -389,6 +399,8 @@ export class AppServer extends EventEmitter {
           this.initializeParams,
         );
 
+        assertSupportedCodex(result.userAgent);
+
         if (!this.initializeResult) {
           this.initializeResult = result;
         }
@@ -396,6 +408,9 @@ export class AppServer extends EventEmitter {
         return client;
       } catch (err) {
         client?.close();
+        // An unsupported binary is a permanent verdict, not a readiness problem — retrying
+        // it 20 times only buries the one message that explains what to do.
+        if (err instanceof CodexVersionError) throw err;
         lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt === 0 || (attempt + 1) % 5 === 0) {
           console.warn(

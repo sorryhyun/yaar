@@ -12,6 +12,7 @@
 import type { AITransport, ProviderType } from './types.js';
 import type { CodexProvider } from './codex/provider.js';
 import { AppServer } from './codex/app-server.js';
+import { CodexVersionError } from './codex/version.js';
 import { getForcedProvider } from './get-forced-provider.js';
 import { PROVIDER_PREFERENCE, instantiateProvider } from './instantiate.js';
 
@@ -59,8 +60,14 @@ class ProviderWarmPool {
 
     this.initializing = true;
     this.initPromise = this.doInitialize();
-    await this.initPromise;
-    this.initializing = false;
+    try {
+      await this.initPromise;
+    } finally {
+      // `finally`, not a trailing assignment: doInitialize() can now reject (an unsupported
+      // forced provider), and leaving the latch set would make every later initialize() await
+      // a settled promise and report success forever.
+      this.initializing = false;
+    }
     return this.initialized;
   }
 
@@ -75,7 +82,19 @@ class ProviderWarmPool {
 
     // Find first available provider and warm it up
     for (const providerType of providerTypes) {
-      const provider = await this.createWarmProvider(providerType);
+      let provider: AITransport | null;
+      try {
+        provider = await this.createWarmProvider(providerType);
+      } catch (err) {
+        // Only CodexVersionError reaches here (see createWarmProvider). Asking for a provider
+        // YAAR cannot drive is not something to paper over with a silent fallback — the user
+        // would get Claude while believing they were on Codex. Auto-detect is the opposite
+        // case: an unsupported codex is simply not a candidate, and Claude is the right answer.
+        if (!(err instanceof CodexVersionError)) throw err;
+        if (forcedProvider) throw err;
+        console.warn(`[WarmPool] Skipping codex: ${err.message}`);
+        continue;
+      }
       if (provider) {
         this.preferredProvider = providerType;
         this.pool.push(provider);
@@ -132,6 +151,11 @@ class ProviderWarmPool {
 
       return provider;
     } catch (err) {
+      // An unsupported CLI is a configuration verdict, not a failed attempt: retrying it or
+      // reporting it as one more "failed to create" line buries the single sentence that says
+      // what to upgrade. doInitialize() decides how loud that is — fatal when the user named
+      // the provider, a skip when we were only auto-detecting.
+      if (err instanceof CodexVersionError) throw err;
       console.error(`[WarmPool] Failed to create ${providerType} provider:`, err);
       return null;
     }

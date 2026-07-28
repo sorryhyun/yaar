@@ -8,7 +8,7 @@ import type { AITransport, ProviderType, ProviderInfo } from './types.js';
 import { getWarmPool } from './warm-pool.js';
 import { getForcedProvider } from './get-forced-provider.js';
 import { PROVIDER_PREFERENCE, instantiateProvider } from './instantiate.js';
-import { isCliAvailable } from './base-transport.js';
+import { cliVersionOutput } from './base-transport.js';
 
 /**
  * Registry of available providers with metadata.
@@ -50,7 +50,24 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
       // Shares the per-boot probe cache with the providers' own checks, and
       // never blocks the event loop — this process serves the MCP endpoints
       // the CLI it is probing will connect back to.
-      if (!(await isCliAvailable(...getCodexSpawnArgs()))) return false;
+      const versionOutput = await cliVersionOutput(...getCodexSpawnArgs());
+      if (versionOutput === null) return false;
+
+      // An under-versioned codex counts as *unavailable*, not as a fallback worth
+      // trying: auto-detect should pick Claude rather than boot into a provider whose
+      // protocol bindings no longer describe it. Explicitly forcing PROVIDER=codex
+      // bypasses this checker and gets a hard error from the AppServer handshake instead.
+      const { CODEX_MIN_VERSION, isAtLeast, parseVersionOutput } =
+        await import('./codex/version.js');
+      const version = parseVersionOutput(versionOutput);
+      // Unparseable → fail open. The version string is OpenAI's to reformat, and a
+      // cosmetic change there must not un-detect a working install.
+      if (version && isAtLeast(version, CODEX_MIN_VERSION) === false) {
+        console.warn(
+          `[providers] Ignoring codex ${version}: YAAR requires >= ${CODEX_MIN_VERSION}.`,
+        );
+        return false;
+      }
     } catch {
       return false;
     }

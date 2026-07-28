@@ -12,7 +12,7 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 
 **SDKs:**
 - **Claude:** Uses `@anthropic-ai/claude-agent-sdk` for programmatic Claude access. See [Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) for API documentation.
-- **Codex:** Uses `codex app-server` for JSON-RPC communication. See [docs/reference/codex_protocol.md](./docs/reference/codex_protocol.md) for protocol details.
+- **Codex:** Uses `codex app-server` for JSON-RPC communication. See [docs/reference/codex_protocol.md](./docs/reference/codex_protocol.md) for protocol details. The protocol bindings are hand-generated (`make codex-types`), so a CLI older than `CODEX_MIN_VERSION` (`providers/codex/version.ts`) is **refused** rather than driven — at generation time, at provider auto-detect, and at the `initialize` handshake. Forcing `PROVIDER=codex` with an unsupported CLI refuses the boot; auto-detect just skips it. See [Version policy](./docs/reference/codex_protocol.md#version-policy).
 
 ## Commands
 
@@ -27,7 +27,7 @@ make build                       # Build all packages
 bun run typecheck                # Type check all packages
 make lint                        # Lint all packages
 make clean                       # Clean generated files
-make codex-types                 # Regenerate Codex protocol types (requires codex CLI)
+make codex-types                 # Regenerate Codex protocol types (requires codex CLI >= CODEX_MIN_VERSION)
 bun run format                   # Format all files with Prettier
 bun run format:check             # Check formatting without writing
 

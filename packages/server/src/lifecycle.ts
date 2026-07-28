@@ -285,7 +285,18 @@ export async function compileAppsAndSyncShortcuts(): Promise<void> {
  * is listening so that codex app-server can reach the MCP endpoints.
  */
 export async function initWarmProviders(): Promise<void> {
-  const warmPoolReady = await initWarmPool();
+  let warmPoolReady: boolean;
+  try {
+    warmPoolReady = await initWarmPool();
+  } catch (err) {
+    const { CodexVersionError } = await import('./providers/codex/version.js');
+    if (!(err instanceof CodexVersionError)) throw err;
+    // The user named a provider YAAR cannot drive. Booting on regardless would either hand
+    // them a different provider than they asked for or leave a desktop that answers nothing,
+    // and either way the reason scrolls past in a stack trace. Refuse, in one sentence.
+    console.error(`\n${err.message}\n`);
+    process.exit(1);
+  }
   if (warmPoolReady) {
     const stats = getWarmPool().getStats();
     console.log(
