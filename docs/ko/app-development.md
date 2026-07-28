@@ -98,7 +98,7 @@ AI가 iframe 윈도우를 열어 컴파일 결과를 바로 확인합니다.
 AI가 devtools 앱에 deploy 명령을 보냅니다.
 
 - 컴파일된 HTML을 `apps/{appId}/`로 복사
-- `SKILL.md`와 `app.json` 자동 생성
+- `app.json` 작성. `SKILL.md`는 직접 작성한 경우에만 배포 (자동 생성 대체본은 없음 — 실행 스니펫과 프로토콜 설명은 읽는 시점에 파생됨)
 - 바탕화면에 아이콘 즉시 등장
 - `appProtocol`: App Protocol 지원 여부 표시 (설정하지 않으면 HTML에서 자동 감지)
 - `fileAssociations`: 파일 확장자를 파일 열기용 `app_command` 호출에 매핑
@@ -649,7 +649,7 @@ AI가 작성 → 컴파일 → 배포한 앱. iframe으로 실행됩니다.
 
 ```
 apps/falling-blocks/
-├── SKILL.md        # 실행 방법 (자동 생성)
+├── SKILL.md        # 선택 — 매니페스트만으로 부족할 때만 작성
 ├── app.json        # { "icon": "🎮", "name": "Falling Blocks" }
 ├── index.html      # 컴파일된 단일 HTML
 └── src/            # 소스 코드 (keepSource: true)

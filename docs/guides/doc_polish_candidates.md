@@ -56,7 +56,6 @@ Unmarked rows are reported but unverified; check before acting.
 | Location | Item | Ev. |
 |---|---|---|
 | `devtools/AGENTS.md:~73` | "All app metadata lives in `app.json`" list omits `personas`/`subagents` and `streams`. devtools authors other apps' manifests | |
-| 6 files | `configurations`, `dock`, `market-apps`, `storage`, `session-logs`, `video-editor-lite` SKILL.md are generator boilerplate ("A compiled TypeScript application.") — content-free tokens on every read | |
 
 ### `docs/architecture/` + `docs/proposals/`
 

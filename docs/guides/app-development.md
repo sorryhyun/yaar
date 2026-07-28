@@ -98,7 +98,7 @@ The AI opens an iframe window to preview the compiled result immediately.
 The AI sends a deploy command to the devtools app.
 
 - Copies compiled HTML to `apps/{appId}/`
-- Auto-generates `SKILL.md` and `app.json`
+- Writes `app.json`, plus `SKILL.md` only if you hand-wrote one (there is no generated fallback — the launch snippet and protocol blurb are derived at read time)
 - Icon appears on desktop immediately
 - Closes any window still running the previous build, and drops the app agent's cached
   profile so its next turn is built from the new `protocol.json`. Both would otherwise
@@ -707,7 +707,7 @@ Built by the AI: write → compile → deploy. Runs in iframe.
 
 ```
 apps/falling-blocks/
-├── SKILL.md        # Launch instructions (auto-generated)
+├── SKILL.md        # Optional — only if the app needs docs beyond its manifest
 ├── app.json        # { "icon": "🎮", "name": "Falling Blocks" }
 ├── index.html      # Compiled single HTML
 └── src/            # Source code (keepSource: true)
