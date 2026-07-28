@@ -80,6 +80,11 @@ export function deploy(
     error?: string;
     /** Present when the deploy was refused by the protocol shrink gate. Counts are commands. */
     protocolShrink?: { before: number; after: number; missing: string[] };
+    /**
+     * Windows of the deployed app that were closed because they were still running the
+     * previous build. The deploying window itself is never among them.
+     */
+    closedWindows?: string[];
   }>('deploy', { path, ...opts });
 }
 

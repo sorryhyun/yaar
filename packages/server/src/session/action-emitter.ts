@@ -284,8 +284,15 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * `sessionId` stays optional in the signature because almost every caller runs inside an
    * agent turn or iframe verb call and the context already holds the answer. What is not
    * optional is that an answer exists.
+   *
+   * `monitorId` is the same override `emitActionWithFeedback` takes, for the same reason:
+   * a caller that knows the target monitor better than the ambient context does. Acting on
+   * a window that is not the caller's own is the case — a deploy retiring the stale windows
+   * of the app it just shipped reads each one's owner off the handle map, and every one of
+   * them may sit on a monitor the deploying iframe is not on. This is not the guess
+   * `resolveWindowMonitor` refuses; it is the registry's own answer.
    */
-  emitAction(action: OSAction, sessionId?: string, agentId?: string): void {
+  emitAction(action: OSAction, sessionId?: string, agentId?: string, monitorId?: string): void {
     const sid = this.resolveSessionId(sessionId);
     if (!sid) {
       this.reportUnaddressed(`action ${action.type}`);
@@ -295,7 +302,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       action,
       sessionId: sid,
       agentId: this.resolveAgentId(agentId),
-      monitorId: this.monitorForAction(action, sid),
+      monitorId: monitorId ?? this.monitorForAction(action, sid),
     });
   }
 

@@ -272,6 +272,20 @@ export class AppTaskProcessor {
   }
 
   /**
+   * Forget the cached profile for one app — its files on disk just changed.
+   *
+   * A profile is built once from `protocol.json`, `SKILL.md`/`AGENTS.md` and `controls`,
+   * and cached because none of that moves during a session. A deploy moves all of it. The
+   * cache is the whole staleness: the prompt is passed per turn (`systemPromptOverride`),
+   * so dropping the entry is enough to rebuild the app agent's instructions from the new
+   * build on its next turn — the agent itself, and the memory of what the user was doing,
+   * survive. Without this it keeps calling yesterday's command names.
+   */
+  invalidateProfile(appId: string): void {
+    this.profiles.delete(appId);
+  }
+
+  /**
    * Drop the window tracking for one monitor (its app agents are disposed with it).
    */
   clearMonitor(monitorId: string): void {

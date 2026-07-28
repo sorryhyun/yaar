@@ -100,6 +100,10 @@ The AI sends a deploy command to the devtools app.
 - Copies compiled HTML to `apps/{appId}/`
 - Auto-generates `SKILL.md` and `app.json`
 - Icon appears on desktop immediately
+- Closes any window still running the previous build, and drops the app agent's cached
+  profile so its next turn is built from the new `protocol.json`. Both would otherwise
+  keep serving the code the deploy just replaced. The deploying window itself is spared,
+  so an app can deploy itself; the closed handles come back as `closedWindows`
 - `appProtocol`: Mark app as supporting App Protocol (auto-detected from HTML if not set)
 - `fileAssociations`: Map file extensions to app_command calls for file opening
 

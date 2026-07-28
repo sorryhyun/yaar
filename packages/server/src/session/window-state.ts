@@ -98,6 +98,12 @@ export class WindowStateRegistry {
    * ActionEmitter.resolveWindowMonitor() exists to keep this from being reachable.
    */
   private actionKey(rawId: string, monitorId?: string): string {
+    // An id that is *already* a handle names one window exactly, and registering it again
+    // under a monitor mints "0/1/memo" — a key nothing else ever produces, so the action
+    // lands on no window and is silently dropped. Callers acting on a window that is not
+    // their own (a deploy retiring the stale windows of the app it just shipped) address
+    // it by handle precisely because a raw id cannot say which monitor's copy they mean.
+    if (this.handleMap.getMonitorId(rawId)) return rawId;
     if (monitorId) return this.handleMap.register(rawId, monitorId);
     // Backward compat: try to find an existing handle for this raw ID
     const resolved = this.resolve(rawId);

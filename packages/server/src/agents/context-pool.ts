@@ -336,6 +336,13 @@ export class ContextPool implements PoolContext {
     }
   }
 
+  /**
+   * An app's files changed on disk (deploy) — rebuild its agent profile next turn.
+   */
+  invalidateAppProfile(appId: string): void {
+    this.appProcessor.invalidateProfile(appId);
+  }
+
   // ── Monitor suspend/resume ──────────────────────────────────────────
 
   suspendMonitor(monitorId: string): boolean {

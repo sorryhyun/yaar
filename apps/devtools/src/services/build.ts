@@ -96,6 +96,8 @@ export async function typecheck(): Promise<void> {
  *
  * On success the preview window is closed: it renders the pre-deploy build under a
  * throwaway principal, so leaving it up invites confirming a deploy against stale pixels.
+ * The server does the same for the *installed* app's own windows and reports which ones
+ * in `closedWindows`; this window is never one of them, so self-deploying is safe.
  *
  * A failed deploy used to be written to the status bar and then swallowed — the caller got
  * back the same `undefined` a successful one returns. An agent, which cannot read the status
@@ -110,7 +112,12 @@ export async function deploy(opts: {
   message?: string;
   skipTypecheck?: boolean;
   allowProtocolShrink?: boolean;
-}): Promise<{ appId: string; name: string; previewClosed?: boolean }> {
+}): Promise<{
+  appId: string;
+  name: string;
+  previewClosed?: boolean;
+  closedWindows?: string[];
+}> {
   const proj = activeProject();
   if (!proj) throw new AppCommandError('No active project. Open or create one first.');
   setStatusText('Deploying...');
@@ -151,6 +158,19 @@ export async function deploy(opts: {
     setPreviewWindowId(null);
   }
 
-  setStatusText(`Deployed as "${name}"`);
-  return { appId: result.appId ?? opts.appId, name, ...(previewClosed ? { previewClosed } : {}) };
+  // The server closes windows still running the pre-deploy bundle (see
+  // features/apps/retire.ts). Say so: a window disappearing at the moment of a deploy
+  // with nothing to explain it reads as a crash.
+  const closedWindows = result.closedWindows ?? [];
+  setStatusText(
+    closedWindows.length > 0
+      ? `Deployed as "${name}" — closed ${closedWindows.length} stale window(s)`
+      : `Deployed as "${name}"`,
+  );
+  return {
+    appId: result.appId ?? opts.appId,
+    name,
+    ...(previewClosed ? { previewClosed } : {}),
+    ...(closedWindows.length > 0 ? { closedWindows } : {}),
+  };
 }

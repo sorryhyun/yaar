@@ -18,6 +18,7 @@ import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
 import { invalidateAppsCache } from '../apps/discovery.js';
+import { retireStaleApp } from '../apps/retire.js';
 import { snapshotApp } from './git.js';
 
 /**
@@ -125,6 +126,11 @@ export interface DeployResult {
   appId: string;
   name: string;
   icon: string;
+  /**
+   * Windows of this app that were closed because they were still running the previous
+   * build. Empty when none were open (or when the only one was the deployer's own).
+   */
+  closedWindows: string[];
 }
 
 export interface DeployRefusal {
@@ -467,6 +473,12 @@ export async function doDeploy(
     // frontend's refreshApps fetch and any agent describe sees the new build.
     invalidateAppsCache();
 
+    // Everything already running this app is now running the *previous* build: an open
+    // window's iframe holds the old bundle, and the app agent's cached profile holds the
+    // old manifest. Close the windows and drop the profile so the next launch and the
+    // next turn both come from what was just written. See features/apps/retire.ts.
+    const closedWindows = retireStaleApp(appId);
+
     // Emit refreshApps AFTER shortcut changes are persisted to disk.
     actionEmitter.emitAction({ type: 'desktop.refreshApps' });
 
@@ -474,9 +486,9 @@ export async function doDeploy(
     // rolls back to.
     await snapshotApp(appId, args.message?.trim() || `deploy: ${appId}`);
 
-    emit('done', { name: finalName, icon: finalIcon });
+    emit('done', { name: finalName, icon: finalIcon, closedWindows });
 
-    return { success: true, appId, name: finalName, icon: finalIcon };
+    return { success: true, appId, name: finalName, icon: finalIcon, closedWindows };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const error = `Failed to deploy app: ${msg}`;
