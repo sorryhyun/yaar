@@ -5,7 +5,8 @@
  * - Windows (native exe): PowerShell FolderBrowserDialog via temp .ps1 file
  *   (stdout piping is broken in Bun compiled exe, so results go through temp files)
  * - WSL: PowerShell FolderBrowserDialog + wslpath conversion
- * - Linux/macOS: zenity or kdialog (direct spawn with stdout)
+ * - macOS: osascript `choose folder` (always present; zenity/kdialog are not)
+ * - Linux: zenity or kdialog (direct spawn with stdout)
  *
  * Returns the selected absolute path, or null if cancelled.
  */
@@ -16,6 +17,7 @@ import { join } from 'path';
 
 const isWSL = process.platform === 'linux' && process.env.WSL_DISTRO_NAME != null;
 const isWin32 = process.platform === 'win32';
+const isDarwin = process.platform === 'darwin';
 
 /** Sleep for ms. */
 const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -39,6 +41,29 @@ async function execDirect(
   } catch {
     return { stdout: '', code: 1 };
   }
+}
+
+/**
+ * macOS: AppleScript `choose folder`. Stock macOS ships neither zenity nor
+ * kdialog, so without this every picker missed and the folder button was a
+ * silent no-op.
+ *
+ * The `choose folder` call is wrapped in a `tell application "System Events"`
+ * block so the dialog belongs to an app we just activated — osascript itself is
+ * not a foreground app, and its dialog otherwise opens behind the browser.
+ * Cancel exits 1 (`User canceled. (-128)` on the ignored stderr) → null.
+ */
+async function tryOsascript(): Promise<string | null> {
+  const script = [
+    'tell application "System Events"',
+    '  activate',
+    '  POSIX path of (choose folder with prompt "Select folder to mount")',
+    'end tell',
+  ].join('\n');
+  const { stdout, code } = await execDirect('osascript', ['-e', script]);
+  if (code !== 0 || !stdout) return null;
+  // `POSIX path of` appends a trailing slash to directories; keep bare "/".
+  return stdout.length > 1 ? stdout.replace(/\/+$/, '') : stdout;
 }
 
 async function tryZenity(): Promise<string | null> {
@@ -177,7 +202,9 @@ export async function pickDirectory(): Promise<string | null> {
   const pickers =
     isWin32 || isWSL
       ? [tryPowerShell, tryZenity, tryKdialog]
-      : [tryZenity, tryKdialog, tryPowerShell];
+      : isDarwin
+        ? [tryOsascript, tryZenity, tryKdialog]
+        : [tryZenity, tryKdialog, tryPowerShell];
 
   for (const picker of pickers) {
     try {
