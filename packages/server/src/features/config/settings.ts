@@ -19,6 +19,8 @@ export const settingsContentSchema = z.object({
   accentColor: z.string().optional(),
   iconSize: z.enum(['small', 'medium', 'large']).optional(),
   theme: z.enum(['dark', 'light']).optional(),
+  // Read by `features/apps/install.ts` to skip the capability-confirmation dialog.
+  allowAllApps: z.boolean().optional(),
   // Persisted only; takes effect on next restart (IS_REMOTE is fixed at module load).
   remote: z.boolean().optional(),
 });
@@ -39,6 +41,7 @@ export async function handleSetSettings(content: Record<string, unknown>) {
   if (result.data.accentColor !== undefined) partial.accentColor = result.data.accentColor;
   if (result.data.iconSize !== undefined) partial.iconSize = result.data.iconSize;
   if (result.data.theme !== undefined) partial.theme = result.data.theme;
+  if (result.data.allowAllApps !== undefined) partial.allowAllApps = result.data.allowAllApps;
   if (result.data.remote !== undefined) partial.remote = result.data.remote;
 
   const settings = await updateSettings(partial);

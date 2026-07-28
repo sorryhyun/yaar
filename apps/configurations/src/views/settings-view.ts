@@ -4,7 +4,11 @@ import { read, invoke, errMsg } from '@bundled/yaar';
 import { showToast } from '../store';
 import { parseJson, capitalize, onInputHandler, onChangeHandler } from '../helpers';
 
-const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize', 'remote'];
+// Every key `settingsContentSchema` (server: features/config/settings.ts) accepts.
+// A key missing here is not merely uncontrolled — it drops into the raw "extra"
+// blob, which means the app can round-trip it but never *introduce* it. Keep the
+// two lists in step when either side grows a setting.
+const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize', 'theme', 'allowAllApps', 'remote'];
 
 // Accent-picker swatch colors — content, not theming: each swatch must show its
 // own fixed preset color, so var(--yaar-accent) (the *current* accent) cannot be
@@ -113,6 +117,17 @@ export function SettingsView() {
       <div class="s-section">
         <div class="y-label s-section-title">🎨 Appearance</div>
         <div class="s-row">
+          <label class="s-label">Theme</label>
+          <select class="s-select"
+            value=${() => String(get('theme') ?? 'dark')}
+            onChange=${onChangeHandler(v => set('theme', v))}
+          >
+            ${['dark', 'light'].map(v =>
+              html`<option value=${v}>${capitalize(v)}</option>`
+            )}
+          </select>
+        </div>
+        <div class="s-row">
           <label class="s-label">Wallpaper</label>
           <select class="s-select"
             value=${() => String(get('wallpaper') ?? '')}
@@ -171,6 +186,17 @@ export function SettingsView() {
             </div>
           </div>
           ${() => Toggle('remote')}
+        </div>
+        <div class="s-row s-row-toggle">
+          <div>
+            <label class="s-label">Install Apps Without Asking</label>
+            <div class="s-hint-block">
+              Skip the confirmation dialog when an app requests permissions or gated
+              SDKs. An installed app then gets whatever its <code>app.json</code> asks
+              for, unprompted.
+            </div>
+          </div>
+          ${() => Toggle('allowAllApps')}
         </div>
         <div class="s-row s-row-toggle">
           <div>
