@@ -233,6 +233,7 @@ AI는 이 모든 것을 `yaar://skills/marketplace` 참조 토픽(`read('yaar://
 | PixiJS | `@bundled/pixi.js` | 2D WebGL 렌더링 |
 | p5.js | `@bundled/p5` | 크리에이티브 코딩 |
 | marked | `@bundled/marked` | 마크다운 → HTML |
+| Mermaid | `@bundled/mermaid` | 텍스트 → 다이어그램 (flowchart, sequence, class, state, ER, gantt, mindmap 등). `renderMermaid(src)` 를 쓰면 디자인 토큰에 맞춰 테마가 적용된 새니타이즈된 SVG 를 반환합니다 — 다시 새니타이즈하지 마세요. 약 3.3 MB 이므로 다이어그램을 그리는 앱에서만 임포트하세요 |
 | Prism | `@bundled/prismjs` | 구문 강조 |
 | DOMPurify | `@bundled/dompurify` | HTML 새니타이즈 (외부 리치 콘텐츠에 필수) |
 | Zod (Mini) | `@bundled/zod` | 신뢰 경계에서 외부/영속 JSON 검증 (함수형 Mini API) |

@@ -242,6 +242,88 @@ declare module '@bundled/mammoth' {
   export = mammoth;
 }
 
+// Diagrams from text: `flowchart`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`,
+// `erDiagram`, `journey`, `gantt`, `pie`, `mindmap`, `timeline`, `gitGraph`, `quadrantChart`,
+// `sankey-beta`, `xychart-beta`, `block-beta`, `C4Context`, `architecture-beta`.
+//
+// Prefer `renderMermaid(source)` over the default export: it applies the YAAR design
+// tokens, forces the strict security level, and serializes renders against mermaid's
+// global config. The SVG it returns is ALREADY SANITIZED — do not pass it through
+// `sanitizeHtml` from '@bundled/yaar', which strips the `<style>` block the diagram
+// needs to theme itself.
+//
+// Rendering is async and needs a live document (it measures text), so render after
+// mount, not during it. Insert the result with `element.innerHTML = svg`.
+declare module '@bundled/mermaid' {
+  import mermaid from 'mermaid';
+
+  export type { MermaidConfig, RenderResult } from 'mermaid';
+
+  /**
+   * Palette for one diagram, in YAAR's vocabulary rather than mermaid's ~140
+   * `themeVariables`. Anything omitted falls back to the design token of the
+   * same role, so most callers pass nothing at all.
+   */
+  export interface MermaidThemeInput {
+    /** Diagram canvas behind everything. Default `--yaar-bg`. */
+    background?: string;
+    /** Node/box fill. Default `--yaar-bg-surface`. */
+    surface?: string;
+    /** Label and title text. Default `--yaar-text`. */
+    text?: string;
+    /** Edges, arrowheads, and secondary text. Default `--yaar-text-muted`. */
+    muted?: string;
+    /** Node borders and emphasis. Default `--yaar-accent`. */
+    accent?: string;
+    /** Cluster/subgraph borders. Default `--yaar-border`. */
+    border?: string;
+    /** Default `--yaar-font`. */
+    fontFamily?: string;
+    /** CSS length, e.g. `'16px'`. Default `--yaar-text-base`. */
+    fontSize?: string;
+  }
+
+  export interface RenderMermaidOptions {
+    /** Per-diagram palette overrides; see `MermaidThemeInput`. */
+    theme?: MermaidThemeInput;
+    /** `'handDrawn'` gives the rough.js sketch look. Default `'classic'`. */
+    look?: 'classic' | 'handDrawn';
+    /**
+     * DOM id mermaid renders under. Defaults to a fresh unique id. Pass one only
+     * to make a render reproducible — two live diagrams sharing an id collide,
+     * because mermaid scopes the SVG's `<style>` rules by it.
+     */
+    id?: string;
+  }
+
+  /**
+   * Render mermaid source to a sanitized `<svg>` string.
+   *
+   * Rejects on a syntax error instead of returning mermaid's "Syntax error in
+   * text" diagram, so the caller decides what an invalid diagram looks like.
+   *
+   * ```ts
+   * const svg = await renderMermaid('flowchart TD\n  A[Start] --> B{Ok?}\n  B -->|yes| C[Done]');
+   * host.innerHTML = svg;
+   * ```
+   */
+  export function renderMermaid(source: string, options?: RenderMermaidOptions): Promise<string>;
+
+  /**
+   * Whether the source parses, without rendering it. For an editor marking a
+   * diagram invalid while it is being typed — cheaper than a full render, and it
+   * never touches the document.
+   */
+  export function isValidMermaid(source: string): Promise<boolean>;
+
+  /**
+   * The upstream mermaid API, for config the helpers above do not cover. Calling
+   * `initialize()` yourself replaces the security level and theme for every later
+   * `renderMermaid` call too, because mermaid's config is global.
+   */
+  export default mermaid;
+}
+
 declare module '@bundled/prismjs' {
   export * from 'prismjs';
 }

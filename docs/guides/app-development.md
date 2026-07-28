@@ -255,6 +255,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | PixiJS | `@bundled/pixi.js` | 2D WebGL rendering |
 | p5.js | `@bundled/p5` | Creative coding |
 | marked | `@bundled/marked` | Markdown → HTML |
+| Mermaid | `@bundled/mermaid` | Text → diagrams (flowchart, sequence, class, state, ER, gantt, mindmap…). Use `renderMermaid(src)`, which themes to the design tokens and returns sanitized SVG — do not sanitize it again. ~3.3 MB, so import it only in apps that draw diagrams |
 | Prism | `@bundled/prismjs` | Syntax highlighting |
 | DOMPurify | `@bundled/dompurify` | HTML sanitization — call it through `sanitizeHtml` from `@bundled/yaar`, not directly |
 | Zod (Mini) | `@bundled/zod` | Validating untrusted/persisted JSON at trust boundaries (functional Mini API) |

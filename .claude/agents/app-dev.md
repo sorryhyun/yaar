@@ -128,6 +128,7 @@ Available via `@bundled/*` imports — no npm install needed:
 | diff | `@bundled/diff` | Text diffing |
 | diff2html | `@bundled/diff2html` | Diff rendering |
 | marked | `@bundled/marked` | Markdown parsing |
+| mermaid | `@bundled/mermaid` | Text → diagrams. `renderMermaid(src)` returns already-sanitized, token-themed SVG; ~3.3 MB, so import only where diagrams are drawn |
 | prismjs | `@bundled/prismjs` | Syntax highlighting |
 | mammoth | `@bundled/mammoth` | DOCX parsing |
 | dompurify | `@bundled/dompurify` | HTML sanitization — do not import it directly; use `sanitizeHtml` from `@bundled/yaar` |
