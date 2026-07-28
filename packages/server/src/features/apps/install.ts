@@ -41,29 +41,85 @@ function broadcastDesktopAction(action: OSAction): void {
   }
 }
 
-/** Format permission entries into a human-readable string for the dialog. */
-function formatPermissions(permissions: PermissionEntry[]): string {
-  return permissions
-    .map((p) => {
+/**
+ * What an installed app can hold that the user should get a say in.
+ *
+ * `controls` and `streams` are deliberately absent: `discovery.ts` strips both for
+ * any app whose source isn't `bundled`, so a marketplace app that declares them is
+ * granted nothing and asking about them would describe authority it never gets.
+ * `bundles` is the opposite case — it is carried onto the iframe token regardless of
+ * source (`getAppMeta`), so it is a real grant and belongs in the dialog.
+ */
+interface AppCapabilities {
+  permissions: PermissionEntry[];
+  bundles: string[];
+}
+
+/** What each gated SDK actually lets an app do, in the user's terms. */
+const BUNDLE_DESCRIPTIONS: Record<string, string> = {
+  'yaar-dev': 'compile, typecheck, and deploy apps on this machine',
+  'yaar-web': 'drive a browser — navigate, click, and read pages',
+  'yaar-ml': 'download and run machine-learning models in the browser',
+};
+
+/** Stable identity for a permission entry, so two manifests can be compared. */
+function permissionKey(p: PermissionEntry): string {
+  if (typeof p === 'string') return p;
+  return `${p.uri}|${(p.verbs ?? []).slice().sort().join(',')}`;
+}
+
+/** Format capabilities into a human-readable string for the dialog. */
+function formatCapabilities(caps: AppCapabilities): string {
+  const sections: string[] = [];
+  if (caps.permissions.length > 0) {
+    const lines = caps.permissions.map((p) => {
       if (typeof p === 'string') return `  • ${p}`;
       const verbs = p.verbs?.length ? ` (${p.verbs.join(', ')})` : '';
       return `  • ${p.uri}${verbs}`;
-    })
-    .join('\n');
+    });
+    sections.push(`Access to:\n${lines.join('\n')}`);
+  }
+  if (caps.bundles.length > 0) {
+    const lines = caps.bundles.map((b) => {
+      const what = BUNDLE_DESCRIPTIONS[b];
+      return what ? `  • ${b} — ${what}` : `  • ${b}`;
+    });
+    sections.push(`Privileged SDKs:\n${lines.join('\n')}`);
+  }
+  return sections.join('\n\n');
 }
 
-/** Read permissions from an extracted app's app.json. */
-async function readAppPermissions(appDir: string): Promise<PermissionEntry[] | null> {
+/** Read the capabilities an app's app.json declares. Missing/invalid → none. */
+async function readAppCapabilities(appDir: string): Promise<AppCapabilities> {
+  const caps: AppCapabilities = { permissions: [], bundles: [] };
   try {
     const metaContent = await Bun.file(join(appDir, 'app.json')).text();
     const meta = JSON.parse(metaContent);
-    if (Array.isArray(meta.permissions) && meta.permissions.length > 0) {
-      return meta.permissions;
+    if (Array.isArray(meta.permissions)) caps.permissions = meta.permissions;
+    if (Array.isArray(meta.bundles)) {
+      caps.bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
     }
   } catch {
     // No app.json or invalid JSON
   }
-  return null;
+  return caps;
+}
+
+/**
+ * The capabilities in `next` that `previous` did not already hold.
+ *
+ * An update used to skip the dialog outright, so a v2 that newly asked for
+ * `yaar-web` was granted it without the user ever seeing the request. Only the
+ * *added* capabilities are prompted for — re-confirming what is already installed
+ * on every routine update would train the user to click through.
+ */
+function addedCapabilities(previous: AppCapabilities, next: AppCapabilities): AppCapabilities {
+  const heldPermissions = new Set(previous.permissions.map(permissionKey));
+  const heldBundles = new Set(previous.bundles);
+  return {
+    permissions: next.permissions.filter((p) => !heldPermissions.has(permissionKey(p))),
+    bundles: next.bundles.filter((b) => !heldBundles.has(b)),
+  };
 }
 
 export async function installApp(appId: string): Promise<VerbResult> {
@@ -117,19 +173,27 @@ export async function installApp(appId: string): Promise<VerbResult> {
     await unlink(tmpFile).catch(() => {});
   }
 
-  // Check for permissions and prompt user before installing.
-  // Skip the permission dialog during onboarding or when allowAllApps is enabled.
-  if (!isUpdate) {
-    const permissions = await readAppPermissions(stagingDir);
-    if (permissions && permissions.length > 0) {
+  // Check what the app asks for and prompt the user before installing. On an
+  // update only the *newly added* capabilities are prompted for.
+  // Skip the dialog during onboarding or when allowAllApps is enabled.
+  {
+    const requested = await readAppCapabilities(stagingDir);
+    const asking = isUpdate
+      ? addedCapabilities(await readAppCapabilities(appDir), requested)
+      : requested;
+
+    if (asking.permissions.length > 0 || asking.bundles.length > 0) {
       const settings = await readSettings();
       if (settings.onboardingCompleted && !settings.allowAllApps) {
+        const lead = isUpdate
+          ? `The update to "${appId}" additionally requests:`
+          : `"${appId}" requests the following:`;
         const confirmed = await actionEmitter.showPermissionDialog(
-          'App Permissions',
-          `"${appId}" requests the following permissions:\n\n${formatPermissions(permissions)}\n\nDo you want to allow this?`,
+          isUpdate ? 'App Update Permissions' : 'App Permissions',
+          `${lead}\n\n${formatCapabilities(asking)}\n\nDo you want to allow this?`,
           'app_install',
           appId,
-          'Install',
+          isUpdate ? 'Update' : 'Install',
           'Cancel',
         );
 
