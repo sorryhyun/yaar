@@ -376,3 +376,13 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/version:
+    get:
+      summary: Running YAAR version and build shape
+      responses:
+        '200':
+          description: '`{ version, bundled, platform, arch }`'
+          content:
+            application/json:
+              schema:
+                type: object

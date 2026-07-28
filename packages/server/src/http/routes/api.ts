@@ -13,7 +13,7 @@ import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
 import { requireHost, resolvePrincipal } from '../access.js';
-import { IS_REMOTE } from '../../config.js';
+import { IS_REMOTE, IS_BUNDLED_EXE, YAAR_VERSION } from '../../config.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -21,6 +21,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     path: '/api/apps',
     response: '`{ apps: AppInfo[] }`',
     description: 'List all installed apps',
+  },
+  {
+    method: 'GET',
+    path: '/api/version',
+    response: '`{ version, bundled, platform, arch }`',
+    description: 'Running YAAR version and build shape',
   },
 ];
 
@@ -32,6 +38,26 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
   // one bit a caller with no token is allowed to learn, and it names nothing secret.
   if (url.pathname === '/health' && req.method === 'GET') {
     return jsonResponse({ status: 'ok', remote: IS_REMOTE });
+  }
+
+  // What is running, and in which shape. Deliberately a REST route rather than a
+  // `yaar://` resource: the version is what an app wants first, and a verb would
+  // cost every such app a permission in its app.json. On PUBLIC_ENDPOINTS (the
+  // iframe allowlist) with no permission check, exactly like /api/apps — it names
+  // nothing of the user's, and a caller that can reach this server can already
+  // fingerprint the build from the assets it serves.
+  //
+  // `bundled` is the field that matters to a caller deciding whether an update is
+  // even applicable: only the standalone exe can be replaced by re-running the
+  // installer. A git checkout updates with `git pull`, and platform/arch are here
+  // so the caller can name the release asset without guessing from a user agent.
+  if (url.pathname === '/api/version' && req.method === 'GET') {
+    return jsonResponse({
+      version: YAAR_VERSION,
+      bundled: IS_BUNDLED_EXE,
+      platform: process.platform,
+      arch: process.arch,
+    });
   }
 
   // List available providers + active provider info

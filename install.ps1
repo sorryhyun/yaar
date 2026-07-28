@@ -39,6 +39,59 @@ function Get-File {
     }
 }
 
+# — Verify checksums —————————————————————————————————————————————————
+#
+# release.yml publishes a SHA256SUMS asset next to the binaries. It travels the
+# same HTTPS channel they do, so it is not a defence against a compromised
+# release — it catches a truncated download, a stale CDN copy, and a binary
+# paired with an apps archive from a different build.
+#
+# Missing manifest => warn and continue: releases cut before SHA256SUMS existed
+# have none, and `$env:VERSION` can pin one. A manifest that *is* present and
+# disagrees is a hard failure.
+
+function Get-Sums {
+    param([string]$Version)
+
+    $Url = "https://github.com/$Repo/releases/download/$Version/SHA256SUMS"
+    $Tmp = Join-Path ([System.IO.Path]::GetTempPath()) "yaar-SHA256SUMS"
+    try {
+        Get-File -Uri $Url -OutFile $Tmp
+        return Get-Content $Tmp
+    } catch {
+        return @()
+    } finally {
+        Remove-Item -Force $Tmp -ErrorAction SilentlyContinue
+    }
+}
+
+function Test-Checksum {
+    param([string]$File, [string]$Name, [string[]]$Sums)
+
+    # sha256sum writes "<hash>  <name>"; the second field may carry a `*` binary
+    # marker. Anchor on the name so one asset cannot match another's suffix.
+    $Line = $Sums | Where-Object { $_ -match "\s\*?$([regex]::Escape($Name))$" } | Select-Object -First 1
+    if (-not $Line) {
+        Write-Host "No published checksum for $Name - skipping verification."
+        return $true
+    }
+
+    # sha256sum emits lowercase hex, Get-FileHash uppercase. PowerShell's -ne is
+    # case-insensitive on strings, but normalising says so out loud.
+    $Want = (($Line -split '\s+')[0]).ToLowerInvariant()
+    $Have = (Get-FileHash -Path $File -Algorithm SHA256).Hash.ToLowerInvariant()
+    if ($Want -ne $Have) {
+        Write-Host ""
+        Write-Host "Checksum mismatch for ${Name}:"
+        Write-Host "  expected: $Want"
+        Write-Host "  actual:   $Have"
+        return $false
+    }
+
+    Write-Host "Verified $Name"
+    return $true
+}
+
 # — Resolve version ——————————————————————————————————————————————————
 
 function Resolve-Version {
@@ -61,12 +114,21 @@ $Url = "https://github.com/$Repo/releases/download/$Version/$AssetName"
 
 Write-Host "Installing YAAR $Version for windows-x64..."
 
+# Fetched once so the binary and the apps archive verify against one manifest.
+$Sums = Get-Sums -Version $Version
+
 # Download
 $TmpFile = Join-Path ([System.IO.Path]::GetTempPath()) $AssetName
 try {
     Get-File -Uri $Url -OutFile $TmpFile
 } catch {
     Write-Error "Failed to download: $Url`nCheck that version '$Version' exists."
+    exit 1
+}
+
+if (-not (Test-Checksum -File $TmpFile -Name $AssetName -Sums $Sums)) {
+    Remove-Item -Force $TmpFile -ErrorAction SilentlyContinue
+    Write-Error "Refusing to install $AssetName."
     exit 1
 }
 
@@ -84,9 +146,16 @@ $AppsUrl = "https://github.com/$Repo/releases/download/$Version/yaar-apps.tar.gz
 $AppsTmp = Join-Path ([System.IO.Path]::GetTempPath()) "yaar-apps.tar.gz"
 try {
     Get-File -Uri $AppsUrl -OutFile $AppsTmp
-    tar -xzf $AppsTmp -C $InstallDir
+    # A bad apps archive is not worth aborting a good binary install over, but it
+    # must not be unpacked either — extracting a corrupt tarball over apps\ is
+    # worse than leaving the previous one in place.
+    if (Test-Checksum -File $AppsTmp -Name "yaar-apps.tar.gz" -Sums $Sums) {
+        tar -xzf $AppsTmp -C $InstallDir
+        Write-Host "Installed bundled apps to: $(Join-Path $InstallDir 'apps')"
+    } else {
+        Write-Host "Skipped bundled apps - checksum did not match."
+    }
     Remove-Item -Force $AppsTmp -ErrorAction SilentlyContinue
-    Write-Host "Installed bundled apps to: $(Join-Path $InstallDir 'apps')"
 } catch {
     Write-Host "Could not download bundled apps ($AppsUrl); YAAR will start with no apps."
 }

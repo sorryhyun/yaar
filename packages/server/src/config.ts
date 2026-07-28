@@ -27,6 +27,7 @@
 export {
   getEnvInt,
   IS_BUNDLED_EXE,
+  YAAR_VERSION,
   PROJECT_ROOT,
   getPort,
   setPort,

@@ -33,6 +33,37 @@ export const PROJECT_ROOT = IS_BUNDLED_EXE
 /** Directory of this module — the base for dev-time package resolution. */
 export const CONFIG_MODULE_DIR = __dirname;
 
+// __YAAR_VERSION is injected at compile time via bun build --define, alongside
+// __YAAR_BUNDLED. It has to be: a bundled exe has no package.json beside it to
+// read, since PROJECT_ROOT there is whatever directory the user dropped the
+// binary in.
+declare const __YAAR_VERSION: string | undefined;
+
+function resolveVersion(): string {
+  if (typeof __YAAR_VERSION !== 'undefined' && __YAAR_VERSION) return __YAAR_VERSION;
+  try {
+    const pkg = JSON.parse(readFileSync(join(PROJECT_ROOT, 'package.json'), 'utf-8'));
+    if (typeof pkg.version === 'string') return pkg.version;
+  } catch {
+    /* not a checkout either — fall through to the sentinel */
+  }
+  return '0.0.0-unknown';
+}
+
+/**
+ * The running YAAR version — one source per build shape.
+ *
+ * The exe gets the compile-time define; `bun run` reads PROJECT_ROOT/package.json,
+ * where the repo is right there and a constant baked at some earlier build would
+ * be free to go stale. `scripts/set-version.ts` stamps that package.json and
+ * `scripts/build-exe-bundle.js` reads the same file for the define, so the two
+ * paths agree by construction.
+ *
+ * `0.0.0-unknown` means neither source answered — a build that lost the define,
+ * not a version. It is deliberately not a plausible-looking number.
+ */
+export const YAAR_VERSION: string = resolveVersion();
+
 /**
  * Load `PROJECT_ROOT/.env` into `process.env`.
  *

@@ -192,6 +192,32 @@ jobs:
           bun scripts/build-exe-bundle.js --target macos --arch arm64
           mv dist/yaar dist/yaar-macos-arm64
 
+      # A manifest of what this release actually contains, generated after every
+      # artifact exists so a partially-built release cannot publish sums that
+      # describe files it did not ship.
+      #
+      # This is not a signature — it rides the same HTTPS channel as the
+      # artifacts, so it is no defence against a compromised release. What it
+      # buys: a truncated or CDN-stale download fails loudly instead of
+      # installing, a binary and an apps archive from different builds cannot be
+      # mixed, and an unattended updater has something to check that is not
+      # "whatever the URL returned". Signing is the separate, later step.
+      #
+      # install.sh/install.ps1 are deliberately absent: a user who pipes the
+      # installer to a shell has already trusted that URL, and an installer that
+      # verifies itself proves nothing.
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum \
+            yaar-windows-x64.exe \
+            yaar-linux-x64 \
+            yaar-linux-arm64 \
+            yaar-macos-x64 \
+            yaar-macos-arm64 \
+            yaar-apps.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Upload assets
         run: |
           gh release upload "${{ github.event.release.tag_name }}" \
@@ -201,6 +227,7 @@ jobs:
             dist/yaar-macos-x64 \
             dist/yaar-macos-arm64 \
             dist/yaar-apps.tar.gz \
+            dist/SHA256SUMS \
             install.sh \
             install.ps1 \
             --clobber

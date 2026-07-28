@@ -302,7 +302,7 @@ for the four laws every new node must satisfy, and the triage rule for placing a
 
 ## REST API
 
-Routes in `http/routes/`. Pattern: `GET /health`, `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.
+Routes in `http/routes/`. Pattern: `GET /health`, `GET /api/version` (running version + `bundled`/`platform`/`arch`; on the iframe allowlist with no permission check, so an app reads it without an `app.json` entry — `yaar://session/*` would have been session-principal-gated and 403'd every app), `/api/providers`, `/api/apps`, `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`, `/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.
 
 ### The access chokepoint (`http/access.ts`)
 

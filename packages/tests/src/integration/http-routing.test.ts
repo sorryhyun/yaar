@@ -134,6 +134,51 @@ describe('createFetchHandler CORS + routing', () => {
   });
 });
 
+// ── /api/version ───────────────────────────────────────────────────────────
+//
+// The reason this route exists at all is that an app — configurations, showing
+// "you are on 0.12.1" — should not have to hold a permission to learn what is
+// running. That makes its membership in the iframe allowlist the actual
+// contract, not an implementation detail: drop it from PUBLIC_ENDPOINTS and the
+// route still answers the desktop perfectly while every app silently 403s.
+
+describe('/api/version', () => {
+  it('reports the running version and build shape', async () => {
+    const { createFetchHandler } = await import('@yaar/server/http/server');
+    const handler = createFetchHandler();
+    const req = new Request('http://localhost:8000/api/version');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await handler(req, {} as any);
+    expect(res?.status).toBe(200);
+
+    const body = (await res!.json()) as Record<string, unknown>;
+    // Not asserted against a literal: set-version.ts rewrites it every release,
+    // and a test that has to be edited to cut a release is a test that will be
+    // edited wrongly. The shape and the sentinel are what matter.
+    expect(typeof body.version).toBe('string');
+    expect(body.version).not.toBe('0.0.0-unknown'); // neither define nor package.json answered
+    expect(body).toMatchObject({ bundled: false, platform: process.platform, arch: process.arch });
+  });
+
+  it('is reachable from an app iframe, unlike a host-only route', async () => {
+    const { createFetchHandler } = await import('@yaar/server/http/server');
+    const handler = createFetchHandler();
+
+    const asIframe = (path: string) =>
+      new Request(`http://localhost:8000${path}`, { headers: { 'sec-fetch-dest': 'iframe' } });
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const version = await handler(asIframe('/api/version'), {} as any);
+    expect(version?.status).toBe(200);
+
+    // The control: /api/agents/stats is host-only, so a route being under /api/
+    // is not what makes the case above pass.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const stats = await handler(asIframe('/api/agents/stats'), {} as any);
+    expect(stats?.status).toBe(403);
+  });
+});
+
 // ── isStaticAsset (F-20) ───────────────────────────────────────────────────
 //
 // Remote auth used to be bypassable by choosing a filename. isStaticAsset() ran

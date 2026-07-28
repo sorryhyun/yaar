@@ -15,8 +15,8 @@
  * Provider is selected at runtime via config/settings.json or PROVIDER env var.
  */
 
-import { execSync } from 'child_process';
-import { readdirSync, writeFileSync, unlinkSync, existsSync } from 'fs';
+import { execFileSync } from 'child_process';
+import { readdirSync, readFileSync, writeFileSync, unlinkSync, existsSync } from 'fs';
 import { join, dirname, relative, basename } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -252,10 +252,23 @@ writeFileSync(generatedEntry, generatedSource, 'utf-8');
 // ── Build ────────────────────────────────────────────────────────────
 
 const entrypoint = relative(rootDir, generatedEntry);
-const defines = ['--define', '__YAAR_BUNDLED=true'];
 
-const cmd = [
-  'bun', 'build',
+// The binary has to carry its own version: PROJECT_ROOT for an exe is whatever
+// directory the user dropped it in, so config/env.ts has no package.json to read
+// there. Sourced from the same root package.json `scripts/set-version.ts` stamps,
+// which is what release.yml asserts against the tag.
+const pkgVersion = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8')).version;
+const defines = [
+  '--define', '__YAAR_BUNDLED=true',
+  '--define', `__YAAR_VERSION=${JSON.stringify(pkgVersion)}`,
+];
+
+// argv, not a joined shell string: __YAAR_VERSION's value is a *JS string
+// literal*, so the define carries quotes that sh and cmd.exe would each strip
+// differently. Passing argv directly means no shell parses it at all — which
+// also stops a path containing a space from silently splitting into two args.
+const args = [
+  'build',
   entrypoint,
   '--compile',
   `--target=${bunTarget}`,
@@ -263,12 +276,12 @@ const cmd = [
   '--minify',
   '--external', 'cpu-features',
   ...defines,
-].join(' ');
+];
 
-console.log(`Running: ${cmd.slice(0, 140)}...`);
+console.log(`Running: bun ${args.join(' ').slice(0, 140)}...`);
 
 try {
-  execSync(cmd, { cwd: rootDir, stdio: 'inherit' });
+  execFileSync('bun', args, { cwd: rootDir, stdio: 'inherit' });
   console.log(`\nBuilt: ${outfile}`);
 } finally {
   // Clean up generated entry point
