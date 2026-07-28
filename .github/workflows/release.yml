@@ -11,10 +11,10 @@ jobs:
   # Pin the exact commit the tag points at, ONCE, and hand that SHA to every
   # downstream job. Two reasons this is a job and not an inline `ref:`:
   #
-  #  1. release-version-bump.yml pushes the version commit with GITHUB_TOKEN,
-  #     which by design does not trigger workflows — so the commit being
-  #     released has never been through CI. Something has to check it, and it
-  #     has to be *this* commit, not "whatever the tag resolves to right now".
+  #  1. A draft release can target any branch or a raw SHA, so the commit being
+  #     released is not necessarily a `main` commit that the branch ruleset
+  #     gated. The checks have to run against *this* commit rather than be
+  #     assumed from wherever the tag happens to point right now.
   #  2. verify and build must agree. Resolving the tag independently in each job
   #     leaves a window where a moved tag ships artifacts that were never tested.
   resolve:
@@ -33,10 +33,11 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "Releasing $sha"
 
-      # The bump workflow syncs package.json to the tag, but nothing verifies the
-      # push landed before "Publish" was clicked. If the maintainer publishes a
-      # draft faster than the bump commit lands, the tag points at the *previous*
-      # version and the artifacts silently carry the wrong number. Fail loudly.
+      # `bun run release:prepare` stamps the version on `dev` and it reaches
+      # `main` through the normal promotion — but nothing forces that to have
+      # happened before "Publish" was clicked. release-draft-check.yml warns
+      # while the release is still a draft; this is the backstop that keeps
+      # artifacts from silently carrying the wrong number. Fail loudly.
       - name: Verify version matches tag
         env:
           TAG: ${{ github.event.release.tag_name }}
@@ -45,7 +46,7 @@ jobs:
           got="$(jq -r .version package.json)"
           if [ "$want" != "$got" ]; then
             echo "::error::Tag $TAG expects version $want but package.json has $got."
-            echo "The release-version-bump commit probably did not land before publish."
+            echo "Run 'bun run release:prepare $TAG' on dev and promote it to main before publishing."
             exit 1
           fi
           echo "package.json version $got matches tag $TAG"

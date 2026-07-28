@@ -1,0 +1,57 @@
+name: Release Draft Check
+
+# Tells you, while the release is still a DRAFT, whether the commit it targets
+# carries the version its tag promises. This replaced a workflow that used to
+# *fix* the mismatch by committing the bump to the target branch itself.
+#
+# It stopped being able to: `main` has a ruleset requiring the `ci / check`
+# status, and a push made with GITHUB_TOKEN does not trigger workflows — so the
+# bump commit would arrive with no status and be rejected. Granting the Actions
+# bot a ruleset bypass is not an option either; GitHub allows that bypass actor
+# only on org-owned repositories, and this repo is user-owned.
+#
+# So the bump moved to `bun run release:prepare <version>` on `dev`, promoted to
+# `main` like any other change, and this workflow is the early warning that you
+# forgot. release.yml re-checks the same thing at publish time as the backstop —
+# but by then the tag exists, and the tag ruleset blocks deleting it.
+on:
+  release:
+    types: [created, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    # Drafts only. A published release is release.yml's business.
+    if: github.event.release.draft == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Compare draft tag against the target commit's version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name }}
+          COMMITISH: ${{ github.event.release.target_commitish }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -uo pipefail
+          want="${TAG#v}"
+
+          # target_commitish is a branch name or a raw SHA; the contents API takes either.
+          if ! got="$(gh api -H 'Accept: application/vnd.github.raw' \
+                       "repos/$REPO/contents/package.json?ref=$COMMITISH" | jq -er .version)"; then
+            echo "::error::Could not read package.json at '$COMMITISH'. Does that ref exist?"
+            exit 1
+          fi
+
+          if [ "$want" != "$got" ]; then
+            echo "::error::Draft $TAG targets '$COMMITISH', whose package.json says $got."
+            echo "Publishing now would tag a commit carrying the wrong version and release.yml would fail."
+            echo "Fix before publishing:"
+            echo "  git switch dev && bun run release:prepare $TAG"
+            echo "  git commit -m 'chore(release): set version to $want' && git push origin dev"
+            echo "  # once ci / check is green:"
+            echo "  git push origin dev:main"
+            exit 1
+          fi
+          echo "'$COMMITISH' is at version $got, matching $TAG. Safe to publish."
