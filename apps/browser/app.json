@@ -8,10 +8,6 @@
     "yaar-web"
   ],
   "variant": "standard",
-  "permissions": [
-    "yaar://storage/",
-    "yaar://windows/"
-  ],
   "version": "1.0.0",
   "author": "YAAR",
   "kind": "system"
