@@ -11,7 +11,7 @@ import {
   waitForLoadedMetadata,
 } from './export-utils';
 import { clamp } from './utils/time';
-import { errMsg } from '@bundled/yaar';
+import { errMsg, showPrompt } from '@bundled/yaar';
 
 export interface EditMode {
   loadSourceUrl(url: string, storagePath?: string | null): boolean;
@@ -285,9 +285,9 @@ export function createEditMode(
     const extraCount = storageVideos.length - 12;
     const extraText = extraCount > 0 ? `\n...and ${extraCount} more` : '';
 
-    const selectionRaw = window.prompt(
+    const selectionRaw = await showPrompt(
       `Pick a storage video (number or path):\n${previewList}${extraText}`,
-      defaultPath,
+      { title: 'Storage video', initial: defaultPath },
     );
     if (selectionRaw === null) return false;
 

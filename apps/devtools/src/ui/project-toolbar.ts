@@ -1,17 +1,17 @@
 export {};
 import html from '@bundled/solid-js/html';
-import { app } from '@bundled/yaar';
+import { app, showPrompt } from '@bundled/yaar';
 import { activeProject, projects, previewUrl } from '../core';
 import { createProject, openProject, compile } from '../services';
 
 /** Project selection and build actions in the app chrome. */
 export function ProjectToolbar() {
-  function handleProjectChange(e: Event): void {
+  async function handleProjectChange(e: Event): Promise<void> {
     const select = e.target as HTMLSelectElement;
     const projectId = select.value;
 
     if (projectId === '__new__') {
-      const name = prompt('Project name:');
+      const name = await showPrompt('Project name:', { title: 'New Project' });
       if (name?.trim()) createProject(name.trim());
       select.value = activeProject()?.id ?? '';
       return;
