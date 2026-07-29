@@ -44,7 +44,7 @@ import type { ResolvedUri } from '../handlers/uri-resolve.js';
 import { buildSDKOptions } from '../providers/claude/sdk-options.js';
 import { initMcpServer } from '../mcp/server.js';
 import { getAppMeta } from '../features/apps/discovery.js';
-import { USER_APPS_DIR } from '../features/apps/roots.js';
+import { APPS_DIR, USER_APPS_DIR } from '../features/apps/roots.js';
 import { parseAppAgentsPath } from '../handlers/apps/paths.js';
 import { getAgentLimiter } from '../agents/limiter.js';
 import type { AITransport, StreamMessage, TransportOptions } from '../providers/types.js';
@@ -74,6 +74,32 @@ function fakeProvider(recorded: Recorded[]): AITransport {
     async dispose() {},
   };
 }
+
+// ── A bundled app that declares personas ────────────────────────────────────
+//
+// The declaration gate is `resolveAppSource(appId) === 'bundled'`, and that reads
+// the filesystem — so every test whose subject is what happens *past* the gate
+// needs a real directory under `apps/`. A fixture rather than a shipped app on
+// purpose: no bundled app declares personas today (`chitchats`, the one that did,
+// now installs from the market), and pointing these tests at whichever app happens
+// to want a cast is what made them go red when that app left the tree.
+//
+// `chitchats` survives below as an arbitrary app id in the string-only assertions
+// — role spelling, key uniqueness, URI parsing — where no app has to exist.
+const CAST_APP = 'persona-cast-fixture';
+const castAppDir = join(APPS_DIR, CAST_APP);
+
+beforeAll(() => {
+  mkdirSync(castAppDir, { recursive: true });
+  writeFileSync(
+    join(castAppDir, 'app.json'),
+    JSON.stringify({ name: 'Cast Fixture', personas: { max: 4 } }),
+  );
+});
+
+afterAll(() => {
+  rmSync(castAppDir, { recursive: true, force: true });
+});
 
 // ── Profile ─────────────────────────────────────────────────────────────────
 
@@ -445,7 +471,7 @@ describe('persona verb ownership', () => {
   it("refuses an app naming another app's personas", async () => {
     // The permission list says what a caller may *ask for*; this says whose personas
     // they are. Both have to agree, and this is the half the app cannot influence.
-    const result = await asApp('memo', () => listPersonas(uri('yaar://apps/chitchats/agents')));
+    const result = await asApp('memo', () => listPersonas(uri(`yaar://apps/${CAST_APP}/agents`)));
     expect(errorText(await result!)).toContain('cannot reach');
   });
 
@@ -455,8 +481,8 @@ describe('persona verb ownership', () => {
   });
 
   it('rejects an unknown action before it can reach the pool', async () => {
-    const result = await asApp('chitchats', () =>
-      invokePersonas(uri('yaar://apps/chitchats/agents'), { action: 'summon' }),
+    const result = await asApp(CAST_APP, () =>
+      invokePersonas(uri(`yaar://apps/${CAST_APP}/agents`), { action: 'summon' }),
     );
     expect(errorText(await result!)).toContain('Unknown action');
   });
@@ -464,16 +490,16 @@ describe('persona verb ownership', () => {
   it('rejects a malformed spawn without spending an agent slot', async () => {
     const slots = getAgentLimiter().getCurrentCount();
 
-    const noPrompt = await asApp('chitchats', () =>
-      invokePersonas(uri('yaar://apps/chitchats/agents'), {
+    const noPrompt = await asApp(CAST_APP, () =>
+      invokePersonas(uri(`yaar://apps/${CAST_APP}/agents`), {
         action: 'spawn',
         personaId: 'alice',
       }),
     );
     expect(errorText(await noPrompt!)).toContain('systemPrompt');
 
-    const badId = await asApp('chitchats', () =>
-      invokePersonas(uri('yaar://apps/chitchats/agents'), {
+    const badId = await asApp(CAST_APP, () =>
+      invokePersonas(uri(`yaar://apps/${CAST_APP}/agents`), {
         action: 'spawn',
         personaId: 'not a valid id',
         systemPrompt: 'You are Alice.',
@@ -481,8 +507,8 @@ describe('persona verb ownership', () => {
     );
     expect(errorText(await badId!)).toContain('Invalid personaId');
 
-    const tooLong = await asApp('chitchats', () =>
-      invokePersonas(uri('yaar://apps/chitchats/agents'), {
+    const tooLong = await asApp(CAST_APP, () =>
+      invokePersonas(uri(`yaar://apps/${CAST_APP}/agents`), {
         action: 'spawn',
         personaId: 'alice',
         systemPrompt: 'x'.repeat(MAX_SUB_AGENT_PROMPT_CHARS + 1),
@@ -568,9 +594,10 @@ describe('persona turns stay out of the monitor context', () => {
 // ── The manifest gate ───────────────────────────────────────────────────────
 
 describe('personas manifest field', () => {
-  // A real installed app, because the gate is `resolveAppSource(appId) === 'bundled'`
-  // and that reads the filesystem. The point of the rule is that shipping the JSON is
-  // not enough — you have to be in the tree.
+  // The bundled half of the gate is `CAST_APP` above. This is the other half: a real
+  // *installed* app, because `resolveAppSource(appId)` reads the filesystem and the
+  // point of the rule is that shipping the JSON is not enough — you have to be in the
+  // tree.
   const INSTALLED_ID = 'persona-gate-fixture';
   const installedDir = join(USER_APPS_DIR, INSTALLED_ID);
 
@@ -597,7 +624,7 @@ describe('personas manifest field', () => {
   // The field normalizes to `subagents` — `"personas": { max }` is the older spelling
   // of it, and stays valid forever (see features/apps/discovery.ts).
   it('is honored for a bundled app that declares it', async () => {
-    expect((await getAppMeta('chitchats'))?.subagents).toEqual({ max: 4 });
+    expect((await getAppMeta(CAST_APP))?.subagents).toEqual({ max: 4 });
   });
 
   it('is absent for every app that does not declare it', async () => {

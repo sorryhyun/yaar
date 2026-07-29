@@ -21,7 +21,9 @@
  * `loopback/loopback-subagent-protocol.test.ts` — because a fake bridge would prove
  * nothing about the bridge.
  */
-import { describe, expect, it, beforeAll, beforeEach, afterEach } from 'bun:test';
+import { describe, expect, it, beforeAll, afterAll, beforeEach, afterEach } from 'bun:test';
+import { mkdirSync, rmSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 import { AgentPool } from '../agents/agent-pool.js';
 import type { SubAgent } from '../agents/agent-pool.js';
@@ -41,6 +43,7 @@ import type { ResolvedUri } from '../handlers/uri-resolve.js';
 import { buildSDKOptions } from '../providers/claude/sdk-options.js';
 import { initMcpServer } from '../mcp/server.js';
 import { getAppMeta } from '../features/apps/discovery.js';
+import { APPS_DIR } from '../features/apps/roots.js';
 import { withoutPersonaCommands, personaCommandFor } from '../features/apps/persona-commands.js';
 import { getAgentLimiter } from '../agents/limiter.js';
 import type { AITransport, StreamMessage, TransportOptions } from '../providers/types.js';
@@ -230,6 +233,26 @@ describe('spawn-time tool specs', () => {
 // ── The manifest gate ───────────────────────────────────────────────────────
 
 describe('the subagents manifest field', () => {
+  // The gate is `resolveAppSource(appId) === 'bundled'`, which reads the filesystem,
+  // so a real directory under `apps/` is what these assertions need. No shipped app
+  // declares the field today — `chitchats`, the reference consumer, installs from the
+  // market now — and a fixture is what keeps the gate tested against the tree rather
+  // than against whichever app currently wants a cast.
+  const DECLARING_APP = 'sub-agent-gate-fixture';
+  const declaringDir = join(APPS_DIR, DECLARING_APP);
+
+  beforeAll(() => {
+    mkdirSync(declaringDir, { recursive: true });
+    writeFileSync(
+      join(declaringDir, 'app.json'),
+      JSON.stringify({ name: 'Gate Fixture', personas: { max: 4 } }),
+    );
+  });
+
+  afterAll(() => {
+    rmSync(declaringDir, { recursive: true, force: true });
+  });
+
   const uri = (u: string) => ({ sourceUri: u }) as ResolvedUri;
   const asApp = <T>(appId: string, fn: () => T) =>
     runWithAgentContext(
@@ -240,7 +263,7 @@ describe('the subagents manifest field', () => {
   it('reads "personas" as the ceiling, spelled the old way', async () => {
     // Shipped wire format: `personas` and `subagents` are the same declaration, and
     // the older spelling stays valid forever.
-    expect((await getAppMeta('chitchats'))?.subagents).toEqual({ max: 4 });
+    expect((await getAppMeta(DECLARING_APP))?.subagents).toEqual({ max: 4 });
   });
 
   it('rejects a malformed spawn without spending an agent slot', async () => {
@@ -254,8 +277,8 @@ describe('the subagents manifest field', () => {
       })),
       [SKIP, { name: 'skip', description: 'again' }],
     ]) {
-      const result = await asApp('chitchats', () =>
-        invokePersonas(uri('yaar://apps/chitchats/agents'), {
+      const result = await asApp(DECLARING_APP, () =>
+        invokePersonas(uri(`yaar://apps/${DECLARING_APP}/agents`), {
           action: 'spawn',
           personaId: 'alice',
           systemPrompt: 'You are Alice.',
