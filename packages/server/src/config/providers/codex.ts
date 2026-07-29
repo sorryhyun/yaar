@@ -4,7 +4,7 @@
 
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
-import { getEnvInt, getPort, IS_BUNDLED_EXE } from '../env.js';
+import { getEnvInt, IS_BUNDLED_EXE } from '../env.js';
 
 /**
  * Get the codex CLI spawn args (command + prefix args).
@@ -48,8 +48,12 @@ export function getCodexWsPort(): number {
 /**
  * Build the CLI args for `codex app-server`.
  * Separates config from process management so it's easy to review/change.
+ *
+ * Deliberately declares no `mcp_servers`: YAAR's namespaces are declared per thread by
+ * `CodexProvider.buildMcpScope`, which is the only place that can stamp the calling
+ * agent's identity onto them. See `app-server.ts`'s `spawnProcess`.
  */
-export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[] {
+export function getCodexAppServerArgs(): string[] {
   const args = ['app-server'];
 
   // Native Codex tool/feature surfaces we force OFF (each → `-c features.<name>=false`).
@@ -107,16 +111,6 @@ export function getCodexAppServerArgs(mcpNamespaces: readonly string[]): string[
   ];
   for (const [key, value] of CONFIG_OVERRIDES) {
     args.push('-c', `${key}=${value}`);
-  }
-
-  // Configure YAAR MCP servers
-  for (const ns of mcpNamespaces) {
-    args.push(
-      '-c',
-      `mcp_servers.${ns}.url=http://127.0.0.1:${getPort()}/mcp/${ns}`,
-      '-c',
-      `mcp_servers.${ns}.bearer_token_env_var=YAAR_MCP_TOKEN`,
-    );
   }
 
   return args;

@@ -156,10 +156,10 @@ export class AppTaskProcessor {
         // window handles the agent's actions resolve against, and the monitor its
         // `relay` reaches.
         monitorId,
-        // Codex doesn't filter tools per-thread via allowedTools (its per-thread
-        // mcp_servers override carries the full active set + agent identity; see
-        // CodexProvider.buildMcpScope), so pass undefined and let it use all
-        // tools. Mirrors the monitor/session agents' Codex handling.
+        // Codex doesn't filter tools per-thread via allowedTools — its per-thread
+        // mcp_servers override selects whole namespaces, not tools within one (see
+        // codexServerFilter) — so pass undefined and let it use all of them. Mirrors
+        // the monitor/session agents' Codex handling.
         allowedTools: this.ctx.providerType === 'codex' ? undefined : [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
         model:

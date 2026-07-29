@@ -18,7 +18,7 @@ import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { JsonRpcWsClient } from './jsonrpc-ws-client.js';
-import { getMcpToken, CORE_SERVERS } from '../../mcp/index.js';
+import { getMcpToken } from '../../mcp/index.js';
 import {
   getCodexSpawnArgs,
   getCodexAppServerArgs,
@@ -252,8 +252,18 @@ export class AppServer extends EventEmitter {
     // Kill any orphaned process still holding the port from a previous run
     this.killStaleProcess();
 
-    const namespaces = CORE_SERVERS;
-    const args = getCodexAppServerArgs(namespaces);
+    // No YAAR MCP servers at the process level: `CodexProvider.buildMcpScope` is the only
+    // place that declares them, per thread, and it is the only place that *can* — the
+    // process-level entries carry no agent identity, so a tool call arriving through one
+    // is anonymous. Every real turn supplies an agentId (`AgentSession` passes its own
+    // instanceId), so this was never the live path, only a fallback nothing reached.
+    //
+    // It has to be empty rather than merely filtered, because a thread's `mcp_servers`
+    // override *merges* over the loaded config instead of replacing it — a server declared
+    // here cannot be taken away per thread. That is what made a sub-agent's allowlist
+    // unenforceable on this provider: its thread named `subagent` alone and still inherited
+    // every namespace listed here. Declaring none makes the per-thread set authoritative.
+    const args = getCodexAppServerArgs();
 
     // Add WebSocket listener
     args.push('--listen', `ws://127.0.0.1:${this.wsPort}`);

@@ -874,8 +874,9 @@ export class AgentPool {
       monitorId: record.monitorId,
       systemPromptOverride: profile.systemPrompt,
       // The containment. See profiles/sub-agent.ts — this allowlist is what decides
-      // which MCP servers the process even connects to (none when the sub-agent has
-      // no tools, the `subagent` namespace alone when it has some).
+      // which MCP servers the turn even connects to (none when the sub-agent has
+      // no tools, the `subagent` namespace alone when it has some), on both providers:
+      // Claude derives them in `claude/sdk-options.ts`, Codex in `codexServerFilter`.
       allowedTools: profile.allowedTools,
       ...(record.model ? { model: record.model } : {}),
       // Not a context tape write — nothing here reaches `ContextTape`. It is the one

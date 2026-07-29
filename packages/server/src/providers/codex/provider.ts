@@ -20,6 +20,7 @@ import { mapNotification } from './message-mapper.js';
 import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
+import { SUB_AGENT_MCP_SERVER } from '../../agents/profiles/sub-agent.js';
 import type {
   ThreadStartParams,
   ThreadStartResponse,
@@ -54,6 +55,35 @@ type McpServerOverride = Record<
   string,
   { url: string; bearer_token_env_var: string; http_headers?: Record<string, string> }
 >;
+
+/**
+ * Which MCP namespaces a turn's thread connects to.
+ *
+ * Codex cannot filter *tools* per thread the way Claude's `allowedTools` does, so callers
+ * that only want to narrow within a namespace pass `undefined` and get the whole surface
+ * (`app-task-processor.ts` does this for app agents). But it can filter which *servers* a
+ * thread connects to at all, and that is enough to carry the one containment that matters:
+ * a sub-agent's turn names `mcp__subagent__*` and nothing else, so it reaches its own app's
+ * iframe and no YAAR verb. Without this filter its thread got the full set — the profile's
+ * allowlist was honored on the Claude path (`claude/sdk-options.ts` derives the same way
+ * from `allowedTools`) and silently ignored here, which is the whole reason it exists.
+ *
+ * The unfiltered case still drops `subagent`, because that namespace's tool list is a pure
+ * function of *who is calling* — `registerSubAgentTools` registers nothing for anyone but a
+ * sub-agent, and a sub-agent always arrives with an allowlist. Attaching it to a monitor or
+ * app agent therefore produced an empty server that advertises a `tools` capability it has
+ * no handler for, which codex reports as `-32601 Method not found` and marks failed. Every
+ * codex thread carried one such dead connection.
+ */
+function codexServerFilter(allowedTools: string[] | undefined): (name: string) => boolean {
+  if (!allowedTools) return (name) => name !== SUB_AGENT_MCP_SERVER;
+  const needed = new Set<string>();
+  for (const tool of allowedTools) {
+    const match = tool.match(/^mcp__(\w+)__/);
+    if (match) needed.add(match[1]);
+  }
+  return (name) => needed.has(name);
+}
 
 export class CodexProvider extends BaseTransport {
   readonly name = 'codex';
@@ -434,21 +464,24 @@ export class CodexProvider extends BaseTransport {
    * closes that. Stamping identity per-thread means every tool call self-identifies,
    * eliminating the race at its root.
    *
-   * We expose the FULL active server set (system+verbs+app) — same as the
-   * process-level config — so this override never narrows the agent's tools; the
-   * only thing it adds over the process-level set is the header.
+   * Which namespaces it covers is {@link codexServerFilter}'s decision.
    *
    * Returns null when there is no agentId to attach, so the thread falls back to
    * the process-level server set (and the legacy global fallback).
    */
-  private buildMcpScope(agentId?: string): {
+  private buildMcpScope(
+    agentId?: string,
+    allowedTools?: string[],
+  ): {
     servers: McpServerOverride;
     signature: string;
   } | null {
     if (!agentId) return null;
 
-    // No filter: expose the FULL active server set, same as the process-level config.
-    const { servers: endpoints, agentToken } = buildMcpServerSet(agentId);
+    const { servers: endpoints, agentToken } = buildMcpServerSet(
+      agentId,
+      codexServerFilter(allowedTools),
+    );
     const servers: McpServerOverride = {};
     for (const { name, url } of endpoints) {
       servers[name] = {
@@ -475,7 +508,7 @@ export class CodexProvider extends BaseTransport {
 
     // Stamp the agent's identity onto the thread's MCP servers so its tool calls
     // self-identify to the shared MCP server (see buildMcpScope).
-    const scope = this.buildMcpScope(options.agentId);
+    const scope = this.buildMcpScope(options.agentId, options.allowedTools);
     const mcpConfig = scope ? { mcp_servers: scope.servers } : undefined;
     const mcpScope = scope?.signature;
 
