@@ -7,10 +7,20 @@ This document covers the Codex App Server JSON-RPC protocol, configuration, and 
 ### Installation
 
 ```bash
-npm install -g @openai/codex
+# macOS / Linux
+curl -fsSL https://chatgpt.com/codex/install.sh | sh
+# Windows
+powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
+# or via a package manager: npm install -g @openai/codex  /  brew install --cask codex
+
 codex login              # Authenticate (opens browser)
 codex login status       # Verify authentication
 ```
+
+Pick one and stay with it. The installers drop the binary in `~/.local/bin`; npm puts it in the
+npm global prefix. Using both leaves two `codex` binaries at different versions, and which one
+YAAR drives is whatever PATH happens to resolve first — `CODEX_UPGRADE_HINT` names the installer
+for the running platform so a version error does not send you down the other path.
 
 YAAR requires **codex >= `CODEX_MIN_VERSION`** (`packages/server/src/providers/codex/version.ts`).
 See [Version policy](#version-policy) — an older CLI is refused rather than driven.

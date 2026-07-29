@@ -41,6 +41,7 @@ export type { AskForApproval } from "./AskForApproval.js";
 export type { AttestationGenerateParams } from "./AttestationGenerateParams.js";
 export type { AttestationGenerateResponse } from "./AttestationGenerateResponse.js";
 export type { AutoReviewDecisionSource } from "./AutoReviewDecisionSource.js";
+export type { BrowserUseRequirements } from "./BrowserUseRequirements.js";
 export type { ByteRange } from "./ByteRange.js";
 export type { CancelLoginAccountParams } from "./CancelLoginAccountParams.js";
 export type { CancelLoginAccountResponse } from "./CancelLoginAccountResponse.js";
@@ -131,6 +132,8 @@ export type { ExternalAgentConfigDetectResponse } from "./ExternalAgentConfigDet
 export type { ExternalAgentConfigImportCompletedNotification } from "./ExternalAgentConfigImportCompletedNotification.js";
 export type { ExternalAgentConfigImportHistoriesReadResponse } from "./ExternalAgentConfigImportHistoriesReadResponse.js";
 export type { ExternalAgentConfigImportHistory } from "./ExternalAgentConfigImportHistory.js";
+export type { ExternalAgentConfigImportHistoryRecordParams } from "./ExternalAgentConfigImportHistoryRecordParams.js";
+export type { ExternalAgentConfigImportHistoryRecordResponse } from "./ExternalAgentConfigImportHistoryRecordResponse.js";
 export type { ExternalAgentConfigImportItemTypeFailure } from "./ExternalAgentConfigImportItemTypeFailure.js";
 export type { ExternalAgentConfigImportItemTypeSuccess } from "./ExternalAgentConfigImportItemTypeSuccess.js";
 export type { ExternalAgentConfigImportParams } from "./ExternalAgentConfigImportParams.js";
@@ -141,6 +144,7 @@ export type { ExternalAgentConfigMigrationItem } from "./ExternalAgentConfigMigr
 export type { ExternalAgentConfigMigrationItemType } from "./ExternalAgentConfigMigrationItemType.js";
 export type { ExternalAgentImportedConnectorCandidate } from "./ExternalAgentImportedConnectorCandidate.js";
 export type { ExternalAgentImportedConnectorSource } from "./ExternalAgentImportedConnectorSource.js";
+export type { FeedbackRequirements } from "./FeedbackRequirements.js";
 export type { FeedbackUploadParams } from "./FeedbackUploadParams.js";
 export type { FeedbackUploadResponse } from "./FeedbackUploadResponse.js";
 export type { FileChangeApprovalDecision } from "./FileChangeApprovalDecision.js";

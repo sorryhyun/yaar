@@ -11,8 +11,16 @@
  * Two numbers, deliberately separate (the same split as `engines.bun` vs `.bun-version`):
  * `CODEX_MIN_VERSION` is the hand-edited floor we refuse to run below, and
  * `CODEX_GENERATED_FROM` (in `generated/codex-version.ts`) records what the bindings were
- * actually generated from. They are usually equal; they differ while raising the floor
- * ahead of a regeneration, which `codex-version.test.ts` refuses to let ship.
+ * actually generated from. Only one direction of drift is safe, and the test enforces it:
+ * generating from a CLI *newer* than the floor is fine (a release that only adds fields
+ * leaves every shape we send unchanged, so the older CLI still speaks what we compiled),
+ * while raising the floor *ahead* of a regeneration claims a protocol we have never
+ * generated against and `codex-version.test.ts` refuses to let it ship.
+ *
+ * So the floor moves only when a release actually breaks something we send or read — not
+ * on every codex version. It currently sits at 0.145.0 with bindings from 0.146.0, whose
+ * diff was additive (`Thread.isPinned`, `ThreadItem.commandExecution.pluginId`/`scriptPath`,
+ * a `PlanType` variant) and touched no request type this provider builds.
  *
  * This module is dependency-free on purpose: `scripts/codegen/codex-types.js` imports it
  * directly, so it must not drag in server internals.
@@ -24,8 +32,18 @@
  */
 export const CODEX_MIN_VERSION = '0.145.0';
 
-/** Documented install path (`docs/reference/codex_protocol.md`), quoted in every error. */
-export const CODEX_UPGRADE_HINT = 'npm install -g @openai/codex@latest';
+/**
+ * Documented install path (`docs/reference/codex_protocol.md`), quoted in every error.
+ *
+ * Platform-split, and deliberately *not* the npm package: OpenAI's own installers are the
+ * primary path in codex's README, and telling someone who installed that way to run
+ * `npm install -g` leaves them with two codex binaries and no way to know which one PATH
+ * resolves to — the exact confusion a version error is supposed to end.
+ */
+export const CODEX_UPGRADE_HINT =
+  process.platform === 'win32'
+    ? 'powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"'
+    : 'curl -fsSL https://chatgpt.com/codex/install.sh | sh';
 
 /** Matches a semver core plus any `-prerelease` / `+build` suffix. */
 const VERSION_PATTERN = /\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?/;
