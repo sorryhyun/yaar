@@ -128,6 +128,7 @@ button,input,select,textarea{font-family:inherit}
 .y-clamp-2{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .y-clamp-3{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .y-btn-danger{color:var(--yaar-error);border-color:var(--yaar-error)}.y-btn-danger:hover{background:${alpha(D.error, 0.1)}}
+.y-btn-warning{color:var(--yaar-warning);border-color:var(--yaar-warning)}.y-btn-warning:hover{background:${alpha(D.warning, 0.1)}}
 /* ── Document-app chrome ──────────────────────────────────────────────
    The appbar + editable title + formatting toolbar + save chip shared by
    the document apps (word-lite, slides-lite). Extracted from near-identical

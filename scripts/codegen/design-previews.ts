@@ -174,6 +174,7 @@ const buttonBody = `
   <button class="y-btn y-btn-primary">Primary</button>
   <button class="y-btn y-btn-ghost">Ghost</button>
   <button class="y-btn y-btn-danger">Danger</button>
+  <button class="y-btn y-btn-warning">Warning</button>
 </div>
 <span class="y-label">Sizes</span>
 <div class="demo-row">

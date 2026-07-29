@@ -214,7 +214,7 @@ All compiled apps get YAAR CSS custom properties and utility classes injected au
 `y-app` (root), `y-flex`, `y-flex-col`, `y-toolbar`, `y-sidebar`, `y-tabs`, `y-modal`, `y-empty` (centered placeholder with `y-empty-icon`)
 
 ### Component Classes
-`y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`, `y-list-item`
+`y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-btn-warning`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`, `y-list-item`
 
 ### Document-app chrome (toolbars, app bars) — check this before writing a toolbar
 If your app has a title bar or an icon toolbar, these exist and you must not rebuild them:
