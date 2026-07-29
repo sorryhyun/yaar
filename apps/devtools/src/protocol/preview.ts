@@ -1,6 +1,12 @@
 import { AppCommandError, errMsg, invoke, defineAppCommand } from '@bundled/yaar';
 import { previewWindowId, setPreviewWindowId } from '../core';
-import { captureFailureHint, openPreview, previewEvaluate, readPreview } from '../services';
+import {
+  captureFailureHint,
+  inspectPreview,
+  openPreview,
+  previewEvaluate,
+  readPreview,
+} from '../services';
 
 export const previewCommands = {
   preview: defineAppCommand({
@@ -49,7 +55,7 @@ export const previewCommands = {
     description:
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
       'Result is JSON-serialized and capped at 16KB. Preview windows only. An expression ' +
-      'that awaits or sleeps for more than 5s needs `timeoutMs` — and this command\'s own ' +
+      "that awaits or sleeps for more than 5s needs `timeoutMs` — and this command's own " +
       'timeoutMs raised above it, or that one expires first.',
     params: {
       type: 'object',
@@ -70,14 +76,28 @@ export const previewCommands = {
       required: ['expression'],
     },
     run: async (p) => {
-      const expression = typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
+      const expression =
+        typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
       if (!expression.trim()) throw new AppCommandError('expression is required.');
       const timeoutMs = typeof p.timeoutMs === 'number' ? p.timeoutMs : undefined;
       return await previewEvaluate(expression, timeoutMs);
     },
   }),
+  previewInspect: defineAppCommand({
+    description:
+      'One snapshot of the running preview: every declared protocol state value, the text the ' +
+      'DOM is actually rendering, and the console tail — plus `changed`, a diff against the ' +
+      'previous inspect (absent on the first call after a preview opens). Reach for this before ' +
+      'previewQuery/previewEval when a bug is unlocated: state that disagrees with the rendered ' +
+      'text is a reactivity bug, not a state bug. Per-key errors are isolated; values are ' +
+      'truncated and any key dropped for budget is named in `stateOmitted`.',
+    params: { type: 'object', properties: {} },
+    run: async () => await inspectPreview(),
+  }),
   previewQuery: defineAppCommand({
-    description: 'Query app protocol state from the preview window.',
+    description:
+      'Query one app protocol state key from the preview window. For an unlocated bug prefer ' +
+      'previewInspect, which returns every key alongside the rendered DOM.',
     params: {
       type: 'object',
       properties: { stateKey: { type: 'string', description: 'State key to query' } },
