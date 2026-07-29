@@ -316,6 +316,14 @@ body {
   font-size: 13px;
 }
 
+/* Pull-from-marketplace button ("Install update") — warning outline (y-btn-warning).
+   It shares a column with Publish / Publish update but moves bytes in the opposite
+   direction, so it must not read as another shade of the same action. Yellow is the
+   "this machine is behind" colour, matching y-badge-warning. */
+.install-update-btn {
+  font-size: 13px;
+}
+
 /* Official badge — a small accent pill next to the title marking YAAR-authored
    apps. Subtle: it annotates the name, matching the dark theme. */
 .official-badge {

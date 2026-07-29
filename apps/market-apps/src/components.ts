@@ -27,6 +27,7 @@ import {
   hasMarketplaceUpdate,
   hideInstalled,
   installedApps,
+  installedVersionOrder,
   isOfficialAuthor,
   isSystem,
   lastUpdated,
@@ -42,7 +43,6 @@ import {
   visibleApps,
 } from './store.js';
 import type { SearchMode } from './store.js';
-import { isNewerVersion } from './parsers.js';
 import type { DisplayApp } from './types.js';
 
 /** Whether the settings/config popover is open. UI-only, so it stays local to this module. */
@@ -63,34 +63,46 @@ function formatBytes(n: number): string {
  * gets misread as "download the newer marketplace version", which is the opposite
  * direction. First push says "Publish"; every later push says "Publish update".
  *
- * When the publisher owns the app and the local version is not newer than what is
+ * When the publisher owns the app and the local version is not *newer* than what is
  * already published, the button is disabled — the host would refuse the publish for
- * the same reason, so we surface it here rather than after a failed round-trip. The
- * check needs both versions: `app.version` (published, from the catalog) and
- * `app.installedVersion` (local). Absent either, we can't prove it's stale, so the
- * button stays enabled and the host remains the backstop.
+ * the same reason, so we surface it here rather than after a failed round-trip. Both
+ * `older` and `same` block: pushing a copy the marketplace is already ahead of would
+ * publish a downgrade, and it must never read as "Publish update".
+ *
+ * `unknown` (either version absent or not numeric dot-parts) stays enabled on
+ * purpose. We cannot prove the copy is stale, and refusing would strand every app
+ * whose version is a codename; the host remains the backstop there. The tooltip says
+ * so rather than implying a comparison we did not make.
+ *
+ * The order is read live from the store, not from `app.installedVersion` — the
+ * "Install update" branch above reads the store too, and the two deciding from
+ * different snapshots is what let them disagree about the same app.
  */
 export function publishButton(app: DisplayApp) {
   if (isSystem(app.id) || !account().signedIn) return '';
   const published = app.version;
-  const local = app.installedVersion;
   // Reactive so it tracks ownership as the account signal settles after sign-in.
-  const upToDate = () =>
-    ownsApp(app.id) && !!published && !!local && !isNewerVersion(local, published);
+  const owns = () => ownsApp(app.id);
+  const order = () => installedVersionOrder(app);
+  const blocked = () => owns() && (order() === 'older' || order() === 'same');
   return html`
     <button
       class="y-btn y-btn-sm publish-btn"
-      disabled=${() => loading() || upToDate()}
-      title=${() =>
-        upToDate()
-          ? `v${published} is already published — bump "version" in app.json to publish an update`
-          : ownsApp(app.id)
-            ? `Publish your local version of ${app.name} to the marketplace as a new version`
-            : `Publish ${app.name} to the marketplace for the first time`}
+      disabled=${() => loading() || blocked()}
+      title=${() => {
+        if (blocked()) {
+          return order() === 'older'
+            ? `The marketplace already serves v${published}, which is newer than the copy on this machine — install it before publishing over it`
+            : `v${published} is already published — bump "version" in app.json to publish an update`;
+        }
+        if (!owns()) return `Publish ${app.name} to the marketplace for the first time`;
+        return order() === 'unknown' && published
+          ? `Publish your local version of ${app.name}. Its version can't be compared with the published v${published}, so the marketplace decides.`
+          : `Publish your local version of ${app.name} to the marketplace as a new version`;
+      }}
       onClick=${() => void publishApp(app)}
     >
-      ${() =>
-        upToDate() ? `v${published} published` : ownsApp(app.id) ? 'Publish update' : 'Publish'}
+      ${() => (blocked() ? `v${published} published` : owns() ? 'Publish update' : 'Publish')}
     </button>
   `;
 }
@@ -143,7 +155,7 @@ export function marketCard(app: DisplayApp) {
                 ${() =>
                   updateAvailable()
                     ? html`<button
-                        class="y-btn y-btn-sm y-btn-primary"
+                        class="y-btn y-btn-sm y-btn-warning install-update-btn"
                         title=${`Replace the installed copy with v${app.version} from the marketplace`}
                         disabled=${() => loading()}
                         onClick=${() => void installApp(app)}

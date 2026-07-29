@@ -68,18 +68,31 @@ export function parseSemver(v: string): number[] | null {
   return nums;
 }
 
-/** Is `local` strictly newer than `published`? Unparseable versions never block (→ true). */
-export function isNewerVersion(local: string, published: string): boolean {
+/** How a locally installed version stands against the published one. */
+export type VersionOrder = 'newer' | 'older' | 'same' | 'unknown';
+
+/**
+ * Compare the installed version against the published one — the single answer both
+ * the "Install update" branch and the publish button are derived from.
+ *
+ * `unknown` is returned whenever either side is absent or is not numeric dot-parts
+ * (`v1.2.0`, a codename). It is deliberately a *third* answer rather than a default
+ * of `newer` or `older`: the two callers want opposite things from "can't tell", and
+ * folding it into either one is what let an app whose version we cannot read be
+ * labelled "Publish update".
+ */
+export function compareVersions(local?: string, published?: string): VersionOrder {
+  if (!local || !published) return 'unknown';
   const a = parseSemver(local);
   const b = parseSemver(published);
-  if (!a || !b) return true;
+  if (!a || !b) return 'unknown';
   const len = Math.max(a.length, b.length);
   for (let i = 0; i < len; i++) {
     const x = a[i] ?? 0;
     const y = b[i] ?? 0;
-    if (x !== y) return x > y;
+    if (x !== y) return x > y ? 'newer' : 'older';
   }
-  return false; // equal → not newer
+  return 'same';
 }
 
 /** Map a raw array to valid InstalledApp entries, dropping nulls. */

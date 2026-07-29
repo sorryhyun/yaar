@@ -11,7 +11,8 @@ import {
   SIGNED_OUT_ACCOUNT,
   GITHUB_STATUS_HEALTHY,
 } from './constants.js';
-import { isNewerVersion, normalizeId, parseSemver, sameAppId } from './parsers.js';
+import { compareVersions, normalizeId, sameAppId } from './parsers.js';
+import type { VersionOrder } from './parsers.js';
 import type {
   Account,
   DisplayApp,
@@ -98,20 +99,22 @@ export function installedVersionOf(appId: string): string | undefined {
 }
 
 /**
- * True only when the catalog is demonstrably newer than the installed copy.
+ * How this machine's copy stands against the catalog — the one live read that both
+ * the card's "Install update" branch and its publish button are decided from.
  *
- * `isNewerVersion` fails *open* — an unparseable version returns true — because it
- * gates the publish button, where the host refuses a stale publish as the backstop.
- * Claiming an update exists has no backstop: it would show "Install update" forever
- * on any app whose version isn't numeric dot-parts (`v1.2.0`, a codename), hide that
- * app's publish button, and re-download the identical bytes on every press. So both
- * sides must actually parse before we make the claim.
+ * They used to compare independently and disagree about the same app: the update
+ * check demanded both versions parse, while the publish button treated "can't tell"
+ * as publishable. Any app with a missing or non-numeric version therefore fell
+ * through the first check and out of the second as an enabled "Publish update" —
+ * offering to push a copy up that may be *older* than what is already published.
  */
+export function installedVersionOrder(app: Pick<ListedApp, 'id' | 'version'>): VersionOrder {
+  return compareVersions(installedVersionOf(app.id), app.version);
+}
+
+/** True only when the catalog is demonstrably newer than the installed copy. */
 export function hasMarketplaceUpdate(app: Pick<ListedApp, 'id' | 'version'>): boolean {
-  const local = installedVersionOf(app.id);
-  if (!app.version || !local) return false;
-  if (!parseSemver(app.version) || !parseSemver(local)) return false;
-  return isNewerVersion(app.version, local);
+  return installedVersionOrder(app) === 'older';
 }
 
 function syncMarketInstallationFlags(): void {
