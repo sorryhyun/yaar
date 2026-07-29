@@ -58,6 +58,7 @@ src/
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     ├── anime.ts           # v3→v4 easing name compat wrapper
+    ├── mediabunny.ts      # re-export barrel workaround (see below)
     ├── mermaid.ts         # lazy init, token theming, forced strict mode, serialized renders
     ├── dompurify.ts       # keeps purify.es.mjs off the entrypoint slot (see below)
     ├── uuid.ts            # re-export barrel workaround (see below)
@@ -246,6 +247,17 @@ tool's output; keep them accurate.** Without them `describeBundledLibrary("solid
 four re-export lines, and importing `render`/`html` from `@bundled/solid-js` was the most
 common first-compile failure.
 
+The same reasoning extends past "which entry point holds what" to "which export you were
+supposed to reach for". Every app importing `@bundled/solid-js/store` imported `createStore`
+and nothing else, so nested updates got written as hand-rolled spread pyramids and fresh
+fetch results got assigned wholesale — `produce`, `reconcile`, and `unwrap` were sitting
+right there behind the same `export *`. That block now spells out what each is for, including
+the point an agent reliably gets backwards: **Solid does not diff**, so an Immer-style
+copying library (immer, mutative) makes reactivity coarser here rather than faster, and
+`produce` — which mutates the store proxy in place — is the correct primitive. `@bundled/mediabunny`
+carries the same kind of block: read/write/convert usage, plus the capability check to run
+*before* encoding.
+
 Beyond the real `@bundled/*` modules it serves **pseudo-libraries** — describable but not importable.
 `design-tokens` is one: the tokens ship as injected CSS, so they have no module and no
 `.d.ts`, but an app agent still has to be able to ask what they are. It returns
@@ -264,6 +276,7 @@ agents exists* are generated from one source (asserted by a test).
 - **Validation:** `@bundled/zod` (Zod Mini — functional API, tree-shakeable)
 - **Animation:** `@bundled/anime` (with v3 compat shim)
 - **Audio:** `@bundled/tone`
+- **Media files:** `@bundled/mediabunny` (read/write/convert mp4, webm, mp3, wav — the container+codec layer the browser doesn't expose; needs WebCodecs to en/decode)
 - **YAAR SDKs:** `@bundled/yaar`, `@bundled/yaar-dev` (gated), `@bundled/yaar-web` (gated), `@bundled/yaar-ml` (gated — in-browser ONNX/WebGPU inference)
 
 ## Shims
@@ -277,6 +290,7 @@ Shims wrap npm packages with compatibility fixes or SDK wrappers:
 - **`mermaid.ts`** — the largest bundled library by a factor of ~2.6 (3.3 MB minified against p5's 1.29 MB; externalizing KaTeX, cytoscape and rough.js only reaches 2.41 MB, so there is no cheap trim), and every prebundled artifact is embedded in the exe, so this costs every download whether or not an app draws a diagram. It earns that because it turns diagramming from code generation into text generation, which is what an app agent is actually good at. The shim exists to remove four decisions an app would otherwise make wrong: **nothing runs at module scope** (`initialize()` is deferred to the first render, so an app importing it survives `fold-schemas.ts`'s DOM-stubbed Worker), **renders are serialized** through a promise queue (mermaid's config is a module-global read *during* `render()`, so two concurrent renders with different themes silently share the later theme), **`securityLevel` is forced to `'strict'`** and is not exposed as an option (that is what runs mermaid's own DOMPurify pass and disables HTML labels — so `renderMermaid`'s output is already sanitized, and passing it through `sanitizeHtml` would strip the `<style>` block the SVG needs to theme itself), and **`suppressErrorRendering`** keeps a syntax error from appending mermaid's "Syntax error in text" SVG to `document.body`, outside the app's tree where nothing cleans it up. Theme values are read from the live `--yaar-*` custom properties rather than imported from `tokens.ts`, so a diagram follows whatever tokens are actually in force; `renderMermaid(src, { theme })` overrides them per call for an app with its own palette
 - **`uuid.ts`** — uuid's browser entry is a pure `export { default as v4 } from './v4.js'` barrel; bundling it directly makes Bun emit the `export { ... }` statement with every binding dropped, so the prebundled artifact fails later with `uuid:1:8: "h" is not declared in this file`. Importing the bindings and re-exporting them separately gives the bundler real references to follow. Any bundled library that is a pure re-export barrel needs the same treatment.
 - **`zod.ts`** — `@bundled/zod` maps to `zod/mini`, whose browser entry is a nested `export * from …` barrel; the same defect makes the prebundled artifact fail with `zod:40:23830: "u6" is not declared in this file`. Routing it through a shim (`import * as z from 'zod/mini'; export * from 'zod/mini'; export { z }`) turns `zod/mini` into an inner module Bun materializes before re-exporting, so both the functional API and the `z` namespace survive. Because the surface is too large to enumerate uuid-style, the fix is the extra layer of indirection rather than an explicit binding list.
+- **`mediabunny.ts`** — same barrel defect, and the one that proves the rule still bites: mediabunny's entry is one `export { … } from './x.js'` line per module, and prebundling it directly collapsed 0.66 MB to a **5.3 KB stub** that still built successfully. A bare `export * from 'mediabunny'` shim restores it. The package has no default export and sets `"sideEffects": false`, so an app importing only `Input` tree-shakes the encoders away.
 - **`lodash.ts`** / **`pixi.ts`** — same barrel defect. `@bundled/lodash` → `lodash-es` (a wall of `export { default as add } from './add.js'`) collapses to a ~4.7 KB stub failing with `lodash:1:8: "Yu" is not declared`; `@bundled/pixi.js` collapses to a ~16 KB stub. Both are fixed with a bare `export * from '<pkg>'` shim — the indirection alone is enough here, and lodash deliberately does **not** re-export the default (monolithic) build so named imports stay tree-shakeable. These three (plus uuid) are caught automatically by the prebundle-completeness test, so a new barrel library fails a test rather than an install.
 - **`dompurify.ts`** — same indirection, different Bun defect. dompurify is the one bundled library that is *also* a dependency of other builds in the same process: `@bundled/yaar`'s `sanitizeHtml` imports it, so every app compile loads the same `dist/purify.es.mjs` that `prebundleLibrary('dompurify')` would otherwise bundle as an **entrypoint**. Bun does not survive one file playing both roles — after the prebundle, later `Bun.build()` calls in that process fail with `purify.es.mjs:-1:-1: EISDIR reading file: ".../purify.es.mjs"` on a plain 64 KB regular file. This took CI down for two days as 15 failures in `define-app.test.ts` / `fold-schemas.test.ts`, both of which pass when run alone; the poisoner was `prebundle-completeness.test.ts` earlier in the same `bun test` process. The shim demotes `purify.es.mjs` to an inner module in *both* builds. A test in `prebundle-completeness.test.ts` asserts the prebundle entrypoint stays the shim, because removing it reproduces only most of the time.
 

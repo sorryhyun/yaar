@@ -38,7 +38,42 @@ declare module '@bundled/solid-js/web' {
 }
 
 declare module '@bundled/solid-js/store' {
-  // Nested reactive stores: createStore, produce, reconcile, unwrap.
+  // Nested reactive state. Every app here imports `createStore` and stops there,
+  // which is why nested updates get written as hand-rolled spread pyramids:
+  //   setState('a', { ...state.a, b: { ...state.a.b, c: 1 } })
+  // The four helpers below exist to delete that code.
+  //
+  //   createStore(initial) -> [state, setState]
+  //     setState takes a PATH before the value, and the path may contain an
+  //     array of keys, an index range, or a filter function:
+  //       setState('items', (i) => i.id === id, 'done', true)
+  //     A function value receives the previous one: setState('count', (c) => c + 1)
+  //
+  //   produce(fn)      Immer-style mutable draft for one update — the readable
+  //                    way to write a deep change:
+  //                      setState(produce((s) => { s.a.b.c = 1; s.list.push(x) }))
+  //                    Solid does NOT diff: it applies your mutations straight to
+  //                    the store proxy, so only the properties you touched
+  //                    invalidate. Reach for this, not an immutable-copy library
+  //                    (immer, mutative) — replacing a subtree with a fresh object
+  //                    invalidates the whole subtree, so an external copy library
+  //                    makes reactivity strictly coarser here, not faster.
+  //
+  //   reconcile(next)  Merge a whole new value in while KEEPING identity for the
+  //                    parts that did not change — the one to use after a fetch or
+  //                    a storage read, so a re-fetch of 200 rows re-renders only
+  //                    the rows whose fields differ:
+  //                      setState('rows', reconcile(fresh, { key: 'id' }))
+  //                    Assigning `setState('rows', fresh)` instead re-renders all
+  //                    200 and loses per-row state (scroll, focus, open/closed).
+  //
+  //   unwrap(state)    The raw underlying object, no proxy. Use it when handing
+  //                    state to something outside Solid — JSON.stringify, an
+  //                    appStorage write, a worker postMessage, a canvas library.
+  //
+  //   createMutable(o) A store you assign to directly (`obj.a.b = 1`), no setter.
+  //                    Convenient, but the mutation site is invisible at a glance;
+  //                    prefer createStore + produce for anything shared.
   export * from 'solid-js/store';
 }
 
@@ -347,6 +382,63 @@ declare module '@bundled/zod' {
 
 declare module '@bundled/tone' {
   export * from 'tone';
+}
+
+// ── Media Files ─────────────────────────────────────────────────────────────
+
+// Reading, writing, and converting media containers — mp4, webm/mkv, mp3, wav,
+// ogg — which the browser otherwise offers no API for. The alternative an app
+// reaches for on its own is `MediaRecorder` over `canvas.captureStream()`, and it
+// is worse in three ways that matter: it records in REAL TIME (a slow frame is a
+// dropped or duplicated frame), it only writes what the browser felt like
+// supporting, and it cannot read an existing file at all. mediabunny encodes
+// frame by frame with explicit timestamps, decoupled from wall-clock.
+//
+// Encoding and decoding need WebCodecs; muxing and demuxing alone do not.
+// Support is per codec AND per platform, so branch on the capability check
+// instead of assuming — `getFirstEncodableVideoCodec(['avc', 'vp9'], { width,
+// height })` returns null when nothing on this machine can do it, which is the
+// answer you want BEFORE rendering 900 frames.
+//
+// Two exported names shadow DOM globals: `BufferSource` (mediabunny's is an
+// input Source; the DOM's is the ArrayBuffer/-View type alias) and `MediaSource`
+// (the abstract base class here, MSE there). Alias on import if an app needs both.
+declare module '@bundled/mediabunny' {
+  // READ — an `Input` over a `Source`, with sinks pulling decoded media out.
+  //   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
+  //   sources: BlobSource, BufferSource, UrlSource, StreamSource
+  //   formats: ALL_FORMATS, or narrow to MP4 / WEBM / MATROSKA / MP3 / WAVE /
+  //            OGG / QTFF / ADTS / FLAC to shrink the bundle
+  //   input.getPrimaryVideoTrack() / .getPrimaryAudioTrack() / .computeDuration()
+  //   sinks:  VideoSampleSink, CanvasSink, AudioBufferSink, EncodedPacketSink
+  //           .getSample(t) / .getCanvas(t) for one seek;
+  //           .samples(start?, end?) / .canvases(start?, end?) async-iterate a range
+  //
+  // WRITE — an `Output` (format + target) fed by sources, one `add` per frame.
+  //   const output = new Output({ format: new Mp4OutputFormat(), target: new BufferTarget() });
+  //   const src = new CanvasSource(canvas, { codec: 'avc', bitrate: QUALITY_HIGH });
+  //   output.addVideoTrack(src, { frameRate: 30 });
+  //   await output.start();
+  //   for each frame: draw, then `await src.add(timeInSeconds, durationInSeconds)`
+  //   await output.finalize();  // then `output.target.buffer` is the ArrayBuffer
+  //   formats: Mp4OutputFormat, WebMOutputFormat, MkvOutputFormat,
+  //            Mp3OutputFormat, WavOutputFormat, OggOutputFormat
+  //   targets: BufferTarget (buffer is null until finalize), StreamTarget
+  //   sources: CanvasSource, VideoSampleSource, AudioBufferSource, AudioSampleSource,
+  //            MediaStreamVideoTrackSource / MediaStreamAudioTrackSource (live capture)
+  //
+  // CONVERT — transcode, resize, trim, or drop tracks without wiring sinks to
+  // sources by hand. This is the right tool for "make this file smaller/shorter".
+  //   const c = await Conversion.init({ input, output, trim: { start: 2, end: 8 } });
+  //   c.onProgress = (p) => setProgress(p);
+  //   await c.execute();
+  //
+  // CAPABILITY — ask before you encode:
+  //   canEncode / canEncodeVideo / canEncodeAudio, and the canDecode* mirrors
+  //   getEncodableVideoCodecs(), getFirstEncodableVideoCodec([...], { width, height })
+  //   QUALITY_VERY_LOW | QUALITY_LOW | QUALITY_MEDIUM | QUALITY_HIGH | QUALITY_VERY_HIGH
+  //     — bitrate presets; pass one as `bitrate` rather than guessing a number.
+  export * from 'mediabunny';
 }
 
 // ── YAAR SDK ────────────────────────────────────────────────────────────────

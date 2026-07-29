@@ -238,7 +238,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | solid-js | `@bundled/solid-js` | Reactive UI (createSignal, createEffect, Show, For, etc.) |
 | solid-js/html | `@bundled/solid-js/html` | `html` tagged templates (no JSX) |
 | solid-js/web | `@bundled/solid-js/web` | `render`, DOM helpers |
-| solid-js/store | `@bundled/solid-js/store` | Nested reactive stores (`createStore`) |
+| solid-js/store | `@bundled/solid-js/store` | Nested reactive stores: `createStore`, plus `produce` (mutable draft for deep updates), `reconcile` (merge fresh data while keeping row identity), `unwrap` (raw object for JSON/storage) |
 | uuid | `@bundled/uuid` | ID generation |
 | lodash | `@bundled/lodash` | Utilities (debounce, cloneDeep, groupBy, etc.) |
 | date-fns | `@bundled/date-fns` | Date handling |
@@ -252,6 +252,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | D3 | `@bundled/d3` | Data visualization |
 | Matter.js | `@bundled/matter-js` | 2D physics engine |
 | Tone.js | `@bundled/tone` | Audio/music synthesis |
+| mediabunny | `@bundled/mediabunny` | Media files: read/write/convert mp4, webm, mp3, wav. Frame-accurate encoding decoupled from real time — use it instead of `MediaRecorder` + `canvas.captureStream()`, which drops frames under load and cannot read an existing file. Needs WebCodecs; call `getFirstEncodableVideoCodec([...])` before encoding. ~0.66 MB |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL rendering |
 | p5.js | `@bundled/p5` | Creative coding |
 | marked | `@bundled/marked` | Markdown → HTML |

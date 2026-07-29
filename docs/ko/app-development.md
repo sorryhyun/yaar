@@ -216,7 +216,7 @@ AI는 이 모든 것을 `yaar://skills/marketplace` 참조 토픽(`read('yaar://
 | solid-js | `@bundled/solid-js` | 반응형 UI (createSignal, createEffect, Show, For 등) |
 | solid-js/html | `@bundled/solid-js/html` | `html` 태그드 템플릿 (JSX 미사용) |
 | solid-js/web | `@bundled/solid-js/web` | `render`, DOM 헬퍼 |
-| solid-js/store | `@bundled/solid-js/store` | 중첩 반응형 스토어 (`createStore`) |
+| solid-js/store | `@bundled/solid-js/store` | 중첩 반응형 스토어: `createStore` 와 함께 `produce` (깊은 업데이트를 위한 가변 draft), `reconcile` (새 데이터를 병합하되 행 identity 는 유지), `unwrap` (JSON/스토리지용 원본 객체) |
 | uuid | `@bundled/uuid` | ID 생성 |
 | lodash | `@bundled/lodash` | 유틸리티 (debounce, cloneDeep, groupBy 등) |
 | date-fns | `@bundled/date-fns` | 날짜 처리 |
@@ -230,6 +230,7 @@ AI는 이 모든 것을 `yaar://skills/marketplace` 참조 토픽(`read('yaar://
 | D3 | `@bundled/d3` | 데이터 시각화 |
 | Matter.js | `@bundled/matter-js` | 2D 물리 엔진 |
 | Tone.js | `@bundled/tone` | 오디오/음악 |
+| mediabunny | `@bundled/mediabunny` | 미디어 파일 읽기/쓰기/변환 (mp4, webm, mp3, wav). 실시간에 묶이지 않는 프레임 단위 인코딩 — 부하가 걸리면 프레임을 흘리고 기존 파일은 읽지도 못하는 `MediaRecorder` + `canvas.captureStream()` 대신 사용하세요. WebCodecs 가 필요하므로 인코딩 전에 `getFirstEncodableVideoCodec([...])` 로 확인하세요. 약 0.66 MB |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL 렌더링 |
 | p5.js | `@bundled/p5` | 크리에이티브 코딩 |
 | marked | `@bundled/marked` | 마크다운 → HTML |
