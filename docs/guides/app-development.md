@@ -1441,6 +1441,8 @@ job** (`appDb`/`appStorage`); a respawned persona gets its history replayed in i
 or first message. `personas.max` is per (monitor, app) and clamped to 16; each persona also takes
 a global `MAX_AGENTS` slot, so `spawn` can fail with "no provider slot" even under your own cap.
 
-**Reference consumer:** `apps/chitchats` (rooms that take turns; characters get `skip`,
-`memorize`, and — when their memory file has chunks — `recall`, whose description carries the
-memory index so the backstory is retrieved rather than replayed every turn).
+**Reference consumer:** `chitchats`, which now ships from the market rather than `apps/` (rooms
+that take turns; characters get `skip`, `memorize`, and — when their memory file has chunks —
+`recall`, whose description carries the memory index so the backstory is retrieved rather than
+replayed every turn). Note that `personas` is parsed only for bundled apps, so declaring it in a
+market or user app has no effect today.

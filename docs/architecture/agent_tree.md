@@ -137,6 +137,6 @@ larger ceiling for sub-agent nodes) is the known fix and is unstarted.
 | Verb surface + ownership check | `handlers/apps/agents-resource.ts` |
 | `persona:` command convention (hidden from the app agent) | `features/apps/persona-commands.ts` |
 | `personas` / `subagents` manifest parsing | `features/apps/discovery.ts` |
-| Reference consumer | `apps/chitchats` (`skip`/`memorize`/`recall`) |
+| Reference consumer | none in-tree — `chitchats` (`skip`/`memorize`/`recall`) moved to the market |
 
 All paths are relative to `packages/server/src/` unless noted.

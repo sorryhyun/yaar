@@ -150,7 +150,7 @@ yaar/
 ├── apps/                        # Convention-based apps (each folder = one app)
 │   ├── dock/                    # Taskbar/dock panel app
 │   ├── storage/                 # File storage browser app
-│   └── ...                      # Other bundled apps (devtools, chitchats, etc.)
+│   └── ...                      # Other bundled apps (devtools, browser, memo, etc.)
 ├── config/                      # User config (git-ignored)
 │   ├── credentials/             # Centralized app credentials (git-ignored)
 │   ├── permissions.json         # Saved permission decisions
@@ -283,7 +283,9 @@ Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lif
 
 ### Sub-agents / Persona Agents (app-spawned AI instances)
 
-An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands). Reference consumer: `apps/chitchats`.
+An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands). No bundled app declares `personas` today — `chitchats`, the app
+the feature was built for, now ships from the market, and the bundled-only gate means a market
+install of it gets no sub-agents.
 
 See `packages/server/CLAUDE.md` (Tools/MCP section) for the full verb surface, lifecycle, and containment details, and [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md) for the design record.
 

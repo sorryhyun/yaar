@@ -146,7 +146,7 @@ Listed so they are not re-flagged. Each was a candidate; each survived verificat
   `uri_reference.md` non-dispatched sub-paths.
 - `app_protocol_reference.md` `app.register()` migration note — live throw behind it.
 - `search/AGENTS.md:14`, `devtools/AGENTS.md` live rules and hazards,
-  `browser-user/HINT.md:12`, `chitchats/SKILL.md`, `process-explorer/SKILL.md:15`,
+  `browser-user/HINT.md:12`, `process-explorer/SKILL.md:15`,
   `devtools/HINT.md:7`, `video-editor-lite/AGENTS.md`.
 - `sqlite.md` JSON-in-`_data`, future-work list (verified absent from `app-db.ts`), and
   all its technical claims (WAL, pool limits) — accurate.
