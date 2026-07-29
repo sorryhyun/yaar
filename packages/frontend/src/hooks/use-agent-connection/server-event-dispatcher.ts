@@ -388,6 +388,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
           confirmText: message.confirmText,
           cancelText: message.cancelText,
           permissionOptions: message.permissionOptions,
+          capabilities: message.capabilities,
         },
       ]);
       break;

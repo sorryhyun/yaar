@@ -58,7 +58,7 @@ export interface ToastModel {
   duration?: number;
 }
 
-import type { PermissionOptions } from '@yaar/shared';
+import type { CapabilityLine, PermissionOptions } from '@yaar/shared';
 
 export interface DialogModel {
   id: string;
@@ -68,6 +68,8 @@ export interface DialogModel {
   cancelText: string;
   timestamp: number;
   permissionOptions?: PermissionOptions;
+  /** Set by the app-install dialog: what is being granted, one row each. */
+  capabilities?: CapabilityLine[];
 }
 
 export interface UserPromptModel {

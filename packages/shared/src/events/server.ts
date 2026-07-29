@@ -2,7 +2,7 @@
  * Server → Client WebSocket event interfaces and the discriminated union over them.
  */
 
-import type { OSAction, PermissionOptions } from '../actions.js';
+import type { CapabilityLine, OSAction, PermissionOptions } from '../actions.js';
 import type { AppProtocolRequest } from '../app-protocol.js';
 import { ServerEventType } from './routing.js';
 
@@ -180,6 +180,8 @@ export interface ApprovalRequestEvent {
   confirmText?: string;
   cancelText?: string;
   permissionOptions?: PermissionOptions;
+  /** Structured capability rows; `message` remains the fallback. See `CapabilityLine`. */
+  capabilities?: CapabilityLine[];
   agentId?: string;
 }
 

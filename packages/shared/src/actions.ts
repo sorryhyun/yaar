@@ -273,6 +273,29 @@ export interface PermissionOptions {
   context?: string;
 }
 
+/**
+ * One thing being granted, said in the user's terms.
+ *
+ * The app-install dialog used to put its whole request in `message` as raw grant
+ * strings — `yaar://storage/` says *what is granted*, never *what the app can do* — so
+ * the one screen where a non-technical user decides how much to trust a stranger's code
+ * was the least readable in the product. The server decides what each grant means (it is
+ * the side that knows what a URI reaches); the frontend only lays these out, keeping the
+ * raw grant visible but demoted so a reader who wants the literal answer still has it.
+ */
+export interface CapabilityLine {
+  /** Single emoji, rendered as the row's icon. */
+  icon: string;
+  /** The capability in plain language: "Read and write your files". */
+  title: string;
+  /** Optional qualifier: "Private to this app". */
+  detail?: string;
+  /** The literal grant this describes (`yaar://storage/`, `yaar-web`), shown demoted. */
+  raw?: string;
+  /** Broad or privileged — rendered with a warning accent so it reads differently. */
+  warn?: boolean;
+}
+
 export interface DialogConfirmAction {
   type: 'dialog.confirm';
   id: string;
@@ -281,6 +304,12 @@ export interface DialogConfirmAction {
   confirmText?: string;
   cancelText?: string;
   permissionOptions?: PermissionOptions;
+  /**
+   * Structured version of what is being asked for. When present the dialog renders
+   * these instead of `message`'s body; `message` stays the fallback (and is what a
+   * client too old to know this field still shows).
+   */
+  capabilities?: CapabilityLine[];
 }
 
 /**

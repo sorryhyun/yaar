@@ -9,6 +9,7 @@
  */
 
 import { join } from 'path';
+import type { CapabilityLine } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/access.js';
 import { parseSubAgents, type SubAgentsEntry } from './discovery.js';
 import { resolveAppSource } from './roots.js';
@@ -44,45 +45,148 @@ const BUNDLE_DESCRIPTIONS: Record<string, string> = {
   'yaar-ml': 'download and run machine-learning models in the browser',
 };
 
+interface PermissionDescription extends CapabilityLine {
+  /** Prefix to match, with `{id}` standing for exactly one path segment. */
+  match: string;
+  /** Match only this exact URI, not everything under it. Outranks every prefix. */
+  exact?: boolean;
+}
+
+/**
+ * What each permission URI actually lets an app do, in the user's terms.
+ *
+ * Two rules make this a list rather than a lookup, and both exist because the broad
+ * entries sit directly above the narrow ones:
+ *
+ * - **Longest prefix wins.** `yaar://apps/{id}/storage/` and `yaar://storage/media/` are
+ *   narrow grants underneath two of the widest entries here; first-match-wins would
+ *   describe an app that wants one private folder as one that wants everything.
+ * - **An `exact` entry outranks every prefix.** `yaar://storage/` is the whole disk;
+ *   `yaar://storage/notes/` is one folder. Prefix matching alone cannot tell them apart,
+ *   so it would put "Full access to YAAR storage" on both — the direction of error this
+ *   screen can least afford, since the user learns to ignore a warning that is always on.
+ *
+ * `warn` marks a grant that is *wide* rather than dangerous in itself — the storage root,
+ * system settings, the app registry — so a whole-disk request reads differently from a
+ * single-folder one without the reader parsing the URI.
+ */
+// One grant per line is the point here; reflowing to 100 columns hides the table.
+// prettier-ignore
+const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
+  { match: 'yaar://storage/',  exact: true, icon: '📁',  title: 'Read and write your files',            detail: 'Full access to YAAR storage', warn: true },
+  { match: 'yaar://storage/',               icon: '📁',  title: 'Read and write files',                 detail: 'Limited to one folder in YAAR storage' },
+  { match: 'yaar://storage/media/',         icon: '🖼️',  title: 'Share images and media with other apps' },
+  { match: 'yaar://apps/',     exact: true, icon: '🧩',  title: 'See and manage installed apps',        warn: true },
+  { match: 'yaar://apps/',                  icon: '🧩',  title: "Use another app's resources" },
+  { match: 'yaar://apps/{id}/storage/',     icon: '📁',  title: 'Store its own data',                   detail: 'Private to this app' },
+  { match: 'yaar://apps/{id}/db/',          icon: '🗄️',  title: 'Keep its own database',                detail: 'Private to this app' },
+  { match: 'yaar://http',                   icon: '🌐',  title: 'Access the internet',                  detail: 'Requests to allowed domains' },
+  { match: 'yaar://windows/',               icon: '🪟',  title: 'Open and control windows' },
+  { match: 'yaar://user/notifications',     icon: '🔔',  title: 'Send you notifications' },
+  { match: 'yaar://user/prompts',           icon: '❓',  title: 'Ask you questions' },
+  { match: 'yaar://user/clipboard',         icon: '📋',  title: 'Read and write your clipboard' },
+  { match: 'yaar://session',                icon: '🧠',  title: 'Read session info and memory' },
+  { match: 'yaar://history/',               icon: '🕘',  title: 'Read past session logs' },
+  { match: 'yaar://config/',   exact: true, icon: '⚙️',  title: 'Change system settings',               warn: true },
+  { match: 'yaar://config/',                icon: '⚙️',  title: 'Change a system setting' },
+  { match: 'yaar://config/mcp/',            icon: '🔌',  title: 'Manage external tool connections',     detail: 'MCP servers' },
+  { match: 'yaar://mcp/',                   icon: '🔌',  title: 'Use connected external tools',         detail: 'MCP servers' },
+  { match: 'yaar://skills/',                icon: '📘',  title: 'Read system skills' },
+  { match: 'yaar://system/',                icon: '🖥️',  title: 'Read system status' },
+  { match: 'yaar://system/update',          icon: '⬇️',  title: 'Check for and install YAAR updates',   warn: true },
+];
+
+/** A trailing slash is a spelling, not a grant: `yaar://http` and `yaar://http/` are one. */
+function normalize(uri: string): string {
+  return uri.endsWith('/') ? uri.slice(0, -1) : uri;
+}
+
+/** `yaar://apps/{id}/storage/` → a regex accepting any single segment for `{id}`. */
+function compile(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\\\{id\\\}/g, '[^/]+');
+  return new RegExp(`^${escaped}`);
+}
+
+const COMPILED = PERMISSION_DESCRIPTIONS.map((entry) => ({ entry, re: compile(entry.match) }));
+
+/**
+ * Say what one permission URI grants, or fall back to a sentence that at least admits
+ * there is something here. Rendering nothing for an unrecognized URI would hide a grant
+ * the user is about to make — the one failure mode this screen cannot have.
+ */
+export function describePermission(uri: string): CapabilityLine {
+  const bare = normalize(uri);
+  let best: PermissionDescription | undefined;
+  for (const { entry, re } of COMPILED) {
+    if (entry.exact) {
+      // An exact hit is the last word — nothing narrower than the URI itself exists.
+      if (normalize(entry.match) === bare) {
+        best = entry;
+        break;
+      }
+      continue;
+    }
+    if (re.test(uri) && (!best || entry.match.length > best.match.length)) best = entry;
+  }
+  if (!best) return { icon: '🔑', title: 'Use a YAAR resource', detail: uri, raw: uri };
+  const { match: _match, exact: _exact, ...line } = best;
+  return { ...line, raw: uri };
+}
+
+/**
+ * The whole request as rows the install dialog lays out — every group in one flat list,
+ * because the user is answering one question and four labelled sections asked it four
+ * times. This replaced a pre-formatted string: a string can only be one weight, so the
+ * raw URI could not be demoted and a broad grant could not be flagged.
+ *
+ * Gated SDKs are all flagged: they exist *because* they are privileged, and a row saying
+ * "deploy apps on this machine" should not read like a row saying "send notifications".
+ */
+export function capabilityLines(caps: AppCapabilities): CapabilityLine[] {
+  // The description tables are written as sentence fragments ("drive a browser") so they
+  // can follow a name; as a row title they start the sentence.
+  const sentence = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  const lines: CapabilityLine[] = [];
+  for (const p of caps.permissions) {
+    const uri = typeof p === 'string' ? p : p.uri;
+    const verbs = typeof p === 'string' ? undefined : p.verbs;
+    const line = describePermission(uri);
+    lines.push(verbs?.length ? { ...line, raw: `${uri} (${verbs.join(', ')})` } : line);
+  }
+  for (const b of caps.bundles) {
+    lines.push({
+      icon: '🛠️',
+      title: BUNDLE_DESCRIPTIONS[b] ? sentence(BUNDLE_DESCRIPTIONS[b]) : `Use the ${b} SDK`,
+      detail: 'Privileged SDK',
+      raw: b,
+      warn: true,
+    });
+  }
+  for (const s of caps.streams) {
+    lines.push({
+      icon: '📡',
+      title: STREAM_DESCRIPTIONS[s]
+        ? sentence(STREAM_DESCRIPTIONS[s])
+        : `Watch ${s} as they happen`,
+      detail: 'Live activity',
+      raw: s,
+    });
+  }
+  if (caps.subagents) {
+    const n = caps.subagents.max;
+    lines.push({
+      icon: '🤖',
+      title: `Run up to ${n} AI ${n === 1 ? 'persona' : 'personas'} of its own`,
+      detail: 'Each its own model session',
+    });
+  }
+  return lines;
+}
+
 /** Stable identity for a permission entry, so two manifests can be compared. */
 function permissionKey(p: PermissionEntry): string {
   if (typeof p === 'string') return p;
   return `${p.uri}|${(p.verbs ?? []).slice().sort().join(',')}`;
-}
-
-/** Format capabilities into a human-readable string for the dialog. */
-export function formatCapabilities(caps: AppCapabilities): string {
-  const sections: string[] = [];
-  if (caps.permissions.length > 0) {
-    const lines = caps.permissions.map((p) => {
-      if (typeof p === 'string') return `  • ${p}`;
-      const verbs = p.verbs?.length ? ` (${p.verbs.join(', ')})` : '';
-      return `  • ${p.uri}${verbs}`;
-    });
-    sections.push(`Access to:\n${lines.join('\n')}`);
-  }
-  if (caps.bundles.length > 0) {
-    const lines = caps.bundles.map((b) => {
-      const what = BUNDLE_DESCRIPTIONS[b];
-      return what ? `  • ${b} — ${what}` : `  • ${b}`;
-    });
-    sections.push(`Privileged SDKs:\n${lines.join('\n')}`);
-  }
-  if (caps.streams.length > 0) {
-    const lines = caps.streams.map((s) => {
-      const what = STREAM_DESCRIPTIONS[s];
-      return what ? `  • ${s} — ${what}` : `  • ${s}`;
-    });
-    sections.push(`Live activity:\n${lines.join('\n')}`);
-  }
-  if (caps.subagents) {
-    const n = caps.subagents.max;
-    sections.push(
-      `Background AI:\n  • run up to ${n} AI ${n === 1 ? 'persona' : 'personas'} of its own, ` +
-        'each its own model session',
-    );
-  }
-  return sections.join('\n\n');
 }
 
 /**

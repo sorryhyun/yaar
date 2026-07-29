@@ -36,6 +36,75 @@
   white-space: pre-wrap;
 }
 
+/* The lead sentence above a capability list — the list is the body, so this is a caption. */
+.lead {
+  font-size: var(--text-base);
+  color: var(--color-subtext-muted);
+  margin-bottom: var(--space-4);
+  line-height: 1.5;
+}
+
+.capabilities {
+  list-style: none;
+  margin: 0 0 var(--space-6) 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  /* An app may ask for a dozen things; the buttons must stay reachable without one. */
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+.capability {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--bg-overlay-light);
+  border-left: 2px solid transparent;
+}
+
+/* Wide grants read differently from narrow ones — the accent is the only difference. */
+.capabilityWarn {
+  border-left-color: var(--color-warning);
+}
+
+.capabilityIcon {
+  font-size: var(--text-lg);
+  line-height: 1.4;
+  flex-shrink: 0;
+}
+
+.capabilityText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.capabilityTitle {
+  font-size: var(--text-base);
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+.capabilityDetail {
+  font-size: var(--text-sm);
+  color: var(--color-subtext-muted);
+  line-height: 1.4;
+}
+
+/* The literal grant, kept visible but demoted — it answers "which URI", not "what for". */
+.capabilityRaw {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--color-subtext-muted);
+  opacity: 0.75;
+  overflow-wrap: anywhere;
+}
+
 .rememberChoice {
   display: flex;
   align-items: center;

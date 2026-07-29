@@ -20,7 +20,8 @@ import {
   readAppCapabilities,
   heldCapabilities,
   addedCapabilities,
-  formatCapabilities,
+  capabilityLines,
+  describePermission,
   grantFor,
   isEmpty,
   type AppCapabilities,
@@ -171,9 +172,9 @@ describe('the recorded grant', () => {
   });
 });
 
-describe('the dialog text', () => {
+describe('the dialog rows', () => {
   it('names every capability it is about to grant', () => {
-    const text = formatCapabilities(
+    const lines = capabilityLines(
       caps({
         permissions: ['yaar://apps/self/db/'],
         bundles: ['yaar-web'],
@@ -182,13 +183,71 @@ describe('the dialog text', () => {
       }),
     );
 
-    expect(text).toContain('yaar://apps/self/db/');
-    expect(text).toContain('drive a browser');
-    expect(text).toContain('watch AI agents think');
-    expect(text).toContain('up to 4 AI personas');
+    expect(lines).toHaveLength(4);
+    expect(lines.map((l) => l.raw)).toContain('yaar://apps/self/db/');
+    expect(lines.map((l) => l.title).join('\n')).toContain('Drive a browser');
+    expect(lines.map((l) => l.title).join('\n')).toContain('Watch AI agents think');
+    expect(lines.map((l) => l.title).join('\n')).toContain('up to 4 AI personas');
   });
 
   it('counts one persona in the singular', () => {
-    expect(formatCapabilities(caps({ subagents: { max: 1 } }))).toContain('up to 1 AI persona of');
+    const [line] = capabilityLines(caps({ subagents: { max: 1 } }));
+    expect(line.title).toBe('Run up to 1 AI persona of its own');
+  });
+
+  it('flags a gated SDK, since it is privileged by definition', () => {
+    const [line] = capabilityLines(caps({ bundles: ['yaar-dev'] }));
+    expect(line.warn).toBe(true);
+    expect(line.raw).toBe('yaar-dev');
+  });
+
+  it('keeps the verbs a narrowed permission was granted for', () => {
+    const [line] = capabilityLines(
+      caps({ permissions: [{ uri: 'yaar://storage/notes/', verbs: ['read'] }] }),
+    );
+    expect(line.raw).toBe('yaar://storage/notes/ (read)');
+  });
+});
+
+/**
+ * The one rule with teeth: every narrow grant in the table sits underneath a broad one,
+ * so a match that is merely *a* match describes an app that wants one folder as an app
+ * that wants the disk. Each case here is a pair that would collide under first-match-wins.
+ */
+describe('describing one permission', () => {
+  it('lets the longest prefix win', () => {
+    expect(describePermission('yaar://storage/media/').title).toBe(
+      'Share images and media with other apps',
+    );
+    expect(describePermission('yaar://apps/self/storage/').title).toBe('Store its own data');
+    expect(describePermission('yaar://config/mcp/').title).toBe('Manage external tool connections');
+  });
+
+  it('separates a root grant from something under it', () => {
+    const root = describePermission('yaar://storage/');
+    expect(root.detail).toBe('Full access to YAAR storage');
+    expect(root.warn).toBe(true);
+
+    const folder = describePermission('yaar://storage/notes/');
+    expect(folder.warn).toBeUndefined();
+    expect(folder.detail).toBe('Limited to one folder in YAAR storage');
+  });
+
+  it('reads a trailing slash as spelling, not as scope', () => {
+    expect(describePermission('yaar://storage').warn).toBe(true);
+    expect(describePermission('yaar://http').title).toBe('Access the internet');
+    expect(describePermission('yaar://http/').title).toBe('Access the internet');
+  });
+
+  it('says something rather than nothing for a URI it does not know', () => {
+    const line = describePermission('yaar://future/thing');
+    expect(line.title).toBeTruthy();
+    expect(line.raw).toBe('yaar://future/thing');
+  });
+
+  it('always carries the literal grant, so the exact answer is never lost', () => {
+    for (const uri of ['yaar://storage/', 'yaar://windows/', 'yaar://nope/']) {
+      expect(describePermission(uri).raw).toBe(uri);
+    }
   });
 });

@@ -7,7 +7,40 @@ import { useDesktopStore, selectDialogs } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
 import { useAgentConnection } from '@/hooks/useAgentConnection';
 import type { DialogModel } from '@/types/state';
+import type { CapabilityLine } from '@yaar/shared';
 import styles from '@/styles/overlays/ConfirmDialog.module.css';
+
+/**
+ * What an app is asking for, one row per grant.
+ *
+ * The plain-language title leads and the literal grant (`yaar://storage/`) follows it in
+ * small monospace — present for anyone who wants the exact answer, but no longer the only
+ * thing on offer. A dialog whose whole content was `yaar://…` lines told a non-technical
+ * user what was *granted* without ever saying what the app could *do* with it.
+ */
+function CapabilityList({ lines }: { lines: CapabilityLine[] }) {
+  return (
+    <ul className={styles.capabilities}>
+      {lines.map((line, i) => (
+        <li
+          key={`${line.title}-${line.raw ?? i}`}
+          className={
+            line.warn ? `${styles.capability} ${styles.capabilityWarn}` : styles.capability
+          }
+        >
+          <span className={styles.capabilityIcon} aria-hidden="true">
+            {line.icon}
+          </span>
+          <span className={styles.capabilityText}>
+            <span className={styles.capabilityTitle}>{line.title}</span>
+            {line.detail && <span className={styles.capabilityDetail}>{line.detail}</span>}
+            {line.raw && <code className={styles.capabilityRaw}>{line.raw}</code>}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function DialogBox({
   dialog,
@@ -37,7 +70,12 @@ function DialogBox({
   return (
     <div className={styles.dialog}>
       <div className={styles.title}>{dialog.title}</div>
-      <div className={styles.message}>{dialog.message}</div>
+      <div className={dialog.capabilities?.length ? styles.lead : styles.message}>
+        {dialog.message}
+      </div>
+      {dialog.capabilities && dialog.capabilities.length > 0 && (
+        <CapabilityList lines={dialog.capabilities} />
+      )}
 
       {hasPermissionOptions && (
         <label className={styles.rememberChoice}>

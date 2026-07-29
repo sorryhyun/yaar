@@ -2,7 +2,12 @@
  * Dialogs slice - manages confirmation dialogs.
  */
 import type { SliceCreator, DialogsSlice, DialogsSliceState } from '../types';
-import type { OSAction, PermissionOptions, DialogConfirmAction } from '@yaar/shared';
+import type {
+  OSAction,
+  PermissionOptions,
+  DialogConfirmAction,
+  CapabilityLine,
+} from '@yaar/shared';
 import { createApplyAction } from './apply-action-factory';
 
 /**
@@ -18,6 +23,7 @@ export const applyDialogAction = createApplyAction<
     cancelText: string;
     timestamp: number;
     permissionOptions?: PermissionOptions;
+    capabilities?: CapabilityLine[];
   }
 >(
   'dialogs',
@@ -30,6 +36,7 @@ export const applyDialogAction = createApplyAction<
     cancelText: action.cancelText ?? 'No',
     timestamp: Date.now(),
     permissionOptions: action.permissionOptions,
+    capabilities: action.capabilities,
   }),
   // The server stopped waiting for an answer, so the dialog stops asking for one. Without
   // this the buttons stayed on screen wired to a request that had already been denied.

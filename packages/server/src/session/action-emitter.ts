@@ -13,6 +13,7 @@ import {
   type DialogConfirmAction,
   type DialogCloseAction,
   type PermissionOptions,
+  type CapabilityLine,
   type AppProtocolRequest,
   type AppProtocolResponse,
   type UserPromptShowAction,
@@ -477,6 +478,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     confirmText: string = 'Allow',
     cancelText: string = 'Deny',
     timeoutMs?: number,
+    capabilities?: CapabilityLine[],
   ): Promise<boolean> {
     const sessionId = getSessionId();
     if (!sessionId) {
@@ -492,6 +494,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       confirmText,
       cancelText,
       timeoutMs,
+      capabilities,
     );
   }
 
@@ -790,6 +793,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     confirmText: string = 'Allow',
     cancelText: string = 'Deny',
     timeoutMs?: number,
+    capabilities?: CapabilityLine[],
   ): Promise<boolean> {
     // Check for saved permission first
     const savedDecision = await checkPermission(toolName, context);
@@ -823,6 +827,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
         confirmText,
         cancelText,
         permissionOptions,
+        ...(capabilities?.length ? { capabilities } : {}),
         agentId: getAgentId() ?? 'system',
       },
     });
