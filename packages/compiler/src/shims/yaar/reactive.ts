@@ -71,12 +71,28 @@ export function createPersistedSignal<T>(
  * value. `setResizing(true)` suppresses the auto-close while a width handle is
  * being dragged — the pointer routinely leaves the panel box mid-drag.
  *
+ * Two predicates cover the cases a flag cannot, because they are answered by
+ * state the panel does not own:
+ *
+ *   `canOpen`  — consulted by `open()`. False means the pointer is over the panel
+ *                for a reason other than wanting it: a drag that began elsewhere
+ *                swept across the rail. The pending fold is still cancelled, so a
+ *                drag that ends over the panel does not slam it shut.
+ *   `holdOpen` — consulted when the fold actually fires, not when it is armed, so
+ *                the answer is read at the moment it matters. True keeps the panel
+ *                open without arming anything new; whatever made it true (a focused
+ *                input, an open menu) calls `scheduleClose()` again when it ends.
+ *
+ * Both default to the unguarded behavior, so existing callers are unaffected.
+ *
  * Headless: the app owns the markup and pointer wiring; only the state is shared.
  */
 export function createCollapsiblePanel(opts?: {
   pinKey?: string; // appStorage key; omit to make pin session-only
   closeDelayMs?: number; // grace period before the fold; default 280
   pinLabel?: string; // toast label on a failed pin persist
+  canOpen?: () => boolean; // false → `open()` only cancels the pending fold
+  holdOpen?: () => boolean; // true → the fold is skipped when it fires
 }): {
   expanded: () => boolean; // pinned() || hovering()
   pinned: () => boolean;
@@ -107,6 +123,7 @@ export function createCollapsiblePanel(opts?: {
 
   const open = () => {
     cancelClose();
+    if (opts?.canOpen && !opts.canOpen()) return;
     setHovering(true);
   };
 
@@ -121,6 +138,7 @@ export function createCollapsiblePanel(opts?: {
     if (resizing) return;
     closeTimer = setTimeout(() => {
       closeTimer = null;
+      if (opts?.holdOpen?.()) return;
       setHovering(false);
     }, closeDelayMs);
   };

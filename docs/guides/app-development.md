@@ -387,7 +387,7 @@ The skeleton is intentionally a **snippet, not a component**. The chrome you cop
 
 Two state machines that document apps kept re-implementing now live in `@bundled/yaar` as **headless** primitives — they return state and handlers, and your app owns the markup. Both are tree-shaken, so apps that don't import them pay nothing.
 
-**`createCollapsiblePanel`** — the hover-expand + pin sidebar/overlay. Visible while pinned or hovered, with a grace period before folding so a brief cursor exit doesn't flicker it shut; pin state persists to `appStorage` when `pinKey` is given, and `setResizing(true)` suppresses auto-close while a width handle is dragged.
+**`createCollapsiblePanel`** — the hover-expand + pin sidebar/overlay. Visible while pinned or hovered, with a grace period before folding so a brief cursor exit doesn't flicker it shut; pin state persists to `appStorage` when `pinKey` is given, and `setResizing(true)` suppresses auto-close while a width handle is dragged. Two predicates cover reasons the panel doesn't own: `canOpen` is consulted by `open()` (return `false` while a drag that began elsewhere is sweeping across the rail — the pending fold is still cancelled), and `holdOpen` is consulted when the fold *fires* (return `true` while a field inside the panel has focus, then call `scheduleClose()` again once it blurs).
 
 ```typescript
 import { createCollapsiblePanel } from '@bundled/yaar';

@@ -98,6 +98,7 @@ process.on('exit', () => {
 
 const {
   appStorage,
+  createCollapsiblePanel,
   createPersistedSignal,
   createProtocolContext,
   showAlert,
@@ -325,6 +326,64 @@ describe('dialogs', () => {
     inputField()!.value = 'discarded';
     cancelButton()!.onclick!({});
     expect(await p).toBeNull();
+  });
+});
+
+/**
+ * The two gates exist because the reason to stay open is often owned by someone
+ * other than the panel: a drag that began in a 3D viewport and swept across the
+ * rail (`canOpen`), or a field inside the panel holding focus (`holdOpen`).
+ * `holdOpen` is deliberately consulted when the fold *fires*, not when it is
+ * armed, so a value that changes during the grace period is still respected.
+ */
+describe('createCollapsiblePanel', () => {
+  const settle = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  test('folds after the grace period, not before', async () => {
+    const panel = createCollapsiblePanel({ closeDelayMs: 5 });
+    panel.open();
+    panel.scheduleClose();
+    expect(panel.expanded()).toBe(true);
+    await settle(20);
+    expect(panel.expanded()).toBe(false);
+  });
+
+  test('canOpen false refuses to expand', () => {
+    const panel = createCollapsiblePanel({ canOpen: () => false });
+    panel.open();
+    expect(panel.expanded()).toBe(false);
+  });
+
+  test('canOpen false still cancels a pending fold', async () => {
+    let allowed = true;
+    const panel = createCollapsiblePanel({ closeDelayMs: 5, canOpen: () => allowed });
+    panel.open();
+    panel.scheduleClose();
+    // The drag ends over the panel: it must not slam shut behind the pointer.
+    allowed = false;
+    panel.open();
+    await settle(20);
+    expect(panel.expanded()).toBe(true);
+  });
+
+  test('holdOpen skips the fold until whatever held it re-arms the close', async () => {
+    let held = true;
+    const panel = createCollapsiblePanel({ closeDelayMs: 5, holdOpen: () => held });
+    panel.open();
+    panel.scheduleClose();
+    await settle(20);
+    expect(panel.expanded()).toBe(true);
+
+    held = false;
+    panel.scheduleClose();
+    await settle(20);
+    expect(panel.expanded()).toBe(false);
+  });
+
+  test('a pin outranks canOpen', () => {
+    const panel = createCollapsiblePanel({ canOpen: () => false });
+    panel.togglePin();
+    expect(panel.expanded()).toBe(true);
   });
 });
 

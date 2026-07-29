@@ -1411,6 +1411,10 @@ declare module '@bundled/yaar' {
     pinKey?: string;
     closeDelayMs?: number;
     pinLabel?: string;
+    /** Consulted by `open()`. False cancels the pending fold without expanding. */
+    canOpen?: () => boolean;
+    /** Consulted when the fold fires. True keeps the panel open (re-arm to retry). */
+    holdOpen?: () => boolean;
   }): {
     expanded: () => boolean;
     pinned: () => boolean;
