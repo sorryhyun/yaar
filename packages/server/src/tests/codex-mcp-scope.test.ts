@@ -111,9 +111,17 @@ describe('codex per-thread MCP scope', () => {
     }
   });
 
-  it('declares no MCP servers at the process level', () => {
+  it('declares no MCP servers at the process level, and only ever takes them away', () => {
     // The override merges rather than replaces, so anything declared here would ride along
     // on every thread — including a sub-agent's — no matter what the per-thread filter says.
-    expect(getCodexAppServerArgs().join(' ')).not.toContain('mcp_servers');
+    // The one permitted process-level `mcp_servers` line is the inverse: `enabled=false`,
+    // which is how a server the *user's* ~/.codex/config.toml declares gets taken away —
+    // per-thread it could not be.
+    const mcpArgs = getCodexAppServerArgs().filter((a) => a.includes('mcp_servers'));
+    for (const arg of mcpArgs) {
+      expect(arg).toMatch(/^mcp_servers\.[^.]+\.enabled=false$/);
+    }
+    expect(mcpArgs).toContain('mcp_servers.node_repl.enabled=false');
+    expect(mcpArgs).toContain('mcp_servers.computer-use.enabled=false');
   });
 });

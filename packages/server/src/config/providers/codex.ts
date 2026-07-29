@@ -91,6 +91,22 @@ export function getCodexAppServerArgs(): string[] {
     args.push('-c', `features.${feature}=false`);
   }
 
+  // MCP servers the *user's* ~/.codex/config.toml may declare, forced off. A per-thread
+  // `mcp_servers` override merges over the loaded config rather than replacing it (see
+  // `app-server.ts`'s `spawnProcess`), so a server the user has configured cannot be taken
+  // away per thread — it rides along on every YAAR thread, including a sub-agent's, whose
+  // containment is precisely an empty tool set. Both entries are ChatGPT desktop app
+  // installs, present on every Mac that runs it: `node_repl` is JS execution + browser
+  // driving (the same untracked shell `code_mode`/`unified_exec` are disabled above to
+  // close), `computer-use` drives the desktop. The matching *features* are already off
+  // above, but a feature flag and a configured MCP server are two separate delivery paths
+  // to the same capability — the user's config.toml declares these directly, and only an
+  // `enabled=false` here takes one away.
+  const DISABLED_MCP_SERVERS = ['node_repl', 'computer-use'];
+  for (const name of DISABLED_MCP_SERVERS) {
+    args.push('-c', `mcp_servers.${name}.enabled=false`);
+  }
+
   // Non-feature scalar config overrides (`-c key=value`), in order: suppressions first,
   // then model behavior.
   const CONFIG_OVERRIDES: Array<[string, string]> = [
