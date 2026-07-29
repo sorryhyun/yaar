@@ -89,14 +89,14 @@ export function createCreatorMode(ui: EditorUI, store: EditorStore): CreatorMode
     store.setExportState({ exporting: true, exportProgress: 0, exportMessage: 'Exporting composition...' });
 
     try {
-      const blob = await exportComposition(state.composition, (p) => {
+      const { blob, extension } = await exportComposition(state.composition, (p) => {
         store.setExportState({
           exportProgress: p.percent,
           exportMessage: `Exporting ${Math.round(p.percent * 100)}% (frame ${p.frame}/${p.totalFrames})`,
         });
       });
 
-      downloadBlob(blob, makeExportFilename('webm', 'composition'));
+      downloadBlob(blob, makeExportFilename(extension, 'composition'));
       store.setExportState({
         exporting: false,
         exportProgress: 1,

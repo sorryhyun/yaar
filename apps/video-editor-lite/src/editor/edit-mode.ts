@@ -4,14 +4,15 @@ import type { EditorPrefs } from './prefs';
 import { normalizeStoragePath, getStorageApi, toStorageUrl, collectStorageVideoPaths } from './storage-utils';
 import {
   MIN_TRIM_GAP,
-  EXPORT_PROGRESS_TICK_MS,
-  pickExportMimeType,
-  exportExtensionFromMimeType,
+  describeDiscardedTracks,
+  extensionForFormat,
   makeExportFilename,
-  waitForLoadedMetadata,
+  pickOutputFormat,
+  sourceForVideoUrl,
 } from './export-utils';
 import { clamp } from './utils/time';
 import { errMsg, showPrompt } from '@bundled/yaar';
+import { ALL_FORMATS, BufferTarget, Conversion, Input, Output } from '@bundled/mediabunny';
 
 export interface EditMode {
   loadSourceUrl(url: string, storagePath?: string | null): boolean;
@@ -140,27 +141,6 @@ export function createEditMode(
       return;
     }
 
-    const mimeType = pickExportMimeType();
-    if (typeof MediaRecorder === 'undefined') {
-      store.setExportState({ exportMessage: 'MediaRecorder is not available in this browser.' });
-      return;
-    }
-
-    const wasPlaying = !ui.video.paused;
-    const resumeTime = ui.video.currentTime || 0;
-
-    const exporterVideo = document.createElement('video');
-    exporterVideo.src = sourceUrl;
-    exporterVideo.preload = 'auto';
-    exporterVideo.playsInline = true;
-    exporterVideo.muted = true;
-    exporterVideo.volume = 0;
-
-    const chunks: BlobPart[] = [];
-    let recorder: MediaRecorder | null = null;
-    let stream: MediaStream | null = null;
-    let progressTimer = 0;
-
     exportingInProgress = true;
     store.setExportState({
       exporting: true,
@@ -168,74 +148,61 @@ export function createEditMode(
       exportMessage: 'Preparing export...',
     });
 
-    try {
-      await waitForLoadedMetadata(exporterVideo);
-      exporterVideo.currentTime = trimStart;
+    // The trim runs entirely off the file's bytes, so the preview keeps playing
+    // untouched. The previous implementation had to pause the preview, play a
+    // hidden copy of the video in real time to feed MediaRecorder, and restore
+    // the playhead afterwards — a 10-minute clip took 10 minutes, re-encoded
+    // lossily, and dropped audio.
+    let input: Input | null = null;
 
-      const streamVideo = exporterVideo as HTMLVideoElement & {
-        captureStream?: () => MediaStream;
-        mozCaptureStream?: () => MediaStream;
-      };
-      const captureStreamFn =
-        streamVideo.captureStream?.bind(streamVideo) ?? streamVideo.mozCaptureStream?.bind(streamVideo);
-      if (!captureStreamFn) {
-        throw new Error('This browser does not support capturing media streams from video.');
+    try {
+      input = new Input({ source: await sourceForVideoUrl(sourceUrl), formats: ALL_FORMATS });
+
+      const outputFormat = await pickOutputFormat(input);
+      const buffer = new BufferTarget();
+      const conversion = await Conversion.init({
+        input,
+        output: new Output({ format: outputFormat, target: buffer }),
+        trim: { start: trimStart, end: trimEnd },
+      });
+
+      if (!conversion.isValid) {
+        throw new Error(
+          describeDiscardedTracks(conversion.discardedTracks) ||
+            'This video cannot be trimmed in this browser.',
+        );
       }
 
-      stream = captureStreamFn() as MediaStream;
-
-      recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      recorder.addEventListener('dataavailable', (event) => {
-        if (event.data && event.data.size > 0) {
-          chunks.push(event.data);
-        }
-      });
-
-      const stopped = new Promise<void>((resolve, reject) => {
-        recorder!.addEventListener('stop', () => resolve(), { once: true });
-        recorder!.addEventListener('error', () => reject(new Error('Recorder failed while exporting.')), {
-          once: true,
-        });
-      });
-
-      recorder.start(250);
-
-      progressTimer = window.setInterval(() => {
-        const elapsed = clamp(exporterVideo.currentTime - trimStart, 0, selectedDuration);
-        const progress = clamp(elapsed / selectedDuration, 0, 1);
+      conversion.onProgress = (progress) => {
         store.setExportState({
-          exportProgress: progress,
+          exportProgress: clamp(progress, 0, 1),
           exportMessage: `Exporting ${Math.round(progress * 100)}%`,
         });
+      };
 
-        if (exporterVideo.currentTime >= trimEnd - 0.01 && recorder && recorder.state !== 'inactive') {
-          recorder.stop();
-        }
-      }, EXPORT_PROGRESS_TICK_MS);
+      await conversion.execute();
 
-      await exporterVideo.play();
-      await stopped;
-
-      const blobType = mimeType || recorder.mimeType || 'video/webm';
-      const outputBlob = new Blob(chunks, { type: blobType });
-      if (outputBlob.size <= 0) {
+      if (!buffer.buffer) {
         throw new Error('Export produced an empty file.');
       }
 
-      const extension = exportExtensionFromMimeType(blobType);
+      const outputBlob = new Blob([buffer.buffer], { type: outputFormat.mimeType });
       const anchor = document.createElement('a');
       const downloadUrl = URL.createObjectURL(outputBlob);
       anchor.href = downloadUrl;
-      anchor.download = makeExportFilename(extension);
+      anchor.download = makeExportFilename(extensionForFormat(outputFormat));
       document.body.appendChild(anchor);
       anchor.click();
       anchor.remove();
       setTimeout(() => URL.revokeObjectURL(downloadUrl), 5000);
 
+      const dropped = describeDiscardedTracks(conversion.discardedTracks);
       store.setExportState({
         exporting: false,
         exportProgress: 1,
-        exportMessage: `Export complete. Downloaded ${selectedDuration.toFixed(2)}s clip.`,
+        exportMessage: `Export complete. Downloaded ${selectedDuration.toFixed(2)}s clip.${
+          dropped ? ` (${dropped})` : ''
+        }`,
       });
     } catch (error) {
       const message = errMsg(error);
@@ -246,20 +213,7 @@ export function createEditMode(
       });
     } finally {
       exportingInProgress = false;
-      window.clearInterval(progressTimer);
-      exporterVideo.pause();
-      exporterVideo.removeAttribute('src');
-      exporterVideo.load();
-
-      if (recorder && recorder.state !== 'inactive') {
-        recorder.stop();
-      }
-      stream?.getTracks().forEach((track) => track.stop());
-
-      ui.video.currentTime = clamp(resumeTime, 0, state.duration);
-      if (wasPlaying) {
-        await ui.video.play().catch(() => undefined);
-      }
+      await input?.dispose();
     }
   };
 
