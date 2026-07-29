@@ -160,7 +160,12 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       }
 
       const entries = result.entries!;
-      const prefix = path ? `${path}/` : '';
+      // A listing URI may arrive with a trailing slash (`yaar://storage/mounts/`),
+      // and `${path}/` would then be `mounts//` — one character longer than the
+      // prefix the entry paths actually carry, so every child name lost its first
+      // character ("mounts/toolresults" listed as "oolresults"). Normalize first.
+      const base = path.replace(/\/+$/, '');
+      const prefix = base ? `${base}/` : '';
       return okLinks(
         entries.map((e) => ({
           uri: `yaar://storage/${e.path}`,
