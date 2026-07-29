@@ -43,8 +43,9 @@ import {
 import type { ResolvedUri } from '../handlers/uri-resolve.js';
 import { buildSDKOptions } from '../providers/claude/sdk-options.js';
 import { initMcpServer } from '../mcp/server.js';
-import { getAppMeta } from '../features/apps/discovery.js';
+import { getAppMeta, subAgentDenialReason } from '../features/apps/discovery.js';
 import { APPS_DIR, USER_APPS_DIR } from '../features/apps/roots.js';
+import { _resetAppGrantsForTest } from '../storage/app-grants.js';
 import { parseAppAgentsPath } from '../handlers/apps/paths.js';
 import { getAgentLimiter } from '../agents/limiter.js';
 import type { AITransport, StreamMessage, TransportOptions } from '../providers/types.js';
@@ -93,7 +94,7 @@ beforeAll(() => {
   mkdirSync(castAppDir, { recursive: true });
   writeFileSync(
     join(castAppDir, 'app.json'),
-    JSON.stringify({ name: 'Cast Fixture', personas: { max: 4 } }),
+    JSON.stringify({ name: 'Cast Fixture', subagents: { max: 4 } }),
   );
 });
 
@@ -596,8 +597,8 @@ describe('persona turns stay out of the monitor context', () => {
 describe('personas manifest field', () => {
   // The bundled half of the gate is `CAST_APP` above. This is the other half: a real
   // *installed* app, because `resolveAppSource(appId)` reads the filesystem and the
-  // point of the rule is that shipping the JSON is not enough — you have to be in the
-  // tree.
+  // point of the rule is that shipping the JSON is not enough — an installed app's
+  // manifest is a request, and the user's install-time answer is the grant.
   const INSTALLED_ID = 'persona-gate-fixture';
   const installedDir = join(USER_APPS_DIR, INSTALLED_ID);
 
@@ -611,18 +612,23 @@ describe('personas manifest field', () => {
         // strip it to nothing and `getAppMeta` answers null, which would pass the
         // assertions below for the wrong reason.
         permissions: ['yaar://apps/self/db/'],
-        personas: { max: 4 },
+        subagents: { max: 4 },
         streams: ['agents'],
       }),
     );
   });
 
-  afterAll(() => {
-    rmSync(installedDir, { recursive: true, force: true });
+  afterEach(() => {
+    _resetAppGrantsForTest({});
   });
 
-  // The field normalizes to `subagents` — `"personas": { max }` is the older spelling
-  // of it, and stays valid forever (see features/apps/discovery.ts).
+  afterAll(() => {
+    rmSync(installedDir, { recursive: true, force: true });
+    _resetAppGrantsForTest(null);
+  });
+
+  // The manifest key is `subagents` and only that; `"personas"` is retired, and what
+  // happens to a manifest still using it is pinned separately below.
   it('is honored for a bundled app that declares it', async () => {
     expect((await getAppMeta(CAST_APP))?.subagents).toEqual({ max: 4 });
   });
@@ -632,7 +638,8 @@ describe('personas manifest field', () => {
     expect((await getAppMeta('process-explorer'))?.subagents).toBeUndefined();
   });
 
-  it('is ignored for an installed app, however it spells it', async () => {
+  it('is ignored for an installed app with no recorded grant', async () => {
+    _resetAppGrantsForTest({});
     const meta = await getAppMeta(INSTALLED_ID);
 
     expect(meta).not.toBeNull();
@@ -640,6 +647,79 @@ describe('personas manifest field', () => {
     // Same rule as `streams`, and for the same reason — asserted here so the two
     // gates cannot drift apart unnoticed.
     expect(meta?.streams).toBeUndefined();
+  });
+
+  it('is honored for an installed app the user granted', async () => {
+    // The case the bundled-only rule made unreachable: `chitchats` shipped to the
+    // market still declaring `personas`, and was refused with advice to add the field
+    // it already had.
+    _resetAppGrantsForTest({ [INSTALLED_ID]: { subagents: { max: 4 }, streams: ['agents'] } });
+    const meta = await getAppMeta(INSTALLED_ID);
+
+    expect(meta?.subagents).toEqual({ max: 4 });
+    expect(meta?.streams).toEqual(['agents']);
+  });
+
+  it('clamps to the grant, so a rewritten manifest cannot widen itself', async () => {
+    // An app holding `yaar-dev` can rewrite its own app.json. The grant is a ceiling,
+    // not a switch — otherwise this would be self-grant with an extra step.
+    _resetAppGrantsForTest({ [INSTALLED_ID]: { subagents: { max: 1 }, streams: [] } });
+    const meta = await getAppMeta(INSTALLED_ID);
+
+    expect(meta?.subagents).toEqual({ max: 1 });
+    expect(meta?.streams).toBeUndefined();
+  });
+
+  it('grants nothing to an app that never declared it, however wide the grant', async () => {
+    // The grant narrows the manifest; it never stands in for one. A stale entry for an
+    // app that dropped the field in an update must not keep the capability alive.
+    _resetAppGrantsForTest({ memo: { subagents: { max: 4 }, streams: ['agents'] } });
+    const meta = await getAppMeta('memo');
+
+    expect(meta?.subagents).toBeUndefined();
+    expect(meta?.streams).toBeUndefined();
+  });
+
+  it('tells a declared-but-ungranted app what is actually missing', async () => {
+    // The old message said "add subagents to its app.json" to an app whose app.json
+    // said it — it sent readers looking for a field they were staring at.
+    expect(await subAgentDenialReason(INSTALLED_ID)).toBe('not-approved');
+    expect(await subAgentDenialReason('memo')).toBe('not-declared');
+  });
+});
+
+// ── The retired `personas` spelling ──────────────────────────────────────────
+
+describe('the retired personas key', () => {
+  // `"personas": { max }` was an accepted alias for `"subagents"` and is not one now.
+  // Dropping an accepted key turns a working app inert, so the two things that matter
+  // are that it grants nothing (or the removal was cosmetic) and that it says why
+  // (or every author hits the same dead end the bundled-only gate created).
+  const STALE_ID = 'retired-key-fixture';
+  const staleDir = join(APPS_DIR, STALE_ID);
+
+  beforeAll(() => {
+    mkdirSync(staleDir, { recursive: true });
+    writeFileSync(
+      join(staleDir, 'app.json'),
+      JSON.stringify({ name: 'Stale Fixture', personas: { max: 4 } }),
+    );
+  });
+
+  afterAll(() => {
+    rmSync(staleDir, { recursive: true, force: true });
+  });
+
+  it('grants nothing, even to a bundled app', async () => {
+    expect((await getAppMeta(STALE_ID))?.subagents).toBeUndefined();
+  });
+
+  it('is reported as a rename, not as a missing field', async () => {
+    expect(await subAgentDenialReason(STALE_ID)).toBe('retired-key');
+  });
+
+  it('does not mistake a valid manifest for a stale one', async () => {
+    expect(await subAgentDenialReason(CAST_APP)).toBe('not-approved');
   });
 });
 

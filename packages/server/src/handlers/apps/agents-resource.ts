@@ -35,7 +35,7 @@ import type { ResolvedUri } from '../uri-resolve.js';
 import { okJson, error, getActivePool, NoActiveSessionError } from '../utils.js';
 import { parseAppAgentsPath } from './paths.js';
 import { getAppId, requireMonitorId } from '../../agents/agent-context.js';
-import { getAppMeta } from '../../features/apps/discovery.js';
+import { getAppMeta, subAgentDenialReason } from '../../features/apps/discovery.js';
 import { buildAgentStreamUri } from '../../streams/agent-stream.js';
 import {
   parseToolSpec,
@@ -161,9 +161,21 @@ async function resolveScope(uri: string): Promise<Scope | VerbResult | null> {
   const meta = await getAppMeta(parsed.appId);
   const declared = meta?.subagents;
   if (!declared || declared.max <= 0) {
+    // Three failures that used to read identically — see `subAgentDenialReason`. The
+    // original bug was this message telling an author to add a field their app.json
+    // already had; each branch here names the fix that actually applies.
+    const reason = await subAgentDenialReason(parsed.appId);
     return error(
-      `App "${parsed.appId}" may not spawn personas. Add "personas": { "max": N } to its ` +
-        'app.json (bundled apps only).',
+      reason === 'retired-key'
+        ? `App "${parsed.appId}" declares "personas", which is no longer read. Rename it to ` +
+            '"subagents": { "max": N } in app.json. Only the manifest key changed — the wire ' +
+            'still says personaId.'
+        : reason === 'not-approved'
+          ? `App "${parsed.appId}" declares subagents but has not been granted them. Installed ` +
+            'apps get this from the user at install time — reinstall or update it from the ' +
+            'market and approve the request.'
+          : `App "${parsed.appId}" may not spawn personas. Add "subagents": { "max": N } to its ` +
+            'app.json.',
     );
   }
 

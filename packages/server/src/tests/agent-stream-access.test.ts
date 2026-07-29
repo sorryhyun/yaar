@@ -3,7 +3,9 @@
  *
  * `yaar://agents/{id}/stream` is a live transcript — prompts, thinking, tool
  * inputs and results — so an app may open it only if it declared `streams:
- * ["agents"]` in its (bundled-only) app.json. That declaration rides the iframe
+ * ["agents"]` in its app.json — and, if it was installed rather than bundled, only
+ * as far as the user granted at install (see `app-capabilities.test.ts`). That
+ * declaration rides the iframe
  * token; `requireStream` checks it. The session agent's own stream is shielded
  * separately in the subscribe route (it needs a live pool), so this pins the two
  * pieces that stand alone: the URI parse and the capability check.

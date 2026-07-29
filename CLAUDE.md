@@ -283,9 +283,18 @@ Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lif
 
 ### Sub-agents / Persona Agents (app-spawned AI instances)
 
-An app that declares `"personas": { "max": N }` in `app.json` (bundled apps only, like `controls`/`streams`) can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands). No bundled app declares `personas` today — `chitchats`, the app
-the feature was built for, now ships from the market, and the bundled-only gate means a market
-install of it gets no sub-agents.
+An app that declares `"subagents": { "max": N }` in `app.json` can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands).
+
+`subagents` and `streams` are **granted by the user at install time**, not by the manifest alone —
+unlike `controls`, which stays bundled-only. A bundled app's app.json ships with the release, so it
+is taken at its word; an installed app's is a *request*, shown in the install dialog and recorded in
+`config/app-grants.json`, which `discovery.ts` then applies as a **ceiling** (an app holding
+`yaar-dev` can rewrite its own manifest, so intersecting rather than trusting is what keeps that from
+being self-grant). This is what `chitchats` needed once it left `apps/` for the market: it still
+declared the field, and the old bundled-only gate refused it while advising the user to add what it
+already had. (`"personas"` was an accepted alias for `subagents` and is no longer read — a manifest
+still using it gets a startup warning and a refusal that names the rename.) An app installed before grants existed holds nothing until it is updated or
+reinstalled and the request approved — see `features/apps/capabilities.ts` for the consent diff.
 
 See `packages/server/CLAUDE.md` (Tools/MCP section) for the full verb surface, lifecycle, and containment details, and [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md) for the design record.
 

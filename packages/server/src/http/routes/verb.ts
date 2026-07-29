@@ -219,7 +219,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
 
       // Streaming a sensitive source is gated on the capability that *produces* it,
       // not a plain `read` permission on the resource. `yaar://agents/{id}/stream`
-      // is a live transcript, so it takes the bundled-only `streams:["agents"]`
+      // is a live transcript, so it takes the `streams:["agents"]`
       // declaration — and the session agent's own stream is shielded outright, since
       // it is the tier that drives the user's real browser. `yaar://dev/*` progress
       // rides the yaar-dev door (the same gate its producer sits behind). Everything

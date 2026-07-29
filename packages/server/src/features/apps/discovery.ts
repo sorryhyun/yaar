@@ -11,6 +11,7 @@ import { buildYaarUri } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 import { withoutPersonaCommands } from './persona-commands.js';
+import { readAppGrant, type AppGrant } from '../../storage/app-grants.js';
 
 /** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
@@ -57,10 +58,12 @@ export interface ControlEntry {
 /**
  * How many sub-agents an app may run per (monitor, app).
  *
- * Two spellings, one meaning — `"personas": { "max": N }` and
- * `"subagents": { "max": N }` are the same declaration, and both stay valid forever:
- * `personas` is shipped wire format, and an app that only wants a cast of characters
- * should not have to relearn the word for it.
+ * `"subagents": { "max": N }`, and only that. `"personas"` was accepted as an alias
+ * and no longer is — no app.json in the tree or on the market ever used it except
+ * `chitchats`, and carrying two spellings for one field meant every doc that mentioned
+ * it had to mention both. The *wire* keeps `personaId` (URI segment, spawn param,
+ * response bodies): a character is what an app spawns, a sub-agent is what YAAR runs,
+ * and only the manifest had to pick one word.
  */
 export interface SubAgentsEntry {
   max: number;
@@ -70,25 +73,93 @@ export interface SubAgentsEntry {
 const MAX_SUB_AGENTS_PER_APP = 16;
 
 /**
- * Parse `subagents` / `personas` from app.json. Returns undefined for an app that
- * declares neither, or declares one with a nonsense `max` — "may not spawn any" is
- * the answer for every app that has not asked, which is nearly all of them.
+ * Parse `subagents` from app.json. Returns undefined for an app that does not declare
+ * it, or declares it with a nonsense `max` — "may not spawn any" is the answer for
+ * every app that has not asked, which is nearly all of them.
+ *
+ * This is what the manifest *asks for*. For a non-bundled app it is not yet what the
+ * app holds — see {@link applyGrant}.
  *
  * Extra keys are ignored rather than rejected: the manifest is data on disk that
  * outlives any one YAAR build, so an app.json still carrying a field a past version
  * read should degrade to "the parts I understand" rather than to "cannot spawn".
  */
-function parseSubAgents(meta: {
-  subagents?: unknown;
-  personas?: unknown;
-}): SubAgentsEntry | undefined {
-  const raw = (meta.subagents ?? meta.personas) as { max?: unknown } | undefined;
+export function parseSubAgents(meta: { subagents?: unknown }): SubAgentsEntry | undefined {
+  const raw = meta.subagents as { max?: unknown } | undefined;
   if (!raw || typeof raw !== 'object') return undefined;
 
   const max = Number(raw.max);
   if (!Number.isInteger(max) || max <= 0) return undefined;
 
   return { max: Math.min(max, MAX_SUB_AGENTS_PER_APP) };
+}
+
+/**
+ * Does this manifest still use the retired `personas` spelling?
+ *
+ * Dropping an accepted key turns a working app into a silently inert one, and the app
+ * that hits this is `chitchats` — published at v1.1.1 declaring `personas`, so every
+ * install of it stops spawning until it is republished. That failure has to be
+ * *legible*: this is what lets the refusal say "rename it" instead of "add it", which
+ * is the same trap the bundled-only gate used to set.
+ */
+export function usesRetiredPersonasKey(meta: { subagents?: unknown; personas?: unknown }): boolean {
+  return !parseSubAgents(meta) && !!meta.personas && typeof meta.personas === 'object';
+}
+
+/**
+ * Narrow what a manifest declares down to what its source entitles it to.
+ *
+ * A bundled app's manifest ships with the release, so it is taken at its word. An
+ * installed app's is a request, and the answer is whatever the user approved at
+ * install time (`config/app-grants.json`) — **intersected**, never substituted: an app
+ * that holds `yaar-dev` can rewrite its own app.json, so a grant of `max: 2` must stay
+ * a ceiling of 2 no matter what the file says afterwards.
+ *
+ * `null` for the grant means an install that predates the dialog, or one the user
+ * declined — both resolve to "declared, holds nothing", which is what
+ * {@link subAgentDenialReason} exists to explain.
+ */
+function applyGrant(
+  source: AppSource | null,
+  grant: AppGrant | null,
+  declared: { subagents?: SubAgentsEntry; streams?: string[] },
+): { subagents?: SubAgentsEntry; streams?: string[] } {
+  if (source === 'bundled') return declared;
+
+  const result: { subagents?: SubAgentsEntry; streams?: string[] } = {};
+  if (declared.subagents && grant?.subagents) {
+    const max = Math.min(declared.subagents.max, grant.subagents.max);
+    if (max > 0) result.subagents = { max };
+  }
+  if (declared.streams?.length && grant?.streams?.length) {
+    const allowed = declared.streams.filter((s) => grant.streams?.includes(s));
+    if (allowed.length > 0) result.streams = allowed;
+  }
+  return result;
+}
+
+/**
+ * Why an app holds no sub-agent slots — so the refusal can name the actual fix.
+ *
+ * Three failures that look identical from the call site and need three different
+ * sentences: the app never asked (`not-declared`); it asked and nobody has approved it
+ * (`not-approved`); or it asked in the retired spelling and is being read as if it had
+ * not asked at all (`retired-key`). Reporting all three as "add the field" is exactly
+ * how the original bug read.
+ */
+export async function subAgentDenialReason(
+  appId: string,
+): Promise<'not-declared' | 'not-approved' | 'retired-key'> {
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return 'not-declared';
+  try {
+    const meta = JSON.parse(await Bun.file(join(appDir, 'app.json')).text());
+    if (usesRetiredPersonasKey(meta)) return 'retired-key';
+    return parseSubAgents(meta) ? 'not-approved' : 'not-declared';
+  } catch {
+    return 'not-declared';
+  }
 }
 
 /** Parse `controls` from app.json, supporting string shorthand and object form. */
@@ -428,30 +499,41 @@ export async function getAppMeta(appId: string): Promise<{
       const bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
       if (bundles.length > 0) result.bundles = bundles;
     }
-    // Streamable capabilities the app declared (e.g. "agents" → may subscribe to
-    // `yaar://agents/{id}/stream`). Bundled-only, mirroring `controls`: an agent
-    // transcript is sensitive, so a marketplace app can't self-grant a live tap by
-    // shipping the declaration. Carried onto the iframe token so the subscribe gate
-    // (verb.ts) checks it at runtime, not just at compile time. See access.ts.
-    if (Array.isArray(meta.streams) && resolveAppSource(appId) === 'bundled') {
-      const streams = meta.streams.filter((s: unknown): s is string => typeof s === 'string');
-      if (streams.length > 0) result.streams = streams;
-    }
-    // How many sub-agents this app may run per (monitor, app) —
-    // spelled `subagents` or `personas`. Absent means the app cannot spawn any, which
-    // is every existing app but one.
+    // The two privileged declarations, resolved together because they answer to the
+    // same rule — see `applyGrant`. A bundled manifest is taken at its word; an
+    // installed one gets the intersection of what it asks for and what the user
+    // approved at install (`config/app-grants.json`).
     //
-    // Bundled-only, mirroring `controls`/`streams`, though a sub-agent is the better
-    // contained of the three: it holds no principal, no YAAR verbs, and no cross-app
-    // reach. The gate is here because spawning one costs a real provider
-    // process and a slot out of the global `MAX_AGENTS` semaphore — a marketplace app
-    // should not be able to claim four of them by shipping a line of JSON. Read at
-    // spawn time (not carried on the iframe token) because the ceiling is a per-call
-    // quota rather than a capability, and the token is minted once per window.
-    if (resolveAppSource(appId) === 'bundled') {
-      const subagents = parseSubAgents(meta);
-      if (subagents) result.subagents = subagents;
+    // `streams` (e.g. "agents" → may subscribe to `yaar://agents/{id}/stream`) is a
+    // live agent transcript, so it may not be self-granted; it rides onto the iframe
+    // token so the subscribe gate (verb.ts) checks it at runtime, not just at compile
+    // time. `subagents` is how many sub-agents the app may run per
+    // (monitor, app); it is gated on cost rather than secrecy — each one is a real
+    // provider process holding a slot out of the global `MAX_AGENTS` semaphore — and is
+    // read at spawn time rather than carried on the token, because the ceiling is a
+    // per-call quota and the token is minted once per window.
+    //
+    // Both were bundled-*only* until market apps needed them: `chitchats` left `apps/`
+    // still declaring them, and was refused with advice to add a field it already had.
+    const source = resolveAppSource(appId);
+    const declaredStreams = Array.isArray(meta.streams)
+      ? meta.streams.filter((s: unknown): s is string => typeof s === 'string')
+      : [];
+    const declaredSubAgents = parseSubAgents(meta);
+    // Say so once, at the one place manifests are read, rather than leaving the author
+    // to discover it when a spawn fails much later.
+    if (usesRetiredPersonasKey(meta)) {
+      console.warn(
+        `[apps] "${appId}" declares "personas", which is no longer read — rename it to ` +
+          '"subagents" in app.json. It cannot spawn sub-agents until then.',
+      );
     }
+    const granted = applyGrant(source, source === 'bundled' ? null : await readAppGrant(appId), {
+      ...(declaredSubAgents ? { subagents: declaredSubAgents } : {}),
+      ...(declaredStreams.length > 0 ? { streams: declaredStreams } : {}),
+    });
+    if (granted.streams) result.streams = granted.streams;
+    if (granted.subagents) result.subagents = granted.subagents;
     // Check for dist/protocol.json to determine appProtocol support
     try {
       await Bun.file(join(appDir, 'dist', 'protocol.json')).text();

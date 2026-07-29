@@ -31,7 +31,9 @@ const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
  * - `agents/` is guarded twice over by the resource itself — `resolveScope` requires
  *   the URI's appId to equal the appId the *context* says the caller is, and spawning
  *   at all requires `"personas": { "max": N }` in the manifest, which `getAppMeta`
- *   honours for bundled apps only. Watching them still needs `"streams": ["agents"]`.
+ *   honours outright for a bundled app and only as far as the user's install-time
+ *   grant for an installed one. Watching them still needs `"streams": ["agents"]`,
+ *   which answers to the same rule.
  *
  * Cross-app access is untouched: `yaar://apps/other/db/` in an app.json still means
  * what it meant, and still has to be written out.

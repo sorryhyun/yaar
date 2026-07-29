@@ -29,8 +29,10 @@ An app's own sub-agents ("personas") — AI instances whose system prompt the ap
 runtime, each a real provider session with its own conversation memory. **Callable only from the
 app's own iframe** (`POST /api/verb`), never by an agent and never by another app: the appId in
 the URI must equal the appId the calling context says the caller is. Requires
-`"personas": { "max": N }` (or the identical `"subagents": { "max": N }`) in `app.json`, bundled
-apps only. The `yaar://apps/self/storage/`, `yaar://apps/self/db/`, and `yaar://apps/self/agents/`
+`"subagents": { "max": N }` in `app.json` — honored
+as written for a bundled app, and for an installed one only as far as the user approved at install
+(`config/app-grants.json`, which caps `max` rather than merely enabling it).
+The `yaar://apps/self/storage/`, `yaar://apps/self/db/`, and `yaar://apps/self/agents/`
 subtrees are auto-granted (`SELF_GRANTS` in `http/iframe-tokens.ts`) — no `permissions` entry
 needed for those specifically. (Other `apps/self/...` resources, and the app resource itself,
 are not auto-granted.)

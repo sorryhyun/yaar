@@ -245,7 +245,7 @@ describe('the subagents manifest field', () => {
     mkdirSync(declaringDir, { recursive: true });
     writeFileSync(
       join(declaringDir, 'app.json'),
-      JSON.stringify({ name: 'Gate Fixture', personas: { max: 4 } }),
+      JSON.stringify({ name: 'Gate Fixture', subagents: { max: 4 } }),
     );
   });
 

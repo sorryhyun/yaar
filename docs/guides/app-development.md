@@ -713,8 +713,8 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `agentType` | `string` | Override the agent profile used for this app's agent |
 | `messaging` | `"all"` | Lets the app agent `direct_message` other apps/windows, not just monitor/user |
 | `controls` | `(string \| { appId, commands? })[]` | Other apps this app may drive. **Bundled apps only** |
-| `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Bundled apps only** |
-| `personas` / `subagents` | `{ max: number }` | Ceiling on [sub-agents](#sub-agents-personas) this app may spawn per monitor — two spellings, one meaning. Clamped to 16; a non-integer or `≤ 0` reads as "none". **Bundled apps only** |
+| `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Approved at install** |
+| `subagents` | `{ max: number }` | Ceiling on [sub-agents](#sub-agents-personas) this app may spawn per monitor. Clamped to 16; a non-integer or `≤ 0` reads as "none". **Approved at install** |
 | `fileAssociations` | `{ extensions, command, paramKey }[]` | Open matching files by invoking a protocol command |
 | `variant` | `"widget" \| "panel"` | Window variant |
 | `dockEdge` | `"top" \| "bottom"` | Dock the window to a screen edge |
@@ -1326,7 +1326,7 @@ delete('yaar://apps/memo/db/notes')                                      → dro
 
 ## Sub-agents (Personas)
 
-A **bundled** app that declares `"personas": { "max": N }` can spawn up to N AI instances from
+An app that declares `"subagents": { "max": N }` can spawn up to N AI instances from
 its iframe, each with a system prompt the app supplies at runtime and each its own provider
 session with its own conversation memory. This is what lets one app run several distinct
 characters *at once* instead of one agent role-playing them in turn.
@@ -1337,13 +1337,25 @@ Full verb surface, limits, and response shapes: [URI Reference](../reference/uri
 
 ```jsonc
 {
-  "personas": { "max": 4 },   // "subagents": { "max": 4 } is the same declaration
-  "streams": ["agents"],      // required to watch them
-  "kind": "system"            // bundled apps only, like controls/streams
+  "subagents": { "max": 4 },  // the manifest key; the wire still says personaId
+  "streams": ["agents"]       // required to watch them
 }
 ```
 
 The `yaar://apps/self/` namespace is auto-granted — no `permissions` entry.
+
+> **`"personas"` is retired.** It was an accepted alias for `subagents` and is no longer read.
+> The *wire* is unchanged — `personaId` in the URI, the spawn param, and every response body — so
+> only `app.json` changes. A manifest still using the old key logs an `[apps]` warning at read and
+> refuses spawns with a message naming the rename, rather than behaving as if nothing was declared.
+
+**Both lines are requests, not grants, for an app that was installed rather than bundled.** A
+bundled manifest ships with the release and is honored as written. An installed app's is itemized
+in the install dialog ("run up to 4 AI personas of its own…"), and the user's answer is recorded in
+`config/app-grants.json` and applied as a **ceiling** — raise `max` in a later manifest and you get
+the granted number until the user approves the new one. So a market app that declares `subagents` gets
+them, but only once someone said yes; an app already installed before this existed holds nothing
+until it is updated or reinstalled. (`controls` is different, and still bundled-only.)
 
 ### Spawn, message, stream
 
@@ -1438,11 +1450,11 @@ something never launches a window. Omitting `tools` connects no MCP server at al
 Sub-agents are reclaimed when your app's last window on that monitor closes, when the monitor is
 removed, or on explicit `delete` — and none survive the session. **Persistence is your app's
 job** (`appDb`/`appStorage`); a respawned persona gets its history replayed in its system prompt
-or first message. `personas.max` is per (monitor, app) and clamped to 16; each persona also takes
+or first message. `subagents.max` is per (monitor, app) and clamped to 16; each persona also takes
 a global `MAX_AGENTS` slot, so `spawn` can fail with "no provider slot" even under your own cap.
 
 **Reference consumer:** `chitchats`, which now ships from the market rather than `apps/` (rooms
 that take turns; characters get `skip`, `memorize`, and — when their memory file has chunks —
 `recall`, whose description carries the memory index so the backstory is retrieved rather than
-replayed every turn). Note that `personas` is parsed only for bundled apps, so declaring it in a
-market or user app has no effect today.
+replayed every turn). Being a market app it holds `subagents` by the user's install-time approval
+rather than by shipping in the tree.

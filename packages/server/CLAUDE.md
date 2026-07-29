@@ -276,8 +276,7 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 - **App → Monitor**: App agent's `relay` tool enqueues a `type: 'monitor'` task. Additionally, app agent responses are pushed to `InteractionTimeline` and drained by the monitor on its next turn.
 
 **Sub-agents / persona agents (`yaar://apps/self/agents`):** an app that declares
-`"personas": { "max": N }` — or, identically, `"subagents": { "max": N }` — in its app.json
-(bundled-only, like `controls`/`streams`) may spawn up to N AI instances, each with a system
+`"subagents": { "max": N }` in its app.json may spawn up to N AI instances, each with a system
 prompt it supplies at runtime and each its own provider session with its own memory. The verb
 surface lives in `handlers/apps/agents-resource.ts` — `list` / `invoke {spawn|message|interrupt}` /
 `read` / `delete` — and is callable from the app's iframe (`POST /api/verb`), never by another app:
@@ -296,6 +295,29 @@ the monitor closes, when the monitor is removed, or on explicit `delete`. See
 `chitchats` (rooms with `skip`/`recall`/`memorize`, whose persona documents are what a
 reclaimed character is respawned from) for the reference consumer — it left `apps/` for the
 market, so no bundled app exercises this path in-tree today.
+
+**Who may declare it (`features/apps/capabilities.ts`, `storage/app-grants.ts`).** `subagents` and
+`streams` are gated on the *user*, not on the app's source. A bundled manifest ships with the
+release and is taken at its word; an installed app's is a **request**, itemized in the install
+dialog and recorded as a grant in `config/app-grants.json`, and `getAppMeta` hands back the
+**intersection** of declaration and grant. Intersection rather than a boolean because an app holding
+`yaar-dev` can rewrite its own app.json — a grant of `max: 2` has to stay a ceiling of 2 whatever
+the file says afterwards, and a grant for an app that has since *dropped* the field must grant
+nothing. Two consequences worth knowing: an update is diffed against what the app **holds** (the
+grant), never against its previous manifest, or an install predating grants would be handed the
+capability with no dialog at all; and uninstall clears the grant, so a reinstall asks again.
+`controls` is deliberately not in this scheme — driving another app is authority over separately
+installed software, and nothing is asking for it — so it stays bundled-only.
+
+**One manifest key, not two.** `"personas": { "max": N }` was an accepted alias for `subagents` and
+is no longer read. Nothing in the tree or on the market used it except `chitchats`, and two
+spellings for one field meant every doc mentioning it had to mention both. The **wire** is
+unchanged and still says persona — `personaId` in the URI segment, the spawn param, and every
+response body — because a character is what an app spawns and a sub-agent is what YAAR runs; only
+the manifest had to pick a word. Retiring an accepted key makes a working app silently inert, so it
+fails loudly instead: `usesRetiredPersonasKey` drives a `[apps]` warning when the manifest is read
+and a `retired-key` branch in `subAgentDenialReason`, so the refusal says "rename it" rather than
+"add it" — the same trap the bundled-only gate used to set.
 
 **The one channel (`agents/profiles/sub-agent.ts`).** The only capability a sub-agent may be given
 is a reach back into the **owning app's own iframe**. `buildSubAgentProfile` is the one place that

@@ -136,7 +136,7 @@ larger ceiling for sub-agent nodes) is the known fix and is unstarted.
 | The one channel back to the owning iframe | `mcp/sub-agent/` |
 | Verb surface + ownership check | `handlers/apps/agents-resource.ts` |
 | `persona:` command convention (hidden from the app agent) | `features/apps/persona-commands.ts` |
-| `personas` / `subagents` manifest parsing | `features/apps/discovery.ts` |
+| `subagents` manifest parsing | `features/apps/discovery.ts` |
 | Reference consumer | none in-tree — `chitchats` (`skip`/`memorize`/`recall`) moved to the market |
 
 All paths are relative to `packages/server/src/` unless noted.

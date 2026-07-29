@@ -12,13 +12,21 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { listApps, invalidateAppsCache } from './discovery.js';
 import { INSTALL_ROOT, resolveAppDir } from './roots.js';
+import { saveAppGrant, clearAppGrant } from '../../storage/app-grants.js';
+import {
+  readAppCapabilities,
+  heldCapabilities,
+  addedCapabilities,
+  formatCapabilities,
+  grantFor,
+  isEmpty,
+} from './capabilities.js';
 import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { readSettings } from '../../storage/settings.js';
 import { ServerEventType, type OSAction } from '@yaar/shared';
-import type { PermissionEntry } from '../../http/access.js';
 import { buildTarExtractInvocation } from './archive.js';
 
 /**
@@ -39,87 +47,6 @@ function broadcastDesktopAction(action: OSAction): void {
   } else {
     actionEmitter.emitAction(action);
   }
-}
-
-/**
- * What an installed app can hold that the user should get a say in.
- *
- * `controls` and `streams` are deliberately absent: `discovery.ts` strips both for
- * any app whose source isn't `bundled`, so a marketplace app that declares them is
- * granted nothing and asking about them would describe authority it never gets.
- * `bundles` is the opposite case — it is carried onto the iframe token regardless of
- * source (`getAppMeta`), so it is a real grant and belongs in the dialog.
- */
-interface AppCapabilities {
-  permissions: PermissionEntry[];
-  bundles: string[];
-}
-
-/** What each gated SDK actually lets an app do, in the user's terms. */
-const BUNDLE_DESCRIPTIONS: Record<string, string> = {
-  'yaar-dev': 'compile, typecheck, and deploy apps on this machine',
-  'yaar-web': 'drive a browser — navigate, click, and read pages',
-  'yaar-ml': 'download and run machine-learning models in the browser',
-};
-
-/** Stable identity for a permission entry, so two manifests can be compared. */
-function permissionKey(p: PermissionEntry): string {
-  if (typeof p === 'string') return p;
-  return `${p.uri}|${(p.verbs ?? []).slice().sort().join(',')}`;
-}
-
-/** Format capabilities into a human-readable string for the dialog. */
-function formatCapabilities(caps: AppCapabilities): string {
-  const sections: string[] = [];
-  if (caps.permissions.length > 0) {
-    const lines = caps.permissions.map((p) => {
-      if (typeof p === 'string') return `  • ${p}`;
-      const verbs = p.verbs?.length ? ` (${p.verbs.join(', ')})` : '';
-      return `  • ${p.uri}${verbs}`;
-    });
-    sections.push(`Access to:\n${lines.join('\n')}`);
-  }
-  if (caps.bundles.length > 0) {
-    const lines = caps.bundles.map((b) => {
-      const what = BUNDLE_DESCRIPTIONS[b];
-      return what ? `  • ${b} — ${what}` : `  • ${b}`;
-    });
-    sections.push(`Privileged SDKs:\n${lines.join('\n')}`);
-  }
-  return sections.join('\n\n');
-}
-
-/** Read the capabilities an app's app.json declares. Missing/invalid → none. */
-async function readAppCapabilities(appDir: string): Promise<AppCapabilities> {
-  const caps: AppCapabilities = { permissions: [], bundles: [] };
-  try {
-    const metaContent = await Bun.file(join(appDir, 'app.json')).text();
-    const meta = JSON.parse(metaContent);
-    if (Array.isArray(meta.permissions)) caps.permissions = meta.permissions;
-    if (Array.isArray(meta.bundles)) {
-      caps.bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
-    }
-  } catch {
-    // No app.json or invalid JSON
-  }
-  return caps;
-}
-
-/**
- * The capabilities in `next` that `previous` did not already hold.
- *
- * An update used to skip the dialog outright, so a v2 that newly asked for
- * `yaar-web` was granted it without the user ever seeing the request. Only the
- * *added* capabilities are prompted for — re-confirming what is already installed
- * on every routine update would train the user to click through.
- */
-function addedCapabilities(previous: AppCapabilities, next: AppCapabilities): AppCapabilities {
-  const heldPermissions = new Set(previous.permissions.map(permissionKey));
-  const heldBundles = new Set(previous.bundles);
-  return {
-    permissions: next.permissions.filter((p) => !heldPermissions.has(permissionKey(p))),
-    bundles: next.bundles.filter((b) => !heldBundles.has(b)),
-  };
 }
 
 export async function installApp(appId: string): Promise<VerbResult> {
@@ -176,13 +103,13 @@ export async function installApp(appId: string): Promise<VerbResult> {
   // Check what the app asks for and prompt the user before installing. On an
   // update only the *newly added* capabilities are prompted for.
   // Skip the dialog during onboarding or when allowAllApps is enabled.
+  const requested = await readAppCapabilities(stagingDir);
   {
-    const requested = await readAppCapabilities(stagingDir);
     const asking = isUpdate
-      ? addedCapabilities(await readAppCapabilities(appDir), requested)
+      ? addedCapabilities(await heldCapabilities(appDir, appId), requested)
       : requested;
 
-    if (asking.permissions.length > 0 || asking.bundles.length > 0) {
+    if (!isEmpty(asking)) {
       const settings = await readSettings();
       if (settings.onboardingCompleted && !settings.allowAllApps) {
         const lead = isUpdate
@@ -216,6 +143,12 @@ export async function installApp(appId: string): Promise<VerbResult> {
     await rm(stagingDir, { recursive: true, force: true }).catch(() => {});
     return error('Failed to move app to install directory.');
   }
+
+  // Record what the user just approved. This also runs on the paths that skipped the
+  // dialog (onboarding, `allowAllApps`): those are the user declining to be *asked*,
+  // not the user declining. Only an explicit Cancel returns above, before the app is
+  // on disk at all.
+  await saveAppGrant(appId, grantFor(requested));
 
   // Compile the app if it has source code
   if (existsSync(join(appDir, 'src', 'main.ts'))) {
@@ -271,6 +204,10 @@ export async function uninstallApp(appId: string): Promise<VerbResult> {
 
   const configPath = join(getConfigDir(), `${appId}.json`);
   await unlink(configPath).catch(() => {});
+
+  // Forget what was approved, so reinstalling asks again rather than silently
+  // reviving a grant against a manifest the user never saw.
+  await clearAppGrant(appId);
 
   const removed = await removeAppShortcut(appId);
   if (removed) {
