@@ -72,15 +72,22 @@ function formatTokens(n: number) {
 }
 
 /**
- * Everything the agent read as input: fresh tokens plus the cached context.
+ * Input the agent actually *spent* — fresh tokens plus cache writes, cache
+ * **reads excluded**. The one place those fields are summed; see {@link AgentUsage}.
  *
- * The one place those three fields are summed — see {@link AgentUsage}. Reading
- * `inputTokens` alone reports ~10 for a turn that actually took 18k of context
- * through the model, because under prompt caching that field means only the
- * remainder that was neither read from nor written to the cache.
+ * Cache reads are left out because they are the same context re-sent every turn:
+ * counting them makes a long-running agent's "in" figure climb roughly linearly
+ * with turn count while nothing new is being read, which reads as a leak. Cache
+ * writes stay in — they are new content passing through the model for the first
+ * time, and are billed as such.
+ *
+ * `inputTokens` alone would be too low the other way (~10 for an 18k-context
+ * turn), since providers report it as the remainder that was neither read from
+ * nor written to the cache. Fresh + writes is the figure that grows only when
+ * the agent takes in something it has not seen before.
  */
 function inputRead(usage: AgentUsage) {
-  return usage.inputTokens + (usage.cacheReadTokens ?? 0) + (usage.cacheWriteTokens ?? 0);
+  return usage.inputTokens + (usage.cacheWriteTokens ?? 0);
 }
 
 /**
@@ -186,7 +193,7 @@ function AgentRow(props: { agent: AgentEntry }) {
             <span style=${() => `color: ${typeBadge(a().type)}`}>${() => a().type}</span>
             <span>${() => (a().busy ? 'busy' : 'idle')}</span>
             <${Show} when=${usageText}>
-              <span class="meta-tokens" title="Input + output tokens. Input includes cached context (cache reads and writes)."
+              <span class="meta-tokens" title="Input + output tokens. Cache reads excluded; cache writes count as input."
                 >${usageText}</span
               >
             </>
@@ -356,7 +363,7 @@ function StatusBar() {
     <div class="status-bar">
       <span>Last refresh: ${() => formatTime(lastRefresh())}</span>
       <${Show} when=${sessionUsage}>
-        <span class="meta-tokens" title="Session total, including agents already disposed. Cache reads and writes excluded."
+        <span class="meta-tokens" title="Session total, including agents already disposed. Cache reads excluded; cache writes count as input."
           >${sessionUsage}</span
         >
       </>

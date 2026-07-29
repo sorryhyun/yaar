@@ -6,13 +6,15 @@ export {};
  * All four fields, and the cache ones are not optional decoration. Both
  * providers report `inputTokens` as the input that was *neither* read from the
  * cache nor used to create one — so under Claude Code's caching it is a
- * near-constant handful of tokens while the actual context rides in
- * `cacheReadTokens`. A measured turn: 10 fresh input against 18,751 cache-read.
- * Showing the fresh figure alone rendered that as "55 tok · 10 in · 45 out",
- * which is not what a process list means by "in".
+ * near-constant handful of tokens while the bulk rides in `cacheReadTokens`.
+ * A measured turn: 10 fresh input against 18,751 cache-read.
  *
- * So the input side is the sum of all three. `inputRead()` in `main.ts` is the
- * one place that sum is taken; nothing should add these fields by hand.
+ * The displayed input is `inputTokens + cacheWriteTokens` — cache **reads are
+ * excluded**. They are the same context re-sent on every turn, so folding them
+ * in makes the figure climb with turn count even when the agent takes in nothing
+ * new. Cache writes are counted: that content is passing through the model for
+ * the first time. `inputRead()` in `main.ts` is the one place that sum is taken;
+ * nothing should add these fields by hand.
  */
 export interface AgentUsage {
   inputTokens: number;
