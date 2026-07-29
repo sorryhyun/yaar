@@ -37,6 +37,8 @@ import {
   setMarketApps,
   setPendingPublish,
   setStatus,
+  setTermsAgreed,
+  termsAgreed,
 } from './store.js';
 import { parseGithubStatus, parseMarket } from './parsers.js';
 import { AuthLoginSchema, AuthMeSchema, AuthStatusSchema, MarketPayloadSchema } from './schema.js';
@@ -175,6 +177,8 @@ export async function publishApp(app: { id: string; name: string }): Promise<voi
     `Preparing ${app.name} to publish…`,
     async () => {
       const summary = await hostPreparePublish(app);
+      // Every dialog starts unticked, even if the last one was ticked and cancelled.
+      setTermsAgreed(false);
       setPendingPublish({ app, summary });
       setStatus(`Review ${app.name} v${summary.version ?? '?'} before publishing.`);
     },
@@ -187,10 +191,23 @@ export async function publishApp(app: { id: string; name: string }): Promise<voi
  * snapshot even though the source changed since prepare; the dialog only sets it on
  * the second, "Publish anyway" press. A first drift reply re-opens the dialog with
  * the changed-file list instead of uploading.
+ *
+ * The publisher terms ride along the same call: when this publisher has not yet
+ * accepted the current version, the ticked box sends `acceptTermsVersion` and the
+ * host records it before uploading. The dialog's button is disabled until then, so
+ * a `terms_required` reply means the host refused something the UI thought was
+ * fine — it keeps the dialog open rather than discarding the freeze.
  */
 export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
   const pending = pendingPublish();
   if (!pending) return;
+
+  const terms = pending.summary.terms;
+  const needsTerms = !!terms && !terms.accepted;
+  if (needsTerms && !termsAgreed()) {
+    setStatus('Accept the Publisher Terms to publish.');
+    return;
+  }
 
   setStatus(`Publishing ${pending.app.name}…`, false);
   await withLoading(
@@ -200,9 +217,11 @@ export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
         pending.app,
         pending.summary.publicationId,
         acknowledgeDrift,
+        needsTerms ? terms.version : undefined,
       );
       if (outcome.published) {
         setPendingPublish(null);
+        setTermsAgreed(false);
         setStatus(outcome.message || `Published ${pending.app.name} to the marketplace`);
         // Ownership may have just been claimed — refresh so the badge reflects it.
         await refreshAccount();
@@ -212,9 +231,15 @@ export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
           drift: { changedFiles: outcome.drift?.changedFiles ?? [] },
         });
         setStatus('Source changed since prepare — review the changes.');
+      } else if (outcome.status === 'terms_required') {
+        // The freeze survives an unaccepted-terms refusal, so the dialog stays open
+        // and the user can tick the box and press Publish again.
+        setTermsAgreed(false);
+        setStatus(outcome.message || 'Accept the Publisher Terms to publish.');
       } else {
         // expired / not_found / error: the freeze is gone or unusable — close and report.
         setPendingPublish(null);
+        setTermsAgreed(false);
         setStatus(outcome.message || 'Publish failed.');
       }
     },
@@ -226,6 +251,7 @@ export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
 export async function cancelPublish(): Promise<void> {
   const pending = pendingPublish();
   setPendingPublish(null);
+  setTermsAgreed(false);
   if (!pending) return;
   try {
     await hostCancelPublish(pending.app, pending.summary.publicationId);

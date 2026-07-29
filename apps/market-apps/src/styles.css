@@ -476,6 +476,59 @@ body {
   overflow-y: auto;
 }
 
+/* ── Publisher terms ─────────────────────────────────────────────────── */
+
+.publish-terms {
+  margin-bottom: var(--yaar-sp-3);
+  padding: var(--yaar-sp-3);
+  border-radius: 6px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  font-size: 12px;
+}
+
+.publish-terms-agree {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--yaar-sp-2);
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.publish-terms-agree input {
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.publish-terms-accepted {
+  line-height: 1.5;
+}
+
+.publish-terms-details {
+  margin-top: var(--yaar-sp-2);
+}
+
+.publish-terms-summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* The terms are prose, not code: wrap them, but keep the authored line breaks so
+   the numbered clauses stay separated. */
+.publish-terms-text {
+  margin: var(--yaar-sp-2) 0 0;
+  padding: var(--yaar-sp-2);
+  max-height: 200px;
+  overflow-y: auto;
+  border-radius: 4px;
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text-muted);
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
 .publish-actions {
   display: flex;
   justify-content: flex-end;

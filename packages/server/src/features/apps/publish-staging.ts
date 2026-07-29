@@ -34,6 +34,10 @@ import { errMessage } from '../../lib/errors.js';
 import { resolveAppDir } from './roots.js';
 import { readAppVersion, versionPublishError } from './version.js';
 import { isValidAppId, packageAppTarball, uploadTarball, type PublishResult } from './publish.js';
+import {
+  acceptForSignedInPublisher,
+  getTermsAcceptanceForSignedInPublisher,
+} from './publisher-terms.js';
 
 /** How long a frozen publication stays valid before its bytes are swept. */
 const PENDING_TTL_MS = 15 * 60 * 1000;
@@ -63,6 +67,20 @@ export interface PendingPublication {
 }
 
 /**
+ * The publisher agreement as it bears on *this* publish.
+ *
+ * Carried on the prepare summary rather than fetched separately so the confirmation
+ * dialog has everything it needs to render the gate in one round trip — and so what
+ * the user reads is the text the server will hold them to.
+ */
+export interface TermsGate {
+  version: string;
+  /** True when the signed-in publisher already accepted this version. */
+  accepted: boolean;
+  text: string;
+}
+
+/**
  * Public, JSON-safe view of a pending publication — no absolute staging path.
  */
 export interface PreparedSummary {
@@ -73,6 +91,8 @@ export interface PreparedSummary {
   manifestSha256: string;
   byteLength: number;
   expiresAt: string;
+  /** What the confirmation step must still get agreement to, if anything. */
+  terms: TermsGate;
 }
 
 export interface DriftResult {
@@ -92,7 +112,13 @@ function stagingDir(): string {
   return join(getStorageDir(), 'publish-staging');
 }
 
-function summarize(p: PendingPublication): PreparedSummary {
+/**
+ * Async because the terms standing is read at summarize time, not frozen with the
+ * bytes: a publisher who accepts, cancels, and re-opens the dialog should see the
+ * gate already satisfied rather than a stale snapshot of when they prepared.
+ */
+async function summarize(p: PendingPublication): Promise<PreparedSummary> {
+  const standing = await getTermsAcceptanceForSignedInPublisher();
   return {
     publicationId: p.publicationId,
     appId: p.appId,
@@ -101,6 +127,7 @@ function summarize(p: PendingPublication): PreparedSummary {
     manifestSha256: p.baseline.appJsonHash,
     byteLength: p.byteLength,
     expiresAt: new Date(p.expiresAt).toISOString(),
+    terms: { version: standing.version, accepted: standing.accepted, text: standing.text },
   };
 }
 
@@ -202,11 +229,13 @@ export async function preparePublication(
     expiresAt: now + PENDING_TTL_MS,
   };
   pending.set(publicationId, record);
-  return { success: true, summary: summarize(record) };
+  return { success: true, summary: await summarize(record) };
 }
 
 /** Read-only status of a pending publication. */
-export function getPendingPublication(publicationId: string): PreparedSummary | null {
+export async function getPendingPublication(
+  publicationId: string,
+): Promise<PreparedSummary | null> {
   const p = pending.get(publicationId);
   return p ? summarize(p) : null;
 }
@@ -239,7 +268,7 @@ export async function detectDrift(publicationId: string): Promise<DriftResult | 
 }
 
 export interface ConfirmResult {
-  status: 'published' | 'drift_detected' | 'expired' | 'not_found' | 'error';
+  status: 'published' | 'drift_detected' | 'terms_required' | 'expired' | 'not_found' | 'error';
   /** Present on `published`. */
   result?: PublishResult;
   /** Present on `drift_detected`. */
@@ -260,6 +289,12 @@ export async function finalizePublication(
   opts: {
     /** Ship the frozen snapshot even though the source changed since prepare. */
     acknowledgeDrift?: boolean;
+    /**
+     * The publisher-terms version the user agreed to in the confirmation dialog.
+     * Recorded here, before the upload, so the gate in `uploadTarball` passes; a
+     * version that is no longer current is refused rather than quietly stored.
+     */
+    acceptTermsVersion?: string;
     /** The app the caller believes it is confirming, cross-checked against the freeze. */
     expectedAppId?: string;
     upload?: (appId: string, tarball: Buffer) => Promise<PublishResult>;
@@ -278,6 +313,14 @@ export async function finalizePublication(
   if (p.expiresAt <= Date.now()) {
     await cancelPublication(publicationId);
     return { status: 'expired', message: 'This publication expired. Prepare it again.' };
+  }
+
+  // Before drift, before reading the frozen bytes: an acceptance the caller sends is
+  // consent to the terms as such, not to this particular tarball, so a later refusal
+  // does not un-accept it and a retry does not re-ask.
+  if (opts.acceptTermsVersion) {
+    const accepted = await acceptForSignedInPublisher(opts.acceptTermsVersion);
+    if (!accepted.ok) return { status: 'terms_required', message: accepted.error };
   }
 
   const drift = await detectDrift(publicationId);
@@ -302,8 +345,13 @@ export async function finalizePublication(
   const upload = opts.upload ?? uploadTarball;
   const result = await upload(p.appId, tarball);
   // Only a successful upload consumes the freeze; a transient failure leaves it so
-  // the caller can retry the same bytes while the nonce/TTL is still valid.
+  // the caller can retry the same bytes while the nonce/TTL is still valid. An
+  // unaccepted-terms refusal is exactly such a retryable state — the freeze stays,
+  // and the dialog can send the acceptance and confirm again.
   if (result.success) await cancelPublication(publicationId);
+  if (result.code === 'terms_required') {
+    return { status: 'terms_required', result, message: result.error };
+  }
   return { status: result.success ? 'published' : 'error', result, message: result.error };
 }
 

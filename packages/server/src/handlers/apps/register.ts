@@ -61,8 +61,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
           type: 'string',
           enum: ['set_badge', 'install', 'publish', 'write', 'clone'],
           description:
-            'set_badge for app badge, install from marketplace, publish to marketplace, ' +
-            'write for app storage, clone for source cloning',
+            'set_badge for app badge, install from marketplace, publish to marketplace ' +
+            '(refused until the signed-in publisher has accepted the Publisher Terms in ' +
+            "the Market Apps publish dialog — that acceptance is the user's to give, not " +
+            "an agent's), write for app storage, clone for source cloning",
         },
         count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
         content: { type: 'string', description: 'File content (for write)' },

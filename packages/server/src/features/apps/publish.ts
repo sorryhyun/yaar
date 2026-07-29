@@ -14,7 +14,8 @@
 import { dirname, basename } from 'path';
 import { spawn } from 'bun';
 import { MARKET_URL } from '../../config.js';
-import { getIdToken } from '../market/google-auth.js';
+import { getAuthStatus, getIdToken } from '../market/google-auth.js';
+import { termsGateError } from './publisher-terms.js';
 import { resolveAppDir } from './roots.js';
 import { readAppVersion, versionPublishError } from './version.js';
 import { errMessage } from '../../lib/errors.js';
@@ -31,6 +32,11 @@ const PUBLISH_RETRY_DELAYS_MS = [1000, 4000];
 export interface PublishResult {
   success: boolean;
   error?: string;
+  /**
+   * Why the publish was refused, when the reason is one a caller can act on rather
+   * than merely report. `terms_required` is the publisher agreement gate.
+   */
+  code?: 'terms_required';
   /** The marketplace's human-facing note, e.g. "live in ~1 minute". */
   message?: string;
   commit?: string;
@@ -97,24 +103,37 @@ export function isValidAppId(appId: string): boolean {
   return APP_ID_RE.test(appId);
 }
 
+/** Said in one voice by every path that needs a publisher and hasn't got one. */
+const SIGNED_OUT_ERROR =
+  'Not signed in to Google. Open the Market Apps window and sign in to publish.';
+
 /**
  * Upload an already-built tarball to the marketplace, authenticated by the Google
  * ID token. Split out from `publishApp` so the two-phase publish flow
  * (`publish-staging.ts`) can ship its *frozen* bytes through the identical path —
  * same auth, same retry policy, same response parsing.
+ *
+ * This is also **the** publisher-terms chokepoint: every route to the marketplace —
+ * the one-shot `publishApp`, the two-phase `finalizePublication`, an agent invoking
+ * `yaar://apps/{id}` directly — passes through here, so the agreement is checked
+ * once, in front of the network call, rather than once per caller.
  */
 export async function uploadTarball(appId: string, tarball: Buffer): Promise<PublishResult> {
+  // Local read, no network: it answers both "is there a publisher" and "who", which
+  // is what the terms are keyed on. Asking before minting an ID token also keeps a
+  // refused publish from spending a token refresh on the way to being refused.
+  const auth = await getAuthStatus();
+  if (!auth.signedIn || !auth.email) return { success: false, error: SIGNED_OUT_ERROR };
+
+  const termsError = await termsGateError(auth.email);
+  if (termsError) return { success: false, error: termsError, code: 'terms_required' };
+
   const idToken = await getIdToken().catch((err) => {
     // An expired refresh grant surfaces here as "sign in again" — pass it through
     // rather than flattening it into a generic publish failure.
     throw new Error(errMessage(err));
   });
-  if (!idToken) {
-    return {
-      success: false,
-      error: 'Not signed in to Google. Open the Market Apps window and sign in to publish.',
-    };
-  }
+  if (!idToken) return { success: false, error: SIGNED_OUT_ERROR };
 
   const form = new FormData();
   form.append('tarball', new Blob([tarball], { type: 'application/gzip' }), `${appId}.tar.gz`);

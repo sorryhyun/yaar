@@ -22,6 +22,7 @@ import {
   __setBaselineForTest,
 } from '../features/apps/publish-staging.js';
 import { isNewerVersion, parseSemver, versionPublishError } from '../features/apps/version.js';
+import { PUBLISHER_TERMS_VERSION } from '../features/apps/publisher-terms.js';
 import type { PublishResult } from '../features/apps/publish.js';
 
 /** Prepare with the version guard stubbed to "unpublished" so it never hits the network. */
@@ -146,13 +147,13 @@ describe('prepare / freeze / cancel (real bundled app: memo)', () => {
     // The frozen tarball is on disk and the record is retrievable.
     const staged = await readdir(join(storageRoot, 'publish-staging'));
     expect(staged.some((f) => f.startsWith(summary.publicationId))).toBe(true);
-    expect(getPendingPublication(summary.publicationId)?.artifactSha256).toBe(
+    expect((await getPendingPublication(summary.publicationId))?.artifactSha256).toBe(
       summary.artifactSha256,
     );
 
     // Cancel removes both the record and the frozen bytes.
     expect(await cancelPublication(summary.publicationId)).toBe(true);
-    expect(getPendingPublication(summary.publicationId)).toBeNull();
+    expect(await getPendingPublication(summary.publicationId)).toBeNull();
     const after = await readdir(join(storageRoot, 'publish-staging'));
     expect(after.some((f) => f.startsWith(summary.publicationId))).toBe(false);
   });
@@ -163,8 +164,8 @@ describe('prepare / freeze / cancel (real bundled app: memo)', () => {
     expect(first.success && second.success).toBe(true);
     if (!first.success || !second.success) return;
 
-    expect(getPendingPublication(first.summary.publicationId)).toBeNull();
-    expect(getPendingPublication(second.summary.publicationId)).not.toBeNull();
+    expect(await getPendingPublication(first.summary.publicationId)).toBeNull();
+    expect(await getPendingPublication(second.summary.publicationId)).not.toBeNull();
     await cancelPublication(second.summary.publicationId);
   });
 });
@@ -185,7 +186,7 @@ describe('finalize / drift gate', () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]).toEqual({ appId: 'memo', byteLength: prep.summary.byteLength });
     // A published freeze is consumed.
-    expect(getPendingPublication(prep.summary.publicationId)).toBeNull();
+    expect(await getPendingPublication(prep.summary.publicationId)).toBeNull();
   });
 
   it('refuses to upload on drift, then ships the frozen snapshot when acknowledged', async () => {
@@ -204,7 +205,7 @@ describe('finalize / drift gate', () => {
     expect(refused.status).toBe('drift_detected');
     expect(refused.drift?.drifted).toBe(true);
     // The freeze survives a refusal so it can be acknowledged or re-prepared.
-    expect(getPendingPublication(id)).not.toBeNull();
+    expect(await getPendingPublication(id)).not.toBeNull();
 
     const acked = fakeUploader();
     const outcome = await finalizePublication(id, {
@@ -232,6 +233,48 @@ describe('finalize / drift gate', () => {
   it('reports not_found for an unknown publication', async () => {
     const outcome = await finalizePublication('pubver_nope', { upload: fakeUploader().upload });
     expect(outcome.status).toBe('not_found');
+  });
+});
+
+/**
+ * The agreement itself is covered by `publisher-terms.test.ts`; what matters here is
+ * that the two-phase flow *carries* it — the summary the dialog renders, and the
+ * acceptance the confirm relays. The injected uploader bypasses the real gate (which
+ * lives in `uploadTarball`), so these assert the wiring, not the refusal.
+ */
+describe('publisher terms in the two-phase flow', () => {
+  it('hands the dialog the terms to show alongside the digest', async () => {
+    const prep = await prepare('memo');
+    expect(prep.success).toBe(true);
+    if (!prep.success) return;
+
+    const { terms } = prep.summary;
+    expect(terms.version).toBe(PUBLISHER_TERMS_VERSION);
+    expect(terms.text).toContain(`v${PUBLISHER_TERMS_VERSION}`);
+    // No Google session in a test process, so nobody has accepted anything.
+    expect(terms.accepted).toBe(false);
+
+    await cancelPublication(prep.summary.publicationId);
+  });
+
+  it('refuses an acceptance it cannot attribute, and keeps the freeze', async () => {
+    const prep = await prepare('memo');
+    expect(prep.success).toBe(true);
+    if (!prep.success) return;
+    const id = prep.summary.publicationId;
+    const { calls, upload } = fakeUploader();
+
+    // Signed out: there is no publisher to record an acceptance against.
+    const outcome = await finalizePublication(id, {
+      expectedAppId: 'memo',
+      acceptTermsVersion: PUBLISHER_TERMS_VERSION,
+      upload,
+    });
+
+    expect(outcome.status).toBe('terms_required');
+    expect(calls).toHaveLength(0); // refused before the upload, not after
+    expect(await getPendingPublication(id)).not.toBeNull();
+    await cancelPublication(id);
   });
 });
 

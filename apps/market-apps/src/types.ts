@@ -80,6 +80,20 @@ export type ApiPayload = {
 };
 
 /**
+ * The publisher agreement, as it stands for the signed-in publisher.
+ *
+ * The `text` is the host's copy, not the app's: the dialog must show the words the
+ * server will hold the user to, so a stale bundled app can never present terms that
+ * differ from the ones being accepted.
+ */
+export type PublisherTerms = {
+  version: string;
+  /** True when this publisher already accepted this exact version — no checkbox needed. */
+  accepted: boolean;
+  text: string;
+};
+
+/**
  * The host's answer to `publish_prepare`: an app has been packaged and its exact
  * bytes frozen server-side under `publicationId`, awaiting confirmation. The digest
  * + size are what the confirmation dialog shows before we commit to uploading.
@@ -92,12 +106,18 @@ export type PreparedPublication = {
   manifestSha256: string;
   byteLength: number;
   expiresAt: string;
+  /**
+   * Optional only because this response is not schema-validated. A host that sends
+   * no terms simply gets no checkbox here — the gate that actually blocks the upload
+   * lives on the server, so a missing field costs a clear refusal, not a bypass.
+   */
+  terms?: PublisherTerms;
 };
 
 /** The host's answer to `publish_confirm`. `published` is the only field always present. */
 export type ConfirmOutcome = {
   published: boolean;
-  status?: 'published' | 'drift_detected' | 'expired' | 'not_found' | 'error';
+  status?: 'published' | 'drift_detected' | 'terms_required' | 'expired' | 'not_found' | 'error';
   message?: string;
   drift?: { drifted: boolean; changedFiles: string[] };
 };

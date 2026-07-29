@@ -76,15 +76,22 @@ export async function hostPreparePublish(app: { id: string }): Promise<PreparedP
   })) as PreparedPublication;
 }
 
+/**
+ * `acceptTermsVersion` is sent only when the user ticked the agreement box in this
+ * dialog — it names the exact terms version they read, and the host refuses any
+ * other. Omitting it on a publish that needs it is what produces `terms_required`.
+ */
 export async function hostConfirmPublish(
   app: { id: string },
   publicationId: string,
   acknowledgeDrift: boolean,
+  acceptTermsVersion?: string,
 ): Promise<ConfirmOutcome> {
   return (await invoke('yaar://apps/' + app.id, {
     action: 'publish_confirm',
     publicationId,
     acknowledgeDrift,
+    ...(acceptTermsVersion ? { acceptTermsVersion } : {}),
   })) as ConfirmOutcome;
 }
 

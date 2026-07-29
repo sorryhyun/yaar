@@ -39,11 +39,13 @@ import {
   setHideInstalled,
   setSearch,
   setSearchMode,
+  setTermsAgreed,
   statusText,
+  termsAgreed,
   visibleApps,
 } from './store.js';
 import type { SearchMode } from './store.js';
-import type { DisplayApp } from './types.js';
+import type { DisplayApp, PublisherTerms } from './types.js';
 
 /** Whether the settings/config popover is open. UI-only, so it stays local to this module. */
 const [configOpen, setConfigOpen] = createSignal(false);
@@ -341,12 +343,53 @@ export function configPanel() {
   `;
 }
 
+/**
+ * The publisher-agreement block inside the publish dialog.
+ *
+ * Two shapes, and the difference matters: a publisher who has already accepted this
+ * version sees a one-line reminder with the terms still readable, while one who has
+ * not gets the checkbox that arms the Publish button. The full text ships inside a
+ * `<details>` rather than behind a link — the terms are what the host will hold them
+ * to, and reading them must not depend on a network round trip.
+ */
+function termsBlock(terms: PublisherTerms) {
+  const readable = html`<details class="publish-terms-details">
+    <summary class="publish-terms-summary y-text-muted">
+      Read the Publisher Terms (v${terms.version})
+    </summary>
+    <pre class="publish-terms-text">${terms.text}</pre>
+  </details>`;
+
+  if (terms.accepted) {
+    return html`<div class="publish-terms">
+      <div class="publish-terms-accepted y-text-muted">
+        ✓ You have accepted the Publisher Terms (v${terms.version}).
+      </div>
+      ${readable}
+    </div>`;
+  }
+
+  return html`<div class="publish-terms">
+    <label class="publish-terms-agree">
+      <input
+        type="checkbox"
+        checked=${() => termsAgreed()}
+        disabled=${() => confirmBusy()}
+        onChange=${(e: Event) => setTermsAgreed((e.target as HTMLInputElement).checked)}
+      />
+      <span>I agree to the Marketplace Publisher Terms (v${terms.version})</span>
+    </label>
+    ${readable}
+  </div>`;
+}
+
 /** The full application view. */
 /**
  * The publish confirmation dialog. Stable outer node + reactive inner content (the
  * `githubBanner` idiom), so it shows/hides as `pendingPublish` flips without the
- * parent re-rendering. Shows the frozen digest + size the user is approving, and on
- * source drift, the changed-file list behind a "Publish anyway" press.
+ * parent re-rendering. Shows the frozen digest + size the user is approving, the
+ * publisher agreement that arms the button, and on source drift, the changed-file
+ * list behind a "Publish anyway" press.
  */
 export function publishModal() {
   return html`
@@ -357,6 +400,10 @@ export function publishModal() {
         const { app, summary } = pending;
         const drifted = !!pending.drift;
         const files = pending.drift?.changedFiles ?? [];
+        const terms = summary.terms;
+        // Only an unaccepted agreement gates the button; an already-accepted one is
+        // shown for reference and asks nothing.
+        const needsTerms = !!terms && !terms.accepted;
         return html`
           <div
             class="publish-backdrop"
@@ -395,6 +442,7 @@ export function publishModal() {
                     </ul>
                   </div>`
                 : ''}
+              ${terms ? termsBlock(terms) : ''}
               <div class="publish-actions">
                 <button
                   class="y-btn y-btn-sm"
@@ -405,7 +453,11 @@ export function publishModal() {
                 </button>
                 <button
                   class="y-btn y-btn-sm y-btn-primary"
-                  disabled=${() => confirmBusy()}
+                  disabled=${() => confirmBusy() || (needsTerms && !termsAgreed())}
+                  title=${() =>
+                    needsTerms && !termsAgreed()
+                      ? 'Accept the Publisher Terms to enable publishing'
+                      : ''}
                   onClick=${() => void confirmPublish(drifted)}
                 >
                   ${() => (confirmBusy() ? 'Publishing…' : drifted ? 'Publish anyway' : 'Publish')}

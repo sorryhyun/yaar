@@ -113,12 +113,17 @@ export async function invokeApplication(
     const outcome = await finalizePublication(publicationId, {
       expectedAppId: appId,
       acknowledgeDrift: payload.acknowledgeDrift === true,
+      // Only a string is passed through: accepting the publisher terms means naming
+      // the version that was read, and `true` names nothing.
+      acceptTermsVersion:
+        typeof payload.acceptTermsVersion === 'string' ? payload.acceptTermsVersion : undefined,
     });
     if (outcome.status === 'published') {
       return okJson({ published: true, appId, ...outcome.result });
     }
-    // drift_detected / expired / not_found / error are all actionable states, not
-    // hard failures — hand the agent structured detail so it can re-prepare or ack.
+    // drift_detected / terms_required / expired / not_found / error are all actionable
+    // states, not hard failures — hand the agent structured detail so it can
+    // re-prepare, acknowledge, or tell the user to accept the terms.
     return okJson({ published: false, ...outcome });
   }
 

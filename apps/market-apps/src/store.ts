@@ -43,6 +43,12 @@ export const [authBusy, setAuthBusy] = createSignal(false);
 export const [pendingPublish, setPendingPublish] = createSignal<PendingPublish | null>(null);
 /** True while a `publish_confirm` round-trip is in flight, to disable the dialog buttons. */
 export const [confirmBusy, setConfirmBusy] = createSignal(false);
+/**
+ * The publisher-terms checkbox in the open dialog. Reset every time a dialog opens
+ * or closes: consent is given for the publish in front of you, and a box left ticked
+ * from a previous dialog would be agreement nobody re-read.
+ */
+export const [termsAgreed, setTermsAgreed] = createSignal(false);
 
 /** Starts healthy so nothing flashes on screen before the first check answers. */
 export const [githubStatus, setGithubStatus] = createSignal<GithubStatus>(GITHUB_STATUS_HEALTHY);
