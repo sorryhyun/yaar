@@ -28,7 +28,7 @@
  * rename means a reader sees the whole file or none of it, never a partial one.
  */
 
-import { mkdir, rename } from 'node:fs/promises';
+import { mkdir, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { extractProtocolFromDir } from '@yaar/compiler';
 import { resolveAppDir } from '../../features/apps/roots.js';
@@ -46,8 +46,22 @@ async function ensureProtocol(appId: string): Promise<void> {
   if (!protocol) return; // no protocol declared — nothing to materialize
   await mkdir(join(appDir, 'dist'), { recursive: true });
   const tmp = `${distProtocol}.${process.pid}.tmp`;
-  await Bun.write(tmp, JSON.stringify(protocol, null, 2));
-  await rename(tmp, distProtocol);
+  try {
+    await Bun.write(tmp, JSON.stringify(protocol, null, 2));
+    await rename(tmp, distProtocol);
+  } catch (err) {
+    // Writing the artifact is a best effort, never fatal. A preload that throws takes
+    // its entire test process with it — one CI run lost the whole `units` partition to
+    // an ENOENT renaming this temp file, and every test in it was reported as an error
+    // rather than a result. The mechanism is unconfirmed (17 processes materialize the
+    // same three files at once, which is the only concurrency here), so the response is
+    // to check the outcome rather than the cause: if the file is there, someone else
+    // wrote it and there was nothing left to do; if it is not, say so and let the test
+    // that needs it fail on its own assertion.
+    await rm(tmp, { force: true });
+    if (await Bun.file(distProtocol).exists()) return;
+    console.warn(`[test-preload] could not materialize ${appId}/dist/protocol.json:`, err);
+  }
 }
 
 await Promise.all(APPS_UNDER_TEST.map(ensureProtocol));
