@@ -146,7 +146,7 @@ src/
 │   ├── utils.ts          # Shared handler utilities
 │   ├── agents.ts / apps.ts (barrel over apps/) / storage.ts / config.ts
 │   ├── apps/             # register.ts, app-resource.ts, storage-resource.ts, db-resource.ts, paths.ts — still one yaar://apps/* registration (ResourceRegistry has no middle wildcard)
-│   ├── session.ts / skills.ts / user.ts / window.ts
+│   ├── session.ts / skills.ts / system.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
 │   ├── system/           # Always-active: reload_cached, list_reload_options
@@ -158,6 +158,7 @@ src/
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)
 │   ├── http/             # fetch.ts — proxied HTTP fetch
+│   ├── update/           # Self-update: semver.ts, release.ts (GitHub + SHA256SUMS), installer.ts (download/verify/swap), updater.ts (state)
 │   └── window/           # Window create/update/manage, app protocol, app query/command, subscribe/unsubscribe
 ├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder
 ├── reload/               # Fingerprint-based action cache
@@ -346,3 +347,41 @@ This is the same check `POST /api/verb` runs, shared rather than duplicated — 
 **The origin boundary (token-forgery closed):** app-origin isolation is on by default, locally and over the network (`YAAR_APP_ORIGIN_ISOLATION`, set `=0` to disable). Installed apps are served cross-origin (from `127.0.0.1` locally, from `…ts.net:8443` over Tailscale Serve) and `resolvePrincipal` refuses a token-less request carrying the app origin, so an app cannot omit its token and be resolved as `host`. Being cross-origin the browser blocks `window.parent` DOM/memory reach, and top-level navigation (`window.top.location`) is closed by `ISOLATED_APP_SANDBOX` (IframeRenderer.tsx), which withholds only the top-navigation family. The residual is the isolation-*off* case and a tailnet **app** rule that fails to register (logged by `tailscale-tunnel.ts`; deliberately not backfilled with the loopback alias, since a remote browser resolves no `127.0.0.1` of ours and the frontend's `siblingLoopbackOrigin()` derives one only on `localhost`). A tunnel that fails to come up leaves the server loopback-only, where `startTunnel` installs the loopback-alias boundary explicitly (`isAppOriginIsolationEnabled()` is false under `IS_REMOTE`, so without that call the fallback would run with none). One consequence: an isolated app's calls authenticate with their **iframe token**, accepted by `checkHttpAuth` as a credential in its own right — a cross-origin `Referer` is trimmed to a bare origin, so the remote token cannot ride along in it. See [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
 
 **MCP principal:** each agent gets a token minted by `mcp/agent-tokens.ts` and bound to its id server-side; providers send it as `X-Agent-Token`. The shared bearer token (`getMcpToken()`) is transport auth only and says nothing about *which* agent is calling. There is deliberately no `x-agent-id` header — an agent that can name a principal can become it.
+
+## Self-update (`features/update/`)
+
+`yaar://system/update` is how YAAR learns about and installs its own releases; the Configurations
+app's **Updates** tab is the one consumer, and it renders the server's answer rather than
+re-deriving any of it. Four files: `semver.ts` (comparison), `release.ts` (GitHub's
+`/releases/latest`, asset naming, `SHA256SUMS` parsing — all pure or injected-`fetch`),
+`installer.ts` (download, verify, swap), `updater.ts` (status + orchestration).
+
+Five things are load-bearing:
+
+- **`read` never hits the network; only `invoke {action:'check'}` does.** The UI polls `read` once
+  a second during an install, and the anonymous GitHub API allows 60 requests an hour per IP.
+  `check` is itself cached for 5 minutes, `force: true` bypasses it.
+- **`invoke {action:'install'}` returns once the work has started**, not when it finishes. A
+  verified download of the binary plus the apps archive is minutes on a slow link; an HTTP request
+  held open for that is indistinguishable from a hang. Refusals (nothing to install, GitHub
+  unreachable, this build cannot self-update) are thrown *synchronously* so the caller learns the
+  reason without reading it back out of progress state.
+- **A missing or mismatched `SHA256SUMS` is a hard failure.** install.sh warns and continues,
+  because it must still work against releases cut before the manifest existed and against a
+  `VERSION=` pin at one of those tags; the updater only ever targets the latest release, which
+  always publishes one — and a user who clicks a button and walks away has no shell to read a
+  warning in.
+- **Staging is a sibling of `process.execPath`, never `os.tmpdir()`.** The swap is `rename(2)`,
+  which fails across filesystems, and `/tmp` frequently is one.
+- **`getUpdateStatus()` reports the *first* blocker, not the last.** `source-checkout` outranks
+  `no-asset`: a dev checkout is blocked whether or not the release ships its platform's binary, and
+  "download it from the releases page" is the wrong advice for one. `blockedReason` maps 1:1 onto
+  the hint the app shows.
+
+Installing never restarts the server — the running process still holds the old code, and the
+previous binary is left beside the new one as `yaar.previous` (Windows cannot delete a running
+executable; the *next* install clears it).
+
+Adding `system` to `YaarAuthority` (`packages/shared/src/yaar-uri.ts`) is what makes the URI
+resolvable — `resolveUri`'s fallback and its bare-authority regex both list it, alongside `skills`
+and `mcp`, as an authority with no dedicated parser.

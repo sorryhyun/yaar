@@ -19,6 +19,7 @@ import { registerSessionHandlers } from './session.js';
 import { registerHistoryHandlers } from './history.js';
 import { registerAgentsHandlers } from './agents.js';
 import { registerSkillsHandlers } from './skills.js';
+import { registerSystemHandlers } from './system.js';
 import { registerHttpHandlers } from './http.js';
 import { registerMcpGatewayHandlers } from './mcp-gateway.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
@@ -54,6 +55,7 @@ export function initRegistry(): ResourceRegistry {
   registerHistoryHandlers(registry);
   registerAgentsHandlers(registry);
   registerSkillsHandlers(registry);
+  registerSystemHandlers(registry);
   registerHttpHandlers(registry);
   registerMcpGatewayHandlers(registry);
 

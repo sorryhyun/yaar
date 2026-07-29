@@ -1,4 +1,4 @@
-export type Tab = 'settings' | 'shortcuts' | 'hooks' | 'domains';
+export type Tab = 'settings' | 'shortcuts' | 'hooks' | 'domains' | 'updates';
 
 export interface Shortcut {
   id: string;
@@ -40,4 +40,41 @@ export interface Hook {
 export interface DomainsData {
   allow_all_domains: boolean;
   allowed_domains: string[];
+}
+
+// Mirrors `UpdateStatus` in `packages/server/src/features/update/updater.ts`, which is
+// the only thing that decides any of it — this app renders the answer, it does not
+// re-derive it. Keep the two in step when the server's shape grows.
+export interface UpdateProgress {
+  stage: 'idle' | 'downloading' | 'verifying' | 'installing' | 'ready' | 'error';
+  detail?: string;
+  /** 0..1 for the current download; absent when the step has no measurable size. */
+  fraction?: number;
+  targetVersion?: string;
+  error?: string;
+  startedAt?: number;
+  finishedAt?: number;
+}
+
+export interface UpdateStatus {
+  current: string;
+  bundled: boolean;
+  platform: string;
+  arch: string;
+  asset: string | null;
+  canInstall: boolean;
+  blockedReason?: 'source-checkout' | 'unsupported-platform' | 'no-asset';
+  latest?: {
+    version: string;
+    tag: string;
+    name: string;
+    notes: string;
+    url: string;
+    publishedAt: string | null;
+    updateAvailable: boolean;
+    assetMissing: boolean;
+  };
+  checkedAt?: number;
+  checkError?: string;
+  progress: UpdateProgress;
 }

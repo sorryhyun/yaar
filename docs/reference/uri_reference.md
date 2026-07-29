@@ -8,7 +8,7 @@ All parsing flows through `packages/shared/src/yaar-uri.ts`. Server-side handler
 
 ## URI Space
 
-The `YaarAuthority` type covers nine namespaces:
+The `YaarAuthority` type covers ten namespaces:
 
 | Namespace | URI | Description |
 |-----------|-----|-------------|
@@ -21,6 +21,7 @@ The `YaarAuthority` type covers nine namespaces:
 | `history` | `yaar://history/` | Past session logs (list/read) |
 | `skills` | `yaar://skills/{topic}` | Skill topic docs (read before using related tools) |
 | `mcp` | `yaar://mcp/...` | External MCP server gateway (add/remove/refresh servers, call their tools) |
+| `system` | `yaar://system/update` | The running installation — version check and self-update |
 
 ### App sub-agents — `yaar://apps/self/agents`
 
@@ -175,6 +176,28 @@ Callable by every agent tier:
 | `yaar://user/notifications/{id}` | Dismiss notification (delete) |
 | `yaar://user/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
 | `yaar://user/clipboard` | **Not yet implemented.** The `clipboard` sub-kind is recognized by URI parsing (`packages/server/src/lib/yaar-uri-server.ts`), but no handler is registered for it in `packages/server/src/handlers/user.ts` — invoking it resolves to "no handler found." |
+
+### System — `yaar://system/...`
+
+The running installation itself, rather than anything inside a session. Not session-principal:
+an app that declares the permission can call it (the Configurations app does — this is what its
+**Updates** tab renders), and so can every agent tier.
+
+| URI | Verb | Description |
+|-----|------|-------------|
+| `yaar://system` | `list` | Enumerate system resources |
+| `yaar://system/update` | `read` | Running version, build shape, last check result, live install progress. **Never touches the network** — safe to poll |
+| `yaar://system/update` | `invoke` `{ action: 'check', force? }` | Ask GitHub for the latest release. Cached 5 minutes; `force` bypasses the cache |
+| `yaar://system/update` | `invoke` `{ action: 'install' }` | Download the latest release, verify it against the release's `SHA256SUMS`, and swap it in. Returns once the work has *started* — poll `read` for the outcome |
+
+`install` refuses synchronously (rather than failing later in the progress state) when there is
+nothing to install, when GitHub was unreachable, or when this build cannot install updates at all
+— only the standalone executable can replace itself, so a source checkout is told to use
+`git pull` and a platform with no published binary is told to build from source. A checksum
+mismatch, or a release with no `SHA256SUMS`, is a hard failure: nothing unverified is installed.
+Installing never restarts YAAR; the user does that.
+
+**Source:** `packages/server/src/features/update/`, `packages/server/src/handlers/system.ts`
 
 ---
 

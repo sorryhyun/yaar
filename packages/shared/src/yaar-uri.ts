@@ -22,6 +22,9 @@
  *   yaar://user/notifications/{id}           → notification by ID (dismiss)
  *   yaar://user/prompts                      → ask/request user input
  *   yaar://user/clipboard                    → clipboard
+ *
+ * The running installation itself (yaar://system/...):
+ *   yaar://system/update                     → version check + self-update
  */
 
 export type YaarAuthority =
@@ -33,7 +36,8 @@ export type YaarAuthority =
   | 'user'
   | 'history'
   | 'skills'
-  | 'mcp';
+  | 'mcp'
+  | 'system';
 
 export interface ParsedYaarUri {
   authority: YaarAuthority;
@@ -56,6 +60,7 @@ const AUTHORITIES = [
   'history',
   'skills',
   'mcp',
+  'system',
 ] as const satisfies readonly YaarAuthority[];
 
 // None of the authority strings contain regex-special characters, so no escaping is needed here;
@@ -129,6 +134,7 @@ export function resolveContentUri(uri: string): string | null {
     case 'history':
     case 'skills':
     case 'mcp':
+    case 'system':
       // These authorities have no content resolution
       return null;
   }

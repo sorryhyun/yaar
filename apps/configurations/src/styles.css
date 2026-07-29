@@ -616,3 +616,123 @@ body,
   color: var(--yaar-error);
   border-color: var(--yaar-error);
 }
+
+/* Updates view */
+.u-value {
+  font-size: 13px;
+  color: var(--yaar-text);
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.u-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg);
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  margin-bottom: var(--yaar-sp-3);
+}
+
+.u-banner strong {
+  color: var(--yaar-text);
+}
+
+.u-banner-ok {
+  border-color: color-mix(in srgb, var(--yaar-success) 45%, var(--yaar-border));
+}
+
+.u-banner-err {
+  border-color: color-mix(in srgb, var(--yaar-error) 55%, var(--yaar-border));
+}
+
+.u-banner-warn {
+  border-color: color-mix(in srgb, var(--yaar-accent) 45%, var(--yaar-border));
+}
+
+.u-release {
+  padding: 12px;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg);
+  margin-bottom: var(--yaar-sp-3);
+}
+
+.u-release-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.u-release-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--yaar-text);
+}
+
+.u-notes {
+  margin: 10px 0 0;
+  padding: 8px 10px;
+  max-height: 180px;
+  overflow: auto;
+  background: var(--yaar-bg-surface);
+  border-radius: var(--yaar-radius);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--yaar-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.u-progress {
+  margin-bottom: var(--yaar-sp-3);
+}
+
+.u-progress-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  margin-bottom: 6px;
+}
+
+.u-bar {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  overflow: hidden;
+}
+
+.u-bar-fill {
+  height: 100%;
+  background: var(--yaar-accent);
+  transition: width 200ms ease;
+}
+
+/* No content-length on the response — show motion rather than a fake percentage. */
+.u-bar-fill.indeterminate {
+  width: 35%;
+  animation: u-slide 1.2s ease-in-out infinite;
+}
+
+@keyframes u-slide {
+  0% {
+    margin-left: -35%;
+  }
+  100% {
+    margin-left: 100%;
+  }
+}
+
+.u-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: var(--yaar-sp-2);
+}

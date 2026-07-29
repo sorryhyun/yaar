@@ -7,12 +7,14 @@ import { SettingsView } from './views/settings-view';
 import { ShortcutsView } from './views/shortcuts-view';
 import { HooksView } from './views/hooks-view';
 import { DomainsView } from './views/domains-view';
+import { UpdatesView } from './views/updates-view';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },
   { id: 'shortcuts', label: 'Shortcuts', icon: '⚡' },
   { id: 'hooks', label: 'Hooks', icon: '🪝' },
   { id: 'domains', label: 'Domains', icon: '🌐' },
+  { id: 'updates', label: 'Updates', icon: '📦' },
 ];
 
 function shiftTab(delta: number) {
@@ -38,6 +40,7 @@ function App() {
         ${() => activeTab() === 'settings' ? SettingsView() :
                  activeTab() === 'shortcuts' ? ShortcutsView() :
                  activeTab() === 'hooks' ? HooksView() :
+                 activeTab() === 'updates' ? UpdatesView() :
                  DomainsView()}
       </div>
 
@@ -51,7 +54,8 @@ export default defineApp({
   name: 'Configurations',
   state: {
     activeTab: {
-      description: 'The settings tab currently shown: settings, shortcuts, hooks, or domains.',
+      description:
+        'The settings tab currently shown: settings, shortcuts, hooks, domains, or updates.',
       get: () => activeTab(),
     },
   },
@@ -63,7 +67,7 @@ export default defineApp({
         properties: {
           tab: {
             type: 'string',
-            enum: ['settings', 'shortcuts', 'hooks', 'domains'],
+            enum: ['settings', 'shortcuts', 'hooks', 'domains', 'updates'],
             description: 'The tab to show.',
           },
         },
@@ -72,7 +76,7 @@ export default defineApp({
       run: (p) => {
         const tab = p.tab as Tab;
         if (!TABS.some((t) => t.id === tab)) {
-          throw new Error(`Unknown tab "${String(p.tab)}" - expected settings | shortcuts | hooks | domains`);
+          throw new Error(`Unknown tab "${String(p.tab)}" - expected ${TABS.map((t) => t.id).join(' | ')}`);
         }
         setActiveTab(tab);
       },
