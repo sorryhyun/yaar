@@ -9,7 +9,7 @@ import html from '@bundled/solid-js/html';
 import { For, Show, createMemo, createSignal } from '@bundled/solid-js';
 import { showPrompt } from '@bundled/yaar';
 import { doc, mutate, select, selection } from '../store';
-import { createDock, railTitle } from './dock';
+import { leftDock as dock, railTitle } from './dock';
 import type { SceneNode } from '../scene-doc';
 
 interface Row {
@@ -73,7 +73,6 @@ function onTreeDblClick(e: MouseEvent): void {
   if (found) void rename(found.node);
 }
 
-const dock = createDock('left');
 
 export function SceneTree() {
   return html`<div

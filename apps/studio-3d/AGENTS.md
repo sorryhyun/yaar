@@ -84,16 +84,21 @@ valid `loadModel` input.
 Both side panels are **hover-reveal**. They start closed, collapsed to a 24px rail on
 each edge labelled SCENE / INSPECTOR; moving the pointer onto a rail slides the panel out
 *over* the viewport (the canvas keeps full width, so nothing re-renders), and moving off
-slides it shut. The ⌗ button in each panel header pins it open. Hover-open is suppressed
-while a pointer drag that started in the viewport is in flight, and auto-close is
-suppressed while an input inside the panel has focus — so orbiting past a rail and typing
-in a field both behave.
+slides it shut. The ⌗ button in each panel header pins it open, and the pin persists.
+Hover-open is suppressed while a pointer drag that started in the viewport is in flight,
+and auto-close is suppressed while an input inside the panel has focus — so orbiting past
+a rail and typing in a field both behave.
+
+The state machine is `createCollapsiblePanel` from `@bundled/yaar`, with those two rules
+supplied as its `canOpen` / `holdOpen` predicates; `src/ui/dock.ts` holds only what is
+specific to a 3D viewport (the drag guard) and the markup glue. Don't fork it back into a
+local copy.
 
 The **Storage…** browser lists folders and files from `yaar://storage/`, with breadcrumbs,
 a `..` row and an ↑ button. Note for maintenance: the `list` verb does **not** set
 `isDirectory` and does not slash-suffix directory URIs — a folder is identified by
-`description === "directory"`, and entry names must be derived from the URI because the
-server's `name` field is truncated by one character in nested listings.
+`description === "directory"`. Entry names are derived from the URI, which is the
+canonical spelling.
 
 ## Anti-patterns
 

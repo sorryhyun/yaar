@@ -7,26 +7,23 @@
  * than sitting in the grid, so opening one never resizes the canvas and the
  * renderer's ResizeObserver never fires.
  *
- * Three things suppress the auto-open/auto-close:
- *   - the pin toggle in the panel header (sustained editing),
- *   - an in-flight pointer drag that started in the viewport (orbit/pan),
- *   - focus sitting on an input inside the panel.
+ * The open/pin state machine is the shared `createCollapsiblePanel` primitive
+ * from `@bundled/yaar` — including the persisted pin, which this module used to
+ * lack. Only what is specific to a 3D viewport lives here, expressed through the
+ * primitive's two gates:
+ *
+ *   canOpen  — an orbit/pan drag that began in the viewport routinely sweeps the
+ *              pointer across a rail. Opening on that is never what was meant.
+ *   holdOpen — a field inside the panel holds focus, so the user is typing; the
+ *              `focusout` handler re-arms the fold once focus leaves.
  */
+import { createCollapsiblePanel } from '@bundled/yaar';
 import { createSignal } from '@bundled/solid-js';
 
 /** True while a pointer drag that began inside the viewport is in flight. */
 const [viewportDragging, setViewportDragging] = createSignal(false);
 
 export { viewportDragging };
-
-/**
- * Per-side open state, published so the viewport can nudge its HUD overlays
- * clear of an open panel. Read-only outside this module.
- */
-const [leftOpen, setLeftOpen] = createSignal(false);
-const [rightOpen, setRightOpen] = createSignal(false);
-
-export const dockOpen = { left: leftOpen as () => boolean, right: rightOpen as () => boolean };
 
 /** Install the global viewport-drag guard. Returns a cleanup function. */
 export function installDragGuard(): () => void {
@@ -68,72 +65,52 @@ function isEditable(el: Element | null): boolean {
   return el.isContentEditable;
 }
 
-export function createDock(side: 'left' | 'right'): DockState {
-  const [openRaw, setOpenRaw] = createSignal(false);
-  const open = openRaw;
-  const publish = side === 'left' ? setLeftOpen : setRightOpen;
-  const setOpen = (v: boolean): void => {
-    setOpenRaw(v);
-    publish(v);
-  };
-  const [pinned, setPinned] = createSignal(false);
+function createDockState(side: 'left' | 'right'): DockState {
   let root: HTMLElement | null = null;
-  let hovering = false;
-  let timer = 0;
 
-  /** An input inside this panel holds focus — the user is typing, keep it open. */
-  const holdsFocus = (): boolean =>
-    !!root && isEditable(document.activeElement) && root.contains(document.activeElement);
-
-  const maybeClose = (): void => {
-    if (pinned() || hovering || holdsFocus()) return;
-    setOpen(false);
-  };
-
-  const scheduleClose = (): void => {
-    if (timer) window.clearTimeout(timer);
-    timer = window.setTimeout(() => {
-      timer = 0;
-      maybeClose();
-    }, CLOSE_DELAY_MS);
-  };
+  const panel = createCollapsiblePanel({
+    pinKey: `dock-pin-${side}.json`,
+    pinLabel: `${side} panel pin`,
+    closeDelayMs: CLOSE_DELAY_MS,
+    canOpen: () => !viewportDragging(),
+    holdOpen: () =>
+      !!root && isEditable(document.activeElement) && root.contains(document.activeElement),
+  });
 
   return {
-    open,
-    pinned,
+    open: panel.expanded,
+    pinned: panel.pinned,
     cls: () =>
-      ['dock', `dock-${side}`, open() ? 'dock-open' : '', pinned() ? 'dock-pinned' : '']
+      [
+        'dock',
+        `dock-${side}`,
+        panel.expanded() ? 'dock-open' : '',
+        panel.pinned() ? 'dock-pinned' : '',
+      ]
         .filter(Boolean)
         .join(' '),
-    togglePin: () => {
-      const next = !pinned();
-      setPinned(next);
-      if (next) setOpen(true);
-      else scheduleClose();
-    },
-    onEnter: () => {
-      hovering = true;
-      if (timer) {
-        window.clearTimeout(timer);
-        timer = 0;
-      }
-      // Never slide open mid-orbit: the pointer is only over the rail because
-      // the drag swept across it.
-      if (viewportDragging()) return;
-      setOpen(true);
-    },
-    onLeave: () => {
-      hovering = false;
-      scheduleClose();
-    },
+    togglePin: panel.togglePin,
+    onEnter: panel.open,
+    onLeave: panel.scheduleClose,
     attach: (el: HTMLElement) => {
       root = el;
       // Blur of a field inside the panel re-arms the close check, so a panel
-      // held open by a focused input shuts once focus leaves it.
-      el.addEventListener('focusout', () => scheduleClose());
+      // held open by `holdOpen` shuts once focus leaves it.
+      el.addEventListener('focusout', () => panel.scheduleClose());
     },
   };
 }
+
+/**
+ * The two docks are created here, not in the panel components, so the viewport
+ * can read their open state (to nudge its HUD overlays clear) without importing
+ * SceneTree or Inspector.
+ */
+export const leftDock = createDockState('left');
+export const rightDock = createDockState('right');
+
+/** Per-side open state, for layout that has to react to an open panel. */
+export const dockOpen = { left: leftDock.open, right: rightDock.open };
 
 /** Markup for the collapsed edge rail. Shared by both panels. */
 export function railTitle(label: string): string {

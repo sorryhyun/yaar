@@ -52,9 +52,13 @@ export function dirName(path: string): string {
  *   { uri, name, description: '18436 bytes', mimeType: 'text/plain' }
  * so the directory flag has to be recovered from `description`/`mimeType`.
  *
- * `name` is also unreliable for nested listings (the server trims a character
- * off it — "mounts/toolresults" arrives as name "oolresults"), so the display
- * name is always derived from the URI instead.
+ * The display name is derived from the URI rather than read off `name`. The URI
+ * is the canonical value either way, and reading it costs nothing — which is
+ * what made this listing survive a server bug that trimmed the first character
+ * off `name` for any listing URI ending in a slash ("mounts/toolresults" came
+ * back as "oolresults"). That bug is fixed (`handlers/storage.ts`, covered by
+ * `storage-list-names.test.ts`); deriving from the URI stays because it is the
+ * value with no second spelling to disagree with.
  */
 interface RawEntry {
   uri?: string;

@@ -6,7 +6,7 @@
 import html from '@bundled/solid-js/html';
 import { Show, createMemo } from '@bundled/solid-js';
 import { doc, mutate, reconciler, selectedNode, selection, warnings } from '../store';
-import { createDock, railTitle } from './dock';
+import { rightDock as dock, railTitle } from './dock';
 import type { MaterialDef, SceneNode, Vec3 } from '../scene-doc';
 
 type Axis = 'x' | 'y' | 'z';
@@ -90,7 +90,6 @@ function toggle(
   </label>`;
 }
 
-const dock = createDock('right');
 
 export function Inspector() {
   const node = createMemo(() => selectedNode());
