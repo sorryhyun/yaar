@@ -107,8 +107,34 @@ async function openScene(path: string): Promise<void> {
 }
 
 function parentDir(dir: string): string {
-  const i = dir.lastIndexOf('/');
-  return i < 0 ? '' : dir.slice(0, i);
+  const clean = dir.replace(/\/+$/, '');
+  const i = clean.lastIndexOf('/');
+  return i < 0 ? '' : clean.slice(0, i);
+}
+
+interface Crumb {
+  label: string;
+  path: string;
+}
+
+function crumbs(): Crumb[] {
+  const out: Crumb[] = [{ label: 'storage', path: '' }];
+  let acc = '';
+  for (const part of cwd().split('/').filter(Boolean)) {
+    acc = acc ? `${acc}/${part}` : part;
+    out.push({ label: part, path: acc });
+  }
+  return out;
+}
+
+function summary(): string {
+  const items = entries();
+  const dirs = items.filter((e) => e.isDirectory).length;
+  const files = items.length - dirs;
+  const models = items.filter((e) => !e.isDirectory && isSupportedName(e.name)).length;
+  const parts = [`${dirs} folder${dirs === 1 ? '' : 's'}`, `${files} file${files === 1 ? '' : 's'}`];
+  if (models > 0) parts.push(`${models} loadable`);
+  return parts.join(' · ');
 }
 
 function storageBody() {
@@ -122,7 +148,17 @@ function storageBody() {
       >
         ↑
       </button>
-      <span>yaar://storage/${() => cwd()}</span>
+      <div class="crumbs">
+        <${For} each=${() => crumbs()}>
+          ${(c: Crumb, i: () => number) =>
+            html`<span class="crumb-wrap">
+              <${Show} when=${() => i() > 0}><span class="crumb-sep">/</span><//>
+              <button class="crumb" onClick=${() => void browseTo(c.path)} title=${`yaar://storage/${c.path}`}>
+                ${c.label}
+              </button>
+            </span>`}
+        <//>
+      </div>
     </div>
     <div class="dlg-body">
       <${Show} when=${() => loading()}>
@@ -130,6 +166,13 @@ function storageBody() {
       <//>
       <${Show} when=${() => !!error()}>
         <div class="warn">${() => error()}</div>
+      <//>
+      <${Show} when=${() => cwd() !== '' && !loading()}>
+        <div class="file-row" onClick=${() => void browseTo(parentDir(cwd()))}>
+          <span class="file-ico">↩</span>
+          <span class="file-name">..</span>
+          <span class="file-hint">parent folder</span>
+        </div>
       <//>
       <${Show} when=${() => !loading() && entries().length === 0 && !error()}>
         <div class="file-row dim">Empty folder</div>
@@ -139,13 +182,19 @@ function storageBody() {
           const supported = entry.isDirectory || isSupportedName(entry.name);
           return html`<div
             class=${supported ? 'file-row' : 'file-row dim'}
+            title=${`yaar://storage/${entry.path}`}
             onClick=${() => (supported ? void choose(entry) : undefined)}
           >
             <span class="file-ico">${entry.isDirectory ? '📁' : supported ? '🧊' : '·'}</span>
-            <span>${entry.name}</span>
+            <span class="file-name">${entry.name}</span>
+            <span class="file-hint">${entry.isDirectory ? '›' : (entry.hint ?? '')}</span>
           </div>`;
         }}
       <//>
+    </div>
+    <div class="dlg-note">
+      <span>${() => (loading() ? '…' : summary())}</span>
+      <span>${SUPPORTED_EXTENSIONS.join(' ')}</span>
     </div>
   `;
 }

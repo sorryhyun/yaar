@@ -79,6 +79,22 @@ PNG captures the live camera, so an unframed scene renders as an unframed image.
 `listScenes` / `openScene` round-trip it. That file is the doc verbatim, so it is also a
 valid `loadModel` input.
 
+## The window chrome (for questions about the UI)
+
+Both side panels are **hover-reveal**. They start closed, collapsed to a 24px rail on
+each edge labelled SCENE / INSPECTOR; moving the pointer onto a rail slides the panel out
+*over* the viewport (the canvas keeps full width, so nothing re-renders), and moving off
+slides it shut. The ⌗ button in each panel header pins it open. Hover-open is suppressed
+while a pointer drag that started in the viewport is in flight, and auto-close is
+suppressed while an input inside the panel has focus — so orbiting past a rail and typing
+in a field both behave.
+
+The **Storage…** browser lists folders and files from `yaar://storage/`, with breadcrumbs,
+a `..` row and an ↑ button. Note for maintenance: the `list` verb does **not** set
+`isDirectory` and does not slash-suffix directory URIs — a folder is identified by
+`description === "directory"`, and entry names must be derived from the URI because the
+server's `name` field is truncated by one character in nested listings.
+
 ## Anti-patterns
 
 - Don't poll `stats` for `fps` — it is a live counter, not a completion signal.

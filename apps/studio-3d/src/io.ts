@@ -9,6 +9,8 @@ export interface StorageEntry {
   /** path relative to the storage root, e.g. "files/models/duck.glb" */
   path: string;
   isDirectory: boolean;
+  /** display-only detail, e.g. "18.0 KB" */
+  hint?: string;
 }
 
 export const MEDIA_DIR = 'media/studio-3d';
@@ -40,34 +42,100 @@ export function dirName(path: string): string {
 
 /* ------------------------------------------------------------- listing -- */
 
+/**
+ * A raw child as returned by `list('yaar://storage/...')`.
+ *
+ * The verb API does NOT set `isDirectory` and does NOT suffix directory URIs
+ * with a slash. A directory child comes back as
+ *   { uri, name, description: 'directory' }
+ * and a file as
+ *   { uri, name, description: '18436 bytes', mimeType: 'text/plain' }
+ * so the directory flag has to be recovered from `description`/`mimeType`.
+ *
+ * `name` is also unreliable for nested listings (the server trims a character
+ * off it — "mounts/toolresults" arrives as name "oolresults"), so the display
+ * name is always derived from the URI instead.
+ */
 interface RawEntry {
   uri?: string;
   path?: string;
   name?: string;
   isDirectory?: boolean;
+  isDir?: boolean;
+  directory?: boolean;
   type?: string;
+  kind?: string;
+  description?: string;
+  mimeType?: string;
+  size?: number;
+}
+
+const DIR_WORDS = new Set(['directory', 'dir', 'folder']);
+
+function isDirWord(v: unknown): boolean {
+  return typeof v === 'string' && DIR_WORDS.has(v.trim().toLowerCase());
+}
+
+function looksLikeDirectory(e: RawEntry): boolean {
+  if (e.isDirectory === true || e.isDir === true || e.directory === true) return true;
+  if (isDirWord(e.type) || isDirWord(e.kind)) return true;
+  if (isDirWord(e.description)) return true;
+  if ((e.uri ?? e.path ?? '').endsWith('/')) return true;
+  return false;
+}
+
+/** Human hint shown on the right of a row: "18.0 KB", "folder", … */
+function entryHint(e: RawEntry, isDirectory: boolean): string {
+  if (isDirectory) return '';
+  const desc = typeof e.description === 'string' ? e.description.trim() : '';
+  const bytes = /^(\d+)\s*bytes?$/i.exec(desc);
+  if (bytes) return formatBytes(Number(bytes[1]));
+  if (typeof e.size === 'number') return formatBytes(e.size);
+  return desc;
+}
+
+export function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '';
+  if (n < 1024) return `${n} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let value = n / 1024;
+  let i = 0;
+  while (value >= 1024 && i < units.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value >= 10 ? Math.round(value) : value.toFixed(1)} ${units[i]}`;
+}
+
+function joinDir(dir: string, name: string): string {
+  if (!dir) return name;
+  if (name === dir || name.startsWith(`${dir}/`)) return name;
+  return `${dir}/${name}`;
 }
 
 function normalizeEntry(raw: unknown, dir: string): StorageEntry | null {
   if (typeof raw === 'string') {
-    const path = toStoragePath(raw.includes('://') ? raw : dir ? `${dir}/${raw}` : raw);
+    const path = toStoragePath(raw.includes('://') ? raw : joinDir(dir, raw));
     if (!path) return null;
-    return { name: baseName(path), path, isDirectory: raw.endsWith('/') };
+    return { name: baseName(path), path, isDirectory: raw.endsWith('/'), hint: '' };
   }
   if (!raw || typeof raw !== 'object') return null;
   const e = raw as RawEntry;
   const source = e.uri ?? e.path ?? e.name;
   if (!source) return null;
-  const path = toStoragePath(
-    source.includes('://') || source.startsWith(dir) ? source : dir ? `${dir}/${source}` : source,
-  );
-  const isDirectory =
-    e.isDirectory === true || e.type === 'directory' || (e.uri ?? '').endsWith('/');
-  return { name: baseName(path) || path, path, isDirectory };
+  const path = toStoragePath(source.includes('://') ? source : joinDir(dir, source));
+  if (!path) return null;
+  const isDirectory = looksLikeDirectory(e);
+  return {
+    name: baseName(path) || path,
+    path,
+    isDirectory,
+    hint: entryHint(e, isDirectory),
+  };
 }
 
 export async function listStorage(dir = ''): Promise<StorageEntry[]> {
-  const clean = toStoragePath(dir);
+  const clean = toStoragePath(dir).replace(/\/+$/, '');
   const res = await list<unknown>(`yaar://storage/${clean ? `${clean}/` : ''}`);
   let items: unknown[] = [];
   if (Array.isArray(res)) items = res;
@@ -81,9 +149,12 @@ export async function listStorage(dir = ''): Promise<StorageEntry[]> {
     }
   }
   const out: StorageEntry[] = [];
+  const seen = new Set<string>();
   for (const item of items) {
     const entry = normalizeEntry(item, clean);
-    if (entry && entry.path !== clean) out.push(entry);
+    if (!entry || entry.path === clean || seen.has(entry.path)) continue;
+    seen.add(entry.path);
+    out.push(entry);
   }
   out.sort((a, b) => {
     if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;

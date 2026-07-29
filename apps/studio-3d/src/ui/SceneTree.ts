@@ -9,6 +9,7 @@ import html from '@bundled/solid-js/html';
 import { For, Show, createMemo, createSignal } from '@bundled/solid-js';
 import { showPrompt } from '@bundled/yaar';
 import { doc, mutate, select, selection } from '../store';
+import { createDock, railTitle } from './dock';
 import type { SceneNode } from '../scene-doc';
 
 interface Row {
@@ -72,40 +73,63 @@ function onTreeDblClick(e: MouseEvent): void {
   if (found) void rename(found.node);
 }
 
+const dock = createDock('left');
+
 export function SceneTree() {
-  return html`<div class="panel panel-left">
-    <div class="panel-title">
-      <span>Scene</span>
-      <span>${() => rows().length}</span>
+  return html`<div
+    class=${dock.cls}
+    ref=${(el: HTMLDivElement) => dock.attach(el)}
+    onMouseEnter=${dock.onEnter}
+    onMouseLeave=${dock.onLeave}
+  >
+    <div class="rail" title=${railTitle('Scene tree')}>
+      <span class="rail-ico">☰</span>
+      <span class="rail-label">Scene</span>
+      <span class="rail-count">${() => rows().length}</span>
     </div>
-    <div class="panel-body" onClick=${onTreeClick} onDblClick=${onTreeDblClick}>
-      <${Show} when=${() => rows().length === 0}>
-        <div class="insp-empty">Nothing loaded.</div>
-      <//>
-      <${For} each=${() => rows()}>
-        ${(row: Row) => html`<div
-          data-node-id=${row.node.id}
-          class=${() =>
-            [
-              'tree-row',
-              selection() === row.node.id ? 'sel' : '',
-              row.node.visible ? '' : 'hidden-node',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          style=${`padding-left:${4 + row.depth * 12}px`}
-          title=${row.node.name}
-        >
-          <span class="tree-twist" data-act=${row.hasChildren ? 'twist' : ''}>
-            ${row.hasChildren ? (row.collapsed ? '▶' : '▼') : ''}
-          </span>
-          <span class="tree-name">${row.node.name}</span>
-          <span class="tree-kind">${row.node.kind === 'mesh' ? 'M' : 'G'}</span>
-          <span class="tree-eye" data-act="eye" title="Toggle visibility"
-            >${() => (row.node.visible ? '👁' : '―')}</span
+    <div class="panel panel-left">
+      <div class="panel-title">
+        <span>Scene</span>
+        <span class="panel-title-r">
+          <span>${() => rows().length}</span>
+          <button
+            class=${() => (dock.pinned() ? 'pin pin-on' : 'pin')}
+            onClick=${dock.togglePin}
+            title=${() => (dock.pinned() ? 'Unpin — panel hides on mouse-out' : 'Pin panel open')}
           >
-        </div>`}
-      <//>
+            ⌗
+          </button>
+        </span>
+      </div>
+      <div class="panel-body" onClick=${onTreeClick} onDblClick=${onTreeDblClick}>
+        <${Show} when=${() => rows().length === 0}>
+          <div class="insp-empty">Nothing loaded.</div>
+        <//>
+        <${For} each=${() => rows()}>
+          ${(row: Row) => html`<div
+            data-node-id=${row.node.id}
+            class=${() =>
+              [
+                'tree-row',
+                selection() === row.node.id ? 'sel' : '',
+                row.node.visible ? '' : 'hidden-node',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            style=${`padding-left:${4 + row.depth * 12}px`}
+            title=${row.node.name}
+          >
+            <span class="tree-twist" data-act=${row.hasChildren ? 'twist' : ''}>
+              ${row.hasChildren ? (row.collapsed ? '▶' : '▼') : ''}
+            </span>
+            <span class="tree-name">${row.node.name}</span>
+            <span class="tree-kind">${row.node.kind === 'mesh' ? 'M' : 'G'}</span>
+            <span class="tree-eye" data-act="eye" title="Toggle visibility"
+              >${() => (row.node.visible ? '👁' : '―')}</span
+            >
+          </div>`}
+        <//>
+      </div>
     </div>
   </div>`;
 }

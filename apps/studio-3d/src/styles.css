@@ -130,25 +130,164 @@ body {
 /* --------------------------------------------------------------- main -- */
 
 .main {
-  display: grid;
-  grid-template-columns: 216px 1fr 268px;
+  position: relative;
   min-height: 0;
   overflow: hidden;
 }
 
+/* ------------------------------------------------- hover-reveal docks -- */
+
+/*
+ * A dock is a zero-width anchor pinned to one edge of .main. Its two children
+ * (the collapsed rail and the panel) are absolutely positioned inside it, so
+ * the panel slides *over* the viewport instead of taking layout space — the
+ * canvas keeps full width and the renderer's ResizeObserver never fires.
+ */
+.dock {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  z-index: 8;
+}
+
+.dock-left {
+  left: 0;
+}
+.dock-right {
+  right: 0;
+}
+
+.rail {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) 0;
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    opacity 160ms ease,
+    background var(--yaar-ease),
+    color var(--yaar-ease);
+}
+
+.dock-left .rail {
+  left: 0;
+  border-right: 1px solid var(--yaar-border);
+}
+.dock-right .rail {
+  right: 0;
+  border-left: 1px solid var(--yaar-border);
+}
+
+.rail:hover {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+
+.dock-open .rail {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rail-ico {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.rail-label {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+  font-size: var(--yaar-text-xs);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.dock-right .rail-label {
+  transform: rotate(180deg);
+}
+
+.rail-count {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  opacity: 0.8;
+}
+
 .panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
   background: var(--yaar-bg-surface);
   display: grid;
   grid-template-rows: 26px 1fr;
   min-height: 0;
   overflow: hidden;
+  box-shadow: var(--yaar-shadow-lg);
+  transition: transform 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
 }
 
 .panel-left {
+  left: 0;
+  width: 216px;
   border-right: 1px solid var(--yaar-border);
+  transform: translateX(-100%);
 }
+
 .panel-right {
+  right: 0;
+  width: 268px;
   border-left: 1px solid var(--yaar-border);
+  transform: translateX(100%);
+}
+
+.dock-open .panel {
+  transform: translateX(0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel,
+  .rail {
+    transition: none;
+  }
+}
+
+.panel-title-r {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.pin {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--yaar-text-dim);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1;
+  padding: 1px 5px;
+  border-radius: var(--yaar-radius-sm);
+  cursor: pointer;
+}
+
+.pin:hover {
+  color: var(--yaar-text);
+  border-color: var(--yaar-border);
+}
+
+.pin-on {
+  color: #fff;
+  background: var(--yaar-accent-emphasis);
+  border-color: var(--yaar-accent-emphasis);
 }
 
 .panel-title {
@@ -183,9 +322,9 @@ body {
 /* ----------------------------------------------------------- viewport -- */
 
 .vp {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
+  /* full width under the overlaid docks */
+  position: absolute;
+  inset: 0;
   overflow: hidden;
   background: var(--yaar-bg);
 }
@@ -202,7 +341,8 @@ body {
 .hud {
   position: absolute;
   top: var(--yaar-sp-2);
-  left: var(--yaar-sp-2);
+  /* clear of the 24px collapsed rail */
+  left: 32px;
   display: flex;
   gap: var(--yaar-sp-3);
   align-items: center;
@@ -217,6 +357,26 @@ body {
   backdrop-filter: blur(6px);
 }
 
+/* Slide the HUD overlays clear of a panel that has hovered open, so nothing
+   is left half-covered. Purely a transform of absolute offsets — the canvas
+   box is untouched, so no renderer resize. */
+.vp-left-open .hud,
+.vp-left-open .vp-hint {
+  left: 226px;
+}
+
+.vp-right-open .hud-tools {
+  right: 278px;
+}
+
+.hud,
+.hud-tools,
+.vp-hint {
+  transition:
+    left 200ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    right 200ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
 .hud b {
   color: var(--yaar-text);
   font-weight: 600;
@@ -225,7 +385,7 @@ body {
 .hud-tools {
   position: absolute;
   top: var(--yaar-sp-2);
-  right: var(--yaar-sp-2);
+  right: 32px;
   display: flex;
   gap: var(--yaar-sp-1);
   background: rgba(22, 27, 34, 0.82);
@@ -238,7 +398,7 @@ body {
 .vp-hint {
   position: absolute;
   bottom: var(--yaar-sp-2);
-  left: var(--yaar-sp-2);
+  left: 32px;
   font-size: var(--yaar-text-xs);
   color: var(--yaar-text-dim);
   pointer-events: none;
@@ -626,6 +786,70 @@ input[type='checkbox'] {
   width: 16px;
   text-align: center;
   flex: none;
+}
+
+.file-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-hint {
+  flex: none;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+}
+
+/* ------------------------------------------------------- breadcrumbs -- */
+
+.crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+}
+
+.crumb-wrap {
+  display: inline-flex;
+  align-items: center;
+}
+
+.crumb {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: var(--yaar-accent);
+  font: inherit;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  padding: 1px 3px;
+  border-radius: var(--yaar-radius-sm);
+  cursor: pointer;
+}
+
+.crumb:hover {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-accent-hover);
+}
+
+.crumb-sep {
+  color: var(--yaar-text-dim);
+  opacity: 0.6;
+}
+
+.dlg-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-3);
+  padding: var(--yaar-sp-2) var(--yaar-sp-4);
+  border-top: 1px solid var(--yaar-border);
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
 }
 
 .url-form {

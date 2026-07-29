@@ -34,6 +34,7 @@ import { SceneTree } from './SceneTree';
 import { Inspector } from './Inspector';
 import { Dialogs, openScenePicker, openStorageBrowser, openUrlPrompt } from './dialogs';
 import { SUPPORTED_EXTENSIONS } from '../loaders';
+import { dockOpen, installDragGuard } from './dock';
 
 const [dragging, setDragging] = createSignal(false);
 
@@ -168,7 +169,12 @@ function ViewportPane() {
     onCleanup(() => vp.dispose());
   });
 
-  return html`<div class="vp">
+  return html`<div
+    class=${() =>
+      ['vp', dockOpen.left() ? 'vp-left-open' : '', dockOpen.right() ? 'vp-right-open' : '']
+        .filter(Boolean)
+        .join(' ')}
+  >
     <div class="vp-host" ref=${(el: HTMLDivElement) => (host = el)}></div>
     <${Hud} />
     <${HudTools} />
@@ -196,6 +202,7 @@ function StatusBar() {
 
 export function App() {
   onMount(() => {
+    onCleanup(installDragGuard());
     let depth = 0;
     const onDragOver = (e: DragEvent) => {
       if (!e.dataTransfer) return;

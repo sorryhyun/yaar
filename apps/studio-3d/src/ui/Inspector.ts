@@ -6,6 +6,7 @@
 import html from '@bundled/solid-js/html';
 import { Show, createMemo } from '@bundled/solid-js';
 import { doc, mutate, reconciler, selectedNode, selection, warnings } from '../store';
+import { createDock, railTitle } from './dock';
 import type { MaterialDef, SceneNode, Vec3 } from '../scene-doc';
 
 type Axis = 'x' | 'y' | 'z';
@@ -88,6 +89,8 @@ function toggle(
     <span>${label}</span>
   </label>`;
 }
+
+const dock = createDock('right');
 
 export function Inspector() {
   const node = createMemo(() => selectedNode());
@@ -176,29 +179,49 @@ export function Inspector() {
     `;
   };
 
-  return html`<div class="panel panel-right">
-    <div class="panel-title">
-      <span>Inspector</span>
-      <span>${() => node()?.kind ?? ''}</span>
+  return html`<div
+    class=${dock.cls}
+    ref=${(el: HTMLDivElement) => dock.attach(el)}
+    onMouseEnter=${dock.onEnter}
+    onMouseLeave=${dock.onLeave}
+  >
+    <div class="rail" title=${railTitle('Inspector')}>
+      <span class="rail-ico">⚙</span>
+      <span class="rail-label">Inspector</span>
     </div>
-    <div class="panel-body">
-      <${Show}
-        when=${() => !!node()}
-        fallback=${() =>
-          html`<div class="insp-empty">
-            Select a node in the scene tree to inspect and edit it.
-          </div>`}
-      >
-        ${body}
-      <//>
-      <${Show} when=${() => warnings().length > 0}>
-        <div class="warn">
-          <b>Import notes</b>
-          <ul>
-            ${() => warnings().map((w) => html`<li>${w}</li>`)}
-          </ul>
-        </div>
-      <//>
+    <div class="panel panel-right">
+      <div class="panel-title">
+        <span>Inspector</span>
+        <span class="panel-title-r">
+          <span>${() => node()?.kind ?? ''}</span>
+          <button
+            class=${() => (dock.pinned() ? 'pin pin-on' : 'pin')}
+            onClick=${dock.togglePin}
+            title=${() => (dock.pinned() ? 'Unpin — panel hides on mouse-out' : 'Pin panel open')}
+          >
+            ⌗
+          </button>
+        </span>
+      </div>
+      <div class="panel-body">
+        <${Show}
+          when=${() => !!node()}
+          fallback=${() =>
+            html`<div class="insp-empty">
+              Select a node in the scene tree to inspect and edit it.
+            </div>`}
+        >
+          ${body}
+        <//>
+        <${Show} when=${() => warnings().length > 0}>
+          <div class="warn">
+            <b>Import notes</b>
+            <ul>
+              ${() => warnings().map((w) => html`<li>${w}</li>`)}
+            </ul>
+          </div>
+        <//>
+      </div>
     </div>
   </div>`;
 }
