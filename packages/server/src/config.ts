@@ -59,6 +59,7 @@ export {
 
 export {
   TRANSPORT_IDLE_TIMEOUT_S,
+  MCP_TOOL_CALL_TIMEOUT_MS,
   MAX_REQUEST_DEADLINE_MS,
   clampDeadline,
   deadlines,

@@ -26,7 +26,13 @@ import type { SessionId, YaarWebSocket } from '../session/types.js';
 import { emitActionChecked } from '../features/window/helpers.js';
 import { askUser } from '../features/user/prompts.js';
 import { MAX_COMMAND_TIMEOUT_MS } from '../features/window/app-protocol.js';
-import { MAX_REQUEST_DEADLINE_MS, TRANSPORT_IDLE_TIMEOUT_S, clampDeadline } from '../config.js';
+import {
+  MAX_REQUEST_DEADLINE_MS,
+  MCP_TOOL_CALL_TIMEOUT_MS,
+  TRANSPORT_IDLE_TIMEOUT_S,
+  buildClaudeEnv,
+  clampDeadline,
+} from '../config.js';
 
 /** Collect the actions the emitter sends to a whole session (dialog closes, prompt dismissals). */
 function collectSessionActions(sink: OSAction[]): () => void {
@@ -170,6 +176,22 @@ describe('F-16 — no inner deadline outlives the transport carrying it', () => 
 
   it('keeps the app-command ceiling inside the budget', () => {
     expect(MAX_COMMAND_TIMEOUT_MS).toBeLessThanOrEqual(MAX_REQUEST_DEADLINE_MS);
+  });
+
+  it("keeps the budget inside the caller's tool-call ceiling too", () => {
+    // YAAR's transport is not the outermost bound — the MCP client waiting on the tool
+    // call has one too, and aborts the POST at 60s unless told otherwise. Above that
+    // clock, YAAR's expiry is unreportable for the same reason a past-the-transport one
+    // is: measured, a 240s prompt was abandoned by the agent at 60,019ms and the dialog
+    // it had raised stayed answerable for three more minutes.
+    expect(MAX_REQUEST_DEADLINE_MS).toBeLessThan(MCP_TOOL_CALL_TIMEOUT_MS);
+    expect(MCP_TOOL_CALL_TIMEOUT_MS).toBeLessThan(TRANSPORT_IDLE_TIMEOUT_S * 1000);
+  });
+
+  it('tells the spawned CLI that ceiling, rather than leaving it at 60s', () => {
+    // An invariant asserted only between constants would hold while the caller went on
+    // using its default, which is exactly the state this fixes.
+    expect(buildClaudeEnv().MCP_TOOL_TIMEOUT).toBe(String(MCP_TOOL_CALL_TIMEOUT_MS));
   });
 });
 

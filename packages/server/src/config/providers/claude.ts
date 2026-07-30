@@ -6,6 +6,7 @@ import type { Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
 import { join, dirname } from 'path';
 import { existsSync } from 'fs';
 import { IS_BUNDLED_EXE } from '../env.js';
+import { MCP_TOOL_CALL_TIMEOUT_MS } from '../deadlines.js';
 
 /**
  * Resolve the absolute path to the claude binary (exe/binary only, not .cmd wrappers).
@@ -86,10 +87,17 @@ const PARENT_HARNESS_ENV_VARS = [
  * YAAR overrides layered onto the scrubbed parent env. Disable the CLI's built-in
  * agents, auto-memory, bundled skills, CLAUDE.md loading, git instructions, and
  * claude.ai MCP servers — none apply to YAAR's short-lived, app-scoped agents —
- * and raise the MCP output ceiling.
+ * and raise the MCP output and tool-call ceilings.
+ *
+ * `MCP_TOOL_TIMEOUT` is the one that has to be raised rather than merely tuned: without
+ * it the CLI aborts the HTTP request under each tool call at 60s, and YAAR's user-facing
+ * waits are longer on purpose. Left at the default, a prompt the agent had already given
+ * up on stayed live on the user's screen until its own deadline passed minutes later. See
+ * `config/deadlines.ts` for the three nested bounds.
  */
 const CLAUDE_ENV_OVERRIDES = {
   MAX_MCP_OUTPUT_TOKENS: '131072',
+  MCP_TOOL_TIMEOUT: String(MCP_TOOL_CALL_TIMEOUT_MS),
   CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: '1',
   CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
   ENABLE_CLAUDEAI_MCP_SERVERS: 'false',
