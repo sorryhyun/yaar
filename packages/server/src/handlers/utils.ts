@@ -133,6 +133,10 @@ export const okLinks = (
     mimeType?: string;
     kind?: string;
     version?: string;
+    /** Bytes, for a file listing. Carried as data — the human `description` may also say it. */
+    size?: number;
+    /** ISO timestamp of the last write, for a file listing. */
+    modifiedAt?: string;
   }>,
 ): VerbResult => {
   const items = links.map((link) => ({
@@ -143,6 +147,11 @@ export const okLinks = (
     ...(link.mimeType ? { mimeType: link.mimeType } : {}),
     ...(link.kind ? { kind: link.kind } : {}),
     ...(link.version ? { version: link.version } : {}),
+    // Size and time are facts a caller acts on — "which asset is blowing the bundle
+    // budget", "which project did I touch last" — so they travel as numbers rather
+    // than only inside the prose `description`, which nobody can parse reliably.
+    ...(link.size !== undefined ? { size: link.size } : {}),
+    ...(link.modifiedAt ? { modifiedAt: link.modifiedAt } : {}),
   }));
 
   return {

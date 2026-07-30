@@ -47,11 +47,18 @@ export const introspectCommands = {
     },
   }),
   describeBundledLibrary: defineAppCommand({
-    description: 'Return type info (methods, interfaces) for a @bundled/* library.',
+    description:
+      'Return type info (methods, interfaces) for anything in the `bundledLibraries` state ' +
+      'key — a @bundled/* library, or "design-tokens", which ships as injected CSS and ' +
+      'answers with the generated list of token and utility-class names.',
     params: {
       type: 'object',
       properties: {
-        name: { type: 'string', description: 'Library name (e.g. "yaar", "anime", "three")' },
+        name: {
+          type: 'string',
+          description:
+            'A name from `bundledLibraries`, e.g. "yaar", "anime", "three", "design-tokens".',
+        },
       },
       required: ['name'],
     },

@@ -3,12 +3,15 @@ import { batch } from '@bundled/solid-js';
 import { appStorage } from '@bundled/yaar';
 import {
   activeProject,
+  setActiveProject,
   setFiles,
+  type FileEntry,
   openFilePath,
   setOpenFilePath,
   setOpenFileContent,
   setOpenFileImage,
   setStatusText,
+  setTypecheckState,
 } from '../core';
 import { projectPath, isImagePath, isBinaryPath } from '../lib/paths';
 import { applyEdits, formatRemoved, type EditSpec } from '../lib/edits';
@@ -23,11 +26,12 @@ export async function refreshFiles(projectId?: string): Promise<void> {
   if (!id) return;
   const basePath = projectPath(id);
   try {
-    const mapped = await listAllFiles(basePath, basePath);
-    // Attach line/byte counts so the `project` state can answer "how big is this
-    // file" without a read per file (agents used to read line 1 just to see the
-    // "(N lines)" header). Projects are a handful of source files, so reading
-    // them in parallel here is cheap; a file that cannot be read stays uncounted.
+    const mapped = pruneEmptyDirectories(await listAllFiles(basePath, basePath));
+    // Sizes and timestamps come from the listing itself. Line counts do not — those
+    // need the text — so the `project` state can still answer "how big is this file"
+    // without a read per file (agents used to read line 1 just to see the "(N lines)"
+    // header). Projects are a handful of source files, so reading them in parallel
+    // here is cheap; a file that cannot be read stays uncounted.
     await Promise.all(
       mapped.map(async (entry) => {
         if (entry.isDirectory || isBinaryPath(entry.path)) return;
@@ -35,16 +39,57 @@ export async function refreshFiles(projectId?: string): Promise<void> {
           const raw = await appStorage.read(projectPath(id, entry.path));
           const text = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
           entry.lines = text.split('\n').length;
+          // Recomputed from the text: a JSON file read back parsed and re-serialized
+          // is not byte-identical to what is on disk, and the count must match the
+          // string this app would edit.
           entry.bytes = new TextEncoder().encode(text).length;
         } catch {
-          /* unreadable — leave counts unset */
+          /* unreadable — leave the listing's own size standing */
         }
       }),
     );
     setFiles(mapped);
+    touchProjectModified(id, mapped);
   } catch {
     setFiles([]);
   }
+}
+
+/**
+ * Drop directories that hold nothing.
+ *
+ * Storage is prefix-addressed, so removing a directory's last file leaves the
+ * directory itself behind — `src/util/` stayed in the listing after both of its
+ * files were deleted, reading as a place where something still lives. Nothing in a
+ * project needs an empty directory: the next write to a path under it recreates it.
+ */
+function pruneEmptyDirectories(entries: FileEntry[]): FileEntry[] {
+  const occupied = new Set<string>();
+  for (const entry of entries) {
+    if (entry.isDirectory) continue;
+    const segments = entry.path.split('/');
+    for (let i = 1; i < segments.length; i++) occupied.add(segments.slice(0, i).join('/'));
+  }
+  return entries.filter((e) => !e.isDirectory || occupied.has(e.path));
+}
+
+/**
+ * Date the active project from its newest file.
+ *
+ * Storage has no timestamp for a *directory* that would mean "anything under it
+ * changed", so the project's own time is the max over its files — which is the
+ * definition the question wants anyway.
+ */
+function touchProjectModified(projectId: string, entries: FileEntry[]): void {
+  const active = activeProject();
+  if (!active || active.id !== projectId) return;
+  let newest = 0;
+  for (const entry of entries) {
+    if (!entry.modifiedAt) continue;
+    const ms = Date.parse(entry.modifiedAt);
+    if (!Number.isNaN(ms) && ms > newest) newest = ms;
+  }
+  if (newest !== active.lastModified) setActiveProject({ ...active, lastModified: newest });
 }
 
 const IMAGE_MIME: Record<string, string> = {
@@ -115,13 +160,35 @@ export async function openFile(path: string): Promise<void> {
   }
 }
 
-export async function writeFile(path: string, content: string): Promise<void> {
+export interface WriteReceipt {
+  path: string;
+  lines: number;
+  bytes: number;
+}
+
+/**
+ * Write a file and say what landed.
+ *
+ * The receipt exists because `editFile` returns `{ editsApplied, lines, removed }`
+ * and this returned "Done." — so the one command whose whole job is to replace a
+ * file's contents was the one that would not confirm what the file now holds. A
+ * line count is also the cheapest way to catch the mistake this command invites:
+ * passing a JSON object and getting the serialization you did not expect.
+ */
+export async function writeFile(path: string, content: string): Promise<WriteReceipt> {
   const proj = activeProject();
-  if (!proj) return;
+  if (!proj) throw new Error('No active project. Open or create one first.');
   await appStorage.save(projectPath(proj.id, path), content);
   if (openFilePath() === path) setOpenFileContent(content);
+  // Whatever tsc last concluded, it concluded about the previous bytes.
+  setTypecheckState('unknown');
   await refreshFiles();
   setStatusText(`Saved ${path}`);
+  return {
+    path,
+    lines: content.split('\n').length,
+    bytes: new TextEncoder().encode(content).length,
+  };
 }
 
 export async function editFile(
@@ -150,6 +217,8 @@ export async function copyFile(from: string, to: string): Promise<void> {
   const raw = await appStorage.read(projectPath(proj.id, from));
   const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
   await appStorage.save(projectPath(proj.id, to), content);
+  // A copy is a new module in the program — an orphan still gets type checked.
+  setTypecheckState('unknown');
   await refreshFiles();
   setStatusText(`Copied ${from} → ${to}`);
 }
@@ -165,6 +234,8 @@ export async function deleteFile(path: string): Promise<void> {
       setOpenFileImage(null);
     });
   }
+  // Deleting a file is how an import breaks, so the last verdict no longer holds.
+  setTypecheckState('unknown');
   await refreshFiles();
   setStatusText(`Deleted ${path}`);
 }
@@ -206,6 +277,18 @@ export async function readFileContent(
     const totalLines = allLines.length;
     const start = opts?.startLine ? Math.max(1, opts.startLine) : 1;
     const end = opts?.endLine ? Math.min(totalLines, opts.endLine) : totalLines;
+    // A range past the end of the file produced a header reading `[86-26]` and no
+    // body — no error, no warning, nothing to distinguish it from an empty file. One
+    // range applies to every path in a multi-path read, so files of different lengths
+    // make this the ordinary case, not an edge one.
+    if (start > totalLines) {
+      const content =
+        `── ${path} (${totalLines} lines) ──\n` +
+        `(requested lines ${opts?.startLine ?? 1}-${opts?.endLine ?? totalLines}, but the ` +
+        `file ends at line ${totalLines} — nothing to show. Omit the range, or read a ` +
+        `range within it.)`;
+      return { path, content, totalLines, startLine: start, endLine: totalLines };
+    }
     const sliced = allLines.slice(start - 1, end);
     const body = opts?.lineNum
       ? sliced

@@ -74,7 +74,10 @@ export const fileCommands = {
     },
   }),
   writeFile: defineAppCommand({
-    description: 'Write content to a file. Objects are serialized as pretty-printed JSON.',
+    description:
+      'Write content to a file. Objects are serialized as pretty-printed JSON. Returns ' +
+      '{ path, lines, bytes } for what landed — check it when you passed an object, since ' +
+      'that is where the serialization can surprise you.',
     params: {
       type: 'object',
       properties: {
@@ -91,7 +94,7 @@ export const fileCommands = {
       // app.json. Mirrors copyFile/readFileContent, which already guard this way.
       const content =
         typeof p.content === 'string' ? p.content : JSON.stringify(p.content, null, 2);
-      await writeFile(String(p.path), content);
+      return await writeFile(String(p.path), content);
     },
   }),
   editFile: defineAppCommand({
@@ -101,8 +104,9 @@ export const fileCommands = {
       '(REQUIRED: current text of startLine, compared trimmed; mismatch rejects the edit and ' +
       'writes nothing) with optional replace; omit replace to delete the range. ' +
       '(3) multi-edit — pass edits, an array of single-edit objects, applied sequentially in ' +
-      'memory and written once, all-or-nothing: any failure names its index and nothing is ' +
-      'written; later line numbers refer to content after earlier edits. Returns ' +
+      'memory and written once, all-or-nothing: any failure names which edit failed, counting ' +
+      'from 1 ("edit 2 of 3"), and nothing is written; later line numbers refer to content ' +
+      'after earlier edits. Returns ' +
       '{ editsApplied, lines, removed } — removed echoes the replaced text (truncated, middle elided).',
     params: {
       type: 'object',

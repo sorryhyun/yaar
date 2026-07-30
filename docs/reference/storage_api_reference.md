@@ -441,7 +441,7 @@ Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `s
 | `readJsonOr` | `(path, fallback) → Promise<T>` | `readJson`, but returns `fallback` instead of throwing. |
 | `readBinary` | `(path) → Promise<{data, mimeType, encoding}>` | Read raw bytes; `encoding` is `'base64'` for image reads, `'text'` otherwise. |
 | `readBlob` | `(path) → Promise<Blob>` | `readBinary`, decoded into a `Blob`. |
-| `list` | `(dirPath?) → Promise<YaarAppStorageEntry[]>` | Each entry is `{ path, isDirectory, uri, mimeType? }` — not the raw `storage.list()` shape above. |
+| `list` | `(dirPath?) → Promise<YaarAppStorageEntry[]>` | Each entry is `{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }`. `path` is relative to the app's own storage root, so it can be handed straight back to `read`/`save`. `size`/`modifiedAt` carry the same values as `StorageEntry` above but are optional here — a directory has no size. |
 | `remove` | `(path) → Promise<void>` | Delete file. |
 
 ---

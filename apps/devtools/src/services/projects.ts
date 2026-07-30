@@ -13,7 +13,8 @@ import {
   setOpenFileContent,
   setOpenFileImage,
   setDiagnostics,
-  setCompileStatus,
+  setBundleStatus,
+  setTypecheckState,
   setPreviewUrl,
   setStaticProtocol,
   setStatusText,
@@ -22,6 +23,7 @@ import {
   type ProjectMeta,
 } from '../core';
 import { projectPath } from '../lib/paths';
+import { appIdFromName, scaffoldMain } from '../lib/scaffold';
 import { refreshFiles, openFile } from './files';
 
 // Project lifecycle: discovery, creation, cloning, switching, deletion, tabs.
@@ -35,6 +37,18 @@ export async function loadProjects(): Promise<void> {
     const metas: ProjectMeta[] = [];
     for (const dir of dirs) {
       const id = dir.path.replace(/\/$/, '').split('/').pop()!;
+      // Dated from app.json, the one file every project has and the one a scaffold
+      // writes last. `Date.now()` used to stand here, which stamped every project
+      // with the moment the list was read — so "most recently worked on" was
+      // whatever order storage happened to enumerate.
+      let lastModified = 0;
+      const appJson = (await appStorage.list(`projects/${id}/`)).find(
+        (e) => !e.isDirectory && e.path.endsWith('app.json'),
+      );
+      if (appJson?.modifiedAt) {
+        const ms = Date.parse(appJson.modifiedAt);
+        if (!Number.isNaN(ms)) lastModified = ms;
+      }
       let name = id;
       // The project's own app.json — user-written, so validated. A missing file
       // is normal (the id is a fine name); an unreadable one is logged and then
@@ -48,7 +62,7 @@ export async function loadProjects(): Promise<void> {
           console.error(`[devtools] projects/${id}/app.json failed validation`, meta.error.issues);
         }
       }
-      metas.push({ id, name, lastModified: Date.now() });
+      metas.push({ id, name, lastModified });
     }
     setProjects(metas);
   } catch (err) {
@@ -62,12 +76,17 @@ export async function loadProjects(): Promise<void> {
 
 export async function createProject(name: string): Promise<string> {
   const id = Date.now().toString();
-  await appStorage.save(
-    projectPath(id, 'src/main.ts'),
-    `import { createSignal } from '@bundled/solid-js';\nimport html from '@bundled/solid-js/html';\nimport { render } from '@bundled/solid-js/web';\nimport './styles.css';\n\nconst App = () => {\n  const [count, setCount] = createSignal(0);\n  return html\`\n    <div class="y-app y-p-3">\n      <h1>Hello, ${name}!</h1>\n      <button class="y-btn y-btn-primary" onClick=\${() => setCount(count() + 1)}>\n        Clicked \${count} times\n      </button>\n    </div>\`;\n};\n\nrender(App, document.getElementById('app')!);\n`,
-  );
+  const appId = appIdFromName(name, id);
+  await appStorage.save(projectPath(id, 'src/main.ts'), scaffoldMain(name, appId));
   await appStorage.save(projectPath(id, 'src/styles.css'), `#app { height: 100%; }\n`);
-  await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ name }, null, 2));
+  // `appId` is the field the compiler compares `defineApp({ id })` against — not
+  // `id`, which nothing reads. Writing it here is what makes the scaffold compile:
+  // an id that disagrees with app.json fails protocol extraction, and an id that is
+  // absent fails it too.
+  await appStorage.save(
+    projectPath(id, 'app.json'),
+    JSON.stringify({ appId, name, icon: '🧩', version: '1.0.0' }, null, 2),
+  );
   await loadProjects();
   await openProject(id);
   setStatusText(`Created project "${name}"`);
@@ -112,6 +131,10 @@ export async function openProject(id: string): Promise<void> {
   // The static manifest belongs to whichever project was last compiled — drop it
   // on switch so the manifest command never reports another project's protocol.
   setStaticProtocol(null);
+  // Same reasoning for the type-check verdict: it was reached about the project
+  // being switched away from. `diagnostics` is left standing until the next
+  // typecheck writes it, but `compileStatus` no longer reads it as current.
+  setTypecheckState('unknown');
   await refreshFiles(id);
   // Open main.ts by default
   await openFile('src/main.ts');
@@ -127,7 +150,8 @@ function clearActiveProjectState(): void {
     setOpenFileContent(null);
     setOpenFileImage(null);
     setDiagnostics([]);
-    setCompileStatus('idle');
+    setBundleStatus('idle');
+    setTypecheckState('unknown');
     setPreviewUrl(null);
     setStaticProtocol(null);
   });

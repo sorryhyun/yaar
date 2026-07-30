@@ -171,7 +171,53 @@ describe('app version history', () => {
     expect(diff.success).toBe(true);
     if (!diff.success) return;
     expect(diff.against).toBe('repo');
-    // Read-only: reading a diff must never mutate the user's index or HEAD.
-    expect(diff.files.every((f) => f.startsWith('apps/devtools/'))).toBe(true);
+    // App-relative, like the snapshot base — `AppDiffResult.files` says "relative to
+    // the app directory", and this branch used to be the one that broke that promise
+    // by passing git's repo-relative output straight through. A caller cannot feed a
+    // path back as `paths` (or into a read) if which of the two it is depends on which
+    // base was asked for.
+    expect(diff.files.every((f) => !f.startsWith('apps/'))).toBe(true);
+  });
+
+  it('answers how much changed without the diff text', async () => {
+    // The whole point of statOnly: the counts arrive without the body. A whole-app
+    // diff is tens of kilobytes, which is what made a routine pre-deploy check
+    // expensive enough to skip.
+    const diff = await appDiff('devtools', { against: 'repo', statOnly: true });
+    expect(diff.success).toBe(true);
+    if (!diff.success) return;
+    expect(diff.diff).toBe('');
+    expect(diff.stat).toBeDefined();
+    expect(diff.stat!.map((s) => s.file).sort()).toEqual([...diff.files].sort());
+    for (const row of diff.stat!) {
+      expect(Number.isFinite(row.added)).toBe(true);
+      expect(Number.isFinite(row.removed)).toBe(true);
+    }
+  });
+
+  it('narrows a snapshot diff to the paths asked for', async () => {
+    await snapshotApp(APP_ID, 'baseline for paths');
+    await writeFile(join(appDir, 'src', 'app.ts'), 'export const v = 2;\n');
+    await writeFile(join(appDir, 'other.txt'), 'also changed\n');
+
+    const all = await appDiff(APP_ID, { statOnly: true });
+    expect(all.success).toBe(true);
+    if (!all.success) return;
+    expect(all.files.sort()).toEqual(['other.txt', 'src/app.ts']);
+
+    const narrowed = await appDiff(APP_ID, { statOnly: true, paths: ['src/app.ts'] });
+    expect(narrowed.success).toBe(true);
+    if (!narrowed.success) return;
+    expect(narrowed.files).toEqual(['src/app.ts']);
+  });
+
+  it('refuses a paths list that escapes the app directory', async () => {
+    // These become a git pathspec, so `..` would name files outside the app. A list
+    // whose every entry is dropped is reported rather than silently read as "nothing
+    // changed" — the answer a caller would otherwise act on.
+    const diff = await appDiff(APP_ID, { paths: ['../elsewhere'] });
+    expect(diff.success).toBe(false);
+    if (diff.success) return;
+    expect(diff.error).toContain('paths');
   });
 });

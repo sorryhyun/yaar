@@ -8,17 +8,18 @@ import {
 } from '@bundled/yaar-dev';
 import {
   activeProject,
-  setCompileStatus,
+  setBundleStatus,
   setCompileErrors,
   setStatusText,
   setPreviewUrl,
   setConsoleLogs,
   setDiagnostics,
+  setTypecheckState,
   setStaticProtocol,
   previewWindowId,
   setPreviewWindowId,
 } from '../core';
-import { projectPath } from '../lib/paths';
+import { projectPath, relativizeProjectPaths } from '../lib/paths';
 import { parseDiagnostics } from '../lib/parse-diagnostics';
 
 // Build, type check and deploy — the calls that talk to the dev server and
@@ -27,7 +28,7 @@ import { parseDiagnostics } from '../lib/parse-diagnostics';
 export async function compile(): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
-  setCompileStatus('compiling');
+  setBundleStatus('compiling');
   setCompileErrors([]);
   setStaticProtocol(null);
   setStatusText('Compiling...');
@@ -41,18 +42,24 @@ export async function compile(): Promise<void> {
         reported: result.protocol !== undefined,
       });
       batch(() => {
-        setCompileStatus('success');
+        setBundleStatus('success');
         setCompileErrors([]);
         setPreviewUrl(result.previewUrl ?? null);
         setConsoleLogs([]);
         setStatusText('Compilation successful');
       });
     } else {
-      const errors = result.errors ?? [
-        (result as { error?: string }).error ?? 'Compilation failed',
-      ];
+      // The dev server reports bundler errors with host-absolute paths
+      // (`/Users/…/storage/apps/devtools/projects/1785…/src/main.ts:6:25`). Relative
+      // to the project is the only form that can be handed back to `editFile`, and it
+      // is what `diagnostics` already uses — so the two agree and neither leaks where
+      // the sandbox lives on this machine.
+      const errors = relativizeProjectPaths(
+        result.errors ?? [(result as { error?: string }).error ?? 'Compilation failed'],
+        proj.id,
+      );
       batch(() => {
-        setCompileStatus('error');
+        setBundleStatus('error');
         setCompileErrors(errors);
         setStatusText(errors.join('\n'));
       });
@@ -60,7 +67,7 @@ export async function compile(): Promise<void> {
   } catch (err) {
     const msg = errMsg(err);
     batch(() => {
-      setCompileStatus('error');
+      setBundleStatus('error');
       setCompileErrors([msg]);
       setStatusText(`Compile error: ${msg}`);
     });
@@ -74,19 +81,29 @@ export async function typecheck(): Promise<void> {
   try {
     const result = await devTypecheck(projectPath(proj.id));
     if (result.success) {
-      setDiagnostics([]);
+      batch(() => {
+        setDiagnostics([]);
+        setTypecheckState('clean');
+      });
       setStatusText('No type errors');
     } else {
       const raw = result.diagnostics ?? [(result as { error?: string }).error ?? 'Unknown error'];
       const parsed = parseDiagnostics(raw.join('\n'));
-      setDiagnostics(
+      const diags =
         parsed.length > 0
           ? parsed
-          : raw.map((m) => ({ file: '?', line: 0, message: m, severity: 'error' as const })),
-      );
+          : raw.map((m) => ({ file: '?', line: 0, message: m, severity: 'error' as const }));
+      batch(() => {
+        setDiagnostics(diags);
+        setTypecheckState(diags.some((d) => d.severity === 'error') ? 'errors' : 'clean');
+      });
       setStatusText(`${parsed.length || raw.length} type error(s)`);
     }
   } catch (err) {
+    // A typecheck that never ran leaves the previous verdict standing, which would
+    // let a stale `clean` outlive the code it described. It is unknown, and
+    // `compileStatus` reports that rather than guessing either way.
+    setTypecheckState('unknown');
     setStatusText(`Typecheck error: ${errMsg(err)}`);
   }
 }

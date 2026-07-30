@@ -224,14 +224,32 @@ describe('appStorage types', () => {
     expect(diagnostics).toEqual([]);
   });
 
-  test('list entries do not claim to expose raw storage metadata', async () => {
+  // The rule this test enforces has not changed: the type promises exactly what the
+  // wire delivers, no more. What changed is the wire — `size` and `modifiedAt` now
+  // ride on the resource links a storage listing returns, so declaring them is the
+  // accurate half of that rule rather than a violation of it. Both are optional,
+  // because a directory has no size and an older server sends neither.
+  test('list entries expose the metadata the listing actually carries', async () => {
     const diagnostics = await check(`
       import { appStorage } from '@bundled/yaar';
       async function inspect() {
         const entries = await appStorage.list();
-        return entries[0].size;
+        const size: number | undefined = entries[0].size;
+        const modifiedAt: string | undefined = entries[0].modifiedAt;
+        return { size, modifiedAt };
       }
     `);
-    expect(diagnostics.join('\n')).toContain("Property 'size' does not exist");
+    expect(diagnostics).toEqual([]);
+  });
+
+  test('list entries still do not claim fields the listing never sends', async () => {
+    const diagnostics = await check(`
+      import { appStorage } from '@bundled/yaar';
+      async function inspect() {
+        const entries = await appStorage.list();
+        return entries[0].createdAt;
+      }
+    `);
+    expect(diagnostics.join('\n')).toContain("Property 'createdAt' does not exist");
   });
 });

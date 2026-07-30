@@ -1080,7 +1080,7 @@ const text = await appStorage.read('data.json');
 // Prefer readBlob(), which handles the branch for you.
 const binary = await appStorage.readBinary('image.png');
 
-// List files (returns [{ path, isDirectory, uri, mimeType }])
+// List files (returns [{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }])
 // Shallow — direct children only. Recurse yourself to walk subdirectories.
 const files = await appStorage.list();
 
@@ -1088,7 +1088,7 @@ const files = await appStorage.list();
 await appStorage.remove('data.json');
 ```
 
-> **`list()` returns no `size` or `modifiedAt`.** Each entry is `{ path, isDirectory, uri, mimeType }`. If you need file sizes or timestamps, use the REST API (`GET /api/storage/{dir}/?list=true`), which returns `StorageEntry` objects with `size` and `modifiedAt`.
+> **`size` and `modifiedAt` are optional on a listing entry.** A directory has no `size`, and neither field is present if the server predates them. They come from the listing itself, so "how big is this asset" and "which file did I touch last" need no extra read — which is what makes an audit of, say, total inlined asset bytes cheap. `size` is the bytes on disk; a JSON file read back through `readJson` and re-serialized will not match it exactly.
 
 > **`readBlob()` on a PDF does not return the PDF bytes.** `readBlob()` takes no options, so the server's page-rasterization opt-in (`pdfPages`) can never fire through this path; the default branch returns the ASCII string `PDF document with N page(s), N bytes.` wrapped in a Blob (`packages/server/src/storage/storage-manager.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
 

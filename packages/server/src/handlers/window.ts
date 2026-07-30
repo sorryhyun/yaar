@@ -31,7 +31,7 @@ import {
   handleAppCommand,
   handleAppEval,
 } from '../features/window/app-protocol.js';
-import { readLog } from '../features/window/protocol-log.js';
+import { readLog, type ProtocolLogEntry } from '../features/window/protocol-log.js';
 import {
   handleSubscribe,
   handleUnsubscribe,
@@ -100,7 +100,16 @@ export function registerWindowHandlers(
       const win = getWindowState().getWindow(windowId);
       if (!win) return error(`Window "${windowId}" not found.`);
       const limit = typeof p.limit === 'number' ? p.limit : undefined;
-      return ok(JSON.stringify(readLog({ windowKey: win.id, limit }), null, 2));
+      const kind = Array.isArray(p.kind)
+        ? (p.kind.filter(
+            (k): k is ProtocolLogEntry['kind'] =>
+              typeof k === 'string' &&
+              (['manifest', 'query', 'command', 'eval', 'emit'] as const).includes(
+                k as ProtocolLogEntry['kind'],
+              ),
+          ) as ProtocolLogEntry['kind'][])
+        : undefined;
+      return ok(JSON.stringify(readLog({ windowKey: win.id, limit, kind }), null, 2));
     },
     message: ({ windowId, p }) => {
       const appId = getWindowState().getAppIdForWindow(windowId);
@@ -203,6 +212,14 @@ export function registerWindowHandlers(
         limit: {
           type: 'number',
           description: 'protocol_log only. Max entries to return, newest last (default 100).',
+        },
+        kind: {
+          type: 'array',
+          items: { type: 'string', enum: ['manifest', 'query', 'command', 'eval', 'emit'] },
+          description:
+            'protocol_log only. Keep only these kinds, applied before `limit` — so ' +
+            '["emit"] with limit 30 is the last 30 emits. Use it to read past your own ' +
+            'query traffic when the question is about what the app did.',
         },
         // message fields
         message: {

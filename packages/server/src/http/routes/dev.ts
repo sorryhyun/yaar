@@ -125,21 +125,25 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
 
   // GET /api/dev/bundled-libraries — no auth required (static list)
   // GET /api/dev/bundled-libraries?lib=yaar — returns detailed type info for a specific library
-  // GET /api/dev/bundled-libraries?lib=design-tokens — returns design tokens CSS
+  // GET /api/dev/bundled-libraries?lib=design-tokens — returns the generated token reference
+  //
+  // `design-tokens` deliberately has no branch of its own. It used to return the raw
+  // injected CSS — ~10KB of rules an agent cannot act on, most of it a verbatim repeat
+  // of the Design Tokens section already in its prompt — while `getBundledLibraryDetail`
+  // had a pseudo-library entry producing exactly the summary that was wanted (names and
+  // classes, generated from the same CSS). The branch shadowed it.
   if (url.pathname === '/api/dev/bundled-libraries' && req.method === 'GET') {
     const lib = url.searchParams.get('lib');
     if (lib) {
-      if (lib === 'design-tokens') {
-        const { YAAR_DESIGN_TOKENS_CSS } = await import('@yaar/compiler');
-        return jsonResponse({ name: lib, types: YAAR_DESIGN_TOKENS_CSS });
-      }
       const { getBundledLibraryDetail } = await import('@yaar/compiler');
       const detail = getBundledLibraryDetail(lib);
       if (!detail) return errorResponse(`Unknown bundled library: "${lib}"`, 404);
       return jsonResponse({ name: lib, types: detail });
     }
-    const { getAvailableBundledLibraries } = await import('@yaar/compiler');
-    return jsonResponse(getAvailableBundledLibraries());
+    // Describable, not merely importable: the caller's next move is to pass one of
+    // these back as `?lib=`, so the list has to be the set that answers.
+    const { getDescribableLibraries } = await import('@yaar/compiler');
+    return jsonResponse(getDescribableLibraries());
   }
 
   if (req.method !== 'POST') return null;
@@ -283,6 +287,10 @@ async function dispatchDevAction(
           await git.appDiff(targetAppId, {
             ref: typeof body.ref === 'string' ? body.ref : undefined,
             against,
+            statOnly: body.statOnly === true,
+            ...(Array.isArray(body.paths)
+              ? { paths: body.paths.filter((p): p is string => typeof p === 'string') }
+              : {}),
           }),
         );
       }

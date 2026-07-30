@@ -94,6 +94,8 @@ export function toEnvelope(result: VerbResult): Record<string, unknown> {
     mimeType?: string;
     kind?: string;
     version?: string;
+    size?: number;
+    modifiedAt?: string;
   }> = [];
 
   for (const c of result.content) {
@@ -120,6 +122,8 @@ export function toEnvelope(result: VerbResult): Record<string, unknown> {
           mimeType?: string;
           kind?: string;
           version?: string;
+          size?: number;
+          modifiedAt?: string;
         };
         links.push({
           uri: link.uri,
@@ -128,6 +132,8 @@ export function toEnvelope(result: VerbResult): Record<string, unknown> {
           ...(link.mimeType ? { mimeType: link.mimeType } : {}),
           ...(link.kind ? { kind: link.kind } : {}),
           ...(link.version ? { version: link.version } : {}),
+          ...(link.size !== undefined ? { size: link.size } : {}),
+          ...(link.modifiedAt ? { modifiedAt: link.modifiedAt } : {}),
         });
         break;
       }

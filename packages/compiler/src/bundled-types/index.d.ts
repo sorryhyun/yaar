@@ -668,7 +668,7 @@ interface YaarAppDefinition<
   S = Record<string, unknown>,
   St = Record<string, YaarAppStateDefinition>,
 > {
-  /** Must equal the `id` in this app's `app.json`; the build enforces it. */
+  /** Must equal `appId` in this app's `app.json` (not `id`, which nothing reads); the build enforces it. */
   id: string;
   name: string;
   state?: St;
@@ -742,6 +742,10 @@ interface YaarAppStorageEntry {
   isDirectory: boolean;
   uri: string;
   mimeType?: string;
+  /** Bytes. Absent for directories. */
+  size?: number;
+  /** ISO timestamp of the last write. */
+  modifiedAt?: string;
 }
 
 interface YaarAppStorage {
@@ -958,14 +962,23 @@ interface YaarDevDiffOpts {
    * has this app changed relative to what the user committed"); bundled apps only.
    */
   against?: 'snapshot' | 'repo';
+  /**
+   * Return per-file line counts (`stat`) instead of the diff text. A whole-app diff
+   * is tens of kilobytes; this answers "how much changed" in a few hundred bytes.
+   */
+  statOnly?: boolean;
+  /** Limit the diff to these app-relative paths. Feed `files` or `stat[].file` back in. */
+  paths?: string[];
 }
 
 interface YaarDevDiffResult {
   success: boolean;
-  /** Unified diff. Empty when there are no changes. */
+  /** Unified diff. Empty when there are no changes, and always empty under `statOnly`. */
   diff?: string;
   /** Paths touched, relative to the app directory. */
   files?: string[];
+  /** Per-file line counts. Returned in place of `diff` under `statOnly`. */
+  stat?: { file: string; added: number; removed: number }[];
   against?: 'snapshot' | 'repo';
   ref?: string;
   /** True when the diff was clipped to stay under the size cap. */
@@ -1097,7 +1110,7 @@ declare module '@bundled/yaar' {
    * import * as z from '@bundled/zod';
    *
    * export default defineApp({
-   *   id: 'memo',                    // must equal app.json's id
+   *   id: 'memo',                    // must equal app.json's "appId"
    *   name: 'Memo',
    *   state: {
    *     memoCount: { description: 'Number of saved memos', get: () => memos().length },

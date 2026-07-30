@@ -116,12 +116,27 @@ export function gitHistory(appId?: string, opts?: { limit?: number }) {
  * history — "what changed since the last deploy". `against: 'repo'` compares
  * against the user's git repo — "what has this app changed relative to what the
  * user committed" — and works only for bundled apps.
+ *
+ * `statOnly` answers "how much changed" with per-file line counts instead of the
+ * diff text; `paths` narrows to the files worth reading in full. A whole-app diff
+ * runs to tens of kilobytes, so reaching for the full text first is how a
+ * pre-deploy check ends up costing more than the change it was checking.
  */
-export function gitDiff(appId?: string, opts?: { ref?: string; against?: 'snapshot' | 'repo' }) {
+export function gitDiff(
+  appId?: string,
+  opts?: {
+    ref?: string;
+    against?: 'snapshot' | 'repo';
+    statOnly?: boolean;
+    paths?: string[];
+  },
+) {
   return devPost<{
     success: boolean;
     diff?: string;
     files?: string[];
+    /** Per-file line counts. Returned instead of `diff` under `statOnly`. */
+    stat?: { file: string; added: number; removed: number }[];
     against?: 'snapshot' | 'repo';
     ref?: string;
     truncated?: boolean;

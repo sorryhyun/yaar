@@ -53,6 +53,27 @@ import { scopedAppStoragePath } from '../../handlers/apps.js';
 function resolvedStorageUri(appId: string, relativePath: string): string {
   return `yaar://apps/${appId}/storage/${relativePath}`;
 }
+
+/**
+ * A listing whose paths can be handed straight back to `storage/{path}`.
+ *
+ * `storageList` answers in storage-root coordinates (`apps/notes/reports/x.md`)
+ * because that is the tree it walks, while every path *argument* on this door is
+ * relative to the app's own root (`reports/x.md`). So a caller that listed a
+ * directory and read one of the results back got "not found" for a file it had just
+ * been shown, and had to strip a prefix nothing told it about. One coordinate system
+ * per door, and this door's is app-relative.
+ */
+function appRelativeEntries(appId: string, result: StorageListResult): StorageListResult {
+  if (!result.entries) return result;
+  const prefix = `apps/${appId}/`;
+  return {
+    ...result,
+    entries: result.entries.map((e) =>
+      e.path.startsWith(prefix) ? { ...e, path: e.path.slice(prefix.length) } : e,
+    ),
+  };
+}
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '../../lib/ids.js';
 import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
@@ -62,6 +83,7 @@ import {
   storageList,
   storageDelete,
 } from '../../storage/storage-manager.js';
+import type { StorageListResult } from '../../storage/types.js';
 
 export const APP_TOOL_NAMES = [
   'mcp__app__query',
@@ -211,7 +233,7 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!relativePath) {
           // List root storage
           const result = await storageList(scoped);
-          return okJson({ uri, ...result });
+          return okJson({ uri, ...appRelativeEntries(appId, result) });
         }
         const result = await storageRead(scoped);
         if (!result.success) {
@@ -238,7 +260,9 @@ export function registerAppAgentTools(server: McpServer): void {
       description:
         'Send a command to the app. Specify the command name and optional parameters. ' +
         'Built-in storage commands: "storage:write" (params: {path, content}), ' +
-        '"storage:delete" (params: {path}), "storage:list" (params: {path?}).',
+        '"storage:delete" (params: {path}), "storage:list" (params: {path?}). Every storage ' +
+        "path — argument and listed result alike — is relative to your own app's storage " +
+        'root, so a path from storage:list can be read back as query("storage/{path}").',
       inputSchema: {
         command: z
           .string()
@@ -301,7 +325,7 @@ export function registerAppAgentTools(server: McpServer): void {
           }
           case 'list': {
             const result = await storageList(scoped);
-            return okJson({ uri, ...result });
+            return okJson({ uri, ...appRelativeEntries(appId, result) });
           }
           default:
             return error(

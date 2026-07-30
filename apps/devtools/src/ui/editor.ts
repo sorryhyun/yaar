@@ -3,8 +3,8 @@ import { createSignal, createEffect, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
-import { createPersistedSignal } from '@bundled/yaar';
-import { openFilePath, openFileContent, openFileImage } from '../core';
+import { createPersistedSignal, errMsg } from '@bundled/yaar';
+import { openFilePath, openFileContent, openFileImage, setStatusText } from '../core';
 import { writeFile } from '../services';
 
 // Register TypeScript grammar (Prism base only has js/css/markup)
@@ -87,7 +87,12 @@ createEffect(() => {
 function performSave() {
   const path = openFilePath();
   if (path && isDirty()) {
-    writeFile(path, localContent());
+    // The write is fire-and-forget so typing never waits on storage, which makes a
+    // rejection nobody catches the failure mode — an autosave that silently stopped
+    // saving. Say so in the status bar instead.
+    writeFile(path, localContent()).catch((err: unknown) => {
+      setStatusText(`Could not save ${path}: ${errMsg(err)}`);
+    });
     setIsDirty(false);
   }
 }

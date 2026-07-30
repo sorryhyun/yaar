@@ -116,13 +116,52 @@ export function endRequest(
   }
   const value =
     response.kind === 'manifest'
-      ? response.manifest
+      ? summarizeManifest(response.manifest)
       : response.kind === 'query'
         ? response.data
         : response.kind === 'eval'
           ? response.value
           : response.result;
   if (value !== undefined) entry.result = clamp(value);
+}
+
+/**
+ * A manifest entry records that the manifest was fetched, not the manifest.
+ *
+ * Full manifests are the largest thing in this buffer by an order of magnitude — a
+ * description plus a params schema plus a URI for every command and every state key,
+ * which pretty-printed is ~90 lines *each* and stays under `clamp`'s limit, so
+ * nothing trimmed it. Four of them in one 30-entry read is a thousand lines of
+ * duplicate text crowding out the query/command/emit rows this log exists to show.
+ * The names are what a reader of an ordering bug needs; the schemas are one
+ * `describe` away.
+ */
+function summarizeManifest(manifest: unknown): unknown {
+  if (!manifest || typeof manifest !== 'object') return manifest;
+  const m = manifest as Record<string, unknown>;
+  const names = (value: unknown): string[] | undefined => {
+    if (Array.isArray(value)) {
+      return value.map((v) =>
+        typeof v === 'string'
+          ? v
+          : String((v as { name?: unknown } | null)?.name ?? JSON.stringify(v)),
+      );
+    }
+    if (value && typeof value === 'object') return Object.keys(value);
+    return undefined;
+  };
+  const commands = names(m.commands);
+  const state = names(m.state);
+  const events = names(m.events);
+  // A shape this does not recognize is passed through rather than summarized into
+  // `{}`: an unreadable entry is worse than a fat one.
+  if (!commands && !state && !events) return manifest;
+  return {
+    summarized: 'names only — call describe for descriptions and params schemas',
+    ...(commands ? { commands } : {}),
+    ...(state ? { state } : {}),
+    ...(events ? { events } : {}),
+  };
 }
 
 /** Record an inbound emit from an app on a declared channel. */
@@ -141,10 +180,22 @@ export function recordEmit(windowKey: string, channel: string, payload: unknown)
 /**
  * Read back the log, newest last (chronological — ordering is usually the point).
  * Omit `windowKey` to read every window's traffic.
+ *
+ * `kind` narrows to the traffic asked about. It matters because the reader is
+ * usually also the *writer*: an agent inspecting an app leaves a row for every
+ * query it made, so the emits it came to check ordering on sit behind dozens of
+ * entries it produced itself. Filtering is done here, before `limit`, so
+ * `{ kind: ['emit'], limit: 30 }` means the last thirty emits — not whichever
+ * emits happen to fall inside the last thirty entries of any kind.
  */
-export function readLog(opts: { windowKey?: string; limit?: number } = {}): ProtocolLogEntry[] {
-  const { windowKey, limit = 100 } = opts;
-  const matched = windowKey ? entries.filter((e) => e.windowKey === windowKey) : entries;
+export function readLog(
+  opts: { windowKey?: string; limit?: number; kind?: ProtocolLogEntry['kind'][] } = {},
+): ProtocolLogEntry[] {
+  const { windowKey, limit = 100, kind } = opts;
+  const kinds = kind && kind.length > 0 ? new Set(kind) : null;
+  const matched = entries.filter(
+    (e) => (!windowKey || e.windowKey === windowKey) && (!kinds || kinds.has(e.kind)),
+  );
   return matched.slice(-limit);
 }
 

@@ -1,7 +1,7 @@
 import { AppCommandError, invoke, wait, defineAppCommand } from '@bundled/yaar';
 import {
   diagnostics,
-  compileStatus,
+  bundleStatus,
   compileErrors,
   previewUrl,
   previewWindowId,
@@ -21,14 +21,19 @@ export const buildCommands = {
   compile: defineAppCommand({
     description:
       'Type check and compile the active project; refreshes the preview window if one is ' +
-      'open. `built` reflects the bundle, `status` reflects type checking — they can ' +
-      'differ. Slow: pass timeoutMs (e.g. 60000).',
+      'open. `built` reflects the bundle, `status` reflects type checking too — they can ' +
+      'differ, and the `compileStatus` state key reports the same combined verdict. ' +
+      'Refreshing the preview remounts the iframe, so in-app state resets to a cold start. ' +
+      'Slow: pass timeoutMs (e.g. 60000).',
     params: {
       type: 'object',
       properties: {
         skipTypecheck: {
           type: 'boolean',
-          description: 'Build without type checking first. Faster, but ships blind.',
+          description:
+            'Build without type checking first. Faster, but ships blind — and typecheck is ' +
+            "the only half that reads import paths, because Bun tree-shakes an unused bad " +
+            'import away and reports a clean build. Leaves `compileStatus` at "unchecked".',
         },
       },
     },
@@ -39,7 +44,7 @@ export const buildCommands = {
       const skip = p.skipTypecheck === true;
       if (!skip) await typecheck();
       await compile();
-      const built = compileStatus() === 'success';
+      const built = bundleStatus() === 'success';
       const errors = compileErrors();
       const diags = skip ? [] : diagnostics();
       const typeErrors = diags.filter((d) => d.severity === 'error').length;
@@ -49,7 +54,17 @@ export const buildCommands = {
       // wasn't true. Bun strips types and builds happily through them, so "it built" and
       // "it type checks" are separate facts and both get reported: `built` for the
       // bundle, `status` for the code. Deploy enforces the same line.
-      const status = built && typeErrors === 0 ? 'success' : 'error';
+      //
+      // `skipTypecheck` gets its own word rather than borrowing `success`: nothing here
+      // checked the code, and the `compileStatus` state key says the same thing so a
+      // caller polling it cannot land on a cleaner answer than the command gave.
+      const status = !built
+        ? 'error'
+        : skip
+          ? 'unchecked'
+          : typeErrors === 0
+            ? 'success'
+            : 'error';
 
       // Refresh an open preview onto the build we just made. Left alone, it went on
       // showing the previous one — so a screenshot taken to confirm a fix showed the
@@ -153,11 +168,20 @@ export const buildCommands = {
   protocolLog: defineAppCommand({
     description:
       'App Protocol traffic for the preview window: every query/command sent and event ' +
-      'emitted, in order, with results and timings.',
+      'emitted, in order, with results and timings. Your own previewQuery/previewCommand ' +
+      "calls are in here too — one row per state key read — so narrow with `kind` when the " +
+      'question is what the *app* did. Manifest rows record only the key names.',
     params: {
       type: 'object',
       properties: {
         limit: { type: 'number', description: 'Max entries, newest last (default 100).' },
+        kind: {
+          type: 'array',
+          items: { type: 'string', enum: ['manifest', 'query', 'command', 'eval', 'emit'] },
+          description:
+            'Keep only these kinds, applied before `limit` — ["emit"] with limit 30 gives ' +
+            'the last 30 emits, which is the read for a duplicate-emit or ordering bug.',
+        },
       },
     },
     run: async (p) => {
@@ -166,6 +190,7 @@ export const buildCommands = {
       return await invoke(`yaar://windows/${wid}`, {
         action: 'protocol_log',
         ...(typeof p.limit === 'number' ? { limit: p.limit } : {}),
+        ...(Array.isArray(p.kind) ? { kind: p.kind.map((k) => String(k)) } : {}),
       });
     },
   }),

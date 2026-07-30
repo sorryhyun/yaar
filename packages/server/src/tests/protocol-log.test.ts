@@ -124,6 +124,68 @@ describe('protocol log', () => {
     expect(readLog({ windowKey: '0/ai-chat' })).toHaveLength(1);
   });
 
+  it('records that a manifest was fetched, not the manifest', () => {
+    // A manifest carries a description and a params schema for every command and every
+    // state key. Compact it stays under the truncation limit, so nothing trimmed it —
+    // and pretty-printed for a reader it is ~90 lines. Four of those in one read is a
+    // thousand lines of duplicate text on top of the traffic being investigated.
+    const entry = beginRequest('0/devtools-preview-1', { kind: 'manifest' });
+    endRequest(
+      entry,
+      {
+        kind: 'manifest',
+        manifest: {
+          commands: {
+            addItem: { description: 'Add an item', params: { type: 'object' }, uri: 'yaar://x' },
+            setFilter: { description: 'Filter', params: { type: 'object' }, uri: 'yaar://y' },
+          },
+          state: { itemCount: { description: 'How many', uri: 'yaar://z' } },
+        },
+      } as never,
+      7,
+    );
+
+    const [logged] = readLog({ windowKey: '0/devtools-preview-1' });
+    expect(logged.result).toEqual({
+      summarized: 'names only — call describe for descriptions and params schemas',
+      commands: ['addItem', 'setFilter'],
+      state: ['itemCount'],
+    });
+    // No description or schema text survives — that is the payload being dropped.
+    expect(JSON.stringify(logged.result)).not.toContain('Add an item');
+  });
+
+  it('passes through a manifest shape it does not recognize', () => {
+    // Summarizing an unexpected shape into `{}` would be worse than the size it saves:
+    // an unreadable entry answers nothing at all.
+    const entry = beginRequest('0/ai-chat', { kind: 'manifest' });
+    endRequest(entry, { kind: 'manifest', manifest: { odd: 'shape' } } as never, 1);
+
+    expect(readLog({ windowKey: '0/ai-chat' })[0].result).toEqual({ odd: 'shape' });
+  });
+
+  it('filters by kind before applying the limit', () => {
+    // The reader is usually also the writer: an agent that queried twenty state keys
+    // has pushed its own traffic in front of the emits it came to check. Filtering
+    // after `limit` would return the emits that happen to fall inside the last N
+    // entries — which is none of them.
+    for (let i = 0; i < 20; i++) {
+      const q = beginRequest('0/ai-chat', { kind: 'query', stateKey: `k${i}` });
+      endRequest(q, { kind: 'query', data: i }, 1);
+    }
+    recordEmit('0/ai-chat', 'reply', { n: 1 });
+    for (let i = 0; i < 20; i++) {
+      const q = beginRequest('0/ai-chat', { kind: 'query', stateKey: `k${i}` });
+      endRequest(q, { kind: 'query', data: i }, 1);
+    }
+    recordEmit('0/ai-chat', 'reply', { n: 2 });
+
+    const emits = readLog({ windowKey: '0/ai-chat', kind: ['emit'], limit: 5 });
+    expect(emits.map((e) => (e.params as { n: number }).n)).toEqual([1, 2]);
+    // An empty filter means "no filter", not "nothing matches".
+    expect(readLog({ windowKey: '0/ai-chat', kind: [], limit: 1000 })).toHaveLength(42);
+  });
+
   it('evicts oldest entries rather than growing without bound', () => {
     for (let i = 0; i < 600; i++) recordEmit('0/ai-chat', 'tick', { i });
 

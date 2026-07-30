@@ -18,25 +18,60 @@ export const gitCommands = {
   gitDiff: defineAppCommand({
     description:
       'Diff a deployed app against a commit. against="snapshot" (default): app\'s own deploy ' +
-      'history. against="repo": user\'s git repo (bundled apps only).',
+      'history. against="repo": user\'s git repo (bundled apps only). Start with ' +
+      'statOnly: true — a whole-app diff runs to tens of kilobytes, and the per-file line ' +
+      'counts it returns instead tell you which paths to then request in full.',
     params: {
       type: 'object',
       properties: {
         appId: { type: 'string', description: 'App to diff' },
         ref: { type: 'string', description: 'Hash or HEAD~N. Default HEAD.' },
         against: { type: 'string', enum: ['snapshot', 'repo'] },
+        statOnly: {
+          type: 'boolean',
+          description:
+            'Return per-file { file, added, removed } counts instead of the diff text.',
+        },
+        paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Only these app-relative paths. Pass back what `files`/`stat` named, e.g. ' +
+            '["src/main.ts"].',
+        },
       },
       required: ['appId'],
     },
     run: async (p) => {
+      const statOnly = p.statOnly === true;
       const result = await gitDiff(String(p.appId), {
         ref: p.ref ? String(p.ref) : undefined,
         against: p.against === 'repo' ? 'repo' : 'snapshot',
+        statOnly,
+        ...(Array.isArray(p.paths) ? { paths: p.paths.map((x) => String(x)) } : {}),
       });
+      // Under statOnly there is no diff text by design, so emptiness has to be read
+      // off the file list — testing `result.diff` would report every stat read as
+      // "nothing changed".
+      const files = result.files ?? [];
+      if (statOnly) {
+        if (files.length === 0) return { changed: false, files: [] };
+        const stat = result.stat ?? [];
+        return {
+          changed: true,
+          files,
+          stat,
+          totals: {
+            files: stat.length,
+            added: stat.reduce((n, s) => n + s.added, 0),
+            removed: stat.reduce((n, s) => n + s.removed, 0),
+          },
+        };
+      }
       if (!result.diff) return { changed: false, files: [] };
       return {
         changed: true,
-        files: result.files ?? [],
+        files,
         diff: result.diff,
         ...(result.truncated ? { truncated: true } : {}),
       };

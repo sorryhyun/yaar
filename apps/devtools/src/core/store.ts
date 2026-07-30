@@ -22,9 +22,27 @@ export const [openFileContent, setOpenFileContent] = createSignal<string | null>
  */
 export const [openFileImage, setOpenFileImage] = createSignal<string | null>(null);
 export const [diagnostics, setDiagnostics] = createSignal<Diagnostic[]>([]);
-export const [compileStatus, setCompileStatus] = createSignal<
+/**
+ * The **bundler's** verdict on the last build. Deliberately not the whole story:
+ * Bun strips types and builds straight through type errors, so this says "it
+ * bundled", never "it is correct". `bundleStatus`/`compileStatus` in the protocol
+ * are what combine it with `typecheckState` — nothing should read this signal alone
+ * and call the project clean.
+ */
+export const [bundleStatus, setBundleStatus] = createSignal<
   'idle' | 'compiling' | 'success' | 'error'
 >('idle');
+/**
+ * Whether type checking has run against the code as it stands now.
+ *
+ * `unknown` is the load-bearing value, and it is the default after every write: a
+ * `clean` from before the last edit describes code that no longer exists, and
+ * reporting it as still clean is the exact failure `compileStatus` was making with
+ * the bundler's verdict. It is a third answer, not a shade of one of the other two.
+ */
+export const [typecheckState, setTypecheckState] = createSignal<'unknown' | 'clean' | 'errors'>(
+  'unknown',
+);
 export const [compileErrors, setCompileErrors] = createSignal<string[]>([]);
 export const [previewUrl, setPreviewUrl] = createSignal<string | null>(null);
 export const [statusText, setStatusText] = createSignal('Ready');

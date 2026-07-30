@@ -11,7 +11,7 @@
 import { readFileSync } from 'fs';
 import { BUNDLED_TYPES_DTS } from '../paths.js';
 import { describeDesignTokens } from '../design-tokens.js';
-import { BUNDLED_LIBRARIES } from './registry.js';
+import { BUNDLED_LIBRARIES, getAvailableBundledLibraries } from './registry.js';
 
 // Lazily cached .d.ts content
 let _dtsContent: string | null = null;
@@ -36,6 +36,20 @@ function loadDtsContent(): string {
 const PSEUDO_LIBRARIES: Record<string, () => string> = {
   'design-tokens': describeDesignTokens,
 };
+
+/**
+ * Everything `getBundledLibraryDetail` can answer for: the importable modules plus
+ * the pseudo-libraries.
+ *
+ * The list an agent reads and the set it can actually ask about have to be the same
+ * set, derived rather than maintained. `getAvailableBundledLibraries()` answers a
+ * narrower question — what may appear in an `@bundled/*` import — and listing that
+ * as if it were this one is what left `design-tokens` describable but unadvertised:
+ * an agent looking only at the list had no way to know the call would work.
+ */
+export function getDescribableLibraries(): string[] {
+  return [...getAvailableBundledLibraries(), ...Object.keys(PSEUDO_LIBRARIES)].sort();
+}
 
 /**
  * Get detailed type information for a specific bundled library.

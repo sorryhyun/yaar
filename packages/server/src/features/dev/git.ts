@@ -250,16 +250,37 @@ export async function appHistory(
 
 export interface AppDiffResult {
   success: true;
-  /** Unified diff. Empty string means no changes. */
+  /** Unified diff. Empty string means no changes — and under `statOnly`, always empty. */
   diff: string;
   /** Paths touched, relative to the app directory. */
   files: string[];
+  /** Per-file line counts. Present under `statOnly`, where they stand in for the diff. */
+  stat?: { file: string; added: number; removed: number }[];
   /** Which base the diff was taken against. */
   against: 'snapshot' | 'repo';
   /** Present when `against: 'snapshot'`. */
   ref?: string;
   /** True when the diff was clipped to stay under the size cap. */
   truncated: boolean;
+}
+
+export interface AppDiffOptions {
+  ref?: string;
+  against?: 'snapshot' | 'repo';
+  /**
+   * Return per-file line counts instead of the diff text.
+   *
+   * "How much changed" is the question most often asked here — before a deploy, to
+   * see whether an app has drifted from the repo — and the full answer to it is
+   * 95KB for one app against `HEAD~1`, which is a real cost paid to learn one
+   * number. `git diff --numstat` answers it in a few hundred bytes.
+   */
+  statOnly?: boolean;
+  /**
+   * Limit the diff to these paths, relative to the app directory. The usual follow-up
+   * to a `statOnly` read: get the shape, then read the one file that matters.
+   */
+  paths?: string[];
 }
 
 /** A diff big enough to blow an agent's context is worse than no diff. */
@@ -275,12 +296,16 @@ const MAX_DIFF_BYTES = 200_000;
  */
 export async function appDiff(
   appId: string,
-  opts: { ref?: string; against?: 'snapshot' | 'repo' } = {},
+  opts: AppDiffOptions = {},
 ): Promise<AppDiffResult | GitFailure> {
   const dir = appDirOrError(appId);
   if ('success' in dir) return dir;
 
   const against = opts.against ?? 'snapshot';
+  const paths = sanitizePaths(opts.paths);
+  if (paths && paths.length === 0) {
+    return { success: false, error: '"paths" was given but held no usable path.' };
+  }
 
   if (against === 'repo') {
     if (resolveAppSource(appId) !== 'bundled') {
@@ -290,15 +315,30 @@ export async function appDiff(
       };
     }
     // Read-only against the host repo: `diff` never touches the index or HEAD.
-    const pathspec = relative(PROJECT_ROOT, join(APPS_DIR, appId));
+    const appDirspec = relative(PROJECT_ROOT, join(APPS_DIR, appId));
+    // A caller's paths are app-relative, so they are re-anchored under the app dir —
+    // which also keeps the pathspec inside it whatever the caller passed.
+    const pathspec = paths ? paths.map((p) => `${appDirspec}/${p}`) : [appDirspec];
     const env = { GIT_DIR: join(PROJECT_ROOT, '.git'), GIT_WORK_TREE: PROJECT_ROOT };
-    const diff = await runGit(['diff', '--', pathspec], env, PROJECT_ROOT);
+    const names = await runGit(['diff', '--numstat', '--', ...pathspec], env, PROJECT_ROOT);
+    if (!names.ok) return { success: false, error: `git diff failed: ${names.stderr}` };
+    const stat = parseNumstat(names.stdout, appDirspec);
+    if (opts.statOnly) {
+      return {
+        success: true,
+        diff: '',
+        files: stat.map((s) => s.file),
+        stat,
+        against: 'repo',
+        truncated: false,
+      };
+    }
+    const diff = await runGit(['diff', '--', ...pathspec], env, PROJECT_ROOT);
     if (!diff.ok) return { success: false, error: `git diff failed: ${diff.stderr}` };
-    const names = await runGit(['diff', '--name-only', '--', pathspec], env, PROJECT_ROOT);
     return {
       success: true,
       ...clip(diff.stdout),
-      files: names.ok ? names.stdout.split('\n').filter(Boolean) : [],
+      files: stat.map((s) => s.file),
       against: 'repo',
     };
   }
@@ -317,14 +357,30 @@ export async function appDiff(
   const add = await runGit(['add', '-A'], env, dir.path);
   if (!add.ok) return { success: false, error: `git add failed: ${add.stderr}` };
 
-  const diff = await runGit(['diff', ref], env, dir.path);
+  const limit = paths ? ['--', ...paths] : [];
+  const names = await runGit(['diff', '--numstat', ref, ...limit], env, dir.path);
+  if (!names.ok) return { success: false, error: `git diff failed: ${names.stderr}` };
+  const stat = parseNumstat(names.stdout);
+
+  if (opts.statOnly) {
+    return {
+      success: true,
+      diff: '',
+      files: stat.map((s) => s.file),
+      stat,
+      against: 'snapshot',
+      ref,
+      truncated: false,
+    };
+  }
+
+  const diff = await runGit(['diff', ref, ...limit], env, dir.path);
   if (!diff.ok) return { success: false, error: `git diff failed: ${diff.stderr}` };
-  const names = await runGit(['diff', '--name-only', ref], env, dir.path);
 
   return {
     success: true,
     ...clip(diff.stdout),
-    files: names.ok ? names.stdout.split('\n').filter(Boolean) : [],
+    files: stat.map((s) => s.file),
     against: 'snapshot',
     ref,
   };
@@ -333,6 +389,49 @@ export async function appDiff(
 function clip(diff: string): { diff: string; truncated: boolean } {
   if (diff.length <= MAX_DIFF_BYTES) return { diff, truncated: false };
   return { diff: diff.slice(0, MAX_DIFF_BYTES), truncated: true };
+}
+
+/**
+ * Drop anything in a caller's `paths` that could reach outside the app directory.
+ *
+ * These become a git pathspec, so a leading `/`, a `..`, or a `:`-prefixed magic
+ * pathspec would each mean something other than "a file in this app". Silently
+ * ignored rather than rejected one by one — an empty result is reported by the
+ * caller, so a `paths` that named nothing usable cannot read as "nothing changed".
+ */
+function sanitizePaths(paths?: string[]): string[] | undefined {
+  if (!paths) return undefined;
+  return paths
+    .filter((p): p is string => typeof p === 'string')
+    .map((p) => p.trim().replace(/^\/+/, ''))
+    .filter((p) => p.length > 0 && !p.startsWith(':') && !p.split('/').includes('..'));
+}
+
+/**
+ * `git diff --numstat` → per-file added/removed counts.
+ *
+ * A binary file's counts are `-`, which becomes 0 here: the file is still reported
+ * as changed, which is the fact `stat` exists to carry. `stripPrefix` re-anchors the
+ * host-repo case, whose paths arrive repo-relative, onto the app directory — so both
+ * bases report the same app-relative paths, and either can be fed straight back in
+ * as `paths`.
+ */
+function parseNumstat(
+  stdout: string,
+  stripPrefix?: string,
+): { file: string; added: number; removed: number }[] {
+  const rows: { file: string; added: number; removed: number }[] = [];
+  for (const line of stdout.split('\n')) {
+    if (!line.trim()) continue;
+    const [added, removed, ...rest] = line.split('\t');
+    let file = rest.join('\t');
+    if (!file) continue;
+    if (stripPrefix && file.startsWith(`${stripPrefix}/`)) {
+      file = file.slice(stripPrefix.length + 1);
+    }
+    rows.push({ file, added: Number(added) || 0, removed: Number(removed) || 0 });
+  }
+  return rows;
 }
 
 export interface RestoreResult {

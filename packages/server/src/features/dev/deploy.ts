@@ -331,6 +331,21 @@ export async function doDeploy(
     // No sandbox app.json
   }
 
+  // `appId` in app.json is what protocol extraction compares `defineApp({ id })`
+  // against, so deploying under a *different* id installs an app whose own next
+  // compile fails on a mismatch it did nothing to cause. Refuse here, where both
+  // names are in hand and the fix is one edit, rather than at that later build.
+  const declaredAppId = sandboxMeta.appId;
+  if (typeof declaredAppId === 'string' && declaredAppId && declaredAppId !== appId) {
+    const error =
+      `This project's app.json declares appId "${declaredAppId}" but you are deploying as ` +
+      `"${appId}". The id is what the app registers under and what \`defineApp({ id })\` must ` +
+      `equal, so deploy with appId "${declaredAppId}", or change both app.json's "appId" and ` +
+      `the \`id\` in src/main.ts to "${appId}".`;
+    emit('error', { step: 'metadata', error });
+    return { success: false, error };
+  }
+
   // Also read existing deployed app's metadata for fallback values
   let existingMeta: Record<string, unknown> = {};
   try {
@@ -415,6 +430,11 @@ export async function doDeploy(
     // Sandbox app.json is the source of truth for all metadata (permissions, variant, etc.)
     // Deploy args only override name/icon/description for convenience.
     const metadata: Record<string, unknown> = { ...existingMeta, ...sandboxMeta };
+    // Stamped, not inherited: the guard above has already established that the
+    // sandbox either agrees or said nothing, and an installed app.json that names
+    // its own id is what keeps the `defineApp({ id })` check live for every later
+    // build of it — including the server's own auto-recompile.
+    metadata.appId = appId;
     if (name !== undefined) metadata.name = name;
     else if (!metadata.name) metadata.name = displayName;
     if (icon !== undefined) metadata.icon = icon;

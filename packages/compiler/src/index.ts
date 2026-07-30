@@ -16,7 +16,7 @@ export {
   resolveBrowserEntry,
   toForwardSlash,
 } from './bundled/registry.js';
-export { getBundledLibraryDetail } from './bundled/describe-library.js';
+export { getBundledLibraryDetail, getDescribableLibraries } from './bundled/describe-library.js';
 export {
   ASSET_MIME_TYPES,
   bundledLibraryPluginBun,

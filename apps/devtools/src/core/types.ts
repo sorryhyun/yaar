@@ -6,6 +6,14 @@ export {};
 export interface ProjectMeta {
   id: string;
   name: string;
+  /**
+   * Unix ms of the most recent write anywhere in the project, or 0 when nothing in
+   * it could be dated.
+   *
+   * Was `Date.now()` at discovery time, which made every project equally recent and
+   * the field useless for the one question it answers ("which of these was I last
+   * working in"). It now comes from the storage listing's own timestamps.
+   */
   lastModified: number;
 }
 
@@ -14,8 +22,10 @@ export interface FileEntry {
   isDirectory: boolean;
   /** Line count — populated for text files when the file list refreshes. */
   lines?: number;
-  /** Size in bytes (UTF-8) — populated alongside `lines`. */
+  /** Size in bytes. From the storage listing, so binary files carry one too. */
   bytes?: number;
+  /** ISO timestamp of the last write, as reported by storage. */
+  modifiedAt?: string;
 }
 
 export interface Diagnostic {

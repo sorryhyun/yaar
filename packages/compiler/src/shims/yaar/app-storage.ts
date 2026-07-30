@@ -33,6 +33,10 @@ export interface YaarAppStorageEntry {
   isDirectory: boolean;
   uri: string;
   mimeType?: string;
+  /** Bytes. Absent for directories, and for a server too old to report it. */
+  size?: number;
+  /** ISO timestamp of the last write. */
+  modifiedAt?: string;
 }
 
 export const appStorage = {
@@ -124,6 +128,8 @@ export const appStorage = {
           isDirectory: entry.description === 'directory',
           uri: entry.uri,
           mimeType: entry.mimeType,
+          ...(typeof entry.size === 'number' ? { size: entry.size } : {}),
+          ...(entry.modifiedAt ? { modifiedAt: entry.modifiedAt } : {}),
         };
       }
       return entry;

@@ -1,12 +1,13 @@
 export {};
-import { invoke, errMsg } from '@bundled/yaar';
+import { describe, invoke, errMsg } from '@bundled/yaar';
 import {
   activeProject,
   projects,
   openFilePath,
   openFileContent,
   diagnostics,
-  compileStatus,
+  bundleStatus,
+  typecheckState,
   compileErrors,
   previewUrl,
   previewWindowId,
@@ -31,8 +32,12 @@ export { mediaCommands } from './media';
 export const devtoolsState = {
   project: {
     description:
-      'Active project. Files come with their size: { path, lines, bytes } for text files, ' +
-      '{ path, isDirectory: true } for directories.',
+      'Active project. `lastModified` is the newest write anywhere in it (unix ms, 0 if ' +
+      'unknown). Files come with their size — { path, lines, bytes } for text, ' +
+      '{ path, bytes } for binary (images, fonts, wasm: real bytes, no line count), ' +
+      '{ path, isDirectory: true } for directories. Generated output (dist/) and ' +
+      'directories holding nothing are left out. Summing binary `bytes` is how to check ' +
+      'an app against the 5MB inlined-asset warning before the compiler raises it.',
     get: () => {
       const proj = activeProject();
       if (!proj) return null;
@@ -75,15 +80,39 @@ export const devtoolsState = {
     },
   },
   diagnostics: {
-    description: 'TypeScript errors/warnings',
+    description:
+      'Type errors and warnings from the last typecheck, one entry per diagnostic with ' +
+      '{ file, line, message, severity } — paths are project-relative. This is the ' +
+      'ONLY place type errors appear; `compileErrors` is the bundler and never repeats them.',
     get: () => [...diagnostics()],
   },
   compileStatus: {
-    description: 'Compilation state',
-    get: () => compileStatus(),
+    description:
+      'Whether the active project is currently clean. "success" requires BOTH halves: the ' +
+      'bundler built AND typecheck ran against the code as it now stands and found no ' +
+      'errors. "unchecked" means it bundled but no typecheck covers the current bytes ' +
+      '(after a `skipTypecheck` compile, or after any write since the last one) — that is ' +
+      'not a pass. "error" means one half failed: read `compileErrors` for the bundler and ' +
+      '`diagnostics` for typecheck. Values: idle | compiling | success | unchecked | error.',
+    get: () => {
+      const bundle = bundleStatus();
+      // A bundle that never succeeded decides it on its own: there is nothing to be
+      // clean about. Only "it built" leaves the question open for typecheck to answer.
+      if (bundle !== 'success') return bundle;
+      const checked = typecheckState();
+      // Reported as its own value, not folded into either verdict. "It built and nobody
+      // type checked it" was the state this key used to call `success`, which is how a
+      // project with six live type errors got waved through as clean.
+      if (checked === 'unknown') return 'unchecked';
+      return checked === 'errors' ? 'error' : 'success';
+    },
   },
   compileErrors: {
-    description: 'Compilation errors (if any)',
+    description:
+      "The BUNDLER's errors from the last compile — unresolved imports, syntax Bun " +
+      'cannot parse, a failed plugin. Empty is normal for code full of type errors: Bun ' +
+      'strips types and builds through them, so type errors live in `diagnostics` and ' +
+      'appear here never. Paths are project-relative, ready to hand back to editFile.',
     get: () => [...compileErrors()],
   },
   previewUrl: {
@@ -91,8 +120,48 @@ export const devtoolsState = {
     get: () => previewUrl(),
   },
   bundledLibraries: {
-    description: 'Available @bundled/* import libraries',
+    description:
+      'Names importable as @bundled/{name}, plus describable pseudo-libraries like ' +
+      '"design-tokens" that ship as injected CSS rather than a module. Pass any of them ' +
+      'to describeBundledLibrary.',
     get: () => [...bundledLibs()],
+  },
+  permissions: {
+    description:
+      "What Dev Tools is allowed to reach: the yaar:// prefixes declared in its app.json, " +
+      'read back from the installed manifest rather than restated here. Read this before ' +
+      'assuming a URI is reachable — the alternative is finding out from a 403, which is ' +
+      'indistinguishable from the resource not existing. `storage` says which storage root ' +
+      'each door writes to; that is the pair most often confused.',
+    get: async () => {
+      try {
+        // `self` is resolved to the real appId by the verb door, so this reports what
+        // the *installed* app holds — a permission edited into a sandbox app.json is
+        // not in force until it is deployed, and this is where that shows.
+        const meta = await describe<{ permissions?: string[]; name?: string }>(
+          'yaar://apps/self',
+        );
+        const declared = Array.isArray(meta?.permissions) ? meta.permissions : [];
+        return {
+          declared,
+          storage: {
+            // Two different roots, one word. The agent-side `storage/x` and this app's
+            // own appStorage both live under the app; only an explicitly declared
+            // prefix reaches the shared tree.
+            appScoped: 'yaar://apps/devtools/storage/ — always writable, needs no permission',
+            shared: declared.filter((p) => p.startsWith('yaar://storage/')),
+            note:
+              'A path under the shared root that no declared prefix covers is refused. ' +
+              'There is no command here that writes outside these — a report or note ' +
+              'belongs in app-scoped storage.',
+          },
+        };
+      } catch (err) {
+        // Reported, not swallowed: an empty permission list would read as "allowed
+        // nothing", which is a different and much more alarming answer.
+        return { error: `Could not read own manifest: ${errMsg(err)}` };
+      }
+    },
   },
   consoleLogs: {
     description:

@@ -40,6 +40,11 @@ async function storageListLinks(appId: string, prefixedPath: string): Promise<Ve
         name: relPath || e.path,
         description: e.isDirectory ? 'directory' : `${e.size ?? 0} bytes`,
         mimeType: e.isDirectory ? undefined : mimeFromPath(e.path),
+        // Also as data, not only inside `description`: a caller auditing asset sizes
+        // or picking the most recently touched entry was left parsing "1234 bytes"
+        // out of prose, and had no route to the timestamp at all.
+        ...(e.isDirectory ? {} : { size: e.size ?? 0 }),
+        ...(e.modifiedAt ? { modifiedAt: e.modifiedAt } : {}),
       };
     }),
   );

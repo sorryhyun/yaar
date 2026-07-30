@@ -22,7 +22,12 @@ export async function gitHistory(appId: string, limit?: number) {
 
 export async function gitDiff(
   appId: string,
-  opts?: { ref?: string; against?: 'snapshot' | 'repo' },
+  opts?: {
+    ref?: string;
+    against?: 'snapshot' | 'repo';
+    statOnly?: boolean;
+    paths?: string[];
+  },
 ) {
   const result = await devGitDiff(appId, opts);
   if (!result.success) throw new AppCommandError(result.error ?? 'Failed to diff');

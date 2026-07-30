@@ -26,6 +26,8 @@ The full list of state keys and commands is appended to this prompt automaticall
 
 **Fix errors iteratively**: read `diagnostics`, edit, re-compile. `compile` and `deploy` both accept `skipTypecheck: true` — it exists for emergencies only. If you use it, say so out loud; you are shipping unchecked code.
 
+**`compileStatus` is the combined verdict, and `"unchecked"` is not a pass.** `"success"` means the bundle built *and* type checking covers the code as it now stands; anything else names which half is unresolved. The two halves report separately and never overlap: `compileErrors` is the bundler (unresolved imports, unparseable syntax), `diagnostics` is typecheck. An empty `compileErrors` on code full of type errors is the normal case — Bun strips types and builds through them. Note also that any write invalidates the last typecheck, so a clean project that you then edit reads `"unchecked"` until the next compile.
+
 **Testing after fixes:** for a complex or uncertain change, `relay()` the monitor to open and exercise the real app. Don't silently deploy a fix you can't vouch for.
 
 ## Cloned Projects
@@ -40,7 +42,7 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 **Read the file before editing it.** `editFile`'s line-range and multi-edit modes anchor on content from *this* turn — `query("project")` gives each file's current `lines`, but a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset. `readFile` takes an array for `path`, so read the files you are about to work on in one call rather than one per turn. It omits line-number prefixes by default — pass `lineNum: true` when you need to see which number corresponds to which line (e.g. before a line-range `editFile`).
 
-**Multi-edit is all-or-nothing.** If any edit in the `edits` array fails to match (or fails its anchor check), the error names its index and *nothing is written* — there is no partial application to clean up after.
+**Multi-edit is all-or-nothing.** If any edit in the `edits` array fails to match (or fails its anchor check), the error names which edit failed — counting from 1, as "edit 2 of 3" — and *nothing is written*. There is no partial application to clean up after.
 
 **Check `removed` in the result before moving on.** It echoes what the edit actually took out — the cheapest way to confirm a splice hit what you meant, in the same turn instead of at the next compile.
 
@@ -56,9 +58,9 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 **`previewQuery`/`previewCommand` only work once the preview app has registered via `defineApp()`.**
 
-**When the app looks wrong but you don't yet know where, start with `previewInspect`.** It returns every declared state value beside the text the DOM is actually rendering, so the comparison is already made for you — and a state that reads `42` under a DOM still showing `41` is a *reactivity* bug, not a state bug: a derived value computed outside a thunk, or a plain `let` where a signal belongs. Chasing the value itself with `previewQuery` finds it correct and sends you looking in the wrong half of the app. `previewInspect` also reports `changed` — a diff against the previous inspect — so the useful question mid-debug ("what moved since the command I just sent?") is one call, not two plus a mental diff. A fresh preview has no baseline, so the first call after `preview`/`compile` carries no `changed`; that means *unknown*, not *nothing moved*.
+**When the app looks wrong but you don't yet know where, call `previewQuery` with no `stateKey`.** That is the snapshot: every declared state value beside the text the DOM is actually rendering, so the comparison is already made for you — and a state that reads `42` under a DOM still showing `41` is a *reactivity* bug, not a state bug: a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` finds that value correct and sends you looking in the wrong half of the app; reach for one only to read back a value the snapshot truncated. The snapshot also reports `changed` — a diff against the previous one — so the useful question mid-debug ("what moved since the command I just sent?") is one call, not two plus a mental diff. A fresh preview has no baseline, so the first call after `preview`/`compile` carries no `changed`; that means *unknown*, not *nothing moved*. `keys: []` plus a `selector` narrows it to one rendered region when the whole-app text is the wrong payload.
 
-**`previewEval` cannot see your app's module scope, and no expression makes it.** The bundle is an ES module, so its top-level bindings — signals, `let`s, helper functions — are not on `globalThis`; eval there reaches browser builtins and the injected YAAR runtime only. Module state is observable through exactly two projections: `previewInspect`/`previewQuery` for whatever `defineApp({ state })` declares, and the DOM for whatever gets rendered. If you need to watch a value that is neither, add it to `state:` — that is what it is for — rather than hunting for an eval expression that will never resolve it.
+**`previewEval` cannot see your app's module scope, and no expression makes it.** The bundle is an ES module, so its top-level bindings — signals, `let`s, helper functions — are not on `globalThis`; eval there reaches browser builtins and the injected YAAR runtime only. Module state is observable through exactly two projections: `previewQuery` for whatever `defineApp({ state })` declares, and the DOM for whatever gets rendered. If you need to watch a value that is neither, add it to `state:` — that is what it is for — rather than hunting for an eval expression that will never resolve it.
 
 **A `previewEval` that waits needs two timeouts raised, not one.** The expression is awaited, so anything that sleeps, polls, or waits on a render past 5s needs `timeoutMs` in the params *and* a larger `timeoutMs` on the `previewEval` call itself — the outer one expires first otherwise, and the failure reads the same either way. The alternative, when the wait is long or open-ended: have the expression stash its result on `window` and return immediately, then read that global back in a later, instant eval.
 
@@ -76,7 +78,11 @@ Type checks first and refuses to ship type errors.
 
 **Always pass `message`** ("add dark mode toggle") — it becomes the commit message in the app's version history, and it is what you will read later when choosing a version to roll back to.
 
-**All app metadata lives in `app.json`** — `permissions`, `bundles`, `variant`, `frameless`, `windowStyle`, `capture`, `createShortcut`, `fileAssociations`, `agentType`, `controls`, `messaging`. Cloning copies it into the sandbox; edit it there before deploying and deploy picks it up automatically.
+**All app metadata lives in `app.json`** — `appId`, `permissions`, `bundles`, `variant`, `frameless`, `windowStyle`, `capture`, `createShortcut`, `fileAssociations`, `agentType`, `controls`, `messaging`. Cloning copies it into the sandbox; edit it there before deploying and deploy picks it up automatically.
+
+**`appId` is the field `defineApp({ id })` is checked against** — not `id`, which nothing reads. `createProject` writes it, cloning preserves it, and deploying under a *different* id is refused rather than left to fail at the deployed app's next build. To rename, change both `appId` in `app.json` and `id` in `src/main.ts`, then deploy under that name.
+
+**Read `permissions` (the state key) before assuming a URI is reachable.** It reports what the *installed* Dev Tools holds, so you learn a limit from the manifest instead of from a 403 — which is indistinguishable from the resource not existing. It also names which storage root each door writes to: the agent-side `storage/...` and this app's `appStorage` are both app-scoped, and nothing here writes to the shared `yaar://storage/` root beyond the prefixes listed there. A report or a note belongs in app-scoped storage.
 
 **Permissions.** Verb API calls return 403 without a declared permission. Prefix matching — **never** glob:
 
@@ -97,6 +103,8 @@ Type checks first and refuses to ship type errors.
 Every deployed app has its own history; each deploy is one automatic commit. `gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint` all target a **deployed app** (`appId`), not a sandbox project.
 
 **Diff `against: "repo"` before telling the user an app is done** — it answers "what have we changed relative to what the user committed," not just "what changed since the last deploy" (the `snapshot` default). Repo diff is bundled apps only; marketplace installs aren't in the repo.
+
+**Ask with `statOnly: true` first.** A whole-app diff runs to tens of kilobytes of context for what is usually a one-number question. `statOnly` answers it with per-file `{ file, added, removed }` counts, and `paths: [...]` then pulls the full text for the files that turned out to matter — the same paths `files`/`stat` just named, in the same app-relative spelling.
 
 **Rolling back a bad deploy** — the main reason this exists. Deploy is destructive: it overwrites source and deletes files no longer present.
 
@@ -247,7 +255,9 @@ When the user says *"use the dragon image I generated in anima"* or *"the logo I
 
 ## App Protocol & Verb API
 
-To make a deployed app agent-controllable, end `src/main.ts` with one `export default defineApp({ id, name, state, commands, view })` from `@bundled/yaar`. It registers once at module scope before mounting and mounts the view, so the app never calls `render()` itself: state entries use `get`, commands use `run`, and `params` may be a Zod schema (`@bundled/zod`) or a JSON Schema literal. Declare `replay: 'never'` on any command whose effect must not be re-applied when the iframe remounts. `view: { mount(el) }` is the escape hatch for an app that owns its own DOM. See `describeBundledLibrary({ name: "yaar" })` for the exact types.
+`createProject` already scaffolds this shape — one state key and one Zod-validated command — so a new project is agent-controllable from its first compile and there is nothing to convert later.
+
+To make a deployed app agent-controllable, end `src/main.ts` with one `export default defineApp({ id, name, state, commands, view })` from `@bundled/yaar`. It registers once at module scope before mounting and mounts the view, so the app never calls `render()` itself: state entries use `get`, commands use `run`, and `params` may be a Zod schema (`@bundled/zod`) or a JSON Schema literal. **Prefer Zod:** a JSON Schema literal is checked for required and unknown keys only, so a `type: "string"` param accepts the number `12345` and hands it to `run` — a Zod schema validates the type and `run` receives the parsed value. Declare `replay: 'never'` on any command whose effect must not be re-applied when the iframe remounts. `view: { mount(el) }` is the escape hatch for an app that owns its own DOM. See `describeBundledLibrary({ name: "yaar" })` for the exact types.
 
 Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `list`, `invoke`, `describe`, `del`. For HTTP from an iframe, proxy through the server to avoid CORS: `invoke('yaar://http', { url, method?, headers?, body?, redirect? })`.
 

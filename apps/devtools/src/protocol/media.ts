@@ -69,10 +69,18 @@ function mediaPathFrom(raw: string): string {
   return path;
 }
 
-/** One level of listing, as entries with their sizes. */
+/**
+ * One level of listing, as entries with their sizes.
+ *
+ * Dotfiles are dropped. The shared tree is a real directory on someone's machine, so
+ * the OS leaves its own files in it — a macOS `.DS_Store` was listed as a published
+ * artifact whose producer was `.DS_Store`, which is a file nothing published and
+ * nothing can import.
+ */
 async function listDir(path: string): Promise<MediaEntry[]> {
   try {
-    return ((await storage.list(path)) ?? []) as unknown as MediaEntry[];
+    const entries = ((await storage.list(path)) ?? []) as unknown as MediaEntry[];
+    return entries.filter((e) => !baseName(e.path).startsWith('.'));
   } catch {
     // A missing `media/` is the ordinary state before anything has been published,
     // not an error worth failing the command over.
