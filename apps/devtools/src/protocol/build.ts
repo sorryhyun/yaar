@@ -1,4 +1,4 @@
-import { AppCommandError, invoke, wait, defineAppCommand } from '@bundled/yaar';
+import { wait, defineAppCommand } from '@bundled/yaar';
 import {
   diagnostics,
   bundleStatus,
@@ -163,35 +163,6 @@ export const buildCommands = {
             : 'Only the static side is available, so no drift check was possible. ' +
               (runtime.reason ?? '');
       return { ...result, note: note.trim() };
-    },
-  }),
-  protocolLog: defineAppCommand({
-    description:
-      'App Protocol traffic for the preview window: every query/command sent and event ' +
-      'emitted, in order, with results and timings. Your own previewQuery/previewCommand ' +
-      "calls are in here too — one row per state key read — so narrow with `kind` when the " +
-      'question is what the *app* did. Manifest rows record only the key names.',
-    params: {
-      type: 'object',
-      properties: {
-        limit: { type: 'number', description: 'Max entries, newest last (default 100).' },
-        kind: {
-          type: 'array',
-          items: { type: 'string', enum: ['manifest', 'query', 'command', 'eval', 'emit'] },
-          description:
-            'Keep only these kinds, applied before `limit` — ["emit"] with limit 30 gives ' +
-            'the last 30 emits, which is the read for a duplicate-emit or ordering bug.',
-        },
-      },
-    },
-    run: async (p) => {
-      const wid = previewWindowId();
-      if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
-      return await invoke(`yaar://windows/${wid}`, {
-        action: 'protocol_log',
-        ...(typeof p.limit === 'number' ? { limit: p.limit } : {}),
-        ...(Array.isArray(p.kind) ? { kind: p.kind.map((k) => String(k)) } : {}),
-      });
     },
   }),
   deploy: defineAppCommand({

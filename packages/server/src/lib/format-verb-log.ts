@@ -12,8 +12,7 @@
  *    timer (`apps/devtools/src/project.ts` — `startConsolePolling`, every 1.5s for as
  *    long as a preview window is open). It is instrumentation, not session activity:
  *    logged, it fills the JSONL with dozens of identical entries between the two the
- *    log exists to show. `features/window/protocol-log.ts` already suppresses the same
- *    poll from the visible protocol log for the same reason. Skip it here too.
+ *    log exists to show. Skip it.
  *  - Everything else is logged with its payload summarized: headers dropped,
  *    long strings and arrays collapsed, nesting capped.
  */

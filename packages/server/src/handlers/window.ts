@@ -6,7 +6,7 @@
  *   list('yaar://windows/')               → list all windows
  *   invoke('yaar://windows/', ...)        → create window (windowId auto-derived from payload)
  *   read('yaar://windows/{w}')            → view window content/metadata
- *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, app_eval, protocol_log, message
+ *   invoke('yaar://windows/{w}', ...)     → update, manage, app_query, app_command, app_eval, message
  *   delete('yaar://windows/{w}')          → close window
  */
 
@@ -31,7 +31,6 @@ import {
   handleAppCommand,
   handleAppEval,
 } from '../features/window/app-protocol.js';
-import { readLog, type ProtocolLogEntry } from '../features/window/protocol-log.js';
 import {
   handleSubscribe,
   handleUnsubscribe,
@@ -94,23 +93,6 @@ export function registerWindowHandlers(
     app_query: ({ windowId, p }) => handleAppQuery(getWindowState(), windowId, p),
     app_command: ({ windowId, p }) => handleAppCommand(getWindowState(), windowId, p),
     app_eval: ({ windowId, p }) => handleAppEval(getWindowState(), windowId, p),
-    protocol_log: ({ windowId, p }) => {
-      // Address by the monitor-scoped key, as app_query/app_command do — the log is
-      // keyed the same way.
-      const win = getWindowState().getWindow(windowId);
-      if (!win) return error(`Window "${windowId}" not found.`);
-      const limit = typeof p.limit === 'number' ? p.limit : undefined;
-      const kind = Array.isArray(p.kind)
-        ? (p.kind.filter(
-            (k): k is ProtocolLogEntry['kind'] =>
-              typeof k === 'string' &&
-              (['manifest', 'query', 'command', 'eval', 'emit'] as const).includes(
-                k as ProtocolLogEntry['kind'],
-              ),
-          ) as ProtocolLogEntry['kind'][])
-        : undefined;
-      return ok(JSON.stringify(readLog({ windowKey: win.id, limit, kind }), null, 2));
-    },
     message: ({ windowId, p }) => {
       const appId = getWindowState().getAppIdForWindow(windowId);
       if (!appId) return error(`Window "${windowId}" is not an app window.`);
@@ -151,7 +133,7 @@ export function registerWindowHandlers(
     description:
       'Window resource. Use yaar://windows/{windowId} to address windows (monitor is automatic). ' +
       'Invoke to create (on bare yaar://windows/), update, manage; read to view content; delete to close. ' +
-      'Invoke actions: create, update (requires operation), close, lock, unlock, move (x, y), resize (width, height), app_query, app_command, app_eval (devtools previews only), protocol_log, message.',
+      'Invoke actions: create, update (requires operation), close, lock, unlock, move (x, y), resize (width, height), app_query, app_command, app_eval (devtools previews only), message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
@@ -207,19 +189,6 @@ export function registerWindowHandlers(
             'app_command and app_eval. How long to wait for the app (max 180s; default 30s ' +
             'for app_command, 5s for app_eval). Raise it for slow commands like compile or ' +
             'deploy, and for an expression that awaits a promise or sleeps.',
-        },
-        // protocol_log fields
-        limit: {
-          type: 'number',
-          description: 'protocol_log only. Max entries to return, newest last (default 100).',
-        },
-        kind: {
-          type: 'array',
-          items: { type: 'string', enum: ['manifest', 'query', 'command', 'eval', 'emit'] },
-          description:
-            'protocol_log only. Keep only these kinds, applied before `limit` — so ' +
-            '["emit"] with limit 30 is the last 30 emits. Use it to read past your own ' +
-            'query traffic when the question is about what the app did.',
         },
         // message fields
         message: {

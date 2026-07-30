@@ -21,7 +21,6 @@ import type { AppProtocolRequestData } from './emitter-channels.js';
 import type { SessionId } from './types.js';
 import type { WindowStateRegistry } from './window-state.js';
 import { actionEmitter } from './action-emitter.js';
-import { recordEmit } from '../features/window/protocol-log.js';
 
 /** The pool operations this coordinator needs, narrowed so `ContextPool` stays out. */
 export interface AppChannelTarget {
@@ -99,7 +98,6 @@ export class AppWindowCoordinator {
     // through as-is — ContextPool indexes subscriptions by that key. Collapsing it to the
     // raw AI-facing id would deliver monitor 1's app events to a subscriber watching
     // monitor 0's copy of the same app, since both windows share the raw id.
-    recordEmit(event.windowId, event.channel, event.payload);
     this.deps.getPool()?.notifyAppChannel(event.windowId, event.channel, event.payload);
   }
 

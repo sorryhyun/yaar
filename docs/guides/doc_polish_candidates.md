@@ -75,7 +75,7 @@ Unmarked rows are reported but unverified; check before acting.
 
 | Location | Item | Ev. |
 |---|---|---|
-| `uri_reference.md:~96` | 5 window actions documented; `handlers/window.ts:83-135` defines 16. Undocumented anywhere: `lock`, `unlock`, `move`, `resize`, `app_eval`, `protocol_log`, `app_subscribe`, `app_unsubscribe` | |
+| `uri_reference.md:~96` | 5 window actions documented; `handlers/window.ts` defines 15. Undocumented anywhere: `lock`, `unlock`, `move`, `resize`, `app_eval`, `app_subscribe`, `app_unsubscribe` | |
 | `uri_reference.md` | `yaar://config/mcp[/*]` absent from the Config table despite being registered and self-advertised by `read('yaar://config/')` | |
 | `uri_reference.md:~223-229` | `read` documented as `{uri}`; takes six params incl. the whole PDF contract (`lines, pattern, context, pdfText, pdfPages`) | |
 | `uri_reference.md` | Brace expansion undocumented — all five verbs run `expandBraceUri` and fan out in parallel; every tool description advertises it | |

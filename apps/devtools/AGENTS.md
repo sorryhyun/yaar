@@ -54,8 +54,6 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 **An empty `consoleLogs` only means something when `connected` is `true`** — read `reason` first. Resource failures surface there too (`[resource] failed to load <img>: ...`), which is how you catch a broken asset; it produces no `console.log` and does not fail the build.
 
-**`protocolLog`'s canonical use: duplicate emits, ordering, or "did that handler fire"** — an app that emits an event twice looks identical to one that emits once until you look at the log instead of the source.
-
 **`previewQuery`/`previewCommand` only work once the preview app has registered via `defineApp()`.**
 
 **When the app looks wrong but you don't yet know where, call `previewQuery` with no `stateKey`.** That is the snapshot: every declared state value beside the text the DOM is actually rendering, so the comparison is already made for you — and a state that reads `42` under a DOM still showing `41` is a *reactivity* bug, not a state bug: a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` finds that value correct and sends you looking in the wrong half of the app; reach for one only to read back a value the snapshot truncated. The snapshot also reports `changed` — a diff against the previous one — so the useful question mid-debug ("what moved since the command I just sent?") is one call, not two plus a mental diff. A fresh preview has no baseline, so the first call after `preview`/`compile` carries no `changed`; that means *unknown*, not *nothing moved*. `keys: []` plus a `selector` narrows it to one rendered region when the whole-app text is the wrong payload.

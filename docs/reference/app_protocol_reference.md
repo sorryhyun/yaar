@@ -37,7 +37,7 @@ Both paths converge on the same executor below, so app-side behavior (readiness 
 
 ### Generic verb (monitor/session agents)
 
-Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`), alongside the window's other actions (`create`, `update`, `close`, `lock`, `unlock`, `move`, `resize`, `message`, `subscribe`, `unsubscribe`, `app_subscribe`, `app_unsubscribe`, `app_eval`, `protocol_log`):
+Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`), alongside the window's other actions (`create`, `update`, `close`, `lock`, `unlock`, `move`, `resize`, `message`, `subscribe`, `unsubscribe`, `app_subscribe`, `app_unsubscribe`, `app_eval`):
 
 | Call | Description |
 |------|-------------|
@@ -110,37 +110,6 @@ interface AppEventDescriptor {
 ```
 
 The manifest is built automatically from the registration config by stripping handler functions and exposing only descriptions and schemas.
-
----
-
-## Protocol Log
-
-A per-window ring buffer of App Protocol traffic, for inspecting what an app was asked and what it answered without re-running commands or reading the app's source.
-
-```
-invoke('yaar://windows/{windowId}', { action: 'protocol_log', limit? })
-```
-
-Returns entries for that window, oldest dropped first, newest last (default `limit`: 100):
-
-```typescript
-interface ProtocolLogEntry {
-  seq: number;
-  ts: number;                                            // Unix ms
-  windowKey: string;
-  direction: 'out' | 'in';                                // out = agent → app request, in = app → agent emit
-  kind: 'manifest' | 'query' | 'command' | 'eval' | 'emit';
-  name?: string;         // stateKey for a query, command name for a command, channel for an emit
-  params?: unknown;
-  result?: unknown;      // set on `out` entries once the app responds
-  error?: string;
-  durationMs?: number;   // round-trip time; `out` entries only
-}
-```
-
-Retains the last 500 entries across all windows (oldest evicted first); `params`/`result` fields are truncated to 2000 chars. The `__console` polling query (devtools reading its console panel) is deliberately excluded so it doesn't drown real traffic in duplicate replays.
-
-**Source:** `packages/server/src/features/window/protocol-log.ts`
 
 ---
 

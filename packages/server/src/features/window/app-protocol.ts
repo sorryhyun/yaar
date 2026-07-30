@@ -9,11 +9,10 @@ import { isContentBlocks } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { ok, error, getActiveSessionId } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
-import { valueOf, type PendingOutcome } from '../../session/pending-store.js';
+import { type PendingOutcome } from '../../session/pending-store.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
-import { beginRequest, endRequest } from './protocol-log.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
 const MAX_TEXT_BYTES = 400_000;
@@ -119,18 +118,14 @@ async function requireAppReady(
   return null;
 }
 
-/** Send a request to an app, recording both it and its outcome in the protocol log. */
+/** Send a request to an app and await its outcome. */
 async function request(
   windowKey: string,
   req: AppProtocolRequest,
   timeoutMs: number,
   sessionId?: string,
 ): Promise<PendingOutcome<AppProtocolResponse>> {
-  const entry = beginRequest(windowKey, req);
-  const started = Date.now();
-  const outcome = await actionEmitter.emitAppProtocolRequest(windowKey, req, timeoutMs, sessionId);
-  endRequest(entry, valueOf(outcome) ?? null, Date.now() - started);
-  return outcome;
+  return await actionEmitter.emitAppProtocolRequest(windowKey, req, timeoutMs, sessionId);
 }
 
 /**
