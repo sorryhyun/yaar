@@ -4,7 +4,10 @@ import { createProject, openProject, deleteProject, cloneApp } from '../services
 
 export const projectCommands = {
   createProject: defineAppCommand({
-    description: 'Create a new project',
+    description:
+      'Create a new project and open it. Scaffolds a working app — one `export default ' +
+      'defineApp({...})` with a state key and a Zod-validated command — plus styles.css and ' +
+      'an app.json whose `appId` is derived from the name and is legal to deploy under.',
     params: {
       type: 'object',
       properties: {
@@ -46,7 +49,9 @@ export const projectCommands = {
     },
   }),
   cloneApp: defineAppCommand({
-    description: 'Clone an installed app source into a new project',
+    description:
+      'Clone an installed app source into a new project and open it. The copy is a sandbox: ' +
+      'editing it changes nothing about the live app until you deploy.',
     params: {
       type: 'object',
       properties: {

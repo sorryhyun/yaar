@@ -30,7 +30,10 @@ export const fileCommands = {
         },
         startLine: { type: 'number', description: 'Start line (1-based, inclusive)' },
         endLine: { type: 'number', description: 'End line (1-based, inclusive)' },
-        lineNum: { type: 'boolean', description: 'Prefix each line with its number. Default false.' },
+        lineNum: {
+          type: 'boolean',
+          description: 'Prefix each line with its number. Default false.',
+        },
         openInEditor: { type: 'boolean', description: 'Also open file(s) in editor UI' },
       },
       required: ['path'],
@@ -106,7 +109,8 @@ export const fileCommands = {
       '(3) multi-edit — pass edits, an array of single-edit objects, applied sequentially in ' +
       'memory and written once, all-or-nothing: any failure names which edit failed, counting ' +
       'from 1 ("edit 2 of 3"), and nothing is written; later line numbers refer to content ' +
-      'after earlier edits. Returns ' +
+      'after earlier edits. `oldString`/`newString` are accepted as aliases for ' +
+      'search/replace, in every mode. Returns ' +
       '{ editsApplied, lines, removed } — removed echoes the replaced text (truncated, middle elided).',
     params: {
       type: 'object',
@@ -114,13 +118,12 @@ export const fileCommands = {
         path: { type: 'string' },
         search: {
           type: 'string',
-          description:
-            'Text to find (first match). Alias: oldString. Mutually exclusive with startLine/endLine.',
+          description: 'Text to find (first match). Mutually exclusive with startLine/endLine.',
         },
         replace: {
           type: 'string',
           description:
-            'Replacement text. Alias: newString. With startLine/endLine, omit or pass an empty string to delete the range.',
+            'Replacement text. With startLine/endLine, omit or pass an empty string to delete the range.',
         },
         oldString: { type: 'string', description: 'Alias for search.' },
         newString: { type: 'string', description: 'Alias for replace.' },

@@ -56,11 +56,14 @@ export const devtoolsState = {
     },
   },
   projectList: {
-    description: 'List of all projects (id/name only). Distinct from `project`, the active project with its files.',
+    description:
+      'List of all projects (id/name only). Distinct from `project`, the active project with its files.',
     get: () => [...projects()],
   },
   openFile: {
-    description: 'Currently open file (with line numbers)',
+    description:
+      'The file open in the editor UI, with line numbers — what the user is looking at. ' +
+      'Not a read tool: `readFile` leaves this alone unless called with openInEditor.',
     get: () => {
       const path = openFilePath();
       if (!path) return null;
@@ -128,7 +131,7 @@ export const devtoolsState = {
   },
   permissions: {
     description:
-      "What Dev Tools is allowed to reach: the yaar:// prefixes declared in its app.json, " +
+      'What Dev Tools is allowed to reach: the yaar:// prefixes declared in its app.json, ' +
       'read back from the installed manifest rather than restated here. Read this before ' +
       'assuming a URI is reachable — the alternative is finding out from a 403, which is ' +
       'indistinguishable from the resource not existing. `storage` says which storage root ' +
@@ -138,9 +141,7 @@ export const devtoolsState = {
         // `self` is resolved to the real appId by the verb door, so this reports what
         // the *installed* app holds — a permission edited into a sandbox app.json is
         // not in force until it is deployed, and this is where that shows.
-        const meta = await describe<{ permissions?: string[]; name?: string }>(
-          'yaar://apps/self',
-        );
+        const meta = await describe<{ permissions?: string[]; name?: string }>('yaar://apps/self');
         const declared = Array.isArray(meta?.permissions) ? meta.permissions : [];
         return {
           declared,

@@ -7,7 +7,7 @@ Note: devtools ships an `AGENTS.md`, which takes priority over this file for its
 ## Workflow
 
 1. Open the devtools window if not already open
-2. `command("createProject", { name: "my-app" })` — or `command("cloneApp", { appId })` to edit an existing app
+2. `command("createProject", { name: "my-app" })` — or `command("cloneApp", { appId })` to edit an existing app. Both open the project they make.
 3. `command("writeFile", { path: "src/main.ts", content: "..." })` — entry point is always `src/main.ts`
 4. `command("compile", {}, { timeoutMs: 60000 })` — type checks *and* builds; no separate `typecheck` needed
 5. `command("preview")` then `command("previewScreenshot")` — verify it actually renders
@@ -18,6 +18,4 @@ Note: devtools ships an `AGENTS.md`, which takes priority over this file for its
 
 - File commands only see the **active project's sandbox** — they return empty if no project is open
 - Look a library up before writing against it: `command("describeBundledLibrary", { name })` — bundled libraries, design tokens (`name: "design-tokens"`), and SDK signatures
-- Split code across files (`protocol.ts`, `styles.css`, `helpers.ts`, …)
-- Check `query("diagnostics")` and fix errors before deploying
 - Deploys are versioned — a bad one rolls back with `command("gitRestore", { appId, ref: "HEAD~1" })`

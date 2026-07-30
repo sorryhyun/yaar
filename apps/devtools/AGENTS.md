@@ -20,31 +20,29 @@ The full list of state keys and commands is appended to this prompt automaticall
 4. `command("compile", {}, { timeoutMs: 60000 })` — type checks *and* builds in one call.
 5. Preview and **look at it** (see **Preview & Debugging**).
 6. `command("deploy", { appId, message, ... }, { timeoutMs: 120000 })`.
-7. `command("deleteProject", { id })` — always clean up, especially clones.
+7. `command("deleteProject", { id })` — clean up when done, especially clones.
 
-**Slow commands need a bigger timeout.** `compile` and `deploy` routinely exceed the 30s default. Pass `timeoutMs` (max 180000). Without it a slow build surfaces as "App did not respond" instead of the actual compile error.
+**A slow command needs `timeoutMs` raised on the *call*.** `compile` and `deploy` routinely exceed the 30s default (max 180000); without it a slow build surfaces as "App did not respond" instead of the actual error. When the command also takes its own `timeoutMs` param — `previewEval`, `previewCommand` — raise **both**, or the outer one expires first and the failure reads the same either way.
 
 **Fix errors iteratively**: read `diagnostics`, edit, re-compile. `compile` and `deploy` both accept `skipTypecheck: true` — it exists for emergencies only. If you use it, say so out loud; you are shipping unchecked code.
 
-**`compileStatus` is the combined verdict, and `"unchecked"` is not a pass.** `"success"` means the bundle built *and* type checking covers the code as it now stands; anything else names which half is unresolved. The two halves report separately and never overlap: `compileErrors` is the bundler (unresolved imports, unparseable syntax), `diagnostics` is typecheck. An empty `compileErrors` on code full of type errors is the normal case — Bun strips types and builds through them. Note also that any write invalidates the last typecheck, so a clean project that you then edit reads `"unchecked"` until the next compile.
+**`"unchecked"` is not a pass**, and type errors never appear in `compileErrors` — read `diagnostics` for those. Check `compileStatus` after the compile that follows your last write, not before it.
 
 **Testing after fixes:** for a complex or uncertain change, `relay()` the monitor to open and exercise the real app. Don't silently deploy a fix you can't vouch for.
 
 ## Cloned Projects
 
-`cloneApp` makes a **temporary copy** in devtools storage — it is not the live app. Editing it changes nothing until you deploy. Delete it when done. If `query("projectList")` shows stale projects from earlier sessions, clear them before starting.
+`cloneApp` makes a **temporary copy** in devtools storage and opens it — it is not the live app. Editing it changes nothing until you deploy. If `query("projectList")` shows stale projects from earlier sessions, clear them before starting.
 
-**`cloneApp` is the only way to read an app's source.** `yaar://apps/{id}` returns metadata, protocol and skill text — never source files.
+**Cloning is the only way to read an app's source** — `yaar://apps/{id}` returns metadata, protocol and skill text, never source files. `cloneApp` is the way to do it *here*, as an editable project; the `search` app's `clone-app` writes source into shared storage instead (and takes a glob, so it is the one to reach for when a question spans many apps). Its `purge-clones` cleans up after itself; `deleteProject` cleans up after this one.
 
 ## Files
 
 All file commands operate **only inside the active project's sandbox**, never the server filesystem. A glob like `apps/**/*.ts` means paths inside the project, not `apps/` on disk.
 
-**Read the file before editing it.** `editFile`'s line-range and multi-edit modes anchor on content from *this* turn — `query("project")` gives each file's current `lines`, but a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset. `readFile` takes an array for `path`, so read the files you are about to work on in one call rather than one per turn. It omits line-number prefixes by default — pass `lineNum: true` when you need to see which number corresponds to which line (e.g. before a line-range `editFile`).
+**Read the file before editing it.** `editFile`'s line-range and multi-edit modes anchor on content from *this* turn — a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset, with `lineNum: true` before a line-range edit. `readFile` takes an array of paths, so read everything you are about to work on in one call rather than one per turn.
 
-**Multi-edit is all-or-nothing.** If any edit in the `edits` array fails to match (or fails its anchor check), the error names which edit failed — counting from 1, as "edit 2 of 3" — and *nothing is written*. There is no partial application to clean up after.
-
-**Check `removed` in the result before moving on.** It echoes what the edit actually took out — the cheapest way to confirm a splice hit what you meant, in the same turn instead of at the next compile.
+**Check `removed` in the edit result before moving on.** It is the cheapest way to confirm a splice hit what you meant — this turn, instead of at the next compile.
 
 ## Preview & Debugging
 
@@ -52,15 +50,15 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 **Look at the app before theorizing about it — screenshot before proposing a fix, and again after applying one.** A green compile is not evidence about anything visual; this environment has ready-made culprits (the `flex: 1` gotcha below is a favourite) that make a wrong diagnosis feel well-supported.
 
-**An empty `consoleLogs` only means something when `connected` is `true`** — read `reason` first. Resource failures surface there too (`[resource] failed to load <img>: ...`), which is how you catch a broken asset; it produces no `console.log` and does not fail the build.
+**Resource failures surface in `consoleLogs`** (`[resource] failed to load <img>: ...`) — that is how you catch a broken asset, which produces no `console.log` and does not fail the build.
 
 **`previewQuery`/`previewCommand` only work once the preview app has registered via `defineApp()`.**
 
-**When the app looks wrong but you don't yet know where, call `previewQuery` with no `stateKey`.** That is the snapshot: every declared state value beside the text the DOM is actually rendering, so the comparison is already made for you — and a state that reads `42` under a DOM still showing `41` is a *reactivity* bug, not a state bug: a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` finds that value correct and sends you looking in the wrong half of the app; reach for one only to read back a value the snapshot truncated. The snapshot also reports `changed` — a diff against the previous one — so the useful question mid-debug ("what moved since the command I just sent?") is one call, not two plus a mental diff. A fresh preview has no baseline, so the first call after `preview`/`compile` carries no `changed`; that means *unknown*, not *nothing moved*. `keys: []` plus a `selector` narrows it to one rendered region when the whole-app text is the wrong payload.
+**When the app looks wrong but you don't yet know where, start with the no-argument `previewQuery` snapshot.** A state that reads `42` under a DOM still showing `41` is a *reactivity* bug, not a state bug — a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` instead finds that value correct and sends you looking in the wrong half of the app.
 
 **`previewEval` cannot see your app's module scope, and no expression makes it.** The bundle is an ES module, so its top-level bindings — signals, `let`s, helper functions — are not on `globalThis`; eval there reaches browser builtins and the injected YAAR runtime only. Module state is observable through exactly two projections: `previewQuery` for whatever `defineApp({ state })` declares, and the DOM for whatever gets rendered. If you need to watch a value that is neither, add it to `state:` — that is what it is for — rather than hunting for an eval expression that will never resolve it.
 
-**A `previewEval` that waits needs two timeouts raised, not one.** The expression is awaited, so anything that sleeps, polls, or waits on a render past 5s needs `timeoutMs` in the params *and* a larger `timeoutMs` on the `previewEval` call itself — the outer one expires first otherwise, and the failure reads the same either way. The alternative, when the wait is long or open-ended: have the expression stash its result on `window` and return immediately, then read that global back in a later, instant eval.
+When a `previewEval` has to wait a long or open-ended time, don't raise the timeouts indefinitely — have the expression stash its result on `window` and return immediately, then read that global back in a later, instant eval.
 
 `compile` runs the manifest-drift check automatically whenever a preview is open, surfacing `manifestDrift` in its result as a warning, never a build failure.
 
@@ -80,7 +78,7 @@ Type checks first and refuses to ship type errors.
 
 **`appId` is the field `defineApp({ id })` is checked against** — not `id`, which nothing reads. `createProject` writes it, cloning preserves it, and deploying under a *different* id is refused rather than left to fail at the deployed app's next build. To rename, change both `appId` in `app.json` and `id` in `src/main.ts`, then deploy under that name.
 
-**Read `permissions` (the state key) before assuming a URI is reachable.** It reports what the *installed* Dev Tools holds, so you learn a limit from the manifest instead of from a 403 — which is indistinguishable from the resource not existing. It also names which storage root each door writes to: the agent-side `storage/...` and this app's `appStorage` are both app-scoped, and nothing here writes to the shared `yaar://storage/` root beyond the prefixes listed there. A report or a note belongs in app-scoped storage.
+**Read the `permissions` state key before assuming a URI is reachable** — a 403 is indistinguishable from the resource not existing. Note it reports what the *installed* Dev Tools holds, so a permission you edited into a sandbox `app.json` is not in force until you deploy.
 
 **Permissions.** Verb API calls return 403 without a declared permission. Prefix matching — **never** glob:
 
@@ -102,8 +100,6 @@ Every deployed app has its own history; each deploy is one automatic commit. `gi
 
 **Diff `against: "repo"` before telling the user an app is done** — it answers "what have we changed relative to what the user committed," not just "what changed since the last deploy" (the `snapshot` default). Repo diff is bundled apps only; marketplace installs aren't in the repo.
 
-**Ask with `statOnly: true` first.** A whole-app diff runs to tens of kilobytes of context for what is usually a one-number question. `statOnly` answers it with per-file `{ file, added, removed }` counts, and `paths: [...]` then pulls the full text for the files that turned out to matter — the same paths `files`/`stat` just named, in the same app-relative spelling.
-
 **Rolling back a bad deploy** — the main reason this exists. Deploy is destructive: it overwrites source and deletes files no longer present.
 
 ```
@@ -124,16 +120,14 @@ Entry point is always `src/main.ts`. Split code across files:
 
 ```
 src/
-├── main.ts        # Entry point: mount(), top-level wiring
+├── main.ts        # Entry point: the single `export default defineApp({...})`
 ├── styles.css     # All CSS (imported via `import './styles.css'`)
-├── protocol.ts    # App Protocol registration
+├── protocol.ts    # Command/state descriptor maps, spread into defineApp
 ├── store.ts       # Signals and shared state
 ├── types.ts       # Type definitions
 ├── helpers.ts     # Pure utility functions
 └── sprite.png     # Static assets — imported, not fetched
 ```
-
-If `main.ts` has no `import`, add `export {};` so TypeScript treats it as a module.
 
 **Mounting and design tokens are specified in the App Authoring Contract at the end of this prompt** — generated from the compiler itself and authoritative. Read it rather than guessing a token name or a mount id; the compiler rejects both a wrong render target and an undefined token, so a build error naming one is telling you the truth.
 
@@ -147,7 +141,7 @@ import { animate, createTimeline } from '@bundled/anime';
 ```
 
 - **`solid-js`** — reactive UI, split across three entry points that are easy to confuse. `import { createSignal, createEffect, For, Show } from '@bundled/solid-js'`; `import html from '@bundled/solid-js/html'` (**default** export, not named); `import { render } from '@bundled/solid-js/web'`. Reaching for `render` or `html` on `@bundled/solid-js` is the usual first-compile failure. Prefer `import './styles.css'` over inline styles.
-- **`yaar`** — SDK helpers (`showToast`, `showAlert`, `showConfirm`, `showPrompt`, `errMsg`, `withLoading`, `onShortcut`, `appStorage`, `createPersistedSignal`) and the Verb API. **Always prefer the helper over hand-rolling**: `showToast` over custom toast HTML, `showConfirm` over native `confirm()` (native dialogs block the page *and* any agent driving it), `errMsg` over `err instanceof Error`.
+- **`yaar`** — the Verb API (`read`, `list`, `invoke`, `describe`, `del`, `subscribe`, `stream`, `httpFetch`) plus helpers: `defineApp`, `defineAppCommand`, `createProtocolContext`, `appStorage`, `appDb`, `sanitizeHtml`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `errMsg`, `AppCommandError`, `withLoading`, `wait`, `createStaleGuard`, `onShortcut`, `createKeyState`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`. **Always prefer the helper over hand-rolling**: `showToast` over custom toast HTML, `showConfirm` over native `confirm()` (native dialogs block the page *and* any agent driving it), `errMsg` over `err instanceof Error`. `defineApp` takes `events`, `onCapture` and `onClose` on top of the fields covered under **App Protocol & Verb API** — `describeBundledLibrary({ name: "yaar" })` has the exact types for all of it.
 
 **Gated SDKs** need a `"bundles"` entry in `app.json` to import:
 - `@bundled/yaar-dev` — `compile()`, `typecheck()`, `deploy()`, `bundledLibraries()`, plus `gitHistory()` / `gitDiff()` / `gitRestore()` / `gitCheckpoint()`. Requires `"bundles": ["yaar-dev"]`.
@@ -159,38 +153,30 @@ When migrating legacy apps, check `describeBundledLibrary({ name: "yaar" })` for
 
 Any HTML the app did not author — Markdown from storage, a scraped page, a feed body, an
 API string, anything round-tripped through `appStorage` — goes through
-`@bundled/dompurify` before it reaches a DOM sink. Never hand-roll a sanitizer; an
-element denylist plus `^on` stripping misses `<svg>`/`<math>` mXSS, `srcset`,
-`formaction` and `xlink:href`.
+`sanitizeHtml` from `@bundled/yaar` before it reaches a DOM sink.
 
 ```ts
-import DOMPurify from '@bundled/dompurify';
+import { sanitizeHtml } from '@bundled/yaar';
 
-// `form` and its controls are on DOMPurify's DEFAULT allowlist. Every YAAR app
-// forbids them: no foreign content has a legitimate form, and one styled as app
-// chrome can collect a password and POST it cross-origin.
-const FORBID_FORM_TAGS = ['form', 'input', 'button', 'select', 'textarea', 'option'];
-
-const clean = DOMPurify.sanitize(dirty, { FORBID_TAGS: FORBID_FORM_TAGS });
+el.innerHTML = sanitizeHtml(dirty);
 ```
 
-Order is fixed: **parse → sanitize → app-specific DOM rewrites → insert → attach
-behavior with `addEventListener`.** Sanitizing before rewriting means no unsafe source
-attribute survives into your rewrite pass; rewriting after means you can mint known-safe
-URLs without loosening the policy.
+Never hand-roll one, and never call `@bundled/dompurify` directly. An element denylist
+plus `^on` stripping misses `<svg>`/`<math>` mXSS, `srcset`, `formaction` and
+`xlink:href`; and six apps that configured DOMPurify themselves all had to rediscover the
+same deviation from its defaults, which is what `sanitizeHtml` bakes in.
+`describeBundledLibrary({ name: "yaar" })` documents its options and the three
+configurations it deliberately refuses.
 
-Never generate an inline handler (`setAttribute('onerror', ...)`). Any sanitizer strips
-it, so the behavior silently vanishes — use `addEventListener(..., { once: true })` on
-the inserted node.
+Two things it cannot do for you:
 
-Two traps: `USE_PROFILES` **overrides** `ALLOWED_TAGS` instead of intersecting with it,
-so adding it to an explicit allowlist silently widens the policy. And DOMPurify does not
-CSS-parse `style` values, so `style` is passed through verbatim — treat it as presentation
-you allowed, not as something the sanitizer vetted.
-
-Adversarial fixtures live in `packages/tests/src/security/html-sanitization.test.ts`.
-Test sanitizers under jsdom or a real browser, never happy-dom: DOMPurify silently no-ops
-when `isSupported` fails, producing false passes and false failures in the same run.
+- **Order is fixed: parse → sanitize → app-specific DOM rewrites → insert → attach
+  behavior with `addEventListener`.** Sanitizing before rewriting means no unsafe source
+  attribute survives into your rewrite pass. Never generate an inline handler
+  (`setAttribute('onerror', ...)`) — any sanitizer strips it, so the behavior silently
+  vanishes.
+- **`style` is passed through verbatim**; DOMPurify does not CSS-parse it. Treat it as
+  presentation you allowed, not as something the sanitizer vetted.
 
 ## Validating External JSON
 
@@ -199,10 +185,9 @@ can change shape, rename a field, or return an `{ error }` envelope where you ex
 list, and TypeScript believes your lie until it crashes in reactive state. Validate JSON at
 the trust boundary with `@bundled/zod`.
 
-**`@bundled/zod` is Zod Mini** — the functional API, not the chained one. Standard Zod's `z`
-namespace defeats bundler tree-shaking and adds ~260KB to your app; Mini's per-validator
-functions bundle to ~10KB. So it is `z.optional(z.string())`, not `z.string().optional()`,
-and `z.safeParse(Schema, data)`, not `Schema.safeParse(data)`.
+**`@bundled/zod` is Zod Mini** — the functional API, not the chained one. So it is
+`z.optional(z.string())`, not `z.string().optional()`, and `z.safeParse(Schema, data)`, not
+`Schema.safeParse(data)`. This is the same `z` you use for `params` in the App Protocol.
 
 ```ts
 import * as z from '@bundled/zod';
@@ -220,11 +205,8 @@ if (!parsed.success) {
 return parsed.data; // typed, no cast
 ```
 
-Scope it to boundaries: external HTTP responses, and persisted JSON whose shape has changed
-across app versions. Do **not** validate ordinary internal state, and do **not** use Zod as
-a second schema language for the App Protocol — `defineAppCommand()` params are JSON-Schema-first
-and agents read that JSON Schema, not a Zod type. See `apps/browser-user/src/schema.ts` for
-a worked example.
+Scope it to boundaries: external HTTP responses, persisted JSON whose shape has changed
+across app versions, and command `params`. Do **not** validate ordinary internal state.
 
 ## Static Assets (images, fonts, audio)
 
@@ -239,13 +221,13 @@ The bundler inlines the bytes into `dist/index.html`, so no request is made at r
 
 **Why not `storage.url(...)`:** the preview runs under a throwaway principal, so anything hitting `/api/storage/` resolves against a different identity than the deployed app will use — a storage-backed asset can 404 in preview and work after deploy, or the reverse. An imported asset has no identity to get wrong, and survives the iframe remount on every compile.
 
-**Use storage only for genuinely dynamic files** — uploads, generated output, anything that changes without a recompile. A sprite, icon, font or sound versioned with the source belongs in the bundle.
+**Use storage only for genuinely dynamic files** — uploads, generated output, anything that changes without a recompile. A sprite, icon, font or sound versioned with the source belongs in the bundle, whatever its size.
 
-**Size:** base64 costs ~33% over raw bytes; the compiler warns past 5MB total. A few hundred KB of sprites is fine; a video is not — stream that. Past ~1MB for a single asset, prefer deploying the file into the app's **own** storage and fetching it at runtime — not from `media/`, which is a staging area the user may prune, and which the deployed app holds no permission for.
+**Size:** base64 costs ~33% over raw bytes; the compiler warns past 5MB total. A few hundred KB of sprites is fine; a video is not — stream that. The one exception to "import it" is a single asset past ~1MB: the bundle cost stops being worth it, so ship the file into the app's **own** storage and fetch it at runtime — never from `media/`, which is a staging area the user may prune and which the deployed app holds no permission for.
 
 ### Assets the user made in another app
 
-When the user says *"use the dragon image I generated in anima"* or *"the logo I edited"*, it is almost certainly in the shared media tree — `listMedia` finds it, `importAsset` pulls it into the project and returns the `import` line to add. Then add the import and compile — the asset is inlined like any other, so everything above in this section applies unchanged.
+When the user says *"use the dragon image I generated in anima"* or *"the logo I edited"*, it is almost certainly in the shared media tree: `listMedia` then `importAsset`. Add the import line it returns and compile — the asset is inlined like any other, so everything above applies unchanged.
 
 **If `listMedia` comes back empty,** the image exists but was never published — app storage is private to the app that owns it, and this is not a dead end. Say so and offer the two recoveries: ask the user to publish it from the producing app (anima and image-edit both have a `publish` command), or `relay` to the monitor agent, which can reach both trees and copy the file into `media/` for you.
 
@@ -257,7 +239,7 @@ When the user says *"use the dragon image I generated in anima"* or *"the logo I
 
 To make a deployed app agent-controllable, end `src/main.ts` with one `export default defineApp({ id, name, state, commands, view })` from `@bundled/yaar`. It registers once at module scope before mounting and mounts the view, so the app never calls `render()` itself: state entries use `get`, commands use `run`, and `params` may be a Zod schema (`@bundled/zod`) or a JSON Schema literal. **Prefer Zod:** a JSON Schema literal is checked for required and unknown keys only, so a `type: "string"` param accepts the number `12345` and hands it to `run` — a Zod schema validates the type and `run` receives the parsed value. Declare `replay: 'never'` on any command whose effect must not be re-applied when the iframe remounts. `view: { mount(el) }` is the escape hatch for an app that owns its own DOM. See `describeBundledLibrary({ name: "yaar" })` for the exact types.
 
-Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `list`, `invoke`, `describe`, `del`. For HTTP from an iframe, proxy through the server to avoid CORS: `invoke('yaar://http', { url, method?, headers?, body?, redirect? })`.
+Apps talk to the server through 5 verbs exported from `@bundled/yaar`: `read`, `list`, `invoke`, `describe`, `del`. For HTTP, use `httpFetch` from the same barrel — it is `fetch`, standard `Response` and all, and cross-origin calls route through the server's proxy automatically (so `yaar://http` must still be declared). Prefer it over `invoke('yaar://http', ...)`, which returns YAAR's internal envelope and has led every app that used it to hand-roll a response type.
 
 **Splitting a large `protocol.ts`.** Descriptor maps may live in `src/protocol/<domain>.ts` and be spread back in — `commands: { ...fileCommands, ...gitCommands }`. The compiler resolves relative imports and spreads, so this reaches the manifest intact. The constraint is that every descriptor stays statically readable: a `const` object literal, no `...buildCommands()` call result, no `` `${x}` `` description, no map built in a loop. Violations are a build error with `file:line:col`, never a silently shrunken manifest. Later spreads win on duplicate names, at runtime and in the manifest alike.
 
@@ -272,7 +254,7 @@ Verify a URI before writing code against it: `command("inspectUri", { uri })` re
 | URI | Verbs | Notes |
 |-----|-------|-------|
 | `yaar://apps/` | describe, list | Installed apps. `yaar://apps/{id}` gives metadata + protocol + skill — **not source**. |
-| `yaar://storage/` | describe, read, list, invoke, del | Files. `invoke` actions: `write`, `edit`, `grep`. |
+| `yaar://storage/media/` | describe, read, list, invoke, del | The shared media tree — **the only part of `yaar://storage/` devtools may reach**. `invoke` actions: `write`, `edit`, `grep`. An app's own files go in `appStorage`, which needs no permission. |
 | `yaar://windows/` | describe, list | Open windows. |
 | `yaar://http` | describe, invoke | HTTP proxy (SSRF-protected, domain allowlist). |
 | `yaar://skills/{topic}` | describe, read | Reference docs. Topics: `components`, `config`, `marketplace`, `remote`. Fetch with `command("inspectUri", { uri, read: true })` — a topic is a document, so `list` is not one of its verbs. |
@@ -284,11 +266,11 @@ Verify a URI before writing code against it: `command("inspectUri", { uri })` re
 Apps run in a **browser iframe sandbox**:
 - No Node APIs (fs, process, child_process); no server processes or listening ports
 - No OAuth flows (needs a server-side client_secret)
-- `fetch()` is CORS-bound — proxy via `invoke('yaar://http', ...)`
-- No localStorage/IndexedDB — use `appStorage`
+- Bare `fetch()` is CORS-bound — use `httpFetch` and declare `yaar://http`
+- No localStorage/IndexedDB — use `appStorage` (key/value) or `appDb` (SQLite); both are app-scoped and need no permission
 - Must be fully self-contained
 
-For an external API, either give the app a `SKILL.md` describing the API and let the user supply a token stored via `invoke('yaar://config/app/{appId}', { config: {...} })`, or build a UI-only compiled app and let the agent mediate API calls across the App Protocol.
+For an external API, give the app a `SKILL.md` describing it and keep the user's token at `yaar://config/app/{appId}`. Two things follow from that URI being a normal permission with no implicit self-grant: the app you are building must declare `yaar://config/app/{appId}` in its own `app.json` to read the token back, and *you* cannot write it — devtools holds no `yaar://config/` permission, so `relay()` that to the monitor agent. The alternative is a UI-only app with the agent mediating API calls across the App Protocol.
 
 ## Solid.js Gotchas
 
