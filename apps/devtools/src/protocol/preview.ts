@@ -5,6 +5,7 @@ import {
   inspectPreview,
   openPreview,
   previewEvaluate,
+  queryPreviewState,
   readPreview,
 } from '../services';
 
@@ -56,7 +57,9 @@ export const previewCommands = {
       "Evaluate a JS expression in the preview iframe's global scope; awaited if a promise. " +
       'Result is JSON-serialized and capped at 16KB. Preview windows only. An expression ' +
       "that awaits or sleeps for more than 5s needs `timeoutMs` — and this command's own " +
-      'timeoutMs raised above it, or that one expires first.',
+      'timeoutMs raised above it, or that one expires first. With `changed: true` the ' +
+      'return becomes { result, changed, dom? } — what the expression moved, diffed against ' +
+      'a snapshot taken just before it ran.',
     params: {
       type: 'object',
       properties: {
@@ -72,6 +75,15 @@ export const previewCommands = {
             'How long to wait for the expression to settle (default 5s, max 180s). Raise it ' +
             'for an expression that awaits a promise, sleeps, or waits on a render.',
         },
+        changed: {
+          type: 'boolean',
+          description:
+            'Snapshot declared state and rendered text before and after, and return what ' +
+            'moved: { result, changed: { state: { key: { from, to } }, dom }, dom? } — `dom` ' +
+            'carrying the new rendered text only when it changed. Use for an expression run ' +
+            'to *cause* something (a click, a fetch); an empty diff is then the finding. ' +
+            'Costs two extra round trips, so leave it off for a plain read.',
+        },
       },
       required: ['expression'],
     },
@@ -80,40 +92,50 @@ export const previewCommands = {
         typeof p.expression === 'string' ? p.expression : String(p.expression ?? '');
       if (!expression.trim()) throw new AppCommandError('expression is required.');
       const timeoutMs = typeof p.timeoutMs === 'number' ? p.timeoutMs : undefined;
-      return await previewEvaluate(expression, timeoutMs);
+      return await previewEvaluate(expression, timeoutMs, { changed: p.changed === true });
     },
-  }),
-  previewInspect: defineAppCommand({
-    description:
-      'One snapshot of the running preview: every declared protocol state value, the text the ' +
-      'DOM is actually rendering, and the console tail — plus `changed`, a diff against the ' +
-      'previous inspect (absent on the first call after a preview opens). Reach for this before ' +
-      'previewQuery/previewEval when a bug is unlocated: state that disagrees with the rendered ' +
-      'text is a reactivity bug, not a state bug. Per-key errors are isolated; values are ' +
-      'truncated and any key dropped for budget is named in `stateOmitted`.',
-    params: { type: 'object', properties: {} },
-    run: async () => await inspectPreview(),
   }),
   previewQuery: defineAppCommand({
     description:
-      'Query one app protocol state key from the preview window. For an unlocated bug prefer ' +
-      'previewInspect, which returns every key alongside the rendered DOM.',
+      'Read the running preview. With no `stateKey` this is the inspect snapshot: every ' +
+      'declared protocol state value, the text the DOM is actually rendering, the console ' +
+      'tail, and `changed` — a diff against the previous snapshot (absent on the first call ' +
+      'after a preview opens, which means unknown, not unchanged). Start here when a bug is ' +
+      'unlocated: state that disagrees with the rendered text is a reactivity bug, not a ' +
+      'state bug, and one call already makes that comparison. Snapshot values are truncated ' +
+      'and any key dropped for budget is named in `stateOmitted`; pass `stateKey` to read one ' +
+      'key back whole.',
     params: {
       type: 'object',
-      properties: { stateKey: { type: 'string', description: 'State key to query' } },
-      required: ['stateKey'],
+      properties: {
+        stateKey: {
+          type: 'string',
+          description:
+            'Read this one key, untruncated, and return its value alone. Omit for the ' +
+            'full snapshot.',
+        },
+        keys: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Snapshot mode: read only these state keys instead of every declared one. `[]` ' +
+            'reads none, which is how to ask for the render and console alone.',
+        },
+        selector: {
+          type: 'string',
+          description:
+            'Snapshot mode: read rendered text from this CSS selector instead of the whole ' +
+            'app. A selector matching nothing is reported as an error, not as empty text.',
+        },
+      },
     },
     run: async (p) => {
-      const wid = previewWindowId();
-      if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
-      try {
-        return await invoke(`yaar://windows/${wid}`, {
-          action: 'app_query',
-          stateKey: String(p.stateKey),
-        });
-      } catch (err) {
-        throw new AppCommandError(`Preview query failed: ${errMsg(err)}`);
+      if (p.stateKey !== undefined) {
+        return await queryPreviewState(String(p.stateKey));
       }
+      const keys = Array.isArray(p.keys) ? p.keys.map((k) => String(k)) : undefined;
+      const selector = typeof p.selector === 'string' ? p.selector : undefined;
+      return await inspectPreview({ ...(keys ? { keys } : {}), ...(selector ? { selector } : {}) });
     },
   }),
   previewCommand: defineAppCommand({

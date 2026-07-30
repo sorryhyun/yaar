@@ -229,27 +229,63 @@ async function evaluateRaw(wid: string, expression: string, timeoutMs?: number):
   });
 }
 
-export async function previewEvaluate(expression: string, timeoutMs?: number): Promise<unknown> {
+export interface EvaluateWithChanges {
+  result: unknown;
+  /** What moved between the snapshot taken before the expression ran and after it. */
+  changed: NonNullable<InspectResult['changed']>;
+  /** The rendered text after the expression — carried only when it actually changed. */
+  dom?: InspectedValue;
+}
+
+/**
+ * Evaluate, and optionally say what the expression *did*.
+ *
+ * The diff is against a snapshot taken immediately before the expression runs,
+ * not against whatever the last inspect happened to see. An eval is asked in
+ * order to cause something ("click the button", "call the fetch"), so the only
+ * useful attribution is to this call — reusing the standing baseline would credit
+ * it with everything that moved since the last time anyone looked.
+ */
+export async function previewEvaluate(
+  expression: string,
+  timeoutMs?: number,
+  opts: { changed?: boolean } = {},
+): Promise<unknown | EvaluateWithChanges> {
   const wid = previewWindowId();
   if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
   logPreviewEvaluation('input', expression);
+  const before = opts.changed === true ? await captureSnapshot(wid, { console: false }) : null;
+  let result: unknown;
   try {
-    const result = await evaluateRaw(wid, expression, timeoutMs);
+    result = await evaluateRaw(wid, expression, timeoutMs);
     logPreviewEvaluation('result', result);
-    return result;
   } catch (err) {
     const message = errMsg(err);
     logPreviewEvaluation('error', message);
     throw new AppCommandError(`Preview eval failed: ${message}`);
   }
+  if (!before) return result;
+
+  const after = await captureSnapshot(wid, { console: false });
+  // Later inspects diff against where the eval left the app, not against the
+  // pre-eval state they never saw.
+  lastInspect = after;
+  const changed = diffSnapshots(before, after);
+  return {
+    result,
+    changed,
+    // Only when it moved: the point of returning it is "here is the new render",
+    // and 4KB of unchanged text on every probe is noise the caller did not ask for.
+    ...(changed.dom ? { dom: after.dom } : {}),
+  };
 }
 
 // ── Inspect ─────────────────────────────────────────────────────────────────
 //
-// One call that puts side by side the three things a stale-render bug lives
+// One read that puts side by side the three things a stale-render bug lives
 // between: what the app *declares* (protocol state), what it *renders* (the
 // DOM's text), and what it *said* (the console tail). Each was already reachable
-// on its own — previewQuery, previewEval, consoleLogs — and that is the point.
+// on its own — a single-key query, an eval, consoleLogs — and that is the point.
 // The failure this catches is not "the value was unreadable" but "nobody thought
 // to compare them": protocol state reading 42 under a DOM still showing 41 is a
 // derived value that was never wrapped in a thunk, and neither half alone says so.
@@ -257,6 +293,11 @@ export async function previewEvaluate(expression: string, timeoutMs?: number): P
 // It also diffs against the previous snapshot, because the question in front of
 // an agent mid-debug is almost never "what is the state" but "what changed since
 // the thing I just did".
+//
+// This is `previewQuery` with no `stateKey`, not a command of its own. Two
+// commands over one subsystem meant both descriptions spent their length telling
+// an agent which to reach for — and the losing branch, single-key query, is the
+// one an agent reaches for by habit when it has no idea where the bug is.
 
 /** Max serialized chars kept per state value. */
 const INSPECT_STATE_CHARS = 2000;
@@ -271,11 +312,23 @@ const INSPECT_CONSOLE_ENTRIES = 30;
  * Read the text the preview is actually showing.
  *
  * `#app` is the compiler's mount point; falling back to `body` covers an app that
- * failed before mounting, which is exactly when this is worth reading.
+ * failed before mounting, which is exactly when this is worth reading. A caller
+ * that names a selector gets that subtree instead — the whole-app text is the
+ * right default, and the wrong payload once the interesting region is one row of
+ * a list the app renders two hundred of.
  */
-const DOM_TEXT_EXPRESSION =
-  "(function(){var r=document.getElementById('app')||document.body;" +
-  "return r?(r.innerText||r.textContent||''):'';})()";
+const DOM_NO_MATCH = ' yaar-selector-no-match';
+
+function domTextExpression(selector?: string): string {
+  const root = selector
+    ? `document.querySelector(${JSON.stringify(selector)})`
+    : "document.getElementById('app')||document.body";
+  // A missing element is reported, not rendered as empty text: "the selector
+  // matched nothing" and "the element is empty" are different findings, and an
+  // empty string that means the first one sends the reader looking at the app.
+  const missing = selector ? JSON.stringify(DOM_NO_MATCH) : "''";
+  return `(function(){var r=${root};return r?(r.innerText||r.textContent||''):${missing};})()`;
+}
 
 export interface InspectedValue {
   value?: string;
@@ -296,19 +349,38 @@ export interface InspectSnapshot {
   /** Keys the budget cut, named rather than silently dropped. */
   stateOmitted?: string[];
   dom: InspectedValue;
-  console: { connected: boolean; reason?: string; entries: ConsoleEntry[] };
+  /** Absent on the internal snapshots taken around a `previewEval`, which skip it. */
+  console?: { connected: boolean; reason?: string; entries: ConsoleEntry[] };
 }
 
 export interface InspectResult extends InspectSnapshot {
   /**
-   * What moved since the last inspect: per-key `{ from, to }` for state, plus a
+   * What moved since the last snapshot: per-key `{ from, to }` for state, plus a
    * flag for the rendered text. Absent on the first call after a preview opens —
    * there is nothing to compare against, which is not the same as "nothing moved".
+   *
+   * A key appears only when both sides are known. One that was budget-omitted on
+   * either side, or that the other snapshot never read (a narrowed `keys`), is
+   * left out rather than reported as having appeared or vanished.
    */
   changed?: {
-    state: Record<string, { from?: string; to?: string }>;
+    state: Record<string, { from: string; to: string }>;
     dom: boolean;
   };
+}
+
+export interface InspectOptions {
+  /**
+   * Read only these state keys instead of every declared one. Skips the manifest
+   * round trip, so an unknown key comes back as a per-key `error` from the app
+   * itself (which names the keys it does have) rather than being filtered away here.
+   * `[]` reads no state at all — the way to ask for the render alone.
+   */
+  keys?: string[];
+  /** Narrow the rendered-text read to one subtree. Defaults to the whole app. */
+  selector?: string;
+  /** Include the console tail. Default true. */
+  console?: boolean;
 }
 
 let lastInspect: InspectSnapshot | null = null;
@@ -356,12 +428,18 @@ function unquoteEvalString(raw: unknown): string {
 
 async function collectState(
   wid: string,
+  requested?: string[],
 ): Promise<Pick<InspectSnapshot, 'state' | 'stateReason' | 'stateOmitted'>> {
-  const manifest = await getRuntimeManifest();
-  if (!manifest.names) return { state: {}, stateReason: manifest.reason };
-
-  // `__`-prefixed keys are the built-ins (`__console`), reported separately below.
-  const keys = manifest.names.state.filter((k) => !k.startsWith('__'));
+  let keys: string[];
+  if (requested) {
+    if (requested.length === 0) return { state: {} };
+    keys = requested;
+  } else {
+    const manifest = await getRuntimeManifest();
+    if (!manifest.names) return { state: {}, stateReason: manifest.reason };
+    // `__`-prefixed keys are the built-ins (`__console`), reported separately below.
+    keys = manifest.names.state.filter((k) => !k.startsWith('__'));
+  }
   // allSettled, not all: a getter that throws is a finding, not a reason to lose
   // the other nineteen values in the snapshot.
   const settled = await Promise.allSettled(
@@ -391,15 +469,21 @@ async function collectState(
   return { state, ...(omitted.length ? { stateOmitted: omitted } : {}) };
 }
 
-async function collectDom(wid: string): Promise<InspectedValue> {
+async function collectDom(wid: string, selector?: string): Promise<InspectedValue> {
   try {
-    return cap(unquoteEvalString(await evaluateRaw(wid, DOM_TEXT_EXPRESSION)), INSPECT_DOM_CHARS);
+    const text = unquoteEvalString(await evaluateRaw(wid, domTextExpression(selector)));
+    if (selector && text === DOM_NO_MATCH) {
+      return { error: `No element matches selector ${JSON.stringify(selector)} in the preview.` };
+    }
+    return cap(text, INSPECT_DOM_CHARS);
   } catch (err) {
     return { error: errMsg(err) };
   }
 }
 
-async function collectConsole(wid: string): Promise<InspectSnapshot['console']> {
+async function collectConsole(
+  wid: string,
+): Promise<NonNullable<InspectSnapshot['console']>> {
   try {
     const entries = await invoke<unknown>(`yaar://windows/${wid}`, {
       action: 'app_query',
@@ -421,37 +505,76 @@ function diffKey(entry: InspectedValue | undefined): string | undefined {
   return entry.error !== undefined ? `error: ${entry.error}` : entry.value;
 }
 
-function diffSnapshots(prev: InspectSnapshot, next: InspectSnapshot): InspectResult['changed'] {
-  const state: Record<string, { from?: string; to?: string }> = {};
-  for (const key of new Set([...Object.keys(prev.state), ...Object.keys(next.state)])) {
+function diffSnapshots(
+  prev: InspectSnapshot,
+  next: InspectSnapshot,
+): NonNullable<InspectResult['changed']> {
+  const state: Record<string, { from: string; to: string }> = {};
+  for (const key of Object.keys(next.state)) {
     const from = diffKey(prev.state[key]);
     const to = diffKey(next.state[key]);
-    // Both undefined means both were omitted by the budget — unknown, not unchanged.
-    if (from === to) continue;
-    state[key] = { ...(from !== undefined ? { from } : {}), ...(to !== undefined ? { to } : {}) };
+    // `undefined` on either side is *unknown*, not a value: the key was omitted by
+    // the budget, or one of the two snapshots narrowed its `keys` and never read it.
+    // Reported as a change it would read as "appeared"/"vanished", which is a lie
+    // about an app whose declared keys do not move.
+    if (from === undefined || to === undefined || from === to) continue;
+    state[key] = { from, to };
   }
-  return { state, dom: diffKey(prev.dom) !== diffKey(next.dom) };
+  const prevDom = diffKey(prev.dom);
+  const nextDom = diffKey(next.dom);
+  return {
+    state,
+    dom: prevDom !== undefined && nextDom !== undefined && prevDom !== nextDom,
+  };
 }
 
 /**
- * Snapshot the running preview, and say what moved since the last snapshot.
+ * One read of the preview's three halves, with no diffing and no baseline effect.
  *
- * The three reads run concurrently: they are independent, and an agent debugging a
- * live app is reading a moving target either way — serializing them would only
- * widen the window over which the three halves disagree.
+ * They run concurrently: they are independent, and an agent debugging a live app is
+ * reading a moving target either way — serializing them would only widen the window
+ * over which the three halves disagree.
  */
-export async function inspectPreview(): Promise<InspectResult> {
+async function captureSnapshot(wid: string, opts: InspectOptions = {}): Promise<InspectSnapshot> {
+  const [statePart, dom, consolePart] = await Promise.all([
+    collectState(wid, opts.keys),
+    collectDom(wid, opts.selector),
+    opts.console === false ? undefined : collectConsole(wid),
+  ]);
+  return {
+    windowId: wid,
+    ...statePart,
+    dom,
+    ...(consolePart ? { console: consolePart } : {}),
+  };
+}
+
+/** Snapshot the running preview, and say what moved since the last snapshot. */
+export async function inspectPreview(opts: InspectOptions = {}): Promise<InspectResult> {
   const wid = previewWindowId();
   if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
 
-  const [statePart, dom, consolePart] = await Promise.all([
-    collectState(wid),
-    collectDom(wid),
-    collectConsole(wid),
-  ]);
-
-  const snapshot: InspectSnapshot = { windowId: wid, ...statePart, dom, console: consolePart };
+  const snapshot = await captureSnapshot(wid, opts);
   const changed = lastInspect ? diffSnapshots(lastInspect, snapshot) : undefined;
   lastInspect = snapshot;
   return { ...snapshot, ...(changed ? { changed } : {}) };
+}
+
+/**
+ * Read one declared state key, whole.
+ *
+ * Deliberately untruncated, unlike the same key inside a snapshot: asking for one
+ * key is how you drill into the value the snapshot capped at 2000 chars, and a
+ * drill-down that truncates too has nowhere left to go.
+ */
+export async function queryPreviewState(stateKey: string): Promise<unknown> {
+  const wid = previewWindowId();
+  if (!wid) throw new AppCommandError('No preview window open. Run preview first.');
+  try {
+    return await invoke(`yaar://windows/${wid}`, { action: 'app_query', stateKey });
+  } catch (err) {
+    // The app's own error already names the keys it registers, so it is passed
+    // through rather than replaced with a devtools-flavored guess.
+    throw new AppCommandError(`Preview query failed: ${errMsg(err)}`);
+  }
 }
