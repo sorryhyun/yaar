@@ -69,7 +69,10 @@ export async function refreshData(): Promise<void> {
       // Remember when this refresh began. A list response started before a
       // successful install must not erase that install when it arrives late.
       const refreshStartedAt = Date.now();
-      const marketPayload = await apiGet('/api/apps/', MarketPayloadSchema);
+      // No trailing slash: the catalog route is `GET /api/apps`, and the slashed
+      // form only reaches it through a 307 that costs a second round trip and
+      // depends on the marketplace rebuilding the URL correctly.
+      const marketPayload = await apiGet('/api/apps', MarketPayloadSchema);
       const apps = parseMarket(marketPayload);
 
       try {

@@ -64,7 +64,7 @@ export async function fetchMe(): Promise<PublisherIdentity> {
  * The version the marketplace currently serves for `appId`, or null if the app is
  * unpublished or the public catalog can't be read.
  *
- * The catalog (`GET /api/apps/`) is public and uncredentialed — it is the same
+ * The catalog (`GET /api/apps`) is public and uncredentialed — it is the same
  * listing the market-apps iframe fetches — so no ID token is attached. Sourced from
  * `MARKET_URL`, the exact origin `uploadTarball` publishes to, so the comparison is
  * against where the bytes would actually land.
@@ -72,7 +72,7 @@ export async function fetchMe(): Promise<PublisherIdentity> {
 export async function fetchPublishedVersion(appId: string): Promise<string | null> {
   let res: Response;
   try {
-    res = await fetch(`${MARKET_URL}/api/apps/`);
+    res = await fetch(`${MARKET_URL}/api/apps`);
   } catch {
     return null; // catalog unreachable — caller falls back to "allow"
   }
