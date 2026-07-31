@@ -58,8 +58,18 @@ export class AppTaskProcessor {
       return;
     }
 
-    const windowId = task.windowId;
-    const monitorId = this.ownerMonitor(windowId, task);
+    const monitorId = this.ownerMonitor(task.windowId, task);
+    // Canonicalize to the monitor-scoped handle ("0/devtools") before anything files
+    // state under it. A task from the client already carries one — the frontend keys
+    // every window that way — but a task from an agent carries the raw, AI-facing id
+    // ("devtools"), because that is how `direct_message` and the window verbs name
+    // windows. Both reach the same window here, and the difference used to survive all
+    // the way out to `WINDOW_AGENT_STATUS`, which then named a window the client had
+    // never heard of: the app agent ran, and the window's badge never lit. It also split
+    // `activeWindows`, the context tape's window source, and the reload fingerprint
+    // across two spellings of one window.
+    const windowId =
+      this.ctx.windowState.handleMap.resolve(task.windowId, monitorId) ?? task.windowId;
 
     // Update the active window for this app on this monitor
     this.activeWindows.set(appAgentKey(monitorId, appId), windowId);
