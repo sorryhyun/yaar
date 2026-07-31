@@ -1,6 +1,8 @@
 import { AppCommandError, describe, errMsg, list, read, defineAppCommand } from '@bundled/yaar';
 import { bundledLibraries } from '@bundled/yaar-dev';
 
+import { imageBlocks, imagesFromReadResult } from './read-blocks';
+
 export const introspectCommands = {
   inspectUri: defineAppCommand({
     description:
@@ -15,7 +17,8 @@ export const introspectCommands = {
           type: 'boolean',
           description:
             'Read the resource content instead of describing it. Takes precedence over list. ' +
-            'Needs the permission; describe never does.',
+            'Needs the permission; describe never does. An image resource comes back as a ' +
+            'viewable image block, not base64 text.',
         },
         list: {
           type: 'boolean',
@@ -33,6 +36,24 @@ export const introspectCommands = {
       try {
         if (p.read) {
           const result = await read(uri);
+          // A PNG, or a rasterized PDF page, is answered with the picture. The verb SDK
+          // splits an image-bearing envelope into `{ data, images }`; returning that object
+          // would stringify the base64 into a text block — and one long enough to be
+          // truncated, so not even decodable. Image blocks pass through the app protocol.
+          const withImages = imagesFromReadResult(result);
+          if (withImages) {
+            const preamble = withImages.text
+              ? [{ type: 'text' as const, text: withImages.text }]
+              : [];
+            return [
+              ...preamble,
+              ...imageBlocks(
+                uri,
+                withImages.images,
+                'open it in a window instead of reading it',
+              ),
+            ];
+          }
           return { content: result };
         }
         if (p.list) {

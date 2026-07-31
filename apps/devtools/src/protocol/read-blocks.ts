@@ -37,19 +37,47 @@ const MAX_INLINE_IMAGE_BYTES = 3_500_000;
 
 export function imageBlocks(
   path: string,
-  image: { data: string; mimeType: string },
+  images: Array<{ data: string; mimeType: string }>,
+  /** What to suggest instead when an image is too big to inline. */
+  tooLargeHint = 'use readFile({ openInEditor: true }) to view it',
 ): ReadBlock[] {
-  const kb = Math.round((image.data.length * 3) / 4 / 1024);
-  if ((image.data.length * 3) / 4 > MAX_INLINE_IMAGE_BYTES) {
+  return images.flatMap((image, i) => {
+    const label = images.length > 1 ? `${path} (${i + 1}/${images.length})` : path;
+    const kb = Math.round((image.data.length * 3) / 4 / 1024);
+    if ((image.data.length * 3) / 4 > MAX_INLINE_IMAGE_BYTES) {
+      return [
+        {
+          type: 'text' as const,
+          text: `── ${label} ──\n(image, ${kb}KB — too large to inline; ${tooLargeHint})`,
+        },
+      ];
+    }
     return [
-      {
-        type: 'text',
-        text: `── ${path} ──\n(image, ${kb}KB — too large to inline; use readFile({ openInEditor: true }) to view it)`,
-      },
+      { type: 'text' as const, text: `── ${label} (image, ${kb}KB) ──` },
+      { type: 'image' as const, data: image.data, mimeType: image.mimeType },
     ];
-  }
-  return [
-    { type: 'text', text: `── ${path} (image, ${kb}KB) ──` },
-    { type: 'image', data: image.data, mimeType: image.mimeType },
-  ];
+  });
+}
+
+/**
+ * The shape `read()` hands back when the resource carried image content: the verb
+ * SDK splits the envelope into `{ data, images }` instead of returning `data` bare
+ * (see `verb-sdk.ts`). Returning that object from a command would JSON-stringify the
+ * base64 into a text block — a truncated wall of characters instead of a picture.
+ */
+export function imagesFromReadResult(
+  result: unknown,
+): { text: string; images: Array<{ data: string; mimeType: string }> } | null {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return null;
+  const envelope = result as { data?: unknown; images?: unknown };
+  if (!Array.isArray(envelope.images) || envelope.images.length === 0) return null;
+  const images = envelope.images.filter(
+    (img): img is { data: string; mimeType: string } =>
+      !!img &&
+      typeof img === 'object' &&
+      typeof (img as { data?: unknown }).data === 'string' &&
+      typeof (img as { mimeType?: unknown }).mimeType === 'string',
+  );
+  if (images.length === 0) return null;
+  return { text: typeof envelope.data === 'string' ? envelope.data : '', images };
 }

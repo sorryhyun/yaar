@@ -60,7 +60,7 @@ export const fileCommands = {
           // says nothing — an image block is the only form that can be read.
           if (isImagePath(fp)) {
             const image = await readImageFile(fp);
-            if (image) return imageBlocks(fp, image);
+            if (image) return imageBlocks(fp, [image]);
             // Unreadable as bytes — fall through to the text path, which reports it.
           }
           const r = await readFileContent(fp, opts);
