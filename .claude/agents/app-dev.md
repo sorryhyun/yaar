@@ -347,7 +347,7 @@ key to relocate one):
 - **`agent/prompt.md`** must document the 4 tools (describe, query, command, relay) since it replaces the generic prompt
 - Without `agent/prompt.md`, the app agent gets a generic prompt with the `protocol.json` manifest appended as call signatures — no file to write for simple apps
 - **`agent/hint.md`** should be 1-3 sentences focused on *when to use* the app
-- A legacy root `AGENTS.md`/`HINT.md` still loads (with a `[apps]` warning) if the new path is absent, but write new apps at the paths above. Root `AGENTS.md` is otherwise reserved for its ecosystem meaning — instructions to a coding agent (like you) editing this directory, not a runtime prompt.
+- A legacy root `HINT.md` still loads (with a `[apps]` warning) if `agent/hint.md` is absent, but write new apps at the paths above. Root `AGENTS.md` has **no** such fallback and is never read at runtime: it holds its ecosystem meaning — instructions to a coding agent (like you) editing this directory. Clone and deploy carry it, so write one for any app whose reasoning would otherwise live only in a chat log.
 
 ## Runtime Constraints
 

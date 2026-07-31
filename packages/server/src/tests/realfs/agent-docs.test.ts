@@ -1,16 +1,21 @@
 /**
  * Where an app's agent docs are read from — `agent/prompt.md` and `agent/hint.md`,
- * the `app.json` override, and the legacy root filenames they replaced.
+ * the `app.json` override, and the root filenames they replaced — plus which docs
+ * survive a clone → deploy round trip.
  *
  * Real filesystem because that is the whole subject: `loadAppPrompt`/`loadAppHint` go
  * through `resolveAppDir`, which answers from `existsSync`, so there is nothing to
  * assert against a mock. See this directory's header for why it gets its own process.
  */
 import { describe, it, expect, beforeEach, afterAll } from 'bun:test';
-import { mkdir, rm, writeFile } from 'fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
 import { join } from 'path';
 import { USER_APPS_DIR } from '../../features/apps/roots.js';
 import { loadAppPrompt, loadAppHint } from '../../features/apps/discovery.js';
+import { cloneAppSource } from '../../features/dev/clone.js';
+import { doDeploy } from '../../features/dev/deploy.js';
+import { getStorageDir } from '../../config.js';
 
 // `user-apps/` is git-ignored, so a fixture here cannot dirty the working tree.
 const APP_ID = 'agent-docs-fixture';
@@ -37,8 +42,12 @@ async function capturingWarnings<T>(fn: () => Promise<T>): Promise<[T, string[]]
   }
 }
 
+// A deploy snapshots the app into a shadow git repo beside the storage dir.
+const shadowDir = join(getStorageDir(), 'app-git', `${APP_ID}.git`);
+
 afterAll(async () => {
   await rm(appDir, { recursive: true, force: true });
+  await rm(shadowDir, { recursive: true, force: true });
 });
 
 describe('app agent docs', () => {
@@ -69,24 +78,36 @@ describe('app agent docs', () => {
 
   // The `personas` → `subagents` rename is the precedent: dropping a path that a
   // published app still ships makes it silently inert. Market apps carry their own
-  // copies and we cannot migrate them, so the old names keep working — and say so.
-  it('still reads the legacy root filenames, and warns which path to move to', async () => {
+  // copies and we cannot migrate them, so `HINT.md` keeps working — and says so.
+  it('still reads the legacy root HINT.md, and warns which path to move to', async () => {
     await seed({
       'app.json': '{"name":"Fixture"}\n',
-      'AGENTS.md': 'legacy prompt\n',
       'HINT.md': 'legacy hint\n',
     });
 
-    const [prompt, promptWarnings] = await capturingWarnings(() => loadAppPrompt(APP_ID));
-    expect(prompt).toBe('legacy prompt\n');
-    expect(promptWarnings.join('\n')).toContain('agent/prompt.md');
-
-    const [hint, hintWarnings] = await capturingWarnings(() => loadAppHint(APP_ID));
+    const [hint, warnings] = await capturingWarnings(() => loadAppHint(APP_ID));
     expect(hint).toBe('legacy hint\n');
-    expect(hintWarnings.join('\n')).toContain('agent/hint.md');
+    expect(warnings.join('\n')).toContain('agent/hint.md');
   });
 
-  it('prefers agent/ over the legacy name, and does not warn about a file it ignored', async () => {
+  // `AGENTS.md` is the one legacy name that could not stay readable. It is the coding
+  // agent's doc now, carried by clone and deploy like any other source file, so reading
+  // it here would install an app's architecture notes as that app's runtime persona.
+  it('does not read a root AGENTS.md as the prompt, and says which reading it took', async () => {
+    await seed({
+      'app.json': '{"name":"Fixture"}\n',
+      'AGENTS.md': 'how to edit this app\n',
+    });
+
+    const [prompt, warnings] = await capturingWarnings(() => loadAppPrompt(APP_ID));
+    expect(prompt).toBeNull();
+    // The notice has to name both readings — most apps with this file meant the
+    // coding-agent one and have nothing to do.
+    expect(warnings.join('\n')).toContain('AGENTS.md');
+    expect(warnings.join('\n')).toContain('agent/prompt.md');
+  });
+
+  it('prefers agent/ over the retired name, and does not warn about a file it ignored', async () => {
     await seed({
       'app.json': '{"name":"Fixture"}\n',
       'agent/prompt.md': 'new prompt\n',
@@ -119,5 +140,61 @@ describe('app agent docs', () => {
     });
 
     expect(await loadAppPrompt(APP_ID)).toBe('the real prompt\n');
+  });
+});
+
+/**
+ * The docs have to make the round trip devtools actually performs: clone an app into a
+ * project, edit, deploy. Deploy copies a *named* set out of the sandbox — `dist/`,
+ * `src/`, components, `app.json`, the agent docs — so a doc missing from that list is
+ * written to the project, deployed, and gone, with the deploy reporting success.
+ * `AGENTS.md` was missing from it, which is the whole reason an app could not keep one.
+ */
+describe('agent docs across clone and deploy', () => {
+  const AGENTS_MD = '# AGENTS.md\n\nHow to edit this app.\n';
+  let sandbox: string;
+
+  beforeEach(async () => {
+    sandbox = await mkdtemp(join(tmpdir(), 'yaar-agent-docs-'));
+    await rm(shadowDir, { recursive: true, force: true });
+  });
+
+  it('carries AGENTS.md and the agent docs from a sandbox into the installed app', async () => {
+    await seed({ 'app.json': `{"name":"Fixture"}\n` });
+    // A sandbox whose manifest is already extracted deploys without compiling anything.
+    await mkdir(join(sandbox, 'dist'), { recursive: true });
+    await writeFile(join(sandbox, 'dist', 'index.html'), '<html></html>');
+    await writeFile(join(sandbox, 'dist', 'protocol.json'), '{"state":{},"commands":{}}');
+    await writeFile(join(sandbox, 'app.json'), '{"name":"Fixture","createShortcut":false}\n');
+    await writeFile(join(sandbox, 'AGENTS.md'), AGENTS_MD);
+    await mkdir(join(sandbox, 'agent'), { recursive: true });
+    await writeFile(join(sandbox, 'agent', 'prompt.md'), 'runtime prompt\n');
+
+    const result = await doDeploy('unused-sandbox-id', { appId: APP_ID, sourcePath: sandbox });
+    expect(result.success).toBe(true);
+
+    expect(await Bun.file(join(appDir, 'AGENTS.md')).text()).toBe(AGENTS_MD);
+    // And it is still only the coding doc — carrying it must not make it a prompt.
+    expect(await loadAppPrompt(APP_ID)).toBe('runtime prompt\n');
+  });
+
+  it('clones AGENTS.md back out, so the agent editing the app can read it', async () => {
+    await seed({
+      'app.json': '{"name":"Fixture"}\n',
+      'src/main.ts': 'export const x = 1;\n',
+      'AGENTS.md': AGENTS_MD,
+      'agent/prompt.md': 'runtime prompt\n',
+    });
+
+    const clone = await cloneAppSource(APP_ID);
+    expect(clone.success).toBe(true);
+    const paths = clone.files?.map((f) => f.path) ?? [];
+    expect(paths).toContain('AGENTS.md');
+    expect(paths).toContain('agent/prompt.md');
+    expect(clone.files?.find((f) => f.path === 'AGENTS.md')?.content).toBe(AGENTS_MD);
+  });
+
+  afterAll(async () => {
+    await rm(sandbox, { recursive: true, force: true });
   });
 });

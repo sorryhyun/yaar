@@ -17,7 +17,7 @@ import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
-import { agentDocPaths, invalidateAppsCache } from '../apps/discovery.js';
+import { agentDocPaths, APP_ROOT_DOCS, invalidateAppsCache } from '../apps/discovery.js';
 import { retireStaleApp } from '../apps/retire.js';
 import { snapshotApp } from './git.js';
 
@@ -391,12 +391,15 @@ export async function doDeploy(
       await cp(join(sandboxPath, f), join(appPath, f));
     }
 
-    // Carry the agent docs across — `agent/prompt.md` is the app agent's whole system
-    // prompt and `agent/hint.md` is what the monitor agent is told about the app.
-    // `cloneApp` pulls both into the sandbox, so a deploy that skipped them would
-    // silently discard every edit the user made to either. The paths come from the
-    // sandbox's own app.json, so a doc lands where the reader will look for it.
-    for (const relPath of Object.values(agentDocPaths(sandboxMeta))) {
+    // Carry the docs across — `agent/prompt.md` is the app agent's whole system prompt,
+    // `agent/hint.md` is what the monitor agent is told about the app, and `AGENTS.md`
+    // is what the *coding* agent reads before editing it. `cloneApp` pulls all of them
+    // into the sandbox, so a deploy that skipped one would silently discard every edit
+    // the user made to it — which is what happened to `AGENTS.md`: devtools would write
+    // an app's architecture notes, deploy, and the file existed nowhere but the sandbox.
+    // The agent-doc paths come from the sandbox's own app.json, so a doc lands where the
+    // reader will look for it; the root docs are at fixed names by definition.
+    for (const relPath of [...Object.values(agentDocPaths(sandboxMeta)), ...APP_ROOT_DOCS]) {
       let content: string;
       try {
         content = await Bun.file(join(sandboxPath, relPath)).text();

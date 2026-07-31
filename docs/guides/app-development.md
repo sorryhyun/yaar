@@ -662,7 +662,9 @@ Both paths are configurable in `app.json`:
 
 These are the *defaults*, applied when `agent` is absent, so most apps never need to set the field — only an app relocating its prompt files does.
 
-**Back-compat:** if `agent/prompt.md` or `agent/hint.md` is absent, the server falls back to a legacy root `AGENTS.md`/`HINT.md` and logs a `[apps]` warning naming the new path. This exists for apps written before the rename (including some market-installed apps) — write new apps at the `agent/` paths.
+**Back-compat:** if `agent/hint.md` is absent, the server falls back to a legacy root `HINT.md` and logs a `[apps]` warning naming the new path. This exists for apps written before the rename (including some market-installed apps) — write new apps at the `agent/` paths.
+
+Root `AGENTS.md` has **no** such fallback, deliberately: it is the coding agent's doc (below), and one file cannot be both an app's architecture notes and its runtime persona. An app that shipped `AGENTS.md` as its prompt gets the generic base plus its manifest, and a `[apps]` notice saying to copy it to `agent/prompt.md` if that is what it meant.
 
 ### agent/hint.md (orchestrator context)
 
@@ -685,13 +687,19 @@ The agent's entire system prompt is replaced with the contents of `agent/prompt.
 
 Since `agent/prompt.md` replaces the base prompt, you must document the available tools (`describe`, `query`, `command`, `relay`) yourself if the agent needs to know about them. (`protocol.json`, and a "Controllable Apps" section when `controls` is set, are still appended automatically.)
 
-Note that `AGENTS.md` at the app's root is a different, unrelated file: it's the conventional name a coding agent looks for when *editing* that directory, not a runtime prompt. Nothing currently ships one — devtools writes apps into `apps/`, so its own root `AGENTS.md` would be exactly the "how to edit this directory" doc a coding agent expects to find there.
+### AGENTS.md (the coding agent's doc)
+
+`AGENTS.md` at the app's root is a different file with a different reader: it's the conventional name a coding agent looks for when *editing* a directory, and devtools is that agent. YAAR reads it for nothing. Put in it what the source cannot say for itself — architecture, invariants, why a thing is hand-rolled, what breaks if you change it. An app of any size wants one; small apps don't need it.
+
+The line between it and `agent/prompt.md` is the reader, not the topic. "`src/gizmo.ts` is hand-rolled because the bundled one drops pointer capture" is `AGENTS.md`. "call `addPrimitive` with `{ kind: 'box' }` before setting a material" is `agent/prompt.md`. Never restate a command signature in either — `protocol.json` is generated and appended automatically, so a hand-written copy is one deploy away from being wrong.
+
+Clone and deploy carry it like any other source file, so it round-trips: an app you clone into devtools arrives with its `AGENTS.md`, and one you write there survives the deploy.
 
 ### Example structure
 
 ```
 apps/my-app/
-├── AGENTS.md        # (Optional) instructions for a coding agent editing this app — not runtime
+├── AGENTS.md        # (Optional) instructions for a coding agent editing this app — never read at runtime
 ├── agent/
 │   ├── prompt.md    # Full custom agent prompt (optional, advanced)
 │   └── hint.md      # Monitor agent routing hint (optional)

@@ -5,7 +5,7 @@
 import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { resolveAppDir } from '../apps/roots.js';
-import { agentDocPathsFor } from '../apps/discovery.js';
+import { agentDocPathsFor, APP_ROOT_DOCS } from '../apps/discovery.js';
 
 interface CloneFile {
   path: string;
@@ -73,10 +73,13 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
   // Read all source files recursively
   const files: CloneFile[] = [];
 
-  // Include the app's non-source files so permissions, protocol and agent docs are
-  // preserved. These are relative paths, not bare names — `deploy` reads them back at
-  // the same path, and the sandbox writer creates intermediate directories.
-  for (const relPath of ['app.json', ...(await agentDocPathsFor(appDir))]) {
+  // Include the app's non-source files so permissions, protocol, agent docs and the
+  // coding-agent doc are preserved. These are relative paths, not bare names — `deploy`
+  // reads them back at the same path, and the sandbox writer creates intermediate
+  // directories. `AGENTS.md` matters most of all here: it is what the agent about to
+  // edit this clone should read first, and a clone that omitted it left that agent
+  // rediscovering the app's invariants from its source every time.
+  for (const relPath of ['app.json', ...(await agentDocPathsFor(appDir)), ...APP_ROOT_DOCS]) {
     try {
       const content = await Bun.file(join(appDir, relPath)).text();
       if (relPath.endsWith('.json')) JSON.parse(content); // validate JSON

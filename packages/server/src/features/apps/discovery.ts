@@ -553,16 +553,36 @@ async function loadAppDoc(appId: string, relPath: string): Promise<string | null
 }
 
 /**
- * The two agent docs an app may ship, each at its default path and beside the
- * filename it used to live under at the app root.
+ * The two agent docs an app may ship — the runtime docs, read by the server and
+ * injected into a prompt.
  *
  * `prompt` *is* the app agent's system prompt; `hint` is what the monitor agent is
  * told about the app. Both are optional, and most apps ship neither.
+ *
+ * `legacy` is a root filename still read when the doc is absent at its path;
+ * `retired` is one that is deliberately no longer read. `HINT.md` means nothing
+ * else to anybody, so it costs nothing to keep answering to it. `AGENTS.md` means
+ * something else to everybody — see {@link APP_ROOT_DOCS}.
  */
 export const AGENT_DOCS = {
-  prompt: { path: 'agent/prompt.md', legacy: 'AGENTS.md' },
+  prompt: { path: 'agent/prompt.md', retired: 'AGENTS.md' },
   hint: { path: 'agent/hint.md', legacy: 'HINT.md' },
-} as const;
+} as const satisfies Record<string, { path: string; legacy?: string; retired?: string }>;
+
+/**
+ * Docs an app keeps at its root that are *about the source*, not read by the runtime.
+ *
+ * `AGENTS.md` is the ecosystem's name for "instructions to a coding agent editing this
+ * directory", and devtools is that agent — a non-trivial app needs somewhere to record
+ * its architecture and invariants, and this is the file every other tool already looks
+ * for. YAAR reads it for nothing.
+ *
+ * It is listed here because clone and deploy carry exactly what is named: an app root
+ * holds `app.json`, the compiled `dist/`, the agent docs above, and this. A doc that
+ * clone cannot see is a doc the agent editing the app cannot read, and one that deploy
+ * drops is one the next clone loses — which is what happened until it was named.
+ */
+export const APP_ROOT_DOCS = ['AGENTS.md'] as const;
 
 export type AgentDocKind = keyof typeof AGENT_DOCS;
 
@@ -619,24 +639,50 @@ async function resolveAgentDocPath(appId: string, kind: AgentDocKind): Promise<s
 
 /**
  * Read an app's agent doc from `agent/`, falling back to the file it used to live in
- * at the app root.
+ * at the app root — except where that name has been given back.
  *
- * The fallback follows the `personas` → `subagents` precedent: a rename that silently
- * turns a working app inert is the trap that one already sprang, and market-installed
- * apps ship their own copies we cannot migrate. So the old location keeps working and
- * says so — loudly enough to get fixed, quietly enough to break nothing.
+ * `HINT.md` keeps working, following the `personas` → `subagents` precedent: a rename
+ * that silently turns a working app inert is the trap that one already sprang, and
+ * market-installed apps ship copies we cannot migrate.
+ *
+ * `AGENTS.md` cannot, because it is no longer ours to read. It is the coding agent's
+ * doc now ({@link APP_ROOT_DOCS}), which clone and deploy carry like any other source
+ * file — so a fallback would take the architecture notes devtools just wrote for an app
+ * and install them as that app's runtime persona, with the app's own agent then acting
+ * on instructions addressed to whoever edits it. Keeping both readings alive is what is
+ * impossible; the collision is the whole reason the prompt moved. An app that did rely
+ * on it loses its prompt rather than its correctness — it falls back to the generic base
+ * plus its manifest — and the notice below names the one-line fix.
  */
 async function loadAgentDoc(appId: string, kind: AgentDocKind): Promise<string | null> {
   const path = await resolveAgentDocPath(appId, kind);
   const doc = await loadAppDoc(appId, path);
   if (doc !== null) return doc;
 
-  const { legacy } = AGENT_DOCS[kind];
-  const legacyDoc = await loadAppDoc(appId, legacy);
+  const spec: { legacy?: string; retired?: string } = AGENT_DOCS[kind];
+
+  if (spec.retired) {
+    // Only worth saying when the app has the retired file and nothing at the new path,
+    // which is exactly the ambiguous shape. An app holding both has already answered,
+    // and this runs once per app agent profile — which is built once and cached.
+    const retiredDoc = await loadAppDoc(appId, spec.retired);
+    if (retiredDoc !== null) {
+      console.warn(
+        `[apps] "${appId}" has a root ${spec.retired} and no ${path}. ${spec.retired} is the ` +
+          'coding-agent doc and is no longer read as the app agent’s prompt — if this app ' +
+          `meant it as one, copy it to ${path}. If it is notes for whoever edits the app, ` +
+          'nothing to do.',
+      );
+    }
+    return null;
+  }
+
+  if (!spec.legacy) return null;
+  const legacyDoc = await loadAppDoc(appId, spec.legacy);
   if (legacyDoc !== null) {
     console.warn(
-      `[apps] "${appId}" still keeps its agent doc at ${legacy}. Move it to ${path} — the old ` +
-        'location is read for now, but the app root no longer owns that name.',
+      `[apps] "${appId}" still keeps its agent doc at ${spec.legacy}. Move it to ${path} — the ` +
+        'old location is read for now, but the app root no longer owns that name.',
     );
   }
   return legacyDoc;

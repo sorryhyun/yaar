@@ -291,14 +291,24 @@ The target **must have an open window** — control resolves against its most re
 
 Direct control (`appId`) is synchronous and precise — use it when you know the exact command. `direct_message` hands a natural-language request to the other app's *own* agent — use it when you want that agent to work out the details. Use `browser-user` to test apps end-to-end in real Chrome, reproduce user-reported bugs, or verify a deployed fix.
 
-## Agent Prompt Files
+## Markdown Files in an App
 
-Two markdown files in an app's `agent/` directory customize how agents treat it. Write them into the project and redeploy; both are optional and most apps need neither.
+Three files, three readers. All optional; all carried by clone and deploy, so anything you write into the project survives the deploy and comes back on the next clone.
+
+### `AGENTS.md` (root) — for you, and whoever edits this app next
+
+Not a runtime file: YAAR never reads it. It is the standard name a coding agent looks for when editing a directory, and you are that agent — **read it first when you open a project that has one, and keep it current as you work.**
+
+Write one for any app big enough that you had to work something out: architecture and the shape of `src/`, invariants that are not visible from any one file, why something is hand-rolled instead of using a bundled library, what breaks if it changes, and the gotchas that cost you a build. A small app needs none. What you would want to have been told when you opened this project cold is exactly what belongs in it — an app whose reasoning lives only in a chat log is one you will re-derive next month.
+
+Write down what the source cannot say for itself. A command reference is not that: `protocol.json` is generated from `src/` on every compile, so a signature copied into prose is one deploy away from being wrong — record *why* a command exists, not what its params are.
+
+### `agent/prompt.md` and `agent/hint.md` — for the app's own agents
 
 **`agent/prompt.md` — the app agent's prompt. It *is* the base prompt**, replacing the generic one entirely, so it must document the tools itself. The app's `protocol.json` manifest is always appended automatically, one call signature per command (param names, types, `?` for optional) — never duplicate the command/state reference, and never restate a param list a signature already carries; a hand-written copy is one deploy away from being wrong. Focus on *how to use* the protocol: concrete `command()`/`query()` examples, multi-step workflows, domain concepts and schemas needed to build valid params, and anti-patterns.
 
 **`agent/hint.md` — injected into the monitor agent's prompt**, not the app agent's. Says *when* to route work to this app, not how it works. Keep to 1–3 sentences. Auto-syncs with install/uninstall.
 
-There is no third, append-to-the-generic-prompt tier. An app that needs to say only a little says it in `agent/hint.md`; everything a *describing* agent needs — the app's description, its state keys, its command signatures — is generated from `app.json` and `protocol.json` and served by `read("yaar://apps/{appId}")`, so writing it out by hand only creates something to keep in sync.
+Write these into the project and redeploy; both are optional and most apps need neither. There is no third, append-to-the-generic-prompt tier. An app that needs to say only a little says it in `agent/hint.md`; everything a *describing* agent needs — the app's description, its state keys, its command signatures — is generated from `app.json` and `protocol.json` and served by `read("yaar://apps/{appId}")`, so writing it out by hand only creates something to keep in sync.
 
-An app's root `AGENTS.md` is **not** one of these. That filename means what it means everywhere else — instructions to a coding agent editing the directory — and you are that agent, so read one if an app has it.
+The line between `AGENTS.md` and `agent/prompt.md` is the reader, not the topic. "`src/gizmo.ts` is hand-rolled because the bundled control drops pointer capture" is `AGENTS.md`. "call `addPrimitive` before setting a material" is `agent/prompt.md`. Root `AGENTS.md` is never read as an app agent's prompt — an app that wants one writes `agent/prompt.md`, even if the two would say some of the same things.
