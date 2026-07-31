@@ -37,6 +37,13 @@ export interface StorageListResult {
   success: boolean;
   entries?: StorageEntry[];
   error?: string;
+  /**
+   * The directory does not exist — as distinct from existing and being empty.
+   * Set only alongside `success: false`, so a caller that wants "missing reads as
+   * empty" (a namespace root nothing has written to yet) can say so explicitly
+   * instead of every caller inheriting it.
+   */
+  notFound?: boolean;
 }
 
 export interface StorageDeleteResult {

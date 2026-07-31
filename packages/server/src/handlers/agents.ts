@@ -98,6 +98,20 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       },
     },
 
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      assertSessionAgents(resolved);
+      if (!resolved.id) return false;
+      // `session` and `monitor` are well-known addresses, not instance ids: they name
+      // the tier rather than a live agent, and both are meaningful before one is spawned
+      // (that is what read's `exists: false` and relay's target are for).
+      if (resolved.id === 'session' || resolved.id === 'monitor') return true;
+      const pool = getPool();
+      if (!pool) return false;
+      if (pool.hasAgent(resolved.id)) return true;
+      // An app agent is also addressable by appId — that is what `delete` accepts.
+      return pool.agentPool.listAgents().some((a) => a.type === 'app' && a.appId === resolved.id);
+    },
+
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       assertSessionAgents(resolved);
       if (!resolved.id) return error('Agent ID required.');

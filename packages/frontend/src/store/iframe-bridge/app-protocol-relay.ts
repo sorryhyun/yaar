@@ -172,6 +172,13 @@ export function handleAppProtocolRequest(
     msg = { type: 'yaar:app-query-request', requestId, stateKey: request.stateKey };
   } else if (request.kind === 'eval') {
     msg = { type: 'yaar:app-eval-request', requestId, expression: request.expression };
+  } else if (request.kind === 'describe') {
+    msg = {
+      type: 'yaar:app-describe-request',
+      requestId,
+      target: request.target,
+      key: request.key,
+    };
   } else {
     msg = {
       type: 'yaar:app-command-request',
@@ -236,6 +243,10 @@ export function handleAppProtocolRequest(
         console.warn(`[AppProtocol] Eval response missing both value and error fields`);
       }
       response = { kind: 'eval', value: msg.value, error: msg.error };
+    } else if (msg.type === 'yaar:app-describe-response') {
+      // `doc: null` is a real answer here — the key exists and the app defines no
+      // describe() for it — so, unlike the branches above, a null carries no warning.
+      response = { kind: 'describe', doc: msg.doc ?? null, error: msg.error };
     } else {
       console.warn(`[AppProtocol] Unknown response type: ${msg.type}`);
       response = {

@@ -35,6 +35,15 @@ export interface ActionTable<Ctx> {
   names: string[];
   /** Drop-in `invokeSchema.properties.action`. Derived from `names`. */
   schema: ActionEnumSchema;
+  /**
+   * Action name → one-line description, for the entries that gave one.
+   *
+   * Same reason the enum is derived: `describe` advertised an `invokeActions` map
+   * written a third time, next to the schema enum and the switch, and no two of the
+   * three agreed. A description that comes off the table cannot name an action that
+   * has no case.
+   */
+  docs: Record<string, string>;
   /** True if `action` is in the table. */
   has(action: string): boolean;
   /**
@@ -47,18 +56,35 @@ export interface ActionTable<Ctx> {
 export type ActionHandler<Ctx> = (ctx: Ctx) => VerbResult | Promise<VerbResult>;
 
 /**
- * @param actions  Action name → the code that runs it.
+ * A table entry: the code alone, or the code with the one-line description a caller
+ * of `describe` should be shown. Both spellings are accepted so an existing table
+ * stays as it is until its actions are worth documenting.
+ */
+export type ActionEntry<Ctx> =
+  | ActionHandler<Ctx>
+  | { description: string; run: ActionHandler<Ctx> };
+
+function runnerOf<Ctx>(entry: ActionEntry<Ctx>): ActionHandler<Ctx> {
+  return typeof entry === 'function' ? entry : entry.run;
+}
+
+/**
+ * @param actions  Action name → the code that runs it (optionally with its description).
  * @param opts.describe  Text appended to the derived schema's `description`.
  * @param opts.unknown  Overrides the refusal. Defaults to naming the available actions.
  */
 export function defineActions<Ctx>(
-  actions: Record<string, ActionHandler<Ctx>>,
+  actions: Record<string, ActionEntry<Ctx>>,
   opts: {
     describe?: string;
     unknown?: (action: string, names: string[]) => VerbResult;
   } = {},
 ): ActionTable<Ctx> {
   const names = Object.keys(actions);
+  const docs: Record<string, string> = {};
+  for (const [name, entry] of Object.entries(actions)) {
+    if (typeof entry !== 'function') docs[name] = entry.description;
+  }
 
   return {
     names,
@@ -67,13 +93,14 @@ export function defineActions<Ctx>(
       enum: names,
       ...(opts.describe ? { description: opts.describe } : {}),
     },
+    docs,
     has: (action) => Object.hasOwn(actions, action),
     async dispatch(action, ctx) {
-      const handler = Object.hasOwn(actions, action) ? actions[action] : undefined;
-      if (!handler) {
+      const entry = Object.hasOwn(actions, action) ? actions[action] : undefined;
+      if (!entry) {
         return opts.unknown ? opts.unknown(action, names) : unknownAction(action, names);
       }
-      return handler(ctx);
+      return runnerOf(entry)(ctx);
     },
   };
 }

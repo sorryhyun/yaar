@@ -13,7 +13,7 @@
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, error, assertUri, requireAction } from './utils.js';
+import { ok, okJson, error, assertUri, requireAction } from './utils.js';
 import { defineActions } from './define-actions.js';
 import { showNotification, dismissNotification } from '../features/user/notifications.js';
 import { askUser, requestUserInput } from '../features/user/prompts.js';
@@ -53,6 +53,27 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://user/notifications/*', {
     description: 'A specific notification. Delete to dismiss.',
     verbs: ['describe', 'delete'],
+
+    /**
+     * The one wildcard namespace whose existence the server genuinely cannot answer.
+     * A notification is an emitted action, not a stored resource: the client owns the
+     * toast and auto-dismisses it on its own timer, and nothing here holds a roster to
+     * check an id against. So `describe` says that outright rather than reporting a
+     * confident yes (which an `exists` returning `true` would be) — dismissal is
+     * idempotent, and the honest answer is "ask the desktop, not me".
+     */
+    async describe(resolved: ResolvedUri): Promise<VerbResult> {
+      assertUri(resolved, 'user');
+      return okJson({
+        uri: resolved.sourceUri,
+        description:
+          'A notification the desktop is showing. Delete to dismiss it. The server keeps no ' +
+          'notification roster — the client owns the toast and auto-dismisses it — so whether ' +
+          'this id is still on screen cannot be answered here. Dismissing an id that is already ' +
+          'gone is a no-op.',
+        verbs: ['describe', 'delete'],
+      });
+    },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'user');

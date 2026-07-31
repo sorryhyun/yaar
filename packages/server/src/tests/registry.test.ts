@@ -18,6 +18,20 @@ function mockHandler(overrides: Partial<ResourceHandler> = {}): ResourceHandler 
   };
 }
 
+/**
+ * A wildcard pattern must say how to tell whether its id names anything — see
+ * `ResourceRegistry.register`. These tests are about matching, not existence, so
+ * they answer "yes" and move on.
+ */
+function wildcardHandler(overrides: Partial<ResourceHandler> = {}): ResourceHandler {
+  return mockHandler({
+    async exists() {
+      return true;
+    },
+    ...overrides,
+  });
+}
+
 describe('ResourceRegistry', () => {
   describe('pattern matching', () => {
     it('matches exact patterns', () => {
@@ -42,7 +56,7 @@ describe('ResourceRegistry', () => {
 
     it('matches wildcard patterns', () => {
       const reg = new ResourceRegistry();
-      const h = mockHandler();
+      const h = wildcardHandler();
       reg.register('yaar://config/*', h);
 
       expect(reg.findHandler('yaar://config/settings')).toBe(h);
@@ -54,7 +68,7 @@ describe('ResourceRegistry', () => {
       const reg = new ResourceRegistry();
       const exact = mockHandler({ description: 'exact' });
       const prefix = mockHandler({ description: 'prefix' });
-      const wildcard = mockHandler({ description: 'wildcard' });
+      const wildcard = wildcardHandler({ description: 'wildcard' });
 
       reg.register('yaar://config/*', wildcard);
       reg.register('yaar://config/', prefix);
@@ -153,6 +167,90 @@ describe('ResourceRegistry', () => {
 
       await reg.execute('invoke', 'yaar://config/settings', { theme: 'light' });
       expect(receivedPayload).toEqual({ theme: 'light' });
+    });
+  });
+
+  // The auto-generated describe answers about the URI *pattern*, so without this hook it
+  // is byte-identical for a live resource and one that has never existed.
+  describe('exists()', () => {
+    it('refuses to register a wildcard that declares neither exists nor describe', () => {
+      const reg = new ResourceRegistry();
+      expect(() => reg.register('yaar://config/*', mockHandler())).toThrow(
+        /exists\(\) or describe/,
+      );
+    });
+
+    it('accepts a wildcard that declares describe instead', () => {
+      const reg = new ResourceRegistry();
+      expect(() =>
+        reg.register(
+          'yaar://config/*',
+          mockHandler({
+            async describe() {
+              return { content: [{ type: 'text', text: 'custom' }] };
+            },
+          }),
+        ),
+      ).not.toThrow();
+    });
+
+    it('errors on describe when the resource does not exist', async () => {
+      const reg = new ResourceRegistry();
+      reg.register(
+        'yaar://config/*',
+        wildcardHandler({
+          async exists(resolved) {
+            return resolved.sourceUri === 'yaar://config/hooks/real';
+          },
+        }),
+      );
+
+      const missing = await reg.execute('describe', 'yaar://config/hooks/ghost');
+      expect(missing.isError).toBe(true);
+      expect(text(missing)).toContain('No resource at yaar://config/hooks/ghost');
+
+      const present = await reg.execute('describe', 'yaar://config/hooks/real');
+      expect(present.isError).toBeFalsy();
+      expect(JSON.parse(text(present)).uri).toBe('yaar://config/hooks/real');
+    });
+
+    it('is not consulted when the handler owns its own describe', async () => {
+      const reg = new ResourceRegistry();
+      let asked = false;
+      reg.register(
+        'yaar://config/*',
+        mockHandler({
+          async exists() {
+            asked = true;
+            return false;
+          },
+          async describe() {
+            return { content: [{ type: 'text', text: 'mine' }] };
+          },
+        }),
+      );
+
+      const r = await reg.execute('describe', 'yaar://config/hooks/anything');
+      expect(text(r)).toBe('mine');
+      expect(asked).toBe(false);
+    });
+
+    it('does not gate verbs other than describe', async () => {
+      const reg = new ResourceRegistry();
+      reg.register(
+        'yaar://config/*',
+        wildcardHandler({
+          async exists() {
+            return false;
+          },
+        }),
+      );
+
+      // read still reaches the handler, which reports absence in its own words —
+      // `exists` exists to stop describe from inventing a success, not to become a
+      // second permission layer in front of every verb.
+      const r = await reg.execute('read', 'yaar://config/hooks/ghost');
+      expect(text(r)).toBe('read-ok');
     });
   });
 

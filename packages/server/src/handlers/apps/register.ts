@@ -15,7 +15,7 @@
 
 import type { ResourceRegistry, VerbResult } from '../uri-registry.js';
 import type { ResolvedUri } from '../uri-resolve.js';
-import { okJson } from '../utils.js';
+import { okJson, error } from '../utils.js';
 import { parseAppDbPath } from './paths.js';
 import { DB_DESCRIBE, handleDbVerb } from './db-resource.js';
 import {
@@ -33,6 +33,7 @@ import {
   deleteStorage,
 } from './storage-resource.js';
 import {
+  appActions,
   appsListHandler,
   describeApplication,
   readApplication,
@@ -41,6 +42,33 @@ import {
   deleteApplication,
 } from './app-resource.js';
 
+/**
+ * Sub-paths that are *not* addressable under `yaar://apps/{id}` — protocol state and
+ * commands belong to a running window, not to the installed app.
+ *
+ * `yaar://apps/{id}` is the **installed** app; `yaar://windows/{id}` is the **running**
+ * instance. State has no value and a command has nothing to act on until an app is
+ * open, and the same app open on two monitors is two states — so an `apps/` spelling
+ * would either name one of them arbitrarily or name none.
+ *
+ * Narrow on purpose. The blanket "no sub-paths under apps/" would delete `appStorage`
+ * and `appDb`, both of which are built entirely on reads and lists under
+ * `yaar://apps/self/{storage,db}/`.
+ */
+const INSTANCE_SUBPATHS = ['state', 'commands'] as const;
+
+/** The refusal for `yaar://apps/{id}/state/…` and `/commands/…`, on every verb. */
+function rejectInstanceSubPath(uri: string): VerbResult | null {
+  const match = uri.match(/^yaar:\/\/apps\/[^/]+\/([^/]+)(?:\/|$)/);
+  const segment = match?.[1];
+  if (!segment || !(INSTANCE_SUBPATHS as readonly string[]).includes(segment)) return null;
+  return error(
+    `"${uri}" is not addressable. An app's protocol ${segment} belong to a running window, ` +
+      'not to the installed app — use yaar://windows/{windowId}/' +
+      `${segment}/{key} instead. Find the window with list("yaar://windows").`,
+  );
+}
+
 export function registerAppsHandlers(registry: ResourceRegistry): void {
   // ── yaar://apps — list all installed apps (exact match) ──
   registry.register('yaar://apps', appsListHandler);
@@ -48,26 +76,33 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   // ── yaar://apps/{appId} — per-app operations + app-scoped storage/db ──
   registry.register('yaar://apps/*', {
     description:
-      'A specific app. Read for its reference doc (description + protocol + permissions), invoke to set_badge/install/publish, delete to uninstall. ' +
+      'A specific app — the *installed* app, not a running one. Describe for its manual ' +
+      '(protocol + SKILL.md), read for its effective manifest, invoke to ' +
+      `${appActions.names.join('/')}, delete to uninstall. ` +
       'Sub-path /storage/{path} provides app-scoped file storage. ' +
       'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search). ' +
-      "Sub-path /agents[/{personaId}] provides the app's own tool-less persona agents.",
+      "Sub-path /agents[/{personaId}] provides the app's own tool-less persona agents. " +
+      'Protocol state and commands are NOT under apps/ — they belong to a running window ' +
+      '(yaar://windows/{windowId}/{state,commands}/{key}).',
     verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',
       required: ['action'],
       properties: {
+        // The app-level actions are derived from the table that dispatches them
+        // (`appActions`); the storage sub-path's own actions are appended because this
+        // one registration is the composite door onto both — the registry has no middle
+        // wildcard, so `yaar://apps/{id}/storage/…` cannot register its own schema.
         action: {
           type: 'string',
-          enum: ['set_badge', 'install', 'publish', 'write', 'clone'],
+          enum: [...appActions.names, 'write', 'copy', 'grep'],
           description:
-            'set_badge for app badge, install from marketplace, publish to marketplace ' +
-            '(refused until the signed-in publisher has accepted the Publisher Terms in ' +
-            "the Market Apps publish dialog — that acceptance is the user's to give, not " +
-            "an agent's), write for app storage, clone for source cloning",
+            `On the app itself: ${appActions.names.join(', ')}. ` +
+            'On a /storage/ sub-path: write, copy, grep. On a /db/ sub-path see ' +
+            'describe(yaar://apps/{id}/db/{collection}).',
         },
         count: { type: 'number', description: 'Badge count (0 to clear, for set_badge)' },
-        content: { type: 'string', description: 'File content (for write)' },
+        content: { type: 'string', description: 'File content (for storage write)' },
         encoding: {
           type: 'string',
           enum: ['utf-8', 'base64'],
@@ -77,13 +112,16 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async describe(resolved: ResolvedUri): Promise<VerbResult> {
+      const rejected = rejectInstanceSubPath(resolved.sourceUri);
+      if (rejected) return rejected;
+
       // Db sub-paths get the db API describe
       if (parseAppDbPath(resolved.sourceUri)) {
         return okJson({ uri: resolved.sourceUri, ...DB_DESCRIBE });
       }
 
-      // Storage sub-paths get generic describe
-      const storageResult = describeStorage(resolved.sourceUri);
+      // Storage sub-paths describe the path on disk
+      const storageResult = await describeStorage(resolved.sourceUri);
       if (storageResult) return storageResult;
 
       const personaResult = describePersonas(resolved.sourceUri);
@@ -93,6 +131,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
+      const rejected = rejectInstanceSubPath(resolved.sourceUri);
+      if (rejected) return rejected;
+
       const dbResult = await handleDbVerb('read', resolved);
       if (dbResult) return dbResult;
 
@@ -106,6 +147,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {
+      const rejected = rejectInstanceSubPath(resolved.sourceUri);
+      if (rejected) return rejected;
+
       const dbResult = await handleDbVerb('list', resolved);
       if (dbResult) return dbResult;
 
@@ -119,6 +163,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      const rejected = rejectInstanceSubPath(resolved.sourceUri);
+      if (rejected) return rejected;
+
       const dbResult = await handleDbVerb('invoke', resolved, payload);
       if (dbResult) return dbResult;
 
@@ -132,6 +179,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
+      const rejected = rejectInstanceSubPath(resolved.sourceUri);
+      if (rejected) return rejected;
+
       const dbResult = await handleDbVerb('delete', resolved);
       if (dbResult) return dbResult;
 

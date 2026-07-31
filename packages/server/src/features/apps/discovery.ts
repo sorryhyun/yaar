@@ -553,11 +553,24 @@ async function loadAppDoc(appId: string, relPath: string): Promise<string | null
 }
 
 /**
- * The two agent docs an app may ship — the runtime docs, read by the server and
- * injected into a prompt.
+ * The agent docs an app may ship — read by the server, never compiled.
+ *
+ * Three files, three audiences, three moments:
+ *
+ * | file              | consumer                         | when read              |
+ * |-------------------|----------------------------------|------------------------|
+ * | `agent/prompt.md` | the **app agent's** system prompt | every app-agent turn  |
+ * | `agent/hint.md`   | the **monitor agent's** prompt    | every monitor turn    |
+ * | `agent/SKILL.md`  | whoever calls `describe`          | on demand             |
  *
  * `prompt` *is* the app agent's system prompt; `hint` is what the monitor agent is
- * told about the app. Both are optional, and most apps ship neither.
+ * told about the app; `skill` is the hand-written manual any caller can ask for. All
+ * are optional, and most apps ship none.
+ *
+ * `skill` is deliberately not the `SKILLS/` directory proposed in
+ * `docs/architecture/shell_to_userland.md` — that is a namespaced topic set reached by
+ * `read`. One file returned by `describe` versus many read on demand; the two compose,
+ * but the names are one letter apart and must not be confused.
  *
  * `legacy` is a root filename still read when the doc is absent at its path;
  * `retired` is one that is deliberately no longer read. `HINT.md` means nothing
@@ -567,6 +580,7 @@ async function loadAppDoc(appId: string, relPath: string): Promise<string | null
 export const AGENT_DOCS = {
   prompt: { path: 'agent/prompt.md', retired: 'AGENTS.md' },
   hint: { path: 'agent/hint.md', legacy: 'HINT.md' },
+  skill: { path: 'agent/SKILL.md' },
 } as const satisfies Record<string, { path: string; legacy?: string; retired?: string }>;
 
 /**
@@ -611,10 +625,17 @@ export function agentDocPaths(meta: unknown): Record<AgentDocKind, string> {
     if (value.startsWith('/') || value.split(/[\\/]/).includes('..')) return AGENT_DOCS[kind].path;
     return value;
   };
-  return { prompt: resolve('prompt'), hint: resolve('hint') };
+  return { prompt: resolve('prompt'), hint: resolve('hint'), skill: resolve('skill') };
 }
 
-/** The agent docs an app on disk actually keeps, in the order `AGENT_DOCS` declares them. */
+/**
+ * The agent docs an app on disk actually keeps, in the order `AGENT_DOCS` declares them.
+ *
+ * Derived from the table rather than listed: this is what clone and deploy carry, and a
+ * doc deploy drops is one the next clone loses — which is the failure that put
+ * {@link APP_ROOT_DOCS} here in the first place. Adding a kind to `AGENT_DOCS` must be
+ * enough to make it travel.
+ */
 export async function agentDocPathsFor(appDir: string): Promise<string[]> {
   let meta: unknown = null;
   try {
@@ -623,7 +644,7 @@ export async function agentDocPathsFor(appDir: string): Promise<string[]> {
     // No app.json, or unreadable — the defaults are the answer.
   }
   const paths = agentDocPaths(meta);
-  return [paths.prompt, paths.hint];
+  return (Object.keys(AGENT_DOCS) as AgentDocKind[]).map((kind) => paths[kind]);
 }
 
 async function resolveAgentDocPath(appId: string, kind: AgentDocKind): Promise<string> {
@@ -659,7 +680,7 @@ async function loadAgentDoc(appId: string, kind: AgentDocKind): Promise<string |
   const doc = await loadAppDoc(appId, path);
   if (doc !== null) return doc;
 
-  const spec: { legacy?: string; retired?: string } = AGENT_DOCS[kind];
+  const spec = AGENT_DOCS[kind] as { path: string; legacy?: string; retired?: string };
 
   if (spec.retired) {
     // Only worth saying when the app has the retired file and nothing at the new path,
@@ -744,4 +765,17 @@ export async function loadAllAppHints(): Promise<{ appId: string; hint: string }
  */
 export function loadAppPrompt(appId: string): Promise<string | null> {
   return loadAgentDoc(appId, 'prompt');
+}
+
+/**
+ * Load an app's hand-written manual (`agent/SKILL.md`).
+ *
+ * Returned by `describe('yaar://apps/{appId}')` when present, and injected into no
+ * prompt — a caller asks for it, or never sees it. It is for what `protocol.json`
+ * cannot say: workflows, ordering constraints, when *not* to use the app. Restating
+ * command or state names the protocol already carries is what made the previous
+ * SKILL.md go stale, and `scripts/check/apps.ts` warns about exactly that.
+ */
+export function loadAppSkill(appId: string): Promise<string | null> {
+  return loadAgentDoc(appId, 'skill');
 }

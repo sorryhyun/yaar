@@ -220,6 +220,11 @@ function toRegistration(definition) {
     };
     const schema = manifestSchema(manifest, 'state', key, 'schema', entry.schema);
     if (schema !== undefined) descriptor.schema = schema;
+    // Optional per-key doc, answered only when something asks (`describe` on
+    // `yaar://windows/{id}/state/{key}`). It never rides in the manifest — a doc
+    // computed from live data on every manifest read would make the cheap call
+    // expensive — so it sits beside `handler` and is called the same way.
+    if (typeof entry.describe === 'function') descriptor.describe = () => entry.describe();
     state[key] = descriptor;
   }
 
@@ -242,6 +247,8 @@ function toRegistration(definition) {
     // Passed through untouched: the injected SDK reads `replay` to build the
     // `noReplay` list it sends with the ready handshake.
     if (entry.replay !== undefined) descriptor.replay = entry.replay;
+    // See the state branch: an on-demand doc, never folded into the manifest.
+    if (typeof entry.describe === 'function') descriptor.describe = () => entry.describe();
     commands[name] = descriptor;
   }
 

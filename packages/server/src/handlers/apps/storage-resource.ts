@@ -21,6 +21,7 @@ import {
 import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { appStoragePath, parseAppStoragePath } from './paths.js';
 import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
+import { describeStoragePath } from '../storage-describe.js';
 
 /**
  * List an app-storage directory as resource links.
@@ -29,8 +30,17 @@ import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
  * same block verbatim; the only thing that ever differed was the local variable
  * names.
  */
-async function storageListLinks(appId: string, prefixedPath: string): Promise<VerbResult> {
+async function storageListLinks(
+  appId: string,
+  prefixedPath: string,
+  opts?: { missingIsEmpty?: boolean },
+): Promise<VerbResult> {
   const result = await storageList(prefixedPath);
+  // An app's storage namespace exists from the moment the app does — the directory
+  // is only created on the first write. So `list('yaar://apps/{id}/storage/')` on an
+  // app that has never written anything is an empty collection, not a missing one.
+  // A *named subfolder* that isn't there is genuinely missing, and says so.
+  if (!result.success && result.notFound && opts?.missingIsEmpty) return okLinks([]);
   if (!result.success) return error(result.error!);
   return okLinks(
     (result.entries ?? []).map((e) => {
@@ -50,16 +60,32 @@ async function storageListLinks(appId: string, prefixedPath: string): Promise<Ve
   );
 }
 
-/** Generic describe for any storage sub-path. Null when the URI is not one. */
-export function describeStorage(uri: string): VerbResult | null {
-  if (!parseAppStoragePath(uri)) return null;
-  return okJson({
-    uri,
-    description:
-      'App-scoped file storage. Invoke with action "write" (add "encoding": "base64" for ' +
-      'binary), "copy" (with "from": a yaar:// storage URI — moves bytes server-side), or "grep".',
-    verbs: ['read', 'list', 'invoke', 'delete'],
-  });
+/**
+ * Describe a storage sub-path. Null when the URI is not one.
+ *
+ * The bare `…/storage` root gets the namespace manual — the verbs an app has over its
+ * own files, which is what a caller landing there is actually asking. Everything under
+ * it is a path on disk, and `describeStoragePath` answers for the path.
+ */
+export async function describeStorage(uri: string): Promise<VerbResult | null> {
+  const storagePath = parseAppStoragePath(uri);
+  if (!storagePath) return null;
+
+  if (!storagePath.path) {
+    const listed = await storageList(appStoragePath(storagePath.appId, ''));
+    return okJson({
+      uri,
+      kind: 'directory',
+      description:
+        'App-scoped file storage. Invoke with action "write" (add "encoding": "base64" for ' +
+        'binary), "copy" (with "from": a yaar:// storage URI — moves bytes server-side), or "grep".',
+      // A namespace root that nothing has written to yet lists as empty, not missing.
+      entries: listed.entries?.length ?? 0,
+      verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
+    });
+  }
+
+  return describeStoragePath(uri, appStoragePath(storagePath.appId, storagePath.path));
 }
 
 /** Read a storage file (or list the bare `/storage` root). Null when not a storage URI. */
@@ -70,7 +96,7 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
   const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
   if (!storagePath.path) {
     // Bare storage root → redirect to list
-    return storageListLinks(storagePath.appId, prefixedPath);
+    return storageListLinks(storagePath.appId, prefixedPath, { missingIsEmpty: true });
   }
   const result = await storageRead(prefixedPath);
   if (!result.success) return error(result.error!);
@@ -99,7 +125,9 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
 export async function listStorage(resolved: ResolvedUri): Promise<VerbResult | null> {
   const storagePath = parseAppStoragePath(resolved.sourceUri);
   if (!storagePath) return null;
-  return storageListLinks(storagePath.appId, appStoragePath(storagePath.appId, storagePath.path));
+  return storageListLinks(storagePath.appId, appStoragePath(storagePath.appId, storagePath.path), {
+    missingIsEmpty: !storagePath.path,
+  });
 }
 
 /** Write / grep a storage path. Null when not a storage URI. */

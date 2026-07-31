@@ -37,10 +37,16 @@ For the full list of available commands, `describe('yaar://apps/devtools')` — 
 | Verb | URI | Description |
 |------|-----|-------------|
 | `list` | `yaar://apps` | List all installed apps |
-| `describe` | `yaar://apps/{appId}` | Metadata + protocol manifest (capabilities) |
-| `read` | `yaar://apps/{appId}` | Load a generated reference doc (name/description + protocol manifest + permissions) |
+| `describe` | `yaar://apps/{appId}` | The app's **manual** — name/description/icon, its `protocol.json` verbatim (less `persona:*` commands), its `agent/SKILL.md` when it ships one, permissions, and this door's verbs + `invoke` actions |
+| `read` | `yaar://apps/{appId}` | The app's **effective manifest** — id, name, kind, source, version, author, `isCompiled`/`hasProtocol`/`hasConfig`, permissions, `bundles`, `controls`, `subagents`, `streams`, `messaging`, `variant`, `dockEdge` |
 | `invoke` | `yaar://apps/{appId}`, `{ action, ... }` | Run an app action (see below) |
 | `delete` | `yaar://apps/{appId}` | Uninstall app |
+
+**describe = the manual, read = the current value.** `describe` answers "what is this app and how do I drive it"; `read` answers "what is installed here". Returning `protocol.json` whole from `describe` carries no drift risk because it is a build artifact — the compiler writes it from the source AST and deploy re-derives and diffs it — which is exactly the objection that retired the previous, hand-written protocol restatement.
+
+`read`'s capability fields are **post-grant**: `subagents` and `streams` are the intersection of what `app.json` declares with what the user approved at install (`config/app-grants.json`), not what the file says. An app holding `yaar-dev` can rewrite its own manifest, so reporting the declaration would report a ceiling the app doesn't have.
+
+`yaar://apps/{appId}/state/…` and `/commands/…` are **not addressable** on any verb, and the handler refuses them by name. Protocol state belongs to a running window — `yaar://windows/{windowId}/state/{key}`. `storage/`, `db/`, and `agents/` sub-paths are unaffected.
 
 **`invoke` actions on `yaar://apps/{appId}`** (`handlers/apps/app-resource.ts`):
 
@@ -98,7 +104,7 @@ The AI opens an iframe window to preview the compiled result immediately.
 The AI sends a deploy command to the devtools app.
 
 - Copies compiled HTML to `apps/{appId}/`
-- Writes `app.json`. Reading the app back (`yaar://apps/{appId}`) always returns a reference doc generated from `app.json`'s `description` and `protocol.json` at read time — there's no file for deploy to write for that; an `agent/prompt.md`/`agent/hint.md` you hand-authored is picked up from the app directory as-is
+- Writes `app.json`. Reading the app back (`read('yaar://apps/{appId}')`) returns the effective manifest, and `describe` returns `protocol.json` plus `agent/SKILL.md` — both assembled at call time, so there's no doc file for deploy to write; the `agent/prompt.md`/`agent/hint.md`/`agent/SKILL.md` you hand-authored are picked up from the app directory as-is and carried through clone and deploy
 - Icon appears on desktop immediately
 - Closes any window still running the previous build, and drops the app agent's cached
   profile so its next turn is built from the new `protocol.json`. Both would otherwise
@@ -645,22 +651,25 @@ Option B: Compiled app + AI-mediated API (for rich UI)
 
 ## Agent Prompt Customization
 
-Each app gets its own **app agent** when a user interacts with it. The agent's system prompt is built from files in the app's directory:
+Each app gets its own **app agent** when a user interacts with it. Three files in the app's directory feed three different readers at three different moments:
 
 | File | Role | When to use |
 |------|------|-------------|
 | `agent/prompt.md` | **Replaces** the generic base prompt entirely | Apps needing precise agent behavior (e.g., devtools IDE) |
 | `agent/hint.md` | Injected into the **monitor agent's** system prompt | Routing hints so the orchestrator knows when/how to use the app |
+| `agent/SKILL.md` | Returned by `describe('yaar://apps/{appId}')` | The manual for *whoever asks* — workflows and ordering constraints the protocol can't state |
+
+Only the first two are injected into a prompt; `SKILL.md` is read on demand or not at all.
 
 There is no append tier — **one file, one meaning.** Without `agent/prompt.md`, the agent gets the generic base prompt, and either way the `protocol.json` manifest is appended: state keys as a name + description list, and each command as a call signature built from its `params` schema — `readFile(path: string|string[], startLine?: number, …)`, with `?` on optional params and enums spelled out as their values. That manifest section is appended regardless of which prompt a given turn uses, so neither the generated prompt nor a hand-written `agent/prompt.md` needs to restate a command's params — one that does will drift from the schema the app actually validates against. `describe()` still returns the full schema when per-param descriptions matter.
 
-Both paths are configurable in `app.json`:
+All three paths are configurable in `app.json`:
 
 ```json
-"agent": { "prompt": "agent/prompt.md", "hint": "agent/hint.md" }
+"agent": { "prompt": "agent/prompt.md", "hint": "agent/hint.md", "skill": "agent/SKILL.md" }
 ```
 
-These are the *defaults*, applied when `agent` is absent, so most apps never need to set the field — only an app relocating its prompt files does.
+These are the *defaults*, applied when `agent` is absent, so most apps never need to set the field — only an app relocating its docs does. An absolute or traversing override is ignored in favor of the default: `app.json` is writable by any app holding `yaar-dev`, and these paths become file reads.
 
 **Back-compat:** if `agent/hint.md` is absent, the server falls back to a legacy root `HINT.md` and logs a `[apps]` warning naming the new path. This exists for apps written before the rename (including some market-installed apps) — write new apps at the `agent/` paths.
 
@@ -687,6 +696,14 @@ The agent's entire system prompt is replaced with the contents of `agent/prompt.
 
 Since `agent/prompt.md` replaces the base prompt, you must document the available tools (`describe`, `query`, `command`, `relay`) yourself if the agent needs to know about them. (`protocol.json`, and a "Controllable Apps" section when `controls` is set, are still appended automatically.)
 
+### agent/SKILL.md (the manual anyone can ask for)
+
+`describe('yaar://apps/{appId}')` returns `protocol.json` verbatim *and* `SKILL.md`, in one payload. Write in `SKILL.md` only what a generated protocol cannot say: the order commands must run in, the workflow that ties three of them together, when *not* to reach for this app.
+
+Never restate a command or state name as a heading or a bullet subject — `describe` returns both documents side by side, so a restatement is a sentence sitting next to the schema it will disagree with after the next deploy. That is why the previous SKILL.md was deleted; returning the two together is what makes the duplication cheap to prohibit, and `bun run check:apps` warns on it (`skill-restates-protocol`, advisory — a name inside a workflow sentence like "run `compile` before `deploy`" is exactly what the file is for, so the check names what it matched and lets you judge).
+
+Not to be confused with the `SKILLS/` directory in [`docs/architecture/shell_to_userland.md`](../architecture/shell_to_userland.md): that is a namespaced set of topics reached by `read('yaar://skills/{appId}/{topic}')`. One file returned by `describe` versus many read on demand — they compose, but the names are one letter apart.
+
 ### AGENTS.md (the coding agent's doc)
 
 `AGENTS.md` at the app's root is a different file with a different reader: it's the conventional name a coding agent looks for when *editing* a directory, and devtools is that agent. YAAR reads it for nothing. Put in it what the source cannot say for itself — architecture, invariants, why a thing is hand-rolled, what breaks if you change it. An app of any size wants one; small apps don't need it.
@@ -702,7 +719,8 @@ apps/my-app/
 ├── AGENTS.md        # (Optional) instructions for a coding agent editing this app — never read at runtime
 ├── agent/
 │   ├── prompt.md    # Full custom agent prompt (optional, advanced)
-│   └── hint.md      # Monitor agent routing hint (optional)
+│   ├── hint.md      # Monitor agent routing hint (optional)
+│   └── SKILL.md     # Manual returned by describe('yaar://apps/my-app') (optional)
 ├── app.json         # Metadata, permissions, protocol manifest
 ├── index.html       # Compiled app (if compiled)
 └── src/             # Source code (if compiled)
@@ -727,7 +745,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `permissions` | `(string \| { uri, verbs? })[]` | Pre-granted URI permissions, e.g. `"yaar://storage/"` or `{ "uri": "yaar://http", "verbs": ["read"] }` |
 | `bundles` | `string[]` | Opt in to gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`). The compiler rejects the import without it |
 | `agentType` | `string` | Override the agent profile used for this app's agent |
-| `agent` | `{ prompt?, hint? }` | Override the default paths (`agent/prompt.md`, `agent/hint.md`) for this app's prompt files |
+| `agent` | `{ prompt?, hint?, skill? }` | Override the default paths (`agent/prompt.md`, `agent/hint.md`, `agent/SKILL.md`) for this app's agent docs |
 | `messaging` | `"all"` | Lets the app agent `direct_message` other apps/windows, not just monitor/user |
 | `controls` | `(string \| { appId, commands? })[]` | Other apps this app may drive. **Bundled apps only** |
 | `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Approved at install** |
@@ -843,6 +861,12 @@ export default defineApp({
   the declared types, which the raw bridge never checked — and folds into
   `dist/protocol.json` at build time via `z.toJSONSchema()`. `run` receives the parsed value,
   so defaults and coercions have already been applied.
+- **`describe`.** Any `state` or `commands` entry may carry an optional `describe()` returning a
+  string, answered only when something asks for it —
+  `describe('yaar://windows/{id}/state/{key}')`. Use it for what the static `description`
+  cannot say because it changes: `describe: () => \`${rows().length} rows; a row is { id, title,
+  done }\``. It never rides in the manifest, so the cheap call stays cheap; omit it and the
+  static `description` is the answer.
 - **`replay`.** The server re-sends recorded commands when a window's iframe remounts.
   Declare `replay: 'never'` on any command whose effect must not be applied twice (appends,
   sends, deletes); omit it for idempotent ones.
@@ -1046,11 +1070,16 @@ defineApp({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
 
 | Tool | Description |
 |------|-------------|
+| `describe('yaar://windows/{id}')` | That window's manual — its live manifest (`source: 'live'`), or the app's on-disk `protocol.json` when the iframe hasn't registered (`source: 'manifest'`) |
+| `list('yaar://windows/{id}')` | That window's state keys and commands, as sub-path URIs |
+| `read('yaar://windows/{id}/state/{key}')` | One state value |
+| `invoke('yaar://windows/{id}/commands/{key}', { ...params })` | Run one command — the payload *is* its params (`timeoutMs` reserved; an `action` or nested `params` is refused) |
+| `describe('yaar://windows/{id}/{state,commands}/{key}')` | One key's documentation — the app's computed `describe()` if it has one, else the manifest's description |
 | `invoke('yaar://windows/{id}', { action: 'app_query', stateKey })` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
 | `invoke('yaar://windows/{id}', { action: 'app_command', command, params })` | Execute a command on the app |
 | `invoke('yaar://windows/{id}', { action: 'message', message })` | Send a message to the app agent (monitor → app agent delegation). Fire-and-forget — same code path as user interaction. |
 
-The agent first calls `app_query` with a bare window URI to discover capabilities (manifest), then uses `app_query` and `app_command` with resource URIs to interact.
+The sub-path spellings and the `action` spellings run the same executor; the first names the key in the URI, the second in the payload. An agent meeting an app for the first time either `describe`s the window or calls `app_query` with a bare window URI (both return the manifest), then reads state and runs commands.
 
 The `message` action lets **monitor agents delegate tasks to app agents** via the window URI. It queues a task through `AppTaskProcessor` exactly like a user `WINDOW_MESSAGE`, creating the app agent on demand if needed. Combine with `subscribe` to get notified when the app agent completes.
 
@@ -1266,8 +1295,13 @@ For custom modals beyond these, compose the same classes yourself: `y-overlay` >
 invoke('yaar://apps/my-app/storage/data.json', { action: 'write', content: '...' })
 read('yaar://apps/my-app/storage/data.json')
 list('yaar://apps/my-app/storage/')
+describe('yaar://apps/my-app/storage/data.json')
 delete('yaar://apps/my-app/storage/data.json')
 ```
+
+`describe` on a storage path describes **that path**: an error when it isn't there, `{ kind: 'directory', entries, totalSize, verbs }` for a folder, `{ kind: 'file', size, modifiedAt, mimeType, verbs }` for a file (a PDF adds its page count and the `pdfText` / `pdfPages` read options). The bare `…/storage` root is the exception — it answers with the app-storage manual plus a root entry count, which is what a caller landing there is actually asking. The same shape answers for `yaar://storage/…`; they are two spellings of one directory tree.
+
+A `list` of a directory that does not exist is an **error**, not an empty success — the two used to be indistinguishable. A namespace root is the exception both ways: an app's `storage/` exists from the moment the app does (the directory is only created by the first write), so listing it before anything is written is empty rather than missing.
 
 ## App-Scoped Database (`appDb`)
 

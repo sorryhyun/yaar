@@ -189,6 +189,8 @@ export const APP_MSG = {
   commandResponse: 'yaar:app-command-response',
   evalRequest: 'yaar:app-eval-request',
   evalResponse: 'yaar:app-eval-response',
+  describeRequest: 'yaar:app-describe-request',
+  describeResponse: 'yaar:app-describe-response',
   /** Parent → iframe, fire-and-forget, just before the window is destroyed. */
   close: 'yaar:app-close',
 
@@ -291,6 +293,30 @@ export interface AppEvalResponse {
   error?: string;
 }
 
+/**
+ * Ask the app to document one state key or command — `describe` on a window sub-path.
+ *
+ * The manifest already carries a one-line `description` per key; this is for the app to
+ * say something the manifest cannot, computed from what it currently holds ("this
+ * collection has 412 rows; the shape of one is …"). Requested on demand only — never
+ * folded into the manifest or into `describe` on the window, or every describe would
+ * pay for every key.
+ */
+export interface AppDescribeRequest {
+  type: typeof APP_MSG.describeRequest;
+  requestId: string;
+  target: 'state' | 'commands';
+  key: string;
+}
+
+export interface AppDescribeResponse {
+  type: typeof APP_MSG.describeResponse;
+  requestId: string;
+  /** The app's computed doc, or null when it defines no `describe()` for this key. */
+  doc: string | null;
+  error?: string;
+}
+
 /** Fire-and-forget notification sent to iframe before window is destroyed. */
 export interface AppCloseNotification {
   type: typeof APP_MSG.close;
@@ -316,6 +342,8 @@ export type AppProtocolPostMessage =
   | AppCommandResponse
   | AppEvalRequest
   | AppEvalResponse
+  | AppDescribeRequest
+  | AppDescribeResponse
   | AppCloseNotification
   | AppEventMessage;
 
@@ -326,11 +354,13 @@ export type AppProtocolRequest =
   | { kind: 'manifest' }
   | { kind: 'query'; stateKey: string }
   | { kind: 'command'; command: string; params?: unknown; replayed?: boolean }
-  | { kind: 'eval'; expression: string };
+  | { kind: 'eval'; expression: string }
+  | { kind: 'describe'; target: 'state' | 'commands'; key: string };
 
 /** Client → Server: iframe's answer */
 export type AppProtocolResponse =
   | { kind: 'manifest'; manifest: AppManifest | null; error?: string }
   | { kind: 'query'; data: unknown; error?: string }
   | { kind: 'command'; result: unknown; error?: string }
-  | { kind: 'eval'; value?: string; error?: string };
+  | { kind: 'eval'; value?: string; error?: string }
+  | { kind: 'describe'; doc: string | null; error?: string };

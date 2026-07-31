@@ -425,6 +425,80 @@ function isInsideDefineCommand(code: string, index: number): boolean {
 const RULES: Rule[] = [storageRule, sleepRule, dialogRule, markedRule, handlerTypeRule];
 
 // ---------------------------------------------------------------------------
+// Doc rule: agent/SKILL.md must not restate protocol.json
+// ---------------------------------------------------------------------------
+
+/**
+ * `agent/SKILL.md` is the hand-written manual `describe('yaar://apps/{id}')` returns —
+ * alongside `protocol.json`, in the same payload.
+ *
+ * The *previous* SKILL.md was deleted because everything it carried was either
+ * `app.json`'s description or a restatement of the protocol, and a restatement is one
+ * deploy away from being wrong. Returning both in one payload is what makes that
+ * duplication visible and cheap to prohibit: a command name appearing in both is a
+ * sentence that will disagree with the schema beside it. SKILL.md is for what a
+ * generated protocol cannot say — workflows, ordering constraints, when *not* to use
+ * the app.
+ *
+ * Advisory: a name may legitimately appear inside a workflow sentence ("run `compile`
+ * before `deploy`"), which is exactly the kind of thing this file is for. The warning
+ * names what was matched so the author can judge.
+ */
+const SKILL_DOC_RULE_ID = 'skill-restates-protocol';
+
+function skillDocPath(appDir: string): string {
+  try {
+    const meta = JSON.parse(readFileSync(join(appDir, 'app.json'), 'utf8'));
+    const declared = meta?.agent?.skill;
+    if (typeof declared === 'string' && declared && !declared.startsWith('/')) return declared;
+  } catch {
+    /* no app.json, or unreadable — the default is the answer */
+  }
+  return 'agent/SKILL.md';
+}
+
+function scanSkillDoc(appDir: string, appId: string): Violation[] {
+  let skill: string;
+  try {
+    skill = readFileSync(join(appDir, skillDocPath(appDir)), 'utf8');
+  } catch {
+    return []; // No SKILL.md — the common case.
+  }
+
+  let protocol: { state?: Record<string, unknown>; commands?: Record<string, unknown> };
+  try {
+    protocol = JSON.parse(readFileSync(join(appDir, 'dist', 'protocol.json'), 'utf8'));
+  } catch {
+    return []; // Nothing compiled to compare against.
+  }
+
+  const names = [...Object.keys(protocol.state ?? {}), ...Object.keys(protocol.commands ?? {})];
+  const lines = skill.split('\n');
+  const violations: Violation[] = [];
+  const file = relative(REPO_ROOT, join(appDir, skillDocPath(appDir)));
+
+  // A heading or a bullet whose subject *is* the name is the restatement shape —
+  // "### searchMemos" or "- `searchMemos` — full-text search". A name mentioned mid
+  // sentence is prose, and prose is the point of the file.
+  for (const [i, line] of lines.entries()) {
+    for (const name of names) {
+      const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (new RegExp(`^\\s*(#{1,6}\\s*|[-*]\\s+)\`?${escaped}\`?\\s*(\\(|—|-|:|$)`).test(line)) {
+        violations.push({
+          file,
+          line: i + 1,
+          message:
+            `"${name}" is already in ${appId}'s protocol.json — describe returns both, so this ` +
+            'entry is a copy that will go stale. Keep SKILL.md for what the protocol cannot say.',
+        });
+        break;
+      }
+    }
+  }
+  return violations;
+}
+
+// ---------------------------------------------------------------------------
 // Driver
 // ---------------------------------------------------------------------------
 
@@ -505,8 +579,36 @@ function main(): void {
     }
   }
 
+  // Doc rule runs per app directory, not per source file — it compares two artifacts
+  // (agent/SKILL.md and dist/protocol.json), neither of which is scannable source.
+  const skillViolations: Violation[] = [];
+  for (const app of readdirSync(APPS_DIR)) {
+    const appDir = join(APPS_DIR, app);
+    try {
+      if (!statSync(appDir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    if (targets.length > 0 && !targets.some((t) => resolve(REPO_ROOT, t).startsWith(appDir)))
+      continue;
+    skillViolations.push(...scanSkillDoc(appDir, app));
+  }
+
   let errorTotal = 0;
-  let advisoryTotal = 0;
+  let advisoryTotal = skillViolations.length;
+
+  if (skillViolations.length === 0) {
+    if (!quiet)
+      console.log(
+        `✅ [ADVISORY] ${SKILL_DOC_RULE_ID}: clean — agent/SKILL.md does not restate protocol.json`,
+      );
+  } else {
+    console.warn(
+      `⚠️  [ADVISORY] ${SKILL_DOC_RULE_ID}: ${skillViolations.length} violation(s) — ` +
+        'agent/SKILL.md restates names protocol.json already carries',
+    );
+    for (const v of skillViolations) console.warn(`     ${v.file}:${v.line}  ${v.message}`);
+  }
 
   for (const rule of RULES) {
     const found = byRule.get(rule.id)!;
@@ -530,6 +632,7 @@ function main(): void {
       `  ${rule.severity.padEnd(8)} ${rule.id.padEnd(24)} ${byRule.get(rule.id)!.length}`,
     );
   }
+  console.log(`  ${'ADVISORY'.padEnd(8)} ${SKILL_DOC_RULE_ID.padEnd(24)} ${skillViolations.length}`);
 
   if (errorTotal > 0) {
     console.error(

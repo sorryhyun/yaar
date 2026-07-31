@@ -47,6 +47,11 @@ export function registerSkillsHandlers(registry: ResourceRegistry): void {
     description: `Read a skill topic — reference docs you MUST read before using related tools. Topics: ${TOPIC_NAMES.join(', ')}. Use read, not list; a topic is a document, not a collection.`,
     verbs: ['describe', 'read'],
 
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      const topic = extractIdFromUri(resolved.sourceUri, 'skills');
+      return !!topic && (TOPIC_NAMES as readonly string[]).includes(topic);
+    },
+
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       const topic = extractIdFromUri(resolved.sourceUri, 'skills');
       if (!topic) return error('Provide a topic name (e.g. yaar://skills/components).');

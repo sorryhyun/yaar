@@ -372,8 +372,17 @@ export async function storageList(dirPath: string = ''): Promise<StorageListResu
       }
       dirEntries = await readdir(resolved.absolutePath);
     } catch {
-      // Directory doesn't exist, return empty list
-      return { success: true, entries: [] };
+      // A directory that does not exist is not an empty one. Reporting it as
+      // `{ success: true, entries: [] }` made `list('yaar://storage/nope/')`
+      // indistinguishable from a folder with nothing in it — the same false success as
+      // a status fabricated for an MCP server nobody configured.
+      //
+      // The storage root is the exception: `ensureStorageDir()` above just created it,
+      // and a namespace root is a collection that exists whether or not anything has
+      // been written into it yet. Callers that own such a root under a subpath (an app's
+      // `storage/apps/{id}/`) opt into the same reading by checking `notFound`.
+      if (!cleaned) return { success: true, entries: [] };
+      return { success: false, notFound: true, error: `Directory not found: ${cleaned}` };
     }
 
     for (const entry of dirEntries) {

@@ -45,9 +45,25 @@ Reached via the generic `invoke` tool on a window resource (`handlers/window.ts`
 | `invoke('yaar://windows/{windowId}', { action: 'app_command', command, params?, timeoutMs? })` | Execute a command. Optional `timeoutMs` overrides how long the server waits for the app to respond (default 30s, clamped to a max of 180s) — raise it for slow commands like a compile or a deploy. |
 | `invoke('yaar://windows/{windowId}', { action: 'app_eval', expression, timeoutMs? })` | Evaluate a JS expression inside the iframe and return its JSON-serialized result (capped at 16KB). A promise is awaited, so `timeoutMs` overrides the wait (default 5s — the app-query deadline — clamped to a max of 180s); raise it for an expression that sleeps or waits on a render. Refused everywhere except devtools preview windows (`devtools-preview-{projectId}`) — a disposable sandbox devtools just built from source, where eval grants nothing beyond what editing-and-recompiling already would. |
 
+### Sub-path URIs (monitor/session agents)
+
+The same protocol has a direct spelling in which the **URI** names the state key or the command, rather than a field of the payload. `enrichManifestWithUris` has been stamping these URIs onto every entry of every live manifest since before any handler implemented them — a read of one used to return the whole window — and they are now dispatched:
+
+| Call | Description |
+|------|-------------|
+| `describe('yaar://windows/{windowId}')` | *This instance's* manual. The live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). The two diverge after a deploy without a reload, so a manual that doesn't say which it read makes that divergence invisible. A non-app window has no protocol at all and answers with its applicable action set instead. |
+| `list('yaar://windows/{windowId}')` | This window's state keys and commands, as `yaar://windows/{w}/state/{key}` / `.../commands/{key}` resource links. (It used to ignore the window id and return every window on the monitor — that is what `list('yaar://windows')` is for.) |
+| `read('yaar://windows/{windowId}/state/{key}')` | One state value — the same executor as `app_query` with that `stateKey`. Reading a `commands/{key}` URI is an error: commands are invoked. |
+| `invoke('yaar://windows/{windowId}/commands/{key}', { ...params })` | Run one command. The payload **is** the params — an `action` or a nested `params` in it is refused rather than guessed at, since two spellings of one call with unclear precedence is how such lists drift. `timeoutMs` is the one reserved key, because it is transport rather than a param. Invoking a `state/{key}` URI is an error. |
+| `describe('yaar://windows/{windowId}/{state,commands}/{key}')` | That one key's documentation — see [Describe](#describe) below. |
+
+Both spellings reach the same `handleAppQuery` / `handleAppCommand`, so readiness wait, replay recording, and truncation are identical.
+
+Note the contrast with `yaar://apps/{appId}`, the **installed** app: `state/` and `commands/` are not addressable there on any verb and the handler refuses them by name. Protocol state has no value and a command has nothing to act on until a window is open, and the same app open on two monitors is two states — an `apps/` spelling would name one arbitrarily or name none. `storage/`, `db/`, and `agents/` stay unchanged under `apps/`.
+
 ### Scoped tools (app agents)
 
-Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. These tools:
+Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. `describe` is the app's manual and is built by the same `describeApp` behind `describe('yaar://apps/{appId}')` — one question, one shape, whichever door asks it. These tools:
 - Default to the agent's own window; pass `appId` to target another app, permitted only when the *calling* app's own `app.json` `controls` list names that target (see root `CLAUDE.md` "Cross-app control").
 - Intercept `stateKey`/`command` values prefixed `storage/` / `storage:` to read/write app-scoped storage directly, bypassing the app protocol entirely (own app only — storage is not cross-app controllable).
 - `command` accepts an optional `timeoutMs` to override the default wait (30s, max 180s) for slow commands like a compile or a deploy.
@@ -109,7 +125,7 @@ interface AppEventDescriptor {
 }
 ```
 
-The manifest is built automatically from the registration config by stripping handler functions and exposing only descriptions and schemas.
+The manifest is built automatically from the registration config by stripping handler functions and exposing only descriptions and schemas. A per-key `describe()` is stripped along with the handlers — it is answered on demand (see [Describe](#describe)) and never rides in the manifest.
 
 ---
 
@@ -181,6 +197,30 @@ Arbitrary expression evaluation, dispatched only to devtools preview windows —
 
 `expression` is run via indirect `eval` (global scope, so it sees the app's globals). `value` is the JSON-serialized result (or `String(...)` for values `JSON.stringify` can't handle), truncated with an explicit marker if oversized.
 
+### Describe
+
+Documents one state key or one command, on demand — `describe('yaar://windows/{windowId}/{state,commands}/{key}')`. An app may attach an optional `describe()` to any `state` or `commands` entry in `defineApp()` and compute the answer from what it currently holds ("412 rows; a row is `{ id, title, done }`"). It is never folded into the manifest: a doc computed from live data on every manifest read would make the cheapest call the most expensive.
+
+**Request** (parent → iframe):
+```json
+{ "type": "yaar:app-describe-request", "requestId": "req-...", "target": "state", "key": "items" }
+```
+
+**Response** (iframe → parent):
+```json
+{ "type": "yaar:app-describe-response", "requestId": "req-...", "doc": "412 rows; a row is { id, title, done }", "error": null }
+```
+
+`command` aliases resolve to the canonical name first, as they do for a command call. Three outcomes, and the middle one is why this is not simply "error unless the app defined a `describe()`":
+
+| Case | Result |
+|------|--------|
+| The key is not in the registration | `error` — the one genuine "no such resource" |
+| The key exists, no `describe()` on it | `doc: null`, and the server answers with the manifest's static `description` (plus the command's `params` schema), tagged `source: 'manifest'` |
+| The key exists with a `describe()` | The app's computed doc |
+
+`protocol.json` already carries a one-line `description` per key, so erroring on a key that *is* documented would report it as missing — the same false signal the registry's `exists` hook exists to remove.
+
 ### Close
 
 Fire-and-forget, sent right before the window is destroyed (no response expected). The SDK invokes the app's `onClose()` handler (from `defineApp()`), if any.
@@ -213,8 +253,9 @@ Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, pa
   request:
     | { kind: 'manifest' }
     | { kind: 'query'; stateKey: string }
-    | { kind: 'command'; command: string; params?: unknown }
-    | { kind: 'eval'; expression: string };
+    | { kind: 'command'; command: string; params?: unknown; replayed?: boolean }
+    | { kind: 'eval'; expression: string }
+    | { kind: 'describe'; target: 'state' | 'commands'; key: string };
   timeoutMs?: number;  // how long the server is prepared to wait; the frontend runs its own
                         // round-trip timer against this instead of a fixed 5s
 }
@@ -231,7 +272,8 @@ Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, pa
     | { kind: 'manifest'; manifest: AppManifest | null; error?: string }
     | { kind: 'query'; data: unknown; error?: string }
     | { kind: 'command'; result: unknown; error?: string }
-    | { kind: 'eval'; value?: string; error?: string };
+    | { kind: 'eval'; value?: string; error?: string }
+    | { kind: 'describe'; doc: string | null; error?: string };
 }
 ```
 
@@ -293,6 +335,7 @@ Schema literal.
     items: {
       description: 'Current list of items',
       schema: { type: 'array', items: { type: 'object' } },  // optional
+      describe: () => `${items.length} items; an item is { text }`,  // optional, on demand only
       handler: async () => {
         return items;   // return current state
       },
@@ -473,4 +516,13 @@ Agent interaction:
 invoke('yaar://windows/sheet', { action: 'app_query' })                                    → discover capabilities (manifest)
 invoke('yaar://windows/sheet', { action: 'app_query', stateKey: 'cells' })                  → read current state
 invoke('yaar://windows/sheet', { action: 'app_command', command: 'setCells', params: { cells: { "A1": "100" } } })
+```
+
+The same three, spelled as URIs:
+
+```
+describe('yaar://windows/sheet')                                → this instance's manual
+list('yaar://windows/sheet')                                    → its state keys and commands
+read('yaar://windows/sheet/state/cells')                        → read current state
+invoke('yaar://windows/sheet/commands/setCells', { cells: { "A1": "100" } })
 ```

@@ -21,6 +21,8 @@ import {
 } from '../features/config/shortcuts.js';
 import { handleSetMount, handleGetMounts, handleRemoveMount } from '../features/config/mounts.js';
 import { handleSetApp, handleGetApp, handleRemoveApp } from '../features/config/app.js';
+import { hasConfig as hasAppConfig } from '../features/apps/config.js';
+import { resolveAppDir } from '../features/apps/roots.js';
 import {
   readAllowedDomains,
   isAllDomainsAllowed,
@@ -194,6 +196,12 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     description: 'A specific MCP server config entry. Read to view, delete to remove.',
     verbs: ['describe', 'read', 'delete'],
 
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      assertUri(resolved, 'config');
+      if (!resolved.id) return false;
+      return resolved.id in (await readMcpConfig());
+    },
+
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
       if (!resolved.id) return error('Server name required.');
@@ -288,6 +296,13 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     description: 'A specific hook. Read to view, delete to remove.',
     verbs: ['describe', 'read', 'delete'],
 
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      assertUri(resolved, 'config');
+      if (!resolved.id) return false;
+      const { hooks } = await handleGetHooks();
+      return (hooks as Array<{ id: string }>).some((h) => h.id === resolved.id);
+    },
+
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
       // Return all hooks — the caller can filter by id
@@ -336,6 +351,13 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
     description: 'A specific shortcut. Delete to remove.',
     verbs: ['describe', 'delete'],
 
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      assertUri(resolved, 'config');
+      if (!resolved.id) return false;
+      const { shortcuts } = await handleGetShortcuts();
+      return shortcuts.some((s) => s.id === resolved.id);
+    },
+
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
       if (!resolved.id) return error('Shortcut ID required.');
@@ -371,6 +393,13 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://config/mounts/*', {
     description: 'A specific mount. Delete to unmount.',
     verbs: ['describe', 'delete'],
+
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      assertUri(resolved, 'config');
+      if (!resolved.id) return false;
+      const { mounts } = await handleGetMounts();
+      return mounts.some((m) => m.alias === resolved.id);
+    },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       assertUri(resolved, 'config');
@@ -411,6 +440,14 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       properties: {
         config: { type: 'object', description: 'Key-value config to merge' },
       },
+    },
+
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      assertUri(resolved, 'config');
+      if (!resolved.id) return false;
+      // An installed app with no config file yet is still a real address — invoke
+      // creates the file. What does not exist is a config slot for an app nobody has.
+      return (await hasAppConfig(resolved.id)) || resolveAppDir(resolved.id) !== null;
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {

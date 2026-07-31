@@ -151,6 +151,8 @@ src/
 │   ├── utils.ts          # Shared handler utilities
 │   ├── agents.ts / apps.ts (barrel over apps/) / storage.ts / config.ts
 │   ├── apps/             # register.ts, app-resource.ts, storage-resource.ts, db-resource.ts, paths.ts — still one yaar://apps/* registration (ResourceRegistry has no middle wildcard)
+│   ├── define-actions.ts # defineActions() — one table per action-bearing handler; the enum, the docs, and the dispatch all come off it
+│   ├── storage-describe.ts # describeStoragePath() — describe for a path on disk, shared by both storage doors
 │   ├── session.ts / skills.ts / system.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS
@@ -158,7 +160,7 @@ src/
 │   ├── sub-agent/        # A sub-agent's one channel — per-caller tool list
 │   └── index.ts          # Re-exports for server, system tools, verb tools
 ├── features/             # Domain business logic (imported by handlers/)
-│   ├── apps/             # App listing, agent prompt/reference loading, marketplace, badge
+│   ├── apps/             # App listing, agent docs (prompt/hint/SKILL) loading, describe.ts (the app's manual), marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)
@@ -272,9 +274,25 @@ The active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`) are `system`, `ver
 
 Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and optionally wait for rendering feedback. Window tools support lock protection — only the locking agent can modify a locked window.
 
+**Verb semantics: `describe` is the manual, `read` is the current value, `list` is what's addressable.** A handler that blurs the three makes a prompt offer rather than instruct — the monitor prompt used to say "use `read(...)` **or** `describe(...)`" precisely because, for apps, both doors returned the same generated reference doc. They now answer different questions:
+
+| | `yaar://apps/{id}` — the *installed* app | `yaar://windows/{id}` — the *running* instance |
+|---|---|---|
+| `describe` | identity + `dist/protocol.json` verbatim + `agent/SKILL.md` + permissions + this door's `verbs`/`invokeActions`/`subPaths` | this instance's manual, tagged `source: 'live'` (the iframe's registration) or `'manifest'` (disk) |
+| `read` | the effective, **post-grant** manifest from `getAppMeta` | window content + metadata |
+| `list` | ✗ not a collection | this window's state keys and commands |
+| sub-paths | `storage/`, `db/`, `agents/` | `state/{key}`, `commands/{key}` |
+
+Four rules hold this together, each closing a false success:
+
+- **`exists?(resolved)` on `ResourceHandler`** is consulted before the auto-generated `describe`, which otherwise answers from the URI *pattern* — byte-identical for a live window, a markdown window, and a window that has never existed. False → `No resource at <uri>.` `register()` **throws** when a `/*` wildcard declares neither `exists` nor `describe`: a wildcard is the one shape where the id can be wrong, and an optional field nobody remembers is how this got in. `apps/*`, `storage/*`, `mcp/*` and `user/notifications/*` own their own `describe` instead; the last is the one namespace that genuinely cannot answer (the client owns the toast), and says so.
+- **The same list is declared once.** `defineActions` (`handlers/define-actions.ts`) now carries a per-action `description`, so the schema `enum`, `describe`'s `invokeActions`, and the dispatch all come off one table. The app actions were previously written three times — `describe` advertised `set_badge` alone, the switch implemented seven, and the enum named five including a `write` it never handled.
+- **`yaar://apps/{id}/state/…` and `/commands/…` are refused on every verb** (`handlers/apps/register.ts`). Protocol state belongs to a running window; the same app open on two monitors is two states. Deliberately narrow — the blanket version would delete `appStorage` and `appDb`, which are built entirely on reads and lists under `yaar://apps/self/{storage,db}/`.
+- **A missing directory is an error, not an empty list.** `storageList` used to return `{ success: true, entries: [] }` for a path that isn't there, so `list('yaar://storage/nope/')` read as an empty folder; it now sets `notFound`. Namespace roots opt back in explicitly (an app's `storage/` exists from the moment the app does — the directory is created by the first write).
+
 **Access tiers (role-based URI access control):** every agent carries a principal `role` (`session` / `monitor` / `app`) on its `AgentContext`. A handler may declare `access: 'session-principal'`, and `ResourceRegistry.execute()` then rejects any caller whose role isn't `session` (default-deny — `undefined` role is non-session). `yaar://session` and all `yaar://session/*` resources are marked session-principal, so only the session agent can read/invoke them; monitor/app agents and apps (`POST /api/verb` also hard-refuses `yaar://session/*`) get a `403`. The role is resolved from the pool (`AgentPool.getRoleForAgent` via `SessionHub.findRoleForAgent`) in the MCP path and from the per-turn role string (`principalRole()`) in-process. The gate's role resolver is injected via `setAccessRoleResolver()` (wired in `lifecycle.ts`) to avoid a runtime import cycle.
 
-**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas.
+**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas. A fourth request kind, `describe`, documents **one** state key or command (`handleAppDescribe` in `features/window/app-protocol.ts`): the app's own `describe()` when the entry defines one, the manifest's static `description` when it doesn't, an error only when the key is absent. Erroring on a documented key would report it as missing — the same false signal `exists` exists to remove. It is requested on demand and never folded into the manifest, or every manifest read would pay for every key.
 
 **Monitor ↔ App Agent Communication:**
 - **Monitor → App**: `invoke('yaar://windows/{id}', { action: 'message', message: '...' })` — wraps message in `<monitor:{monitorId}>` tags and routes as an app task via `AppTaskProcessor`. Fire-and-forget; use `hook: 'response'` to get the app agent's reply back.

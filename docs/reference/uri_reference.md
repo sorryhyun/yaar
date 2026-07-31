@@ -23,6 +23,33 @@ The `YaarAuthority` type covers ten namespaces:
 | `mcp` | `yaar://mcp/...` | External MCP server gateway (add/remove/refresh servers, call their tools) |
 | `system` | `yaar://system/update` | The running installation — version check and self-update |
 
+### Apps — `yaar://apps/{appId}`
+
+The **installed** app. (The *running* instance is `yaar://windows/{windowId}` — see below.)
+
+| Verb | URI | Effect |
+|------|-----|--------|
+| `list` | `yaar://apps` | Every installed app, as resource links |
+| `describe` | `yaar://apps/{appId}` | The app's manual: name/description/icon, `dist/protocol.json` **verbatim**, `agent/SKILL.md` when it ships one, permissions, plus this door's `verbs`, `invokeActions`, and `subPaths`. `persona:*` commands are filtered out — they are a sub-agent's half of the protocol, written for a character rather than an operator |
+| `read` | `yaar://apps/{appId}` | The app's effective manifest: id, name, kind, source, version, author, `isCompiled`, `hasProtocol`, `hasConfig`, permissions, `bundles`, `controls`, `subagents`, `streams`, `messaging`, `variant`, `dockEdge` |
+| `invoke` | `yaar://apps/{appId}` | `set_badge`, `install`, `publish`, `publish_prepare`, `publish_confirm`, `publish_cancel`, `clone` — the enum and `describe`'s `invokeActions` are both derived from the table that dispatches them |
+| `delete` | `yaar://apps/{appId}` | Uninstall |
+| `list` | `yaar://apps/{appId}` | Not a collection — an app's addressable children are its `storage/`, `db/`, and `agents/` sub-paths |
+
+Returning `protocol.json` whole is safe because it is a build artifact: the compiler writes it from the source AST, `fold-schemas.ts` inlines the Zod param schemas, and deploy re-derives and diffs it. It cannot drift from the code the way a hand-written restatement can.
+
+`read`'s `subagents` and `streams` are **post-grant** — the intersection of the manifest with what the user approved at install (`config/app-grants.json`), not what `app.json` declares. An app holding `yaar-dev` can rewrite its own manifest, so the declaration is a request and the grant is the ceiling.
+
+> `yaar://apps/{appId}/state/…` and `/commands/…` are **refused on every verb**, by name. Protocol
+> state has no value and a command has nothing to act on until a window is open, and the same app
+> open on two monitors is two states — an `apps/` spelling would name one arbitrarily or name none.
+> Use `yaar://windows/{windowId}/{state,commands}/{key}`. The refusal is deliberately narrow:
+> `storage/`, `db/`, and `agents/` keep all five verbs, since `appStorage` and `appDb` are built
+> entirely on reads and lists under `yaar://apps/self/{storage,db}/`.
+
+Handlers: `packages/server/src/handlers/apps/` (`register.ts` is the one composite registration —
+`ResourceRegistry` has no middle wildcard).
+
 ### App sub-agents — `yaar://apps/self/agents`
 
 An app's own sub-agents ("personas") — AI instances whose system prompt the app supplies at
@@ -94,24 +121,43 @@ spent; `no-slot` means `MAX_AGENTS` is.
 
 ### Windows — `yaar://windows/{windowId}`
 
-The canonical way agents address windows. The monitor is injected automatically from the agent's context.
+The canonical way agents address windows. The monitor is injected automatically from the agent's context. A window is the **running** instance; `yaar://apps/{appId}` is the installed app it came from.
 
 | URI | Description |
 |-----|-------------|
 | `yaar://windows/` | Window collection (list, create) |
-| `yaar://windows/{windowId}` | Window (read, update, subscribe, message, delete) |
+| `yaar://windows/{windowId}` | Window (describe, read, list, update, subscribe, message, delete) |
+| `yaar://windows/{windowId}/state/{key}` | One state key of an app window (describe, read) |
+| `yaar://windows/{windowId}/commands/{key}` | One command of an app window (describe, invoke) |
 
-> `yaar://windows/{windowId}/state/{key}` and `yaar://windows/{windowId}/commands/{key}` are
-> **not** independently-dispatched resources. `buildWindowResourceUri`
-> (`packages/server/src/lib/yaar-uri-server.ts`) attaches these shapes as a cosmetic `uri` label
-> on each state/command entry in the app-protocol manifest returned by `app_query` — so an agent
-> reading the manifest knows how to *refer to* a given piece of state or a command.
-> `packages/server/src/handlers/uri-resolve.ts` does parse the sub-path into
-> `ResolvedWindow.subPath`, but the registered `yaar://windows/*` handler
-> (`packages/server/src/handlers/window.ts`) never reads it, so `read`/`invoke` on the sub-path
-> resolves and executes identically to the base window URI. The real way to read state or run a
-> command is `invoke('yaar://windows/{id}', { action: 'app_query', ... })` /
-> `invoke('yaar://windows/{id}', { action: 'app_command', ... })`.
+| Verb | URI | Effect |
+|------|-----|--------|
+| `describe` | `yaar://windows/{windowId}` | This instance's manual — the live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). A non-app window answers with the action set filtered to its renderer instead |
+| `read` | `yaar://windows/{windowId}` | Window content + metadata (with capture) |
+| `list` | `yaar://windows/{windowId}` | *That window's* state keys and commands, as sub-path resource links |
+| `read` | `yaar://windows/{windowId}/state/{key}` | One state value — the same executor as `app_query` |
+| `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params |
+| `describe` | `yaar://windows/{windowId}/{state,commands}/{key}` | That key's doc — the app's computed `describe()` if it defines one, otherwise the manifest's static `description` |
+
+> **Two protocol sources exist**, and `describe` says which it read. `protocol.json` on disk and the
+> iframe's own registration diverge after a deploy without a reload; a manual that doesn't name its
+> source makes that divergence invisible — the agent reads a command list, calls a command the
+> running iframe has never heard of, and the error names neither cause.
+
+> **`invoke` on a command sub-path takes no `action`** — the URI already names the command, so the
+> payload is its params and nothing else. An `action` or a nested `params` in the payload is
+> refused rather than accepted-and-guessed; two spellings of one call with unclear precedence
+> between them is how such lists drift. `timeoutMs` is the one reserved key, because it is
+> transport rather than a param. The `{ action: 'app_query' | 'app_command' }` spellings on the
+> bare window URI remain, and reach the same executor.
+
+> `list('yaar://windows/{windowId}')` returns *that window's* keys. It used to ignore the window id
+> and return every window on the monitor, which is what `list('yaar://windows')` is for.
+
+`buildWindowResourceUri` / `parseWindowResourceUri`
+(`packages/server/src/lib/yaar-uri-server.ts`) mint and read these URIs, and
+`enrichManifestWithUris` stamps one onto every state and command entry of every live manifest —
+so an agent reading the manifest is handed URIs it can call directly.
 
 > `yaar://monitors/{monitorId}` survives only as an internal `ContextSource` tag
 > (`agents/context.ts`) for tagging message history — it is **not** an addressable resource URI.
@@ -207,13 +253,19 @@ Installing never restarts YAAR; the user does that.
 
 Five verbs. The URI identifies the resource; the verb determines the operation.
 
+**`describe` is the manual, `read` is the current value, `list` is what's addressable.**
+
 | Verb | Semantics | Returns |
 |------|-----------|---------|
-| `describe` | Schema + capabilities of a URI (which verbs it supports, payload shape) | `{ uri, description, verbs, invokeSchema? }` |
-| `read` | Get current state of a resource | Resource-specific data |
-| `list` | Enumerate children of a collection URI | MCP `resource_link` content blocks, one per child (`{ uri, name, description?, mimeType?, kind?, version? }`) — not a JSON object with an `items` key |
+| `describe` | The manual — what this resource *is* and what may be done with it | `{ uri, description, verbs, invokeSchema? }`, or a handler's own richer shape |
+| `read` | The current value — what the resource holds right now | Resource-specific data |
+| `list` | What is addressable under the URI | MCP `resource_link` content blocks, one per child (`{ uri, name, description?, mimeType?, kind?, version? }`) — not a JSON object with an `items` key |
 | `invoke` | Mutate, create, or trigger — the universal write/action verb | Resource-specific result |
 | `delete` | Remove a resource | `{ deleted: true }` |
+
+The three are not interchangeable, and the difference is sharpest on apps and windows (above): `describe('yaar://apps/notes')` is Notes' protocol and SKILL.md, `read('yaar://apps/notes')` is what version of it is installed and what it was granted.
+
+**Describing a URI that names nothing is an error, not a plausible success**, so a `describe` that answers is proof the resource exists. The auto-generated form describes the URI *pattern*, which is an honest answer only when the URI names something — hence the `exists` hook below.
 
 `invoke` covers both data mutation (idempotent merges like config updates) and side-effecting actions (browser navigate, agent interrupt). The URI identifies *what* is being acted on; the payload's `action` field (when needed) specifies *how*.
 
@@ -278,6 +330,7 @@ interface ResourceHandler {
   invokeSchema?: Record<string, unknown>;  // JSON Schema for invoke payload (optional)
   access?: 'session-principal';  // when set, only the session agent may call any verb (403 for others)
 
+  exists?(resolved: ResolvedUri): Promise<boolean>;       // consulted before the auto-generated describe
   describe?(resolved: ResolvedUri): Promise<VerbResult>;  // custom describe; overrides auto-generation
   read?(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult>;
   list?(resolved: ResolvedUri): Promise<VerbResult>;
@@ -293,6 +346,10 @@ Patterns use authority + optional path prefix, matched by specificity (exact > p
 'yaar://config/'          -> matches yaar://config/ and anything under it
 'yaar://config/*'         -> wildcard match under yaar://config/
 ```
+
+**A `/*` wildcard must declare either `exists` or `describe`, and `register()` throws otherwise.** A wildcard is exactly the shape where the id can be wrong, and the auto-generated `describe` answers from the *pattern* — identically for a live resource and one that has never existed. An optional field nobody remembers is how that got in. `exists` returning false makes `describe` answer `No resource at <uri>.`; a handler with its own `describe` owns the check instead. Exact and prefix patterns name a fixed resource and stay exempt.
+
+`yaar://session/{agents,monitors}/*`, `yaar://config/{mcp,hooks,shortcuts,mounts,app}/*` and `yaar://skills/*` take the hook; `yaar://windows/*`, `yaar://apps/*`, `yaar://storage/*`, `yaar://mcp/*` and `yaar://user/notifications/*` answer for themselves. The last is the one namespace that genuinely cannot say: a notification is an emitted action, not a stored resource — the client owns the toast and dismisses it on its own timer — so its `describe` says so outright rather than reporting a confident yes.
 
 Each domain registers its handlers during server startup (`handlers/config.ts`, `handlers/window.ts`, etc.). For action-bearing resources (browser, agents), the handler dispatches on `payload.action`:
 

@@ -549,6 +549,16 @@ interface YaarAppStateDefinition<T = unknown> {
   /** Optional schema for the value, exported to the agent-facing manifest. */
   schema?: object;
   get: () => T | Promise<T>;
+  /**
+   * Optional computed doc, answered only when someone asks — `describe` on
+   * `yaar://windows/{windowId}/state/{key}`.
+   *
+   * Never folded into the manifest: a doc computed from live data on every manifest
+   * read would make the cheapest call the most expensive. Use it for what
+   * `description` cannot say because it changes — "412 rows; a row is
+   * `{ id, title, done }`". Omit it and `describe` answers with `description`.
+   */
+  describe?: () => string | Promise<string>;
 }
 
 /**
@@ -569,6 +579,8 @@ interface YaarAppCommandDefinition<P = Record<string, unknown>, R = unknown> {
    * one-shot. The list of `'never'` commands rides the ready handshake.
    */
   replay?: 'always' | 'never';
+  /** See `YaarAppStateDefinition.describe` — on-demand doc, never in the manifest. */
+  describe?: () => string | Promise<string>;
   run: (params: P, ctx: YaarAppCommandContext) => R | Promise<R>;
 }
 
@@ -624,6 +636,8 @@ interface YaarAppCommandOf<S, R> {
   returns?: object;
   /** See `YaarAppCommandDefinition.replay`. */
   replay?: 'always' | 'never';
+  /** See `YaarAppStateDefinition.describe` — on-demand doc, never in the manifest. */
+  describe?: () => string | Promise<string>;
   run: (params: YaarAppRunParams<S>, ctx: YaarAppCommandContext) => R | Promise<R>;
 }
 
@@ -640,6 +654,8 @@ type YaarAppCommands<S> = {
     returns?: object;
     /** See `YaarAppCommandDefinition.replay`. */
     replay?: 'always' | 'never';
+    /** See `YaarAppStateDefinition.describe` — on-demand doc, never in the manifest. */
+    describe?: () => string | Promise<string>;
     run: (params: YaarAppRunParams<S[K]>, ctx: YaarAppCommandContext) => unknown;
   };
 };

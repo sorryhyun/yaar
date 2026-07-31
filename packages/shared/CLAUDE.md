@@ -10,6 +10,12 @@ Shared types between frontend and server.
 - `components.ts` - The Zod half: `componentSchema`, `componentLayoutSchema`, `displayContentSchema`, and the inferred `ComponentLayout` / `DisplayContent`
 - `schemas.ts` - The `@yaar/shared/schemas` entry point: every Zod-bearing export (component schemas + the whole bridge contract), kept off the barrel so the frontend does not bundle Zod
 - `app-protocol.ts` - App Protocol types (manifest, state/command descriptors, postMessage protocol, `IFRAME_APP_PROTOCOL_SCRIPT`), plus `listKeybindingIssues` — the one exported keybinding entry point, shared by both protocol readers (combo normalization and the reserved-combo set are internal to it)
+  - Five request kinds: `manifest`, `query`, `command`, `eval`, and `describe`. The last documents
+    **one** state key or command (`AppDescribeRequest`/`AppDescribeResponse`, `APP_MSG.describe*`)
+    from an optional `describe()` the app attaches to that entry. `doc: null` is a real answer —
+    the key exists and the app defines no `describe()` for it, so the server falls back to the
+    manifest's static `description`; only a key that is absent is an error. It is answered on
+    demand and never folded into the manifest, or the cheapest call would pay for every key.
   - A command's `params` JSON Schema is **enforced** by the iframe bridge before the handler
     runs: a missing `required` key or a key absent from `properties` is rejected naming both
     the wrong keys and the accepted ones. `additionalProperties: true` opts a pass-through

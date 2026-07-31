@@ -52,7 +52,7 @@ src/
     │   ├── dialogs.ts     # showAlert / showConfirm / showPrompt
     │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms)
-    │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch
+    │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
@@ -87,6 +87,12 @@ app actually serves is built at runtime by the iframe SDK from the same `defineA
 config. **Those two must agree.** The failure that matters is one-sided: a command that runs
 fine but never reaches `dist/protocol.json` is invisible to agents while every build signal
 stays green — one real incident shrank 29 commands to 3.
+
+A descriptor's optional `describe()` is the one field deliberately outside that agreement. It is
+a runtime handler like `get`/`run` — answered per key on demand
+(`describe('yaar://windows/{id}/state/{key}')`), so it reaches neither manifest and the extractor
+skips it with the other functions. A doc computed from live data on every manifest read would
+make the cheapest call the most expensive.
 
 `protocol/extract-protocol-dir.ts` is the entry point and picks between two implementations:
 

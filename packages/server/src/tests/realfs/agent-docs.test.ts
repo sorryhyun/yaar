@@ -1,7 +1,7 @@
 /**
- * Where an app's agent docs are read from — `agent/prompt.md` and `agent/hint.md`,
- * the `app.json` override, and the root filenames they replaced — plus which docs
- * survive a clone → deploy round trip.
+ * Where an app's agent docs are read from — `agent/prompt.md`, `agent/hint.md` and
+ * `agent/SKILL.md`, the `app.json` override, and the root filenames they replaced —
+ * plus which docs survive a clone → deploy round trip.
  *
  * Real filesystem because that is the whole subject: `loadAppPrompt`/`loadAppHint` go
  * through `resolveAppDir`, which answers from `existsSync`, so there is nothing to
@@ -12,7 +12,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { USER_APPS_DIR } from '../../features/apps/roots.js';
-import { loadAppPrompt, loadAppHint } from '../../features/apps/discovery.js';
+import { loadAppPrompt, loadAppHint, loadAppSkill } from '../../features/apps/discovery.js';
 import { cloneAppSource } from '../../features/dev/clone.js';
 import { doDeploy } from '../../features/dev/deploy.js';
 import { getStorageDir } from '../../config.js';
@@ -66,9 +66,24 @@ describe('app agent docs', () => {
     expect(await loadAppHint(APP_ID)).toBe('Route memos here.\n');
   });
 
-  it('is null when the app ships neither — the common case, not an error', async () => {
+  // The third doc, and the only one nothing injects: `describe` returns it when a
+  // caller asks and never otherwise. It is what a generated protocol cannot say.
+  it('reads the SKILL.md describe returns', async () => {
+    await seed({
+      'app.json': '{"name":"Fixture"}\n',
+      'agent/SKILL.md': 'Call save only after the user confirms.\n',
+    });
+
+    expect(await loadAppSkill(APP_ID)).toBe('Call save only after the user confirms.\n');
+    // Three docs, three audiences — shipping one must not imply the others.
     expect(await loadAppPrompt(APP_ID)).toBeNull();
     expect(await loadAppHint(APP_ID)).toBeNull();
+  });
+
+  it('is null when the app ships none — the common case, not an error', async () => {
+    expect(await loadAppPrompt(APP_ID)).toBeNull();
+    expect(await loadAppHint(APP_ID)).toBeNull();
+    expect(await loadAppSkill(APP_ID)).toBeNull();
   });
 
   it('is null for an app that does not exist', async () => {
@@ -169,6 +184,7 @@ describe('agent docs across clone and deploy', () => {
     await writeFile(join(sandbox, 'AGENTS.md'), AGENTS_MD);
     await mkdir(join(sandbox, 'agent'), { recursive: true });
     await writeFile(join(sandbox, 'agent', 'prompt.md'), 'runtime prompt\n');
+    await writeFile(join(sandbox, 'agent', 'SKILL.md'), 'the manual\n');
 
     const result = await doDeploy('unused-sandbox-id', { appId: APP_ID, sourcePath: sandbox });
     expect(result.success).toBe(true);
@@ -176,6 +192,8 @@ describe('agent docs across clone and deploy', () => {
     expect(await Bun.file(join(appDir, 'AGENTS.md')).text()).toBe(AGENTS_MD);
     // And it is still only the coding doc — carrying it must not make it a prompt.
     expect(await loadAppPrompt(APP_ID)).toBe('runtime prompt\n');
+    // Every kind in AGENT_DOCS travels, or the next clone loses whatever deploy dropped.
+    expect(await loadAppSkill(APP_ID)).toBe('the manual\n');
   });
 
   it('clones AGENTS.md back out, so the agent editing the app can read it', async () => {
@@ -184,6 +202,7 @@ describe('agent docs across clone and deploy', () => {
       'src/main.ts': 'export const x = 1;\n',
       'AGENTS.md': AGENTS_MD,
       'agent/prompt.md': 'runtime prompt\n',
+      'agent/SKILL.md': 'the manual\n',
     });
 
     const clone = await cloneAppSource(APP_ID);
@@ -191,6 +210,7 @@ describe('agent docs across clone and deploy', () => {
     const paths = clone.files?.map((f) => f.path) ?? [];
     expect(paths).toContain('AGENTS.md');
     expect(paths).toContain('agent/prompt.md');
+    expect(paths).toContain('agent/SKILL.md');
     expect(clone.files?.find((f) => f.path === 'AGENTS.md')?.content).toBe(AGENTS_MD);
   });
 

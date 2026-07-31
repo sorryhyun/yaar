@@ -64,6 +64,17 @@ function resolvedStorageUri(appId: string, relativePath: string): string {
  * been shown, and had to strip a prefix nothing told it about. One coordinate system
  * per door, and this door's is app-relative.
  */
+/**
+ * An app's storage namespace exists from the moment the app does; the directory on
+ * disk is only created by the first write. So a root listing of an app that has never
+ * written anything is empty, not missing — {@link StorageListResult.notFound} is the
+ * genuine answer for a named subfolder that isn't there, and this is where the root
+ * opts out of it.
+ */
+function emptyIfRootMissing(result: StorageListResult, isRoot: boolean): StorageListResult {
+  return !result.success && result.notFound && isRoot ? { success: true, entries: [] } : result;
+}
+
 function appRelativeEntries(appId: string, result: StorageListResult): StorageListResult {
   if (!result.entries) return result;
   const prefix = `apps/${appId}/`;
@@ -77,6 +88,7 @@ function appRelativeEntries(appId: string, result: StorageListResult): StorageLi
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '../../lib/ids.js';
 import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
+import { describeApp } from '../../features/apps/describe.js';
 import {
   storageRead,
   storageWrite,
@@ -232,7 +244,7 @@ export function registerAppAgentTools(server: McpServer): void {
         const uri = resolvedStorageUri(appId, relativePath);
         if (!relativePath) {
           // List root storage
-          const result = await storageList(scoped);
+          const result = emptyIfRootMissing(await storageList(scoped), true);
           return okJson({ uri, ...appRelativeEntries(appId, result) });
         }
         const result = await storageRead(scoped);
@@ -324,7 +336,7 @@ export function registerAppAgentTools(server: McpServer): void {
             return ok(`Deleted ${uri}`);
           }
           case 'list': {
-            const result = await storageList(scoped);
+            const result = emptyIfRootMissing(await storageList(scoped), !path);
             return okJson({ uri, ...appRelativeEntries(appId, result) });
           }
           default:
@@ -363,7 +375,8 @@ export function registerAppAgentTools(server: McpServer): void {
     'describe',
     {
       description:
-        "Describe an app's protocol — its available state keys and commands. " +
+        "An app's manual — its protocol (every state key and command, with schemas) plus its " +
+        'SKILL.md if it ships one. The same answer describe("yaar://apps/{id}") gives. ' +
         'Omit appId to describe your own app; pass appId to inspect another app you are permitted to control.',
       inputSchema: {
         appId: z
@@ -392,11 +405,16 @@ export function registerAppAgentTools(server: McpServer): void {
         }
       }
 
-      const apps = await listApps();
-      const app = apps.find((a) => a.id === targetAppId);
-      if (!app) return error(`app "${targetAppId}" not found.`);
-      if (!app.protocol) return error(`app "${targetAppId}" exposes no protocol.`);
-      return okJson({ appId: app.id, name: app.name, ...app.protocol });
+      // One shape for one verb: this is `describeApp`, the same builder behind
+      // describe("yaar://apps/{id}"). It used to assemble a third shape of its own here
+      // — distinct from both the verbs door and `read` — so the same question answered
+      // differently depending on which tool asked it.
+      const facts = await describeApp(targetAppId);
+      if (!facts) return error(`app "${targetAppId}" not found.`);
+      if (!facts.protocol && !facts.skill) {
+        return error(`app "${targetAppId}" exposes no protocol and ships no SKILL.md.`);
+      }
+      return okJson({ uri: `yaar://apps/${targetAppId}`, appId: targetAppId, ...facts });
     },
   );
 

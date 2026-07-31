@@ -18,7 +18,8 @@ apps/my-app/
 ├── AGENTS.md           # (Optional, not runtime) instructions for a coding agent editing this app
 ├── agent/
 │   ├── prompt.md       # (Optional) Full custom app agent prompt (replaces generic)
-│   └── hint.md         # (Optional) Monitor agent routing hint
+│   ├── hint.md         # (Optional) Monitor agent routing hint
+│   └── SKILL.md        # (Optional) Manual returned by describe('yaar://apps/my-app')
 ├── protocol.json       # (Optional, auto-extracted) State keys and commands manifest
 ├── dist/
 │   └── index.html      # Compiled output (single self-contained HTML)
@@ -327,26 +328,32 @@ export default defineApp({
   `dist/protocol.json` at build time.
 - **`replay`**: `'never'` on any command whose effect must not be re-applied when a window's
   iframe remounts (appends, sends, deletes). Omit it for idempotent commands.
+- **`describe`**: optional per-entry `describe(): string` on any state key or command, answered
+  on demand by `describe('yaar://windows/{id}/state/{key}')` and never folded into the manifest.
+  For what the static `description` cannot say because it changes — `` describe: () =>
+  `${items().length} items; an item is { text }` ``.
 - **Splitting up**: descriptor maps may live in other modules and be spread in
   (`commands: { ...fileCommands, ...gitCommands }`) — the extractor resolves imported consts
   and spreads. The default export itself must stay in `src/main.ts`.
 - The compiler auto-extracts `protocol.json` from source. Never write it by hand, and check
   your change with `bun scripts/codegen/app-protocol-by-id.ts <appId>`.
 
-## Agent Prompt Files
+## Agent Docs
 
-After creating/editing an app, you can add these markdown files (both optional — `app.json`'s
-`agent: { prompt, hint }` points at them, defaulting to the paths below, so you only touch that
-key to relocate one):
+After creating/editing an app, you can add these markdown files (all optional — `app.json`'s
+`agent: { prompt, hint, skill }` points at them, defaulting to the paths below, so you only touch
+that key to relocate one):
 
-| File | Target Agent | Purpose |
-|------|-------------|---------|
-| `agent/prompt.md` | App agent | Replaces the generic prompt entirely — for complex apps |
-| `agent/hint.md` | Monitor agent | When/why to route tasks to this app |
+| File | Reader | Purpose |
+|------|--------|---------|
+| `agent/prompt.md` | App agent (every turn) | Replaces the generic prompt entirely — for complex apps |
+| `agent/hint.md` | Monitor agent (every turn) | When/why to route tasks to this app |
+| `agent/SKILL.md` | Whoever calls `describe` (on demand) | Workflows and ordering constraints the protocol can't state |
 
 - **`agent/prompt.md`** must document the 4 tools (describe, query, command, relay) since it replaces the generic prompt
 - Without `agent/prompt.md`, the app agent gets a generic prompt with the `protocol.json` manifest appended as call signatures — no file to write for simple apps
 - **`agent/hint.md`** should be 1-3 sentences focused on *when to use* the app
+- **`agent/SKILL.md`** is returned by `describe('yaar://apps/{appId}')` **alongside `protocol.json`**, so never restate a command or state name as a heading or bullet subject — that copy is one deploy from disagreeing with the schema printed next to it. `check:apps` warns on it (`skill-restates-protocol`, advisory). Not the `SKILLS/` directory proposed in `docs/architecture/shell_to_userland.md` — that one is many topics read from `yaar://skills/{appId}/{topic}`
 - A legacy root `HINT.md` still loads (with a `[apps]` warning) if `agent/hint.md` is absent, but write new apps at the paths above. Root `AGENTS.md` has **no** such fallback and is never read at runtime: it holds its ecosystem meaning — instructions to a coding agent (like you) editing this directory. Clone and deploy carry it, so write one for any app whose reasoning would otherwise live only in a chat log.
 
 ## Runtime Constraints

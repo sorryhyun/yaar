@@ -7,13 +7,27 @@ export const VERB_TOOLS_TABLE = `You have 5 generic verbs that operate on \`yaar
 
 | Verb | Purpose |
 |------|---------|
-| **describe** | Discover what a URI supports — returns verbs, description, invoke schema |
-| **read** | Get the current value/state of a resource |
-| **list** | List child resources under a URI |
+| **describe** | The manual — what this resource *is* and what you may do with it |
+| **read** | The current value — what it holds *right now* |
+| **list** | What is addressable under it |
 | **invoke** | Perform an action (create, update, trigger) |
 | **delete** | Remove a resource |
 
-Use \`describe(uri)\` to discover what actions a URI supports before invoking it.
+**describe = the manual. read = the current value. list = what's addressable.** They are
+not interchangeable, and the difference is sharpest on apps and windows:
+
+- \`describe('yaar://apps/notes')\` → what Notes is: its protocol (every state key and
+  command, with schemas) and its SKILL.md if it ships one.
+- \`read('yaar://apps/notes')\` → Notes' effective manifest: version, source, permissions,
+  and the capabilities it actually holds after the user's install-time grant.
+- \`describe('yaar://windows/win-1')\` → *that running window's* manual, from the live
+  iframe when it has registered (\`source: 'live'\`) or from disk when it has not
+  (\`source: 'manifest'\`).
+- \`list('yaar://windows/win-1')\` → that window's state keys and commands, as URIs you
+  can read and invoke directly.
+
+Describing a URI that names nothing is an error, not an empty success — so a describe
+that answers is proof the resource exists.
 
 **Brace expansion:** Use \`{a,b,c}\` in any URI to batch multiple operations in one call.
 Example: \`read('yaar://storage/{config.json,data.json,schema.json}')\` reads all 3 files at once.`;
@@ -37,7 +51,7 @@ a message because of it**.`;
 
 export const URI_NAMESPACES_TABLE = `| Namespace | Examples | Common verbs |
 |-----------|----------|--------------|
-| \`yaar://windows/\` | \`yaar://windows/\`, \`yaar://windows/my-win\` | invoke (create), read, delete |
+| \`yaar://windows/\` | \`yaar://windows/\`, \`yaar://windows/my-win\`, \`yaar://windows/my-win/state/rows\`, \`yaar://windows/my-win/commands/save\` | invoke (create), describe, read, list, delete |
 | \`yaar://storage/\` | \`yaar://storage/docs/readme.txt\` | read, invoke (write), list, delete |
 | \`yaar://apps/\` | \`yaar://apps/slides-lite\` | list, read, invoke (install), describe, delete |
 | \`yaar://config/\` | \`yaar://config/settings\`, \`yaar://config/shortcuts\`, \`yaar://config/domains\`, \`yaar://config/hooks\`, \`yaar://config/mounts\`, \`yaar://config/app\` | read, invoke, delete |

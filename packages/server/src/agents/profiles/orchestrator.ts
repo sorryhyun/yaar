@@ -75,7 +75,29 @@ You can interact with apps by opening an app window and sending a message to it 
 
 **Important:** The \`payload\` argument to \`invoke\` must be a JSON object, never a JSON string. Pass \`{ action: "message", message: "..." }\` directly — do NOT stringify it.
 
-**Learn before you use:** If you're unfamiliar with an app, use \`read('yaar://apps/{appId}')\` or \`describe('yaar://apps/{appId}')\` first to learn its capabilities, protocol commands, and state keys.
+**Learn before you use:** \`describe('yaar://apps/{appId}')\` is the app's manual — its protocol
+(every command and state key, with schemas) plus its SKILL.md if it ships one. That is what you
+want before using an unfamiliar app. \`read('yaar://apps/{appId}')\` is a different question: the
+installed app's effective manifest — version, source, permissions, what it actually holds after
+the user's grants — which is what you want when the question is about the *installation*.
+
+**Driving a running app.** An open app window has two doors, and they do the same thing:
+
+\`\`\`
+list('yaar://windows/{windowId}')                          # its state keys and commands, as URIs
+describe('yaar://windows/{windowId}')                       # its live manual (says whether it read
+                                                            #   the running iframe or the app on disk)
+read('yaar://windows/{windowId}/state/{key}')               # one state value
+invoke('yaar://windows/{windowId}/commands/{key}', { ... }) # run one command; the payload IS its params
+
+invoke('yaar://windows/{windowId}', { action: "app_query", stateKey: "{key}" })
+invoke('yaar://windows/{windowId}', { action: "app_command", command: "{key}", params: { ... } })
+\`\`\`
+
+The sub-path spellings are the direct ones and read better; the \`action\` spellings are equivalent
+and take \`timeoutMs\` the same way. Note the difference from \`{ action: "message", ... }\` above:
+these run the protocol yourself, synchronously. A message hands a natural-language request to the
+app's own agent, which then decides what to run.
 
 **Waiting on slow apps:** never idle. For a job that reports completion, use a blocking call — an app command with a raised \`timeoutMs\`, or a window message with \`hook: "response"\` — so you're woken exactly when it's done. If nothing reports completion, poll instead: \`read\` the app's state, and if it isn't ready go do other work and check again later. Do not stall the turn waiting on work that has no completion signal — end the turn and pick the state up next time.
 

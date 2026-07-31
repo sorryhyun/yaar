@@ -21,6 +21,7 @@ import {
 import { ok, okJson, okWithImages, okResource, okLinks, error } from './utils.js';
 import { prependNote, applyEdit, applyReadOptions, mimeFromPath } from './utils.js';
 import { copyStorageBytes, decodeWriteContent } from './storage-bytes.js';
+import { describeStoragePath } from './storage-describe.js';
 
 // ── Helpers ──
 
@@ -81,6 +82,12 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
           description: 'Last line to replace (edit line mode, 1-based, inclusive)',
         },
       },
+    },
+
+    async describe(resolved: ResolvedUri): Promise<VerbResult> {
+      const parsed = parseFileUri(resolved.sourceUri);
+      if (!parsed && resolved.sourceUri !== 'yaar://storage') return error('Invalid storage URI.');
+      return describeStoragePath(resolved.sourceUri, parsed?.path ?? '');
     },
 
     async read(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult> {

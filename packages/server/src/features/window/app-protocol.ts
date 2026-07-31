@@ -2,12 +2,13 @@
  * App protocol logic (app_query and app_command).
  */
 
-import type { AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
+import type { AppManifest, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
 import { isPreviewAppId } from '@yaar/shared';
 import type { ContentBlock, VerbResult } from '../../handlers/uri-registry.js';
 import { isContentBlocks } from '../../handlers/uri-registry.js';
 import type { WindowStateRegistry } from '../../session/window-state.js';
-import { ok, error, getActiveSessionId } from '../../handlers/utils.js';
+import { ok, okJson, error, getActiveSessionId } from '../../handlers/utils.js';
+import { buildWindowResourceUri } from '../../lib/yaar-uri-server.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { type PendingOutcome } from '../../session/pending-store.js';
 import { deadlines } from '../../config.js';
@@ -231,6 +232,86 @@ export async function handleAppQuery(
   if (response.kind !== 'query') return error('Unexpected response kind.');
   if (response.error) return error(response.error);
   return wrapAppValue(response.data);
+}
+
+/**
+ * The live manifest as an object, for callers that need to read it rather than hand it
+ * to a model — `describe` on a window, and the static-description fallback below.
+ *
+ * Returns null (rather than waiting out `appReadyMs`) when the iframe has not
+ * registered: `describe` has a disk-side answer to fall back to, and making it block for
+ * the full readiness deadline to discover that would be the wrong trade.
+ */
+export async function fetchLiveManifest(
+  windowState: WindowStateRegistry,
+  windowId: string,
+): Promise<AppManifest | null> {
+  const win = windowState.getWindow(windowId);
+  if (!win || win.content.renderer !== 'iframe' || !win.appProtocol) return null;
+
+  const outcome = await request(win.id, { kind: 'manifest' }, deadlines.appQueryMs);
+  if (!outcome.ok) return null;
+  const response = outcome.value;
+  if (response.kind !== 'manifest' || response.error || !response.manifest) return null;
+  enrichManifestWithUris(response.manifest, win.id, windowState.handleMap);
+  return withoutPersonaCommands(response.manifest);
+}
+
+/**
+ * Handle a per-key describe — `describe('yaar://windows/{id}/{state,commands}/{key}')`.
+ *
+ * Three outcomes, and the middle one is the reason this is not simply "error unless the
+ * app defined a describe()":
+ *
+ * | case                              | result                          |
+ * |-----------------------------------|---------------------------------|
+ * | key not in the manifest           | error                           |
+ * | key exists, no `describe()`       | the manifest's static description |
+ * | key exists, handler defined       | the app's computed doc          |
+ *
+ * `protocol.json` already carries a one-line `description` per key, so erroring on a key
+ * that *is* documented would report it as missing — the same false signal the `exists`
+ * hook exists to remove. The error is reserved for a key that does not exist.
+ */
+export async function handleAppDescribe(
+  windowState: WindowStateRegistry,
+  windowId: string,
+  target: 'state' | 'commands',
+  key: string,
+): Promise<VerbResult> {
+  const win = windowState.getWindow(windowId);
+  if (!win) return error(`Window "${windowId}" not found.`);
+  if (win.content.renderer !== 'iframe') return error(`Window "${windowId}" is not an iframe app.`);
+
+  const windowKey = win.id;
+  const readyErr = await requireAppReady(windowState, windowKey);
+  if (readyErr) return readyErr;
+
+  const outcome = await request(
+    windowKey,
+    { kind: 'describe', target, key },
+    deadlines.appQueryMs,
+    undefined,
+  );
+  if (!outcome.ok) return error(noAnswer(outcome, `describe of ${target} "${key}"`));
+  const response = outcome.value;
+  if (response.kind !== 'describe') return error('Unexpected response kind.');
+  // The app says this key is not in its table — the one genuine "no such resource".
+  if (response.error) return error(response.error);
+  if (response.doc !== null) {
+    return okJson({ uri: buildWindowResourceUri(windowId, target, key), doc: response.doc });
+  }
+
+  // No describe() on this entry. The manifest's own one-liner is a real answer.
+  const manifest = await fetchLiveManifest(windowState, windowId);
+  const table = target === 'state' ? manifest?.state : manifest?.commands;
+  const entry = table?.[key] as { description?: string } | undefined;
+  return okJson({
+    uri: buildWindowResourceUri(windowId, target, key),
+    doc: entry?.description ?? null,
+    source: 'manifest',
+    ...(target === 'commands' && entry ? { schema: (entry as { params?: unknown }).params } : {}),
+  });
 }
 
 /**

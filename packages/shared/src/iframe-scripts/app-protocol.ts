@@ -452,6 +452,32 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       }, asResult);
       return;
     }
+
+    // Per-key describe. Answers with the app's computed doc for one state key or
+    // command, or \`null\` when the app defines no describe() for it — the server then
+    // falls back to the manifest's static description, which is a real answer rather
+    // than a missing one. Only a key that does not exist is an error.
+    if (msg.type === '${APP_MSG.describeRequest}') {
+      var table = registration && (msg.target === 'state' ? registration.state : registration.commands);
+      var describeKey = msg.key;
+      if (msg.target === 'commands' && aliasMap[describeKey]) describeKey = aliasMap[describeKey];
+      if (!table || !table[describeKey]) {
+        reply('${APP_MSG.describeResponse}', requestId, {
+          doc: null,
+          error: memberError(msg.target === 'state' ? 'state' : 'command', msg.key)
+        });
+        return;
+      }
+      var entry = table[describeKey];
+      if (typeof entry.describe !== 'function') {
+        reply('${APP_MSG.describeResponse}', requestId, { doc: null });
+        return;
+      }
+      settle('${APP_MSG.describeResponse}', requestId, 'doc', function() {
+        return entry.describe();
+      }, function(v) { return v == null ? null : String(v); });
+      return;
+    }
   });
 })();
 `;

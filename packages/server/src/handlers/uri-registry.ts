@@ -131,6 +131,17 @@ export interface ResourceHandler {
    */
   access?: 'session-principal';
 
+  /**
+   * Whether the resource this URI names actually exists.
+   *
+   * Consulted before the auto-generated `describe`, which otherwise answers about the
+   * URI *pattern* and so returns a plausible success for an id that names nothing.
+   * Required for `/*` patterns (see {@link ResourceRegistry.register}) — a wildcard is
+   * exactly the shape where the id can be wrong. A handler with its own `describe`
+   * owns its existence check instead and needs no hook.
+   */
+  exists?(resolved: ResolvedUri): Promise<boolean>;
+
   /** Custom describe handler. When provided, called instead of auto-generation. */
   describe?(resolved: ResolvedUri): Promise<VerbResult>;
   read?(resolved: ResolvedUri, options?: ReadOptions): Promise<VerbResult>;
@@ -165,6 +176,17 @@ export class ResourceRegistry {
       matchType = 'prefix';
     } else {
       matchType = 'exact';
+    }
+    // A wildcard pattern is the one shape where the id can name nothing, so it must
+    // say how to tell. Without this, `describe` auto-generates from the *pattern* and
+    // answers identically for a live resource and one that has never existed — an
+    // optional field nobody remembers is how that got in. Exact and prefix patterns
+    // (`yaar://config/`) name a fixed resource and stay exempt.
+    if (matchType === 'wildcard' && !handler.exists && !handler.describe) {
+      throw new Error(
+        `Wildcard handler "${pattern}" must declare exists() or describe() — otherwise ` +
+          'describe answers for ids that name no resource.',
+      );
     }
     this.registrations.push({ pattern, handler, matchType });
   }
@@ -267,6 +289,23 @@ export class ResourceRegistry {
           };
         }
         return handler.describe(resolved);
+      }
+      // The auto-generated form describes the URI *pattern*, so it is only an honest
+      // answer when the URI names something. Ask before generating.
+      if (handler.exists) {
+        const resolved = resolveUri(uri);
+        if (!resolved) {
+          return {
+            content: [{ type: 'text', text: `Could not resolve URI: ${uri}` }],
+            isError: true,
+          };
+        }
+        if (!(await handler.exists(resolved))) {
+          return {
+            content: [{ type: 'text', text: `No resource at ${uri}.` }],
+            isError: true,
+          };
+        }
       }
       const result: DescribeResult = {
         uri,

@@ -210,7 +210,21 @@ export function registerMcpGatewayHandlers(registry: ResourceRegistry): void {
       const manager = await getMcpClientManager();
 
       if (!parsed.toolName) {
-        // yaar://mcp/{server} — describe the server
+        // yaar://mcp/{server} — describe the server.
+        //
+        // Guarded here rather than in `getStatus`, whose "fill in the blanks" shape the
+        // list path relies on: asked about a name it has never seen, it fabricates
+        // `{ state: 'disconnected' }`, so describing a server nobody configured used to
+        // read as a plausible success — a configured server that happens to be down.
+        if (!manager.getConfiguredServers().includes(parsed.serverName)) {
+          const configured = manager.getConfiguredServers();
+          return error(
+            `No MCP server "${parsed.serverName}" is configured. ` +
+              (configured.length
+                ? `Configured: ${configured.join(', ')}.`
+                : 'None are configured — add one with invoke("yaar://mcp", { action: "add", … }).'),
+          );
+        }
         const status = manager.getStatus(parsed.serverName) as {
           name: string;
           type: string;

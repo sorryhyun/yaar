@@ -1,100 +1,48 @@
 /**
- * What one app looks like to another agent — the `describe` and `read` verbs on
- * `yaar://apps/{appId}`.
+ * What one app looks like to another agent — the facts behind
+ * `describe('yaar://apps/{appId}')`.
+ *
+ * `describe` is the manual. It answers with the app's identity, its **protocol.json
+ * verbatim**, and its hand-written `agent/SKILL.md` when it ships one. It is not the
+ * app's current state — that is `read`, which returns the effective manifest
+ * (`handlers/apps/app-resource.ts`).
+ *
+ * Returning `protocol.json` whole carries no drift risk, which is what killed the
+ * *previous* SKILL.md: the file is a build artifact. `compile.ts` writes it from AST
+ * extraction of the source, `fold-schemas.ts` inlines the Zod param schemas into it, and
+ * `deploy.ts` re-derives and diffs it on every deploy. It cannot disagree with the code
+ * the way a hand-written restatement can — and `agent/SKILL.md` is scoped to exactly
+ * what a generated protocol cannot say: workflows, ordering constraints, when *not* to
+ * use the app.
  */
 
-import { listApps } from './discovery.js';
+import { listApps, loadAppSkill } from './discovery.js';
 
 /**
- * Build a rich app info object for the describe verb.
- * Returns null if the app is not found.
+ * Build the app-facts half of the describe payload. Returns null if the app is not
+ * installed — the caller turns that into the error, since it owns the URI.
+ *
+ * Deliberately does *not* carry `verbs` or `invokeActions`: those describe what the
+ * handler does, not what the app is, and the handler derives them from the table that
+ * dispatches them (`appActions`). Three hand-written copies of that list is how they
+ * came to disagree in the first place.
  */
 export async function describeApp(appId: string): Promise<Record<string, unknown> | null> {
   const apps = await listApps();
   const app = apps.find((a) => a.id === appId);
   if (!app) return null;
 
-  const invokeActions: Record<string, string> = {
-    set_badge: 'Set badge count on app icon ({ count })',
-  };
+  const skill = await loadAppSkill(appId);
 
-  const result: Record<string, unknown> = {
+  return {
     name: app.name,
-    description: app.description,
-    icon: app.icon,
-    verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
-    invokeActions,
+    ...(app.description ? { description: app.description } : {}),
+    ...(app.icon ? { icon: app.icon } : {}),
+    // The protocol as compiled, minus persona-audience commands — those are the
+    // sub-agent's half of the protocol and are described to it in its own voice at
+    // spawn, so an operator reading them reads the wrong script (`persona-commands.ts`).
+    ...(app.protocol ? { protocol: app.protocol } : {}),
+    ...(skill ? { skill } : {}),
+    ...(app.permissions?.length ? { permissions: app.permissions } : {}),
   };
-
-  if (app.protocol) result.protocol = app.protocol;
-  if (app.permissions?.length) result.permissions = app.permissions;
-
-  return result;
-}
-
-/**
- * The reference doc another agent gets from `read('yaar://apps/{appId}')` — a header
- * from `app.json` plus the protocol manifest and permissions.
- *
- * Entirely generated. There used to be a hand-written `SKILL.md` this fell back from,
- * but everything it carried is either `app.json`'s `description` or a restatement of
- * `protocol.json` — and a restatement is one deploy away from being wrong. An app that
- * needs to say more to its *own* agent writes `agent/prompt.md`; page-length API
- * references are the job of the per-app `SKILLS/` directory proposed in
- * `docs/architecture/shell_to_userland.md`, read on demand rather than injected.
- *
- * Returns null only when the app is not installed.
- */
-export async function buildAppReference(appId: string): Promise<string | null> {
-  const apps = await listApps();
-  const app = apps.find((a) => a.id === appId);
-  if (!app) return null;
-
-  let result = `# ${app.name}${app.description ? `\n\n${app.description}` : ''}`.trimEnd();
-  if (app.protocol) {
-    const sections: string[] = [];
-    const { state, commands } = app.protocol;
-    if (state && Object.keys(state).length) {
-      sections.push(
-        '### State\n' +
-          Object.entries(state)
-            .map(([k, v]) => `- \`${k}\` — ${v.description}`)
-            .join('\n'),
-      );
-    }
-    if (commands && Object.keys(commands).length) {
-      sections.push(
-        '### Commands\n' +
-          Object.entries(commands)
-            .map(([k, v]) => `- \`${k}\` — ${v.description}`)
-            .join('\n'),
-      );
-    }
-    const keybindings = app.protocol.keybindings;
-    if (keybindings && Object.keys(keybindings).length) {
-      sections.push(
-        '### Keybindings\n' +
-          Object.entries(keybindings)
-            .map(([combo, command]) => `- \`${combo}\` → \`${command}\``)
-            .join('\n'),
-      );
-    }
-    if (sections.length) {
-      result += '\n\n## Protocol\n\n' + sections.join('\n\n');
-    }
-  }
-
-  // Append permissions section if the app declares URI permissions
-  if (app.permissions?.length) {
-    const permissionsList = app.permissions
-      .map((p) => {
-        if (typeof p === 'string') return `- \`${p}\``;
-        const verbs = p.verbs?.length ? ` (${p.verbs.join(', ')})` : '';
-        return `- \`${p.uri}\`${verbs}`;
-      })
-      .join('\n');
-    result += '\n\n## Permissions\n\n' + permissionsList;
-  }
-
-  return result;
 }

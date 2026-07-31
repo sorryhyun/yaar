@@ -203,6 +203,15 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       },
     },
 
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      const monitorId = (resolved as ResolvedSession).id;
+      if (!monitorId) return false;
+      const session = getActiveSession();
+      const pool = session.getPool();
+      if (!pool) return false;
+      return getMonitorStatus(session, pool, monitorId) !== null;
+    },
+
     async read(resolved: ResolvedUri): Promise<VerbResult> {
       const sessionResolved = resolved as ResolvedSession;
       const monitorId = sessionResolved.id;
