@@ -1,24 +1,27 @@
 /**
- * Filesystem integration tests — these run real `git` against real app directories.
+ * Real-filesystem tests — these run real `git` against real app directories.
  *
- * They live in `src/integration/`, not `src/tests/`, and run as a second `bun test`
- * process (see this package's `test` script). Several unit tests in `src/tests/`
- * call `mock.module('../config.js', …)` with `PROJECT_ROOT: '/mock-root'`; Bun
- * hoists `mock.module` and applies it process-wide, so any test sharing that
- * process which touches the real filesystem via `PROJECT_ROOT` dies with
+ * That is what `src/tests/realfs/` is for, and the reason it gets a process of its own
+ * (`scripts/test/partitions.ts`) is the mocks rather than the git: several unit tests in
+ * `src/tests/` call `mock.module('../config.js', …)` with `PROJECT_ROOT: '/mock-root'`.
+ * Bun hoists `mock.module` and applies it process-wide with no teardown, so any test
+ * sharing that process which resolves a real path through `PROJECT_ROOT` dies with
  * `EACCES: mkdir '/mock-root'`, regardless of file order.
  *
- * The directory name must not be a superstring of `src/tests` — Bun treats a path
- * argument as a substring filter, so `bun test src/tests` would also match
- * `src/tests-integration/` and pull these back into the poisoned process.
+ * This is not the *integration* suite — that is `packages/tests/src/integration/`, which
+ * boots the server and drives it over HTTP and WebSocket. Nothing here starts a server.
+ *
+ * A `bun test src/tests` run collects this directory alongside the units, which is a
+ * mixed process; `scripts/test/partition-guard.ts` stops such a run and prints the command
+ * for each partition, the same way it does for `remote/` and `loopback/` next door.
  */
 import { describe, it, expect, beforeEach, afterAll } from 'bun:test';
 import { mkdir, rm, writeFile } from 'fs/promises';
 import { existsSync } from 'fs';
 import { join } from 'path';
-import { getStorageDir } from '../config.js';
-import { USER_APPS_DIR } from '../features/apps/roots.js';
-import { snapshotApp, appHistory, appDiff, restoreApp } from '../features/dev/git.js';
+import { getStorageDir } from '../../config.js';
+import { USER_APPS_DIR } from '../../features/apps/roots.js';
+import { snapshotApp, appHistory, appDiff, restoreApp } from '../../features/dev/git.js';
 
 // A real app directory is required — `resolveAppDir` only sees apps on disk.
 // `user-apps/` is git-ignored, so a fixture here cannot dirty the working tree.

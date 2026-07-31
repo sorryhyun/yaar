@@ -17,10 +17,13 @@
  *     race rather than an order. That race is not theoretical: `app-agent-model.test.ts`
  *     passed locally and failed in CI because four other files stub the
  *     `agents/profiles/index.js` barrel.
- *   - **Some suites bind real sockets and are sequential-only.** Running the 80
+ *   - **Some suites own real resources and are sequential-only.** Running the 80
  *     non-remote server files in one `--parallel` process fails 45 of them; the same
- *     80 run sequentially pass. `src/tests/loopback/` (real stack, `FakeClient` +
- *     `ScriptedProvider`) and `src/integration/` are the two that cannot overlap.
+ *     80 run sequentially pass. Two cannot overlap with anything: `src/tests/loopback/`
+ *     (real stack, `FakeClient` + `ScriptedProvider`) binds real sockets, and
+ *     `src/tests/realfs/` drives real `git` over one on-disk fixture directory that its
+ *     cases reseed. Neither is the *integration* suite — that is `packages/tests/`,
+ *     a separate package and therefore already a separate partition.
  *
  * Plus one that is about the harness rather than the code under test: **the root
  * preload sets up exactly one package per process.** `scripts/test/preload-root.ts`
@@ -133,13 +136,15 @@ export function partitionOf(repoRel: string, source: string): Partition | null {
       howToRun: 'cd packages/server && bun test src/tests/loopback',
     };
   }
-  if (inPackage.startsWith('src/integration/')) {
+  if (inPackage.startsWith('src/tests/realfs/')) {
     return {
       ...base,
-      key: 'server:integration',
-      label: 'integration',
-      reason: 'boots the real server and cannot overlap with another suite in the same process',
-      howToRun: 'cd packages/server && bun test src/integration',
+      key: 'server:realfs',
+      label: 'realfs',
+      reason:
+        'resolves real paths through PROJECT_ROOT, so it cannot share a process with the ' +
+        "units — several of them mock.module it to '/mock-root' and the stub has no teardown",
+      howToRun: 'cd packages/server && bun test src/tests/realfs',
     };
   }
   if (installsModuleMock(source)) {

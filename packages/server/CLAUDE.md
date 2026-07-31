@@ -20,11 +20,15 @@ that is 94 files in 17 processes:
 1. `units` — one `--parallel` process for the plain unit/component tests.
 2. `remote` — `src/tests/remote/`, with `REMOTE=1` pinned for the whole process.
 3. `loopback` — `src/tests/loopback/`, the loopback harness (see `tests/loopback/harness/`).
-4. `integration` — `src/integration/`.
+4. `realfs` — `src/tests/realfs/`, which runs real `git` against real app directories and so
+   cannot share a process with the units that `mock.module` `PROJECT_ROOT` to `/mock-root`.
+   The *integration* suite is not here at all: it is the separate `@yaar/tests` package.
 5. one process per file that calls `mock.module` (13 of them).
 
-The glob is `src/**`, not `src/tests/**` plus a hardcoded `src/integration`: a test file written
-next to the module it covers used to be collected by nothing and reported by nothing.
+The glob is `src/**`, not `src/tests/**` plus a hardcoded extra directory: a test file written
+next to the module it covers used to be collected by nothing and reported by nothing (today
+`src/features/update/update.test.ts` is one). `tsconfig.build.json` therefore excludes
+`**/*.test.ts` as well as `src/tests`, or those colocated files compile into `dist/`.
 
 The split is load-bearing, and `scripts/test/partition-guard.ts` (third preload in `bunfig.toml`)
 enforces it rather than trusting it — `bun test src/tests` looks reasonable and quietly mixes the
@@ -63,7 +67,8 @@ The loopback harness runs the real stack end to end — `createWsHandlers` → `
 `LiveSession` → `ContextPool` → `AgentSession` → `actionEmitter` → `PendingStore` — with
 exactly two fakes: the browser (`FakeClient`) and the model (`ScriptedProvider`). It needs its
 own process, and a sequential one: run the 80 non-remote files together under `--parallel` and
-45 fail, because this suite and `src/integration` bind real sockets. Full rationale, including
+45 fail, because this suite binds real sockets and `src/tests/realfs/` reseeds one on-disk
+fixture directory across its cases. Full rationale, including
 the deadlock this exists to catch, is in `tests/loopback/harness/boot.ts`'s header comment.
 
 Three rules follow:

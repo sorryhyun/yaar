@@ -11,7 +11,7 @@
  * `run-unit-tests.ts` that owned only `src/tests`, followed by three more `bun test`
  * invocations for remote, loopback, and integration:
  *
- *   - **It globs `src/**`, not `src/tests/**`.** The old glob plus a hardcoded `src/integration`
+ *   - **It globs `src/**`, not `src/tests/**`.** The old glob plus a hardcoded extra directory
  *     meant a test file written anywhere else under `src/` — next to the module it tests, the
  *     obvious place to put one — was collected by nothing and reported by nothing. A skipped
  *     test that no one is told about is worse than a failing one.

@@ -70,8 +70,8 @@ was collecting each compiler test twice, the stale copy failing.
 **A run that spans more than one partition is refused, not guessed at.** Some test files
 cannot share a Bun process — the server's `src/tests/remote/` needs `REMOTE=1` pinned before
 the first import, files calling `mock.module` leak a stub with no teardown, `src/tests/loopback`
-and `src/integration` bind real sockets (45 of 80 files fail if they run `--parallel` with the
-units), and one process holds one package's setup. `bun test packages/server` used to put all
+binds real sockets and `src/tests/realfs` drives real `git` over a shared fixture dir (45 of 80
+files fail if they run `--parallel` with the units), and one process holds one package's setup. `bun test packages/server` used to put all
 of that in a single process and report **86 failures against a green tree**; a bare repo-wide
 `bun test` was wrong the same way. `scripts/test/partitions.ts` states which files may share a
 process and why; `scripts/test/partition-guard.ts` (preloaded from the root and server bunfigs)
