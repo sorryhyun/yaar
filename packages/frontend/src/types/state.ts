@@ -200,6 +200,8 @@ export interface DesktopActions {
 
   // Connection management
   setConnectionStatus: (status: ConnectionStatus, error?: string) => void;
+  /** Set the last error text without asserting anything about the transport. */
+  setConnectionError: (error: string | null) => void;
   setSession: (providerType: string, sessionId: string) => void;
 
   // User-initiated actions

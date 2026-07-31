@@ -52,6 +52,7 @@ function createHandlers() {
     applyActions: mock(() => {}),
     setIsConnecting: mock(() => {}),
     setConnectionStatus: mock(() => {}),
+    setConnectionError: mock(() => {}),
     setSession: mock(() => {}),
     setAttachment: mock(() => {}),
     checkForPreviousSession: mock(() => {}),
@@ -403,6 +404,45 @@ describe('server event dispatcher', () => {
     expect(handlers.setAgentActive).not.toHaveBeenCalled();
     // And it must not reach the debug panel, which one chunk per line would bury.
     expect(handlers.addDebugEntry).not.toHaveBeenCalled();
+  });
+
+  it('does not let an agent error report the connection as down', () => {
+    const handlers = createHandlers();
+
+    dispatchServerEvent(
+      {
+        type: 'ERROR',
+        error: 'Failed to create agent for app devtools',
+        agentId: 'app-devtools-m0',
+        monitorId: '0',
+      },
+      handlers,
+    );
+
+    // The socket is open and the monitor agent is still working. This used to call
+    // setConnectionStatus('error', …), which the status bar renders as "Disconnected"
+    // and which nothing on a live session ever clears.
+    expect(handlers.setConnectionStatus).not.toHaveBeenCalled();
+    expect(handlers.setConnectionError).toHaveBeenCalledWith(
+      'Failed to create agent for app devtools',
+    );
+    expect(handlers.addCliEntry).toHaveBeenCalledWith({
+      type: 'error',
+      content: 'Failed to create agent for app devtools',
+      monitorId: '0',
+    });
+  });
+
+  it('still buries a message named by an error', () => {
+    const handlers = createHandlers();
+
+    dispatchServerEvent(
+      { type: 'ERROR', error: 'Message dropped: the window closed.', messageId: 'm-9' },
+      handlers,
+    );
+
+    expect(handlers.failMessage).toHaveBeenCalledWith('m-9', 'Message dropped: the window closed.');
+    expect(handlers.settleOutbox).toHaveBeenCalledWith('m-9');
   });
 
   it('ignores an output event with no chunk', () => {

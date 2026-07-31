@@ -160,6 +160,7 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
           applyActions: store.applyActions,
           setIsConnecting,
           setConnectionStatus: store.setConnectionStatus,
+          setConnectionError: store.setConnectionError,
           setSession: store.setSession,
           setAttachment: store.setAttachment,
           checkForPreviousSession,

@@ -132,6 +132,8 @@ export interface ConnectionSliceState {
 
 export interface ConnectionSliceActions {
   setConnectionStatus: (status: ConnectionStatus, error?: string) => void;
+  /** Set the last error text without asserting anything about the transport. */
+  setConnectionError: (error: string | null) => void;
   setSession: (providerType: string, sessionId: string) => void;
   setAttachment: (attachment: {
     sessionId: string;

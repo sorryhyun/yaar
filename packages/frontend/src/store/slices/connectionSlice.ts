@@ -18,6 +18,20 @@ export const createConnectionSlice: SliceCreator<ConnectionSlice> = (set, _get) 
       state.connectionError = error ?? null;
     }),
 
+  // Record something that went wrong without claiming the transport did.
+  //
+  // A ServerEvent ERROR is almost never about the connection: it names a message that
+  // was dropped, an app agent that threw, a queue that was full. Routing those through
+  // setConnectionStatus('error') put the whole desktop into a state the status bar
+  // renders as "Disconnected" — while the socket was open and the agent kept working,
+  // with nothing to clear it until the next attach. The text is still worth keeping:
+  // it is what the stalled LoadingScreen shows when the *first* connection is the thing
+  // that failed ("No AI provider available. Install Claude CLI.").
+  setConnectionError: (error) =>
+    set((state) => {
+      state.connectionError = error;
+    }),
+
   setSession: (providerType, sessionId) =>
     set((state) => {
       state.providerType = providerType;

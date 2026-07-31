@@ -17,6 +17,8 @@ export interface ServerEventDispatchHandlers {
     status: 'connecting' | 'connected' | 'disconnected' | 'error',
     error?: string,
   ) => void;
+  /** Record an error's text without claiming the transport changed state. */
+  setConnectionError: (error: string | null) => void;
   setSession: (provider: string, sessionId: string) => void;
   setAttachment: (attachment: {
     sessionId: string;
@@ -356,7 +358,14 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     }
     case ServerEventType.ERROR: {
       const monitorId = (message as { monitorId?: string }).monitorId;
-      handlers.setConnectionStatus('error', message.error);
+      // Not a transport event. ERROR names a *message* or an *agent* — a dropped task, an
+      // app agent that threw, a full queue — and carries agentId/monitorId/messageId to
+      // say which. Putting it into connectionStatus made one app agent's failure render
+      // as "Disconnected" for the whole desktop, permanently: nothing re-sends
+      // CONNECTION_STATUS on a live session, so the only thing that ever cleared it was
+      // the next attach. The error still lands in the CLI, on the message, and in
+      // connectionError (which the pre-connect LoadingScreen shows).
+      handlers.setConnectionError(message.error);
       handlers.addCliEntry({ type: 'error', content: message.error, monitorId });
       // An error that names a message is that message's obituary: it will not run. Mark it
       // failed and stop holding it for redelivery — resending a message the server has
