@@ -5,6 +5,7 @@
 import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { resolveAppDir } from '../apps/roots.js';
+import { agentDocPathsFor } from '../apps/discovery.js';
 
 interface CloneFile {
   path: string;
@@ -72,12 +73,14 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
   // Read all source files recursively
   const files: CloneFile[] = [];
 
-  // Include top-level app files so permissions, protocol, skill docs, etc. are preserved
-  for (const filename of ['app.json', 'SKILL.md', 'AGENTS.md', 'HINT.md']) {
+  // Include the app's non-source files so permissions, protocol and agent docs are
+  // preserved. These are relative paths, not bare names — `deploy` reads them back at
+  // the same path, and the sandbox writer creates intermediate directories.
+  for (const relPath of ['app.json', ...(await agentDocPathsFor(appDir))]) {
     try {
-      const content = await Bun.file(join(appDir, filename)).text();
-      if (filename.endsWith('.json')) JSON.parse(content); // validate JSON
-      files.push({ path: filename, content });
+      const content = await Bun.file(join(appDir, relPath)).text();
+      if (relPath.endsWith('.json')) JSON.parse(content); // validate JSON
+      files.push({ path: relPath, content });
     } catch {
       /* file doesn't exist or invalid */
     }

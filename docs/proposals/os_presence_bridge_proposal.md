@@ -178,7 +178,7 @@ Each phase independently shippable; phase 1 alone delivers the motivating scenar
 1. **Is `yaar://browser/*` the right authority,** given `yaar://session/browser` exists? (Position
    taken here: yes — the substrate docs already treat "session-gated actuation" and "extracted
    read-only observation" as different namespaces by design. But naming deserves one review.)
-2. **Should monitor agents get presence pushed into context** (like `HINT.md` / window
+2. **Should monitor agents get presence pushed into context** (like `agent/hint.md` / window
    subscriptions) rather than pull-only? A monitor agent that *knows* the user is watching a video
    could be proactive — or annoying. Default to pull; revisit with usage.
 3. **Wayland title access** varies by compositor (KWin scripting vs. wlr protocols vs. GNOME shell

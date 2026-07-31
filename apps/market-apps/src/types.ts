@@ -13,7 +13,6 @@ export type ListedApp = {
 export type InstalledApp = {
   id: string;
   name: string;
-  hasSkill?: boolean;
   /** 'system' apps are built-in and cannot be uninstalled. */
   kind?: string;
   /** The local app.json version — compared against the published version to gate publishing. */

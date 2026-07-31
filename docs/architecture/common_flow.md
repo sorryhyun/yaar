@@ -64,9 +64,9 @@ window close/reopen — created on first interaction with an app window and rout
 context.
 
 - **Role**: `app-{appId}-{messageId}`; canonical ID `app-{appId}`; keyed `monitorId::appId`
-- **Context**: first turn bootstraps with the app's prompt (`AGENTS.md` replaces the generic
-  prompt, else `SKILL.md` appends to it) + `protocol.json` manifest; later turns reuse the
-  provider session
+- **Context**: first turn bootstraps with the app's prompt (`agent/prompt.md` replaces the
+  generic prompt if present, else the generic one is used) + `protocol.json` manifest;
+  later turns reuse the provider session
 - **Tools** (scoped by design):
 
 | Tool | Purpose |
@@ -170,7 +170,7 @@ sequenceDiagram
     FE->>S: COMPONENT_ACTION { windowId, action, formData? }
     Note over S: app window → get-or-create app agent (per appId)
     S-->>FE: WINDOW_AGENT_STATUS { status: 'assigned'/'active' }
-    Note over S: first turn: AGENTS.md/SKILL.md + manifest<br/>later turns: provider session continuity
+    Note over S: first turn: agent/prompt.md (or generated) + manifest<br/>later turns: provider session continuity
     S->>AI: provider.query(prompt, { sessionId })
     AI-->>S: stream + query()/command() against the iframe
     S-->>FE: AGENT_RESPONSE

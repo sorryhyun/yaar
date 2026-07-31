@@ -102,7 +102,7 @@ name ? `${appId}-${slug(name)}` : `${appId}-${shortId()}`
 ```
 
 `single` apps keep `deriveWindowId → appId` verbatim, so their stable, guessable window ID
-(which SKILL.md snippets and `reload` fingerprints rely on) is unchanged. The launch snippet
+(which the generated launch snippet and `reload` fingerprints rely on) is unchanged. The launch snippet
 in `features/dev/helpers.ts` must, for `multi` apps, stop hardcoding
 `yaar://windows/${appId}` and instead create against the bare collection
 (`invoke('yaar://windows/', { action: "create", appId, name })`) so each launch gets its own

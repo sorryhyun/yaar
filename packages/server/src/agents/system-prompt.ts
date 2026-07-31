@@ -54,7 +54,7 @@ const DEFAULT_LOADERS: SystemPromptLoaders = {
  * Assemble a turn's full system prompt.
  *
  * App profiles are deliberately closed over their own app context. In
- * particular, do not load the installed-app roster, other apps' HINT.md files,
+ * particular, do not load the installed-app roster, other apps' monitor hints,
  * global storage/mounts, onboarding instructions, or shared memory for them.
  */
 export async function assembleSystemPromptForRole(

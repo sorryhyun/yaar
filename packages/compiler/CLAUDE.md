@@ -262,7 +262,7 @@ Beyond the real `@bundled/*` modules it serves **pseudo-libraries** — describa
 `design-tokens` is one: the tokens ship as injected CSS, so they have no module and no
 `.d.ts`, but an app agent still has to be able to ask what they are. It returns
 `describeDesignTokens()`, generated from `YAAR_DESIGN_TOKENS_CSS`. Before it existed the
-call fell through to `null`, and devtools' `AGENTS.md` was telling agents to make it — so
+call fell through to `null`, and devtools' `agent/prompt.md` was telling agents to make it — so
 the agent asked for the token list, got nothing, and invented Tailwind-shaped names
 (`--yaar-space-2`) that render to nothing. Same list feeds the App Authoring Contract in
 `server/agents/profiles/app-agent.ts`, so what the compiler *rejects* and what it *tells

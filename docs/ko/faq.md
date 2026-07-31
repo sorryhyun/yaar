@@ -94,11 +94,10 @@ delete('yaar://windows/old-panel')           → close it
 
 ```
 apps/slides-lite/
-  app.json        ← metadata + permissions
-  SKILL.md        ← what the AI reads to know how to use it
-  AGENTS.md       ← optional: a dedicated agent for this app
-  src/main.ts     ← the UI + logic
-  dist/index.html ← the build: one self-contained file
+  app.json          ← metadata + permissions; its description is what the AI reads by default
+  agent/prompt.md   ← optional: a dedicated agent prompt for this app, replacing the default
+  src/main.ts       ← the UI + logic
+  dist/index.html   ← the build: one self-contained file
 ```
 
 폴더를 넣으면 → 설치됩니다. 지우면 → 사라집니다. 등록 코드 같은 건 없습니다. 이는 또한 앱이 자신만의 에이전트를 함께 담을 수 있다는 뜻이기도 합니다. 앱 윈도우와 상호작용하면 그 앱을 위한 영속 앱 에이전트가 생성되어 모니터 에이전트에게 메시지를 보낼 수 있고 — `controls`가 선언되어 있다면 *다른* 앱을 직접 조작할 수도 있습니다(Dev Tools가 Browser 앱을 조작해 앱을 처음부터 끝까지 빌드하고 테스트하는 식으로).

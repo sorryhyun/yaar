@@ -158,7 +158,7 @@ src/
 │   ├── sub-agent/        # A sub-agent's one channel — per-caller tool list
 │   └── index.ts          # Re-exports for server, system tools, verb tools
 ├── features/             # Domain business logic (imported by handlers/)
-│   ├── apps/             # App listing, skill loading, marketplace, badge
+│   ├── apps/             # App listing, agent prompt/reference loading, marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)

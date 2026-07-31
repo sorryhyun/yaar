@@ -4,7 +4,7 @@
  * A sub-agent is the leaf of the agent tree (session → monitor → app → sub-agent):
  * an AI instance whose **system prompt its owning app supplies at runtime**. Every
  * other profile in this directory is an install-time artifact, with the prompt coming
- * off disk (`AGENTS.md`, `SKILL.md`) or out of a constant. A sub-agent inverts that
+ * off disk (`agent/prompt.md`) or out of a constant. A sub-agent inverts that
  * half, which is exactly why the other half — what it can touch — is nailed shut here
  * rather than left to the caller (law 3 in
  * `docs/architecture/agent_tree.md`: prompts descend toward runtime,

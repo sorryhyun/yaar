@@ -2,7 +2,7 @@
   "icon": "🧭",
   "name": "Real Browser",
   "run": "dist/index.html",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "YAAR",
   "description": "Observe and manage your real Chrome tabs via the YAAR Bridge extension.",
   "kind": "system",

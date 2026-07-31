@@ -194,9 +194,9 @@ Four IPC mechanisms:
 
 ## Applications
 
-Convention-based: each folder in `apps/` is an app. `SKILL.md` defines what the AI knows about it. `app.json` provides metadata (icon, variant, visibility, file associations).
+Convention-based: each folder in `apps/` is an app. `app.json` provides metadata (icon, variant, visibility, file associations) and, via its `description`, what the AI knows about the app by default — an `agent/prompt.md` overrides that for apps whose agent needs more.
 
-Hidden apps (`"hidden": true`) inject their skill into the system prompt automatically — system-level capabilities the AI always knows about. Install/uninstall flows through the marketplace resources under `yaar://apps/`.
+Hidden apps (`"hidden": true`) inject their description into the system prompt automatically — system-level capabilities the AI always knows about. Install/uninstall flows through the marketplace resources under `yaar://apps/`.
 
 See the Apps System section in the root `CLAUDE.md` for the full schema.
 

@@ -270,7 +270,7 @@ Apps run in a **browser iframe sandbox**:
 - No localStorage/IndexedDB — use `appStorage` (key/value) or `appDb` (SQLite); both are app-scoped and need no permission
 - Must be fully self-contained
 
-For an external API, give the app a `SKILL.md` describing it and keep the user's token at `yaar://config/app/{appId}`. Two things follow from that URI being a normal permission with no implicit self-grant: the app you are building must declare `yaar://config/app/{appId}` in its own `app.json` to read the token back, and *you* cannot write it — devtools holds no `yaar://config/` permission, so `relay()` that to the monitor agent. The alternative is a UI-only app with the agent mediating API calls across the App Protocol.
+For an external API, describe it in the app's `agent/prompt.md` and keep the user's token at `yaar://config/app/{appId}`. Two things follow from that URI being a normal permission with no implicit self-grant: the app you are building must declare `yaar://config/app/{appId}` in its own `app.json` to read the token back, and *you* cannot write it — devtools holds no `yaar://config/` permission, so `relay()` that to the monitor agent. The alternative is a UI-only app with the agent mediating API calls across the App Protocol.
 
 ## Solid.js Gotchas
 
@@ -293,12 +293,12 @@ Direct control (`appId`) is synchronous and precise — use it when you know the
 
 ## Agent Prompt Files
 
-Markdown files in an app's directory customize how agents treat it. Write them into the project and redeploy.
+Two markdown files in an app's `agent/` directory customize how agents treat it. Write them into the project and redeploy; both are optional and most apps need neither.
 
-**`AGENTS.md` — the app agent's prompt. Replaces the generic base prompt entirely**, so it must document the tools itself. The app's `protocol.json` manifest is always appended automatically, one call signature per command (param names, types, `?` for optional) — never duplicate the command/state reference, and never restate a param list a signature already carries; a hand-written copy is one deploy away from being wrong. Focus on *how to use* the protocol: concrete `command()`/`query()` examples, multi-step workflows, domain concepts and schemas needed to build valid params, and anti-patterns.
+**`agent/prompt.md` — the app agent's prompt. It *is* the base prompt**, replacing the generic one entirely, so it must document the tools itself. The app's `protocol.json` manifest is always appended automatically, one call signature per command (param names, types, `?` for optional) — never duplicate the command/state reference, and never restate a param list a signature already carries; a hand-written copy is one deploy away from being wrong. Focus on *how to use* the protocol: concrete `command()`/`query()` examples, multi-step workflows, domain concepts and schemas needed to build valid params, and anti-patterns.
 
-**`SKILL.md` — appended to a generic base prompt.** For simpler apps needing only added domain context. Deploy auto-generates one for compiled apps.
+**`agent/hint.md` — injected into the monitor agent's prompt**, not the app agent's. Says *when* to route work to this app, not how it works. Keep to 1–3 sentences. Auto-syncs with install/uninstall.
 
-**`HINT.md` — injected into the monitor agent's prompt**, not the app agent's. Says *when* to route work to this app, not how it works. Keep to 1–3 sentences. Auto-syncs with install/uninstall.
+There is no third, append-to-the-generic-prompt tier. An app that needs to say only a little says it in `agent/hint.md`; everything a *describing* agent needs — the app's description, its state keys, its command signatures — is generated from `app.json` and `protocol.json` and served by `read("yaar://apps/{appId}")`, so writing it out by hand only creates something to keep in sync.
 
-**Priority:** `AGENTS.md` > `SKILL.md` — if both exist only `AGENTS.md` is used. `HINT.md` is independent and always applies.
+An app's root `AGENTS.md` is **not** one of these. That filename means what it means everywhere else — instructions to a coding agent editing the directory — and you are that agent, so read one if an app has it.

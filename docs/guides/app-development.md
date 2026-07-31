@@ -30,7 +30,7 @@ All operations use 5 generic verbs (`read`, `list`, `invoke`, `delete`, `describ
 
 App development (write, edit, compile, typecheck, deploy, clone) is handled through the **devtools app** via App Protocol commands. The devtools app runs in an iframe window and exposes these operations as protocol commands. The AI opens the devtools window and interacts with it using `app_command` and `app_query`.
 
-See the devtools app's `SKILL.md` for the full list of available commands.
+For the full list of available commands, `describe('yaar://apps/devtools')` — the manifest is generated from the app's own `protocol.json`.
 
 ### Apps — `yaar://apps/`
 
@@ -38,7 +38,7 @@ See the devtools app's `SKILL.md` for the full list of available commands.
 |------|-----|-------------|
 | `list` | `yaar://apps` | List all installed apps |
 | `describe` | `yaar://apps/{appId}` | Metadata + protocol manifest (capabilities) |
-| `read` | `yaar://apps/{appId}` | Load an app's SKILL.md (manifest appended) |
+| `read` | `yaar://apps/{appId}` | Load a generated reference doc (name/description + protocol manifest + permissions) |
 | `invoke` | `yaar://apps/{appId}`, `{ action, ... }` | Run an app action (see below) |
 | `delete` | `yaar://apps/{appId}` | Uninstall app |
 
@@ -98,7 +98,7 @@ The AI opens an iframe window to preview the compiled result immediately.
 The AI sends a deploy command to the devtools app.
 
 - Copies compiled HTML to `apps/{appId}/`
-- Writes `app.json`, plus `SKILL.md` only if you hand-wrote one (there is no generated fallback — the launch snippet and protocol blurb are derived at read time)
+- Writes `app.json`. Reading the app back (`yaar://apps/{appId}`) always returns a reference doc generated from `app.json`'s `description` and `protocol.json` at read time — there's no file for deploy to write for that; an `agent/prompt.md`/`agent/hint.md` you hand-authored is picked up from the app directory as-is
 - Icon appears on desktop immediately
 - Closes any window still running the previous build, and drops the app agent's cached
   profile so its next turn is built from the new `protocol.json`. Both would otherwise
@@ -616,7 +616,7 @@ stay in your app. `httpFetch` normalizes transport only.
 
 Common mistakes to avoid when building apps:
 
-- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (SKILL.md only) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { config })`.
+- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (`app.json` + `agent/prompt.md`, no compiled source) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { config })`.
 - **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
@@ -631,7 +631,7 @@ Common mistakes to avoid when building apps:
 
 ```
 Option A: API-based app (preferred for API wrappers)
-  apps/recent-papers/SKILL.md → describes the arXiv API, query flow
+  apps/recent-papers/agent/prompt.md → describes the arXiv API, query flow
   User provides an API key → stored via invoke('yaar://config/app/{appId}', { config })
   AI calls the service API via invoke('yaar://http', ...) → renders in windows
 
@@ -649,15 +649,24 @@ Each app gets its own **app agent** when a user interacts with it. The agent's s
 
 | File | Role | When to use |
 |------|------|-------------|
-| `SKILL.md` | Appended to a generic base prompt | Most apps — add API docs, usage instructions, domain context |
-| `AGENTS.md` | **Replaces** the generic base prompt entirely | Apps needing precise agent behavior (e.g., devtools IDE) |
-| `HINT.md` | Injected into the **monitor agent's** system prompt | Routing hints so the orchestrator knows when/how to use the app |
+| `agent/prompt.md` | **Replaces** the generic base prompt entirely | Apps needing precise agent behavior (e.g., devtools IDE) |
+| `agent/hint.md` | Injected into the **monitor agent's** system prompt | Routing hints so the orchestrator knows when/how to use the app |
 
-**Priority:** `AGENTS.md` > `SKILL.md`. If both exist, only `AGENTS.md` is used. The `protocol.json` manifest is always appended regardless: state keys as a name + description list, and each command as a call signature built from its `params` schema — `readFile(path: string|string[], startLine?: number, …)`, with `?` on optional params and enums spelled out as their values. So neither prompt file needs to restate a command's params, and one that does will drift from the schema the app actually validates against. `describe()` still returns the full schema when per-param descriptions matter.
+There is no append tier — **one file, one meaning.** Without `agent/prompt.md`, the agent gets the generic base prompt, and either way the `protocol.json` manifest is appended: state keys as a name + description list, and each command as a call signature built from its `params` schema — `readFile(path: string|string[], startLine?: number, …)`, with `?` on optional params and enums spelled out as their values. That manifest section is appended regardless of which prompt a given turn uses, so neither the generated prompt nor a hand-written `agent/prompt.md` needs to restate a command's params — one that does will drift from the schema the app actually validates against. `describe()` still returns the full schema when per-param descriptions matter.
 
-### HINT.md (orchestrator context)
+Both paths are configurable in `app.json`:
 
-Unlike `SKILL.md` and `AGENTS.md` which configure the **app agent**, `HINT.md` is injected into the **monitor (orchestrator) agent's** system prompt. This tells the orchestrator when to route tasks to the app. Hints auto-sync with installed apps — uninstalling the app removes the hint.
+```json
+"agent": { "prompt": "agent/prompt.md", "hint": "agent/hint.md" }
+```
+
+These are the *defaults*, applied when `agent` is absent, so most apps never need to set the field — only an app relocating its prompt files does.
+
+**Back-compat:** if `agent/prompt.md` or `agent/hint.md` is absent, the server falls back to a legacy root `AGENTS.md`/`HINT.md` and logs a `[apps]` warning naming the new path. This exists for apps written before the rename (including some market-installed apps) — write new apps at the `agent/` paths.
+
+### agent/hint.md (orchestrator context)
+
+Unlike `agent/prompt.md`, which configures the **app agent**, `agent/hint.md` is injected into the **monitor (orchestrator) agent's** system prompt. This tells the orchestrator when to route tasks to the app. Hints auto-sync with installed apps — uninstalling the app removes the hint.
 
 Use this for app-dependent orchestration guidance that would otherwise go stale in a static system prompt. Example:
 
@@ -667,29 +676,28 @@ is a specialist with direct access to the project filesystem, compiler,
 and type checker.
 ```
 
-### SKILL.md (default)
+### agent/prompt.md (full control)
 
-The agent gets a generic prompt ("You are an AI assistant for the X app...") with `SKILL.md` content appended under an "App Documentation" heading. Good for apps where the default tool behavior (describe, query, command, relay) is sufficient and you just need to add domain knowledge.
-
-### AGENTS.md (full control)
-
-The agent's entire system prompt is replaced with the contents of `AGENTS.md`. Use this when:
+The agent's entire system prompt is replaced with the contents of `agent/prompt.md`. Use this when:
 - The agent needs a specific workflow (e.g., devtools: typecheck → compile → deploy)
 - You want to define anti-patterns, gotchas, or domain-specific rules
 - The generic prompt's behavior guidelines don't fit
 
-Since `AGENTS.md` replaces the base prompt, you must document the available tools (`describe`, `query`, `command`, `relay`) yourself if the agent needs to know about them. (`protocol.json`, and a "Controllable Apps" section when `controls` is set, are still appended automatically.)
+Since `agent/prompt.md` replaces the base prompt, you must document the available tools (`describe`, `query`, `command`, `relay`) yourself if the agent needs to know about them. (`protocol.json`, and a "Controllable Apps" section when `controls` is set, are still appended automatically.)
+
+Note that `AGENTS.md` at the app's root is a different, unrelated file: it's the conventional name a coding agent looks for when *editing* that directory, not a runtime prompt. Nothing currently ships one — devtools writes apps into `apps/`, so its own root `AGENTS.md` would be exactly the "how to edit this directory" doc a coding agent expects to find there.
 
 ### Example structure
 
 ```
 apps/my-app/
-├── AGENTS.md       # Full custom agent prompt (optional, advanced)
-├── SKILL.md        # App documentation (optional, simpler)
-├── HINT.md         # Monitor agent routing hint (optional)
-├── app.json        # Metadata, permissions, protocol manifest
-├── index.html      # Compiled app (if compiled)
-└── src/            # Source code (if compiled)
+├── AGENTS.md        # (Optional) instructions for a coding agent editing this app — not runtime
+├── agent/
+│   ├── prompt.md    # Full custom agent prompt (optional, advanced)
+│   └── hint.md      # Monitor agent routing hint (optional)
+├── app.json         # Metadata, permissions, protocol manifest
+├── index.html       # Compiled app (if compiled)
+└── src/             # Source code (if compiled)
 ```
 
 ## `app.json` Reference
@@ -711,6 +719,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `permissions` | `(string \| { uri, verbs? })[]` | Pre-granted URI permissions, e.g. `"yaar://storage/"` or `{ "uri": "yaar://http", "verbs": ["read"] }` |
 | `bundles` | `string[]` | Opt in to gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`). The compiler rejects the import without it |
 | `agentType` | `string` | Override the agent profile used for this app's agent |
+| `agent` | `{ prompt?, hint? }` | Override the default paths (`agent/prompt.md`, `agent/hint.md`) for this app's prompt files |
 | `messaging` | `"all"` | Lets the app agent `direct_message` other apps/windows, not just monitor/user |
 | `controls` | `(string \| { appId, commands? })[]` | Other apps this app may drive. **Bundled apps only** |
 | `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Approved at install** |
@@ -734,32 +743,37 @@ Built by the AI: write → compile → deploy. Runs in iframe.
 
 ```
 apps/falling-blocks/
-├── SKILL.md        # Optional — only if the app needs docs beyond its manifest
-├── app.json        # { "icon": "🎮", "name": "Falling Blocks" }
-├── index.html      # Compiled single HTML
-└── src/            # Source code (keepSource: true)
+├── agent/
+│   └── prompt.md    # Optional — only if the app needs the agent to know more than its manifest
+├── app.json         # { "icon": "🎮", "name": "Falling Blocks" }
+├── index.html       # Compiled single HTML
+└── src/             # Source code (keepSource: true)
     ├── main.ts
     └── styles.css
 ```
 
 ### API-based Apps
 
-Apps that call external APIs. Describe the API in SKILL.md and the AI handles the calls.
+Apps that call external APIs. Describe the API in `agent/prompt.md` and the AI handles the calls.
 
 ```
 apps/moltbook/
-└── SKILL.md        # API endpoints, auth flow, workflows
+├── app.json
+└── agent/
+    └── prompt.md    # API endpoints, auth flow, workflows
 ```
 
-List APIs like `POST /api/v1/posts`, `GET /feed` in SKILL.md. When a user says "show my feed", the AI calls the API and renders results in a window.
+List APIs like `POST /api/v1/posts`, `GET /feed` in `agent/prompt.md`. When a user says "show my feed", the AI calls the API and renders results in a window.
 
-### Manual SKILL.md Apps
+### Manual prompt-only Apps
 
-You can also create apps manually. Just put a `SKILL.md` in `apps/`.
+You can also create apps manually with no compiled source — just `app.json` plus an `agent/prompt.md` in `apps/`.
 
 ```
 apps/weather/
-└── SKILL.md    # API docs, auth, workflows
+├── app.json
+└── agent/
+    └── prompt.md    # API docs, auth, workflows
 ```
 
 ## App Protocol

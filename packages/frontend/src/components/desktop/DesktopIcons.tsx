@@ -23,7 +23,6 @@ interface AppInfo {
   description?: string;
   icon?: string;
   iconType?: 'emoji' | 'image';
-  hasSkill: boolean;
   hasConfig: boolean;
   run?: string;
   variant?: 'standard' | 'widget' | 'panel';

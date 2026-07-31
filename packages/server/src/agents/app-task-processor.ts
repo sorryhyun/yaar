@@ -4,7 +4,7 @@
  * App agents:
  * - Persist for the session lifetime (not tied to window close)
  * - Have only query, command, and relay tools
- * - Get a dynamic system prompt from SKILL.md and protocol manifest
+ * - Get a dynamic system prompt from `agent/prompt.md` and the protocol manifest
  * - Track the most recently interacted window for tool resolution
  */
 
@@ -284,7 +284,7 @@ export class AppTaskProcessor {
   /**
    * Forget the cached profile for one app — its files on disk just changed.
    *
-   * A profile is built once from `protocol.json`, `SKILL.md`/`AGENTS.md` and `controls`,
+   * A profile is built once from `protocol.json`, `agent/prompt.md` and `controls`,
    * and cached because none of that moves during a session. A deploy moves all of it. The
    * cache is the whole staleness: the prompt is passed per turn (`systemPromptOverride`),
    * so dropping the entry is enough to rebuild the app agent's instructions from the new

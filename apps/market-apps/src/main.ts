@@ -128,7 +128,6 @@ export default defineApp({
               properties: {
                 id: { type: 'string' },
                 name: { type: 'string' },
-                hasSkill: { type: 'boolean' },
                 kind: { type: 'string' },
                 version: { type: 'string' },
               },

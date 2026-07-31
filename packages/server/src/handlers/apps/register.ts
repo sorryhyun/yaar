@@ -48,7 +48,7 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   // ── yaar://apps/{appId} — per-app operations + app-scoped storage/db ──
   registry.register('yaar://apps/*', {
     description:
-      'A specific app. Read to load its SKILL.md, invoke to set_badge/install/publish, delete to uninstall. ' +
+      'A specific app. Read for its reference doc (description + protocol + permissions), invoke to set_badge/install/publish, delete to uninstall. ' +
       'Sub-path /storage/{path} provides app-scoped file storage. ' +
       'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search). ' +
       "Sub-path /agents[/{personaId}] provides the app's own tool-less persona agents.",

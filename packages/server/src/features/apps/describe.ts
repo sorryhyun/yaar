@@ -1,8 +1,9 @@
 /**
- * App describe/skill business logic extracted from handlers/apps.ts.
+ * What one app looks like to another agent — the `describe` and `read` verbs on
+ * `yaar://apps/{appId}`.
  */
 
-import { listApps, loadAppSkill } from './discovery.js';
+import { listApps } from './discovery.js';
 
 /**
  * Build a rich app info object for the describe verb.
@@ -28,28 +29,29 @@ export async function describeApp(appId: string): Promise<Record<string, unknown
   if (app.protocol) result.protocol = app.protocol;
   if (app.permissions?.length) result.permissions = app.permissions;
 
-  const skill = await loadAppSkill(appId);
-  if (skill) result.skill = skill;
-
   return result;
 }
 
 /**
- * Load an app's SKILL.md and append protocol manifest + permissions sections.
- * Returns null if the app is not installed.
+ * The reference doc another agent gets from `read('yaar://apps/{appId}')` — a header
+ * from `app.json` plus the protocol manifest and permissions.
  *
- * SKILL.md is optional and no longer generated at deploy time, so an app
- * without one still gets a doc here — a header plus the manifest and
- * permissions derived from app.json/protocol.json.
+ * Entirely generated. There used to be a hand-written `SKILL.md` this fell back from,
+ * but everything it carried is either `app.json`'s `description` or a restatement of
+ * `protocol.json` — and a restatement is one deploy away from being wrong. An app that
+ * needs to say more to its *own* agent writes `agent/prompt.md`; page-length API
+ * references are the job of the per-app `SKILLS/` directory proposed in
+ * `docs/architecture/shell_to_userland.md`, read on demand rather than injected.
+ *
+ * Returns null only when the app is not installed.
  */
-export async function loadAppSkillWithManifest(appId: string): Promise<string | null> {
+export async function buildAppReference(appId: string): Promise<string | null> {
   const apps = await listApps();
   const app = apps.find((a) => a.id === appId);
   if (!app) return null;
 
-  const skill = await loadAppSkill(appId);
-  let result = skill ?? `# ${app.name}${app.description ? `\n\n${app.description}` : ''}`.trimEnd();
-  if (app?.protocol) {
+  let result = `# ${app.name}${app.description ? `\n\n${app.description}` : ''}`.trimEnd();
+  if (app.protocol) {
     const sections: string[] = [];
     const { state, commands } = app.protocol;
     if (state && Object.keys(state).length) {
@@ -83,7 +85,7 @@ export async function loadAppSkillWithManifest(appId: string): Promise<string | 
   }
 
   // Append permissions section if the app declares URI permissions
-  if (app?.permissions?.length) {
+  if (app.permissions?.length) {
     const permissionsList = app.permissions
       .map((p) => {
         if (typeof p === 'string') return `- \`${p}\``;

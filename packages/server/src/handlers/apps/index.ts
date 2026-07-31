@@ -4,7 +4,7 @@
  * Maps app operations to the verb layer:
  *
  *   list('yaar://apps')                              → list all installed apps
- *   read('yaar://apps/{appId}')                      → load SKILL.md
+ *   read('yaar://apps/{appId}')                      → generated reference doc
  *   invoke('yaar://apps/{appId}', { action, ... })   → set_badge | install | publish | clone
  *   delete('yaar://apps/{appId}')                    → uninstall app
  *

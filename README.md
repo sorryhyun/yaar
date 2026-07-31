@@ -84,9 +84,9 @@ The whole desktop is an input surface, not just the text box:
   list('yaar://apps')                        delete('yaar://windows/old-panel')
   ```
 
-- **One folder = one app.** Skills, plugins, agents, and UI are unified into a single convention: metadata (`app.json`), AI-readable docs (`SKILL.md`), an optional dedicated agent (`AGENTS.md`), and source that builds to one self-contained HTML file. Drop the folder in to install, delete it to uninstall — zero registration code.
+- **One folder = one app.** Skills, plugins, agents, and UI are unified into a single convention: metadata (`app.json`, whose `description` doubles as AI-readable docs), an optional dedicated agent prompt (`agent/prompt.md`), and source that builds to one self-contained HTML file. Drop the folder in to install, delete it to uninstall — zero registration code.
 
-- **Every app can have its own agent.** Drop in an `AGENTS.md` and that app gets a dedicated agent that exchanges messages with the monitor agent. Apps can even drive other apps directly (`controls` in `app.json`) — Dev Tools, for example, pilots the real browser app to build and test an app end to end.
+- **Every app can have its own agent.** Drop in an `agent/prompt.md` and that app gets a dedicated agent that exchanges messages with the monitor agent. Apps can even drive other apps directly (`controls` in `app.json`) — Dev Tools, for example, pilots the real browser app to build and test an app end to end.
 
 - **Permissions are explicit and scoped.** An app is confined to the `permissions` declared in its `app.json` plus its own storage. Outbound HTTP is limited to a domain allowlist, new domains require your approval, and every allow/deny decision is recorded. Details in [Security](#security).
 

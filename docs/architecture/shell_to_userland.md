@@ -78,7 +78,8 @@ Let an app contribute skill topics from its own directory, and have `yaar://skil
 ```
 apps/market-apps/
   app.json
-  HINT.md              # already: monitor-agent orchestration hints
+  agent/
+    hint.md            # already: monitor-agent orchestration hints
   SKILLS/
     marketplace.md     # new: lazily-read reference doc
 ```
@@ -91,9 +92,9 @@ apps/market-apps/
 - The `TOPIC_NAMES` / `TOPICS` drift assertion in `topics.ts` stays, scoped to built-ins. App
   topics are discovered, so they cannot drift.
 
-### Why `SKILLS/` and not `HINT.md`
+### Why `SKILLS/` and not `agent/hint.md`
 
-`HINT.md` is injected into the **monitor agent's system prompt** — always-on token cost, paid on
+`agent/hint.md` is injected into the **monitor agent's system prompt** — always-on token cost, paid on
 every turn whether or not the marketplace is in play. Skill topics are read **on demand**. The
 marketplace reference is a page of API tables; that is a read, not a preamble. The two mechanisms
 should stay distinct, and an app should be able to use both.

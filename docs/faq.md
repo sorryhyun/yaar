@@ -94,11 +94,10 @@ Because in most AI tooling, one capability is scattered across four registries: 
 
 ```
 apps/slides-lite/
-  app.json        ← metadata + permissions
-  SKILL.md        ← what the AI reads to know how to use it
-  AGENTS.md       ← optional: a dedicated agent for this app
-  src/main.ts     ← the UI + logic
-  dist/index.html ← the build: one self-contained file
+  app.json          ← metadata + permissions; its description is what the AI reads by default
+  agent/prompt.md   ← optional: a dedicated agent prompt for this app, replacing the default
+  src/main.ts       ← the UI + logic
+  dist/index.html   ← the build: one self-contained file
 ```
 
 Drop the folder in → installed. Delete it → gone. No registration code. It also means an app can bundle its own agent: interact with an app window and a persistent app agent spins up for it, able to message the monitor agent — or, with declared `controls`, drive *other* apps directly (Dev Tools drives the Browser app to build and test apps end-to-end).

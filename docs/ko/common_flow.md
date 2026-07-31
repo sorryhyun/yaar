@@ -56,9 +56,9 @@ flowchart LR
 영속 에이전트입니다(같은 앱의 모든 윈도우가 이를 공유하며, 윈도우를 닫았다 다시 열어도 유지).
 
 - **Role**: `app-{appId}-{messageId}`; 정규 ID는 `app-{appId}`
-- **컨텍스트**: 첫 턴은 앱의 프롬프트로 부트스트랩되고(`AGENTS.md`가 있으면 제너릭 프롬프트를
-  대체하고, 없으면 `SKILL.md`가 여기에 덧붙여짐) `protocol.json` 매니페스트가 함께 주입됨;
-  이후 턴은 프로바이더 세션을 재사용
+- **컨텍스트**: 첫 턴은 앱의 프롬프트로 부트스트랩되고(`agent/prompt.md`가 있으면 제너릭 프롬프트를
+  대체하고, 없으면 제너릭 프롬프트를 그대로 씀) `protocol.json`
+  매니페스트가 함께 주입됨; 이후 턴은 프로바이더 세션을 재사용
 - **도구** (설계상 범위가 제한됨):
 
 | 도구 | 용도 |
@@ -142,7 +142,7 @@ sequenceDiagram
     FE->>S: COMPONENT_ACTION { windowId, action, formData? }
     Note over S: 앱 윈도우 → 앱 에이전트 조회 또는 생성 (appId별)
     S-->>FE: WINDOW_AGENT_STATUS { status: 'assigned'/'active' }
-    Note over S: 첫 턴: AGENTS.md/SKILL.md + 매니페스트<br/>이후 턴: 프로바이더 세션 연속성
+    Note over S: 첫 턴: agent/prompt.md(또는 생성된 프롬프트) + 매니페스트<br/>이후 턴: 프로바이더 세션 연속성
     S->>AI: provider.query(prompt, { sessionId })
     AI-->>S: 스트림 + iframe에 대한 query()/command()
     S-->>FE: AGENT_RESPONSE

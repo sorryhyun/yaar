@@ -3,7 +3,7 @@
  */
 
 import { mkdir, cp, readdir, stat, rm, unlink } from 'fs/promises';
-import { join } from 'path';
+import { dirname, join } from 'path';
 import {
   compileTypeScript,
   typecheckSandbox,
@@ -17,7 +17,7 @@ import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
-import { invalidateAppsCache } from '../apps/discovery.js';
+import { agentDocPaths, invalidateAppsCache } from '../apps/discovery.js';
 import { retireStaleApp } from '../apps/retire.js';
 import { snapshotApp } from './git.js';
 
@@ -101,7 +101,6 @@ export interface DeployArgs {
   description?: string;
   icon?: string;
   keepSource?: boolean;
-  skill?: string;
   sourcePath?: string; // Override sandbox path — use this directory as source
   message?: string; // Commit message for this deploy's history snapshot
   /** Ship without type checking. Escape hatch — the caller is stating they know. */
@@ -144,7 +143,7 @@ export async function doDeploy(
   sandboxId: string,
   args: DeployArgs,
 ): Promise<DeployResult | DeployRefusal> {
-  const { appId, name, description, icon, keepSource = true, skill, skipTypecheck } = args;
+  const { appId, name, description, icon, keepSource = true, skipTypecheck } = args;
 
   // Deploy-progress stream. Frames go to any app streaming this URI; a no-op
   // when no one is subscribed (or no sessionId was passed).
@@ -315,14 +314,6 @@ export async function doDeploy(
     return { success: false, error: 'Nothing to deploy. Run compile first.' };
   }
 
-  // Read SKILL.md from sandbox if it exists (editable during development)
-  let sandboxSkill: string | undefined;
-  try {
-    sandboxSkill = await Bun.file(join(sandboxPath, 'SKILL.md')).text();
-  } catch {
-    // No sandbox SKILL.md
-  }
-
   // Read sandbox's app.json as the base (preserves permissions, etc. from clone)
   let sandboxMeta: Record<string, unknown> = {};
   try {
@@ -400,31 +391,20 @@ export async function doDeploy(
       await cp(join(sandboxPath, f), join(appPath, f));
     }
 
-    // Only hand-written SKILL.md is deployed. There is no generated fallback:
-    // the launch snippet and protocol blurb it used to emit are already derived
-    // at read time (`features/apps/describe.ts` appends the protocol manifest),
-    // so generating them here only produced boilerplate files to maintain.
-    const skillContent = sandboxSkill ?? skill;
-    if (skillContent !== undefined) {
-      await writeIfChanged(join(appPath, 'SKILL.md'), skillContent);
-    }
-
-    // Copy HINT.md from sandbox if it exists (monitor agent orchestration hints)
-    try {
-      const hintContent = await Bun.file(join(sandboxPath, 'HINT.md')).text();
-      await writeIfChanged(join(appPath, 'HINT.md'), hintContent);
-    } catch {
-      // No HINT.md in sandbox
-    }
-
-    // Copy AGENTS.md from sandbox if it exists (full custom app-agent prompt).
-    // `cloneApp` pulls it into the sandbox, so a deploy that skipped it would
-    // silently discard every edit the user made to the app agent's prompt.
-    try {
-      const agentsContent = await Bun.file(join(sandboxPath, 'AGENTS.md')).text();
-      await writeIfChanged(join(appPath, 'AGENTS.md'), agentsContent);
-    } catch {
-      // No AGENTS.md in sandbox
+    // Carry the agent docs across — `agent/prompt.md` is the app agent's whole system
+    // prompt and `agent/hint.md` is what the monitor agent is told about the app.
+    // `cloneApp` pulls both into the sandbox, so a deploy that skipped them would
+    // silently discard every edit the user made to either. The paths come from the
+    // sandbox's own app.json, so a doc lands where the reader will look for it.
+    for (const relPath of Object.values(agentDocPaths(sandboxMeta))) {
+      let content: string;
+      try {
+        content = await Bun.file(join(sandboxPath, relPath)).text();
+      } catch {
+        continue; // not in the sandbox — the common case
+      }
+      await mkdir(dirname(join(appPath, relPath)), { recursive: true });
+      await writeIfChanged(join(appPath, relPath), content);
     }
 
     // Sandbox app.json is the source of truth for all metadata (permissions, variant, etc.)

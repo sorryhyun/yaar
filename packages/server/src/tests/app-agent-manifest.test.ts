@@ -7,8 +7,8 @@ import { buildAppAgentProfile } from '../agents/profiles/app-agent.js';
 
 /**
  * The appended manifest is the only place an app agent is told what a command's
- * params are called — devtools' AGENTS.md points at it explicitly. When it listed
- * names and descriptions only, the agent guessed: `readFile({ paths: [...] })`
+ * params are called — devtools' `agent/prompt.md` points at it explicitly. When it
+ * listed names and descriptions only, the agent guessed: `readFile({ paths: [...] })`
  * against a command whose batch form is `path: string[]`.
  */
 describe('app agent protocol manifest', () => {
@@ -34,5 +34,41 @@ describe('app agent protocol manifest', () => {
 
     expect(systemPrompt).toContain('## Available State');
     expect(systemPrompt).toMatch(/- `project`: /);
+  });
+});
+
+/**
+ * One prompt file, one meaning. `agent/prompt.md` *is* the base prompt when an app
+ * ships one, and the generic base is when it doesn't — there is no third tier that
+ * appends to the generic prompt, which is what `SKILL.md` used to be.
+ */
+describe('app agent base prompt', () => {
+  const GENERIC_OPENING = "You handle user interactions within this app's windows.";
+
+  it('uses agent/prompt.md as the whole base, not as an addition to the generic one', async () => {
+    // devtools ships apps/devtools/agent/prompt.md.
+    const { systemPrompt } = await buildAppAgentProfile('devtools');
+
+    expect(systemPrompt.startsWith('# Devtools Agent')).toBe(true);
+    expect(systemPrompt).not.toContain(GENERIC_OPENING);
+  });
+
+  it('falls back to the generic prompt, with nothing appended from disk', async () => {
+    // memo ships no agent/prompt.md — only an agent/hint.md, which is the *monitor*
+    // agent's business and must not leak into this prompt.
+    const { systemPrompt } = await buildAppAgentProfile('memo');
+
+    expect(systemPrompt).toContain('You are an AI assistant for the "Memo" app');
+    expect(systemPrompt).toContain(GENERIC_OPENING);
+    // The heading SKILL.md's contents used to arrive under.
+    expect(systemPrompt).not.toContain('## App Documentation');
+  });
+
+  it('appends the protocol manifest either way', async () => {
+    const withPrompt = await buildAppAgentProfile('devtools');
+    const generic = await buildAppAgentProfile('memo');
+
+    expect(withPrompt.systemPrompt).toContain('## Available Commands');
+    expect(generic.systemPrompt).toContain('## Available Commands');
   });
 });

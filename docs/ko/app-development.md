@@ -30,7 +30,7 @@ YAAR에서는 AI에게 무엇을 만들지 말하면 AI가 앱을 만듭니다. 
 
 앱 개발(작성, 편집, 컴파일, 타입 검사, 배포, 복제)은 **devtools 앱**을 통해 App Protocol 명령으로 처리됩니다. devtools 앱은 iframe 윈도우에서 실행되며, 이러한 작업을 프로토콜 명령으로 제공합니다. AI가 devtools 윈도우를 열고 `app_command`와 `app_query`로 상호작용합니다.
 
-사용 가능한 명령의 전체 목록은 devtools 앱의 `SKILL.md`를 참조하세요.
+사용 가능한 명령의 전체 목록은 `describe('yaar://apps/devtools')`로 확인하세요 — 매니페스트는 앱 자신의 `protocol.json`에서 생성됩니다.
 
 ### 앱 — `yaar://apps/`
 
@@ -38,7 +38,7 @@ YAAR에서는 AI에게 무엇을 만들지 말하면 AI가 앱을 만듭니다. 
 |------|-----|------|
 | `list` | `yaar://apps` | 설치된 앱 전체 목록 조회 |
 | `describe` | `yaar://apps/{appId}` | 메타데이터 + 프로토콜 매니페스트(기능) |
-| `read` | `yaar://apps/{appId}` | 앱의 SKILL.md 로드 (매니페스트가 덧붙여짐) |
+| `read` | `yaar://apps/{appId}` | 생성된 참조 문서 로드 (이름/설명 + 프로토콜 매니페스트 + 권한) |
 | `invoke` | `yaar://apps/{appId}`, `{ action, ... }` | 앱 액션 실행 (아래 참조) |
 | `delete` | `yaar://apps/{appId}` | 앱 삭제 |
 
@@ -98,7 +98,7 @@ AI가 iframe 윈도우를 열어 컴파일 결과를 바로 확인합니다.
 AI가 devtools 앱에 deploy 명령을 보냅니다.
 
 - 컴파일된 HTML을 `apps/{appId}/`로 복사
-- `app.json` 작성. `SKILL.md`는 직접 작성한 경우에만 배포 (자동 생성 대체본은 없음 — 실행 스니펫과 프로토콜 설명은 읽는 시점에 파생됨)
+- `app.json` 작성. 앱을 다시 읽으면(`yaar://apps/{appId}`) 읽는 시점에 `app.json`의 `description`과 `protocol.json`으로부터 생성된 참조 문서가 항상 반환되므로, deploy가 이를 위해 따로 쓰는 파일은 없음 — 직접 작성한 `agent/prompt.md`/`agent/hint.md`는 앱 디렉터리에 있는 그대로 사용됨
 - 바탕화면에 아이콘 즉시 등장
 - `appProtocol`: App Protocol 지원 여부 표시 (설정하지 않으면 HTML에서 자동 감지)
 - `fileAssociations`: 파일 확장자를 파일 열기용 `app_command` 호출에 매핑
@@ -535,7 +535,7 @@ export async function logout() {
 
 앱 개발 시 피해야 할 일반적인 실수:
 
-- **OAuth 클라이언트를 컴파일된 앱으로 만들지 마세요** — OAuth에는 서버 측 `client_secret` 토큰 교환이 필요합니다. 대신, 사용자가 개인 액세스 토큰(PAT)을 제공하고 `invoke('yaar://config/app/{appId}', { config })`로 저장하는 API 기반 앱(SKILL.md만)을 만드세요.
+- **OAuth 클라이언트를 컴파일된 앱으로 만들지 마세요** — OAuth에는 서버 측 `client_secret` 토큰 교환이 필요합니다. 대신, 사용자가 개인 액세스 토큰(PAT)을 제공하고 `invoke('yaar://config/app/{appId}', { config })`로 저장하는 API 기반 앱(`app.json` + `agent/prompt.md`, 컴파일된 소스 없음)을 만드세요.
 - **외부 서버가 실행 중이라고 가정하지 마세요** — `localhost:3000`이나 다른 포트에 백엔드가 없습니다. 앱은 완전히 자체 완결형이어야 합니다.
 - **프록시 응답 봉투를 직접 정의하지 마세요** — `httpFetch` 와 그것이 반환하는 표준 `Response` 를 쓰세요. `invoke('yaar://http')` 주위에 `{ ok, status, body }` 인터페이스를 직접 선언하는 것은 소유하지 않은 내부 계약을 다시 타이핑하는 일입니다. [HTTP 요청하기](#http-요청하기) 참고.
 - **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
@@ -549,7 +549,7 @@ export async function logout() {
 
 ```
 옵션 A: API 기반 앱 (API 래퍼에 적합)
-  apps/recent-papers/SKILL.md → arXiv API, 조회 흐름 기술
+  apps/recent-papers/agent/prompt.md → arXiv API, 조회 흐름 기술
   사용자가 API 키 제공 → invoke('yaar://config/app/{appId}', { config })로 저장
   AI가 invoke('yaar://http', ...)로 서비스 API 호출 → 윈도우에 렌더링
 
@@ -567,15 +567,24 @@ export async function logout() {
 
 | 파일 | 역할 | 사용 시점 |
 |------|------|-----------|
-| `SKILL.md` | 범용 기본 프롬프트에 추가 | 대부분의 앱 — API 문서, 사용법, 도메인 컨텍스트 추가 |
-| `AGENTS.md` | 범용 기본 프롬프트를 **완전히 대체** | 정밀한 에이전트 동작이 필요한 앱 (예: devtools IDE) |
-| `HINT.md` | **모니터 에이전트**의 시스템 프롬프트에 주입 | 오케스트레이터가 언제/어떻게 이 앱을 쓸지 아는 라우팅 힌트 |
+| `agent/prompt.md` | 범용 기본 프롬프트를 **완전히 대체** | 정밀한 에이전트 동작이 필요한 앱 (예: devtools IDE) |
+| `agent/hint.md` | **모니터 에이전트**의 시스템 프롬프트에 주입 | 오케스트레이터가 언제/어떻게 이 앱을 쓸지 아는 라우팅 힌트 |
 
-**우선순위:** `AGENTS.md` > `SKILL.md`. 둘 다 있으면 `AGENTS.md`만 사용됩니다. `protocol.json` 매니페스트(사용 가능한 state 키와 command)는 어떤 경우든 항상 추가됩니다.
+추가되는 단계는 없습니다 — **파일 하나에 의미 하나.** `agent/prompt.md`가 없으면 에이전트는 범용 기본 프롬프트를 받으며, 어느 쪽이든 `protocol.json` 매니페스트가 뒤에 덧붙습니다: state 키는 이름 + 설명 목록으로, 각 command는 `params` 스키마로부터 만들어진 호출 시그니처로 — `readFile(path: string|string[], startLine?: number, …)`처럼 선택 인자에는 `?`를 붙이고 enum은 그 값을 그대로 씁니다. 이 매니페스트 섹션은 그 턴이 어떤 프롬프트를 쓰든 항상 덧붙여지므로, 생성된 프롬프트든 직접 쓴 `agent/prompt.md`든 command의 params를 다시 적을 필요가 없습니다 — 다시 적으면 앱이 실제로 검증하는 스키마와 어긋나게 됩니다. per-param 설명이 필요할 때는 `describe()`가 여전히 전체 스키마를 반환합니다.
 
-### HINT.md (오케스트레이터 컨텍스트)
+두 경로 모두 `app.json`에서 오버라이드할 수 있습니다:
 
-**앱 에이전트**를 구성하는 `SKILL.md`, `AGENTS.md`와 달리, `HINT.md`는 **모니터(오케스트레이터) 에이전트**의 시스템 프롬프트에 주입됩니다. 오케스트레이터에게 언제 이 앱으로 작업을 라우팅할지 알려주는 역할입니다. 힌트는 설치된 앱과 자동으로 동기화됩니다 — 앱을 삭제하면 힌트도 함께 사라집니다.
+```json
+"agent": { "prompt": "agent/prompt.md", "hint": "agent/hint.md" }
+```
+
+이는 `agent`가 없을 때 적용되는 *기본값*이므로, 대부분의 앱은 이 필드를 설정할 필요가 없습니다 — 프롬프트 파일 위치를 옮기는 앱만 설정하면 됩니다.
+
+**하위 호환:** `agent/prompt.md` 또는 `agent/hint.md`가 없으면 서버는 예전 루트의 `AGENTS.md`/`HINT.md`로 폴백하고 새 경로를 알리는 `[apps]` 경고를 로그로 남깁니다. 이는 이름 변경 이전에 작성된 앱(일부 마켓 설치 앱 포함)을 위한 것입니다 — 새 앱은 `agent/` 경로에 작성하세요.
+
+### agent/hint.md (오케스트레이터 컨텍스트)
+
+**앱 에이전트**를 구성하는 `agent/prompt.md`와 달리, `agent/hint.md`는 **모니터(오케스트레이터) 에이전트**의 시스템 프롬프트에 주입됩니다. 오케스트레이터에게 언제 이 앱으로 작업을 라우팅할지 알려주는 역할입니다. 힌트는 설치된 앱과 자동으로 동기화됩니다 — 앱을 삭제하면 힌트도 함께 사라집니다.
 
 정적인 시스템 프롬프트에 두면 금세 낡아버릴, 앱에 의존적인 오케스트레이션 안내에 이를 사용하세요. 예시:
 
@@ -585,29 +594,28 @@ is a specialist with direct access to the project filesystem, compiler,
 and type checker.
 ```
 
-### SKILL.md (기본)
+### agent/prompt.md (완전 제어)
 
-에이전트가 범용 프롬프트("당신은 X 앱의 AI 어시스턴트입니다...")를 받고, `SKILL.md` 내용이 "App Documentation" 제목 아래 추가됩니다. 기본 도구 동작(describe, query, command, relay)이 충분하고 도메인 지식만 추가하면 되는 앱에 적합합니다.
-
-### AGENTS.md (완전 제어)
-
-에이전트의 전체 시스템 프롬프트가 `AGENTS.md`의 내용으로 대체됩니다. 다음과 같은 경우에 사용하세요:
+에이전트의 전체 시스템 프롬프트가 `agent/prompt.md`의 내용으로 대체됩니다. 다음과 같은 경우에 사용하세요:
 - 에이전트에 특정 워크플로우가 필요한 경우 (예: devtools의 타입체크 → 컴파일 → 배포)
 - 안티패턴, 주의사항, 도메인 특화 규칙을 정의해야 하는 경우
 - 범용 프롬프트의 동작 가이드라인이 맞지 않는 경우
 
-`AGENTS.md`는 기본 프롬프트를 대체하므로, 에이전트가 알아야 할 도구(`describe`, `query`, `command`, `relay`)를 직접 문서화해야 합니다. (`protocol.json`과, `controls`가 설정된 경우의 "Controllable Apps" 섹션은 여전히 자동으로 추가됩니다.)
+`agent/prompt.md`는 기본 프롬프트를 대체하므로, 에이전트가 알아야 할 도구(`describe`, `query`, `command`, `relay`)를 직접 문서화해야 합니다. (`protocol.json`과, `controls`가 설정된 경우의 "Controllable Apps" 섹션은 여전히 자동으로 추가됩니다.)
+
+앱 루트의 `AGENTS.md`는 이와 다른, 별개의 파일입니다: 코딩 에이전트가 그 디렉터리를 *편집*할 때 찾는 관례적인 이름이지, 런타임 프롬프트가 아닙니다. 현재 이를 갖춘 앱은 없습니다 — devtools는 `apps/`에 앱을 써내는 앱이므로, 코딩 에이전트가 그 디렉터리에서 기대할 법한 "이 디렉터리를 어떻게 편집하는가" 문서를 devtools 자신의 루트 `AGENTS.md`로 정확히 갖게 될 것입니다.
 
 ### 예시 구조
 
 ```
 apps/my-app/
-├── AGENTS.md       # 완전한 커스텀 에이전트 프롬프트 (선택, 고급)
-├── SKILL.md        # 앱 문서 (선택, 간단)
-├── HINT.md         # 모니터 에이전트 라우팅 힌트 (선택)
-├── app.json        # 메타데이터, 권한, 프로토콜 매니페스트
-├── index.html      # 컴파일된 앱 (컴파일된 경우)
-└── src/            # 소스 코드 (컴파일된 경우)
+├── AGENTS.md         # (선택) 이 앱을 편집하는 코딩 에이전트를 위한 지침 — 런타임 아님
+├── agent/
+│   ├── prompt.md     # 완전한 커스텀 에이전트 프롬프트 (선택, 고급)
+│   └── hint.md       # 모니터 에이전트 라우팅 힌트 (선택)
+├── app.json          # 메타데이터, 권한, 프로토콜 매니페스트
+├── index.html        # 컴파일된 앱 (컴파일된 경우)
+└── src/              # 소스 코드 (컴파일된 경우)
 ```
 
 ## `app.json` 참조
@@ -629,6 +637,7 @@ apps/my-app/
 | `permissions` | `(string \| { uri, verbs? })[]` | 미리 부여된 URI 권한, 예: `"yaar://storage/"` 또는 `{ "uri": "yaar://http", "verbs": ["read"] }` |
 | `bundles` | `string[]` | 게이트된 SDK(`yaar-dev`, `yaar-web`, `yaar-ml`) 사용 동의. 선언하지 않으면 컴파일러가 import를 거부 |
 | `agentType` | `string` | 이 앱의 에이전트에 사용할 에이전트 프로필 오버라이드 |
+| `agent` | `{ prompt?, hint? }` | 이 앱의 프롬프트 파일 기본 경로(`agent/prompt.md`, `agent/hint.md`) 오버라이드 |
 | `messaging` | `"all"` | 앱 에이전트가 모니터/사용자뿐 아니라 다른 앱/윈도우에도 `direct_message`할 수 있게 함 |
 | `controls` | `(string \| { appId, commands? })[]` | 이 앱이 조작할 수 있는 다른 앱. **번들 앱 전용** |
 | `fileAssociations` | `{ extensions, command, paramKey }[]` | 프로토콜 명령을 호출해 일치하는 파일 열기 |
@@ -650,32 +659,37 @@ AI가 작성 → 컴파일 → 배포한 앱. iframe으로 실행됩니다.
 
 ```
 apps/falling-blocks/
-├── SKILL.md        # 선택 — 매니페스트만으로 부족할 때만 작성
-├── app.json        # { "icon": "🎮", "name": "Falling Blocks" }
-├── index.html      # 컴파일된 단일 HTML
-└── src/            # 소스 코드 (keepSource: true)
+├── agent/
+│   └── prompt.md    # 선택 — 매니페스트만으로 부족할 때만 작성
+├── app.json         # { "icon": "🎮", "name": "Falling Blocks" }
+├── index.html       # 컴파일된 단일 HTML
+└── src/             # 소스 코드 (keepSource: true)
     ├── main.ts
     └── styles.css
 ```
 
 ### API 기반 앱
 
-외부 API를 호출하는 앱. SKILL.md에 API 사용법을 기술하면 AI가 호출합니다.
+외부 API를 호출하는 앱. `agent/prompt.md`에 API 사용법을 기술하면 AI가 호출합니다.
 
 ```
 apps/moltbook/
-└── SKILL.md        # API 엔드포인트, 인증 흐름, 워크플로우
+├── app.json
+└── agent/
+    └── prompt.md    # API 엔드포인트, 인증 흐름, 워크플로우
 ```
 
-SKILL.md에 `POST /api/v1/posts`, `GET /feed` 같은 API 목록을 적어두면, "피드 보여줘"라고 할 때 AI가 API를 호출하고 결과를 윈도우에 표시합니다.
+`agent/prompt.md`에 `POST /api/v1/posts`, `GET /feed` 같은 API 목록을 적어두면, "피드 보여줘"라고 할 때 AI가 API를 호출하고 결과를 윈도우에 표시합니다.
 
-### SKILL.md 직접 작성
+### 프롬프트만 있는 수동 앱
 
-수동으로 앱을 만들 수도 있습니다. `apps/` 안에 `SKILL.md`만 넣으면 됩니다.
+소스 코드 없이도 수동으로 앱을 만들 수 있습니다. `apps/` 안에 `app.json`과 `agent/prompt.md`만 넣으면 됩니다.
 
 ```
 apps/weather/
-└── SKILL.md    # API 문서, 인증, 워크플로우 등
+├── app.json
+└── agent/
+    └── prompt.md    # API 문서, 인증, 워크플로우 등
 ```
 
 ## App Protocol

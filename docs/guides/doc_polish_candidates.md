@@ -29,7 +29,7 @@ Unmarked rows are reported but unverified; check before acting.
 | gap | `doc_polish_case.md:24` globs `find docs -name '*.md'`. The largest confirmed phantom cluster (`?? '0'`, 10 restatements) was entirely in `.ts` and scored zero | ✓ |
 | gap | Positively-phrased phantoms score zero — `sqlite.md` restated one absence 6× as "Purely additive", "No conflict — parallel systems". Density: 1 hit / 527 lines | ✓ |
 | gap | `docs/ko/*` scores 0.0 by construction; terms are English. Needs `더 이상`, `없습니다`, `제거`, `않습니다` | ✓ |
-| gap | Checklist has no "confirm the absence is real" step. Several `there is no X` warnings were false (the `devtools/AGENTS.md` session-URI claim) — and one audit row itself failed this test (`9b941ed3` above) | ✓ |
+| gap | Checklist has no "confirm the absence is real" step. Several `there is no X` warnings were false (the `devtools/agent/prompt.md` session-URI claim) — and one audit row itself failed this test (`9b941ed3` above) | ✓ |
 | gap | Doc frames phantoms as noise; they decay into `wrong`. `monitor-identity.test.ts` held a phantom that became a false present-tense claim citing 4 dead line refs | ✓ |
 
 ---
@@ -55,7 +55,7 @@ Unmarked rows are reported but unverified; check before acting.
 
 | Location | Item | Ev. |
 |---|---|---|
-| `devtools/AGENTS.md:~73` | "All app metadata lives in `app.json`" list omits `personas`/`subagents` and `streams`. devtools authors other apps' manifests | |
+| `devtools/agent/prompt.md:~73` | "All app metadata lives in `app.json`" list omits `personas`/`subagents` and `streams`. devtools authors other apps' manifests | |
 
 ### `docs/architecture/` + `docs/proposals/`
 
@@ -145,9 +145,10 @@ Listed so they are not re-flagged. Each was a candidate; each survived verificat
 - `os_actions_reference.md` "There is no fallback tier", dialog deadline,
   `uri_reference.md` non-dispatched sub-paths.
 - `app_protocol_reference.md` `app.register()` migration note — live throw behind it.
-- `search/AGENTS.md:14`, `devtools/AGENTS.md` live rules and hazards,
-  `browser-user/HINT.md:12`, `process-explorer/SKILL.md:15`,
-  `devtools/HINT.md:7`, `video-editor-lite/AGENTS.md`.
+- `search/agent/prompt.md:14`, `devtools/agent/prompt.md` live rules and hazards,
+  `browser-user/agent/hint.md:12`, `process-explorer/SKILL.md:15` (since removed; content
+  was already duplicated in `HINT.md`, now `agent/hint.md`),
+  `devtools/agent/hint.md:7`, `video-editor-lite/agent/prompt.md`.
 - `sqlite.md` JSON-in-`_data`, future-work list (verified absent from `app-db.ts`), and
   all its technical claims (WAL, pool limits) — accurate.
 - `app-development.md`'s instructional sections — instructions, not rebuttals.

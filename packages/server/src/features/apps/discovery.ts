@@ -1,5 +1,5 @@
 /**
- * App discovery - list apps and load skills.
+ * App discovery — list apps and load their agent docs.
  */
 
 import { readdir, stat } from 'fs/promises';
@@ -206,7 +206,6 @@ export interface AppInfo {
   iconType?: 'emoji' | 'image';
   version?: string;
   author?: string;
-  hasSkill: boolean;
   hasConfig: boolean;
   createShortcut?: boolean;
   run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/dist/index.html)
@@ -228,15 +227,6 @@ export interface AppInfo {
 /** Build an AppInfo for a single app directory under `root`. */
 async function readAppInfo(root: string, appId: string, source: AppSource): Promise<AppInfo> {
   const appPath = join(root, appId);
-
-  // Check for SKILL.md
-  let hasSkill = false;
-  try {
-    await stat(join(appPath, 'SKILL.md'));
-    hasSkill = true;
-  } catch {
-    // File doesn't exist
-  }
 
   // Check for credentials (in either location)
   const appHasConfig = await hasConfig(appId);
@@ -368,7 +358,6 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     iconType,
     ...(version && { version }),
     ...(author && { author }),
-    hasSkill,
     hasConfig: appHasConfig,
     ...(createShortcut === false && { createShortcut: false }),
     ...(resolvedRun && { run: resolvedRun }),
@@ -388,8 +377,8 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   };
 }
 
-// listApps() does ~6 filesystem ops per app (stat SKILL.md, hasConfig, stat
-// dist, parse app.json, parse protocol.json, readdir for an icon) and runs on
+// listApps() does ~5 filesystem ops per app (hasConfig, stat dist, parse
+// app.json, parse protocol.json, readdir for an icon) and runs on
 // every GET /api/apps, every app-agent profile build, and every describe/query
 // MCP call — none of which mutate the filesystem. A short-lived cache collapses
 // the repeated scans within one desktop load or one agent turn into a single
@@ -550,34 +539,116 @@ export async function getAppMeta(appId: string): Promise<{
 /**
  * Read one of an app's markdown docs, or null if the app or the doc is absent.
  *
- * All three docs are optional by design — absence is the common case, not an error — so a
+ * Both docs are optional by design — absence is the common case, not an error — so a
  * missing file and an unresolvable appId are the same `null` to every caller.
  */
-async function loadAppDoc(appId: string, filename: string): Promise<string | null> {
+async function loadAppDoc(appId: string, relPath: string): Promise<string | null> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return null;
   try {
-    return await Bun.file(join(appDir, filename)).text();
+    return await Bun.file(join(appDir, relPath)).text();
   } catch {
     return null;
   }
 }
 
 /**
- * Load SKILL.md for a specific app.
- * When present, its content is appended to the generic app agent system prompt.
+ * The two agent docs an app may ship, each at its default path and beside the
+ * filename it used to live under at the app root.
+ *
+ * `prompt` *is* the app agent's system prompt; `hint` is what the monitor agent is
+ * told about the app. Both are optional, and most apps ship neither.
  */
-export function loadAppSkill(appId: string): Promise<string | null> {
-  return loadAppDoc(appId, 'SKILL.md');
+export const AGENT_DOCS = {
+  prompt: { path: 'agent/prompt.md', legacy: 'AGENTS.md' },
+  hint: { path: 'agent/hint.md', legacy: 'HINT.md' },
+} as const;
+
+export type AgentDocKind = keyof typeof AGENT_DOCS;
+
+/**
+ * Where a manifest says its agent docs live.
+ *
+ * The default is `agent/{kind}.md`; `app.json`'s `"agent": { "prompt": …, "hint": … }`
+ * overrides it. The override exists so the filenames stop being magic — the manifest
+ * already carries every other agent knob (`agentType`, `controls`, `subagents`,
+ * `bundles`), and a doc the server reads without compiling anything belongs in the
+ * file the server reads.
+ *
+ * A traversing or absolute override is ignored rather than honored: an app.json is
+ * writable by any app holding `yaar-dev`, and these paths become file reads.
+ *
+ * Pure, and takes the parsed manifest, because the code that *copies* the docs around
+ * (clone, deploy) already has one in hand and must land on the same two paths the code
+ * that *reads* them will look at — an app whose docs deployed to a path nothing reads
+ * is exactly the silent-inertness this whole rename exists to avoid.
+ */
+export function agentDocPaths(meta: unknown): Record<AgentDocKind, string> {
+  const declared = (meta as { agent?: Record<string, unknown> } | null)?.agent;
+  const resolve = (kind: AgentDocKind): string => {
+    const value = declared?.[kind];
+    if (typeof value !== 'string' || !value) return AGENT_DOCS[kind].path;
+    if (value.startsWith('/') || value.split(/[\\/]/).includes('..')) return AGENT_DOCS[kind].path;
+    return value;
+  };
+  return { prompt: resolve('prompt'), hint: resolve('hint') };
+}
+
+/** The agent docs an app on disk actually keeps, in the order `AGENT_DOCS` declares them. */
+export async function agentDocPathsFor(appDir: string): Promise<string[]> {
+  let meta: unknown = null;
+  try {
+    meta = JSON.parse(await Bun.file(join(appDir, 'app.json')).text());
+  } catch {
+    // No app.json, or unreadable — the defaults are the answer.
+  }
+  const paths = agentDocPaths(meta);
+  return [paths.prompt, paths.hint];
+}
+
+async function resolveAgentDocPath(appId: string, kind: AgentDocKind): Promise<string> {
+  const appDir = resolveAppDir(appId);
+  if (!appDir) return AGENT_DOCS[kind].path;
+  try {
+    const meta = JSON.parse(await Bun.file(join(appDir, 'app.json')).text());
+    return agentDocPaths(meta)[kind];
+  } catch {
+    return AGENT_DOCS[kind].path;
+  }
 }
 
 /**
- * Load HINT.md for a specific app.
+ * Read an app's agent doc from `agent/`, falling back to the file it used to live in
+ * at the app root.
+ *
+ * The fallback follows the `personas` → `subagents` precedent: a rename that silently
+ * turns a working app inert is the trap that one already sprang, and market-installed
+ * apps ship their own copies we cannot migrate. So the old location keeps working and
+ * says so — loudly enough to get fixed, quietly enough to break nothing.
+ */
+async function loadAgentDoc(appId: string, kind: AgentDocKind): Promise<string | null> {
+  const path = await resolveAgentDocPath(appId, kind);
+  const doc = await loadAppDoc(appId, path);
+  if (doc !== null) return doc;
+
+  const { legacy } = AGENT_DOCS[kind];
+  const legacyDoc = await loadAppDoc(appId, legacy);
+  if (legacyDoc !== null) {
+    console.warn(
+      `[apps] "${appId}" still keeps its agent doc at ${legacy}. Move it to ${path} — the old ` +
+        'location is read for now, but the app root no longer owns that name.',
+    );
+  }
+  return legacyDoc;
+}
+
+/**
+ * Load an app's monitor-agent hint (`agent/hint.md`).
  * When present, its content is injected into the monitor agent's system prompt
  * so the orchestrator knows when/how to use the app.
  */
 export function loadAppHint(appId: string): Promise<string | null> {
-  return loadAppDoc(appId, 'HINT.md');
+  return loadAgentDoc(appId, 'hint');
 }
 
 /**
@@ -617,9 +688,14 @@ export async function loadAllAppHints(): Promise<{ appId: string; hint: string }
 }
 
 /**
- * Load AGENTS.md for a specific app.
- * When present, this replaces the generic app agent system prompt.
+ * Load an app's own agent prompt (`agent/prompt.md`).
+ * When present, this *is* the app agent's system prompt — it replaces the generic base.
+ *
+ * Deliberately no longer `AGENTS.md`: that filename means "instructions to a coding
+ * agent editing this directory" everywhere else, and devtools writes apps into `apps/`,
+ * so the two readings collide exactly where it hurts most. The app root is now free to
+ * hold the ecosystem's `AGENTS.md`.
  */
-export function loadAppAgentDoc(appId: string): Promise<string | null> {
-  return loadAppDoc(appId, 'AGENTS.md');
+export function loadAppPrompt(appId: string): Promise<string | null> {
+  return loadAgentDoc(appId, 'prompt');
 }

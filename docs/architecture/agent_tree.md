@@ -28,8 +28,8 @@ separate tier.
 | Tier | Key | Prompt provenance | Capabilities | Spawned by |
 |---|---|---|---|---|
 | session | (singleton) | constant | full session toolset; the only `yaar://session/*` principal | first invocation of `yaar://session/agents/session` |
-| monitor | `monitorId` | constant + `HINT.md` injections | monitor toolset | monitor creation |
-| app | `monitorId::appId` | install-time disk (`AGENTS.md` / `SKILL.md`) | `describe`/`query`/`command`/`relay` (+`direct_message`, +`controls`), the app principal | first window interaction |
+| monitor | `monitorId` | constant + `agent/hint.md` injections | monitor toolset | monitor creation |
+| app | `monitorId::appId` | install-time disk (`agent/prompt.md`, else generated from `app.json` + manifest) | `describe`/`query`/`command`/`relay` (+`direct_message`, +`controls`), the app principal | first window interaction |
 | sub-agent | `monitorId::appId::subId` | **runtime, verbatim** | one channel to its own app's iframe under app-declared tool names — or nothing at all | the owning app, via `yaar://apps/self/agents` |
 
 **Ephemeral agents** are the one node that predates the model: monitor-tier helpers spawned only

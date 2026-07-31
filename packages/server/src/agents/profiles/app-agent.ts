@@ -1,16 +1,15 @@
 /**
  * App agent profile builder — creates dynamic profiles for app-scoped agents.
  *
- * App agents have a focused system prompt built from:
- * 1. AGENTS.md (if present) — full custom prompt, replaces the generic base
- * 2. SKILL.md (fallback) — app documentation appended to generic base prompt
- * Protocol manifest from app.json is appended when the app declares one (in both
- * prompt branches).
+ * One prompt file, one meaning: `agent/prompt.md` (when the app ships one) *is* the
+ * base prompt, and otherwise the generic base below is. There is no append tier —
+ * what one used to carry is either `app.json`'s description or a restatement of
+ * `protocol.json`, and the manifest appended further down states the latter exactly.
  */
 
 import type { AgentProfile } from './types.js';
 import { APP_AGENT_TOOL_NAMES } from './types.js';
-import { loadAppSkill, loadAppAgentDoc, listApps } from '../../features/apps/discovery.js';
+import { loadAppPrompt, listApps } from '../../features/apps/discovery.js';
 import { APP_MOUNT_ID, describeDesignTokens } from '@yaar/compiler';
 import { resolveAgentModel } from './model-tiers.js';
 import { PAYLOAD_LITERALS_SECTION } from './shared-sections.js';
@@ -47,7 +46,7 @@ function renderType(prop: unknown): string {
  * A command rendered as a call signature: `readFile(path: string|string[], lineNum?: boolean)`.
  *
  * The manifest below used to carry names and descriptions only, while the params
- * JSON Schema lived behind a `describe` call — and devtools' AGENTS.md tells its
+ * JSON Schema lived behind a `describe` call — and devtools' prompt tells its
  * agent that this manifest *is* the full list, so a param name had to be guessed
  * or paid for with a round-trip. It got guessed: `readFile({ paths: [...] })`
  * against a command whose batch form is `path: string[]`, which cost a turn and
@@ -77,7 +76,7 @@ function renderSignature(name: string, descriptor: unknown): string {
  * An app that writes and deploys other apps (devtools) has to know the mount
  * point id and the exact set of design tokens. Both are facts the compiler
  * decides — it emits the `<div id>` and injects the token CSS — and a prompt that
- * restates them from memory drifts. It already had: devtools' AGENTS.md told the
+ * restates them from memory drifts. It already had: devtools' prompt told the
  * agent to look tokens up via `describeBundledLibrary({ name: 'design-tokens' })`,
  * which returned null, so the agent guessed Tailwind-shaped names
  * (`--yaar-space-2`) that silently render to nothing.
@@ -113,25 +112,20 @@ ${describeDesignTokens()}
 
 /**
  * Build a dynamic agent profile for a specific app.
- * If AGENTS.md exists, uses it as the full system prompt base.
- * Otherwise falls back to the generic prompt + SKILL.md.
- * Protocol manifest from app.json is appended in both cases.
+ * If `agent/prompt.md` exists it is the full system prompt base; otherwise the
+ * generic prompt below is. Protocol manifest from app.json is appended in both cases.
  */
 export async function buildAppAgentProfile(appId: string): Promise<AgentProfile> {
-  const [agentDoc, skill, apps] = await Promise.all([
-    loadAppAgentDoc(appId),
-    loadAppSkill(appId),
-    listApps(),
-  ]);
+  const [appPrompt, apps] = await Promise.all([loadAppPrompt(appId), listApps()]);
   const appInfo = apps.find((a) => a.id === appId);
   const appName = appInfo?.name ?? appId;
   const protocol = appInfo?.protocol;
 
   let systemPrompt: string;
 
-  if (agentDoc) {
-    // AGENTS.md provides the full base prompt
-    systemPrompt = agentDoc;
+  if (appPrompt) {
+    // agent/prompt.md provides the full base prompt
+    systemPrompt = appPrompt;
   } else {
     // Generic fallback prompt
     systemPrompt = `You are an AI assistant for the "${appName}" app in YAAR, a reactive AI-driven operating system interface.
@@ -160,10 +154,6 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
 
 `;
 
-    if (skill) {
-      systemPrompt += `\n## App Documentation\n\n${skill}\n`;
-    }
-
     systemPrompt += `
 ## Behavior
 - Handle user interactions efficiently within your app domain
@@ -174,9 +164,9 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
 `;
   }
 
-  // Payload-literal rule is always appended — an AGENTS.md app issues the same
-  // `command` payloads as a generic one, so replacing the base prompt must not
-  // drop it.
+  // Payload-literal rule is always appended — an app with its own `agent/prompt.md`
+  // issues the same `command` payloads as a generic one, so replacing the base prompt
+  // must not drop it.
   systemPrompt += `\n${PAYLOAD_LITERALS_SECTION}\n`;
 
   // Protocol manifest from app.json is appended when the app declares one
@@ -209,14 +199,14 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
   }
 
   // App-authoring contract — appended for apps that can actually build and deploy
-  // apps (they hold the yaar-dev SDK). Applies to AGENTS.md apps too: devtools is
-  // an AGENTS.md app, and it is the one that needs this most.
+  // apps (they hold the yaar-dev SDK). Applies to apps with their own
+  // prompt too: devtools has one, and it is the one that needs this most.
   if (appInfo?.bundles?.includes('yaar-dev')) {
     systemPrompt += buildAuthoringContract();
   }
 
-  // Controllable apps — always appended (applies to AGENTS.md apps too). These are
-  // the apps this app may drive via the `appId` param on describe/query/command.
+  // Controllable apps — always appended (applies to apps with their own prompt too).
+  // These are the apps this app may drive via the `appId` param on describe/query/command.
   const controls = appInfo?.controls ?? [];
   if (controls.length > 0) {
     systemPrompt += '\n## Controllable Apps\n\n';

@@ -12,7 +12,7 @@ import type { ResolvedUri } from '../uri-resolve.js';
 import { ok, okJson, okResource, okLinks, error, extractIdFromUri } from '../utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { listApps } from '../../features/apps/discovery.js';
-import { describeApp, loadAppSkillWithManifest } from '../../features/apps/describe.js';
+import { describeApp, buildAppReference } from '../../features/apps/describe.js';
 import { uninstallApp } from '../../features/apps/install.js';
 
 /** `yaar://apps` — the exact-match handler listing every installed app. */
@@ -45,13 +45,13 @@ export async function describeApplication(resolved: ResolvedUri): Promise<VerbRe
   return okJson(result);
 }
 
-/** Read an app's SKILL.md (with its protocol manifest appended). */
+/** Read an app's generated reference doc — description, protocol manifest, permissions. */
 export async function readApplication(resolved: ResolvedUri): Promise<VerbResult> {
   const appId = extractIdFromUri(resolved.sourceUri, 'apps');
   if (!appId) return error('App ID required.');
 
-  const result = await loadAppSkillWithManifest(appId);
-  if (result === null) return error(`No SKILL.md found for app "${appId}".`);
+  const result = await buildAppReference(appId);
+  if (result === null) return error(`App "${appId}" not found.`);
 
   return okResource(resolved.sourceUri, result, 'text/markdown');
 }
