@@ -117,11 +117,15 @@ describe('codex per-thread MCP scope', () => {
     // The one permitted process-level `mcp_servers` line is the inverse: `enabled=false`,
     // which is how a server the *user's* ~/.codex/config.toml declares gets taken away —
     // per-thread it could not be.
+    //
+    // The rule, not a roster: which servers are named is `DISABLED_MCP_SERVERS`'s business
+    // (currently none — the block is commented out in `config/providers/codex.ts`), and
+    // asserting the two entries it used to carry made this fail the moment that changed
+    // while the containment it exists to guard still held perfectly. What must never
+    // change is the *shape*: a takeaway is the only thing this list may contain.
     const mcpArgs = getCodexAppServerArgs().filter((a) => a.includes('mcp_servers'));
     for (const arg of mcpArgs) {
       expect(arg).toMatch(/^mcp_servers\.[^.]+\.enabled=false$/);
     }
-    expect(mcpArgs).toContain('mcp_servers.node_repl.enabled=false');
-    expect(mcpArgs).toContain('mcp_servers.computer-use.enabled=false');
   });
 });
