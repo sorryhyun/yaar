@@ -623,6 +623,17 @@ export class LiveSession {
   async cleanup(): Promise<void> {
     sessionEventRouter.detach(this.sessionId, this.eventSink);
 
+    // A session can be torn down while its pool is still being built — a connection that
+    // opens and closes before `doInitialize` resolves, which is every short-lived client
+    // and every test that boots and disposes. Without this wait, `this.pool` is still null
+    // below, so nothing is cleaned; the init then finishes and assigns a live pool to a
+    // session nobody holds. Its monitor agent keeps a slot in the *global* AgentLimiter
+    // that no code path will ever release, so the process quietly loses one agent slot per
+    // such connection until every later session is refused an agent outright.
+    if (this.initPromise) {
+      await this.initPromise.catch(() => undefined);
+    }
+
     // Force-clear any pending requests/dialogs/app-requests for this session
     // so awaiting tools unblock immediately instead of waiting for timeouts.
     actionEmitter.clearPendingForSession(this.sessionId);
