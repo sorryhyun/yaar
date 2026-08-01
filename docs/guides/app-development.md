@@ -1071,10 +1071,10 @@ defineApp({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
 | Tool | Description |
 |------|-------------|
 | `describe('yaar://windows/{id}')` | That window's manual — its live manifest (`source: 'live'`), or the app's on-disk `protocol.json` when the iframe hasn't registered (`source: 'manifest'`) |
-| `list('yaar://windows/{id}')` | That window's state keys and commands, as sub-path URIs |
+| `list('yaar://windows/{id}')` | That window's state keys and commands, as sub-path URIs — each command's description prefixed with its signature |
 | `read('yaar://windows/{id}/state/{key}')` | One state value |
-| `invoke('yaar://windows/{id}/commands/{key}', { ...params })` | Run one command — the payload *is* its params (`timeoutMs` reserved; an `action` or nested `params` is refused) |
-| `describe('yaar://windows/{id}/{state,commands}/{key}')` | One key's documentation — the app's computed `describe()` if it has one, else the manifest's description |
+| `invoke('yaar://windows/{id}/commands/{key}', { ...params })` | Run one command — the payload *is* its params (`action`, `params` and `timeoutMs` are reserved *unless the command declares one of them*, in which case it is that param). Pass an **array** of params to run it once per element, in order |
+| `describe('yaar://windows/{id}/{state,commands}/{key}')` | One key's documentation — the app's computed `describe()` if it has one, else the manifest's description. A command also carries its `signature`, a rendered `invoke` example, and its `schema` |
 | `invoke('yaar://windows/{id}', { action: 'app_query', stateKey })` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
 | `invoke('yaar://windows/{id}', { action: 'app_command', command, params })` | Execute a command on the app |
 | `invoke('yaar://windows/{id}', { action: 'message', message })` | Send a message to the app agent (monitor → app agent delegation). Fire-and-forget — same code path as user interaction. |

@@ -135,10 +135,10 @@ The canonical way agents address windows. The monitor is injected automatically 
 |------|-----|--------|
 | `describe` | `yaar://windows/{windowId}` | This instance's manual — the live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). A non-app window answers with the action set filtered to its renderer instead. Either way, `builtinState` carries the window's own keys |
 | `read` | `yaar://windows/{windowId}` | Metadata + `__content`; on an iframe window, metadata + `__screenshot` instead, with `contentOmitted` naming where the content went |
-| `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links |
+| `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links. A command's `description` is prefixed with its rendered signature, so the list is enough to call from |
 | `read` | `yaar://windows/{windowId}/state/{key}` | One state value — the same executor as `app_query` |
-| `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params |
-| `describe` | `yaar://windows/{windowId}/{state,commands}/{key}` | That key's doc — the app's computed `describe()` if it defines one, otherwise the manifest's static `description` |
+| `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params. An **array** payload runs it once per element, in order (see [Batching](#batching)) |
+| `describe` | `yaar://windows/{windowId}/{state,commands}/{key}` | That key's doc — the app's computed `describe()` if it defines one, otherwise the manifest's static `description`. A command also carries `signature`, a rendered `invoke` example, and its `schema` |
 
 > **Two protocol sources exist**, and `describe` says which it read. `protocol.json` on disk and the
 > iframe's own registration diverge after a deploy without a reload; a manual that doesn't name its
@@ -328,6 +328,24 @@ describe('yaar://config/settings')             -> { verbs: ['describe', 'read', 
 
 HTTP requests also flow through the verb layer: `invoke('yaar://http', { url, ... })`, with domain allowlisting at `invoke('yaar://config/domains', { domain })`. `delete('yaar://http')` clears the caller's stored cookie jar (use on app logout).
 
+### Batching
+
+A call batches on **either axis**, and the two are independent:
+
+```
+invoke('yaar://storage/{a.txt,b.txt}', { content: '...' })   -> many URIs, one payload  (parallel)
+invoke('yaar://windows/studio-3d/commands/setTransform', [   -> one URI, many payloads (in order)
+  { id: 'left-eye',  position: { x: -0.12 } },
+  { id: 'right-eye', position: { x:  0.12 } },
+])
+```
+
+**URI axis** — brace expansion, handled above the registry (`handlers/index.ts`). Expanded URIs name distinct resources, so they run concurrently and every result is reported.
+
+**Payload axis** — an array payload to `invoke`, handled in `ResourceRegistry.execute`. Because the elements are edits to *one* resource they run **sequentially**, and the batch **stops at the first failure**, reporting the index that failed and how many were not attempted — resend from that index. Max 100 elements; a longer list is refused, never truncated. Handlers never see the array: each element reaches `handler.invoke` as an ordinary payload, so no resource opts in or can get it wrong. Available to agents (the `invoke` MCP tool) and to apps (`POST /api/verb`, `invoke()` from `@bundled/yaar`) alike.
+
+It is a spelling, not a transaction: N elements are N calls, so an app that records undo steps records N of them. One undo step needs a command that takes a list (`addNodes`) rather than a batched call.
+
 ### MCP Surface
 
 One MCP tool per verb, served from the `verbs` namespace:
@@ -337,7 +355,7 @@ One MCP tool per verb, served from the `verbs` namespace:
 | `describe` | `{ uri }` |
 | `read` | `{ uri }` |
 | `list` | `{ uri }` |
-| `invoke` | `{ uri, payload? }` |
+| `invoke` | `{ uri, payload? }` — `payload` is an object, or an array of objects (see [Batching](#batching)) |
 | `delete` | `{ uri }` |
 
 Active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`): `system`, `verbs`, `app`, `messaging`, `subagent`.

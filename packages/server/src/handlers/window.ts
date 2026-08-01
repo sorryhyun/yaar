@@ -52,6 +52,11 @@ import {
 import { listApps } from '../features/apps/discovery.js';
 import { buildWindowResourceUri, parseWindowResourceUri } from '../lib/yaar-uri-server.js';
 import {
+  RESERVED_COMMAND_KEYS,
+  declaredParamNames,
+  renderSignature,
+} from '../lib/command-signature.js';
+import {
   handleSubscribe,
   handleUnsubscribe,
   handleAppSubscribe,
@@ -359,19 +364,66 @@ export function registerWindowHandlers(
   }
 
   /**
+   * The manifest entry for one command of one window — the running registration first, the
+   * app's shipped `protocol.json` second, and `undefined` when neither knows the name.
+   *
+   * Same two sources, same order, and the same reason as `describe`: the two diverge after
+   * a deploy without a reload, and the live one is what the call is about to reach.
+   */
+  async function commandDescriptor(windowId: string, command: string): Promise<unknown> {
+    // An alias is a name the iframe resolves to a canonical command, so it is not a key of
+    // the table — looked up by key alone, every aliased command would look undeclared, and
+    // the caller would be refused for a param the command really does declare.
+    const lookup = (commands?: Record<string, unknown>): unknown => {
+      if (!commands) return undefined;
+      const direct = commands[command];
+      if (direct) return direct;
+      return Object.values(commands).find((entry) =>
+        (entry as { aliases?: unknown } | undefined)?.aliases instanceof Array
+          ? ((entry as { aliases: unknown[] }).aliases as unknown[]).includes(command)
+          : false,
+      );
+    };
+
+    const live = await fetchLiveManifest(getWindowState(), windowId);
+    const fromLive = lookup(live?.commands);
+    if (fromLive) return fromLive;
+
+    const win = getWindowState().getWindow(windowId);
+    if (!win?.appId) return undefined;
+    const app = (await listApps()).find((a) => a.id === win.appId);
+    return lookup(app?.protocol?.commands as Record<string, unknown> | undefined);
+  }
+
+  /**
    * `invoke` on `yaar://windows/{id}/commands/{key}` — the URI names the command, so
    * the payload is the command's params and nothing else.
    *
    * One spelling, deliberately. `action` and a nested `params` are both refused rather
    * than accepted-and-guessed: two ways to write one call, with unclear precedence
    * between them, is exactly how `invokeActions` drifted from what it dispatched.
-   * `timeoutMs` is the one reserved key, because it is transport, not a param.
+   * `timeoutMs` is consumed as transport for the same reason — it is the deadline this
+   * call waits on, not something the app was asked.
+   *
+   * **Unless the command declares one of those names as a param of its own.** The three
+   * were reserved on the key name alone, which made every command whose schema declares
+   * `params` unreachable through this spelling — `studio-3d.setGeometryParams(id, params,
+   * points)` and `devtools.previewCommand(command, params, timeoutMs)` are the two in the
+   * tree — and, worse, made `devtools.previewEval(expression, timeoutMs, …)` *silently*
+   * wrong: its `timeoutMs` says how long the preview may take to settle, and this function
+   * ate it as the transport deadline and told the app nothing. So the reservation is now
+   * conditional on the schema, and the schema is only consulted when one of the three
+   * names is actually present — the ordinary call pays for no lookup.
+   *
+   * A command the manifest cannot account for (an app that never registered and ships no
+   * protocol.json) keeps the old refusals: a guess in the app's favour would send an
+   * undeclared key to a bridge that rejects the whole command for it.
    */
-  function invokeSubResource(
+  async function invokeSubResource(
     resolved: ResolvedWindow,
     target: { resourceType: 'state' | 'commands'; key: string },
     payload?: Record<string, unknown>,
-  ): Promise<VerbResult> | VerbResult {
+  ): Promise<VerbResult> {
     if (target.resourceType === 'state') {
       return error(
         `State is read, not invoked. Use read("${resolved.sourceUri}") for its value. ` +
@@ -381,22 +433,32 @@ export function registerWindowHandlers(
     }
 
     const p = { ...(payload ?? {}) };
-    if ('action' in p) {
+    const declared = RESERVED_COMMAND_KEYS.some((key) => key in p)
+      ? new Set(declaredParamNames(await commandDescriptor(resolved.windowId, target.key)))
+      : new Set<string>();
+
+    if ('action' in p && !declared.has('action')) {
       return error(
         `invoke("${resolved.sourceUri}") takes no "action" — the URI already names the ` +
           "command. Pass the command's params directly, or use " +
           `invoke("yaar://windows/${resolved.windowId}", { action: "app_command", command: "${target.key}", params: {…} }).`,
       );
     }
-    if ('params' in p) {
+    if ('params' in p && !declared.has('params')) {
       return error(
         `invoke("${resolved.sourceUri}") takes the command's params directly — the payload ` +
-          '*is* `params`. Drop the wrapper: { …params } rather than { params: { …params } }.',
+          '*is* `params`. Drop the wrapper: { …params } rather than { params: { …params } }. ' +
+          `("${target.key}" declares no param of that name — describe("${resolved.sourceUri}") ` +
+          'lists the ones it does.)',
       );
     }
 
+    // Transport, unless the command declared a `timeoutMs` of its own — in which case it is
+    // both, and deliberately: the app is told how long it may take, and the server waits at
+    // least that long rather than cutting off a call it just authorized.
     const timeoutMs = p.timeoutMs;
-    delete p.timeoutMs;
+    if (!declared.has('timeoutMs')) delete p.timeoutMs;
+
     return handleAppCommand(getWindowState(), resolved.windowId, {
       command: target.key,
       params: p,
@@ -413,7 +475,8 @@ export function registerWindowHandlers(
       'addressable state keys and commands, invoke to create (on bare yaar://windows/), update, ' +
       'manage; delete to close. ' +
       'Sub-paths: read yaar://windows/{windowId}/state/{key} for one state value, invoke ' +
-      'yaar://windows/{windowId}/commands/{key} to run one command (payload = its params). ' +
+      'yaar://windows/{windowId}/commands/{key} to run one command (payload = its params; ' +
+      'pass an ARRAY of params to run it once per element, in order, as one call). ' +
       'Every window also answers three state keys of its own, whatever it renders: ' +
       '__content (its content, no capture), __screenshot and __console (iframe windows). ' +
       'A bare read of an iframe window is __content + __screenshot, the screenshot winning. ' +
@@ -703,11 +766,24 @@ export function registerWindowHandlers(
             name: `state/${key}`,
             description: (desc as { description?: string }).description,
           })),
-        ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => ({
-          uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
-          name: `commands/${key}`,
-          description: (desc as { description?: string }).description,
-        })),
+        // A command's name is not enough to call it, and `list` is the door an agent
+        // reaches for first. The signature rides in `description` rather than in a field
+        // of its own because that is the part of a `resource_link` a model is certain to
+        // read — and the round trip it saves (a `describe` spent only on learning param
+        // names) is the whole point. `renderSignature` returns the bare name when the
+        // command declares no schema, so nothing is invented for one that documents none.
+        ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => {
+          const signature = renderSignature(key, desc);
+          const description = (desc as { description?: string }).description;
+          return {
+            uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
+            name: `commands/${key}`,
+            description:
+              signature === key
+                ? description
+                : `${signature}${description ? ` — ${description}` : ''}`,
+          };
+        }),
       ];
       return okLinks(links);
     },

@@ -43,7 +43,14 @@ function isConsolePoll(payload: unknown): boolean {
  * Returns undefined when nothing survives, so `{ verb, uri }` stays clean.
  */
 export function compactVerbPayload(payload: unknown): Record<string, unknown> | undefined {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return undefined;
+  // A batched invoke (one URI, N payloads) is still one call and gets one line. Dropping
+  // it for being an array would log a 40-element batch as a bare `{ verb, uri }` — the
+  // shape of the thing that ran is exactly what the log is for.
+  if (Array.isArray(payload)) {
+    const first = compactVerbPayload(payload[0]);
+    return { batch: payload.length, ...(first ? { first } : {}) };
+  }
+  if (!payload || typeof payload !== 'object') return undefined;
 
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(payload as Record<string, unknown>)) {

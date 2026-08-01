@@ -21,9 +21,14 @@ export async function read<T = unknown>(uri: string): Promise<T> {
   return y.read(uri);
 }
 
+/**
+ * Invoke a verb. An **array** payload runs the same URI once per element, in order, as
+ * one call — the payload-axis complement to brace expansion in the URI. It stops at the
+ * first failure and names the index that failed.
+ */
 export async function invoke<T = unknown>(
   uri: string,
-  payload?: Record<string, unknown>,
+  payload?: Record<string, unknown> | Record<string, unknown>[],
 ): Promise<T> {
   return y.invoke(uri, payload);
 }

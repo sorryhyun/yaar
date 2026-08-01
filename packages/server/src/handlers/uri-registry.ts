@@ -116,6 +116,21 @@ export interface ReadOptions {
   pdfPages?: string;
 }
 
+/**
+ * What `invoke` accepts: one payload, or a list of payloads to run against the same URI
+ * in order. Only `ResourceRegistry.execute` ever sees the list form — a handler's
+ * `invoke` is always handed one element (see {@link ResourceRegistry.executeBatch}).
+ */
+export type InvokePayload = Record<string, unknown> | Record<string, unknown>[];
+
+/**
+ * Ceiling on a batched invoke. Sized to cover real authoring payloads (a 53-node scene,
+ * the ~40 follow-up tweaks that motivated this) while keeping a runaway list from
+ * becoming an unbounded sequence of app-command deadlines. Refused with the number in
+ * the message, never silently truncated.
+ */
+const MAX_BATCH_PAYLOADS = 100;
+
 export interface ResourceHandler {
   /** Human-readable description of this resource. */
   description: string;
@@ -237,13 +252,33 @@ export class ResourceRegistry {
 
   /**
    * Execute a verb against a URI.
+   *
+   * An **array** payload runs the same invoke once per element, in order — see
+   * {@link ResourceRegistry.executeBatch}. Handlers never see it: each element reaches
+   * `handler.invoke` as an ordinary payload, so batching is not something a resource
+   * opts into, implements, or can get wrong.
    */
   async execute(
     verb: Verb,
     uri: string,
-    payload?: Record<string, unknown>,
+    payload?: InvokePayload,
     readOptions?: ReadOptions,
   ): Promise<VerbResult> {
+    if (Array.isArray(payload)) {
+      if (verb !== 'invoke') {
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `An array payload is only meaningful for invoke — "${verb}" takes one payload or none.`,
+            },
+          ],
+          isError: true,
+        };
+      }
+      return this.executeBatch(uri, payload);
+    }
+
     const handler = this.findHandler(uri);
     if (!handler) {
       return {
@@ -385,5 +420,91 @@ export class ResourceRegistry {
       return handler.read!.call(handler, resolved, readOptions);
     }
     return (method as (resolved: ResolvedUri) => Promise<VerbResult>).call(handler, resolved);
+  }
+
+  /**
+   * One URI, N payloads, run in order.
+   *
+   * Brace expansion (`handlers/index.ts`) already batches the other axis — many URIs
+   * against one payload, concurrently. This is its complement, and the one that was
+   * missing: authoring a scene of 53 nodes takes one `addNodes`, but every subsequent
+   * tweak was one call per node because each node needs a *different* payload. Forty
+   * tool calls to nudge eyes and socks is the cost this removes.
+   *
+   * Three decisions, each the conservative reading of "in order":
+   *
+   * - **Sequential**, unlike brace expansion. Expanded URIs name distinct resources and
+   *   cannot interfere; N payloads against *one* resource are edits to one thing, and
+   *   running them concurrently would make the result depend on scheduling.
+   * - **Stop at the first failure.** The remaining payloads are reported as not
+   *   attempted rather than run against a resource that is no longer in the state they
+   *   were written for. The index says exactly where to resume.
+   * - **Per-element dispatch through `execute`**, so each element is resolved, access-
+   *   checked and verb-checked exactly as a lone invoke would be. A batch is a spelling,
+   *   never a bypass.
+   *
+   * Atomicity is deliberately *not* claimed: N elements are N calls, so an app that
+   * records undo steps records N of them. Collapsing those into one is the app's to
+   * offer through a command that takes a list (`addNodes`), which several already do.
+   */
+  private async executeBatch(
+    uri: string,
+    payloads: Record<string, unknown>[],
+  ): Promise<VerbResult> {
+    if (payloads.length === 0) {
+      return {
+        content: [
+          { type: 'text', text: `Empty payload array for invoke("${uri}") — nothing to do.` },
+        ],
+        isError: true,
+      };
+    }
+    if (payloads.length > MAX_BATCH_PAYLOADS) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text:
+              `${payloads.length} payloads for invoke("${uri}") exceeds the batch limit of ` +
+              `${MAX_BATCH_PAYLOADS}. Split it — each element is a real call, and a batch this ` +
+              'long cannot report a partial failure usefully.',
+          },
+        ],
+        isError: true,
+      };
+    }
+    if (payloads.some((p) => !p || typeof p !== 'object' || Array.isArray(p))) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Every element of a batch payload must be an object — invoke("${uri}") got one that is not.`,
+          },
+        ],
+        isError: true,
+      };
+    }
+
+    const content: VerbResult['content'] = [];
+    for (let i = 0; i < payloads.length; i++) {
+      const result = await this.execute('invoke', uri, payloads[i]);
+      content.push({ type: 'text', text: `--- [${i}] ---` });
+      content.push(...result.content);
+      if (result.isError) {
+        const remaining = payloads.length - i - 1;
+        content.push({
+          type: 'text',
+          text:
+            `Batch stopped at [${i}] of ${payloads.length}: ${i} succeeded` +
+            (remaining ? `, ${remaining} not attempted (resend from [${i}]).` : '.'),
+        });
+        return { content, isError: true };
+      }
+    }
+    content.push({
+      type: 'text',
+      text: `Batch complete: ${payloads.length} of ${payloads.length}.`,
+    });
+    return { content };
   }
 }

@@ -202,13 +202,23 @@ export function registerVerbTools(server: McpServer): void {
     {
       description:
         'Invoke an action on a yaar:// resource (create, update, trigger). ' +
-        'URIs support brace expansion: yaar://storage/{a,b} invokes on both.',
+        'Batches on either axis: URIs support brace expansion (yaar://storage/{a,b} ' +
+        'invokes on both, in parallel), and payload accepts an ARRAY to run the same URI ' +
+        'once per element, in order, as one call — e.g. invoke(".../commands/setTransform", ' +
+        '[{id:"a",...},{id:"b",...}]). Use the array form instead of N identical calls that ' +
+        'differ only in their payload. It stops at the first failure and reports the index.',
       inputSchema: {
         uri: z.string().describe('yaar:// URI to invoke'),
         payload: z
-          .record(z.string(), z.unknown())
+          .union([
+            z.record(z.string(), z.unknown()),
+            z.array(z.record(z.string(), z.unknown())).max(100),
+          ])
           .optional()
-          .describe('Action-specific payload (see describe for schema)'),
+          .describe(
+            'Action-specific payload (see describe for schema), or an array of payloads ' +
+              'to run against this URI in order.',
+          ),
       },
     },
     async ({ uri, payload }) => exec(reg, 'invoke', uri, payload),

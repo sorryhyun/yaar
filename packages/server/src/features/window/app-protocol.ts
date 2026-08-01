@@ -13,6 +13,11 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { type PendingOutcome } from '../../session/pending-store.js';
 import { deadlines } from '../../config.js';
 import { enrichManifestWithUris } from './manifest-utils.js';
+import {
+  renderSignature,
+  renderInvokeExample,
+  reservedKeyNote,
+} from '../../lib/command-signature.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
@@ -272,6 +277,16 @@ export async function fetchLiveManifest(
  * `protocol.json` already carries a one-line `description` per key, so erroring on a key
  * that *is* documented would report it as missing — the same false signal the `exists`
  * hook exists to remove. The error is reserved for a key that does not exist.
+ *
+ * A command's answer additionally carries *how to call it*: a signature, a rendered
+ * `invoke` example, and — when the command declares one of the names the sub-path
+ * spelling otherwise reserves — a note saying so. The prose those replace ("the payload
+ * *is* `params`") reads as a prohibition on a payload containing a key called `params`,
+ * which is exactly the shape `setGeometryParams(id, params, points)` needs; a rendered
+ * example carrying the literal keys cannot be read that way. That costs a manifest fetch
+ * on the computed-doc path, which used to skip it — a describe is a deliberate, rare call,
+ * and answering "what does this do" without "how do I call it" is what sent callers back
+ * for a second one.
  */
 export async function handleAppDescribe(
   windowState: WindowStateRegistry,
@@ -298,19 +313,33 @@ export async function handleAppDescribe(
   if (response.kind !== 'describe') return error('Unexpected response kind.');
   // The app says this key is not in its table — the one genuine "no such resource".
   if (response.error) return error(response.error);
-  if (response.doc !== null) {
-    return okJson({ uri: buildWindowResourceUri(windowId, target, key), doc: response.doc });
+
+  const uri = buildWindowResourceUri(windowId, target, key);
+  if (response.doc !== null && target === 'state') {
+    return okJson({ uri, doc: response.doc });
   }
 
-  // No describe() on this entry. The manifest's own one-liner is a real answer.
+  // The manifest is read for its own one-liner when the app computed none, and for the
+  // params of a command either way.
   const manifest = await fetchLiveManifest(windowState, windowId);
   const table = target === 'state' ? manifest?.state : manifest?.commands;
-  const entry = table?.[key] as { description?: string } | undefined;
+  const entry = table?.[key] as { description?: string; params?: unknown } | undefined;
+
+  if (target === 'state') {
+    return okJson({ uri, doc: entry?.description ?? null, source: 'manifest' });
+  }
+
+  const note = reservedKeyNote(entry);
   return okJson({
-    uri: buildWindowResourceUri(windowId, target, key),
-    doc: entry?.description ?? null,
-    source: 'manifest',
-    ...(target === 'commands' && entry ? { schema: (entry as { params?: unknown }).params } : {}),
+    uri,
+    doc: response.doc ?? entry?.description ?? null,
+    // Attribution belongs to the doc, so it is claimed only when the doc came from here.
+    ...(response.doc === null ? { source: 'manifest' } : {}),
+    ...(entry
+      ? { signature: renderSignature(key, entry), invoke: renderInvokeExample(uri, entry) }
+      : {}),
+    ...(entry?.params !== undefined ? { schema: entry.params } : {}),
+    ...(note ? { note } : {}),
   });
 }
 

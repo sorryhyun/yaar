@@ -90,6 +90,23 @@ function memoApp(): FakeApp {
             required: ['id'],
           },
         },
+        // A command that declares two of the three names the sub-path spelling reserves.
+        // Not hypothetical: `studio-3d.setGeometryParams(id, params, points)` was
+        // unreachable through this URI and `devtools.previewEval(expression, timeoutMs)`
+        // had its `timeoutMs` silently eaten as the transport deadline. Both of those
+        // ship in the tree; this is their shape.
+        applyStyle: {
+          description: 'Apply a named style with its own params',
+          params: {
+            type: 'object',
+            properties: {
+              id: { type: 'string' },
+              params: { type: 'object' },
+              timeoutMs: { type: 'number' },
+            },
+            required: ['id'],
+          },
+        },
       },
     },
     state: {
@@ -131,9 +148,16 @@ function answer(app: FakeApp, request: AppProtocolRequest): AppProtocolResponse 
       return { kind: 'manifest', manifest: app.manifest };
     case 'query':
       return { kind: 'query', data: app.state[request.stateKey] };
-    case 'command':
+    case 'command': {
+      // One id the app refuses, so a batch has something real to stop at. An app that
+      // never fails would let a batch's stop-at-first-failure rule pass vacuously.
+      const params = request.params as { id?: unknown } | undefined;
+      if (params?.id === 'boom') {
+        return { kind: 'command', result: null, error: `No memo "boom".` };
+      }
       app.ran.push({ command: request.command, params: request.params });
       return { kind: 'command', result: `ran ${request.command}` };
+    }
     case 'describe': {
       const table = request.target === 'state' ? app.manifest.state : app.manifest.commands;
       if (!table[request.key]) {
@@ -239,13 +263,17 @@ async function bootTwoAppWindows() {
    * turns a raw window id into `"0/memo"`. Every call is budgeted: an unbudgeted await of a
    * call that can park on the app is a test that hangs instead of failing.
    */
-  const call = (verb: Verb, uri: string, payload?: Record<string, unknown>): Promise<VerbResult> =>
+  const call = (
+    verb: Verb,
+    uri: string,
+    payload?: Record<string, unknown> | Record<string, unknown>[],
+  ): Promise<VerbResult> =>
     expectSettlesWithin(
       runWithAgentContext(
         { agentId: 'harness-app-agent', sessionId: h.sessionId, monitorId: '0' },
         () => registry.execute(verb, uri, payload),
       ),
-      1000,
+      2000,
       `${verb}("${uri}")`,
     );
 
@@ -299,7 +327,7 @@ function resourceJsonOf(result: VerbResult): Record<string, unknown> {
 }
 
 /** The `resource_link` blocks of a list result. */
-function linksOf(result: VerbResult): Array<{ uri: string; name: string }> {
+function linksOf(result: VerbResult): Array<{ uri: string; name: string; description?: string }> {
   return result.content.filter(
     (block): block is Extract<ContentBlock, { type: 'resource_link' }> =>
       block.type === 'resource_link',
@@ -359,6 +387,53 @@ describe('S10 — a window sub-path addresses one state key or one command', () 
     // meant as a param at all.
     expect(memo.ran).toEqual([{ command: 'pinMemo', params: { id: 'm-1' } }]);
     expect(commandFrames(h)[0]!.timeoutMs).toBe(4000);
+  });
+});
+
+describe('S10 — a reserved key belongs to the command that declares it', () => {
+  it('`params` reaches a command that declares one, instead of being refused as a wrapper', async () => {
+    const { call, memo } = await bootTwoAppWindows();
+
+    const result = await call('invoke', 'yaar://windows/memo/commands/applyStyle', {
+      id: 'm-1',
+      params: { color: 'red' },
+    });
+
+    // The refusal used to fire on the key *name*, so every command whose own schema
+    // declares `params` was unreachable through this spelling — the caller's only way out
+    // was the { action: 'app_command' } form, for every subsequent call in the session.
+    expect(result.isError).toBeUndefined();
+    expect(memo.ran).toEqual([
+      { command: 'applyStyle', params: { id: 'm-1', params: { color: 'red' } } },
+    ]);
+  });
+
+  it('a declared `timeoutMs` is passed to the app *and* steers the deadline', async () => {
+    const { h, call, memo } = await bootTwoAppWindows();
+
+    await call('invoke', 'yaar://windows/memo/commands/applyStyle', { id: 'm-1', timeoutMs: 4000 });
+
+    // The silent half of the bug: `timeoutMs` was deleted from the payload and used as the
+    // transport deadline, so a command that declares one (devtools' previewEval) was told
+    // nothing and no error was raised. It is now both — the app learns how long it may
+    // take, and the server does not cut off a wait it just authorized.
+    expect(memo.ran).toEqual([{ command: 'applyStyle', params: { id: 'm-1', timeoutMs: 4000 } }]);
+    expect(commandFrames(h)[0]!.timeoutMs).toBe(4000);
+  });
+
+  it('the reservation still holds for a command that declares nothing of the kind', async () => {
+    const { call, memo } = await bootTwoAppWindows();
+
+    const result = await call('invoke', 'yaar://windows/memo/commands/pinMemo', {
+      params: { id: 'm-1' },
+    });
+
+    // The schema is what decides, so the same payload is refused here and accepted above.
+    // Guessing in the app's favour would send an undeclared key to a bridge that rejects
+    // the whole command for it.
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('declares no param of that name');
+    expect(memo.ran).toEqual([]);
   });
 });
 
@@ -442,6 +517,79 @@ describe('S10 — the wrong spelling is refused, not guessed at', () => {
   });
 });
 
+describe('S10 — one URI, many payloads', () => {
+  it('runs the command once per element, in order, as one call', async () => {
+    const { h, call, memo } = await bootTwoAppWindows();
+
+    const result = await call('invoke', 'yaar://windows/memo/commands/pinMemo', [
+      { id: 'm-1' },
+      { id: 'm-2', note: 'second' },
+      { id: 'm-3' },
+    ]);
+
+    // The axis brace expansion does not cover: one resource, a different payload each
+    // time. Authoring a scene took one `addNodes`; the forty follow-up tweaks that each
+    // nudged one node took forty calls, because no two payloads were the same.
+    expect(result.isError).toBeUndefined();
+    expect(memo.ran).toEqual([
+      { command: 'pinMemo', params: { id: 'm-1' } },
+      { command: 'pinMemo', params: { id: 'm-2', note: 'second' } },
+      { command: 'pinMemo', params: { id: 'm-3' } },
+    ]);
+    // Ordered *and* sequential: these are edits to one resource, so overlapping them
+    // would make the result depend on scheduling.
+    expect(
+      commandFrames(h).map((frame) =>
+        frame.request.kind === 'command' ? (frame.request.params as { id: string }).id : null,
+      ),
+    ).toEqual(['m-1', 'm-2', 'm-3']);
+    expect(textOf(result)).toContain('Batch complete: 3 of 3.');
+  });
+
+  it('stops at the first failure and names the index to resume from', async () => {
+    const { call, memo } = await bootTwoAppWindows();
+
+    const result = await call('invoke', 'yaar://windows/memo/commands/pinMemo', [
+      { id: 'm-1' },
+      { id: 'boom' },
+      { id: 'm-3' },
+    ]);
+
+    // The conservative reading of "in order": payload 3 was written for a state payload 2
+    // was supposed to produce. Running it anyway would edit a resource nobody asked to
+    // edit — so the remainder is reported as not attempted, with the index to resend from.
+    expect(result.isError).toBe(true);
+    expect(memo.ran).toEqual([{ command: 'pinMemo', params: { id: 'm-1' } }]);
+    expect(textOf(result)).toContain('No memo "boom"');
+    expect(textOf(result)).toContain('Batch stopped at [1] of 3');
+    expect(textOf(result)).toContain('resend from [1]');
+  });
+
+  it('each element is checked exactly as a lone invoke is', async () => {
+    const { call, memo } = await bootTwoAppWindows();
+
+    const result = await call('invoke', 'yaar://windows/memo/commands/pinMemo', [
+      { id: 'm-1' },
+      { params: { id: 'm-2' } },
+    ]);
+
+    // A batch is a spelling, never a bypass: the second element meets the same
+    // reserved-key refusal it would have met on its own.
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('declares no param of that name');
+    expect(memo.ran).toEqual([{ command: 'pinMemo', params: { id: 'm-1' } }]);
+  });
+
+  it('an empty batch is an error, not a silent success', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const result = await call('invoke', 'yaar://windows/memo/commands/pinMemo', []);
+
+    expect(result.isError).toBe(true);
+    expect(textOf(result)).toContain('nothing to do');
+  });
+});
+
 describe('S10 — list on a window is that window, not the monitor', () => {
   it("returns this window's own state keys and commands as addressable links", async () => {
     const { call } = await bootTwoAppWindows();
@@ -462,6 +610,7 @@ describe('S10 — list on a window is that window, not the monitor', () => {
       'yaar://windows/memo/state/drafts',
       'yaar://windows/memo/state/memos',
       'yaar://windows/memo/commands/pinMemo',
+      'yaar://windows/memo/commands/applyStyle',
     ]);
     expect(links.map((link) => link.name)).toContain('commands/pinMemo');
 
@@ -470,6 +619,25 @@ describe('S10 — list on a window is that window, not the monitor', () => {
     const uris = links.map((link) => link.uri).join(' ');
     expect(uris).not.toContain('storage');
     expect(uris).not.toBe('yaar://windows/memo');
+  });
+
+  it('a command link carries its signature, so the list is enough to call from', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const links = linksOf(await call('list', 'yaar://windows/memo'));
+    const pin = links.find((link) => link.name === 'commands/pinMemo')!;
+    const open = linksOf(await call('list', 'yaar://windows/storage')).find(
+      (link) => link.name === 'commands/openPath',
+    )!;
+
+    // `list` is the door an agent reaches for first, and a bare name is not enough to
+    // call with — the round trip it saves is a `describe` spent only on param names.
+    expect(pin.description).toBe(
+      'pinMemo(id: string, note?: string) — Pin one memo to the top of the list',
+    );
+    // A command that declares no schema is left alone rather than rendered as `name()`,
+    // which would document a command that takes params as one that takes none.
+    expect(open.description).toBe('Open a path in the browser pane');
   });
 
   it('the other window answers for itself, from its own manifest', async () => {
@@ -584,7 +752,7 @@ describe('S10 — describe answers from the running app', () => {
     expect(manual.source).toBe('live');
     expect(manual.uri).toBe('yaar://windows/memo');
     expect(Object.keys(manual.state as object).sort()).toEqual(['drafts', 'memos']);
-    expect(Object.keys(manual.commands as object)).toEqual(['pinMemo']);
+    expect(Object.keys(manual.commands as object)).toEqual(['pinMemo', 'applyStyle']);
     // `drafts` exists only in the running registration and `searchMemos` only on disk (see
     // memoApp) — so this pair is what proves the answer came off the wire.
     expect(manual.commands).not.toHaveProperty('searchMemos');
@@ -626,6 +794,37 @@ describe('S10 — describe answers from the running app', () => {
       properties: { id: { type: 'string' }, note: { type: 'string' } },
       required: ['id'],
     });
+  });
+
+  it('a command says how it is called, not only what it does', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const doc = jsonOf(await call('describe', 'yaar://windows/memo/commands/pinMemo'));
+
+    // The two questions that were being guessed — what is this called, and what shape is
+    // it — answered without a second call. The example carries the literal param names,
+    // which is the part prose cannot do: "the payload *is* `params`" reads as a ban on a
+    // payload containing a key called `params`.
+    expect(doc.signature).toBe('pinMemo(id: string, note?: string)');
+    expect(doc.invoke).toBe(
+      'invoke("yaar://windows/memo/commands/pinMemo", { id: <string>, note?: <string> })',
+    );
+    // A command with no name collision earns no note.
+    expect(doc.note).toBeUndefined();
+  });
+
+  it('a command that declares a reserved name says so, in its own describe', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const doc = jsonOf(await call('describe', 'yaar://windows/memo/commands/applyStyle'));
+
+    expect(doc.signature).toBe('applyStyle(id: string, params?: object, timeoutMs?: number)');
+    expect(String(doc.invoke)).toContain('params?: <object>');
+    // The note exists for exactly the reader who has just been told the payload *is*
+    // `params` and is holding a command whose params include one.
+    expect(String(doc.note)).toContain('`params`');
+    expect(String(doc.note)).toContain('`timeoutMs`');
+    expect(String(doc.note)).toContain('inline');
   });
 
   it('a key the app does not have is the one genuine error', async () => {

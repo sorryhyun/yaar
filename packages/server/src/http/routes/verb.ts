@@ -13,7 +13,7 @@
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
-import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
+import type { InvokePayload, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   requireBundle,
   requirePermission,
@@ -34,7 +34,9 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     path: '/api/verb',
     response: 'JSON',
     description:
-      'Execute a yaar:// verb from an iframe app. Body: `{ verb, uri, payload? }`. Restricted to allowed URI prefixes.',
+      'Execute a yaar:// verb from an iframe app. Body: `{ verb, uri, payload? }`, where an ' +
+      'invoke `payload` may be an array of payloads to run against the same URI in order ' +
+      '(stops at the first failure). Restricted to allowed URI prefixes.',
   },
   {
     method: 'POST',
@@ -50,7 +52,8 @@ const VALID_VERBS: Verb[] = ['describe', 'read', 'list', 'invoke', 'delete'];
 interface VerbRequest {
   verb?: string;
   uri?: string;
-  payload?: Record<string, unknown>;
+  /** One payload, or a list to invoke against the same URI in order (`InvokePayload`). */
+  payload?: InvokePayload;
 }
 
 interface SubscribeRequest {
@@ -313,13 +316,20 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // write its own storage could name any source and pull the bytes in — a read grant
   // for the whole tree, spelled as a write. The source is checked under the same rules
   // as reading it directly; `copy` adds no authority, only a cheaper route.
-  if (verb === 'invoke' && body.payload?.action === 'copy') {
-    const from = body.payload.from;
-    if (typeof from !== 'string') {
-      return errorResponse('"from" (a yaar:// storage URI) is required for copy', 400);
+  //
+  // Applied per *element*, because a batched invoke is N calls and the registry runs them
+  // without coming back through this door — checking only the object form would make the
+  // array form the bypass.
+  if (verb === 'invoke') {
+    for (const element of Array.isArray(body.payload) ? body.payload : [body.payload]) {
+      if (element?.action !== 'copy') continue;
+      const from = element.from;
+      if (typeof from !== 'string') {
+        return errorResponse('"from" (a yaar:// storage URI) is required for copy', 400);
+      }
+      const deniedSource = requirePermission(principal, from, 'read');
+      if (deniedSource) return deniedSource;
     }
-    const deniedSource = requirePermission(principal, from, 'read');
-    if (deniedSource) return deniedSource;
   }
 
   const tokenEntry: Extract<Principal, { kind: 'app' }> | null =
