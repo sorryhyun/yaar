@@ -128,13 +128,14 @@ The canonical way agents address windows. The monitor is injected automatically 
 | `yaar://windows/` | Window collection (list, create) |
 | `yaar://windows/{windowId}` | Window (describe, read, list, update, subscribe, message, delete) |
 | `yaar://windows/{windowId}/state/{key}` | One state key of an app window (describe, read) |
+| `yaar://windows/{windowId}/state/__{content,screenshot,console}` | The **window's own** state keys — see below (describe, read) |
 | `yaar://windows/{windowId}/commands/{key}` | One command of an app window (describe, invoke) |
 
 | Verb | URI | Effect |
 |------|-----|--------|
-| `describe` | `yaar://windows/{windowId}` | This instance's manual — the live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). A non-app window answers with the action set filtered to its renderer instead |
-| `read` | `yaar://windows/{windowId}` | Window content + metadata (with capture) |
-| `list` | `yaar://windows/{windowId}` | *That window's* state keys and commands, as sub-path resource links |
+| `describe` | `yaar://windows/{windowId}` | This instance's manual — the live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). A non-app window answers with the action set filtered to its renderer instead. Either way, `builtinState` carries the window's own keys |
+| `read` | `yaar://windows/{windowId}` | Metadata + `__content`; on an iframe window, metadata + `__screenshot` instead, with `contentOmitted` naming where the content went |
+| `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links |
 | `read` | `yaar://windows/{windowId}/state/{key}` | One state value — the same executor as `app_query` |
 | `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params |
 | `describe` | `yaar://windows/{windowId}/{state,commands}/{key}` | That key's doc — the app's computed `describe()` if it defines one, otherwise the manifest's static `description` |
@@ -153,6 +154,32 @@ The canonical way agents address windows. The monitor is injected automatically 
 
 > `list('yaar://windows/{windowId}')` returns *that window's* keys. It used to ignore the window id
 > and return every window on the monitor, which is what `list('yaar://windows')` is for.
+
+**Three state keys belong to the window, not to the app inside it.** `__console` was always one;
+`__content` and `__screenshot` join it, and the set is now listed and described rather than
+mentioned in one param's help text:
+
+| Key | Answers | Available on |
+|-----|---------|--------------|
+| `__content` | the window registry — no capture, no round trip to the app | every window |
+| `__screenshot` | a `window.capture` round trip to the frontend | iframe windows |
+| `__console` | the injected app-protocol script's capture buffer | iframe windows |
+
+Two things follow, and both were inconsistencies before:
+
+- **A window with no protocol lists what it has, instead of erroring about what it lacks.**
+  `list('yaar://windows/{markdownWindow}')` used to be an error — "it has no protocol, so nothing
+  under it is addressable" — which answered a question about the *app* when it was asked one about
+  the *window*. It now returns `state/__content`, with a note saying there is no app.
+- **A bare `read` of an iframe window is `__content` + `__screenshot`, and says so.** The screenshot
+  wins (an app window's raw content is a compiled HTML blob), so `content` is replaced by
+  `contentOmitted`, which names the URI holding it. It used to be dropped silently whenever a
+  capture happened to succeed — so the shape of "the window's current value" depended on whether
+  the frontend answered in time, and the half that was dropped was addressable by nothing.
+
+The `__` prefix is reserved: an app declaring a state key by one of these names is shadowed, not
+merged. `invoke(..., { action: 'app_query', stateKey: '__content' })` reaches the same answer as
+reading the sub-path, since the schema calls the two equivalent.
 
 `buildWindowResourceUri` / `parseWindowResourceUri`
 (`packages/server/src/lib/yaar-uri-server.ts`) mint and read these URIs, and

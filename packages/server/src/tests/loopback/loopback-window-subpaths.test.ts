@@ -25,7 +25,13 @@
  */
 import { describe, it, expect, afterEach } from 'bun:test';
 import { ClientEventType, ServerEventType } from '@yaar/shared';
-import type { AppManifest, AppProtocolRequest, AppProtocolResponse } from '@yaar/shared';
+import type {
+  AppManifest,
+  AppProtocolRequest,
+  AppProtocolResponse,
+  OSAction,
+  WindowCaptureAction,
+} from '@yaar/shared';
 import type { ContentBlock, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { boot, type Harness } from './harness/boot.js';
 import { expectSettlesWithin } from './harness/liveness.js';
@@ -144,6 +150,53 @@ function answer(app: FakeApp, request: AppProtocolRequest): AppProtocolResponse 
   }
 }
 
+/** The pixels the fake frontend answers a `window.capture` with. */
+const CAPTURED = 'Y2FwdHVyZWQtcGl4ZWxz';
+
+/**
+ * Answer window captures the way the browser does — over `RENDERING_FEEDBACK`, keyed by the
+ * `requestId` the action carries. Without this the capture waits out its own 5s deadline,
+ * which is the difference between a test that asserts a screenshot and one that asserts a
+ * timeout that happens to look the same from the outside.
+ */
+function answerCaptures(h: Harness): void {
+  h.client.onFrame(ServerEventType.ACTIONS, async (frame) => {
+    for (const action of frame.actions) {
+      if (action.type !== 'window.capture') continue;
+      const capture = action as WindowCaptureAction;
+      if (!capture.requestId) continue;
+      await h.client.deliver({
+        type: ClientEventType.RENDERING_FEEDBACK,
+        requestId: capture.requestId,
+        windowId: capture.windowId,
+        renderer: 'capture',
+        success: true,
+        imageData: CAPTURED,
+      });
+    }
+  });
+}
+
+/**
+ * A window with no app in it, seeded the way an agent's `window.create` does.
+ *
+ * The interesting case for the built-in state keys: there is no iframe to ask, so anything
+ * this window can answer, the OS is answering.
+ */
+function seedMarkdownWindow(h: Harness, rawId: string, body: string): string {
+  h.session.windowState.handleAction(
+    {
+      type: 'window.create',
+      windowId: rawId,
+      title: rawId,
+      bounds: { x: 0, y: 0, w: 400, h: 300 },
+      content: { renderer: 'markdown', data: body },
+    } as OSAction,
+    '0',
+  );
+  return h.session.windowState.getWindow(rawId)?.id ?? `0/${rawId}`;
+}
+
 /** A session holding two registered app windows, and a browser that answers for both. */
 async function bootTwoAppWindows() {
   const h = await boot();
@@ -196,7 +249,31 @@ async function bootTwoAppWindows() {
       `${verb}("${uri}")`,
     );
 
-  return { h, call, memo: apps.get(memoKey)!, storage: apps.get(storageKey)! };
+  /**
+   * The same call, but inside a real turn — which is what a `window.capture` needs.
+   *
+   * An emitted OS Action only reaches the browser through `ToolActionBridge`, and that is
+   * installed per turn. A capture asserted from a bare `call()` would be asserting the
+   * timeout path with extra steps: the frame never goes out, so nothing can answer it.
+   */
+  const callInTurn = async (verb: Verb, uri: string): Promise<VerbResult> => {
+    h.registry.onTurn(() => [
+      { kind: 'tool', name: `${verb}(${uri})`, run: () => registry.execute(verb, uri) },
+    ]);
+    await expectSettlesWithin(
+      h.client.deliverAsync({
+        type: ClientEventType.USER_MESSAGE,
+        messageId: `m-${h.registry.turns.length}`,
+        monitorId: '0',
+        content: `${verb} ${uri}`,
+      }),
+      2000,
+      `the turn running ${verb}("${uri}")`,
+    );
+    return h.registry.tools.at(-1)!.result as VerbResult;
+  };
+
+  return { h, call, callInTurn, memo: apps.get(memoKey)!, storage: apps.get(storageKey)! };
 }
 
 /** What the model reads: every text block of a result, joined. */
@@ -210,6 +287,15 @@ function textOf(result: VerbResult): string {
 /** A JSON result (`okJson`), parsed back out of the text block it rides in. */
 function jsonOf(result: VerbResult): Record<string, unknown> {
   return JSON.parse(textOf(result)) as Record<string, unknown>;
+}
+
+/** A JSON result that rides in an embedded resource block (`okJsonResource`) instead. */
+function resourceJsonOf(result: VerbResult): Record<string, unknown> {
+  const block = result.content.find((b) => b.type === 'resource');
+  if (block?.type !== 'resource' || !('text' in block.resource)) {
+    throw new Error(`no embedded resource in result: ${JSON.stringify(result.content)}`);
+  }
+  return JSON.parse(block.resource.text) as Record<string, unknown>;
 }
 
 /** The `resource_link` blocks of a list result. */
@@ -366,16 +452,18 @@ describe('S10 — list on a window is that window, not the monitor', () => {
     // The behavior *change*: this used to ignore the window id and answer with every
     // window on the monitor — which is what `list("yaar://windows")` already says, and
     // which offered the caller no way to discover what a window could be asked.
-    expect(links.map((link) => link.uri).sort()).toEqual([
-      'yaar://windows/memo/commands/pinMemo',
+    //
+    // The window's own keys come first and the app's follow, because the answer is "what is
+    // addressable under this URI" — and three of those keys are the window's, not the app's.
+    expect(links.map((link) => link.uri)).toEqual([
+      'yaar://windows/memo/state/__content',
+      'yaar://windows/memo/state/__screenshot',
+      'yaar://windows/memo/state/__console',
       'yaar://windows/memo/state/drafts',
       'yaar://windows/memo/state/memos',
+      'yaar://windows/memo/commands/pinMemo',
     ]);
-    expect(links.map((link) => link.name).sort()).toEqual([
-      'commands/pinMemo',
-      'state/drafts',
-      'state/memos',
-    ]);
+    expect(links.map((link) => link.name)).toContain('commands/pinMemo');
 
     // The other window is open, on this monitor, and answering — and is still none of this
     // URI's business. (Under the old behavior it was the *whole* answer.)
@@ -391,10 +479,96 @@ describe('S10 — list on a window is that window, not the monitor', () => {
 
     // Same session, same monitor, one call apart — so the id in the URI is doing the work,
     // not the session's window list.
-    expect(links.map((link) => link.uri).sort()).toEqual([
-      'yaar://windows/storage/commands/openPath',
+    expect(links.map((link) => link.uri).filter((uri) => !uri.includes('/__'))).toEqual([
       'yaar://windows/storage/state/cwd',
+      'yaar://windows/storage/commands/openPath',
     ]);
+  });
+});
+
+describe('S10 — every window has state of its own, whatever it renders', () => {
+  it('a window with no app lists its own keys rather than failing', async () => {
+    const { call, h } = await bootTwoAppWindows();
+    seedMarkdownWindow(h, 'notes', '# Notes');
+
+    const result = await call('list', 'yaar://windows/notes');
+
+    // This used to be an error: "it has no protocol, so nothing under it is addressable".
+    // But `list` is asked what is addressable under *this window*, and the answer for a
+    // markdown window is its content — not a complaint about the app it never had. An
+    // existing container with no children is an empty list; this one is not even empty.
+    expect(result.isError).toBeUndefined();
+    expect(linksOf(result).map((link) => link.uri)).toEqual([
+      'yaar://windows/notes/state/__content',
+    ]);
+    // The two that need an iframe are absent rather than listed-and-broken.
+    expect(textOf(result)).toContain('markdown window');
+  });
+
+  it('reads its content with no app, no capture, and no round trip', async () => {
+    const { call, h } = await bootTwoAppWindows();
+    seedMarkdownWindow(h, 'notes', '# Notes\n\nbuy milk');
+
+    const before = h.client.framesOf(ServerEventType.APP_PROTOCOL_REQUEST).length;
+    const content = resourceJsonOf(await call('read', 'yaar://windows/notes/state/__content'));
+
+    expect(content.renderer).toBe('markdown');
+    expect(content.content).toBe('# Notes\n\nbuy milk');
+    // Answered from the registry. A markdown window has no iframe to ask, so a built-in that
+    // fell through to the app path would sit out the readiness deadline and then refuse.
+    expect(h.client.framesOf(ServerEventType.APP_PROTOCOL_REQUEST).length).toBe(before);
+  });
+
+  it('refuses the two built-ins that need an iframe, and says which window it is', async () => {
+    const { call, h } = await bootTwoAppWindows();
+    seedMarkdownWindow(h, 'notes', '# Notes');
+
+    const shot = await call('read', 'yaar://windows/notes/state/__screenshot');
+
+    // Not listed, not described, so reading it is a genuine "no such resource" — the rule
+    // that a *missing* thing is an error is what makes the empty-ish list above safe.
+    expect(shot.isError).toBe(true);
+    expect(textOf(shot)).toContain('needs an iframe');
+    expect(textOf(shot)).toContain('markdown window');
+  });
+
+  it('documents its built-ins itself, without asking the app', async () => {
+    const { call } = await bootTwoAppWindows();
+
+    const doc = jsonOf(await call('describe', 'yaar://windows/memo/state/__content'));
+
+    // `source: 'window'` beside the app's `'manifest'`/computed docs: the memo app has never
+    // heard of `__content` and would answer "Unknown state key" for it, which would report a
+    // live resource as missing.
+    expect(doc.source).toBe('window');
+    expect(String(doc.doc)).toContain('no capture');
+  });
+});
+
+describe('S10 — a bare read of an app window is __content + __screenshot', () => {
+  it('returns the screenshot and says where the content went', async () => {
+    const { callInTurn, h } = await bootTwoAppWindows();
+    answerCaptures(h);
+
+    const result = await callInTurn('read', 'yaar://windows/memo');
+    const image = result.content.find((block) => block.type === 'image');
+    const meta = resourceJsonOf(result);
+
+    expect(image).toEqual({ type: 'image', data: CAPTURED, mimeType: 'image/webp' });
+    // The composition used to be silent: `content` was dropped whenever a capture happened to
+    // succeed, so the shape of "the window's current value" depended on whether the frontend
+    // answered in time, and the dropped half was addressable by nothing.
+    expect(meta.content).toBeUndefined();
+    expect(String(meta.contentOmitted)).toContain('yaar://windows/memo/state/__content');
+  });
+
+  it('the screenshot is separately addressable, and is the same capture', async () => {
+    const { callInTurn, h } = await bootTwoAppWindows();
+    answerCaptures(h);
+
+    const result = await callInTurn('read', 'yaar://windows/memo/state/__screenshot');
+
+    expect(result.content).toEqual([{ type: 'image', data: CAPTURED, mimeType: 'image/webp' }]);
   });
 });
 

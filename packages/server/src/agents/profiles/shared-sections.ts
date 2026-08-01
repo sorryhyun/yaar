@@ -29,6 +29,19 @@ not interchangeable, and the difference is sharpest on apps and windows:
 Describing a URI that names nothing is an error, not an empty success — so a describe
 that answers is proof the resource exists.
 
+**Every window answers three state keys of its own**, whatever it renders and whether or
+not an app is running in it:
+
+\`\`\`
+read('yaar://windows/win-1/state/__content')     # its content, no capture, no app round trip
+read('yaar://windows/win-1/state/__screenshot')  # what it is showing (iframe windows)
+read('yaar://windows/win-1/state/__console')     # the iframe's console output
+\`\`\`
+
+A bare \`read('yaar://windows/win-1')\` on an app window is the first two together, and the
+screenshot wins: you get the metadata plus the picture, and \`__content\` is where the raw
+value went. So a markdown window is never an empty list — it has \`__content\`.
+
 **Brace expansion:** Use \`{a,b,c}\` in any URI to batch multiple operations in one call.
 Example: \`read('yaar://storage/{config.json,data.json,schema.json}')\` reads all 3 files at once.`;
 

@@ -18,17 +18,22 @@
  * The sub-path URIs are not new promises: `enrichManifestWithUris` has been stamping
  * them onto every key of every live manifest since before any handler implemented
  * them, and a read of one silently returned the whole window.
+ *
+ * Three of those state keys belong to the *window* rather than to the app inside it —
+ * `__content`, `__screenshot`, `__console` (see BUILTIN_STATE). They are what a window
+ * with no protocol has to list, and what a bare read of an app window is composed of.
  */
 
 import type { ResourceRegistry, VerbResult, ResourceHandler } from './uri-registry.js';
 import type { ResolvedUri, ResolvedWindow } from './uri-resolve.js';
-import type { WindowStateRegistry } from '../session/window-state.js';
+import type { WindowState, WindowStateRegistry } from '../session/window-state.js';
 import {
   ok,
   okJson,
   okJsonResource,
   okLinks,
   error,
+  prependNote,
   getActiveSession,
   assertUri,
   requireAction,
@@ -98,6 +103,83 @@ function nonAppActions(names: readonly string[]): string[] {
   return names.filter((n) => n !== 'create' && !n.startsWith('app_') && n !== 'message');
 }
 
+/**
+ * The state keys a *window* answers for, as opposed to the ones the app inside it answers.
+ *
+ * `__console` is the precedent: a key that has always been addressable, answered without the
+ * app's involvement, and documented nowhere but in one param description. Making the set
+ * explicit is what lets `list` on a window with no protocol return what it *has* instead of an
+ * error about what it lacks — a markdown window is not a failed collection, it is a window
+ * whose only addressable value is its content.
+ *
+ * `__content` and `__screenshot` are answered here, from the registry and from a capture round
+ * trip; `__console` is listed here and dispatched to the app path, since the injected
+ * app-protocol script is what holds the buffer. The `__` prefix is reserved for this: an app
+ * declaring one of these names is shadowed, not merged, because a window's own content is not
+ * something the app inside it gets to redefine.
+ */
+const BUILTIN_STATE = {
+  __content: {
+    description:
+      "This window's content, exactly as the registry holds it — no capture, no round trip " +
+      'to the app. This is the field a bare read omits when it returns a screenshot instead.',
+    iframeOnly: false,
+  },
+  __screenshot: {
+    description:
+      'A capture of what this window is showing right now. Iframe windows only — it is what ' +
+      'a bare read of one returns alongside its metadata.',
+    iframeOnly: true,
+  },
+  __console: {
+    description:
+      "The iframe's captured console output. Answered by the injected app-protocol script, so " +
+      'it works before — and without — the app ever registering.',
+    iframeOnly: true,
+  },
+} as const;
+
+type BuiltinStateKey = keyof typeof BUILTIN_STATE;
+
+function isBuiltinStateKey(key: string): key is BuiltinStateKey {
+  return Object.prototype.hasOwnProperty.call(BUILTIN_STATE, key);
+}
+
+/** The built-in keys that apply to one window — two of the three need an iframe to answer. */
+function builtinStateFor(win: WindowState): BuiltinStateKey[] {
+  const isIframe = win.content.renderer === 'iframe';
+  return (Object.keys(BUILTIN_STATE) as BuiltinStateKey[]).filter(
+    (key) => isIframe || !BUILTIN_STATE[key].iframeOnly,
+  );
+}
+
+/** The built-ins as `list` links — the same shape a protocol state key gets. */
+function builtinLinks(windowId: string, win: WindowState) {
+  return builtinStateFor(win).map((key) => ({
+    uri: buildWindowResourceUri(windowId, 'state', key),
+    name: `state/${key}`,
+    description: BUILTIN_STATE[key].description,
+  }));
+}
+
+/**
+ * The built-ins as a `describe` section — carried *beside* an app's manifest, never merged
+ * into it. Merging would make the app's own manual claim keys the app never declared; the
+ * point of naming them is that `describe` and `list` agree on which keys exist, which is
+ * exactly the disagreement this section exists to close.
+ */
+function builtinManual(windowId: string, win: WindowState): Record<string, unknown> {
+  return Object.fromEntries(
+    builtinStateFor(win).map((key) => [
+      key,
+      {
+        uri: buildWindowResourceUri(windowId, 'state', key),
+        description: BUILTIN_STATE[key].description,
+      },
+    ]),
+  );
+}
+
 function badSubPath(resolved: ResolvedWindow, subPath: string): VerbResult {
   return error(
     `"${subPath}" is not a window sub-resource. Use yaar://windows/${resolved.windowId}/state/{key} ` +
@@ -150,7 +232,7 @@ export function registerWindowHandlers(
     unlock: ({ windowId }) => handleManage(getWindowState(), windowId, 'unlock'),
     move: ({ windowId, p }) => handleGeometry(getWindowState(), windowId, 'move', p),
     resize: ({ windowId, p }) => handleGeometry(getWindowState(), windowId, 'resize', p),
-    app_query: ({ windowId, p }) => handleAppQuery(getWindowState(), windowId, p),
+    app_query: ({ windowId, p }) => queryWindowState(windowId, p),
     app_command: ({ windowId, p }) => handleAppCommand(getWindowState(), windowId, p),
     app_eval: ({ windowId, p }) => handleAppEval(getWindowState(), windowId, p),
     message: ({ windowId, p }) => {
@@ -187,6 +269,94 @@ export function registerWindowHandlers(
     app_subscribe: ({ windowId, p }) => handleAppSubscribe(getWindowState(), windowId, p),
     app_unsubscribe: ({ p }) => handleUnsubscribe(p),
   });
+
+  /**
+   * Ask the frontend for a capture of this window.
+   *
+   * Addressed by the *window's* monitor, never the caller's: an iframe-SDK read (agentId
+   * `iframe:*`, e.g. devtools' viewPreview) carries no monitor of its own, so a capture sent
+   * out on the caller's monitor goes unaddressed and its feedback never comes back — which
+   * left the one tool that builds a window as the only tool that could not look at it.
+   *
+   * A failure names its cause: a capture that failed because the canvas was tainted is
+   * unfixable by retrying, while one that timed out may well succeed on the next call.
+   * Reported as the same empty result, both looked like "it may not have painted yet".
+   */
+  async function captureWindow(
+    win: WindowState,
+  ): Promise<{ imageData?: string; captureFailure?: string }> {
+    const outcome = await actionEmitter.emitActionWithFeedback(
+      { type: 'window.capture', windowId: win.id },
+      5000,
+      undefined,
+      getWindowState().getMonitorForWindow(win.id),
+    );
+    const feedback = valueOf(outcome);
+    if (feedback?.success && feedback.imageData) return { imageData: feedback.imageData };
+    return { captureFailure: feedback?.captureFailure };
+  }
+
+  /**
+   * `read` of a built-in state key.
+   *
+   * Returns null only for `__console`, whose buffer lives in the injected script — that one
+   * falls through to the app path like any declared key. The other two are answered here, and
+   * deliberately *before* the app is consulted: a markdown window has no app to ask, and an
+   * iframe whose app never registered would otherwise wait out the readiness deadline to be
+   * told it cannot answer for a value the OS was holding all along.
+   */
+  async function readBuiltinState(
+    windowId: string,
+    win: WindowState,
+    key: BuiltinStateKey,
+  ): Promise<VerbResult | null> {
+    if (!builtinStateFor(win).includes(key)) {
+      return error(
+        `"${key}" needs an iframe; window "${windowId}" is a ${win.content.renderer} window. ` +
+          `list("yaar://windows/${windowId}") shows what this one has.`,
+      );
+    }
+
+    if (key === '__content') {
+      return okJsonResource(buildWindowResourceUri(windowId, 'state', key), {
+        renderer: win.content.renderer,
+        content: win.content.data,
+      });
+    }
+
+    if (key === '__screenshot') {
+      const { imageData, captureFailure } = await captureWindow(win);
+      if (!imageData) {
+        return error(
+          `Could not capture window "${windowId}"${captureFailure ? ` (${captureFailure})` : ''}.`,
+        );
+      }
+      return { content: [{ type: 'image', data: imageData, mimeType: 'image/webp' }] };
+    }
+
+    return null;
+  }
+
+  /**
+   * One door for `app_query` and for a `state/{key}` read.
+   *
+   * The invoke schema calls the two equivalent, and they are — so a built-in that answered on
+   * only one of them would make that documentation a lie for exactly the keys the app cannot
+   * answer for itself.
+   */
+  async function queryWindowState(
+    windowId: string,
+    payload: Record<string, unknown>,
+  ): Promise<VerbResult> {
+    const stateKey = typeof payload.stateKey === 'string' ? payload.stateKey : '';
+    if (isBuiltinStateKey(stateKey)) {
+      const win = getWindowState().getWindow(windowId);
+      if (!win) return error(`Window "${windowId}" not found.`);
+      const builtin = await readBuiltinState(windowId, win, stateKey);
+      if (builtin) return builtin;
+    }
+    return handleAppQuery(getWindowState(), windowId, payload);
+  }
 
   /**
    * `invoke` on `yaar://windows/{id}/commands/{key}` — the URI names the command, so
@@ -244,6 +414,9 @@ export function registerWindowHandlers(
       'manage; delete to close. ' +
       'Sub-paths: read yaar://windows/{windowId}/state/{key} for one state value, invoke ' +
       'yaar://windows/{windowId}/commands/{key} to run one command (payload = its params). ' +
+      'Every window also answers three state keys of its own, whatever it renders: ' +
+      '__content (its content, no capture), __screenshot and __console (iframe windows). ' +
+      'A bare read of an iframe window is __content + __screenshot, the screenshot winning. ' +
       'Invoke actions: create, update (requires operation), close, lock, unlock, move (x, y), resize (width, height), app_query, app_command, app_eval (devtools previews only), message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
@@ -303,8 +476,8 @@ export function registerWindowHandlers(
           type: 'string',
           description:
             'app_query only. A state key from the app\'s protocol; defaults to "manifest", ' +
-            'which returns the whole protocol. "__console" is a built-in that returns the ' +
-            "iframe's captured console output. Equivalent to " +
+            'which returns the whole protocol. The window\'s own built-ins ("__content", ' +
+            '"__screenshot", "__console") are readable here too. Equivalent to ' +
             'read("yaar://windows/{windowId}/state/{key}").',
         },
         // app_eval fields
@@ -391,6 +564,21 @@ export function registerWindowHandlers(
       }
 
       if (target.kind === 'resource') {
+        // A built-in is documented here, not asked of the app: the app has never heard of
+        // these keys and would answer "unknown state key" for one it does not own.
+        if (target.resourceType === 'state' && isBuiltinStateKey(target.key)) {
+          if (!builtinStateFor(win).includes(target.key)) {
+            return error(
+              `"${target.key}" needs an iframe; window "${resolved.windowId}" is a ` +
+                `${win.content.renderer} window.`,
+            );
+          }
+          return okJson({
+            uri: resolved.sourceUri,
+            doc: BUILTIN_STATE[target.key].description,
+            source: 'window',
+          });
+        }
         return handleAppDescribe(
           getWindowState(),
           resolved.windowId,
@@ -402,21 +590,30 @@ export function registerWindowHandlers(
       // A non-app window has no protocol at all. Its manual is the action set, filtered
       // to what this renderer can actually answer — `create` is not an operation on a
       // window that exists, and `jsonfile`/`minimized`/`position` are create-time fields.
+      // It still has the window's own state keys, so `list` is a verb it answers.
       if (win.content.renderer !== 'iframe' || !win.appId) {
         return okJson({
           uri: resolved.sourceUri,
           kind: 'window',
           renderer: win.content.renderer,
           title: win.title,
-          verbs: ['describe', 'read', 'invoke', 'delete'],
+          verbs: ['describe', 'read', 'list', 'invoke', 'delete'],
           actions: nonAppActions(windowActions.names),
-          note: 'Not an app window — it has no protocol, so it has no state or command sub-paths.',
+          builtinState: builtinManual(resolved.windowId, win),
+          note:
+            'Not an app window — it has no protocol, so it has no commands and no state ' +
+            "beyond the window's own (below).",
         });
       }
 
       const live = await fetchLiveManifest(getWindowState(), resolved.windowId);
       if (live) {
-        return okJson({ uri: resolved.sourceUri, source: 'live', ...live });
+        return okJson({
+          uri: resolved.sourceUri,
+          source: 'live',
+          ...live,
+          builtinState: builtinManual(resolved.windowId, win),
+        });
       }
 
       // The iframe has not registered (or did not answer). Fall back to what the app
@@ -431,6 +628,7 @@ export function registerWindowHandlers(
           appId: win.appId,
           state: {},
           commands: {},
+          builtinState: builtinManual(resolved.windowId, win),
           note: 'The app has not registered with the App Protocol and ships no protocol.json.',
         });
       }
@@ -440,6 +638,7 @@ export function registerWindowHandlers(
         appId: win.appId,
         name: app.name,
         ...app.protocol,
+        builtinState: builtinManual(resolved.windowId, win),
         note:
           'Read from the app on disk — the iframe has not registered with the App Protocol, ' +
           'so a deploy since the window opened would not show here.',
@@ -468,10 +667,16 @@ export function registerWindowHandlers(
 
       const win = getWindowState().getWindow(resolved.windowId);
       if (!win) return error(`Window "${resolved.windowId}" not found.`);
+
+      // Every window has the built-ins, so "no protocol" is no longer a failed list — it is
+      // a list of what this window does hold. Both of these used to be errors, which made
+      // `list` the one verb that answered a question about the app when it was asked a
+      // question about the window.
+      const builtins = builtinLinks(resolved.windowId, win);
       if (win.content.renderer !== 'iframe') {
-        return error(
-          `Window "${resolved.windowId}" is a ${win.content.renderer} window — it has no protocol, ` +
-            'so nothing under it is addressable. Use read to see its content.',
+        return prependNote(
+          okLinks(builtins),
+          `a ${win.content.renderer} window — no app, so no protocol state or commands`,
         );
       }
 
@@ -480,17 +685,24 @@ export function registerWindowHandlers(
       const fallback = win.appId ? apps.find((a) => a.id === win.appId)?.protocol : undefined;
       const manifest = live ?? fallback;
       if (!manifest) {
-        return error(
-          `Window "${resolved.windowId}" has no protocol — the app has not registered and ships no protocol.json.`,
+        return prependNote(
+          okLinks(builtins),
+          'the app has not registered with the App Protocol and ships no protocol.json, so ' +
+            "only the window's own keys are addressable",
         );
       }
 
       const links = [
-        ...Object.entries(manifest.state ?? {}).map(([key, desc]) => ({
-          uri: buildWindowResourceUri(resolved.windowId, 'state', key),
-          name: `state/${key}`,
-          description: (desc as { description?: string }).description,
-        })),
+        ...builtins,
+        // `__`-named app keys are shadowed by the built-ins, so they are dropped here rather
+        // than listed twice under one URI that answers as the window.
+        ...Object.entries(manifest.state ?? {})
+          .filter(([key]) => !isBuiltinStateKey(key))
+          .map(([key, desc]) => ({
+            uri: buildWindowResourceUri(resolved.windowId, 'state', key),
+            name: `state/${key}`,
+            description: (desc as { description?: string }).description,
+          })),
         ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => ({
           uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
           name: `commands/${key}`,
@@ -533,19 +745,23 @@ export function registerWindowHandlers(
 
       const target = windowTarget(resolved);
       if (target.kind === 'invalid') return badSubPath(resolved, target.subPath);
-      if (target.kind === 'resource') {
-        if (target.resourceType === 'commands') {
-          return error(
-            `Commands are invoked, not read. Use invoke("${resolved.sourceUri}", { …params }), ` +
-              `or describe("${resolved.sourceUri}") for what it does.`,
-          );
-        }
-        return handleAppQuery(getWindowState(), resolved.windowId, { stateKey: target.key });
+      if (target.kind === 'resource' && target.resourceType === 'commands') {
+        return error(
+          `Commands are invoked, not read. Use invoke("${resolved.sourceUri}", { …params }), ` +
+            `or describe("${resolved.sourceUri}") for what it does.`,
+        );
       }
 
+      // Resolved before the sub-path is dispatched, not after: a state key on a window that
+      // does not exist should say so here, where the message points at `list`, rather than
+      // reach the app path to be told the same thing less usefully.
       const win = getWindowState().getWindow(resolved.windowId);
       if (!win) {
         return error(`Window "${resolved.windowId}" not found. Use list to see available windows.`);
+      }
+
+      if (target.kind === 'resource') {
+        return queryWindowState(resolved.windowId, { stateKey: target.key });
       }
 
       const windowInfo: Record<string, unknown> & { captureFailure?: string } = {
@@ -560,26 +776,17 @@ export function registerWindowHandlers(
         ...formatWindowFlags(win),
       };
 
-      // For iframe windows, capture a screenshot so the agent can see what's rendered.
+      // A bare read of an iframe window is the composition `__content` + `__screenshot`, with
+      // the screenshot winning: the raw content of an app window is a compiled HTML blob, and
+      // a picture of what it rendered is the more useful answer by a wide margin.
       //
-      // This used to be skipped for iframe-SDK reads (agentId `iframe:*`, e.g. devtools'
-      // viewPreview) because such a read carries no monitor of its own, so the capture went
-      // out unaddressed and its feedback never came back — leaving the one tool that builds
-      // a window as the only tool that could not look at it. But the caller's monitor was
-      // never the right one to ask: the window's own monitor is. Address the window by its
-      // resolved, monitor-scoped key and deliver the capture there, exactly as handleAppQuery
-      // does. The image itself already survives the trip — POST /api/verb lifts image blocks
-      // into `envelope.images` and the iframe SDK hands them back (verb-sdk.ts).
+      // The composition is *named* rather than implied. It used to drop `content` silently
+      // whenever a capture happened to succeed, so the shape of "the window's current value"
+      // depended on whether the frontend answered in time — and the half that was dropped was
+      // addressable by nothing. `__content` is that half, and this says where it went.
       if (win.content.renderer === 'iframe') {
-        const outcome = await actionEmitter.emitActionWithFeedback(
-          { type: 'window.capture', windowId: win.id },
-          5000,
-          undefined,
-          getWindowState().getMonitorForWindow(win.id),
-        );
-        const feedback = valueOf(outcome);
-        if (feedback?.success && feedback.imageData) {
-          // Omit raw content (compiled HTML blob) — the screenshot is more useful
+        const { imageData, captureFailure } = await captureWindow(win);
+        if (imageData) {
           const { content: _content, ...infoWithoutContent } = windowInfo;
           return {
             content: [
@@ -587,20 +794,23 @@ export function registerWindowHandlers(
                 type: 'resource',
                 resource: {
                   uri: resolved.sourceUri,
-                  text: JSON.stringify(infoWithoutContent, null, 2),
+                  text: JSON.stringify(
+                    {
+                      ...infoWithoutContent,
+                      contentOmitted: `The screenshot below is this window's content. For the raw value, read("${buildWindowResourceUri(resolved.windowId, 'state', '__content')}").`,
+                    },
+                    null,
+                    2,
+                  ),
                   mimeType: 'application/json',
                 },
               },
-              { type: 'image', data: feedback.imageData, mimeType: 'image/webp' },
+              { type: 'image', data: imageData, mimeType: 'image/webp' },
             ],
           };
         }
-        // No image. Say why, in the metadata the caller gets anyway: a capture that
-        // failed because the canvas was tainted is unfixable by retrying, and one
-        // that timed out may well succeed on the next call. Reported as the same
-        // empty result, both looked like "it may not have painted yet".
-        if (feedback?.captureFailure) {
-          windowInfo.captureFailure = feedback.captureFailure;
+        if (captureFailure) {
+          windowInfo.captureFailure = captureFailure;
         }
       }
 

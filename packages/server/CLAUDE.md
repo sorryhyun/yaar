@@ -15,7 +15,7 @@ bun run test                   # Every suite, each in the process it needs
 `bun run test` is `scripts/run-tests.ts`. It globs **every** `*.test.ts` under `src/`, groups
 them by `scripts/test/partitions.ts`, and spawns one process per group — concurrently, and
 reporting all of them, so a unit failure no longer hides whether the other suites passed. Today
-that is 94 files in 17 processes:
+that is 105 files in 17 processes:
 
 1. `units` — one `--parallel` process for the plain unit/component tests.
 2. `remote` — `src/tests/remote/`, with `REMOTE=1` pinned for the whole process.
@@ -278,9 +278,9 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 
 | | `yaar://apps/{id}` — the *installed* app | `yaar://windows/{id}` — the *running* instance |
 |---|---|---|
-| `describe` | identity + `dist/protocol.json` verbatim + `agent/SKILL.md` + permissions + this door's `verbs`/`invokeActions`/`subPaths` | this instance's manual, tagged `source: 'live'` (the iframe's registration) or `'manifest'` (disk) |
-| `read` | the effective, **post-grant** manifest from `getAppMeta` | window content + metadata |
-| `list` | ✗ not a collection | this window's state keys and commands |
+| `describe` | identity + `dist/protocol.json` verbatim + `agent/SKILL.md` + permissions + this door's `verbs`/`invokeActions`/`subPaths` | this instance's manual, tagged `source: 'live'` (the iframe's registration) or `'manifest'` (disk), plus `builtinState` |
+| `read` | the effective, **post-grant** manifest from `getAppMeta` | metadata + `__content`, or metadata + `__screenshot` for an iframe |
+| `list` | ✗ not a collection | this window's built-in keys, then the app's state keys and commands |
 | sub-paths | `storage/`, `db/`, `agents/` | `state/{key}`, `commands/{key}` |
 
 Four rules hold this together, each closing a false success:
@@ -289,6 +289,7 @@ Four rules hold this together, each closing a false success:
 - **The same list is declared once.** `defineActions` (`handlers/define-actions.ts`) now carries a per-action `description`, so the schema `enum`, `describe`'s `invokeActions`, and the dispatch all come off one table. The app actions were previously written three times — `describe` advertised `set_badge` alone, the switch implemented seven, and the enum named five including a `write` it never handled.
 - **`yaar://apps/{id}/state/…` and `/commands/…` are refused on every verb** (`handlers/apps/register.ts`). Protocol state belongs to a running window; the same app open on two monitors is two states. Deliberately narrow — the blanket version would delete `appStorage` and `appDb`, which are built entirely on reads and lists under `yaar://apps/self/{storage,db}/`.
 - **A missing directory is an error, not an empty list.** `storageList` used to return `{ success: true, entries: [] }` for a path that isn't there, so `list('yaar://storage/nope/')` read as an empty folder; it now sets `notFound`. Namespace roots opt back in explicitly (an app's `storage/` exists from the moment the app does — the directory is created by the first write).
+- **The converse: a resource that exists and holds nothing answers, it does not complain.** `list` on a window with no protocol used to be an error naming the app the window never had — a question about the *app* answered when one was asked about the *window*. Every window now has three state keys of its own (`BUILTIN_STATE` in `handlers/window.ts`): `__content` and `__screenshot` answered by the OS, `__console` by the injected script. So the markdown window lists `state/__content`, and a bare `read` of an iframe window is the named composition `__content` + `__screenshot` — the screenshot wins and `contentOmitted` says where the content went, instead of `content` silently vanishing whenever a capture happened to succeed. `__` is reserved: an app key by one of these names is shadowed, not merged.
 
 **Access tiers (role-based URI access control):** every agent carries a principal `role` (`session` / `monitor` / `app`) on its `AgentContext`. A handler may declare `access: 'session-principal'`, and `ResourceRegistry.execute()` then rejects any caller whose role isn't `session` (default-deny — `undefined` role is non-session). `yaar://session` and all `yaar://session/*` resources are marked session-principal, so only the session agent can read/invoke them; monitor/app agents and apps (`POST /api/verb` also hard-refuses `yaar://session/*`) get a `403`. The role is resolved from the pool (`AgentPool.getRoleForAgent` via `SessionHub.findRoleForAgent`) in the MCP path and from the per-turn role string (`principalRole()`) in-process. The gate's role resolver is injected via `setAccessRoleResolver()` (wired in `lifecycle.ts`) to avoid a runtime import cycle.
 
