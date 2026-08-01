@@ -247,3 +247,24 @@ Only relay when the monitor agent needs to take further action.`;
 export const BACKGROUND_APPS_SECTION = `## Background Apps
 
 Iframe apps with app protocol stay alive even when minimized. You can open an app minimized (\`minimized: true\` in create payload) to do background work via app_query/app_command.`;
+
+// ── Provider-specific sections ───────────────────────────────────────
+//
+// Everything above is provider-agnostic — the same words reach Claude and
+// Codex. The two below are the exception: they correct a habit one model has
+// and the other does not, so stating them to both would be teaching a mistake
+// to the model that never makes it. Selected by `providerSection()` in
+// `agents/system-prompt.ts` and appended to every non-app agent's prompt.
+//
+// A section belongs here only if it is about the *model*. Anything true of
+// YAAR regardless of who is driving goes in the shared sections above.
+
+export const CODEX_PROVIDER_SECTION = `## Getting results back from sub-agents (use hooks, not yaar://session/agents)
+
+When you hand work to an app or window agent, pass \`hook: "response"\` in the invoke:
+\`invoke('yaar://windows/{id}', { action: "message", message: "...", hook: "response" })\`.
+The system then delivers that agent's result to you as a single \`<agent-hook>\` message when it finishes. Wait for it and act on it — that message **is** the handoff.
+
+Do **not** poll or relay through \`yaar://session/agents\` to find out what a sub-agent did. That namespace is refused for you (session-principal only) and is not how results are returned.`;
+
+export const CLAUDE_PROVIDER_SECTION = ``;

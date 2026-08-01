@@ -8,6 +8,7 @@
 
 import type { ProviderType } from '../providers/types.js';
 import { buildEnvironmentSection } from '../providers/environment.js';
+import { CLAUDE_PROVIDER_SECTION, CODEX_PROVIDER_SECTION } from './profiles/shared-sections.js';
 import { configRead } from '../storage/storage-manager.js';
 
 export interface SystemPromptLoaders {
@@ -35,6 +36,20 @@ function buildScopeSection(role: string, monitorId?: string): string {
   }
 
   return '';
+}
+
+/**
+ * The one section that differs by model.
+ *
+ * A provider section corrects a habit one model has and the other does not, so
+ * it is selected here rather than written into a profile: the profiles are
+ * built at import time, where the provider is not yet known. An empty entry
+ * means that model needs no correction and nothing is appended — the section
+ * separator is not emitted for it.
+ */
+function providerSection(providerType: ProviderType): string {
+  const section = providerType === 'codex' ? CODEX_PROVIDER_SECTION : CLAUDE_PROVIDER_SECTION;
+  return section ? `\n\n${section}` : '';
 }
 
 async function loadMemory(): Promise<string> {
@@ -74,5 +89,5 @@ export async function assembleSystemPromptForRole(
     loaders.loadMemory(),
     loaders.buildEnvironment(providerType),
   ]);
-  return scopedPrompt + environment + memory;
+  return scopedPrompt + providerSection(providerType) + environment + memory;
 }
