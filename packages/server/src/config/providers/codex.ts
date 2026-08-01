@@ -102,10 +102,10 @@ export function getCodexAppServerArgs(): string[] {
   // above, but a feature flag and a configured MCP server are two separate delivery paths
   // to the same capability — the user's config.toml declares these directly, and only an
   // `enabled=false` here takes one away.
-  const DISABLED_MCP_SERVERS = ['node_repl', 'computer-use'];
-  for (const name of DISABLED_MCP_SERVERS) {
-    args.push('-c', `mcp_servers.${name}.enabled=false`);
-  }
+  // const DISABLED_MCP_SERVERS = ['node_repl', 'computer-use'];
+  // for (const name of DISABLED_MCP_SERVERS) {
+  //   args.push('-c', `mcp_servers.${name}.enabled=false`);
+  // }
 
   // Non-feature scalar config overrides (`-c key=value`), in order: suppressions first,
   // then model behavior.
