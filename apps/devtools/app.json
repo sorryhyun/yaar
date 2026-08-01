@@ -22,5 +22,6 @@
   "run": "dist/index.html",
   "version": "1.0.1",
   "author": "YAAR",
-  "kind": "system"
+  "kind": "system",
+  "appId": "devtools"
 }
