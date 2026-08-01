@@ -101,40 +101,6 @@ function appendLayoutContext(result: VerbResult): VerbResult {
   return result;
 }
 
-/**
- * Drop `structuredContent` on the way out to a model.
- *
- * `structuredContent` exists for *programmatic* consumers — `POST /api/verb` reads it in
- * `toEnvelope` to hand an app typed data without re-parsing text. That path calls
- * `registry.execute()` directly and never comes through here, so nothing it needs is lost.
- *
- * The model's channel is `content`, and a client is entitled to prefer the structured copy
- * when both are present: MCP says `structuredContent` accompanies a tool that declares an
- * `outputSchema`, and none of the five verbs do. Claude Code 2.1.220 takes us at our word
- * — when it sees `structuredContent` it keeps only the *non-text* blocks and appends a
- * compact `JSON.stringify` of the structured copy. Every text block is discarded, which
- * silently deleted four things the server had just decided to say:
- *
- * - the `[layout]` block `appendLayoutContext` appends — and that one does not come back,
- *   because `LayoutContext` is delta-tracked and marks the snapshot delivered on return;
- * - `prependNote`'s read↔list fallback notes ("this is a folder — used list instead");
- * - `wrapAppValue`'s 400KB truncation, which is applied to the text and not to the
- *   structured copy, so the guard became a no-op and the untruncated value went anyway;
- * - `okJson`'s indentation, so a 33KB `describe` arrived as one unbroken line.
- *
- * Listings lost nothing but paid twice: `okLinks`' resource_link blocks survived the filter
- * *and* the same items rode along again as JSON.
- *
- * Stripping here rather than at each `okJson`/`okLinks` call site keeps the typed copy
- * available to every non-model caller and puts the decision at the one boundary that knows
- * a model is on the other side.
- */
-export function forModel(result: VerbResult): Omit<VerbResult, 'structuredContent'> {
-  if (result.structuredContent === undefined) return result;
-  const { structuredContent: _dropped, ...rest } = result;
-  return rest;
-}
-
 /** Spread to satisfy MCP SDK's index-signature requirement on tool results. */
 const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry['execute']>) => {
   const [verb, uri, payload, readOptions] = args;
@@ -144,7 +110,7 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
     // Normal single-URI path
     recordVerbCall(verb, uri, payload);
     const result = await reg.execute(...args);
-    return { ...forModel(appendLayoutContext(result)) };
+    return { ...appendLayoutContext(result) };
   }
 
   // Multi-URI: execute all in parallel, format combined result
@@ -154,7 +120,7 @@ const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry[
       return reg.execute(verb, u, payload, readOptions);
     }),
   );
-  return { ...forModel(appendLayoutContext(formatBatchResults(expanded, settled))) };
+  return { ...appendLayoutContext(formatBatchResults(expanded, settled)) };
 };
 
 /** Register the 5 verb tools on an MCP server instance. */
