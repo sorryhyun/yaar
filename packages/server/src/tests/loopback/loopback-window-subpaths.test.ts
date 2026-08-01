@@ -515,6 +515,44 @@ describe('S10 — the wrong spelling is refused, not guessed at', () => {
     expect(bare.isError).toBe(true);
     expect(textOf(bare)).toContain('is not a window sub-resource');
   });
+
+  /**
+   * `delete` was left out of the loop above, and was the one verb that never asked what the
+   * URI named: it read `windowId` and closed it. So a sub-path spelling — the one the other
+   * four verbs teach — closed the whole window and reported success, which is how
+   * `delete("yaar://windows/studio-3d/nodes/sleeveL")` took a 3D editor down while the model
+   * believed it had removed one node.
+   */
+  it('a sub-path is refused by delete, not read as "close the whole window"', async () => {
+    const { h, call } = await bootTwoAppWindows();
+
+    for (const uri of [
+      'yaar://windows/memo/nodes/sleeveL',
+      'yaar://windows/memo/commands/pinMemo',
+      'yaar://windows/memo/state/drafts',
+    ]) {
+      const result = await call('delete', uri);
+      expect(result.isError).toBe(true);
+      // Emphatically not `ok("Closed window …")`, which is what this used to return.
+      expect(textOf(result)).not.toContain('Closed window');
+      // The refusal has to say what delete *does*, and name the close as the separate,
+      // deliberate act it is — otherwise an agent that wants one node gone reads "use a
+      // proper window URI" and closes the window on the very next call instead.
+      expect(textOf(result)).toMatch(/closes the (whole )?window/);
+      expect(textOf(result)).toContain('list("yaar://windows/memo")');
+      expect(textOf(result)).toContain('delete("yaar://windows/memo")');
+      // The window is still there. An emitted `window.close` is folded straight back into
+      // the registry by LiveSession's action listener, so this is the close itself, not a
+      // proxy for it.
+      expect(h.session.windowState.getWindow('memo')).toBeDefined();
+    }
+
+    // The bare collection has no window to close either — and there is no "close them all".
+    const collection = await call('delete', 'yaar://windows/');
+    expect(collection.isError).toBe(true);
+    expect(h.session.windowState.getWindow('memo')).toBeDefined();
+    expect(h.session.windowState.getWindow('storage')).toBeDefined();
+  });
 });
 
 describe('S10 — one URI, many payloads', () => {

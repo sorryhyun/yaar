@@ -925,8 +925,51 @@ export function registerWindowHandlers(
       return windowActions.dispatch(action, { windowId: resolved.windowId, p });
     },
 
+    /**
+     * `delete` closes a window — the *whole* window, which is why a sub-path has to be
+     * refused rather than ignored.
+     *
+     * This was the one verb that never asked what the URI named. Every other one branches
+     * on `windowTarget`; `delete` read `resolved.windowId` and closed it, so
+     * `delete("yaar://windows/studio-3d/nodes/sleeveL")` — an agent reaching for one node
+     * of a 3D scene, addressing it the way `state/{key}` and `commands/{key}` had taught it
+     * to — closed the editor. Nothing said no, and the result read as success: the node was
+     * gone, along with everything else.
+     *
+     * The refusals say what delete *does*, not only that the URI is wrong. A message that
+     * merely offered `state/{key}` and `commands/{key}` would send an agent that wants one
+     * node deleted to `delete("yaar://windows/studio-3d")`, which is the same window close
+     * one step later — so both point at the command that removes the thing instead, and
+     * name the window close as the separate, deliberate act it is.
+     */
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
+      if (isWindowCollection(resolved)) {
+        return error(
+          'delete needs a window URI (yaar://windows/{windowId}) — there is no "close every ' +
+            'window" verb. list("yaar://windows") shows the open ones.',
+        );
+      }
+
       assertUri(resolved, 'window');
+      const target = windowTarget(resolved);
+      if (target.kind === 'resource') {
+        return error(
+          `delete("yaar://windows/${resolved.windowId}") closes the window — it does not remove ` +
+            `things inside it, so "${target.resourceType}/${target.key}" cannot be deleted. To ` +
+            'remove something the app is holding, invoke the command that removes it: ' +
+            `list("yaar://windows/${resolved.windowId}") shows them.`,
+        );
+      }
+      if (target.kind === 'invalid') {
+        return error(
+          `"${target.subPath}" is not a window sub-resource, and delete on a window URI closes ` +
+            'the whole window — so this is refused rather than run against ' +
+            `"${resolved.windowId}". To remove something the app is holding, invoke the command ` +
+            `that removes it; list("yaar://windows/${resolved.windowId}") shows the commands and ` +
+            `state keys it has. To close the window itself: delete("yaar://windows/${resolved.windowId}").`,
+        );
+      }
+
       return handleManage(getWindowState(), resolved.windowId, 'close');
     },
   };
