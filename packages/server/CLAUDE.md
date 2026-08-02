@@ -29,7 +29,7 @@ files included — which is why `tsconfig.build.json` excludes `**/*.test.ts`), 
 The split is load-bearing and enforced: `scripts/test/partition-guard.ts` (preloaded via
 `bunfig.toml`) stops any run that mixes partitions and prints the right command for each.
 Every suite starts from a pinned environment — `scripts/test/env.ts` scrubs `YAAR_*` and the
-documented knobs and points config/storage at temp dirs, and sets `YAAR_TEST_REMOTE=1` itself
+documented knobs and points config/storage/session-logs at temp dirs, and sets `YAAR_TEST_REMOTE=1` itself
 when the collected files live under `src/tests/remote/`, so a by-path run stays a remote-mode
 run. Full rationale, including the CI incidents that forced each rule, is in
 `scripts/test/partitions.ts` and `scripts/test/env.ts`.
@@ -59,7 +59,8 @@ client can only answer over a socket the server is holding is a deadlock waiting
 - `PORT` - Server port (default: 8000), `MAX_AGENTS` - Global agent limit (default: 10)
 - `MCP_SKIP_AUTH` - Skip MCP auth (`1` for local dev), `REMOTE` - Enable remote mode (`1`)
 - `YAAR_REMOTE_TOKEN` - Adopt this remote token instead of minting one, so a launcher can build the `#remote=<token>` URL before the server starts (`scripts/dev/start.sh` does this for `make claude`). Under 32 chars it is ignored with a warning — remote mode hands the token to every device that can reach the server. See `http/auth.ts`.
-- `YAAR_STORAGE` / `YAAR_CONFIG` - Override storage/config directory paths
+- `YAAR_STORAGE` / `YAAR_CONFIG` / `YAAR_SESSION_LOGS` - Override storage/config/session-log directory paths. All three are pinned to temp dirs by `scripts/test/env.ts` — a suite that builds a `SessionLogger` mints a log directory, which is how `session_logs/` used to collect `app-persona-…` logs from `bun run test`.
+- `YAAR_KEEP_EMPTY_SESSIONS` - `1` keeps session logs that recorded nothing. Off by default: `createSession()` runs at boot so a click before the first message is still logged, so every launch the user closed without typing left a directory behind — in `yaar://history/` and `GET /api/sessions` as much as on disk. The launch that would add the next one sweeps them first. What counts as empty (exactly the created shape, every log zero-length) and what protects a concurrently-running instance's log (the creating `pid` in `metadata.json`, plus a 5-minute grace window) is `logging/prune.ts`.
 - `YAAR_SKIP_DOTENV` - `1` skips loading the root `.env` in `config/env.ts`. Set by `scripts/test/env.ts`: a test run pins every knob explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk back through.
 - `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test/env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
 - `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop; `resolvePrincipal` refuses a token-less request carrying the app origin. **Which two origins** (`loopback-alias` locally, `proxy-port` over Tailscale Serve, `off`) is `http/origin-boundary.ts`'s business and the one place to ask — its header explains both modes and why the proxy-port attribution is unforgeable. See [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
@@ -132,7 +133,7 @@ src/
 │   └── window/           # Window create/update/manage, app protocol, app query/command, subscribe/unsubscribe
 ├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder
 ├── reload/               # Fingerprint-based action cache
-├── logging/              # Session logging (JSONL), reading, context/window restore
+├── logging/              # Session logging (JSONL), reading, context/window restore, empty-log prune
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
 └── lib/                  # Standalone utilities (no server internal imports)
     ├── browser/ pdf/ pick-directory.ts

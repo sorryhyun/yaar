@@ -15,6 +15,12 @@ export interface SessionMetadata {
   agents: Record<string, AgentInfo>; // agentId -> AgentInfo
   threadIds?: Record<string, string>; // canonicalAgent -> provider threadId
   failureCount?: number;
+  /**
+   * Pid of the server process that created this log. Read only by
+   * `pruneEmptySessions()`, to tell a log abandoned by a dead server from one a
+   * still-running instance is holding open. Absent in logs from older builds.
+   */
+  pid?: number;
 }
 
 export interface SessionInfo {

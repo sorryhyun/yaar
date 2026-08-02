@@ -58,12 +58,18 @@ function generateSessionId(): string {
 
 /**
  * Create a new session.
+ *
+ * `dir` defaults to the real `session_logs/` — a parameter so a test can mint one into a
+ * temp directory of its own instead of the one every suite in the process shares.
  */
-export async function createSession(provider: string): Promise<SessionInfo> {
-  await ensureSessionsDir();
+export async function createSession(
+  provider: string,
+  dir: string = SESSIONS_DIR,
+): Promise<SessionInfo> {
+  if (dir === SESSIONS_DIR) await ensureSessionsDir();
 
   const sessionId = generateSessionId();
-  const directory = join(SESSIONS_DIR, sessionId);
+  const directory = join(dir, sessionId);
 
   await mkdir(directory, { recursive: true });
   await mkdir(join(directory, 'agents'), { recursive: true });
@@ -73,6 +79,7 @@ export async function createSession(provider: string): Promise<SessionInfo> {
     createdAt: now,
     provider,
     lastActivity: now,
+    pid: process.pid,
     agents: {
       'monitor-0': {
         agentId: 'monitor-0',

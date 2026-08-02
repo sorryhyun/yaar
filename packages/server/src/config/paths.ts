@@ -32,6 +32,24 @@ export function getConfigDir(): string {
 }
 
 /**
+ * Get the session-log directory path.
+ * - Environment variable override
+ * - Otherwise: PROJECT_ROOT/session_logs/
+ *
+ * The override exists for the same reason `YAAR_STORAGE`'s does: a test run must not
+ * write into the working tree. Anything that builds a `SessionLogger` mints a directory
+ * here, and a suite that exercises app agents or sub-agents does exactly that — which is
+ * how `session_logs/` filled up with `app-persona-…` logs from `bun run test`.
+ * `scripts/test/env.ts` points this at a temp dir alongside the other two.
+ */
+export function getSessionLogsDir(): string {
+  if (process.env.YAAR_SESSION_LOGS) {
+    return process.env.YAAR_SESSION_LOGS;
+  }
+  return join(PROJECT_ROOT, 'session_logs');
+}
+
+/**
  * Get the frontend dist directory path.
  * - Environment variable override
  * - Bundled exe: ./public/ alongside executable

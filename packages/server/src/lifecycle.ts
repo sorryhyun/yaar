@@ -11,13 +11,12 @@ import { listApps } from './features/apps/discovery.js';
 import { syncAppShortcuts } from './storage/shortcuts.js';
 import { initWarmPool, getWarmPool } from './providers/factory.js';
 import {
-  listSessions,
-  readSessionMessages,
-  parseSessionMessages,
+  findRestorableSession,
   getWindowRestoreActions,
   getContextRestoreMessages,
   getCliRestoreEntries,
   createSession,
+  pruneEmptySessions,
   SessionLogger,
 } from './logging/index.js';
 import {
@@ -27,6 +26,7 @@ import {
   IS_DEV,
   getPort,
   isAppOriginIsolationRequested,
+  shouldPruneEmptySessions,
 } from './config.js';
 import { installProxyPortBoundary, installLoopbackAliasBoundary } from './http/origin-boundary.js';
 import { initCompiler } from '@yaar/compiler';
@@ -127,45 +127,51 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   // the already-built dist/ is served in the meantime, and a fresh build
   // invalidates the app-list cache the moment it lands.
 
-  // Create session log eagerly so user interactions are logged from the start
-  const sessionInfo = await createSession('pending');
-  const sessionLogger = new SessionLogger(sessionInfo);
+  // Sweep the logs of launches that recorded nothing before adding this launch's own
+  // (see logging/prune.ts). Deliberately before createSession() — the new directory is
+  // then never a candidate — and never fatal.
+  if (shouldPruneEmptySessions()) {
+    try {
+      const pruned = await pruneEmptySessions();
+      if (pruned.length > 0) {
+        console.log(`Pruned ${pruned.length} empty session log(s)`);
+      }
+    } catch (err) {
+      console.warn('[SessionPrune] Failed to prune empty session logs:', err);
+    }
+  }
 
-  // Restore window state from the most recent previous session
+  // Restore window state from the most recent previous session. Resolved BEFORE this
+  // launch mints its own log below — see findRestorableSession().
   const options: WebSocketServerOptions = {
     restoreActions: [],
     contextMessages: [],
-    sessionLogger,
   };
 
   try {
-    const sessions = await listSessions();
-    if (sessions.length > 0) {
-      const lastSession = sessions[0];
-      const messagesJsonl = await readSessionMessages(lastSession.sessionId);
-      if (messagesJsonl) {
-        const messages = parseSessionMessages(messagesJsonl);
-        const restoreActions = getWindowRestoreActions(messages);
-        if (restoreActions.length > 0) {
-          options.restoreActions = restoreActions;
-          console.log(
-            `Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`,
-          );
-        }
-        const contextMessages = getContextRestoreMessages(messages);
-        if (contextMessages.length > 0) {
-          options.contextMessages = contextMessages;
-          console.log(
-            `Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`,
-          );
-        }
-        const cliEntries = getCliRestoreEntries(messages);
-        if (cliEntries.length > 0) {
-          options.cliEntries = cliEntries;
-          console.log(
-            `Restored ${cliEntries.length} CLI entries from session ${lastSession.sessionId}`,
-          );
-        }
+    const restorable = await findRestorableSession();
+    if (restorable) {
+      const { session: lastSession, messages } = restorable;
+      const restoreActions = getWindowRestoreActions(messages);
+      if (restoreActions.length > 0) {
+        options.restoreActions = restoreActions;
+        console.log(
+          `Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`,
+        );
+      }
+      const contextMessages = getContextRestoreMessages(messages);
+      if (contextMessages.length > 0) {
+        options.contextMessages = contextMessages;
+        console.log(
+          `Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`,
+        );
+      }
+      const cliEntries = getCliRestoreEntries(messages);
+      if (cliEntries.length > 0) {
+        options.cliEntries = cliEntries;
+        console.log(
+          `Restored ${cliEntries.length} CLI entries from session ${lastSession.sessionId}`,
+        );
       }
       if (lastSession.metadata?.threadIds) {
         options.savedThreadIds = lastSession.metadata.threadIds;
@@ -177,6 +183,10 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   } catch (err) {
     console.error('Failed to restore previous session:', err);
   }
+
+  // Create session log eagerly so user interactions are logged from the start
+  const sessionInfo = await createSession('pending');
+  options.sessionLogger = new SessionLogger(sessionInfo);
 
   return options;
 }

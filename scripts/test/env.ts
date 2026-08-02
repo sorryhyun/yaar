@@ -16,9 +16,9 @@
  *      shell export cannot decide an assertion either;
  *   2. pins `REMOTE` explicitly. Explicit is what matters: `loadPersistedRemote()` only fills
  *      in when `REMOTE` is *unset*, so writing `'0'` here is what makes settings.json inert;
- *   3. points `YAAR_CONFIG` / `YAAR_STORAGE` at fresh temp dirs, so nothing reads the
- *      developer's saved permissions, hooks, or mounts — and nothing a test writes lands in
- *      the working tree;
+ *   3. points `YAAR_CONFIG` / `YAAR_STORAGE` / `YAAR_SESSION_LOGS` at fresh temp dirs, so
+ *      nothing reads the developer's saved permissions, hooks, or mounts — and nothing a test
+ *      writes lands in the working tree;
  *   4. sets `YAAR_SKIP_DOTENV`, the one seam `loadRootEnv()` honours, so the root `.env`
  *      cannot reintroduce a knob behind all of the above.
  *
@@ -97,8 +97,12 @@ process.env.YAAR_SKIP_DOTENV = '1';
 process.env.REMOTE = process.env.YAAR_TEST_REMOTE === '1' ? '1' : '0';
 process.env.YAAR_CONFIG = scratchDir('config');
 process.env.YAAR_STORAGE = scratchDir('storage');
+// Anything that builds a `SessionLogger` mints a directory under it, so without this the
+// app-agent and sub-agent suites left `session_logs/{timestamp}/agents/app-persona-….jsonl`
+// in the working tree on every run — indistinguishable, once there, from a real session.
+process.env.YAAR_SESSION_LOGS = scratchDir('session-logs');
 
-// One process, one pair of dirs — removed on the way out. `exit` (not a signal handler) so a
+// One process, one set of dirs — removed on the way out. `exit` (not a signal handler) so a
 // suite that is killed mid-run leaves them in the OS temp dir rather than half-deleted under
 // a still-running test.
 process.on('exit', () => {

@@ -5,17 +5,26 @@ import type { SessionInfo, SessionMetadata, ParsedMessage } from './types.js';
 
 /**
  * List all sessions.
+ *
+ * `dir` defaults to the real `session_logs/`; it is a parameter so a test can point the
+ * read side at a temp directory of its own rather than at the one every suite in the
+ * process shares.
  */
-export async function listSessions(): Promise<SessionInfo[]> {
-  await ensureSessionsDir();
+export async function listSessions(dir: string = SESSIONS_DIR): Promise<SessionInfo[]> {
+  if (dir === SESSIONS_DIR) await ensureSessionsDir();
 
-  const entries = await readdir(SESSIONS_DIR, { withFileTypes: true });
+  let entries;
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
   const sessions: SessionInfo[] = [];
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
 
-    const directory = join(SESSIONS_DIR, entry.name);
+    const directory = join(dir, entry.name);
     const metadataPath = join(directory, 'metadata.json');
 
     try {
@@ -45,8 +54,11 @@ export async function listSessions(): Promise<SessionInfo[]> {
 /**
  * Read session messages.
  */
-export async function readSessionMessages(sessionId: string): Promise<string | null> {
-  const messagesPath = join(SESSIONS_DIR, sessionId, 'messages.jsonl');
+export async function readSessionMessages(
+  sessionId: string,
+  dir: string = SESSIONS_DIR,
+): Promise<string | null> {
+  const messagesPath = join(dir, sessionId, 'messages.jsonl');
 
   try {
     return await Bun.file(messagesPath).text();

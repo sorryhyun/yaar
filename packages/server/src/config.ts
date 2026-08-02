@@ -40,12 +40,14 @@ export {
   APP_ORIGIN_HOST,
   MARKET_URL,
   GOOGLE_CLIENT_ID,
+  shouldPruneEmptySessions,
 } from './config/env.js';
 
 export {
   getStorageDir,
   STORAGE_DIR,
   getConfigDir,
+  getSessionLogsDir,
   getFrontendDist,
   FRONTEND_DIST,
 } from './config/paths.js';

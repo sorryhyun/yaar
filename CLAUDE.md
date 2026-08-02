@@ -49,7 +49,7 @@ bun run build:exe:bundle:macos   # Build macOS executable
 Test runs are environment-pinned and process-partitioned:
 
 - Every `bun test` preloads `scripts/test/env.ts` (wired in each `bunfig.toml`), which scrubs
-  `YAAR_*` and the knobs below and points config/storage at temp dirs — a run describes the code,
+  `YAAR_*` and the knobs below and points config/storage/session-logs at temp dirs — a run describes the code,
   not the machine.
 - Some test files cannot share a Bun process (`REMOTE=1` pinning, `mock.module` leaks, real
   sockets/git). A run mixing partitions is **refused** by `scripts/test/partition-guard.ts`, which
@@ -164,7 +164,7 @@ Beyond agents and providers, the server has additional subsystems:
   - `ssrf.ts` — SSRF protection (URL validation, safe fetch with redirect following)
   - `image.ts` — data-URL image parsing
   - plus single-file utilities: `ids.ts`, `open-url.ts`, `pick-directory.ts`, `format-interaction.ts`, `format-verb-log.ts`, `yaar-uri-server.ts`
-- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{YYYY-MM-DD_HH-MM-SS}/`
+- **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{YYYY-MM-DD_HH-MM-SS}/`. Each launch mints one eagerly, so each launch also prunes the ones that recorded nothing first (`logging/prune.ts`, `YAAR_KEEP_EMPTY_SESSIONS=1` to keep them)
 
 ### Connection Lifecycle
 

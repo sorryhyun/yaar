@@ -219,6 +219,20 @@ export const APP_ORIGIN_HOST = '127.0.0.1';
 /** Dev mode: local development with live reload (not remote, not bundled). */
 export const IS_DEV = !IS_REMOTE && !IS_BUNDLED_EXE;
 
+/**
+ * Sweep session logs that recorded nothing at launch? **Default on.**
+ *
+ * Every boot mints a `session_logs/` directory eagerly (so a click before the first
+ * message is still logged), so every launch the user closed without typing leaves an
+ * empty one behind — in `yaar://history/` and `GET /api/sessions` as much as on disk.
+ * `YAAR_KEEP_EMPTY_SESSIONS=1` keeps them, for anyone who wants a directory per launch
+ * as a record that the launch happened. What counts as empty, and what protects a
+ * concurrently-running instance's log, is `logging/prune.ts`.
+ */
+export function shouldPruneEmptySessions(): boolean {
+  return process.env.YAAR_KEEP_EMPTY_SESSIONS !== '1';
+}
+
 export const MARKET_URL = process.env.MARKET_URL ?? 'https://yaarmarket.vercel.app';
 
 /**

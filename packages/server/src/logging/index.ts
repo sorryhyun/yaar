@@ -6,10 +6,9 @@
  */
 
 import { mkdir } from 'fs/promises';
-import { join } from 'path';
-import { PROJECT_ROOT } from '../config.js';
+import { getSessionLogsDir } from '../config.js';
 
-export const SESSIONS_DIR = join(PROJECT_ROOT, 'session_logs');
+export const SESSIONS_DIR = getSessionLogsDir();
 
 export async function ensureSessionsDir(): Promise<void> {
   await mkdir(SESSIONS_DIR, { recursive: true });
@@ -18,6 +17,10 @@ export async function ensureSessionsDir(): Promise<void> {
 // Re-exports
 export type { AgentInfo, SessionMetadata, SessionInfo, ParsedMessage } from './types.js';
 export { createSession, SessionLogger } from './session-logger.js';
+export { pruneEmptySessions } from './prune.js';
+export type { PruneOptions } from './prune.js';
+export { findRestorableSession } from './restore-source.js';
+export type { RestoreSource } from './restore-source.js';
 export {
   listSessions,
   readSessionTranscript,
