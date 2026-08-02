@@ -1,0 +1,52 @@
+/* Collapsible JSON tree — components/JsonView.ts */
+
+.lab-json {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+  max-height: 420px;
+  overflow: auto;
+}
+.lab-jrow {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+  cursor: default;
+  line-height: 1.6;
+}
+.lab-jtoggle {
+  width: 10px;
+  color: var(--yaar-text-dim);
+  cursor: pointer;
+  flex: 0 0 10px;
+}
+.lab-jkey {
+  color: var(--yaar-accent);
+}
+.lab-jsep {
+  color: var(--yaar-text-dim);
+  margin-right: 2px;
+}
+.lab-jprev {
+  color: var(--yaar-text-dim);
+  cursor: pointer;
+}
+.lab-jval {
+  word-break: break-all;
+}
+.lab-j-string {
+  color: var(--yaar-success);
+}
+.lab-j-number {
+  color: var(--yaar-warning);
+}
+.lab-j-boolean {
+  color: var(--yaar-accent-hover);
+}
+.lab-j-null,
+.lab-j-undefined {
+  color: var(--yaar-text-dim);
+}
+.lab-jchildren {
+  border-left: 1px solid var(--yaar-border);
+  margin-left: 4px;
+}

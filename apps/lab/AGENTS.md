@@ -9,26 +9,69 @@ excludes outputs entirely. If you add a command, keep that property.
 ## Layout
 
 ```
-src/kernel-source.ts   the worker, as a String.raw template  <- read the warnings below
-src/kernel.ts          main-thread worker lifecycle: queue, timeout, terminate, restart
-src/bridge.ts          dispatch for calls the worker makes back into the app (store/http/chart)
-src/store.ts           notebook signals + persistence in appStorage
-src/run.ts             cell execution orchestration, lastRun, run summaries
-src/chart.ts           kernel chart spec -> Chart.js config; offscreen PNG rendering
-src/media.ts           data URL -> blob, saving into the shared media tree
-src/App.ts             the notebook UI
-src/output.ts          output part dispatch (+ chart/image blocks)
-src/json-view.ts       collapsible JSON tree
-src/table-view.ts      sortable, paginated table
-src/protocol.ts        state + execution commands
-src/protocol-nb.ts     notebook/cell/export commands
+src/main.ts            defineApp: state, commands, view, onClose
+src/types.ts           every shared type (Cell, Notebook, OutputPart, ChartSpec, RunResult)
+
+src/kernel/
+  source/              the worker source, split into 11 String.raw parts <- read the warnings below
+  source.ts            joins the parts into KERNEL_SRC (order is load-bearing)
+  worker.ts            main-thread lifecycle: queue, timeout, terminate, restart
+  bridge.ts            dispatch for calls the worker makes back into the app
+  paths.ts             store path rules (app-private vs the shared media tree)
+  store-ops.ts         the five store operations behind the bridge
+
+src/state/
+  signals.ts           the signals everything else reads; uid()
+  persistence.ts       appStorage layout, autosave, open/new/delete, bootstrap
+  cells.ts             every mutation of the open notebook's cells
+  run.ts               cell execution orchestration, lastRun, timeout setting
+  starter.ts           the cells a new notebook opens with
+
+src/lib/               no app state, no DOM ownership; safe to call from anywhere
+  chart-config.ts      kernel chart spec -> Chart.js config
+  chart-render.ts      live canvas + offscreen PNG rendering
+  media.ts             media/lab path rules, saving a data URL to the shared tree
+  data-url.ts          data URL <-> blob, browser download
+  markdown.ts          marked + sanitizeHtml
+  summarize.ts         a run result -> the one line the agent reads
+  trim.ts              the on-disk output cap (see the truncation layers below)
+
+src/components/        App shell, Sidebar, CellRow, CellEditor, OutputView,
+                       ChartView, ImageView, JsonView, TableView,
+                       editor-registry.ts (textarea map + edit-mode signals)
+
+src/protocol/          state.ts, run.ts, notebook.ts, export.ts, shape.ts
+src/styles/            one sheet per area, imported in cascade order by main.ts
 ```
 
-## src/kernel-source.ts — the sharp edges
+Three conventions worth keeping:
+
+- **No `index.ts` anywhere.** Every import names a real file, so a path in a stack
+  trace is the file you open.
+- **Dependencies point one way:** components -> state -> kernel/lib. `lib/` imports
+  nothing from `state/` or `components/`, which is what keeps it testable from a cell.
+- **`main.ts` spreads the command maps directly** (`{ ...runCommands, ... }`) rather
+  than through a re-export barrel: the manifest extractor needs statically readable
+  object literals, so keep descriptor maps as plain `const` objects and spreads.
+  Verify any reshuffle with devtools' `manifest` command — a pure move must not
+  change the command or state list.
+- **`src/styles/` import order is the cascade.** main.ts lists the sheets in the order
+  they must apply; reordering the imports reorders the rules.
+
+## src/kernel/source/ — the sharp edges
 
 The worker cannot be a separate bundle: the compiler inlines everything into one HTML file,
 so there is no second entry point to load. The kernel is therefore a **string**, turned into
 a Blob URL at runtime. Consequences:
+
+It is split across `src/kernel/source/*.ts` as 11 exported parts that `source.ts`
+concatenates with `join('')`. The split is byte-exact and must stay that way:
+**each part after the first begins with the newline that follows its opening backtick,
+and that newline is the blank separator line between sections.** So a part starts at
+its section banner and ends at its last non-blank line — add a stray blank line at
+either end and every line number in a kernel stack trace shifts. When you change the
+boundaries, prove it: keep a copy of the old source, `console.log(NEW === OLD)` from
+the preview, and read it back from devtools' `consoleLogs`.
 
 - It is `String.raw` so backslashes survive (regexes work). That means **no backticks and no
   `$` followed by `{` anywhere in the kernel body** — either one ends or interpolates the
@@ -80,7 +123,7 @@ them preserve state.
 - `__labEncode` — for the **UI**: generous caps (5 000 table rows, 250 KB JSON).
 - `__labAgentResult` — for **`runCode`**: a byte budget (`resultLimit`, default 8 KB) that
   fills a row sample until the budget runs out and reports `shape` + `truncated`.
-- `trimOutput` in `src/store.ts` — a third pass before a notebook is written to disk
+- `trimOutput` in `src/lib/trim.ts` — a third pass before a notebook is written to disk
   (200 rows/part, images over 400 KB dropped), so a notebook file cannot grow unbounded.
 
 `saveResultTo` is handled **inside the worker**, before encoding, so the full value is written
@@ -90,7 +133,7 @@ from the sandbox and only a path comes back.
 
 Never write an explicit `undefined` into a Chart.js options object. A present-but-undefined
 `scales.x.type` made Chart.js fall back to a linear axis and render category labels as
-0,1,2,3. `buildConfig` now always names a concrete `type`. Horizontal bars swap which axis
+0,1,2,3. `buildConfig` (`src/lib/chart-config.ts`) now always names a concrete `type`. Horizontal bars swap which axis
 carries the categories — that is what the `o.horizontal` branch in `buildConfig` is for.
 
 PNG export renders a second, offscreen chart at `scale` device pixels rather than reading the

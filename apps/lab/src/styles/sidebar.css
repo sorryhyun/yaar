@@ -1,0 +1,78 @@
+/* The notebook list — components/Sidebar.ts */
+
+.lab-sidebar {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 220px;
+  border-right: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  display: flex;
+  flex-direction: column;
+}
+.lab-side-head {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+}
+.lab-side-title {
+  font-weight: 600;
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-text-muted);
+  flex: 1;
+}
+.lab-side-list {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 37px;
+  bottom: 0;
+  overflow-y: auto;
+}
+.lab-side-item {
+  position: relative;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-bottom: 1px solid rgba(55, 62, 71, 0.5);
+  cursor: pointer;
+}
+.lab-side-item:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+.lab-side-item-on {
+  background: rgba(83, 155, 245, 0.13);
+  box-shadow: inset 2px 0 0 var(--yaar-accent);
+}
+.lab-side-name {
+  font-size: var(--yaar-text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.lab-side-meta {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  margin-top: 2px;
+}
+.lab-side-del {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--yaar-text-dim);
+  font-size: var(--yaar-text-xs);
+  padding: 2px 4px;
+  border-radius: var(--yaar-radius-sm);
+}
+.lab-side-item:hover .lab-side-del {
+  display: block;
+}
+.lab-side-del:hover {
+  color: var(--yaar-error);
+  background: var(--yaar-bg);
+}

@@ -1,0 +1,21 @@
+/* Document + app root. Absolute positioning throughout, never flex chains:
+   Solid's `html` inserts comment markers into reactive slots and breaks flex: 1. */
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+#app {
+  height: 100%;
+}
+
+.lab-root {
+  position: absolute;
+  inset: 0;
+  font-family: var(--yaar-font);
+  font-size: var(--yaar-text-base);
+  color: var(--yaar-text);
+  background: var(--yaar-bg);
+  overflow: hidden;
+}

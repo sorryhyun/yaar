@@ -1,0 +1,58 @@
+/* Sortable, paginated table — components/TableView.ts */
+
+.lab-table-wrap {
+  margin-bottom: var(--yaar-sp-2);
+}
+.lab-table-scroll {
+  max-height: 420px;
+  overflow: auto;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+}
+.lab-table {
+  border-collapse: collapse;
+  font-size: var(--yaar-text-sm);
+  font-family: var(--yaar-font-mono);
+  width: 100%;
+}
+.lab-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text-muted);
+  text-align: left;
+  padding: 3px var(--yaar-sp-2);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--yaar-border);
+  cursor: pointer;
+  user-select: none;
+}
+.lab-table th:hover {
+  color: var(--yaar-text);
+}
+.lab-table td {
+  padding: 2px var(--yaar-sp-2);
+  border-bottom: 1px solid rgba(55, 62, 71, 0.4);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lab-table tr:hover td {
+  background: var(--yaar-bg-surface);
+}
+.lab-th-num {
+  color: var(--yaar-text-dim);
+  text-align: right;
+  width: 1%;
+}
+.lab-sort {
+  color: var(--yaar-accent);
+}
+.lab-table-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding-top: 4px;
+}

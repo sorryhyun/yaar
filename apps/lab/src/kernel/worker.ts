@@ -1,7 +1,13 @@
 import { createSignal } from '@bundled/solid-js';
-import { KERNEL_SRC } from './kernel-source';
+import { KERNEL_SRC } from './source';
 import { handleBridgeCall } from './bridge';
-import type { RunResult } from './types';
+import type { RunResult } from '../types';
+
+/**
+ * Main-thread lifecycle for the compute worker: one worker at a time, one run at
+ * a time (the kernel has a single shared scope), and a hard timeout that can only
+ * be enforced by terminating — there is no soft interrupt for `while (true)`.
+ */
 
 export const DEFAULT_TIMEOUT_MS = 30000;
 

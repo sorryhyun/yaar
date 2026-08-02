@@ -1,0 +1,93 @@
+/* Cell row, gutter, run button and the code textarea
+   — components/CellRow.ts + components/CellEditor.ts */
+
+.lab-cell {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  margin-bottom: var(--yaar-sp-3);
+}
+.lab-cell-gutter {
+  width: 34px;
+  flex: 0 0 34px;
+  text-align: center;
+  padding-top: 24px;
+}
+.lab-cell-num {
+  display: block;
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  margin-top: 4px;
+  font-family: var(--yaar-font-mono);
+}
+.lab-run {
+  width: 24px;
+  height: 24px;
+  border-radius: var(--yaar-radius-sm);
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  color: var(--yaar-accent);
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1;
+}
+.lab-run:hover:not(:disabled) {
+  background: var(--yaar-accent-emphasis);
+  color: #fff;
+}
+.lab-run:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.lab-cell-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg-surface);
+  overflow: hidden;
+}
+.lab-cell-running .lab-cell-body {
+  border-color: var(--yaar-warning);
+}
+.lab-cell-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+.lab-type {
+  background: var(--yaar-bg);
+  color: var(--yaar-text-dim);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+  font-size: var(--yaar-text-xs);
+  padding: 1px 4px;
+}
+
+.lab-editor {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border: none;
+  border-left: 2px solid transparent;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-base);
+  line-height: 1.5;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  resize: vertical;
+  overflow: hidden;
+  min-height: 38px;
+}
+.lab-editor:focus {
+  outline: none;
+  border-left-color: var(--yaar-accent);
+}
+
+.lab-add-row {
+  padding: var(--yaar-sp-2) 0 var(--yaar-sp-8) 42px;
+}

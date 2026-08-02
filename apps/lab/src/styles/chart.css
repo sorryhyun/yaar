@@ -1,0 +1,27 @@
+/* Chart canvas and image output — components/ChartView.ts + components/ImageView.ts */
+
+.lab-chart-block {
+  margin-bottom: var(--yaar-sp-2);
+}
+.lab-chart {
+  position: relative;
+  width: 100%;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+  padding: var(--yaar-sp-2);
+  box-sizing: border-box;
+}
+.lab-chart-actions {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  margin-top: 4px;
+}
+.lab-image {
+  max-width: 100%;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+}
+.lab-image-block {
+  margin-bottom: var(--yaar-sp-2);
+}

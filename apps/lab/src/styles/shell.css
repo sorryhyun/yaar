@@ -1,0 +1,168 @@
+/* Main pane, toolbar, status bar and the shared button/input primitives
+   — components/App.ts */
+
+.lab-main {
+  position: absolute;
+  left: 220px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
+.lab-no-side .lab-main {
+  left: 0;
+}
+
+.lab-toolbar {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 38px;
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 0 var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.lab-toolbar > * {
+  flex: 0 0 auto;
+}
+.lab-toolbar .lab-spacer {
+  flex: 1 1 auto;
+}
+.lab-cells {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38px;
+  bottom: 26px;
+  overflow-y: auto;
+  padding: var(--yaar-sp-3);
+}
+.lab-status {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 0 var(--yaar-sp-3);
+  border-top: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  overflow: hidden;
+}
+
+.lab-spacer {
+  flex: 1 1 auto;
+}
+.lab-note {
+  color: var(--yaar-text-dim);
+  font-size: var(--yaar-text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lab-title {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--yaar-text);
+  font-size: var(--yaar-text-lg);
+  font-family: var(--yaar-font);
+  padding: 2px var(--yaar-sp-2);
+  border-radius: var(--yaar-radius-sm);
+  width: 220px;
+  min-width: 90px;
+  flex: 0 1 220px;
+}
+.lab-title:hover {
+  border-color: var(--yaar-border);
+}
+.lab-title:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+  background: var(--yaar-bg);
+}
+
+.lab-btn,
+.lab-mini {
+  background: var(--yaar-bg);
+  color: var(--yaar-text-muted);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+  font-family: var(--yaar-font);
+  cursor: pointer;
+  transition:
+    background var(--yaar-ease),
+    color var(--yaar-ease);
+}
+.lab-btn {
+  padding: 3px var(--yaar-sp-3);
+  font-size: var(--yaar-text-sm);
+}
+.lab-mini {
+  padding: 1px var(--yaar-sp-2);
+  font-size: var(--yaar-text-xs);
+}
+.lab-btn:hover:not(:disabled),
+.lab-mini:hover:not(:disabled) {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+.lab-btn:disabled,
+.lab-mini:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.lab-mini-danger:hover {
+  color: var(--yaar-error);
+  border-color: var(--yaar-error);
+}
+
+.lab-timeout {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.lab-timeout input {
+  width: 46px;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+  padding: 2px 4px;
+  font-size: var(--yaar-text-xs);
+}
+
+.lab-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--yaar-radius-full);
+  display: inline-block;
+}
+.lab-dot-idle {
+  background: var(--yaar-text-dim);
+}
+.lab-dot-busy {
+  background: var(--yaar-warning);
+  animation: lab-pulse 1s infinite;
+}
+@keyframes lab-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.25;
+  }
+}

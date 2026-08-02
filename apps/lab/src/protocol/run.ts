@@ -1,65 +1,11 @@
 import * as z from '@bundled/zod';
 import { defineAppCommand, AppCommandError } from '@bundled/yaar';
-import { notebooks, current, findCell } from './store';
-import { runInKernel, resetKernel as resetKernelFn } from './kernel';
-import { runCell as runCellFn, runAll as runAllFn, lastRun, timeoutMs } from './run';
-import type { Cell } from './types';
+import { findCell } from '../state/cells';
+import { runInKernel, resetKernel as resetKernelFn } from '../kernel/worker';
+import { runCell as runCellFn, runAll as runAllFn, timeoutMs } from '../state/run';
+import { agentLogs } from './shape';
 
-const MAX_SOURCE_IN_STATE = 4000;
-const MAX_AGENT_LOG_CHARS = 4000;
-
-function cellsForState(cells: Cell[]) {
-  return cells.map((c) => ({
-    id: c.id,
-    type: c.type,
-    source: c.source.length > MAX_SOURCE_IN_STATE ? c.source.slice(0, MAX_SOURCE_IN_STATE) + '\n…(truncated)' : c.source,
-    hasOutput: !!c.output,
-  }));
-}
-
-function agentLogs(logs: { level: string; text: string }[]): string[] {
-  const out: string[] = [];
-  let used = 0;
-  for (const l of logs || []) {
-    const line = l.level === 'log' ? l.text : '[' + l.level + '] ' + l.text;
-    if (used + line.length > MAX_AGENT_LOG_CHARS) {
-      out.push('… ' + (logs.length - out.length) + ' more log lines omitted');
-      break;
-    }
-    out.push(line);
-    used += line.length;
-  }
-  return out;
-}
-
-/* -------------------------------------------------------------- state --- */
-
-export const labState = {
-  notebooks: {
-    description: 'Saved notebooks: { id, title, updatedAt, cellCount }[]. Newest first.',
-    get: () => notebooks(),
-  },
-  currentNotebook: {
-    description:
-      'The open notebook: { id, title, cells: [{ id, type, source, hasOutput }] }. Cell OUTPUTS are deliberately excluded (they are large) — read a result with runCode or the summary in lastRun.',
-    get: () => {
-      const nb = current();
-      if (!nb) return null;
-      return { id: nb.id, title: nb.title, updatedAt: nb.updatedAt, cells: cellsForState(nb.cells) };
-    },
-  },
-  lastRun: {
-    description: 'The most recent cell execution: { cellId, ok, summary, durationMs, at }.',
-    get: () => lastRun(),
-  },
-  kernel: {
-    description: 'Kernel settings: { defaultTimeoutMs }.',
-    get: () => ({ defaultTimeoutMs: timeoutMs() }),
-  },
-};
-
-/* ------------------------------------------------------------ commands --- */
-
+/** Execution commands: everything that puts code through the kernel. */
 export const runCommands = {
   runCode: defineAppCommand({
     description:

@@ -1,0 +1,48 @@
+/* Output block, log lines and preformatted text — components/OutputView.ts */
+
+.lab-output {
+  border-top: 1px solid var(--yaar-border);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  background: var(--yaar-bg);
+}
+.lab-output-bad {
+  border-top-color: var(--yaar-error);
+}
+.lab-output-foot {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  margin-top: var(--yaar-sp-2);
+}
+
+.lab-pre {
+  margin: 0 0 var(--yaar-sp-2) 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-text-muted);
+  max-height: 420px;
+  overflow: auto;
+}
+.lab-err {
+  color: var(--yaar-error);
+}
+
+.lab-logs {
+  border-left: 2px solid var(--yaar-border);
+  padding-left: var(--yaar-sp-2);
+  margin-bottom: var(--yaar-sp-2);
+}
+.lab-log {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--yaar-text-dim);
+}
+.lab-log-warn {
+  color: var(--yaar-warning);
+}
+.lab-log-error {
+  color: var(--yaar-error);
+}

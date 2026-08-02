@@ -1,7 +1,4 @@
-import { Chart, registerables } from '@bundled/chart.js';
-import type { ChartSpec } from './types';
-
-Chart.register(...registerables);
+import type { ChartSpec } from '../types';
 
 const PALETTE = [
   '#539bf5', '#57ab5a', '#c69026', '#e5534b', '#986ee2',
@@ -9,7 +6,7 @@ const PALETTE = [
 ];
 const TEXT = '#adbac7';
 const GRID = 'rgba(55, 62, 71, 0.9)';
-const BG = '#1c2128';
+export const BG = '#1c2128';
 
 function hexAlpha(hex: string, a: number): string {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
@@ -19,7 +16,7 @@ function hexAlpha(hex: string, a: number): string {
 }
 
 /** Fill the canvas behind the chart so exported PNGs are not transparent. */
-const bgPlugin = {
+export const bgPlugin = {
   id: 'labBackground',
   beforeDraw(chart: any, _args: unknown, pluginOpts: any) {
     const color = pluginOpts && pluginOpts.color;
@@ -129,43 +126,4 @@ export function buildConfig(spec: ChartSpec, opts?: { background?: string; anima
     },
     plugins: [bgPlugin],
   };
-}
-
-/** Live chart inside a cell output. Caller owns destruction. */
-export function renderChart(canvas: HTMLCanvasElement, spec: ChartSpec): any {
-  return new Chart(canvas, buildConfig(spec));
-}
-
-/**
- * Render a chart off-screen and return a PNG data URL. Used by plot.toPNG()
- * from inside the kernel, by the "Save PNG" button, and by exportChart.
- */
-export async function chartToPNG(
-  spec: ChartSpec,
-  opts?: { width?: number; height?: number; scale?: number; background?: string },
-): Promise<string> {
-  const width = Math.max(120, Math.round((opts && opts.width) || 720));
-  const height = Math.max(90, Math.round((opts && opts.height) || (spec.options && spec.options.height) || 360));
-  const scale = Math.min(3, Math.max(1, (opts && opts.scale) || 2));
-  const holder = document.createElement('div');
-  holder.style.cssText =
-    'position:fixed;left:-20000px;top:0;pointer-events:none;width:' + width + 'px;height:' + height + 'px;';
-  const canvas = document.createElement('canvas');
-  canvas.width = width * scale;
-  canvas.height = height * scale;
-  canvas.style.width = width + 'px';
-  canvas.style.height = height + 'px';
-  holder.appendChild(canvas);
-  document.body.appendChild(holder);
-  let chart: any = null;
-  try {
-    chart = new Chart(canvas, buildConfig(spec, { background: (opts && opts.background) || BG }));
-    chart.resize(width, height);
-    chart.update('none');
-    await new Promise<void>((r) => requestAnimationFrame(() => r()));
-    return canvas.toDataURL('image/png');
-  } finally {
-    if (chart) chart.destroy();
-    holder.remove();
-  }
 }
