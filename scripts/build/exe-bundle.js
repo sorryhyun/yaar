@@ -267,7 +267,7 @@ const defines = [
 // literal*, so the define carries quotes that sh and cmd.exe would each strip
 // differently. Passing argv directly means no shell parses it at all — which
 // also stops a path containing a space from silently splitting into two args.
-const args = [
+const buildArgs = [
   'build',
   entrypoint,
   '--compile',
@@ -278,10 +278,10 @@ const args = [
   ...defines,
 ];
 
-console.log(`Running: bun ${args.join(' ').slice(0, 140)}...`);
+console.log(`Running: bun ${buildArgs.join(' ').slice(0, 140)}...`);
 
 try {
-  execFileSync('bun', args, { cwd: rootDir, stdio: 'inherit' });
+  execFileSync('bun', buildArgs, { cwd: rootDir, stdio: 'inherit' });
   console.log(`\nBuilt: ${outfile}`);
 } finally {
   // Clean up generated entry point

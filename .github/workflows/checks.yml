@@ -56,6 +56,14 @@ jobs:
       - name: Test
         run: bun run --filter '*' test
 
+      # scripts/ is outside every package, so `typecheck` and `lint` (both
+      # `--filter '*'`, both scoped to a package's src) never read it. The build
+      # scripts only ever run in release.yml, on an already-tagged commit — which
+      # is how a duplicate `const` in exe-bundle.js reached v0.13.0. Parsing them
+      # here is cheap and puts that class of failure back on the push that caused it.
+      - name: Check scripts parse
+        run: bun run check:scripts
+
       # Warns when a reference doc's **Source:** file changed after the doc's last
       # update. Broken pointers and bundled-library list drift still fail the check.
       # Run `bun run check:docs:strict` when stale-source warnings should also fail.
