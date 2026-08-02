@@ -289,6 +289,22 @@ export class AgentPool {
   private appAgents = new Map<string, PooledAgent>();
 
   /**
+   * App-agent creations reserved but not yet landed, keyed like {@link appAgents}.
+   *
+   * Written before the first await in {@link AgentPool.getOrCreateAppAgent}, for the
+   * reason spelled out over {@link subAgentSpawns}: two creations for one key that
+   * overlap inside `acquireProvider` both find the map empty, and the loser lands in
+   * no collection at all — unreachable by every dispose path and by `cleanup()`, while
+   * still holding a provider process and a `MAX_AGENTS` slot.
+   *
+   * Two app tasks for one app already overlap whenever one of them carries an
+   * `actionId`: parallel button actions skip the processing lock on purpose. A `fresh`
+   * turn widens the window further, since it empties the map deliberately and then
+   * asks for a replacement.
+   */
+  private appAgentSpawns = new Map<string, Promise<PooledAgent | null>>();
+
+  /**
    * Sub-agents, keyed by `{monitorId}::{appId}::{subId}` (see `subAgentKey`) — the
    * app tier's children, one key-extension down.
    *
@@ -627,6 +643,26 @@ export class AgentPool {
       return existing;
     }
 
+    // A creation already in flight for this key: join it rather than start a second
+    // one. The joiner gets the same agent it would have found had it arrived one tick
+    // later. Reserved before the first await — see `appAgentSpawns`.
+    const inFlight = this.appAgentSpawns.get(key);
+    if (inFlight) return inFlight;
+
+    const pending = this.createAppAgent(monitorId, appId);
+    this.appAgentSpawns.set(key, pending);
+    try {
+      return await pending;
+    } finally {
+      this.appAgentSpawns.delete(key);
+    }
+  }
+
+  /**
+   * The creation itself. Only ever called with a reservation held, which is what makes
+   * the `appAgents.set` below the only writer for that key.
+   */
+  private async createAppAgent(monitorId: string, appId: string): Promise<PooledAgent | null> {
     const provider = await this.acquireProvider();
     const agent = await this.createAgentCore(provider ?? undefined);
     if (!agent) {
@@ -634,7 +670,7 @@ export class AgentPool {
       return null;
     }
 
-    this.appAgents.set(key, agent);
+    this.appAgents.set(appKey(monitorId, appId), agent);
     console.log(
       `[AgentPool] App agent created for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
     );
@@ -664,14 +700,30 @@ export class AgentPool {
 
   /**
    * Dispose the app agent for a given app on a given monitor.
+   *
+   * Settles a creation still in flight first, for the reason `settlePersonaSpawns`
+   * gives: one inside `acquireProvider` is in no collection yet, so the delete below
+   * would walk past it and the agent would land moments later — alive, unreferenced,
+   * and holding a slot until the session ends. A `fresh` turn disposes and then
+   * immediately re-creates, so this is the ordinary case here, not the exotic one.
    */
   async disposeAppAgent(monitorId: string, appId: string): Promise<void> {
     const key = appKey(monitorId, appId);
+    await this.settleAppAgentSpawns((k) => k === key);
+
     const agent = this.appAgents.get(key);
     if (!agent) return;
 
     this.appAgents.delete(key);
     await this.disposeAgent(agent, `App agent disposed for ${appId} on monitor ${monitorId}`);
+  }
+
+  /** Wait out the app-agent reservations a teardown is about to sweep past. */
+  private async settleAppAgentSpawns(match: (key: string) => boolean): Promise<void> {
+    const pending = [...this.appAgentSpawns.entries()]
+      .filter(([key]) => match(key))
+      .map(([, promise]) => promise);
+    if (pending.length > 0) await Promise.allSettled(pending);
   }
 
   /**
@@ -680,6 +732,10 @@ export class AgentPool {
    * else would, and leaking them would hold limiter slots for a monitor that's gone.
    */
   async disposeAppAgentsForMonitor(monitorId: string): Promise<void> {
+    // Same reason as in `disposeAppAgent`, one tier up: enumerate only after the
+    // monitor's in-flight creations have landed, or the sweep misses them.
+    await this.settleAppAgentSpawns((key) => parseAppKey(key).monitorId === monitorId);
+
     const appIds = [...this.appAgents.keys()]
       .map(parseAppKey)
       .filter((k) => k.monitorId === monitorId)
@@ -1185,6 +1241,7 @@ export class AgentPool {
     // Before the snapshot: a persona still mid-spawn is in no collection, so it would
     // land in `subAgents` after the clear below and outlive the pool that owns it.
     await this.settlePersonaSpawns(() => true);
+    await this.settleAppAgentSpawns(() => true);
     // Snapshot before the first await: the two phases must walk the same roster.
     const allAgents = [...this.allAgents()].map((e) => e.agent);
 

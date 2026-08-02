@@ -37,6 +37,12 @@ export interface Task {
   monitorId?: string; // Which monitor this task belongs to
   /** One-shot hook: notify the originating agent when this task completes. */
   hook?: 'response';
+  /**
+   * Run this app task on a brand-new app agent, dropping whatever the current one
+   * remembers. App-tier only — a monitor agent is the desktop's continuity and has
+   * nothing to be fresh from.
+   */
+  fresh?: boolean;
 }
 
 /**

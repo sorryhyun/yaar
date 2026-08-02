@@ -254,6 +254,7 @@ export function registerWindowHandlers(
       const monitorId = requireMonitorId();
       const taggedContent = `<monitor:${monitorId}>\n${p.message}\n</monitor:${monitorId}>`;
       const hook = p.hook === 'response' ? ('response' as const) : undefined;
+      const fresh = p.fresh === true;
       pool
         .handleTask({
           type: 'app',
@@ -262,11 +263,13 @@ export function registerWindowHandlers(
           content: taggedContent,
           monitorId,
           hook,
+          fresh,
         })
         .catch((err: unknown) => console.error('[window.message] Failed:', err));
 
       return ok(
-        `Message sent to app "${appId}" via window "${windowId}" (messageId: ${messageId}).`,
+        `Message sent to app "${appId}" via window "${windowId}" (messageId: ${messageId})` +
+          `${fresh ? ' on a fresh agent' : ''}.`,
       );
     },
     subscribe: ({ windowId, p }) => handleSubscribe(getWindowState(), windowId, p),
@@ -561,6 +564,14 @@ export function registerWindowHandlers(
         message: {
           type: 'string',
           description: 'Message to send to the app agent (for message action)',
+        },
+        fresh: {
+          type: 'boolean',
+          description:
+            'message only. Answer on a brand-new app agent, dropping everything the ' +
+            'current one remembers of this session. Use when the request is unrelated to ' +
+            'what the app was doing — not to tidy up: a new agent pays a full provider ' +
+            'start. If the app agent is mid-turn, that turn finishes first.',
         },
         // subscribe fields
         events: {

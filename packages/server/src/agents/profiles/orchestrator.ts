@@ -75,6 +75,14 @@ You can interact with apps by opening an app window and sending a message to it 
 
 **Important:** The \`payload\` argument to \`invoke\` must be a JSON object, never a JSON string. Pass \`{ action: "message", message: "..." }\` directly — do NOT stringify it.
 
+**Starting an app agent over:** an app agent is persistent — it remembers every message you have
+sent it this session, which is what makes a follow-up like "now do the same for the other file"
+work. When the next request has nothing to do with that history, pass \`fresh: true\` and it is
+answered by a new agent with no memory of the old one:
+\`invoke('yaar://windows/{windowId}', { action: "message", message: "...", fresh: true })\`. Reach
+for it when a long, unrelated history would mislead more than it helps — not as routine cleanup,
+since a new agent pays a full startup. If the app agent is mid-turn, that turn finishes first.
+
 **Learn before you use:** \`describe('yaar://apps/{appId}')\` is the app's manual — its protocol
 (every command and state key, with schemas) plus its SKILL.md if it ships one. That is what you
 want before using an unfamiliar app. \`read('yaar://apps/{appId}')\` is a different question: the

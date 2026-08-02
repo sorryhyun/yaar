@@ -79,8 +79,15 @@ export class AppTaskProcessor {
 
     // If the app agent is already busy, try to steer (inject mid-turn message).
     // Falls back to queuing if the provider doesn't support steering.
+    //
+    // A `fresh` task never steers: steering injects it into the very turn — and the
+    // very memory — it asked not to be answered from. It queues instead, and the
+    // release happens when it reaches the front. Deliberately not an interrupt: the
+    // flag says the *next* request needs no history, not that the running one should
+    // be abandoned.
     if (!isParallel && this.ctx.windowQueuePolicy.isProcessing(processingKey)) {
-      const steered = await this.ctx.agentPool.steerAppAgent(monitorId, appId, task.content);
+      const steered =
+        !task.fresh && (await this.ctx.agentPool.steerAppAgent(monitorId, appId, task.content));
       if (steered) {
         console.log(
           `[AppTaskProcessor] Steered task ${task.messageId} into running ${appId} agent`,
@@ -118,6 +125,13 @@ export class AppTaskProcessor {
       : `app-${appId}-m${monitorId}-${task.messageId}`;
 
     try {
+      // Retire the incumbent before asking for one, so the turn below runs on an agent
+      // that remembers nothing. Inside the processing lock on purpose: between the
+      // dispose and the create there is a window where the map is empty, and holding
+      // the lock is what keeps another task for this app from creating the replacement
+      // this turn is about to ask for.
+      if (task.fresh) await this.releaseAgent(monitorId, appId);
+
       // Get or create the persistent app agent for this app on this monitor
       const agent = await this.ctx.agentPool.getOrCreateAppAgent(monitorId, appId);
       if (!agent) {
@@ -229,6 +243,36 @@ export class AppTaskProcessor {
     } finally {
       this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
       if (!isParallel) await this.processQueue(processingKey);
+    }
+  }
+
+  /**
+   * Retire one app's agent on one monitor so the next turn starts from nothing.
+   *
+   * The agent's memory lives in its provider session, which `disposeAppAgent` ends —
+   * the context tape is a log, not a prompt source (nothing calls `formatForPrompt`),
+   * so there is no branch to prune here.
+   *
+   * The handoff fingerprints must go with it. They exist to tell an agent that comes
+   * *back* to a window whether the app's state moved while it was away; handed to an
+   * agent that was never there, `<app_state_since_handoff changed="true"/>` claims a
+   * handoff that never happened. Every window of this app on this monitor is cleared,
+   * not just the one this task names — the dead agent may have driven several, and its
+   * successor has seen none of them.
+   *
+   * Sub-agents deliberately survive. A persona's owner is the (monitor, app) pair, not
+   * the app agent — the iframe spawns them and they exist whether or not an app agent
+   * ever did — so retiring the operator must not take the cast down with it.
+   */
+  private async releaseAgent(monitorId: string, appId: string): Promise<void> {
+    if (!this.ctx.agentPool.hasAppAgent(monitorId, appId)) return;
+
+    await this.ctx.agentPool.disposeAppAgent(monitorId, appId);
+
+    for (const handle of this.ctx.windowState.handleMap.listByMonitor(monitorId)) {
+      if (this.ctx.windowState.getAppIdForWindow(handle) === appId) {
+        this.handoffState.forget(handle);
+      }
     }
   }
 

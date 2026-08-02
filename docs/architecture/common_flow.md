@@ -40,7 +40,8 @@ The persistent generalist handling the main conversation flow, one per monitor
 - **Tools**: windows, notifications, storage read/list, memory, skills, config hooks,
   cache replay, and delegation (Claude's Task tool; app messaging via
   `invoke('yaar://windows/{id}', { action: "message", ... })`, optionally with
-  `hook: "response"` to get the app agent's answer back)
+  `hook: "response"` to get the app agent's answer back, or `fresh: true` to have it
+  answered by an app agent that remembers nothing of the session so far)
 - **URI**: `yaar://agents/{instanceId}`
 
 It understands user intent and dispatches: trivial things (a notification, opening a window,
@@ -66,7 +67,9 @@ context.
 - **Role**: `app-{appId}-{messageId}`; canonical ID `app-{appId}`; keyed `monitorId::appId`
 - **Context**: first turn bootstraps with the app's prompt (`agent/prompt.md` replaces the
   generic prompt if present, else the generic one is used) + `protocol.json` manifest;
-  later turns reuse the provider session
+  later turns reuse the provider session — which is where the agent's memory of the session
+  lives, and why `{ action: "message", fresh: true }` (retire the agent, answer on a new one)
+  is the way to start it over when a long, unrelated history would mislead more than it helps
 - **Tools** (scoped by design):
 
 | Tool | Purpose |
@@ -186,7 +189,7 @@ The monitor agent is the **generalist** that knows the user and conversation; ap
 |---|---|---|
 | Knows | full conversation, all windows on its monitor, app catalog, system state | app manifest (state keys + commands), app skill, its own interaction history |
 | Doesn't know | app-internal state (cells, URLs, slides), app protocol mechanics | other windows, the broader conversation, web/code tools |
-| Escape hatch | messages the app window (`action: "message"`, optional `hook: "response"`) | `relay()` back to the monitor agent |
+| Escape hatch | messages the app window (`action: "message"`, optional `hook: "response"`, optional `fresh: true`) | `relay()` back to the monitor agent |
 
 ```mermaid
 sequenceDiagram
