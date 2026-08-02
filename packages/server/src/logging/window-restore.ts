@@ -1,5 +1,5 @@
 import type { OSAction } from '@yaar/shared';
-import { applyContentOperation, extractAppId } from '@yaar/shared';
+import { applyContentOperation, extractAppId, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import type { ParsedMessage } from './types.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
 import { isolatedAppOrigin, isOriginBoundaryActive } from '../http/origin-boundary.js';
@@ -12,18 +12,39 @@ function extractAppIdFromPath(path: string): string | null {
 }
 
 /**
+ * A window id from the log, as a monitor-scoped handle.
+ *
+ * The log is written in both spellings, and a transcript is read long after the code that
+ * wrote it: a window the *user* opened was logged bare (`window.create "process-explorer"`)
+ * while every interaction on it was logged scoped (`close:0/process-explorer`). Compared
+ * as written, the close matched no create — so a restore replayed every window the user
+ * had ever opened by hand, including the ones they had closed, and replayed them under a
+ * bare key that no later close could address (`WindowStateRegistry.targetKey`). Both
+ * halves of that are fixed at the source now; this keeps the transcripts already on disk
+ * from restoring wrong.
+ *
+ * Defaulting a bare id to monitor 0 matches what the frontend does with one, so the two
+ * registries agree on the key. It can misplace a hand-opened window from a second monitor
+ * in an old log — but that window is unclosable today, and the first session written by
+ * the fixed writer records its monitor.
+ */
+function scopedWindowId(windowId: string): string {
+  return windowId.includes('/') ? windowId : `${DEFAULT_MONITOR_ID}/${windowId}`;
+}
+
+/**
  * Extract window restore actions from parsed messages.
  * Returns the final state of all windows that should still be open.
  */
 export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
-  // Track window states by ID
+  // Track window states by scoped handle — see scopedWindowId for why not "as written".
   const windows = new Map<string, OSAction>();
 
   for (const msg of messages) {
     // Handle interaction entries (e.g., user closing a window)
     if (msg.type === 'interaction' && msg.interaction?.startsWith('close:')) {
       const windowId = msg.interaction.slice('close:'.length);
-      windows.delete(windowId);
+      windows.delete(scopedWindowId(windowId));
       continue;
     }
 
@@ -31,18 +52,21 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
     const action = msg.action;
 
     switch (action.type) {
-      case 'window.create':
-        // Store the create action
-        windows.set(action.windowId, { ...action });
+      case 'window.create': {
+        // The id is rewritten, not only re-keyed: this action is replayed into both
+        // registries, and a bare id there is a window on no monitor.
+        const windowId = scopedWindowId(action.windowId);
+        windows.set(windowId, { ...action, windowId });
         break;
+      }
 
       case 'window.close':
         // Remove the window
-        windows.delete(action.windowId);
+        windows.delete(scopedWindowId(action.windowId));
         break;
 
       case 'window.setContent': {
-        const win = windows.get(action.windowId);
+        const win = windows.get(scopedWindowId(action.windowId));
         if (win && win.type === 'window.create') {
           win.content = { ...action.content };
         }
@@ -50,7 +74,7 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
       }
 
       case 'window.updateContent': {
-        const win = windows.get(action.windowId);
+        const win = windows.get(scopedWindowId(action.windowId));
         if (win && win.type === 'window.create') {
           win.content = {
             renderer: action.renderer ?? win.content?.renderer ?? 'text',
@@ -61,7 +85,7 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
       }
 
       case 'window.setTitle': {
-        const win = windows.get(action.windowId);
+        const win = windows.get(scopedWindowId(action.windowId));
         if (win && win.type === 'window.create') {
           win.title = action.title;
         }
@@ -69,7 +93,7 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
       }
 
       case 'window.move': {
-        const win = windows.get(action.windowId);
+        const win = windows.get(scopedWindowId(action.windowId));
         if (win && win.type === 'window.create' && win.bounds) {
           win.bounds.x = action.x;
           win.bounds.y = action.y;
@@ -78,7 +102,7 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
       }
 
       case 'window.resize': {
-        const win = windows.get(action.windowId);
+        const win = windows.get(scopedWindowId(action.windowId));
         if (win && win.type === 'window.create' && win.bounds) {
           win.bounds.w = action.w;
           win.bounds.h = action.h;
@@ -87,7 +111,7 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
       }
 
       case 'window.lock': {
-        const win = windows.get(action.windowId);
+        const win = windows.get(scopedWindowId(action.windowId));
         if (win && win.type === 'window.create') {
           // Don't restore locked state - windows should start unlocked
         }

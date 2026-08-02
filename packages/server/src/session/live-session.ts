@@ -266,20 +266,25 @@ export class LiveSession {
    * bill it to its monitor's budget, and wake whoever is watching that window.
    */
   private handleEmittedAction(event: ActionEvent): void {
+    const rawWindowId = (event.action as { windowId?: string }).windowId;
+    // Resolved *before* the action is applied. `window.close` removes the handle, so a
+    // lookup afterwards answers with the raw id — which is what went out on the wire to
+    // the frontend, and to every subscriber, for every close an app performed. The
+    // frontend then had to guess the monitor back by scanning its keys for a matching
+    // suffix, and with the same app open on two monitors it could guess wrong and close
+    // the other one.
+    const windowHandle = rawWindowId
+      ? (this.windowState.handleMap.resolve(rawWindowId, event.monitorId) ?? rawWindowId)
+      : undefined;
+
     this.windowState.handleAction(event.action, event.monitorId);
     // Record action against the monitor's budget (if monitorId present)
     if (event.monitorId && this.pool) {
       this.pool.recordMonitorAction(event.monitorId);
     }
     // Wake iframe apps subscribed to yaar://windows (see http/subscriptions.ts).
-    // The window is gone by now for window.close, so resolve() falls back to the
-    // raw id — subscribers on the `yaar://windows` prefix match either form.
-    if (event.action.type.startsWith('window.')) {
-      const rawId = (event.action as { windowId?: string }).windowId;
-      if (rawId) {
-        const handle = this.windowState.handleMap.resolve(rawId) ?? rawId;
-        subscriptionRegistry.notifyChange(`yaar://windows/${handle}`, this.sessionId);
-      }
+    if (event.action.type.startsWith('window.') && windowHandle) {
+      subscriptionRegistry.notifyChange(`yaar://windows/${windowHandle}`, this.sessionId);
     }
     // Notify window subscribers of state changes
     if (this.pool) {
@@ -301,9 +306,9 @@ export class LiveSession {
     // if the agentId starts with "iframe:" and broadcast directly.
     if (event.agentId?.startsWith('iframe:')) {
       const action = event.action;
-      const raw = (action as { windowId?: string }).windowId;
+      const raw = rawWindowId;
       // Stamp the scoped handle if the action has a raw windowId
-      const handle = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
+      const handle = windowHandle;
       // Carry the requestId through, as ToolActionBridge does on the agent path.
       // An action awaiting feedback is only answerable if the frontend knows which
       // request to answer: `window.capture` reads the id off the action itself and

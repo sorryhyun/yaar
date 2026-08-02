@@ -87,7 +87,29 @@ export class WindowStateRegistry {
   }
 
   /**
-   * Determine the internal key for a given action windowId + monitorId.
+   * The key an action that targets an **existing** window must land on, or undefined
+   * if this registry holds no such window.
+   *
+   * Distinct from `actionKey`, which *mints* a handle. A `create` is entitled to name a
+   * key that does not exist yet; nothing else is, and minting one for them is how a close
+   * came to silently miss. A window restored under a bare `"process-explorer"` key (an
+   * older log's unscoped id — see `getWindowRestoreActions`) sent
+   * `actionKey("process-explorer", "0")` down the register branch, which answered
+   * `"0/process-explorer"`: a freshly minted key holding no window. The delete removed
+   * nothing, the close callback fired for a window that had not closed, and the entry
+   * stayed in the registry for the rest of the process — listed to every agent, since an
+   * unscoped window is listed on every monitor, and unclosable, because every later
+   * attempt resolved exactly the same way.
+   */
+  private targetKey(rawId: string, monitorId?: string): string | undefined {
+    if (this.windows.has(rawId)) return rawId;
+    const handle = this.handleMap.resolve(rawId, monitorId ?? getMonitorId());
+    if (handle && this.windows.has(handle)) return handle;
+    return undefined;
+  }
+
+  /**
+   * Determine the internal key for a **new** window: `window.create` and nothing else.
    *
    * Every key here should be monitor-scoped — either because a monitor was passed, or
    * because the id already carries one ("0/dock", as restore replays them). A key that
@@ -133,8 +155,8 @@ export class WindowStateRegistry {
     monitorId: string | undefined,
     fn: (win: WindowState) => void,
   ): void {
-    const key = this.actionKey(rawId, monitorId);
-    const win = this.windows.get(key);
+    const key = this.targetKey(rawId, monitorId);
+    const win = key ? this.windows.get(key) : undefined;
     if (!win) return;
     fn(win);
     win.updatedAt = Date.now();
@@ -164,7 +186,12 @@ export class WindowStateRegistry {
       }
 
       case 'window.close': {
-        const key = this.actionKey(action.windowId, monitorId);
+        // Never `actionKey`: a close that mints a handle deletes a key that by
+        // construction holds nothing, leaving the real window behind (see `targetKey`).
+        // Falling back to the raw id keeps the best-effort teardown a close of an
+        // unregistered window has always had — a preview created through the iframe
+        // proxy files its app commands under exactly that id.
+        const key = this.targetKey(action.windowId, monitorId) ?? action.windowId;
         const appId = this.windows.get(key)?.appId;
         // Read the owner before remove() drops it — the callback needs it to find
         // the app agent that was driving this window.
@@ -249,9 +276,20 @@ export class WindowStateRegistry {
       case 'window.create': {
         if (!interaction.windowId || !interaction.content || !interaction.bounds) return [];
         const appMeta = interaction.appId ? await loadAppMeta(interaction.appId) : null;
+        // Reading a log, not routing a message: an interaction recorded before
+        // monitors were stamped genuinely has no monitor, and the alternative to
+        // placing it on the default desktop is dropping the user's window.
+        const monitorId = interaction.monitorId ?? DEFAULT_MONITOR_ID;
+        // The action carries the *scoped handle*, not the raw id the click arrived with.
+        // This action is what gets logged, and the log is what the next launch restores
+        // from — while every later interaction on this window (`close:0/notes`) names it
+        // by handle. Logged raw, the two never matched: `getWindowRestoreActions` deleted
+        // nothing on close, so every window the user had opened by hand came back on the
+        // next launch, under a bare key no close could then address.
+        const windowId = this.actionKey(interaction.windowId, monitorId);
         const createAction: OSAction = {
           type: 'window.create',
-          windowId: interaction.windowId,
+          windowId,
           title: interaction.windowTitle ?? interaction.windowId,
           bounds: interaction.bounds,
           content: interaction.content,
@@ -261,17 +299,14 @@ export class WindowStateRegistry {
           windowStyle: appMeta?.windowStyle,
           appId: interaction.appId,
         };
-        // Reading a log, not routing a message: an interaction recorded before
-        // monitors were stamped genuinely has no monitor, and the alternative to
-        // placing it on the default desktop is dropping the user's window.
-        this.handleAction(createAction, interaction.monitorId ?? DEFAULT_MONITOR_ID);
+        this.handleAction(createAction, monitorId);
         return [createAction];
       }
 
       case 'window.close': {
         if (!interaction.windowId) return [];
         const closeAction: OSAction = { type: 'window.close', windowId: interaction.windowId };
-        this.handleAction(closeAction);
+        this.handleAction(closeAction, interaction.monitorId);
         return [closeAction];
       }
 
@@ -291,8 +326,8 @@ export class WindowStateRegistry {
           w: b.w,
           h: b.h,
         };
-        this.handleAction(moveAction);
-        this.handleAction(resizeAction);
+        this.handleAction(moveAction, interaction.monitorId);
+        this.handleAction(resizeAction, interaction.monitorId);
         return [moveAction, resizeAction];
       }
 
@@ -442,13 +477,17 @@ export class WindowStateRegistry {
 
   restoreFromActions(actions: OSAction[]): void {
     for (const action of actions) {
-      this.handleAction(action);
-      // Restored actions have scoped windowIds (e.g., "0/dock").
-      // Register the handle mapping so raw-ID lookups work for verb tools.
+      // Registered *before* the action is applied, not after. Restored ids are scoped
+      // handles ("0/dock"), and `actionKey` short-circuits on an id the handle map
+      // already knows — so registering first is what makes a restored window resolvable
+      // by its raw id from the very first action, rather than only from the second.
+      // `getWindowRestoreActions` guarantees the scoping; an id that somehow arrives
+      // bare is a no-op here and warns in `actionKey`.
       const windowId = (action as { windowId?: string }).windowId;
       if (windowId) {
         this.handleMap.registerHandle(windowId);
       }
+      this.handleAction(action);
     }
   }
 }
