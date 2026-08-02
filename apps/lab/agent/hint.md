@@ -1,0 +1,1 @@
+Route data work to **lab** when a task means computing over files rather than reading them: aggregating CSV/JSON in storage, joining or grouping rows, computing statistics, or producing a chart PNG for another app. Its `runCode` command runs JavaScript inside the app's sandbox and returns only logs plus a size-capped result, so large data sets never enter an agent's context.
