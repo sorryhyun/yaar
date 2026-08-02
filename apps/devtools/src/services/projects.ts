@@ -93,7 +93,13 @@ export async function createProject(name: string): Promise<string> {
   return id;
 }
 
-export async function cloneApp(appId: string): Promise<string> {
+export interface CloneAppResult {
+  id: string;
+  /** Root AGENTS.md content, or null when the cloned app does not provide one. */
+  agentsMd: string | null;
+}
+
+export async function cloneApp(appId: string): Promise<CloneAppResult> {
   setStatusText(`Cloning "${appId}"...`);
   const result = await invoke<{
     // `encoding` is set for files whose bytes are not valid UTF-8 (images, fonts,
@@ -116,10 +122,22 @@ export async function cloneApp(appId: string): Promise<string> {
       );
     }
   }
+  // The clone payload already told us whether the root instruction file exists.
+  // Read it back from the newly written project rather than forwarding the source
+  // payload, so the command returns precisely the instructions its caller can now
+  // act on. `null` is intentional: an absent AGENTS.md is different from a present
+  // but empty one (which returns '').
+  const hasAgentsMd = result?.files?.some((file) => file.path === 'AGENTS.md') ?? false;
+  let agentsMd: string | null = null;
+  if (hasAgentsMd) {
+    const raw = await appStorage.read(projectPath(id, 'AGENTS.md'));
+    if (typeof raw !== 'string') throw new Error('Cloned AGENTS.md is not text');
+    agentsMd = raw;
+  }
   await loadProjects();
   await openProject(id);
   setStatusText(`Cloned "${name}"`);
-  return id;
+  return { id, agentsMd };
 }
 
 export async function openProject(id: string): Promise<void> {

@@ -51,7 +51,8 @@ export const projectCommands = {
   cloneApp: defineAppCommand({
     description:
       'Clone an installed app source into a new project and open it. The copy is a sandbox: ' +
-      'editing it changes nothing about the live app until you deploy.',
+      'editing it changes nothing about the live app until you deploy. Returns `agentsMd` with ' +
+      'the cloned root AGENTS.md contents, or null when the app has no AGENTS.md.',
     params: {
       type: 'object',
       properties: {
@@ -60,12 +61,13 @@ export const projectCommands = {
       required: ['appId'],
     },
     run: async (p) => {
-      const projectId = await cloneApp(String(p.appId));
+      const { id: projectId, agentsMd } = await cloneApp(String(p.appId));
       const proj = activeProject();
       return {
         projectId,
         project: proj ? { id: proj.id, name: proj.name } : undefined,
         files: files().map((f) => f.path),
+        agentsMd,
       };
     },
   }),
