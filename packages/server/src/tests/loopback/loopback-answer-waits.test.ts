@@ -35,6 +35,7 @@ import {
   type AnswerEventType,
   type ApprovalRequestEvent,
   type AppProtocolRequestEvent,
+  type UserClipboardReadAction,
   type UserPromptShowAction,
   type WindowCaptureAction,
 } from '@yaar/shared';
@@ -42,7 +43,11 @@ import { boot, type Harness } from './harness/boot.js';
 import { deferred, type Deferred } from './harness/deferred.js';
 import { expectSettlesWithin, expectStillPending } from './harness/liveness.js';
 import type { ToolRecord, TurnContext } from './harness/scripted-provider.js';
-import type { RenderingFeedback, UserPromptResult } from '../../session/action-emitter.js';
+import type {
+  ClipboardFeedback,
+  RenderingFeedback,
+  UserPromptResult,
+} from '../../session/action-emitter.js';
 import type { PendingOutcome } from '../../session/pending-store.js';
 
 const { handleAppCommand } = await import('../../features/window/app-protocol.js');
@@ -58,6 +63,7 @@ const ANSWERED = {
   afterReady: 'registered-then-answered',
   imageData: 'IMAGE-DATA-FROM-THE-BROWSER',
   promptText: 'the user typed this',
+  clipboardText: 'what the user had copied',
 } as const;
 
 let harness: Harness | undefined;
@@ -247,6 +253,44 @@ const ROWS: WaitRow<unknown>[] = [
       // deliberately distinct from the user declining. Text can only come from the user.
       expect(result.dismissed).toBeFalsy();
       expect(result.text).toBe(ANSWERED.promptText);
+    },
+  }),
+
+  row<UserClipboardReadAction>({
+    answers: ClientEventType.CLIPBOARD_RESPONSE,
+    what: 'a clipboard read, parked on the browser that owns the clipboard',
+    block: () =>
+      actionEmitter.readUserClipboard({
+        maxChars: 100,
+        image: false,
+        maxImagePx: 0,
+        maxImageBytes: 0,
+      }),
+    async witness(h) {
+      const frame = await h.client.waitForFrame(ServerEventType.ACTIONS, (f) =>
+        f.actions.some((a) => a.type === 'user.clipboard.read'),
+      );
+      const read = frame.actions.find(
+        (a) => a.type === 'user.clipboard.read',
+      ) as UserClipboardReadAction;
+      // Without an id on the wire the desktop has nothing to answer *to*, and the wait can
+      // only time out — the same defect the capture row guards `requestId` against.
+      expect(read.id).toBeTruthy();
+      return read;
+    },
+    answer: (h, _s, read) =>
+      h.client.deliver({
+        type: ClientEventType.CLIPBOARD_RESPONSE,
+        requestId: read.id,
+        ok: true,
+        text: ANSWERED.clipboardText,
+      }),
+    check: (tool) => {
+      const outcome = tool.result as PendingOutcome<ClipboardFeedback>;
+      // Nobody answering yields `ok: false` — the caller is told the desktop said nothing,
+      // never that the clipboard was empty. Text can only have come through the socket.
+      expect(outcome.ok).toBe(true);
+      expect(outcome.ok && outcome.value.text).toBe(ANSWERED.clipboardText);
     },
   }),
 ];

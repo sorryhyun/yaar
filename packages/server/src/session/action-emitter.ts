@@ -20,6 +20,8 @@ import {
   type UserPromptDismissAction,
   type UserPromptOption,
   type UserPromptInputField,
+  type UserClipboardAction,
+  type ClipboardResponseEvent,
 } from '@yaar/shared';
 import type { ActionEmitterChannels, ActionEvent, AppReadyEvent } from './emitter-channels.js';
 import { getAgentId, getMonitorId, getSessionId } from '../agents/agent-context.js';
@@ -95,6 +97,14 @@ export interface UserPromptResult {
 }
 
 /**
+ * The desktop's answer to a clipboard read or write, minus the frame's own `type`.
+ *
+ * Structurally the `CLIPBOARD_RESPONSE` payload, so the controller forwards it without
+ * re-describing it — but named here because this is the shape a *tool* reads.
+ */
+export type ClipboardFeedback = Omit<ClipboardResponseEvent, 'type'>;
+
+/**
  * How long an expired dialog is remembered so a click already on its way still counts.
  */
 const EXPIRED_DIALOG_GRACE_MS = 5 * 60_000;
@@ -124,6 +134,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   private pendingRequests = new PendingStore<RenderingFeedback>();
   private pendingDialogs = new PendingStore<boolean, PermissionOptions | undefined>();
   private pendingUserPrompts = new PendingStore<UserPromptResult>();
+  private pendingClipboard = new PendingStore<ClipboardFeedback>();
   private pendingAppRequests = new PendingStore<AppProtocolResponse, AppRequestMeta>();
   /**
    * App protocol requests whose deadline passed, kept just long enough to recognize a reply
@@ -612,6 +623,83 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   }
 
   /**
+   * Ask the desktop to touch the system clipboard, and wait for what it found.
+   *
+   * The server has no clipboard of its own to read — see {@link UserClipboardReadAction}.
+   * So this is the same server→client wait as a prompt or a capture, and it is registered
+   * in `ANSWER_EVENT_TYPES` for the same reason: the answer arrives on the socket the
+   * parked turn is holding, and must overtake it.
+   *
+   * Delivered on the session-scoped `'user-clipboard'` channel rather than `'action'`.
+   * The clipboard is a property of the browser, not of a monitor, and the `'action'`
+   * channel's monitor stamping would filter the read out of every connection whose tab is
+   * showing a different monitor than the agent is running on.
+   */
+  private askDesktopForClipboard(
+    build: (id: string) => UserClipboardAction,
+    timeoutMs?: number,
+  ): Promise<PendingOutcome<ClipboardFeedback>> {
+    const sessionId = this.resolveSessionId();
+    if (!sessionId) {
+      // No desktop to ask, so settle now rather than parking on a wait nothing can answer.
+      // `cancelled` (not `timeout`) — the request never went out at all.
+      this.reportUnaddressed('clipboard request');
+      return Promise.resolve({ ok: false, reason: 'cancelled' } as const);
+    }
+
+    const id = `clip-${Date.now()}-${++this.requestCounter}`;
+    const pending = this.pendingClipboard.create(id, {
+      timeoutMs: clampDeadline(timeoutMs ?? deadlines.clipboardMs),
+      sessionId,
+    });
+
+    this.emit('user-clipboard', {
+      sessionId,
+      event: {
+        type: ServerEventType.ACTIONS,
+        actions: [build(id) as OSAction],
+        agentId: getAgentId() ?? 'system',
+      },
+    });
+
+    return pending;
+  }
+
+  /** Read the system clipboard, with every ceiling applied by the desktop before sending. */
+  readUserClipboard(opts: {
+    maxChars: number;
+    image: boolean;
+    maxImagePx: number;
+    maxImageBytes: number;
+    timeoutMs?: number;
+  }): Promise<PendingOutcome<ClipboardFeedback>> {
+    return this.askDesktopForClipboard(
+      (id) => ({
+        type: 'user.clipboard.read',
+        id,
+        maxChars: opts.maxChars,
+        image: opts.image,
+        maxImagePx: opts.maxImagePx,
+        maxImageBytes: opts.maxImageBytes,
+      }),
+      opts.timeoutMs,
+    );
+  }
+
+  /** Put text on the system clipboard. Waits so the caller can report whether it landed. */
+  writeUserClipboard(text: string, timeoutMs?: number): Promise<PendingOutcome<ClipboardFeedback>> {
+    return this.askDesktopForClipboard(
+      (id) => ({ type: 'user.clipboard.write', id, text }),
+      timeoutMs,
+    );
+  }
+
+  /** Resolve a pending clipboard request with the desktop's answer. */
+  resolveClipboardFeedback(feedback: ClipboardFeedback): boolean {
+    return this.pendingClipboard.resolve(feedback.requestId, feedback).resolved;
+  }
+
+  /**
    * Notify that an iframe app in `sessionId` has registered with the App Protocol.
    * Resolves any pending waitForAppReady() calls for that session's window.
    */
@@ -849,6 +937,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     this.pendingRequests.clearForSession(sessionId);
     this.pendingDialogs.clearForSession(sessionId);
     this.pendingUserPrompts.clearForSession(sessionId);
+    this.pendingClipboard.clearForSession(sessionId);
     this.pendingAppRequests.clearForSession(sessionId);
     this.readyWindows.delete(sessionId);
   }

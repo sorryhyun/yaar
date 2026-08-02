@@ -21,6 +21,7 @@ import type {
   DesktopUpdateSettingsAction,
   WindowCreateAction,
   ActiveAgentSnapshot,
+  UserClipboardAction,
 } from '@yaar/shared';
 import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 // Import all slice creators
@@ -54,6 +55,7 @@ import { applyNotificationAction } from './slices/notificationsSlice';
 import { applyToastAction } from './slices/toastsSlice';
 import { applyDialogAction } from './slices/dialogsSlice';
 import { applyUserPromptAction } from './slices/userPromptsSlice';
+import { handleClipboardAction } from '@/lib/clipboard';
 
 // Import iframe bridge (circular import — safe, only accessed at runtime)
 import {
@@ -123,6 +125,13 @@ export const useDesktopStore = create<DesktopStore>()(
         return;
       }
 
+      // The clipboard is reached through `navigator`, not through store state — same
+      // shape as `window.capture`: do the async work, answer the socket, hold nothing.
+      if (actionType.startsWith('user.clipboard.')) {
+        handleClipboardAction(action as UserClipboardAction);
+        return;
+      }
+
       if (actionType.startsWith('window.')) {
         store.handleWindowAction(action as WindowAction);
       } else if (actionType.startsWith('notification.')) {
@@ -177,7 +186,11 @@ export const useDesktopStore = create<DesktopStore>()(
       const syncActions: OSAction[] = [];
       const asyncActions: OSAction[] = [];
       for (const action of actions) {
-        if (action.type === 'window.capture' || action.type === 'desktop.updateSettings')
+        if (
+          action.type === 'window.capture' ||
+          action.type === 'desktop.updateSettings' ||
+          action.type.startsWith('user.clipboard.')
+        )
           asyncActions.push(action);
         else syncActions.push(action);
       }

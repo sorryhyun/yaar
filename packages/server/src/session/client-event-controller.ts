@@ -96,6 +96,7 @@ export class ClientEventController {
       [ClientEventType.APP_EVENT]: (event) => this.deps.appWindows.handleAppEvent(event),
       [ClientEventType.TOAST_ACTION]: (event) => this.handleToastAction(event),
       [ClientEventType.USER_PROMPT_RESPONSE]: (event) => this.handleUserPromptResponse(event),
+      [ClientEventType.CLIPBOARD_RESPONSE]: (event) => this.handleClipboardResponse(event),
       [ClientEventType.USER_INTERACTION]: (event, connectionId) =>
         this.handleUserInteraction(event, connectionId),
       [ClientEventType.SUBSCRIBE_MONITOR]: (event, connectionId) =>
@@ -323,6 +324,21 @@ export class ClientEventController {
     if (!resolved && !event.dismissed) {
       this.notifyTooLate('That prompt expired before you answered, so your answer was not sent.');
     }
+  }
+
+  /**
+   * The desktop reporting back on a clipboard read or write.
+   *
+   * Deliberately silent when the id is unknown, unlike a late dialog or prompt answer.
+   * Those are the *user* being told their click landed on nothing; this is the browser
+   * answering a question the agent asked, and a toast about it would be noise about
+   * plumbing the user never saw.
+   */
+  private handleClipboardResponse(
+    event: ClientEventOf<typeof ClientEventType.CLIPBOARD_RESPONSE>,
+  ): void {
+    const { type: _type, ...feedback } = event;
+    actionEmitter.resolveClipboardFeedback(feedback);
   }
 
   /**

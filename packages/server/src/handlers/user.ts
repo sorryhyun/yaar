@@ -9,14 +9,24 @@
  *   delete('yaar://user/notifications/{id}')                   → dismiss notification
  *   invoke('yaar://user/prompts', { action: 'ask', ... })      → ask user a question
  *   invoke('yaar://user/prompts', { action: 'request', ... })  → request user action
+ *   read('yaar://user/clipboard')                              → what is on the clipboard
+ *   invoke('yaar://user/clipboard', { action: 'write', ... })  → put text on the clipboard
+ *   invoke('yaar://user/clipboard', { action: 'save', ... })   → the whole of it, to a file
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
 import type { ResolvedUri } from './uri-resolve.js';
-import { ok, okJson, error, assertUri, requireAction } from './utils.js';
+import { ok, okJson, okWithImages, error, assertUri, requireAction } from './utils.js';
 import { defineActions } from './define-actions.js';
 import { showNotification, dismissNotification } from '../features/user/notifications.js';
 import { askUser, requestUserInput } from '../features/user/prompts.js';
+import {
+  readClipboard,
+  writeClipboard,
+  saveClipboard,
+  CLIPBOARD_TEXT_LIMIT,
+  CLIPBOARD_IMAGE_MAX_PX,
+} from '../features/user/clipboard.js';
 
 export function registerUserHandlers(registry: ResourceRegistry): void {
   // ── yaar://user/notifications — show/manage notifications ──
@@ -146,6 +156,135 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
 
       const p = payload!;
       return promptActions.dispatch(p.action as string, p);
+    },
+  });
+
+  // ── yaar://user/clipboard — the system clipboard, read through the desktop ──
+  const clipboardActions = defineActions<Record<string, unknown>>({
+    write: {
+      description: 'Put text on the system clipboard.',
+      run: async (p) => {
+        if (typeof p.text !== 'string') return error('"text" (string) is required for "write".');
+        const result = await writeClipboard(p.text);
+        return result.success
+          ? ok(`Copied ${p.text.length} characters to the clipboard.`)
+          : error(result.error!);
+      },
+    },
+    save: {
+      description:
+        'Write the whole clipboard (untruncated text, full-resolution image) to a storage ' +
+        'path and return its URI. The door for content too large to read.',
+      run: async (p) => {
+        if (typeof p.path !== 'string' || !p.path.trim()) {
+          return error('"path" (a storage path like "temp/paste.txt") is required for "save".');
+        }
+        const result = await saveClipboard(p.path.trim());
+        if (!result.success) return error(result.error!);
+        return okJson({
+          uri: result.uri,
+          kind: result.kind,
+          bytes: result.bytes,
+          ...(result.truncated
+            ? {
+                truncated: true,
+                totalChars: result.totalChars,
+                note: 'The clipboard exceeded even the save ceiling; the file holds its start.',
+              }
+            : {}),
+        });
+      },
+    },
+  });
+
+  registry.register('yaar://user/clipboard', {
+    description:
+      'The system clipboard. Read it to see what the user has copied — text is truncated ' +
+      `to ${CLIPBOARD_TEXT_LIMIT.toLocaleString()} characters and an image is downscaled to ` +
+      `${CLIPBOARD_IMAGE_MAX_PX}px on its longest edge, both reported when they happen. ` +
+      'Invoke with action "write" to put text on it, or action "save" to write the whole ' +
+      'of it (untruncated text, full-resolution image) to storage and get back a URI.',
+    verbs: ['describe', 'read', 'invoke'],
+    invokeSchema: {
+      type: 'object',
+      required: ['action'],
+      properties: {
+        action: clipboardActions.schema,
+        text: { type: 'string', description: 'Text to put on the clipboard (write)' },
+        path: {
+          type: 'string',
+          description:
+            'Storage path to write the clipboard to, e.g. "temp/paste.txt" (save). For an ' +
+            "image the extension may be omitted — the clipboard's own format decides it.",
+        },
+      },
+    },
+
+    /**
+     * Written out rather than auto-generated, because the two things most likely to go
+     * wrong here are not visible from the schema: the clipboard lives in the *browser*
+     * (so a read can be refused by a permission YAAR does not own, and there is a real
+     * user-consent story behind it), and a read is deliberately lossy.
+     */
+    async describe(resolved: ResolvedUri): Promise<VerbResult> {
+      assertUri(resolved, 'user');
+      return okJson({
+        uri: resolved.sourceUri,
+        description:
+          'The user’s system clipboard. YAAR has no clipboard of its own: the read happens ' +
+          'in the browser showing the desktop, which under REMOTE=1 may be a different ' +
+          'machine entirely than the one running the server. The browser gates clipboard ' +
+          'reads behind its own permission prompt, so the first read may need the user to ' +
+          'allow it, and a refusal is theirs rather than an error to retry around.',
+        verbs: ['describe', 'read', 'invoke'],
+        limits: {
+          textChars: CLIPBOARD_TEXT_LIMIT,
+          imageLongestEdgePx: CLIPBOARD_IMAGE_MAX_PX,
+          note:
+            'A read is sized for a conversation and says so when it trims. When the whole ' +
+            'thing is wanted, invoke with action "save" — it writes to storage and returns ' +
+            'a URI instead of spending context on bytes nobody reads.',
+        },
+        invokeActions: clipboardActions.docs,
+      });
+    },
+
+    async read(resolved: ResolvedUri): Promise<VerbResult> {
+      assertUri(resolved, 'user');
+      const result = await readClipboard();
+      if (!result.success) return error(result.error!);
+
+      const notes: string[] = [];
+      if (result.text !== undefined) {
+        notes.push(
+          result.truncated
+            ? `Clipboard text (first ${result.text.length.toLocaleString()} of ` +
+                `${result.totalChars?.toLocaleString()} characters — invoke with action "save" ` +
+                `to write all of it to storage):\n\n${result.text}`
+            : `Clipboard text:\n\n${result.text}`,
+        );
+      }
+      if (result.image) {
+        const { width, height, bytes, downscaled, mimeType } = result.image;
+        notes.push(
+          `Clipboard image: ${width}×${height} originally, attached as ${mimeType} ` +
+            `(${Math.round(bytes / 1024)} KB)` +
+            (downscaled
+              ? ' — downscaled for viewing; action "save" writes it at full resolution.'
+              : '.'),
+        );
+      }
+
+      const text = notes.join('\n\n');
+      return result.image
+        ? okWithImages(text, [{ data: result.image.data, mimeType: result.image.mimeType }])
+        : ok(text);
+    },
+
+    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
+      const actionErr = requireAction(payload);
+      if (actionErr) return actionErr;
+      return clipboardActions.dispatch(payload!.action as string, payload!);
     },
   });
 }

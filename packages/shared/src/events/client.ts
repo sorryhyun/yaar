@@ -143,6 +143,48 @@ export interface UserPromptResponseEvent {
   dismissed?: boolean;
 }
 
+/**
+ * An image lifted off the clipboard, already sized to the request's ceilings.
+ *
+ * `width`/`height` are the image's *natural* size, before any downscale, so a caller can
+ * tell a thumbnail of a 4K screenshot from a 200px avatar that arrived untouched — the
+ * base64 alone cannot say which it is looking at.
+ */
+export interface ClipboardImagePayload {
+  /** Base64 bytes, no `data:` prefix — same shape as `RenderingFeedbackEvent.imageData`. */
+  data: string;
+  mimeType: string;
+  /** Decoded size in bytes. What the image costs, not what its base64 spelling costs. */
+  bytes: number;
+  width: number;
+  height: number;
+  /** The desktop re-encoded it smaller to fit `maxImagePx`/`maxImageBytes`. */
+  downscaled?: boolean;
+}
+
+/**
+ * The desktop's answer to a `user.clipboard.read` / `user.clipboard.write`.
+ *
+ * `reason` is machine-readable because the failures are not interchangeable and the caller
+ * has to say something different about each: a denied read is fixed by the user granting
+ * clipboard access, an unfocused one by clicking the desktop first, an empty one by
+ * copying something. Collapsing them into one "clipboard read failed" is what makes an
+ * agent guess.
+ */
+export interface ClipboardResponseEvent {
+  type: typeof ClientEventType.CLIPBOARD_RESPONSE;
+  requestId: string;
+  ok: boolean;
+  /** Clipboard text, already trimmed to the request's `maxChars`. */
+  text?: string;
+  /** True length in characters, present only when `text` is a prefix of it. */
+  totalChars?: number;
+  truncated?: boolean;
+  image?: ClipboardImagePayload;
+  reason?: 'denied' | 'not-focused' | 'unsupported' | 'empty' | 'too-large' | 'failed';
+  error?: string;
+}
+
 export interface UserInteractionEvent {
   type: typeof ClientEventType.USER_INTERACTION;
   interactions: UserInteraction[];
@@ -252,6 +294,7 @@ export type ClientEvent =
   | DialogFeedbackEvent
   | ToastActionEvent
   | UserPromptResponseEvent
+  | ClipboardResponseEvent
   | UserInteractionEvent
   | AppProtocolResponseEvent
   | AppProtocolReadyEvent

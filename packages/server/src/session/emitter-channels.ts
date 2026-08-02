@@ -114,6 +114,8 @@ export interface ActionEmitterChannels {
   'session-action': [SessionScopedEvent];
   /** A prompt shown to the user (`user.prompt.show`). */
   'user-prompt': [SessionScopedEvent];
+  /** A clipboard read/write the desktop must perform on the server's behalf. */
+  'user-clipboard': [SessionScopedEvent];
   /** A permission dialog awaiting an answer. */
   'approval-request': [SessionScopedEvent];
   /** A change ping or stream frame for an iframe's verb subscription. */

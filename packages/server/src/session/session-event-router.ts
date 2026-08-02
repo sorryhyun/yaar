@@ -55,6 +55,10 @@ import type { SessionId } from './types.js';
 const FORWARDED_SESSION_CHANNELS: readonly SessionScopedChannel[] = [
   'approval-request',
   'user-prompt',
+  // The clipboard belongs to the browser, not to a monitor: whichever desktop is attached
+  // answers, and filtering by monitor would drop the read on a session whose agent is on
+  // monitor 1 while the tab shows monitor 0.
+  'user-clipboard',
   // Actions the server sends on its own behalf, outside any agent turn — a dialog whose
   // deadline passed being taken off the screen. There is no monitor context on a timer
   // callback, and a dialog is session-scoped anyway.

@@ -47,6 +47,7 @@ export const ClientEventType = {
   DIALOG_FEEDBACK: 'DIALOG_FEEDBACK',
   TOAST_ACTION: 'TOAST_ACTION',
   USER_PROMPT_RESPONSE: 'USER_PROMPT_RESPONSE',
+  CLIPBOARD_RESPONSE: 'CLIPBOARD_RESPONSE',
   USER_INTERACTION: 'USER_INTERACTION',
   APP_INTERACTION: 'APP_INTERACTION',
   APP_PROTOCOL_RESPONSE: 'APP_PROTOCOL_RESPONSE',
@@ -84,6 +85,7 @@ export const ANSWER_EVENT_TYPES = [
   ClientEventType.RENDERING_FEEDBACK, // → PendingStore (emitActionWithFeedback)
   ClientEventType.DIALOG_FEEDBACK, // → PendingStore (confirm/permission dialogs)
   ClientEventType.USER_PROMPT_RESPONSE, // → PendingStore (user prompts)
+  ClientEventType.CLIPBOARD_RESPONSE, // → PendingStore (yaar://user/clipboard)
 ] as const;
 
 /** A client frame that answers a pending server-side wait. See ANSWER_EVENT_TYPES. */

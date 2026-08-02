@@ -250,7 +250,42 @@ Callable by every agent tier:
 | `yaar://user/notifications` | Show notification (invoke with `{ id, title, body }`) |
 | `yaar://user/notifications/{id}` | Dismiss notification (delete) |
 | `yaar://user/prompts` | User prompts (invoke with `{ action: 'ask' \| 'request', ... }`) |
-| `yaar://user/clipboard` | **Not yet implemented.** The `clipboard` sub-kind is recognized by URI parsing (`packages/server/src/lib/yaar-uri-server.ts`), but no handler is registered for it in `packages/server/src/handlers/user.ts` — invoking it resolves to "no handler found." |
+| `yaar://user/clipboard` | The system clipboard: `read` for what is on it, `invoke` with `{ action: 'write', text }` or `{ action: 'save', path }` |
+
+#### The clipboard is the browser's
+
+YAAR has no clipboard of its own. `read('yaar://user/clipboard')` emits a `user.clipboard.read`
+action, the desktop answers with a `CLIPBOARD_RESPONSE` frame, and the turn is parked in between —
+it is a server→client wait like a prompt or a capture, and it is registered in `ANSWER_EVENT_TYPES`
+for the same reason (see `packages/shared/src/events/routing.ts`). Three consequences:
+
+- **A refusal is the browser's, not YAAR's.** Reads are gated by the browser's own
+  clipboard permission, so the first one may need the user to allow it in site settings; the
+  answer distinguishes `denied` from `not-focused` (browsers refuse a read to an unfocused tab)
+  because the fixes are different.
+- **Under `REMOTE=1` it is the *viewing* device's clipboard**, not the server host's — the phone's,
+  if the phone is what has the desktop open.
+- **No desktop attached, no clipboard.** A read outside a live session fails immediately rather
+  than waiting out its deadline.
+
+#### Ceilings, and the door past them
+
+A `read` is sized for a conversation, and says so whenever it trims (see
+`packages/server/src/features/user/clipboard.ts` for the constants):
+
+| | `read` | `invoke { action: 'save' }` |
+|---|---|---|
+| Text | first 20,000 characters, with the true length reported | untruncated, to the file |
+| Image | downscaled to 1600px on its longest edge, ≤4 MB | full resolution, ≤32 MB |
+| Returns | the content | a `yaar://storage/...` URI |
+
+Truncation happens **in the desktop**, before the data crosses the socket — a 4K screenshot is
+~30 MB decoded, and trimming it server-side would still mean moving all of it through a WebSocket
+frame first. `save` is the escape hatch for both "too long" and "too big to look at": it writes the
+whole thing to storage and hands back the URI, so a large paste becomes a file an app can open
+rather than a prompt nobody can afford. An image wins over text when the clipboard holds both — a
+pasted screenshot usually carries a `text/plain` alternative naming the file, and saving that name
+instead of the picture would look like a successful save of the wrong thing.
 
 ### System — `yaar://system/...`
 

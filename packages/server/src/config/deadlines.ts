@@ -86,6 +86,15 @@ export interface Deadlines {
   userPromptMs: number;
   /** Default wait for the frontend to report on a rendered action. */
   renderFeedbackMs: number;
+  /**
+   * Default wait for the desktop to answer a clipboard read/write.
+   *
+   * Longer than `renderFeedbackMs` even though the work is trivial: the *first* read from
+   * an origin raises the browser's own clipboard-read permission prompt, and that is a
+   * human clicking a button, not a page painting. Shorter than a user prompt, because
+   * unlike a question this is not meant to sit on screen while the user thinks.
+   */
+  clipboardMs: number;
 }
 
 const PRODUCTION_DEADLINES: Readonly<Deadlines> = Object.freeze({
@@ -96,6 +105,7 @@ const PRODUCTION_DEADLINES: Readonly<Deadlines> = Object.freeze({
   dialogMs: 60_000,
   userPromptMs: MAX_REQUEST_DEADLINE_MS,
   renderFeedbackMs: 3_000,
+  clipboardMs: 30_000,
 });
 
 export const deadlines: Deadlines = { ...PRODUCTION_DEADLINES };

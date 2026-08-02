@@ -364,6 +364,42 @@ export interface UserPromptDismissAction {
   id: string;
 }
 
+// ============ Clipboard Actions ============
+
+/**
+ * Ask the desktop what is on the system clipboard.
+ *
+ * The clipboard is the browser's, not the server's, and that is the whole shape of this
+ * action. Under `REMOTE=1` the machine running YAAR and the machine holding the clipboard
+ * are routinely not the same machine; even locally, only the page has
+ * `navigator.clipboard`. So a read is a round trip — this action out, a
+ * `CLIPBOARD_RESPONSE` frame back, matched on `id`.
+ *
+ * Every ceiling below is set by the server and applied by the desktop, so an oversized
+ * clipboard is trimmed *before* it crosses the socket rather than after. A 40 MB image
+ * pasted from a design tool would otherwise be base64'd onto a WebSocket frame in full,
+ * only to be thrown away at the other end.
+ */
+export interface UserClipboardReadAction {
+  type: 'user.clipboard.read';
+  id: string;
+  /** Ceiling on returned text. Past it the desktop trims and reports the true length. */
+  maxChars: number;
+  /** Read an image if one is there. False skips the decode/encode entirely. */
+  image: boolean;
+  /** Longest edge in px an image is downscaled to before encoding. `0` disables downscaling. */
+  maxImagePx: number;
+  /** Hard ceiling on the encoded image, in bytes. Over it, the read reports `too-large`. */
+  maxImageBytes: number;
+}
+
+/** Put text on the system clipboard. Answered by the same `CLIPBOARD_RESPONSE` frame. */
+export interface UserClipboardWriteAction {
+  type: 'user.clipboard.write';
+  id: string;
+  text: string;
+}
+
 // ============ App Actions ============
 
 export interface AppBadgeAction {
@@ -448,6 +484,8 @@ export type DialogAction = DialogConfirmAction | DialogCloseAction;
 
 export type UserPromptAction = UserPromptShowAction | UserPromptDismissAction;
 
+export type UserClipboardAction = UserClipboardReadAction | UserClipboardWriteAction;
+
 export type AppAction = AppBadgeAction;
 
 export type DesktopAction =
@@ -463,6 +501,7 @@ export type OSAction =
   | ToastAction
   | DialogAction
   | UserPromptAction
+  | UserClipboardAction
   | AppAction
   | DesktopAction;
 
