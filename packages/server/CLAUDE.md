@@ -12,64 +12,27 @@ bun run test                   # Every suite, each in the process it needs
 
 ## Tests
 
-`bun run test` is `scripts/run-tests.ts`. It globs **every** `*.test.ts` under `src/`, groups
-them by `scripts/test/partitions.ts`, and spawns one process per group — concurrently, and
-reporting all of them, so a unit failure no longer hides whether the other suites passed. Today
-that is 105 files in 17 processes:
+`bun run test` is `scripts/run-tests.ts`. It globs **every** `*.test.ts` under `src/` (colocated
+files included — which is why `tsconfig.build.json` excludes `**/*.test.ts`), groups them by
+`scripts/test/partitions.ts`, and spawns one process per group, concurrently. The partitions:
 
 1. `units` — one `--parallel` process for the plain unit/component tests.
-2. `remote` — `src/tests/remote/`, with `REMOTE=1` pinned for the whole process.
-3. `loopback` — `src/tests/loopback/`, the loopback harness (see `tests/loopback/harness/`).
-4. `realfs` — `src/tests/realfs/`, which runs real `git` against real app directories and so
-   cannot share a process with the units that `mock.module` `PROJECT_ROOT` to `/mock-root`.
-   The *integration* suite is not here at all: it is the separate `@yaar/tests` package.
-5. one process per file that calls `mock.module` (13 of them).
+2. `remote` — `src/tests/remote/`, with `REMOTE=1` pinned for the whole process (`IS_REMOTE` is a
+   module-load constant, so remote-gate assertions are vacuous in a local-mode process).
+3. `loopback` — `src/tests/loopback/`, the real stack end to end with exactly two fakes
+   (`FakeClient` for the browser, `ScriptedProvider` for the model); sequential, binds real
+   sockets. See `tests/loopback/harness/boot.ts`'s header for the deadlock it exists to catch.
+4. `realfs` — `src/tests/realfs/`, real `git` over a shared fixture dir. (The *integration* suite
+   is the separate `@yaar/tests` package.)
+5. one process per file that calls `mock.module` — the stub is process-global with no teardown.
 
-The glob is `src/**`, not `src/tests/**` plus a hardcoded extra directory: a test file written
-next to the module it covers used to be collected by nothing and reported by nothing (today
-`src/features/update/update.test.ts` is one). `tsconfig.build.json` therefore excludes
-`**/*.test.ts` as well as `src/tests`, or those colocated files compile into `dist/`.
-
-The split is load-bearing, and `scripts/test/partition-guard.ts` (third preload in `bunfig.toml`)
-enforces it rather than trusting it — `bun test src/tests` looks reasonable and quietly mixes the
-mocking files into the shared process, so the guard stops the run and prints the right command.
-See `scripts/test/partitions.ts` for each partition's rationale.
-
-**Every suite starts from a pinned environment**, not the developer's. `scripts/test/env.ts` is
-preloaded (`bunfig.toml`, first entry, shared by every package in the repo) before any test file
-— and therefore before `config/env.ts` freezes `IS_REMOTE`. It scrubs every `YAAR_*` var and the
-documented knobs (`REMOTE`, `PORT`, `PROVIDER`, `MCP_SKIP_AUTH`, …), pins `REMOTE` explicitly,
-points `YAAR_CONFIG`/`YAAR_STORAGE` at throwaway temp dirs, and sets `YAAR_SKIP_DOTENV`. Without
-it a developer who had toggled remote mode on in the configurations app ran the whole suite in
-remote mode: `settings.json` fed `loadPersistedRemote()`, and `http-routing.test.ts` /
-`app-origin-isolation.test.ts` failed locally while passing in CI, which has no such file.
-
-`YAAR_TEST_REMOTE=1` is how that is carried, but `src/tests/remote/` **is** the opt-in: `test/env.ts`
-sets the var itself when the first collected file lives there, so running one of those files by
-path (`bun test packages/server/src/tests/remote/…`, the obvious move after a red CI line) cannot
-silently become a local-mode run. It necessarily scopes to a **whole process**:
-`IS_REMOTE` is a module-load constant, so a local-mode process cannot assert anything about the
-remote gate — `checkHttpAuth` returns `null` on its first line and every assertion passes
-regardless. That vacuity is not hypothetical; see the header of
-`packages/tests/src/integration/ml-runtime-remote-auth.test.ts`. Hence the pairing: local-mode
-rows in `app-origin-isolation.test.ts` and `http-routing.test.ts`, remote-mode rows in
-`src/tests/remote/remote-mode.test.ts`, each asserting its own `IS_REMOTE` up front so a broken
-wiring fails loudly instead of quietly passing.
-
-**The unit suite is itself partitioned by process.** The split is computed from source on every
-run, so there is no list to keep in sync: any file that calls `mock.module` gets its own process
-(still run concurrently with the rest), everything else shares one `--parallel` process — because
-`mock.module` is process-global with no teardown, so a stub is otherwise visible to every
-concurrently-running file that imports the same specifier. Full rationale, including the CI
-incident that forced this, is in `scripts/test/partitions.ts`.
-
-The loopback harness runs the real stack end to end — `createWsHandlers` → `SessionHub` →
-`LiveSession` → `ContextPool` → `AgentSession` → `actionEmitter` → `PendingStore` — with
-exactly two fakes: the browser (`FakeClient`) and the model (`ScriptedProvider`). It needs its
-own process, and a sequential one: run the 80 non-remote files together under `--parallel` and
-45 fail, because this suite binds real sockets and `src/tests/realfs/` reseeds one on-disk
-fixture directory across its cases. Full rationale, including
-the deadlock this exists to catch, is in `tests/loopback/harness/boot.ts`'s header comment.
+The split is load-bearing and enforced: `scripts/test/partition-guard.ts` (preloaded via
+`bunfig.toml`) stops any run that mixes partitions and prints the right command for each.
+Every suite starts from a pinned environment — `scripts/test/env.ts` scrubs `YAAR_*` and the
+documented knobs and points config/storage at temp dirs, and sets `YAAR_TEST_REMOTE=1` itself
+when the collected files live under `src/tests/remote/`, so a by-path run stays a remote-mode
+run. Full rationale, including the CI incidents that forced each rule, is in
+`scripts/test/partitions.ts` and `scripts/test/env.ts`.
 
 Three rules follow:
 
@@ -99,8 +62,7 @@ client can only answer over a socket the server is holding is a deadlock waiting
 - `YAAR_STORAGE` / `YAAR_CONFIG` - Override storage/config directory paths
 - `YAAR_SKIP_DOTENV` - `1` skips loading the root `.env` in `config/env.ts`. Set by `scripts/test/env.ts`: a test run pins every knob explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk back through.
 - `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test/env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
-- `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop. **Enforcing:** `resolvePrincipal` refuses a token-less request that carries the app origin, and `http/server.ts` redirects a desktop document that lands there back to the desktop origin. Closes the token-forgery escapes; being cross-origin also blocks `window.parent` DOM/memory reach, and top-level navigation is closed by the sandbox on isolated frames — see [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
-  **Which two origins** is `http/origin-boundary.ts`'s business, and the one place to ask: `loopback-alias` (local — desktop `localhost`, apps `127.0.0.1`, one socket) | `proxy-port` (Tailscale Serve — one MagicDNS name, `:443` desktop / `:8443` apps, **two local sockets**) | `off`. The env var is only the switch; `isAppOriginIsolationEnabled()` in `config/env.ts` answers for the loopback-alias way alone and is local-mode only. The `proxy-port` boundary is installed at runtime by `lifecycle.startTunnel()` once the transport confirms both origins are live. Over a proxy the addressed origin is unreadable from the request (`url.port` is the loopback hop, `Host`/`X-Forwarded-*` are the proxy's word), so the app-origin socket gets its own `createFetchHandler({ appOriginSocket: true })` running inside `runOnAppOriginSocket()` — which socket a request arrived on is unforgeable. `window.create` carries `appOrigin` only in that mode, since the client cannot derive `https://host:8443`; locally the frontend must derive the alias itself (a dev proxy's port is not the API's).
+- `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop; `resolvePrincipal` refuses a token-less request carrying the app origin. **Which two origins** (`loopback-alias` locally, `proxy-port` over Tailscale Serve, `off`) is `http/origin-boundary.ts`'s business and the one place to ask — its header explains both modes and why the proxy-port attribution is unforgeable. See [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
 - `MONITOR_MAX_CONCURRENT` (default: 2), `MONITOR_MAX_ACTIONS_PER_MIN` (30), `MONITOR_MAX_OUTPUT_PER_MIN` (50000) - Background monitor budget limits
 - `CODEX_WS_PORT` (default: 4510), `CHROME_PATH` (auto-detected), `MARKET_URL`
 - `YAAR_BROWSER_PROVIDER` - **No longer a selector.** `POST /api/browser` is always the headless sandbox (`getHeadlessBrowser()`); the user's real Chrome is reached only through the session-agent door `yaar://session/browser` (`getLocalBrowser()`), which auto-attaches whenever a debuggable Chrome is reachable. The var survives only as a **force-headless opt-out**: set `=headless` to keep the agent away from your real browser (the session door then uses the sandbox too).
@@ -260,7 +222,7 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 **Codex:** `codex app-server` child process with per-provider WebSocket connections (`--listen ws://`). Settings: `approval_policy=on-request`, `model_reasoning_effort=medium`, `sandbox_mode=danger-full-access`.
 
-**Codex version policy (`providers/codex/version.ts`):** the bindings in `providers/codex/generated/` are hand-generated by `make codex-types`, so a drifted CLI compiles fine and misbehaves at runtime instead. `CODEX_MIN_VERSION` is the hand-edited floor; `CODEX_GENERATED_FROM` (in `generated/codex-version.ts`, stamped by the codegen script) records what the bindings came from. Three gates: the codegen script refuses an under-versioned binary (fails *closed*, `--force` overrides), `factory.ts` treats one as unavailable so auto-detect picks Claude, and `assertSupportedCodex` checks the `initialize` `userAgent` of whichever app-server actually answered — the only gate that catches a stale process still holding `CODEX_WS_PORT`. The last two fail *open* on an unparseable version (the format is OpenAI's to change). `CodexVersionError` is never retried by `connectAndInitialize`, and a **forced** `PROVIDER=codex` turns it into a refused boot in `lifecycle.ts` rather than a silent fallback to Claude. Covered by `tests/codex-version.test.ts` and `tests/warm-pool-codex-version.test.ts`.
+**Codex version policy (`providers/codex/version.ts`):** the bindings in `providers/codex/generated/` are hand-generated by `make codex-types`, so an under-versioned CLI is **refused rather than driven** — at codegen (fails closed), at auto-detect in `factory.ts` (skipped, Claude picked), and at the `initialize` handshake (`assertSupportedCodex`, the only gate that catches a stale process on `CODEX_WS_PORT`). A **forced** `PROVIDER=codex` turns the refusal into a refused boot rather than a silent fallback. Gate-by-gate rationale in `version.ts`; covered by `tests/codex-version.test.ts` and `tests/warm-pool-codex-version.test.ts`.
 
 ## Tools (MCP)
 
@@ -283,92 +245,60 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 | `list` | ✗ not a collection | this window's built-in keys, then the app's state keys and commands |
 | sub-paths | `storage/`, `db/`, `agents/` | `state/{key}`, `commands/{key}` |
 
-Four rules hold this together, each closing a false success:
+Five rules hold this together, each closing a false success (each is documented in full at the
+named site):
 
-- **`exists?(resolved)` on `ResourceHandler`** is consulted before the auto-generated `describe`, which otherwise answers from the URI *pattern* — byte-identical for a live window, a markdown window, and a window that has never existed. False → `No resource at <uri>.` `register()` **throws** when a `/*` wildcard declares neither `exists` nor `describe`: a wildcard is the one shape where the id can be wrong, and an optional field nobody remembers is how this got in. `apps/*`, `storage/*`, `mcp/*` and `user/notifications/*` own their own `describe` instead; the last is the one namespace that genuinely cannot answer (the client owns the toast), and says so.
-- **The same list is declared once.** `defineActions` (`handlers/define-actions.ts`) now carries a per-action `description`, so the schema `enum`, `describe`'s `invokeActions`, and the dispatch all come off one table. The app actions were previously written three times — `describe` advertised `set_badge` alone, the switch implemented seven, and the enum named five including a `write` it never handled.
-- **`yaar://apps/{id}/state/…` and `/commands/…` are refused on every verb** (`handlers/apps/register.ts`). Protocol state belongs to a running window; the same app open on two monitors is two states. Deliberately narrow — the blanket version would delete `appStorage` and `appDb`, which are built entirely on reads and lists under `yaar://apps/self/{storage,db}/`.
-- **A missing directory is an error, not an empty list.** `storageList` used to return `{ success: true, entries: [] }` for a path that isn't there, so `list('yaar://storage/nope/')` read as an empty folder; it now sets `notFound`. Namespace roots opt back in explicitly (an app's `storage/` exists from the moment the app does — the directory is created by the first write).
-- **The converse: a resource that exists and holds nothing answers, it does not complain.** `list` on a window with no protocol used to be an error naming the app the window never had — a question about the *app* answered when one was asked about the *window*. Every window now has three state keys of its own (`BUILTIN_STATE` in `handlers/window.ts`): `__content` and `__screenshot` answered by the OS, `__console` by the injected script. So the markdown window lists `state/__content`, and a bare `read` of an iframe window is the named composition `__content` + `__screenshot` — the screenshot wins and `contentOmitted` says where the content went, instead of `content` silently vanishing whenever a capture happened to succeed. `__` is reserved: an app key by one of these names is shadowed, not merged.
+- **`exists?(resolved)` on `ResourceHandler`** is consulted before the auto-generated `describe`; a `/*` wildcard that declares neither `exists` nor `describe` makes `register()` **throw**. (`handlers/uri-registry.ts`)
+- **The same action list is declared once** — `defineActions` derives the schema `enum`, `describe`'s `invokeActions`, and the dispatch from one table, so they cannot drift. (`handlers/define-actions.ts`)
+- **`yaar://apps/{id}/state/…` and `/commands/…` are refused on every verb** — protocol state belongs to a running window, and the same app on two monitors is two states. (`handlers/apps/register.ts`)
+- **A missing directory is an error, not an empty list** (`storageList` sets `notFound`); namespace roots opt back in explicitly.
+- **A resource that exists and holds nothing answers, it does not complain** — every window has the three built-in state keys (`BUILTIN_STATE`: `__content`, `__screenshot`, `__console`; `__` is reserved, an app key by those names is shadowed). (`handlers/window.ts`)
 
-**A call batches on two axes, and neither is a handler's business.** Brace expansion (`handlers/index.ts`) batches *URIs* against one payload, concurrently — expanded URIs name distinct resources. An **array payload** to `invoke` batches *payloads* against one URI, and `ResourceRegistry.execute` runs those **sequentially**, stopping at the first failure and naming the index to resend from: the elements are edits to one resource in a stated order, so overlapping them would make the result depend on scheduling, and running past a failure would edit a resource nobody asked to edit. Each element goes back through `execute`, so it is resolved, access-checked and verb-checked exactly as a lone invoke would be — a batch is a spelling, never a bypass, which is also why `routes/verb.ts` runs its `copy` source-permission check per element. `handler.invoke` never sees the array (`MAX_BATCH_PAYLOADS = 100`, refused rather than truncated). The axis that was missing is the expensive one: authoring a 53-node scene is one `addNodes`, but the forty follow-up tweaks that each nudge one node were forty calls, since no two payloads were alike.
+**A call batches on two axes, and neither is a handler's business.** Brace expansion (`handlers/index.ts`) batches *URIs* against one payload, concurrently. An **array payload** to `invoke` batches *payloads* against one URI, run **sequentially** by `ResourceRegistry.execute`, stopping at the first failure and naming the index to resend from; each element is resolved, access-checked and verb-checked exactly as a lone invoke would be — a batch is a spelling, never a bypass. `handler.invoke` never sees the array (`MAX_BATCH_PAYLOADS = 100`, refused rather than truncated). Rationale at the `MAX_BATCH_PAYLOADS` declaration in `uri-registry.ts`.
 
 **Access tiers (role-based URI access control):** every agent carries a principal `role` (`session` / `monitor` / `app`) on its `AgentContext`. A handler may declare `access: 'session-principal'`, and `ResourceRegistry.execute()` then rejects any caller whose role isn't `session` (default-deny — `undefined` role is non-session). `yaar://session` and all `yaar://session/*` resources are marked session-principal, so only the session agent can read/invoke them; monitor/app agents and apps (`POST /api/verb` also hard-refuses `yaar://session/*`) get a `403`. The role is resolved from the pool (`AgentPool.getRoleForAgent` via `SessionHub.findRoleForAgent`) in the MCP path and from the per-turn role string (`principalRole()`) in-process. The gate's role resolver is injected via `setAccessRoleResolver()` (wired in `lifecycle.ts`) to avoid a runtime import cycle.
 
-**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas. A fourth request kind, `describe`, documents **one** state key or command (`handleAppDescribe` in `features/window/app-protocol.ts`): the app's own `describe()` when the entry defines one, the manifest's static `description` when it doesn't, an error only when the key is absent. Erroring on a documented key would report it as missing — the same false signal `exists` exists to remove. It is requested on demand and never folded into the manifest, or every manifest read would pay for every key. A **command's** answer also carries its rendered `signature`, an `invoke` example with the literal param names, and its `schema` (`lib/command-signature.ts`, the same renderer the app agent's prompt uses); the signature also prefixes each command's `description` in `list('yaar://windows/{id}')`, so the list is enough to call from.
+**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas. A fourth request kind, `describe`, documents **one** state key or command on demand (`handleAppDescribe` in `features/window/app-protocol.ts`) — never folded into the manifest, or every manifest read would pay for every key. A command's answer carries its rendered `signature`, an `invoke` example, and its `schema` (`lib/command-signature.ts`); the signature also prefixes each command's `description` in `list('yaar://windows/{id}')`, so the list is enough to call from.
 
-**A reserved payload key is checked against the command's schema, not against its name** (`invokeSubResource` in `handlers/window.ts`). `action`, `params` and `timeoutMs` mean something to the `commands/{key}` spelling — the first two refused, the third consumed as the transport deadline. Applied to the name alone, that made every command declaring one of them unreachable through this URI (`studio-3d.setGeometryParams`, `devtools.previewCommand`) and made `devtools.previewEval(expression, timeoutMs, …)` *silently* wrong: its `timeoutMs` says how long the preview may take to settle, and the server ate it and told the app nothing. A declared key is now the param it is, and a declared `timeoutMs` is both — it steers the deadline too, so the server does not cut off a wait it just authorized. The manifest is consulted only when one of the three names is present, so the ordinary call pays for no lookup; when nothing can account for the command (never registered, ships no `protocol.json`) the old refusals stand, since an undeclared key gets the whole command rejected by the bridge.
+**A reserved payload key (`action`/`params`/`timeoutMs`) is checked against the command's schema, not against its name** — a command that *declares* one of those params keeps it, and a declared `timeoutMs` also steers the transport deadline. Full story at `invokeSubResource` in `handlers/window.ts`.
 
 **Monitor ↔ App Agent Communication:**
 - **Monitor → App**: `invoke('yaar://windows/{id}', { action: 'message', message: '...' })` — wraps message in `<monitor:{monitorId}>` tags and routes as an app task via `AppTaskProcessor`. Fire-and-forget; use `hook: 'response'` to get the app agent's reply back.
+- **Monitor → App, starting over**: the same call with `fresh: true` retires the app agent first (its memory lives in its provider session, which `disposeAppAgent` ends), so the message is answered by an agent that remembers nothing. A `fresh` task never steers, releases inside the processing lock, and drops handoff fingerprints; sub-agents deliberately survive (their owner is the (monitor, app) pair, not the app agent). The rationale for each lives as comments in `AppTaskProcessor` and `AgentPool`.
 - **App → Monitor**: App agent's `relay` tool enqueues a `type: 'monitor'` task. Additionally, app agent responses are pushed to `InteractionTimeline` and drained by the monitor on its next turn.
 
 **Sub-agents / persona agents (`yaar://apps/self/agents`):** an app that declares
-`"subagents": { "max": N }` in its app.json may spawn up to N AI instances, each with a system
-prompt it supplies at runtime and each its own provider session with its own memory. The verb
-surface lives in `handlers/apps/agents-resource.ts` — `list` / `invoke {spawn|message|interrupt}` /
-`read` / `delete` — and is callable from the app's iframe (`POST /api/verb`), never by another app:
-the appId in the URI must equal the appId the *context* says the caller is, which the caller cannot
-forge. `message` returns as soon as the turn is queued, so N sub-agents generate concurrently; the
-answer arrives on the existing `yaar://agents/{instanceId}/stream` feed (needs `"streams": ["agents"]`),
-whose `done` frame carries the turn's final text.
+`"subagents": { "max": N }` in its app.json may spawn up to N AI instances, each with a
+runtime-supplied system prompt and its own provider session/memory. The verb surface is
+`handlers/apps/agents-resource.ts` (`list` / `invoke {spawn|message|interrupt}` / `read` /
+`delete`), callable only from the app's own iframe — the appId in the URI must equal the appId the
+*context* says the caller is. `message` returns as soon as the turn is queued; answers arrive on
+`yaar://agents/{instanceId}/stream` (needs `"streams": ["agents"]`).
 
-Sub-agents deliberately hold **no YAAR verbs, no permissions, and no principal**. A spawn with no
-`tools` gets `allowedTools: []`, from which `buildSDKOptions` derives an empty MCP set and no
-builtins — that empty array is the whole containment story for a runtime-supplied prompt, since
-`undefined` there would mean *every* tool. Every sub-agent bypasses `ContextPool` entirely (no tape,
-no queue — the app's own scheduler serializes them) and is reclaimed when the app's last window on
-the monitor closes, when the monitor is removed, or on explicit `delete`. See
-[`docs/architecture/agent_tree.md`](../../docs/architecture/agent_tree.md) for the design, and
-`chitchats` (rooms with `skip`/`recall`/`memorize`, whose persona documents are what a
-reclaimed character is respawned from) for the reference consumer — it left `apps/` for the
-market, so no bundled app exercises this path in-tree today.
+The containment and gating rules, each documented in full at the named site:
 
-**Who may declare it (`features/apps/capabilities.ts`, `storage/app-grants.ts`).** `subagents` and
-`streams` are gated on the *user*, not on the app's source. A bundled manifest ships with the
-release and is taken at its word; an installed app's is a **request**, itemized in the install
-dialog and recorded as a grant in `config/app-grants.json`, and `getAppMeta` hands back the
-**intersection** of declaration and grant. Intersection rather than a boolean because an app holding
-`yaar-dev` can rewrite its own app.json — a grant of `max: 2` has to stay a ceiling of 2 whatever
-the file says afterwards, and a grant for an app that has since *dropped* the field must grant
-nothing. Two consequences worth knowing: an update is diffed against what the app **holds** (the
-grant), never against its previous manifest, or an install predating grants would be handed the
-capability with no dialog at all; and uninstall clears the grant, so a reinstall asks again.
-`controls` is deliberately not in this scheme — driving another app is authority over separately
-installed software, and nothing is asking for it — so it stays bundled-only.
+- **No YAAR verbs, no permissions, no principal.** A spawn with no `tools` gets
+  `allowedTools: []` — that empty array is the whole containment story, since `undefined` would
+  mean *every* tool. Sub-agents bypass `ContextPool` entirely and are reclaimed with the app's
+  last window, the monitor, or explicit `delete`.
+- **The only capability is a reach back into the owning app's own iframe**
+  (`agents/profiles/sub-agent.ts`): each declared tool becomes one `persona:{name}` app-protocol
+  command, `personaId` stamped last so a model cannot answer as another character. Grants to the
+  app *agent* (`controls`, `direct_message`) do not descend.
+- **`subagents`/`streams` are granted by the user at install time** and applied as a ceiling by
+  intersection with the recorded grant — see `features/apps/capabilities.ts` /
+  `storage/app-grants.ts` for why intersection, update-diffing against the grant, and
+  uninstall-clears-grant all follow. `controls` stays bundled-only.
+- **One manifest key**: the `"personas"` alias is retired and refused by name
+  (`usesRetiredPersonasKey`); the **wire** still says `personaId` — `agents-resource.ts` is the one
+  place the two spellings meet (read `p.subId`, emit `personaId`).
 
-**One manifest key, not two.** `"personas": { "max": N }` was an accepted alias for `subagents` and
-is no longer read. Nothing in the tree or on the market used it except `chitchats`, and two
-spellings for one field meant every doc mentioning it had to mention both. The **wire** is
-unchanged and still says persona — `personaId` in the URI segment, the spawn param, and every
-response body — because a character is what an app spawns and a sub-agent is what YAAR runs; only
-the manifest had to pick a word. Retiring an accepted key makes a working app silently inert, so it
-fails loudly instead: `usesRetiredPersonasKey` drives a `[apps]` warning when the manifest is read
-and a `retired-key` branch in `subAgentDenialReason`, so the refusal says "rename it" rather than
-"add it" — the same trap the bundled-only gate used to set.
-
-**The one channel (`agents/profiles/sub-agent.ts`).** The only capability a sub-agent may be given
-is a reach back into the **owning app's own iframe**. `buildSubAgentProfile` is the one place that
-is decided, and it runs on every sub-agent turn, so the turn's `allowedTools` come from the profile
-and never from the call site. The allowlist is *derived* from the declared tool names
-(`mcp__subagent__{name}`), never taken from the caller, so `buildSDKOptions` connects exactly one
-MCP server; each of its tools becomes one app-protocol command (`persona:{name}`) to the app's
-active window on its own monitor, with `personaId` stamped last so a model cannot answer as another
-character. No window → an error *result*, never a launched window and never a dead turn. Grants to
-the app *agent* (`controls`, `direct_message`) do not descend. Commands named `persona:*` are hidden
-from the app agent's `describe`/manifest (`features/apps/persona-commands.ts`) because their
-spawn-time descriptions are written for a character, not an operator.
-
-In the pool a sub-agent lives in `subAgents` under `subAgentKey(monitorId, appId, subId)`. That key
-extends the app agent's, which extends the monitor's — the four collections are one tree (session →
-monitor → app → sub-agent), addressed through the owner and torn down with it. `buildAgentTree()`
-renders the flat roster in that shape, and `list('yaar://session/agents')` returns both views
-(`agents` flat, `tree` nested; a `tree` node with `id: null` is an owner slot nobody occupies — an
-app whose personas exist but whose own agent was never needed). In the pool the id field is `subId`;
-the **wire** keeps `personaId` (URI segment, spawn param, response bodies), and
-`handlers/apps/agents-resource.ts` is the one place the two spellings meet — read `p.subId`, emit
-`personaId`. See [`docs/architecture/agent_tree.md`](../../docs/architecture/agent_tree.md)
-for the four laws every new node must satisfy, and the triage rule for placing a new one.
+In the pool, `subAgentKey(monitorId, appId, subId)` extends the app agent's key, which extends the
+monitor's — session → monitor → app → sub-agent is one tree, addressed through the owner and torn
+down with it; `list('yaar://session/agents')` returns both flat and tree views. See
+[`docs/architecture/agent_tree.md`](../../docs/architecture/agent_tree.md) for the four laws every
+new node must satisfy and the triage rule for placing one. Reference consumer: `chitchats` (now on
+the market, so no bundled app exercises this path in-tree).
 
 ## REST API
 
@@ -395,43 +325,24 @@ This is the same check `POST /api/verb` runs, shared rather than duplicated — 
 - **The same rewrite runs inside `requirePermission`**, so a URI taken from a request body (`POST /api/verb`) is canonicalized too — `yaar://storage/apps/vault/x` is matched as `yaar://apps/vault/storage/x`. Without it, prefix matching made a declared `yaar://storage/` a permission for every app's private storage; thirteen bundled apps declare it. Applied to grants as well as targets, so either spelling works and they agree. A traversing storage URI names no resource and is refused.
 - Tokens for subresources that cannot set a header (`<img src>`, `EventSource`) ride as `?__yaar_token=`.
 
-**The origin boundary (token-forgery closed):** app-origin isolation is on by default, locally and over the network (`YAAR_APP_ORIGIN_ISOLATION`, set `=0` to disable). Installed apps are served cross-origin (from `127.0.0.1` locally, from `…ts.net:8443` over Tailscale Serve) and `resolvePrincipal` refuses a token-less request carrying the app origin, so an app cannot omit its token and be resolved as `host`. Being cross-origin the browser blocks `window.parent` DOM/memory reach, and top-level navigation (`window.top.location`) is closed by `ISOLATED_APP_SANDBOX` (IframeRenderer.tsx), which withholds only the top-navigation family. The residual is the isolation-*off* case and a tailnet **app** rule that fails to register (logged by `tailscale-tunnel.ts`; deliberately not backfilled with the loopback alias, since a remote browser resolves no `127.0.0.1` of ours and the frontend's `siblingLoopbackOrigin()` derives one only on `localhost`). A tunnel that fails to come up leaves the server loopback-only, where `startTunnel` installs the loopback-alias boundary explicitly (`isAppOriginIsolationEnabled()` is false under `IS_REMOTE`, so without that call the fallback would run with none). One consequence: an isolated app's calls authenticate with their **iframe token**, accepted by `checkHttpAuth` as a credential in its own right — a cross-origin `Referer` is trimmed to a bare origin, so the remote token cannot ride along in it. See [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
+**The origin boundary (token-forgery closed):** installed apps are served cross-origin (see the `YAAR_APP_ORIGIN_ISOLATION` entry above and `http/origin-boundary.ts`'s header), and `resolvePrincipal` refuses a token-less request carrying the app origin, so an app cannot omit its token and be resolved as `host`. Being cross-origin blocks `window.parent` reach; top-level navigation is closed by `ISOLATED_APP_SANDBOX` (IframeRenderer.tsx). An isolated app's calls authenticate with their **iframe token** as a credential in its own right — a cross-origin `Referer` is trimmed to a bare origin, so the remote token cannot ride along in it. Edge cases (tailnet app rule failing to register, tunnel fallback to loopback-alias) are in [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md) and `lifecycle.startTunnel()`.
 
 **MCP principal:** each agent gets a token minted by `mcp/agent-tokens.ts` and bound to its id server-side; providers send it as `X-Agent-Token`. The shared bearer token (`getMcpToken()`) is transport auth only and says nothing about *which* agent is calling. There is deliberately no `x-agent-id` header — an agent that can name a principal can become it.
 
 ## Self-update (`features/update/`)
 
 `yaar://system/update` is how YAAR learns about and installs its own releases; the Configurations
-app's **Updates** tab is the one consumer, and it renders the server's answer rather than
-re-deriving any of it. Four files: `semver.ts` (comparison), `release.ts` (GitHub's
-`/releases/latest`, asset naming, `SHA256SUMS` parsing — all pure or injected-`fetch`),
-`installer.ts` (download, verify, swap), `updater.ts` (status + orchestration).
+app's **Updates** tab is the one consumer. Four files: `semver.ts` (comparison), `release.ts`
+(GitHub `/releases/latest`, asset naming, `SHA256SUMS` parsing), `installer.ts` (download, verify,
+swap), `updater.ts` (status + orchestration).
 
-Five things are load-bearing:
-
-- **`read` never hits the network; only `invoke {action:'check'}` does.** The UI polls `read` once
-  a second during an install, and the anonymous GitHub API allows 60 requests an hour per IP.
-  `check` is itself cached for 5 minutes, `force: true` bypasses it.
-- **`invoke {action:'install'}` returns once the work has started**, not when it finishes. A
-  verified download of the binary plus the apps archive is minutes on a slow link; an HTTP request
-  held open for that is indistinguishable from a hang. Refusals (nothing to install, GitHub
-  unreachable, this build cannot self-update) are thrown *synchronously* so the caller learns the
-  reason without reading it back out of progress state.
-- **A missing or mismatched `SHA256SUMS` is a hard failure.** install.sh warns and continues,
-  because it must still work against releases cut before the manifest existed and against a
-  `VERSION=` pin at one of those tags; the updater only ever targets the latest release, which
-  always publishes one — and a user who clicks a button and walks away has no shell to read a
-  warning in.
-- **Staging is a sibling of `process.execPath`, never `os.tmpdir()`.** The swap is `rename(2)`,
-  which fails across filesystems, and `/tmp` frequently is one.
-- **`getUpdateStatus()` reports the *first* blocker, not the last.** `source-checkout` outranks
-  `no-asset`: a dev checkout is blocked whether or not the release ships its platform's binary, and
-  "download it from the releases page" is the wrong advice for one. `blockedReason` maps 1:1 onto
-  the hint the app shows.
-
-Installing never restarts the server — the running process still holds the old code, and the
-previous binary is left beside the new one as `yaar.previous` (Windows cannot delete a running
-executable; the *next* install clears it).
+The load-bearing rules — each explained in `updater.ts`'s and `installer.ts`'s headers: `read`
+never hits the network (only `invoke {action:'check'}` does, behind a 5-minute cache);
+`install` returns once the work has *started*, with refusals thrown synchronously; a missing or
+mismatched `SHA256SUMS` is a **hard** failure (unlike install.sh's warn-and-continue); staging is
+a sibling of `process.execPath`, never `os.tmpdir()` (the swap is `rename(2)`);
+`getUpdateStatus()` reports the *first* blocker. Installing never restarts the server; the
+previous binary is left beside the new one as `yaar.previous`.
 
 Adding `system` to `YaarAuthority` (`packages/shared/src/yaar-uri.ts`) is what makes the URI
 resolvable — `resolveUri`'s fallback and its bare-authority regex both list it, alongside `skills`

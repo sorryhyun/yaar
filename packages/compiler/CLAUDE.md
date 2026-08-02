@@ -239,40 +239,21 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 ## Bundled Libraries
 
 `getBundledLibraryDetail(name)` (in `bundled/describe-library.ts`) backs the agent-facing
-`describeBundledLibrary`. It slices the
-`declare module '@bundled/<name>…'` blocks out of `bundled-types/index.d.ts` and prepends the
-`Yaar*` declarations they reference, transitively and covering `type` aliases as well as
-`interface`s — `register()` is gone, but `defineApp`'s `YaarAppDefinition` -> `YaarAppCommands`
--> `YaarAppRunParams` chain has the same depth. See `describe-library.ts`'s header comment for
-why transitive resolution matters here.
+`describeBundledLibrary`. It slices the `declare module '@bundled/<name>…'` blocks out of
+`bundled-types/index.d.ts` and prepends the `Yaar*` declarations they reference, transitively —
+see `describe-library.ts`'s header comment for why transitive resolution matters.
 
-A module block that is a bare `export * from 'pkg'` tells the caller nothing, since the
-upstream package is not something the agent can open — which is why the four `solid-js` blocks
-carry in-block comments naming what lives in each entry point. **Those comments are part of the
-tool's output; keep them accurate.** Without them `describeBundledLibrary("solid-js")` returned
-four re-export lines, and importing `render`/`html` from `@bundled/solid-js` was the most
-common first-compile failure.
+Two rules about `bundled-types/index.d.ts` itself:
 
-The same reasoning extends past "which entry point holds what" to "which export you were
-supposed to reach for". Every app importing `@bundled/solid-js/store` imported `createStore`
-and nothing else, so nested updates got written as hand-rolled spread pyramids and fresh
-fetch results got assigned wholesale — `produce`, `reconcile`, and `unwrap` were sitting
-right there behind the same `export *`. That block now spells out what each is for, including
-the point an agent reliably gets backwards: **Solid does not diff**, so an Immer-style
-copying library (immer, mutative) makes reactivity coarser here rather than faster, and
-`produce` — which mutates the store proxy in place — is the correct primitive. `@bundled/mediabunny`
-carries the same kind of block: read/write/convert usage, plus the capability check to run
-*before* encoding.
-
-Beyond the real `@bundled/*` modules it serves **pseudo-libraries** — describable but not importable.
-`design-tokens` is one: the tokens ship as injected CSS, so they have no module and no
-`.d.ts`, but an app agent still has to be able to ask what they are. It returns
-`describeDesignTokens()`, generated from `YAAR_DESIGN_TOKENS_CSS`. Before it existed the
-call fell through to `null`, and devtools' `agent/prompt.md` was telling agents to make it — so
-the agent asked for the token list, got nothing, and invented Tailwind-shaped names
-(`--yaar-space-2`) that render to nothing. Same list feeds the App Authoring Contract in
-`server/agents/profiles/app-agent.ts`, so what the compiler *rejects* and what it *tells
-agents exists* are generated from one source (asserted by a test).
+- **In-block comments in bare `export * from 'pkg'` blocks are part of the tool's output; keep
+  them accurate.** A bare re-export tells the agent nothing (it cannot open the upstream package),
+  so the `solid-js` blocks name what lives in each entry point and which export to reach for —
+  including that **Solid does not diff**, so `produce` (not an Immer-style copy) is the right
+  store-update primitive. `@bundled/mediabunny` carries the same kind of block.
+- Beyond real modules it serves **pseudo-libraries** — describable but not importable.
+  `design-tokens` returns `describeDesignTokens()` generated from `YAAR_DESIGN_TOKENS_CSS`; the
+  same list feeds the App Authoring Contract in `server/agents/profiles/app-agent.ts`, so what the
+  compiler *rejects* and what it *tells agents exists* come from one source (asserted by a test).
 
 30+ libraries available via `@bundled/*` — no npm install needed in apps:
 - **UI:** `@bundled/solid-js`, `@bundled/solid-js/web`, `@bundled/solid-js/html`, `@bundled/solid-js/store`
@@ -287,18 +268,34 @@ agents exists* are generated from one source (asserted by a test).
 
 ## Shims
 
-Shims wrap npm packages with compatibility fixes or SDK wrappers:
+Shims wrap npm packages with compatibility fixes or SDK wrappers. **Every shim file carries a
+header comment with its full rationale — read it before changing or removing one.**
 
-- **`yaar/`** — thin wrapper over `window.yaar` global. Split into internal modules for ownership; `index.ts` is the sole entry and `BUNDLED_SHIMS` points at it. The split is internal only — there are no `@bundled/yaar/*` subpath imports, and the declared type surface stays a single `declare module '@bundled/yaar'` in `bundled-types/index.d.ts`. Exports verb functions (`read`, `invoke`, `list`, `describe`, `del`, `subscribe`), `appStorage` (read/write/list/remove via `yaar://apps/self/storage/*`, plus `trySave` — reports the failure and resolves `false` instead of throwing, so callers can withhold a "Saved" UI), `appDb` (SQLite-backed collections via `yaar://apps/self/db/*` — insert/find/search/update/remove with Mongo-style filters, plus `createReactiveCollection` for a query-tracking Solid signal), `createPersistedSignal` (Solid signal auto-synced to storage via `trySave`, with a `revive` hook that clamps/migrates/validates the loaded value before it reaches the signal), `createCollapsiblePanel` (headless hover-expand + pin sidebar/overlay state machine — visibility, grace-period fold, persisted pin, resize-suppression, plus the `canOpen`/`holdOpen` predicates for reasons the panel doesn't own, e.g. a viewport drag sweeping the rail or a focused field inside it; app owns the markup), `createAutosave` (headless dirty/debounced-save/save-status lifecycle with an editSeq guard so a stale save never clears the dirty flag), `defineApp` (the one registration entrypoint), `defineAppCommand` (for a command declared in another module and spread into `defineApp({ commands })` — `defineApp` infers `run`'s parameter only from a `params` at its own call site, so a spread-in command otherwise loses that typing silently), `createProtocolContext` (set-once holder letting statically-declared descriptors reach a context supplied at registration time — the supported alternative to a `buildCommands(ctx)` factory, which the extractor refuses), `onShortcut`, `createKeyState` (held-key tracking for game loops — auto-repeat filtered, cleared on blur/tab-hide, releases keyed by `e.code` so a stuck key is impossible), `showToast`, `withLoading`, `errMsg`, `wait`, `createStaleGuard` (the generation counter that keeps a slow response from overwriting a newer one — `begin`/`latest`/`invalidate`), `sanitizeHtml` (the single DOMPurify policy: its defaults plus the no-forms deviation every app was writing by hand; apps must not import `@bundled/dompurify` directly), `AppCommandError`
-- **`yaar-dev.ts`** — posts to `/api/dev/<action>` endpoints for compile/typecheck/deploy, plus per-app version history (`gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint`) backed by a shadow git repo per app
-- **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation (tabs, navigation, clicks, screenshots, cookies)
+- **`yaar/`** — the SDK, a thin wrapper over the `window.yaar` global. Split into internal modules
+  for ownership; `index.ts` is the sole entry (`BUNDLED_SHIMS` points at it), there are no
+  `@bundled/yaar/*` subpath imports, and the declared type surface stays a single
+  `declare module '@bundled/yaar'` in `bundled-types/index.d.ts`. The barrel is the export
+  inventory; two exports worth calling out: `sanitizeHtml` is the single DOMPurify policy (apps
+  must not import `@bundled/dompurify` directly), and `defineAppCommand`/`createProtocolContext`
+  exist for descriptors declared outside the `defineApp({...})` literal (see Protocol Extraction).
+- **`yaar-dev.ts`** — posts to `/api/dev/<action>` for compile/typecheck/deploy, plus per-app version history backed by a shadow git repo per app
+- **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation
 - **`anime.ts`** — normalizes v3 easing names (`easeOutCubic` → `outCubic`) for anime.js v4
-- **`mermaid.ts`** — the largest bundled library by a factor of ~2.6 (3.3 MB minified against p5's 1.29 MB; externalizing KaTeX, cytoscape and rough.js only reaches 2.41 MB, so there is no cheap trim), and every prebundled artifact is embedded in the exe, so this costs every download whether or not an app draws a diagram. It earns that because it turns diagramming from code generation into text generation, which is what an app agent is actually good at. The shim exists to remove four decisions an app would otherwise make wrong: **nothing runs at module scope** (`initialize()` is deferred to the first render, so an app importing it survives `fold-schemas.ts`'s DOM-stubbed Worker), **renders are serialized** through a promise queue (mermaid's config is a module-global read *during* `render()`, so two concurrent renders with different themes silently share the later theme), **`securityLevel` is forced to `'strict'`** and is not exposed as an option (that is what runs mermaid's own DOMPurify pass and disables HTML labels — so `renderMermaid`'s output is already sanitized, and passing it through `sanitizeHtml` would strip the `<style>` block the SVG needs to theme itself), and **`suppressErrorRendering`** keeps a syntax error from appending mermaid's "Syntax error in text" SVG to `document.body`, outside the app's tree where nothing cleans it up. Theme values are read from the live `--yaar-*` custom properties rather than imported from `tokens.ts`, so a diagram follows whatever tokens are actually in force; `renderMermaid(src, { theme })` overrides them per call for an app with its own palette
-- **`uuid.ts`** — uuid's browser entry is a pure `export { default as v4 } from './v4.js'` barrel; bundling it directly makes Bun emit the `export { ... }` statement with every binding dropped, so the prebundled artifact fails later with `uuid:1:8: "h" is not declared in this file`. Importing the bindings and re-exporting them separately gives the bundler real references to follow. Any bundled library that is a pure re-export barrel needs the same treatment.
-- **`zod.ts`** — `@bundled/zod` maps to `zod/mini`, whose browser entry is a nested `export * from …` barrel; the same defect makes the prebundled artifact fail with `zod:40:23830: "u6" is not declared in this file`. Routing it through a shim (`import * as z from 'zod/mini'; export * from 'zod/mini'; export { z }`) turns `zod/mini` into an inner module Bun materializes before re-exporting, so both the functional API and the `z` namespace survive. Because the surface is too large to enumerate uuid-style, the fix is the extra layer of indirection rather than an explicit binding list.
-- **`mediabunny.ts`** — same barrel defect, and the one that proves the rule still bites: mediabunny's entry is one `export { … } from './x.js'` line per module, and prebundling it directly collapsed 0.66 MB to a **5.3 KB stub** that still built successfully. A bare `export * from 'mediabunny'` shim restores it. The package has no default export and sets `"sideEffects": false`, so an app importing only `Input` tree-shakes the encoders away.
-- **`lodash.ts`** / **`pixi.ts`** — same barrel defect. `@bundled/lodash` → `lodash-es` (a wall of `export { default as add } from './add.js'`) collapses to a ~4.7 KB stub failing with `lodash:1:8: "Yu" is not declared`; `@bundled/pixi.js` collapses to a ~16 KB stub. Both are fixed with a bare `export * from '<pkg>'` shim — the indirection alone is enough here, and lodash deliberately does **not** re-export the default (monolithic) build so named imports stay tree-shakeable. These three (plus uuid) are caught automatically by the prebundle-completeness test, so a new barrel library fails a test rather than an install.
-- **`dompurify.ts`** — same indirection, different Bun defect. dompurify is the one bundled library that is *also* a dependency of other builds in the same process: `@bundled/yaar`'s `sanitizeHtml` imports it, so every app compile loads the same `dist/purify.es.mjs` that `prebundleLibrary('dompurify')` would otherwise bundle as an **entrypoint**. Bun does not survive one file playing both roles — after the prebundle, later `Bun.build()` calls in that process fail with `purify.es.mjs:-1:-1: EISDIR reading file: ".../purify.es.mjs"` on a plain 64 KB regular file. This took CI down for two days as 15 failures in `define-app.test.ts` / `fold-schemas.test.ts`, both of which pass when run alone; the poisoner was `prebundle-completeness.test.ts` earlier in the same `bun test` process. The shim demotes `purify.es.mjs` to an inner module in *both* builds. A test in `prebundle-completeness.test.ts` asserts the prebundle entrypoint stays the shim, because removing it reproduces only most of the time.
+- **`mermaid.ts`** — lazy init, serialized renders, forced `securityLevel: 'strict'` (output is
+  already sanitized — do **not** pass it through `sanitizeHtml`, which strips the SVG's `<style>`
+  block), suppressed error rendering, live-token theming. Each decision's incident is in the shim
+  header.
+- **`uuid.ts`, `zod.ts`, `lodash.ts`, `pixi.ts`, `mediabunny.ts`** — one shared Bun defect:
+  **a pure re-export barrel collapses when prebundled directly** (Bun emits the `export { … }`
+  list with the bindings dropped; the build still succeeds and the breakage surfaces later in exe
+  mode — mediabunny's 0.66 MB collapsed to a 5.3 KB stub that built green). Routing through a shim
+  makes the package an inner module Bun materializes first. Any new barrel library needs the same
+  treatment, and the prebundle-completeness test catches it automatically.
+- **`dompurify.ts`** — same indirection, different defect: the one library that is both a
+  prebundle *entrypoint* and a *dependency* of every app compile in the same process, which Bun
+  does not survive (spurious `EISDIR` on later builds; two days of CI-only failures). The shim
+  demotes `purify.es.mjs` to an inner module in both builds; a `prebundle-completeness.test.ts`
+  case pins the entrypoint to the shim because the failure reproduces only most of the time.
 
 ## Build Manifest & Staleness
 

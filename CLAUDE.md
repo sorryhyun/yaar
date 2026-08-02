@@ -46,40 +46,16 @@ bun run build:exe:bundle:linux   # Build Linux executable
 bun run build:exe:bundle:macos   # Build macOS executable
 ```
 
-Every package's `bun test` preloads `scripts/test/env.ts` first (wired in each `bunfig.toml`),
-which pins the environment before the server's `config/env.ts` can read it: `YAAR_*` and the
-knobs below are scrubbed, `REMOTE` is set explicitly, `YAAR_CONFIG`/`YAAR_STORAGE` point at
-throwaway temp dirs, and the root `.env` is skipped. So a test run describes the code, not the
-machine — in particular, toggling remote mode on in the configurations app (which persists
-`remote: true` to `config/settings.json`) no longer changes what the suite asserts.
+Test runs are environment-pinned and process-partitioned:
 
-**`bun test <path>` works from the repo root too.** Bun picks `bunfig.toml` by *current
-directory*, not by the test file's package, so a root-launched run used to load no preload at
-all and report silently wrong results — the same class of failure `test/env.ts` exists to
-prevent. The root `bunfig.toml` closes that: it preloads `test/env.ts`, then
-`scripts/test/preload-root.ts`, which loads whatever setup the anchored package needs on top
-(frontend's happy-dom globals, the server's `dist/protocol.json` fixtures). It dispatches
-rather than loading both because a global DOM would change what the *compiler* tests see —
-`shims/yaar/define-app.ts` branches on `typeof window`. It also runs that package's own
-`pretest` (`bun run` executes npm lifecycle hooks; `bun test` executes none), so a root run
-builds `@yaar/shared`/`@yaar/compiler` instead of testing whatever `dist/` was lying around —
-~25ms when already fresh. Both root and package bunfigs carry `pathIgnorePatterns` for
-`**/dist/**`: `tsc` emits compiled `.test.js` copies next to the sources, and an unscoped run
-was collecting each compiler test twice, the stale copy failing.
-
-**A run that spans more than one partition is refused, not guessed at.** Some test files
-cannot share a Bun process — the server's `src/tests/remote/` needs `REMOTE=1` pinned before
-the first import, files calling `mock.module` leak a stub with no teardown, `src/tests/loopback`
-binds real sockets and `src/tests/realfs` drives real `git` over a shared fixture dir (45 of 80
-files fail if they run `--parallel` with the units), and one process holds one package's setup. `bun test packages/server` used to put all
-of that in a single process and report **86 failures against a green tree**; a bare repo-wide
-`bun test` was wrong the same way. `scripts/test/partitions.ts` states which files may share a
-process and why; `scripts/test/partition-guard.ts` (preloaded from the root and server bunfigs)
-watches what a process actually loads and stops the run the moment a second partition appears,
-printing the command for each. So a mixed run is now an error that names its fix, and every
-*single*-partition path still works — including `bun test packages/server/src/tests/remote/…`,
-which `test/env.ts` now recognizes by location and runs in remote mode. For everything at once
-use `bun run test`, which is what CI runs.
+- Every `bun test` preloads `scripts/test/env.ts` (wired in each `bunfig.toml`), which scrubs
+  `YAAR_*` and the knobs below and points config/storage at temp dirs — a run describes the code,
+  not the machine.
+- Some test files cannot share a Bun process (`REMOTE=1` pinning, `mock.module` leaks, real
+  sockets/git). A run mixing partitions is **refused** by `scripts/test/partition-guard.ts`, which
+  prints the correct command for each. `bun test <path>` works from the repo root for any
+  single-partition path; for everything at once use `bun run test` (what CI runs).
+- The full rationale lives in `scripts/test/partitions.ts` and `packages/server/CLAUDE.md` (Tests).
 
 ## Environment Variables
 
@@ -95,53 +71,17 @@ use `bun run test`, which is what CI runs.
 
 ## Running YAAR Headlessly (Agents Driving YAAR)
 
-YAAR can be launched and driven by an external agent — including from inside another Claude Code session. The Claude provider spawns the `claude` CLI as a subprocess; the harness scrubs nested-Claude env vars before the spawn (see `providers/claude/session-provider.ts`), so it works inside cloud sandboxes without IPC clashes.
+YAAR can be launched and driven by an external agent — including from inside another Claude Code
+session (`make claude-dev` after exporting `CLAUDE_CODE_OAUTH_TOKEN`; the harness scrubs
+nested-Claude env vars before the spawn, see `providers/claude/session-provider.ts`). Drive it
+**like a user, through the browser** — Chromium at `http://127.0.0.1:8000`, type into the command
+palette textarea (the only `<textarea>` on the page), Enter to send, `Shift+Tab` for the CLI panel.
+Internal HTTP routes and WebSocket frames are YAAR's own plumbing, **not** the supported entry
+point for outside automation. Never drive YAAR through YAAR's own Browser app (recursive
+rendering), and screenshot before each action — the AI may have moved windows.
 
-**Launch (cloud / headless):**
-
-```bash
-export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...   # required if not already logged in
-export CLAUDE_CODE_PATH=/path/to/claude           # optional; only if not in ~/.local/bin or PATH
-make claude-dev                                   # PROVIDER=claude, MCP_SKIP_AUTH=1, port 8000
-# server is ready when you see "[banner] YAAR running at ..."
-```
-
-**Drive YAAR like a user — through the browser.** YAAR is a desktop UI; an external agent should use it the way a person does, via Chromium and the command palette. Internal HTTP routes (`/api/*`) and WebSocket frames (`USER_MESSAGE` etc.) are YAAR's own plumbing — used by the frontend and bundled tools — and are **not** the supported entry point for outside automation. Driving via the browser exercises the real user surface, makes failures visible (you can screenshot), and avoids coupling external agents to internal event schemas that may change.
-
-**Recommended flow** (any CDP client works — Playwright, Puppeteer, the `claude-in-chrome` MCP tools, or YAAR's own `yaar-web` SDK from inside an app):
-
-```
-1. Launch Chromium pointed at http://127.0.0.1:8000
-2. Wait for the desktop to render (the command palette textarea appears at the bottom)
-3. Click/focus the textarea (it's the only <textarea> on the page)
-4. Type your prompt
-5. Press Enter to submit (Shift+Enter inserts a newline; Enter sends)
-6. Optionally press Shift+Tab to toggle the CLI panel and watch the agent stream
-```
-
-Minimal example using the `claude-in-chrome` MCP tools available to an agent:
-
-```
-navigate("http://127.0.0.1:8000")
-form_input(selector: "textarea", text: "create a memo window saying hello")
-press(key: "Enter", selector: "textarea")
-press(key: "Shift+Tab")                       # open CLI panel (streaming + Monitor/Session "act as me" target toggle)
-```
-
-`press()` now correctly handles modifier prefixes (`Shift+Tab`, `Ctrl+1`, `Meta+P`); navigation timeouts resolve with `null` instead of rejecting, so a stalled page doesn't crash the server.
-
-**Caveats for agent-driven sessions:**
-- Don't drive YAAR through YAAR's own Browser app — that nests YAAR inside YAAR and produces recursive rendering plus duplicate-element selectors.
-- The desktop sometimes auto-opens a Browser window when YAAR detects a browsing-related need; for clean demos, drive YAAR from a separate Chromium instance you control, not from a window inside YAAR.
-- Take a screenshot before each action — the AI may have moved/added windows since your last view.
-
-**Watching the agent's reasoning:** `Shift+Tab` toggles the CLI panel (`DesktopSurface.tsx:84`), which streams every assistant token, tool call, and OS Action live. For shell-based monitoring, tail the JSONL log:
-
-```bash
-tail -f session_logs/$(ls -t session_logs | head -1)/*.jsonl
-```
-
-**Running an AI agent inside YAAR from a parent agent (Claude-in-Claude):** the parent agent (this Claude Code session) launches `make claude-dev`, opens Chromium at `http://127.0.0.1:8000`, and types prompts into the command palette like a user. YAAR's own Claude provider spawns its own `claude` subprocess to handle each prompt — that's two separate Claude sessions stacked. The env-scrub in `session-provider.ts` is what makes this stacking work; without it the inner `claude` inherits the outer's FD-based auth and `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1`, and immediately exits with code 1.
+Full walkthrough, caveats, log-tailing, and the Claude-in-Claude stacking details:
+[`docs/guides/headless_driving.md`](./docs/guides/headless_driving.md).
 
 ## Monorepo Structure
 
@@ -243,12 +183,10 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - `make dev` runs `scripts/dev/start.sh` which: builds shared package first → starts server (serves both API and frontend on single port)
 - Git branches: `dev` is where work lands; `main` is the stable branch (the default, so it is what `git clone` gives you) and only receives merges from `dev`; releases are cut by publishing a GitHub draft release targeting `main`. Open PRs against `dev` unless the change is a release promotion.
 - **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
-- **CI** (`.github/workflows/ci.yml`): thin caller for `.github/workflows/checks.yml` — install → build shared + compiler → typecheck → test → check:docs → check:openapi. Runs on push/PR to `dev` and `main`.
-- **`checks.yml`** is the one definition of "is this tree good?", shared by CI and release so they cannot drift. Its `full` input adds lint, format:check, and check:apps. Three tiers, escalating: `dev` gets the baseline (fast inner loop), anything touching `main` gets `full` (it is the clone target), and a release gets `full` plus the version-vs-tag assertion and the artifact smoke test. A check that should guard every push goes in the baseline; one that need only hold at promotion or ship time goes behind `full`.
-- **Branch protection** (repo rulesets, not files — inspect with `gh api repos/sorryhyun/yaar/rulesets`): `main` and `dev` both block deletion and force-push; `refs/tags/v*` blocks deletion and force-update, so a botched release is retried with a new patch version rather than by moving a tag. `main` additionally requires the `ci / check` status — which is why `ci.yml`'s job id must stay `check` (the reusable-workflow name is `<caller job> / <called job>`). Nothing bypasses these; the Actions bot *cannot* be given a bypass on a user-owned repo, which is what shaped the release flow below. A fast-forward `dev` → `main` push is still allowed: the commit already carries a green `ci / check` from its `dev` run. Note that push satisfies the rule with the **baseline** tier — only a PR into `main` runs `full` *before* the branch moves.
-- **Release**: `bun run release:prepare <version>` stamps the version on `dev` (this replaced a workflow that committed the bump straight to `main`; it can't, now that `main` requires a status a `GITHUB_TOKEN` push never produces), the bump is promoted to `main` like any other change, then a draft release targeting `main` is published. `release-draft-check.yml` warns while the release is still a draft if the target commit's version disagrees with the tag. On publish, `release.yml`'s `resolve` pins the tag's SHA and re-asserts the version → `verify` runs `checks.yml` with `full: true` against that SHA (a draft may target any branch or SHA, so the released commit is not necessarily ruleset-gated) → `release` builds and smoke-tests the artifacts, then publishes a `SHA256SUMS` manifest alongside them. The manifest is generated after every artifact exists, so it can never describe files the release did not ship; `install.sh`/`install.ps1` verify against it, hard-failing on a mismatch and warning-but-continuing when it is absent (releases predating it, and `VERSION=` pins at those tags). It rides the same HTTPS channel as the artifacts, so it is integrity, not provenance — signing is a separate, later step. The installers are deliberately excluded from it: a user who pipes one to a shell has already trusted that URL.
-- **Version at runtime**: `YAAR_VERSION` (`config/env.ts`), served by `GET /api/version` with `bundled`/`platform`/`arch`. Two sources, one per build shape — the `__YAAR_VERSION` compile-time define for the exe (which has no `package.json` beside it, since `PROJECT_ROOT` there is wherever the binary was dropped), and `PROJECT_ROOT/package.json` under `bun run`. `scripts/release/set-version.ts` stamps that file and `scripts/build/exe-bundle.js` reads it for the define, so the two agree by construction; `0.0.0-unknown` means neither answered. The route is on `PUBLIC_ENDPOINTS` (the iframe allowlist) with no permission check, so an app can read the version without declaring anything in its `app.json`.
-- **Bun version**: CI/release pin the version in `.bun-version` (via setup-bun's `bun-version-file`). `engines.bun` states the supported *floor*; the two are intentionally different numbers.
+- **CI** (`.github/workflows/ci.yml`): thin caller for `.github/workflows/checks.yml` — the one definition of "is this tree good?", shared by CI and release so they cannot drift. Three escalating tiers: `dev` gets the baseline, anything touching `main` gets `full` (adds lint, format:check, check:apps), a release adds the version-vs-tag assertion and artifact smoke test. A check that should guard every push goes in the baseline; one that need only hold at ship time goes behind `full`.
+- **Branch protection**: repo rulesets (not files) block deletion/force-push on `main`/`dev` and force-update on `v*` tags; `main` requires the `ci / check` status, so `ci.yml`'s job id must stay `check`.
+- **Release**: `bun run release:prepare <version>` stamps the version on `dev`; the bump is promoted to `main` like any other change, then a draft release targeting `main` is published. On publish, `release.yml` re-verifies the pinned SHA with `full: true`, builds and smoke-tests artifacts, and publishes a `SHA256SUMS` manifest.
+- Full detail — ruleset rationale, the `SHA256SUMS` integrity model, `GET /api/version`'s two version sources, `.bun-version` vs `engines.bun` — in [`docs/reference/release_process.md`](./docs/reference/release_process.md).
 
 ### Subagent Model Selection
 
@@ -275,26 +213,23 @@ Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata
 
 When a user interacts with an app window, a **persistent app agent** is created (one per `monitorId::appId`, reused across all windows of that app on that monitor — not shared across monitors). App agents have four scoped tools — `describe` (an app's manual: its protocol plus its `agent/SKILL.md`, the same answer `describe('yaar://apps/{id}')` gives), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
 
-**Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window (no permission needed). Passing another app's id targets that app — gated by the caller's `app.json` `controls` list (bundled apps only, mirroring the `kind: "system"` guard). `controls` accepts a string shorthand (`["browser-user"]`) or object form (`[{ "appId": "browser-user", "commands": ["navigate", "click"] }]`) to restrict which commands may be issued. The target app doesn't need an open window — `resolveTarget` reuses one already open on the caller's monitor, or auto-launches one if none exists. This is direct synchronous protocol control; contrast with `direct_message` to `app:{id}`, which hands a natural-language request to the other app's own agent. E.g. devtools declares `"controls": ["browser-user"]` to drive the real browser end-to-end. The app's own protocol is injected at boot; controlled apps' protocols are discovered on demand via `describe(appId)`.
+**Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window; passing another app's id targets that app — gated by the caller's `app.json` `controls` list (**bundled apps only**), which can also restrict which commands may be issued. The target app needn't have an open window (`resolveTarget` reuses or auto-launches one). This is direct synchronous protocol control; `direct_message` to `app:{id}` is the natural-language alternative handled by the other app's own agent. Parsing and the bundled-only guard: `features/apps/discovery.ts`.
 
-**Agent docs (`AGENT_DOCS` in `features/apps/discovery.ts`):** three files, three readers, three moments. `agent/prompt.md`, if present, replaces the app agent's generic base prompt entirely — one file, one meaning, no append tier. Without it the agent gets the generic prompt, and either way the `protocol.json` manifest is appended — commands as call signatures rendered from their `params` schema (`readFile(path: string|string[], startLine?: number, …)`), so a prompt file never has to restate param names — as is a "Controllable Apps" section when `controls` is set. Use `agent/prompt.md` for apps like devtools that need precise agent behavior; leave it out where the generic prompt plus the manifest suffices. `agent/hint.md` is separate — its content is injected into the **monitor agent's** system prompt (not the app agent's), providing orchestration hints that auto-sync with app install/uninstall. `agent/SKILL.md` is injected into no prompt at all: it is the hand-written manual `describe('yaar://apps/{id}')` returns beside `protocol.json`, for what a generated protocol cannot say — workflows, ordering constraints, when *not* to use the app. Because both are returned in one payload, restating a command or state name there is visibly a copy that will go stale, and `scripts/check/apps.ts` warns on it (`skill-restates-protocol`, advisory). It is not the `SKILLS/` directory proposed in `docs/architecture/shell_to_userland.md` — that is a namespaced topic set read from `yaar://skills/{appId}/{topic}`; one file returned by `describe` versus many read on demand. All three paths are configurable via `app.json`'s `agent: { prompt, hint, skill }` (those are the defaults, and an absolute or traversing override is ignored); a legacy root `HINT.md` is still read with a `[apps]` warning if `agent/hint.md` is absent. Root `AGENTS.md` is **not** — it has its ecosystem meaning back (instructions to a coding agent editing that directory, which is what devtools is), and reading it as a runtime prompt too would install an app's architecture notes as its own agent's persona. An app that shipped one as its prompt gets the generic base plus its manifest, and a `[apps]` notice naming both readings. Clone and deploy carry every one of them — the `AGENT_DOCS` paths derived from the table rather than listed, plus `APP_ROOT_DOCS` for `AGENTS.md` — because a doc neither one carries is a doc devtools writes and loses on the next deploy.
+**Agent docs (`AGENT_DOCS` in `features/apps/discovery.ts`):** three files, three readers:
 
-Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (describe/query/command/relay tools), `features/apps/discovery.ts` (`controls` parsing + bundled-only guard).
+- `agent/prompt.md` — **replaces** the app agent's generic base prompt entirely (no append tier); either way the `protocol.json` manifest is appended as rendered call signatures.
+- `agent/hint.md` — injected into the **monitor agent's** system prompt (orchestration hints, auto-synced with install/uninstall). Legacy root `HINT.md` still read with a warning.
+- `agent/SKILL.md` — injected into no prompt; it is the hand-written manual `describe('yaar://apps/{id}')` returns beside `protocol.json` (workflows, ordering, when *not* to use the app). `scripts/check/apps.ts` warns when it restates the protocol.
+
+Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }` (traversing/absolute overrides ignored). Root `AGENTS.md` is deliberately **not** read as a prompt — it keeps its ecosystem meaning (instructions to a coding agent editing that directory). Clone and deploy carry all of these; the full rules and rationale live in `discovery.ts`'s doc comments.
+
+Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (describe/query/command/relay tools).
 
 ### Sub-agents / Persona Agents (app-spawned AI instances)
 
-An app that declares `"subagents": { "max": N }` in `app.json` can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with a system prompt the app supplies at runtime, each its own provider session with its own conversation memory. This is what lets one app run several distinct characters at once rather than one agent role-playing them in turn. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands).
+An app that declares `"subagents": { "max": N }` in `app.json` can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with an app-supplied system prompt, each its own provider session and memory. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands).
 
-`subagents` and `streams` are **granted by the user at install time**, not by the manifest alone —
-unlike `controls`, which stays bundled-only. A bundled app's app.json ships with the release, so it
-is taken at its word; an installed app's is a *request*, shown in the install dialog and recorded in
-`config/app-grants.json`, which `discovery.ts` then applies as a **ceiling** (an app holding
-`yaar-dev` can rewrite its own manifest, so intersecting rather than trusting is what keeps that from
-being self-grant). This is what `chitchats` needed once it left `apps/` for the market: it still
-declared the field, and the old bundled-only gate refused it while advising the user to add what it
-already had. (`"personas"` was an accepted alias for `subagents` and is no longer read — a manifest
-still using it gets a startup warning and a refusal that names the rename.) An app installed before grants existed holds nothing until it is updated or
-reinstalled and the request approved — see `features/apps/capabilities.ts` for the consent diff.
+`subagents` and `streams` are **granted by the user at install time**, not by the manifest alone (unlike `controls`, which stays bundled-only): an installed app's declaration is a *request*, recorded in `config/app-grants.json` and applied by `discovery.ts` as a **ceiling** — see `features/apps/capabilities.ts` for why intersecting rather than trusting matters. The old `"personas"` manifest alias is retired and refused by name.
 
 See `packages/server/CLAUDE.md` (Tools/MCP section) for the full verb surface, lifecycle, and containment details, and [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md) for the design record.
 
