@@ -157,13 +157,17 @@ launch_chrome_when_ready() {
   # to set it — which is why this lives here and not in setup-webgpu-linux.sh.
   # Only takes effect when this actually starts a new Chrome: if one with this
   # profile is already running, close it and re-run to pick up the flags.
+  # --enable-unsafe-webgpu is deliberately NOT here: it is on Chrome's bad-flags
+  # list, so it costs the user the "unsupported command-line flag" infobar on
+  # every launch, and it buys no adapter and no shader-f16 that the two flags
+  # below don't already give. See webgpu-flags.ts for the measurements.
   # Keep in sync with LINUX_WEBGPU_FLAGS in
   # packages/server/src/lib/browser/webgpu-flags.ts, which the exe's launcher uses —
   # bash cannot import it, so this is a copy. They disagreed once already: the exe
   # shipped with no GPU flags at all, so WebGPU worked under `make claude-dev` and not
   # under `yaar`, on the same machine.
   local gpu_flags=()
-  [ "$(uname -s)" = "Linux" ] && gpu_flags=(--enable-unsafe-webgpu --enable-features=Vulkan
+  [ "$(uname -s)" = "Linux" ] && gpu_flags=(--enable-features=Vulkan
     --enable-dawn-features=vulkan_enable_f16_on_nvidia)
 
   (

@@ -13,6 +13,18 @@
  * no-op elsewhere. Dawn toggles have no `chrome://flags` entry, so the command line is
  * the only way to set it.
  *
+ * Deliberately absent: `--enable-unsafe-webgpu`. It is on Chrome's `kBadFlags` list
+ * (`chrome/browser/ui/startup/bad_flags_prompt.cc`), so every launch it appears in greets
+ * the user with the "You are using an unsupported command-line flag ... stability and
+ * security will suffer" infobar — and it buys nothing here. What it actually does is turn
+ * on WebGPU's *experimental* features (`EnableWebGPUExperimentalFeatures` in
+ * `content/child/runtime_features.cc`) and allow a fallback adapter; measured on Chrome 149
+ * / RTX 5070 Ti, the flag *alone* yields a SwiftShader (CPU) adapter with no `shader-f16`,
+ * while `--enable-features=Vulkan` alone yields the real NVIDIA adapter. Adding it to the
+ * set below changed nothing but the infobar — same adapter, same features, visible and
+ * headless alike. There is no switch that suppresses that infobar (the prompt has no
+ * `--test-type` escape on desktop), so not passing the flag is the only way to be rid of it.
+ *
  * Every launcher that opens a *visible* Chrome for a human to use YAAR in wants exactly
  * this set, and there are three of them (`scripts/dev/start.sh`, `exe-entry.ts`, and the
  * headless pool in `chrome.ts`, which adds its own).
@@ -21,7 +33,6 @@
  * change both.
  */
 export const LINUX_WEBGPU_FLAGS = [
-  '--enable-unsafe-webgpu',
   '--enable-features=Vulkan',
   '--enable-dawn-features=vulkan_enable_f16_on_nvidia',
 ];
