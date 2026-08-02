@@ -94,6 +94,13 @@ async function startup() {
 
   await printBanner(server);
 
+  // Hold a clipboard grant open against the local Chrome, if there is one. Started
+  // after the port is settled (serveFromFirstFreePort may have moved it) because the
+  // grant names an exact origin, and left running for the process's life — the CDP
+  // override dies with the connection. See lib/browser/clipboard-grant.ts.
+  const { startClipboardGrant } = await import('./lib/browser/clipboard-grant.js');
+  startClipboardGrant(getPort());
+
   // Compile stale apps and warm the provider pool concurrently, AFTER the server
   // is listening — codex app-server needs to reach MCP endpoints at
   // http://127.0.0.1:{PORT}/mcp/*, and compile no longer blocks either the

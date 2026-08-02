@@ -403,6 +403,16 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
       activeTunnel = null;
     }
 
+    // Release the clipboard grant's CDP connection. Independent of the two browser
+    // providers below — it holds its own connection, and dropping theirs does not
+    // touch the override (see lib/browser/clipboard-grant.ts).
+    try {
+      const { stopClipboardGrant } = await import('./lib/browser/clipboard-grant.js');
+      stopClipboardGrant();
+    } catch {
+      // Never started — nothing to release.
+    }
+
     // Close browser sessions — both doors (headless sandbox + the user's real
     // Chrome). The local provider never owns Chrome, so its shutdown only drops
     // our CDP connection.

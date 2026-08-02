@@ -11,7 +11,7 @@
  *   config/limits.ts            queue and monitor budget limits
  *   config/providers/claude.ts  claude binary discovery + spawn args + SDK env/options
  *   config/providers/codex.ts   codex binary discovery + app-server args
- *   config/browser.ts           CDP debug port
+ *   config/browser.ts           CDP debug port, clipboard pre-grant
  *
  * **Ordering rule.** `config/env.ts` loads the root `.env` at module evaluation and
  * every other submodule imports it, so `process.env` is fully populated before any
@@ -88,4 +88,4 @@ export {
   getCodexAppServerArgs,
 } from './config/providers/codex.js';
 
-export { CHROME_DEBUG_PORT } from './config/browser.js';
+export { CHROME_DEBUG_PORT, isClipboardGrantEnabled } from './config/browser.js';
