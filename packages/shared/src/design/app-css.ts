@@ -46,6 +46,23 @@ import {
  * relocates the decision into every app. `border` stays accent-only because a
  * tinted *edge* has one call site; the house pattern for a bordered wash is an
  * opaque color token beside it, as `.y-badge-*` shows.
+ *
+ * **Needing a strength this scale does not have** is expected — a 4% gradient
+ * stop, a 40% cast glow. Write it as an app-local `color-mix()` over the color
+ * var, never as a baked `rgba()` (which cannot follow `.y-light`), and never
+ * under a `--yaar-`-prefixed name — that would shadow a shipped token rather
+ * than extend it. The same form covers an app's own brand hue: dc-comics and
+ * thesingularity-reader each keep a `#f7b731` editorial amber that is
+ * deliberately not `--yaar-warning`, and mix its tints off that var so the hue
+ * has one source. Mint a property only for a hue used more than once; a single
+ * call site reads better inline.
+ *
+ * Two failure modes the `user-apps/` migration hit, worth knowing before a
+ * sweep: an app can hide baked channels behind indirection
+ * (`--x-accent-rgb: 83, 155, 245` fed to `rgba(var(--x-accent-rgb), .14)`),
+ * which no `rgba(<digit>` scan finds; and an app's *own* palette can sit a few
+ * points off a token on purpose, so an exact bit-for-bit match to a token is
+ * evidence of a mistake while a near miss usually is not.
  */
 const WASH = { base: 10, strong: 16, border: 35 } as const;
 const wash = (color: string, pct: number) =>
