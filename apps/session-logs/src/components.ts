@@ -1,4 +1,5 @@
 import html from '@bundled/solid-js/html';
+import { downloadBlob } from '@bundled/yaar';
 import type { SessionSummary } from './types';
 import { state } from './store';
 import { loadDetail } from './api';
@@ -46,12 +47,7 @@ export const DetailView = () => {
     const content = state.transcript ?? '';
     if (!content) return;
     const blob = new Blob([content], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${sid}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadBlob(blob, `${sid}.md`);
   };
 
   return html`

@@ -1,3 +1,4 @@
+import { formatClock } from '@bundled/yaar';
 import type { SessionSummary } from './types';
 
 /** YYYY-MM-DD HH:MM in local time */
@@ -34,14 +35,7 @@ export function formatFull(iso: string | undefined): string {
 /** HH:MM:SS local time for a transcript turn */
 export function formatTime(iso: string | undefined): string {
   if (!iso) return '';
-  try {
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '';
-    const hh = String(d.getHours()).padStart(2, '0');
-    const min = String(d.getMinutes()).padStart(2, '0');
-    const sec = String(d.getSeconds()).padStart(2, '0');
-    return `${hh}:${min}:${sec}`;
-  } catch { return ''; }
+  return formatClock(new Date(iso));
 }
 
 /** Human-readable duration between two ISO timestamps */
