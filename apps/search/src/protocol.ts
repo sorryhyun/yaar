@@ -1,7 +1,32 @@
 export {};
-import { invoke, del, list, storage, errMsg } from '@bundled/yaar';
+import { appStorage, invoke, del, list, storage, errMsg } from '@bundled/yaar';
 import { state, setState } from './store';
 import type { SearchResult, SearchMatch } from './types';
+
+/** Cloned source is private to Search; ordinary searches continue to use shared storage. */
+const CLONE_ROOT = 'apps-source';
+
+function cleanPath(path: string): string {
+  return path.replace(/^\/+|\/+$/g, '');
+}
+
+function isClonePath(path: string): boolean {
+  const clean = cleanPath(path);
+  return clean === CLONE_ROOT || clean.startsWith(`${CLONE_ROOT}/`);
+}
+
+/** Keep custom clone destinations inside Search's private clone tree. */
+function clonePath(path: string): string {
+  const clean = cleanPath(path);
+  if (clean.split('/').includes('..')) throw new Error('Clone path cannot escape apps-source.');
+  if (!clean) return CLONE_ROOT;
+  return isClonePath(clean) ? clean : `${CLONE_ROOT}/${clean}`;
+}
+
+/** Match the JavaScript RegExp contract used by Dev Tools' grep command. */
+export function validateSearchPattern(pattern: string): void {
+  new RegExp(pattern);
+}
 
 export async function performSearch(pattern: string, glob?: string, scope?: string) {
   if (!pattern) return;
@@ -16,7 +41,13 @@ export async function performSearch(pattern: string, glob?: string, scope?: stri
   setState('previewContent', null);
   setState('previewHighlightLine', null);
   try {
-    const uri = scope ? `yaar://storage/${scope}` : 'yaar://storage/';
+    validateSearchPattern(pattern);
+    const normalizedScope = cleanPath(scope ?? '');
+    const uri = normalizedScope
+      ? isClonePath(normalizedScope)
+        ? `yaar://apps/self/storage/${normalizedScope}`
+        : `yaar://storage/${normalizedScope}`
+      : 'yaar://storage/';
     const payload: Record<string, unknown> = { action: 'grep', pattern };
     if (glob) payload.glob = glob;
     const result = await invoke<SearchResult>(uri, payload);
@@ -47,7 +78,10 @@ export async function selectResult(index: number) {
   setState('previewHighlightLine', match.line);
   setState('previewPath', match.file);
   try {
-    const content = await storage.read(match.file, { as: 'text' });
+    const path = fullPath(match.file);
+    const content = isClonePath(path)
+      ? await appStorage.read(path)
+      : await storage.read(path, { as: 'text' });
     setState('previewContent', typeof content === 'string' ? content : String(content));
   } catch {
     setState('previewContent', '(unable to read file)');
@@ -191,7 +225,7 @@ export async function cloneApps(spec: string | string[]): Promise<BatchCloneSumm
       cloned.push({
         appId,
         filesWritten: r.filesWritten ?? 0,
-        destPath: r.destPath ?? `apps-source/${appId}`,
+        destPath: r.destPath ?? `${CLONE_ROOT}/${appId}`,
       });
     } else {
       skipped.push({ appId, reason: r.error ?? 'unknown error' });
@@ -203,11 +237,11 @@ export async function cloneApps(spec: string | string[]): Promise<BatchCloneSumm
 
 /** Remove every cloned app source in one call. */
 export async function purgeClones(path?: string) {
-  const target = path || 'apps-source';
+  const target = clonePath(path || CLONE_ROOT);
   setState('statusText', `Purging ${target}…`);
   try {
-    await del(`yaar://storage/${target}`);
-    setState('statusText', `Purged storage/${target}/`);
+    await del(`yaar://apps/self/storage/${target}`);
+    setState('statusText', `Purged Search storage/${target}/`);
     return { success: true, path: target };
   } catch (e: unknown) {
     const msg = errMsg(e);
@@ -217,7 +251,7 @@ export async function purgeClones(path?: string) {
 }
 
 export async function cloneApp(appId: string, destPath?: string): Promise<CloneOutcome> {
-  const dest = destPath || `apps-source/${appId}`;
+  const dest = clonePath(destPath || appId);
   setState('statusText', `Cloning ${appId}…`);
   try {
     const result = await invoke<{
@@ -230,10 +264,10 @@ export async function cloneApp(appId: string, destPath?: string): Promise<CloneO
     }
     let written = 0;
     for (const file of result.files) {
-      await storage.save(`${dest}/${file.path}`, file.content);
+      await appStorage.save(`${dest}/${file.path}`, file.content);
       written++;
     }
-    setState('statusText', `Cloned ${appId}: ${written} files → storage/${dest}/`);
+    setState('statusText', `Cloned ${appId}: ${written} files → Search storage/${dest}/`);
     return { success: true, filesWritten: written, destPath: dest };
   } catch (e: unknown) {
     const msg = errMsg(e);
@@ -243,11 +277,11 @@ export async function cloneApp(appId: string, destPath?: string): Promise<CloneO
 }
 
 export async function removeClone(appId: string, destPath?: string) {
-  const dest = destPath || `apps-source/${appId}`;
+  const dest = clonePath(destPath || appId);
   setState('statusText', `Removing ${dest}…`);
   try {
-    await del(`yaar://storage/${dest}`);
-    setState('statusText', `Removed storage/${dest}/`);
+    await del(`yaar://apps/self/storage/${dest}`);
+    setState('statusText', `Removed Search storage/${dest}/`);
     return { success: true, path: dest };
   } catch (e: unknown) {
     const msg = errMsg(e);

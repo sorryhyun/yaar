@@ -15,8 +15,9 @@ import {
   setOnPreviewLoaded,
   sliceMatches,
   RESULTS_CAP,
+  validateSearchPattern,
 } from './protocol';
-import { showToast, defineApp } from '@bundled/yaar';
+import { AppCommandError, errMsg, showToast, defineApp } from '@bundled/yaar';
 
 let previewBodyEl: HTMLDivElement | undefined;
 
@@ -155,7 +156,7 @@ const App = () => html`
         ${() => state.searching ? '…' : 'Go'}
       </button>
     </div>
-    <button class="y-btn y-btn-sm" onClick=${openCloneDialog} title="Clone app source into storage">Clone</button>
+    <button class="y-btn y-btn-sm" onClick=${openCloneDialog} title="Clone app source into Search storage">Clone</button>
     <button class="y-btn y-btn-sm" onClick=${clearSearch} title="Clear results">Clear</button>
   </div>
 
@@ -325,6 +326,11 @@ export default defineApp({
       },
       run: async (params) => {
         const pattern = String(params.pattern);
+        try {
+          validateSearchPattern(pattern);
+        } catch (e) {
+          throw new AppCommandError(errMsg(e));
+        }
         setState('query', pattern);
         if (params.glob) setState('glob', String(params.glob));
         if (params.scope != null) setState('scope', String(params.scope));
@@ -376,7 +382,7 @@ export default defineApp({
     },
     'clone-app': {
       description:
-        'Clone one or more app sources into storage. appId accepts a plain id, a glob ("*" for every app, "dc-*"), or an array of either. Apps without src/ are skipped rather than failing the batch.',
+        'Clone one or more app sources into Search’s private storage. appId accepts a plain id, a glob ("*" for every app, "dc-*"), or an array of either. Apps without src/ are skipped rather than failing the batch.',
       params: {
         type: 'object',
         properties: {
@@ -386,7 +392,7 @@ export default defineApp({
           },
           destPath: {
             type: 'string',
-            description: 'Destination path (single app only, default: apps-source/{appId})',
+            description: 'Destination within Search’s private apps-source/ tree (single app only; default: apps-source/{appId}).',
           },
         },
         required: ['appId'],
@@ -422,7 +428,7 @@ export default defineApp({
     },
     'purge-clones': {
       description:
-        'Remove all cloned app sources in one call (default: the entire apps-source/ tree)',
+        'Remove all cloned app sources from Search’s private storage (default: the entire apps-source/ tree).',
       params: {
         type: 'object',
         properties: {
@@ -434,7 +440,7 @@ export default defineApp({
       },
     },
     'remove-clone': {
-      description: 'Remove a previously cloned app source from storage',
+      description: 'Remove a previously cloned app source from Search’s private storage',
       params: {
         type: 'object',
         properties: {
