@@ -1,6 +1,6 @@
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { showConfirm, showToast, errMsg } from '@bundled/yaar';
+import { showConfirm, tryToast } from '@bundled/yaar';
 import { deleteNotebook, newNotebook, openNotebook, saveCurrent } from '../state/persistence';
 import { current, notebooks } from '../state/signals';
 
@@ -23,7 +23,7 @@ export function Sidebar() {
               onClick=${async () => {
                 if (current()?.id === m.id) return;
                 await saveCurrent();
-                try { await openNotebook(m.id); } catch (e) { showToast(errMsg(e), 'error'); }
+                await tryToast(() => openNotebook(m.id));
               }}
             >
               <div class="lab-side-name">${m.title}</div>

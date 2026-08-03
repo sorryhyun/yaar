@@ -1,6 +1,6 @@
 import { createSignal, onCleanup, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { read, invoke, errMsg } from '@bundled/yaar';
+import { read, invoke, errMsg, tryToast } from '@bundled/yaar';
 import { showToast } from '../store';
 import type { UpdateStatus } from '../types';
 
@@ -104,17 +104,14 @@ export function UpdatesView() {
 
   const install = async () => {
     setStarting(true);
-    try {
+    // The server refuses synchronously when there is nothing to install or this
+    // build cannot install it, so the toasted message is the actual reason, not a timeout.
+    await tryToast(async () => {
       const next = await invoke<UpdateStatus>('yaar://system/update', { action: 'install' });
       setStatus(next);
       startPolling();
-    } catch (err) {
-      // The server refuses synchronously when there is nothing to install or this
-      // build cannot install it, so this message is the actual reason, not a timeout.
-      showToast(errMsg(err), 'error');
-    } finally {
-      setStarting(false);
-    }
+    });
+    setStarting(false);
   };
 
   onMount(async () => {
