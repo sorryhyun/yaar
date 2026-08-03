@@ -170,8 +170,42 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * ever shown.
    */
   private readyWindows = new Map<string, Set<string>>();
+  /**
+   * Agents whose turn the user stopped, by instance id.
+   *
+   * Interrupting an agent stops the agent; it does not stop the tool calls it
+   * already dispatched. Those run to completion on the MCP server and emit
+   * their actions through `emitAction`, which knows nothing about turns — so a
+   * window created a beat before the stop still opened after it, and the user
+   * who pressed stop watched the screen keep changing. An id lands here on
+   * interrupt and leaves on the agent's next turn or its disposal
+   * (`AgentSession.interrupt` / `handleMessage` / `cleanup`), so the block
+   * covers exactly the tail of the stopped turn.
+   */
+  private interruptedAgents = new Set<string>();
   private requestCounter = 0;
   private currentMonitorId: string | undefined;
+
+  /** This agent's turn was stopped: drop the actions its in-flight tools still emit. */
+  markInterrupted(agentId: string): void {
+    this.interruptedAgents.add(agentId);
+  }
+
+  /** This agent is running again (or gone): stop dropping its actions. */
+  clearInterrupted(agentId: string): void {
+    this.interruptedAgents.delete(agentId);
+  }
+
+  /**
+   * Whether an action from this emitter should be dropped as post-stop debris.
+   *
+   * Only actions attributable to an agent are ever dropped. An action with no
+   * agent in context comes from an iframe verb call or an HTTP route — the user
+   * clicking something — and a stopped agent is no reason to ignore the user.
+   */
+  private isInterrupted(agentId: string | undefined): boolean {
+    return !!agentId && this.interruptedAgents.has(agentId);
+  }
 
   /**
    * Set the current monitor ID for action stamping.
@@ -310,10 +344,15 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       this.reportUnaddressed(`action ${action.type}`);
       return;
     }
+    const aid = this.resolveAgentId(agentId);
+    if (this.isInterrupted(aid)) {
+      console.log(`[ActionEmitter] Dropping ${action.type} from interrupted agent ${aid}`);
+      return;
+    }
     this.emit('action', {
       action,
       sessionId: sid,
-      agentId: this.resolveAgentId(agentId),
+      agentId: aid,
       monitorId: monitorId ?? this.monitorForAction(action, sid),
     });
   }
@@ -350,6 +389,13 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     const requestId = this.generateRequestId();
     // Get current agent ID from context (with Codex fallback) and include in action
     const agentId = this.resolveAgentId();
+    if (this.isInterrupted(agentId)) {
+      // Same drop as `emitAction`, settled the way an undelivered action is settled
+      // above: `cancelled` says the action never reached a screen, which is exactly
+      // what happened, and is the one answer that cannot be read as a refusal.
+      console.log(`[ActionEmitter] Dropping ${action.type} from interrupted agent ${agentId}`);
+      return { ok: false, reason: 'cancelled' };
+    }
     const actionWithAgent = agentId ? { ...action, agentId } : action;
 
     const feedbackPromise = this.pendingRequests.create(requestId, {

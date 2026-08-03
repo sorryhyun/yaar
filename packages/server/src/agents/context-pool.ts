@@ -615,7 +615,28 @@ export class ContextPool implements PoolContext {
     return this.agentPool.getMonitorAgentSession(monitorId);
   }
 
+  /**
+   * Stop everything: the running turns *and* the work waiting behind them.
+   *
+   * The queues have to go first, and they have to go at all. `processMonitorTask`
+   * drains its monitor's queue on the way out, so interrupting alone only stops
+   * the turn the user can see — the next queued message starts the moment that
+   * turn unwinds, and a stop button that starts an agent is not a stop button.
+   *
+   * Dropping them is deliberately noisy (`reportDropped`): each one is a message
+   * the user sent and is still waiting on, and silence would read as "sent and
+   * ignored" rather than "stopped, as asked".
+   *
+   * This is the *user's* stop. The relay path (`MonitorTaskProcessor`) interrupts
+   * an agent to make its queue drain sooner and calls `session.interrupt()`
+   * directly, which is why that meaning of "interrupt" does not pass through
+   * here and keeps its queue.
+   */
   async interruptAll(): Promise<void> {
+    const dropped: Task[] = [];
+    this.monitorQueues.forEach((q) => dropped.push(...q.clear().map((i) => i.task)));
+    dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
+    this.reportDropped(dropped, 'the agents were stopped');
     await this.agentPool.interruptAll();
   }
 

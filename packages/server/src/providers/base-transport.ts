@@ -7,7 +7,13 @@
  * - Common interface implementation
  */
 
-import type { AITransport, StreamMessage, TransportOptions, ProviderType } from './types.js';
+import type {
+  AITransport,
+  InterruptReceipt,
+  StreamMessage,
+  TransportOptions,
+  ProviderType,
+} from './types.js';
 import { errMessage } from '../lib/errors.js';
 
 /**
@@ -114,9 +120,16 @@ export abstract class BaseTransport implements AITransport {
 
   /**
    * Interrupt the current query by aborting the controller.
+   *
+   * An abort is synchronous and terminal — there is nothing left running to
+   * acknowledge it — so the base receipt is always `acknowledged`. Providers
+   * that stop a turn by *asking* a live process to stop override this and say
+   * what the process answered.
    */
-  interrupt(): void {
+  async interrupt(): Promise<InterruptReceipt> {
+    const running = this.abortController && !this.abortController.signal.aborted;
     this.abortController?.abort();
+    return { outcome: running ? 'acknowledged' : 'idle' };
   }
 
   /**
@@ -142,7 +155,7 @@ export abstract class BaseTransport implements AITransport {
    * Subclasses can override to add additional cleanup.
    */
   async dispose(): Promise<void> {
-    this.interrupt();
+    await this.interrupt();
   }
 
   /**

@@ -136,6 +136,32 @@ export interface TransportOptions {
   allowedTools?: string[]; // Profile-specific tool subset (overrides default getToolNames())
 }
 
+/**
+ * What a provider can say about an interrupt it just performed.
+ *
+ * The point of the type is that "we asked it to stop" and "it stopped" are
+ * different facts, and only the provider knows which one happened. The Claude
+ * Agent SDK says so explicitly — `query.interrupt()` resolves with a receipt
+ * carrying `still_queued`, the messages the CLI kept *after* the interrupt — so
+ * a provider that fires the request and returns has not learned anything, and a
+ * caller that reports "stopped" off that has told the user something it does
+ * not know. Every provider returns one of these and every caller may log it;
+ * the escalation to a hard stop happens inside the provider, because only it
+ * knows what its hard stop is.
+ */
+export interface InterruptReceipt {
+  /**
+   * `acknowledged` — the provider confirmed the turn stopped.
+   * `escalated` — the acknowledgement was missing, late, or reported leftover
+   *   work, so the provider took the turn down the hard way (killing the
+   *   process, aborting the stream). Still stopped, but worth a log line.
+   * `idle` — nothing was running.
+   */
+  outcome: 'acknowledged' | 'escalated' | 'idle';
+  /** Ids the provider reported as still queued after the interrupt, if any. */
+  stillQueued?: string[];
+}
+
 export interface AITransport {
   readonly name: string;
   readonly providerType: ProviderType;
@@ -143,7 +169,8 @@ export interface AITransport {
 
   isAvailable(): Promise<boolean>;
   query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage>;
-  interrupt(): void;
+  /** Stop the in-flight turn. Resolves only once the turn is actually stopped. */
+  interrupt(): Promise<InterruptReceipt>;
   dispose(): Promise<void>;
 
   /**

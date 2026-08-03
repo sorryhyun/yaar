@@ -13,7 +13,7 @@
  */
 
 import { BaseTransport } from '../base-transport.js';
-import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
+import type { InterruptReceipt, StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import type { AppServer } from './app-server.js';
 import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
@@ -352,25 +352,41 @@ export class CodexProvider extends BaseTransport {
     }
   }
 
-  interrupt(): void {
+  /**
+   * Interrupt the in-flight turn, and don't return until app-server has said so.
+   *
+   * The `turn/interrupt` request used to be fired and forgotten, so this
+   * resolved while the turn was still winding down and the caller reported a
+   * stop it had not observed. The local abort below is unconditional either
+   * way — it is what unblocks *our* read loop — but whether the model stopped
+   * is app-server's answer to give, so we wait for it and say which happened.
+   */
+  async interrupt(): Promise<InterruptReceipt> {
     const threadId = this.currentSession?.threadId;
     const turnId = this.currentTurnId;
-    if (this.client?.isConnected && threadId && turnId) {
-      this.client
-        .request<TurnInterruptParams, TurnInterruptResponse>('turn/interrupt', {
-          threadId,
-          turnId,
-        })
-        .catch((err) => {
-          console.warn(`[codex] turn/interrupt failed:`, err);
+    const canAsk = !!this.client?.isConnected && !!threadId && !!turnId;
+
+    let outcome: InterruptReceipt['outcome'] = canAsk ? 'acknowledged' : 'idle';
+    if (canAsk) {
+      try {
+        await this.client!.request<TurnInterruptParams, TurnInterruptResponse>('turn/interrupt', {
+          threadId: threadId!,
+          turnId: turnId!,
         });
+      } catch (err) {
+        // The turn is still stopped locally — we abort below — but nothing
+        // confirmed the model stopped, so this is not a clean acknowledgement.
+        console.warn(`[codex] turn/interrupt failed:`, err);
+        outcome = 'escalated';
+      }
     }
 
-    super.interrupt();
+    await super.interrupt();
     if (this.resolveMessage) {
       this.resolveMessage(true);
       this.resolveMessage = null;
     }
+    return { outcome };
   }
 
   /**

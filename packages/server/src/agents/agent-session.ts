@@ -7,6 +7,7 @@
 
 import type {
   AITransport,
+  InterruptReceipt,
   TransportOptions,
   ProviderType,
   TokenUsage,
@@ -373,6 +374,9 @@ export class AgentSession {
 
     this.setRunning(true);
     this.interrupted = false;
+    // A new turn is not the interrupted one: lift the emitter's block, or this
+    // agent would never paint again after its first stop.
+    actionEmitter.clearInterrupted(stableAgentId);
     this.currentMessageId = messageId ?? null;
     this.recordedActions = [];
 
@@ -527,10 +531,38 @@ export class AgentSession {
     return this.provider.steer(content);
   }
 
-  async interrupt(): Promise<void> {
+  /**
+   * Stop this agent's turn, and resolve only once it is actually stopped.
+   *
+   * Three things have to happen, in this order, and the order is the fix:
+   *
+   * 1. `running = false` stops *us* — the turn loop breaks at its next message,
+   *    so nothing further is mapped into events or context.
+   * 2. The agent is marked interrupted with the action emitter. Steps 1 and 3
+   *    say nothing about tool calls already dispatched: those run to completion
+   *    on the MCP server and emit their actions through a path that never looks
+   *    at this session. Without the mark, a `window.create` issued a beat before
+   *    the stop still opens a window after it — the user presses stop, the
+   *    agent disappears from the dashboard, and the screen keeps changing.
+   * 3. The provider is awaited. It, not us, knows whether the model stopped;
+   *    `interrupt()` used to return here without waiting, which is why "stopped"
+   *    could be reported while the CLI was still working through queued input.
+   */
+  async interrupt(): Promise<InterruptReceipt | undefined> {
     this.setRunning(false);
     this.interrupted = true;
-    this.provider?.interrupt();
+    actionEmitter.markInterrupted(this.instanceId);
+    if (!this.provider) return undefined;
+
+    const receipt = await this.provider.interrupt();
+    if (receipt.outcome === 'escalated') {
+      const queued = receipt.stillQueued?.length ?? 0;
+      console.warn(
+        `[AgentSession] ${this.instanceId}: interrupt escalated to a hard stop` +
+          (queued > 0 ? ` (${queued} message(s) still queued)` : ''),
+      );
+    }
+    return receipt;
   }
 
   async setProvider(providerType: ProviderType): Promise<void> {
@@ -542,6 +574,9 @@ export class AgentSession {
   }
 
   async cleanup(): Promise<void> {
+    // The emitter keeps interrupted agents by id; an agent that is gone can
+    // neither emit nor be un-marked by a next turn, so drop the entry with it.
+    actionEmitter.clearInterrupted(this.instanceId);
     if (this.unsubscribeAction) {
       this.unsubscribeAction();
       this.unsubscribeAction = null;

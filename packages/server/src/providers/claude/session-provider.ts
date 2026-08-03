@@ -7,7 +7,7 @@
 
 import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
 import { BaseTransport } from '../base-transport.js';
-import type { StreamMessage, TransportOptions, ProviderType } from '../types.js';
+import type { InterruptReceipt, StreamMessage, TransportOptions, ProviderType } from '../types.js';
 import { mapClaudeMessage, TurnUsageTracker } from './message-mapper.js';
 import { createInputChannel, type InputChannel } from './input-channel.js';
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
@@ -37,6 +37,29 @@ type TurnOptionsRequest = Omit<SDKOptionsRequest, 'defaultSystemPrompt' | 'abort
 
 /** Max time to hold a turn's first message while MCP servers connect. */
 const MCP_CONNECT_WAIT_MS = 5000;
+
+/**
+ * How long an interrupt waits for the CLI's acknowledgement before killing the
+ * process instead. A control request answered over the same pipe the turn is
+ * streaming on should be near-instant; a wait this long already means the CLI
+ * is not answering, and the user has been staring at a stop button since.
+ */
+const INTERRUPT_ACK_MS = 2000;
+
+/**
+ * Resolve `promise`, or reject once `ms` have passed.
+ *
+ * Deliberately not a "resolve with undefined on timeout": every caller here
+ * treats a missing answer as a reason to escalate, and `undefined` is already
+ * the SDK's spelling for "old CLI, acknowledged with no detail". Collapsing the
+ * two would make a hung control channel look like a clean stop.
+ */
+function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`timed out after ${ms}ms`)), ms);
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
 
 /**
  * Separator joining a turn's fingerprint fields. NUL cannot occur in a prompt,
@@ -492,20 +515,52 @@ export class ClaudeSessionProvider extends BaseTransport {
   }
 
   /**
-   * Interrupt the in-flight turn. On the persistent stream this is a control
-   * request — the turn stops but the process and its MCP connections survive
-   * for the next turn. One-shot (fork) turns abort their process.
+   * Interrupt the in-flight turn, and don't return until it is actually stopped.
+   *
+   * On the persistent stream this is a control request whose *receipt* is the
+   * whole point (`SDKControlInterruptResponse`): `still_queued` names async user
+   * messages that, in the SDK's words, "WILL run unless cancelled first". This
+   * used to be `void stream.interrupt().catch(...)` — fire-and-forget — so the
+   * receipt was discarded and only a rejection was noticed. The turn was
+   * reported stopped while the CLI worked through whatever it had kept, which is
+   * exactly what "it says stopped but it's still going" looks like from outside.
+   *
+   * Three escalations, all ending in `closePersistentSession()` because killing
+   * the process is the only stop this provider owns that cannot be argued with:
+   * leftover queued work, an acknowledgement that never came, and a rejection.
+   * An empty `still_queued` is not proof of quiet — messages enqueued without a
+   * uuid are never listed — but it is the strongest signal the CLI offers, and
+   * the alternative is killing a healthy warm process after every stop.
+   *
+   * An *idle* session is closed rather than aborted. `this.abortController` is
+   * the same controller the open stream was built with (`getSDKOptions` mints
+   * it, `openPersistentSession` stores it), so `super.interrupt()` here would
+   * kill a prewarmed process while leaving `persistentSession` pointing at it —
+   * and the next turn would reuse that corpse, push a message into a dead
+   * channel, and return no answer at all.
    */
-  interrupt(): void {
+  async interrupt(): Promise<InterruptReceipt> {
     const session = this.persistentSession;
-    if (session?.busy) {
-      void session.stream.interrupt().catch((err) => {
-        console.warn('[ClaudeSessionProvider] Control interrupt failed; killing process:', err);
-        void this.closePersistentSession();
-      });
-      return;
+    if (!session) return super.interrupt();
+    if (!session.busy) {
+      await this.closePersistentSession();
+      return { outcome: 'idle' };
     }
-    super.interrupt();
+
+    try {
+      const receipt = await withDeadline(session.stream.interrupt(), INTERRUPT_ACK_MS);
+      const stillQueued = receipt?.still_queued ?? [];
+      if (stillQueued.length === 0) return { outcome: 'acknowledged' };
+      console.warn(
+        `[ClaudeSessionProvider] Interrupt left ${stillQueued.length} message(s) queued; closing the stream`,
+      );
+      await this.closePersistentSession();
+      return { outcome: 'escalated', stillQueued };
+    } catch (err) {
+      console.warn('[ClaudeSessionProvider] Control interrupt failed; killing process:', err);
+      await this.closePersistentSession();
+      return { outcome: 'escalated' };
+    }
   }
 
   async dispose(): Promise<void> {

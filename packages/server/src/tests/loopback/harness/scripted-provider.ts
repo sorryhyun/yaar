@@ -19,7 +19,12 @@
  * with `handleMessage = mock(async () => {})`. Under that stub, "routeMessage awaits the
  * whole turn" awaits nothing, and a turn that waits on the client cannot be expressed.
  */
-import type { AITransport, StreamMessage, TransportOptions } from '../../../providers/types.js';
+import type {
+  AITransport,
+  InterruptReceipt,
+  StreamMessage,
+  TransportOptions,
+} from '../../../providers/types.js';
 import type { WindowStateRegistry } from '../../../session/window-state.js';
 import type { SessionId } from '../../../session/types.js';
 import { runWithAgentContext } from '../../../agents/agent-context.js';
@@ -162,7 +167,9 @@ export class ScriptedProvider implements AITransport {
     yield { type: 'complete' };
   }
 
-  interrupt(): void {}
+  async interrupt(): Promise<InterruptReceipt> {
+    return { outcome: 'acknowledged' };
+  }
 
   async dispose(): Promise<void> {}
 }

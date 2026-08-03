@@ -1105,23 +1105,41 @@ export class AgentPool {
   // ── Query / interrupt ───────────────────────────────────────────────
 
   /**
-   * Interrupt all running agents (monitor, app, ephemeral).
+   * Interrupt every *running* agent (monitor, app, ephemeral).
+   *
+   * Idle agents are skipped, and the skip is load-bearing rather than an
+   * optimization: interrupting an idle agent is not free. A prewarmed Claude
+   * agent holds an open stream, and stopping it costs the warm process — the
+   * first message after any "stop all" would then pay a cold start. Worse
+   * before this skip existed, the idle path aborted that stream's controller
+   * while leaving the session record pointing at the dead process, so the next
+   * turn reused it and answered nothing at all.
    */
   async interruptAll(): Promise<void> {
-    for (const { agent } of this.allAgents()) {
-      await agent.session.interrupt();
-    }
+    // Concurrently, because each interrupt now waits for its provider to
+    // acknowledge: serially, the user's stop would take as long as the sum of
+    // every agent's acknowledgement, and the last agent stopped would keep
+    // working through the wait for all the ones before it.
+    await Promise.all(
+      [...this.allAgents()]
+        .filter(({ agent }) => agent.session.isRunning())
+        .map(({ agent }) => agent.session.interrupt()),
+    );
   }
 
   /**
    * Interrupt a specific agent, identified either by its current role
    * (`monitor-{messageId}`, `app-{id}`, …) or by its instanceId — the id
    * `listAgents()` reports, which is stable across turns.
+   *
+   * Returns true when the named agent exists, whether or not it had a turn to
+   * stop: "already idle" is the outcome the caller asked for, and reporting it
+   * as "no such agent" would send a caller looking for a bug that isn't there.
    */
   async interruptByIdOrRole(idOrRole: string): Promise<boolean> {
     for (const { agent } of this.allAgents()) {
       if (agent.currentRole === idOrRole || agent.instanceId === idOrRole) {
-        await agent.session.interrupt();
+        if (agent.session.isRunning()) await agent.session.interrupt();
         return true;
       }
     }

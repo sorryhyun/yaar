@@ -115,9 +115,15 @@ export function isAnswerEvent(type: string): boolean {
  *
  * The safety argument is per-entry, not general: each handler here touches only
  * session/connection-level state (the monitor list, this connection's subscription, an
- * agent's cancel signal) and never enters `ContextPool`'s task queues, so no frame it
- * overtakes reads its effect as a sequence. They stay ordered *among themselves* because
- * their handlers are synchronous and `message()` dispatches them in arrival order.
+ * agent's cancel signal) and never enters `ContextPool`'s task queues as a *producer*, so
+ * no frame it overtakes reads its effect as a sequence.
+ *
+ * The monitor handlers are synchronous, so they stay ordered among themselves by arrival.
+ * The two interrupts are not: stopping an agent now waits for the provider to say the turn
+ * actually stopped (`AITransport.interrupt`), because reporting a stop we had not observed
+ * is what let a "stopped" agent keep working. Two overlapping interrupts are harmless —
+ * interrupting an agent twice is interrupting it once — and the wait is bounded by the
+ * provider, so neither ordering nor liveness rests on the handler being instant.
  *
  * Deliberately absent: `RESYNC`, whose entire contract is "you have now heard everything
  * I said before this" — it is the one frame whose meaning *is* its position in the queue.

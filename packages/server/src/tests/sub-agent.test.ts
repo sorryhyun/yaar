@@ -67,7 +67,9 @@ function fakeProvider(recorded: Recorded[]): AITransport {
       yield { type: 'text', content: 'ok' } as StreamMessage;
       yield { type: 'complete' } as StreamMessage;
     },
-    interrupt() {},
+    async interrupt() {
+      return { outcome: 'acknowledged' as const };
+    },
     async dispose() {},
   };
 }
