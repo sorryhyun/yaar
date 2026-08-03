@@ -1,4 +1,5 @@
 export {};
+import { formatBytes } from '@bundled/yaar';
 
 // ── Pure utilities (no side-effects, no external imports) ─────────────────
 
@@ -11,11 +12,13 @@ export function sanitizeAlias(alias: string): string {
   return alias.trim().toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }
 
+/**
+ * `formatBytes` has no "unknown" case — a directory or a listing that omits
+ * `size` would render as a misleading `'0 B'`. Blank stays a local delta on
+ * top of the shared ladder rather than something the helper should own.
+ */
 export function formatSize(bytes?: number): string {
-  if (bytes == null) return '';
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return bytes == null ? '' : formatBytes(bytes);
 }
 
 export function getExtension(name: string): string {
