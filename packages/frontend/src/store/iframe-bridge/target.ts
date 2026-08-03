@@ -64,6 +64,31 @@ export function resolveTargetKey(windowId: string): string {
 }
 
 /**
+ * Why a window id did not reach an element, in terms the caller can act on.
+ *
+ * "Window element not found" was the same sentence for two different faults, and the
+ * one that mattered — the desktop and the server holding the same window under
+ * different keys, so nothing this tab does will ever reach it — read exactly like the
+ * benign one. Naming the resolved key and the keys this client actually holds is what
+ * turns that into a report instead of a mystery; the session that produced issue #48
+ * spent its whole diagnosis re-deriving it by hand.
+ */
+export function explainMissingWindow(windowId: string): string {
+  const state = getDesktopState();
+  const key = resolveTargetKey(windowId);
+  if (state.windows[key]) {
+    return `Window "${windowId}" is in this desktop's state as "${key}" but has no element in the DOM.`;
+  }
+  const known = Object.keys(state.windows);
+  const sample = known.slice(0, 8).join(', ') + (known.length > 8 ? ', ...' : '');
+  return (
+    `Window "${windowId}" is not on this desktop: it resolved to "${key}", which no window ` +
+    `holds. This client has ${known.length} window(s)${known.length ? `: ${sample}` : ''}. ` +
+    `The server and the desktop disagree about this window's handle.`
+  );
+}
+
+/**
  * Full path from a server-supplied window id to a live, postable iframe.
  *
  * Collapses the identical resolve → element → iframe → `contentWindow` chain shared by the

@@ -3,7 +3,12 @@
  */
 import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
-import { findIframeIn, findWindowElement, getIframeTargetOrigin } from './target';
+import {
+  explainMissingWindow,
+  findIframeIn,
+  findWindowElement,
+  getIframeTargetOrigin,
+} from './target';
 
 /**
  * Outcome of a self-capture attempt. A failure always names its cause, so the
@@ -92,7 +97,9 @@ export async function captureWindow(windowId: string, requestId: string) {
     // Addressed by the raw id, not a store-resolved key — see `resolveTargetKey`.
     const el = findWindowElement(windowId);
     if (!el) {
-      sendFeedback(false, { error: 'Window element not found in DOM' });
+      sendFeedback(false, {
+        error: `Window element not found in DOM. ${explainMissingWindow(windowId)}`,
+      });
       return;
     }
 

@@ -453,4 +453,52 @@ describe('server event dispatcher', () => {
     );
     expect(handlers.appendCliStreaming).not.toHaveBeenCalled();
   });
+
+  // An unscoped windowId leaves the store to pick a monitor, and its pick is *this tab's*
+  // active one. On a two-monitor desktop that forks the registries — the server holding
+  // "1/preview", the tab holding "0/preview" — and every later app-protocol call against
+  // the window then resolves to no DOM element, permanently.
+  it('carries the event monitor onto a window action that arrived unscoped', () => {
+    const handlers = createHandlers();
+    dispatchServerEvent(
+      {
+        type: 'ACTIONS',
+        monitorId: '1',
+        actions: [
+          {
+            type: 'window.create',
+            windowId: 'devtools-preview-1',
+            title: 'preview',
+            bounds: { x: 0, y: 0, w: 640, h: 480 },
+            content: { renderer: 'iframe', data: '/x.html' },
+          },
+        ],
+      } as unknown as Parameters<typeof dispatchServerEvent>[0],
+      handlers,
+    );
+
+    const [actions] = handlers.applyActions.mock.calls[0] as unknown as [
+      Array<{ monitorId?: string }>,
+    ];
+    expect(actions[0].monitorId).toBe('1');
+  });
+
+  it('leaves an already-scoped window action alone', () => {
+    const handlers = createHandlers();
+    dispatchServerEvent(
+      {
+        type: 'ACTIONS',
+        monitorId: '1',
+        actions: [{ type: 'window.close', windowId: '0/notes' }],
+      } as unknown as Parameters<typeof dispatchServerEvent>[0],
+      handlers,
+    );
+
+    const [actions] = handlers.applyActions.mock.calls[0] as unknown as [
+      Array<Record<string, unknown>>,
+    ];
+    // A handle already names its monitor; re-stamping it would let the event's monitor
+    // contradict the id and there would be no way to tell which one won.
+    expect(actions[0]).toEqual({ type: 'window.close', windowId: '0/notes' });
+  });
 });

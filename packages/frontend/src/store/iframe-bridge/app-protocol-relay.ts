@@ -7,6 +7,7 @@ import { ClientEventType } from '@/types';
 import { wsManager, sendEvent } from '@/hooks/use-agent-connection/transport-manager';
 import { getDesktopState } from './store-access';
 import {
+  explainMissingWindow,
   findIframeIn,
   findWindowElement,
   getIframeTargetOrigin,
@@ -150,7 +151,7 @@ export function handleAppProtocolRequest(
   if (!el) {
     sendAppProtocolResponse(requestId, windowId, {
       kind: request.kind,
-      error: 'Window element not found',
+      error: `Window element not found. ${explainMissingWindow(windowId)}`,
     } as AppProtocolResponse);
     return;
   }

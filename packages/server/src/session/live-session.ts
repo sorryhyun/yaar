@@ -273,11 +273,28 @@ export class LiveSession {
     // frontend then had to guess the monitor back by scanning its keys for a matching
     // suffix, and with the same app open on two monitors it could guess wrong and close
     // the other one.
-    const windowHandle = rawWindowId
-      ? (this.windowState.handleMap.resolve(rawWindowId, event.monitorId) ?? rawWindowId)
+    const priorHandle = rawWindowId
+      ? this.windowState.handleMap.resolve(rawWindowId, event.monitorId)
       : undefined;
 
     this.windowState.handleAction(event.action, event.monitorId);
+
+    // ...and re-asked afterwards, because `window.create` is the mirror case: it *mints*
+    // the handle, so before the action there is nothing to resolve and the pre-lookup
+    // necessarily answers with the raw id. Sending that raw id to the frontend is not
+    // cosmetic — the frontend has no monitor to key the new window by either, so it falls
+    // back to whichever monitor that tab is *looking at* (`applyWindowAction`), and on a
+    // two-monitor desktop that is routinely the wrong one. The two registries then hold
+    // the same window under different keys forever: the server says `0/preview`, the tab
+    // says `1/preview`, every later app_query resolves to no DOM element and reports
+    // "Window element not found", and nothing short of closing and re-creating the window
+    // repairs it. Only `create` needs this — for everything else the prior handle is the
+    // authoritative one, and for `close` it is the *only* one left.
+    const windowHandle = rawWindowId
+      ? (priorHandle ??
+        this.windowState.handleMap.resolve(rawWindowId, event.monitorId) ??
+        rawWindowId)
+      : undefined;
     // Record action against the monitor's budget (if monitorId present)
     if (event.monitorId && this.pool) {
       this.pool.recordMonitorAction(event.monitorId);

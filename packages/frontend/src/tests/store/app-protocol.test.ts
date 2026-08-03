@@ -235,8 +235,14 @@ describe('handleAppProtocolRequest', () => {
       type: 'APP_PROTOCOL_RESPONSE',
       requestId: 'req-missing',
       windowId: 'nonexistent-window',
-      response: { kind: 'manifest', error: 'Window element not found' },
+      response: { kind: 'manifest' },
     });
+    const { error } = (sent[0] as { response: { error: string } }).response;
+    expect(error).toStartWith('Window element not found');
+    // The generic sentence alone could not tell a not-yet-mounted window from the
+    // server and the desktop holding different keys for it — the diagnosis must name
+    // the key that was actually looked up.
+    expect(error).toContain('0/nonexistent-window');
   });
 
   it('reports a window with no iframe as an error, immediately', () => {

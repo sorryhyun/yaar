@@ -67,4 +67,30 @@ describe('iframe-emitted actions awaiting feedback', () => {
     // The scoped handle still survives the same rewrite.
     expect(capture?.windowId).toBe('0/devtools-preview-1752345678901');
   });
+
+  /**
+   * `window.create` is the one action whose handle does not exist until the action is
+   * applied, so the handle lookup that brackets it has to happen afterwards. It did not,
+   * and the raw id went out — leaving the frontend to key the new window by whichever
+   * monitor that tab happened to be looking at. With two monitors the two registries
+   * then held the same window under different keys, and every app_query, app_command and
+   * __screenshot against it failed with "Window element not found" until it was closed
+   * and re-created (issue #48).
+   */
+  it('reaches the frontend with the handle window.create itself mints', async () => {
+    const actions = await broadcastFromIframe({
+      type: 'window.create',
+      windowId: 'devtools-preview-1752345678902',
+      title: '3D Studio (preview)',
+      bounds: { x: 225, y: 84, w: 640, h: 480 },
+      content: { renderer: 'iframe', data: '/api/storage/apps/devtools/x/dist/index.html' },
+    } as OSAction);
+
+    const create = actions.find((a) => a.type === 'window.create') as
+      | (OSAction & { windowId?: string })
+      | undefined;
+
+    expect(create).toBeDefined();
+    expect(create?.windowId).toBe('0/devtools-preview-1752345678902');
+  });
 });

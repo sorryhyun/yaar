@@ -95,6 +95,21 @@ function extractAgentId(message: ServerEvent): string {
   return (message as { agentId?: string }).agentId || 'default';
 }
 
+/**
+ * Tag a window action that arrived with an unscoped windowId with the monitor the
+ * emitting event named, so the store keys it there rather than on this tab's active
+ * monitor. Actions that already carry a scoped handle, or a monitorId of their own, are
+ * returned untouched.
+ */
+function scopeToMonitor(monitorId: string): (action: OSAction) => OSAction {
+  return (action) => {
+    if (!action.type.startsWith('window.')) return action;
+    const a = action as OSAction & { windowId?: string; monitorId?: string };
+    if (!a.windowId || a.windowId.includes('/') || a.monitorId) return action;
+    return { ...a, monitorId } as unknown as OSAction;
+  };
+}
+
 export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventDispatchHandlers) {
   const shouldLog =
     message.type === ServerEventType.ACTIONS ||
@@ -122,9 +137,18 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
   switch (message.type) {
     case ServerEventType.ACTIONS: {
       const monitorId = (message as { monitorId?: string }).monitorId;
-      // Server already stamps scoped handles on windowId — just pass actions through.
-      // monitorId is only used for CLI entry attribution below.
-      handlers.applyActions(message.actions);
+      // The server stamps a scoped handle ("0/notes") on windowId, and that handle is what
+      // keys the window in this store. When one arrives unscoped anyway, the event's own
+      // monitorId is carried onto the action so `applyWindowAction` keys the window by the
+      // monitor the *server* placed it on. Its fallback otherwise is this tab's active
+      // monitor, which on a multi-monitor desktop silently forks the two registries: the
+      // server holds "0/preview", the tab holds "1/preview", and every later app-protocol
+      // call against it resolves to no DOM element. Belt and braces for the server-side
+      // stamp (see `LiveSession.handleEmittedAction`), because the divergence is silent
+      // and unrecoverable while the stamp being missing is neither.
+      handlers.applyActions(
+        monitorId ? message.actions.map(scopeToMonitor(monitorId)) : message.actions,
+      );
       // Summarize actions for CLI
       const summary = message.actions
         .map((a) => {
