@@ -9,7 +9,7 @@ import { agentLogs } from './shape';
 export const runCommands = {
   runCode: defineAppCommand({
     description:
-      'Run JavaScript in the notebook kernel WITHOUT creating a cell, and get back a COMPRESSED result. Shares the same persistent scope as the notebook cells, so variables defined here are visible to cells and vice versa. Helpers in scope: store (read/write yaar storage), csv, df (mini dataframe), stats, plot, http, show(), sleep(). Top-level await is allowed and the last expression is the result. The result is capped at resultLimit bytes; when it does not fit you get a shape summary plus a sample, and truncated: true. For the full data set saveResultTo a storage path and only the path comes back.',
+      'Run JavaScript in the notebook kernel WITHOUT creating a cell, and get back a COMPRESSED result. Shares the same persistent scope as the notebook cells, so variables defined here are visible to cells and vice versa. Helpers in scope: store (read/write storage), csv, df (mini dataframe), stats, plot, http, show(), sleep(). store paths are two-tier: a bare path like \'notebooks/x.json\' is this app\'s private storage, and shared storage takes an explicit URI, \'yaar://storage/media/lab/x.png\'. Top-level await is allowed and the last expression is the result. The result is capped at resultLimit bytes; when it does not fit you get a shape summary plus a sample, and truncated: true. For the full data set saveResultTo a storage path and only the path comes back.',
     params: z.object({
       code: z.string(),
       timeoutMs: z.optional(z.number()),

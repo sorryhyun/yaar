@@ -66,16 +66,36 @@ await store.remove(path)
 await store.exists(path)
 ```
 
-Path rules:
+Path rules — **two tiers, chosen by the form of the path.** This applies identically to
+`read readJSON readCSV write writeJSON writeCSV list remove exists`.
 
 | path | goes to |
 |---|---|
-| `notes/x.json` (default) | this app's private storage |
-| `media/lab/x.png` | the shared media tree, where other apps can read it |
-| `yaar://storage/media/...` | same, absolute form |
+| `notes/x.json`, `/notes/x.json` (default) | this app's private storage |
+| `app:notes/x.json` | the same, written explicitly |
+| `yaar://apps/self/storage/notes/x.json` | the same, absolute |
+| `yaar://storage/media/lab/x.png` | **shared storage** — the sanctioned way out of app storage |
+| `shared:media/lab/x.png` | the same, shorthand |
+| `media/...` or `media` | the shared media tree (legacy shorthand, still supported) |
+
+So a bare path is *always* this app's own storage, and reaching anything else takes a
+`yaar://storage/...` URI. Shared reads and writes are subject to the `yaar://storage/`
+permission in `app.json`; without it they fail with a 403 rather than falling back.
+
+Trailing slashes, doubled slashes and `.` segments are normalised away, so
+`yaar://storage//media//` and `media/` both work. `..` is refused in every form — use a
+URI to leave app storage, not traversal.
+
+When a path is refused the message names the location it resolved to and the URI that
+would have reached shared storage:
+
+```
+store.list failed for 'yaar://apps/self/storage/media' (Directory not found).
+Paths are this app's private storage by default — use 'yaar://storage/media' for shared storage.
+```
 
 Writing a base64 `data:` URL stores real bytes, so
-`store.write('media/lab/c.png', await plot.toPNG())` produces a usable image.
+`store.write('yaar://storage/media/lab/c.png', await plot.toPNG())` produces a usable image.
 
 ### df — mini dataframe
 
@@ -189,3 +209,5 @@ keeps.
   a variable is missing, re-run the setup.
 - `store.write` to a `media/` path for private scratch data. `media/` is shared and visible;
   default (app-scoped) paths are not.
+- Reaching for `../..` to get at another app's files. Traversal is refused; shared storage
+  is `yaar://storage/...` and nothing else is reachable.

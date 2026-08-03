@@ -17,7 +17,7 @@ src/kernel/
   source.ts            joins the parts into KERNEL_SRC (order is load-bearing)
   worker.ts            main-thread lifecycle: queue, timeout, terminate, restart
   bridge.ts            dispatch for calls the worker makes back into the app
-  paths.ts             store path rules (app-private vs the shared media tree)
+  paths.ts             store path rules (app-private by default vs. explicit yaar:// URIs)
   store-ops.ts         the five store operations behind the bridge
 
 src/state/
@@ -153,6 +153,37 @@ is a tiny plugin using `destination-over`, because a bare canvas exports transpa
 - `previewScreenshot` in devtools does not render textarea heights or scroll position
   faithfully. Verify layout with `previewEval` measurements, and verify charts by exporting
   a PNG and reading it back.
+
+## store paths: two tiers, decided by form
+
+`resolvePath` in `src/kernel/paths.ts` is the single decision point, and every operation in
+`store-ops.ts` goes through it — so a rule added there applies to `read`/`write`/`list`/
+`remove`/`exists` at once. Keep it that way; the old bug was one operation resolving
+differently from the others.
+
+- A **bare or relative path is this app's own storage.** That is the default and must stay
+  the default: notebooks in the wild are full of `store.readJSON('data/x.json')`.
+- **Shared storage takes an explicit `yaar://storage/...` URI** (or the `shared:` shorthand).
+- `media` / `media/...` is a *legacy* shared shorthand that predates the URI form. It is the
+  one exception to "bare means private", kept because `plot.save` and `exportChart` document
+  it. Do not add more exceptions — new ones go through the URI.
+- `..` is refused in every form. It used to resolve server-side out of `apps/lab/` into
+  neighbouring apps' directories; a URI is the sanctioned way out.
+- Errors name the resolved location as a **canonical URI**, never a physical path: under the
+  devtools preview the principal is `preview--{projectId}`, so a hard-coded `apps/lab/` in a
+  message is wrong exactly where you are most likely to be reading it. The backend's own
+  message already carries the physical path.
+
+### The shared listing hazard
+
+`storage.list()` (shared) is typed `Promise<string[]>` in the yaar bundle's `.d.ts`, but at
+runtime it returns **entry objects** — mapping `n.endsWith('/')` over the result crashed
+every shared listing with `G.endsWith is not a function`, and the type declaration hid it.
+`toEntry` in `store-ops.ts` accepts both shapes deliberately. Do not "simplify" it back to
+one, and do not trust that signature.
+
+Note the two backends also differ in what they return: app storage yields paths relative to
+the app root, shared storage yields paths including the directory prefix (`media/lab/x.png`).
 
 ## Storage layout
 
