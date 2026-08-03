@@ -1,6 +1,6 @@
 import { createSignal, createMemo, Show, For, onMount, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { defineApp, showToast, errMsg, onShortcut } from '@bundled/yaar';
+import { defineApp, showToast, onShortcut, tryToast } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import {
   memos,
@@ -72,7 +72,10 @@ function App() {
   async function handleSave() {
     if (saving()) return;
     setSaving(true);
-    try {
+    // Success message depends on which mode was saved, so it's toasted inline
+    // rather than via `tryToast`'s single `opts.success` string; `tryToast`
+    // still owns the one shared failure path.
+    await tryToast(async () => {
       if (editMode() === 'new') {
         const memo = await addMemo(editTitle(), editContent());
         setSelectedId(memo.id);
@@ -86,23 +89,20 @@ function App() {
           showToast('Memo updated', 'success');
         }
       }
-    } catch (err) {
-      showToast(errMsg(err), 'error');
-    } finally {
-      setSaving(false);
-    }
+    });
+    setSaving(false);
   }
 
   async function handleDelete() {
     const id = selectedId();
     if (!id) return;
-    try {
-      await deleteMemo(id);
-      setConfirmDelete(false);
-      showToast('Memo deleted', 'success');
-    } catch (err) {
-      showToast(errMsg(err), 'error');
-    }
+    await tryToast(
+      async () => {
+        await deleteMemo(id);
+        setConfirmDelete(false);
+      },
+      { success: 'Memo deleted' },
+    );
   }
 
   // Keyboard shortcuts
