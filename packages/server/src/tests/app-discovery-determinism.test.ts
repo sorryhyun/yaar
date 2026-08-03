@@ -17,9 +17,19 @@ describe('app discovery ordering', () => {
       }),
     );
 
-    expect(runs[0]).toEqual([...runs[0]].sort());
-    for (const ids of runs.slice(1)) {
-      expect(ids).toEqual(runs[0]);
+    // The subject is *order*, not membership. `realfs/agent-docs.test.ts` seeds a real
+    // app directory under `user-apps/` from its own process while this one reads, so the
+    // app set genuinely can change mid-test — that is an install, which is a thing that
+    // happens to a live YAAR, not an ordering bug. Asserting run-to-run identity turned
+    // it into a failure here (and would in any session that installed an app at the
+    // wrong moment). So: every read is sorted, and any two reads agree on the order of
+    // the apps they both saw.
+    for (const ids of runs) {
+      expect(ids).toEqual([...ids].sort());
+    }
+    const inEveryRun = runs.reduce((shared, ids) => shared.filter((id) => ids.includes(id)));
+    for (const ids of runs) {
+      expect(ids.filter((id) => inEveryRun.includes(id))).toEqual(inEveryRun);
     }
   });
 });
