@@ -148,6 +148,37 @@ describe('safeParseOr', () => {
     expect(safeParseOr(Layout, { width: 'wide' }, null)).toBeNull();
   });
 
+  test('onInvalid replaces the log rather than adding to it', () => {
+    const seen: unknown[] = [];
+    const out = safeParseOr(Layout, { width: 'wide' }, fallback, {
+      onInvalid: (issues) => seen.push(issues),
+    });
+    expect(out).toBe(fallback);
+    expect(seen).toHaveLength(1);
+    // The schema's own issues, so a caller can log or render them itself.
+    expect(Array.isArray(seen[0])).toBeTrue();
+    expect(errors).toBeEmpty();
+  });
+
+  test('onInvalid does not run for an absent value', () => {
+    let called = false;
+    expect(safeParseOr(Layout, undefined, fallback, { onInvalid: () => (called = true) })).toBe(
+      fallback,
+    );
+    expect(called).toBeFalse();
+  });
+
+  test('an onInvalid that throws reaches the caller — parse-or-throw, without a second export', () => {
+    expect(() =>
+      safeParseOr(Layout, { width: 'wide' }, undefined, {
+        onInvalid: () => {
+          throw new Error('Malformed config');
+        },
+      }),
+    ).toThrow(/Malformed config/);
+    expect(errors).toBeEmpty();
+  });
+
   test('throws on a non-schema — a caller bug, not bad data', () => {
     expect(() => safeParseOr({ width: Number } as never, {}, fallback)).toThrow(/Standard Schema/);
   });

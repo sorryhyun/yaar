@@ -45,6 +45,26 @@ import { describeIssues, isStandardSchema } from './standard-schema.js';
  * for those — this returns a value, not a promise, so its callers can use it in
  * a store initializer). Both fail identically on every run, so failing loudly
  * costs one dev-loop iteration and hiding them costs a silent fallback forever.
+ *
+ * `onInvalid` replaces the `console.error` for callers whose boundary is not
+ * "log it and carry on". The adoption pass that first exercised this helper
+ * found three such shapes, and all three had written the whole safeParse block
+ * by hand rather than bend to a fixed logging policy:
+ *
+ * ```ts
+ * // the call has to fail — the ~18 parse-or-throw sites across the fleet
+ * safeParseOr(S, raw, undefined, { onInvalid: () => { throw new Error('...') } });
+ *
+ * // the user is about to be misled by a plausible-looking fallback
+ * safeParseOr(S, raw, EMPTY, { onInvalid: (i) => { console.error(i); showToast('...') } });
+ *
+ * // a poll: one line per tick is how a real signal gets tuned out
+ * safeParseOr(S, raw, last, { onInvalid: () => noteSyncFailure() });
+ * ```
+ *
+ * It receives the schema's own issues and runs *instead of* the default line,
+ * so a caller that wants both logs it itself. It does not run on absence —
+ * nothing is wrong with a value that was never written.
  */
 // The app-facing signature is the one in `bundled-types/index.d.ts`, where the
 // return type is derived from the schema's own output type. This one is written
@@ -53,7 +73,7 @@ export function safeParseOr<F>(
   schema: unknown,
   raw: unknown,
   fallback: F,
-  opts?: { label?: string },
+  opts?: { label?: string; onInvalid?: (issues: unknown) => void },
 ): F {
   const label = opts && opts.label ? `safeParseOr(${opts.label})` : 'safeParseOr';
   if (!isStandardSchema(schema)) {
@@ -70,7 +90,11 @@ export function safeParseOr<F>(
     );
   }
   if (outcome && outcome.issues && outcome.issues.length) {
-    console.error(`[yaar] ${label}: using fallback - ${describeIssues(outcome.issues)}`);
+    // Called before the fallback is returned, so an `onInvalid` that throws
+    // reaches its caller instead — which is what makes parse-or-throw a call
+    // option rather than a second export.
+    if (opts && opts.onInvalid) opts.onInvalid(outcome.issues);
+    else console.error(`[yaar] ${label}: using fallback - ${describeIssues(outcome.issues)}`);
     return fallback;
   }
   return outcome ? outcome.value : fallback;

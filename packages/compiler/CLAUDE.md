@@ -52,7 +52,7 @@ src/
     │   ├── dialogs.ts     # showConfirm / showPrompt (no showAlert — showToast covers it)
     │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, tryToast, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms) — and escapeHtml
-    │   ├── boundary.ts    # safeParseOr — parse untrusted JSON, log, fall back (absence stays silent)
+    │   ├── boundary.ts    # safeParseOr — parse untrusted JSON, log, fall back (absence stays silent; `onInvalid` replaces the log)
     │   ├── standard-schema.ts # internal: isStandardSchema + describeIssues, shared by defineApp and safeParseOr
     │   ├── files.ts       # downloadBlob, blobToDataUrl
     │   ├── format.ts      # formatBytes, formatDuration, formatClock — one rendering per value, OS-wide
@@ -254,6 +254,15 @@ agent before it is called by an app:
   `safeParseOr` (82 call sites / 22 apps), `tryToast` (~50), `escapeHtml` (6, three of them
   attribute-unsafe), `downloadBlob`/`blobToDataUrl` (6 and 4), `formatBytes`/`formatDuration`/
   `formatClock` (4, 3 and 6, all rendering the same value differently).
+
+  **Count the call sites by contract, not by shape.** The adoption pass that exercised
+  those seven found the audit had overcounted wherever it matched a *shape*: `tryToast`'s
+  ~50 `try/await/catch/showToast` blocks are ~38 real adoptions, because configurations
+  and lab curate a short static failure message (`'Failed to add'`) rather than surfacing
+  `errMsg(e)`, and `tryToast` can only toast the latter — 2 of ~15 sites fit across those
+  two apps. One of `formatClock`'s six was a formatter with no callers. A grep tells you
+  how many places have the same silhouette; only reading them tells you how many have the
+  same contract, and only the second number belongs in this argument.
 - **No new `BUNDLED_LIBRARIES` entry without a concrete first consumer.** Registry entries
   are prebundled into the standalone exe, so a speculative one costs artifact bytes
   permanently and narrows nothing. The reverse direction is cheap: one line plus a `.d.ts`

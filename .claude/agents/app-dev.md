@@ -149,7 +149,7 @@ Always available. Key exports:
 - **Verb API**: `read(uri)`, `list(uri)`, `invoke(uri, params)`, `describe(uri)`, `del(uri)`, `subscribe(uri, callback)`, `stream(uri)`
 - **Utilities**: `showToast(msg, type?)`, `errMsg(err)`, `withLoading(fn)`, `tryToast(fn, { success? })`, `onShortcut(key, fn)`, `defineAppCommand`, `wait`
 - **Sanitization**: `sanitizeHtml(html, opts?)` — mandatory for externally-sourced HTML. DOMPurify's defaults plus the no-forms deviation; never call DOMPurify directly, never hand-roll. `escapeHtml(s)` for text interpolated into a template (covers `& < > " '`, so it is safe in an attribute too)
-- **Boundaries**: `safeParseOr(Schema, raw, fallback, { label })` — parse untrusted JSON, log the issues, return the fallback; `undefined` (nothing stored) is absence and stays silent
+- **Boundaries**: `safeParseOr(Schema, raw, fallback, { label })` — parse untrusted JSON, log the issues, return the fallback; `undefined` (nothing stored) is absence and stays silent. Pass `onInvalid` instead of `label` when logging is not the right answer: it gets the issues and runs *instead of* the console line, so `onInvalid: () => { throw … }` is parse-or-throw, and `onInvalid: () => noteFailure()` is a poll that reports the transition rather than every tick
 - **Stale responses**: `createStaleGuard()` — `begin()`/`latest()`/`invalidate()`; use instead of a hand-rolled generation counter when a slow response could overwrite a newer one
 - **Files**: `downloadBlob(blob, filename)`, `blobToDataUrl(blob)`, `toWebP(source, opts?)`
 - **Formatting**: `formatBytes(n)` → `'2.0 MB'`, `formatDuration(secs)` → `'1:03:07'`, `formatClock(ts, opts?)` → `'15:04:05'` — one rendering per value across every window; never hand-roll a unit ladder or hardcode a locale
@@ -173,7 +173,9 @@ fallback. Malformed record → same fallback, but `console.error` with `parsed.e
 (and a toast when the user would otherwise be misled about what they are looking at).
 
 - `safeParseOr(Schema, raw, fallback, { label })` is that rule as one call — don't re-write
-  the safeParse/log/return block by hand.
+  the safeParse/log/return block by hand. Reach for `onInvalid` before you reach for a
+  hand-rolled `z.safeParse`: it covers throwing, toasting, and throttled poll reporting.
+  Hand-roll only for per-field recovery or element-wise array validation.
 - Schemas live in `src/schema.ts` with a header naming *which* boundaries they guard.
 - `@bundled/zod` is **Zod Mini**: `z.optional(x)`, `z.safeParse(Schema, v)` — no `.optional()`
   or `.parse()` methods.

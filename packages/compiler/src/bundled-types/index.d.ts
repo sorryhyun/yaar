@@ -1316,13 +1316,28 @@ declare module '@bundled/yaar' {
    * than falling back on the caller's own bugs: a non-schema, or a schema that
    * validates asynchronously (await `schema['~standard'].validate(raw)` yourself
    * for those — this returns a value, not a promise).
+   *
+   * `onInvalid` replaces the default `console.error` when logging is not the
+   * right answer at that boundary — it runs instead of the line, not before it:
+   *
+   * ```ts
+   * // the call must fail rather than degrade
+   * safeParseOr(S, raw, undefined, { onInvalid: () => { throw new Error('...') } });
+   * // the fallback would mislead, so say so
+   * safeParseOr(S, raw, EMPTY, { onInvalid: (i) => { console.error(i); showToast('...') } });
+   * // a poll — log the transition into failure, not every tick
+   * safeParseOr(S, raw, last, { onInvalid: () => noteSyncFailure() });
+   * ```
    */
   export function safeParseOr<S, F = YaarStandardOutput<S>>(
     schema: S,
     raw: unknown,
     fallback: F,
-    /** `label` tags the console line, e.g. `'storage:layout'`. */
-    opts?: { label?: string },
+    /**
+     * `label` tags the console line, e.g. `'storage:layout'`. `onInvalid`
+     * replaces that line; it never runs for an absent (`undefined`) value.
+     */
+    opts?: { label?: string; onInvalid?: (issues: unknown) => void },
   ): YaarStandardOutput<S> | F;
 
   /**

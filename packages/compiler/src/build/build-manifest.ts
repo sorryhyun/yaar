@@ -67,7 +67,7 @@ import { join, basename } from 'path';
  * is what keeps "does this build have `formatBytes`?" answerable from the
  * manifest instead of from the app's edit history.
  */
-export const COMPILER_VERSION = '18';
+export const COMPILER_VERSION = '19';
 
 export interface BuildManifest {
   sourceHash: string;

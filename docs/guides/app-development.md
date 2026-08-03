@@ -1239,9 +1239,33 @@ const prefs = safeParseOr(PrefsSchema, raw, DEFAULTS, { label: 'prefs.json' });
 `safeParseOr` **is** that rule: `undefined` — nothing stored, first run — takes the fallback
 silently, while a value that is present and wrong takes the same fallback and logs the
 schema's own issues. It was the single most-copied block in the fleet (82 `safeParse` call
-sites across 22 apps), which is why it now lives in the SDK; write the `z.safeParse` by hand
-only when the failure branch does something other than fall back, such as per-field recovery
-or a toast.
+sites across 22 apps), which is why it now lives in the SDK.
+
+When logging is *not* the right answer at that boundary, pass `onInvalid` — it receives the
+schema's issues and runs **instead of** the default console line:
+
+```typescript
+// The call must fail rather than degrade: an onInvalid that throws reaches the
+// caller, so a parse-or-throw boundary needs no separate helper.
+return safeParseOr(ResponseSchema, await res.json(), undefined, {
+  onInvalid: (issues) => {
+    console.error(`GET ${path} failed validation`, issues);
+    throw new Error('The service returned an unexpected response.');
+  },
+});
+
+// A poll: one line per tick is how a real signal gets tuned out.
+safeParseOr(StateSchema, stored, undefined, { onInvalid: () => noteSyncFailure() });
+
+// The fallback would mislead — an empty allow-list looks like a valid one.
+safeParseOr(DomainsSchema, raw, undefined, {
+  onInvalid: (issues) => { console.error(issues); showToast('Config is malformed', 'error'); },
+});
+```
+
+Write the `z.safeParse` by hand only when the failure branch needs something the single
+fallback cannot express — per-field recovery, or validating an array element-wise so one
+bad row does not reject the rest.
 
 The rule is one line: **degraded-by-design must be distinguishable from broken.** A missing
 file is normal and stays silent; a malformed one is logged with `parsed.error.issues`, and
