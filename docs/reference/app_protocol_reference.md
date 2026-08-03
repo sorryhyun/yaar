@@ -64,7 +64,7 @@ Note the contrast with `yaar://apps/{appId}`, the **installed** app: `state/` an
 ### Scoped tools (app agents)
 
 Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. `describe` is the app's manual and is built by the same `describeApp` behind `describe('yaar://apps/{appId}')` — one question, one shape, whichever door asks it. These tools:
-- Default to the agent's own window; pass `appId` to target another app, permitted only when the *calling* app's own `app.json` `controls` list names that target (see root `CLAUDE.md` "Cross-app control").
+- Default to the agent's own window; pass `appId` to target another app, permitted only when the *calling* app's own `app.json` `controls` list names that target (see root `CLAUDE.md` "Cross-app control"). The target need not already be open — resolution is the target's most recently active window on the caller's monitor, else any window of it on that monitor, else a fresh one opened for the call (`features/window/resolve-app-window.ts`, shared with `direct_message`); the result says when one was opened.
 - Intercept `stateKey`/`command` values prefixed `storage/` / `storage:` to read/write app-scoped storage directly, bypassing the app protocol entirely (own app only — storage is not cross-app controllable).
 - `command` accepts an optional `timeoutMs` to override the default wait (30s, max 180s) for slow commands like a compile or a deploy.
 

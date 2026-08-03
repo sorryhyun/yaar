@@ -748,7 +748,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `agentType` | `string` | Override the agent profile used for this app's agent |
 | `agent` | `{ prompt?, hint?, skill? }` | Override the default paths (`agent/prompt.md`, `agent/hint.md`, `agent/SKILL.md`) for this app's agent docs |
 | `messaging` | `"all"` | Lets the app agent `direct_message` other apps/windows, not just monitor/user |
-| `controls` | `(string \| { appId, commands? })[]` | Other apps this app may drive. **Bundled apps only** |
+| `controls` | `(string \| { appId, commands? , background? })[]` | Other apps this app may drive. A target with no window on the caller's monitor gets one opened; `background: true` opens it minimized. **Bundled apps only** |
 | `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Approved at install** |
 | `subagents` | `{ max: number }` | Ceiling on [sub-agents](#sub-agents-personas) this app may spawn per monitor. Clamped to 16; a non-integer or `≤ 0` reads as "none". **Approved at install** |
 | `fileAssociations` | `{ extensions, command, paramKey }[]` | Open matching files by invoking a protocol command |

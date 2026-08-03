@@ -9,7 +9,7 @@
  * Routing reuses the existing task processors — the same paths that back the
  * `relay` tool and `invoke('yaar://windows/{id}', { action: 'message' })`:
  *   - monitor / monitor:{id} → pool.handleTask({ type: 'monitor' })
- *   - app:{appId}            → resolve active window → pool.handleTask({ type: 'app' })
+ *   - app:{appId}            → resolve (or open) a window → pool.handleTask({ type: 'app' })
  *   - window:{windowId}      → pool.handleTask({ type: 'app' })
  *   - user                   → showNotification()
  *
@@ -30,6 +30,7 @@ import { getActiveSession, ok, error } from '../../handlers/utils.js';
 import type { LiveSession } from '../../session/live-session.js';
 import { genId } from '../../lib/ids.js';
 import { getAppMeta } from '../../features/apps/discovery.js';
+import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
 import { showNotification } from '../../features/user/notifications.js';
 
 export const MESSAGING_TOOL_NAMES = ['mcp__messaging__direct_message'] as const;
@@ -131,13 +132,31 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
     case 'app': {
       // App agents are per-monitor: a sender can only reach the copy of the app
       // running on its own monitor.
-      const windowId = pool.getActiveAppWindow(senderMonitorId, target.id!);
-      if (!windowId) {
+      //
+      // Opening a window for a target that has none is parity with cross-app control,
+      // which does exactly that for the same app on the same monitor — refusing it here
+      // made the two doors disagree about what `app:{id}` means. Who may trigger it is
+      // not the same question, though: a session or monitor principal already opens
+      // windows at will, while an app principal may only do it for a target its own
+      // `controls` names. `"messaging": "all"` buys a conversation with a running app,
+      // not the authority to put one on the user's desktop.
+      const targetAppId = target.id!;
+      const control = senderAppId
+        ? (await getAppMeta(senderAppId))?.controls?.find((c) => c.appId === targetAppId)
+        : undefined;
+      const resolved = await resolveAppWindowOnMonitor(session, senderMonitorId, targetAppId, {
+        launch: privileged || !!control,
+        background: control?.background,
+      });
+      if (!resolved.found) {
         return {
           ok: false,
-          error: `app "${target.id}" has no open window on monitor ${senderMonitorId} to receive the message.`,
+          error: resolved.attemptedLaunch
+            ? `app "${targetAppId}" has no open window on monitor ${senderMonitorId} and could not be opened.`
+            : `app "${targetAppId}" has no open window on monitor ${senderMonitorId} to receive the message.`,
         };
       }
+      const { windowId } = resolved;
       pool
         .handleTask({
           type: 'app',
@@ -149,7 +168,9 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
         .catch((err: unknown) => console.error('[DirectMessage] app route:', err));
       return {
         ok: true,
-        text: `Message delivered to app "${target.id}" (window ${windowId}, messageId: ${messageId}).`,
+        text:
+          `Message delivered to app "${targetAppId}" (window ${windowId}, messageId: ${messageId}).` +
+          (resolved.launched ? ` It had no window on this monitor, so one was opened.` : ''),
       };
     }
     case 'window': {

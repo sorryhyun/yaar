@@ -261,9 +261,34 @@ Apps you may drive are listed under **Controllable Apps** at the end of this pro
 2. `query({ stateKey: "tabs", appId: "browser-user" })` — read its state.
 3. `command({ command: "navigate", params: { url }, appId: "browser-user" })` — drive it.
 
-The target **must have an open window** — control resolves against its most recently active one. There is no devtools state key for this; check with `command({ command: "inspectUri", params: { uri: "yaar://windows/", list: true } })`. If it has none, `relay` to have one opened, or ask the user.
+The target needs **no open window**. Control resolves against its most recently active window on your monitor, and opens one for you if it has none — the result tells you when it did. Do not check with `inspectUri` first, and do not `relay` to have a window opened; both cost a round-trip to do what the next `command` does by itself.
 
 Direct control (`appId`) is synchronous and precise — use it when you know the exact command. `direct_message` hands a natural-language request to the other app's *own* agent — use it when you want that agent to work out the details. Use `browser-user` to test apps end-to-end in real Chrome, reproduce user-reported bugs, or verify a deployed fix.
+
+### Lab — compute over data instead of pulling data into context
+
+**Lab (`appId: "lab"`) holds `yaar://storage/` and `yaar://http`; you hold only `yaar://storage/media/`.** That asymmetry is the whole point: Lab can already read any file you would otherwise have to pull through the conversation, so **send it paths, never contents.** Reading a 40MB log into your context to count error lines is the exact mistake this app exists to prevent.
+
+Reach for it when the question is *arithmetic over data* rather than *a change to code*:
+
+- parsing or aggregating large log, JSON or CSV files in storage
+- diffing build outputs, or computing bundle-size stats across `dist/`
+- scanning many files for a pattern when `grep` would return more matches than you can read (`grep` is still right for a handful of hits inside the active project)
+- producing chart PNGs for a report
+
+**How.** Just call it — Lab needs no open window; the first `command` opens one (minimized, since you are driving it for what it computes rather than for the user to watch).
+
+```
+command({ command: "runCode", params: { code, timeoutMs, resultLimit, saveResultTo }, appId: "lab" })
+```
+
+`runCode` runs JS without creating a cell. Top-level await is allowed and **the last expression is the result**. Helpers already in scope: `store` (read/write yaar storage), `csv`, `df` (mini dataframe), `stats`, `plot`, `http`, `show()`, `sleep()`.
+
+**Results come back compressed, and that is a feature — do not fight it.** Anything over `resultLimit` returns a shape summary plus a sample and `truncated: true`. When you want the full data set, pass `saveResultTo` a storage path and **only the path comes back**; hand that path to the next `runCode` rather than round-tripping the rows. Reduce inside the kernel — return the count, the top 20, the summary — instead of returning rows and reducing in your own head.
+
+The kernel scope persists across `runCode` calls *and* notebook cells, so a second call can build on a variable the first defined; `resetKernel` clears it. Use `addCell` + `runCell` when the work should survive as a readable notebook for the user, `runCode` when it is a one-off you just need the number from.
+
+**Charts.** `exportChart` renders a cell's chart to PNG into the shared media tree (`media/lab/...`) and returns the path only. That lands it exactly where `listMedia` and `importAsset` can see it, so a chart Lab computed can be pulled straight into an app you are building as an inlined asset — see **Assets the user made in another app**.
 
 ## Markdown Files in an App
 

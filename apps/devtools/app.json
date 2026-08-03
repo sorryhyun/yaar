@@ -10,7 +10,11 @@
   "messaging": "all",
   "controls": [
     "browser-user",
-    "search"
+    "search",
+    {
+      "appId": "lab",
+      "background": true
+    }
   ],
   "permissions": [
     "yaar://storage/media/",

@@ -37,7 +37,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
-import { handleCreate } from '../../features/window/create.js';
+import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
 import { getWindowId, getMonitorId } from '../../agents/agent-context.js';
 import { getActiveSession, getActivePool, ok, okJson, error } from '../../handlers/utils.js';
 import { scopedAppStoragePath } from '../../handlers/apps.js';
@@ -87,7 +87,8 @@ function appRelativeEntries(appId: string, result: StorageListResult): StorageLi
 }
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '../../lib/ids.js';
-import { getAppMeta, listApps, type ControlEntry } from '../../features/apps/discovery.js';
+import { getAppMeta, type ControlEntry } from '../../features/apps/discovery.js';
+import type { VerbResult } from '../../handlers/uri-registry.js';
 import { describeApp } from '../../features/apps/describe.js';
 import {
   storageRead,
@@ -118,22 +119,24 @@ function getAppId(windowState: WindowStateRegistry, windowId: string): string | 
 }
 
 /**
- * Open a window for a controllable app that has no live window yet, so a
- * cross-app query/command has an iframe to talk to. Uses the appId as the
- * deterministic windowId (mirrors deriveWindowId) and blocks on iframe load
- * (handleCreate awaits load feedback). Returns the windowId, or undefined if
- * the app is unknown or the launch failed.
+ * Tell the model a window was opened on its behalf.
+ *
+ * Auto-open is silent otherwise: the tool answers exactly as it would have for an app
+ * that was already running, so the model cannot tell the user why a window appeared, and
+ * a `background` app's window is invisible besides. Prepended as its own block rather
+ * than folded into the app's answer, which is the app's text and not ours to edit.
  */
-async function launchControlledApp(appId: string): Promise<string | undefined> {
-  const app = (await listApps()).find((a) => a.id === appId);
-  if (!app) return undefined;
-  const result = await handleCreate(appId, {
-    title: app.name ?? appId,
-    renderer: 'iframe',
-    content: `yaar://apps/${appId}`,
-    appId,
-  });
-  return result.isError ? undefined : appId;
+function withLaunchNote(result: VerbResult, appId: string, windowId: string): VerbResult {
+  return {
+    ...result,
+    content: [
+      {
+        type: 'text' as const,
+        text: `(No window of "${appId}" was open on this monitor, so one was opened: ${windowId}.)`,
+      },
+      ...result.content,
+    ],
+  };
 }
 
 export function registerAppAgentTools(server: McpServer): void {
@@ -149,7 +152,15 @@ export function registerAppAgentTools(server: McpServer): void {
     ownWindowId: string,
     targetAppId: string | undefined,
   ): Promise<
-    | { ok: true; windowId: string; ownAppId?: string; foreign: boolean; entry?: ControlEntry }
+    | {
+        ok: true;
+        windowId: string;
+        ownAppId?: string;
+        foreign: boolean;
+        entry?: ControlEntry;
+        /** This call opened the window; the caller reports it (see withLaunchNote). */
+        launched?: boolean;
+      }
     | { ok: false; error: string }
   > => {
     const session = getActiveSession();
@@ -172,11 +183,11 @@ export function registerAppAgentTools(server: McpServer): void {
           `Add "${targetAppId}" to "controls" in ${ownAppId}'s app.json.`,
       };
     }
-    // Resolve a live window for the target on the caller's own monitor: prefer one
-    // the target's app agent has already touched, else any open window of that app
-    // on this monitor, else launch a fresh one so the caller doesn't have to open it
-    // manually first. Never reach across monitors — monitor N's apps are not monitor
-    // M's to drive.
+    // Resolve a live window for the target on the caller's own monitor, opening one if
+    // it has none — the app agent holds no window verbs, so this is its only way to
+    // reach an app the user has not already opened. Never reach across monitors:
+    // monitor N's apps are not monitor M's to drive. Shared with `direct_message`, which
+    // gates the launch differently; see resolve-app-window.ts.
     const monitorId = session.windowState.getMonitorForWindow(ownWindowId);
     if (!monitorId) {
       return {
@@ -184,21 +195,21 @@ export function registerAppAgentTools(server: McpServer): void {
         error: `could not resolve the monitor of your own window (${ownWindowId}); cannot target another app.`,
       };
     }
-    let windowId =
-      session.getPool()?.getActiveAppWindow(monitorId, targetAppId) ??
-      session.windowState
-        .listWindows()
-        .find(
-          (w) =>
-            w.appId === targetAppId && session.windowState.getMonitorForWindow(w.id) === monitorId,
-        )?.id;
-    if (!windowId) {
-      windowId = await launchControlledApp(targetAppId);
-    }
-    if (!windowId) {
+    const resolved = await resolveAppWindowOnMonitor(session, monitorId, targetAppId, {
+      launch: true,
+      background: entry.background,
+    });
+    if (!resolved.found) {
       return { ok: false, error: `app "${targetAppId}" could not be opened to control.` };
     }
-    return { ok: true, windowId, ownAppId, foreign: true, entry };
+    return {
+      ok: true,
+      windowId: resolved.windowId,
+      ownAppId,
+      foreign: true,
+      entry,
+      launched: resolved.launched,
+    };
   };
 
   // query — query app state, manifest, or app-scoped storage
@@ -257,10 +268,11 @@ export function registerAppAgentTools(server: McpServer): void {
       const target = await resolveTarget(windowId, args.appId);
       if (!target.ok) return error(target.error);
 
+      const result = await handleAppQuery(windowState, target.windowId, {
+        stateKey: args.stateKey,
+      });
       return {
-        ...(await handleAppQuery(windowState, target.windowId, {
-          stateKey: args.stateKey,
-        })),
+        ...(target.launched ? withLaunchNote(result, args.appId!, target.windowId) : result),
       };
     },
   );
@@ -359,12 +371,13 @@ export function registerAppAgentTools(server: McpServer): void {
         );
       }
 
+      const result = await handleAppCommand(windowState, target.windowId, {
+        command: args.command,
+        params: args.params,
+        ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
+      });
       return {
-        ...(await handleAppCommand(windowState, target.windowId, {
-          command: args.command,
-          params: args.params,
-          ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
-        })),
+        ...(target.launched ? withLaunchNote(result, args.appId!, target.windowId) : result),
       };
     },
   );

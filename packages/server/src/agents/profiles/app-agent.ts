@@ -161,10 +161,13 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
       'You may drive these apps by passing their id as `appId` to describe/query/command:\n';
     for (const c of controls) {
       const cmds = c.commands?.length ? ` (commands: ${c.commands.join(', ')})` : '';
-      systemPrompt += `- \`${c.appId}\`${cmds}\n`;
+      const bg = c.background ? ' (opens minimized)' : '';
+      systemPrompt += `- \`${c.appId}\`${cmds}${bg}\n`;
     }
     systemPrompt +=
-      "\nCall `describe(appId)` first to learn an app's protocol, then `command(appId, ...)` to drive it. The target app must have an open window.\n";
+      "\nCall `describe(appId)` first to learn an app's protocol, then `command(appId, ...)` to drive it. " +
+      'The target needs **no** open window: if it has none on your monitor, control opens one for you ' +
+      'and the result says so. Do not check whether it is open first, and do not `relay` to have one opened.\n';
   }
 
   return {

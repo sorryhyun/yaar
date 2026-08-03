@@ -53,6 +53,16 @@ export interface ControlEntry {
   appId: string;
   /** If set, only these commands may be issued to the target app. Omit = all commands. */
   commands?: string[];
+  /**
+   * Open this app minimized when control has to open it.
+   *
+   * For an app driven purely for what it computes — `lab` running a reduction over a
+   * file the caller must never pull into its own context — a window arriving on top of
+   * the user's work is noise, not feedback. The iframe still mounts and loads while
+   * minimized, so the app is fully drivable; it just sits in the taskbar. Ignored when
+   * the app already has a window: control never minimizes something the user opened.
+   */
+  background?: boolean;
 }
 
 /**
@@ -174,11 +184,12 @@ function parseControls(raw: unknown[]): ControlEntry[] {
       'appId' in entry &&
       typeof (entry as { appId: unknown }).appId === 'string'
     ) {
-      const obj = entry as { appId: string; commands?: unknown };
+      const obj = entry as { appId: string; commands?: unknown; background?: unknown };
       const parsed: ControlEntry = { appId: obj.appId };
       if (Array.isArray(obj.commands) && obj.commands.every((c) => typeof c === 'string')) {
         parsed.commands = obj.commands as string[];
       }
+      if (obj.background === true) parsed.background = true;
       result.push(parsed);
     }
   }
