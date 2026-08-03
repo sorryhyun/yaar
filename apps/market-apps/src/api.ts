@@ -6,7 +6,7 @@
 // state and status text are the caller's concern (see actions.ts).
 
 import * as z from '@bundled/zod';
-import { del, invoke, list } from '@bundled/yaar';
+import { del, invoke, list, safeParseOr } from '@bundled/yaar';
 import { GITHUB_STATUS_URL, MARKET_DOMAIN } from './constants.js';
 import { parseInstalledAny } from './parsers.js';
 import { GithubStatusSummarySchema } from './schema.js';
@@ -20,12 +20,16 @@ export async function apiGet<S extends z.ZodMiniType>(
 ): Promise<z.infer<S>> {
   const res = await fetch(`${MARKET_DOMAIN}${path}`, { method: 'GET' });
   if (!res.ok) throw new Error(`GET ${path} failed (${res.status})`);
-  const parsed = z.safeParse(schema, await res.json());
-  if (!parsed.success) {
-    console.error(`GET ${path} response failed validation`, parsed.error.issues);
-    throw new Error('The marketplace returned an unexpected response.');
-  }
-  return parsed.data;
+  // Parse-or-throw: these helpers exist so a caller can `await` them and let
+  // withLoading/runAction catch. `onInvalid` is what makes that expressible --
+  // it runs instead of the "using fallback" line, and the fallback is never
+  // reached because it throws first.
+  return safeParseOr(schema, await res.json(), undefined, {
+    onInvalid: (issues) => {
+      console.error(`GET ${path} response failed validation`, issues);
+      throw new Error('The marketplace returned an unexpected response.');
+    },
+  });
 }
 
 // ── GitHub health ────────────────────────────────────────────────────
@@ -38,12 +42,12 @@ export async function apiGet<S extends z.ZodMiniType>(
 export async function fetchGithubStatus(): Promise<unknown> {
   const res = await fetch(GITHUB_STATUS_URL, { method: 'GET' });
   if (!res.ok) throw new Error(`GitHub status check failed (${res.status})`);
-  const parsed = z.safeParse(GithubStatusSummarySchema, await res.json());
-  if (!parsed.success) {
-    console.error('GitHub status summary failed validation', parsed.error.issues);
-    throw new Error('GitHub status page returned an unexpected response.');
-  }
-  return parsed.data;
+  return safeParseOr(GithubStatusSummarySchema, await res.json(), undefined, {
+    onInvalid: (issues) => {
+      console.error('GitHub status summary failed validation', issues);
+      throw new Error('GitHub status page returned an unexpected response.');
+    },
+  });
 }
 
 // ── Host verbs (yaar://apps/) ──────────────────────────────────────────
@@ -115,12 +119,12 @@ export async function yaarGet<S extends z.ZodMiniType>(
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new Error(body?.error || `GET ${path} failed (${res.status})`);
   }
-  const parsed = z.safeParse(schema, await res.json());
-  if (!parsed.success) {
-    console.error(`GET ${path} response failed validation`, parsed.error.issues);
-    throw new Error(`GET ${path} returned an unexpected response.`);
-  }
-  return parsed.data;
+  return safeParseOr(schema, await res.json(), undefined, {
+    onInvalid: (issues) => {
+      console.error(`GET ${path} response failed validation`, issues);
+      throw new Error(`GET ${path} returned an unexpected response.`);
+    },
+  });
 }
 
 /**
@@ -138,10 +142,10 @@ export async function yaarPost<S extends z.ZodMiniType>(
     throw new Error(body?.error || `POST ${path} failed (${res.status})`);
   }
   if (!schema) return undefined;
-  const parsed = z.safeParse(schema, await res.json());
-  if (!parsed.success) {
-    console.error(`POST ${path} response failed validation`, parsed.error.issues);
-    throw new Error(`POST ${path} returned an unexpected response.`);
-  }
-  return parsed.data;
+  return safeParseOr(schema, await res.json(), undefined, {
+    onInvalid: (issues) => {
+      console.error(`POST ${path} response failed validation`, issues);
+      throw new Error(`POST ${path} returned an unexpected response.`);
+    },
+  });
 }

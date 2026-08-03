@@ -1,7 +1,6 @@
 import { createSignal, onMount, For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { read, invoke, del, errMsg } from '@bundled/yaar';
-import * as z from '@bundled/zod';
+import { read, invoke, del, errMsg, safeParseOr } from '@bundled/yaar';
 import { showToast } from '../store';
 import type { DomainsData } from '../types';
 import { onInputHandler } from '../helpers';
@@ -16,13 +15,17 @@ export function DomainsView() {
   const load = async () => {
     try {
       const raw = await read<unknown>('yaar://config/domains');
-      const parsed = z.safeParse(DomainsDataSchema, raw);
-      if (!parsed.success) {
-        console.error('[configurations] yaar://config/domains failed validation', parsed.error.issues);
-        showToast('Domain config is malformed — see the console', 'error');
-        return;
-      }
-      setData(parsed.data);
+      // An empty allow-list and a malformed one look identical on screen, so
+      // this is the boundary that has to *say* it fell back rather than just
+      // log it — which is what `onInvalid` is for.
+      const parsed = safeParseOr(DomainsDataSchema, raw, undefined, {
+        onInvalid: (issues) => {
+          console.error('[configurations] yaar://config/domains failed validation', issues);
+          showToast('Domain config is malformed — see the console', 'error');
+        },
+      });
+      if (!parsed) return;
+      setData(parsed);
     } catch (err) {
       console.error('[configurations] failed to read yaar://config/domains', err);
       showToast(`Failed to load domains: ${errMsg(err)}`, 'error');
