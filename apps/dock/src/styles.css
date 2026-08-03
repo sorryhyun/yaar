@@ -124,7 +124,7 @@ body {
   font-weight: 700;
   color: var(--yaar-accent);
   font-variant-numeric: tabular-nums;
-  background: rgba(88, 166, 255, 0.15);
+  background: var(--yaar-wash-accent-strong);
   border-radius: 8px;
   padding: 0 4px;
 }

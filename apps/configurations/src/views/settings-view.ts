@@ -12,16 +12,19 @@ const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', '
 
 // Accent-picker swatch colors — content, not theming: each swatch must show its
 // own fixed preset color, so var(--yaar-accent) (the *current* accent) cannot be
-// used here. Some values coincide with design tokens, noted inline.
+// used here. Values mirror ACCENT_PRESETS_DATA's `color` field in
+// packages/shared/src/design/tokens.ts and are duplicated here (rather than
+// imported) because a compiled app cannot import from @yaar/shared. The keys
+// below are persisted in user settings, so only the values may ever change.
 const ACCENT_COLORS: Record<string, string> = {
-  blue: '#58a6ff', // == default --yaar-accent
-  lavender: '#b392f0',
-  mauve: '#d2a8ff',
+  blue: '#539bf5',
+  lavender: '#a5b4fc',
+  mauve: '#bc8cff',
   pink: '#f778ba',
-  peach: '#ffa28b',
+  peach: '#ffa657',
   yellow: '#e3b341',
-  green: '#3fb950', // == --yaar-success
-  red: '#f85149', // == --yaar-error
+  green: '#3fb950',
+  red: '#f85149',
 };
 
 const WALLPAPER_LABELS: Record<string, string> = {

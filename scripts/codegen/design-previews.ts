@@ -236,6 +236,19 @@ const layoutBody = `
 const feedbackBody = `
 <span class="y-label">Spinners</span>
 <div class="demo-row"><span class="y-spinner"></span><span class="y-spinner y-spinner-lg"></span></div>
+<span class="y-label">Status dots</span>
+<div class="demo-row">
+  <span class="y-dot"></span><span class="y-text-sm y-text-muted">idle</span>
+  <span class="y-dot y-dot-ok"></span><span class="y-text-sm y-text-muted">ok</span>
+  <span class="y-dot y-dot-warn"></span><span class="y-text-sm y-text-muted">warn</span>
+  <span class="y-dot y-dot-err"></span><span class="y-text-sm y-text-muted">err</span>
+  <span class="y-dot y-dot-accent y-dot-pulse"></span><span class="y-text-sm y-text-muted">busy (pulse)</span>
+</div>
+<span class="y-label">Progress</span>
+<div style="max-width:360px;display:flex;flex-direction:column;gap:var(--yaar-sp-2)">
+  <div class="y-progress"><div class="y-progress-fill" style="width:35%"></div></div>
+  <div class="y-progress y-progress-indeterminate"><div class="y-progress-fill"></div></div>
+</div>
 <span class="y-label">Toast (forced visible)</span>
 <div class="y-toast y-toast-visible y-toast-success" style="position:static;transform:none;display:inline-block">Saved successfully</div>
 <span class="y-label">Empty state</span>
@@ -311,7 +324,15 @@ const lightBody = `
 <div class="y-card" style="max-width:360px">
   <div class="y-font-bold">Light surface</div>
   <div class="y-text-sm y-text-muted">Same tokens, remapped from the same source data.</div>
-</div>`;
+</div>
+<span class="y-label">Washes — the reason they are color-mix() over the color var</span>
+<div class="demo-row">
+  <span class="y-badge y-wash-accent">accent</span>
+  <span class="y-badge y-wash-success">success</span>
+  <span class="y-badge y-wash-error">error</span>
+  <span class="y-badge y-wash-warning">warning</span>
+</div>
+<div class="y-text-xs y-text-dim" style="max-width:360px">A baked rgba() would stay dark-tinted here; these re-mix from the light accent.</div>`;
 
 const cards: Array<{
   file: string;

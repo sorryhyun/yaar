@@ -303,9 +303,9 @@ function toggleExpand(name: string) {
 // ── Helpers ───────────────────────────────────────────────
 
 function stateDot(state: string) {
-  if (state === 'connected') return 'dot dot-ok';
-  if (state === 'connecting') return 'dot dot-warn';
-  return 'dot dot-err';
+  if (state === 'connected') return 'y-dot y-dot-ok';
+  if (state === 'connecting') return 'y-dot y-dot-warn';
+  return 'y-dot y-dot-err';
 }
 
 // ── Components ────────────────────────────────────────────
@@ -331,7 +331,7 @@ function DiscoveredCard(server: DiscoveredServer) {
   return html`
     <div class="y-card discovered-card">
       <div class="discovered-row">
-        <span class="dot dot-ok"></span>
+        <span class="y-dot y-dot-ok"></span>
         <div class="server-info">
           <strong>
             ${server.serverName ??

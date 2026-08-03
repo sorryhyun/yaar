@@ -53,9 +53,14 @@ import { join, basename } from 'path';
  * registry, all four at zero consumers. Nothing installed imports them, so the
  * bump buys no migration; it exists so no dist/ survives carrying a bundled copy
  * of surface the repo no longer resolves, which is the state that makes a later
- * "why does this still build?" report unanswerable.
+ * "why does this still build?" report unanswerable. '17': the `--yaar-wash-*`
+ * tokens plus the `y-wash-*`/`y-dot*`/`y-progress*` utilities entered the
+ * injected stylesheet, and the chrome's own baked `rgba()` tints moved onto
+ * them. The tokens CSS is inlined into every dist/index.html, so an app that
+ * does not rebuild keeps the pre-wash sheet: the new classes would resolve to
+ * nothing and the chrome would stay dark-tinted under `.y-light`.
  */
-export const COMPILER_VERSION = '16';
+export const COMPILER_VERSION = '17';
 
 export interface BuildManifest {
   sourceHash: string;

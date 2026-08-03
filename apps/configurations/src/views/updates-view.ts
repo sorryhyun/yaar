@@ -160,9 +160,9 @@ export function UpdatesView() {
           <span>${() => `${p.stage}${p.detail ? ` — ${p.detail}` : ''}`}</span>
           <span>${() => (pct === null ? '' : `${pct}%`)}</span>
         </div>
-        <div class="u-bar">
+        <div class=${() => `y-progress${pct === null ? ' y-progress-indeterminate' : ''}`}>
           <div
-            class=${() => `u-bar-fill${pct === null ? ' indeterminate' : ''}`}
+            class="y-progress-fill"
             style=${() => (pct === null ? '' : `width: ${pct}%`)}
           ></div>
         </div>

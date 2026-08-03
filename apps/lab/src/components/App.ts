@@ -60,8 +60,8 @@ export default function App() {
           </div>
         </div>
         <div class="lab-status">
-          <${Show} when=${busy} fallback=${() => html`<span class="lab-dot lab-dot-idle"></span><span>idle</span>`}>
-            <span class="lab-dot lab-dot-busy"></span><span>running…</span>
+          <${Show} when=${busy} fallback=${() => html`<span class="y-dot"></span><span>idle</span>`}>
+            <span class="y-dot y-dot-warn y-dot-pulse"></span><span>running…</span>
             <button class="lab-mini lab-mini-danger" onClick=${() => cancelRun()}>Cancel</button>
           <//>
           <span class="lab-spacer"></span>

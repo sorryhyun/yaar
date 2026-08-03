@@ -34,6 +34,14 @@ To change the visual language: edit `packages/shared/src/design/tokens.ts`, run
   may deliberately differ per surface.
 - **Type ramp is 5 canonical steps** (`xs/sm/base/lg/xl`) — the only step names
   that exist. Don't add steps — pick the nearest.
+- **Tints are `--yaar-wash-*`, never a baked `rgba()`.** A tinted background or
+  border (selected row, status badge, pressed toolbar button) mixes the color
+  var with `color-mix()`, at one of three strengths: base, `-strong` for a
+  pressed/selected fill, `-border` for a tinted edge. Two things follow that a
+  literal cannot give: the tint tracks `.y-light` and any app accent override,
+  and every window on screen agrees on how strong "tinted" is. The app fleet
+  hand-wrote ~60 of these as GitHub's `#58a6ff` rather than YAAR's accent, so
+  the drift this prevents is measured, not hypothetical.
 - **Borders are opaque color tokens.** The alpha white/black overlays
   (`--bg-overlay-*`, `--bg-dark-overlay-*`) are the **glass tier** — hover washes,
   scrims, translucent chrome — not a border mechanism.

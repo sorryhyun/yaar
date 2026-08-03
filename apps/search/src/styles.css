@@ -106,7 +106,7 @@
   background: var(--yaar-bg-surface-hover);
 }
 .result-row.selected {
-  background: rgba(88, 166, 255, 0.12);
+  background: var(--yaar-wash-accent);
 }
 .result-line-num {
   color: var(--yaar-text-muted);

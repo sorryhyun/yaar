@@ -42,7 +42,7 @@
   background: var(--yaar-bg-surface-hover);
 }
 .lab-side-item-on {
-  background: rgba(83, 155, 245, 0.13);
+  background: var(--yaar-wash-accent);
   box-shadow: inset 2px 0 0 var(--yaar-accent);
 }
 .lab-side-name {

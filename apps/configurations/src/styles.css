@@ -272,13 +272,13 @@ body,
   display: inline-block;
 }
 .item-badge-event {
-  background: rgba(88, 166, 255, 0.1);
-  border-color: rgba(88, 166, 255, 0.3);
+  background: var(--yaar-wash-accent);
+  border-color: var(--yaar-accent);
   color: var(--yaar-accent);
 }
 .item-badge-enabled {
-  background: rgba(63, 185, 80, 0.1);
-  border-color: rgba(63, 185, 80, 0.3);
+  background: var(--yaar-wash-success);
+  border-color: var(--yaar-success);
   color: var(--yaar-success);
 }
 .item-badge-disabled {
@@ -554,7 +554,7 @@ body,
 
 .folder-del-btn:hover {
   color: var(--yaar-error);
-  background: rgba(255, 80, 80, 0.1);
+  background: var(--yaar-wash-error);
 }
 
 .sc-item-indented {
@@ -699,35 +699,6 @@ body,
   font-size: 11px;
   color: var(--yaar-text-muted);
   margin-bottom: 6px;
-}
-
-.u-bar {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--yaar-bg);
-  border: 1px solid var(--yaar-border);
-  overflow: hidden;
-}
-
-.u-bar-fill {
-  height: 100%;
-  background: var(--yaar-accent);
-  transition: width 200ms ease;
-}
-
-/* No content-length on the response — show motion rather than a fake percentage. */
-.u-bar-fill.indeterminate {
-  width: 35%;
-  animation: u-slide 1.2s ease-in-out infinite;
-}
-
-@keyframes u-slide {
-  0% {
-    margin-left: -35%;
-  }
-  100% {
-    margin-left: 100%;
-  }
 }
 
 .u-actions {

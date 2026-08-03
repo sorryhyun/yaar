@@ -11,13 +11,18 @@ import { activeProject, bundleStatus, statusText } from '../core';
  * things. `compileStatus` in the protocol does combine them, because an agent has
  * no panel to look at.
  */
+const DOT_CLASS: Record<ReturnType<typeof bundleStatus>, string> = {
+  idle: 'y-dot',
+  compiling: 'y-dot y-dot-accent y-dot-pulse',
+  success: 'y-dot y-dot-ok',
+  error: 'y-dot y-dot-err',
+};
+
 export function StatusBar() {
   return html`
     <div class="statusbar">
       <div class="y-flex" style="gap: 6px; align-items: center">
-        <span
-          class=${() => `status-indicator ${bundleStatus() === 'idle' ? '' : bundleStatus()}`}
-        ></span>
+        <span class=${() => DOT_CLASS[bundleStatus()]}></span>
         <span>${statusText}</span>
       </div>
       <${Show} when=${() => activeProject()}>

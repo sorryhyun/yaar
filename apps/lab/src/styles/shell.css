@@ -143,26 +143,3 @@
   padding: 2px 4px;
   font-size: var(--yaar-text-xs);
 }
-
-.lab-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: var(--yaar-radius-full);
-  display: inline-block;
-}
-.lab-dot-idle {
-  background: var(--yaar-text-dim);
-}
-.lab-dot-busy {
-  background: var(--yaar-warning);
-  animation: lab-pulse 1s infinite;
-}
-@keyframes lab-pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.25;
-  }
-}

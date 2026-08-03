@@ -58,29 +58,27 @@
   height: 100%;
 }
 
+/*
+ * Trackless indeterminate indicator — a bare accent sliver over the live
+ * screenshot, shown only while loading (no `display:none` footprint
+ * otherwise). Declining `.y-progress`'s track+fill here: painting a 4px
+ * `--yaar-border` strip across the top of a webview screenshot at all times
+ * during navigation is a heavier visual than this thin overlay, and it has
+ * no track to layer onto. Reusing the shared `y-progress-slide` keyframes
+ * (injected into every app by the token layer) instead of a local
+ * width-animating one, so there's one indeterminate-slide animation, not two.
+ */
 .loading-bar {
   position: absolute;
   top: 0;
   left: 0;
+  width: 25%;
   height: 2px;
   background: var(--yaar-accent);
-  animation: loading 1.5s ease-in-out infinite;
   display: none;
 }
 
 .loading-bar.active {
   display: block;
-}
-
-@keyframes loading {
-  0% {
-    width: 0%;
-  }
-  50% {
-    width: 70%;
-  }
-  100% {
-    width: 100%;
-    opacity: 0;
-  }
+  animation: y-progress-slide 1.2s ease-in-out infinite;
 }

@@ -148,7 +148,7 @@ export function Editor() {
         <div class="editor-header y-text-xs y-text-muted">
           <span class="editor-file-name">${() => openFilePath()}</span>
           <${Show} when=${isDirty}>
-            <span class="dirty-dot"></span>
+            <span class="y-dot y-dot-accent"></span>
           <//>
           <${Show} when=${() => !openFileImage()}>
             <button

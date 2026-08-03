@@ -149,9 +149,9 @@ function StatsBar() {
 function AgentRow(props: { agent: AgentEntry }) {
   const a = () => props.agent;
   const dotClass = () => {
-    if (a().busy) return 'dot dot-warn';
-    if (a().type === 'ephemeral') return 'dot dot-warn';
-    return 'dot dot-ok';
+    if (a().busy) return 'y-dot y-dot-warn';
+    if (a().type === 'ephemeral') return 'y-dot y-dot-warn';
+    return 'y-dot y-dot-ok';
   };
 
   // Live activity, folded from the agent's stream: an explicit turn state, the
@@ -288,9 +288,9 @@ function AppRow(props: { proc: AppProcess }) {
   const p = () => props.proc;
 
   const dotClass = () => {
-    if (p().agent?.busy) return 'dot dot-warn';
-    if (p().orphaned) return 'dot dot-warn';
-    return 'dot dot-ok';
+    if (p().agent?.busy) return 'y-dot y-dot-warn';
+    if (p().orphaned) return 'y-dot y-dot-warn';
+    return 'y-dot y-dot-ok';
   };
 
   const agentLabel = () => {
@@ -380,7 +380,7 @@ function App() {
   return html`
     <div class="pe-app">
       <${StatsBar} />
-      <div class="tab-content">
+      <div class="tab-content y-scroll">
         <${Show} when=${() => activeTab() === 'agents'}><${AgentList} /></>
         <${Show} when=${() => activeTab() === 'windows'}><${WindowList} /></>
         <${Show} when=${() => activeTab() === 'apps'}><${AppList} /></>

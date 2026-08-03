@@ -207,24 +207,3 @@
   font-size: var(--yaar-text-xs);
   color: var(--yaar-text-muted);
 }
-
-/* ── Dot indicators ──────────────────────────── */
-
-.dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--yaar-radius-full);
-  flex-shrink: 0;
-}
-
-.dot-ok {
-  background: var(--yaar-success);
-}
-
-.dot-warn {
-  background: var(--yaar-warning);
-}
-
-.dot-err {
-  background: var(--yaar-error);
-}

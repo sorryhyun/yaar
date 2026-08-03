@@ -1,3 +1,11 @@
+:root {
+  /* Diff inline add/remove highlights need a stronger tint than any shipped
+     --yaar-wash-* strength (0.4 vs. the shipped 10%/16%) — app-local, not a
+     redefinition of a shipped token. */
+  --dt-diff-del-strong: color-mix(in srgb, var(--yaar-error) 40%, transparent);
+  --dt-diff-ins-strong: color-mix(in srgb, var(--yaar-success) 40%, transparent);
+}
+
 #app {
   height: 100%;
 }
@@ -306,15 +314,6 @@
   color: #79c0ff;
 }
 
-.dirty-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--yaar-accent);
-  display: inline-block;
-  flex-shrink: 0;
-}
-
 /* ── Diagnostics / Bottom Panel ── */
 .diagnostics {
   border-top: 1px solid var(--yaar-border);
@@ -545,23 +544,23 @@
 }
 
 .diff-output .d2h-del {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--yaar-wash-error-strong);
 }
 
 .diff-output .d2h-ins {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--yaar-wash-success-strong);
 }
 
 .diff-output .d2h-del .d2h-code-line-ctn {
-  background: rgba(248, 81, 73, 0.15);
+  background: var(--yaar-wash-error-strong);
 }
 
 .diff-output .d2h-ins .d2h-code-line-ctn {
-  background: rgba(63, 185, 80, 0.15);
+  background: var(--yaar-wash-success-strong);
 }
 
 .diff-output .d2h-info {
-  background: rgba(88, 166, 255, 0.1);
+  background: var(--yaar-wash-accent);
   color: var(--yaar-accent);
   border-color: var(--yaar-border);
 }
@@ -577,13 +576,13 @@
 
 .diff-output del,
 .diff-output .d2h-del .d2h-code-line-ctn del {
-  background: rgba(248, 81, 73, 0.4);
+  background: var(--dt-diff-del-strong);
   text-decoration: none;
 }
 
 .diff-output ins,
 .diff-output .d2h-ins .d2h-code-line-ctn ins {
-  background: rgba(63, 185, 80, 0.4);
+  background: var(--dt-diff-ins-strong);
   text-decoration: none;
 }
 
@@ -597,34 +596,4 @@
   border-top: 1px solid var(--yaar-border);
   font-size: 11px;
   color: var(--yaar-text-muted);
-}
-
-.statusbar .status-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--yaar-text-muted);
-}
-
-.statusbar .status-indicator.success {
-  background: var(--yaar-success);
-}
-
-.statusbar .status-indicator.error {
-  background: var(--yaar-error);
-}
-
-.statusbar .status-indicator.compiling {
-  background: var(--yaar-accent);
-  animation: pulse 1s infinite;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.4;
-  }
 }
