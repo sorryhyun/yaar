@@ -19,6 +19,7 @@ import {
 import type { ContextRestorePolicy } from '../../logging/index.js';
 import { jsonResponse, errorResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { requireHost, requirePermission, resolvePrincipal } from '../access.js';
+import { getSessionHub } from '../../session/session-hub.js';
 
 /**
  * Empty on purpose — a session transcript is the user's entire conversation with the
@@ -84,26 +85,45 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
   // Restore session (returns window create actions + context according to restore policy)
   const restoreMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/restore$/);
   if (restoreMatch && req.method === 'POST') {
-    const sessionId = restoreMatch[1];
+    // The path names a *transcript on disk* (`session_logs/YYYY-MM-DD_HH-MM-SS`), which is
+    // what /api/sessions is keyed by. It is not a hub session id (`ses-…`) and must never
+    // be used as one — see the token minting below.
+    const logSessionId = restoreMatch[1];
     // Host only. Restoring rebuilds the desktop *and mints fresh iframe tokens* for
     // every window it brings back (refreshIframeTokens below) — it is the desktop
     // reconstituting itself, not a resource an app can hold a permission for.
     const denied = requireHost(principal);
     if (denied) return denied;
     try {
-      const parsed = await parseJsonBody<{ policy?: ContextRestorePolicy }>(req, {
-        allowEmpty: true,
-      });
+      const parsed = await parseJsonBody<{ policy?: ContextRestorePolicy; sessionId?: string }>(
+        req,
+        { allowEmpty: true },
+      );
       if (parsed instanceof Response) return parsed;
       const policy: ContextRestorePolicy | undefined = parsed?.policy;
 
-      const messagesJsonl = await readSessionMessages(sessionId);
+      const messagesJsonl = await readSessionMessages(logSessionId);
       if (messagesJsonl === null) {
         return errorResponse('Session not found', 404);
       }
       const messages = parseSessionMessages(messagesJsonl);
       const rawActions = getWindowRestoreActions(messages);
-      const restoreActions = await refreshRestoredWindowActions(rawActions, sessionId);
+      // Mint the restored windows' iframe tokens against the *live* session, not the log
+      // directory this transcript came from. The two id namespaces are the collision
+      // 3f978c48 untangled on the CONNECTION_STATUS path; this door still conflated them,
+      // so every app the Restore banner brought back carried a token naming a session the
+      // hub never held. Each of its session-scoped verbs (`yaar://session/agents`,
+      // `yaar://windows`, …) then parked the full waitFor() and answered 503 — for the
+      // life of the window, until a reconnect re-minted its token.
+      //
+      // The caller is the desktop, so it knows which incarnation it is; fall back to the
+      // hub's default, and to '' (POST /api/verb then resolves the default at call time)
+      // rather than to an id that names nothing.
+      const claimed = parsed?.sessionId;
+      const hub = getSessionHub();
+      const liveSessionId =
+        (claimed && hub.get(claimed) ? claimed : hub.getDefault()?.sessionId) ?? '';
+      const restoreActions = await refreshRestoredWindowActions(rawActions, liveSessionId);
       const contextMessages = getContextRestoreMessages(messages, policy);
       return jsonResponse({ actions: restoreActions, contextMessages });
     } catch {

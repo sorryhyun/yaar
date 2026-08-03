@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
 import type { OSAction } from '@yaar/shared';
 import { apiFetch } from '@/lib/api';
+import { restoreSession } from '@/lib/restoreSession';
 import styles from '@/styles/overlays/SessionsModal.module.css';
 
 interface SessionInfo {
@@ -83,7 +84,7 @@ export function SessionsModal() {
       e.stopPropagation();
       try {
         setRestoring(sessionId);
-        const response = await apiFetch(`/api/sessions/${sessionId}/restore`, { method: 'POST' });
+        const response = await restoreSession(sessionId);
         if (!response.ok) {
           throw new Error(t('sessions.error.restore'));
         }

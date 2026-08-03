@@ -4,7 +4,7 @@
 import { useState, useCallback } from 'react';
 import { useDesktopStore } from '@/store';
 import type { OSAction } from '@yaar/shared';
-import { apiFetch } from '@/lib/api';
+import { restoreSession } from '@/lib/restoreSession';
 import styles from '@/styles/overlays/RestorePromptBanner.module.css';
 
 export function RestorePromptBanner() {
@@ -19,9 +19,7 @@ export function RestorePromptBanner() {
 
     try {
       setRestoring(true);
-      const response = await apiFetch(`/api/sessions/${restorePrompt.sessionId}/restore`, {
-        method: 'POST',
-      });
+      const response = await restoreSession(restorePrompt.sessionId);
       if (!response.ok) {
         throw new Error('Failed to restore session');
       }
