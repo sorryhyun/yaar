@@ -1,9 +1,13 @@
 # Proposal: SDK & CSS Consolidation for v1 (De-duplicating the App Fleet)
 
-**Status:** Draft — the prune pass that preceded it landed 2026-08-03 (`showAlert` and the
-`clsx`/`konva`/`p5` registry entries removed at zero consumers, `COMPILER_VERSION` 15 → 16).
-Its standing rule now lives in `packages/compiler/CLAUDE.md` under "Adding to the
-Agent-Facing Surface" and governs every addition below.
+**Status:** the design-token primitives and their bundled-app adoption landed 2026-08-03
+(`COMPILER_VERSION` 16 → 17), as did the prune pass that preceded the proposal (`showAlert`
+and the `clsx`/`konva`/`p5` registry entries removed at zero consumers, 15 → 16). The
+prune's standing rule now lives in `packages/compiler/CLAUDE.md` under "Adding to the
+Agent-Facing Surface" and governs every addition below. **Open:** Part 1 (SDK helpers),
+Part 3 (the pre-existing-primitive adoption pass), Part 3a (`user-apps/` migration),
+Part 4 (guards). Landed sections are deleted as they land rather than annotated, so what
+is left in this document is the work that is left.
 **Scope:** `packages/compiler` (shims/yaar, bundled-types), `packages/shared` (design tokens), `scripts/check/apps.ts`, adoption edits across `apps/*` and `user-apps/*`
 
 ## Summary
@@ -14,22 +18,23 @@ markdown are consolidated, and the top helpers are widely adopted (`errMsg` 20 a
 `showToast` 16, `appStorage` 15). What remains is a small set of high-frequency, tiny
 patterns that apps keep re-implementing by hand.
 
-The proposal is four contained additions and one explicit non-decision:
+What remains is three contained pieces of work and one explicit non-decision:
 
 1. **Five micro-helpers added to `@bundled/yaar`** (~80 lines total): `safeParseOr`,
    `tryToast`, `downloadBlob`/`blobToDataUrl`, `escapeHtml`, and a tiny formatter trio.
-2. **Three new CSS utilities** in the design-token layer: theme-following color washes
-   (`y-wash-*` + `--yaar-wash-*` tokens), status dots (`y-dot*`), progress bars
-   (`y-progress*`).
-3. **An adoption pass** swapping hand-rolled code for primitives that already exist
-   (`.y-scroll`, `.y-truncate`, `.y-empty`, `createAutosave`, `createKeyState`, SDK
-   dialogs, `@bundled/uuid`).
-4. **Two warnings in `scripts/check/apps.ts`** so the two systemic-but-diffuse problems
+2. **An adoption pass** swapping hand-rolled code for primitives that already exist —
+   `.y-scroll`, `.y-truncate`, `.y-empty`, `createAutosave`, `createKeyState`, SDK dialogs,
+   `@bundled/uuid` (Part 3), and the `user-apps/` half of the wash/dot/progress migration
+   the bundled fleet already took (Part 3a).
+3. **Two warnings in `scripts/check/apps.ts`** so the two systemic-but-diffuse problems
    (hardcoded token-adjacent colors, off-scale spacing literals) stop regressing without
    a big-bang refactor.
-5. **No new bundled npm library.** The audit looked for missing libraries specifically and
+4. **No new bundled npm library.** The audit looked for missing libraries specifically and
    found none — every gap is a ≤10-line helper, which is exactly the case for the SDK,
    not a registry entry.
+
+The CSS half — theme-following washes, status dots, progress bars — is done; see
+**Landed** below for the surface it left behind.
 
 On the size concern: the SDK is compiled into each app by `Bun.build`, which tree-shakes
 unused ESM exports. ~80 added lines are noise next to any real library (mermaid alone is
@@ -197,75 +202,35 @@ existing one-entry-point rule.
 
 ---
 
-## Part 2 — Design-token layer additions
+## Landed: the design-token primitives
 
-Source of truth stays `packages/shared/src/design/tokens.ts` / `app-css.ts`; regenerate
-with `bun scripts/codegen/design-tokens.ts`.
+Shipped 2026-08-03 with the bundled-app adoption that goes with them
+(`COMPILER_VERSION` 16 -> 17). Listed here only as the surface Part 3a migrates *onto* —
+the reasoning lives in `packages/shared/src/design/app-css.ts`, which is where it stays
+accurate:
 
-### 2.1 Color-wash tokens + utilities (`--yaar-wash-*`, `y-wash-*`)
+- **Washes** — `--yaar-wash-{accent,success,error,warning}` plus a `-strong` (16%) variant
+  of each, and `--yaar-wash-accent-border` (35%). `color-mix()` over the cascading color
+  var, re-declared inside `.y-light`, so they follow the theme and any accent override.
+  Classes `y-wash-accent/-success/-error/-warning` for the plain-background case.
+- **Status dots** — `y-dot` + `y-dot-ok/-warn/-err/-accent/-pulse`.
+- **Progress** — `y-progress` + `y-progress-fill`, with `y-progress-indeterminate` on the
+  track for a sliding block.
 
-The largest CSS finding: **63 occurrences across 12+ files** hardcode the literal RGB
-decomposition of the accent/success colors for tinted backgrounds and borders —
-`rgba(88, 166, 255, α)` and `rgba(63, 185, 80, α)`. Worst offenders:
-`user-apps/thesingularity-reader/src/styles.css` (18+6), `user-apps/dc-comics` (8),
-`user-apps/slides-lite` (5), `apps/session-logs` (4+4), `user-apps/falling-blocks` (4),
-plus `apps/configurations`, `apps/devtools`, `word-lite`, `search`, `github`, `memo`,
-`dock`, and raw `#58a6ff`/`#3fb950` in gradients (`ai-chat`, `falling-blocks`,
-`excel-lite`).
+Two rules the bundled pass established, which Part 3a inherits:
 
-Two compounding problems:
+- A tinted **border** pairs a wash background with the **opaque** color token
+  (`border-color: var(--yaar-success)`), the pattern `.y-badge-*` already used. Only
+  accent has a tinted-edge token.
+- A tint beyond the shipped strengths gets an **app-local** `color-mix()` over the color
+  var, never a baked `rgba()` — and never a `--yaar-`-prefixed name, which would be an
+  override of a shipped token rather than an extension.
 
-- Those literals are **GitHub's palette, not ours**: `#58a6ff` vs `--yaar-accent`
-  `#539bf5`, `#3fb950` vs `--yaar-success` `#57ab5a`. Apps copied the wash by eye,
-  slightly wrong, so the fleet already disagrees with the token layer today.
-- They can never follow a theme change. This bites *now*, not hypothetically: `.y-light`
-  exists (`app-css.ts:104`) and swaps every `--yaar-*` color var — hardcoded washes stay
-  dark-tinted on a light surface.
 
-Fix: define washes with `color-mix()` over the cascading var, so they re-theme for free:
+## Watchlist — two apps each, do not add yet
 
-```css
-:root {
-  --yaar-wash-accent: color-mix(in srgb, var(--yaar-accent) 10%, transparent);
-  --yaar-wash-accent-border: color-mix(in srgb, var(--yaar-accent) 35%, transparent);
-  --yaar-wash-success: color-mix(in srgb, var(--yaar-success) 10%, transparent);
-  --yaar-wash-error: color-mix(in srgb, var(--yaar-error) 10%, transparent);
-  --yaar-wash-warning: color-mix(in srgb, var(--yaar-warning) 10%, transparent);
-}
-.y-wash-accent { background: var(--yaar-wash-accent); }
-/* …-success / -error / -warning */
-```
-
-Tokens *and* classes, because roughly half the offending sites use the wash inside their
-own compound selectors (hover states, borders) where only a var() can reach.
-
-**Follow-through:** the generated utilities themselves bake `alpha(D.accent, 0.1)`
-literals today (`y-badge-*`, `y-list-item.active`, `y-btn-danger:hover`,
-`y-tbtn-active` — `app-css.ts:92–160`), which have the same doesn't-re-theme defect
-under `.y-light`. Once the wash tokens exist, migrate those rules onto them so the
-token layer obeys its own rule. (`color-mix` baseline: Chrome 111+, well below what the
-iframe runtime already requires.)
-
-### 2.2 Status dot (`y-dot`, `y-dot-ok/-warn/-err`)
-
-Five independent implementations converging on the same 3-line shape (6–8px circle,
-`border-radius: 50%`, background = a status token): `user-apps/ai-chat`,
-`apps/devtools` (with its own `@keyframes pulse`), `apps/process-explorer`,
-`apps/mcp-manager`, `user-apps/studio-3d`. The process-explorer and mcp-manager copies
-(`.dot`, `.dot-ok/-warn/-err`) are structurally byte-identical — already a copy-paste
-pair. Add `y-dot` + status modifiers, plus `y-dot-pulse` for the animated variant
-devtools wants.
-
-### 2.3 Progress bar (`y-progress`, `y-progress-fill`)
-
-Exactly at the 3-app bar: `user-apps/ocr` (track + fill), `apps/browser` (indeterminate
-loading bar with its own keyframes), `user-apps/slides-lite` (bare bar). Track =
-`--yaar-border`, fill = `--yaar-accent`, height 4px; an indeterminate modifier absorbs
-browser's keyframes.
-
-### 2.4 Watchlist — two apps each, do not add yet
-
-Recorded so the *third* consumer triggers extraction instead of another fork:
+Recorded so the *third* consumer triggers extraction instead of another fork. All three
+live in `user-apps/`, so Part 3a is when the count moves:
 
 - `y-skeleton` — dc-comics and thesingularity-reader share a **verbatim** shimmer clone
   (same keyframe name, same gradient stops, same comment wording).
@@ -297,10 +262,59 @@ many apps — land as one commit per app.
 **The sibling-fork special case:** dc-comics and thesingularity-reader share a forked
 ~250-line `helpers.ts` at ~90% identity (countdown/clock formatters, lazy-image
 resolution, scraped-HTML rewrite pipeline) plus cloned CSS (shimmer, scrollbars, washes).
-Parts dissolve into 1.5/2.1 above; the scraper-specific remainder should either be
-extracted to a shared module or the fork consciously accepted — decided once, because a
-third scraper-style app will copy it again. No new bundled library for it until that
-third app exists.
+The clock formatters dissolve into 1.5 and the cloned CSS into Part 3a; the
+scraper-specific remainder should either be extracted to a shared module or the fork
+consciously accepted — decided once, because a third scraper-style app will copy it again.
+No new bundled library for it until that third app exists.
+
+---
+
+## Part 3a — the `user-apps/` wash/dot/progress migration
+
+The bundled half of this is done. The **larger** half is not: `user-apps/` holds ~73 of
+the baked tint sites, and every one of them is a GitHub-palette literal that cannot follow
+`.y-light`.
+
+| App | Tint sites | Also has |
+|---|---|---|
+| thesingularity-reader | 28 | shimmer clone (`y-skeleton` watchlist), forked `helpers.ts` |
+| falling-blocks | 13 | keyboard chips (`y-kbd` watchlist) — **mostly game content, see below** |
+| slides-lite | 10 | progress bar, dots |
+| dc-comics | 8 | shimmer clone, progress bar, dots |
+| studio-3d | 4 | dots, `y-btn` rebuild, tree rows (`y-tree` watchlist) |
+| ai-chat | 3 | dots + its own `@keyframes` |
+| word-lite | 2 | — |
+| recent-papers | 2 | one is a chart series color — **content, leave it** |
+| github, image-edit, excel-lite | 1 each | — |
+| ocr | — | progress bar (track + fill) |
+
+Same three migration rules as the bundled pass, plus what that pass learned: map to the
+nearest shipped strength rather than preserving the old alpha, and expect the hue to shift
+(these literals are `#58a6ff`/`#3fb950`/`#f85149`, not YAAR's tokens) — that shift is the
+correction, not a regression.
+
+**Why this is a separate part rather than more of Part 3.** `user-apps/` is git-ignored: it
+is the user's installed fleet, not repo content. So this work
+
+- cannot be reviewed in a PR, cannot be verified by CI, and leaves no history to revert to;
+- may collide with edits the user has made since, so it needs a clean tree per app and a
+  deliberate session rather than a background sweep;
+- has to be **recompiled and redeployed** per app, not merely edited — an installed app
+  keeps serving its old `dist/` until it is rebuilt, and the `COMPILER_VERSION` bump only
+  forces that on the next compile.
+
+**Judgement, not mechanics, in two places.** `falling-blocks` is the trap: 13 sites, but
+most of its color is game board and sprites — *content*, which the design system
+deliberately exempts. Only its chrome (HUD chips, buttons, overlays) migrates, and a sweep
+that treats the count as a work-list will recolor the game. `recent-papers/src/chart.ts`
+is the same shape at smaller scale: a chart series color is content.
+
+**Do the fork first, or don't do it at all.** dc-comics and thesingularity-reader hold 36
+of the 73 sites between them and share a ~90%-identical forked `helpers.ts` plus cloned
+CSS (shimmer, scrollbars, washes). Migrating them independently doubles the work and
+leaves the fork in place; the sibling-fork decision in Part 3 above should be made first,
+because whichever way it goes it determines whether these two apps are one migration or
+two.
 
 ---
 
@@ -351,20 +365,25 @@ re-proposed piecemeal:
 
 ## Rollout
 
-The prune pass landed first, so everything below starts from a baseline with no
-zero-consumer surface on it.
+The prune pass and the token primitives landed first, so what follows starts from a
+baseline with no zero-consumer surface and no hand-rolled washes in `apps/`.
 
-1. **Part 2** (tokens + codegen + regenerate) — no app changes required to land.
-2. **Part 1** (SDK helpers + `.d.ts` + barrel exports) — contained in
+1. **Part 1** (SDK helpers + `.d.ts` + barrel exports) — contained in
    `packages/compiler`; bumps `COMPILER_VERSION` so apps recompile.
-3. **Part 3** adoption pass — one commit per app, each verifiable by that app compiling
-   and behaving identically (bundled apps first; user-apps opportunistically). The
-   minecraft-lite item also settles `createKeyState`'s adopt-or-remove call.
+2. **Part 3** adoption pass — one commit per app, each verifiable by that app compiling
+   and behaving identically. The minecraft-lite item also settles `createKeyState`'s
+   adopt-or-remove call. Settle the dc-comics/thesingularity-reader sibling fork here,
+   since Part 3a depends on which way it goes.
+3. **Part 3a** (`user-apps/` migration) — after Part 3's fork decision, per app, each
+   recompiled and redeployed rather than only edited. Not CI-verifiable; see the part
+   itself for why that changes how it must be run.
 4. **Part 4** guards — last, so the fleet is mostly clean when the warnings switch on.
+   Part 3a is what decides whether the token-adjacent-color warning starts life quiet or
+   with ~73 hits in it.
 
-Parts 1–2 are the actual v1 blockers-adjacent work; Part 3 can proceed incrementally
-after release without breaking anything, since nothing in Parts 1–2 removes or changes
-existing surface.
+Part 1 is the remaining v1-blockers-adjacent work; Parts 3 and 3a can proceed
+incrementally after release without breaking anything, since nothing landed so far removes
+or changes existing surface.
 
 ## Open questions
 
@@ -372,5 +391,9 @@ existing surface.
   loading signal, folding `withLoading` in — current lean: keep them orthogonal.
 - Should `safeParseOr` also have a throwing sibling (`parseOrThrow`) for command handlers
   that want `AppCommandError` on bad input, or is that over-reach for v1?
-- Wash percentages: standardize on 10%/35% (background/border) or expose two background
-  strengths? The fleet's hand-rolled values cluster at 0.08–0.16.
+- The dc-comics/thesingularity-reader sibling fork: extract the scraper-specific remainder
+  to a shared module, or consciously accept the fork? Blocks Part 3a's largest two apps.
+
+(Settled: wash percentages — two background strengths, 10% and 16%, plus a 35% accent
+border. The reasoning is in `app-css.ts`, including why the scale ships complete for all
+four semantic colors rather than only where the chrome consumes it.)
