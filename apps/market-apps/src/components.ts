@@ -6,6 +6,7 @@
 
 import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
+import { formatBytes } from '@bundled/yaar';
 import {
   cancelPublish,
   confirmPublish,
@@ -49,13 +50,6 @@ import type { DisplayApp, PublisherTerms } from './types.js';
 
 /** Whether the settings/config popover is open. UI-only, so it stays local to this module. */
 const [configOpen, setConfigOpen] = createSignal(false);
-
-/** Human-readable byte size for the confirmation dialog. */
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(2)} MB`;
-}
 
 /**
  * Push-to-marketplace button for an installed, non-system app — only when signed in.
