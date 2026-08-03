@@ -60,7 +60,10 @@ export const McpToolsListResult = z.looseObject({
 // Persisted MCP config read in `loadServers` via `read('yaar://config/mcp')`.
 // The app reads `.servers` and, per entry, `.type` (with optional `url`/`command`).
 // `url` is also what dedupes a scan result against an already-configured server.
-const McpServerConfig = z.looseObject({
+// Exported so `loadServers` can name the record's value type: `servers ?? {}`
+// widens to `Record<string, McpServerConfig> | {}`, and `Object.entries` over
+// that union hands back `unknown` values.
+export const McpServerConfig = z.looseObject({
   type: z.string(),
   url: z.optional(z.string()),
   command: z.optional(z.string()),

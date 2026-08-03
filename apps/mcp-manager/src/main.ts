@@ -10,10 +10,13 @@ import {
   showConfirm,
   withLoading,
   errMsg,
+  safeParseOr,
+  tryToast,
 } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import {
   McpConfigResponse,
+  McpServerConfig,
   McpServerStatus,
   McpStatusListResponse,
   McpToolInfo,
@@ -55,7 +58,12 @@ const [probeResult, setProbeResult] = createSignal<DiscoveredServer | null>(null
 
 /** URLs already registered — a scan hit matching one of these is not news. */
 const configuredUrls = createMemo(
-  () => new Set(servers().map((s) => s.url).filter((u): u is string => !!u)),
+  () =>
+    new Set(
+      servers()
+        .map((s) => s.url)
+        .filter((u): u is string => !!u),
+    ),
 );
 
 const visibleDiscovered = createMemo(() =>
@@ -141,34 +149,34 @@ async function loadServers() {
       list<unknown>('yaar://mcp'),
     ]);
     // Validate the persisted config at the trust boundary. A missing config
-    // (null/undefined) is normal — treat it as an empty `{}` rather than a
-    // validation failure so first-run users don't see a spurious error.
-    const configParsed = z.safeParse(McpConfigResponse, configRaw ?? {});
-    if (!configParsed.success) {
-      console.error('MCP config failed validation', configParsed.error.issues);
-      throw new Error('Malformed MCP config');
-    }
-    const configs = configParsed.data.servers ?? {};
+    // (null/undefined) is coerced to `{}` before validating, which always
+    // satisfies this loose schema — so `onInvalid` only ever fires for a config
+    // that is *present* and malformed, not for a fresh install.
+    const configParsed = safeParseOr(McpConfigResponse, configRaw ?? {}, undefined, {
+      onInvalid: (issues) => {
+        console.error('MCP config failed validation', issues);
+        throw new Error('Malformed MCP config');
+      },
+    });
+    // Annotated rather than left to `?? {}`: the bare empty-object literal widens
+    // the union to `Record<string, McpServerConfig> | {}`, and `Object.entries`
+    // over that union yields `unknown` values two calls downstream.
+    const configs: Record<string, z.infer<typeof McpServerConfig>> = configParsed.servers ?? {};
 
     // The runtime status list crosses the same boundary as the config and gets
     // the same treatment. It is only a *decoration* of the config-derived list,
     // though, so an unreadable status is survivable in a way an unreadable
     // config is not: the row still renders, as "disconnected".
-    const statusParsed = z.safeParse(McpStatusListResponse, statusRaw ?? {});
-    if (!statusParsed.success) {
-      console.error('[mcp-manager] MCP status list failed validation', statusParsed.error.issues);
-    }
+    const statusParsed = safeParseOr(McpStatusListResponse, statusRaw ?? {}, undefined, {
+      label: 'mcp-manager:status',
+    });
     const statusMap = new Map<string, z.infer<typeof McpServerStatus>>();
-    for (const entry of statusParsed.success ? (statusParsed.data.servers ?? []) : []) {
-      const row = z.safeParse(McpServerStatus, entry);
-      if (!row.success) {
-        console.error('[mcp-manager] MCP status entry failed validation', {
-          entry,
-          issues: row.error.issues,
-        });
-        continue;
-      }
-      statusMap.set(row.data.name, row.data);
+    for (const entry of statusParsed?.servers ?? []) {
+      const row = safeParseOr(McpServerStatus, entry, undefined, {
+        label: 'mcp-manager:status-entry',
+      });
+      if (!row) continue;
+      statusMap.set(row.name, row);
     }
 
     setServers(
@@ -227,22 +235,19 @@ async function refreshServerByName(name: string): Promise<void> {
 async function loadToolsFor(name: string) {
   try {
     const raw = await list<unknown>(`yaar://mcp/${encodeURIComponent(name)}`);
-    const parsed = z.safeParse(McpToolListResponse, raw ?? {});
-    if (!parsed.success) {
-      console.error(`[mcp-manager] tool list for "${name}" failed validation`, parsed.error.issues);
-      throw new Error('Malformed MCP tool list');
-    }
+    const parsed = safeParseOr(McpToolListResponse, raw ?? {}, undefined, {
+      onInvalid: (issues) => {
+        console.error(`[mcp-manager] tool list for "${name}" failed validation`, issues);
+        throw new Error('Malformed MCP tool list');
+      },
+    });
     const tools: McpTool[] = [];
-    for (const entry of parsed.data.tools ?? []) {
-      const row = z.safeParse(McpToolInfo, entry);
-      if (!row.success) {
-        console.error(`[mcp-manager] tool entry for "${name}" failed validation`, {
-          entry,
-          issues: row.error.issues,
-        });
-        continue;
-      }
-      tools.push({ name: row.data.name, description: row.data.description });
+    for (const entry of parsed.tools ?? []) {
+      const row = safeParseOr(McpToolInfo, entry, undefined, {
+        label: `mcp-manager:tool-entry:${name}`,
+      });
+      if (!row) continue;
+      tools.push({ name: row.name, description: row.description });
     }
     setServerTools((prev) => ({ ...prev, [name]: tools }));
   } catch (err) {
@@ -258,12 +263,18 @@ async function loadToolsFor(name: string) {
 // ── UI actions ─────────────────────────────────────────────
 
 async function addDiscovered(server: DiscoveredServer) {
-  await withLoading(setLoading, async () => {
-    const name = await addServerByUrl(server.url, server.serverName);
-    showToast(`Added "${name}"`, 'success');
-    setDiscovered((prev) => prev.filter((s) => s.url !== server.url));
-    if (probeResult()?.url === server.url) setProbeResult(null);
-  });
+  // The success message names the server by the name it actually registered
+  // under (only known after the call), so it stays inline rather than
+  // `tryToast`'s static `success` option; `tryToast` still supplies the error
+  // toast + log that `withLoading` alone would otherwise swallow silently.
+  await withLoading(setLoading, () =>
+    tryToast(async () => {
+      const name = await addServerByUrl(server.url, server.serverName);
+      showToast(`Added "${name}"`, 'success');
+      setDiscovered((prev) => prev.filter((s) => s.url !== server.url));
+      if (probeResult()?.url === server.url) setProbeResult(null);
+    }),
+  );
 }
 
 /** UI remove path: confirm first. The agent command calls the core directly. */
@@ -274,19 +285,13 @@ async function confirmRemove(name: string) {
     danger: true,
   });
   if (!ok) return;
-  await withLoading(setLoading, async () => {
-    await removeServerByName(name);
-    showToast(`Removed "${name}"`, 'success');
-  });
+  await withLoading(setLoading, () =>
+    tryToast(() => removeServerByName(name), { success: `Removed "${name}"` }),
+  );
 }
 
 async function refreshServer(name: string) {
-  try {
-    await refreshServerByName(name);
-    showToast(`Refreshed "${name}"`, 'success');
-  } catch (err) {
-    showToast(errMsg(err), 'error');
-  }
+  await tryToast(() => refreshServerByName(name), { success: `Refreshed "${name}"` });
 }
 
 function toggleExpand(name: string) {
@@ -334,8 +339,10 @@ function DiscoveredCard(server: DiscoveredServer) {
         <span class="y-dot y-dot-ok"></span>
         <div class="server-info">
           <strong>
-            ${server.serverName ??
-            (server.port != null ? `Port ${server.port}` : deriveName(server.url))}
+            ${
+              server.serverName ??
+              (server.port != null ? `Port ${server.port}` : deriveName(server.url))
+            }
           </strong>
           <${Show} when=${server.serverVersion}>
             <span class="version">v${server.serverVersion}</span>
@@ -434,7 +441,7 @@ function ScanSection() {
         <div class="scan-field scan-field-btn">
           <button
             class="y-btn y-btn-primary"
-            onClick=${() => startScan().catch((err) => showToast(errMsg(err), 'error'))}
+            onClick=${() => tryToast(() => startScan())}
             disabled=${scanning}
           >
             ${() => (scanning() ? 'Scanning...' : 'Scan')}
@@ -554,8 +561,7 @@ export default defineApp({
   name: 'MCP Manager',
   state: {
     servers: {
-      description:
-        'Configured MCP servers with live connection state, type, url and tool count.',
+      description: 'Configured MCP servers with live connection state, type, url and tool count.',
       get: () => servers(),
     },
     discovered: {

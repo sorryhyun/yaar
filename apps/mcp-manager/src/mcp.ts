@@ -2,8 +2,7 @@
 //
 // Kept separate from the UI so the request/response rules live in one place —
 // in particular the two headers that must ride every request after initialize.
-import { httpFetch } from '@bundled/yaar';
-import * as z from '@bundled/zod';
+import { httpFetch, safeParseOr } from '@bundled/yaar';
 import { JsonRpcResponse, McpInitializeResult, McpToolInfo, McpToolsListResult } from './schema';
 
 /**
@@ -82,12 +81,15 @@ function tryJson(text: string): unknown {
 export function parseRpcResponse(body: string): unknown {
   const direct = tryJson(body);
   if (direct !== undefined) {
-    const parsed = z.safeParse(JsonRpcResponse, direct);
-    if (!parsed.success) {
-      console.error('MCP JSON-RPC response failed validation', parsed.error.issues);
-      throw new Error('Malformed MCP JSON-RPC response');
-    }
-    const data = parsed.data;
+    // `direct` is always a real parsed JSON value here (never JS `undefined`),
+    // so `undefined` can only mean "failed validation" — safe to use as the
+    // fallback-doubles-as-failure-signal sentinel (see apps/market-apps/src/api.ts).
+    const data = safeParseOr(JsonRpcResponse, direct, undefined, {
+      onInvalid: (issues) => {
+        console.error('MCP JSON-RPC response failed validation', issues);
+        throw new Error('Malformed MCP JSON-RPC response');
+      },
+    });
     if (data.result !== undefined) return data.result;
     if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
     return data;
@@ -95,17 +97,16 @@ export function parseRpcResponse(body: string): unknown {
 
   // Not JSON on its own — SSE framing: look for "data: {...}" lines. A line that
   // does not decode is skipped (an SSE stream legitimately carries other
-  // frames); a line that decodes and *is* an error envelope throws, as above.
+  // frames); a line that fails schema validation is skipped the same way; a
+  // line that decodes and *is* an error envelope throws, as above.
   for (const line of body.split('\n')) {
     if (!line.startsWith('data: ')) continue;
     const value = tryJson(line.slice(6));
     if (value === undefined) continue;
-    const parsed = z.safeParse(JsonRpcResponse, value);
-    if (!parsed.success) {
-      console.error('MCP SSE data line failed validation', parsed.error.issues);
-      continue;
-    }
-    const data = parsed.data;
+    const data = safeParseOr(JsonRpcResponse, value, undefined, {
+      label: 'mcp:rpc-sse-line',
+    });
+    if (data === undefined) continue;
     if (data.result !== undefined) return data.result;
     if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
   }
@@ -113,22 +114,19 @@ export function parseRpcResponse(body: string): unknown {
 }
 
 function parseTools(raw: unknown, label: string): McpTool[] {
-  const parsed = z.safeParse(McpToolsListResult, raw);
-  if (!parsed.success) {
-    console.error(`[mcp-manager] tools/list from ${label} failed validation`, parsed.error.issues);
-    throw new Error('Malformed MCP tool list');
-  }
+  const result = safeParseOr(McpToolsListResult, raw, undefined, {
+    onInvalid: (issues) => {
+      console.error(`[mcp-manager] tools/list from ${label} failed validation`, issues);
+      throw new Error('Malformed MCP tool list');
+    },
+  });
   const tools: McpTool[] = [];
-  for (const entry of parsed.data.tools ?? []) {
-    const row = z.safeParse(McpToolInfo, entry);
-    if (!row.success) {
-      console.error(`[mcp-manager] tool entry from ${label} failed validation`, {
-        entry,
-        issues: row.error.issues,
-      });
-      continue;
-    }
-    tools.push({ name: row.data.name, description: row.data.description });
+  for (const entry of result.tools ?? []) {
+    const row = safeParseOr(McpToolInfo, entry, undefined, {
+      label: `mcp:tool-entry:${label}`,
+    });
+    if (!row) continue;
+    tools.push({ name: row.name, description: row.description });
   }
   return tools;
 }
@@ -156,16 +154,22 @@ export async function probeUrl(url: string, port?: number): Promise<DiscoveredSe
 
   // The body is either JSON or an SSE stream; parseRpcResponse handles both, so
   // read it as text rather than committing to res.json().
-  const initParsed = z.safeParse(McpInitializeResult, parseRpcResponse(await initRes.text()));
-  if (!initParsed.success) {
-    console.error(`[mcp-manager] initialize from ${url} failed validation`, initParsed.error.issues);
-    throw new Error('Malformed MCP initialize result');
-  }
+  const initResult = safeParseOr(
+    McpInitializeResult,
+    parseRpcResponse(await initRes.text()),
+    undefined,
+    {
+      onInvalid: (issues) => {
+        console.error(`[mcp-manager] initialize from ${url} failed validation`, issues);
+        throw new Error('Malformed MCP initialize result');
+      },
+    },
+  );
 
   const session: McpSession = {
     // Headers.get() is case-insensitive, unlike a plain-object lookup.
     sessionId: initRes.headers.get('mcp-session-id') ?? undefined,
-    protocolVersion: initParsed.data.protocolVersion ?? CLIENT_PROTOCOL_VERSION,
+    protocolVersion: initResult.protocolVersion ?? CLIENT_PROTOCOL_VERSION,
   };
 
   await mcpPost(url, jsonRpcNotification('notifications/initialized'), session);
@@ -175,8 +179,8 @@ export async function probeUrl(url: string, port?: number): Promise<DiscoveredSe
   return {
     url,
     port,
-    serverName: initParsed.data.serverInfo?.name,
-    serverVersion: initParsed.data.serverInfo?.version,
+    serverName: initResult.serverInfo?.name,
+    serverVersion: initResult.serverInfo?.version,
     protocolVersion: session.protocolVersion,
     tools: parseTools(parseRpcResponse(await toolsRes.text()), url),
   };
