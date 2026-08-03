@@ -1,7 +1,6 @@
 import { createSignal, onMount, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { defineApp, notifications } from '@bundled/yaar';
-import * as z from '@bundled/zod';
+import { defineApp, notifications, safeParseOr } from '@bundled/yaar';
 import { OpenMeteoResponse, NominatimResponse } from './schema';
 import './styles.css';
 
@@ -88,13 +87,12 @@ async function fetchWeather(lat: number, lon: number, city: string) {
       `&current=temperature_2m,weather_code&timezone=auto`;
     const res = await fetch(url);
     if (!res.ok) throw new Error('weather fetch failed');
-    const parsed = z.safeParse(OpenMeteoResponse, await res.json());
-    if (!parsed.success) {
-      // Graceful degradation: dock is core chrome, keep previous weather state.
-      console.error('open-meteo response failed validation', parsed.error.issues);
-      return;
-    }
-    const current = parsed.data.current;
+    // Graceful degradation: dock is core chrome, keep previous weather state.
+    const data = safeParseOr(OpenMeteoResponse, await res.json(), undefined, {
+      label: 'dock:weather',
+    });
+    if (!data) return;
+    const current = data.current;
     if (current?.temperature_2m === undefined || current.weather_code === undefined) {
       console.error('open-meteo response missing current weather fields');
       return;
@@ -116,13 +114,12 @@ async function reverseGeocode(lat: number, lon: number): Promise<string> {
       { headers: { 'Accept-Language': 'en' } }
     );
     if (!res.ok) throw new Error('geo failed');
-    const parsed = z.safeParse(NominatimResponse, await res.json());
-    if (!parsed.success) {
-      // Graceful degradation: fall back to 'Unknown' rather than throwing.
-      console.error('nominatim response failed validation', parsed.error.issues);
-      return 'Unknown';
-    }
-    const address = parsed.data.address;
+    // Graceful degradation: fall back to 'Unknown' rather than throwing.
+    const data = safeParseOr(NominatimResponse, await res.json(), undefined, {
+      label: 'dock:geocode',
+    });
+    if (!data) return 'Unknown';
+    const address = data.address;
     return address?.city || address?.town || address?.county || 'Unknown';
   } catch (_) {
     return 'Unknown';
