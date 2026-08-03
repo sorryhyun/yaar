@@ -1280,6 +1280,52 @@ declare module '@bundled/yaar' {
   ): Promise<T | undefined>;
 
   /**
+   * Run an async action; on failure log it and toast `errMsg(e)`. The
+   * do-the-thing-and-say-why-it-failed try/catch, written once.
+   *
+   * ```ts
+   * await tryToast(() => deleteRepo(name), { success: 'Deleted' });
+   * ```
+   *
+   * Resolves the action's value, or `undefined` if it threw — check the result
+   * rather than re-catching. Orthogonal to `withLoading` (which owns a loading
+   * flag and knows nothing about toasts); nest them when you want both:
+   * `withLoading(setBusy, () => tryToast(...))`.
+   */
+  export function tryToast<T>(
+    fn: () => Promise<T>,
+    opts?: { success?: string },
+  ): Promise<T | undefined>;
+
+  /**
+   * Validate untrusted data against a schema; on mismatch log it and return
+   * `fallback`. The boundary for persisted JSON and HTTP responses.
+   *
+   * ```ts
+   * const layout = safeParseOr(LayoutSchema, await appStorage.readJsonOr('layout.json', undefined), DEFAULT_LAYOUT, {
+   *   label: 'storage:layout',
+   * });
+   * ```
+   *
+   * `readJsonOr` answers "the file is missing" and "the file is garbage" with the
+   * same value, so a broken app renders identically to a fresh one. This keeps
+   * those apart: `undefined` (nothing stored) takes the fallback silently, while
+   * a value that is present and wrong is logged with the schema's own issues.
+   *
+   * Takes any Standard Schema — a `@bundled/zod` schema, typically. Throws rather
+   * than falling back on the caller's own bugs: a non-schema, or a schema that
+   * validates asynchronously (await `schema['~standard'].validate(raw)` yourself
+   * for those — this returns a value, not a promise).
+   */
+  export function safeParseOr<S, F = YaarStandardOutput<S>>(
+    schema: S,
+    raw: unknown,
+    fallback: F,
+    /** `label` tags the console line, e.g. `'storage:layout'`. */
+    opts?: { label?: string },
+  ): YaarStandardOutput<S> | F;
+
+  /**
    * The generation counter that keeps a slow response from overwriting a newer one.
    *
    * ```ts
@@ -1331,6 +1377,59 @@ declare module '@bundled/yaar' {
    * rewrites the *sanitized* output.
    */
   export function sanitizeHtml(html: string, opts?: SanitizeHtmlOptions): string;
+
+  /**
+   * Escape text for interpolation into HTML — always covers `& < > " '`.
+   *
+   * The other half of the untrusted-content story: `sanitizeHtml` cleans markup
+   * you mean to render, this neutralizes text you mean to show (a commit message
+   * in a template literal, a filename in a `title="..."`). Escaping only
+   * `& < >` is safe in a text node and not in an attribute, where a lone `"`
+   * ends it and everything after is markup — so this covers both, since which
+   * context a call site sits in changes when someone edits the template.
+   *
+   * Emits `&#39;` for the apostrophe. Escaping for an XML *document* is a
+   * different grammar (`&apos;`); a DOCX or SVG serializer keeps its own.
+   */
+  export function escapeHtml(s: string): string;
+
+  /**
+   * Trigger a browser download of `blob`, named `filename` — the objectURL /
+   * `<a download>` / click / revoke dance, with the revoke deferred a tick so it
+   * cannot race the download it just scheduled.
+   */
+  export function downloadBlob(blob: Blob, filename: string): void;
+
+  /**
+   * Read a Blob or File into a `data:` URL (base64, with the MIME prefix).
+   *
+   * For an image about to be stored or shown, prefer `toWebP` — it re-encodes
+   * and returns both the data URL and the raw base64 `appStorage.save(...,
+   * 'base64')` wants. This is the general case: any blob, no re-encode.
+   */
+  export function blobToDataUrl(blob: Blob): Promise<string>;
+
+  /**
+   * Bytes as a human-readable size: `'0 B'`, `'834 B'`, `'1.5 KB'`, `'2.0 MB'`.
+   * Binary steps (1024), one decimal above bytes. Use it rather than a local
+   * ladder, so two windows never label the same file differently.
+   */
+  export function formatBytes(n: number): string;
+
+  /**
+   * Seconds as elapsed time: `'0:07'`, `'3:07'`, `'1:03:07'`. Hours appear only
+   * when there are hours; seconds are floored, so a scrubber never reads one
+   * second longer than the media it is playing.
+   */
+  export function formatDuration(seconds: number): string;
+
+  /**
+   * A timestamp as a wall clock in the user's locale: `'15:04:05'`. 24-hour by
+   * choice (log lines and save times are a column, not prose), locale-decided
+   * separators — never a hardcoded locale. `{ seconds: false }` gives `'15:04'`
+   * for a "Saved 15:04" label.
+   */
+  export function formatClock(ts: number | Date, opts?: { seconds?: boolean }): string;
 
   /** Anything `toWebP` can encode from. A URL string is fetched first. */
   export type ImageSource =

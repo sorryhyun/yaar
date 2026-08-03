@@ -58,9 +58,16 @@ import { join, basename } from 'path';
  * injected stylesheet, and the chrome's own baked `rgba()` tints moved onto
  * them. The tokens CSS is inlined into every dist/index.html, so an app that
  * does not rebuild keeps the pre-wash sheet: the new classes would resolve to
- * nothing and the chrome would stay dark-tinted under `.y-light`.
+ * nothing and the chrome would stay dark-tinted under `.y-light`. '18': the
+ * micro-helper additions to `@bundled/yaar` (`safeParseOr`, `tryToast`,
+ * `escapeHtml`, `downloadBlob`/`blobToDataUrl`, the `format*` trio). Additive,
+ * so no unrebuilt app is broken by it — and the SDK is bundled *into* each app,
+ * so a bundle's helper set is otherwise a function of when that app last
+ * happened to be stale. The bump makes every dist/ carry one SDK vintage, which
+ * is what keeps "does this build have `formatBytes`?" answerable from the
+ * manifest instead of from the app's edit history.
  */
-export const COMPILER_VERSION = '17';
+export const COMPILER_VERSION = '18';
 
 export interface BuildManifest {
   sourceHash: string;

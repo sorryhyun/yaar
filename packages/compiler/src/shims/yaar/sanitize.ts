@@ -77,3 +77,34 @@ export function sanitizeHtml(html: string, opts?: SanitizeHtmlOptions): string {
   if (opts?.forbidAttr) config.FORBID_ATTR = opts.forbidAttr;
   return DOMPurify.sanitize(html, config) as string;
 }
+
+/** The five characters that can end a text run and start markup. */
+const HTML_ESCAPES: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+/**
+ * Escape text for interpolation into HTML.
+ *
+ * The other half of the untrusted-content story: `sanitizeHtml` cleans markup an
+ * app means to *render*, this neutralizes text an app means to *show* — a commit
+ * message in a template literal, a filename in a tooltip.
+ *
+ * Six apps wrote it and three of them escaped only `& < >`, which is safe in a
+ * text node and not in `title="${…}"`, where a lone `"` ends the attribute and
+ * everything after it is markup. Whether a given call site is in an attribute is
+ * exactly the fact that changes when someone edits the template, so this covers
+ * both contexts and there is no cheaper variant to reach for.
+ *
+ * `&#39;` rather than `&apos;` — the numeric form is understood everywhere,
+ * including by HTML4 parsers and anything treating the output as XML. Escaping
+ * for an XML *document* is a different grammar (`&apos;` is the spelling there);
+ * a DOCX or SVG serializer should keep its own.
+ */
+export function escapeHtml(s: string): string {
+  return String(s).replace(/[&<>"']/g, (c) => HTML_ESCAPES[c]);
+}

@@ -4,10 +4,12 @@
 (`COMPILER_VERSION` 16 → 17), as did the prune pass that preceded the proposal (`showAlert`
 and the `clsx`/`konva`/`p5` registry entries removed at zero consumers, 15 → 16). The
 prune's standing rule now lives in `packages/compiler/CLAUDE.md` under "Adding to the
-Agent-Facing Surface" and governs every addition below. **Open:** Part 1 (SDK helpers),
-Part 3 (the pre-existing-primitive adoption pass), Part 3a (`user-apps/` migration),
-Part 4 (guards). Landed sections are deleted as they land rather than annotated, so what
-is left in this document is the work that is left.
+Agent-Facing Surface" and governs every addition below. Part 3a (the `user-apps/` half of
+that migration) landed the same day, across 11 installed apps. Part 1 (the seven SDK
+helpers) landed 2026-08-03 as well (17 → 18). **Open:** Part 3 (the
+pre-existing-primitive adoption pass), Part 3b (adopting Part 1's helpers — the
+integration half of the same pass), Part 4 (guards). Landed sections are deleted as they
+land rather than annotated, so what is left in this document is the work that is left.
 **Scope:** `packages/compiler` (shims/yaar, bundled-types), `packages/shared` (design tokens), `scripts/check/apps.ts`, adoption edits across `apps/*` and `user-apps/*`
 
 ## Summary
@@ -18,28 +20,22 @@ markdown are consolidated, and the top helpers are widely adopted (`errMsg` 20 a
 `showToast` 16, `appStorage` 15). What remains is a small set of high-frequency, tiny
 patterns that apps keep re-implementing by hand.
 
-What remains is three contained pieces of work and one explicit non-decision:
+What remains is two contained pieces of work and one explicit non-decision:
 
-1. **Five micro-helpers added to `@bundled/yaar`** (~80 lines total): `safeParseOr`,
-   `tryToast`, `downloadBlob`/`blobToDataUrl`, `escapeHtml`, and a tiny formatter trio.
-2. **An adoption pass** swapping hand-rolled code for primitives that already exist —
+1. **An adoption pass** swapping hand-rolled code for primitives that already exist —
    `.y-scroll`, `.y-truncate`, `.y-empty`, `createAutosave`, `createKeyState`, SDK dialogs,
-   `@bundled/uuid` (Part 3), and the `user-apps/` half of the wash/dot/progress migration
-   the bundled fleet already took (Part 3a).
-3. **Two warnings in `scripts/check/apps.ts`** so the two systemic-but-diffuse problems
+   `@bundled/uuid` (Part 3), and the seven helpers Part 1 just added (Part 3b). The surface
+   exists now; the ~150 hand-rolled call sites it replaces do not know it yet, and an
+   export nothing calls is the state the prune pass existed to clean up.
+2. **Two warnings in `scripts/check/apps.ts`** so the two systemic-but-diffuse problems
    (hardcoded token-adjacent colors, off-scale spacing literals) stop regressing without
    a big-bang refactor.
-4. **No new bundled npm library.** The audit looked for missing libraries specifically and
+3. **No new bundled npm library.** The audit looked for missing libraries specifically and
    found none — every gap is a ≤10-line helper, which is exactly the case for the SDK,
    not a registry entry.
 
-The CSS half — theme-following washes, status dots, progress bars — is done; see
-**Landed** below for the surface it left behind.
-
-On the size concern: the SDK is compiled into each app by `Bun.build`, which tree-shakes
-unused ESM exports. ~80 added lines are noise next to any real library (mermaid alone is
-3.3 MB). The failure mode to avoid is not SDK size but SDK *scope* — helpers below the
-frequency bar are rejected in **Non-goals**.
+The CSS half — theme-following washes, status dots, progress bars — is done, as is the SDK
+half; what is left is teaching the fleet that both exist.
 
 ## How the evidence was gathered
 
@@ -53,184 +49,12 @@ verified during the audit; line numbers are approximate where files have since m
 
 ---
 
-## Part 1 — SDK additions (`@bundled/yaar`)
-
-Each addition is justified by the same bar: **the pattern appears in 3+ apps (or 10+
-sites), the copies are near-identical, and the helper is small enough that its whole
-contract fits in a signature.** Everything below clears it; everything that didn't is in
-Non-goals.
-
-### 1.1 `safeParseOr` — the parse-or-fallback boundary idiom
-
-The single most repeated code shape in the fleet: 82 `z.safeParse` call sites across 22
-apps, of which 15+ reproduce this exact block verbatim:
-
-```ts
-const parsed = z.safeParse(Schema, raw);
-if (!parsed.success) {
-  console.error('[app] bad stored layout', parsed.error.issues);
-  return FALLBACK;
-}
-return parsed.data;
-```
-
-It appears in two contexts that share the idiom exactly: reviving persisted JSON
-(`apps/storage/src/layout.ts`, `apps/memo/src/store.ts`, `user-apps/github/src/storage.ts`,
-`user-apps/slides-lite/src/storage.ts`, `user-apps/word-lite/src/documents.ts`,
-`user-apps/dc-comics/src/store.ts`, `user-apps/video-editor-lite/src/editor/prefs.ts`, …)
-and validating external HTTP responses (`apps/dock/src/main.ts`,
-`apps/market-apps/src/api.ts`, `apps/mcp-manager/src/mcp.ts`,
-`user-apps/recent-papers/src/data.ts`). The multi-paragraph rationale comment
-("persisted JSON is untrusted input…") is itself copy-pasted across 5–6 `schema.ts`
-files and has already begun to drift.
-
-```ts
-/** Validate untrusted data at a boundary; return `fallback` (and log) on mismatch. */
-export function safeParseOr<S extends StandardSchemaV1>(
-  schema: S,
-  raw: unknown,
-  fallback: StandardSchemaV1.InferOutput<S>,
-  opts?: { label?: string }, // log tag, e.g. 'storage:layout'
-): StandardSchemaV1.InferOutput<S>;
-```
-
-Standard Schema generic, not Zod-specific — consistent with `defineApp`, which already
-validates `params` through `~standard.validate`. Lives in a new small `boundary.ts` shim
-module (or `ui.ts`). The doc comment absorbs the copy-pasted rationale prose so it is
-written once.
-
-### 1.2 `tryToast` — the call-it-toast-the-error wrapper
-
-~50 occurrences of:
-
-```ts
-try {
-  await doThing();
-  showToast('Saved', 'success');   // sometimes
-} catch (err) {
-  console.error('[app]', err);     // sometimes
-  showToast(errMsg(err), 'error'); // always
-}
-```
-
-Concentrations: `user-apps/chitchats/src/stage.ts` (10 copies in one file),
-`user-apps/github/src/actions.ts` (9), `user-apps/thesingularity-reader/src/actions.ts`
-(6), `apps/process-explorer/src/data.ts` (5), `apps/mcp-manager/src/main.ts` (5),
-`apps/configurations` (5), `user-apps/ocr` (4), `apps/lab` (4).
-
-```ts
-/** Run an async action; on failure log it and toast `errMsg(e)`. Sibling of `withLoading`. */
-export async function tryToast<T>(
-  fn: () => Promise<T>,
-  opts?: { success?: string }, // success toast, if any
-): Promise<T | undefined>;
-```
-
-Composes with the existing `withLoading` rather than replacing it (loading signal and
-error toast are orthogonal concerns; call sites that need both nest them). Lives in
-`ui.ts` next to `showToast` and `errMsg`.
-
-### 1.3 `downloadBlob` and `blobToDataUrl` — file plumbing
-
-Six copies of the objectURL / `<a download>` / click / revoke dance
-(`apps/session-logs/src/components.ts`, `user-apps/excel-lite/src/io-utils.ts`,
-`user-apps/image-edit/src/store.ts`, `user-apps/word-lite/src/utils.ts`, and **two**
-inside `user-apps/video-editor-lite` — one extracted, one inlined). `word-lite` and
-`video-editor-lite` independently extracted it with the *same name and signature*, which
-is the clearest possible signal it belongs in the SDK.
-
-Four copies of the `FileReader`-promise wrapper under three different names
-(`blobToDataUrl` in chitchats, `fileToDataUrl` in image-edit, inlined in slides-lite and
-thesingularity-reader).
-
-```ts
-/** Trigger a browser download of `blob` as `filename`. */
-export function downloadBlob(blob: Blob, filename: string): void;
-/** Read a Blob/File into a data: URL. */
-export function blobToDataUrl(blob: Blob): Promise<string>;
-```
-
-Both are purely mechanical — zero design decisions to get wrong per-app. Natural home:
-`image.ts` sidecar or a new `files.ts` shim module.
-
-### 1.4 `escapeHtml` — six copies, inconsistently safe
-
-Six independent implementations with **diverging coverage**:
-`apps/devtools/src/ui/editor.ts`, `user-apps/github/src/markdown.ts`, and
-`user-apps/word-lite/src/documents.ts` escape only `& < >` — unsafe if the result ever
-lands in an attribute context — while `user-apps/slides-lite/src/markdown.ts` and
-`user-apps/recent-papers/src/sanitize.ts` correctly add `"` and `'`. This is the one
-duplication with a security edge, and it belongs next to `sanitizeHtml` (`sanitize.ts`),
-which is already the documented single DOMPurify policy.
-
-```ts
-/** Escape text for interpolation into HTML. Always covers & < > " '. */
-export function escapeHtml(s: string): string;
-```
-
-`word-lite`'s XML variant (`&apos;` for DOCX serialization) stays local — one consumer,
-different target grammar.
-
-### 1.5 `format.ts` — `formatBytes`, `formatDuration`, `formatClock`
-
-Three formatter families, all hand-rolled, all visibly inconsistent across the OS:
-
-| Formatter | Copies | Divergence |
-|---|---|---|
-| bytes → human size | 4 (`apps/market-apps`, `user-apps/github`, `user-apps/ocr`, `user-apps/studio-3d`) | four different unit ladders and rounding rules — "2.0MB" vs "2 MB" vs "2MB" depending on the app |
-| seconds → `mm:ss` / `hh:mm:ss` | 3 (`user-apps/video-editor-lite`, `user-apps/video-viewer-lite`, `user-apps/slides-lite`) | three precisions (one adds centiseconds) |
-| timestamp → wall clock | 6 (`apps/devtools`, `apps/process-explorer`, `apps/session-logs`, `user-apps/ai-chat`, `user-apps/dc-comics`, `user-apps/thesingularity-reader`) | half hardcode `'ko-KR'`, half use default locale; one hand-rolls `padStart` |
-
-```ts
-export function formatBytes(n: number): string;            // '2.0 MB'
-export function formatDuration(seconds: number): string;   // '3:07' / '1:03:07'
-export function formatClock(ts: number | Date): string;    // locale HH:MM:SS
-```
-
-`@bundled/date-fns` is already bundled and *zero* of these sites use it — pulling a date
-library into an app for `HH:mm` is heavier than 20 SDK lines, and a library cannot give
-the thing that actually matters here: **one consistent rendering across every window on
-screen**. Calendar-date formatting (4–5 more copies of `toLocaleDateString` wrappers)
-deliberately stays out of scope — date *style* is a legitimate per-app choice in a way
-"2.0 MB" is not; those sites should be pointed at `date-fns` instead.
-
-### Type surface
-
-Each addition gets its declaration in the single `declare module '@bundled/yaar'` block
-in `bundled-types/index.d.ts` and its export in the `shims/yaar/index.ts` barrel, per the
-existing one-entry-point rule.
-
----
-
-## Landed: the design-token primitives
-
-Shipped 2026-08-03 with the bundled-app adoption that goes with them
-(`COMPILER_VERSION` 16 -> 17). Listed here only as the surface Part 3a migrates *onto* —
-the reasoning lives in `packages/shared/src/design/app-css.ts`, which is where it stays
-accurate:
-
-- **Washes** — `--yaar-wash-{accent,success,error,warning}` plus a `-strong` (16%) variant
-  of each, and `--yaar-wash-accent-border` (35%). `color-mix()` over the cascading color
-  var, re-declared inside `.y-light`, so they follow the theme and any accent override.
-  Classes `y-wash-accent/-success/-error/-warning` for the plain-background case.
-- **Status dots** — `y-dot` + `y-dot-ok/-warn/-err/-accent/-pulse`.
-- **Progress** — `y-progress` + `y-progress-fill`, with `y-progress-indeterminate` on the
-  track for a sliding block.
-
-Two rules the bundled pass established, which Part 3a inherits:
-
-- A tinted **border** pairs a wash background with the **opaque** color token
-  (`border-color: var(--yaar-success)`), the pattern `.y-badge-*` already used. Only
-  accent has a tinted-edge token.
-- A tint beyond the shipped strengths gets an **app-local** `color-mix()` over the color
-  var, never a baked `rgba()` — and never a `--yaar-`-prefixed name, which would be an
-  override of a shipped token rather than an extension.
-
-
 ## Watchlist — two apps each, do not add yet
 
 Recorded so the *third* consumer triggers extraction instead of another fork. All three
-live in `user-apps/`, so Part 3a is when the count moves:
+live in `user-apps/`, and Part 3a passed through every one of them without moving a count —
+each was migrated in place and left un-extracted on purpose, so all three still stand at
+two consumers:
 
 - `y-skeleton` — dc-comics and thesingularity-reader share a **verbatim** shimmer clone
   (same keyframe name, same gradient stops, same comment wording).
@@ -262,59 +86,59 @@ many apps — land as one commit per app.
 **The sibling-fork special case:** dc-comics and thesingularity-reader share a forked
 ~250-line `helpers.ts` at ~90% identity (countdown/clock formatters, lazy-image
 resolution, scraped-HTML rewrite pipeline) plus cloned CSS (shimmer, scrollbars, washes).
-The clock formatters dissolve into 1.5 and the cloned CSS into Part 3a; the
+The clock formatters dissolve into `formatClock`; the cloned CSS is settled (see below). The
 scraper-specific remainder should either be extracted to a shared module or the fork
 consciously accepted — decided once, because a third scraper-style app will copy it again.
 No new bundled library for it until that third app exists.
 
+Part 3a resolved the CSS half by force rather than by choice, and the reasoning is worth
+keeping: two separately-installed apps each compile to a self-contained HTML file, so
+cloned CSS has **no sharing route between them** except promotion into the token layer —
+which is exactly what the `y-skeleton` watchlist defers until a third consumer. So the two
+apps were migrated independently, and the shimmer clone stayed cloned. Only the JS fork is
+still open, and it does not block anything.
+
 ---
 
-## Part 3a — the `user-apps/` wash/dot/progress migration
+## Part 3b — SDK integration (adopting what Part 1 added)
 
-The bundled half of this is done. The **larger** half is not: `user-apps/` holds ~73 of
-the baked tint sites, and every one of them is a GitHub-palette literal that cannot follow
-`.y-light`.
+Part 3's sibling: same mechanical shape, same one-commit-per-app rule, but the target is
+the surface Part 1 *just* created rather than surface that has existed for months. It is
+listed separately because the risk profile is the opposite. Part 3 swaps a hand-rolled copy
+for a primitive that already proved itself; here every swap is also the helper's first real
+exercise, so a bad fit is a signal about the helper, not just about the app.
 
-| App | Tint sites | Also has |
+Sites are from the audit that justified each helper — the counts are what the bar was
+argued on, so an adoption pass that lands far short of them means the helper missed:
+
+| Helper | Adopt at | Count |
 |---|---|---|
-| thesingularity-reader | 28 | shimmer clone (`y-skeleton` watchlist), forked `helpers.ts` |
-| falling-blocks | 13 | keyboard chips (`y-kbd` watchlist) — **mostly game content, see below** |
-| slides-lite | 10 | progress bar, dots |
-| dc-comics | 8 | shimmer clone, progress bar, dots |
-| studio-3d | 4 | dots, `y-btn` rebuild, tree rows (`y-tree` watchlist) |
-| ai-chat | 3 | dots + its own `@keyframes` |
-| word-lite | 2 | — |
-| recent-papers | 2 | one is a chart series color — **content, leave it** |
-| github, image-edit, excel-lite | 1 each | — |
-| ocr | — | progress bar (track + fill) |
+| `safeParseOr` | persisted JSON: `apps/storage/src/layout.ts`, `apps/memo/src/store.ts`, `user-apps/github/src/storage.ts`, `slides-lite/src/storage.ts`, `word-lite/src/documents.ts`, `dc-comics/src/store.ts`, `video-editor-lite/src/editor/prefs.ts`; HTTP responses: `apps/dock/src/main.ts`, `apps/market-apps/src/api.ts`, `apps/mcp-manager/src/mcp.ts`, `user-apps/recent-papers/src/data.ts` | 82 `safeParse` sites / 22 apps, 15+ verbatim |
+| `tryToast` | `user-apps/chitchats/src/stage.ts` (10 in one file), `github/src/actions.ts` (9), `thesingularity-reader/src/actions.ts` (6), `apps/process-explorer/src/data.ts` (5), `apps/mcp-manager/src/main.ts` (5), `apps/configurations` (5), `ocr` (4), `apps/lab` (4) | ~50 |
+| `escapeHtml` | `apps/devtools/src/ui/editor.ts`, `github/src/markdown.ts`, `word-lite/src/documents.ts` (all three `& < >`-only — **these are fixes, not swaps**), `slides-lite/src/markdown.ts`, `recent-papers/src/sanitize.ts` | 6 |
+| `downloadBlob` | `apps/session-logs/src/components.ts`, `excel-lite/src/io-utils.ts`, `image-edit/src/store.ts`, `word-lite/src/utils.ts`, `video-editor-lite` (two: one extracted, one inlined) | 6 |
+| `blobToDataUrl` | chitchats (`blobToDataUrl`), image-edit (`fileToDataUrl`), slides-lite + thesingularity-reader (inlined) | 4 |
+| `formatBytes` | `apps/market-apps`, `github`, `ocr`, `studio-3d` | 4 |
+| `formatDuration` | `video-editor-lite`, `video-viewer-lite`, `slides-lite` | 3 |
+| `formatClock` | `apps/devtools`, `apps/process-explorer`, `apps/session-logs`, `ai-chat`, `dc-comics`, `thesingularity-reader` | 6 |
 
-Same three migration rules as the bundled pass, plus what that pass learned: map to the
-nearest shipped strength rather than preserving the old alpha, and expect the hue to shift
-(these literals are `#58a6ff`/`#3fb950`/`#f85149`, not YAAR's tokens) — that shift is the
-correction, not a regression.
+Four things to watch, because they are where "behaves identically" is not the goal:
 
-**Why this is a separate part rather than more of Part 3.** `user-apps/` is git-ignored: it
-is the user's installed fleet, not repo content. So this work
+- **`escapeHtml`'s three unsafe adopters change output on purpose.** devtools, github and
+  word-lite escape only `& < >`; adopting the helper starts escaping `"` and `'` too. Any
+  golden-output test there is asserting the bug.
+- **`safeParseOr` logs where a hand-rolled copy may have been silent**, and treats
+  `undefined` as absence. A site that currently passes a schema-failing fallback through
+  `readJsonOr` goes from noisy-on-fresh-install to quiet, which is the intended change.
+- **The formatters change pixels.** `'2 MB'` becomes `'2.0 MB'`, a `ko-KR` clock loses its
+  오후 marker. That is the point — one rendering per value across every window — but it is a
+  visible diff, not a refactor, and worth saying so in the commit.
+- **`user-apps/` is git-ignored**, so those commits live in each app's own history and need
+  a deploy, exactly as Part 3a did. Bundled apps under `apps/` land in this repo.
 
-- cannot be reviewed in a PR, cannot be verified by CI, and leaves no history to revert to;
-- may collide with edits the user has made since, so it needs a clean tree per app and a
-  deliberate session rather than a background sweep;
-- has to be **recompiled and redeployed** per app, not merely edited — an installed app
-  keeps serving its old `dist/` until it is rebuilt, and the `COMPILER_VERSION` bump only
-  forces that on the next compile.
-
-**Judgement, not mechanics, in two places.** `falling-blocks` is the trap: 13 sites, but
-most of its color is game board and sprites — *content*, which the design system
-deliberately exempts. Only its chrome (HUD chips, buttons, overlays) migrates, and a sweep
-that treats the count as a work-list will recolor the game. `recent-papers/src/chart.ts`
-is the same shape at smaller scale: a chart series color is content.
-
-**Do the fork first, or don't do it at all.** dc-comics and thesingularity-reader hold 36
-of the 73 sites between them and share a ~90%-identical forked `helpers.ts` plus cloned
-CSS (shimmer, scrollbars, washes). Migrating them independently doubles the work and
-leaves the fork in place; the sibling-fork decision in Part 3 above should be made first,
-because whichever way it goes it determines whether these two apps are one migration or
-two.
+`createKeyState`'s adopt-or-remove call (Part 3) is the precedent for what to do if a
+helper does not fit in practice: delete the export rather than keep a zero-consumer API.
+That applies to anything here that survives the pass unadopted.
 
 ---
 
@@ -328,6 +152,37 @@ owning hard failures.
    within a small RGB distance of a known token value (catches `#58a6ff`-for-accent
    exactly). Suggest the token or wash var by name, reusing the token list the compiler
    already parses out of `YAAR_DESIGN_TOKENS_CSS`.
+
+   Part 3a left this guard three concrete requirements, each from a site a naive
+   literal-scan would have handled wrong:
+
+   - **Follow channel-list indirection.** excel-lite declared `--xl-accent-rgb: 83, 155,
+     245` — `--yaar-accent`'s decimal channels — and fed it seven tints as
+     `rgba(var(--xl-accent-rgb), .14)`. A `rgba(<digit>` scan matches none of them, and
+     they have the exact defect the wash tokens exist to remove. The form appears in one
+     app and zero bundled apps today, so the guard should catch it before it spreads.
+   - **An exact match is the signal; a near miss is usually deliberate.** In
+     falling-blocks the author's own arcade palette (`#58a6ff`/`#b35cff`/`#ff4c68`, reused
+     as one identity gradient) sits beside two literals that are bit-for-bit
+     `--yaar-warning` and `--yaar-error` — and only those two were chrome. Distance-based
+     matching inverts this: a *small but nonzero* distance to a token is weak evidence,
+     while an exact hit is strong. Tuning the radius up will flag identity palettes and
+     train people to ignore the warning.
+   - **It cannot see the content exemption at all.** Chart series colors, canvas brush
+     strokes, game sprites, and the slide surface in slides-lite are all legitimate
+     literals, and `export.ts`-style standalone output has no token layer for a `var()` to
+     resolve against. The warning must be suppressible per file or per line, or it will be
+     wrong on every app that draws something.
+   - **A fallback literal beside its own token name is correct, not drift.** A canvas
+     cannot parse `var()`, so a drawing app resolves tokens at runtime and passes the
+     token's own value as the fallback — `colorVar('--yaar-bg', '#161b22')`. music-maker
+     has eight of these. They are exact token matches sitting one argument away from the
+     token they belong to, so the exact-match signal above fires on every one. The guard
+     must not flag a literal whose sibling argument names the matching token.
+
+   Scope note: two of these four come from colors living in **TypeScript**, not CSS
+   (`ctx.fillStyle`, a `TRACK_COLORS` array). A CSS-only guard would have missed the
+   entire music-maker migration, so this rule needs to read app `.ts` too.
 2. **Off-scale spacing literals.** Warn when `padding`/`margin`/`gap` use a bare px value
    that lands exactly on the 4px scale (~180 occurrences across 24 files today). Warn-only
    by design: many literals are legitimate one-off dimensions, so this surfaces new
@@ -342,9 +197,10 @@ library. None does — the gaps are all micro-helpers. The removals in the other
 already happened (`clsx`, `konva`, `p5`, all at zero consumers); one observation survives
 them:
 
-- `date-fns` is bundled and effectively unused. If Part 1.5 lands, its remaining niche is
-  calendar-date formatting; keep it and point the `toLocaleDateString` hand-rollers at it
-  via docs rather than adding SDK calendar formatters.
+- `date-fns` is bundled and effectively unused. Now that the SDK owns bytes, durations and
+  wall clocks, its remaining niche is calendar-date formatting; keep it and point the
+  `toLocaleDateString` hand-rollers at it via docs rather than adding SDK calendar
+  formatters.
 
 ## Non-goals
 
@@ -361,39 +217,47 @@ re-proposed piecemeal:
 - **A generic `{ ok, error }` command-envelope type** — the 75 occurrences are mostly
   legitimate domain result shapes; the real guidance is "throw `AppCommandError` for true
   failures," which is a style note for the app-authoring contract.
-- **Calendar-date SDK formatters** — see 1.5; `date-fns` exists for this.
+- **Calendar-date SDK formatters** — `date-fns` exists for this. Date *style* is a
+  legitimate per-app choice in a way "2.0 MB" is not, which is why `formatClock` shipped
+  and a `formatDate` did not.
 
 ## Rollout
 
-The prune pass and the token primitives landed first, so what follows starts from a
-baseline with no zero-consumer surface and no hand-rolled washes in `apps/`.
+The prune pass, the token primitives, and the SDK helpers landed first, so what follows
+starts from a baseline with no zero-consumer surface, no hand-rolled washes in `apps/`, and
+every primitive the two adoption passes want already exported.
 
-1. **Part 1** (SDK helpers + `.d.ts` + barrel exports) — contained in
-   `packages/compiler`; bumps `COMPILER_VERSION` so apps recompile.
+1. **Part 3b** SDK integration — first of the two adoption passes, because its helpers are
+   days old and unexercised: every swap is also the evidence that the addition was right,
+   and the sooner one of them turns out not to fit, the cheaper it is to delete.
 2. **Part 3** adoption pass — one commit per app, each verifiable by that app compiling
    and behaving identically. The minecraft-lite item also settles `createKeyState`'s
-   adopt-or-remove call. Settle the dc-comics/thesingularity-reader sibling fork here,
-   since Part 3a depends on which way it goes.
-3. **Part 3a** (`user-apps/` migration) — after Part 3's fork decision, per app, each
-   recompiled and redeployed rather than only edited. Not CI-verifiable; see the part
-   itself for why that changes how it must be run.
-4. **Part 4** guards — last, so the fleet is mostly clean when the warnings switch on.
-   Part 3a is what decides whether the token-adjacent-color warning starts life quiet or
-   with ~73 hits in it.
+   adopt-or-remove call. The sibling fork's CSS half is already settled (see Part 3); only
+   the `helpers.ts` remainder is still a live call, and it blocks nothing.
+3. **Part 4** guards — last, so the fleet is mostly clean when the warnings switch on.
+   Part 3a already did that work: the token-adjacent-color warning now starts life
+   effectively quiet, with the only surviving literals being deliberate content
+   (falling-blocks' game palette, chart series colors, the slides surface).
 
-Part 1 is the remaining v1-blockers-adjacent work; Parts 3 and 3a can proceed
-incrementally after release without breaking anything, since nothing landed so far removes
-or changes existing surface.
+All three can proceed incrementally after release without breaking anything, since nothing
+landed so far removes or changes existing surface.
 
 ## Open questions
 
-- `tryToast` naming (`notifyErrors`? `toastErrors`?) and whether it should also accept a
-  loading signal, folding `withLoading` in — current lean: keep them orthogonal.
-- Should `safeParseOr` also have a throwing sibling (`parseOrThrow`) for command handlers
-  that want `AppCommandError` on bad input, or is that over-reach for v1?
 - The dc-comics/thesingularity-reader sibling fork: extract the scraper-specific remainder
-  to a shared module, or consciously accept the fork? Blocks Part 3a's largest two apps.
+  to a shared module, or consciously accept the fork? Now the JS half only — Part 3a
+  settled the CSS half (see Part 3) and blocks nothing, and Part 1's `formatClock` already
+  dissolves the countdown/clock formatters in both copies.
 
 (Settled: wash percentages — two background strengths, 10% and 16%, plus a 35% accent
 border. The reasoning is in `app-css.ts`, including why the scale ships complete for all
 four semantic colors rather than only where the chrome consumes it.)
+
+(Settled by Part 1: `tryToast` keeps its name and stays orthogonal to `withLoading` — a
+loading flag and an error toast are separate concerns, and a call site wanting both nests
+them. No `parseOrThrow` sibling: it had zero hand-rolled call sites, which is exactly what
+the "Adding to the Agent-Facing Surface" bar in `packages/compiler/CLAUDE.md` rejects; a
+command handler wanting `AppCommandError` on bad input declares a `params` schema and gets
+it from `defineApp`. `safeParseOr` treats `undefined` as absence and stays silent there,
+so a fresh install is quiet even when the fallback would not satisfy the schema — the trap
+`createPersistedSignal`'s `revive` documents.)

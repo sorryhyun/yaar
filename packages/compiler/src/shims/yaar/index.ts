@@ -50,15 +50,25 @@ export {
   AppCommandError,
   showToast,
   withLoading,
+  tryToast,
   createStaleGuard,
   onShortcut,
   createKeyState,
 } from './ui.js';
 export type { KeyState, KeyStateOptions } from './ui.js';
 
-// ── HTML sanitization ───────────────────────────────────────────
-export { sanitizeHtml } from './sanitize.js';
+// ── Untrusted input ─────────────────────────────────────────────
+export { safeParseOr } from './boundary.js';
+
+// ── HTML sanitization + escaping ────────────────────────────────
+export { sanitizeHtml, escapeHtml } from './sanitize.js';
 export type { SanitizeHtmlOptions } from './sanitize.js';
+
+// ── File plumbing ───────────────────────────────────────────────
+export { downloadBlob, blobToDataUrl } from './files.js';
+
+// ── Consistent value rendering ──────────────────────────────────
+export { formatBytes, formatDuration, formatClock } from './format.js';
 
 // ── Image re-encoding ───────────────────────────────────────────
 export { toWebP } from './image.js';

@@ -34,6 +34,7 @@
  */
 
 import { render } from 'solid-js/web';
+import { describeIssues, isStandardSchema } from './standard-schema.js';
 import { AppCommandError, isEditableTarget, parseShortcut, shortcutMatches } from './ui.js';
 
 /**
@@ -98,39 +99,9 @@ function foldedSchema(manifest, section, key, prop) {
   return value && typeof value === 'object' ? value : undefined;
 }
 
-/**
- * True for a Standard Schema — Zod v4, Valibot, ArkType and anything else that
- * implements the spec.
- *
- * The spec interface is what this file validates through, rather than Zod's own
- * `parse`: `@bundled/zod` maps to `zod/mini`, whose schemas deliberately carry no
- * methods (parsing there is `z.parse(schema, value)`), so a `.parse` check would
- * be false for the very library the docs point apps at.
- */
-function isStandardSchema(value) {
-  return (
-    !!value &&
-    (typeof value === 'object' || typeof value === 'function') &&
-    !!value['~standard'] &&
-    typeof value['~standard'].validate === 'function'
-  );
-}
-
-/** How many issues a rejection names before it starts summarizing. */
-const MAX_REPORTED_ISSUES = 5;
-
 /** Turn Standard Schema issues into one line an agent can act on. */
 function issuesToMessage(name, issues) {
-  const shown = issues.slice(0, MAX_REPORTED_ISSUES).map((issue) => {
-    const path = (issue.path || [])
-      .map((seg) => (seg && typeof seg === 'object' ? seg.key : seg))
-      .join('.');
-    return (path ? path + ': ' : '') + issue.message;
-  });
-  const extra = issues.length - shown.length;
-  return (
-    name + ': invalid params - ' + shown.join('; ') + (extra > 0 ? ' (and ' + extra + ' more)' : '')
-  );
+  return name + ': invalid params - ' + describeIssues(issues);
 }
 
 /**

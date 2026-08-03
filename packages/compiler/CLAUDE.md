@@ -50,8 +50,12 @@ src/
     │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
     │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)
     │   ├── dialogs.ts     # showConfirm / showPrompt (no showAlert — showToast covers it)
-    │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
-    │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms)
+    │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, tryToast, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
+    │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms) — and escapeHtml
+    │   ├── boundary.ts    # safeParseOr — parse untrusted JSON, log, fall back (absence stays silent)
+    │   ├── standard-schema.ts # internal: isStandardSchema + describeIssues, shared by defineApp and safeParseOr
+    │   ├── files.ts       # downloadBlob, blobToDataUrl
+    │   ├── format.ts      # formatBytes, formatDuration, formatClock — one rendering per value, OS-wide
     │   ├── image.ts       # toWebP — the canvas re-encode round-trip apps kept hand-rolling
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
@@ -243,9 +247,13 @@ Two standing bars, because everything this package exports is read by an app-aut
 agent before it is called by an app:
 
 - **No new `@bundled/yaar` export without 3+ existing hand-rolled call sites in the app
-  fleet.** `describeBundledLibrary('yaar')` already returns ~850 lines (~8k tokens) — the
+  fleet.** `describeBundledLibrary('yaar')` already returns ~940 lines (~9k tokens) — the
   largest single describe payload — and every export lengthens the list an agent reads
   before writing a line. A helper below the bar makes the ones above it harder to find.
+  The last additions cleared it by a wide margin and are the calibration to argue against:
+  `safeParseOr` (82 call sites / 22 apps), `tryToast` (~50), `escapeHtml` (6, three of them
+  attribute-unsafe), `downloadBlob`/`blobToDataUrl` (6 and 4), `formatBytes`/`formatDuration`/
+  `formatClock` (4, 3 and 6, all rendering the same value differently).
 - **No new `BUNDLED_LIBRARIES` entry without a concrete first consumer.** Registry entries
   are prebundled into the standalone exe, so a speculative one costs artifact bytes
   permanently and narrows nothing. The reverse direction is cheap: one line plus a `.d.ts`

@@ -93,6 +93,41 @@ export async function withLoading<T>(
 }
 
 /**
+ * Run an async action; on failure, log it and toast `errMsg(e)`.
+ *
+ * The most-repeated try/catch in the fleet — ~50 copies, ten of them in one
+ * file — is "do the thing, and if it fails tell the user why". Failing silently
+ * is the bug that shape exists to prevent, and it is exactly what gets written
+ * when the boilerplate is four lines instead of one.
+ *
+ * ```ts
+ * await tryToast(() => deleteRepo(name), { success: 'Deleted' });
+ * ```
+ *
+ * Returns the action's value, or `undefined` if it threw — so a caller that
+ * needs to know whether it worked checks the result rather than re-catching.
+ * Orthogonal to `withLoading`, which owns a loading flag and knows nothing about
+ * toasts; a call site wanting both nests them:
+ * `withLoading(setBusy, () => tryToast(...))`.
+ */
+export async function tryToast<T>(
+  fn: () => Promise<T>,
+  opts?: { success?: string },
+): Promise<T | undefined> {
+  try {
+    const result = await fn();
+    if (opts?.success) showToast(opts.success, 'success');
+    return result;
+  } catch (e) {
+    // Logged as well as toasted: the toast carries the message, the console
+    // carries the stack, and the stack is what a devtools session needs.
+    console.error('[yaar] tryToast:', e);
+    showToast(errMsg(e), 'error');
+    return undefined;
+  }
+}
+
+/**
  * The generation counter that keeps a slow response from overwriting a newer one.
  *
  * Three apps invented this independently (dc-comics `fetchVersion`, github

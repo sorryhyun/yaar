@@ -532,6 +532,25 @@ denylists and `^on` attribute stripping miss `<svg>`/`<math>` mutation-XSS, `src
 strips nor absolutizes them — so an app that needs them resolved rewrites the *sanitized*
 output, per step 3 above.
 
+### Interpolating text, not markup
+
+`sanitizeHtml` cleans markup you mean to *render*. Text you mean to *show* — a commit
+message, a filename, a search query dropped into a template literal — needs `escapeHtml`
+from the same module:
+
+```typescript
+import { escapeHtml } from '@bundled/yaar';
+
+el.innerHTML = `<li title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</li>`;
+```
+
+It always covers `& < > " '`. Three of the six apps that hand-rolled this escaped only
+`& < >` — safe in a text node, and not in `title="${…}"`, where a lone `"` ends the
+attribute and everything after it is markup. Which context a call site sits in is exactly
+what changes when someone edits the template, so there is no cheaper variant worth keeping.
+Escaping for an XML *document* is a different grammar (`&apos;` rather than `&#39;`); a
+DOCX or SVG serializer keeps its own.
+
 ### Two traps that make a sanitizer look like it works
 
 **`USE_PROFILES` overrides `ALLOWED_TAGS`; it does not intersect with it.** Adding
@@ -624,7 +643,7 @@ Common mistakes to avoid when building apps:
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `toWebP`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
 - **Don't hand-roll a canvas re-encode** — `toWebP(source, { quality, maxSize })` from `@bundled/yaar` is the bitmap → canvas → `convertToBlob` round-trip, including the check that the encoder did not quietly fall back to PNG and the chunked base64 conversion a storage write needs. It returns `null` (never throws) when the browser cannot do it, so the fallback is `if (!encoded) keepTheOriginal()`. No `@bundled/*` package ships a WebP codec — Chromium already has one; this is the boilerplate around it.
 - **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
@@ -1211,14 +1230,18 @@ export const PrefsSchema = z.looseObject({
 
 ```typescript
 // Good — "missing" is quiet, "malformed" is loud, and both still render.
-const raw = await appStorage.readJsonOr<unknown>('prefs.json', null);
-if (raw == null) return DEFAULTS;                      // first run — degraded by design
-const parsed = z.safeParse(PrefsSchema, raw);
-if (!parsed.success) {
-  console.error('[myapp] prefs.json failed validation', parsed.error.issues);
-  return DEFAULTS;                                     // broken — but now it says so
-}
+import { safeParseOr } from '@bundled/yaar';
+
+const raw = await appStorage.readJsonOr<unknown>('prefs.json', undefined);
+const prefs = safeParseOr(PrefsSchema, raw, DEFAULTS, { label: 'prefs.json' });
 ```
+
+`safeParseOr` **is** that rule: `undefined` — nothing stored, first run — takes the fallback
+silently, while a value that is present and wrong takes the same fallback and logs the
+schema's own issues. It was the single most-copied block in the fleet (82 `safeParse` call
+sites across 22 apps), which is why it now lives in the SDK; write the `z.safeParse` by hand
+only when the failure branch does something other than fall back, such as per-field recovery
+or a toast.
 
 The rule is one line: **degraded-by-design must be distinguishable from broken.** A missing
 file is normal and stays silent; a malformed one is logged with `parsed.error.issues`, and
@@ -1243,7 +1266,7 @@ fields are independent: a drifted `playbackRate` should not cost the user their
 `@bundled/yaar` ships the small helpers apps otherwise rewrite. Prefer them over inlining:
 
 ```typescript
-import { errMsg, showToast, withLoading, wait, createStaleGuard, AppCommandError } from '@bundled/yaar';
+import { errMsg, showToast, withLoading, tryToast, wait, createStaleGuard, AppCommandError } from '@bundled/yaar';
 
 errMsg(e);                       // not: e instanceof Error ? e.message : String(e)
 showToast('Deleted', 'success'); // 'info' | 'success' | 'error', auto-dismissing
@@ -1258,11 +1281,41 @@ if (!fresh()) return;
 // Sets loading true, runs fn, routes a throw to onError, always clears loading.
 await withLoading(setLoading, () => fetchIssues(), (msg) => showToast(msg, 'error'));
 
+// The whole try/catch/log/toast block: returns the value, or undefined if it threw.
+await tryToast(() => deleteRepo(name), { success: 'Deleted' });
+
 // Throw from a command handler to report failure to the agent.
 throw new AppCommandError('No document open');
 ```
 
+`withLoading` and `tryToast` are orthogonal — one owns a loading flag, the other owns the
+error toast. Nest them when an action needs both: `withLoading(setBusy, () => tryToast(...))`.
+
 `debounce` / `throttle` come from `@bundled/lodash` — don't hand-roll them.
+
+### Formatting and file helpers
+
+Three renderings must not disagree between two windows on one screen, so they are SDK
+functions rather than a per-app choice — the audit that added them found four byte
+formatters with four unit ladders and six clock formatters, half of them hardcoding a
+locale the user never picked:
+
+```typescript
+import { formatBytes, formatDuration, formatClock, downloadBlob, blobToDataUrl } from '@bundled/yaar';
+
+formatBytes(2_097_152);          // '2.0 MB'  — binary steps, one decimal above bytes
+formatDuration(3787);            // '1:03:07' — hours only when there are hours
+formatClock(Date.now());         // '15:04:05' — 24-hour, locale separators
+formatClock(savedAt, { seconds: false });  // '15:04', for a "Saved 15:04" label
+
+downloadBlob(new Blob([csv]), 'report.csv');   // objectURL + <a download> + revoke
+const dataUrl = await blobToDataUrl(file);     // FileReader, promisified
+```
+
+Calendar *dates* are deliberately not here — date style is a legitimate per-app choice, and
+`@bundled/date-fns` is bundled for it. For an image you are about to store or show, prefer
+`toWebP` over `blobToDataUrl`: it re-encodes and hands back both the data URL and the raw
+base64 that `appStorage.save(..., 'base64')` wants.
 
 ### Dialog helpers
 
