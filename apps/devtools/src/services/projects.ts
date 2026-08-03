@@ -1,7 +1,7 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, invoke, del, errMsg } from '@bundled/yaar';
-import * as z from '@bundled/zod';
+import { appStorage, invoke, del, errMsg, safeParseOr } from '@bundled/yaar';
+import type * as z from '@bundled/zod';
 import { ProjectAppJsonSchema } from '../schema';
 import {
   activeProject,
@@ -30,6 +30,9 @@ import { refreshFiles, openFile } from './files';
 // Depends on ./files one-way (opening a project lists its files and opens
 // main.ts); ./files must never import this module back.
 
+/** What `safeParseOr` falls back to for a missing or unreadable app.json — every field is optional. */
+const EMPTY_APP_JSON: z.infer<typeof ProjectAppJsonSchema> = {};
+
 export async function loadProjects(): Promise<void> {
   try {
     const entries = await appStorage.list('projects/');
@@ -53,15 +56,11 @@ export async function loadProjects(): Promise<void> {
       // The project's own app.json — user-written, so validated. A missing file
       // is normal (the id is a fine name); an unreadable one is logged and then
       // treated the same way, because one broken project must not hide the rest.
-      const raw = await appStorage.readJsonOr<unknown>(`projects/${id}/app.json`, null);
-      if (raw != null) {
-        const meta = z.safeParse(ProjectAppJsonSchema, raw);
-        if (meta.success) {
-          if (meta.data.name) name = meta.data.name;
-        } else {
-          console.error(`[devtools] projects/${id}/app.json failed validation`, meta.error.issues);
-        }
-      }
+      const raw = await appStorage.readJsonOr<unknown>(`projects/${id}/app.json`, undefined);
+      const meta = safeParseOr(ProjectAppJsonSchema, raw, EMPTY_APP_JSON, {
+        label: `projects/${id}/app.json`,
+      });
+      if (meta.name) name = meta.name;
       metas.push({ id, name, lastModified });
     }
     setProjects(metas);

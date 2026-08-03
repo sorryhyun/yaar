@@ -1,6 +1,7 @@
 export {};
 import { For, Show, onMount, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
+import { formatClock } from '@bundled/yaar';
 import { consoleLogs, type ConsoleEntry } from '../core';
 import { addConsoleEntry } from '../services';
 
@@ -9,16 +10,6 @@ function levelIcon(level: string): string {
   if (level === 'warn') return '⚠️';
   if (level === 'info') return 'ℹ️';
   return '●';
-}
-
-function formatTime(ts: number): string {
-  const d = new Date(ts);
-  return d.toLocaleTimeString([], {
-    hour12: false,
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
 }
 
 export function ConsolePanel() {
@@ -44,7 +35,7 @@ export function ConsolePanel() {
         ${(entry: ConsoleEntry) => html`
           <div class=${`console-entry ${entry.level}`}>
             <span class="console-level">${levelIcon(entry.level)}</span>
-            <span class="console-time y-text-xs">${formatTime(entry.timestamp)}</span>
+            <span class="console-time y-text-xs">${formatClock(entry.timestamp)}</span>
             <span class="console-args y-text-xs">${entry.args.join(' ')}</span>
           </div>
         `}

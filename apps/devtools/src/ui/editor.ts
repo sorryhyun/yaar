@@ -3,7 +3,7 @@ import { createSignal, createEffect, onCleanup, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { debounce } from '@bundled/lodash';
 import Prism from '@bundled/prismjs';
-import { createPersistedSignal, errMsg } from '@bundled/yaar';
+import { createPersistedSignal, errMsg, escapeHtml } from '@bundled/yaar';
 import { openFilePath, openFileContent, openFileImage, setStatusText } from '../core';
 import { writeFile } from '../services';
 
@@ -52,10 +52,6 @@ function highlight(code: string, lang: string): string {
   } catch {
     return escapeHtml(code);
   }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 const [isDirty, setIsDirty] = createSignal(false);

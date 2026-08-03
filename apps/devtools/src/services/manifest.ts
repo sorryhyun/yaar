@@ -1,5 +1,5 @@
 export {};
-import { appStorage, invoke, errMsg } from '@bundled/yaar';
+import { appStorage, invoke, errMsg, safeParseOr } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { AppManifestSchema, ProjectProtocolJsonSchema } from '../schema';
 import { activeProject, previewWindowId, staticProtocol } from '../core';
@@ -40,33 +40,23 @@ export async function getStaticManifest(): Promise<StaticManifestResult> {
   const proj = activeProject();
   if (proj) {
     for (const rel of ['dist/protocol.json', 'protocol.json']) {
-      try {
-        const raw = await appStorage.readJsonOr<unknown>(projectPath(proj.id, rel), null);
-        // Absent is the normal case for the first candidate — try the next one.
-        if (raw == null) continue;
-        const parsed = z.safeParse(ProjectProtocolJsonSchema, raw);
-        if (!parsed.success) {
-          // A protocol.json that is there but unreadable is a compiler output we
-          // cannot trust; reporting it as "no manifest" would send the caller
-          // chasing a missing defineApp() that is not the problem.
-          console.error(
-            `[devtools] ${rel} failed validation`,
-            projectPath(proj.id, rel),
-            parsed.error.issues,
-          );
-          continue;
-        }
-        if (parsed.data.commands || parsed.data.state) {
-          return {
-            names: {
-              commands: Object.keys(parsed.data.commands ?? {}),
-              state: Object.keys(parsed.data.state ?? {}),
-            },
-            source: 'protocol.json',
-          };
-        }
-      } catch {
-        /* not there — try the next candidate */
+      // Absent is the normal case for the first candidate — try the next one.
+      // A protocol.json that is there but unreadable is a compiler output we
+      // cannot trust; reporting it as "no manifest" would send the caller
+      // chasing a missing defineApp() that is not the problem — so `safeParseOr`
+      // (silent on absence, logged on present-and-wrong) still leaves both cases
+      // falling through to the next candidate below.
+      const raw = await appStorage.readJsonOr<unknown>(projectPath(proj.id, rel), undefined);
+      const parsed = safeParseOr(ProjectProtocolJsonSchema, raw, undefined, { label: rel });
+      if (!parsed) continue;
+      if (parsed.commands || parsed.state) {
+        return {
+          names: {
+            commands: Object.keys(parsed.commands ?? {}),
+            state: Object.keys(parsed.state ?? {}),
+          },
+          source: 'protocol.json',
+        };
       }
     }
   }
