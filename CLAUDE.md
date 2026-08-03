@@ -162,7 +162,7 @@ Beyond agents and providers, the server has additional subsystems:
   - `tunnel/` — Tailscale Serve tunnel setup for remote mode
   - `download/` — chunked file download handling
   - `ssrf.ts` — SSRF protection (URL validation, safe fetch with redirect following)
-  - `image.ts` — data-URL image parsing
+  - `image.ts` — data-URL image parsing, plus `toWebPForModel()` — the WebP re-encode storage image reads and PDF rasterization apply on the way into a model context
   - plus single-file utilities: `ids.ts`, `open-url.ts`, `pick-directory.ts`, `format-interaction.ts`, `format-verb-log.ts`, `yaar-uri-server.ts`
 - **`logging/`** — Session logger (JSONL), session reader, context restore, and window restore. Logs stored at `session_logs/{YYYY-MM-DD_HH-MM-SS}/`. Each launch mints one eagerly, so each launch also prunes the ones that recorded nothing first (`logging/prune.ts`, `YAAR_KEEP_EMPTY_SESSIONS=1` to keep them)
 

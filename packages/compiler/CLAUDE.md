@@ -52,6 +52,7 @@ src/
     │   ├── dialogs.ts     # showAlert / showConfirm / showPrompt
     │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms)
+    │   ├── image.ts       # toWebP — the canvas re-encode round-trip apps kept hand-rolling
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
@@ -275,8 +276,10 @@ header comment with its full rationale — read it before changing or removing o
   for ownership; `index.ts` is the sole entry (`BUNDLED_SHIMS` points at it), there are no
   `@bundled/yaar/*` subpath imports, and the declared type surface stays a single
   `declare module '@bundled/yaar'` in `bundled-types/index.d.ts`. The barrel is the export
-  inventory; two exports worth calling out: `sanitizeHtml` is the single DOMPurify policy (apps
-  must not import `@bundled/dompurify` directly), and `defineAppCommand`/`createProtocolContext`
+  inventory; three exports worth calling out: `sanitizeHtml` is the single DOMPurify policy (apps
+  must not import `@bundled/dompurify` directly), `toWebP` is the canvas re-encode round-trip
+  (no `@bundled/*` package ships a WebP codec because Chromium already has one — what apps kept
+  rewriting was the boilerplate around it), and `defineAppCommand`/`createProtocolContext`
   exist for descriptors declared outside the `defineApp({...})` literal (see Protocol Extraction).
 - **`yaar-dev.ts`** — posts to `/api/dev/<action>` for compile/typecheck/deploy, plus per-app version history backed by a shadow git repo per app
 - **`yaar-web.ts`** — posts to `/api/browser` for CDP browser automation

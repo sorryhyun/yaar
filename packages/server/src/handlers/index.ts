@@ -178,10 +178,17 @@ export function registerVerbTools(server: McpServer): void {
               'scanned/visual PDFs. Omit both pdfText and pdfPages to just get metadata + a ' +
               'hint to open a viewer window.',
           ),
+        rawImage: z
+          .boolean()
+          .optional()
+          .describe(
+            'Images only: return the stored bytes instead of the smaller WebP re-encode ' +
+              'reads normally apply. Only when the exact pixels matter.',
+          ),
       },
     },
-    async ({ uri, lines, pattern, context, pdfText, pdfPages }) =>
-      exec(reg, 'read', uri, undefined, { lines, pattern, context, pdfText, pdfPages }),
+    async ({ uri, lines, pattern, context, pdfText, pdfPages, rawImage }) =>
+      exec(reg, 'read', uri, undefined, { lines, pattern, context, pdfText, pdfPages, rawImage }),
   );
 
   server.registerTool(

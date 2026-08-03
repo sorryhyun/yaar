@@ -107,6 +107,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       const result = await storageRead(parsed.path, {
         pdfText: options?.pdfText,
         pdfPages: options?.pdfPages,
+        rawImage: options?.rawImage,
       });
       if (!result.success) {
         // Directory → fall through to list

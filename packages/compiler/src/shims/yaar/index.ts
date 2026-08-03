@@ -60,6 +60,10 @@ export type { KeyState, KeyStateOptions } from './ui.js';
 export { sanitizeHtml } from './sanitize.js';
 export type { SanitizeHtmlOptions } from './sanitize.js';
 
+// ── Image re-encoding ───────────────────────────────────────────
+export { toWebP } from './image.js';
+export type { EncodeImageOptions, EncodedImage, ImageSource } from './image.js';
+
 // ── Protocol handler context ────────────────────────────────────
 export { createProtocolContext } from './protocol-context.js';
 

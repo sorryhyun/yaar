@@ -19,9 +19,17 @@
  * as base64. Neither path puts them in a transcript.
  */
 
-import { AppCommandError, appStorage, errMsg, invoke, storage, defineAppCommand } from '@bundled/yaar';
+import {
+  AppCommandError,
+  appStorage,
+  errMsg,
+  invoke,
+  storage,
+  toWebP,
+  defineAppCommand,
+} from '@bundled/yaar';
 import { activeProject } from '../core';
-import { projectPath, base64FromBuffer } from '../lib';
+import { projectPath } from '../lib';
 import { refreshFiles } from '../services';
 
 /** The shared tree. Everything here is relative to the flat storage root. */
@@ -178,7 +186,7 @@ export const mediaCommands = {
       let recompressed = false;
 
       if (wantsRecompress) {
-        const encoded = await toWebP(sourcePath);
+        const encoded = await recompressToWebP(sourcePath);
         if (encoded) {
           // Only take the WebP if it actually won. A small PNG with few colours can
           // re-encode *larger*, and paying that in the bundle to no benefit is worse
@@ -264,27 +272,19 @@ async function copyIntoProject(
 }
 
 /**
- * Re-encode a raster image to WebP in the iframe.
+ * Read a media file and re-encode it to WebP.
  *
- * Returns null when the browser cannot decode or encode it — a corrupt file, or an
- * OffscreenCanvas without WebP support — so the caller falls back to copying the
- * original rather than failing the import.
+ * The canvas round-trip itself is `toWebP` from the SDK; this is the storage read in
+ * front of it. Null (from either half) means the browser could not decode or encode
+ * the file — a corrupt source, or an encoder that declined — so the caller falls back
+ * to copying the original rather than failing the import.
  */
-async function toWebP(sourcePath: string): Promise<{ base64: string; bytes: number } | null> {
+async function recompressToWebP(
+  sourcePath: string,
+): Promise<{ base64: string; bytes: number } | null> {
   try {
     const blob = (await storage.read(sourcePath, { as: 'blob' })) as Blob;
-    const bitmap = await createImageBitmap(blob);
-    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return null;
-    ctx.drawImage(bitmap, 0, 0);
-    bitmap.close();
-
-    const encoded = await canvas.convertToBlob({ type: 'image/webp', quality: 0.9 });
-    if (encoded.type !== 'image/webp') return null; // silently fell back to PNG
-
-    const buffer = await encoded.arrayBuffer();
-    return { base64: base64FromBuffer(buffer), bytes: buffer.byteLength };
+    return await toWebP(blob, { quality: 0.9 });
   } catch {
     return null;
   }

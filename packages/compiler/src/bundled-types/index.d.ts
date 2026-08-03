@@ -1356,6 +1356,67 @@ declare module '@bundled/yaar' {
    */
   export function sanitizeHtml(html: string, opts?: SanitizeHtmlOptions): string;
 
+  /** Anything `toWebP` can encode from. A URL string is fetched first. */
+  export type ImageSource =
+    | Blob
+    | ImageBitmap
+    | HTMLCanvasElement
+    | OffscreenCanvas
+    | HTMLImageElement
+    | HTMLVideoElement
+    | string;
+
+  export interface EncodeImageOptions {
+    /**
+     * Encoder quality, 0-1. Default 0.9. Ignored by lossless encoders
+     * (`image/png`), and WebP treats 1 as lossless.
+     */
+    quality?: number;
+    /**
+     * Cap on the longest edge, in pixels. Downscale only — a smaller image is
+     * never enlarged to meet it. Omit to keep the source's dimensions.
+     */
+    maxSize?: number;
+    /** Output format. Default `image/webp`. */
+    type?: 'image/webp' | 'image/png' | 'image/jpeg';
+  }
+
+  export interface EncodedImage {
+    blob: Blob;
+    /** Base64 *without* a data-URL prefix — what `appStorage.save(..., 'base64')` wants. */
+    base64: string;
+    /** The same bytes as a `data:` URL, for `<img src>` and content blocks. */
+    dataUrl: string;
+    bytes: number;
+    width: number;
+    height: number;
+    mimeType: string;
+  }
+
+  /**
+   * Re-encode an image, by default to WebP. Use this rather than hand-rolling
+   * a canvas round-trip — no `@bundled/*` package ships a WebP codec because
+   * Chromium already has one, and this is the boilerplate around it.
+   *
+   * Returns `null` rather than throwing when the browser cannot do it: an
+   * undecodable source, a canvas with no 2D context, or an encoder that
+   * declined the format and quietly handed back PNG. Callers have a sensible
+   * fallback for that (keep the original bytes); a rejected promise would put
+   * a try/catch around the common case.
+   *
+   * ```ts
+   * const shot = await toWebP(canvas, { maxSize: 1024 });
+   * if (shot) await appStorage.save('shots/latest.webp', shot.base64, { encoding: 'base64' });
+   * ```
+   *
+   * A cross-origin image drawn without CORS taints the canvas and makes the
+   * encode throw — you get `null`. Fetch it via `httpFetch` and pass the Blob.
+   */
+  export function toWebP(
+    source: ImageSource,
+    opts?: EncodeImageOptions,
+  ): Promise<EncodedImage | null>;
+
   /**
    * Register a keyboard shortcut. Returns a cleanup function.
    *

@@ -48,7 +48,7 @@ Read a file by URI.
 
 **Returns (text files):** Line-numbered content as an embedded resource — the full file, or filtered by `lines`/`pattern`.
 
-**Returns (PDF files):** View-first by default — reading a PDF with no `pdfText`/`pdfPages` returns metadata only (`pdfMeta: true`, page count, byte size) plus a hint to open it in a viewer window (`yaar://storage/` iframe content), with zero bytes ingested. Pass `pdfText` to extract the text layer (cheapest way to actually read the content), or `pdfPages` to rasterize a page range to base64 PNG images — capped at `MAX_PDF_RASTER_PAGES` (20 pages) per request.
+**Returns (PDF files):** View-first by default — reading a PDF with no `pdfText`/`pdfPages` returns metadata only (`pdfMeta: true`, page count, byte size) plus a hint to open it in a viewer window (`yaar://storage/` iframe content), with zero bytes ingested. Pass `pdfText` to extract the text layer (cheapest way to actually read the content), or `pdfPages` to rasterize a page range to base64 images — capped at `MAX_PDF_RASTER_PAGES` (20 pages) per request, and re-encoded to WebP unless `rawImage: true` (see [File Type Handling](#file-type-handling)).
 
 **Returns (image files):** Base64-encoded image content with MIME type.
 
@@ -352,9 +352,20 @@ All operations resolve paths in order:
 | File Type | Behavior |
 |-----------|----------|
 | Text files (`.txt`, `.md`, `.ts`, `.json`, etc.) | Read as UTF-8, line-numbered output |
-| PDF (`.pdf`) | View-first: returns metadata only (page count, byte size) by default. `pdfText` extracts the text layer; `pdfPages` rasterizes a page range to PNG via poppler (capped at 20 pages) |
-| Images (`.png`, `.jpg`, `.gif`, `.webp`) | Return as base64 image content |
+| PDF (`.pdf`) | View-first: returns metadata only (page count, byte size) by default. `pdfText` extracts the text layer; `pdfPages` rasterizes a page range via poppler (capped at 20 pages) and re-encodes it to WebP |
+| Images (`.png`, `.jpg`, `.gif`, `.webp`) | Return as base64 image content, re-encoded to WebP |
 | Other binary | Return explanation message, point to REST API |
+
+A read is a **presentation** read: its consumer is a vision model, so PNG and JPEG bytes
+are re-encoded to WebP on the way out (`lib/image.ts`, `toWebPForModel`) — typically 60–80%
+smaller at a quality the model cannot tell apart. The file on disk is never rewritten, and
+the content block reports the MIME type the bytes actually are, so read it rather than
+assuming the extension. Three cases pass through untouched: WebP (already the target), GIF
+(a single-frame encode would drop the animation), and a re-encode that came out larger.
+
+Pass `rawImage: true` to `read` for the stored bytes exactly as they are — for when the
+pixels themselves are the subject rather than the content. `GET /api/storage/<path>` is
+unaffected and always serves the original file.
 
 ---
 

@@ -7,6 +7,7 @@
 import { mkdir, readdir, unlink, rm, stat, realpath } from 'fs/promises';
 import { join, normalize, relative, dirname, extname } from 'path';
 import { pdfToImages, pdfToText, getPdfPageCount } from '../lib/pdf/index.js';
+import { toWebPForModel } from '../lib/image.js';
 import {
   STORAGE_DIR,
   getConfigDir,
@@ -150,10 +151,11 @@ function parsePdfPageRange(
 async function convertPdfToImages(
   filePath: string,
   pages: string,
+  raw?: boolean,
 ): Promise<{ images: StorageImageContent[]; totalPages: number; firstPage: number; lastPage: number }> {
   const totalPages = await getPdfPageCount(filePath);
   const { firstPage, lastPage } = parsePdfPageRange(pages, totalPages);
-  const pdfPages = await pdfToImages(filePath, 1.5, { firstPage, lastPage });
+  const pdfPages = await pdfToImages(filePath, 1.5, { firstPage, lastPage }, { raw });
 
   const images = pdfPages.map((page) => ({
     type: 'image' as const,
@@ -193,6 +195,15 @@ export interface StorageReadOptions {
   pdfText?: boolean | string;
   /** PDF page range to rasterize to images (e.g. "1-3"), for visual/scanned PDFs. */
   pdfPages?: string;
+  /**
+   * Return image bytes exactly as they are on disk (and PDF pages as poppler's PNG),
+   * skipping the WebP re-encode this read normally applies.
+   *
+   * The re-encode is lossy and sized for a vision model. Ask for `rawImage` when the
+   * pixels themselves are the point — a fidelity comparison, or a caller that is going
+   * to write the bytes back out somewhere.
+   */
+  rawImage?: boolean;
 }
 
 /**
@@ -251,6 +262,7 @@ export async function storageRead(
         const { images, totalPages, firstPage, lastPage } = await convertPdfToImages(
           validatedPath,
           opts.pdfPages,
+          opts.rawImage,
         );
         return {
           success: true,
@@ -268,16 +280,28 @@ export async function storageRead(
       };
     }
 
-    // Image files — return as base64 image content
+    // Image files — return as base64 image content.
+    //
+    // Re-encoded to WebP on the way out (unless `rawImage`): this is a presentation
+    // read whose consumer is a vision model, and a PNG dropped into storage by another
+    // app or by the user otherwise enters the context at its full lossless size every
+    // single time it is read. The file on disk is not touched — see `toWebPForModel`
+    // for what it declines to convert (WebP already, GIF because of animation) and when
+    // it hands the original back.
     const mime = imageFileMime(validatedPath);
     if (mime) {
       const buf = Buffer.from(await Bun.file(validatedPath).arrayBuffer());
+      const encoded = opts?.rawImage ? { data: buf, mimeType: mime } : await toWebPForModel(buf, mime);
       const image: StorageImageContent = {
         type: 'image',
-        data: buf.toString('base64'),
-        mimeType: mime,
+        data: encoded.data.toString('base64'),
+        mimeType: encoded.mimeType,
       };
-      return { success: true, content: `Image file (${mime})`, images: [image] };
+      const note =
+        encoded.mimeType === mime
+          ? `Image file (${mime})`
+          : `Image file (${mime}, re-encoded to ${encoded.mimeType} for this read; the stored file is unchanged)`;
+      return { success: true, content: note, images: [image] };
     }
 
     // Reject unknown binary files — don't read as UTF-8

@@ -114,6 +114,12 @@ export interface ReadOptions {
    * its content unless the agent explicitly asks.
    */
   pdfPages?: string;
+  /**
+   * Images only: return the stored bytes as-is instead of the WebP re-encode a read
+   * normally applies before the image enters the context. For when the pixels are the
+   * subject rather than the content.
+   */
+  rawImage?: boolean;
 }
 
 /**

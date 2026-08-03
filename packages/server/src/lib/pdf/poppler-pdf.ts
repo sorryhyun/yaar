@@ -10,6 +10,7 @@ import { dirname, join } from 'path';
 import { tmpdir } from 'os';
 import { readdir, rm, mkdir } from 'fs/promises';
 import { IS_BUNDLED_EXE } from '../../config.js';
+import { toWebPForModel } from '../image.js';
 
 /**
  * Get the path to poppler binaries.
@@ -35,11 +36,15 @@ function getPoppler(): Poppler {
 
 /**
  * PDF page image result.
+ *
+ * `mimeType` is whatever the page ended up encoded as — WebP for the model-bound
+ * default, PNG when `raw` was asked for or when the re-encode declined. Read it;
+ * do not assume either.
  */
 export interface PdfPageImage {
   pageNumber: number;
   data: Buffer;
-  mimeType: 'image/png';
+  mimeType: string;
 }
 
 /** Page range to rasterize (1-based, inclusive). Omit fields to default to the whole document. */
@@ -49,13 +54,19 @@ export interface PdfPageRange {
 }
 
 /**
- * Convert pages of a PDF to PNG images. Without a range, converts the whole document.
+ * Convert pages of a PDF to images. Without a range, converts the whole document.
  * Page numbers on the results reflect the real 1-based page index, not the array position.
+ *
+ * Poppler rasterizes to PNG; each page is then re-encoded to WebP, because the caller
+ * is base64-ing these into a model context and a scanned multi-page PDF is the largest
+ * single payload the storage API produces. Pass `raw` to keep poppler's PNG bytes —
+ * for a caller that wants the pixels rather than a look at them.
  */
 export async function pdfToImages(
   pdfPath: string,
   scale: number = 1.5,
   range?: PdfPageRange,
+  opts?: { raw?: boolean },
 ): Promise<PdfPageImage[]> {
   const poppler = getPoppler();
   const images: PdfPageImage[] = [];
@@ -90,11 +101,14 @@ export async function pdfToImages(
 
     for (const { file, page } of pngFiles) {
       const filePath = join(tempDir, file);
-      const data = Buffer.from(await Bun.file(filePath).arrayBuffer());
+      const png = Buffer.from(await Bun.file(filePath).arrayBuffer());
+      const encoded = opts?.raw
+        ? { data: png, mimeType: 'image/png' }
+        : await toWebPForModel(png, 'image/png');
       images.push({
         pageNumber: page,
-        data,
-        mimeType: 'image/png',
+        data: encoded.data,
+        mimeType: encoded.mimeType,
       });
     }
 
