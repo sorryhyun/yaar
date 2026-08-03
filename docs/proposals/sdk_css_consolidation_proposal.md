@@ -6,10 +6,12 @@ and the `clsx`/`konva`/`p5` registry entries removed at zero consumers, 15 → 1
 prune's standing rule now lives in `packages/compiler/CLAUDE.md` under "Adding to the
 Agent-Facing Surface" and governs every addition below. Part 3a (the `user-apps/` half of
 that migration) landed the same day, across 11 installed apps. Part 1 (the seven SDK
-helpers) landed 2026-08-03 as well (17 → 18). **Open:** Part 3 (the
-pre-existing-primitive adoption pass), Part 3b (adopting Part 1's helpers — the
-integration half of the same pass), Part 4 (guards). Landed sections are deleted as they
-land rather than annotated, so what is left in this document is the work that is left.
+helpers) landed 2026-08-03 as well (17 → 18), and Part 3b — adopting them across 24 apps —
+landed the same day, taking `safeParseOr`'s `onInvalid` with it (18 → 19). **Open:** Part 3
+(the pre-existing-primitive adoption pass), Part 4 (guards). Landed sections are deleted as
+they land rather than annotated, so what is left in this document is the work that is left;
+Part 3b keeps a short findings section because Part 3 runs the same play and should not
+re-learn what it measured.
 **Scope:** `packages/compiler` (shims/yaar, bundled-types), `packages/shared` (design tokens), `scripts/check/apps.ts`, adoption edits across `apps/*` and `user-apps/*`
 
 ## Summary
@@ -24,9 +26,10 @@ What remains is two contained pieces of work and one explicit non-decision:
 
 1. **An adoption pass** swapping hand-rolled code for primitives that already exist —
    `.y-scroll`, `.y-truncate`, `.y-empty`, `createAutosave`, `createKeyState`, SDK dialogs,
-   `@bundled/uuid` (Part 3), and the seven helpers Part 1 just added (Part 3b). The surface
-   exists now; the ~150 hand-rolled call sites it replaces do not know it yet, and an
-   export nothing calls is the state the prune pass existed to clean up.
+   `@bundled/uuid` (Part 3). The surface exists now; the ~150 hand-rolled call sites it
+   replaces do not know it yet, and an export nothing calls is the state the prune pass
+   existed to clean up. Part 3b did this for the seven SDK helpers and is the calibration
+   for what Part 3 should expect — read its findings before starting.
 2. **Two warnings in `scripts/check/apps.ts`** so the two systemic-but-diffuse problems
    (hardcoded token-adjacent colors, off-scale spacing literals) stop regressing without
    a big-bang refactor.
@@ -100,45 +103,47 @@ still open, and it does not block anything.
 
 ---
 
-## Part 3b — SDK integration (adopting what Part 1 added)
+## What Part 3b measured (landed 2026-08-03)
 
-Part 3's sibling: same mechanical shape, same one-commit-per-app rule, but the target is
-the surface Part 1 *just* created rather than surface that has existed for months. It is
-listed separately because the risk profile is the opposite. Part 3 swaps a hand-rolled copy
-for a primitive that already proved itself; here every swap is also the helper's first real
-exercise, so a bad fit is a signal about the helper, not just about the app.
+The seven Part 1 helpers were adopted across 24 apps — 12 bundled (one commit each) and 12
+user-apps (recompiled in place). Every helper found real consumers, so none is a candidate
+for `createKeyState`'s adopt-or-remove call. What the pass was *for*, though, was the
+counter-evidence, and it produced four results worth keeping:
 
-Sites are from the audit that justified each helper — the counts are what the bar was
-argued on, so an adoption pass that lands far short of them means the helper missed:
+**1. `safeParseOr` had a fixed-logging problem, and it cost adoptions.** Three boundaries
+kept their hand-rolled block for the same reason — logging was not the right answer there:
+parse-or-throw (~18 sites across 8 apps, including a chitchats helper named `parseOrThrow`;
+three agents independently invented an `undefined`-sentinel workaround that logs "using
+fallback" on a path that throws), telling the user (configurations' domain allowlist renders
+identically whether empty or corrupt), and reporting a *transition* rather than a tick
+(ai-chat re-reads shared state every 1.5s). All three are now `onInvalid`, added in response
+to this pass — one option rather than a second export.
 
-| Helper | Adopt at | Count |
-|---|---|---|
-| `safeParseOr` | persisted JSON: `apps/storage/src/layout.ts`, `apps/memo/src/store.ts`, `user-apps/github/src/storage.ts`, `slides-lite/src/storage.ts`, `word-lite/src/documents.ts`, `dc-comics/src/store.ts`, `video-editor-lite/src/editor/prefs.ts`; HTTP responses: `apps/dock/src/main.ts`, `apps/market-apps/src/api.ts`, `apps/mcp-manager/src/mcp.ts`, `user-apps/recent-papers/src/data.ts` | 82 `safeParse` sites / 22 apps, 15+ verbatim |
-| `tryToast` | `user-apps/chitchats/src/stage.ts` (10 in one file), `github/src/actions.ts` (9), `thesingularity-reader/src/actions.ts` (6), `apps/process-explorer/src/data.ts` (5), `apps/mcp-manager/src/main.ts` (5), `apps/configurations` (5), `ocr` (4), `apps/lab` (4) | ~50 |
-| `escapeHtml` | `apps/devtools/src/ui/editor.ts`, `github/src/markdown.ts`, `word-lite/src/documents.ts` (all three `& < >`-only — **these are fixes, not swaps**), `slides-lite/src/markdown.ts`, `recent-papers/src/sanitize.ts` | 6 |
-| `downloadBlob` | `apps/session-logs/src/components.ts`, `excel-lite/src/io-utils.ts`, `image-edit/src/store.ts`, `word-lite/src/utils.ts`, `video-editor-lite` (two: one extracted, one inlined) | 6 |
-| `blobToDataUrl` | chitchats (`blobToDataUrl`), image-edit (`fileToDataUrl`), slides-lite + thesingularity-reader (inlined) | 4 |
-| `formatBytes` | `apps/market-apps`, `github`, `ocr`, `studio-3d` | 4 |
-| `formatDuration` | `video-editor-lite`, `video-viewer-lite`, `slides-lite` | 3 |
-| `formatClock` | `apps/devtools`, `apps/process-explorer`, `apps/session-logs`, `ai-chat`, `dc-comics`, `thesingularity-reader` | 6 |
+**2. Counting by shape overcounts.** `tryToast`'s ~50 became ~38: configurations and lab
+curate a short static failure message (`'Failed to add'`) instead of surfacing `errMsg(e)`,
+and only 2 of ~15 candidate sites across those two apps fit. devtools, storage and
+image-edit report through a status bar and have *zero* toast sites. One of `formatClock`'s
+six was a formatter with no callers. The rule now lives in `packages/compiler/CLAUDE.md`.
 
-Four things to watch, because they are where "behaves identically" is not the goal:
+**3. The predicted pixel diffs all happened, plus one bug fix nobody predicted.** `'2 MB'`
+→ `'2.0 MB'` (market-apps `'2.00 MB'`, github `'15 MB'` → `'15.0 MB'`); ocr's decimal ladder
+became binary, so a 62 MB model reads `'59.1 MB'`; `ko-KR` clocks in ai-chat and
+thesingularity-reader lost their 오후 marker. slides-lite's presentation timer had rolled
+past an hour as `'75:07'` and now reads `'1:15:07'`.
 
-- **`escapeHtml`'s three unsafe adopters change output on purpose.** devtools, github and
-  word-lite escape only `& < >`; adopting the helper starts escaping `"` and `'` too. Any
-  golden-output test there is asserting the bug.
-- **`safeParseOr` logs where a hand-rolled copy may have been silent**, and treats
-  `undefined` as absence. A site that currently passes a schema-failing fallback through
-  `readJsonOr` goes from noisy-on-fresh-install to quiet, which is the intended change.
-- **The formatters change pixels.** `'2 MB'` becomes `'2.0 MB'`, a `ko-KR` clock loses its
-  오후 marker. That is the point — one rendering per value across every window — but it is a
-  visible diff, not a refactor, and worth saying so in the commit.
-- **`user-apps/` is git-ignored**, so those commits live in each app's own history and need
-  a deploy, exactly as Part 3a did. Bundled apps under `apps/` land in this repo.
+**4. Three helpers have a documented edge they should not grow into.** `formatDuration`
+floors to whole seconds, so video-editor-lite's trim scrubber keeps its own hundredths
+formatter (`'00:00.00'`) — the right call, since a scrubber that rounds disagrees with the
+file it plays. `escapeHtml` is HTML, so word-lite's DOCX serializer keeps `escapeXml`
+(`&apos;`, not `&#39;`). And `safeParseOr` at *module scope* in a `defineApp`-with-Zod-params
+app logs on every compile: protocol extraction runs the module graph in the `fold-schemas`
+Worker against a `window.yaar` stub whose `read()` returns a truthy inert Proxy, which the
+helper correctly reads as present-and-wrong. Worth fixing in the stub, not the helper.
 
-`createKeyState`'s adopt-or-remove call (Part 3) is the precedent for what to do if a
-helper does not fit in practice: delete the export rather than keep a zero-consumer API.
-That applies to anything here that survives the pass unadopted.
+Two things behaved exactly as the plan assumed and need no further note: the three
+`& < >`-only `escapeHtml` copies were security fixes rather than swaps (all three fed text
+nodes, so nothing rendered differently), and `user-apps/` commits live in each app's own
+history with a recompile as the deploy.
 
 ---
 
@@ -227,14 +232,18 @@ The prune pass, the token primitives, and the SDK helpers landed first, so what 
 starts from a baseline with no zero-consumer surface, no hand-rolled washes in `apps/`, and
 every primitive the two adoption passes want already exported.
 
-1. **Part 3b** SDK integration — first of the two adoption passes, because its helpers are
-   days old and unexercised: every swap is also the evidence that the addition was right,
-   and the sooner one of them turns out not to fit, the cheaper it is to delete.
-2. **Part 3** adoption pass — one commit per app, each verifiable by that app compiling
+1. **Part 3** adoption pass — one commit per app, each verifiable by that app compiling
    and behaving identically. The minecraft-lite item also settles `createKeyState`'s
    adopt-or-remove call. The sibling fork's CSS half is already settled (see Part 3); only
    the `helpers.ts` remainder is still a live call, and it blocks nothing.
-3. **Part 4** guards — last, so the fleet is mostly clean when the warnings switch on.
+
+   Part 3b ran this play first and left two lessons for it. **Expect the site counts to be
+   high**: they were gathered by grep, and a matching silhouette is not a matching
+   contract — check each one before treating a shortfall as the primitive missing.
+   **A non-fit is the finding.** Part 3b's most valuable output was the boundaries that
+   refused `safeParseOr`, which is what `onInvalid` came from; an agent that forces the
+   swap destroys exactly the evidence the pass exists to collect.
+2. **Part 4** guards — last, so the fleet is mostly clean when the warnings switch on.
    Part 3a already did that work: the token-adjacent-color warning now starts life
    effectively quiet, with the only surviving literals being deliberate content
    (falling-blocks' game palette, chart series colors, the slides surface).
@@ -246,8 +255,12 @@ landed so far removes or changes existing surface.
 
 - The dc-comics/thesingularity-reader sibling fork: extract the scraper-specific remainder
   to a shared module, or consciously accept the fork? Now the JS half only — Part 3a
-  settled the CSS half (see Part 3) and blocks nothing, and Part 1's `formatClock` already
-  dissolves the countdown/clock formatters in both copies.
+  settled the CSS half (see Part 3) and blocks nothing. Part 3b shrank it less than hoped:
+  `formatClock` dissolved the clock formatter in thesingularity-reader and deleted a
+  *dead* one in dc-comics, but the countdown formatter is a different function and stays.
+  What remains forked at ~90% identity is the scraper machinery itself — `normalizeUrl`,
+  the lazy-image resolution set, `fetchImageAsBlobUrl`, the sanitize-and-rewrite pipeline,
+  the image-error fallbacks — and none of it is a micro-helper the SDK would take.
 
 (Settled: wash percentages — two background strengths, 10% and 16%, plus a 35% accent
 border. The reasoning is in `app-css.ts`, including why the scale ships complete for all
@@ -255,9 +268,15 @@ four semantic colors rather than only where the chrome consumes it.)
 
 (Settled by Part 1: `tryToast` keeps its name and stays orthogonal to `withLoading` — a
 loading flag and an error toast are separate concerns, and a call site wanting both nests
-them. No `parseOrThrow` sibling: it had zero hand-rolled call sites, which is exactly what
-the "Adding to the Agent-Facing Surface" bar in `packages/compiler/CLAUDE.md` rejects; a
-command handler wanting `AppCommandError` on bad input declares a `params` schema and gets
-it from `defineApp`. `safeParseOr` treats `undefined` as absence and stays silent there,
-so a fresh install is quiet even when the fallback would not satisfy the schema — the trap
-`createPersistedSignal`'s `revive` documents.)
+them. `safeParseOr` treats `undefined` as absence and stays silent there, so a fresh
+install is quiet even when the fallback would not satisfy the schema — the trap
+`createPersistedSignal`'s `revive` documents. `null` is *not* absence, deliberately and
+under test: a stored literal `null` is a value that is present and wrong, and the migration
+for an app that used `readJsonOr(path, null)` is to pass `undefined` instead.)
+
+(**Corrected by Part 3b:** Part 1 rejected a `parseOrThrow` sibling on the grounds that it
+had *zero* hand-rolled call sites. That premise was false — the adoption pass found ~18
+across 8 apps, including a chitchats helper named `parseOrThrow`, and three separate agents
+independently invented the same `undefined`-sentinel workaround for it. It is still not a
+second export: `safeParseOr`'s `onInvalid` covers it, along with the two other boundaries
+that had a fixed-logging problem. See "What Part 3b measured" above.)
