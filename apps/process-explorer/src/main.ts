@@ -2,7 +2,7 @@ export {};
 
 import { onMount, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { defineApp } from '@bundled/yaar';
+import { defineApp, formatClock } from '@bundled/yaar';
 import type { AgentEntry, AgentTurnState, AgentUsage, WindowInfo, AppProcess } from './types';
 import {
   agentStats,
@@ -61,7 +61,7 @@ function formatAge(ts: number, at: number) {
 
 function formatTime(date: Date | null) {
   if (!date) return '--';
-  return date.toLocaleTimeString();
+  return formatClock(date);
 }
 
 /** Compact token count — 812, 12.4k, 3.1M. Exact below 1k, where the digits still read. */

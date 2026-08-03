@@ -10,6 +10,7 @@ import {
   stream,
   showToast,
   errMsg,
+  tryToast,
   type StreamFrame,
 } from '@bundled/yaar';
 import * as z from '@bundled/zod';
@@ -504,23 +505,15 @@ function reconcileStreams(agents: AgentEntry[]) {
 // the ping is lost.
 
 export async function interruptAgent(agentId: string) {
-  try {
-    await invoke(`yaar://session/agents/${agentId}`, { action: 'interrupt' });
-    showToast(`Interrupted ${agentId}`, 'success');
-  } catch (err) {
-    showToast(errMsg(err), 'error');
-  }
+  await tryToast(() => invoke(`yaar://session/agents/${agentId}`, { action: 'interrupt' }), {
+    success: `Interrupted ${agentId}`,
+  });
   await fetchAgents();
   setLastRefresh(new Date());
 }
 
 export async function closeWindow(windowId: string) {
-  try {
-    await del(`yaar://windows/${windowId}`);
-    showToast(`Closed window`, 'success');
-  } catch (err) {
-    showToast(errMsg(err), 'error');
-  }
+  await tryToast(() => del(`yaar://windows/${windowId}`), { success: `Closed window` });
   await fetchWindows();
   setLastRefresh(new Date());
 }
@@ -531,12 +524,7 @@ export async function closeWindow(windowId: string) {
  * agent. This is the only way to reclaim an orphaned agent.
  */
 export async function killAppAgent(appId: string) {
-  try {
-    await del(`yaar://session/agents/${appId}`);
-    showToast(`Killed ${appId} agent`, 'success');
-  } catch (err) {
-    showToast(errMsg(err), 'error');
-  }
+  await tryToast(() => del(`yaar://session/agents/${appId}`), { success: `Killed ${appId} agent` });
   await fetchAgents();
   setLastRefresh(new Date());
 }
@@ -546,12 +534,9 @@ export async function closeAppWindows(appId: string) {
   const targets = appProcesses().find((p) => p.appId === appId)?.windows ?? [];
   if (targets.length === 0) return;
 
-  try {
-    await Promise.all(targets.map((w) => del(`yaar://windows/${w.id}`)));
-    showToast(`Closed ${targets.length} window${targets.length === 1 ? '' : 's'}`, 'success');
-  } catch (err) {
-    showToast(errMsg(err), 'error');
-  }
+  await tryToast(() => Promise.all(targets.map((w) => del(`yaar://windows/${w.id}`))), {
+    success: `Closed ${targets.length} window${targets.length === 1 ? '' : 's'}`,
+  });
   await fetchWindows();
   setLastRefresh(new Date());
 }
