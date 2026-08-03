@@ -48,9 +48,14 @@ import { join, basename } from 'path';
  * bundled `defineApp` shim), so an old build is self-consistent and would keep
  * running its removed registration path indefinitely. Forcing the rebuild is
  * what makes an unmigrated app fail loudly, with the extractor naming the fix,
- * instead of quietly outliving the removal.)
+ * instead of quietly outliving the removal.) '16': the prune pass — `showAlert`
+ * left `@bundled/yaar`, and `clsx`/`konva`/`p5` left the bundled-library
+ * registry, all four at zero consumers. Nothing installed imports them, so the
+ * bump buys no migration; it exists so no dist/ survives carrying a bundled copy
+ * of surface the repo no longer resolves, which is the state that makes a later
+ * "why does this still build?" report unanswerable.
  */
-export const COMPILER_VERSION = '15';
+export const COMPILER_VERSION = '16';
 
 export interface BuildManifest {
   sourceHash: string;

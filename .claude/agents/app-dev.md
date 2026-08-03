@@ -115,9 +115,7 @@ Available via `@bundled/*` imports — no npm install needed:
 | uuid | `@bundled/uuid` | `v4()` ID generation |
 | lodash | `@bundled/lodash` | debounce, cloneDeep, groupBy |
 | date-fns | `@bundled/date-fns` | Date formatting/manipulation |
-| clsx | `@bundled/clsx` | CSS class composition |
 | anime | `@bundled/anime` | Animation |
-| konva | `@bundled/konva` | 2D canvas graphics |
 | three | `@bundled/three` | 3D graphics |
 | cannon-es | `@bundled/cannon-es` | 3D physics |
 | xlsx | `@bundled/xlsx` | Spreadsheet parsing |
@@ -126,7 +124,6 @@ Available via `@bundled/*` imports — no npm install needed:
 | matter-js | `@bundled/matter-js` | 2D physics |
 | tone | `@bundled/tone` | Audio/music |
 | pixi.js | `@bundled/pixi.js` | 2D WebGL |
-| p5 | `@bundled/p5` | Creative coding |
 | diff | `@bundled/diff` | Text diffing |
 | diff2html | `@bundled/diff2html` | Diff rendering |
 | marked | `@bundled/marked` | Markdown parsing |
@@ -153,7 +150,7 @@ Always available. Key exports:
 - **Utilities**: `showToast(msg, type?)`, `errMsg(err)`, `withLoading(fn)`, `onShortcut(key, fn)`, `defineAppCommand`, `wait`
 - **Sanitization**: `sanitizeHtml(html, opts?)` — mandatory for externally-sourced HTML. DOMPurify's defaults plus the no-forms deviation; never call DOMPurify directly, never hand-roll
 - **Stale responses**: `createStaleGuard()` — `begin()`/`latest()`/`invalidate()`; use instead of a hand-rolled generation counter when a slow response could overwrite a newer one
-- **Dialogs**: `showAlert`, `showConfirm`, `showPrompt`
+- **Dialogs**: `showConfirm`, `showPrompt` (there is no `showAlert` — use `showToast`)
 - **Storage**: `appStorage.save(path, content)`, `.trySave(path, content)`, `.read(path)`, `.readJson(path)`, `.readJsonOr(path, fallback)`, `.readBinary(path)`, `.readBlob(path)`, `.list(dirPath?)`, `.remove(path)`
 - **Database**: `appDb` — SQLite-backed collections scoped to the app
 - **Persisted state**: `createPersistedSignal(key, defaultValue, opts?)` — Solid.js signal that persists to appStorage; `opts.revive` clamps/migrates/validates the loaded value before it reaches the signal. Also `createAutosave`, `createCollapsiblePanel`

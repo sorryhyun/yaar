@@ -158,11 +158,6 @@ declare module '@bundled/date-fns' {
   export * from 'date-fns';
 }
 
-declare module '@bundled/clsx' {
-  export * from 'clsx';
-  export { default } from 'clsx';
-}
-
 // ── Animation ───────────────────────────────────────────────────────────────
 
 declare module '@bundled/anime' {
@@ -221,18 +216,8 @@ declare module '@bundled/cannon-es' {
 
 // ── 2D Graphics ─────────────────────────────────────────────────────────────
 
-declare module '@bundled/konva' {
-  export { default } from 'konva';
-  export { default as Konva } from 'konva';
-}
-
 declare module '@bundled/pixi.js' {
   export * from 'pixi.js';
-}
-
-declare module '@bundled/p5' {
-  export { default } from 'p5';
-  export { default as p5 } from 'p5';
 }
 
 // ── Physics ─────────────────────────────────────────────────────────────────
@@ -1256,7 +1241,7 @@ declare module '@bundled/yaar' {
   /** Show a toast notification using the built-in `y-toast` CSS classes. Auto-dismisses after `ms` (default 3000). */
   export function showToast(msg: string, type?: 'info' | 'success' | 'error', ms?: number): void;
 
-  /** Options for the modal dialog helpers (showAlert / showConfirm / showPrompt). */
+  /** Options for the modal dialog helpers (showConfirm / showPrompt). */
   export interface DialogOptions {
     /** Bold heading above the message. */
     title?: string;
@@ -1267,15 +1252,6 @@ declare module '@bundled/yaar' {
     /** Style the confirming button as destructive (`y-btn-danger`). */
     danger?: boolean;
   }
-
-  /**
-   * Show a modal alert styled with the built-in `y-modal` classes. Resolves when
-   * dismissed. Use instead of native `alert()`, which blocks the whole page.
-   */
-  export function showAlert(
-    msg: string,
-    opts?: Pick<DialogOptions, 'title' | 'okLabel'>,
-  ): Promise<void>;
 
   /**
    * Show a modal confirm dialog. Resolves `true` on OK, `false` on

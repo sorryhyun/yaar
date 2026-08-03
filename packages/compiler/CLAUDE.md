@@ -49,7 +49,7 @@ src/
     │   ├── verbs.ts       # window.yaar global, read/invoke/list/describe/del/subscribe, stream, httpFetch
     │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
     │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)
-    │   ├── dialogs.ts     # showAlert / showConfirm / showPrompt
+    │   ├── dialogs.ts     # showConfirm / showPrompt (no showAlert — showToast covers it)
     │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
     │   ├── sanitize.ts    # sanitizeHtml — the one DOMPurify policy (defaults + no forms)
     │   ├── image.ts       # toWebP — the canvas re-encode round-trip apps kept hand-rolling
@@ -237,6 +237,31 @@ Bundled-library resolution logs are quiet by default. Set `YAAR_DEBUG_BUNDLED_LI
 
 **`typecheckSandbox(path, { bundles })`** — runs the real TypeScript JS entry through Bun and removes ambient declarations for gated SDKs not present in `app.json` `bundles`. Compile and typecheck therefore reject the same unauthorized `@bundled/yaar-*` imports.
 
+## Adding to the Agent-Facing Surface
+
+Two standing bars, because everything this package exports is read by an app-authoring
+agent before it is called by an app:
+
+- **No new `@bundled/yaar` export without 3+ existing hand-rolled call sites in the app
+  fleet.** `describeBundledLibrary('yaar')` already returns ~850 lines (~8k tokens) — the
+  largest single describe payload — and every export lengthens the list an agent reads
+  before writing a line. A helper below the bar makes the ones above it harder to find.
+- **No new `BUNDLED_LIBRARIES` entry without a concrete first consumer.** Registry entries
+  are prebundled into the standalone exe, so a speculative one costs artifact bytes
+  permanently and narrows nothing. The reverse direction is cheap: one line plus a `.d.ts`
+  block, the moment an app actually needs it.
+
+Both exist because the surface that had to be pruned — `showAlert`, `clsx`, `konva`, `p5`,
+all at zero consumers — got there through locally reasonable set-completion ("we have
+confirm and prompt, so add alert") and anticipation ("someone will draw canvas graphics"),
+not through anyone deciding to add dead weight. The bar is the cheaper check.
+
+Two SDK exports are **frozen** rather than pruned, and should not grow without the demand
+that was missing the first time: `appDb` (168 lines, 9 methods, 2 consumers — kept because
+a document store is a capability, not a convenience) and `createAutosave` (a ~68-line
+dirty/saveFailed/editSeq machine with 1 consumer; if a second app skips it *because* of
+that weight, shrink it to what slides-lite uses rather than defending the API).
+
 ## Bundled Libraries
 
 `getBundledLibraryDetail(name)` (in `bundled/describe-library.ts`) backs the agent-facing
@@ -258,8 +283,8 @@ Two rules about `bundled-types/index.d.ts` itself:
 
 30+ libraries available via `@bundled/*` — no npm install needed in apps:
 - **UI:** `@bundled/solid-js`, `@bundled/solid-js/web`, `@bundled/solid-js/html`, `@bundled/solid-js/store`
-- **Utils:** `@bundled/uuid`, `@bundled/lodash`, `@bundled/date-fns`, `@bundled/clsx`
-- **Graphics:** `@bundled/three`, `@bundled/konva`, `@bundled/pixi.js`, `@bundled/p5`, `@bundled/cannon-es`, `@bundled/matter-js`
+- **Utils:** `@bundled/uuid`, `@bundled/lodash`, `@bundled/date-fns`
+- **Graphics:** `@bundled/three`, `@bundled/pixi.js`, `@bundled/cannon-es`, `@bundled/matter-js`
 - **Data:** `@bundled/chart.js`, `@bundled/d3`, `@bundled/diff`, `@bundled/diff2html`, `@bundled/xlsx`, `@bundled/marked`, `@bundled/mermaid`, `@bundled/mammoth`, `@bundled/prismjs`, `@bundled/dompurify`
 - **Validation:** `@bundled/zod` (Zod Mini — functional API, tree-shakeable)
 - **Animation:** `@bundled/anime` (with v3 compat shim)

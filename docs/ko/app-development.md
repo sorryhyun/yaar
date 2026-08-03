@@ -220,9 +220,7 @@ AI는 이 모든 것을 `yaar://skills/marketplace` 참조 토픽(`read('yaar://
 | uuid | `@bundled/uuid` | ID 생성 |
 | lodash | `@bundled/lodash` | 유틸리티 (debounce, cloneDeep, groupBy 등) |
 | date-fns | `@bundled/date-fns` | 날짜 처리 |
-| clsx | `@bundled/clsx` | CSS 클래스 조합 |
 | anime.js | `@bundled/anime` | 애니메이션 |
-| Konva | `@bundled/konva` | 2D 캔버스 그래픽 |
 | Three.js | `@bundled/three` | 3D 그래픽 |
 | cannon-es | `@bundled/cannon-es` | 3D 물리 엔진 |
 | xlsx | `@bundled/xlsx` | 스프레드시트 파싱/생성 |
@@ -232,7 +230,6 @@ AI는 이 모든 것을 `yaar://skills/marketplace` 참조 토픽(`read('yaar://
 | Tone.js | `@bundled/tone` | 오디오/음악 |
 | mediabunny | `@bundled/mediabunny` | 미디어 파일 읽기/쓰기/변환 (mp4, webm, mp3, wav). 실시간에 묶이지 않는 프레임 단위 인코딩 — 부하가 걸리면 프레임을 흘리고 기존 파일은 읽지도 못하는 `MediaRecorder` + `canvas.captureStream()` 대신 사용하세요. WebCodecs 가 필요하므로 인코딩 전에 `getFirstEncodableVideoCodec([...])` 로 확인하세요. 약 0.66 MB |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL 렌더링 |
-| p5.js | `@bundled/p5` | 크리에이티브 코딩 |
 | marked | `@bundled/marked` | 마크다운 → HTML |
 | Mermaid | `@bundled/mermaid` | 텍스트 → 다이어그램 (flowchart, sequence, class, state, ER, gantt, mindmap 등). `renderMermaid(src)` 를 쓰면 디자인 토큰에 맞춰 테마가 적용된 새니타이즈된 SVG 를 반환합니다 — 다시 새니타이즈하지 마세요. 약 3.3 MB 이므로 다이어그램을 그리는 앱에서만 임포트하세요 |
 | Prism | `@bundled/prismjs` | 구문 강조 |
@@ -540,7 +537,7 @@ export async function logout() {
 - **프록시 응답 봉투를 직접 정의하지 마세요** — `httpFetch` 와 그것이 반환하는 표준 `Response` 를 쓰세요. `invoke('yaar://http')` 주위에 `{ ok, status, body }` 인터페이스를 직접 선언하는 것은 소유하지 않은 내부 계약을 다시 타이핑하는 일입니다. [HTTP 요청하기](#http-요청하기) 참고.
 - **localhost URL을 하드코딩하지 마세요** — 앱은 YAAR가 서비스되는 어떤 호스트에서든 실행됩니다.
 - **저장 실패를 삼키지 마세요** — `appStorage.save()` 를 `catch { /* ignore */ }` 로 감싸면 UI는 "저장됨"이라고 표시한 채 데이터가 조용히 사라집니다. `appStorage.trySave()` 를 쓰고 그 결과에 따라 성공 UI를 표시하세요. [저장 실패를 삼키지 마세요](#저장-실패를-삼키지-마세요) 참고.
-- **SDK 헬퍼를 다시 구현하지 마세요** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait` 는 `@bundled/yaar` 가, `debounce` 는 `@bundled/lodash` 가 제공합니다. 네이티브 `alert()`/`confirm()`/`prompt()` 는 페이지(그리고 브라우저를 조작 중인 에이전트)를 블로킹하므로 쓰지 마세요.
+- **SDK 헬퍼를 다시 구현하지 마세요** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `wait` 는 `@bundled/yaar` 가, `debounce` 는 `@bundled/lodash` 가 제공합니다. 네이티브 `alert()`/`confirm()`/`prompt()` 는 페이지(그리고 브라우저를 조작 중인 에이전트)를 블로킹하므로 쓰지 마세요 — `alert()` 자리에는 `showToast` 를 쓰세요.
 - **새니타이즈하지 않은 HTML 을 `innerHTML` 에 넣지 마세요** — `marked.parse()` 는 원본 HTML 을 이스케이프하지 않으며, RSS 피드나 스크래핑한 페이지, 스토리지에서 읽은 파일도 마찬가지입니다. 먼저 `@bundled/dompurify` 를 통과시키세요. [신뢰할 수 없는 HTML 렌더링](#신뢰할-수-없는-html-렌더링) 참고.
 - **새니타이저를 직접 만들지 마세요** — 엘리먼트 차단 목록에 `^on` 속성 제거를 더하면 완전해 보이지만 그렇지 않습니다. `<svg>`/`<math>` 뮤테이션 XSS, `style`, `srcset`, `formaction`, `xlink:href` 를 놓칩니다.
 - **인라인 이벤트 속성을 생성하지 마세요** — `setAttribute('onerror', ...)` 는 어떤 새니타이저든 제거하므로, 파이프라인을 안전하게 만드는 순간 그 동작이 사라집니다. 삽입된 노드에 `addEventListener` 를 쓰세요.
@@ -1005,12 +1002,13 @@ throw new AppCommandError('열린 문서가 없습니다');
 네이티브 `alert()` / `confirm()` / `prompt()` 는 절대 쓰지 마세요 — 디자인이 이질적이고,
 페이지 전체를 블로킹하며, 브라우저를 조작 중인 에이전트까지 멈춥니다. `@bundled/yaar` 가
 내장 `y-modal` 클래스로 스타일된 프로미스 기반 대체를 제공합니다 (Escape 취소, Enter 확인,
-배경 클릭으로 닫힘):
+배경 클릭으로 닫힘). `alert()` 의 대체는 `showToast` 입니다 — 버튼 하나짜리 모달은 토스트가
+이미 하는 말을 하려고 포커스를 뺏을 뿐입니다:
 
 ```typescript
-import { showAlert, showConfirm, showPrompt } from '@bundled/yaar';
+import { showConfirm, showPrompt, showToast } from '@bundled/yaar';
 
-await showAlert('내보내기 완료.', { title: '내보내기' });
+showToast('내보내기 완료.', 'success');
 
 if (await showConfirm(`"${name}" 을(를) 삭제할까요?`, { danger: true, okLabel: '삭제' })) {
   await remove(name);

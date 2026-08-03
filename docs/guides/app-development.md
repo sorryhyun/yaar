@@ -248,9 +248,7 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | uuid | `@bundled/uuid` | ID generation |
 | lodash | `@bundled/lodash` | Utilities (debounce, cloneDeep, groupBy, etc.) |
 | date-fns | `@bundled/date-fns` | Date handling |
-| clsx | `@bundled/clsx` | CSS class composition |
 | anime.js | `@bundled/anime` | Animation |
-| Konva | `@bundled/konva` | 2D canvas graphics |
 | Three.js | `@bundled/three` | 3D graphics |
 | cannon-es | `@bundled/cannon-es` | 3D physics engine |
 | xlsx | `@bundled/xlsx` | Spreadsheet parsing/generation |
@@ -260,7 +258,6 @@ Available via `@bundled/*` imports — no npm install needed. The authoritative 
 | Tone.js | `@bundled/tone` | Audio/music synthesis |
 | mediabunny | `@bundled/mediabunny` | Media files: read/write/convert mp4, webm, mp3, wav. Frame-accurate encoding decoupled from real time — use it instead of `MediaRecorder` + `canvas.captureStream()`, which drops frames under load and cannot read an existing file. Needs WebCodecs; call `getFirstEncodableVideoCodec([...])` before encoding. ~0.66 MB |
 | PixiJS | `@bundled/pixi.js` | 2D WebGL rendering |
-| p5.js | `@bundled/p5` | Creative coding |
 | marked | `@bundled/marked` | Markdown → HTML |
 | Mermaid | `@bundled/mermaid` | Text → diagrams (flowchart, sequence, class, state, ER, gantt, mindmap…). Use `renderMermaid(src)`, which themes to the design tokens and returns sanitized SVG — do not sanitize it again. ~3.3 MB, so import it only in apps that draw diagrams |
 | Prism | `@bundled/prismjs` | Syntax highlighting |
@@ -627,7 +624,7 @@ Common mistakes to avoid when building apps:
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showAlert`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `toWebP`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it).
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `wait`, `sanitizeHtml`, `toWebP`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
 - **Don't hand-roll a canvas re-encode** — `toWebP(source, { quality, maxSize })` from `@bundled/yaar` is the bitmap → canvas → `convertToBlob` round-trip, including the check that the encoder did not quietly fall back to PNG and the chunked base64 conversion a storage write needs. It returns `null` (never throws) when the browser cannot do it, so the fallback is `if (!encoded) keepTheOriginal()`. No `@bundled/*` package ships a WebP codec — Chromium already has one; this is the boilerplate around it.
 - **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
@@ -1272,12 +1269,13 @@ throw new AppCommandError('No document open');
 Never use native `alert()` / `confirm()` / `prompt()` — they look foreign, block the whole
 page, and freeze any agent driving the browser. `@bundled/yaar` ships promise-based
 replacements styled with the built-in `y-modal` classes (Escape cancels, Enter confirms,
-backdrop click dismisses):
+backdrop click dismisses). The replacement for `alert()` is `showToast` — a one-button
+modal only steals focus to say something a toast already says:
 
 ```typescript
-import { showAlert, showConfirm, showPrompt } from '@bundled/yaar';
+import { showConfirm, showPrompt, showToast } from '@bundled/yaar';
 
-await showAlert('Export finished.', { title: 'Export' });
+showToast('Export finished.', 'success');
 
 if (await showConfirm(`Delete "${name}"?`, { danger: true, okLabel: 'Delete' })) {
   await remove(name);

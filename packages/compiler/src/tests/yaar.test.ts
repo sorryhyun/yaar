@@ -101,7 +101,6 @@ const {
   createCollapsiblePanel,
   createPersistedSignal,
   createProtocolContext,
-  showAlert,
   showConfirm,
   showPrompt,
 } = await import('../shims/yaar/index.js');
@@ -295,9 +294,8 @@ describe('dialogs', () => {
     await p;
   });
 
-  test('showAlert has no cancel button and resolves on OK', async () => {
-    const p = showAlert('Done.', { title: 'Export' });
-    expect(cancelButton()).toBeUndefined();
+  test('a title renders above the message when one is given', async () => {
+    const p = showConfirm('Overwrite "a.txt"?', { title: 'Export' });
     expect(flatten(overlay()!).some((el) => el.className === 'y-modal-title')).toBe(true);
     okButton()!.onclick!({});
     await p;

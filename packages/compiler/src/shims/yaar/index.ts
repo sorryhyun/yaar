@@ -71,7 +71,7 @@ export { createProtocolContext } from './protocol-context.js';
 export { defineApp } from './define-app.js';
 
 // ── Dialogs ─────────────────────────────────────────────────────
-export { showAlert, showConfirm, showPrompt } from './dialogs.js';
+export { showConfirm, showPrompt } from './dialogs.js';
 export type { DialogOptions } from './dialogs.js';
 
 // ── Reactive primitives ─────────────────────────────────────────

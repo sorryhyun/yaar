@@ -28,7 +28,7 @@ import {
 } from '../index.js';
 
 // Each case pays for a real prebundle (some libraries are megabytes) plus a
-// consumer Bun.build(). Big libs (p5, three, mammoth) dominate the cost.
+// consumer Bun.build(). Big libs (mermaid, three, mammoth) dominate the cost.
 setDefaultTimeout(120_000);
 
 // solid-js sub-package artifacts carry bare `import 'solid-js'` (its sisters are

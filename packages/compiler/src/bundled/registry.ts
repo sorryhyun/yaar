@@ -56,6 +56,18 @@ export const CONDITIONAL_EXPORT_LIBS = [
 /**
  * Map of @bundled/* import names to actual npm module paths.
  * These libraries are installed as devDependencies and bundled into apps.
+ *
+ * **An entry needs a concrete first consumer.** Every name here is prebundled into
+ * the standalone exe (`scripts/build/prebundle-libs.js` walks this map), so a
+ * library no app imports costs exe bytes and widens the choice an app-authoring
+ * agent has to make — tree-shaking makes it free per app, never free in the
+ * artifact. `clsx`, `konva`, and `p5` were retired for exactly that (zero
+ * consumers, each redundant with a kept library or a platform API); re-adding one
+ * is this line plus a `.d.ts` block, so retirement is cheap to reverse the moment
+ * a real consumer appears. A zero-consumer entry stays only when it is the sole
+ * provider of a capability apps cannot reasonably hand-roll (`cannon-es`,
+ * `matter-js`) or is deliberately hidden behind the SDK (`dompurify`, reachable
+ * only through `sanitizeHtml`).
  */
 export const BUNDLED_LIBRARIES: Record<string, string> = {
   'solid-js': 'solid-js',
@@ -65,9 +77,7 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   uuid: 'uuid',
   lodash: 'lodash-es',
   'date-fns': 'date-fns',
-  clsx: 'clsx',
   anime: 'animejs',
-  konva: 'konva',
   three: 'three',
   'cannon-es': 'cannon-es',
   xlsx: '@e965/xlsx',
@@ -79,7 +89,6 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   'matter-js': 'matter-js',
   tone: 'tone',
   'pixi.js': 'pixi.js',
-  p5: 'p5',
   mammoth: 'mammoth',
   marked: 'marked',
   mediabunny: 'mediabunny',

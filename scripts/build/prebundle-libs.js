@@ -12,7 +12,7 @@
  * builtin shims, and the solid-js external handling all live there.
  */
 
-import { mkdirSync } from 'fs';
+import { mkdirSync, rmSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -25,6 +25,11 @@ const outDir = join(rootDir, 'dist', 'bundled-libs');
 // their shim and everything else through the npm browser entry — one code path for both.
 const { BUNDLED_LIBRARIES, prebundleLibrary } = await import('../../packages/compiler/src/index.ts');
 
+// Wipe first: `exe-bundle.js` embeds whatever .js files it *finds* here rather than
+// walking BUNDLED_LIBRARIES, so a retired library would otherwise survive in every exe
+// built on a tree that had already prebundled it — resolving at runtime inside the exe
+// while failing in a repo install, which is the worst version of the two to debug.
+rmSync(outDir, { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
 const libNames = Object.keys(BUNDLED_LIBRARIES);

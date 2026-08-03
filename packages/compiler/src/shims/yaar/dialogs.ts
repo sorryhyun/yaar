@@ -2,8 +2,13 @@
 // It is compiled by the Bun plugin for @bundled/yaar imports.
 /**
  * Modal dialogs built from the `y-modal` CSS classes — replacements for the
- * native `alert()` / `confirm()` / `prompt()`, which block the whole page
- * (and any agent driving it).
+ * native `confirm()` / `prompt()`, which block the whole page (and any agent
+ * driving it).
+ *
+ * There is deliberately no `showAlert`: it shipped alongside these two for set
+ * completion, reached zero consumers across the whole app fleet, and a
+ * one-button modal is what `showToast` already covers without stealing focus.
+ * Native `alert()` is still the thing to avoid — the replacement is a toast.
  */
 
 export interface DialogOptions {
@@ -21,8 +26,6 @@ interface DialogConfig extends DialogOptions {
   message: string;
   /** Include a text input; the dialog resolves with its value on confirm. */
   input?: { placeholder?: string; initial?: string };
-  /** Omit the cancel button (alert). Escape still dismisses. */
-  noCancel?: boolean;
 }
 
 function openDialog(cfg: DialogConfig): Promise<{ ok: boolean; value: string }> {
@@ -33,7 +36,7 @@ function openDialog(cfg: DialogConfig): Promise<{ ok: boolean; value: string }> 
     overlay.className = 'y-overlay';
     const modal = document.createElement('div');
     modal.className = 'y-modal';
-    modal.setAttribute('role', cfg.noCancel ? 'alertdialog' : 'dialog');
+    modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     overlay.appendChild(modal);
 
@@ -67,13 +70,11 @@ function openDialog(cfg: DialogConfig): Promise<{ ok: boolean; value: string }> 
 
     const actions = document.createElement('div');
     actions.className = 'y-modal-actions';
-    if (!cfg.noCancel) {
-      const cancelBtn = document.createElement('button');
-      cancelBtn.className = 'y-btn';
-      cancelBtn.textContent = cfg.cancelLabel ?? 'Cancel';
-      cancelBtn.onclick = () => close(false);
-      actions.appendChild(cancelBtn);
-    }
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'y-btn';
+    cancelBtn.textContent = cfg.cancelLabel ?? 'Cancel';
+    cancelBtn.onclick = () => close(false);
+    actions.appendChild(cancelBtn);
     const okBtn = document.createElement('button');
     okBtn.className = cfg.danger ? 'y-btn y-btn-danger' : 'y-btn y-btn-primary';
     okBtn.textContent = cfg.okLabel ?? 'OK';
@@ -102,18 +103,6 @@ function openDialog(cfg: DialogConfig): Promise<{ ok: boolean; value: string }> 
     (field ?? okBtn).focus();
     field?.select();
   });
-}
-
-/**
- * Show a modal alert styled with the built-in `y-modal` classes.
- * Resolves when dismissed. Use instead of native `alert()`, which blocks
- * the whole page (and any agent driving it).
- */
-export async function showAlert(
-  msg: string,
-  opts?: Pick<DialogOptions, 'title' | 'okLabel'>,
-): Promise<void> {
-  await openDialog({ message: msg, ...opts, noCancel: true });
 }
 
 /**
