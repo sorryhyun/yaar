@@ -287,6 +287,30 @@ rather than a prompt nobody can afford. An image wins over text when the clipboa
 pasted screenshot usually carries a `text/plain` alternative naming the file, and saving that name
 instead of the picture would look like a successful save of the wrong thing.
 
+#### Credentials are taken out first
+
+Clipboard **text** is scanned for credentials before it is handed over, and every match is replaced
+with a `[redacted: aws-access-key-id #1]` placeholder naming what was there. The read still
+succeeds and the rest of the content is verbatim — the caller is an LLM, and a refusal makes it
+ask the user to paste the content into the chat instead, which lands the secret in the same
+context window by a route with no scan on it. A read that removed something says so, and the
+detector is `packages/server/src/features/user/secret-scan.ts`.
+
+Three limits are worth knowing before relying on it:
+
+- **It detects vendor-prefixed credentials only** — `ghp_`, `sk-ant-`, `AKIA`, `AIza`, `xoxb-`,
+  PEM private-key blocks, JWTs, a password in a connection URL. An unlabeled high-entropy string,
+  or a `MY_SECRET=hunter2` with no recognizable shape, passes through. This is a floor, not a
+  guarantee: clipboard content is the user's private data whether or not the scan found anything.
+- **Images are not scanned.** A screenshot of an `.env` file goes through as pixels.
+- **`save` is scanned too, and writes the redacted text.** Not an afterthought — `save` returns a
+  URI rather than bytes, so writing the raw clipboard would leave the secret one
+  `read('yaar://storage/...')` away, in a read with no clipboard in it to scan. Both doors go
+  through one gate for exactly this reason.
+
+`YAAR_CLIPBOARD_SECRETS=0` turns the scan off, for an agent whose job *is* the credential
+(rotating a key, debugging an auth header).
+
 ### System — `yaar://system/...`
 
 The running installation itself, rather than anything inside a session. Not session-principal:

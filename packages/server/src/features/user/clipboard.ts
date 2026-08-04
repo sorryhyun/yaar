@@ -27,12 +27,20 @@
  * They are not two spellings of one door — `save` has an effect, `read` does not — which
  * is why the ceiling knob lives on `save` rather than as an option to `read` (see the
  * "describe is the manual, read is the current value" rule in packages/server/CLAUDE.md).
+ *
+ * **Both doors are also where credentials are taken out** (`secret-scan.ts`). That has to
+ * happen here rather than one layer up, because guarding only `read` would not be a guard
+ * at all: `save` to a storage path followed by `read('yaar://storage/...')` puts the same
+ * bytes in the same context window without either verb touching a clipboard. This module is
+ * the one place both doors pass through — which also means it covers the app-iframe route
+ * (`POST /api/verb`), not just agents.
  */
 
 import type { ClipboardImagePayload } from '@yaar/shared';
 import { actionEmitter, type ClipboardFeedback } from '../../session/action-emitter.js';
 import type { PendingOutcome } from '../../session/pending-store.js';
 import { storageWrite } from '../../storage/storage-manager.js';
+import { redactSecrets, type SecretFinding } from './secret-scan.js';
 
 /**
  * How much clipboard text a `read` returns.
@@ -58,6 +66,40 @@ export const CLIPBOARD_IMAGE_MAX_BYTES = 4 * 1024 * 1024;
 export const CLIPBOARD_SAVE_TEXT_LIMIT = 20_000_000;
 export const CLIPBOARD_SAVE_IMAGE_MAX_BYTES = 32 * 1024 * 1024;
 
+/**
+ * Whether clipboard content is scanned for credentials before it is handed over.
+ *
+ * On by default; `YAAR_CLIPBOARD_SECRETS=0` turns it off, spelled the same way as
+ * `YAAR_CLIPBOARD_GRANT` because it is the other half of that decision — the grant removes
+ * the browser's consent prompt, and this is what stands in for it. Read per call rather than
+ * at module load so the setting is a setting, not a launch flag.
+ *
+ * The opt-out exists because redaction is lossy in a way the caller cannot undo: an agent
+ * working on a credential *deliberately* (rotating a key, debugging an auth header) is doing
+ * legitimate work that this makes impossible.
+ */
+function isSecretScanEnabled(): boolean {
+  return process.env.YAAR_CLIPBOARD_SECRETS !== '0';
+}
+
+/**
+ * Take credentials out of clipboard text, if the scan is on and there are any.
+ *
+ * Redaction rather than refusal, because a refusal is not the safer option it looks like:
+ * the caller is an LLM, a hard "no" makes it retry, rephrase, or ask the user to paste the
+ * content into the chat instead — which lands the secret in the same context window by a
+ * route with no scan on it. Returning the other 99% with the credentials named and removed
+ * ends the turn's interest in them.
+ */
+function guardText(text: string | undefined): {
+  text: string | undefined;
+  redactions?: SecretFinding[];
+} {
+  if (!text || !isSecretScanEnabled()) return { text };
+  const { text: redacted, findings } = redactSecrets(text);
+  return findings.length > 0 ? { text: redacted, redactions: findings } : { text };
+}
+
 /** What the caller gets back. Plain data — the handler turns it into a `VerbResult`. */
 export interface ClipboardReadResult {
   success: boolean;
@@ -65,6 +107,12 @@ export interface ClipboardReadResult {
   truncated?: boolean;
   totalChars?: number;
   image?: ClipboardImagePayload;
+  /**
+   * Credentials removed from `text`, by kind. Absent when nothing was found — present and
+   * non-empty is the signal, so a caller never has to distinguish "scanned, clean" from
+   * "not scanned" in order to render the right thing.
+   */
+  redactions?: SecretFinding[];
   error?: string;
 }
 
@@ -143,12 +191,18 @@ export async function readClipboard(opts?: { image?: boolean }): Promise<Clipboa
     return { success: false, error: 'The clipboard is empty.' };
   }
 
+  // `totalChars` stays the clipboard's own length, not the redacted string's: it answers
+  // "how much is there", which is what decides whether to go to `save`, and redaction does
+  // not change that. The returned text already differs in length whenever it is truncated.
+  const guarded = guardText(answer.text);
+
   return {
     success: true,
-    text: answer.text,
+    text: guarded.text,
     truncated: answer.truncated,
     totalChars: answer.totalChars,
     image: answer.image,
+    ...(guarded.redactions ? { redactions: guarded.redactions } : {}),
   };
 }
 
@@ -172,6 +226,8 @@ export interface ClipboardSaveResult {
    */
   truncated?: boolean;
   totalChars?: number;
+  /** Credentials removed before the file was written, by kind. */
+  redactions?: SecretFinding[];
   error?: string;
 }
 
@@ -222,14 +278,22 @@ export async function saveClipboard(path: string): Promise<ClipboardSaveResult> 
 
   if (!answer.text) return { success: false, error: 'The clipboard is empty.' };
 
-  const written = await storageWrite(path, answer.text);
+  // The file, not just the answer, is what gets redacted. `save` returns a URI rather than
+  // bytes, so writing the raw text here would look like it had kept the secret out of the
+  // conversation while leaving it one `read('yaar://storage/...')` away — and that read has
+  // no clipboard in it to scan.
+  const guarded = guardText(answer.text);
+  const body = guarded.text!;
+
+  const written = await storageWrite(path, body);
   if (!written.success) return { success: false, error: written.error };
   return {
     success: true,
     uri: `yaar://storage/${path}`,
-    bytes: Buffer.byteLength(answer.text, 'utf8'),
+    bytes: Buffer.byteLength(body, 'utf8'),
     kind: 'text',
     truncated: answer.truncated,
     totalChars: answer.totalChars,
+    ...(guarded.redactions ? { redactions: guarded.redactions } : {}),
   };
 }

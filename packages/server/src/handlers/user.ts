@@ -27,6 +27,7 @@ import {
   CLIPBOARD_TEXT_LIMIT,
   CLIPBOARD_IMAGE_MAX_PX,
 } from '../features/user/clipboard.js';
+import { describeRedactions } from '../features/user/secret-scan.js';
 
 export function registerUserHandlers(registry: ResourceRegistry): void {
   // ── yaar://user/notifications — show/manage notifications ──
@@ -185,6 +186,7 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
           uri: result.uri,
           kind: result.kind,
           bytes: result.bytes,
+          ...(result.redactions ? { redacted: describeRedactions(result.redactions) } : {}),
           ...(result.truncated
             ? {
                 truncated: true,
@@ -237,6 +239,12 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
           'reads behind its own permission prompt, so the first read may need the user to ' +
           'allow it, and a refusal is theirs rather than an error to retry around.',
         verbs: ['describe', 'read', 'invoke'],
+        secrets:
+          'Vendor-prefixed credentials (API keys, access tokens, private keys, passwords in ' +
+          'connection URLs) are replaced with placeholders before clipboard text reaches you ' +
+          'or is written by "save". A read that removed something says so. Detection is ' +
+          'prefix-anchored, so it is not a guarantee — clipboard content is still the user’s ' +
+          'private data and treating it as publishable because it came back clean is wrong.',
         limits: {
           textChars: CLIPBOARD_TEXT_LIMIT,
           imageLongestEdgePx: CLIPBOARD_IMAGE_MAX_PX,
@@ -255,6 +263,9 @@ export function registerUserHandlers(registry: ResourceRegistry): void {
       if (!result.success) return error(result.error!);
 
       const notes: string[] = [];
+      // First, so it is read before the content it describes rather than as a footnote to
+      // text the agent has already started acting on.
+      if (result.redactions) notes.push(describeRedactions(result.redactions));
       if (result.text !== undefined) {
         notes.push(
           result.truncated

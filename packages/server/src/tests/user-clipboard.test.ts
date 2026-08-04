@@ -228,3 +228,73 @@ describe('yaar://user/clipboard — write and save', () => {
     }
   });
 });
+
+/**
+ * The credential scan (`features/user/secret-scan.ts`) lives below both doors. What the unit
+ * tests cannot show is the thing that decided where to put it: `read` and `save` are two ways
+ * to the same bytes, and a guard on one of them is not a guard.
+ */
+describe('yaar://user/clipboard — credentials', () => {
+  const AWS_KEY = 'AKIAIOSFODNN7EXAMPLE';
+  const ENV_PASTE = `AWS_ACCESS_KEY_ID=${AWS_KEY}\nAWS_REGION=us-east-1`;
+
+  it('read hands over the paste with the credential replaced', async () => {
+    fakeDesktop(() => ({ ok: true, text: ENV_PASTE }));
+
+    const result = await asAgent('sess-secret-read', () => readClipboard());
+
+    expect(result.success).toBe(true);
+    expect(result.text).not.toContain(AWS_KEY);
+    // Redaction, not refusal: the rest of the paste is why the agent was asked to look.
+    expect(result.text).toContain('AWS_REGION=us-east-1');
+    expect(result.redactions).toEqual([{ kind: 'aws-access-key-id', count: 1 }]);
+  });
+
+  it('save writes the redacted text, not the raw clipboard', async () => {
+    fakeDesktop(() => ({ ok: true, text: ENV_PASTE }));
+
+    try {
+      const result = await asAgent('sess-secret-save', () => saveClipboard('temp/env.txt'));
+
+      expect(result.success).toBe(true);
+      expect(result.redactions).toEqual([{ kind: 'aws-access-key-id', count: 1 }]);
+
+      // The bypass this closes: `save` returns a URI rather than bytes, so a raw write would
+      // look like it had kept the key out of the conversation while leaving it one
+      // `read('yaar://storage/temp/env.txt')` away — a read with no clipboard in it to scan.
+      const written = await readFile(join(STORAGE_DIR, 'temp/env.txt'), 'utf8');
+      expect(written).not.toContain(AWS_KEY);
+      expect(written).toContain('AWS_REGION=us-east-1');
+      // `bytes` describes the file that exists, not the clipboard that was read.
+      expect(result.bytes).toBe(Buffer.byteLength(written, 'utf8'));
+    } finally {
+      await rm(join(STORAGE_DIR, 'temp/env.txt'), { force: true });
+    }
+  });
+
+  it('says nothing about redaction when the clipboard holds no credentials', async () => {
+    fakeDesktop(() => ({ ok: true, text: 'the meeting is at four' }));
+
+    const result = await asAgent('sess-secret-clean', () => readClipboard());
+
+    // Absent rather than empty: a caller must not have to tell "scanned, clean" from
+    // "not scanned" to decide whether to render a warning.
+    expect(result.redactions).toBeUndefined();
+    expect(result.text).toBe('the meeting is at four');
+  });
+
+  it('YAAR_CLIPBOARD_SECRETS=0 hands the clipboard over untouched', async () => {
+    fakeDesktop(() => ({ ok: true, text: ENV_PASTE }));
+    process.env.YAAR_CLIPBOARD_SECRETS = '0';
+    try {
+      const result = await asAgent('sess-secret-off', () => readClipboard());
+
+      // Read per call, not at module load — otherwise the opt-out is a launch flag and the
+      // test below would pass for the wrong reason.
+      expect(result.text).toContain(AWS_KEY);
+      expect(result.redactions).toBeUndefined();
+    } finally {
+      delete process.env.YAAR_CLIPBOARD_SECRETS;
+    }
+  });
+});
