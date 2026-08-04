@@ -34,7 +34,7 @@
  * validates earlier, in `parseAppStoragePath`).
  */
 
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { handleAppQuery, handleAppCommand } from '../../features/window/app-protocol.js';
 import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';

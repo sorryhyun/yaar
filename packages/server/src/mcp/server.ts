@@ -9,9 +9,11 @@
  * client and reused for subsequent requests carrying the same session ID.
  */
 
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
-import { isInitializeRequest } from '@modelcontextprotocol/sdk/types.js';
+import {
+  isInitializeRequest,
+  McpServer,
+  WebStandardStreamableHTTPServerTransport,
+} from '@modelcontextprotocol/server';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { SYSTEM_TOOL_NAMES } from './system/index.js';
@@ -74,9 +76,11 @@ interface StandaloneStreamHandle {
  * client isn't currently holding one open.
  *
  * Reaches into an SDK-private field (`_streamMapping`) — verified against
- * @modelcontextprotocol/sdk 1.29.0. Guarded with optional chaining so a future
- * shape change degrades to "no keep-alive / eligible for eviction" rather than
- * throwing.
+ * @modelcontextprotocol/server 2.0.0 (and previously @modelcontextprotocol/sdk
+ * 1.29.0; the field name and the `{ controller, encoder }` shape survived the v2
+ * package split unchanged, v2 only adds a `cleanup` key we don't read). Guarded
+ * with optional chaining so a future shape change degrades to "no keep-alive /
+ * eligible for eviction" rather than throwing.
  */
 function getOpenGetStream(
   transport: WebStandardStreamableHTTPServerTransport,
@@ -110,25 +114,21 @@ setInterval(() => {
  * server for server→client messages, but YAAR pushes almost nothing over it, so
  * it sits idle — and Bun closes idle sockets at TRANSPORT_IDLE_TIMEOUT_S (255s).
  * A periodic SSE comment (`:`-prefixed, ignored by any spec-compliant client)
- * keeps the socket active so the stream never has to be reconnected, and
- * refreshes `lastUsed` as a belt-and-suspenders alongside the eviction skip
- * above. 60s gives a comfortable margin under the 255s ceiling.
+ * keeps the socket active so the stream never has to be reconnected.
+ *
+ * This used to be a hand-rolled `setInterval` walking `mcpSessions` and writing
+ * through `getOpenGetStream()`. @modelcontextprotocol/server 2.0.0 does it
+ * itself (`keepAliveMs`, emitting the identical `: keepalive\n\n` frame), so the
+ * value is now handed to the transport instead. The explicit 60s is kept over
+ * the SDK's 15s default because the number is a deliberate margin under the 255s
+ * ceiling, not a taste preference.
+ *
+ * One consequence: the old loop also refreshed `lastUsed` on every tick, and the
+ * transport's own timer cannot. That was belt-and-suspenders — a session holding
+ * the GET stream open is already skipped by the eviction loop above via
+ * `getOpenGetStream()`, which is the load-bearing guard and is unaffected.
  */
 const MCP_KEEPALIVE_MS = 60 * 1000;
-setInterval(() => {
-  const now = Date.now();
-  for (const entry of mcpSessions.values()) {
-    const stream = getOpenGetStream(entry.transport);
-    if (!stream) continue;
-    try {
-      stream.controller.enqueue(stream.encoder.encode(': keepalive\n\n'));
-      entry.lastUsed = now;
-    } catch {
-      // Controller already closed/errored — the transport's own cancel handler
-      // removes it from `_streamMapping`; nothing to clean up here.
-    }
-  }
-}, MCP_KEEPALIVE_MS).unref();
 
 // Bearer token for MCP authentication (generated at startup)
 let mcpToken: string | null = null;
@@ -328,6 +328,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
       const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: () => crypto.randomUUID(),
         enableJsonResponse: true,
+        keepAliveMs: MCP_KEEPALIVE_MS,
         onsessioninitialized: (newSessionId: string) => {
           const key = `${serverName}:${newSessionId}`;
           mcpSessions.set(key, { server, transport, lastUsed: Date.now() });

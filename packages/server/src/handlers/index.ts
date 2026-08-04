@@ -5,7 +5,7 @@
  */
 
 import { z } from 'zod';
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { ResourceRegistry, type VerbResult } from './uri-registry.js';
 import type { WindowStateRegistry } from '../session/window-state.js';
 import { getActiveSession, formatBatchResults } from './utils.js';

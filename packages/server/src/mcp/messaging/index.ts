@@ -23,7 +23,7 @@
  * `"messaging": "all"` in its app.json.
  */
 
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { requireMonitorId, getWindowId, getAgentRole } from '../../agents/agent-context.js';
 import { getActiveSession, ok, error } from '../../handlers/utils.js';

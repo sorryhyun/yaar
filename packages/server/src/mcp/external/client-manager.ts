@@ -5,10 +5,12 @@
  * config to config/mcp-servers.json.
  */
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
+import {
+  Client,
+  StreamableHTTPClientTransport,
+  type Transport,
+} from '@modelcontextprotocol/client';
+import { StdioClientTransport } from '@modelcontextprotocol/client/stdio';
 import { MAX_REQUEST_DEADLINE_MS } from '../../config.js';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
 import type {
@@ -188,11 +190,14 @@ class McpClientManager {
     const client = await this.ensureConnected(name);
 
     try {
-      const result = await client.callTool({ name: toolName, arguments: args }, undefined, {
-        timeout: CALL_TIMEOUT_MS,
-        resetTimeoutOnProgress: true,
-        maxTotalTimeout: CALL_TIMEOUT_MS,
-      });
+      const result = await client.callTool(
+        { name: toolName, arguments: args },
+        {
+          timeout: CALL_TIMEOUT_MS,
+          resetTimeoutOnProgress: true,
+          maxTotalTimeout: CALL_TIMEOUT_MS,
+        },
+      );
       return {
         content: (result.content ?? []) as Array<{
           type: string;

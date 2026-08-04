@@ -4,7 +4,7 @@
  * Provides tools for replaying cached action sequences.
  */
 
-import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { McpServer } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 import { ok } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
