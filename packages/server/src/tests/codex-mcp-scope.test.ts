@@ -14,7 +14,9 @@
  *    only granularity it has, and `codexServerFilter` is where that translation lives.
  *
  * Driven through the real `CodexProvider.query()` with a fake JSON-RPC client, so what is
- * asserted is the `thread/start` params actually sent.
+ * asserted is the params actually sent — on every call that opens a thread, `thread/resume`
+ * included. A resume that omits `config` is the same bug as declaring the wrong namespaces,
+ * just spelled as an absence.
  */
 import { describe, it, expect } from 'bun:test';
 import { EventEmitter } from 'node:events';
@@ -34,6 +36,10 @@ class FakeClient extends EventEmitter {
     switch (method) {
       case 'thread/start':
         return { thread: { id: 'thread-1' } };
+      case 'thread/resume':
+        // A non-empty `turns` is what makes the provider keep the resumed thread rather
+        // than fall through to `thread/start`.
+        return { thread: { id: params.threadId, turns: [{ id: 'turn-0' }] } };
       case 'turn/start':
         setTimeout(() => {
           this.emit('notification', 'turn/completed', { turn: { status: 'completed' } });
@@ -49,8 +55,10 @@ class FakeClient extends EventEmitter {
   close(): void {}
 }
 
-/** Run one turn and return the `mcp_servers` map the thread was started with. */
-async function scopeFor(allowedTools?: string[]): Promise<Record<string, any>> {
+/** Run one turn and return the recorded requests. */
+async function runTurn(
+  options: { allowedTools?: string[]; resumeThreadId?: string } = {},
+): Promise<FakeClient> {
   const fake = new FakeClient();
   const appServer = {
     isRunning: true,
@@ -62,11 +70,18 @@ async function scopeFor(allowedTools?: string[]): Promise<Record<string, any>> {
   for await (const _ of provider.query('hi', {
     systemPrompt: 'sp',
     agentId: 'agent-1',
-    ...(allowedTools ? { allowedTools } : {}),
+    ...(options.allowedTools ? { allowedTools: options.allowedTools } : {}),
+    ...(options.resumeThreadId ? { resumeThread: true, sessionId: options.resumeThreadId } : {}),
   })) {
     // drain
   }
 
+  return fake;
+}
+
+/** Run one turn and return the `mcp_servers` map the thread was started with. */
+async function scopeFor(allowedTools?: string[]): Promise<Record<string, any>> {
+  const fake = await runTurn(allowedTools ? { allowedTools } : {});
   const start = fake.requests.find((r) => r.method === 'thread/start');
   return start!.params.config.mcp_servers as Record<string, any>;
 }
@@ -109,6 +124,28 @@ describe('codex per-thread MCP scope', () => {
       expect(config.http_headers['x-agent-token']).toBeTruthy();
       expect(config.bearer_token_env_var).toBe('YAAR_MCP_TOKEN');
     }
+  });
+
+  it('carries the same scope onto a resumed thread', async () => {
+    // A thread's server set is decided when the thread is opened, and `thread/start` is not
+    // the only way to open one: restoring a previous run's session log makes the first turn
+    // a `thread/resume`. That call used to send no `config`, which was invisible while the
+    // process-level set still existed — the resumed thread inherited the servers from the
+    // loaded config. Once that set was emptied (the assertion below), a resumed thread got
+    // zero YAAR namespaces and the agent answered as if MCP did not exist.
+    const fake = await runTurn({ resumeThreadId: 'thread-from-a-previous-run' });
+
+    const resume = fake.requests.find((r) => r.method === 'thread/resume');
+    expect(resume).toBeDefined();
+    // It really resumed — a fall-through to thread/start would satisfy a scope assertion
+    // while proving nothing about the resume path.
+    expect(fake.requests.find((r) => r.method === 'thread/start')).toBeUndefined();
+
+    const names = Object.keys(resume!.params.config.mcp_servers);
+    expect(names).toContain('verbs');
+    expect(names).toContain('app');
+    expect(names).toContain('system');
+    expect(names).toContain('messaging');
   });
 
   it('declares no MCP servers at the process level, and only ever takes them away', () => {

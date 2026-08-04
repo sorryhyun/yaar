@@ -555,11 +555,23 @@ export class CodexProvider extends BaseTransport {
     }
 
     // Case 2: Resume a saved thread
+    //
+    // `config` matters here for exactly the reason it does on start/fork: a thread's MCP
+    // server set is decided when the thread is (re)opened, and since the app-server process
+    // declares none (see `app-server.ts`'s `spawnProcess`), a resume that omits it opens a
+    // thread with zero YAAR namespaces — the agent then has no verbs at all and answers as
+    // if MCP did not exist. Until the process-level set was emptied, a resumed thread
+    // inherited the servers from the loaded config and the omission was invisible.
+    //
+    // Only applies to a *cold* resume, which is the one YAAR performs (a thread id restored
+    // from a previous run's session log, on the first turn). `thread/resume` on a thread
+    // this app-server already has loaded rejoins it and ignores config overrides.
     if (options.resumeThread && options.sessionId) {
       console.log(`[codex] Resuming thread ${options.sessionId}`);
       try {
         const fullParams: ThreadResumeParams = {
           threadId: options.sessionId,
+          ...(mcpConfig ? { config: mcpConfig } : {}),
         };
         const result = await client.request<ThreadResumeParams, ThreadResumeResponse>(
           'thread/resume',
