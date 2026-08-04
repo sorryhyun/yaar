@@ -780,11 +780,21 @@ export class ContextPool implements PoolContext {
         const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
         if (agent) {
           if (monitorId === '0') {
+            // Same two ids, same rule as `initialize()` above: `sessionId` is the hub key
+            // the client mints iframe tokens against, `logSessionId` is the transcript dir.
+            // This emitter sent the *log* id as `sessionId` — so after a reset the desktop
+            // adopted a directory name (`2026-08-04_14-55-15`) as its session, and every
+            // app it launched from then on held a token naming a session the hub does not
+            // hold. Their session-scoped verbs (`yaar://session/agents`, `yaar://windows`,
+            // `yaar://history/`) each parked the full `SessionHub.waitFor()` and answered
+            // 503, so Process Explorer, Session Logs and Configurations simply never
+            // loaded, while storage-only apps like devtools were unaffected.
             await this.sendEvent({
               type: ServerEventType.CONNECTION_STATUS,
               status: 'connected',
               provider: provider.name,
-              sessionId: this.logSessionId ?? undefined,
+              sessionId: this.sessionId,
+              logSessionId: this.logSessionId ?? undefined,
             });
           }
         } else {
