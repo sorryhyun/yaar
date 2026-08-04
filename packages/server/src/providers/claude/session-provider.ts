@@ -47,6 +47,14 @@ const MCP_CONNECT_WAIT_MS = 5000;
 const INTERRUPT_ACK_MS = 2000;
 
 /**
+ * How long a steer waits for its turn's own message to reach the wire. The turn
+ * gates on `mcpReady` first, so the bound has to clear that with room to spare;
+ * past it the turn is not starting, and the caller is better served by the fresh
+ * turn it falls back to. Lands on Codex's 10s by construction.
+ */
+const STEER_TURN_START_MS = MCP_CONNECT_WAIT_MS + 5000;
+
+/**
  * Resolve `promise`, or reject once `ms` have passed.
  *
  * Deliberately not a "resolve with undefined on timeout": every caller here
@@ -97,6 +105,15 @@ interface PersistentSession {
   openedWithResume: string | undefined;
   /** Turns pushed so far — a virgin stream can still be swapped for a resume. */
   turnsProcessed: number;
+  /**
+   * Identifies the in-flight turn. Codex steers by naming an `expectedTurnId`,
+   * so a steer that lost the race is refused by app-server rather than absorbed
+   * into whatever runs next; the CLI exposes no turn id, so this counter is the
+   * local stand-in. Only ever compared for equality.
+   */
+  turnId: number;
+  /** Resolves once this turn's own message is on the wire; null while idle. */
+  turnStarted: Promise<void> | null;
   busy: boolean;
 }
 
@@ -106,7 +123,6 @@ export class ClaudeSessionProvider extends BaseTransport {
   readonly systemPrompt: string;
 
   private sessionId: string | null = null;
-  private currentQuery: ReturnType<typeof sdkQuery> | null = null;
   private persistentSession: PersistentSession | null = null;
 
   constructor() {
@@ -147,23 +163,63 @@ export class ClaudeSessionProvider extends BaseTransport {
     return this.sessionId;
   }
 
+  /**
+   * Inject a message into the turn that is running *now*.
+   *
+   * Deliberately not `Query.streamInput()`, though that is the SDK's own name
+   * for this. It drains the iterable it is handed and then calls
+   * `transport.endInput()` — ending the CLI's stdin. For a one-shot process that
+   * is right: there is nothing more to send. Here the process is shared by every
+   * later turn and fed by a channel that never closes (`input-channel.ts`), so a
+   * single steer closed stdin under the whole session and the CLI exited at the
+   * end of the turn, costing the warm process and its MCP connections. The close
+   * is unconditional for us — the SDK defers it only when the query
+   * `hasBidirectionalNeeds()` (SDK-side MCP transports, hooks, `canUseTool`) and
+   * every YAAR MCP server is `type: 'http'`. Pushing into the channel the SDK is
+   * already draining is the same code path to the same stdin write, minus the
+   * close.
+   *
+   * The two guards are Codex's, transplanted, and each closes a way this could
+   * land somewhere other than the turn the caller meant:
+   *
+   * 1. **Wait for the turn to start.** `runPersistentTurn` marks itself busy
+   *    before gating on `mcpReady`, so there is a real window in which a steer
+   *    would be written *ahead* of the message it is meant to steer — the
+   *    conversation would read in the wrong order. Codex waits on
+   *    `turnReadyPromise` for the same race.
+   * 2. **Re-check identity after the wait.** A turn that ended while we waited
+   *    would otherwise take our message as the *next* turn's opening line.
+   *    `turnId` is the `expectedTurnId` analogue; the session identity check
+   *    catches a stream closed and reopened underneath us.
+   *
+   * A fork's one-shot process is refused outright: it has no channel, and its
+   * prompt iterable has already completed. The caller's fallback — a fresh turn
+   * — is the only honest answer there.
+   */
   async steer(content: string): Promise<boolean> {
-    if (!this.currentQuery) return false;
-    try {
-      await this.currentQuery.streamInput(
-        (async function* () {
-          yield {
-            type: 'user' as const,
-            message: { role: 'user' as const, content },
-          };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SDK expects SDKUserMessage but accepts partial
-        })() as AsyncIterable<any>,
-      );
-      return true;
-    } catch (err) {
-      console.warn('[claude] streamInput failed:', err);
+    const session = this.persistentSession;
+    if (!session || !session.busy) return false;
+
+    const turnId = session.turnId;
+    const started = session.turnStarted;
+    if (started) {
+      try {
+        await withDeadline(started, STEER_TURN_START_MS);
+      } catch {
+        console.warn('[claude] steer: turn never started; not steering');
+        return false;
+      }
+    }
+
+    if (this.persistentSession !== session || !session.busy || session.turnId !== turnId) {
       return false;
     }
+
+    session.channel.push({
+      type: 'user',
+      message: { role: 'user', content },
+    });
+    return true;
   }
 
   async *query(prompt: string, options: TransportOptions): AsyncIterable<StreamMessage> {
@@ -292,7 +348,13 @@ export class ClaudeSessionProvider extends BaseTransport {
 
     const session = this.persistentSession!;
     session.busy = true;
-    this.currentQuery = session.stream;
+    session.turnId++;
+    // Steering waits on this rather than on `busy`: busy is true from here, but
+    // the turn's own message is not on the wire until after the MCP gate below.
+    let markTurnStarted!: () => void;
+    session.turnStarted = new Promise<void>((resolve) => {
+      markTurnStarted = resolve;
+    });
     let messageCount = 0;
     // One tracker per turn — the stream outlives the turn, the accumulator must not.
     const turnUsage = new TurnUsageTracker();
@@ -303,6 +365,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         type: 'user',
         message: { role: 'user', content: messageContent },
       });
+      markTurnStarted();
 
       for (;;) {
         const { value: msg, done } = await session.stream.next();
@@ -355,7 +418,11 @@ export class ClaudeSessionProvider extends BaseTransport {
       }
     } finally {
       session.busy = false;
-      this.currentQuery = null;
+      session.turnStarted = null;
+      // Wake a steer still waiting on a turn that ended, or that never started
+      // at all (the MCP gate threw). It re-checks and refuses rather than
+      // holding the caller for the full deadline.
+      markTurnStarted();
     }
   }
 
@@ -381,6 +448,8 @@ export class ClaudeSessionProvider extends BaseTransport {
       abortController: sdkOptions.abortController ?? new AbortController(),
       openedWithResume,
       turnsProcessed: 0,
+      turnId: 0,
+      turnStarted: null,
       busy: false,
     };
   }
@@ -438,7 +507,6 @@ export class ClaudeSessionProvider extends BaseTransport {
 
     try {
       const stream = sdkQuery({ prompt: promptInput, options: sdkOptions });
-      this.currentQuery = stream;
       void this.waitForMcpConnected(stream, sdkOptions).finally(releaseMcpGate);
       let messageCount = 0;
       const turnUsage = new TurnUsageTracker();
@@ -457,7 +525,6 @@ export class ClaudeSessionProvider extends BaseTransport {
               `[ClaudeSessionProvider] Stale session ${resumeSession}, retrying without resume`,
             );
             this.sessionId = null;
-            this.currentQuery = null;
             yield* this.executeQuery(messageContent, undefined, options);
             return;
           }
@@ -471,8 +538,6 @@ export class ClaudeSessionProvider extends BaseTransport {
         return;
       }
       yield this.createErrorMessage(err);
-    } finally {
-      this.currentQuery = null;
     }
   }
 
@@ -565,7 +630,6 @@ export class ClaudeSessionProvider extends BaseTransport {
 
   async dispose(): Promise<void> {
     await this.closePersistentSession();
-    this.currentQuery = null;
     this.sessionId = null;
     await super.dispose();
   }
