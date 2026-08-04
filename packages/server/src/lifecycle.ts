@@ -31,8 +31,9 @@ import {
 import { installProxyPortBoundary, installLoopbackAliasBoundary } from './http/origin-boundary.js';
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
-import { initSessionHub } from './session/session-hub.js';
+import { initSessionHub, getSessionHub } from './session/session-hub.js';
 import { setAccessRoleResolver } from './handlers/uri-registry.js';
+import { setWindowGrantResolver } from './http/access.js';
 import { getAgentRole } from './agents/agent-context.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
 import {
@@ -74,6 +75,14 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   // named import of agent-context's getters from inside the handlers/agents
   // import cycle mis-links under Bun's module loader.
   setAccessRoleResolver(getAgentRole);
+
+  // Same reason, same shape: an app iframe's permissions are its app.json list *plus*
+  // whatever storage files an agent named to its window (features/window/delegated-grants.ts).
+  // Those live on the session's WindowStateRegistry, which http/access.ts cannot import.
+  setWindowGrantResolver(
+    (sessionId, windowId, monitorId) =>
+      getSessionHub().get(sessionId)?.windowState.getWindowGrants(windowId, monitorId) ?? [],
+  );
 
   await ensureStorageDir();
 

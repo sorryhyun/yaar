@@ -87,6 +87,27 @@ export type Principal = HostPrincipal | AppPrincipal;
 /** Apps that declare nothing get nothing. */
 const NO_PERMISSIONS: PermissionEntry[] = [];
 
+/**
+ * Storage files a more-privileged principal named to this window's app.
+ *
+ * Injected rather than imported (the `setAccessRoleResolver` pattern): the grants live
+ * on `WindowStateRegistry`, reached through `SessionHub`, and a static import of the
+ * session tree from the HTTP access module is a runtime cycle. Wired in `lifecycle.ts`;
+ * until then, and in any test that boots no hub, nothing is delegated.
+ *
+ * Read here rather than folded into the token at mint time because the token is not
+ * durable — see `WindowStateRegistry.delegatedGrants`.
+ */
+let resolveWindowGrants: (
+  sessionId: string,
+  windowId: string,
+  monitorId?: string,
+) => PermissionEntry[] = () => NO_PERMISSIONS;
+
+export function setWindowGrantResolver(fn: typeof resolveWindowGrants): void {
+  resolveWindowGrants = fn;
+}
+
 // ── Resolving the caller ────────────────────────────────────────────────────
 
 /**
@@ -128,13 +149,20 @@ export function resolvePrincipal(req: Request, url: URL): Principal | Response {
   const entry = validateIframeToken(token);
   if (!entry) return errorResponse('Invalid or expired iframe token', 403);
 
+  // Files an agent named *to* this window, on top of what app.json declares. Read per
+  // request so a grant made after the token was minted (an `app_command` naming a file
+  // in an already-open window) is in force immediately, and so a grant survives the
+  // token being re-minted on remount.
+  const delegated = resolveWindowGrants(entry.sessionId, entry.windowId, entry.monitorId);
+  const declared = entry.permissions ?? NO_PERMISSIONS;
+
   return {
     kind: 'app',
     appId: entry.appId,
     sessionId: entry.sessionId,
     windowId: entry.windowId,
     monitorId: entry.monitorId,
-    permissions: entry.permissions ?? NO_PERMISSIONS,
+    permissions: delegated.length > 0 ? [...declared, ...delegated] : declared,
     systemApp: entry.systemApp ?? false,
     bundles: entry.bundles ?? [],
     streams: entry.streams ?? [],

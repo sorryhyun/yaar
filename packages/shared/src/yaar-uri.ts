@@ -173,11 +173,18 @@ export function isPreviewAppId(appId: string | undefined | null): boolean {
 
 /**
  * Extract app ID from a yaar://apps/{appId} URI.
+ *
+ * A query string or fragment is stripped first. `resolveContentUri` deliberately carries
+ * both through to the served URL, so `yaar://apps/memo?file=…` is how a caller hands an
+ * app a launch parameter — but the id in it is `memo`, not `memo?file=…`. Without the
+ * strip, `window.create` derived a nonsense appId for every parameterized launch: no
+ * `getAppMeta`, so no declared permissions, no default size, and an app-protocol key the
+ * app itself never matches.
  */
 export function extractAppId(uri: string): string | null {
   const parsed = parseYaarUri(uri);
   if (parsed?.authority === 'apps') {
-    return splitFirst(parsed.path)[0];
+    return splitFirst(parsed.path)[0].split(/[?#]/)[0] || null;
   }
   return null;
 }

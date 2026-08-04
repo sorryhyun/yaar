@@ -133,7 +133,7 @@ delete('yaar://storage/docs/readme.txt')
 
 | Prefix | What lives there |
 |---|---|
-| \`media/{producer}/\` | Artifacts apps publish for **each other** — a generated image, an edited logo. Apps are granted \`yaar://storage/media/\` and nothing wider, so this is the one place a file can cross between them. |
+| \`media/{producer}/\` | Artifacts apps publish for **each other** — a generated image, an edited logo. It is the one prefix apps hold a *standing* permission for, so a file here keeps working after the window that introduced it closes. |
 | \`temp/\` | Scratch, including OS file drops. Safe to prune. |
 | \`files/\` | The user's own documents. |
 | \`apps/{id}/\` | One app's **private** storage — the same files as \`yaar://apps/{id}/storage/\`. You can read it; the app itself cannot read any other app's. |
@@ -157,9 +157,22 @@ rasterizes pages to images (for scanned/visual PDFs).
 **Binary.** Pass \`encoding: "base64"\` when writing image or PDF bytes. Without it the
 base64 *text* is what lands on disk — a file that looks written and is unreadable.
 
-This is how you hand an image from one app to another: \`copy\` it into
-\`media/{producer}/\`, then \`direct_message\` the consuming app naming the new URI.
-The app can read \`media/\` itself; it cannot read where the file came from.`;
+**Handing a file to an app.** Name the \`yaar://storage/…\` URI in the \`app_command\`
+params — or in the create payload, or as a launch parameter on the app's own URI
+(\`yaar://apps/{id}?file=yaar://storage/…\`) — and the app may read *that file*, in *that
+window*, for as long as the window is open. You are lending it your own reach; there is
+nothing to declare and nothing to copy first.
+
+\`\`\`
+invoke('yaar://windows/<id>', { action: "app_command", command: "open",
+                               params: { path: "yaar://storage/files/report.md" } })
+\`\`\`
+
+The lend is narrow on purpose: that one file, \`read\` only, dropped when the window
+closes. An app that must *write* the file, or reach a whole folder, needs that in its own
+app.json \`permissions\`. To hand a file to an app **for keeps** — across windows and
+sessions — \`copy\` it into \`media/{producer}/\` and \`direct_message\` the app naming the new
+URI; \`media/\` is the one prefix apps hold a standing permission for.`;
 
 export const HTTP_SECTION = `## HTTP Access
 

@@ -89,6 +89,14 @@ const tokens = new Map<string, TokenEntry>();
 export interface IframeTokenOptions {
   appId?: string;
   permissions?: PermissionEntry[];
+  /**
+   * Permissions a privileged caller is adding on top of the app's declared list.
+   *
+   * Distinct from `permissions`, which *is* the list. Only `generateAppIframeToken`
+   * reads this, and only after its caller has established that the caller outranks the
+   * app — see the note at the `window.create` call site.
+   */
+  extraPermissions?: PermissionEntry[];
   /** Monitor the window lives on. See TokenEntry.monitorId. */
   monitorId?: string;
   systemApp?: boolean;
@@ -177,11 +185,18 @@ export async function previewBundles(
 export async function generateAppIframeToken(
   windowId: string,
   sessionId: string,
-  { appId, permissions: explicitPermissions, monitorId, documentUri }: IframeTokenOptions = {},
+  {
+    appId,
+    permissions: explicitPermissions,
+    extraPermissions,
+    monitorId,
+    documentUri,
+  }: IframeTokenOptions = {},
 ): Promise<string> {
   const { getAppMeta } = await import('../features/apps/discovery.js');
   const appMeta = appId ? await getAppMeta(appId) : null;
   let permissions = explicitPermissions ?? appMeta?.permissions ?? [];
+  if (extraPermissions?.length) permissions = [...permissions, ...extraPermissions];
 
   // Auto-grant the app's own namespace (see SELF_GRANTS).
   if (appId) {

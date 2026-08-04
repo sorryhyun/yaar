@@ -24,6 +24,8 @@ import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
 import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
+import { grantsFromPayload, mayDelegateGrants } from './delegated-grants.js';
+import type { PermissionEntry } from '../../http/access.js';
 import {
   formatWindowRef,
   deriveWindowId,
@@ -260,9 +262,16 @@ export async function handleCreate(
       ? {
           iframeToken: await generateAppIframeToken(actualId, getSessionId() ?? '', {
             appId,
-            permissions: Array.isArray(payload.permissions)
-              ? (payload.permissions as string[])
-              : undefined,
+            // Caller-supplied permissions are honoured only for a caller that outranks
+            // the app (`mayDelegateGrants`) — `window.create` is reachable from any app
+            // declaring `yaar://windows/`, and these used to be taken from the payload
+            // unconditionally *and* to replace the manifest's list. An app could
+            // therefore mint itself a window whose token held `yaar://storage/`. It is
+            // additive now for the same reason: a grant must never subtract.
+            extraPermissions:
+              Array.isArray(payload.permissions) && mayDelegateGrants()
+                ? (payload.permissions as PermissionEntry[])
+                : undefined,
             // Pin the monitor now, using the same resolution the emitter will stamp on
             // the create action below. Left to be derived later from the window id, it
             // is ambiguous whenever the app is open on more than one monitor.
@@ -274,6 +283,15 @@ export async function handleCreate(
   };
 
   if (renderer === 'iframe') {
+    // Files this create named to the app it is opening — a `?file=yaar://storage/…` on
+    // the content URL, a path in an `open` payload. The window's own document is already
+    // covered by `documentUri` above; this is everything else the caller pointed at.
+    // Recorded before the emit so the app can read them on its very first turn, and
+    // filed under the raw id, which is the only key that exists until the window is.
+    if (appId) {
+      session?.windowState.grantWindowAccess(actualId, grantsFromPayload(payload));
+    }
+
     const outcome = await actionEmitter.emitActionWithFeedback(osAction, IFRAME_RENDER_TIMEOUT_MS);
 
     if (outcome.ok && !outcome.value.success) {

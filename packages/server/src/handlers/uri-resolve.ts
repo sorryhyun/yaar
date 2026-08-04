@@ -92,9 +92,16 @@ export function resolveResourceUri(uri: string): ResolvedResource | null {
 
   switch (parsed.authority) {
     case 'apps': {
-      const slashIdx = parsed.path.indexOf('/');
-      const appId = slashIdx === -1 ? parsed.path : parsed.path.slice(0, slashIdx);
-      const subpath = slashIdx === -1 ? 'dist/index.html' : parsed.path.slice(slashIdx + 1);
+      // Drop a query string / fragment before splitting. `resolveContentUri` keeps both
+      // on `apiPath` — that is how a launch parameter reaches the iframe — but they are
+      // no part of the app id or of the file being served. Left on, the first `/` found
+      // was the one inside `?file=yaar://…`, which made the app id `memo?file=yaar:` and
+      // the subpath the parameter's own path: every parameterized launch resolved to
+      // nothing and was reported as an unknown app.
+      const path = parsed.path.split(/[?#]/)[0];
+      const slashIdx = path.indexOf('/');
+      const appId = slashIdx === -1 ? path : path.slice(0, slashIdx);
+      const subpath = slashIdx === -1 ? 'dist/index.html' : path.slice(slashIdx + 1);
 
       // App-scoped storage is not part of the app directory — it lives in the shared
       // storage tree (storage/apps/{appId}/…), which apiPath already points at.

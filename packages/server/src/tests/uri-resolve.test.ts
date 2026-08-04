@@ -133,6 +133,21 @@ describe('resolveUri', () => {
     expect(apps?.kind).toBe('root');
   });
 
+  it('resolves an app URI carrying a launch parameter', () => {
+    // The query is a parameter for the app, not part of its id or of the file served.
+    // Before it was stripped, the first `/` found was the one inside `yaar://storage/`,
+    // making the app id `dock?file=yaar:` — so this resolved to nothing and
+    // `window.create` reported an unknown app for every parameterized launch. The query
+    // must still reach the iframe, which is what the apiPath assertion pins.
+    const r = resolveUri('yaar://apps/dock?file=yaar://storage/files/report.md');
+    expect(r?.kind).toBe('app-static');
+    if (r?.kind === 'app-static') {
+      expect(r.appId).toBe('dock');
+      expect(r.absolutePath).toContain('dist/index.html');
+      expect(r.apiPath).toBe('/api/apps/dock?file=yaar://storage/files/report.md');
+    }
+  });
+
   it('resolves bare authority URIs', () => {
     for (const authority of ['apps', 'storage', 'config', 'session', 'skills']) {
       const r = resolveUri(`yaar://${authority}`);

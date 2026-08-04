@@ -159,6 +159,14 @@ describe('extractAppId', () => {
   it('returns null for a non-apps authority', () => {
     expect(extractAppId('yaar://storage/anima')).toBeNull();
   });
+
+  it('strips a launch parameter — the app id is the app, not the query', () => {
+    // resolveContentUri carries the query through to the iframe on purpose; the id in
+    // it is still `anima`. Left on, this returned `anima?file=yaar:` and every
+    // parameterized launch resolved to no app at all.
+    expect(extractAppId('yaar://apps/anima?file=yaar://storage/files/x.md')).toBe('anima');
+    expect(extractAppId('yaar://apps/anima#top')).toBe('anima');
+  });
 });
 
 // ============ Brace expansion ============

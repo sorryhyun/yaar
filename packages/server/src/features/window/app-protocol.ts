@@ -19,6 +19,7 @@ import {
   reservedKeyNote,
 } from '../../lib/command-signature.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
+import { grantsFromPayload } from './delegated-grants.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
 const MAX_TEXT_BYTES = 400_000;
@@ -452,6 +453,12 @@ export async function handleAppCommand(
     command: payload.command as string,
     params: payload.params as Record<string, unknown> | undefined,
   };
+
+  // A storage file named in the params is a file the caller is handing to this app —
+  // grant it before the command runs, or the app 403s on the one path it was just told
+  // about. `grantsFromPayload` returns nothing unless the caller outranks the app, so
+  // an app driving another app's window through `yaar://windows/` grants nothing.
+  windowState.grantWindowAccess(key, grantsFromPayload(req.params));
 
   const timeoutMs = resolveTimeout(payload, deadlines.appCommandMs);
 

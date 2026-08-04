@@ -11,6 +11,7 @@
 import type { OSAction, WindowState, AppProtocolRequest, UserInteraction } from '@yaar/shared';
 import { applyContentOperation, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { getMonitorId } from '../agents/agent-context.js';
+import type { PermissionEntry } from '../http/access.js';
 import { WindowHandleMap } from './window-handle-map.js';
 
 // Re-export WindowState for convenience
@@ -44,6 +45,19 @@ export class WindowStateRegistry {
    * key while the commands it filters live under another silently filters nothing.
    */
   private appNoReplay: Map<string, Set<string>> = new Map();
+  /**
+   * Per window: storage files a more-privileged principal named *to* this window's app,
+   * each readable by it for as long as the window lives.
+   *
+   * Kept here rather than on the iframe token because the token is not durable — it is
+   * re-minted on remount and on reconnect (`/api/iframe-token`), and a grant recorded on
+   * the old one would vanish the first time the desktop reloaded. Keyed like
+   * `appCommands`, and dropped by the same `window.close` that drops them.
+   *
+   * Minted by `features/window/delegated-grants.ts`, which is also where the rules for
+   * what may be delegated live; read at the access gate via `getWindowGrants`.
+   */
+  private delegatedGrants: Map<string, PermissionEntry[]> = new Map();
   private onWindowCloseCallback?: (windowId: string, appId?: string, monitorId?: string) => void;
 
   readonly handleMap: WindowHandleMap;
@@ -199,6 +213,10 @@ export class WindowStateRegistry {
         this.windows.delete(key);
         this.appCommands.delete(key);
         this.appNoReplay.delete(key);
+        // Both spellings — see getWindowGrants for why a grant can be filed under the
+        // raw id. A revoked grant that survives under the other key is a live one.
+        this.delegatedGrants.delete(key);
+        this.delegatedGrants.delete(action.windowId);
         this.handleMap.remove(key);
         this.onWindowCloseCallback?.(key, appId, owner);
         break;
@@ -396,6 +414,47 @@ export class WindowStateRegistry {
 
   getAppCommands(windowId: string): AppProtocolRequest[] {
     return this.appCommands.get(this.appKey(windowId)) ?? [];
+  }
+
+  /**
+   * Record storage files delegated to this window's app (see `delegatedGrants`).
+   *
+   * Additive and deduplicated by URI: a second command naming the same file must not
+   * grow the list, and each call adds to what earlier ones granted rather than replacing
+   * it — an agent that opens a file, then opens a second one, meant both.
+   */
+  grantWindowAccess(windowId: string, entries: readonly PermissionEntry[], monitorId?: string) {
+    if (entries.length === 0) return;
+    const key = this.targetKey(windowId, monitorId) ?? windowId;
+    const existing = this.delegatedGrants.get(key) ?? [];
+    const seen = new Set(existing.map((e) => (typeof e === 'string' ? e : e.uri)));
+    const added = entries.filter((e) => {
+      const uri = typeof e === 'string' ? e : e.uri;
+      if (seen.has(uri)) return false;
+      seen.add(uri);
+      return true;
+    });
+    if (added.length > 0) this.delegatedGrants.set(key, [...existing, ...added]);
+  }
+
+  /**
+   * Storage files delegated to this window's app. Empty for every other window.
+   *
+   * `monitorId` is passed explicitly by the access gate: the grant is *recorded* inside
+   * an agent turn, which carries a monitor, but it is *read* on an HTTP request, which
+   * carries none — and a raw window id repeats across monitors, so an ambient-only
+   * lookup finds nothing for any app open on two of them. The iframe token pins the
+   * monitor at mint time precisely so this lookup can be exact.
+   */
+  getWindowGrants(windowId: string, monitorId?: string): PermissionEntry[] {
+    const key = this.targetKey(windowId, monitorId) ?? windowId;
+    const resolved = this.delegatedGrants.get(key) ?? [];
+    // Also read the raw id when it is not the key we just resolved. A grant recorded
+    // before the frontend confirmed the window exists lands under the raw id; every
+    // later one lands under the handle. Unioning is how a file named at create time
+    // stays granted once the window is registered.
+    const raw = key === windowId ? [] : (this.delegatedGrants.get(windowId) ?? []);
+    return raw.length === 0 ? resolved : [...resolved, ...raw];
   }
 
   /**
