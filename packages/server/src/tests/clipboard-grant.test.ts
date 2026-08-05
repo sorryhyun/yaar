@@ -83,6 +83,17 @@ async function waitFor(predicate: () => boolean, timeoutMs = 5000): Promise<void
 const grants = (chrome: FakeChrome) =>
   chrome.calls.filter((c) => c.method === 'Browser.grantPermissions');
 
+/**
+ * Wait until the grant is *held*, not merely until the call was seen.
+ *
+ * The fake records a call the moment the frame arrives, but `attempt()` only adopts the
+ * connection after `cdp.send()` resolves — a round trip later. Asserting on the status
+ * right after observing the call races that window, so any test that checks `held` waits
+ * on the conjunction instead.
+ */
+const heldAfter = (chrome: FakeChrome, calls: number) => () =>
+  grants(chrome).length >= calls && clipboardGrantStatus().held;
+
 let fake: FakeChrome | null = null;
 
 afterEach(() => {
@@ -97,7 +108,7 @@ describe('clipboard grant', () => {
     fake = startFakeChrome();
     startClipboardGrant(8000, { debugPort: fake.server.port, intervalMs: 50 });
 
-    await waitFor(() => grants(fake!).length > 0);
+    await waitFor(heldAfter(fake, 1));
 
     const grant = grants(fake)[0]!;
     expect(grant.params.origin).toBe('http://localhost:8000');
@@ -125,7 +136,7 @@ describe('clipboard grant', () => {
     // The override dies with the connection, so a reconnect that assumed the old grant
     // still stood would leave the origin `denied` with nothing holding it.
     fake.dropConnection();
-    await waitFor(() => grants(fake!).length > 1);
+    await waitFor(heldAfter(fake, 2));
 
     expect(clipboardGrantStatus().held).toBe(true);
   });
