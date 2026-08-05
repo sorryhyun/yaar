@@ -19,12 +19,22 @@ export class ContextAssemblyPolicy {
     this.windowInitialMaxTurns = windowInitialMaxTurns;
   }
 
+  /**
+   * The `<open_windows>` block, in stacking order — bottom of the screen's pile first, so
+   * the last line is the window the user is looking at.
+   *
+   * `windows` is expected in stack order (`WindowStateRegistry.stackOrder`); the position
+   * in the array *is* the z rank, which is why nothing here sorts. A caller that passes an
+   * unordered list still gets correct overlap facts, just an arbitrary "above/below".
+   */
   formatOpenWindows(
     windows: WindowState[],
     options?: {
       monitorId?: string;
       currentWindowId?: string;
       getRawWindowId?: (handle: string) => string;
+      /** The desktop's focused window, marked so the agent knows where the user is. */
+      focusedWindowId?: string | null;
     },
   ): string {
     if (windows.length === 0) return '';
@@ -34,7 +44,7 @@ export class ContextAssemblyPolicy {
         const slashIdx = id.indexOf('/');
         return slashIdx >= 0 ? id.slice(slashIdx + 1) : id;
       });
-    const lines = windows.map((w) => {
+    const lines = windows.map((w, i) => {
       const label = w.title || w.content.renderer;
       const current = options?.currentWindowId === w.id ? ' (you)' : '';
       const rawId = getRaw(w.id);
@@ -45,13 +55,20 @@ export class ContextAssemblyPolicy {
         facts.push('minimized');
       } else {
         facts.push(`${width}×${h} at (${x},${y})`);
-        // Rectangle overlap is factual regardless of z-order (which we don't track),
-        // so report intersections without claiming which window is on top.
-        const overlapping = windows
-          .filter((o) => o !== w && !o.minimized && rectsOverlap(w.bounds, o.bounds))
-          .map((o) => getRaw(o.id));
-        if (overlapping.length > 0) facts.push(`overlaps ${overlapping.join(', ')}`);
+        if (w.variant !== 'panel') facts.push(`z:${i}`);
+        // An overlap is only half the fact — a window that is covered is invisible to the
+        // user, while one that covers is what they are reading. Splitting the two is the
+        // difference between "these intersect" and "nobody can see this".
+        const covers: string[] = [];
+        const coveredBy: string[] = [];
+        windows.forEach((o, oi) => {
+          if (o === w || o.minimized || !rectsOverlap(w.bounds, o.bounds)) return;
+          (oi > i ? coveredBy : covers).push(getRaw(o.id));
+        });
+        if (coveredBy.length > 0) facts.push(`covered by ${coveredBy.join(', ')}`);
+        if (covers.length > 0) facts.push(`covers ${covers.join(', ')}`);
       }
+      if (options?.focusedWindowId === w.id) facts.push('focused');
       if (w.locked) facts.push('locked');
       if (w.appId) facts.push(`app:${w.appId}`);
 

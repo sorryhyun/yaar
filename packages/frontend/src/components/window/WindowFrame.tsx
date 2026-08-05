@@ -315,12 +315,7 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
             <button
               className={styles.controlBtn}
               data-action="minimize"
-              onClick={() => {
-                useDesktopStore.getState().applyAction({
-                  type: 'window.minimize',
-                  windowId: window.id,
-                });
-              }}
+              onClick={() => useDesktopStore.getState().userMinimizeWindow(window.id)}
             >
               −
             </button>

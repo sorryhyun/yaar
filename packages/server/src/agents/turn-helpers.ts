@@ -32,11 +32,15 @@ export function buildReloadContext(
   // monitor 0's windows is a lie the agent acts on. `task.monitorId` only says who sent
   // the task, so a caller that has resolved the owning monitor passes it explicitly.
   const monitorId = options?.monitorId ?? task.monitorId;
-  const windowSnapshot = ctx.windowState.listWindows(monitorId);
+  // Stack order, not listing order: `formatOpenWindows` reads the array position as the z
+  // rank. The fingerprint below is unaffected — `computeWindowStateHash` sorts its input,
+  // so a reordered snapshot hashes the same and no cache entry is invalidated by a click.
+  const windowSnapshot = ctx.windowState.stackOrder(monitorId);
   const openWindowsContext = ctx.contextAssembly.formatOpenWindows(windowSnapshot, {
     monitorId,
     currentWindowId: options?.currentWindowId,
     getRawWindowId: (handle) => ctx.windowState.handleMap.getRawWindowId(handle),
+    focusedWindowId: ctx.windowState.getFocusedWindowId(),
   });
   const fp = ctx.reloadPolicy.buildFingerprint(task, windowSnapshot);
   const reloadPrefix = ctx.reloadPolicy.formatReloadOptions(ctx.reloadPolicy.findMatches(fp, 3));

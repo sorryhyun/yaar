@@ -205,13 +205,21 @@ export function registerWindowHandlers(
       // The caller's monitor, not the session: an agent may only address windows on
       // the monitor it runs on, so listing another desktop's windows offers it URIs
       // that resolve to nothing. Outside a turn (no monitor in context) list them all.
-      const windows = getWindowState().listWindows(getMonitorId());
+      // Bottom of the stack first, so the last link is the window on top. An agent that
+      // reads this list to decide where to put the next window was previously given
+      // creation order and no way to tell what is covering what.
+      const windows = getWindowState().stackOrder(getMonitorId());
       if (windows.length === 0) return okLinks([]);
 
+      const focused = getWindowState().getFocusedWindowId();
       return okLinks(
-        windows.map((win) => {
+        windows.map((win, i) => {
           const windowId = getWindowState().handleMap.getRawWindowId(win.id);
           const parts = [win.content.renderer, `${win.bounds.w}x${win.bounds.h}`];
+          // Panels do not stack (fixed position) and sort last, so every `z` below is
+          // still that window's true rank among the ones that do.
+          parts.push(win.variant === 'panel' ? 'fixed' : `z:${i}`);
+          if (win.id === focused) parts.push('focused');
           if (win.locked) parts.push('locked');
           if (win.minimized) parts.push('minimized');
           if (win.appId) parts.push(`app:${win.appId}`);
@@ -851,6 +859,10 @@ export function registerWindowHandlers(
         return queryWindowState(resolved.windowId, { stateKey: target.key });
       }
 
+      // Stack position among this monitor's windows, `0` at the bottom. Undefined on a
+      // panel, which is fixed rather than stacked.
+      const z = getWindowState().stackIndex(win.id);
+
       const windowInfo: Record<string, unknown> & { captureFailure?: string } = {
         id: win.id,
         title: win.title,
@@ -860,6 +872,9 @@ export function registerWindowHandlers(
         size: { width: win.bounds.w, height: win.bounds.h },
         locked: win.locked,
         lockedBy: win.lockedBy,
+        ...(z === undefined ? {} : { z }),
+        ...(win.id === getWindowState().getFocusedWindowId() ? { focused: true } : {}),
+        ...(win.minimized ? { minimized: true } : {}),
         ...formatWindowFlags(win),
       };
 

@@ -407,6 +407,26 @@ export const createWindowsSlice: SliceCreator<WindowsSlice> = (set, _get) => ({
       }
     }),
 
+  // Reported, unlike the titlebar's old direct `applyAction`, because the server now
+  // tracks `minimized` and ranks windows by stack position: a window the user put away
+  // and a window sitting on the desktop are described differently to the agent, so the
+  // one event that tells the two apart cannot stay client-side.
+  userMinimizeWindow: (windowId) =>
+    set((state) => {
+      const win = state.windows[windowId];
+      if (!win || win.variant === 'widget' || win.variant === 'panel') return;
+      win.minimized = true;
+      if (state.focusedWindowId === windowId) {
+        const visible = state.zOrder.filter((id) => !state.windows[id]?.minimized);
+        state.focusedWindowId = visible[visible.length - 1] ?? null;
+      }
+      (state as DesktopStore).pendingInteractions.push({
+        type: 'window.minimize',
+        timestamp: Date.now(),
+        windowId,
+      });
+    }),
+
   userCloseWindow: (windowId) =>
     set((state) => {
       notifyIframeClose(windowId);

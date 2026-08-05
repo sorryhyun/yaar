@@ -59,6 +59,8 @@ Bring a window to the front.
 - Panels are unaffected.
 - Unminimizes the window if it was minimized.
 
+This is the only action that changes stacking apart from `window.create` (which puts the new window on top of its layer) and `window.close`. The server mirrors the result — see [Window State](#window-state) — so an agent can read which window is on top without asking the desktop.
+
 ### `window.minimize`
 
 Hide a window from the viewport.
@@ -196,6 +198,77 @@ Capture a window's content as a PNG screenshot.
 
 Async operation. Sends a `yaar:capture-request` postMessage to the window's iframe and awaits a `yaar:capture-response` (2s timeout); the injected capture script handles canvas and DOM (via `foreignObject`) capture using the browser's native CSS engine. There is no fallback tier — if the iframe doesn't respond in time, or responds with no image data, capture fails outright. Returns base64 PNG via `RENDERING_FEEDBACK` (`success: true, imageData`) on success, or `success: false` with an `error`/`captureFailure` reason (e.g. `no-response`) on failure. `requestId` is typed optional but is not: `packages/frontend/src/store/desktop.ts`'s handler only calls `captureWindow` `if (requestId)` — an action sent without it returns early with no capture and no warning.
 
+### Window State
+
+The actions above mutate state the actions themselves never spell out. Two types hold it, and they
+are deliberately not the same shape — the server tracks what it must re-emit on restore, the
+frontend tracks what it must draw.
+
+**`WindowState`** (`packages/shared/src/actions.ts`) — the server's record, and what session restore
+replays. It extends `WindowPresentation` (`appId`, `variant`, `dockEdge`, `frameless`,
+`windowStyle`, `minimized`, `isolateOrigin`, `appOrigin` — the same fields `window.create` accepts)
+and adds:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Window id |
+| `title` | `string` | Current title (`window.setTitle` writes it) |
+| `bounds` | `WindowBounds` | Current position and size |
+| `content` | `WindowContent` | Current content (`window.setContent` / `updateContent` write it) |
+| `locked` | `boolean` | Whether a lock is held (`window.lock` / `unlock`) |
+| `lockedBy` | `string?` | Agent id holding the lock |
+| `appProtocol` | `boolean?` | The iframe has registered an App Protocol manifest |
+| `createdAt` / `updatedAt` | `number` | Epoch ms |
+
+**`WindowModel`** (`packages/frontend/src/types/state.ts`) — the store's record. Same fields plus
+the ones only the desktop knows: `maximized: boolean` and `previousBounds?` (written by
+`window.maximize`, read by `window.restore`), `minimized: boolean` (non-optional here),
+`monitorId`, `requestId`, `iframeToken`. **`maximized` / `previousBounds` are frontend-only** —
+the server never sees them, so a maximized window comes back from session restore at its saved
+`bounds`.
+
+#### Stacking order
+
+The desktop's `zOrder` (an array, bottom to top) is **mirrored server-side** by
+`WindowStateRegistry`, because the server sees every input that moves a window in the pile:
+`window.create` and `window.focus` from an agent, a click-to-focus or a taskbar restore as a
+`window.focus` user interaction, and a close from either side. The layering rules are the same on
+both sides and must stay in step:
+
+| Variant | Stacking |
+|---------|----------|
+| `standard` | Goes on top on create and on focus |
+| `widget` | Own layer, always below every standard window — focusing one does not promote it |
+| `panel` | Outside the stack entirely (fixed position); reported as `fixed`, never with a `z` |
+
+`maximized` is deliberately **not** mirrored: the frontend computes those bounds from a viewport
+the server does not have.
+
+Three doors report the result, each ranking a window among *its own monitor's* windows, `0` at the
+bottom:
+
+| Door | What it shows |
+|------|---------------|
+| `list('yaar://windows')` | Links ordered bottom to top — the last one is on top. Each carries `renderer`, `WxH`, `z:{n}` (or `fixed`), then `focused`, `locked`, `minimized`, `app:{appId}` when each applies |
+| `read('yaar://windows/{id}')` | `z` and `focused` alongside the rest of the metadata; `z` is absent on a panel |
+| `<open_windows>` in the agent's turn | Lines in stacking order, each with `z:{n}` and, for overlaps, `covered by …` / `covers …` rather than a bare `overlaps` — a covered window is one the user cannot see |
+
+### Built-in Window State Keys
+
+Three state keys belong to the *window* rather than to the app inside it, and they are readable
+without any action at all. `__` is reserved: an app state key by one of these names is shadowed.
+
+| Key | Answers | Available on |
+|-----|---------|--------------|
+| `__content` | the window registry — no capture, no round trip to the app | every window |
+| `__screenshot` | a `window.capture` round trip to the frontend | iframe windows |
+| `__console` | the injected app-protocol script's capture buffer | iframe windows |
+
+They are addressed as `yaar://windows/{windowId}/state/__content` and friends. A bare
+`read('yaar://windows/{windowId}')` is metadata + `__content`, or metadata + `__screenshot` on an
+iframe window (with `contentOmitted` naming where the content went). Full verb table:
+[URI Reference → Windows](./uri_reference.md#windows--yaarwindowswindowid).
+
 ---
 
 ## Notification Actions
@@ -269,6 +342,7 @@ Show a modal confirmation dialog.
 | `confirmText` | `string` | no | Confirm button label (default: `'Yes'`) |
 | `cancelText` | `string` | no | Cancel button label (default: `'No'`) |
 | `permissionOptions` | `PermissionOptions` | no | Permission persistence config |
+| `capabilities` | `CapabilityLine[]` | no | Structured version of what is being asked for. When present the dialog renders these instead of `message`'s body; `message` stays the fallback for a client too old to know the field. |
 
 **PermissionOptions:**
 
@@ -277,6 +351,16 @@ Show a modal confirmation dialog.
 | `showRememberChoice` | `boolean` | Show "Remember my choice" checkbox |
 | `toolName` | `string` | Tool name for saving the decision |
 | `context` | `string?` | Optional context identifier |
+
+**CapabilityLine** — one thing being granted, said in the user's terms (the app-install dialog is the consumer). The server decides what each grant means; the frontend only lays these out.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `icon` | `string` | Single emoji, rendered as the row's icon |
+| `title` | `string` | The capability in plain language: "Read and write your files" |
+| `detail` | `string?` | Optional qualifier: "Private to this app" |
+| `raw` | `string?` | The literal grant this describes (`yaar://storage/`, `yaar-web`), shown demoted |
+| `warn` | `boolean?` | Broad or privileged — rendered with a warning accent |
 
 The user's response is sent back to the server as a `DIALOG_FEEDBACK` event. If `permissionOptions` is set and the user checks "remember", the decision is persisted to `config/permissions.json`.
 
@@ -535,6 +619,49 @@ The user's response is sent back via `USER_PROMPT_RESPONSE` client event.
 
 ---
 
+## Clipboard Actions
+
+The clipboard is the browser's, not the server's, and that is the whole shape of these actions.
+Under `REMOTE=1` the machine running YAAR and the machine holding the clipboard are routinely not
+the same machine; even locally, only the page has `navigator.clipboard`. So every clipboard
+operation is a round trip — this action out, a `CLIPBOARD_RESPONSE` client event back, matched on
+`id`. Neither action touches store state (`handleClipboardAction` in
+`packages/frontend/src/lib/clipboard.ts`).
+
+Every ceiling below is set by the server and applied by the desktop, so an oversized clipboard is
+trimmed *before* it crosses the socket rather than after.
+
+### `user.clipboard.read`
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `type` | `'user.clipboard.read'` | yes | |
+| `id` | `string` | yes | Matched by the `requestId` on the response |
+| `maxChars` | `number` | yes | Ceiling on returned text. Past it the desktop trims and reports the true length. |
+| `image` | `boolean` | yes | Read an image if one is there. `false` skips the decode/encode entirely. |
+| `maxImagePx` | `number` | yes | Longest edge in px an image is downscaled to before encoding. `0` disables downscaling. |
+| `maxImageBytes` | `number` | yes | Hard ceiling on the encoded image. Over it, the read reports `too-large`. |
+
+### `user.clipboard.write`
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `'user.clipboard.write'` | yes |
+| `id` | `string` | yes |
+| `text` | `string` | yes |
+
+**`CLIPBOARD_RESPONSE`** (`packages/shared/src/events/client.ts`) carries `requestId`, `ok`, and
+then `text` / `totalChars` / `truncated` / `image`, or a machine-readable `reason`: `denied`,
+`not-focused`, `unsupported`, `empty`, `too-large`, `failed`. They are not interchangeable — a
+denied read is fixed by granting clipboard access, an unfocused one by clicking the desktop first,
+an empty one by copying something.
+
+Clipboard **text** is scanned for vendor-prefixed credentials on the server before it reaches an
+agent (`YAAR_CLIPBOARD_SECRETS`, on by default); images are not scanned. See
+`packages/server/CLAUDE.md`.
+
+---
+
 ## Union Type
 
 All actions are represented by the `OSAction` union:
@@ -546,6 +673,7 @@ type OSAction =
   | ToastAction
   | DialogAction
   | UserPromptAction
+  | UserClipboardAction
   | AppAction
   | DesktopAction;
 ```
@@ -574,4 +702,4 @@ AI emits tool call → MCP tool creates OSAction
 
 Actions are scoped by monitor. The store key format is `"monitorId/windowId"` (e.g., `"0/win-settings"`). If no `monitorId` is present in the action, it falls back to the active monitor.
 
-Multiple synchronous actions are batched into a single Immer transaction. Async actions (`window.capture`, `desktop.updateSettings`) run outside Immer.
+Multiple synchronous actions are batched into a single Immer transaction. Async actions (`window.capture`, `desktop.updateSettings`, and both `user.clipboard.*`) run outside Immer.

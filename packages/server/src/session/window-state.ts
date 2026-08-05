@@ -58,6 +58,26 @@ export class WindowStateRegistry {
    * what may be delegated live; read at the access gate via `getWindowGrants`.
    */
   private delegatedGrants: Map<string, PermissionEntry[]> = new Map();
+  /**
+   * Stacking order, bottom to top — this registry's mirror of the desktop's `zOrder`.
+   *
+   * Mirrored rather than reported, because the server already sees every input that moves
+   * a window in the stack: `window.create` and `window.focus` from an agent land in
+   * `handleAction`, a click-to-focus arrives as a `window.focus` interaction, and a close
+   * arrives both ways. The layering rules are `insertIntoZOrder` in the frontend's
+   * `windowsSlice` and must stay in step with it: panels are outside the stack entirely
+   * (fixed position), widgets sit below every standard window, a standard window goes on
+   * top. Session-wide like the frontend's, since the keys are monitor-scoped handles;
+   * `stackIndex` is what ranks a window among *its own* monitor's.
+   *
+   * What is deliberately not mirrored is `maximized`: the frontend computes those bounds
+   * from a viewport the server does not have, so a maximized window is stored at the
+   * bounds it will return to. Reporting a stack position we can derive exactly is worth
+   * more than a maximize flag we would have to guess the geometry for.
+   */
+  private stack: string[] = [];
+  /** Top of the stack among non-minimized windows — the desktop's `focusedWindowId`. */
+  private focused: string | null = null;
   private onWindowCloseCallback?: (windowId: string, appId?: string, monitorId?: string) => void;
 
   readonly handleMap: WindowHandleMap;
@@ -176,6 +196,42 @@ export class WindowStateRegistry {
     win.updatedAt = Date.now();
   }
 
+  /**
+   * Put `key` on top of its own layer, removing it from wherever it was.
+   *
+   * Safe to call on create and on focus alike — the removal is what makes a re-focus
+   * idempotent. Mirrors `insertIntoZOrder` (frontend `windowsSlice`); the two are one
+   * rule expressed twice, so a change to either belongs in both.
+   */
+  private restack(key: string, variant?: WindowState['variant']): void {
+    if (variant === 'panel') return;
+    this.stack = this.stack.filter((id) => id !== key);
+    if (variant === 'widget') {
+      const firstStandard = this.stack.findIndex((id) => {
+        const v = this.windows.get(id)?.variant;
+        return !v || v === 'standard';
+      });
+      if (firstStandard === -1) this.stack.push(key);
+      else this.stack.splice(firstStandard, 0, key);
+    } else {
+      this.stack.push(key);
+    }
+  }
+
+  /** Highest window in the stack that is not minimized, or null. */
+  private topVisible(): string | null {
+    for (let i = this.stack.length - 1; i >= 0; i--) {
+      const id = this.stack[i];
+      if (id !== undefined && !this.windows.get(id)?.minimized) return id;
+    }
+    return null;
+  }
+
+  /** Hand focus to whatever is on top now — after the focused window left or was hidden. */
+  private refocusIfHolding(key: string): void {
+    if (this.focused === key) this.focused = this.topVisible();
+  }
+
   handleAction(action: OSAction, monitorId?: string): void {
     switch (action.type) {
       case 'window.create': {
@@ -196,6 +252,12 @@ export class WindowStateRegistry {
           createdAt: now,
           updatedAt: now,
         });
+        this.restack(key, action.variant);
+        // Only a standard window that is actually on screen steals focus — the same
+        // condition the frontend applies.
+        if ((!action.variant || action.variant === 'standard') && !action.minimized) {
+          this.focused = key;
+        }
         break;
       }
 
@@ -217,6 +279,8 @@ export class WindowStateRegistry {
         // raw id. A revoked grant that survives under the other key is a live one.
         this.delegatedGrants.delete(key);
         this.delegatedGrants.delete(action.windowId);
+        this.stack = this.stack.filter((id) => id !== key);
+        this.refocusIfHolding(key);
         this.handleMap.remove(key);
         this.onWindowCloseCallback?.(key, appId, owner);
         break;
@@ -268,6 +332,42 @@ export class WindowStateRegistry {
         this.mutateWindow(action.windowId, monitorId, (win) => {
           win.locked = false;
           win.lockedBy = undefined;
+        });
+        break;
+
+      // The three cases below exist for the stack, and they close a gap that predates it:
+      // `minimized` was written by `create` and never again, so a window an agent had
+      // minimized was still described as being on screen — by `formatOpenWindows`, by
+      // `list`, and by the fingerprint the reload cache is keyed on.
+      case 'window.focus': {
+        const key = this.targetKey(action.windowId, monitorId);
+        const win = key ? this.windows.get(key) : undefined;
+        if (!key || !win) break;
+        win.minimized = false;
+        win.updatedAt = Date.now();
+        this.restack(key, win.variant);
+        // A panel is outside the stack but can still hold focus, so this is set for
+        // every variant — `restack` is what declines to move a panel.
+        this.focused = key;
+        break;
+      }
+
+      case 'window.minimize': {
+        const key = this.targetKey(action.windowId, monitorId);
+        const win = key ? this.windows.get(key) : undefined;
+        if (!key || !win) break;
+        if (win.variant === 'widget' || win.variant === 'panel') break;
+        win.minimized = true;
+        win.updatedAt = Date.now();
+        this.refocusIfHolding(key);
+        break;
+      }
+
+      // Restores visibility only. A maximized window's bounds are the frontend's to
+      // restore (see `stack`) — this registry never recorded them as changed.
+      case 'window.restore':
+        this.mutateWindow(action.windowId, monitorId, (win) => {
+          win.minimized = false;
         });
         break;
     }
@@ -326,6 +426,17 @@ export class WindowStateRegistry {
         const closeAction: OSAction = { type: 'window.close', windowId: interaction.windowId };
         this.handleAction(closeAction, interaction.monitorId);
         return [closeAction];
+      }
+
+      // Click-to-focus, and the taskbar button that brings a minimized window back —
+      // both arrive here, and both are what keeps the mirrored stack (see `stack`)
+      // honest about a user who has been rearranging their own desktop.
+      case 'window.focus':
+      case 'window.minimize': {
+        if (!interaction.windowId) return [];
+        const action: OSAction = { type: interaction.type, windowId: interaction.windowId };
+        this.handleAction(action, interaction.monitorId);
+        return [action];
       }
 
       case 'window.move':
@@ -523,10 +634,51 @@ export class WindowStateRegistry {
     return win.appProtocol === true && !!win.appId;
   }
 
+  /**
+   * This monitor's windows, bottom of the stack to top — the last entry is on top.
+   *
+   * Ranked among the monitor's own windows, not the session's: a monitor is a separate
+   * desktop, so "third from the bottom" has to mean third on *that* screen. Panels are
+   * outside the stack (fixed position, no stacking) and are appended after the ranked
+   * ones so a caller iterating this still sees every window.
+   */
+  stackOrder(monitorId?: string): WindowState[] {
+    const listed = this.listWindows(monitorId);
+    const rank = new Map(listed.map((win) => [win.id, this.stack.indexOf(win.id)]));
+    return [...listed].sort((a, b) => {
+      const ra = rank.get(a.id) ?? -1;
+      const rb = rank.get(b.id) ?? -1;
+      // -1 is "not in the stack" (a panel); keep those last, in listing order.
+      if (ra === -1 || rb === -1) return ra === rb ? 0 : ra === -1 ? 1 : -1;
+      return ra - rb;
+    });
+  }
+
+  /**
+   * Where a window sits in its monitor's stack: `0` is the bottom, and `undefined` means
+   * it does not stack at all (a panel) or is not a window this registry holds.
+   */
+  stackIndex(windowId: string, monitorId?: string): number | undefined {
+    const resolved = this.resolve(windowId);
+    if (!resolved) return undefined;
+    const [key] = resolved;
+    if (!this.stack.includes(key)) return undefined;
+    const owner = monitorId ?? this.handleMap.getMonitorId(key);
+    const idx = this.stackOrder(owner).findIndex((win) => win.id === key);
+    return idx === -1 ? undefined : idx;
+  }
+
+  /** The window the desktop has focused, or null. Session-wide, like the desktop's. */
+  getFocusedWindowId(): string | null {
+    return this.focused;
+  }
+
   clear(): void {
     this.windows.clear();
     this.appCommands.clear();
     this.appNoReplay.clear();
+    this.stack = [];
+    this.focused = null;
     this.handleMap.clear();
   }
 

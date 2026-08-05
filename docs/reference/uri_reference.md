@@ -134,7 +134,7 @@ The canonical way agents address windows. The monitor is injected automatically 
 | Verb | URI | Effect |
 |------|-----|--------|
 | `describe` | `yaar://windows/{windowId}` | This instance's manual — the live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). A non-app window answers with the action set filtered to its renderer instead. Either way, `builtinState` carries the window's own keys |
-| `read` | `yaar://windows/{windowId}` | Metadata + `__content`; on an iframe window, metadata + `__screenshot` instead, with `contentOmitted` naming where the content went |
+| `read` | `yaar://windows/{windowId}` | Metadata (including `z` and `focused` — see below) + `__content`; on an iframe window, metadata + `__screenshot` instead, with `contentOmitted` naming where the content went |
 | `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links. A command's `description` is prefixed with its rendered signature, so the list is enough to call from |
 | `read` | `yaar://windows/{windowId}/state/{key}` | One state value — the same executor as `app_query` |
 | `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params. An **array** payload runs it once per element, in order (see [Batching](#batching)) |
@@ -154,6 +154,14 @@ The canonical way agents address windows. The monitor is injected automatically 
 
 > `list('yaar://windows/{windowId}')` returns *that window's* keys. It used to ignore the window id
 > and return every window on the monitor, which is what `list('yaar://windows')` is for.
+
+> **`list('yaar://windows')` answers in stacking order, bottom first** — the last link is the window
+> on top. Each line carries `z:{n}` (rank among *this monitor's* windows, `0` at the bottom; a panel
+> says `fixed` instead, since panels do not stack) and `focused` on the one the desktop has focused.
+> Before this, the order was creation order and nothing said what was covering what, so an agent
+> placing a new window had no way to avoid burying the one the user was reading. The server mirrors
+> the desktop's z-order from the actions and interactions it already sees — see
+> [OS Actions Reference → Stacking order](./os_actions_reference.md#stacking-order).
 
 **Three state keys belong to the window, not to the app inside it.** `__console` was always one;
 `__content` and `__screenshot` join it, and the set is now listed and described rather than

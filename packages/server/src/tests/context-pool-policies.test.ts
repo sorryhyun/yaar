@@ -74,41 +74,48 @@ describe('ContextAssemblyPolicy', () => {
     expect(windows).not.toContain('overlaps');
   });
 
-  it('reports rectangle overlap, minimized, and locked facts', () => {
+  it('reports stack position, which window covers which, minimized, and locked facts', () => {
     const policy = new ContextAssemblyPolicy();
-    const windows = policy.formatOpenWindows([
-      {
-        id: 'a',
-        title: 'A',
-        content: { renderer: 'markdown', data: '' },
-        bounds: { x: 0, y: 0, w: 400, h: 300 },
-        locked: false,
-        createdAt: 0,
-        updatedAt: 0,
-      },
-      {
-        id: 'b',
-        title: 'B',
-        content: { renderer: 'markdown', data: '' },
-        bounds: { x: 100, y: 100, w: 400, h: 300 },
-        locked: true,
-        createdAt: 0,
-        updatedAt: 0,
-      },
-      {
-        id: 'c',
-        title: 'C',
-        content: { renderer: 'markdown', data: '' },
-        bounds: { x: 0, y: 0, w: 400, h: 300 },
-        locked: false,
-        minimized: true,
-        createdAt: 0,
-        updatedAt: 0,
-      },
-    ]);
-    expect(windows).toContain('yaar://windows/a — A · 400×300 at (0,0) · overlaps b');
+    // Array order is the stack, bottom first — `a` is under `b`.
+    const windows = policy.formatOpenWindows(
+      [
+        {
+          id: 'a',
+          title: 'A',
+          content: { renderer: 'markdown', data: '' },
+          bounds: { x: 0, y: 0, w: 400, h: 300 },
+          locked: false,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+        {
+          id: 'b',
+          title: 'B',
+          content: { renderer: 'markdown', data: '' },
+          bounds: { x: 100, y: 100, w: 400, h: 300 },
+          locked: true,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+        {
+          id: 'c',
+          title: 'C',
+          content: { renderer: 'markdown', data: '' },
+          bounds: { x: 0, y: 0, w: 400, h: 300 },
+          locked: false,
+          minimized: true,
+          createdAt: 0,
+          updatedAt: 0,
+        },
+      ],
+      { focusedWindowId: 'b' },
+    );
+    // The one under reports what hides it; the one on top reports what it hides.
+    expect(windows).toContain('yaar://windows/a — A · 400×300 at (0,0) · z:0 · covered by b');
+    expect(windows).toContain('yaar://windows/b — B · 400×300 at (100,100) · z:1 · covers a');
+    expect(windows).toContain('focused');
     expect(windows).toContain('locked');
-    // Minimized windows report no geometry/overlap.
+    // Minimized windows report no geometry, no stack position, and no overlap.
     expect(windows).toContain('yaar://windows/c — C · minimized');
   });
 
