@@ -31,22 +31,7 @@
  */
 
 import type { SDKAssistantMessageError, SDKMessage } from '@anthropic-ai/claude-agent-sdk';
-
-/**
- * Something the provider said about itself that the user should see, which did
- * not end the turn.
- *
- * `level` is only about prominence: `warning` is a real problem (a limit, a
- * denial, a refusal, a truncation), `info` is bookkeeping the user would want to
- * be able to find afterwards but need not act on (an automatic model fallback).
- * `code` is the SDK's own discriminant, forwarded verbatim so a consumer can key
- * off it without parsing English.
- */
-export interface ProviderNotice {
-  level: 'info' | 'warning';
-  code: string;
-  text: string;
-}
+import type { ProviderNotice } from '../notice.js';
 
 /**
  * One sentence per {@link SDKAssistantMessageError}.

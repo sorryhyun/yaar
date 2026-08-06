@@ -213,8 +213,17 @@ export class CodexProvider extends BaseTransport {
           }
         }
 
-        // Check for turn completion
-        if (method === 'turn/completed' || method === 'turn/failed' || method === 'error') {
+        // Check for turn completion. An `error` the app-server says it will
+        // retry is *not* one: closing the loop here abandons a turn that is
+        // still running, and the answer the retry produces is never read. The
+        // mapper makes the same distinction (a notice, not a terminal error);
+        // both have to agree or the loop and the stream disagree about whether
+        // the turn ended.
+        const retryable = method === 'error' && (params as { willRetry?: boolean })?.willRetry;
+        if (
+          !retryable &&
+          (method === 'turn/completed' || method === 'turn/failed' || method === 'error')
+        ) {
           if (this.resolveMessage) {
             this.resolveMessage(true);
             this.resolveMessage = null;

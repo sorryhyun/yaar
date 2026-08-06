@@ -17,6 +17,8 @@ import type {
   ThreadItem,
   ThreadTokenUsageUpdatedNotification,
 } from './types.js';
+import { describeTurnError, notificationNotice, NOTICE_METHODS } from './errors.js';
+import { toNoticeMessage } from '../notice.js';
 
 /** Extract the mcpToolCall variant from ThreadItem */
 type McpToolCallItem = Extract<ThreadItem, { type: 'mcpToolCall' }>;
@@ -157,13 +159,15 @@ const IGNORED_PREFIXES = ['codex/event/', 'fuzzyFileSearch/'];
 
 const IGNORED_METHODS = new Set([
   'thread/compacted',
-  'account/rateLimits/updated',
   'account/updated',
   'account/login/completed',
   'app/list/updated',
-  'model/rerouted',
   'turn/plan/updated',
   'turn/diff/updated',
+  // Policy bookkeeping with no user-visible consequence — see `errors.ts` for
+  // why these are skipped rather than surfaced as notices.
+  'model/verification',
+  'turn/moderationMetadata',
   'item/fileChange/outputDelta',
   'item/commandExecution/terminalInteraction',
   'item/mcpToolCall/progress',
@@ -202,10 +206,15 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     case 'turn/completed': {
       const p = params as TurnCompletedNotification;
       if (p.turn?.status === 'interrupted') {
-        return { type: 'error', error: 'Turn was interrupted' };
+        return { type: 'error', error: 'Turn was interrupted', errorCode: 'interrupted' };
       }
       if (p.turn?.status === 'failed') {
-        return { type: 'error', error: p.turn.error?.message ?? 'Turn failed' };
+        // The typed `codexErrorInfo` and `additionalDetails` beside `message`
+        // were discarded, so a context overflow and an expired login both read
+        // as whatever prose the app-server happened to attach — or, absent any,
+        // as the literal string 'Turn failed'.
+        const { text, code } = describeTurnError(p.turn.error, 'Turn failed');
+        return { type: 'error', error: text, errorCode: code };
       }
       return { type: 'complete' };
     }
@@ -335,15 +344,33 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
 
     case 'error': {
       const p = params as ErrorNotification;
-      const message = p.error?.message ?? 'Unknown error';
-      return { type: 'error', error: message };
+      const { text, code } = describeTurnError(p.error, 'Unknown error');
+      // `willRetry` is the app-server telling us it is going to try again. This
+      // used to map to a terminal `error` regardless, which both latched the turn
+      // closed in `StreamToEventMapper` and tripped the `done` short-circuit in
+      // `CodexProvider`'s read loop — so the retry's answer was produced and
+      // never read. A retryable failure is a notice; only a final one is an error.
+      if (p.willRetry) {
+        return toNoticeMessage({ level: 'warning', code, text: `${text} Retrying.` });
+      }
+      return { type: 'error', error: text, errorCode: code };
     }
 
     // ========================================================================
     // Unknown/unhandled events
     // ========================================================================
 
-    default:
+    default: {
+      // Warnings, deprecations, model reroutes, reached limits, failed MCP
+      // servers — Codex's user-facing channels, which all used to land in the
+      // `console.debug` below.
+      const notice = notificationNotice(method, params);
+      if (notice) return toNoticeMessage(notice);
+      // A notice method that produced nothing is a level signal in its quiet
+      // state (`status: 'ready'`, a gauge below its limit), not an unhandled
+      // event — logging it as unknown is how a handled method looks unhandled.
+      if (NOTICE_METHODS.has(method)) return null;
+
       // Skip noisy codex internal events
       if (isIgnoredNotification(method)) {
         return null;
@@ -351,6 +378,7 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       // Log truly unknown events for debugging
       console.debug(`[codex] Unknown notification: ${method}`, params);
       return null;
+    }
   }
 }
 

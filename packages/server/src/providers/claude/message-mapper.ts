@@ -8,13 +8,8 @@ import type { SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sd
 import { SUBAGENT_TOOL_NAME } from '@yaar/shared';
 import type { StreamMessage, TokenUsage } from '../types.js';
 import { consumeLastCall } from '../../mcp/tool-call-buffer.js';
-import {
-  assistantNotice,
-  describeResultError,
-  rateLimitNotice,
-  systemNotice,
-  type ProviderNotice,
-} from './errors.js';
+import { assistantNotice, describeResultError, rateLimitNotice, systemNotice } from './errors.js';
+import { toNoticeMessage } from '../notice.js';
 
 /** Track tool_use_id → toolName from content_block_start events */
 const toolNameById = new Map<string, string>();
@@ -150,17 +145,6 @@ export class TurnUsageTracker {
       return undefined;
     return delta;
   }
-}
-
-/** Lift a {@link ProviderNotice} onto the wire, carrying the session id along. */
-function toNoticeMessage(notice: ProviderNotice, sessionId?: string): StreamMessage {
-  return {
-    type: 'notice',
-    content: notice.text,
-    noticeLevel: notice.level,
-    errorCode: notice.code,
-    ...(sessionId ? { sessionId } : {}),
-  };
 }
 
 /**

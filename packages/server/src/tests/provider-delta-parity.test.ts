@@ -106,11 +106,15 @@ describe('provider delta parity — Codex', () => {
     expect(mapNotification('turn/completed', { turn: { status: 'interrupted' } })).toMatchObject({
       type: 'error',
     });
+    // `toMatchObject`, not `toEqual`: the mapper also stamps an `errorCode` off
+    // the failure's typed `codexErrorInfo` (see `codex/errors.ts`). What this row
+    // pins is that a failed turn is an error carrying the app-server's prose —
+    // not the exact field set, which is that module's business.
     expect(
       mapNotification('turn/completed', {
         turn: { status: 'failed', error: { message: 'boom' } },
       }),
-    ).toEqual({ type: 'error', error: 'boom' });
+    ).toMatchObject({ type: 'error', error: 'boom' });
   });
 });
 
