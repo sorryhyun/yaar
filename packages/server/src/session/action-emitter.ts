@@ -4,6 +4,14 @@
  * This bridges the gap between MCP tool execution and the WebSocket
  * connection to the frontend. Tools emit actions here, and the agent
  * session subscribes to receive them.
+ *
+ * What is left in this file is the emitter: addressing an action to a session and a
+ * monitor, and the six questions the server asks a desktop. The three things that were
+ * only ever *stored* here live beside their own rules now —
+ * {@link DesktopRequest} (the ask-and-wait prelude every question shares),
+ * {@link AppReadyRegistry} (which iframes are listening), and
+ * {@link InterruptGate} (whose stopped turn is still emitting debris).
+ * The singleton's public surface is unchanged; it is the facade over all three.
  */
 
 import { EventEmitter } from 'events';
@@ -31,7 +39,10 @@ import {
   savePermission,
   type PermissionDecision,
 } from '../storage/permissions.js';
-import { PendingStore, type PendingOutcome } from './pending-store.js';
+import type { PendingOutcome } from './pending-store.js';
+import { DesktopRequest, LATE_ANSWER_GRACE_MS, reportUnaddressed } from './desktop-request.js';
+import { AppReadyRegistry } from './app-ready-registry.js';
+import { InterruptGate } from './interrupt-gate.js';
 
 /**
  * The channel payloads live in `emitter-channels.ts` alongside the map that says which
@@ -105,16 +116,26 @@ export interface UserPromptResult {
 export type ClipboardFeedback = Omit<ClipboardResponseEvent, 'type'>;
 
 /**
- * How long an expired dialog is remembered so a click already on its way still counts.
+ * One permission question, as its asker states it.
+ *
+ * An options object rather than the eight positional parameters this used to take: with
+ * `context`, `confirmText`, `cancelText` and `timeoutMs` all optional and all strings-or-
+ * numbers, a caller that wanted only `capabilities` had to count commas and write
+ * `undefined, // default deadline` to get there. Two of the thirteen call sites did.
  */
-const EXPIRED_DIALOG_GRACE_MS = 5 * 60_000;
-
-/**
- * How long an expired app protocol request is remembered, so that a reply arriving after
- * its deadline can be reported as *late* rather than merely unknown. See
- * `resolveAppProtocolResponse`.
- */
-const EXPIRED_APP_REQUEST_GRACE_MS = 5 * 60_000;
+export interface PermissionDialogRequest {
+  title: string;
+  message: string;
+  /** What is being asked for, as `checkPermission`/`savePermission` key it. */
+  toolName: string;
+  /** Narrows the saved decision — the domain, the app id, the path. */
+  context?: string;
+  confirmText?: string;
+  cancelText?: string;
+  timeoutMs?: number;
+  /** Structured rows the dialog can weight individually. See `capabilityLines()`. */
+  capabilities?: CapabilityLine[];
+}
 
 /** What an in-flight app protocol request was, kept so a late reply can be named. */
 interface AppRequestMeta {
@@ -131,80 +152,52 @@ interface AppRequestMeta {
  * the ones listed there, checked at compile time. See that module for why.
  */
 class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
-  private pendingRequests = new PendingStore<RenderingFeedback>();
-  private pendingDialogs = new PendingStore<boolean, PermissionOptions | undefined>();
-  private pendingUserPrompts = new PendingStore<UserPromptResult>();
-  private pendingClipboard = new PendingStore<ClipboardFeedback>();
-  private pendingAppRequests = new PendingStore<AppProtocolResponse, AppRequestMeta>();
+  private renderRequests = new DesktopRequest<RenderingFeedback>({ prefix: 'req' });
+
   /**
-   * App protocol requests whose deadline passed, kept just long enough to recognize a reply
-   * that arrives afterwards. A late reply used to be dropped in silence — which is exactly
-   * why a frontend relay timer firing six seconds past its own deadline stayed invisible
-   * for so long: the agent was told "the app did not respond", and nothing anywhere said
-   * that the app *had* responded, merely too late to matter.
+   * Dialogs keep a grace window because the thing arriving late is not only an answer:
+   * it may carry *"don't ask me again"*, which is a standing instruction about every
+   * future request rather than an answer to this one. Dropping the late click dropped
+   * that too, so a user who ticked "always allow" a moment past the deadline got asked
+   * again, forever, with no sign their choice had gone anywhere.
    */
-  private expiredAppRequests = new Map<string, AppRequestMeta>();
+  private dialogs = new DesktopRequest<boolean, PermissionOptions | undefined>({
+    prefix: 'dialog',
+    graceMs: LATE_ANSWER_GRACE_MS,
+  });
+
+  private userPrompts = new DesktopRequest<UserPromptResult>({ prefix: 'prompt' });
+
+  private clipboardRequests = new DesktopRequest<ClipboardFeedback>({ prefix: 'clip' });
+
   /**
-   * Dialogs whose deadline passed, kept so a click that lands just after expiry is not
-   * thrown away. The window is small (the dialog is off the screen by then) but real —
-   * and the thing being thrown away was the user's *"don't ask me again"*, which is a
-   * durable decision, not an answer to one request. See resolveDialogFeedback.
+   * App requests keep a grace window so a late reply can be reported as *late* rather
+   * than merely unknown. A silent drop here is exactly why a frontend relay timer firing
+   * six seconds past its own deadline stayed invisible for so long: the agent was told
+   * "the app did not respond", and nothing anywhere said that the app *had* responded,
+   * merely too late to matter.
    */
-  private expiredDialogs = new Map<
-    string,
-    { permissionOptions?: PermissionOptions; expiredAt: number }
-  >();
-  /**
-   * Which iframes have registered with the App Protocol — per session, per window key.
-   *
-   * The window key ("0/ai-chat") names a window on a monitor, and *every* session has a
-   * monitor 0. Keyed by that alone (as this was) the set is a claim about the process, not
-   * about anyone's browser: the first session to open an app made that key ready forever,
-   * so the next session's `waitForAppReady` returned true for an iframe that had never
-   * spoken, `requireAppReady` stopped being a wait, and the first command went out to an
-   * iframe not yet listening — reaching the agent as "App did not respond".
-   *
-   * So the session is in the key, and the whole entry is dropped when the session goes
-   * (`clearPendingForSession`) or the window closes (`forgetAppReady`). Nothing ever left
-   * the old set, either: a desktop open for a day accumulated one entry per window it had
-   * ever shown.
-   */
-  private readyWindows = new Map<string, Set<string>>();
-  /**
-   * Agents whose turn the user stopped, by instance id.
-   *
-   * Interrupting an agent stops the agent; it does not stop the tool calls it
-   * already dispatched. Those run to completion on the MCP server and emit
-   * their actions through `emitAction`, which knows nothing about turns — so a
-   * window created a beat before the stop still opened after it, and the user
-   * who pressed stop watched the screen keep changing. An id lands here on
-   * interrupt and leaves on the agent's next turn or its disposal
-   * (`AgentSession.interrupt` / `handleMessage` / `cleanup`), so the block
-   * covers exactly the tail of the stopped turn.
-   */
-  private interruptedAgents = new Set<string>();
-  private requestCounter = 0;
+  private appRequests = new DesktopRequest<AppProtocolResponse, AppRequestMeta>({
+    prefix: 'req',
+    graceMs: LATE_ANSWER_GRACE_MS,
+  });
+
+  /** Which iframes are listening right now, per session. See {@link AppReadyRegistry}. */
+  private appReady = new AppReadyRegistry();
+
+  /** Whose stopped turn is still emitting. See {@link InterruptGate}. */
+  private interrupts = new InterruptGate();
+
   private currentMonitorId: string | undefined;
 
   /** This agent's turn was stopped: drop the actions its in-flight tools still emit. */
   markInterrupted(agentId: string): void {
-    this.interruptedAgents.add(agentId);
+    this.interrupts.mark(agentId);
   }
 
   /** This agent is running again (or gone): stop dropping its actions. */
   clearInterrupted(agentId: string): void {
-    this.interruptedAgents.delete(agentId);
-  }
-
-  /**
-   * Whether an action from this emitter should be dropped as post-stop debris.
-   *
-   * Only actions attributable to an agent are ever dropped. An action with no
-   * agent in context comes from an iframe verb call or an HTTP route — the user
-   * clicking something — and a stopped agent is no reason to ignore the user.
-   */
-  private isInterrupted(agentId: string | undefined): boolean {
-    return !!agentId && this.interruptedAgents.has(agentId);
+    this.interrupts.clear(agentId);
   }
 
   /**
@@ -220,13 +213,6 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    */
   clearCurrentMonitor(): void {
     this.currentMonitorId = undefined;
-  }
-
-  /**
-   * Generate a unique request ID.
-   */
-  private generateRequestId(): string {
-    return `req-${Date.now()}-${++this.requestCounter}`;
   }
 
   /**
@@ -309,22 +295,6 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   }
 
   /**
-   * Say, once and loudly, that an action could not be addressed.
-   *
-   * Dropping is deliberate: broadcasting to an arbitrary session puts a window on a
-   * stranger's desktop, which is worse than not opening it. Dropping *silently* would be
-   * worse than both, hence the error — the message names the action type because that is
-   * what identifies the call site that needs a session threaded through it.
-   */
-  private reportUnaddressed(what: string): void {
-    console.error(
-      `[ActionEmitter] Dropped ${what}: no session in context and none passed. ` +
-        'Frontend-directed emits must run inside an agent turn or an iframe verb call, ' +
-        'or name their session explicitly.',
-    );
-  }
-
-  /**
    * Emit an OS Action to the session it belongs to.
    *
    * `sessionId` stays optional in the signature because almost every caller runs inside an
@@ -341,11 +311,11 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   emitAction(action: OSAction, sessionId?: string, agentId?: string, monitorId?: string): void {
     const sid = this.resolveSessionId(sessionId);
     if (!sid) {
-      this.reportUnaddressed(`action ${action.type}`);
+      reportUnaddressed(`action ${action.type}`);
       return;
     }
     const aid = this.resolveAgentId(agentId);
-    if (this.isInterrupted(aid)) {
+    if (this.interrupts.blocks(aid)) {
       console.log(`[ActionEmitter] Dropping ${action.type} from interrupted agent ${aid}`);
       return;
     }
@@ -365,7 +335,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * knows which: a lock veto that never arrives means *proceed*, an iframe that never
    * reports means *do not tell the agent it rendered*.
    */
-  async emitActionWithFeedback(
+  emitActionWithFeedback(
     action: OSAction,
     timeoutMs?: number,
     sessionId?: string,
@@ -378,41 +348,30 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     monitorId?: string,
   ): Promise<PendingOutcome<RenderingFeedback>> {
     const currentSessionId = this.resolveSessionId(sessionId);
-    if (!currentSessionId) {
-      // Settle now rather than creating a pending entry nothing can answer. A caller
-      // that waits out a full deadline for an action that was never delivered reads the
-      // silence as "the frontend declined", which is a different fact entirely.
-      this.reportUnaddressed(`action ${action.type} (awaiting feedback)`);
-      return { ok: false, reason: 'cancelled' };
-    }
-
-    const requestId = this.generateRequestId();
-    // Get current agent ID from context (with Codex fallback) and include in action
+    // Get current agent ID from context and include in action
     const agentId = this.resolveAgentId();
-    if (this.isInterrupted(agentId)) {
-      // Same drop as `emitAction`, settled the way an undelivered action is settled
-      // above: `cancelled` says the action never reached a screen, which is exactly
-      // what happened, and is the one answer that cannot be read as a refusal.
+    if (currentSessionId && this.interrupts.blocks(agentId)) {
+      // Same drop as `emitAction`, settled the way an undelivered action is settled:
+      // `cancelled` says the action never reached a screen, which is exactly what
+      // happened, and is the one answer that cannot be read as a refusal.
       console.log(`[ActionEmitter] Dropping ${action.type} from interrupted agent ${agentId}`);
-      return { ok: false, reason: 'cancelled' };
+      return Promise.resolve({ ok: false, reason: 'cancelled' });
     }
     const actionWithAgent = agentId ? { ...action, agentId } : action;
 
-    const feedbackPromise = this.pendingRequests.create(requestId, {
+    return this.renderRequests.ask({
+      sessionId: currentSessionId,
       timeoutMs: clampDeadline(timeoutMs ?? deadlines.renderFeedbackMs),
-      sessionId: currentSessionId,
+      what: `action ${action.type} (awaiting feedback)`,
+      send: (requestId, sid) =>
+        this.emit('action', {
+          action: actionWithAgent,
+          requestId,
+          sessionId: sid,
+          agentId,
+          monitorId: monitorId ?? this.monitorForAction(action, sid),
+        }),
     });
-
-    // Emit action with request ID, agentId from context, and monitorId
-    this.emit('action', {
-      action: actionWithAgent,
-      requestId,
-      sessionId: currentSessionId,
-      agentId,
-      monitorId: monitorId ?? this.monitorForAction(action, currentSessionId),
-    });
-
-    return feedbackPromise;
   }
 
   /**
@@ -420,7 +379,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * Called by the session when it receives rendering feedback from frontend.
    */
   resolveFeedback(feedback: RenderingFeedback): boolean {
-    return this.pendingRequests.resolve(feedback.requestId, feedback).resolved;
+    return this.renderRequests.resolve(feedback.requestId, feedback).resolved;
   }
 
   /**
@@ -437,7 +396,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       // There is nothing to fall back to. This used to re-emit on `'action'`, which
       // reached whichever sessions happened to be listening — and a dialog being taken
       // off *someone's* screen is not a partial success.
-      this.reportUnaddressed(`session action ${action.type}`);
+      reportUnaddressed(`session action ${action.type}`);
       return;
     }
     this.emit('session-action', {
@@ -446,27 +405,14 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     });
   }
 
-  /** Drop dialogs that expired long enough ago that no click can still be in flight. */
-  private pruneExpiredDialogs(): void {
-    const cutoff = Date.now() - EXPIRED_DIALOG_GRACE_MS;
-    for (const [id, entry] of this.expiredDialogs) {
-      if (entry.expiredAt < cutoff) this.expiredDialogs.delete(id);
-    }
-  }
-
   /**
-   * A dialog's deadline passed: take it off the screen and remember that it was asked.
+   * A dialog's deadline passed: take it off the screen.
    *
    * The tool that asked has already been told "denied" by then. Leaving the dialog up
-   * leaves the user a live-looking question wired to nothing.
+   * leaves the user a live-looking question wired to nothing. Remembering that it was
+   * asked is the store's job (see the grace window on {@link dialogs}).
    */
-  private expireDialog(
-    dialogId: string,
-    sessionId: string | undefined,
-    permissionOptions: PermissionOptions | undefined,
-  ): void {
-    this.pruneExpiredDialogs();
-    this.expiredDialogs.set(dialogId, { permissionOptions, expiredAt: Date.now() });
+  private closeExpiredDialog(dialogId: string, sessionId: string | undefined): void {
     const close: DialogCloseAction = { type: 'dialog.close', id: dialogId, reason: 'timeout' };
     this.emitSessionAction(sessionId, close as OSAction);
   }
@@ -485,39 +431,30 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     timeoutMs?: number,
   ): Promise<boolean> {
     const agentId = getAgentId();
-    const currentSessionId = getSessionId();
-    if (!currentSessionId) {
-      // A dialog nobody can be shown cannot be answered, and an unanswered dialog is a
-      // denial — so this is the same `false` the deadline would have produced, minus the
-      // wait, plus a line saying why.
-      this.reportUnaddressed(`confirm dialog "${title}"`);
-      return false;
-    }
-    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
+    const currentSessionId = this.resolveSessionId();
 
-    const dialogPromise = this.pendingDialogs.create(dialogId, {
+    // A dialog nobody can be shown cannot be answered, and an unanswered dialog is a
+    // denial — so a missing session yields the same `false` the deadline would have
+    // produced, minus the wait, plus a line saying why.
+    const outcome = await this.dialogs.ask({
+      sessionId: currentSessionId,
       timeoutMs: clampDeadline(timeoutMs ?? deadlines.dialogMs),
-      sessionId: currentSessionId,
+      what: `confirm dialog "${title}"`,
       meta: undefined,
-      onExpire: (id) => this.expireDialog(id, currentSessionId, undefined),
+      onExpire: (id) => this.closeExpiredDialog(id, currentSessionId),
+      send: (dialogId, sid) => {
+        const action: DialogConfirmAction = {
+          type: 'dialog.confirm',
+          id: dialogId,
+          title,
+          message,
+          confirmText,
+          cancelText,
+        };
+        this.emit('action', { action: action as OSAction, sessionId: sid, agentId });
+      },
     });
 
-    const action: DialogConfirmAction = {
-      type: 'dialog.confirm',
-      id: dialogId,
-      title,
-      message,
-      confirmText,
-      cancelText,
-    };
-
-    this.emit('action', {
-      action: action as OSAction,
-      sessionId: currentSessionId,
-      agentId,
-    });
-
-    const outcome = await dialogPromise;
     return outcome.ok ? outcome.value : false;
   }
 
@@ -527,32 +464,13 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * Resolves the session ID from the current agent context and delegates
    * to showPermissionDialogToSession() for delivery via LiveSession.broadcast().
    */
-  async showPermissionDialog(
-    title: string,
-    message: string,
-    toolName: string,
-    context?: string,
-    confirmText: string = 'Allow',
-    cancelText: string = 'Deny',
-    timeoutMs?: number,
-    capabilities?: CapabilityLine[],
-  ): Promise<boolean> {
+  async showPermissionDialog(request: PermissionDialogRequest): Promise<boolean> {
     const sessionId = getSessionId();
     if (!sessionId) {
       console.warn('[ActionEmitter] showPermissionDialog called without agent context');
       return false;
     }
-    return this.showPermissionDialogToSession(
-      sessionId,
-      title,
-      message,
-      toolName,
-      context,
-      confirmText,
-      cancelText,
-      timeoutMs,
-      capabilities,
-    );
+    return this.showPermissionDialogToSession(sessionId, request);
   }
 
   /**
@@ -566,13 +484,10 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * again, forever, with no sign that their choice had gone anywhere.
    */
   async resolveDialogFeedback(feedback: DialogFeedback): Promise<boolean> {
-    const { resolved, meta } = this.pendingDialogs.resolve(feedback.dialogId, feedback.confirmed);
+    const { resolved, meta } = this.dialogs.resolve(feedback.dialogId, feedback.confirmed);
+    const permissionOptions = resolved ? meta : this.dialogs.takeLate(feedback.dialogId);
 
-    const expired = resolved ? undefined : this.expiredDialogs.get(feedback.dialogId);
-    if (expired) this.expiredDialogs.delete(feedback.dialogId);
-    const permissionOptions = resolved ? meta : expired?.permissionOptions;
-
-    // Save permission if user chose to remember (business logic stays here, not in PendingStore)
+    // Save permission if user chose to remember (business logic stays here, not in the store)
     if (permissionOptions && feedback.rememberChoice) {
       const { toolName, context } = permissionOptions;
       let decision: PermissionDecision = 'ask';
@@ -608,50 +523,44 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     timeoutMs?: number;
   }): Promise<UserPromptResult> {
     const agentId = getAgentId();
-    const currentSessionId = getSessionId();
-    if (!currentSessionId) {
-      // Nobody can be asked, so report it as nobody having answered — `dismissed` without
-      // `timedOut`, which is the shape a caller already knows how to read.
-      this.reportUnaddressed(`user prompt "${opts.title}"`);
-      return { dismissed: true };
-    }
-    const promptId = `prompt-${Date.now()}-${++this.requestCounter}`;
+    const currentSessionId = this.resolveSessionId();
     // The old default was 300s — 45s past the transport's idle timeout, so the request
     // this prompt is holding open died before the prompt could ever report expiring.
     const timeoutMs = clampDeadline(opts.timeoutMs ?? deadlines.userPromptMs);
 
-    const promptPromise = this.pendingUserPrompts.create(promptId, {
-      timeoutMs,
+    const outcome = await this.userPrompts.ask({
       sessionId: currentSessionId,
+      timeoutMs,
+      what: `user prompt "${opts.title}"`,
       onExpire: (id) =>
         this.emitSessionAction(currentSessionId, {
           type: 'user.prompt.dismiss',
           id,
         } as UserPromptDismissAction as OSAction),
-    });
-
-    const action: UserPromptShowAction = {
-      type: 'user.prompt.show',
-      id: promptId,
-      title: opts.title,
-      message: opts.message,
-      options: opts.options,
-      multiSelect: opts.multiSelect,
-      inputField: opts.inputField,
-      allowDismiss: opts.allowDismiss ?? true,
-    };
-
-    // Deliver via dedicated event -> LiveSession.broadcast() (session-scoped, no monitor filter)
-    this.emit('user-prompt', {
-      sessionId: currentSessionId,
-      event: {
-        type: ServerEventType.ACTIONS,
-        actions: [action],
-        agentId: agentId ?? 'system',
+      // Deliver via dedicated event -> LiveSession.broadcast() (session-scoped, no
+      // monitor filter)
+      send: (promptId, sid) => {
+        const action: UserPromptShowAction = {
+          type: 'user.prompt.show',
+          id: promptId,
+          title: opts.title,
+          message: opts.message,
+          options: opts.options,
+          multiSelect: opts.multiSelect,
+          inputField: opts.inputField,
+          allowDismiss: opts.allowDismiss ?? true,
+        };
+        this.emit('user-prompt', {
+          sessionId: sid,
+          event: {
+            type: ServerEventType.ACTIONS,
+            actions: [action],
+            agentId: agentId ?? 'system',
+          },
+        });
       },
     });
 
-    const outcome = await promptPromise;
     if (outcome.ok) return outcome.value;
     // Nobody answered. Say that, rather than reporting it as the user declining.
     return { dismissed: true, timedOut: outcome.reason === 'timeout' };
@@ -661,7 +570,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * Resolve a pending user prompt with feedback from the frontend.
    */
   resolveUserPromptFeedback(feedback: UserPromptFeedback): boolean {
-    return this.pendingUserPrompts.resolve(feedback.promptId, {
+    return this.userPrompts.resolve(feedback.promptId, {
       selectedValues: feedback.selectedValues,
       text: feedback.text,
       dismissed: feedback.dismissed ?? false,
@@ -685,30 +594,20 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     build: (id: string) => UserClipboardAction,
     timeoutMs?: number,
   ): Promise<PendingOutcome<ClipboardFeedback>> {
-    const sessionId = this.resolveSessionId();
-    if (!sessionId) {
-      // No desktop to ask, so settle now rather than parking on a wait nothing can answer.
-      // `cancelled` (not `timeout`) — the request never went out at all.
-      this.reportUnaddressed('clipboard request');
-      return Promise.resolve({ ok: false, reason: 'cancelled' } as const);
-    }
-
-    const id = `clip-${Date.now()}-${++this.requestCounter}`;
-    const pending = this.pendingClipboard.create(id, {
+    return this.clipboardRequests.ask({
+      sessionId: this.resolveSessionId(),
       timeoutMs: clampDeadline(timeoutMs ?? deadlines.clipboardMs),
-      sessionId,
+      what: 'clipboard request',
+      send: (id, sid) =>
+        this.emit('user-clipboard', {
+          sessionId: sid,
+          event: {
+            type: ServerEventType.ACTIONS,
+            actions: [build(id) as OSAction],
+            agentId: getAgentId() ?? 'system',
+          },
+        }),
     });
-
-    this.emit('user-clipboard', {
-      sessionId,
-      event: {
-        type: ServerEventType.ACTIONS,
-        actions: [build(id) as OSAction],
-        agentId: getAgentId() ?? 'system',
-      },
-    });
-
-    return pending;
   }
 
   /** Read the system clipboard, with every ceiling applied by the desktop before sending. */
@@ -742,20 +641,18 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
 
   /** Resolve a pending clipboard request with the desktop's answer. */
   resolveClipboardFeedback(feedback: ClipboardFeedback): boolean {
-    return this.pendingClipboard.resolve(feedback.requestId, feedback).resolved;
+    return this.clipboardRequests.resolve(feedback.requestId, feedback).resolved;
   }
 
   /**
    * Notify that an iframe app in `sessionId` has registered with the App Protocol.
    * Resolves any pending waitForAppReady() calls for that session's window.
+   *
+   * The registry resolves its own waiters; the `'app-ready'` emit is the public
+   * announcement of the same fact, for anything that subscribes to the channel.
    */
   notifyAppReady(sessionId: string, windowId: string): void {
-    let windows = this.readyWindows.get(sessionId);
-    if (!windows) {
-      windows = new Set();
-      this.readyWindows.set(sessionId, windows);
-    }
-    windows.add(windowId);
+    this.appReady.notify(sessionId, windowId);
     this.emit('app-ready', { sessionId, windowId } as AppReadyEvent);
   }
 
@@ -763,120 +660,59 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * Check if an app has already signaled readiness *in this session*.
    */
   isAppReady(sessionId: string, windowId: string): boolean {
-    return this.readyWindows.get(sessionId)?.has(windowId) ?? false;
+    return this.appReady.isReady(sessionId, windowId);
   }
 
-  /**
-   * Forget one window's registration — it closed.
-   *
-   * A window key is reused: close "ai-chat" and open it again and the key is the same, but
-   * the iframe behind it is a new document that has not registered. A registration that
-   * outlived its window would tell the next one's first command that the app is already
-   * listening. This is the same defect as the cross-session one, at a smaller radius.
-   */
+  /** Forget one window's registration — it closed. See {@link AppReadyRegistry.forget}. */
   forgetAppReady(sessionId: string, windowId: string): void {
-    const windows = this.readyWindows.get(sessionId);
-    if (!windows) return;
-    windows.delete(windowId);
-    if (windows.size === 0) this.readyWindows.delete(sessionId);
+    this.appReady.forget(sessionId, windowId);
   }
 
   /**
    * Wait for an iframe app to register with the App Protocol, in the caller's session.
-   * Resolves true if that session's app is already ready or becomes ready within the timeout.
-   *
-   * `sessionId` is required and not defaulted: a wait that cannot name whose iframe it is
-   * waiting for is the bug. An undefined session matches no registration (they all carry
-   * one), so it waits out its deadline rather than borrowing another session's answer —
-   * but it is also unreachable in practice, since the window registry the caller checked
-   * before waiting was itself resolved from a session.
+   * See {@link AppReadyRegistry.wait} for why `sessionId` is required and not defaulted.
    */
   waitForAppReady(
     sessionId: string | undefined,
     windowId: string,
     timeoutMs?: number,
   ): Promise<boolean> {
-    if (sessionId !== undefined && this.isAppReady(sessionId, windowId)) {
-      return Promise.resolve(true);
-    }
-
-    return new Promise((resolve) => {
-      const timeout = setTimeout(() => {
-        this.off('app-ready', handler);
-        resolve(false);
-      }, timeoutMs ?? deadlines.appReadyMs);
-
-      const handler = (ready: AppReadyEvent) => {
-        if (ready.sessionId === sessionId && ready.windowId === windowId) {
-          clearTimeout(timeout);
-          this.off('app-ready', handler);
-          resolve(true);
-        }
-      };
-
-      this.on('app-ready', handler);
-    });
+    return this.appReady.wait(sessionId, windowId, timeoutMs);
   }
 
   /**
    * Send an app protocol request to an iframe app and wait for its response.
    * The outcome is `ok: false` if the app does not answer within the deadline.
+   *
+   * Without a session there is no iframe to ask, so that settles as `cancelled` — the
+   * caller's "the app is unreachable" branch — rather than as a deadline the frontend was
+   * never given a chance to meet.
    */
-  async emitAppProtocolRequest(
+  emitAppProtocolRequest(
     windowId: string,
     request: AppProtocolRequest,
     timeoutMs?: number,
     sessionId?: string,
   ): Promise<PendingOutcome<AppProtocolResponse>> {
-    const currentSessionId = this.resolveSessionId(sessionId);
-    if (!currentSessionId) {
-      // The pending entry was always created against the caller's session; only the
-      // *request* went out unaddressed. Without a session there is no iframe to ask, so
-      // this is `cancelled` — the caller's "the app is unreachable" branch — rather than
-      // a deadline the frontend was never given a chance to meet.
-      this.reportUnaddressed(`app protocol ${request.kind} for ${windowId}`);
-      return { ok: false, reason: 'cancelled' };
-    }
-
-    const requestId = this.generateRequestId();
     const deadlineMs = clampDeadline(timeoutMs ?? deadlines.appQueryMs);
-    const meta: AppRequestMeta = {
-      windowId,
-      kind: request.kind,
-      startedAt: Date.now(),
-      timeoutMs: deadlineMs,
-    };
 
-    const responsePromise = this.pendingAppRequests.create(requestId, {
+    return this.appRequests.ask({
+      sessionId: this.resolveSessionId(sessionId),
       timeoutMs: deadlineMs,
-      sessionId: currentSessionId,
-      meta,
-      onExpire: (id, expiredMeta) => {
-        this.pruneExpiredAppRequests();
-        this.expiredAppRequests.set(id, expiredMeta);
-      },
+      what: `app protocol ${request.kind} for ${windowId}`,
+      meta: { windowId, kind: request.kind, startedAt: Date.now(), timeoutMs: deadlineMs },
+      // Pass the deadline to the frontend too — it relays the postMessage leg and needs
+      // to know how long we are prepared to wait. It no longer times the leg itself:
+      // this deadline is the only one.
+      send: (requestId, sid) =>
+        this.emit('app-protocol', {
+          sessionId: sid,
+          requestId,
+          windowId,
+          request,
+          timeoutMs: deadlineMs,
+        }),
     });
-
-    // Pass the deadline to the frontend too — it relays the postMessage leg and needs to
-    // know how long we are prepared to wait. It no longer times the leg itself: this
-    // deadline is the only one.
-    this.emit('app-protocol', {
-      sessionId: currentSessionId,
-      requestId,
-      windowId,
-      request,
-      timeoutMs: deadlineMs,
-    });
-
-    return responsePromise;
-  }
-
-  /** Forget app requests that expired too long ago for any reply to still be in flight. */
-  private pruneExpiredAppRequests(): void {
-    const cutoff = Date.now() - EXPIRED_APP_REQUEST_GRACE_MS;
-    for (const [id, meta] of this.expiredAppRequests) {
-      if (meta.startedAt + meta.timeoutMs < cutoff) this.expiredAppRequests.delete(id);
-    }
   }
 
   /**
@@ -889,12 +725,11 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * "the app is broken" three layers away.
    */
   resolveAppProtocolResponse(requestId: string, response: AppProtocolResponse): boolean {
-    const { resolved } = this.pendingAppRequests.resolve(requestId, response);
+    const { resolved } = this.appRequests.resolve(requestId, response);
     if (resolved) return true;
 
-    const expired = this.expiredAppRequests.get(requestId);
+    const expired = this.appRequests.takeLate(requestId);
     if (expired) {
-      this.expiredAppRequests.delete(requestId);
       const latency = Date.now() - expired.startedAt;
       console.warn(
         `[AppProtocol] Late reply for ${requestId} (${expired.kind} on ${expired.windowId}): ` +
@@ -913,28 +748,20 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   /**
    * Show a permission dialog targeted at a specific session via BroadcastCenter.
    *
-   * Unlike showPermissionDialog() which broadcasts through the EventEmitter
-   * (reaching all agent sessions), this sends the APPROVAL_REQUEST directly
-   * to a session's WebSocket connections. Used by the /api/fetch proxy route
-   * where there's no agent context.
+   * Unlike showPermissionDialog() which resolves the session from the agent context,
+   * this names it — used by the /api/fetch proxy route and the browser guards, where
+   * there is no agent context to read one from.
    */
   async showPermissionDialogToSession(
     sessionId: string,
-    title: string,
-    message: string,
-    toolName: string,
-    context?: string,
-    confirmText: string = 'Allow',
-    cancelText: string = 'Deny',
-    timeoutMs?: number,
-    capabilities?: CapabilityLine[],
+    request: PermissionDialogRequest,
   ): Promise<boolean> {
+    const { title, message, toolName, context, capabilities } = request;
+
     // Check for saved permission first
     const savedDecision = await checkPermission(toolName, context);
     if (savedDecision === 'allow') return true;
     if (savedDecision === 'deny') return false;
-
-    const dialogId = `dialog-${Date.now()}-${++this.requestCounter}`;
 
     const permissionOptions: PermissionOptions = {
       showRememberChoice: true,
@@ -942,31 +769,31 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       context,
     };
 
-    const dialogPromise = this.pendingDialogs.create(dialogId, {
-      timeoutMs: clampDeadline(timeoutMs ?? deadlines.dialogMs),
+    const outcome = await this.dialogs.ask({
       sessionId,
+      timeoutMs: clampDeadline(request.timeoutMs ?? deadlines.dialogMs),
+      what: `permission dialog "${title}"`,
       meta: permissionOptions,
-      onExpire: (id, meta) => this.expireDialog(id, sessionId, meta),
+      onExpire: (id) => this.closeExpiredDialog(id, sessionId),
+      // Emit through the event system so LiveSession.broadcast() handles delivery and
+      // monitor-scoped routing — the same door 'app-protocol' events go through.
+      send: (dialogId, sid) =>
+        this.emit('approval-request', {
+          sessionId: sid,
+          event: {
+            type: ServerEventType.APPROVAL_REQUEST,
+            dialogId,
+            title,
+            message,
+            confirmText: request.confirmText ?? 'Allow',
+            cancelText: request.cancelText ?? 'Deny',
+            permissionOptions,
+            ...(capabilities?.length ? { capabilities } : {}),
+            agentId: getAgentId() ?? 'system',
+          },
+        }),
     });
 
-    // Emit through the event system so LiveSession.broadcast() handles delivery and
-    // monitor-scoped routing — the same door 'app-protocol' events go through.
-    this.emit('approval-request', {
-      sessionId,
-      event: {
-        type: ServerEventType.APPROVAL_REQUEST,
-        dialogId,
-        title,
-        message,
-        confirmText,
-        cancelText,
-        permissionOptions,
-        ...(capabilities?.length ? { capabilities } : {}),
-        agentId: getAgentId() ?? 'system',
-      },
-    });
-
-    const outcome = await dialogPromise;
     return outcome.ok ? outcome.value : false;
   }
 
@@ -980,12 +807,12 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * session's `waitForAppReady` on behalf of a document that no longer exists.
    */
   clearPendingForSession(sessionId: string): void {
-    this.pendingRequests.clearForSession(sessionId);
-    this.pendingDialogs.clearForSession(sessionId);
-    this.pendingUserPrompts.clearForSession(sessionId);
-    this.pendingClipboard.clearForSession(sessionId);
-    this.pendingAppRequests.clearForSession(sessionId);
-    this.readyWindows.delete(sessionId);
+    this.renderRequests.clearForSession(sessionId);
+    this.dialogs.clearForSession(sessionId);
+    this.userPrompts.clearForSession(sessionId);
+    this.clipboardRequests.clearForSession(sessionId);
+    this.appRequests.clearForSession(sessionId);
+    this.appReady.forgetSession(sessionId);
   }
 
   /**

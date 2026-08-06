@@ -236,15 +236,15 @@ async function ensureContentReadConsent(
 
   // `showPermissionDialogToSession` checks the saved `browser_content_read:{domain}` decision first
   // and, if the user picks "remember", persists it — so a granted domain won't prompt again.
-  const confirmed = await actionEmitter.showPermissionDialogToSession(
-    sessionId,
-    'Allow Reading Page Content',
-    `The agent wants to read the full text of your open tab on "${domain}".\n\n` +
+  const confirmed = await actionEmitter.showPermissionDialogToSession(sessionId, {
+    title: 'Allow Reading Page Content',
+    message:
+      `The agent wants to read the full text of your open tab on "${domain}".\n\n` +
       `This is a real, logged-in page — its content may include private information. ` +
       `Allow the agent to read the page content on "${domain}"?`,
-    'browser_content_read',
-    domain,
-  );
+    toolName: 'browser_content_read',
+    context: domain,
+  });
   if (!confirmed) {
     return { ok: false, error: `User denied reading page content on "${domain}".` };
   }
@@ -287,15 +287,15 @@ async function ensureTabControlConsentForUrl(
     };
   }
 
-  const confirmed = await actionEmitter.showPermissionDialogToSession(
-    sessionId,
-    'Allow Tab Control',
-    `The agent wants to control your open tab on "${domain}".\n\n` +
+  const confirmed = await actionEmitter.showPermissionDialogToSession(sessionId, {
+    title: 'Allow Tab Control',
+    message:
+      `The agent wants to control your open tab on "${domain}".\n\n` +
       `This is a real, logged-in tab in your browser. Allow the agent to ` +
       `click, type, and run scripts on "${domain}"?`,
-    'http_domain',
-    domain,
-  );
+    toolName: 'http_domain',
+    context: domain,
+  });
   if (!confirmed) {
     return { ok: false, error: `User denied tab control for "${domain}".` };
   }

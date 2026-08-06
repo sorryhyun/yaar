@@ -113,14 +113,12 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       }
 
       const reasonText = payload?.reason ? `\n\nReason: ${payload.reason}` : '';
-      const confirmed = await actionEmitter.showPermissionDialog(
-        'Allow Domain Access',
-        `The AI wants to make HTTP requests to "${domain}".${reasonText}\n\nDo you want to allow this domain?`,
-        'http_domain',
-        domain,
-        'Allow',
-        'Deny',
-      );
+      const confirmed = await actionEmitter.showPermissionDialog({
+        title: 'Allow Domain Access',
+        message: `The AI wants to make HTTP requests to "${domain}".${reasonText}\n\nDo you want to allow this domain?`,
+        toolName: 'http_domain',
+        context: domain,
+      });
 
       if (confirmed) {
         const success = await addAllowedDomain(domain);

@@ -115,19 +115,18 @@ export async function installApp(appId: string): Promise<VerbResult> {
         const lead = isUpdate
           ? `The update to "${appId}" additionally requests:`
           : `"${appId}" requests the following:`;
-        const confirmed = await actionEmitter.showPermissionDialog(
-          isUpdate ? 'App Update Permissions' : 'App Permissions',
-          // The message is now the lead sentence alone. The request itself travels as
+        const confirmed = await actionEmitter.showPermissionDialog({
+          title: isUpdate ? 'App Update Permissions' : 'App Permissions',
+          // The message is the lead sentence alone. The request itself travels as
           // structured rows, which is the only way the dialog can demote a raw URI or
           // flag a broad grant — a pre-formatted string can only be one weight.
-          lead,
-          'app_install',
-          appId,
-          isUpdate ? 'Update' : 'Install',
-          'Cancel',
-          undefined, // default deadline
-          capabilityLines(asking),
-        );
+          message: lead,
+          toolName: 'app_install',
+          context: appId,
+          confirmText: isUpdate ? 'Update' : 'Install',
+          cancelText: 'Cancel',
+          capabilities: capabilityLines(asking),
+        });
 
         if (!confirmed) {
           await rm(stagingDir, { recursive: true, force: true }).catch(() => {});

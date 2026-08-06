@@ -206,12 +206,11 @@ const ROWS: WaitRow<unknown>[] = [
     answers: ClientEventType.DIALOG_FEEDBACK,
     what: 'a permission dialog, parked on the user',
     block: (_h, _s, ctx) =>
-      actionEmitter.showPermissionDialogToSession(
-        ctx.sessionId,
-        'Allow this?',
-        'The agent would like to run a tool.',
-        'loopback.test-tool',
-      ),
+      actionEmitter.showPermissionDialogToSession(ctx.sessionId, {
+        title: 'Allow this?',
+        message: 'The agent would like to run a tool.',
+        toolName: 'loopback.test-tool',
+      }),
     witness: (h) => h.client.waitForFrame(ServerEventType.APPROVAL_REQUEST),
     answer: (h, _s, req) =>
       h.client.deliver({

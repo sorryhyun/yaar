@@ -57,16 +57,13 @@ export async function ensureDomainAllowed(
   }
 
   const purpose = options?.purpose ?? `An app wants to make HTTP requests to "${domain}".`;
-  const confirmed = await actionEmitter.showPermissionDialogToSession(
-    sessionId,
-    'Allow Domain Access',
-    `${purpose}\n\nDo you want to allow this domain?`,
-    'http_domain',
-    domain,
-    'Allow',
-    'Deny',
-    options?.timeoutMs,
-  );
+  const confirmed = await actionEmitter.showPermissionDialogToSession(sessionId, {
+    title: 'Allow Domain Access',
+    message: `${purpose}\n\nDo you want to allow this domain?`,
+    toolName: 'http_domain',
+    context: domain,
+    timeoutMs: options?.timeoutMs,
+  });
 
   if (!confirmed) {
     return { reason: 'denied', domain, message: `User denied access to domain "${domain}".` };

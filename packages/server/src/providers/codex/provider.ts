@@ -404,12 +404,12 @@ export class CodexProvider extends BaseTransport {
           ? `${p.reason}\n\n\`${description}\``
           : `Codex wants to run:\n\n\`${description}\``;
 
-        const approved = await actionEmitter.showPermissionDialog(
+        const approved = await actionEmitter.showPermissionDialog({
           title,
           message,
-          'codex_command',
-          p.command ?? undefined,
-        );
+          toolName: 'codex_command',
+          context: p.command ?? undefined,
+        });
         client.respond(id, {
           decision: approved ? 'accept' : 'decline',
         });
@@ -423,12 +423,12 @@ export class CodexProvider extends BaseTransport {
           ? p.reason
           : `Codex wants to modify files${p.grantRoot ? ` under ${p.grantRoot}` : ''}`;
 
-        const approved = await actionEmitter.showPermissionDialog(
+        const approved = await actionEmitter.showPermissionDialog({
           title,
           message,
-          'codex_file_change',
-          p.grantRoot ?? undefined,
-        );
+          toolName: 'codex_file_change',
+          context: p.grantRoot ?? undefined,
+        });
         client.respond(id, {
           decision: approved ? 'accept' : 'decline',
         });

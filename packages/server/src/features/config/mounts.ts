@@ -19,12 +19,12 @@ export async function handleSetMount(content: Record<string, unknown>) {
 
   const { alias, hostPath, readOnly } = result.data;
   const roLabel = readOnly ? ' (read-only)' : '';
-  const confirmed = await actionEmitter.showPermissionDialog(
-    'Mount Directory',
-    `Mount "${hostPath}" as yaar://storage/mounts/${alias}/${roLabel}?`,
-    'storage_mount',
-    hostPath,
-  );
+  const confirmed = await actionEmitter.showPermissionDialog({
+    title: 'Mount Directory',
+    message: `Mount "${hostPath}" as yaar://storage/mounts/${alias}/${roLabel}?`,
+    toolName: 'storage_mount',
+    context: hostPath,
+  });
   if (!confirmed) {
     return error('User denied the mount request.');
   }

@@ -131,13 +131,12 @@ export async function handleOpen(
         `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
       );
     }
-    const confirmed = await actionEmitter.showPermissionDialogToSession(
-      sessionId,
-      'Allow Domain Access',
-      `The browser wants to navigate to "${domain}".\n\nDo you want to allow this domain?`,
-      'http_domain',
-      domain,
-    );
+    const confirmed = await actionEmitter.showPermissionDialogToSession(sessionId, {
+      title: 'Allow Domain Access',
+      message: `The browser wants to navigate to "${domain}".\n\nDo you want to allow this domain?`,
+      toolName: 'http_domain',
+      context: domain,
+    });
     if (!confirmed) {
       return error(`User denied access to domain "${domain}".`);
     }
@@ -285,13 +284,12 @@ export async function handleNavigate(
           `Domain "${domain}" not allowed. Use invoke('yaar://config/domains', { domain: "${domain}" }) first.`,
         );
       }
-      const confirmed = await actionEmitter.showPermissionDialogToSession(
-        sessionId,
-        'Allow Domain Access',
-        `The browser wants to navigate to "${domain}".\n\nDo you want to allow this domain?`,
-        'http_domain',
-        domain,
-      );
+      const confirmed = await actionEmitter.showPermissionDialogToSession(sessionId, {
+        title: 'Allow Domain Access',
+        message: `The browser wants to navigate to "${domain}".\n\nDo you want to allow this domain?`,
+        toolName: 'http_domain',
+        context: domain,
+      });
       if (!confirmed) {
         return error(`User denied access to domain "${domain}".`);
       }

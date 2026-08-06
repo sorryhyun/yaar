@@ -230,16 +230,12 @@ describe('F-17 — an expired dialog leaves the screen', () => {
   });
 
   it('takes the dialog off the screen when the server stops waiting for it', async () => {
-    const answered = actionEmitter.showPermissionDialogToSession(
-      'sess-dialog' as string,
-      'Allow?',
-      'Something wants in',
-      'some_tool',
-      undefined,
-      'Allow',
-      'Deny',
-      10,
-    );
+    const answered = actionEmitter.showPermissionDialogToSession('sess-dialog' as string, {
+      title: 'Allow?',
+      message: 'Something wants in',
+      toolName: 'some_tool',
+      timeoutMs: 10,
+    });
 
     // Unanswered means denied, and the user is not left looking at a live dialog for a
     // request that has already been refused.
@@ -266,16 +262,12 @@ describe('F-17 — an expired dialog leaves the screen', () => {
     bc.subscribe('conn-wire', fakeSocket(received), sessionId);
 
     try {
-      await actionEmitter.showPermissionDialogToSession(
-        sessionId,
-        'Allow?',
-        'Something wants in',
-        'wire_tool',
-        undefined,
-        'Allow',
-        'Deny',
-        10,
-      );
+      await actionEmitter.showPermissionDialogToSession(sessionId, {
+        title: 'Allow?',
+        message: 'Something wants in',
+        toolName: 'wire_tool',
+        timeoutMs: 10,
+      });
       await settle(5);
 
       const delivered = received
@@ -342,16 +334,12 @@ describe('F-17 — an expired dialog leaves the screen', () => {
     actionEmitter.on('approval-request', onApproval);
     const stopClose = collectSessionActions(askedAgain);
     try {
-      const allowed = await actionEmitter.showPermissionDialogToSession(
-        'sess-late',
-        'Allow?',
-        'Something wants in again',
-        'late_tool',
-        undefined,
-        'Allow',
-        'Deny',
-        10,
-      );
+      const allowed = await actionEmitter.showPermissionDialogToSession('sess-late', {
+        title: 'Allow?',
+        message: 'Something wants in again',
+        toolName: 'late_tool',
+        timeoutMs: 10,
+      });
       expect(allowed).toBe(false);
       expect(dialogShown).toBe(false);
     } finally {
@@ -373,16 +361,12 @@ describe('F-17 — an expired dialog leaves the screen', () => {
     const stopClose = collectSessionActions(shown);
 
     try {
-      await actionEmitter.showPermissionDialogToSession(
-        sessionId,
-        'Allow?',
-        'Something wants in',
+      await actionEmitter.showPermissionDialogToSession(sessionId, {
+        title: 'Allow?',
+        message: 'Something wants in',
         toolName,
-        undefined,
-        'Allow',
-        'Deny',
-        10,
-      );
+        timeoutMs: 10,
+      });
       await settle(5);
       expect(shown.some((a) => a.type === 'dialog.close')).toBe(true);
       return seen[0]!;

@@ -645,6 +645,16 @@ export class WindowStateRegistry {
   /**
    * Record that a window's iframe app has registered, and with what replay policy.
    *
+   * **`appProtocol` means "has ever registered", not "is listening now."** It is durable
+   * window metadata: it survives an iframe remount, and nothing clears it short of the
+   * window closing. That is what {@link isAppProtocolWindow} wants — *is this window an
+   * app at all* — and it is deliberately **not** what a caller about to send a command
+   * wants. Whether a document is listening *right now* is `AppReadyRegistry`
+   * (`actionEmitter.isAppReady` / `waitForAppReady`), which is cleared on window close
+   * and on session teardown because a document that has gone away cannot answer.
+   * Reading this flag as readiness is how a command goes out to an iframe that has not
+   * come up yet and comes back to the agent as "App did not respond".
+   *
    * `noReplay` is the set of command names the registration that *just came up* declared
    * `replay: 'never'` for, and it **replaces** whatever the previous registration said —
    * an app that dropped the opt-out in a rebuild must not keep being filtered by a policy

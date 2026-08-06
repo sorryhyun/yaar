@@ -37,12 +37,12 @@ export async function handleSetHook(content: Record<string, unknown>) {
 
   const { event, label, filter } = result.data;
 
-  const approved = await actionEmitter.showPermissionDialog(
-    'Add Hook',
-    `The AI wants to add a hook: **${label}** (${event}). Allow?`,
-    'config_hook',
-    event,
-  );
+  const approved = await actionEmitter.showPermissionDialog({
+    title: 'Add Hook',
+    message: `The AI wants to add a hook: **${label}** (${event}). Allow?`,
+    toolName: 'config_hook',
+    context: event,
+  });
 
   if (!approved) {
     return error('Permission denied — hook was not added.');

@@ -152,12 +152,11 @@ const ROWS: DeadRow[] = [
   {
     what: 'a permission dialog nobody clicks',
     block: (_h, _s, ctx) =>
-      actionEmitter.showPermissionDialogToSession(
-        ctx.sessionId,
-        'Allow this?',
-        'The agent would like to run a tool.',
-        'loopback.dead-client-tool',
-      ),
+      actionEmitter.showPermissionDialogToSession(ctx.sessionId, {
+        title: 'Allow this?',
+        message: 'The agent would like to run a tool.',
+        toolName: 'loopback.dead-client-tool',
+      }),
     witness: (h) => h.client.waitForFrame(ServerEventType.APPROVAL_REQUEST),
     starved: (tool) => {
       // Deny by default. The safe direction, and an explicit one: nobody said yes.
