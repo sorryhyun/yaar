@@ -115,93 +115,47 @@ the code and its tests are the record. Seven notes worth carrying forward:
 ## Phase 4 — agent pool system (deep lifecycle audit, 2026-08-06)
 
 A dedicated trace of create → run → interrupt → dispose per tier (session, monitor, app,
-sub-agent, ephemeral), limiter accounting, warm pool, and interrupt propagation. The limiter
-bugs are the most urgent thing left in this document — process-global, permanent for the
-life of the process, and invisible from `/api/agents/stats`. They land here rather than
-first only because the fixes share one structural move (4.1).
+sub-agent, ephemeral), limiter accounting, warm pool, and interrupt propagation.
 
-### 4.1 — Limiter accounting: route everything through the dispose chokepoint
+**4.1, 4.2, 4.3, 4.4 and 4.6 landed 2026-08-06, ahead of Phase 3** — the bug fixes are
+worth more than the refactor, and they barely overlap: Phase 3's three `agent-pool.ts`
+seams (sub-agent tier, roster, spawn reservations) leave the core these fixes edit
+(`disposeAgent`, `createAgentCore`, `cleanup`) exactly where it is. Their code and
+regression tests are the record. Six notes worth carrying forward:
 
-The global `MAX_AGENTS` count can drift in **both directions**, permanently, per process:
+- **`disposeAgent` is now idempotent per agent id**, decided by the synchronous
+  `agentIds` delete before its first await, and that is what makes the fire-and-forget
+  disposers safe. `cleanup()` routes through it, clears its collections *before* the
+  first dispose await (`disposeAgent`'s contract is that the caller already removed the
+  agent), and **never throws** — the caller has no recovery to offer and stopping early
+  is the bug. `disposeEphemeral` needed no separate guard in the end; the id guard covers
+  every path.
+- **`createAgentCore` releases on every non-success exit**, and
+  `createWithFreshProvider`'s provider compensation moved into a `finally` — a *throw*
+  used to skip the `if (!agent) dispose()` shape entirely, leaving the child process too.
+- **`instanceId` is `genId(\`agent-${counter}\`)`** — the counter stays for readable
+  logs, `genId` supplies the identity. The stale rationale in `disposeAgent`'s
+  layout-delta comment ("a later agent could be handed a delta computed against a dead
+  one's") went with it: that reuse is now impossible.
+- **The provider switch refuses while a turn is in flight, then resets every session.**
+  Each half covers what the other cannot — a running agent is the only thing that can
+  observe its provider dying mid-stream, and idle agents still hold clients to the
+  stopped `AppServer`. The refusal lands *before* anything is persisted. `applySettings`
+  is the one implementation; `PATCH /api/settings` is now a thin door onto it and gained
+  the validation and `desktop.updateSettings` broadcast it never had.
+- **The idle reaper is one pool-level sweep, not a timer per agent** — `lastUsed` is
+  already stamped on every turn, so it needs no new call sites and cannot leave a timer
+  on a disposed agent. `PooledAgent.idleTimer` was deleted rather than wired up. Two
+  decisions are load-bearing and documented at the sweep: a busy agent is *refreshed*
+  rather than skipped (`lastUsed` is stamped at turn start, so a long turn would be
+  reapable the instant it ended), and `getOrCreateAppAgent` touches the agent on the
+  reuse path (between hand-out and `runAgentTurn` it is neither busy nor recently used).
+  `APP_AGENT_IDLE_MINUTES` (default 15, `0` disables).
+- **`SessionHub` gained `all()` and `drain()`.** `drain()` is bounded at 2s inside
+  shutdown's 5s force-kill deadline: a hung provider must not be what stops the log flush
+  of every *other* session.
 
-- **Up (slots leak):** `AgentPool.cleanup()` (`agent-pool.ts:1272-1275`) runs
-  `await agent.session.cleanup(); limiter.release()` per agent with **no `try/finally`** —
-  the first throwing agent leaks its slot and every subsequent agent's, `ContextPool.teardown`
-  swallows the throw (`context-pool.ts:680-684`), collections never clear, hub agent-ids stay
-  registered, providers stay alive. **A passing test certifies this bug**:
-  `tests/agent-cleanup.test.ts:245-252` asserts `mockRelease` is called 0 times under a
-  comment that literally reads `// BUG: …`.
-- **Down (over-admission):** two fire-and-forget dispose paths
-  (`monitor-registry.ts:127` unawaited `removeMonitorAgent`;
-  `window-event-coordinator.ts:164` `.catch()`-ed `disposeSubAgentsForApp`) can dispose an
-  agent already snapshotted by `cleanup()`'s `allAgents()` — `disposeAgent` releases, then
-  cleanup Phase 2 releases the same agent again; `AgentLimiter.release()` only guards at
-  zero (`limiter.ts:111`), so the count under-runs while agents are live and the process
-  admits past `MAX_AGENTS`.
-- **Exception door open at create:** `createAgentCore` (`agent-pool.ts:487-526`) does
-  `tryAcquire()` then `await session.initialize(...)` with no try/finally — a throw (e.g. fs
-  `mkdir` in `createSession`) holds the slot **and** the provider process forever, skipping
-  every caller's `if (provider) dispose()` compensation. The spawn reservations closed the
-  concurrency door (`:291-305`); the exception door is still open. Same shape:
-  `warm-pool.ts:226-231`'s on-demand branch can throw `CodexVersionError` out of `acquire()`
-  and no pool call site is in a `try`.
-
-**Fix (one move):** `disposeAgent` (`:462-479`) is already the correct chokepoint
-(try/finally, `retiredUsage` fold, untrack, notify). Route `cleanup()` through it per agent
-instead of hand-rolling; make dispose idempotent per agent id so the fire-and-forget paths
-can't double-release (guard by map delete, as the app/sub-agent disposers already do —
-`disposeEphemeral` at `:562-565` is the one sibling missing the guard); wrap
-`createAgentCore`'s body in try/finally releasing on any non-success exit. Then flip the
-`agent-cleanup.test.ts` assertions from certifying the leak to pinning the fix.
-
-### 4.2 — Agent identity: `instanceId` collides across pools
-
-`agent-${this.nextAgentId++}-${Date.now()}` (`agent-pool.ts:494-495`) — per-pool counter
-from 0, ms timestamp, no entropy. Two sessions creating their first agent in the same ms
-collide: `SessionHub.registerAgent` silently overwrites (misrouted `findSessionByAgent`),
-`actionEmitter.interruptedAgents` is process-global so one session's stop gates the other's
-actions, and `getAgentToken` hands both the same MCP token. `lib/ids.ts:genId` (used for
-the *fallback* id at `agent-session.ts:124`) already has entropy — use it here too.
-
-### 4.3 — Credential and shutdown hygiene
-
-- **`revokeAgentToken` is dead** (`mcp/agent-tokens.ts:41`): exported, documented, called
-  from nowhere. Token maps grow for the process's life and a disposed agent's
-  `X-Agent-Token` stays resolvable — currently fails closed only because
-  `findRoleForAgent` returns `undefined` downstream. Call it from `disposeAgent`.
-- **Shutdown never drains sessions** (`lifecycle.ts:400-462`): `shutdown()` never touches
-  `SessionHub`, so no `LiveSession.cleanup()` runs and `SessionLogger`'s debounced buffer
-  (`session-logger.ts:109-213`) is lost on every Ctrl-C — a data-loss finding, not a
-  process leak (`process.kill(-pid)` takes the provider group). Add a bounded
-  best-effort hub drain before `server.stop()`.
-- **Provider switch tears down the warm pool under live agents**
-  (`features/config/settings.ts:50-53` vs `http/routes/settings.ts:59-63`): two independent
-  implementations with *different* change detection; `warmPool.cleanup()` stops the shared
-  Codex `AppServer` while live agents' clients still point at it, and
-  `ContextPool.providerType` never updates. That last part is the desync the client-side
-  `SET_PROVIDER` switch was deleted for — this is the **other** door onto it, and it is
-  still open. Consolidate to one implementation; either refuse the switch while agents are
-  live or reset sessions through `ContextPool`.
-- **Unguarded interrupt kills idle sub-agent processes**
-  (`handlers/apps/agents-resource.ts:267`): every other interrupt door checks
-  `isRunning()` first (`agent-pool.ts:1125`, `handlers/agents.ts:177`); this one doesn't,
-  and an idle interrupt takes `closePersistentSession()`
-  (`claude/session-provider.ts:610-613`) — the exact cost `interruptAll`'s doc says the
-  skip avoids — plus leaves a stale `markInterrupted` until the next turn. Copy the guard.
-
-### 4.4 — App-agent accumulation vs `MAX_AGENTS` (the load-bearing gap)
-
-App agents are reclaimed only by `fresh:true`, monitor removal, explicit `delete`, or
-session teardown — never window close, never idle. Eight apps opened once permanently hold
-8 of 10 global slots; the ninth app and every other session then get "Agent limit reached."
-`PooledAgent.idleTimer` is always `null` and `lastUsed` is written-never-read
-(`agent-pool.ts:75-77`) — the struct advertises an idle-reaper that does not exist, on the
-one tier that needs it. **Implement the idle reaper** (timer-based `disposeAppAgent` after
-N minutes idle, reset on task). This supersedes `multi_window_apps_proposal.md`'s "idle
-reaping — follow-up, not required for v1": with a global limit of 10, it is now the
-load-bearing gap, not a nicety.
-
-### 4.5 — Structural (fold into Phases 1–3 where they overlap)
+### 4.5 — Structural (fold into Phases 1–3 where they overlap) — **still open**
 
 - **Half of `AgentLimiter` is dead** (`limiter.ts:75-105`): production only calls
   `tryAcquire()`; the wait queue, timeout machinery, `clearWaiting`, `getWaitingCount` are
@@ -233,28 +187,24 @@ load-bearing gap, not a nicety.
   (Codex: `AppServer` start + OAuth) on every subsequent acquire. Replenish on the
   on-demand path too; latch the no-provider answer with a TTL.
 - **Sub-agent turns bypass `inflightCount`** (`agent-pool.ts:924`):
-  `ContextPool.teardown` step 4's "no in-flight references" comment (`context-pool.ts:679`)
-  is false for this tier — step 5 disposes providers under a live `for await`. Count
-  sub-agent turns in `inflightCount` (or a pool-owned equivalent awaited by teardown), then
-  the comment becomes true.
+  `ContextPool.teardown` step 4's "no in-flight references" comment is false for this tier
+  — step 5 disposes providers under a live `for await`. Count sub-agent turns in
+  `inflightCount` (or a pool-owned equivalent awaited by teardown). The step-5 comment now
+  *names* the exception rather than claiming the guarantee, so this is a real fix waiting,
+  not a lie waiting.
 
-### 4.6 — Doc corrections (one-line each)
+### Phase 4 lifecycle map (reference, as of the 4.1–4.4 landing)
 
-- `packages/server/CLAUDE.md` pattern table: `AgentLimiter` — "global agent limit with
-  queue" → no queue in effect (or delete the queue half first and keep the doc).
-- `agent-pool.ts:2-25` header: state that disposal cascades monitor→app→sub-agent but
-  window close reclaims only sub-agents, never app agents (readers assume otherwise).
-- `context-pool.ts:679` step-5 comment: false until 4.5's inflight fix lands.
-
-### Phase 4 lifecycle map (reference)
+Every tier's dispose is now idempotent — the guard is `disposeAgent`'s, not each
+disposer's, so a new tier gets it for free.
 
 | tier | provider acquired by | disposed by | reclaim gaps |
 |---|---|---|---|
-| session | pool `acquireProvider` | `disposeSessionAgent` (idempotent) | — |
-| monitor | **ContextPool supplies** | `removeMonitorAgent` (cascades) | `MonitorRegistry.remove` fires it unawaited |
-| app | pool `acquireProvider` | `disposeAppAgent` (idempotent) | never on window close, no idle reap (4.4) |
+| session | pool `acquireProvider` | `disposeSessionAgent` | — |
+| monitor | **ContextPool supplies** | `removeMonitorAgent` (cascades) | `MonitorRegistry.remove` fires it unawaited (safe, but still unobserved) |
+| app | pool `acquireProvider` | `disposeAppAgent` | never on window close — idle reap is what bounds it |
 | sub-agent | pool `acquireProvider` | `disposeSubAgent*` | turn bypasses inflight (4.5); unawaited on last-window-close |
-| ephemeral | pool `acquireProvider` | own task's `finally` only | dispose not idempotent (4.1) |
+| ephemeral | pool `acquireProvider` | own task's `finally` only | — |
 
 ## Non-goals — audited and deliberately left alone
 
@@ -303,7 +253,13 @@ in the loopback test. Nothing left here changes wire formats, `ClientEvent`/`Ser
 shapes, or app-facing verbs.
 
 Phase 4's items are bug fixes, and each carries a regression test pinning the fixed
-behavior, written against the *old* behavior first (`it.failing`, or simply run red before
-the fix — the `audit_fix_proposal.md` ratchet pattern, and how the landed Phase 0 was
-verified). 4.1 additionally flips `tests/agent-cleanup.test.ts:245-252` from certifying the
-leak to pinning the fix.
+behavior. **Only 4.5 is left**, and it is the half of Phase 4 that overlaps the two big
+splits — in particular, 4.5's settle-then-sweep reorder touches the two spawn-reservation
+copies Phase 3's seam C consolidates, so it should follow that seam rather than precede it.
+That is the one genuine ordering constraint between the remaining phases.
+
+What landed with 4.1–4.4: `tests/agent-cleanup.test.ts` flipped from certifying the leak
+to pinning the fix and gained the double-release race, the create-throws case, the token
+revocation and the cross-pool id collision; `tests/app-agent-idle-reap.test.ts` and
+`tests/settings-provider-switch.test.ts` are new; `tests/personas.test.ts` and
+`tests/pool-drain.test.ts` took the interrupt guard and the hub drain.
