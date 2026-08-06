@@ -272,6 +272,12 @@ export class StreamToEventMapper {
         if (message.sessionId && this.onSessionId) {
           await this.onSessionId(message.sessionId);
         }
+        // The one notice that outlives the session: an escape guard firing,
+        // with the text that triggered it. A tripped call is cancelled, so no
+        // `tool_use` entry is ever written and this is its only trace.
+        if (message.escapeGuard) {
+          this.logger?.logEscapeGuard(message.escapeGuard, this.role);
+        }
         const text = message.content;
         if (!text) break;
         const level = message.noticeLevel ?? 'warning';

@@ -190,6 +190,7 @@ describe('persona tool-lessness (through the real SDK options builder)', () => {
       },
       defaultSystemPrompt: 'generic',
       abortController: new AbortController(),
+      onEscapeGuard: () => {},
     });
 
   it('connects no MCP server and enables no builtin tool', () => {

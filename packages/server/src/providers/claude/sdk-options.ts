@@ -8,7 +8,7 @@
  */
 
 import type { Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
-import type { TransportOptions } from '../types.js';
+import type { EscapeGuardRecord, TransportOptions } from '../types.js';
 import { getToolNames, getMcpToken } from '../../mcp/index.js';
 import {
   getStorageDir,
@@ -17,6 +17,7 @@ import {
   CLAUDE_STATIC_SDK_OPTIONS,
 } from '../../config.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
+import { createEscapeRepairHook } from './escape-hook.js';
 
 /** Inputs to the SDK options builder for one turn. */
 export interface SDKOptionsRequest {
@@ -28,6 +29,12 @@ export interface SDKOptionsRequest {
   defaultSystemPrompt: string;
   /** The controller to bind to the process this turn's stream spawns. */
   abortController: AbortController;
+  /**
+   * Where the `PreToolUse` repair hook reports what it fixed. The hook runs in
+   * an SDK callback with no route to the session logger, so the provider takes
+   * the record and puts it on the message stream instead.
+   */
+  onEscapeGuard: (record: EscapeGuardRecord) => void;
 }
 
 /**
@@ -38,6 +45,7 @@ export function buildSDKOptions({
   options,
   defaultSystemPrompt,
   abortController,
+  onEscapeGuard,
 }: SDKOptionsRequest): SDKOptions {
   const { systemPrompt, agentId, allowedTools } = options;
 
@@ -99,5 +107,12 @@ export function buildSDKOptions({
     tools: builtinTools,
     allowedTools: effectiveAllowed,
     mcpServers: mcpServerConfigs,
+    // Repairs escape-depth mistakes in tool arguments before the call runs.
+    // Registering any hook flips the SDK's `hasBidirectionalNeeds()` to true;
+    // that only governs whether `Query.streamInput()` closes stdin when it
+    // drains, and the provider deliberately never calls `streamInput` (it
+    // pushes into the long-lived channel instead — see `steer`'s doc comment
+    // in session-provider.ts), so nothing here depends on which way it lands.
+    hooks: { PreToolUse: [{ hooks: [createEscapeRepairHook(onEscapeGuard)] }] },
   };
 }

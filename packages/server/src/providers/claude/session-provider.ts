@@ -7,9 +7,16 @@
 
 import { query as sdkQuery, type Options as SDKOptions } from '@anthropic-ai/claude-agent-sdk';
 import { BaseTransport } from '../base-transport.js';
-import type { InterruptReceipt, StreamMessage, TransportOptions, ProviderType } from '../types.js';
+import type {
+  EscapeGuardRecord,
+  InterruptReceipt,
+  StreamMessage,
+  TransportOptions,
+  ProviderType,
+} from '../types.js';
 import { mapClaudeMessage, TurnUsageTracker } from './message-mapper.js';
 import { createInputChannel, type InputChannel } from './input-channel.js';
+import { EscapeTripwire, escapeCorrection, escapeGuardNotice } from './escape-tripwire.js';
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getClaudeSpawnArgs } from '../../config.js';
@@ -33,7 +40,10 @@ interface TextContentBlock {
 type ContentBlock = TextContentBlock | ImageContentBlock;
 
 /** The turn-supplied half of an SDK options request; the provider fills the rest. */
-type TurnOptionsRequest = Omit<SDKOptionsRequest, 'defaultSystemPrompt' | 'abortController'>;
+type TurnOptionsRequest = Omit<
+  SDKOptionsRequest,
+  'defaultSystemPrompt' | 'abortController' | 'onEscapeGuard'
+>;
 
 /** Max time to hold a turn's first message while MCP servers connect. */
 const MCP_CONNECT_WAIT_MS = 5000;
@@ -53,6 +63,17 @@ const INTERRUPT_ACK_MS = 2000;
  * turn it falls back to. Lands on Codex's 10s by construction.
  */
 const STEER_TURN_START_MS = MCP_CONNECT_WAIT_MS + 5000;
+
+/**
+ * How many times one turn may be restarted for escape-mangled tool arguments.
+ *
+ * One. The correction is pushed as a user message, so a model that ignores it
+ * would otherwise trip, be corrected, and trip again for as long as it kept
+ * escaping — burning a turn each time. After the retry the turn is allowed to
+ * run to completion however it writes its arguments, and the `PreToolUse`
+ * repair hook still fixes whatever lands.
+ */
+const MAX_ESCAPE_RETRIES = 1;
 
 /**
  * Resolve `promise`, or reject once `ms` have passed.
@@ -144,7 +165,26 @@ export class ClaudeSessionProvider extends BaseTransport {
       options,
       defaultSystemPrompt: this.systemPrompt,
       abortController: this.createAbortController(),
+      onEscapeGuard: (record) => this.escapeGuardQueue.push(record),
     });
+  }
+
+  /**
+   * Escape-guard records waiting to be put on the message stream.
+   *
+   * The `PreToolUse` repair hook fires inside an SDK callback, off the read
+   * loop, and has nowhere to yield to; the loop drains this on its next pass.
+   * A record that outlives its turn is still worth reporting — it describes a
+   * tool call that really was repaired — so the queue is not cleared between
+   * turns, only by draining.
+   */
+  private escapeGuardQueue: EscapeGuardRecord[] = [];
+
+  /** Turn queued escape-guard records into notices, oldest first. */
+  private *drainEscapeGuards(): Generator<StreamMessage> {
+    while (this.escapeGuardQueue.length > 0) {
+      yield escapeGuardNotice(this.escapeGuardQueue.shift()!);
+    }
   }
 
   /**
@@ -358,6 +398,12 @@ export class ClaudeSessionProvider extends BaseTransport {
     let messageCount = 0;
     // One tracker per turn — the stream outlives the turn, the accumulator must not.
     const turnUsage = new TurnUsageTracker();
+    // Per-turn too: block indices restart with each assistant message.
+    const tripwire = new EscapeTripwire();
+    let escapeRetries = 0;
+    // Set between "we interrupted" and "the interrupted turn's terminal arrived",
+    // which is the one result message this turn must swallow rather than yield.
+    let awaitingEscapeRetry = false;
     try {
       await session.mcpReady;
       session.turnsProcessed++;
@@ -372,6 +418,17 @@ export class ClaudeSessionProvider extends BaseTransport {
         if (done) {
           // Process exited (crash or abort) — the stream is gone.
           await this.closePersistentSession();
+          // An escape-retry that lost its stream has already had this turn's
+          // terminal swallowed, so returning here would leave the caller with
+          // no completion at all. Resend on a fresh stream instead: the
+          // original message is still the one that needs answering.
+          if (awaitingEscapeRetry && !session.abortController.signal.aborted) {
+            console.warn(
+              '[ClaudeSessionProvider] Stream ended during escape retry; resending fresh',
+            );
+            yield* this.executeQuery(messageContent, this.sessionId ?? undefined, options);
+            return;
+          }
           if (messageCount === 0 && !session.abortController.signal.aborted) {
             console.warn(
               '[ClaudeSessionProvider] Persistent stream ended before responding; retrying fresh',
@@ -384,7 +441,49 @@ export class ClaudeSessionProvider extends BaseTransport {
         messageCount++;
         if (session.abortController.signal.aborted) break;
 
+        // Anything the repair hook fixed since the last pass. Drained here
+        // rather than at the trip site because the hook fires on its own
+        // schedule, between reads.
+        yield* this.drainEscapeGuards();
+
         this.captureSessionId(msg, options);
+
+        // Cancel a tool call whose arguments are being written as escape
+        // sequences, before the rest of them are generated. The correction is
+        // pushed straight into the channel, so the retry runs on this same
+        // stream and stays one turn from the caller's point of view — which is
+        // why the interrupted turn's terminal is swallowed below rather than
+        // yielded. `stream.interrupt()` rather than `this.interrupt()`: the
+        // latter aborts the controller and takes the process down on timeout,
+        // and the process is exactly what the retry needs.
+        if (
+          !awaitingEscapeRetry &&
+          escapeRetries < MAX_ESCAPE_RETRIES &&
+          (msg as { type?: string }).type === 'stream_event'
+        ) {
+          const tripped = tripwire.observe((msg as { event?: unknown }).event);
+          if (tripped) {
+            escapeRetries++;
+            awaitingEscapeRetry = true;
+            console.warn(
+              `[ClaudeSessionProvider] Escaped-text tripwire on ${tripped.toolName}; restarting turn`,
+            );
+            // Before the interrupt: this notice carries the only record that
+            // the cancelled call ever happened, and the turn is about to be
+            // torn down. See `EscapeGuardRecord`.
+            yield escapeGuardNotice(tripped);
+            void session.stream.interrupt().catch(() => {
+              // An interrupt the CLI never acknowledged still leaves the pushed
+              // correction queued; the turn either ends on its own or the outer
+              // abort path takes it. Nothing useful to do here.
+            });
+            session.channel.push({
+              type: 'user',
+              message: { role: 'user', content: escapeCorrection(tripped.toolName) },
+            });
+            continue;
+          }
+        }
 
         const mapped = mapClaudeMessage(msg, turnUsage);
         if (!mapped) continue;
@@ -398,6 +497,15 @@ export class ClaudeSessionProvider extends BaseTransport {
           await this.closePersistentSession();
           yield* this.executeQuery(messageContent, undefined, options);
           return;
+        }
+
+        // The interrupted turn's own terminal. Yielding it would end the turn
+        // in the UI while the correction we already pushed is about to start
+        // answering on the same stream.
+        if (awaitingEscapeRetry && (mapped.type === 'complete' || mapped.type === 'error')) {
+          awaitingEscapeRetry = false;
+          tripwire.reset();
+          continue;
         }
 
         yield mapped;

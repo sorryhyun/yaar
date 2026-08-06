@@ -5,6 +5,7 @@ import { formatCompactInteraction } from '../lib/format-interaction.js';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
 import type { ContextSource } from '../agents/context.js';
+import type { EscapeGuardRecord } from '../providers/types.js';
 
 const LOG_FLUSH_MS = 200;
 const METADATA_FLUSH_MS = 300;
@@ -328,6 +329,20 @@ export class SessionLogger {
       content: reviveJson(content),
       toolUseId,
       ...meta,
+    });
+  }
+
+  /**
+   * Record an escape guard firing, with the text that triggered it.
+   *
+   * Its own entry type rather than a field on `tool_use`: the tripwire cancels
+   * the call, so there is no `tool_use` entry to hang it on and the firing would
+   * otherwise leave no trace in the log at all.
+   */
+  logEscapeGuard(escapeGuard: EscapeGuardRecord, agentId?: string): void {
+    this.appendEntry('escape_guard', agentId, {
+      toolName: escapeGuard.toolName,
+      escapeGuard,
     });
   }
 

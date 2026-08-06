@@ -1,5 +1,6 @@
 import type { OSAction } from '@yaar/shared';
 import type { ContextSource } from '../agents/context.js';
+import type { EscapeGuardRecord } from '../providers/types.js';
 
 export interface AgentInfo {
   agentId: string;
@@ -30,7 +31,15 @@ export interface SessionInfo {
 }
 
 export interface ParsedMessage {
-  type: 'user' | 'assistant' | 'action' | 'thinking' | 'tool_use' | 'tool_result' | 'interaction';
+  type:
+    | 'user'
+    | 'assistant'
+    | 'action'
+    | 'thinking'
+    | 'tool_use'
+    | 'tool_result'
+    | 'interaction'
+    | 'escape_guard';
   timestamp: string;
   agentId: string | null;
   parentAgentId: string | null;
@@ -45,6 +54,12 @@ export interface ParsedMessage {
   // unicodeEscapes = \uXXXX spellings normalized away by parse (harmless),
   // literalBackslashU = backslash-u text surviving in the parsed value (corrupting).
   toolInputEscapes?: { unicodeEscapes: number; literalBackslashU: number };
+  /**
+   * An escape guard firing, with the text that triggered it. On a `tripwire`
+   * entry there is deliberately no accompanying `tool_use` entry — the call was
+   * cancelled before it ran, so this is the only trace of it.
+   */
+  escapeGuard?: EscapeGuardRecord;
   toolUseId?: string;
   interactionSource?: string;
   interaction?: string;

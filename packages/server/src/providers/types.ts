@@ -39,6 +39,42 @@ export interface TokenUsage {
   costUsd?: number;
 }
 
+/**
+ * One firing of an escape guard, kept for the session log.
+ *
+ * Two guards, two stages. `tripwire` fires mid-stream on arguments being
+ * written as `\uXXXX` escapes and the turn is cancelled, so `sample` is the raw
+ * argument JSON as far as it had been generated. `repair` fires in the
+ * `PreToolUse` hook on arguments that already landed, so `sample` is the
+ * offending value *before* the rewrite and the path lists say which fields.
+ *
+ * `sample` is truncated (`ESCAPE_SAMPLE_LIMIT`) — the evidence is the spelling,
+ * which the first line of it already shows, and a whole escaped document in the
+ * log is just the same six characters repeated a thousand times.
+ *
+ * @see providers/claude/escape-tripwire.ts, providers/claude/escape-hook.ts
+ */
+export interface EscapeGuardRecord {
+  stage: 'tripwire' | 'repair';
+  toolName: string;
+  /** The text that triggered it, truncated. Raw JSON for `tripwire`. */
+  sample: string;
+  /** Dotted paths whose literal escape runs were decoded (`repair` only). */
+  overEscaped?: string[];
+  /** Dotted paths whose nested JSON was re-escaped (`repair` only). */
+  underEscaped?: string[];
+}
+
+/** How much triggering text a record carries. See {@link EscapeGuardRecord}. */
+export const ESCAPE_SAMPLE_LIMIT = 300;
+
+/** Truncate triggering text to {@link ESCAPE_SAMPLE_LIMIT}, marking what was dropped. */
+export function escapeSample(text: string): string {
+  return text.length > ESCAPE_SAMPLE_LIMIT
+    ? `${text.slice(0, ESCAPE_SAMPLE_LIMIT)}… (${text.length} chars)`
+    : text;
+}
+
 export interface StreamMessage {
   /**
    * `tool_use_start` and `tool_input_delta` are the *parameter-generation* phase
@@ -116,6 +152,20 @@ export interface StreamMessage {
   errorCode?: string;
   /** How prominently to show a `notice`. See the `notice` type above. */
   noticeLevel?: 'info' | 'warning';
+  /**
+   * Set on a `notice` raised by the escape guards, carrying the evidence.
+   *
+   * A notice is otherwise prose — it says what happened and is gone. This one
+   * has to survive the session, because the thing it describes is a model
+   * defect worth reporting upstream and the offending text is the report. The
+   * `notice` branch of `StreamToEventMapper` persists it via
+   * `SessionLogger.logEscapeGuard`; nothing else reads it.
+   *
+   * Note that a tripped turn is *cancelled*, so no `tool_use` entry is ever
+   * written for it and `toolInputEscapes` above never gets the chance to
+   * describe it. This is the only record that call happened at all.
+   */
+  escapeGuard?: EscapeGuardRecord;
   isError?: boolean;
   /** Token accounting, normalized. Present on `usage`, and on Claude's terminals. */
   usage?: TokenUsage;

@@ -142,6 +142,7 @@ describe('sub-agent reach (through the real SDK options builder)', () => {
       },
       defaultSystemPrompt: 'generic',
       abortController: new AbortController(),
+      onEscapeGuard: () => {},
     });
 
   it('connects the subagent namespace and nothing else', () => {
