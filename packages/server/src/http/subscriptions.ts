@@ -4,10 +4,15 @@
  * Iframe apps can subscribe to yaar:// URIs and receive push notifications
  * when the underlying data changes. The registry tracks active subscriptions
  * and emits events via actionEmitter when changes are detected.
+ *
+ * Matching is by literal URI string (exact, or a walk up the path for prefix
+ * subscriptions), so both sides have to be written in real app ids — see
+ * `checkResolved` below for the contract that used to be convention.
  */
 
 import { ServerEventType, type StreamFrame } from '@yaar/shared';
 import { actionEmitter } from '../session/action-emitter.js';
+import { namesSelf } from './access.js';
 import { recordDeliveredFrame } from '../streams/stream-diagnostics.js';
 
 /**
@@ -91,6 +96,37 @@ function capPayload(data: unknown): unknown {
 
 let counter = 0;
 
+/**
+ * The registry's one contract, now checked instead of trusted.
+ *
+ * Subscriptions are keyed by literal URI string, so a subscription stored under
+ * `yaar://apps/self/storage/` can never match the `yaar://apps/notes/storage/x.json`
+ * a producer notifies with — and vice versa. Both sides must speak in real ids.
+ * `/api/verb/subscribe` resolves `self` before storing (see `resolveSelf` in
+ * http/access.ts), and every producer already passes a resolved URI, but nothing
+ * said so and the failure mode is invisible: a subscription that simply never fires.
+ *
+ * The two boundaries answer differently on purpose:
+ *
+ * - `subscribe` **throws**. It has one caller, which resolves `self` and refuses
+ *   what it cannot resolve, so a throw here is a backstop for a future second
+ *   caller — and storing an unmatchable key is worse than failing the request.
+ * - `notifyChange`/`publishFrame` **log and carry on**. A producer that reached one
+ *   of them has already done the work it is announcing; throwing would report
+ *   failure for a write that succeeded. Delivery would find no subscriber either
+ *   way, so what this adds is that the miss is now visible in the log rather than
+ *   silent.
+ */
+function checkResolved(uri: string, method: string): boolean {
+  if (!namesSelf(uri)) return true;
+  console.error(
+    `[subscriptions] ${method}("${uri}") was given an unresolved "self" URI. ` +
+      "Subscriptions are keyed by literal string, so this can never match a producer's " +
+      "real-id URI — resolve it against the caller's appId first (resolveSelf in http/access.ts).",
+  );
+  return false;
+}
+
 class SubscriptionRegistry {
   private subscriptions = new Map<string, Subscription>();
   private uriIndex = new Map<string, Set<string>>();
@@ -99,6 +135,7 @@ class SubscriptionRegistry {
   /** Stream-only coalescing buffers, keyed by subscription id. */
   private coalescing = new Map<string, CoalesceState>();
 
+  /** Register a subscription and return its id. `uri` must be fully resolved. */
   subscribe(
     token: string,
     windowId: string,
@@ -107,6 +144,10 @@ class SubscriptionRegistry {
     mode: SubscriptionMode = 'change',
     kinds?: string[],
   ): string {
+    // A key nothing can ever match is worse than a refused request — see checkResolved.
+    if (!checkResolved(uri, 'subscribe')) {
+      throw new Error(`Cannot subscribe to an unresolved "self" URI: ${uri}`);
+    }
     const id = `sub-${Date.now()}-${++counter}`;
     const sub: Subscription = { id, token, windowId, sessionId, uri, mode, kinds, seq: 0 };
     this.subscriptions.set(id, sub);
@@ -198,6 +239,7 @@ class SubscriptionRegistry {
    * subscribers in session B. Omit it for session-independent URIs (app storage).
    */
   notifyChange(uri: string, sessionId?: string): void {
+    checkResolved(uri, 'notifyChange');
     const subscribers = this.getSubscribers(uri);
     for (const sub of subscribers) {
       if (sub.mode !== 'change') continue; // stream subs receive frames, not pings
@@ -224,6 +266,7 @@ class SubscriptionRegistry {
    * sources (agents, windows, dev jobs) so session A's frames don't leak to B.
    */
   publishFrame(uri: string, kind: string, data: unknown, sessionId?: string): void {
+    checkResolved(uri, 'publishFrame');
     const subscribers = this.getSubscribers(uri);
     for (const sub of subscribers) {
       if (sub.mode !== 'stream') continue;
