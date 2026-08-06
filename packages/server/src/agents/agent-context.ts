@@ -33,6 +33,31 @@ interface AgentContext {
   appId?: string;
   /** Principal tier for URI access control (undefined → treated as non-session). */
   role?: AgentRole;
+  /**
+   * This context was entered from a **bundled `kind: "system"` app's** iframe token.
+   *
+   * Set only from a validated token (`routes/verb.ts`), never from a request body — an
+   * app cannot self-grant it (`getAppMeta` sets it for bundled system apps only), so it
+   * is exactly as forgeable as the token, which is to say not at all.
+   *
+   * Widens `access: 'session-principal'` past `role === 'session'`: a system app carries
+   * no agent role at all, and the HTTP gate has always let it through `yaar://session/*`
+   * (`isSessionUri` in http/access.ts). Without this the two gates answer in different
+   * currencies and a system app is admitted by one door and refused by the other.
+   */
+  systemApp?: boolean;
+}
+
+/**
+ * Who is calling, as the URI access gate needs to know it.
+ *
+ * The two fields are alternatives, not a hierarchy: an agent turn carries a `role` and
+ * no `systemApp`; a system app's iframe carries `systemApp` and no role. See
+ * `ResourceRegistry.execute`'s gate for what satisfies `access: 'session-principal'`.
+ */
+export interface AccessPrincipal {
+  role?: AgentRole;
+  systemApp?: boolean;
 }
 
 /**
@@ -94,6 +119,15 @@ export function getAgentRole(): AgentRole | undefined {
 }
 
 /**
+ * The current caller as the URI access gate sees it. Wired into
+ * `setAccessPrincipalResolver` in lifecycle.ts.
+ */
+export function getAccessPrincipal(): AccessPrincipal {
+  const store = agentContext.getStore();
+  return { role: store?.role, systemApp: store?.systemApp };
+}
+
+/**
  * Run a function within a specific agent context.
  * Used to restore agent identity from HTTP headers (e.g., X-Agent-Id in MCP requests).
  */
@@ -113,6 +147,7 @@ export function runWithAgentContext<T>(
     windowId?: string;
     appId?: string;
     role?: AgentRole;
+    systemApp?: boolean;
   },
   fn: () => T,
 ): T {
@@ -128,6 +163,7 @@ export function runWithAgentContext<T>(
       windowId: ctx.windowId ?? existing?.windowId,
       appId: ctx.appId ?? existing?.appId,
       role: ctx.role ?? existing?.role,
+      systemApp: ctx.systemApp ?? existing?.systemApp,
     },
     fn,
   );

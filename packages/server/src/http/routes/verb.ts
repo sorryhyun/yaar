@@ -390,6 +390,12 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
             monitorId,
             windowId: callerWindowId,
             appId: tokenEntry?.appId,
+            // Read off the *validated token*, never the request body: `systemApp` is a
+            // bundled `kind: "system"` app's declared identity (`getAppMeta`), so an app
+            // can no more forge it than it can forge the token. It is what lets the
+            // registry's session-principal gate admit a system app — the same widening
+            // `requirePermission` has always applied to `yaar://session/*`.
+            systemApp: tokenEntry?.systemApp,
           },
           execute,
         )

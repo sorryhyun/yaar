@@ -213,7 +213,12 @@ so an agent reading the manifest is handed URIs it can call directly.
 
 ### Session — `yaar://session/...`
 
-Session-scoped resources. Most of the namespace is **session-principal** — only the session agent may access it (enforced centrally in `ResourceRegistry.execute()`; monitor/app agents get a 403). `yaar://session/agents` and `yaar://session/agents/*` are the exception: they carry no principal gate, since `relay` is meant to be called by app/window agents (targeting `.../monitor`) and `interrupt`/`delete` are usable by any tier that can name an agent id.
+Session-scoped resources. The whole namespace is **session-principal**, `yaar://session/agents`
+and `yaar://session/agents/*` included: a caller gets in iff its role is `session` **or** it is a
+bundled `kind: "system"` app presenting an iframe token (enforced centrally in
+`ResourceRegistry.execute()`, the gate both doors end at). Monitor and app agents get a 403 — an
+app/window agent hands work back to its monitor through its own `relay` tool, not through
+`yaar://session/agents/monitor`.
 
 | URI | Description |
 |-----|-------------|
@@ -440,7 +445,8 @@ interface ResourceHandler {
   description: string;           // human-readable, returned by `describe`
   verbs: Verb[];                 // which verbs this handler supports (describe is always auto-generated)
   invokeSchema?: Record<string, unknown>;  // JSON Schema for invoke payload (optional)
-  access?: 'session-principal';  // when set, only the session agent may call any verb (403 for others)
+  access?: 'session-principal';  // when set, only the session agent or a bundled system app's
+                                 // iframe token may call any verb (403 for everyone else)
 
   exists?(resolved: ResolvedUri): Promise<boolean>;       // consulted before the auto-generated describe
   describe?(resolved: ResolvedUri): Promise<VerbResult>;  // custom describe; overrides auto-generation

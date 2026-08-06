@@ -257,6 +257,13 @@ export function requirePermission(principal: Principal, uri: string, verb: Verb)
   // A marketplace app cannot self-grant it by declaring it in app.json — the only
   // apps that get through are bundled `kind: "system"` ones, which ship with the
   // repo and still need the URI in their permissions list.
+  //
+  // This is the cheap early refusal, not the authority. `ResourceRegistry.execute`'s
+  // `access: 'session-principal'` gate is — it sits behind *both* doors (MCP and
+  // `POST /api/verb`) and applies the same widening, admitting the session agent or a
+  // token-backed system app. The two used to answer in different currencies (this
+  // module's `systemApp` flag vs. the registry's agent `role`), which is how a system
+  // app came to be admitted here and 403'd there.
   if (isSessionUri(uri) && !principal.systemApp) {
     return errorResponse('yaar://session/* is restricted to the session agent', 403);
   }

@@ -8,20 +8,20 @@
 
 import type { ResolvedUri } from './uri-resolve.js';
 import { resolveUri } from './uri-resolve.js';
-import type { AgentRole } from '../agents/agent-context.js';
+import type { AccessPrincipal } from '../agents/agent-context.js';
 
 /**
- * Injected resolver for the current caller's principal role. Decoupled from
+ * Injected resolver for the current caller's principal. Decoupled from
  * agent-context via dependency injection (rather than a direct import) because
  * uri-registry sits inside a large import cycle; a runtime import of
  * agent-context's getters from here mis-links under Bun's module loader.
- * Wired in handlers/index.ts:initRegistry(). Defaults to "no role" → callers
- * are treated as non-session until wired.
+ * Wired in lifecycle.ts. Defaults to the empty principal → callers are treated
+ * as neither the session agent nor a system app until wired.
  */
-let resolveAgentRole: () => AgentRole | undefined = () => undefined;
+let resolveAccessPrincipal: () => AccessPrincipal = () => ({});
 
-export function setAccessRoleResolver(fn: () => AgentRole | undefined): void {
-  resolveAgentRole = fn;
+export function setAccessPrincipalResolver(fn: () => AccessPrincipal): void {
+  resolveAccessPrincipal = fn;
 }
 
 export type Verb = 'describe' | 'read' | 'list' | 'invoke' | 'delete';
@@ -145,10 +145,11 @@ export interface ResourceHandler {
   /** Optional JSON schema for invoke payloads. */
   invokeSchema?: Record<string, unknown>;
   /**
-   * Optional access requirement. When set to 'session-principal', only the
-   * session agent (the user's deputy) may invoke any verb on this resource;
-   * all other callers receive a 403-style error. Enforced centrally in
-   * ResourceRegistry.execute().
+   * Optional access requirement. When set to 'session-principal', a caller
+   * satisfies it iff its role is `session` (the user's deputy) **or** it is a
+   * token-backed bundled system app; every other caller receives a 403-style
+   * error. Enforced centrally in ResourceRegistry.execute(), which is the
+   * authority — it sits behind both doors (MCP and `POST /api/verb`).
    */
   access?: 'session-principal';
 
@@ -293,15 +294,28 @@ export class ResourceRegistry {
       };
     }
 
-    // Central access control: session-principal resources are reachable only by
-    // the session agent. Every other caller (monitor/app agents, apps via
-    // /api/verb, contexts with no role) is denied — default-deny.
-    if (handler.access === 'session-principal' && resolveAgentRole() !== 'session') {
+    // Central access control, and the *authoritative* one: both doors into the verb
+    // layer (MCP tools and `POST /api/verb`) end here, so this is the only gate that
+    // sees every caller. Two principals satisfy it and nothing else does — default-deny:
+    //
+    //   - the session agent (`role === 'session'`), the user's deputy;
+    //   - a bundled `kind: "system"` app, which carries no agent role but whose token
+    //     says what it is. `http/access.ts` has always admitted those to
+    //     `yaar://session/*` (`isSessionUri`); before this they were let through one
+    //     door and refused at the other, which is why `yaar://session/agents` could only
+    //     stay reachable for Process Explorer by going untagged.
+    //
+    // Everyone else — monitor/app agents, ordinary apps via /api/verb, contexts with no
+    // principal at all — is denied.
+    const { role, systemApp } = resolveAccessPrincipal();
+    if (handler.access === 'session-principal' && role !== 'session' && systemApp !== true) {
       return {
         content: [
           {
             type: 'text',
-            text: `Access denied (403): ${uri} is restricted to the session agent (the user's deputy).`,
+            text:
+              `Access denied (403): ${uri} is restricted to the session agent ` +
+              "(the user's deputy) and bundled system apps.",
           },
         ],
         isError: true,

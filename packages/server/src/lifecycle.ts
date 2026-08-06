@@ -32,9 +32,9 @@ import { installProxyPortBoundary, installLoopbackAliasBoundary } from './http/o
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub, getSessionHub } from './session/session-hub.js';
-import { setAccessRoleResolver } from './handlers/uri-registry.js';
+import { setAccessPrincipalResolver } from './handlers/uri-registry.js';
 import { setWindowGrantResolver } from './http/access.js';
-import { getAgentRole } from './agents/agent-context.js';
+import { getAccessPrincipal } from './agents/agent-context.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
 import {
   loadTunnelConfig,
@@ -70,11 +70,12 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: IS_BUNDLED_EXE });
 
   // Wire central URI access control: session-principal handlers are reachable
-  // only by the session agent.
+  // only by the session agent and by bundled system apps (whose iframe token
+  // carries the flag — see routes/verb.ts).
   // Wired here (a non-cyclic boot module) rather than in handlers/index — a
   // named import of agent-context's getters from inside the handlers/agents
   // import cycle mis-links under Bun's module loader.
-  setAccessRoleResolver(getAgentRole);
+  setAccessPrincipalResolver(getAccessPrincipal);
 
   // Same reason, same shape: an app iframe's permissions are its app.json list *plus*
   // whatever storage files an agent named to its window (features/window/delegated-grants.ts).

@@ -51,35 +51,46 @@ ratchets in Phase 0 all flipped.
   window is the design (one per connected tab); the bug was only that none died with the
   window. The 24h TTL stays as the backstop for windows that never see a clean close.
 
-## Phase 2 — one session-principal policy (finding 3)
+## Phase 2 — ✅ landed (finding 3)
 
-The two gates disagree because they answer in different currencies (token `systemApp` flag
-vs. agent `role`). Decision: **the registry gate is authoritative** — it sits behind both
-doors (MCP and `/api/verb` both end in `ResourceRegistry.execute`) — and the definition of
-"session principal" widens to what the HTTP gate already implied:
+The two gates disagreed because they answered in different currencies (token `systemApp`
+flag vs. agent `role`). **The registry gate is the authority** — it sits behind both doors
+(MCP and `/api/verb` both end in `ResourceRegistry.execute`) — and the definition of
+"session principal" widened to what the HTTP gate already implied:
 
 > A caller satisfies `access: 'session-principal'` iff its role is `session` **or** it is
 > a token-backed bundled system app.
 
-- `AgentContext` gains `systemApp?: boolean`; `verb.ts`'s `runWithAgentContext` sets it
-  from the **validated token** (`tokenEntry.systemApp`) — never from the request body, so
-  it is as unforgeable as the token.
-- The registry gate becomes `role === 'session' || context.systemApp === true` (via the
-  injected resolver, extended from `() => role` to `() => ({ role, systemApp })`).
-- `access.ts`'s `isSessionUri` check stays as the cheap early refusal for non-system apps
-  (identical behavior), with a comment naming the registry gate as the authority.
-- **Decide `yaar://session/agents` explicitly:** tag `handlers/agents.ts:30,79` with
-  `access: 'session-principal'` so all seven `yaar://session/*` registrations are uniform.
-  process-explorer keeps working — it now qualifies via `systemApp` instead of via the
-  accidental gap.
+It is documented where it is enforced: `packages/server/CLAUDE.md` (access tiers),
+`ResourceRegistry.execute`'s gate, `AgentContext.systemApp`, and the widened
+`isSessionUri` comment in `http/access.ts`.
+
+- `AgentContext` gained `systemApp?: boolean` (plus the `AccessPrincipal` shape);
+  `verb.ts`'s `runWithAgentContext` sets it from the **validated token**
+  (`tokenEntry.systemApp`) — never from the request body, so it is as unforgeable as the
+  token.
+- The injected resolver went from `() => role` to `() => ({ role, systemApp })`, and
+  `setAccessRoleResolver` was renamed `setAccessPrincipalResolver` — it no longer resolves
+  only a role.
+- `handlers/agents.ts`'s two registrations are tagged, so all seven `yaar://session/*`
+  registrations are uniform. Process Explorer keeps working via `systemApp` rather than via
+  the accidental gap.
 
 Behavior delta: bundled system apps gain working access to the `session/*` sub-resources
-their `app.json` already declares (`session/browser`, `/monitors`, `/context` for
-process-explorer) — previously admitted by one gate and 403'd by the other. This is a
-capability *widening* for `kind: "system"` bundled apps only (marketplace apps cannot hold
-the flag; `getAppMeta` enforces bundled-only). Tests: a system-app iframe can invoke a
-tagged handler; a non-system app still 403s at both doors; a monitor agent still 403s at
-the MCP door.
+their `app.json` already declares — previously admitted by one gate and 403'd by the other.
+In-tree that is process-explorer alone (the only bundled app declaring `yaar://session/`);
+the widening is unavailable to marketplace apps, since `getAppMeta` sets `systemApp` for
+bundled `kind: "system"` apps only. The other half is a *narrowing*: monitor and app agents
+lost the ungated reach into `yaar://session/agents/*` (list, interrupt, delete every agent
+in the session) that the missing tag left them. Nothing asks for it — the app-agent `relay`
+tool is a separate path, and `RELAY_SECTION`, the one prompt naming
+`yaar://session/agents/monitor` for non-session agents, is dead code.
+
+Pinned by `tests/session-principal.test.ts` (both doors, including that the flag comes off
+the token and not the body) and the widened gate cases in `tests/registry.test.ts`. Both
+files wire the *production* resolver rather than a fake: the resolver is a process global
+and the unit partition runs its files concurrently, so a fake would decide the gate's answer
+for whatever else overlapped it.
 
 ## Phase 3 — shrink the drift surface (findings 4, 7, 9, 11, 12)
 
@@ -131,9 +142,9 @@ Real refactors with their own risk budgets; none blocks Phases 1–3.
 
 ## Sequencing & risk
 
-- **Remaining order:** 2, then 3's items in any order, 4 when convenient. Each phase is one
+- **Remaining order:** 3's items in any order, 4 when convenient. Each phase is one
   PR against `dev`; Phase 3 can be one PR of small commits.
-- Phase 2 changes behavior on purpose (delta tabled above); Phase 3 is intended to be
+- Phase 2 changed behavior on purpose (delta above); Phase 3 is intended to be
   behavior-preserving except items 4 and 6's error-message/coarse-gate tightening.
 - Test partitions: token/grant tests are plain units; anything booting the hub follows the
   existing partition rules (`scripts/test/partitions.ts`).

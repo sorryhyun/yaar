@@ -1,7 +1,28 @@
-import { describe, it, expect, afterAll } from 'bun:test';
-import { ResourceRegistry, setAccessRoleResolver } from '../handlers/uri-registry.js';
+import { describe, it, expect } from 'bun:test';
+import { ResourceRegistry, setAccessPrincipalResolver } from '../handlers/uri-registry.js';
 import type { ResourceHandler } from '../handlers/uri-registry.js';
-import type { AgentRole } from '../agents/agent-context.js';
+import {
+  getAccessPrincipal,
+  runWithAgentContext,
+  type AccessPrincipal,
+} from '../agents/agent-context.js';
+
+/**
+ * Wire the gate the way lifecycle.ts does, and drive it through the same
+ * AsyncLocalStorage a real caller travels in.
+ *
+ * A fake resolver would read more directly, but the resolver is process-global and the
+ * unit partition runs its files *concurrently* in one process — so a file that installs
+ * its own would decide the gate's answer for every other file that happens to overlap
+ * it. Installing the production resolver is idempotent: session-principal.test.ts does
+ * the same, and whichever order they load in, they agree.
+ */
+setAccessPrincipalResolver(getAccessPrincipal);
+
+/** Run `fn` as a caller with this principal, as the two doors would enter it. */
+function as<T>(principal: AccessPrincipal, fn: () => T): T {
+  return runWithAgentContext({ agentId: 'test-caller', ...principal }, fn);
+}
 
 /** Extract text from first content item (all test results are text). */
 const text = (r: { content: Array<{ type: string; text?: string }> }) =>
@@ -255,12 +276,6 @@ describe('ResourceRegistry', () => {
   });
 
   describe('session-principal access control', () => {
-    // Drive the injected resolver directly (production wires it to the ALS-backed
-    // getAgentRole; the gate just calls resolveAgentRole()).
-    let currentRole: AgentRole | undefined;
-    setAccessRoleResolver(() => currentRole);
-    afterAll(() => setAccessRoleResolver(() => undefined));
-
     // Gate is handler-keyed (namespace-agnostic); use a resolvable URI.
     const URI = 'yaar://config/settings';
     function sessionReg() {
@@ -269,8 +284,7 @@ describe('ResourceRegistry', () => {
       return reg;
     }
 
-    it('denies callers with no role (default-deny)', async () => {
-      currentRole = undefined;
+    it('denies callers with no principal (default-deny)', async () => {
       const r = await sessionReg().execute('read', URI);
       expect(r.isError).toBe(true);
       expect(text(r)).toContain('Access denied');
@@ -279,25 +293,39 @@ describe('ResourceRegistry', () => {
     it('denies monitor- and app-tier callers', async () => {
       const reg = sessionReg();
       for (const role of ['monitor', 'app'] as const) {
-        currentRole = role;
-        const r = await reg.execute('read', URI);
+        const r = await as({ role }, () => reg.execute('read', URI));
         expect(r.isError).toBe(true);
         expect(text(r)).toContain('Access denied');
       }
     });
 
     it('allows the session agent', async () => {
-      currentRole = 'session';
-      const r = await sessionReg().execute('read', URI);
+      const r = await as({ role: 'session' }, () => sessionReg().execute('read', URI));
       expect(r.isError).toBeUndefined();
       expect(text(r)).toBe('read-ok');
     });
 
+    // A bundled system app's iframe has no agent role at all — it is not an agent. The
+    // HTTP gate has always let it reach yaar://session/*; this is the same rule stated
+    // at the authoritative gate, so both doors now answer alike.
+    it('allows a token-backed system app, which carries no role', async () => {
+      const r = await as({ systemApp: true }, () => sessionReg().execute('read', URI));
+      expect(r.isError).toBeUndefined();
+      expect(text(r)).toBe('read-ok');
+    });
+
+    it('denies an app-tier caller that is not a system app', async () => {
+      const r = await as({ role: 'app', systemApp: false }, () =>
+        sessionReg().execute('read', URI),
+      );
+      expect(r.isError).toBe(true);
+      expect(text(r)).toContain('Access denied');
+    });
+
     it('does not gate handlers without an access requirement', async () => {
-      currentRole = 'monitor';
       const reg = new ResourceRegistry();
       reg.register('yaar://config/settings', mockHandler());
-      const r = await reg.execute('read', 'yaar://config/settings');
+      const r = await as({ role: 'monitor' }, () => reg.execute('read', 'yaar://config/settings'));
       expect(r.isError).toBeUndefined();
       expect(text(r)).toBe('read-ok');
     });

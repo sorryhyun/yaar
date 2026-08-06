@@ -32,6 +32,12 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       'List all active agents (session, monitor, app, sub-agent, ephemeral), flat and as ' +
       'the ownership tree they form.',
     verbs: ['describe', 'list'],
+    // Tagged like every other yaar://session/* registration, rather than relying on
+    // the HTTP door's `isSessionUri` refusal alone: the two agent registrations were
+    // the only ones the registry gate did not cover, so a monitor or app *agent*
+    // (which never passes through the HTTP door) reached them. Process Explorer keeps
+    // working because it qualifies as a bundled system app, not because of the gap.
+    access: 'session-principal',
 
     async list(): Promise<VerbResult> {
       const pool = getPool();
@@ -81,6 +87,10 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       'Agent instance. Read for agent info, invoke to interrupt, relay, or invoke the session agent, ' +
       'delete to dispose the session agent or an app agent (by instanceId or appId).',
     verbs: ['describe', 'read', 'invoke', 'delete'],
+    // See the sibling registration above. `relay` is reached from the session agent
+    // (role `session`) and Process Explorer's interrupt/kill from a system app token;
+    // both still qualify.
+    access: 'session-principal',
     invokeSchema: {
       type: 'object',
       required: ['action'],
