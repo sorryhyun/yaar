@@ -33,6 +33,7 @@ import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { notifyAgentsChanged } from '../http/subscriptions.js';
 import { genId } from '../lib/ids.js';
+import { revokeAgentToken } from '../mcp/agent-tokens.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -482,6 +483,11 @@ export class AgentPool {
     { interruptIfRunning = true }: { interruptIfRunning?: boolean } = {},
   ): Promise<void> {
     if (!this.untrackAgent(agent.instanceId)) return;
+    // The credential dies with the agent it names. Without this the two token maps
+    // grew for the process's life and a disposed agent's `X-Agent-Token` stayed
+    // resolvable — it failed closed only downstream, where `findRoleForAgent` has no
+    // agent to answer for, which is a coincidence rather than a design.
+    revokeAgentToken(agent.instanceId);
     // The layout deltas are keyed by agent id and were never dropped, so the map only
     // ever grew. Through the hub because the session owns the LayoutContext and a pool
     // that outlives its session has nothing to clear.

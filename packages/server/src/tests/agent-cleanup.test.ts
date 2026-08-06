@@ -178,6 +178,7 @@ mock.module('../agents/agent-session.js', () => {
 
 const { AgentPool } = await import('../agents/agent-pool.js');
 import type { SessionId } from '../session/types.js';
+import { getAgentToken, resolveAgentToken } from '../mcp/agent-tokens.js';
 
 // ── Setup ────────────────────────────────────────────────────────────────
 
@@ -292,6 +293,26 @@ describe('AgentPool limiter slot release on error', () => {
     expect(err).toBeInstanceOf(Error);
     expect(mockTryAcquire).toHaveBeenCalledTimes(1);
     expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('AgentPool credential hygiene', () => {
+  it('revokes the agent MCP token on dispose', async () => {
+    const pool = new AgentPool(
+      'test-session' as SessionId,
+      mock(() => {}),
+    );
+
+    const agent = await pool.createEphemeral();
+    const token = getAgentToken(agent!.instanceId);
+    expect(resolveAgentToken(token)).toBe(agent!.instanceId);
+
+    await pool.disposeEphemeral(agent!);
+
+    // `revokeAgentToken` was exported, documented, and called from nowhere: the two
+    // maps grew for the process's life and a dead agent's `X-Agent-Token` stayed
+    // resolvable, failing closed only by accident further downstream.
+    expect(resolveAgentToken(token)).toBeNull();
   });
 });
 

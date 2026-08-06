@@ -4,6 +4,8 @@
  */
 import { mock, describe, it, expect } from 'bun:test';
 import { InteractionTimeline } from '../agents/interaction-timeline.js';
+import { getSessionHub } from '../session/session-hub.js';
+import type { SessionId } from '../session/types.js';
 
 // ── AppServer turn queue drain ──────────────────────────────────────────
 
@@ -398,5 +400,32 @@ describe('Timeline injection into main prompt', () => {
     expect(formatted).toContain('agent="ephemeral-1"');
     expect(formatted).toContain('agent="window-settings"');
     expect(timeline.size).toBe(0);
+  });
+});
+
+// ── SessionHub drain on shutdown ────────────────────────────────────────
+
+describe('SessionHub.drain()', () => {
+  // `shutdown()` never touched the hub, so no `LiveSession.cleanup()` ran on Ctrl-C
+  // and every session's debounced `SessionLogger` buffer went with the process.
+  it('tears down every live session, and one that throws does not stop the rest', async () => {
+    const hub = getSessionHub();
+    const a = hub.getOrCreate('ses-drain-a' as SessionId, {});
+    const b = hub.getOrCreate('ses-drain-b' as SessionId, {});
+
+    let bCleaned = false;
+    (a as unknown as { cleanup: () => Promise<void> }).cleanup = async () => {
+      throw new Error('logger flush exploded');
+    };
+    (b as unknown as { cleanup: () => Promise<void> }).cleanup = async () => {
+      bCleaned = true;
+    };
+
+    await hub.drain();
+
+    expect(bCleaned).toBe(true);
+    expect(hub.get('ses-drain-a' as SessionId)).toBeUndefined();
+    expect(hub.get('ses-drain-b' as SessionId)).toBeUndefined();
+    expect(hub.all()).toHaveLength(0);
   });
 });

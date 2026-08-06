@@ -201,6 +201,49 @@ export class SessionHub {
   }
 
   /**
+   * Every live session, as a snapshot — callers that tear sessions down while
+   * walking must not iterate the live map.
+   */
+  all(): LiveSession[] {
+    return [...this.sessions.values()];
+  }
+
+  /**
+   * Tear every live session down, for process shutdown.
+   *
+   * `shutdown()` never touched the hub, so no `LiveSession.cleanup()` ran on Ctrl-C
+   * and `SessionLogger`'s debounced write buffer went with the process — every
+   * launch lost whatever had not hit its flush timer. This is data loss, not a
+   * process leak: the provider children die with the group either way.
+   *
+   * Bounded, because shutdown has a 5s force-kill deadline over it and a hung
+   * provider must not be what stops the flush of every *other* session's log. A
+   * session that overruns is abandoned, not awaited.
+   */
+  async drain(timeoutMs = 2_000): Promise<void> {
+    for (const timer of this.evictionTimers.values()) clearTimeout(timer);
+    this.evictionTimers.clear();
+
+    const ids = [...this.sessions.keys()];
+    if (ids.length === 0) return;
+
+    const removals = ids.map((id) =>
+      this.remove(id).catch((err) => console.error(`[SessionHub] Drain failed for ${id}:`, err)),
+    );
+    let bell: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.all(removals),
+      new Promise<void>((resolve) => {
+        bell = setTimeout(() => {
+          console.error(`[SessionHub] Drain timed out after ${timeoutMs}ms; abandoning the rest.`);
+          resolve();
+        }, timeoutMs);
+      }),
+    ]);
+    clearTimeout(bell);
+  }
+
+  /**
    * Drop a session from the hub and tear it down.
    *
    * Deregistration happens in `finally`: a `cleanup()` that throws leaves a partially

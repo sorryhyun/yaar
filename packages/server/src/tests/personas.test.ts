@@ -49,6 +49,7 @@ import { APPS_DIR, USER_APPS_DIR } from '../features/apps/roots.js';
 import { _resetAppGrantsForTest } from '../storage/app-grants.js';
 import { parseAppAgentsPath } from '../handlers/apps/paths.js';
 import { getAgentLimiter } from '../agents/limiter.js';
+import { getSessionHub } from '../session/session-hub.js';
 import type { AITransport, StreamMessage, TransportOptions } from '../providers/types.js';
 import type { SessionId } from '../session/types.js';
 
@@ -521,6 +522,59 @@ describe('persona verb ownership', () => {
     expect(errorText(await tooLong!)).toContain('limit is');
 
     expect(getAgentLimiter().getCurrentCount()).toBe(slots);
+  });
+});
+
+// ── Interrupt ───────────────────────────────────────────────────────────────
+
+describe('persona interrupt', () => {
+  // `yaar://apps/self/agents` was the one interrupt door with no `isRunning()` check —
+  // `AgentPool.interruptAll` and `handlers/agents.ts` both have one. Interrupting an
+  // idle agent is not free: it takes `closePersistentSession()` on a prewarmed Claude
+  // sub-agent, which is the exact cost `interruptAll`'s doc says its skip avoids, and
+  // it leaves `markInterrupted` latched until the next turn — so the first action of
+  // the turn after a no-op interrupt was dropped.
+  const SESSION = 'ses-persona-interrupt' as SessionId;
+
+  it('skips an idle persona, and says it did not interrupt it', async () => {
+    const recorded: Recorded[] = [];
+    let interrupts = 0;
+    const pool = new AgentPool(
+      SESSION,
+      () => {},
+      (id) => id,
+      async () => ({
+        ...fakeProvider(recorded),
+        async interrupt() {
+          interrupts++;
+          return { outcome: 'acknowledged' as const };
+        },
+      }),
+    );
+
+    const spawned = await pool.spawnSubAgent('0', CAST_APP, 'alice', {
+      systemPrompt: 'You are Alice.',
+      max: 4,
+    });
+    expect('record' in spawned).toBe(true);
+
+    // The verb reaches its pool through the ambient session, as an iframe call does.
+    const session = getSessionHub().getOrCreate(SESSION, {});
+    (session as unknown as { getPool: () => unknown }).getPool = () => ({ agentPool: pool });
+
+    const result = await runWithAgentContext(
+      { agentId: `iframe:${CAST_APP}`, sessionId: SESSION, monitorId: '0', appId: CAST_APP },
+      () =>
+        invokePersonas({ sourceUri: `yaar://apps/${CAST_APP}/agents/alice` } as ResolvedUri, {
+          action: 'interrupt',
+        }),
+    );
+
+    expect(result!.structuredContent).toMatchObject({ personaId: 'alice', interrupted: false });
+    expect(interrupts).toBe(0);
+
+    await pool.cleanup();
+    await getSessionHub().remove(SESSION);
   });
 });
 

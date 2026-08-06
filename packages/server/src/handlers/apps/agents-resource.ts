@@ -264,6 +264,16 @@ export async function invokePersonas(
     case 'interrupt': {
       const record = requirePersona(scope);
       if ('content' in record) return record;
+      // The same `isRunning()` guard every other interrupt door applies
+      // (`AgentPool.interruptAll`, `handlers/agents.ts`), and for the reason
+      // `interruptAll`'s doc gives: interrupting an idle agent is not free. A
+      // prewarmed Claude sub-agent holds an open stream, and this took
+      // `closePersistentSession()` on it — so an app polling `interrupt` on a
+      // finished sub-agent paid a cold start for its next message, and left a stale
+      // `markInterrupted` that swallowed the first action of the turn after it.
+      if (!record.agent.session.isRunning()) {
+        return okJson({ personaId: record.subId, interrupted: false });
+      }
       await record.agent.session.interrupt();
       return okJson({ personaId: record.subId, interrupted: true });
     }

@@ -6,8 +6,7 @@
  * PATCH /api/domains   — update domain settings
  */
 
-import { readSettings, updateSettings } from '../../storage/settings.js';
-import { getWarmPool } from '../../providers/factory.js';
+import { applySettings } from '../../features/config/settings.js';
 import {
   readAllowedDomains,
   isAllDomainsAllowed,
@@ -41,28 +40,17 @@ export async function handleSettingsRoutes(req: Request, url: URL): Promise<Resp
   const denied = requirePermission(principal, uri, req.method === 'GET' ? 'read' : 'invoke');
   if (denied) return denied;
 
-  // Update settings
+  // Update settings — `applySettings` is the one implementation; this route used to
+  // carry a second one that validated nothing, detected a provider change against a
+  // different source of truth, and told no open desktop that anything had moved.
   if (url.pathname === '/api/settings' && req.method === 'PATCH') {
     try {
       const partial = await parseJsonBody<Record<string, unknown>>(req);
       if (partial instanceof Response) return partial;
 
-      // Check if provider is changing (requires warm pool restart)
-      const providerChanging =
-        partial.provider !== undefined && partial.provider !== getWarmPool().getPreferredProvider();
-
-      const settings = await updateSettings(
-        partial as Partial<Awaited<ReturnType<typeof readSettings>>>,
-      );
-
-      // Reinitialize warm pool when provider changes
-      if (providerChanging) {
-        const warmPool = getWarmPool();
-        await warmPool.cleanup();
-        await warmPool.initialize();
-      }
-
-      return jsonResponse(settings);
+      const result = await applySettings(partial);
+      if (!result.ok) return errorResponse(result.message, 400);
+      return jsonResponse(result.settings);
     } catch {
       return errorResponse('Failed to update settings');
     }

@@ -409,6 +409,11 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
   }, 5_000);
 
   try {
+    // First, while the deadline above still has room: every live session, so each
+    // `SessionLogger` flushes its debounced write buffer. Nothing else here rescues
+    // it, and the buffer is the only shutdown casualty that cannot be recreated.
+    await getSessionHub().drain();
+
     // Drop the Tailscale serve rules
     if (activeTunnel) {
       await activeTunnel.shutdown();
