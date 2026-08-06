@@ -62,6 +62,7 @@ Test runs are environment-pinned and process-partitioned:
 - `PROVIDER` - Force a specific AI provider (`claude` or `codex`). Auto-detected if not set.
 - `PORT` - Server port (default: 8000)
 - `MAX_AGENTS` - Global agent limit (default: 10)
+- `APP_AGENT_IDLE_MINUTES` - Idle minutes before an app agent is reclaimed (default: 15, `0` disables). See `packages/server/CLAUDE.md`.
 - `MCP_SKIP_AUTH` - Skip MCP authentication for local development
 - `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/guides/remote_mode.md`
 - `YAAR_REMOTE_TOKEN` - Use this remote-mode token instead of a freshly minted one (lets a launcher know the `#remote=<token>` URL up front). Ignored under 32 chars.

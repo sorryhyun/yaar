@@ -65,6 +65,7 @@ client can only answer over a socket the server is holding is a deadlock waiting
 - `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test/env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
 - `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop; `resolvePrincipal` refuses a token-less request carrying the app origin. **Which two origins** (`loopback-alias` locally, `proxy-port` over Tailscale Serve, `off`) is `http/origin-boundary.ts`'s business and the one place to ask — its header explains both modes and why the proxy-port attribution is unforgeable. See [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
 - `MONITOR_MAX_CONCURRENT` (default: 2), `MONITOR_MAX_ACTIONS_PER_MIN` (30), `MONITOR_MAX_OUTPUT_PER_MIN` (50000) - Background monitor budget limits
+- `APP_AGENT_IDLE_MINUTES` (default: 15) - How long an app agent may sit idle before `AgentPool` reclaims it; `0` disables the reaper. App agents are the one tier nothing else reclaims — not window close, only `fresh:true`, monitor removal, explicit delete, or session teardown — so against a process-global `MAX_AGENTS` of 10, apps opened once and left alone used to hold their slots until restart. Reaping ends the agent's provider session, so its memory goes with it (the same thing `fresh: true` does deliberately); its sub-agents survive, because their owner is the (monitor, app) pair.
 - `CODEX_WS_PORT` (default: 4510), `CHROME_PATH` (auto-detected), `MARKET_URL`
 - `YAAR_BROWSER_PROVIDER` - **No longer a selector.** `POST /api/browser` is always the headless sandbox (`getHeadlessBrowser()`); the user's real Chrome is reached only through the session-agent door `yaar://session/browser` (`getLocalBrowser()`), which auto-attaches whenever a debuggable Chrome is reachable. The var survives only as a **force-headless opt-out**: set `=headless` to keep the agent away from your real browser (the session door then uses the sandbox too).
 - `CHROME_DEBUG_PORT` (default: 9222) - DevTools port the local (session-door) browser provider attaches to (user launches Chrome with `--remote-debugging-port`).
@@ -207,7 +208,7 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 | Pattern | Location | Purpose |
 |---------|----------|---------|
-| Semaphore | `AgentLimiter` | Global agent limit with queue |
+| Semaphore | `AgentLimiter` | Global agent limit. Production only calls `tryAcquire()` — the wait queue is unreachable, so `waitingCount` is structurally zero |
 | Pool | `ContextPool` | Unified agent reuse with dynamic roles |
 | Warm Pool | `providers/warm-pool.ts` | Pre-initialize providers at startup |
 | Context Tape | `ContextTape` | Track messages by source for injection |

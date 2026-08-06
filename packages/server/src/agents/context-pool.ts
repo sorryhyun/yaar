@@ -673,7 +673,11 @@ export class ContextPool implements PoolContext {
       console.error('[ContextPool] Teardown: awaitInflight failed:', err);
     }
 
-    // 5. Now safe to dispose agents (no in-flight references)
+    // 5. Dispose agents. "No in-flight references" holds for every tier `inflightCount`
+    //    actually counts — which is not the sub-agent tier: its turns run outside that
+    //    accounting (`AgentPool.messageSubAgent`), so step 4 can return while one is
+    //    mid-`for await` and this disposes the provider under it. Counting sub-agent
+    //    turns is what would make the claim total; until then, this is the exception.
     try {
       await this.agentPool.cleanup();
     } catch (err) {

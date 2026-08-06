@@ -10,7 +10,17 @@
  *         └─ sub-agent                  `monitorId::appId::subId`   worker threads
  *
  * Each tier's key extends its owner's, each is addressed through its owner, and
- * disposal cascades downward. A sub-agent's capabilities are written once in
+ * disposal cascades downward.
+ *
+ * **What reclaims what is not symmetric, and readers assume it is.** Disposing a
+ * monitor takes its app agents and their sub-agents with it. Closing a *window*
+ * reclaims only sub-agents — an app agent survives every one of its windows closing,
+ * because it is keyed by (monitor, app) and the next window of that app is meant to
+ * find it still holding the conversation. What eventually reclaims it is idleness
+ * (`reapIdleAppAgents`), `fresh:true`, monitor removal, explicit delete, or session
+ * teardown.
+ *
+ * A sub-agent's capabilities are written once in
  * `profiles/sub-agent.ts` and never composed at the call site: it holds one channel
  * to its own app's iframe, wearing whatever tool names the app declared at spawn, or
  * no tools at all.
@@ -34,6 +44,7 @@ import { getSessionHub } from '../session/session-hub.js';
 import { notifyAgentsChanged } from '../http/subscriptions.js';
 import { genId } from '../lib/ids.js';
 import { revokeAgentToken } from '../mcp/agent-tokens.js';
+import { APP_AGENT_IDLE_MS, APP_AGENT_SWEEP_MS } from '../config.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -74,9 +85,14 @@ export interface PooledAgent {
   session: AgentSession;
   id: number;
   instanceId: string;
+  /**
+   * When this agent last ran a turn or was handed to a caller. Read only by the
+   * app-agent idle reaper ({@link AgentPool.reapIdleAppAgents}); every other tier
+   * writes it and nothing reads it, which is fine — the field is the reaper's clock,
+   * and a tier with another reclaim path does not need one.
+   */
   lastUsed: number;
   currentRole: string | null; // 'monitor-{messageId}' or 'app-{id}' when active
-  idleTimer: NodeJS.Timeout | null;
 }
 
 /** One live agent, as reported by `listAgents()`. */
@@ -289,6 +305,12 @@ export class AgentPool {
 
   /** Persistent per-app agents, keyed by `{monitorId}::{appId}` (see `appKey`). */
   private appAgents = new Map<string, PooledAgent>();
+
+  /**
+   * The app-agent idle reaper's interval — armed with the first app agent, disarmed
+   * with the last. Null whenever this pool has none. See {@link reapIdleAppAgents}.
+   */
+  private idleSweepTimer: ReturnType<typeof setInterval> | null = null;
 
   /**
    * App-agent creations reserved but not yet landed, keyed like {@link appAgents}.
@@ -557,7 +579,6 @@ export class AgentPool {
         instanceId,
         lastUsed: Date.now(),
         currentRole: null,
-        idleTimer: null,
       };
 
       // Past this line the agent owns the slot and `disposeAgent` releases it.
@@ -699,6 +720,10 @@ export class AgentPool {
     const key = appKey(monitorId, appId);
     const existing = this.appAgents.get(key);
     if (existing) {
+      // Touched on the way out, not only when a turn starts: an agent handed to a
+      // caller that has not begun its turn yet is neither busy nor idle, and the reaper
+      // must not take it out from under them.
+      existing.lastUsed = Date.now();
       console.log(
         `[AgentPool] Reusing app agent for ${appId} on monitor ${monitorId}: ${existing.instanceId}`,
       );
@@ -729,10 +754,69 @@ export class AgentPool {
     if (!agent) return null;
 
     this.appAgents.set(appKey(monitorId, appId), agent);
+    this.armIdleSweep();
     console.log(
       `[AgentPool] App agent created for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
     );
     return agent;
+  }
+
+  // ── App-agent idle reaper ────────────────────────────────────────────
+  //
+  // App agents are the one tier nothing else reclaims: not window close, not idleness,
+  // only `fresh:true`, monitor removal, explicit delete, or session teardown. Against a
+  // *process-global* limit of ten, eight apps opened once and left alone permanently
+  // held eight slots — and the ninth app, plus every other session on the machine, got
+  // "Agent limit reached" with no way to get a slot back short of a restart.
+  //
+  // One pool-level interval rather than a timer per agent: `lastUsed` is already
+  // written on every turn, so a sweep needs no new call sites, cannot leave a timer
+  // behind on a disposed agent, and costs one unref'd handle per session that has any
+  // app agents at all.
+
+  private armIdleSweep(): void {
+    if (this.idleSweepTimer || APP_AGENT_IDLE_MS <= 0) return;
+    this.idleSweepTimer = setInterval(() => {
+      void this.reapIdleAppAgents();
+    }, APP_AGENT_SWEEP_MS);
+    // Never the reason the process stays up.
+    this.idleSweepTimer.unref?.();
+  }
+
+  private disarmIdleSweep(): void {
+    if (!this.idleSweepTimer) return;
+    clearInterval(this.idleSweepTimer);
+    this.idleSweepTimer = null;
+  }
+
+  /**
+   * Dispose app agents that have gone quiet, freeing their global slots.
+   *
+   * Reaping costs the agent's memory — it lives in the provider session
+   * `disposeAppAgent` ends — which is exactly what a `fresh:true` turn does on purpose.
+   * The app's *sub-agents* survive, for the reason they survive a `fresh` turn: their
+   * owner is the (monitor, app) pair, not the app agent.
+   */
+  private async reapIdleAppAgents(): Promise<void> {
+    const now = Date.now();
+    const expired: Array<{ monitorId: string; appId: string }> = [];
+
+    for (const [key, agent] of this.appAgents) {
+      if (this.isBusy(agent)) {
+        // A busy agent's idle clock starts when it goes quiet, not when its turn
+        // began: `lastUsed` is stamped at turn *start*, so a turn longer than the TTL
+        // would otherwise be reapable the instant it finished.
+        agent.lastUsed = now;
+        continue;
+      }
+      if (now - agent.lastUsed >= APP_AGENT_IDLE_MS) expired.push(parseAppKey(key));
+    }
+
+    for (const { monitorId, appId } of expired) {
+      await this.disposeAppAgent(monitorId, appId, 'idle');
+    }
+
+    if (this.appAgents.size === 0) this.disarmIdleSweep();
   }
 
   /**
@@ -765,7 +849,7 @@ export class AgentPool {
    * and holding a slot until the session ends. A `fresh` turn disposes and then
    * immediately re-creates, so this is the ordinary case here, not the exotic one.
    */
-  async disposeAppAgent(monitorId: string, appId: string): Promise<void> {
+  async disposeAppAgent(monitorId: string, appId: string, reason?: string): Promise<void> {
     const key = appKey(monitorId, appId);
     await this.settleAppAgentSpawns((k) => k === key);
 
@@ -773,7 +857,10 @@ export class AgentPool {
     if (!agent) return;
 
     this.appAgents.delete(key);
-    await this.disposeAgent(agent, `App agent disposed for ${appId} on monitor ${monitorId}`);
+    await this.disposeAgent(
+      agent,
+      `App agent disposed${reason ? ` (${reason})` : ''} for ${appId} on monitor ${monitorId}`,
+    );
   }
 
   /** Wait out the app-agent reservations a teardown is about to sweep past. */
@@ -1306,6 +1393,7 @@ export class AgentPool {
    * teardown that stops early is the failure mode being fixed.
    */
   async cleanup(): Promise<void> {
+    this.disarmIdleSweep();
     // Before the snapshot: a persona still mid-spawn is in no collection, so it would
     // land in `subAgents` after the clear below and outlive the pool that owns it.
     await this.settlePersonaSpawns(() => true);

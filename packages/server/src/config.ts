@@ -74,6 +74,8 @@ export {
   MONITOR_MAX_CONCURRENT,
   MONITOR_MAX_ACTIONS_PER_MIN,
   MONITOR_MAX_OUTPUT_PER_MIN,
+  APP_AGENT_IDLE_MS,
+  APP_AGENT_SWEEP_MS,
 } from './config/limits.js';
 
 export {
