@@ -8,6 +8,10 @@ import { hasConfig } from './config.js';
 import { APP_ROOTS, resolveAppDir, resolveAppSource, type AppSource } from './roots.js';
 import type { AppManifest, FileAssociation } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';
+// Must stay `import type`. `http/access.ts` imports `http/iframe-tokens.ts`, which
+// imports this module statically for `getAppMeta` — the cycle is closed only because
+// this edge erases at compile time. Making it a value import would make it real, and
+// the symptom is an undefined binding at module init, not a build error.
 import type { PermissionEntry } from '../../http/access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 import { withoutPersonaCommands } from './persona-commands.js';

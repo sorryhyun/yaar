@@ -33,6 +33,10 @@
 import { join } from 'node:path';
 import { isPreviewAppId, PREVIEW_APP_PREFIX } from '@yaar/shared';
 import type { PermissionEntry } from './access.js';
+// Static, and safe to be: `discovery.js` reaches back into `http/` only through
+// `import type { PermissionEntry } from '../../http/access.js'`, which erases. That
+// type-only edge is the whole reason there is no cycle here — see the note on it.
+import { getAppMeta } from '../features/apps/discovery.js';
 import { getStorageDir } from '../config.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
 
@@ -268,7 +272,6 @@ export async function generateAppIframeToken(
   sessionId: string,
   { appId, permissions: explicitPermissions, monitorId }: IframeTokenOptions = {},
 ): Promise<string> {
-  const { getAppMeta } = await import('../features/apps/discovery.js');
   const appMeta = appId ? await getAppMeta(appId) : null;
   let permissions = explicitPermissions ?? appMeta?.permissions ?? [];
 
