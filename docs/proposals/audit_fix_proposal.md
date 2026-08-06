@@ -92,36 +92,56 @@ files wire the *production* resolver rather than a fake: the resolver is a proce
 and the unit partition runs its files concurrently, so a fake would decide the gate's answer
 for whatever else overlapped it.
 
-## Phase 3 — shrink the drift surface (findings 4, 7, 9, 11, 12)
+## Phase 3 — ✅ landed (findings 4, 7, 9, 11, 12, 13)
 
-Mechanical consolidations, each its own small commit:
+Six mechanical consolidations, one commit each. Each is documented where it is enforced —
+`packages/server/CLAUDE.md`'s access-chokepoint section and the headers of the modules
+named below — not here.
 
-1. **One `resolveSelf`** (finding 4): export it from `access.ts`; use it at `verb.ts`'s two
-   inline copies (main + subscribe). `storageUriFor` keeps its path-flavored expansion but
-   gains a cross-reference comment — restructuring it to round-trip through the URI form
-   isn't worth the churn.
-2. **Shared door prelude** (finding 13): extract the common "parse body → resolvePrincipal
-   → insist app" sequence from `/api/verb` and `/api/verb/subscribe` into one helper,
-   keeping each door's genuinely different rules (describe-for-anonymous, stream carve-outs)
-   at the door.
-3. **Shared copy-action shape** (finding 7): one module (e.g. `handlers/storage-copy.ts`)
-   exports the copy-payload schema and `copySources(payload): string[]`; `verb.ts`'s
-   enforcement loop and both storage handlers (`handlers/storage.ts`,
-   `handlers/apps/storage-resource.ts`) import it. A renamed field then breaks the build
-   instead of uncovering the check.
-4. **One token-extraction rule** (finding 9): export `extractIframeToken` from `access.ts`;
-   `auth.ts:hasValidIframeToken` and `server.ts`'s Phase B route gate both call it.
-   Behavior delta: a query-param token now also hits the coarse PUBLIC_ENDPOINTS
-   allowlist — the safe direction, but **verify first** that every legitimate query-param
-   consumer (`<img src>` on `/api/storage/…`, `EventSource`) is on the allowlist, with a
-   test per consumer.
-5. **Subscription URI contract** (finding 12): make `subscriptionRegistry` itself refuse (or
-   resolve) a `self`-bearing URI at both `subscribe` and `notify` boundaries, so the
-   "producers always pass resolved URIs" convention becomes checked instead of trusted.
-6. **Delete the dead batch branch** (finding 11): `/api/verb` never brace-expands, so
-   `toEnvelope`'s `--- uri ---` sniffing branch is dead — remove it, and have the door
-   return a pointed error for brace URIs ("brace expansion is MCP-only; send an array
-   payload") instead of "No handler registered".
+1. **One `resolveSelf`** (finding 4). Exported from `access.ts`, with `namesSelf` as its
+   counterpart: `resolveSelf` returns the URI untouched when there is no appId to expand
+   against, so testing the *result* is how each door decides whether that is fatal. Both
+   of `verb.ts`'s inline copies collapse to two lines. `storageUriFor` keeps its
+   path-flavored expansion and gains the cross-reference.
+2. **Shared door prelude** (finding 13). `openVerbDoor` owns "read the body, resolve the
+   caller"; `requireApp` (access.ts, third caller `requireBundledApp`) owns "insist it is a
+   real app" and returns the narrowed `AppPrincipal`. Each door's genuinely different rules
+   stayed at the door — folding them in would make one helper answer "may this caller in?"
+   two ways depending on a flag.
+3. **Shared copy-action shape** (finding 7). `handlers/storage-copy.ts` owns the action
+   name, the `from` schema, the refusal wording and `copySources()`. It found live drift:
+   the composite `yaar://apps/*` registration listed `copy` in its action enum and declared
+   no `from` property at all.
+4. **One token-extraction rule** (finding 9). `extractIframeToken` exported from
+   `access.ts`; `auth.ts` and `server.ts`'s Phase B gate both call it.
+5. **Subscription URI contract** (finding 12). `subscribe` throws on a `self`-bearing URI;
+   `notifyChange`/`publishFrame` log and carry on.
+6. **Delete the dead batch branch** (finding 11), and refuse a brace URI at the door by
+   name.
+
+### Behavior deltas (intentional)
+
+| Before | After |
+|---|---|
+| A query-param token skipped the coarse route allowlist | It meets the same gate as a header token |
+| `/api/verb` with a bad verb *and* a bad token reported the verb | Reports the identity failure — the more accurate of two refusals |
+| `yaar://storage/{a,b}` → "No handler registered for …" | "Brace expansion is MCP-only", plus what this door does batch |
+| A `self`-bearing URI reached the subscription registry silently | Refused at `subscribe`, logged at `notifyChange`/`publishFrame` |
+
+Item 4 was the only one needing verification rather than reading: the tightening is safe
+only if every legitimate query-param consumer is on `PUBLIC_ENDPOINTS`. All are — storage
+files and listings, app static files (the iframe document itself), PDF page rasters,
+browser screenshots, browser events — and `tests/iframe-token-extraction.test.ts` holds one
+row per consumer, driving the real fetch handler.
+
+Also pinned by `tests/self-resolution.test.ts`, `tests/verb-door-prelude.test.ts`,
+`tests/storage-copy-shape.test.ts`, `tests/subscription-uri-contract.test.ts`, and new rows
+in `tests/verb-envelope.test.ts`. All plain units.
+
+**Not done, deliberately:** finding 5 (authority assembled in three layers). It is a
+description of the Phase 0/1 design rather than a defect — frozen-at-mint identity,
+per-request grants, per-check canonicalization are three layers because they have three
+different lifetimes. Consolidating them would undo the split that fixed findings 1 and 2.
 
 ## Phase 4 — optional, separately scheduled (findings 6, 8, 10)
 
@@ -142,11 +162,11 @@ Real refactors with their own risk budgets; none blocks Phases 1–3.
 
 ## Sequencing & risk
 
-- **Remaining order:** 3's items in any order, 4 when convenient. Each phase is one
-  PR against `dev`; Phase 3 can be one PR of small commits.
-- Phase 2 changed behavior on purpose (delta above); Phase 3 is intended to be
-  behavior-preserving except items 4 and 6's error-message/coarse-gate tightening.
+- **Remaining:** Phase 4 only, when convenient. Its three items are independent of each
+  other and of everything above.
+- Phases 2 and 3 changed behavior on purpose; each phase's deltas are tabled in its own
+  section.
 - Test partitions: token/grant tests are plain units; anything booting the hub follows the
   existing partition rules (`scripts/test/partitions.ts`).
-- Docs to update in the same PR: `packages/server/CLAUDE.md` (access chokepoint section —
-  the widened session-principal definition).
+- Docs live where the behavior is enforced — `packages/server/CLAUDE.md`'s access
+  chokepoint section plus the module headers — and were updated with each phase.
