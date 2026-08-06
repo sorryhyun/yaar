@@ -27,7 +27,6 @@ function findChromiumBrowser(): string | null {
   const currentPlatform = platform();
 
   if (currentPlatform === 'win32') {
-    // Common install locations for Chrome and Edge on Windows
     const candidates = [
       `${process.env.PROGRAMFILES}\\Google\\Chrome\\Application\\chrome.exe`,
       `${process.env['PROGRAMFILES(X86)']}\\Google\\Chrome\\Application\\chrome.exe`,
@@ -65,9 +64,6 @@ function findChromiumBrowser(): string | null {
   return null;
 }
 
-/**
- * Build the full URL, including the remote auth token when in remote/bundled mode.
- */
 function getBaseUrl(): string {
   return `http://127.0.0.1:${getPort()}`;
 }
@@ -118,7 +114,6 @@ function openAppWindow() {
       stdio: ['ignore', 'ignore', 'ignore'],
     });
 
-    // Hide console after browser is launched
     hideConsole();
 
     // Terminate the server when the browser window is closed.
@@ -141,7 +136,6 @@ function openAppWindow() {
     return;
   }
 
-  // Fallback: open in default browser
   console.log(`No Chromium browser found. Opening default browser: ${url}`);
   hideConsole();
   try {
@@ -166,7 +160,6 @@ function openAppWindow() {
 // main.ts registers SIGINT/SIGTERM handlers for graceful shutdown.
 // lifecycle.ts has a 5-second force-kill timer as a last resort.
 
-// Wait for the server to be fully ready, then open the app window.
 try {
   await ready;
   openAppWindow();

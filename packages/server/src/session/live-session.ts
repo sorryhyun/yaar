@@ -111,7 +111,6 @@ export class LiveSession {
   readonly epoch: number = nextSessionEpoch();
   private connections = new Map<ConnectionId, YaarWebSocket>();
 
-  // Session-scoped state
   private pool: ContextPool | null = null;
   private initPromise: Promise<boolean> | null = null;
   private initialized = false;
@@ -155,16 +154,17 @@ export class LiveSession {
   private readonly acceptedMessageIds = new Set<string>();
   private static readonly MAX_TRACKED_MESSAGE_IDS = 500;
 
-  // Restored state
   private restoredContext: ContextMessage[];
   private savedThreadIds?: Record<string, string>;
 
   /** True once launch hooks have been executed — prevents re-firing on reconnect or second tab. */
   launchHooksExecuted = false;
 
-  // Session logger — created at server startup, passed via options.
-  // Owned by LiveSession so that user interactions are logged even before the
-  // pool is initialized (i.e., before the user sends their first message).
+  /**
+   * Created at server startup, passed via options. Owned by LiveSession so that user
+   * interactions are logged even before the pool is initialized (i.e., before the user
+   * sends their first message).
+   */
   private sessionLogger: SessionLogger | null = null;
 
   /** The client frames this session answers. See `client-event-controller.ts`. */
@@ -191,10 +191,8 @@ export class LiveSession {
     const cachePath = join(getConfigDir(), 'reload-cache', `${sessionId}.json`);
     this.reloadCache = new ReloadCache(cachePath);
 
-    // Use the session logger created at startup
     this.sessionLogger = options.sessionLogger ?? null;
 
-    // Restore windows from previous session
     if (options.restoreActions && options.restoreActions.length > 0) {
       this.windowState.restoreFromActions(options.restoreActions);
       this.regrantRestoredDocuments(options.restoreActions);
@@ -344,7 +342,6 @@ export class LiveSession {
         this.windowState.handleMap.resolve(rawWindowId, event.monitorId) ??
         rawWindowId)
       : undefined;
-    // Record action against the monitor's budget (if monitorId present)
     if (event.monitorId && this.pool) {
       this.pool.recordMonitorAction(event.monitorId);
     }
@@ -352,7 +349,6 @@ export class LiveSession {
     if (event.action.type.startsWith('window.') && windowHandle) {
       subscriptionRegistry.notifyChange(`yaar://windows/${windowHandle}`, this.sessionId);
     }
-    // Notify window subscribers of state changes
     if (this.pool) {
       const changeEvent = mapActionToSubscriptionEvent(event.action);
       if (changeEvent) {
@@ -368,12 +364,10 @@ export class LiveSession {
       }
     }
     // Actions from non-agent contexts (iframe verb proxy, HTTP routes) have no
-    // ToolActionBridge to broadcast them to the frontend. Detect these by checking
-    // if the agentId starts with "iframe:" and broadcast directly.
+    // ToolActionBridge to broadcast them to the frontend, so do it directly.
     if (event.agentId?.startsWith('iframe:')) {
       const action = event.action;
       const raw = rawWindowId;
-      // Stamp the scoped handle if the action has a raw windowId
       const handle = windowHandle;
       // Carry the requestId through, as ToolActionBridge does on the agent path.
       // An action awaiting feedback is only answerable if the frontend knows which
@@ -396,8 +390,6 @@ export class LiveSession {
       this.sessionLogger?.logAction(stamped);
     }
   }
-
-  // ── Connection management ───────────────────────────────────────────
 
   addConnection(connectionId: ConnectionId, ws: YaarWebSocket): void {
     this.connections.set(connectionId, ws);
@@ -426,8 +418,6 @@ export class LiveSession {
   getConnectionCount(): number {
     return this.connections.size;
   }
-
-  // ── Event broadcasting ──────────────────────────────────────────────
 
   /**
    * Single gateway for all server→frontend events.
@@ -462,23 +452,13 @@ export class LiveSession {
     }
   }
 
-  /**
-   * Send an event to a specific connection only (e.g., initial snapshot).
-   */
   sendTo(connectionId: ConnectionId, event: ServerEvent): void {
     getBroadcastCenter().publishToConnection(event, connectionId);
   }
 
-  // ── Session Logger ──────────────────────────────────────────────────
-
-  /**
-   * Get the session logger (pool's logger takes precedence if available).
-   */
   getSessionLogger(): SessionLogger | null {
     return this.pool?.getSessionLogger() ?? this.sessionLogger;
   }
-
-  // ── Snapshot ────────────────────────────────────────────────────────
 
   /** Everything this session currently holds. See `session-snapshot-service.ts`. */
   async buildSnapshot(): Promise<{ actions: OSAction[]; agents: ActiveAgentSnapshot[] }> {
@@ -493,8 +473,6 @@ export class LiveSession {
   async generateSnapshot(): Promise<OSAction[]> {
     return this.snapshots.windowActions();
   }
-
-  // ── Launch hooks ──────────────────────────────────────────────────
 
   /**
    * Execute launch hooks (e.g., opening dock on startup).
@@ -546,8 +524,6 @@ export class LiveSession {
     }
   }
 
-  // ── Pool lifecycle ──────────────────────────────────────────────────
-
   private async ensureInitialized(): Promise<boolean> {
     if (this.initialized) return true;
     if (this.initPromise) return this.initPromise;
@@ -561,7 +537,6 @@ export class LiveSession {
   private async doInitialize(): Promise<boolean> {
     console.log(`[LiveSession ${this.sessionId}] Initializing pool`);
 
-    // Load reload cache from disk
     await this.reloadCache.load();
 
     this.pool = new ContextPool(
@@ -619,12 +594,9 @@ export class LiveSession {
       this.savedThreadIds = undefined;
       await getWarmPool().resetCodexProviders();
     }
-    // Re-execute launch hooks (e.g., reopen dock)
     this.launchHooksExecuted = false;
     await this.executeLaunchHooks(connectionId);
   }
-
-  // ── Message routing ─────────────────────────────────────────────────
 
   /**
    * Route incoming messages to the appropriate handler.
@@ -660,14 +632,10 @@ export class LiveSession {
     await this.router.dispatch(event, connectionId);
   }
 
-  // ── Monitors ────────────────────────────────────────────────────────
-
   /** The session's monitors. Authoritative — the client renders this, it does not mint it. */
   getMonitors(): MonitorInfo[] {
     return this.monitorRegistry.list();
   }
-
-  // ── Query methods ───────────────────────────────────────────────────
 
   hasWindow(windowId: string): boolean {
     return this.windowState.hasWindow(windowId);
@@ -681,8 +649,6 @@ export class LiveSession {
   hasActiveAppAgentTurn(windowId: string): boolean {
     return this.pool?.hasActiveAppAgentTurn(windowId) ?? false;
   }
-
-  // ── Cleanup ─────────────────────────────────────────────────────────
 
   async cleanup(): Promise<void> {
     sessionEventRouter.detach(this.sessionId, this.eventSink);

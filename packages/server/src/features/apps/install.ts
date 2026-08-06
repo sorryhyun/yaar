@@ -137,7 +137,6 @@ export async function installApp(appId: string): Promise<VerbResult> {
     }
   }
 
-  // Move from staging to final app directory
   if (isUpdate) {
     await rm(appDir, { recursive: true, force: true });
   }
@@ -155,7 +154,6 @@ export async function installApp(appId: string): Promise<VerbResult> {
   // on disk at all.
   await saveAppGrant(appId, grantFor(requested));
 
-  // Compile the app if it has source code
   if (existsSync(join(appDir, 'src', 'main.ts'))) {
     let bundles: string[] | undefined;
     let title = appId;
@@ -164,7 +162,7 @@ export async function installApp(appId: string): Promise<VerbResult> {
       if (Array.isArray(meta.bundles)) bundles = meta.bundles;
       if (typeof meta.name === 'string') title = meta.name;
     } catch {
-      // No app.json or invalid JSON
+      // No app.json or it's malformed — fall back to appId as the title.
     }
     const compileResult = await compileTypeScript(appDir, { title, bundles });
     if (!compileResult.success) {

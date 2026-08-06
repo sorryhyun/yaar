@@ -37,10 +37,8 @@ export function getCodexSpawnArgs(): string[] {
 
 // ── Codex app-server configuration ────────────────────────────────────
 
-/** Default port for the codex app-server WebSocket listener. */
 export const CODEX_WS_PORT = getEnvInt('CODEX_WS_PORT', 4510);
 
-/** Get the codex app-server WebSocket port (env override or default). */
 export function getCodexWsPort(): number {
   return CODEX_WS_PORT;
 }

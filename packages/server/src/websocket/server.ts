@@ -66,7 +66,6 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       const { connectionId } = ws.data;
       const broadcastCenter = getBroadcastCenter();
 
-      // Get or create session
       const hub = getSessionHub();
       const sessionOptions: LiveSessionOptions = {
         restoreActions: options.restoreActions,
@@ -82,7 +81,6 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       // Update ws.data with the actual session ID (may differ from requested)
       ws.data.sessionId = session.sessionId;
 
-      // Register connection with session and broadcast center
       // Bun's ServerWebSocket has the same send/readyState API as our YaarWebSocket
       session.addConnection(connectionId, ws);
       broadcastCenter.subscribe(connectionId, ws, session.sessionId);

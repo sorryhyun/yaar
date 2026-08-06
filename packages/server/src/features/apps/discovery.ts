@@ -17,7 +17,6 @@ import type { Verb } from '../../handlers/uri-registry.js';
 import { withoutPersonaCommands } from './persona-commands.js';
 import { readAppGrant, type AppGrant } from '../../storage/app-grants.js';
 
-/** Supported image extensions for app icons */
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
 
 /** Stable bytewise ordering for app IDs, independent of filesystem or locale order. */
@@ -243,19 +242,16 @@ export interface AppInfo {
 async function readAppInfo(root: string, appId: string, source: AppSource): Promise<AppInfo> {
   const appPath = join(root, appId);
 
-  // Check for credentials (in either location)
   const appHasConfig = await hasConfig(appId);
 
-  // Check for compiled app (index.html)
   let isCompiled = false;
   try {
     await stat(join(appPath, 'dist', 'index.html'));
     isCompiled = true;
   } catch {
-    // File doesn't exist
+    // Not compiled yet — isCompiled stays false.
   }
 
-  // Check for app.json metadata
   let icon: string | undefined;
   let iconType: 'emoji' | 'image' | undefined;
   let displayName: string | undefined;
@@ -303,7 +299,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
       bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
     }
   } catch {
-    // No metadata or invalid JSON
+    // No app.json or it's malformed — fields stay at their defaults.
   }
 
   // Only bundled apps may declare themselves `system` — an installed app cannot
@@ -314,7 +310,6 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   // other apps, so an installed app can't grab control of e.g. the real browser.
   if (controls && source !== 'bundled') controls = undefined;
 
-  // Load dist/protocol.json (implies appProtocol support)
   try {
     const protocolContent = await Bun.file(join(appPath, 'dist', 'protocol.json')).text();
     // Persona-audience commands are stripped here, at the one place the protocol is
@@ -324,10 +319,10 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     // to it in its own voice at spawn — see `persona-commands.ts`.
     protocol = withoutPersonaCommands(JSON.parse(protocolContent));
   } catch {
-    // No protocol.json
+    // No protocol.json — protocol stays undefined.
   }
 
-  // Check for icon image file (takes priority over emoji)
+  // Icon image file takes priority over emoji
   try {
     const files = await readdir(appPath);
     for (const file of files) {
@@ -343,10 +338,9 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
       }
     }
   } catch {
-    // Could not read directory
+    // Can't read the app dir — fall back to no icon.
   }
 
-  // Convert kebab-case or snake_case to Title Case (fallback)
   const name =
     displayName ??
     appId
@@ -354,7 +348,6 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(' ');
 
-  // Resolve run URL as yaar:// URI
   let resolvedRun: string | undefined;
   if (run) {
     // Absolute paths stay as-is (not a yaar:// URI)
@@ -425,7 +418,7 @@ export async function listApps(): Promise<AppInfo[]> {
     try {
       entries = await readdir(root, { withFileTypes: true });
     } catch {
-      continue; // root doesn't exist
+      continue;
     }
     for (const entry of entries.sort((a, b) => compareAppIds(a.name, b.name))) {
       if (!entry.isDirectory()) continue;
@@ -440,9 +433,6 @@ export async function listApps(): Promise<AppInfo[]> {
   return [...apps];
 }
 
-/**
- * Get window metadata (variant, dockEdge) for a single app from its app.json.
- */
 export async function getAppMeta(appId: string): Promise<{
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
@@ -538,12 +528,11 @@ export async function getAppMeta(appId: string): Promise<{
     });
     if (granted.streams) result.streams = granted.streams;
     if (granted.subagents) result.subagents = granted.subagents;
-    // Check for dist/protocol.json to determine appProtocol support
     try {
       await Bun.file(join(appDir, 'dist', 'protocol.json')).text();
       result.hasProtocol = true;
     } catch {
-      // No dist/protocol.json
+      // No protocol.json — hasProtocol stays unset.
     }
     return Object.keys(result).length > 0 ? result : null;
   } catch {
@@ -733,9 +722,6 @@ export function loadAppHint(appId: string): Promise<string | null> {
   return loadAgentDoc(appId, 'hint');
 }
 
-/**
- * Load all app hints for injection into the monitor prompt.
- */
 export async function loadAllAppHints(): Promise<{ appId: string; hint: string }[]> {
   const results: { appId: string; hint: string }[] = [];
   const seen = new Set<string>();

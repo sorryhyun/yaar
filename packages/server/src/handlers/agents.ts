@@ -26,7 +26,6 @@ function getPool() {
 }
 
 export function registerAgentsHandlers(registry: ResourceRegistry): void {
-  // ── yaar://session/agents — list all agents ──
   registry.register('yaar://session/agents', {
     description:
       'List all active agents (session, monitor, app, sub-agent, ephemeral), flat and as ' +
@@ -81,7 +80,6 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://session/agents/* — agent instance operations ──
   registry.register('yaar://session/agents/*', {
     description:
       'Agent instance. Read for agent info, invoke to interrupt, relay, or invoke the session agent, ' +
@@ -126,7 +124,6 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       assertSessionAgents(resolved);
       if (!resolved.id) return error('Agent ID required.');
 
-      // Session agent status
       if (resolved.id === 'session') {
         const pool = getPool();
         if (!pool) return error('Session not initialized.');
@@ -156,7 +153,6 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
 
       const action = payload!.action as string;
 
-      // ── Session agent actions ──
       if (resolved.id === 'session') {
         if (action === 'audit' || action === 'coordinate' || action === 'query') {
           const pool = getPool();
@@ -177,7 +173,6 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         if (!pool) return error('No agents — session not initialized.');
 
         if (resolved.id) {
-          // Session agent interrupt
           if (resolved.id === 'session') {
             const agent = pool.agentPool.getSessionAgent();
             if (!agent || !agent.session.isRunning()) return error('Session agent is not running.');
@@ -190,7 +185,6 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           return ok(`Interrupted agent "${resolved.id}".`);
         }
 
-        // No specific agent — interrupt all
         await pool.interruptAll();
         return ok('Interrupted all agents.');
       }

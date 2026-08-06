@@ -96,7 +96,6 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
 
   const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
   if (!storagePath.path) {
-    // Bare storage root → redirect to list
     return storageListLinks(storagePath.appId, prefixedPath, { missingIsEmpty: true });
   }
   const result = await storageRead(prefixedPath);
@@ -108,7 +107,6 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
         `content "${resolved.sourceUri}" rather than reading the bytes.`,
     );
   }
-  // Images / PDFs — return base64 content items
   if (result.images?.length) {
     return okWithImages(result.content!, result.images);
   }
@@ -118,7 +116,6 @@ export async function readStorage(resolved: ResolvedUri): Promise<VerbResult | n
   // API or fed to the model as garbage. `storageRead` already returns a "Binary file (…) —
   // use /api/storage/… to serve it directly" line, which is the useful answer anyway.
 
-  // Text content — return as embedded resource with URI + MIME
   return okResource(resolved.sourceUri, result.content!, mimeFromPath(storagePath.path));
 }
 

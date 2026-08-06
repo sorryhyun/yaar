@@ -118,7 +118,6 @@ function writeDenied(callerAppId: string, targetAppId: string): Response {
 export async function handleDevRoutes(req: Request, url: URL): Promise<Response | null> {
   if (!url.pathname.startsWith('/api/dev/')) return null;
 
-  // GET /api/dev/preview/{appId} — the app as a top-level page, token included.
   if (url.pathname.startsWith('/api/dev/preview/') && req.method === 'GET') {
     return servePreview(req, url);
   }
@@ -163,7 +162,6 @@ export async function handleDevRoutes(req: Request, url: URL): Promise<Response 
   const callerAppId = principal.appId;
   if (!callerAppId) return errorResponse('Invalid or missing iframe token', 403);
 
-  // Body
   const body = await parseJsonBody<Record<string, unknown>>(req);
   if (body instanceof Response) return body;
 

@@ -35,7 +35,6 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
   const principal = resolvePrincipal(req, url);
   if (principal instanceof Response) return principal;
 
-  // List all sessions
   if (url.pathname === '/api/sessions' && req.method === 'GET') {
     const denied = requirePermission(principal, 'yaar://history/', 'list');
     if (denied) return denied;
@@ -47,7 +46,6 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
     }
   }
 
-  // Get session transcript
   const transcriptMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/transcript$/);
   if (transcriptMatch && req.method === 'GET') {
     const sessionId = transcriptMatch[1];
@@ -64,7 +62,6 @@ export async function handleSessionRoutes(req: Request, url: URL): Promise<Respo
     }
   }
 
-  // Get session messages (for replay)
   const messagesMatch = url.pathname.match(/^\/api\/sessions\/([^/]+)\/messages$/);
   if (messagesMatch && req.method === 'GET') {
     const sessionId = messagesMatch[1];

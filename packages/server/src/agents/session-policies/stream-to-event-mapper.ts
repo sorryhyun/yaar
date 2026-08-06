@@ -411,7 +411,6 @@ export class StreamToEventMapper {
           const verb = rawName.replace('mcp__verbs__', '');
           const uri = input?.uri;
           displayName = uri ? `${verb}:(${uri})` : verb;
-          // Strip uri from display input, show only payload (or nothing)
           if (input) {
             const { uri: _uri, ...rest } = input;
             displayInput = Object.keys(rest).length > 0 ? rest : undefined;
@@ -445,10 +444,8 @@ export class StreamToEventMapper {
           });
         }
 
-        // Execute matching tool_use hooks
         const hookCtx: ToolUseContext = { toolName: displayName };
 
-        // For verb tools, extract verb/uri/action from toolInput
         if ((VERB_TOOL_NAMES as readonly string[]).includes(rawName)) {
           const input = message.toolInput as Record<string, unknown> | undefined;
           hookCtx.verb = rawName.replace('mcp__verbs__', '');
@@ -523,7 +520,6 @@ export class StreamToEventMapper {
             `[ToolError] ${formatToolDisplay(message.toolName ?? 'tool')}: ${message.content?.slice(0, 200)}`,
           );
         }
-        // Compute timing + error metadata
         let meta: { isError?: boolean; errorCategory?: string; durationMs?: number } | undefined;
         if (message.toolUseId) {
           const startEntry = this.toolStartTimes.get(message.toolUseId);
@@ -596,7 +592,6 @@ export class StreamToEventMapper {
   private async flushThinking(): Promise<void> {
     if (!this.thinkingDirty) return;
 
-    // Emit final thinking event with this block's accumulated text
     await this.sendEvent({
       type: ServerEventType.AGENT_THINKING,
       content: this.state.thinkingText.slice(this.blockThinkingStart),
@@ -604,7 +599,7 @@ export class StreamToEventMapper {
       monitorId: this.monitorId,
     });
 
-    // Log only the new thinking text since last flush (handles multiple thinking blocks)
+    // Handles multiple thinking blocks: only what's new since the last flush.
     const newText = this.state.thinkingText.slice(this.lastFlushedThinkingLength);
     if (newText) {
       this.logger?.logThinking(newText, this.role);

@@ -39,7 +39,6 @@ export async function handleProxyRoutes(req: Request, url: URL): Promise<Respons
     return null;
   }
 
-  // Parse request body
   const body = await parseJsonBody<{
     url?: string;
     method?: string;

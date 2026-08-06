@@ -185,7 +185,6 @@ export async function handleCreate(
     });
   }
 
-  // Non-component renderers
   let data = payload.content as string | { headers: string[]; rows: string[][] };
 
   // Auto-extract appId from content URI (e.g. yaar://apps/word-lite) when not explicit
@@ -194,7 +193,6 @@ export async function handleCreate(
     (renderer === 'iframe' && typeof data === 'string' && extractAppId(data)) ||
     undefined;
 
-  // Resolve yaar:// URIs for iframe content
   if (renderer === 'iframe' && typeof data === 'string') {
     const resolved = resolveResourceUri(data);
     if (resolved) {

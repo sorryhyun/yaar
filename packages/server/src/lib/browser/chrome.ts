@@ -99,11 +99,9 @@ const WHICH_CANDIDATES = ['google-chrome', 'google-chrome-stable', 'chromium-bro
  * Checks CHROME_PATH env var first, then platform-specific known paths.
  */
 export async function findChrome(): Promise<string | null> {
-  // Env var takes priority
   const envPath = process.env.CHROME_PATH;
   if (envPath && existsSync(envPath)) return envPath;
 
-  // Check platform-specific paths
   const candidates = CHROME_PATHS[process.platform] || [];
   for (const p of candidates) {
     if (p && existsSync(p)) return p;
@@ -190,7 +188,6 @@ export async function launchChrome(chromePath: string): Promise<ChromeInstance> 
 
     let resolved = false;
 
-    // Read stderr as a stream to find the DevTools URL
     const reader = proc.stderr.getReader();
     let stderrData = '';
 
@@ -256,9 +253,6 @@ export async function launchChrome(chromePath: string): Promise<ChromeInstance> 
   return { process: proc, port, wsUrl, userDataDir };
 }
 
-/**
- * Kill Chrome process and clean up temp profile directory.
- */
 export async function cleanupChrome(instance: ChromeInstance): Promise<void> {
   // On Windows, Chrome may have forked — the process handle might be the dead parent.
   // Send Browser.close via CDP to ensure the actual Chrome child shuts down.
@@ -293,7 +287,6 @@ export async function cleanupChrome(instance: ChromeInstance): Promise<void> {
     /* already dead */
   }
 
-  // Wait for process to exit
   await new Promise((resolve) => setTimeout(resolve, 500));
 
   try {

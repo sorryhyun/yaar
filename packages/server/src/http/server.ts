@@ -10,7 +10,6 @@ import { handleMcpRequest, CORE_SERVERS, type McpServerName } from '../mcp/serve
 import { getPort, IS_REMOTE, APP_ORIGIN_ISOLATION } from '../config.js';
 import { desktopRedirectTarget, runOnAppOriginSocket } from './origin-boundary.js';
 
-// ── Dev reload SSE handler (set by dev-bundler.ts) ──────────────────
 let _devReloadHandler: (() => Response) | null = null;
 
 /** Register the SSE handler for dev live-reload. Called by dev-bundler.ts. */
@@ -50,7 +49,6 @@ import { PUBLIC_ENDPOINTS as SETTINGS_PUBLIC } from './routes/settings.js';
 import { PUBLIC_ENDPOINTS as SHORTCUTS_PUBLIC } from './routes/shortcuts.js';
 import { PUBLIC_ENDPOINTS as VERB_PUBLIC } from './routes/verb.js';
 
-// ── Public endpoint matcher ──────────────────────────────────────────
 // Build a set of { method, regex } from all route files' PUBLIC_ENDPOINTS.
 // Path patterns like `/api/storage/{path}` become `/api/storage/.+`.
 // Static routes (/health, frontend assets) are always allowed.
@@ -76,7 +74,6 @@ function buildPublicRoutes(): PublicRoute[] {
     ...VERB_PUBLIC,
   ];
   return all.map((ep) => {
-    // Strip query string from path pattern
     const pathOnly = ep.path.split('?')[0];
     // Convert {param} placeholders to .+ and anchor
     const regexStr = '^' + pathOnly.replace(/\{[^}]+\}/g, '[^/]+') + '(/.*)?$';
@@ -87,7 +84,6 @@ function buildPublicRoutes(): PublicRoute[] {
 const publicRoutes = buildPublicRoutes();
 
 function isPublicRoute(method: string, pathname: string): boolean {
-  // Health and static assets are always public
   if (pathname === '/health') return true;
   // Frontend static files (served by static.ts) are always public
   if (!pathname.startsWith('/api/') && !pathname.startsWith('/mcp/')) return true;
@@ -158,12 +154,10 @@ function createFetchHandlerInner() {
       if (target) return new Response(null, { status: 302, headers: { Location: target } });
     }
 
-    // CORS headers
     const origin = req.headers.get('origin');
     const corsHeaders: Record<string, string> = {};
 
     if (IS_REMOTE) {
-      // Remote mode: allow any requesting origin
       if (origin) {
         corsHeaders['Access-Control-Allow-Origin'] = origin;
         corsHeaders['Access-Control-Allow-Methods'] = 'GET, POST, PATCH, DELETE, OPTIONS';
@@ -189,7 +183,6 @@ function createFetchHandlerInner() {
       }
     }
 
-    // Handle preflight
     if (req.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
@@ -198,7 +191,6 @@ function createFetchHandlerInner() {
     const authResponse = checkHttpAuth(req, url);
     if (authResponse) return withCors(authResponse, corsHeaders);
 
-    // ── Iframe route restriction ───────────────────────────────────────
     // Phase A: Sec-Fetch-Dest check — browser-enforced, cannot be spoofed.
     // Catches iframe document loads (initial page load in <iframe>).
     const secFetchDest = req.headers.get('sec-fetch-dest');
@@ -264,7 +256,6 @@ function createFetchHandlerInner() {
       }
     }
 
-    // Dev live-reload SSE endpoint
     if (_devReloadHandler && url.pathname === '/dev-reload') {
       return _devReloadHandler();
     }
@@ -309,12 +300,10 @@ function createFetchHandlerInner() {
     const staticResponse = await handleStaticRoutes(req, url);
     if (staticResponse) return withCors(staticResponse, corsHeaders);
 
-    // 404 for unknown routes
     return withCors(Response.json({ error: 'Not found' }, { status: 404 }), corsHeaders);
   };
 }
 
-/** Append CORS headers to a Response. */
 function withCors(response: Response, corsHeaders: Record<string, string>): Response {
   if (Object.keys(corsHeaders).length === 0) return response;
   const newHeaders = new Headers(response.headers);

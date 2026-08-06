@@ -28,7 +28,6 @@ import { snapshotApp } from './git.js';
 async function syncDir(src: string, dest: string): Promise<void> {
   await mkdir(dest, { recursive: true });
 
-  // Collect source files
   const srcFiles = new Set<string>();
   const entries = await readdir(src, { recursive: true, withFileTypes: true });
   for (const entry of entries) {
@@ -50,13 +49,12 @@ async function syncDir(src: string, dest: string): Promise<void> {
         continue; // Content identical — skip to preserve permissions
       }
     } catch {
-      // Destination file doesn't exist yet
+      // Dest file doesn't exist yet — fall through to write it.
     }
     await Bun.write(join(dest, relPath), srcBuf);
   }
 
-  // Remove files in dest that aren't in source anymore
-  // (also cleans up renamed/deleted source files)
+  // Also cleans up renamed/deleted source files
   try {
     const destEntries = await readdir(dest, { recursive: true, withFileTypes: true });
     for (const entry of destEntries) {
@@ -69,7 +67,7 @@ async function syncDir(src: string, dest: string): Promise<void> {
       }
     }
   } catch {
-    // dest doesn't exist yet — nothing to clean
+    // dest doesn't exist yet — nothing to clean up.
   }
 }
 
@@ -79,7 +77,7 @@ async function writeIfChanged(filePath: string, content: string): Promise<void> 
     const existing = await Bun.file(filePath).text();
     if (existing === content) return;
   } catch {
-    // File doesn't exist yet
+    // File doesn't exist yet — fall through to write it.
   }
   await Bun.write(filePath, content);
 }
@@ -222,7 +220,7 @@ export async function doDeploy(
       }
       hasCompiledApp = true;
     } catch {
-      // No source either
+      // No src/main.ts to auto-compile either — hasCompiledApp stays false.
     }
   }
 
@@ -307,19 +305,19 @@ export async function doDeploy(
       }
     }
   } catch {
-    // readdir failure is non-fatal
+    // sandboxPath doesn't exist — componentFiles stays empty.
   }
 
   if (!hasCompiledApp && componentFiles.length === 0) {
     return { success: false, error: 'Nothing to deploy. Run compile first.' };
   }
 
-  // Read sandbox's app.json as the base (preserves permissions, etc. from clone)
+  // Base metadata preserves permissions, etc. carried over from clone.
   let sandboxMeta: Record<string, unknown> = {};
   try {
     sandboxMeta = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
   } catch {
-    // No sandbox app.json
+    // No app.json in the sandbox — sandboxMeta stays empty.
   }
 
   // `appId` in app.json is what protocol extraction compares `defineApp({ id })`
@@ -337,12 +335,11 @@ export async function doDeploy(
     return { success: false, error };
   }
 
-  // Also read existing deployed app's metadata for fallback values
   let existingMeta: Record<string, unknown> = {};
   try {
     existingMeta = JSON.parse(await Bun.file(join(appPath, 'app.json')).text());
   } catch {
-    // New app
+    // No existing app.json — this is a first deploy.
   }
 
   const resolvedIcon = icon ?? (existingMeta.icon as string | undefined) ?? '🎮';
@@ -372,7 +369,7 @@ export async function doDeploy(
           join(appDistDir, '.build-manifest.json'),
         );
       } catch {
-        // No manifest — will be regenerated on next server start
+        // Regenerated on next server start
       }
     }
 
@@ -383,7 +380,7 @@ export async function doDeploy(
         // Sync instead of delete+copy to preserve file permissions for unchanged files
         await syncDir(srcPath, join(appPath, 'src'));
       } catch {
-        // No src directory
+        // No src/ in the sandbox — nothing to copy.
       }
     }
 

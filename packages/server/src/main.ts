@@ -49,7 +49,7 @@ function serveFromFirstFreePort(
       ) {
         continue;
       }
-      throw err; // non-port error, rethrow
+      throw err;
     }
   }
   throw new Error(

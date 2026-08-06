@@ -277,7 +277,6 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
         ? { usage: { ...ZERO_USAGE }, usageScope: 'turn' as const, ...cost }
         : {};
 
-    // Check for errors (SDKResultError type)
     if (result.is_error || result.subtype?.startsWith('error')) {
       // `errors[]` is routinely empty, which is how every failed turn used to
       // read "Unknown SDK error" regardless of cause. `describeResultError`
@@ -296,7 +295,6 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
     return { type: 'complete', sessionId: result.session_id, ...accounting };
   }
 
-  // Handle user messages containing tool results
   if (msg.type === 'user') {
     return extractToolResult(msg.message);
   }
@@ -306,7 +304,6 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
   const rateNotice = rateLimitNotice(msg);
   if (rateNotice) return toNoticeMessage(rateNotice, (msg as { session_id?: string }).session_id);
 
-  // Skip other types
   return null;
 }
 
@@ -335,9 +332,6 @@ function countEscapeSpellings(rawJson: string): StreamMessage['toolInputEscapes'
   return { unicodeEscapes, literalBackslashU };
 }
 
-/**
- * Map a stream event to a StreamMessage.
- */
 function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage | null {
   if (!event || typeof event !== 'object') return null;
 
@@ -446,7 +440,6 @@ function mapStreamEvent(event: unknown, turn?: TurnUsageTracker): StreamMessage 
     }
   }
 
-  // Skip other stream events
   return null;
 }
 
@@ -462,7 +455,6 @@ function extractToolResult(message: unknown): StreamMessage | null {
 
   if (!Array.isArray(content)) return null;
 
-  // Look for tool_result blocks
   for (const block of content) {
     if (
       typeof block === 'object' &&
@@ -475,7 +467,6 @@ function extractToolResult(message: unknown): StreamMessage | null {
         content?: unknown;
       };
 
-      // Extract the text content from the tool result
       let resultText = '';
       if (typeof toolResult.content === 'string') {
         resultText = toolResult.content;

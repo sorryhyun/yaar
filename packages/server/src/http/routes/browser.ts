@@ -110,7 +110,6 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
   // real browser is reached only through `yaar://session/browser` (session agent).
   const pool = getHeadlessBrowser();
 
-  // GET /api/browser/sessions — list all open sessions
   if (url.pathname === '/api/browser/sessions' && req.method === 'GET') {
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
@@ -126,7 +125,6 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     return jsonResponse({ ok: true, data: items });
   }
 
-  // DELETE /api/browser/:id — close a session
   if (req.method === 'DELETE' && url.pathname.startsWith('/api/browser/')) {
     const id = url.pathname.slice('/api/browser/'.length);
     if (!id) return null;
@@ -150,7 +148,6 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     return jsonResponse({ ok: true, data: `Browser ${id} closed.` });
   }
 
-  // GET /api/browser/:id/screenshot — capture screenshot
   const screenshotMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/screenshot$/);
   if (screenshotMatch && req.method === 'GET') {
     const browserId = decodeURIComponent(screenshotMatch[1]);
@@ -174,7 +171,6 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     }
   }
 
-  // GET /api/browser/:id/events — SSE stream for browser session updates
   const eventsMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/events$/);
   if (eventsMatch && req.method === 'GET') {
     const browserId = decodeURIComponent(eventsMatch[1]);
@@ -258,7 +254,6 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     }
   }
 
-  // POST /api/browser — dispatch action
   if (url.pathname === '/api/browser' && req.method === 'POST') {
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;

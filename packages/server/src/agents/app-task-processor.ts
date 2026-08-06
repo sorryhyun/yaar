@@ -71,7 +71,6 @@ export class AppTaskProcessor {
     const windowId =
       this.ctx.windowState.handleMap.resolve(task.windowId, monitorId) ?? task.windowId;
 
-    // Update the active window for this app on this monitor
     this.activeWindows.set(appAgentKey(monitorId, appId), windowId);
 
     const processingKey = `app-${monitorId}-${appId}`;
@@ -132,7 +131,6 @@ export class AppTaskProcessor {
       // this turn is about to ask for.
       if (task.fresh) await this.releaseAgent(monitorId, appId);
 
-      // Get or create the persistent app agent for this app on this monitor
       const agent = await this.ctx.agentPool.getOrCreateAppAgent(monitorId, appId);
       if (!agent) {
         this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
@@ -145,7 +143,6 @@ export class AppTaskProcessor {
         return;
       }
 
-      // Build or retrieve cached profile
       let profile = this.profiles.get(appId);
       if (!profile) {
         profile = await buildAppAgentProfile(appId);
@@ -162,7 +159,6 @@ export class AppTaskProcessor {
       });
       const source = windowSource(windowId);
 
-      // Record user message
       this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, prompt, source);
 
       // Capture the app-agent's response text for relaying to the monitor
@@ -276,15 +272,13 @@ export class AppTaskProcessor {
     }
   }
 
-  /**
-   * Get the most recently active windowId for an app on a monitor.
-   */
+  /** The most recently active windowId for an app on a monitor. */
   getActiveWindowId(monitorId: string, appId: string): string | undefined {
     return this.activeWindows.get(appAgentKey(monitorId, appId));
   }
 
   /**
-   * Handle a window being closed — interrupt the app agent if it's running for this window,
+   * A window closed: interrupt the app agent if it's running for this window,
    * clear queued tasks, and remove active window tracking.
    */
   async handleWindowClose(windowId: string, appId: string, monitorId?: string): Promise<void> {
@@ -306,12 +300,10 @@ export class AppTaskProcessor {
       });
     }
 
-    // Remove active window tracking
     if (this.activeWindows.get(key) === windowId) {
       this.activeWindows.delete(key);
     }
 
-    // Interrupt the app agent if it's currently running
     const agent = this.ctx.agentPool.getAppAgent(owner, appId);
     if (agent?.session.isRunning()) {
       console.log(
@@ -350,9 +342,6 @@ export class AppTaskProcessor {
     this.handoffState.forgetMonitor(monitorId);
   }
 
-  /**
-   * Clean up all tracked state.
-   */
   disposeAll(): void {
     this.activeWindows.clear();
     this.profiles.clear();
@@ -389,7 +378,6 @@ export class AppTaskProcessor {
   private async processQueue(processingKey: string): Promise<void> {
     const next = this.ctx.windowQueuePolicy.dequeue(processingKey);
     if (next) {
-      // Re-derive appId from the task's windowId
       const appId = next.task.windowId
         ? this.ctx.windowState.getAppIdForWindow(next.task.windowId)
         : undefined;

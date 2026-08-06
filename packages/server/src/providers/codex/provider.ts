@@ -38,9 +38,6 @@ import type {
   FileChangeRequestApprovalParams,
 } from './types.js';
 
-/**
- * Session state for a thread.
- */
 interface ThreadSession {
   threadId: string;
   systemPrompt: string;
@@ -108,10 +105,7 @@ export class CodexProvider extends BaseTransport {
   // can't recurse forever (resume fails → new thread → turn/start fails → …).
   private recovering = false;
 
-  /**
-   * Create a CodexProvider.
-   * @param appServer - The shared AppServer (owned by WarmPool, not this provider).
-   */
+  /** @param appServer - The shared AppServer (owned by WarmPool, not this provider). */
   constructor(appServer: AppServer) {
     super();
     this.appServer = appServer;
@@ -124,9 +118,6 @@ export class CodexProvider extends BaseTransport {
     return this.appServer;
   }
 
-  /**
-   * Get the current thread/session ID.
-   */
   getSessionId(): string | null {
     return this.currentSession?.threadId ?? null;
   }
@@ -185,7 +176,6 @@ export class CodexProvider extends BaseTransport {
       // Capture local references so dispose() doesn't crash the finally block.
       const client = this.client!;
 
-      // Handle thread creation: new, fork, or reuse
       const threadCreated = await this.ensureThread(options);
       if (threadCreated) {
         yield { type: 'text', sessionId: this.currentSession!.threadId };
@@ -243,7 +233,6 @@ export class CodexProvider extends BaseTransport {
       client.on('server_request', serverRequestHandler);
 
       try {
-        // Build input array with text and optional images
         const input: Array<
           { type: 'text'; text: string; text_elements: never[] } | { type: 'image'; url: string }
         > = [{ type: 'text', text: prompt, text_elements: [] }];
@@ -268,7 +257,6 @@ export class CodexProvider extends BaseTransport {
         this.turnReadyResolve?.();
         this.turnReadyResolve = null;
 
-        // Yield messages as they arrive
         while (true) {
           if (this.isAborted()) break;
 
@@ -456,7 +444,6 @@ export class CodexProvider extends BaseTransport {
 
   async dispose(): Promise<void> {
     await super.dispose();
-    // Close own WS connection
     if (this.client) {
       this.client.close();
       this.client = null;

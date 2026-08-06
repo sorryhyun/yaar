@@ -52,7 +52,6 @@ function truncateText(text: string): string {
 function wrapAppValue(value: unknown): VerbResult {
   if (value === undefined || value === null) return ok('Done.');
 
-  // Content blocks — pass through directly
   if (isContentBlocks(value)) {
     // Truncate text/resource blocks, pass image/resource_link blocks as-is
     const content = value.map((block): ContentBlock => {
@@ -68,7 +67,6 @@ function wrapAppValue(value: unknown): VerbResult {
     return { content };
   }
 
-  // Plain string
   if (typeof value === 'string') return ok(truncateText(value));
 
   // Object → a JSON text block for the model/logs PLUS a lossless
@@ -125,7 +123,6 @@ async function requireAppReady(
   return null;
 }
 
-/** Send a request to an app and await its outcome. */
 async function request(
   windowKey: string,
   req: AppProtocolRequest,
@@ -194,7 +191,6 @@ function resolveTimeout(payload: Record<string, unknown>, fallbackMs: number): n
     : fallbackMs;
 }
 
-/** Handle app_query: query app state or manifest via the app protocol. */
 export async function handleAppQuery(
   windowState: WindowStateRegistry,
   windowId: string,
@@ -431,7 +427,6 @@ export async function handleAppEval(
   return ok(response.value ?? 'undefined');
 }
 
-/** Handle app_command: send a command to an app via the app protocol. */
 export async function handleAppCommand(
   windowState: WindowStateRegistry,
   windowId: string,

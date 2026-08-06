@@ -14,7 +14,6 @@ import { getMonitorId } from '../agents/agent-context.js';
 import type { PermissionEntry } from '../http/access.js';
 import { WindowHandleMap } from './window-handle-map.js';
 
-// Re-export WindowState for convenience
 export type { WindowState } from '@yaar/shared';
 
 /**
@@ -32,9 +31,6 @@ export interface AppWindowMeta {
 /** Shared empty result for `getNoReplayCommands` — nothing may mutate it. */
 const NO_COMMANDS: ReadonlySet<string> = new Set<string>();
 
-/**
- * Window state registry for one connection/session.
- */
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
@@ -91,18 +87,11 @@ export class WindowStateRegistry {
     this.handleMap = handleMap ?? new WindowHandleMap();
   }
 
-  /**
-   * Set a callback to be invoked when a window is closed.
-   * Used to invalidate reload cache entries that depend on the closed window.
-   */
   setOnWindowClose(cb: (windowId: string, appId?: string, monitorId?: string) => void): void {
     this.onWindowCloseCallback = cb;
   }
 
   /**
-   * Resolve a windowId (raw or handle) to its internal map key.
-   * Returns the resolved key and the stored WindowState, or undefined.
-   *
    * Raw IDs are only unique within a monitor (they are derived from the appId), so
    * a raw lookup is scoped to the caller's monitor — taken from the ambient agent
    * context, since an agent may only address windows on the monitor it runs on.
@@ -622,7 +611,6 @@ export class WindowStateRegistry {
   }
 
   /**
-   * Check if a window is locked by a different agent.
    * Returns the locking agent's ID if locked by someone else, or null if not locked / locked by the same agent.
    */
   isLockedByOther(windowId: string, agentId?: string): string | null {

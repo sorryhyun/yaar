@@ -97,8 +97,6 @@ export async function handleMlRuntimeRoutes(req: Request, url: URL): Promise<Res
   return null;
 }
 
-// ── Static runtime artifacts ─────────────────────────────────────────────────
-
 async function serveRuntimeArtifact(req: Request, url: URL): Promise<Response> {
   if (req.method !== 'GET' && req.method !== 'HEAD')
     return errorResponse('Method not allowed', 405);
@@ -133,8 +131,6 @@ async function serveRuntimeArtifact(req: Request, url: URL): Promise<Response> {
     },
   });
 }
-
-// ── Streaming weights proxy ──────────────────────────────────────────────────
 
 async function proxyWeights(req: Request, url: URL): Promise<Response> {
   if (req.method !== 'GET' && req.method !== 'HEAD')
@@ -191,8 +187,6 @@ async function proxyWeights(req: Request, url: URL): Promise<Response> {
   });
 }
 
-// ── Server-side weight download (HF → storage/) ──────────────────────────────
-//
 // The browser cannot write these files: `POST /api/storage/{path}` reads the whole
 // body into memory under MAX_UPLOAD_SIZE (50 MB), and the DiT sidecar alone is
 // 3.9 GB. So the server streams the download to disk itself and the app reads the

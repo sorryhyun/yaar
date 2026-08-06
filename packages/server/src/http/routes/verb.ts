@@ -72,9 +72,6 @@ interface SubscribeRequest {
   kinds?: string[];
 }
 
-/**
- * Try to parse a raw string as JSON, returning the string itself on failure.
- */
 function tryParseJson(raw: string): unknown {
   try {
     return JSON.parse(raw);
@@ -86,10 +83,6 @@ function tryParseJson(raw: string): unknown {
 /**
  * Transform a VerbResult into a standard JSON envelope for iframe apps.
  *
- * Single-URI results have one text block → `{ ok, data }`.
- * Resource blocks → extract embedded text.
- * Resource link blocks → return as array of link objects.
- *
  * There is no brace-expansion case to handle. Expansion is `handlers/index.ts`'s
  * `exec` wrapper, which only the MCP tools go through; this door dispatches the URI
  * verbatim, so `formatBatchResults`' interleaved `--- uri ---` headers never reach
@@ -98,7 +91,6 @@ function tryParseJson(raw: string): unknown {
  * with a pointed message rather than reaching the registry as an unknown one.
  */
 export function toEnvelope(result: VerbResult): Record<string, unknown> {
-  // Collect blocks by type
   const textItems: Array<{ type: 'text'; text: string }> = [];
   const images: Array<{ data: string; mimeType: string }> = [];
   const links: Array<{
@@ -123,7 +115,6 @@ export function toEnvelope(result: VerbResult): Record<string, unknown> {
         break;
       }
       case 'resource': {
-        // Embedded resource → extract text content, treat as text block
         const res = c.resource as { text?: string };
         if (res.text) textItems.push({ type: 'text', text: res.text });
         break;
@@ -208,7 +199,6 @@ async function openVerbDoor<T>(
 }
 
 export async function handleVerbRoutes(req: Request, url: URL): Promise<Response | null> {
-  // ── Subscribe/unsubscribe endpoint ──
   if (url.pathname === '/api/verb/subscribe' && req.method === 'POST') {
     const opened = await openVerbDoor<SubscribeRequest>(req, url);
     if (opened instanceof Response) return opened;
@@ -285,7 +275,6 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('Invalid "action". Must be "subscribe" or "unsubscribe".', 400);
   }
 
-  // ── Main verb endpoint ──
   if (url.pathname !== '/api/verb' || req.method !== 'POST') {
     return null;
   }
@@ -294,13 +283,11 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   if (opened instanceof Response) return opened;
   const { body, principal } = opened;
 
-  // Validate verb
   const verb = body.verb as Verb;
   if (!verb || !VALID_VERBS.includes(verb)) {
     return errorResponse(`Invalid verb. Must be one of: ${VALID_VERBS.join(', ')}`, 400);
   }
 
-  // Validate URI
   const uri = body.uri;
   if (!uri || typeof uri !== 'string') {
     return errorResponse('Missing or invalid "uri" field', 400);

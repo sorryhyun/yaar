@@ -139,7 +139,6 @@ export class AppServer extends EventEmitter {
     return this;
   }
 
-  /** Shared initialize params for all connections. */
   private get initializeParams(): InitializeParams {
     return {
       clientInfo: { name: 'yaar', title: 'YAAR Desktop', version: '1.0.0' },
@@ -147,15 +146,11 @@ export class AppServer extends EventEmitter {
     };
   }
 
-  /**
-   * Start the app-server process.
-   */
   async start(): Promise<void> {
     if (this.process) {
       throw new Error('AppServer is already running');
     }
 
-    // Create temp directory for agent role configs
     this.tempDir = await mkdtemp(join(tmpdir(), 'codex-'));
 
     // Write agent role config files so subagents inherit the correct model
@@ -167,7 +162,6 @@ export class AppServer extends EventEmitter {
 
     await this.spawnProcess();
 
-    // Connect the control client + initialize (retry loop until server is ready)
     try {
       await this.connectControlClient();
     } catch (err) {
@@ -188,7 +182,6 @@ export class AppServer extends EventEmitter {
    */
   private killStaleProcess(): void {
     if (process.platform !== 'win32') {
-      // Unix: try fuser first, then lsof
       try {
         const r = Bun.spawnSync(['fuser', '-k', `${this.wsPort}/tcp`], {
           stdio: ['ignore', 'ignore', 'ignore'],
@@ -245,11 +238,7 @@ export class AppServer extends EventEmitter {
     }
   }
 
-  /**
-   * Spawn the app-server process with WebSocket listener.
-   */
   private async spawnProcess(): Promise<void> {
-    // Kill any orphaned process still holding the port from a previous run
     this.killStaleProcess();
 
     // No YAAR MCP servers at the process level: `CodexProvider.buildMcpScope` is the only
@@ -265,10 +254,8 @@ export class AppServer extends EventEmitter {
     // every namespace listed here. Declaring none makes the per-thread set authoritative.
     const args = getCodexAppServerArgs();
 
-    // Add WebSocket listener
     args.push('--listen', `ws://127.0.0.1:${this.wsPort}`);
 
-    // Add model if specified
     if (this.config.model) {
       args.push('-c', `model=${this.config.model}`);
 
@@ -438,9 +425,6 @@ export class AppServer extends EventEmitter {
     );
   }
 
-  /**
-   * Stop the app-server process.
-   */
   async stop(): Promise<void> {
     if (this.controlClient) {
       this.controlClient.close();
@@ -477,34 +461,23 @@ export class AppServer extends EventEmitter {
       this.ownsProcessGroup = false;
     }
 
-    // Clean up temp directory
     if (this.tempDir) {
       try {
         await rm(this.tempDir, { recursive: true, force: true });
       } catch {
-        // Ignore cleanup errors
+        /* ignore */
       }
       this.tempDir = null;
     }
   }
 
-  /**
-   * Check if the app-server is running.
-   */
   get isRunning(): boolean {
     return this.process !== null && this.controlClient !== null;
   }
 
-  /**
-   * Get the capabilities received from the initialize handshake.
-   */
   getCapabilities(): InitializeResponse | null {
     return this.initializeResult;
   }
-
-  // ============================================================================
-  // Account API (via control client)
-  // ============================================================================
 
   async accountRead(params: GetAccountParams): Promise<GetAccountResponse> {
     if (!this.controlClient) {

@@ -53,19 +53,13 @@ import { MAX_QUEUE_SIZE } from '../config.js';
 // Re-export Task for barrel compatibility
 export type { Task } from './pool-types.js';
 
-/**
- * ContextPool manages task orchestration with a persistent monitor agent,
- * ephemeral overflow agents, and persistent per-window agents.
- *
- * Implements PoolContext so processors can access shared state and policies.
- */
+/** Implements PoolContext so processors can access shared state and policies. */
 export class ContextPool implements PoolContext {
   /** This session's key in the SessionHub — distinct from `logSessionId` below. */
   readonly sessionId: SessionId;
   /** The session_logs/ directory name. Names a transcript on disk, not a live session. */
   private logSessionId: string | null = null;
 
-  // ── PoolContext fields (readonly for processors) ───────────────────
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
   readonly windowState: WindowStateRegistry;
@@ -78,7 +72,6 @@ export class ContextPool implements PoolContext {
   savedThreadIds?: Record<string, string>;
   providerType: ProviderType | null = null;
 
-  // ── Internal state ────────────────────────────────────────────────
   private broadcastFn: (event: ServerEvent) => void;
   private monitorQueues = new Map<string, MonitorQueuePolicy>();
   /**
@@ -94,7 +87,6 @@ export class ContextPool implements PoolContext {
   private inflightCount = 0;
   private inflightResolve: (() => void) | null = null;
 
-  // ── Processors ────────────────────────────────────────────────────
   private monitorProcessor: MonitorTaskProcessor;
   private appProcessor: AppTaskProcessor;
   private sessionProcessor: SessionTaskProcessor;
@@ -133,9 +125,6 @@ export class ContextPool implements PoolContext {
       sessionId,
       broadcast,
       (rawId, monitorId) => {
-        // Resolve raw window ID to scoped handle via the handle map.
-        // If monitorId is provided, register/resolve; otherwise try lookup.
-        //
         // The lookup must be scoped to the acting monitor before we fall back to
         // registering. Raw IDs are derived from the appId, so an unscoped resolve
         // would hand monitor 1's agent the handle of monitor 0's window of the same
@@ -150,7 +139,6 @@ export class ContextPool implements PoolContext {
       this.acquireProvider,
     );
 
-    // Create processors
     this.monitorProcessor = new MonitorTaskProcessor(this);
     this.appProcessor = new AppTaskProcessor(this);
     this.sessionProcessor = new SessionTaskProcessor(this);
@@ -206,8 +194,6 @@ export class ContextPool implements PoolContext {
     });
   }
 
-  // ── Initialization ─────────────────────────────────────────────────
-
   async initialize(existingLogger?: SessionLogger): Promise<boolean> {
     const provider = await this.acquireProvider();
     if (!provider) {
@@ -220,10 +206,8 @@ export class ContextPool implements PoolContext {
 
     this.providerType = provider.providerType;
     if (existingLogger) {
-      // Reuse the session-owned logger (already has a log directory)
       this.sharedLogger = existingLogger;
       this.logSessionId = existingLogger.getSessionId();
-      // Update provider name now that we know it
       existingLogger.updateProvider(provider.name);
     } else {
       const sessionInfo = await createSession(provider.name);
@@ -252,8 +236,6 @@ export class ContextPool implements PoolContext {
 
     return true;
   }
-
-  // ── Monitor lifecycle ──────────────────────────────────────────────
 
   async createMonitorAgent(monitorId: string): Promise<boolean> {
     const provider = await this.acquireProvider();
@@ -336,14 +318,10 @@ export class ContextPool implements PoolContext {
     }
   }
 
-  /**
-   * An app's files changed on disk (deploy) — rebuild its agent profile next turn.
-   */
+  /** An app's files changed on disk (deploy) — rebuild its agent profile next turn. */
   invalidateAppProfile(appId: string): void {
     this.appProcessor.invalidateProfile(appId);
   }
-
-  // ── Monitor suspend/resume ──────────────────────────────────────────
 
   suspendMonitor(monitorId: string): boolean {
     if (!this.agentPool.hasMonitorAgent(monitorId)) return false;
@@ -358,7 +336,6 @@ export class ContextPool implements PoolContext {
     if (!queue || !queue.isSuspended()) return false;
     queue.resume();
     console.log(`[ContextPool] Resumed monitor ${monitorId}`);
-    // Drain any pending tasks
     this.monitorProcessor
       .processMonitorQueue(monitorId)
       .catch((err) => console.error(`[ContextPool] Error draining queue after resume:`, err));
@@ -369,8 +346,6 @@ export class ContextPool implements PoolContext {
     const queue = this.monitorQueues.get(monitorId);
     return queue?.isSuspended() ?? false;
   }
-
-  // ── Session agent ─────────────────────────────────────────────────
 
   async getOrCreateSessionAgent(): Promise<PooledAgent | null> {
     return this.sessionProcessor.getOrCreateAgent();
@@ -414,8 +389,6 @@ export class ContextPool implements PoolContext {
     await this.agentPool.disposeSessionAgent();
   }
 
-  // ── Inflight tracking ──────────────────────────────────────────────
-
   private inflightEnter(): void {
     this.inflightCount++;
   }
@@ -455,8 +428,6 @@ export class ContextPool implements PoolContext {
     }
   }
 
-  // ── Task routing (delegates to processors) ─────────────────────────
-
   async handleTask(task: Task): Promise<void> {
     if (this.resetting) {
       console.log(`[ContextPool] Rejecting task ${task.messageId} — pool is resetting`);
@@ -469,7 +440,6 @@ export class ContextPool implements PoolContext {
       if (task.type === 'monitor') {
         await this.monitorProcessor.queueMonitorTask(task);
       } else {
-        // Check if this window belongs to an app (appId set on window.create)
         const appId = task.windowId ? this.windowState.getAppIdForWindow(task.windowId) : undefined;
         // A preview window carries an app identity so that `self` resolves inside it, but it
         // is not the app: devtools is the agent for anything happening in a preview. Routing
@@ -515,10 +485,7 @@ export class ContextPool implements PoolContext {
     return monitorId;
   }
 
-  /**
-   * Find the windowId for a given agent instanceId.
-   * Checks app agents via AppTaskProcessor.
-   */
+  /** The windowId for a given agent instanceId. Checks app agents via AppTaskProcessor. */
   findWindowForAgent(agentId: string): string | undefined {
     return this.windowEvents.findWindowForAgent(agentId);
   }
@@ -557,8 +524,6 @@ export class ContextPool implements PoolContext {
   handleWindowClose(windowId: string, appId?: string, monitorId?: string): void {
     this.windowEvents.handleWindowClose(windowId, appId, monitorId);
   }
-
-  // ── Query methods ──────────────────────────────────────────────────
 
   getContextTape(): ContextTape {
     return this.contextTape;
@@ -679,12 +644,7 @@ export class ContextPool implements PoolContext {
     };
   }
 
-  // ── Reset / Cleanup ────────────────────────────────────────────────
-
-  /**
-   * Shared teardown logic used by both reset() and cleanup().
-   * Clears queues, interrupts agents, waits for inflight tasks, disposes agents.
-   */
+  /** Shared teardown logic used by both reset() and cleanup(). */
   private async teardown(options?: { closeWindows?: boolean }): Promise<void> {
     const closeWindows = options?.closeWindows ?? true;
     // 1. Clear queues so no new tasks start from dequeue. Everything in them is a message

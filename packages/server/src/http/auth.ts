@@ -55,7 +55,6 @@ export function getRemoteToken(): string | null {
 export function checkHttpAuth(req: Request, url: URL): Response | null {
   if (!IS_REMOTE || !remoteToken) return null;
 
-  // /health is always exempt
   if (url.pathname === '/health') return null;
 
   // MCP endpoints have their own bearer token auth — exempt from remote auth
@@ -190,7 +189,6 @@ const ASSET_EXTENSIONS = [
   '.otf',
 ];
 
-/** Extract token from Authorization header, query param, or Referer. */
 function extractToken(req: Request, url: URL): string | null {
   const authHeader = req.headers.get('authorization');
   if (authHeader?.startsWith('Bearer ')) {

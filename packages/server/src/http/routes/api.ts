@@ -60,7 +60,6 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     });
   }
 
-  // List available providers + active provider info
   if (url.pathname === '/api/providers' && req.method === 'GET') {
     const providers = await getAvailableProviders();
     const warmPoolStats = getWarmPool().getStats();
@@ -70,7 +69,6 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     });
   }
 
-  // List available apps
   if (url.pathname === '/api/apps' && req.method === 'GET') {
     try {
       const [apps, settings] = await Promise.all([listApps(), readSettings()]);
@@ -107,7 +105,6 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     if (denied) return denied;
   }
 
-  // Pick directory (native folder dialog)
   if (url.pathname === '/api/pick-directory' && req.method === 'POST') {
     try {
       const path = await pickDirectory();
@@ -128,7 +125,6 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     return jsonResponse({ remote: true, ...info });
   }
 
-  // Agent stats endpoint
   if (url.pathname === '/api/agents/stats' && req.method === 'GET') {
     const limiterStats = getAgentLimiter().getStats();
     const broadcastStats = getBroadcastCenter().getStats();

@@ -87,7 +87,6 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 
   await ensureStorageDir();
 
-  // Warm mount cache and validate mount paths still exist
   const mounts = await loadMounts();
   if (mounts.length > 0) {
     for (const m of mounts) {
@@ -100,7 +99,6 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     console.log(`Loaded ${mounts.length} mount(s)`);
   }
 
-  // In bundled exe mode, auto-create runtime directories
   if (IS_BUNDLED_EXE) {
     await Promise.all([
       mkdir(join(PROJECT_ROOT, 'apps'), { recursive: true }),
@@ -117,7 +115,6 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     plannedTunnel = loadTunnelConfig() ?? DEFAULT_TUNNEL;
   }
 
-  // Dev mode: build frontend and start file watcher with live reload
   if (IS_DEV) {
     const { initDevBundler } = await import('./http/dev-bundler.js');
     await initDevBundler();
@@ -335,10 +332,6 @@ function getDirectUrl(): string {
   return `http://127.0.0.1:${getPort()}`;
 }
 
-/**
- * Get remote connection info for display in the frontend UI.
- * Returns null if not in remote mode.
- */
 export function getRemoteInfo(): {
   connectUrl: string;
   token: string;
@@ -383,7 +376,6 @@ export async function printBanner(server: Server<any>): Promise<void> {
     console.log('╚══════════════════════════════════════════════════╝');
     console.log('');
 
-    // Print QR code if available
     try {
       const qrcode = (await import('qrcode-terminal')) as {
         default: {
@@ -444,7 +436,6 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
       // Browser module not available — nothing to clean up
     }
 
-    // Disconnect external MCP servers
     try {
       const { getMcpClientManager } = await import('./mcp/external/index.js');
       const manager = await getMcpClientManager();
@@ -453,7 +444,6 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
       // External MCP module not initialized — nothing to clean up
     }
 
-    // Flush and close per-app SQLite databases
     try {
       const { closeAllAppDatabases } = await import('./db/index.js');
       closeAllAppDatabases();

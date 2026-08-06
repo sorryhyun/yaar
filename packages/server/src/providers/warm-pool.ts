@@ -16,9 +16,6 @@ import { CodexVersionError } from './codex/version.js';
 import { getForcedProvider } from './get-forced-provider.js';
 import { PROVIDER_PREFERENCE, instantiateProvider } from './instantiate.js';
 
-/**
- * Configuration for the warm pool.
- */
 interface WarmPoolConfig {
   /** Number of providers to pre-warm (default: 1) */
   poolSize: number;
@@ -31,9 +28,6 @@ const DEFAULT_CONFIG: WarmPoolConfig = {
   autoReplenish: true,
 };
 
-/**
- * Provider warm pool singleton.
- */
 class ProviderWarmPool {
   private config: WarmPoolConfig;
   private pool: AITransport[] = [];
@@ -74,13 +68,11 @@ class ProviderWarmPool {
   private async doInitialize(): Promise<void> {
     console.log('[WarmPool] Initializing provider warm pool...');
 
-    // Determine which provider to use
     const forcedProvider = getForcedProvider();
     const providerTypes: readonly ProviderType[] = forcedProvider
       ? [forcedProvider]
       : PROVIDER_PREFERENCE;
 
-    // Find first available provider and warm it up
     for (const providerType of providerTypes) {
       let provider: AITransport | null;
       try {
@@ -108,7 +100,6 @@ class ProviderWarmPool {
       return;
     }
 
-    // Pre-warm additional providers if configured
     for (let i = 1; i < this.config.poolSize; i++) {
       const provider = await this.createWarmProvider(this.preferredProvider!);
       if (provider) {
@@ -143,7 +134,6 @@ class ProviderWarmPool {
         }
       }
 
-      // Check availability
       if (!(await provider.isAvailable())) {
         await provider.dispose();
         return null;
@@ -198,7 +188,6 @@ class ProviderWarmPool {
       }
     });
 
-    // Check auth via RPC and trigger browser OAuth if needed
     const { checkAndLoginCodex } = await import('./codex/index.js');
     const authenticated = await checkAndLoginCodex(this.sharedCodexAppServer);
 
@@ -214,12 +203,10 @@ class ProviderWarmPool {
    * Falls back to creating a new one if pool is empty.
    */
   async acquire(): Promise<AITransport | null> {
-    // Ensure initialized
     if (!this.initialized) {
       await this.initialize();
     }
 
-    // Try to get from pool
     const provider = this.pool.shift();
     if (provider) {
       const sessionId = provider.getSessionId?.() ?? 'no-session';
@@ -236,7 +223,6 @@ class ProviderWarmPool {
       return provider;
     }
 
-    // Pool empty - create on demand
     if (this.preferredProvider) {
       console.log('[WarmPool] Pool empty, creating provider on demand');
       return this.createWarmProvider(this.preferredProvider);
@@ -270,23 +256,14 @@ class ProviderWarmPool {
       });
   }
 
-  /**
-   * Get the preferred provider type.
-   */
   getPreferredProvider(): ProviderType | null {
     return this.preferredProvider;
   }
 
-  /**
-   * Check if the pool is initialized.
-   */
   isInitialized(): boolean {
     return this.initialized;
   }
 
-  /**
-   * Get pool statistics.
-   */
   getStats(): {
     poolSize: number;
     available: number;
@@ -320,9 +297,6 @@ class ProviderWarmPool {
     this.pool = kept;
   }
 
-  /**
-   * Clean up all pooled providers.
-   */
   async cleanup(): Promise<void> {
     for (const provider of this.pool) {
       await provider.dispose();
@@ -341,9 +315,6 @@ class ProviderWarmPool {
 // Singleton instance
 let warmPool: ProviderWarmPool | null = null;
 
-/**
- * Get the global provider warm pool instance.
- */
 export function getWarmPool(): ProviderWarmPool {
   if (!warmPool) {
     warmPool = new ProviderWarmPool();
@@ -351,10 +322,6 @@ export function getWarmPool(): ProviderWarmPool {
   return warmPool;
 }
 
-/**
- * Initialize the warm pool at startup.
- * Call this in the server startup sequence.
- */
 export async function initWarmPool(): Promise<boolean> {
   return getWarmPool().initialize();
 }

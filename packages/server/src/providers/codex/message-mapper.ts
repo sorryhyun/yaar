@@ -20,16 +20,9 @@ import type {
 import { describeTurnError, notificationNotice, NOTICE_METHODS } from './errors.js';
 import { toNoticeMessage } from '../notice.js';
 
-/** Extract the mcpToolCall variant from ThreadItem */
 type McpToolCallItem = Extract<ThreadItem, { type: 'mcpToolCall' }>;
-
-/** Extract the commandExecution variant from ThreadItem */
 type CommandExecutionItem = Extract<ThreadItem, { type: 'commandExecution' }>;
-
-/** Extract the webSearch variant from ThreadItem */
 type WebSearchItem = Extract<ThreadItem, { type: 'webSearch' }>;
-
-/** Extract the collabAgentToolCall variant from ThreadItem */
 type CollabAgentToolCallItem = Extract<ThreadItem, { type: 'collabAgentToolCall' }>;
 
 /** Format MCP tool name with server namespace: "apps:typecheck" */
@@ -95,7 +88,6 @@ function mapCommandExecutionCompleted(
   };
 }
 
-/** Map the item carried by an `item/started` notification. */
 function mapItemStarted(p: ItemStartedNotification): StreamMessage | null {
   const item = p.item;
   switch (item?.type) {
@@ -124,7 +116,6 @@ function mapItemStarted(p: ItemStartedNotification): StreamMessage | null {
   }
 }
 
-/** Map the item carried by an `item/completed` notification. */
 function mapItemCompleted(p: ItemCompletedNotification): StreamMessage | null {
   const item = p.item;
   switch (item?.type) {
@@ -188,19 +179,10 @@ function isIgnoredNotification(method: string): boolean {
 /**
  * Map a JSON-RPC notification to a StreamMessage.
  * Returns null for notifications that should be skipped.
- *
- * @param method - The notification method name
- * @param params - The notification parameters
- * @returns A StreamMessage or null if the notification should be skipped
  */
 export function mapNotification(method: string, params: unknown): StreamMessage | null {
   switch (method) {
-    // ========================================================================
-    // Turn lifecycle events
-    // ========================================================================
-
     case 'turn/started':
-      // Turn started, no content to yield
       return null;
 
     case 'turn/completed': {
@@ -218,10 +200,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       }
       return { type: 'complete' };
     }
-
-    // ========================================================================
-    // Token accounting
-    // ========================================================================
 
     case 'thread/tokenUsage/updated': {
       const p = params as ThreadTokenUsageUpdatedNotification;
@@ -258,10 +236,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       };
     }
 
-    // ========================================================================
-    // Agent message events (streaming text response)
-    // ========================================================================
-
     case 'item/agentMessage/delta': {
       const p = params as AgentMessageDeltaNotification;
       if (p.delta) {
@@ -273,10 +247,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     case 'item/agentMessage/completed':
       // Already streamed via deltas, skip the completed snapshot
       return null;
-
-    // ========================================================================
-    // Reasoning events (thinking/chain-of-thought)
-    // ========================================================================
 
     case 'item/reasoning/textDelta': {
       const p = params as ReasoningTextDeltaNotification;
@@ -290,12 +260,7 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     case 'item/reasoning/summaryTextDelta':
     case 'item/reasoning/summaryTextCompleted':
     case 'item/reasoning/summaryPartAdded':
-      // Reasoning lifecycle/summary events — skip silently
       return null;
-
-    // ========================================================================
-    // Item lifecycle events (covers MCP, commands, file changes, etc.)
-    // ========================================================================
 
     case 'item/started':
       return mapItemStarted(params as ItemStartedNotification);
@@ -303,19 +268,11 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     case 'item/completed':
       return mapItemCompleted(params as ItemCompletedNotification);
 
-    // ========================================================================
-    // MCP tool call sub-events (also handled via item/started + item/completed)
-    // ========================================================================
-
     case 'item/mcpToolCall/started':
       return mapMcpToolCallStarted(params as Partial<McpToolCallItem> | undefined);
 
     case 'item/mcpToolCall/completed':
       return mapMcpToolCallCompleted(params as Partial<McpToolCallItem> | undefined);
-
-    // ========================================================================
-    // Command execution sub-events
-    // ========================================================================
 
     case 'item/commandExecution/started':
       return mapCommandExecutionStarted(params as Partial<CommandExecutionItem> | undefined);
@@ -338,10 +295,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
     case 'item/commandExecution/completed':
       return mapCommandExecutionCompleted(params as Partial<CommandExecutionItem> | undefined);
 
-    // ========================================================================
-    // Error events
-    // ========================================================================
-
     case 'error': {
       const p = params as ErrorNotification;
       const { text, code } = describeTurnError(p.error, 'Unknown error');
@@ -356,10 +309,6 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       return { type: 'error', error: text, errorCode: code };
     }
 
-    // ========================================================================
-    // Unknown/unhandled events
-    // ========================================================================
-
     default: {
       // Warnings, deprecations, model reroutes, reached limits, failed MCP
       // servers — Codex's user-facing channels, which all used to land in the
@@ -371,11 +320,9 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       // event — logging it as unknown is how a handled method looks unhandled.
       if (NOTICE_METHODS.has(method)) return null;
 
-      // Skip noisy codex internal events
       if (isIgnoredNotification(method)) {
         return null;
       }
-      // Log truly unknown events for debugging
       console.debug(`[codex] Unknown notification: ${method}`, params);
       return null;
     }
@@ -426,9 +373,6 @@ function formatContentBlock(block: unknown): string | null {
   }
 }
 
-/**
- * Format MCP tool call result as a string.
- */
 function formatMcpResult(item: Partial<McpToolCallItem> | undefined): string {
   if (!item?.result) {
     return 'Tool completed';
@@ -465,9 +409,6 @@ function isErrorResult(result: unknown): boolean {
   );
 }
 
-/**
- * Format collab agent tool call result as a string.
- */
 function formatCollabResult(item: CollabAgentToolCallItem): string {
   const parts: string[] = [`tool: ${item.tool}`, `status: ${item.status}`];
   if (item.prompt) parts.push(`prompt: ${item.prompt}`);
@@ -484,9 +425,6 @@ function formatCollabResult(item: CollabAgentToolCallItem): string {
   return parts.join('\n');
 }
 
-/**
- * Format web search result as a string (v2 camelCase fields).
- */
 function formatWebSearchResult(item: WebSearchItem): string {
   const action = item.action;
   if (!action) return item.query;
@@ -503,9 +441,6 @@ function formatWebSearchResult(item: WebSearchItem): string {
   return actionDesc ? `${item.query} → ${actionDesc}` : item.query;
 }
 
-/**
- * Format command execution result as a string.
- */
 function formatCommandResult(item: Partial<CommandExecutionItem> | undefined): string {
   const parts: string[] = [];
 

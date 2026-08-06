@@ -251,7 +251,6 @@ export class ClientEventController {
       content,
       actionId: event.actionId,
     });
-    // Notify other agents subscribed to this window's interactions
     this.deps.getPool()?.notifyWindowSubscribers(
       event.windowId,
       'interaction',
@@ -380,8 +379,7 @@ export class ClientEventController {
       if (interaction.type === 'window.create') {
         for (const action of applied) logger?.logAction(action);
       }
-      // Close all browser sessions (including stale ones) when any browser window is
-      // closed — both the headless sandbox and the user's real-Chrome (session) door.
+      // A stale session with no matching window must not survive its window closing either.
       if (interaction.type === 'window.close' && interaction.windowId?.startsWith('browser-')) {
         this.deps.closeBrowsers();
       }
