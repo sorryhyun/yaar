@@ -20,31 +20,42 @@
  * (`reapIdleAppAgents`), `fresh:true`, monitor removal, explicit delete, or session
  * teardown.
  *
- * A sub-agent's capabilities are written once in
- * `profiles/sub-agent.ts` and never composed at the call site: it holds one channel
- * to its own app's iframe, wearing whatever tool names the app declared at spawn, or
- * no tools at all.
- *
  * Agent types:
  * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
  * - Ephemeral agents: fresh provider, no context, disposed after one task
  * - App agents: persistent per (monitor, app), handle app protocol communication
- * - Sub-agents: N per (monitor, app), prompt supplied by the app at runtime
+ * - Sub-agents: N per (monitor, app), prompt supplied by the app at runtime — the whole
+ *   tier lives in {@link SubAgentRegistry}, reached through the {@link subAgents} door
+ *
+ * What is left in this file is lifecycle: making an agent, tearing one down, and the
+ * global slot each holds. The record itself, the roster projections and the composite
+ * keys are `agent-roster.ts`; the reserve-before-first-await rule every tier shares is
+ * `spawn-reservations.ts`.
  *
  * Used by ContextPool to decouple agent lifecycle from task orchestration.
  */
 
 import { AgentSession } from './agent-session.js';
 import { getAgentLimiter } from './limiter.js';
-import { buildSubAgentProfile, subAgentRole } from './profiles/sub-agent.js';
-import type { SubAgentToolSpec } from './profiles/sub-agent.js';
-import { monitorSource } from './context.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { notifyAgentsChanged } from '../http/subscriptions.js';
 import { genId } from '../lib/ids.js';
 import { revokeAgentToken } from '../mcp/agent-tokens.js';
 import { APP_AGENT_IDLE_MS, APP_AGENT_SWEEP_MS } from '../config.js';
+import {
+  appAgentKey,
+  buildAgentTree,
+  isAgentBusy,
+  listAgents as buildRoster,
+  parseAppKey,
+  type AgentEntry,
+  type AgentTreeNode,
+  type PooledAgent,
+  type RosterMember,
+} from './agent-roster.js';
+import { SpawnReservations } from './spawn-reservations.js';
+import { SubAgentRegistry } from './sub-agent-registry.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -52,227 +63,12 @@ import type { AITransport, TokenUsage } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
 import type { AgentPoolStats } from './pool-types.js';
 
-/**
- * App agents are scoped to the monitor that owns their windows, so two monitors
- * running the same app each get their own agent (and neither can see the other's
- * context). This is the composite key; `::` cannot occur in a monitorId (numeric)
- * or an appId (a directory name).
- */
-export function appAgentKey(monitorId: string, appId: string): string {
-  return `${monitorId}::${appId}`;
-}
 const appKey = appAgentKey;
 
-function parseAppKey(key: string): { monitorId: string; appId: string } {
-  const idx = key.indexOf('::');
-  return { monitorId: key.slice(0, idx), appId: key.slice(idx + 2) };
-}
-
-/**
- * Sub-agents extend the app key with their own id. The parts are never parsed back
- * out — {@link SubAgent} carries them as fields — so the key only has to be unique,
- * and `::` still cannot occur in any of the three components (numeric monitorId,
- * directory-name appId, {@link PERSONA_ID_RE} subId).
- */
-export function subAgentKey(monitorId: string, appId: string, subId: string): string {
-  return `${monitorId}::${appId}::${subId}`;
-}
-
-/**
- * Internal pooled agent representation.
- */
-export interface PooledAgent {
-  session: AgentSession;
-  id: number;
-  instanceId: string;
-  /**
-   * When this agent last ran a turn or was handed to a caller. Read only by the
-   * app-agent idle reaper ({@link AgentPool.reapIdleAppAgents}); every other tier
-   * writes it and nothing reads it, which is fine — the field is the reaper's clock,
-   * and a tier with another reclaim path does not need one.
-   */
-  lastUsed: number;
-  currentRole: string | null; // 'monitor-{messageId}' or 'app-{id}' when active
-}
-
-/** One live agent, as reported by `listAgents()`. */
-export interface AgentEntry {
-  /** instanceId — stable across turns; accepted by `interruptByIdOrRole`. */
-  id: string;
-  /**
-   * Which tier. `persona` is the sub-agent tier's spelling — shipped vocabulary, and
-   * the same word the URI segment and the spawn param use.
-   */
-  type: 'session' | 'monitor' | 'app' | 'ephemeral' | 'persona';
-  /** Human-readable name: the monitorId, the appId, or the current role. */
-  label: string;
-  busy: boolean;
-  monitorId?: string;
-  appId?: string;
-  /** Sub-agents only — the id its owning app spawned it under. */
-  subId?: string;
-  /** Lifetime token consumption. `inputTokens` is fresh input — see {@link TokenUsage}. */
-  usage: TokenUsage;
-}
-
-/**
- * One node of the roster rendered as the tree it already is — see {@link buildAgentTree}.
- *
- * `id` is null for a **vacant owner slot**: ownership follows the key, not the
- * instance, so an app's sub-agents hang under `monitorId::appId` whether or not that
- * app ever grew an agent of its own (a persona is spawned by an app's *iframe*, which
- * needs no app agent to exist).
- */
-export interface AgentTreeNode {
-  /** instanceId, or null when this node is an owner slot with nobody in it. */
-  id: string | null;
-  type: AgentEntry['type'];
-  label: string;
-  busy?: boolean;
-  children?: AgentTreeNode[];
-}
-
-/**
- * Re-shape a flat roster into the ownership tree, session at the root.
- *
- * Nothing here is new information — every entry already carries its `monitorId`,
- * `appId`, and `subId`, so the parentage was always in the data. This states it,
- * which is the whole point: a reader of `yaar://session/agents` should be able to see
- * that disposing a monitor takes its apps and their sub-agents with it.
- *
- * Ephemerals sit at the root: they are monitor-tier helpers keyed by nothing (the
- * one anomaly the tree hasn't absorbed yet), so there is no owner to place them under.
- */
-export function buildAgentTree(entries: AgentEntry[]): AgentTreeNode[] {
-  const roots: AgentTreeNode[] = [];
-  const monitorNodes = new Map<string, AgentTreeNode>();
-  const appNodes = new Map<string, AgentTreeNode>();
-
-  const kids = (node: AgentTreeNode): AgentTreeNode[] => (node.children ??= []);
-  const leaf = (e: AgentEntry): AgentTreeNode => ({
-    id: e.id,
-    type: e.type,
-    label: e.label,
-    busy: e.busy,
-  });
-  /** Fill a slot that was created vacant, keeping its place among its siblings. */
-  const occupy = (node: AgentTreeNode, e: AgentEntry): void => {
-    node.id = e.id;
-    node.label = e.label;
-    node.busy = e.busy;
-  };
-
-  // Pulled out first so monitors have somewhere to attach regardless of roster order.
-  const sessionEntry = entries.find((e) => e.type === 'session');
-  const sessionNode = sessionEntry ? leaf(sessionEntry) : undefined;
-  if (sessionNode) roots.push(sessionNode);
-  const topLevel = (): AgentTreeNode[] => (sessionNode ? kids(sessionNode) : roots);
-
-  const monitorSlot = (monitorId: string): AgentTreeNode => {
-    let node = monitorNodes.get(monitorId);
-    if (!node) {
-      node = { id: null, type: 'monitor', label: `monitor ${monitorId}` };
-      monitorNodes.set(monitorId, node);
-      topLevel().push(node);
-    }
-    return node;
-  };
-  const appSlot = (monitorId: string, appId: string): AgentTreeNode => {
-    const key = appAgentKey(monitorId, appId);
-    let node = appNodes.get(key);
-    if (!node) {
-      node = { id: null, type: 'app', label: `${appId} (monitor ${monitorId})` };
-      appNodes.set(key, node);
-      kids(monitorSlot(monitorId)).push(node);
-    }
-    return node;
-  };
-
-  for (const e of entries) {
-    if (e === sessionEntry) continue;
-    if (e.type === 'monitor' && e.monitorId) occupy(monitorSlot(e.monitorId), e);
-    else if (e.type === 'app' && e.monitorId && e.appId) occupy(appSlot(e.monitorId, e.appId), e);
-    else if (e.type === 'persona' && e.monitorId && e.appId)
-      kids(appSlot(e.monitorId, e.appId)).push(leaf(e));
-    // Ephemerals, and anything missing the ids that would place it, stay at the top.
-    else topLevel().push(leaf(e));
-  }
-
-  return roots;
-}
-
-/**
- * A sub-agent and the metadata its owning app spawned it with.
- *
- * The prompt lives here rather than on the provider because a persona's prompt is
- * *the persona*: it is replayed as `systemPromptOverride` on every turn, and the
- * provider's own `systemPrompt` (the generic YAAR one it was warmed with) is never
- * used. Keeping it on the record also means a busy check, a roster row, and a
- * respawn all read the same object.
- */
-export interface SubAgent {
-  agent: PooledAgent;
+/** How a spawn reservation is matched without parsing its key back out. */
+interface SpawnTag {
   monitorId: string;
   appId: string;
-  /**
-   * The sub-id its owning app spawned it under — the last component of
-   * {@link subAgentKey}.
-   *
-   * The *wire* keeps `personaId` (`yaar://apps/self/agents/{personaId}`, the spawn
-   * param, every response body) — that is shipped format, and
-   * `handlers/apps/agents-resource.ts` is the one place the two spellings meet.
-   */
-  subId: string;
-  /** Verbatim, caller-supplied. Replayed on every turn — see {@link buildSubAgentProfile}. */
-  systemPrompt: string;
-  model?: string;
-  createdAt: number;
-  /**
-   * Final assistant text of the last completed turn.
-   *
-   * The `done` stream frame carries the same text, so a live subscriber never needs
-   * this. It exists for the subscriber that *wasn't* live: an iframe that reloaded
-   * mid-turn, or one whose subscription dropped, can `read` the persona and recover
-   * the answer instead of re-asking a question the model already paid for.
-   */
-  lastResponse?: string;
-  /**
-   * The app-defined tools this sub-agent was spawned with; empty for a tool-less one.
-   *
-   * Prompt material plus a dispatch table, not a capability list — see
-   * `profiles/sub-agent.ts`. The reach is fixed by the profile (one channel to the
-   * owning app's own iframe); this only decides how many names it answers to and what
-   * each one is *called* when it lands there (`persona:{name}`).
-   */
-  tools: SubAgentToolSpec[];
-}
-
-/**
- * What {@link AgentPool.spawnSubAgent} did.
- *
- * Four outcomes rather than a nullable record because the verb handler owes the app
- * four different sentences: `reused` is a success the app should not treat as a new
- * character, `at-capacity` names its own `personas.max`, and `no-slot` names the
- * machine's `MAX_AGENTS`. Collapsing the last two into `null` made "close a window"
- * the advice for a limit only "delete a persona" could clear.
- */
-export type SubAgentSpawnResult =
-  | { status: 'created'; record: SubAgent }
-  | { status: 'reused'; record: SubAgent }
-  | { status: 'at-capacity' }
-  | { status: 'no-slot' };
-
-/**
- * What one spawn asks for: the prompt that makes the node, the tools it may dispatch
- * to its own app, and the app's own ceiling.
- *
- * Omitting `tools` is the plain case — a sub-agent that receives text and returns text.
- */
-export interface SpawnSubAgentOptions {
-  systemPrompt: string;
-  model?: string;
-  max: number;
-  tools?: SubAgentToolSpec[];
 }
 
 const ZERO_USAGE: TokenUsage = {
@@ -315,42 +111,25 @@ export class AgentPool {
   /**
    * App-agent creations reserved but not yet landed, keyed like {@link appAgents}.
    *
-   * Written before the first await in {@link AgentPool.getOrCreateAppAgent}, for the
-   * reason spelled out over {@link subAgentSpawns}: two creations for one key that
-   * overlap inside `acquireProvider` both find the map empty, and the loser lands in
-   * no collection at all — unreachable by every dispose path and by `cleanup()`, while
-   * still holding a provider process and a `MAX_AGENTS` slot.
-   *
    * Two app tasks for one app already overlap whenever one of them carries an
    * `actionId`: parallel button actions skip the processing lock on purpose. A `fresh`
    * turn widens the window further, since it empties the map deliberately and then
-   * asks for a replacement.
+   * asks for a replacement. See {@link SpawnReservations} for the leak class this
+   * closes.
    */
-  private appAgentSpawns = new Map<string, Promise<PooledAgent | null>>();
+  private appAgentSpawns = new SpawnReservations<PooledAgent, SpawnTag>();
 
   /**
-   * Sub-agents, keyed by `{monitorId}::{appId}::{subId}` (see `subAgentKey`) — the
-   * app tier's children, one key-extension down.
+   * The sub-agent tier — the app tier's children, one key-extension down.
    *
-   * Monitor-scoped for the same reason app agents are: the app that spawned them is
-   * itself scoped to the monitor whose window it runs in, so two monitors running the
-   * same app get two independent casts and neither can name the other's.
+   * Public because it is the door, not a pass-through: everything about that tier (its
+   * cap, its turn, who reclaims it) is the registry's, and the pool supplies it only
+   * the two services below. `ContextPool.agentPool` is the same shape one level up.
    */
-  private subAgents = new Map<string, SubAgent>();
-
-  /**
-   * Spawns reserved but not yet landed, keyed like {@link subAgents}.
-   *
-   * The reservation is written *before* the first await in {@link AgentPool.spawnSubAgent},
-   * which is what makes that method safe to call concurrently — a second call for the same
-   * sub-agent finds the reservation and joins it instead of starting a second provider.
-   * `monitorId`/`appId` ride along rather than being parsed back out of the key, for
-   * the same reason {@link SubAgent} carries them: the key is opaque.
-   */
-  private subAgentSpawns = new Map<
-    string,
-    { monitorId: string; appId: string; pending: Promise<SubAgent | null> }
-  >();
+  readonly subAgents = new SubAgentRegistry({
+    createAgent: () => this.createWithFreshProvider(),
+    disposeAgent: (agent, label) => this.disposeAgent(agent, label),
+  });
 
   /** Session agent — lazy singleton for cross-monitor oversight. */
   private sessionAgent: PooledAgent | null = null;
@@ -449,13 +228,7 @@ export class AgentPool {
    * roster, lookup, and teardown below sees it. They used to walk the four
    * collections by hand, and a tier missed in one of them is a silent bug.
    */
-  private *allAgents(): Iterable<{
-    agent: PooledAgent;
-    type: AgentEntry['type'];
-    monitorId?: string;
-    appId?: string;
-    subId?: string;
-  }> {
+  private *allAgents(): Iterable<RosterMember> {
     if (this.sessionAgent) yield { agent: this.sessionAgent, type: 'session' };
     for (const [monitorId, agent] of this.monitorAgents) {
       yield { agent, type: 'monitor', monitorId };
@@ -463,21 +236,8 @@ export class AgentPool {
     for (const [key, agent] of this.appAgents) {
       yield { agent, type: 'app', ...parseAppKey(key) };
     }
-    for (const p of this.subAgents.values()) {
-      yield {
-        agent: p.agent,
-        type: 'persona',
-        monitorId: p.monitorId,
-        appId: p.appId,
-        subId: p.subId,
-      };
-    }
+    yield* this.subAgents.members();
     for (const agent of this.ephemeralAgents) yield { agent, type: 'ephemeral' };
-  }
-
-  /** An agent is busy while its provider is streaming or a role is assigned to it. */
-  private isBusy(agent: PooledAgent): boolean {
-    return agent.session.isRunning() || agent.currentRole !== null;
   }
 
   // ── Agent disposal ───────────────────────────────────────────────────
@@ -493,7 +253,7 @@ export class AgentPool {
    * **Idempotent per agent, and that is load-bearing.** Two dispose paths reach the
    * same agent whenever a fire-and-forget disposer races `cleanup()`'s roster
    * snapshot — `MonitorRegistry.remove` never awaits `removeMonitorAgent`, and
-   * `WindowEventCoordinator` only `.catch()`es `disposeSubAgentsForApp`. A second
+   * `WindowEventCoordinator` only `.catch()`es `subAgents.disposeForApp`. A second
    * `release()` would take the process-global count *below* the number of live
    * agents, permanently, and the process then admits past `MAX_AGENTS`. The
    * `agentIds` delete decides the race before the first await; the loser returns
@@ -554,10 +314,10 @@ export class AgentPool {
       // at 0 in every pool, so two sessions creating their first agent in the same
       // millisecond minted the same id — and the three registries keyed by it are all
       // process-global. `SessionHub.registerAgent` silently overwrites (so
-      // `findSessionByAgent` routes one session's agent to the other),
-      // `actionEmitter.interruptedAgents` gates both from either one's stop, and
-      // `getAgentToken` hands both the same MCP credential. The counter stays for
-      // readable logs; `genId` is what makes the string an identity.
+      // `findSessionByAgent` routes one session's agent to the other), the
+      // `InterruptGate` gates both from either one's stop, and `getAgentToken` hands
+      // both the same MCP credential. The counter stays for readable logs; `genId` is
+      // what makes the string an identity.
       const instanceId = genId(`agent-${id}`);
 
       const session = new AgentSession(
@@ -669,7 +429,7 @@ export class AgentPool {
   isMonitorAgentBusy(monitorId = '0'): boolean {
     const agent = this.monitorAgents.get(monitorId);
     if (!agent) return true; // no monitor agent = effectively busy
-    return this.isBusy(agent);
+    return isAgentBusy(agent);
   }
 
   /**
@@ -732,17 +492,13 @@ export class AgentPool {
 
     // A creation already in flight for this key: join it rather than start a second
     // one. The joiner gets the same agent it would have found had it arrived one tick
-    // later. Reserved before the first await — see `appAgentSpawns`.
+    // later. Reserved before the first await — see `SpawnReservations`.
     const inFlight = this.appAgentSpawns.get(key);
     if (inFlight) return inFlight;
 
-    const pending = this.createAppAgent(monitorId, appId);
-    this.appAgentSpawns.set(key, pending);
-    try {
-      return await pending;
-    } finally {
-      this.appAgentSpawns.delete(key);
-    }
+    return this.appAgentSpawns.reserve(key, { monitorId, appId }, () =>
+      this.createAppAgent(monitorId, appId),
+    );
   }
 
   /**
@@ -802,7 +558,7 @@ export class AgentPool {
     const expired: Array<{ monitorId: string; appId: string }> = [];
 
     for (const [key, agent] of this.appAgents) {
-      if (this.isBusy(agent)) {
+      if (isAgentBusy(agent)) {
         // A busy agent's idle clock starts when it goes quiet, not when its turn
         // began: `lastUsed` is stamped at turn *start*, so a turn longer than the TTL
         // would otherwise be reapable the instant it finished.
@@ -843,15 +599,16 @@ export class AgentPool {
   /**
    * Dispose the app agent for a given app on a given monitor.
    *
-   * Settles a creation still in flight first, for the reason `settlePersonaSpawns`
-   * gives: one inside `acquireProvider` is in no collection yet, so the delete below
-   * would walk past it and the agent would land moments later — alive, unreferenced,
-   * and holding a slot until the session ends. A `fresh` turn disposes and then
-   * immediately re-creates, so this is the ordinary case here, not the exotic one.
+   * Settles a creation still in flight first, for the reason {@link SpawnReservations}
+   * rule 3 gives: one inside `acquireProvider` is in no collection yet, so the delete
+   * below would walk past it and the agent would land moments later — alive,
+   * unreferenced, and holding a slot until the session ends. A `fresh` turn disposes
+   * and then immediately re-creates, so this is the ordinary case here, not the exotic
+   * one.
    */
   async disposeAppAgent(monitorId: string, appId: string, reason?: string): Promise<void> {
     const key = appKey(monitorId, appId);
-    await this.settleAppAgentSpawns((k) => k === key);
+    await this.appAgentSpawns.settle((tag) => tag.monitorId === monitorId && tag.appId === appId);
 
     const agent = this.appAgents.get(key);
     if (!agent) return;
@@ -863,14 +620,6 @@ export class AgentPool {
     );
   }
 
-  /** Wait out the app-agent reservations a teardown is about to sweep past. */
-  private async settleAppAgentSpawns(match: (key: string) => boolean): Promise<void> {
-    const pending = [...this.appAgentSpawns.entries()]
-      .filter(([key]) => match(key))
-      .map(([, promise]) => promise);
-    if (pending.length > 0) await Promise.allSettled(pending);
-  }
-
   /**
    * Dispose every app agent owned by a monitor. App agents belong to the monitor
    * whose windows they drive, so tearing the monitor down reclaims them — nothing
@@ -879,7 +628,7 @@ export class AgentPool {
   async disposeAppAgentsForMonitor(monitorId: string): Promise<void> {
     // Same reason as in `disposeAppAgent`, one tier up: enumerate only after the
     // monitor's in-flight creations have landed, or the sweep misses them.
-    await this.settleAppAgentSpawns((key) => parseAppKey(key).monitorId === monitorId);
+    await this.appAgentSpawns.settle((tag) => tag.monitorId === monitorId);
 
     const appIds = [...this.appAgents.keys()]
       .map(parseAppKey)
@@ -892,230 +641,9 @@ export class AgentPool {
 
     // Not folded into the loop above: a persona is spawned by an app's *iframe*,
     // which needs no app agent to exist. An app that only ever talks to its personas
-    // has entries here and none in `appAgents`, so walking app agents would reclaim
+    // has entries there and none in `appAgents`, so walking app agents would reclaim
     // nothing and leak every slot the monitor's personas hold.
-    await this.disposeSubAgentsForMonitor(monitorId);
-  }
-
-  // ── Sub-agents ───────────────────────────────────────────────────
-
-  /**
-   * Spawn a sub-agent for one app on one monitor, or hand back the one that already
-   * answers to that id.
-   *
-   * Every decision here — does the persona exist, is one already on its way, is the
-   * app at its ceiling — is taken **synchronously, before the first await**. That is
-   * the whole point of the method. The shape it replaces checked existence and the
-   * cap in the verb handler and *then* awaited a provider, so two spawns arriving in
-   * one tick both passed both checks: the second overwrote the first in
-   * `subAgents`, and the first became an agent in no collection at all —
-   * unreachable by every dispose path and by `cleanup()`, which walks `allAgents()`.
-   * It held a provider process and a `MAX_AGENTS` slot until the process died. An app
-   * spawning its cast with `Promise.all` is the ordinary way to land there, and
-   * `spawn` is documented as safe to re-run on every mount.
-   *
-   * `max` is the app's `subagents.max`: the caller reads the manifest, the pool
-   * enforces it, and reservations count toward it so the cap holds under concurrency
-   * too. The cap is per (monitor, app) and counts every sub-agent, tool-bearing or
-   * not — a slot is a provider process either way.
-   */
-  async spawnSubAgent(
-    monitorId: string,
-    appId: string,
-    subId: string,
-    options: SpawnSubAgentOptions,
-  ): Promise<SubAgentSpawnResult> {
-    const key = subAgentKey(monitorId, appId, subId);
-
-    const existing = this.subAgents.get(key);
-    if (existing) return { status: 'reused', record: existing };
-
-    // A spawn already in flight for this id: join it rather than start a second one.
-    // The joiner gets `reused`, which is the same answer it would have got had it
-    // arrived one tick later and found the record in place.
-    const inFlight = this.subAgentSpawns.get(key);
-    if (inFlight) {
-      const record = await inFlight.pending;
-      return record ? { status: 'reused', record } : { status: 'no-slot' };
-    }
-
-    if (this.countSubAgents(monitorId, appId) >= options.max) return { status: 'at-capacity' };
-
-    const pending = this.createSubAgent(monitorId, appId, subId, options);
-    this.subAgentSpawns.set(key, { monitorId, appId, pending });
-    try {
-      const record = await pending;
-      return record ? { status: 'created', record } : { status: 'no-slot' };
-    } finally {
-      this.subAgentSpawns.delete(key);
-    }
-  }
-
-  /**
-   * The spawn itself. Only ever called with a reservation held, which is what makes
-   * the `subAgents.set` below the only writer for that key.
-   *
-   * Returns null when the global limiter has no slot — the caller surfaces that to
-   * the app as a clean "agent limit reached" rather than a crash, since a room of
-   * four characters plus the standing session/monitor/app trio sits close to the
-   * `MAX_AGENTS` default.
-   */
-  private async createSubAgent(
-    monitorId: string,
-    appId: string,
-    subId: string,
-    options: SpawnSubAgentOptions,
-  ): Promise<SubAgent | null> {
-    const agent = await this.createWithFreshProvider();
-    if (!agent) return null;
-
-    const tools = options.tools ?? [];
-    const record: SubAgent = {
-      agent,
-      monitorId,
-      appId,
-      subId,
-      systemPrompt: options.systemPrompt,
-      tools,
-      ...(options.model ? { model: options.model } : {}),
-      createdAt: Date.now(),
-    };
-    this.subAgents.set(subAgentKey(monitorId, appId, subId), record);
-    console.log(
-      `[AgentPool] Sub-agent "${subId}" (${tools.length} tools) spawned for ${appId} ` +
-        `on monitor ${monitorId}: ${agent.instanceId}`,
-    );
-    return record;
-  }
-
-  /** Live sub-agents plus reservations — the number `subagents.max` is measured against. */
-  private countSubAgents(monitorId: string, appId: string): number {
-    let count = this.listSubAgents(monitorId, appId).length;
-    for (const spawn of this.subAgentSpawns.values()) {
-      if (spawn.monitorId === monitorId && spawn.appId === appId) count++;
-    }
-    return count;
-  }
-
-  /**
-   * Wait out the reservations a teardown is about to sweep past.
-   *
-   * A spawn still inside `acquireProvider` is in no collection yet, so a dispose
-   * sweep walks right by it and the persona lands in `subAgents` moments after
-   * the app that owns it stopped existing — alive, unreferenced, and holding a slot
-   * until the session ends. Settling first means the sweep sees it.
-   */
-  private async settlePersonaSpawns(
-    match: (spawn: { monitorId: string; appId: string }) => boolean,
-  ): Promise<void> {
-    const pending = [...this.subAgentSpawns.values()].filter(match).map((s) => s.pending);
-    if (pending.length > 0) await Promise.allSettled(pending);
-  }
-
-  getSubAgent(monitorId: string, appId: string, subId: string): SubAgent | undefined {
-    return this.subAgents.get(subAgentKey(monitorId, appId, subId));
-  }
-
-  /**
-   * The sub-agent one MCP request is coming from, or undefined for every other
-   * caller.
-   *
-   * The `subagent` MCP namespace is the one door whose *tool list* depends on who is
-   * knocking (an app-defined set, fixed at spawn), so it needs the record behind the
-   * agent token rather than just its id. Every other namespace registers the same
-   * tools for everyone and never asks.
-   */
-  findSubAgentForAgent(agentId: string): SubAgent | undefined {
-    for (const record of this.subAgents.values()) {
-      if (record.agent.instanceId === agentId) return record;
-    }
-    return undefined;
-  }
-
-  /** Every sub-agent one app owns on one monitor, oldest first, whatever the grade. */
-  listSubAgents(monitorId: string, appId: string): SubAgent[] {
-    return [...this.subAgents.values()]
-      .filter((p) => p.monitorId === monitorId && p.appId === appId)
-      .sort((a, b) => a.createdAt - b.createdAt);
-  }
-
-  /** True while the sub-agent's provider is streaming — one turn at a time, each. */
-  isSubAgentBusy(record: SubAgent): boolean {
-    return this.isBusy(record.agent);
-  }
-
-  /**
-   * Run one sub-agent turn, fire and forget.
-   *
-   * Deliberately not routed through `ContextPool`: a sub-agent has no context tape,
-   * no window, and no queue — the app's own scheduler decides who speaks and when,
-   * and the pool's queues exist to serialize things a sub-agent has no share in. What
-   * it does share is the turn machinery, so the answer streams to
-   * `yaar://agents/{instanceId}/stream` exactly like any other agent's, for free.
-   *
-   * The returned promise resolves when the turn ends; callers that want the verb to
-   * return immediately (the app's `message` action does) simply don't await it. The
-   * final text lands on `record.lastResponse` either way.
-   *
-   * The turn's hands come from {@link buildSubAgentProfile} and never from this
-   * method. That is the shape law 3 asks for: the pool knows a record's declared tool
-   * *names* and nothing about what a sub-agent may touch, so there is no branch here
-   * that could be widened into "…and also these tools".
-   */
-  runSubAgentTurn(record: SubAgent, content: string, messageId: string): Promise<void> {
-    const profile = buildSubAgentProfile(record);
-    return record.agent.session.handleMessage(content, {
-      role: subAgentRole(record.appId, record.subId),
-      source: monitorSource(record.monitorId),
-      messageId,
-      monitorId: record.monitorId,
-      systemPromptOverride: profile.systemPrompt,
-      // The containment. See profiles/sub-agent.ts — this allowlist is what decides
-      // which MCP servers the turn even connects to (none when the sub-agent has
-      // no tools, the `subagent` namespace alone when it has some), on both providers:
-      // Claude derives them in `claude/sdk-options.ts`, Codex in `codexServerFilter`.
-      allowedTools: profile.allowedTools,
-      ...(record.model ? { model: record.model } : {}),
-      // Not a context tape write — nothing here reaches `ContextTape`. It is the one
-      // callback that hands back the turn's final assistant text, which `read` serves
-      // to an iframe that missed the `done` frame.
-      onContextMessage: (role, text) => {
-        if (role === 'assistant') record.lastResponse = text;
-      },
-    });
-  }
-
-  /** Dispose one sub-agent. Returns false when the app never spawned it. */
-  async disposeSubAgent(monitorId: string, appId: string, subId: string): Promise<boolean> {
-    const key = subAgentKey(monitorId, appId, subId);
-    const record = this.subAgents.get(key);
-    if (!record) return false;
-
-    this.subAgents.delete(key);
-    await this.disposeAgent(
-      record.agent,
-      `Sub-agent "${subId}" disposed for ${appId} on monitor ${monitorId}`,
-    );
-    return true;
-  }
-
-  /** Dispose every sub-agent one app owns on one monitor. Returns how many died. */
-  async disposeSubAgentsForApp(monitorId: string, appId: string): Promise<number> {
-    await this.settlePersonaSpawns((s) => s.monitorId === monitorId && s.appId === appId);
-    const doomed = this.listSubAgents(monitorId, appId);
-    for (const p of doomed) {
-      await this.disposeSubAgent(monitorId, appId, p.subId);
-    }
-    return doomed.length;
-  }
-
-  /** Dispose every sub-agent on a monitor, whichever app owns it. */
-  async disposeSubAgentsForMonitor(monitorId: string): Promise<void> {
-    await this.settlePersonaSpawns((s) => s.monitorId === monitorId);
-    const doomed = [...this.subAgents.values()].filter((p) => p.monitorId === monitorId);
-    for (const p of doomed) {
-      await this.disposeSubAgent(monitorId, p.appId, p.subId);
-    }
+    await this.subAgents.disposeForMonitor(monitorId);
   }
 
   // ── Session agent ────────────────────────────────────────────────
@@ -1291,51 +819,11 @@ export class AgentPool {
    * agent by `id` (see `interruptByIdOrRole`).
    */
   listAgents(): AgentEntry[] {
-    const entries: AgentEntry[] = [];
-    for (const { agent, type, monitorId, appId, subId } of this.allAgents()) {
-      const id = agent.instanceId;
-      const busy = this.isBusy(agent);
-      const usage = agent.session.getUsage();
-      switch (type) {
-        case 'session':
-          entries.push({ id, type, label: 'session', busy, usage });
-          break;
-        case 'monitor':
-          entries.push({ id, type, label: `monitor ${monitorId}`, busy, monitorId, usage });
-          break;
-        case 'app':
-          entries.push({
-            id,
-            type,
-            label: `${appId} (monitor ${monitorId})`,
-            busy,
-            monitorId,
-            appId,
-            usage,
-          });
-          break;
-        case 'persona':
-          entries.push({
-            id,
-            type,
-            label: `${subId} · ${appId} (monitor ${monitorId})`,
-            busy,
-            monitorId,
-            appId,
-            subId,
-            usage,
-          });
-          break;
-        case 'ephemeral':
-          entries.push({ id, type, label: agent.currentRole ?? 'ephemeral', busy, usage });
-          break;
-      }
-    }
-    return entries;
+    return buildRoster(this.allAgents());
   }
 
   /**
-   * The same roster, nested by ownership — see {@link buildAgentTree}.
+   * The same roster, nested by ownership — see `buildAgentTree`.
    *
    * `listAgents()` stays flat because that is what every existing consumer indexes,
    * interrupts, and filters over. This is the other view of the identical data, for
@@ -1358,7 +846,7 @@ export class AgentPool {
 
     for (const { agent } of this.allAgents()) {
       total++;
-      if (this.isBusy(agent)) busy++;
+      if (isAgentBusy(agent)) busy++;
       else idle++;
       usage = addUsage(usage, agent.session.getUsage());
     }
@@ -1395,9 +883,9 @@ export class AgentPool {
   async cleanup(): Promise<void> {
     this.disarmIdleSweep();
     // Before the snapshot: a persona still mid-spawn is in no collection, so it would
-    // land in `subAgents` after the clear below and outlive the pool that owns it.
-    await this.settlePersonaSpawns(() => true);
-    await this.settleAppAgentSpawns(() => true);
+    // land in the registry after the clear below and outlive the pool that owns it.
+    await this.subAgents.settleSpawns(() => true);
+    await this.appAgentSpawns.settle(() => true);
     // Snapshot before the first await: the two phases must walk the same roster.
     const allAgents = [...this.allAgents()].map((e) => e.agent);
 

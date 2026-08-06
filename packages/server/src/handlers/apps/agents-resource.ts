@@ -46,7 +46,8 @@ import {
   SUB_AGENT_ID_RE,
   type SubAgentToolSpec,
 } from '../../agents/profiles/sub-agent.js';
-import type { AgentPool, SubAgent } from '../../agents/agent-pool.js';
+import type { AgentPool } from '../../agents/agent-pool.js';
+import type { SubAgent } from '../../agents/sub-agent-registry.js';
 import { genId } from '../../lib/ids.js';
 
 const DESCRIBE = {
@@ -106,7 +107,7 @@ function personaView(p: SubAgent, pool: AgentPool): Record<string, unknown> {
     personaId: p.subId,
     instanceId: p.agent.instanceId,
     streamUri: buildAgentStreamUri(p.agent.instanceId),
-    busy: pool.isSubAgentBusy(p),
+    busy: pool.subAgents.isBusy(p),
     createdAt: p.createdAt,
     ...(p.model ? { model: p.model } : {}),
     ...(p.tools.length > 0 ? { tools: p.tools.map((t) => t.name) } : {}),
@@ -204,7 +205,7 @@ function requirePersona(scope: Scope): SubAgent | VerbResult {
   if (!scope.personaId) {
     return error('This action addresses one persona: yaar://apps/self/agents/{personaId}.');
   }
-  const record = scope.pool().getSubAgent(scope.monitorId, scope.appId, scope.personaId);
+  const record = scope.pool().subAgents.get(scope.monitorId, scope.appId, scope.personaId);
   if (!record) {
     return error(
       `No persona "${scope.personaId}" — spawn it first with ` +
@@ -224,7 +225,7 @@ export async function listPersonas(resolved: ResolvedUri): Promise<VerbResult | 
   if (scope === null) return null;
   if (isVerbResult(scope)) return scope;
 
-  const personas = scope.pool().listSubAgents(scope.monitorId, scope.appId);
+  const personas = scope.pool().subAgents.list(scope.monitorId, scope.appId);
   return okJson({
     max: scope.max,
     personas: personas.map((p) => personaView(p, scope.pool())),
@@ -339,7 +340,7 @@ async function spawn(scope: Scope, payload?: Record<string, unknown>): Promise<V
   // collection at all, holding a provider and a `MAX_AGENTS` slot forever. This layer
   // owns the manifest (hence `max`) and the wording; the pool owns the invariant, and
   // `profiles/sub-agent.ts` owns what a sub-agent can touch.
-  const result = await scope.pool().spawnSubAgent(scope.monitorId, scope.appId, personaId, {
+  const result = await scope.pool().subAgents.spawn(scope.monitorId, scope.appId, personaId, {
     systemPrompt,
     max: scope.max,
     ...(tools.length > 0 ? { tools } : {}),
@@ -382,7 +383,7 @@ async function message(scope: Scope, payload?: Record<string, unknown>): Promise
   // whether a second message is a follow-up worth waiting for or a race worth
   // dropping. Queueing here would decide that for it, invisibly. `busy: true` is on
   // the envelope so the caller can branch without parsing the sentence.
-  if (scope.pool().isSubAgentBusy(record)) {
+  if (scope.pool().subAgents.isBusy(record)) {
     return {
       ...error(`Persona "${record.subId}" is still answering. Interrupt it or wait for done.`),
       structuredContent: { busy: true, personaId: record.subId },
@@ -396,7 +397,7 @@ async function message(scope: Scope, payload?: Record<string, unknown>): Promise
   // only catches a throw before the stream opens.
   void scope
     .pool()
-    .runSubAgentTurn(record, content, taskId)
+    .subAgents.runTurn(record, content, taskId)
     .catch((err: unknown) => {
       console.error(`[personas] turn failed for ${record.appId}/${record.subId}:`, err);
     });
@@ -415,11 +416,11 @@ export async function deletePersonas(resolved: ResolvedUri): Promise<VerbResult 
   if (isVerbResult(scope)) return scope;
 
   if (!scope.personaId) {
-    const disposed = await scope.pool().disposeSubAgentsForApp(scope.monitorId, scope.appId);
+    const disposed = await scope.pool().subAgents.disposeForApp(scope.monitorId, scope.appId);
     return okJson({ disposed });
   }
 
-  const ok = await scope.pool().disposeSubAgent(scope.monitorId, scope.appId, scope.personaId);
+  const ok = await scope.pool().subAgents.dispose(scope.monitorId, scope.appId, scope.personaId);
   if (!ok) return error(`No persona "${scope.personaId}" to delete.`);
   return okJson({ personaId: scope.personaId, disposed: 1 });
 }

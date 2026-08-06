@@ -43,7 +43,8 @@
 import { ContextTape, type ContextMessage } from './context.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { monitorRole } from './roles.js';
-import { AgentPool, type PooledAgent, type AgentEntry } from './agent-pool.js';
+import { AgentPool } from './agent-pool.js';
+import type { PooledAgent, AgentEntry } from './agent-roster.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import {
   ServerEventType,

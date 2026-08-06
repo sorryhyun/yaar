@@ -26,7 +26,7 @@ import { mkdirSync, rmSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
 import { AgentPool } from '../agents/agent-pool.js';
-import type { SubAgent } from '../agents/agent-pool.js';
+import type { SubAgent } from '../agents/sub-agent-registry.js';
 import {
   buildSubAgentProfile,
   isSubAgentRole,
@@ -356,7 +356,7 @@ describe('tool-bearing sub-agents in AgentPool', () => {
   const spawn = async (subId = 'alice', tools = [SKIP, MEMORIZE]): Promise<SubAgent | null> => {
     // `devtools` is the app that declares `controls` — a grant to the app *agent*.
     // Law 2 says it must not descend, and the turn below is where that is checked.
-    const result = await pool.spawnSubAgent('0', 'devtools', subId, {
+    const result = await pool.subAgents.spawn('0', 'devtools', subId, {
       systemPrompt: `You are ${subId}.`,
       max: 4,
       tools,
@@ -366,7 +366,7 @@ describe('tool-bearing sub-agents in AgentPool', () => {
 
   it('runs a turn with the bridge tools and nothing the owning app was granted', async () => {
     const alice = await spawn();
-    await pool.runSubAgentTurn(alice!, 'Bob said hello.', 'task-1');
+    await pool.subAgents.runTurn(alice!, 'Bob said hello.', 'task-1');
 
     expect(recorded).toHaveLength(1);
     expect(recorded[0].options.systemPrompt).toBe('You are alice.');
@@ -381,30 +381,30 @@ describe('tool-bearing sub-agents in AgentPool', () => {
 
   it('runs a tool-less turn with an empty allowlist, not an absent one', async () => {
     const bob = await spawn('bob', []);
-    await pool.runSubAgentTurn(bob!, 'Say hello.', 'task-2');
+    await pool.subAgents.runTurn(bob!, 'Say hello.', 'task-2');
 
     expect(recorded[0].options.allowedTools).toEqual([]);
   });
 
   it('shares one cap and one teardown whether or not there are tools', async () => {
     await spawn('alice');
-    await pool.spawnSubAgent('0', 'devtools', 'bob', { systemPrompt: 'You are Bob.', max: 4 });
+    await pool.subAgents.spawn('0', 'devtools', 'bob', { systemPrompt: 'You are Bob.', max: 4 });
 
-    expect(pool.listSubAgents('0', 'devtools').map((s) => s.tools.length)).toEqual([2, 0]);
+    expect(pool.subAgents.list('0', 'devtools').map((s) => s.tools.length)).toEqual([2, 0]);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 2);
 
     // A slot is a provider process either way — one ceiling, one sweep.
-    expect(await pool.disposeSubAgentsForApp('0', 'devtools')).toBe(2);
+    expect(await pool.subAgents.disposeForApp('0', 'devtools')).toBe(2);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore);
   });
 
   it('is findable by agent id — the lookup the MCP door resolves tools through', async () => {
     const alice = await spawn();
 
-    const found = pool.findSubAgentForAgent(alice!.agent.instanceId);
+    const found = pool.subAgents.findByAgentId(alice!.agent.instanceId);
     expect(found?.subId).toBe('alice');
     expect(found?.tools.map((t) => t.name)).toEqual(['skip', 'memorize']);
-    expect(pool.findSubAgentForAgent('agent-nobody')).toBeUndefined();
+    expect(pool.subAgents.findByAgentId('agent-nobody')).toBeUndefined();
     // Least-privileged tier: its tool calls *do* arrive over MCP, and this is the role
     // the session-principal gate reads.
     expect(pool.getRoleForAgent(alice!.agent.instanceId)).toBe('app');
@@ -412,7 +412,7 @@ describe('tool-bearing sub-agents in AgentPool', () => {
 
   it('hangs under its app in the tree', async () => {
     await spawn('alice');
-    await pool.spawnSubAgent('0', 'devtools', 'bob', { systemPrompt: 'You are Bob.', max: 4 });
+    await pool.subAgents.spawn('0', 'devtools', 'bob', { systemPrompt: 'You are Bob.', max: 4 });
 
     const [monitor] = pool.agentTree();
     const app = monitor.children?.[0];

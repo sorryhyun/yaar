@@ -15,7 +15,7 @@ import { monitorSource } from './context.js';
 import { sessionRole } from './roles.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { SESSION_AGENT_PROFILE, turnOptionsFor } from './profiles/index.js';
-import type { PooledAgent } from './agent-pool.js';
+import type { PooledAgent } from './agent-roster.js';
 import type { SessionPoolContext, Task } from './pool-types.js';
 
 export class SessionTaskProcessor {

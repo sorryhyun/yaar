@@ -139,7 +139,7 @@ describe('app-agent idle reaper', () => {
 
   it("leaves the app's sub-agents alone, exactly as a `fresh` turn does", async () => {
     await pool.getOrCreateAppAgent('0', 'memo');
-    const spawned = await pool.spawnSubAgent('0', 'memo', 'alice', {
+    const spawned = await pool.subAgents.spawn('0', 'memo', 'alice', {
       systemPrompt: 'You are Alice.',
       max: 4,
     });
@@ -151,6 +151,6 @@ describe('app-agent idle reaper', () => {
     expect(pool.hasAppAgent('0', 'memo')).toBe(false);
     // A sub-agent's owner is the (monitor, app) pair, not the app agent — same rule
     // that keeps them alive across `fresh: true`.
-    expect(pool.getSubAgent('0', 'memo', 'alice')).toBeTruthy();
+    expect(pool.subAgents.get('0', 'memo', 'alice')).toBeTruthy();
   });
 });

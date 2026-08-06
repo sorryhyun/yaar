@@ -12,7 +12,7 @@ import type { WindowState, OSAction } from '@yaar/shared';
 import type { ContextSource } from './context.js';
 import type { MonitorBudgetPolicy } from './context-pool-policies/index.js';
 import type { TurnContext, Task } from './pool-types.js';
-import type { PooledAgent } from './agent-pool.js';
+import type { PooledAgent } from './agent-roster.js';
 import type { Fingerprint } from '../reload/types.js';
 
 // ── Reload context ──────────────────────────────────────────────────────────

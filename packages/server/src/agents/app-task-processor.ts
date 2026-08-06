@@ -15,7 +15,7 @@ import { buildAppAgentProfile, turnOptionsFor } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 import { appRolePrefix, monitorRole } from './roles.js';
-import { appAgentKey } from './agent-pool.js';
+import { appAgentKey } from './agent-roster.js';
 import { enqueueOrReject } from './queue-refusal.js';
 import { AppStateHandoffStore, formatAppStateHandoffNotice } from './app-state-handoff.js';
 import { captureDeclaredAppState } from '../features/window/app-protocol.js';

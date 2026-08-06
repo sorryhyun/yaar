@@ -7,7 +7,7 @@
 
 import { ServerEventType } from '@yaar/shared';
 import type { MonitorPoolContext, Task } from './pool-types.js';
-import type { PooledAgent } from './agent-pool.js';
+import type { PooledAgent } from './agent-roster.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { monitorSource } from './context.js';

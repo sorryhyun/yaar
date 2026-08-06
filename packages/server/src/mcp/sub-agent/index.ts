@@ -38,7 +38,7 @@ import { getAgentId } from '../../agents/agent-context.js';
 import { getActiveSession, error } from '../../handlers/utils.js';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import type { LiveSession } from '../../session/live-session.js';
-import type { SubAgent } from '../../agents/agent-pool.js';
+import type { SubAgent } from '../../agents/sub-agent-registry.js';
 import type { SubAgentToolParam, SubAgentToolSpec } from '../../agents/profiles/sub-agent.js';
 
 /**
@@ -52,7 +52,7 @@ function callingSubAgent(): SubAgent | null {
   const agentId = getAgentId();
   if (!agentId) return null;
   try {
-    return getActiveSession().getPool()?.agentPool.findSubAgentForAgent(agentId) ?? null;
+    return getActiveSession().getPool()?.agentPool.subAgents.findByAgentId(agentId) ?? null;
   } catch {
     // No active session (the hub is empty) — there is no pool to ask, and a
     // tool-less namespace is the right answer rather than a thrown initialize.

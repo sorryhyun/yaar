@@ -253,7 +253,7 @@ export interface SubAgentSpec {
  * `systemPrompt` is used verbatim — no preamble, no appended house rules. The caller
  * is an app describing a character; anything appended here leaks YAAR's voice into it.
  *
- * Every sub-agent turn goes through here (`AgentPool.runSubAgentTurn` rebuilds the
+ * Every sub-agent turn goes through here (`SubAgentRegistry.runTurn` rebuilds the
  * profile per turn), so the turn's `allowedTools` come from this function and never
  * from the call site.
  */

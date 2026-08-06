@@ -161,7 +161,7 @@ export class WindowEventCoordinator {
       );
     if (stillOpen) return;
 
-    this.ctx.agentPool.disposeSubAgentsForApp(monitorId, appId).catch((err: unknown) => {
+    this.ctx.agentPool.subAgents.disposeForApp(monitorId, appId).catch((err: unknown) => {
       console.error(`[WindowEventCoordinator] Error disposing personas for ${appId}:`, err);
     });
   }

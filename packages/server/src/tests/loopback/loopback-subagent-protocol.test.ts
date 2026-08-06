@@ -22,7 +22,7 @@ import { describe, it, expect, afterEach } from 'bun:test';
 import { ClientEventType, ServerEventType } from '@yaar/shared';
 import { boot, type Harness } from './harness/boot.js';
 import type { OSAction } from '@yaar/shared';
-import type { SubAgent } from '../../agents/agent-pool.js';
+import type { SubAgent } from '../../agents/sub-agent-registry.js';
 
 const { dispatchSubAgentTool } = await import('../../mcp/sub-agent/index.js');
 const { runWithAgentContext } = await import('../../agents/agent-context.js');
@@ -94,7 +94,7 @@ async function bootSubAgentSession(opts: { answerWith?: unknown; silent?: boolea
   // ensureInitialized()`), so a caller that needs the pool waits for it the way the
   // first real message does.
   const pool = (await waitForPool(h)).agentPool;
-  const spawned = await pool.spawnSubAgent('0', 'chitchats', 'alice', {
+  const spawned = await pool.subAgents.spawn('0', 'chitchats', 'alice', {
     systemPrompt: 'You are Alice.',
     max: 4,
     tools: TOOLS,

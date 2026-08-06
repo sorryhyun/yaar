@@ -90,10 +90,16 @@ src/
 │   ├── monitor-registry.ts          # MonitorRegistry — authoritative monitor list, id minting, subscription + viewport, removal
 │   ├── client-event-controller.ts   # ClientEventController — the total ClientEventRoutes table + frame handlers
 │   ├── session-snapshot-service.ts  # SessionSnapshotService — read-only window/surface/agent snapshot building
-│   └── app-window-coordinator.ts    # AppWindowCoordinator — app readiness, command replay, app-channel/bridge-event routing
+│   ├── app-window-coordinator.ts    # AppWindowCoordinator — app readiness, command replay, app-channel/bridge-event routing
+│   ├── desktop-request.ts           # DesktopRequest — the ask-the-desktop-and-wait prelude every server→client question shares
+│   ├── app-ready-registry.ts        # AppReadyRegistry — which iframes are registered *right now*, per (session, window)
+│   └── interrupt-gate.ts            # InterruptGate — agent ids whose stopped turn is still emitting
 ├── websocket/            # WebSocket server + connection registry
 ├── agents/               # Agent lifecycle, pooling, context management
-│   ├── agent-pool.ts     # AgentPool — per-monitor, app, and session agent registry
+│   ├── agent-pool.ts     # AgentPool — creation, disposal, and the global slot each agent holds
+│   ├── agent-roster.ts   # PooledAgent, the composite keys, listAgents()/buildAgentTree() — pure projections
+│   ├── sub-agent-registry.ts   # SubAgentRegistry — the whole sub-agent tier, reached via `AgentPool.subAgents`
+│   ├── spawn-reservations.ts   # SpawnReservations — reserve-before-first-await / join / settle-before-sweep
 │   ├── context-pool.ts   # ContextPool — unified task orchestration
 │   ├── context.ts        # ContextTape — hierarchical message history
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore

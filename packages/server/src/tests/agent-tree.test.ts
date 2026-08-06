@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { buildAgentTree, type AgentEntry } from '../agents/agent-pool.js';
+import { buildAgentTree, type AgentEntry } from '../agents/agent-roster.js';
 
 const ZERO = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 };
 
