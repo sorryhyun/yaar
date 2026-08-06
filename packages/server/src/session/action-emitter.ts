@@ -190,6 +190,12 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
 
   private currentMonitorId: string | undefined;
 
+  /**
+   * Agent ids already reported taking the `currentMonitorId` fallback — see
+   * {@link resolveMonitorId}. Goes away with the field it measures.
+   */
+  private fallbackReported = new Set<string>();
+
   /** This agent's turn was stopped: drop the actions its in-flight tools still emit. */
   markInterrupted(agentId: string): void {
     this.interrupts.mark(agentId);
@@ -240,9 +246,38 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
    * stamp actions emitted outside a turn — an app's iframe calling a verb, say —
    * with whichever monitor the last agent turn happened to leave behind, which is
    * how a window opened from monitor 1's dock lands on monitor 0.
+   *
+   * **The fallback is on notice, and this is the measurement.** It is the only
+   * cross-session mutable global left in this layer — one field, set around every
+   * provider turn on both providers, last writer wins across concurrent turns — and it
+   * undercuts `resolveWindowMonitor`'s own "never place a window by guess" rule from
+   * underneath. Its stated justification (Codex cannot stamp identity onto MCP
+   * requests) has been false since agent tokens: `mcp/server.ts` resolves the monitor
+   * from `hub.findMonitorForAgent(agentId)` for *both* providers.
+   *
+   * What is left is the case that resolver cannot answer — an agent in no monitor
+   * collection. Ephemerals are the known one (they have no monitor by design), and the
+   * session agent between turns is the other. So the line below names the agent rather
+   * than merely counting: what the field is really covering decides whether deleting it
+   * means removing four provider call sites or giving ephemerals a monitor first. Once
+   * per agent id, because the answer is which *tier* takes it, not how often.
    */
   private resolveMonitorId(): string | undefined {
-    return getMonitorId() ?? this.currentMonitorId;
+    const contextMonitorId = getMonitorId();
+    if (contextMonitorId) return contextMonitorId;
+    if (this.currentMonitorId) this.reportMonitorFallback();
+    return this.currentMonitorId;
+  }
+
+  private reportMonitorFallback(): void {
+    const agentId = this.resolveAgentId() ?? 'no-agent';
+    if (this.fallbackReported.has(agentId)) return;
+    this.fallbackReported.add(agentId);
+    console.warn(
+      `[ActionEmitter] Agent ${agentId} stamped monitor ${this.currentMonitorId} from the ` +
+        'turn-scoped fallback: no monitor in its async context, and the MCP boundary could ' +
+        'not resolve one either. This field is slated for deletion — please report this line.',
+    );
   }
 
   /**

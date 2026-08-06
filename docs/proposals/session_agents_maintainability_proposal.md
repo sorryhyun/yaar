@@ -70,47 +70,61 @@ the code and its tests are the record. Seven notes worth carrying forward:
   slimmed: with the logger mint and `CONNECTION_STATUS` gone, `AgentSession.initialize` is
   six lines of acquire-and-attach.
 
-## Phase 3 — the two big splits (do last; Phases 1–2 shrink them first)
+## Phase 3 — the two big splits
 
-1. **Split `ActionEmitter`** (1003 lines, 11 fields, nine responsibilities, five methods
-   repeating the same resolve-session → mint-id → `PendingStore.create` → emit → map-outcome
-   prelude). Extract, keeping the singleton's public surface byte-identical as a facade:
-   - `session/desktop-request.ts` — the ask-the-desktop-and-wait prelude (dialogs, prompts,
-     clipboard, app-protocol requests share it).
-   - `session/app-ready-registry.ts` — `readyWindows` + notify/is/forget/wait. Per-(session,
-     window) state, not an emitter concern.
-   - `session/interrupt-gate.ts` — `interruptedAgents` (two external mutators in
-     `agent-session.ts`).
-   **Trap:** `tests/loopback/loopback-answer-waits.test.ts:373` greps *source text* for
-   `/actionEmitter\.(resolve[A-Z]\w*|notifyAppReady)\s*\(/` — the regex must move with the
-   extraction or the loopback wait-coverage assertion silently stops covering it.
-   While here (cheap riders): the 9-positional-arg dialog API → options object
-   (`install.ts:118` already passes `undefined, // default deadline`); document or rename
-   the `WindowState.appProtocol` ("has ever registered") vs `readyWindows` ("currently
-   registered") split at `window-state.ts:588`.
+**Items 1 and 2 landed 2026-08-06** and have been removed from this document; the code
+and the suites that already covered it are the record. Six notes worth carrying forward:
 
-2. **Split `agent-pool.ts`** (1288 lines) along three seams:
-   - **A:** sub-agent tier (lines ~755–978 + types at ~186–258) → `agents/sub-agent-registry.ts`;
-     touches only `createAgentCore`, `disposeAgent`, `acquireProvider` — inject those three.
-   - **B:** `buildAgentTree` + `AgentEntry`/`AgentTreeNode` (~100–184, already pure) +
-     `listAgents` → `agents/agent-roster.ts`.
-   - **C:** the reserve-before-first-await / join-in-flight / settle-before-sweep pattern,
-     implemented twice (`appAgentSpawns` `:305,636-659,722-727`; `subAgentSpawns`
-     `:326,777-807,867-872`) → one `SpawnReservations<T>`. **Do not** alter the semantics —
-     the comments at `:291-305` and `:757-776` record a real leak class (agent in no
-     collection holding a `MAX_AGENTS` slot forever); the settle calls in every dispose path
-     must survive the move. Rider: `settlePersonaSpawns` → `settleSubAgentSpawns` (internal
-     symmetry; the wire-facing persona vocabulary is untouched).
+- **The loopback grep needed no move after all.** `loopback-answer-waits.test.ts` scans
+  source text for `actionEmitter.(resolve*|notifyAppReady)(` in the two frame-answering
+  files, and keeping the singleton's public surface byte-identical is what left it
+  pointed at real calls. Extracting *behind* a facade rather than *out from under* one is
+  what made the trap a non-event.
+- **`DesktopRequest` folded a sixth thing nobody had listed: the late-answer grace
+  window.** `expiredDialogs` and `expiredAppRequests` were two maps, two prunes and two
+  cutoff computations for one rule, so the store now owns "remember an expiry for
+  `graceMs`" and the two callers keep their distinct *readings* of a late answer — a
+  dialog's "don't ask me again" is still saved, an app's answer is still only a log line.
+- **`AppReadyRegistry` holds its own waiters** rather than subscribing to the emitter's
+  `'app-ready'` channel. A wait that is also a channel subscriber makes the registry's
+  correctness depend on a subscription another module could remove; the channel stays as
+  the public announcement of the same fact.
+- **The sub-agent tier is reached through `AgentPool.subAgents`, not nine pass-throughs**
+  — the call Phase 2 made for `ContextPool.agentPool`, one tier down. The registry reaches
+  back for exactly two things, both constructor callbacks (build an agent, dispose one);
+  `acquireProvider` was the third the proposal named, but `createWithFreshProvider`
+  already wraps it, so injecting it separately would have been a second door onto the
+  same seam.
+- **`agent-roster.ts` took the composite keys too.** They are the ownership tree written
+  as strings (`monitorId` → `::appId` → `::subId`) and `buildAgentTree` reads them back;
+  three modules mint them and a fourth parses them, so they belong with the projection
+  that depends on the extension rule rather than with the lifecycle that does not.
+- **`SpawnReservations` states its three rules at the top**, because the two copies had
+  drifted in *shape* while agreeing on every rule, and the leak they prevent is invisible
+  by construction (an agent in no collection, holding a provider process and a
+  `MAX_AGENTS` slot until the process dies). The app tier now matches reservations by tag
+  instead of re-parsing its own key; every settle call survived the move unchanged.
 
-3. **Retire `currentMonitorId`** (`action-emitter.ts:187`) — the only cross-session mutable
-   global in the layer, last-writer-wins across concurrent turns. Its justification ("Codex
-   cannot stamp identity onto MCP requests", `:252-256`) is contradicted in writing by
-   `mcp/server.ts:242-244`, and it undercuts `resolveWindowMonitor`'s own "never place a
-   window by guess" invariant. **Measure first:** warn when the fallback actually fires, run
-   a week, then delete the field and the four provider call sites
-   (`claude/session-provider.ts:292,303`, `codex/provider.ts:189,283`). Caveat before
-   deleting: `hub.findMonitorForAgent` returns `undefined` for agents outside an
-   `AgentPool` (sub-agents, ephemeral).
+### 3.3 — Retire `currentMonitorId` — **measuring, opened 2026-08-06**
+
+The only cross-session mutable global left in the layer, last-writer-wins across
+concurrent turns, undercutting `resolveWindowMonitor`'s own "never place a window by
+guess" invariant from underneath. Its stated justification ("Codex cannot stamp identity
+onto MCP requests") has been false since agent tokens: `mcp/server.ts` resolves the
+monitor from `hub.findMonitorForAgent(agentId)` for *both* providers.
+
+**The measurement is in** (`ActionEmitter.reportMonitorFallback`): a warning naming the
+agent, once per agent id, whenever the fallback actually decides the answer. Naming the
+agent rather than counting is what makes the result actionable — the whole server suite,
+loopback included, prints the line zero times, so what is left to find is which *tier*
+takes it in a real session.
+
+The known candidate is the one `hub.findMonitorForAgent` cannot answer for: **ephemeral
+agents have no monitor by design** (the session agent between turns is the other). If a
+week of real use only ever names ephemerals, deleting the field means giving ephemerals a
+monitor first, not just removing the four provider call sites
+(`claude/session-provider.ts`, `codex/provider.ts` — two each). If it names nobody, the
+field and its four call sites go.
 
 ## Phase 4 — agent pool system (deep lifecycle audit, 2026-08-06)
 
@@ -164,7 +178,8 @@ regression tests are the record. Six notes worth carrying forward:
   `clearWaiting`, which would reject *other sessions'* waiters the day anything queues.
   Deleting resolves both.
 - **The `acquireProvider` test seam has a hole it documents itself as closing**
-  (`agent-pool.ts:365-374`): `createMonitorAgent(id)` with no provider falls through to
+  (`agent-pool.ts`, at the `acquireProvider` field): `createMonitorAgent(id)` with no
+  provider falls through to
   `AgentSession.initialize`'s module-level `acquireWarmProvider()`, bypassing the injected
   seam — the reason `tests/agent-cleanup.test.ts` needs `mock.module` and its own test
   partition. Thread the pool's `acquireProvider` into `createAgentCore`.
@@ -175,18 +190,21 @@ regression tests are the record. Six notes worth carrying forward:
   hardcoding `source: yaar://monitors/0` (`:56`), skips `MESSAGE_ACCEPTED` and
   reload-cache recording. Route it through `SessionTaskProcessor.process` (Phase 1's
   `turnOptionsFor()` removes the first divergence mechanically).
-- **Settle-then-sweep re-entry window on the dispose side** (`agent-pool.ts:712,963,973`;
-  widened by `removeMonitorAgent` deleting from `monitorAgents` *after* the app-agent
-  sweep, `:617-627`): a spawn beginning during the settle await lands after the sweep,
-  orphaned until pool cleanup. Reorder the map delete first; add the missing
-  dispose-then-create-race test (`app-agent-fresh.test.ts:362` covers only the reverse).
+- **Settle-then-sweep re-entry window on the dispose side** (`AgentPool.disposeAppAgent`
+  and `SubAgentRegistry.disposeForApp`/`disposeForMonitor`; widened by
+  `removeMonitorAgent` deleting from `monitorAgents` *after* the app-agent sweep): a spawn
+  beginning during the settle await lands after the sweep, orphaned until pool cleanup.
+  Reorder the map delete first; add the missing dispose-then-create-race test
+  (`app-agent-fresh.test.ts:362` covers only the reverse). Phase 3's seam C consolidated
+  the two reservation copies, so the reorder is now one rule in one place — state it on
+  `SpawnReservations` beside the three it already carries.
 - **Warm pool goes permanently cold after one failed replenish**
   (`warm-pool.ts:237-257`): replenish only triggers on the *hit* path, so one `null`
   replenish leaves size 0 and every acquisition cold with no retry; and `doInitialize`'s
   early return (`:98-101`) without setting `initialized` re-runs full provider detection
   (Codex: `AppServer` start + OAuth) on every subsequent acquire. Replenish on the
   on-demand path too; latch the no-provider answer with a TTL.
-- **Sub-agent turns bypass `inflightCount`** (`agent-pool.ts:924`):
+- **Sub-agent turns bypass `inflightCount`** (`SubAgentRegistry.runTurn`):
   `ContextPool.teardown` step 4's "no in-flight references" comment is false for this tier
   — step 5 disposes providers under a live `for await`. Count sub-agent turns in
   `inflightCount` (or a pool-owned equivalent awaited by teardown). The step-5 comment now
@@ -203,7 +221,7 @@ disposer's, so a new tier gets it for free.
 | session | pool `acquireProvider` | `disposeSessionAgent` | — |
 | monitor | **ContextPool supplies** | `removeMonitorAgent` (cascades) | `MonitorRegistry.remove` fires it unawaited (safe, but still unobserved) |
 | app | pool `acquireProvider` | `disposeAppAgent` | never on window close — idle reap is what bounds it |
-| sub-agent | pool `acquireProvider` | `disposeSubAgent*` | turn bypasses inflight (4.5); unawaited on last-window-close |
+| sub-agent | pool `acquireProvider` | `SubAgentRegistry.dispose*` | turn bypasses inflight (4.5); unawaited on last-window-close |
 | ephemeral | pool `acquireProvider` | own task's `finally` only | — |
 
 ## Non-goals — audited and deliberately left alone
@@ -234,7 +252,7 @@ disposer's, so a new tier gets it for free.
 - **`WindowStateRegistry`'s ambient `getMonitorId()` fallback** — load-bearing for the MCP
   path. Add optional explicit `monitorId` params opportunistically (the grant pair at
   `window-state.ts:532,560` shows the shape); do not purge as a project.
-- **`interruptAll`'s idle skip** (`agent-pool.ts:1118-1128`) — the `isRunning` filter is
+- **`interruptAll`'s idle skip** (`agent-pool.ts`) — the `isRunning` filter is
   load-bearing and its doc is accurate; Phase 4.3's finding is a site that failed to copy
   it, not a flaw in the rule.
 - **Sub-agent containment** (`profiles/sub-agent.ts`, `mcp/sub-agent/`, the
@@ -247,16 +265,17 @@ disposer's, so a new tier gets it for free.
 
 ## Sequencing & test posture
 
-Each phase lands independently; within a phase, items are independent PRs. Phases 1–3 are
-behavior-preserving: the existing suites are the safety net, plus the one moved grep-regex
-in the loopback test. Nothing left here changes wire formats, `ClientEvent`/`ServerEvent`
-shapes, or app-facing verbs.
+Each phase lands independently; within a phase, items are independent PRs. Phases 1–3
+were behavior-preserving and the existing suites were the safety net — which held: the
+two splits landed with no test edited beyond import paths and the sub-agent door's new
+spelling. Nothing left here changes wire formats, `ClientEvent`/`ServerEvent` shapes, or
+app-facing verbs.
 
 Phase 4's items are bug fixes, and each carries a regression test pinning the fixed
-behavior. **Only 4.5 is left**, and it is the half of Phase 4 that overlaps the two big
-splits — in particular, 4.5's settle-then-sweep reorder touches the two spawn-reservation
-copies Phase 3's seam C consolidates, so it should follow that seam rather than precede it.
-That is the one genuine ordering constraint between the remaining phases.
+behavior. **Only 4.5 is left**, plus 3.3's week of measurement. The one ordering
+constraint between them is now discharged: 4.5's settle-then-sweep reorder touched the
+two spawn-reservation copies, and seam C has consolidated them, so it is one edit to
+`SpawnReservations` rather than two edits that must agree.
 
 What landed with 4.1–4.4: `tests/agent-cleanup.test.ts` flipped from certifying the leak
 to pinning the fix and gained the double-release race, the create-throws case, the token
