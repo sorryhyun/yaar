@@ -16,6 +16,7 @@ import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
 import type { InvokePayload, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   namesSelf,
+  requireApp,
   requireBundle,
   requirePermission,
   requireStream,
@@ -198,17 +199,40 @@ export function toEnvelope(result: VerbResult): Record<string, unknown> {
   return envelope;
 }
 
+/**
+ * The prelude both verb doors share: read the JSON body, then resolve the caller.
+ *
+ * Kept to exactly what the two doors agree on. Everything past this point differs and
+ * stays at its own door — the main door admits an anonymous caller for `describe`
+ * (metadata only) and refuses it for everything else, while the subscribe door never
+ * admits one and carries its own stream/bundle carve-outs. Folding those in would
+ * produce one helper answering "may this caller in?" two different ways depending on a
+ * flag, which is the drift this is meant to end rather than relocate.
+ */
+async function openVerbDoor<T>(
+  req: Request,
+  url: URL,
+): Promise<{ body: T; principal: Principal } | Response> {
+  const body = await parseJsonBody<T>(req);
+  if (body instanceof Response) return body;
+
+  const principal = resolvePrincipal(req, url);
+  if (principal instanceof Response) return principal;
+
+  return { body, principal };
+}
+
 export async function handleVerbRoutes(req: Request, url: URL): Promise<Response | null> {
   // ── Subscribe/unsubscribe endpoint ──
   if (url.pathname === '/api/verb/subscribe' && req.method === 'POST') {
-    const body = await parseJsonBody<SubscribeRequest>(req);
-    if (body instanceof Response) return body;
+    const opened = await openVerbDoor<SubscribeRequest>(req, url);
+    if (opened instanceof Response) return opened;
+    const { body } = opened;
 
-    const principal = resolvePrincipal(req, url);
+    // This door has no anonymous tier at all: every branch below keys a subscription
+    // by the caller's token, window and session.
+    const principal = requireApp(opened.principal);
     if (principal instanceof Response) return principal;
-    if (principal.kind !== 'app') {
-      return errorResponse('Invalid or missing iframe token', 403);
-    }
 
     if (body.action === 'unsubscribe') {
       if (!body.subscriptionId) {
@@ -281,8 +305,9 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return null;
   }
 
-  const body = await parseJsonBody<VerbRequest>(req);
-  if (body instanceof Response) return body;
+  const opened = await openVerbDoor<VerbRequest>(req, url);
+  if (opened instanceof Response) return opened;
+  const { body, principal } = opened;
 
   // Validate verb
   const verb = body.verb as Verb;
@@ -296,14 +321,12 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('Missing or invalid "uri" field', 400);
   }
 
-  // Resolve the caller. This endpoint is the *app* door — the desktop drives the
-  // server over the WebSocket, not through here — so a caller presenting no iframe
-  // token is not the host asking a favour, it is an app with nothing declared. It
-  // gets nothing but `describe`, which is metadata-only.
-  const principal = resolvePrincipal(req, url);
-  if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app' && verb !== 'describe') {
-    return errorResponse('Invalid or missing iframe token', 403);
+  // This endpoint is the *app* door, so a caller presenting no iframe token gets
+  // nothing but `describe`, which is metadata-only. That carve-out is the one
+  // reason this door does not simply call `requireApp` in its prelude.
+  if (verb !== 'describe') {
+    const app = requireApp(principal);
+    if (app instanceof Response) return app;
   }
 
   const denied = requirePermission(principal, uri, verb);

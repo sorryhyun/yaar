@@ -330,6 +330,25 @@ export function requireHost(principal: Principal): Response | null {
 }
 
 /**
+ * Insist the caller is a real app, and hand back the narrowed principal.
+ *
+ * A `host` principal is what "presented no token" resolves to, so a door that only
+ * asks `requirePermission` is open to anyone who simply omits one — `requirePermission`
+ * returns `null` for the host, correctly, since the host is the user. The app doors
+ * (`/api/verb`, `/api/verb/subscribe`, the gated-SDK routes) are reached *from an
+ * iframe*; the desktop drives the server over the WebSocket and has no business here.
+ * So for them a token-less caller is not the user asking a favour, it is an app with
+ * nothing declared.
+ *
+ * Returns the `AppPrincipal` rather than a `Response | null` so the narrowing survives
+ * the call — every caller goes on to read `appId`/`sessionId`/`token` off it.
+ */
+export function requireApp(principal: Principal): AppPrincipal | Response {
+  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
+  return principal;
+}
+
+/**
  * Require that an app declared a gated SDK in its app.json `bundles`.
  *
  * The compiler refuses to bundle `@bundled/yaar-dev` et al without this
@@ -351,13 +370,11 @@ export function requireBundle(principal: Principal, bundle: string): Response | 
  * The full prelude for a gated-SDK door: resolve the caller, insist it is a real
  * app, and require the bundle.
  *
- * The `kind !== 'app'` step is the load-bearing one and the reason this is a
- * helper rather than a bare `requireBundle` call. `requireBundle` returns `null`
- * for a `host` principal — correct on its own terms, since the host is the user —
- * so a door that calls it *without* first pinning the caller to an app is open to
- * anyone who simply omits a token. `/api/browser`, `/api/bridge` and `/api/dev/*`
- * each rewrote this sequence by hand; `browser.ts` re-ran it (and re-resolved the
- * principal) five times per request.
+ * The {@link requireApp} step is the load-bearing one and the reason this is a
+ * helper rather than a bare `requireBundle` call — see its docstring for why a door
+ * that skips it is open to anyone who omits a token. `/api/browser`, `/api/bridge`
+ * and `/api/dev/*` each rewrote this sequence by hand; `browser.ts` re-ran it (and
+ * re-resolved the principal) five times per request.
  *
  * Returns the `AppPrincipal` so callers can read `appId`/`sessionId` off it
  * without re-narrowing.
@@ -365,10 +382,11 @@ export function requireBundle(principal: Principal, bundle: string): Response | 
 export function requireBundledApp(req: Request, url: URL, bundle: string): AppPrincipal | Response {
   const principal = resolvePrincipal(req, url);
   if (principal instanceof Response) return principal;
-  if (principal.kind !== 'app') return errorResponse('Invalid or missing iframe token', 403);
-  const denied = requireBundle(principal, bundle);
+  const app = requireApp(principal);
+  if (app instanceof Response) return app;
+  const denied = requireBundle(app, bundle);
   if (denied) return denied;
-  return principal;
+  return app;
 }
 
 /**

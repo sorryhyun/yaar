@@ -69,18 +69,50 @@ export const ok = (text: string) => ({
 });
 
 /**
- * Create a successful JSON result (pretty-printed). Only accepts objects/arrays — use ok() for plain text.
+ * Above this many bytes of compact JSON, `okJson` stops indenting.
+ *
+ * Indentation is readability the model pays for by the byte, and the two sides of that
+ * trade invert with size. A small result is easier to read nested; a large one is mostly
+ * whitespace. `describe('yaar://apps/studio-3d')` measured 43 KB of compact protocol that
+ * `JSON.stringify(data, null, 2)` inflated to 69 KB — 26 KB of leading spaces, 38% of the
+ * block, on the one channel that is charged to the context window. Nothing at that size is
+ * being read by a human, and no model needs a 2-space gutter to find `"commands"`.
+ *
+ * 8 KB, because that is comfortably above every routine result (a window list, a config
+ * read, a storage stat) and comfortably below the ones where the gutter is the payload.
+ * It is a display choice only: `structuredContent` is unaffected, so every programmatic
+ * reader sees exactly the same bytes either way.
+ */
+const COMPACT_JSON_THRESHOLD = 8_192;
+
+/**
+ * Create a successful JSON result. Only accepts objects/arrays — use ok() for plain text.
+ *
+ * Indented below {@link COMPACT_JSON_THRESHOLD}, compact above it.
  *
  * The text block stays the model-facing channel; `structuredContent` carries the same value
  * losslessly for programmatic consumers (`POST /api/verb`, non-model MCP clients) so they get
  * typed data without re-parsing the text. `structuredContent` is object-only per the MCP
  * contract, so a bare array is left text-only — same trade-off `wrapAppValue` makes — and
  * still round-trips through `toEnvelope`'s tryParseJson.
+ *
+ * Both are sent, and neither is redundant: Codex reads `content` and only falls back to
+ * `structuredContent` when it is empty (`providers/codex/message-mapper.ts`), while
+ * `POST /api/verb` and `resolveAppWindow` read `structuredContent` and never look at the
+ * text. Dropping either copy to save the duplication breaks one of them.
  */
-export const okJson = (data: object) => ({
-  content: [{ type: 'text' as const, text: JSON.stringify(data, null, 2) }],
-  ...(Array.isArray(data) ? {} : { structuredContent: data as Record<string, unknown> }),
-});
+export const okJson = (data: object) => {
+  const compact = JSON.stringify(data);
+  return {
+    content: [
+      {
+        type: 'text' as const,
+        text: compact.length > COMPACT_JSON_THRESHOLD ? compact : JSON.stringify(data, null, 2),
+      },
+    ],
+    ...(Array.isArray(data) ? {} : { structuredContent: data as Record<string, unknown> }),
+  };
+};
 
 /** Create an error text result (sets isError: true) */
 export const error = (text: string) => ({
