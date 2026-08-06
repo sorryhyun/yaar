@@ -12,8 +12,8 @@ import type { Task } from '../agents/pool-types.js';
 describe('MonitorQueuePolicy', () => {
   it('preserves FIFO ordering', () => {
     const policy = new MonitorQueuePolicy(3);
-    const t1: Task = { type: 'monitor', messageId: '1', content: 'a' };
-    const t2: Task = { type: 'monitor', messageId: '2', content: 'b' };
+    const t1: Task = { requestedType: 'monitor', kind: 'user', messageId: '1', content: 'a' };
+    const t2: Task = { requestedType: 'monitor', kind: 'user', messageId: '2', content: 'b' };
 
     policy.enqueue(t1);
     policy.enqueue(t2);
@@ -24,7 +24,7 @@ describe('MonitorQueuePolicy', () => {
 
   it('enforces queue size limit checks', () => {
     const policy = new MonitorQueuePolicy(1);
-    policy.enqueue({ type: 'monitor', messageId: '1', content: 'a' });
+    policy.enqueue({ requestedType: 'monitor', kind: 'user', messageId: '1', content: 'a' });
     expect(policy.canEnqueue()).toBe(false);
   });
 });
@@ -32,11 +32,46 @@ describe('MonitorQueuePolicy', () => {
 describe('WindowQueuePolicy', () => {
   it('queues sequentially per key', () => {
     const policy = new WindowQueuePolicy();
-    policy.enqueue('w1', { type: 'app', windowId: 'w1', messageId: '1', content: 'first' });
-    policy.enqueue('w1', { type: 'app', windowId: 'w1', messageId: '2', content: 'second' });
+    policy.enqueue('w1', {
+      requestedType: 'app',
+      kind: 'user',
+      windowId: 'w1',
+      messageId: '1',
+      content: 'first',
+    });
+    policy.enqueue('w1', {
+      requestedType: 'app',
+      kind: 'user',
+      windowId: 'w1',
+      messageId: '2',
+      content: 'second',
+    });
 
     expect(policy.dequeue('w1')?.task.messageId).toBe('1');
     expect(policy.dequeue('w1')?.task.messageId).toBe('2');
+  });
+
+  // The window queue was unbounded, so a wedged app agent accumulated every later click
+  // with no ceiling and no refusal. The bound is per key: one stuck app must not start
+  // refusing another app's messages.
+  it('bounds each key independently', () => {
+    const policy = new WindowQueuePolicy(1);
+    expect(policy.canEnqueue('app-0-memo')).toBe(true);
+    policy.enqueue('app-0-memo', {
+      requestedType: 'app',
+      kind: 'user',
+      windowId: 'w1',
+      messageId: '1',
+      content: 'a',
+    });
+
+    expect(policy.canEnqueue('app-0-memo')).toBe(false);
+    expect(policy.canEnqueue('app-0-notes')).toBe(true);
+    expect(policy.maxSize).toBe(1);
+
+    // Draining makes room again.
+    policy.dequeue('app-0-memo');
+    expect(policy.canEnqueue('app-0-memo')).toBe(true);
   });
 });
 
@@ -144,11 +179,17 @@ describe('ReloadCachePolicy', () => {
     // Pass a minimal mock cache — only generateCacheLabel is tested here
     const policy = new ReloadCachePolicy({ findMatches: () => [], record: () => {} } as any);
     expect(
-      policy.generateCacheLabel({ type: 'monitor', messageId: '1', content: 'app: moltbook' }),
+      policy.generateCacheLabel({
+        requestedType: 'monitor',
+        kind: 'user',
+        messageId: '1',
+        content: 'app: moltbook',
+      }),
     ).toBe('Open moltbook app');
     expect(
       policy.generateCacheLabel({
-        type: 'app',
+        requestedType: 'app',
+        kind: 'user',
         windowId: 'w',
         messageId: '2',
         content: 'click button "Save" now',

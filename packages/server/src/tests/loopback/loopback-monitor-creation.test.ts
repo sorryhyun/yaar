@@ -110,7 +110,7 @@ describe('S8.1 — minting a monitor does not wait on the turn already running',
 
     // And the new monitor cost nothing yet: the agent is created lazily, on its first
     // message, so a session with two desktops still has one agent.
-    expect(h.session.getPool()?.getMonitorAgentIds()).toEqual(['0']);
+    expect(h.session.getPool()?.agentPool.getMonitorAgentIds()).toEqual(['0']);
 
     gate.resolve();
     await expectSettlesWithin(turn, 1000, 'the held turn');
@@ -177,7 +177,7 @@ describe('S8.2 — the new monitor runs while the old one waits on an app', () =
     expect(onNewMonitor).toHaveLength(1);
     expect(onNewMonitor[0]!.prompt).toContain('anything at all');
     expect(onNewMonitor[0]!.prompt).not.toContain('ask the app');
-    expect(h.session.getPool()?.getMonitorAgentIds().sort()).toEqual(['0', '1']);
+    expect(h.session.getPool()?.agentPool.getMonitorAgentIds().sort()).toEqual(['0', '1']);
 
     // And monitor 0 was only ever waiting on the app: answer it and it finishes normally.
     await h.client.deliver({
@@ -211,7 +211,7 @@ describe('S8.3 — minting a monitor the limiter cannot staff', () => {
       2000,
       "monitor 0's turn",
     );
-    expect(h.session.getPool()?.getMonitorAgentIds()).toEqual(['0']);
+    expect(h.session.getPool()?.agentPool.getMonitorAgentIds()).toEqual(['0']);
 
     // The mint itself is pure bookkeeping, so it succeeds regardless of the limiter. The
     // user now has a second desktop on screen.
@@ -234,7 +234,7 @@ describe('S8.3 — minting a monitor the limiter cannot staff', () => {
     await flush();
 
     // The agent could not be created, and the session says so.
-    expect(h.session.getPool()?.getMonitorAgentIds()).toEqual(['0']);
+    expect(h.session.getPool()?.agentPool.getMonitorAgentIds()).toEqual(['0']);
     const errors = [...h.client.sent, ...tab.sent].filter((e) => e.type === ServerEventType.ERROR);
     expect(errors.some((e) => 'error' in e && /[Aa]gent limit/.test(String(e.error)))).toBe(true);
 

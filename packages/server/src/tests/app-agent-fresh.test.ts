@@ -240,7 +240,8 @@ describe('a window message answered on a fresh app agent', () => {
 
   function message(messageId: string, extra: { fresh?: boolean } = {}) {
     return pool.handleTask({
-      type: 'app',
+      requestedType: 'app',
+      kind: 'user',
       messageId,
       windowId: WINDOW,
       monitorId: MONITOR,

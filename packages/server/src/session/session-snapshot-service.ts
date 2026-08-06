@@ -16,7 +16,7 @@
 import type { ActiveAgentSnapshot, OSAction } from '@yaar/shared';
 import type { SessionId } from './types.js';
 import type { SurfaceRegistry } from './surface-state.js';
-import type { WindowStateRegistry } from './window-state.js';
+import { windowCreateAction, type WindowStateRegistry } from './window-state.js';
 import { refreshRestoredWindowActions } from '../logging/window-restore.js';
 
 /** The subset of a pooled agent this snapshot reports. Narrowed so the pool stays out. */
@@ -48,20 +48,9 @@ export class SessionSnapshotService {
    * property of the boundary currently in force. See `refreshRestoredWindowActions`.
    */
   async windowActions(): Promise<OSAction[]> {
-    const windows = this.deps.windowState.listWindows();
-    const actions: OSAction[] = windows.map((win) => ({
-      type: 'window.create' as const,
-      windowId: win.id,
-      title: win.title,
-      bounds: { ...win.bounds },
-      content: { ...win.content },
-      ...(win.variant ? { variant: win.variant } : {}),
-      ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
-      ...(win.frameless ? { frameless: win.frameless } : {}),
-      ...(win.windowStyle ? { windowStyle: win.windowStyle } : {}),
-      ...(win.minimized ? { minimized: win.minimized } : {}),
-      ...(win.appId ? { appId: win.appId } : {}),
-    }));
+    // `windowCreateAction` is the one state→action mapping, shared with session-log restore
+    // (`getWindowRestoreActions`) so the two cannot disagree about what "open" looks like.
+    const actions = this.deps.windowState.listWindows().map(windowCreateAction);
     return refreshRestoredWindowActions(actions, this.deps.sessionId);
   }
 

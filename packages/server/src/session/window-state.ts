@@ -31,6 +31,43 @@ export interface AppWindowMeta {
 /** Shared empty result for `getNoReplayCommands` — nothing may mutate it. */
 const NO_COMMANDS: ReadonlySet<string> = new Set<string>();
 
+/** Every action that says something about a window. The union `handleAction` is total over. */
+export type WindowAction = Extract<OSAction, { type: `window.${string}` }>;
+
+export function isWindowAction(action: OSAction): action is WindowAction {
+  return action.type.startsWith('window.');
+}
+
+/**
+ * The `window.create` that would recreate a tracked window — the one direction the
+ * state↔action mapping runs in.
+ *
+ * Shared by the two callers that have to produce it: the reconnect snapshot
+ * (`SessionSnapshotService.windowActions`) and session-log restore
+ * (`getWindowRestoreActions`). They used to derive it separately, restore by mutating the
+ * original `window.create` it had replayed and the snapshot by reading this registry, which
+ * is how "what is open" came to have two answers that could disagree.
+ *
+ * Two fields on `window.create` are deliberately absent, because neither is window state:
+ * `iframeToken` and `requestId` belong to *this run* and are re-derived by
+ * `refreshRestoredWindowActions`, along with the app-origin marks.
+ */
+export function windowCreateAction(win: WindowState): OSAction {
+  return {
+    type: 'window.create' as const,
+    windowId: win.id,
+    title: win.title,
+    bounds: { ...win.bounds },
+    content: { ...win.content },
+    ...(win.variant ? { variant: win.variant } : {}),
+    ...(win.dockEdge ? { dockEdge: win.dockEdge } : {}),
+    ...(win.frameless ? { frameless: win.frameless } : {}),
+    ...(win.windowStyle ? { windowStyle: win.windowStyle } : {}),
+    ...(win.minimized ? { minimized: win.minimized } : {}),
+    ...(win.appId ? { appId: win.appId } : {}),
+  };
+}
+
 export class WindowStateRegistry {
   private windows: Map<string, WindowState> = new Map();
   private appCommands: Map<string, AppProtocolRequest[]> = new Map();
@@ -226,7 +263,23 @@ export class WindowStateRegistry {
     if (this.focused === key) this.focused = this.topVisible();
   }
 
+  /**
+   * Apply one action. **The** window reducer — there is no second one.
+   *
+   * There used to be: `getWindowRestoreActions` replayed a session log through its own
+   * hand-written `switch`, and the two were supposed to agree about what a session looks
+   * like. They drifted — that one handled 9 of the 12 window actions, so a window the user
+   * minimized before shutdown came back on screen and nothing said a word. Restore now
+   * feeds a throwaway registry *this* method, so a case can only be missing in one place.
+   *
+   * The `never` at the bottom is what makes that a guarantee rather than a hope: the union
+   * is narrowed to `window.*` first, so the next window action added to the DSL is a
+   * **compile error here** and not a silent no-op. Everything else in the stream —
+   * notifications, toasts, dialogs — says nothing about which windows are open, and is
+   * declined once at the top rather than case by case.
+   */
   handleAction(action: OSAction, monitorId?: string): void {
+    if (!isWindowAction(action)) return;
     switch (action.type) {
       case 'window.create': {
         const now = Date.now();
@@ -365,6 +418,19 @@ export class WindowStateRegistry {
           win.minimized = false;
         });
         break;
+
+      // Neither is window state, and saying so explicitly is what keeps the `never` below
+      // meaningful. A maximize's bounds are the frontend's to compute (it has the viewport;
+      // this registry does not), and a capture is a request for a screenshot.
+      case 'window.maximize':
+      case 'window.capture':
+        break;
+
+      default: {
+        const unhandled: never = action;
+        void unhandled;
+        break;
+      }
     }
   }
 

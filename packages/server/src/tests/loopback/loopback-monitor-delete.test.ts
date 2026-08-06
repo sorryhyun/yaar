@@ -43,7 +43,7 @@ async function bootWithSecondMonitor(): Promise<Harness> {
     monitorId: '1',
     content: 'hello',
   });
-  expect(h.session.getPool()?.hasMonitorAgent('1')).toBe(true);
+  expect(h.session.getPool()?.agentPool.hasMonitorAgent('1')).toBe(true);
   return h;
 }
 
@@ -63,7 +63,7 @@ describe('S9 — the verb deletes the monitor, not only its agent', () => {
     // the frame that tells it the list changed.
     expect(h.session.getMonitors().map((m) => m.id)).toEqual(['0']);
     expect(broadcastLists(h.client).at(-1)).toEqual(['0']);
-    expect(h.session.getPool()?.hasMonitorAgent('1')).toBe(false);
+    expect(h.session.getPool()?.agentPool.hasMonitorAgent('1')).toBe(false);
   });
 
   it('a later message to the deleted monitor is refused, not answered by a new agent', async () => {
@@ -82,7 +82,7 @@ describe('S9 — the verb deletes the monitor, not only its agent', () => {
     // registry at all.
     const refusal = h.client.framesOf(ServerEventType.ERROR).find((e) => e.messageId === 'm2');
     expect(refusal?.error).toContain('does not exist');
-    expect(h.session.getPool()?.hasMonitorAgent('1')).toBe(false);
+    expect(h.session.getPool()?.agentPool.hasMonitorAgent('1')).toBe(false);
   });
 
   it('refuses the primary desktop and an id the session does not have', async () => {
@@ -101,7 +101,7 @@ describe('S9 — the verb deletes the monitor, not only its agent', () => {
 
     // Agents are minted on first use, so this monitor has none — the verb used to answer
     // "not found" for exactly the monitors that were cheapest to delete.
-    expect(h.session.getPool()?.hasMonitorAgent('1')).toBeFalsy();
+    expect(h.session.getPool()?.agentPool.hasMonitorAgent('1')).toBeFalsy();
     expect(await disposeMonitor(h.session, '1')).toMatchObject({ success: true });
     expect(h.session.getMonitors().map((m) => m.id)).toEqual(['0']);
   });

@@ -37,7 +37,7 @@ SessionHub (singleton registry)
 ### Key Patterns
 
 - **Policy classes**: Complex behavior decomposed into focused policies (under `agents/`):
-  - `agents/session-policies/`: `StreamToEventMapper`, `ProviderLifecycleManager`, `ToolActionBridge`
+  - `agents/session-policies/`: `StreamToEventMapper`, `ToolActionBridge`
   - `agents/context-pool-policies/`: `MonitorQueuePolicy`, `WindowQueuePolicy`, `ContextAssemblyPolicy`, `ReloadCachePolicy`, `WindowSubscriptionPolicy`, `MonitorBudgetPolicy`
 - **BroadcastCenter**: Singleton event hub decoupling agent lifecycle from WebSocket connections (observer pattern).
 - **Warm Pool** (`providers/warm-pool.ts`): Providers pre-initialized at startup. Auto-replenishes when acquired.

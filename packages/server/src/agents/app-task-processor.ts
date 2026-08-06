@@ -9,13 +9,14 @@
  */
 
 import { ServerEventType } from '@yaar/shared';
-import type { PoolContext, Task } from './pool-types.js';
+import type { AppPoolContext, Task } from './pool-types.js';
 import type { AgentProfile } from './profiles/types.js';
 import { buildAppAgentProfile, turnOptionsFor } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
 import { appRolePrefix, monitorRole } from './roles.js';
 import { appAgentKey } from './agent-pool.js';
+import { enqueueOrReject } from './queue-refusal.js';
 import { AppStateHandoffStore, formatAppStateHandoffNotice } from './app-state-handoff.js';
 import { captureDeclaredAppState } from '../features/window/app-protocol.js';
 
@@ -43,7 +44,7 @@ export class AppTaskProcessor {
   /** Fingerprints captured immediately before an app agent is released. */
   private handoffState = new AppStateHandoffStore();
 
-  constructor(private readonly ctx: PoolContext) {}
+  constructor(private readonly ctx: AppPoolContext) {}
 
   /**
    * The monitor that owns an app agent: the monitor of the window it drives.
@@ -114,16 +115,21 @@ export class AppTaskProcessor {
         return;
       }
 
-      // Fallback: queue if steering not supported (e.g. Codex provider)
-      const queueSize = this.ctx.windowQueuePolicy.enqueue(processingKey, task);
-      console.log(
-        `[AppTaskProcessor] Queued task ${task.messageId} for ${appId}, queue size: ${queueSize}`,
-      );
-
-      await this.ctx.sendEvent({
-        type: ServerEventType.MESSAGE_QUEUED,
-        messageId: task.messageId,
-        position: queueSize,
+      // Fallback: queue if steering not supported (e.g. Codex provider). Bounded, and
+      // refused out loud when the bound is reached — a wedged app agent used to collect
+      // clicks forever, and the user's only clue was a chip that never moved.
+      await enqueueOrReject({
+        sendEvent: (event) => this.ctx.sendEvent(event),
+        queue: {
+          canEnqueue: () => this.ctx.windowQueuePolicy.canEnqueue(processingKey),
+          enqueue: () => this.ctx.windowQueuePolicy.enqueue(processingKey, task),
+        },
+        task,
+        monitorId,
+        maxQueueSize: this.ctx.windowQueuePolicy.maxSize,
+        why: 'Please wait for current operations to complete.',
+        queuedLog: (position) =>
+          `[AppTaskProcessor] Queued task ${task.messageId} for ${appId}, queue size: ${position}`,
       });
       return;
     }

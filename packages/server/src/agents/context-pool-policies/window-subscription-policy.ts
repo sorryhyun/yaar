@@ -283,7 +283,8 @@ export class WindowSubscriptionPolicy {
    */
   private buildNotifyTask(sub: WindowSubscription, prefix: string, content: string): Task {
     return {
-      type: sub.subscriberType,
+      requestedType: sub.subscriberType,
+      kind: 'notify',
       messageId: `${prefix}-${sub.id}-${Date.now()}`,
       windowId: sub.subscriberWindowId,
       content,

@@ -235,7 +235,7 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       const pool = getActiveSession().getPool();
       if (!pool) return error('Session not initialized.');
 
-      if (!pool.hasMonitorAgent(monitorId)) {
+      if (!pool.agentPool.hasMonitorAgent(monitorId)) {
         return error(`Monitor "${monitorId}" not found.`);
       }
 

@@ -1,28 +1,17 @@
 import type { ActionEvent } from '../../session/action-emitter.js';
 import { ServerEventType, type OSAction, type ServerEvent } from '@yaar/shared';
 import type { SessionLogger } from '../../logging/index.js';
+import {
+  stampWindowHandle,
+  windowHandleFor,
+  type WindowHandleResolver,
+} from '../../session/window-handle-stamp.js';
 
 export interface ToolActionBridgeState {
   currentRole: string | null;
   monitorId?: string;
   /** The live session this agent belongs to. Actions for any other one are not ours. */
   sessionId: string;
-}
-
-/**
- * Rewrite windowId fields in an action to use the scoped handle.
- * The resolver maps (rawWindowId, monitorId) → handle.
- */
-function stampWindowHandle(
-  action: OSAction,
-  monitorId: string | undefined,
-  resolveHandle: (rawId: string, monitorId?: string) => string,
-): OSAction {
-  const raw = (action as { windowId?: string }).windowId;
-  if (!raw || !monitorId) return action;
-  const handle = resolveHandle(raw, monitorId);
-  if (handle === raw) return action;
-  return { ...action, windowId: handle } as OSAction;
 }
 
 export class ToolActionBridge {
@@ -32,8 +21,7 @@ export class ToolActionBridge {
     private readonly getFilterAgentId: () => string,
     private readonly getLogger: () => SessionLogger | null,
     private readonly recordAction: (action: OSAction) => void,
-    private readonly resolveWindowHandle: (rawId: string, monitorId?: string) => string = (id) =>
-      id,
+    private readonly resolveWindowHandle: WindowHandleResolver = (id) => id,
   ) {}
 
   async handleToolAction(event: ActionEvent): Promise<void> {
@@ -61,14 +49,15 @@ export class ToolActionBridge {
     // Prefer the event's monitorId (from action emitter) over the bridge's state
     const monitorId = event.monitorId ?? this.state.monitorId;
 
+    // The agent's turn has already applied the action to the window registry by the time
+    // this runs (`LiveSession.handleEmittedAction` is the same emit), so there is no
+    // "before" to ask and no `priorHandle` to pass — which is correct for a create and
+    // best-effort for the rest. See `window-handle-stamp.ts`.
+    const addressed = { ...event.action, agentId: uiAgentId } as OSAction;
     const action = stampWindowHandle(
-      {
-        ...event.action,
-        ...(event.requestId && { requestId: event.requestId }),
-        agentId: uiAgentId,
-      } as OSAction,
-      monitorId,
-      this.resolveWindowHandle,
+      addressed,
+      windowHandleFor(addressed, this.resolveWindowHandle, monitorId),
+      event.requestId,
     );
 
     await this.sendEvent({

@@ -122,7 +122,13 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
     case 'monitor': {
       const monitorId = target.id ?? senderMonitorId;
       pool
-        .handleTask({ type: 'monitor', messageId, content: wrap(message), monitorId })
+        .handleTask({
+          requestedType: 'monitor',
+          kind: 'relay',
+          messageId,
+          content: wrap(message),
+          monitorId,
+        })
         .catch((err: unknown) => console.error('[DirectMessage] monitor route:', err));
       return {
         ok: true,
@@ -159,7 +165,8 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
       const { windowId } = resolved;
       pool
         .handleTask({
-          type: 'app',
+          requestedType: 'app',
+          kind: 'relay',
           messageId,
           windowId,
           content: wrap(message),
@@ -178,7 +185,8 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
       if (!appId) return { ok: false, error: `window "${target.id}" is not an app window.` };
       pool
         .handleTask({
-          type: 'app',
+          requestedType: 'app',
+          kind: 'relay',
           messageId,
           windowId: target.id,
           content: wrap(message),

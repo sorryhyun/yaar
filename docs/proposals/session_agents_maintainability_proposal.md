@@ -6,8 +6,8 @@ cross-cutting session flows (connect/restore/teardown, `handlers/window.ts`, eve
 paths. No wire-format or behavior changes.
 
 **Phase 0 (four bug fixes) landed 2026-08-06** and has been removed from this document; the
-code and its regression tests are the record. One piece of it was deliberately deferred and
-survives here as Phase 2.8.
+code and its regression tests are the record. One piece of it was deliberately deferred to
+Phase 2, and landed with it.
 
 The audit's overall verdict: the architecture is healthier than its file sizes suggest — the
 existing extractions (`ClientEventController`'s total routing table, `SessionEventRouter`,
@@ -30,68 +30,45 @@ from this document; the code is the record. Three notes worth carrying forward:
   (`features/agents/session-actions.ts`), which fixes the unconditional-`allowedTools`-on-
   Codex divergence Phase 4.5 records. That is the one behavior change in the phase.
 
-## Phase 2 — seams & honest contracts (a day or two each)
+**Phase 2 (all eight items) landed 2026-08-06** and has been removed from this document;
+the code and its tests are the record. Seven notes worth carrying forward:
 
-1. **One `stampWindowHandle()`.** Three implementations of "stamp the scoped handle before
-   broadcast": `tool-action-bridge.ts:16` (agent path), `live-session.ts:323`/`:368`
-   (iframe/HTTP — the only copy with the create/close pre-vs-post resolve asymmetry from the
-   `0/preview`-vs-`1/preview` incident), `live-session.ts:496` (launch hooks). Extract one
-   helper beside `window-handle-map.ts` taking `{handleMap, monitorId, requestId?, phase}`;
-   the ordering rule gets one home and one test. Best value-to-cost in the session layer.
-
-2. **Complete-or-drop the `ContextPool` facade.** ~20 one-line delegators coexist with a
-   public `readonly agentPool` that seven modules use to bypass them — a reader cannot tell
-   which is the intended door. **Recommendation: drop the delegators** (they enforce
-   nothing), keep only names that add meaning (`getPrimaryAgent`, `listAgents`).
-
-3. **Narrow `PoolContext`** (`pool-types.ts:108`). Every task processor currently receives
-   the entire pool (agentPool, tape, windowState, all six policies, mutable
-   `savedThreadIds`), so none is independently reasonable. Split into a small `TurnContext`
-   (sendEvent, contextTape, contextAssembly, reloadPolicy, windowState, providerType,
-   sharedLogger) plus per-processor extras. Mechanical, type-checked; do after Phase 1
-   shrinks the surface.
-
-4. **Make task routing honest.** `Task.type: 'monitor' | 'app' | 'session'` is not the
-   routing key: `handleTask` (`context-pool.ts:440`) routes by windowId→appId lookup (a
-   plain-window `'app'` task silently becomes a monitor task) and `'session'` never reaches
-   it. `MonitorTaskProcessor:109` routes by sniffing `messageId` prefixes (`relay-`,
-   `hook-resp-`) minted in three unrelated files.
-   **Fix:** add `kind: 'user' | 'relay' | 'hook' | 'notify'` to `Task`, delete the prefix
-   sniffing; rename `Task.type` → `requestedType` or drop `'session'` from the union; add
-   one producer-enumeration diagram (7 producers × 4 executors × 3 gates) atop
-   `context-pool.ts` — the cheapest comprehension win the audit found.
-
-5. **Bound the app-window queues.** `AppTaskProcessor` enqueues with no `canEnqueue()`
-   (`app-task-processor.ts:105`); `WindowQueuePolicy` has no `maxQueueSize` — contrast the
-   monitor path's `enqueueOrReject` + `MESSAGE_QUEUE_FULL`. A wedged app agent accumulates
-   tasks without bound or feedback. Give the window queue a bound routed through the same
-   refusal shape — **preserving both refusal wordings** (`monitor-task-processor.ts:49-57`
-   documents the rejected consolidation).
-
-6. **One owner for logger-mint and `CONNECTION_STATUS`.**
-   `ProviderLifecycleManager.initialize` duplicates both from `ContextPool.initialize`; the
-   duplicate emits `CONNECTION_STATUS` with no `sessionId` — the exact hazard
-   `context-pool.ts:743` documents. Strip it to provider acquire/attach only; then inline
-   the manager back into `AgentSession` (its 47 remaining lines cost a 30-line getter/setter
-   proxy and an eslint-disable; `setProvider` is already gone, and once this strips
-   `initialize`, nothing of substance remains).
-
-7. **Budget-slot placement.** `MonitorBudgetPolicy` slots are acquired at `queueMonitorTask`
-   and held across a whole queue drain, but `ContextPool.resumeMonitor` (`context-pool.ts:339`)
-   enters the same drain slot-less — "one background monitor slot" means different things by
-   entry path. Move acquire/release to wrap `processMonitorTask` (what actually consumes a
-   provider). Read `tests/monitor-budget-policy.test.ts` first.
-
-8. **One window reducer.** Carried forward from the landed Phase 0: `getWindowRestoreActions`
-   (`logging/window-restore.ts`) is now exhaustive over `window.*`, so it can no longer
-   *silently* lack a case — but it is still a second hand-written reducer beside
-   `WindowStateRegistry.handleAction`, free to disagree about what a case means. Replace it
-   with a throwaway `WindowStateRegistry` fed the same JSONL entries, deriving final actions
-   via the win→action mapping `SessionSnapshotService.windowActions()` already owns
-   (`session/session-snapshot-service.ts:50`) — extracted to a pure function both can call.
-   Collapses three parallel reducers to one source of truth. Requires threading an explicit
-   `monitorId` instead of the ambient `getMonitorId()` lookup (restore has no ambient
-   context); bounded to one file plus that extraction.
+- **The handle-stamping rule split in two** (`session/window-handle-stamp.ts`):
+  `windowHandleFor()` holds the ordering rule (a `create` resolves *after* the registry
+  write, everything else prefers the answer from *before*), `stampWindowHandle()` is the
+  pure patch. All three emit paths call both. One deliberate behavior change:
+  `ToolActionBridge` used to return the action untouched when it had no `monitorId` and now
+  stamps an unambiguous handle anyway — an *ambiguous* raw id still resolves to `undefined`
+  and falls back to itself, so this cannot misplace a window. The launch-hook path gained
+  the prior-handle lookup it never had, which is what a launch hook closing a window needed.
+- **`getPrimaryAgent` turned out to have no callers at all**, so it went with the other
+  delegators rather than being kept as proposed, and took `AgentPool.getMonitorAgentSession`
+  (its only callee) with it. `ContextPool.agentPool` now carries the doc comment saying it is
+  the door; what stays on `ContextPool` either orchestrates or guards.
+- **`Task.kind` made `direct_message` honest, and that changed one behavior.** A DM
+  targeting a monitor is `kind: 'relay'`, so it now interrupts-and-queues on a busy monitor
+  agent instead of trying to steer — the same "must not silently evaporate" guarantee the
+  `relay` tool already had, and the reason the distinction exists. `window.message` is
+  `'relay'` too, but it is always an app task, where `kind` does not affect routing.
+  `reload/fingerprint.ts` deliberately keys on `requestedType`, not the executor: a cache key
+  must not depend on the window registry's current state.
+- **The queue refusal is shared, the wording is not** (`agents/queue-refusal.ts`). Both
+  queues send one event shape; `why` stays at the call site, for the reason
+  `monitor-task-processor.ts` already documented.
+- **The budget slot wraps the *turn*, not `processMonitorTask`.** That method re-enters
+  `processMonitorQueue` on its way out, so a slot held across the whole method would be held
+  while the next turn asked for one of its own — with `MONITOR_MAX_CONCURRENT` background
+  monitors draining, a deadlock against a semaphore each of them holds. Ephemeral turns are
+  now billed a slot explicitly; they used to be covered only incidentally, by the slot
+  `queueMonitorTask` happened to be holding.
+- **The exhaustiveness `never` moved onto the surviving reducer.**
+  `WindowStateRegistry.handleAction` now declines non-window actions at the top and is total
+  over `window.*`, so the guarantee Phase 0 bought did not die with the reducer it was added
+  to. `windowCreateAction()` (in `window-state.ts`) is the one state→action mapping, shared
+  by restore and the reconnect snapshot.
+- **`session-policies/` is now two files.** `ProviderLifecycleManager` is deleted, not
+  slimmed: with the logger mint and `CONNECTION_STATUS` gone, `AgentSession.initialize` is
+  six lines of acquire-and-attach.
 
 ## Phase 3 — the two big splits (do last; Phases 1–2 shrink them first)
 
@@ -233,10 +210,10 @@ load-bearing gap, not a nicety.
   `clearWaiting`, which would reject *other sessions'* waiters the day anything queues.
   Deleting resolves both.
 - **The `acquireProvider` test seam has a hole it documents itself as closing**
-  (`agent-pool.ts:365-374`): `createMonitorAgent(id)` with no provider falls through
-  `ProviderLifecycleManager` to the module-level `acquireWarmProvider()`, bypassing the
-  injected seam — the reason `tests/agent-cleanup.test.ts` needs `mock.module` and its own
-  test partition. Thread the pool's `acquireProvider` into `createAgentCore`.
+  (`agent-pool.ts:365-374`): `createMonitorAgent(id)` with no provider falls through to
+  `AgentSession.initialize`'s module-level `acquireWarmProvider()`, bypassing the injected
+  seam — the reason `tests/agent-cleanup.test.ts` needs `mock.module` and its own test
+  partition. Thread the pool's `acquireProvider` into `createAgentCore`.
 - **A fifth turn runner diverges from the other four**
   (`features/agents/session-actions.ts`): runs session-agent turns outside
   `SessionTaskProcessor` — passes `allowedTools` unconditionally on Codex (`:60`; both

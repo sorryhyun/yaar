@@ -265,7 +265,8 @@ export function registerWindowHandlers(
       const fresh = p.fresh === true;
       pool
         .handleTask({
-          type: 'app',
+          requestedType: 'app',
+          kind: 'relay',
           messageId,
           windowId,
           content: taggedContent,
@@ -823,7 +824,7 @@ export function registerWindowHandlers(
 
         return okJsonResource('yaar://windows/', {
           monitorId,
-          hasMonitorAgent: pool.hasMonitorAgent(monitorId),
+          hasMonitorAgent: pool.agentPool.hasMonitorAgent(monitorId),
           windows: windows.map((w) => ({
             id: w.id,
             title: w.title,

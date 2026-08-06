@@ -2,7 +2,8 @@
  * Shared types and interface for ContextPool processors.
  *
  * - `Task` / `QueuedTask` — moved here to break circular imports between context-pool <-> policies.
- * - `PoolContext` — the contract that MonitorTaskProcessor and AppTaskProcessor depend on.
+ * - `TurnContext` and the four per-collaborator tiers narrowed from it; `PoolContext` is
+ *   their union, implemented by `ContextPool`. A processor depends on its own tier.
  * - `AgentPoolStats` / `MonitorBudgetStats` / `PoolStats` — the stats contract read by
  *   `yaar://agents`, `yaar://windows/`, and `yaar://` (session read).
  */
@@ -25,10 +26,42 @@ import type {
 } from './context-pool-policies/index.js';
 
 /**
+ * Who produced a task. The one field routing is allowed to branch on.
+ *
+ * `MonitorTaskProcessor` used to answer this question by sniffing the *messageId* for
+ * `relay-` and `hook-resp-` prefixes minted in three unrelated files — so the rule that
+ * decides whether a message may steer a running turn or must interrupt-and-queue lived in
+ * a string format, enforced nowhere, and a producer that spelled its id differently
+ * silently took the other branch. Stating it is the whole fix.
+ *
+ * - `user` — a frame from the client: the user typed or clicked.
+ * - `relay` — an agent handing work to another agent (the `relay` tool, `direct_message`,
+ *   `window.message`).
+ * - `hook` — an app agent's answer coming back to the agent that asked for it.
+ * - `notify` — a subscription or app-event wake.
+ *
+ * `relay` and `hook` are the two that must not be steered into a running turn: steering
+ * can report success without the model ever processing the injected message, and unlike a
+ * user who is watching, nothing behind these will ask again. They interrupt and queue.
+ */
+export type TaskKind = 'user' | 'relay' | 'hook' | 'notify';
+
+/**
  * A task to be processed by the pool.
  */
 export interface Task {
-  type: 'monitor' | 'app' | 'session';
+  /**
+   * The tier the *producer* asked for — a request, not the routing key.
+   *
+   * `ContextPool.handleTask` re-derives the real executor from the task's window
+   * (windowId → appId), so a `'app'` task naming a plain window runs on the monitor agent
+   * and an `'app'` task naming a preview window does too. `'session'` is honored by
+   * `handleSessionTask` alone and never reaches `handleTask` at all. The name says
+   * "requested" so that reading it as the answer is not the easy mistake.
+   */
+  requestedType: 'monitor' | 'app' | 'session';
+  /** Who produced this task. See {@link TaskKind}. */
+  kind: TaskKind;
   messageId: string;
   windowId?: string;
   content: string;
@@ -103,32 +136,48 @@ export type PoolStats = AgentPoolStats & {
 };
 
 /**
- * The contract processors depend on — implemented by ContextPool.
+ * What running one agent turn needs, and nothing else.
+ *
+ * Every task processor used to receive the entire pool — the agent registry, all six
+ * policies, the timelines, the mutable `savedThreadIds` — so none of them could be reasoned
+ * about on its own: reading `AppTaskProcessor` told you nothing about whether it touched a
+ * monitor's queue, because it could. The tiers below narrow that to what each one actually
+ * reaches for, and `turn-helpers.ts` — the machinery all of them share — sees only this.
+ *
+ * `ContextPool` still implements the union ({@link PoolContext}); the narrowing is about
+ * what a processor can *see*, not about handing it a different object.
  */
-export interface PoolContext {
-  readonly sessionId: SessionId;
-  readonly agentPool: AgentPool;
+export interface TurnContext {
   readonly contextTape: ContextTape;
   readonly windowState: WindowStateRegistry;
   readonly sharedLogger: SessionLogger | null;
-  savedThreadIds?: Record<string, string>;
   readonly providerType: ProviderType | null;
-
-  // Policies
   readonly contextAssembly: ContextAssemblyPolicy;
   readonly reloadPolicy: ReloadCachePolicy;
-  readonly windowQueuePolicy: WindowQueuePolicy;
-  readonly budgetPolicy: MonitorBudgetPolicy;
-  readonly windowSubscriptionPolicy: WindowSubscriptionPolicy;
-
-  // Methods processors call back into
-  getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy;
-  /**
-   * The interaction timeline of one monitor. There is no session-wide timeline: an
-   * entry is drained into the next turn of the desktop it happened on, and no other.
-   */
-  timelineFor(monitorId: string): InteractionTimeline;
   sendEvent(event: ServerEvent): Promise<void>;
+}
+
+/**
+ * The interaction timeline of one monitor. There is no session-wide timeline: an entry is
+ * drained into the next turn of the desktop it happened on, and no other.
+ */
+export interface TimelineAccess {
+  timelineFor(monitorId: string): InteractionTimeline;
+}
+
+/** What `MonitorTaskProcessor` needs: the monitor queues, the background budget, threads. */
+export interface MonitorPoolContext extends TurnContext, TimelineAccess {
+  readonly agentPool: AgentPool;
+  readonly budgetPolicy: MonitorBudgetPolicy;
+  savedThreadIds?: Record<string, string>;
+  getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy;
+}
+
+/** What `AppTaskProcessor` needs: the window queues, and the hook that answers a monitor. */
+export interface AppPoolContext extends TurnContext, TimelineAccess {
+  readonly sessionId: SessionId;
+  readonly agentPool: AgentPool;
+  readonly windowQueuePolicy: WindowQueuePolicy;
   /** Deliver a hook-triggered response notification to the monitor agent. */
   notifyHookResponse(
     appId: string,
@@ -137,3 +186,30 @@ export interface PoolContext {
     responseText: string,
   ): void;
 }
+
+/**
+ * What `SessionTaskProcessor` needs — the smallest of the three. The deputy has no queue
+ * and no budget: it is one agent, running one turn at a time, on the user's own behalf.
+ */
+export interface SessionPoolContext extends TurnContext {
+  readonly agentPool: AgentPool;
+}
+
+/**
+ * What `WindowEventCoordinator` needs. Notably not a {@link TurnContext}: it runs no turns
+ * — it routes notifications back through the pool's one task door and tears down window
+ * state, so it never assembles a prompt or sends a turn event.
+ */
+export interface WindowEventPoolContext extends TimelineAccess {
+  readonly agentPool: AgentPool;
+  readonly contextTape: ContextTape;
+  readonly windowState: WindowStateRegistry;
+  readonly windowSubscriptionPolicy: WindowSubscriptionPolicy;
+}
+
+/**
+ * Everything the pool offers its collaborators — implemented by `ContextPool`, and the
+ * union of the four tiers above. Nothing should depend on *this*; depend on the tier.
+ */
+export interface PoolContext
+  extends MonitorPoolContext, AppPoolContext, SessionPoolContext, WindowEventPoolContext {}

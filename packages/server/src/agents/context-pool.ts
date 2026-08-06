@@ -12,13 +12,38 @@
  * - MonitorTaskProcessor: main queue, ephemeral overflow, budget enforcement
  * - AppTaskProcessor: app agent lifecycle and task execution
  * Complex work is delegated to native provider subagents (Claude Task / Codex collab)
+ *
+ * ## Who sends work here, and where it lands
+ *
+ * Seven producers, two doors, three executors. Neither door trusts the producer's
+ * `requestedType` as the routing key — `handleTask` re-derives the executor from the
+ * task's window — so this table, not the field, is what a task's fate depends on:
+ *
+ * | producer | `kind` | `requestedType` | executor |
+ * |---|---|---|---|
+ * | `ClientEventController` — USER_MESSAGE (target `monitor`) | `user` | monitor | MonitorTaskProcessor |
+ * | `ClientEventController` — USER_MESSAGE (target `session`) | `user` | session | SessionTaskProcessor |
+ * | `ClientEventController` — WINDOW_MESSAGE / APP_INTERACTION / COMPONENT_ACTION | `user` | app | App, or Monitor for a plain window |
+ * | `features/agents/relay.ts` + the app agent's `relay` tool | `relay` | monitor | MonitorTaskProcessor |
+ * | `mcp/messaging` — `direct_message` | `relay` | monitor \| app | per target |
+ * | `handlers/window.ts` — `invoke {action:'message'}` | `relay` | app | AppTaskProcessor |
+ * | `notifyHookResponse` — an app agent's answer coming back | `hook` | monitor | MonitorTaskProcessor |
+ * | `WindowSubscriptionPolicy` — subscription / app-event wake | `notify` | monitor \| app | per subscriber |
+ *
+ * Three gates stand between a producer and an executor, and every task passes all three:
+ * the **reset guard** (a pool tearing down drops the task and says so), **inflight
+ * accounting** (teardown waits for what is already running), and — for the monitor tier —
+ * the **queue**, whose steer-vs-interrupt decision reads `kind` and nothing else.
+ *
+ * `handleSessionTask` is the second door rather than a branch of the first because the
+ * session agent has no queue and no monitor of its own to be placed on; it shares only the
+ * two pool-wide gates.
  */
 
 import { ContextTape, type ContextMessage } from './context.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { monitorRole } from './roles.js';
 import { AgentPool, type PooledAgent, type AgentEntry } from './agent-pool.js';
-import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
 import {
   ServerEventType,
@@ -61,6 +86,18 @@ export class ContextPool implements PoolContext {
   /** The session_logs/ directory name. Names a transcript on disk, not a live session. */
   private logSessionId: string | null = null;
 
+  /**
+   * The agent registry — and **the** door to it. Ask it directly.
+   *
+   * This used to sit beside ~20 one-line methods on this class that forwarded to it
+   * (`hasMonitorAgent`, `getMonitorAgentIds`, `hasAgent`, `interruptAgent`,
+   * `disposeSessionAgent`, …) while seven modules reached past them to the field, so a
+   * reader could not tell which was the intended entrance and neither answer was wrong.
+   * The delegators enforced nothing, so they went: what stays on this class either
+   * orchestrates (acquire a provider, prewarm, drop the queues that belong to the agent
+   * being removed) or guards (the reset check, inflight accounting). A method here that
+   * would only forward is a method that belongs on the pool.
+   */
   readonly agentPool: AgentPool;
   readonly contextTape: ContextTape;
   readonly windowState: WindowStateRegistry;
@@ -186,7 +223,8 @@ export class ContextPool implements PoolContext {
   ): void {
     const messageId = genId('hook-resp');
     this.handleTask({
-      type: 'monitor',
+      requestedType: 'monitor',
+      kind: 'hook',
       messageId,
       monitorId,
       content: `<agent-hook type="response" appId="${appId}" windowId="${windowId}">${responseText || '(no response text)'}</agent-hook>`,
@@ -275,14 +313,6 @@ export class ContextPool implements PoolContext {
       monitorId,
       ...getMonitorTurnOptions(this.providerType ?? ''),
     });
-  }
-
-  hasMonitorAgent(monitorId: string): boolean {
-    return this.agentPool.hasMonitorAgent(monitorId);
-  }
-
-  getMonitorAgentIds(): string[] {
-    return this.agentPool.getMonitorAgentIds();
   }
 
   /** Every live agent, for the reconnect snapshot's "who is actually still running". */
@@ -382,10 +412,6 @@ export class ContextPool implements PoolContext {
     }
   }
 
-  async disposeSessionAgent(): Promise<void> {
-    await this.agentPool.disposeSessionAgent();
-  }
-
   private inflightEnter(): void {
     this.inflightCount++;
   }
@@ -425,6 +451,20 @@ export class ContextPool implements PoolContext {
     }
   }
 
+  /**
+   * The one door for every task that is not the session agent's. See the header's map.
+   *
+   * `task.requestedType` is what the producer asked for; the executor is decided here, and
+   * the two differ often enough that reading the field as the answer is a mistake:
+   *
+   * ```
+   *   requestedType: 'monitor'  →  MonitorTaskProcessor
+   *   requestedType: 'app'      →  AppTaskProcessor      … if the window belongs to an app
+   *                             →  MonitorTaskProcessor  … if it is a plain window, or a
+   *                                                        devtools preview (see below)
+   *   requestedType: 'session'  →  never arrives here; handleSessionTask is its only door
+   * ```
+   */
   async handleTask(task: Task): Promise<void> {
     if (this.resetting) {
       console.log(`[ContextPool] Rejecting task ${task.messageId} — pool is resetting`);
@@ -434,7 +474,7 @@ export class ContextPool implements PoolContext {
 
     this.inflightEnter();
     try {
-      if (task.type === 'monitor') {
+      if (task.requestedType === 'monitor') {
         await this.monitorProcessor.queueMonitorTask(task);
       } else {
         const appId = task.windowId ? this.windowState.getAppIdForWindow(task.windowId) : undefined;
@@ -453,7 +493,7 @@ export class ContextPool implements PoolContext {
           // must be derived from the window rather than re-typed as-is.
           await this.monitorProcessor.queueMonitorTask({
             ...task,
-            type: 'monitor',
+            requestedType: 'monitor',
             monitorId: this.monitorForWindowTask(task),
           });
         }
@@ -560,10 +600,6 @@ export class ContextPool implements PoolContext {
     return this.sharedLogger;
   }
 
-  getPrimaryAgent(monitorId?: string): AgentSession | null {
-    return this.agentPool.getMonitorAgentSession(monitorId);
-  }
-
   /**
    * Stop everything: the running turns *and* the work waiting behind them.
    *
@@ -587,14 +623,6 @@ export class ContextPool implements PoolContext {
     dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
     this.reportDropped(dropped, 'the agents were stopped');
     await this.agentPool.interruptAll();
-  }
-
-  async interruptAgent(agentId: string): Promise<boolean> {
-    return this.agentPool.interruptByIdOrRole(agentId);
-  }
-
-  hasAgent(agentId: string): boolean {
-    return this.agentPool.hasAgent(agentId);
   }
 
   getStats(): PoolStats {

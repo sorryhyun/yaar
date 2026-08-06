@@ -16,10 +16,10 @@ import { sessionRole } from './roles.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { SESSION_AGENT_PROFILE, turnOptionsFor } from './profiles/index.js';
 import type { PooledAgent } from './agent-pool.js';
-import type { PoolContext, Task } from './pool-types.js';
+import type { SessionPoolContext, Task } from './pool-types.js';
 
 export class SessionTaskProcessor {
-  constructor(private readonly ctx: PoolContext) {}
+  constructor(private readonly ctx: SessionPoolContext) {}
 
   /**
    * The session agent, born on first use. There is at most one per session; a

@@ -47,6 +47,12 @@ import { ClientEventController } from './client-event-controller.js';
 import { MonitorRegistry } from './monitor-registry.js';
 import { SessionSnapshotService } from './session-snapshot-service.js';
 import { AppWindowCoordinator } from './app-window-coordinator.js';
+import {
+  actionWindowId,
+  stampWindowHandle,
+  windowHandleFor,
+  type WindowHandleResolver,
+} from './window-handle-stamp.js';
 import { getConfigDir } from '../storage/storage-manager.js';
 import { genId } from '../lib/ids.js';
 import { getWarmPool } from '../providers/warm-pool.js';
@@ -310,39 +316,35 @@ export class LiveSession {
   }
 
   /**
+   * This session's handle lookup, for the two paths here that stamp an outgoing action.
+   *
+   * A pure lookup: it never registers. Minting a handle for a window that is about to
+   * exist is `WindowStateRegistry`'s job on the `window.create` itself, and a resolver that
+   * also registered would file one for a `window.close` on its way out.
+   */
+  private readonly resolveWindowHandle: WindowHandleResolver = (raw, monitorId) =>
+    this.windowState.handleMap.resolve(raw, monitorId);
+
+  /**
    * An OS Action emitted by a tool anywhere in this session: track it in window state,
    * bill it to its monitor's budget, and wake whoever is watching that window.
    */
   private handleEmittedAction(event: ActionEvent): void {
-    const rawWindowId = (event.action as { windowId?: string }).windowId;
-    // Resolved *before* the action is applied. `window.close` removes the handle, so a
-    // lookup afterwards answers with the raw id — which is what went out on the wire to
-    // the frontend, and to every subscriber, for every close an app performed. The
-    // frontend then had to guess the monitor back by scanning its keys for a matching
-    // suffix, and with the same app open on two monitors it could guess wrong and close
-    // the other one.
+    const rawWindowId = actionWindowId(event.action);
+    // Asked *before* the action is applied and again after; which answer wins is
+    // `windowHandleFor`'s rule, and its header records the two incidents that set it.
     const priorHandle = rawWindowId
-      ? this.windowState.handleMap.resolve(rawWindowId, event.monitorId)
+      ? this.resolveWindowHandle(rawWindowId, event.monitorId)
       : undefined;
 
     this.windowState.handleAction(event.action, event.monitorId);
 
-    // ...and re-asked afterwards, because `window.create` is the mirror case: it *mints*
-    // the handle, so before the action there is nothing to resolve and the pre-lookup
-    // necessarily answers with the raw id. Sending that raw id to the frontend is not
-    // cosmetic — the frontend has no monitor to key the new window by either, so it falls
-    // back to whichever monitor that tab is *looking at* (`applyWindowAction`), and on a
-    // two-monitor desktop that is routinely the wrong one. The two registries then hold
-    // the same window under different keys forever: the server says `0/preview`, the tab
-    // says `1/preview`, every later app_query resolves to no DOM element and reports
-    // "Window element not found", and nothing short of closing and re-creating the window
-    // repairs it. Only `create` needs this — for everything else the prior handle is the
-    // authoritative one, and for `close` it is the *only* one left.
-    const windowHandle = rawWindowId
-      ? (priorHandle ??
-        this.windowState.handleMap.resolve(rawWindowId, event.monitorId) ??
-        rawWindowId)
-      : undefined;
+    const windowHandle = windowHandleFor(
+      event.action,
+      this.resolveWindowHandle,
+      event.monitorId,
+      priorHandle,
+    );
     if (event.monitorId && this.pool) {
       this.pool.recordMonitorAction(event.monitorId);
     }
@@ -367,22 +369,7 @@ export class LiveSession {
     // Actions from non-agent contexts (iframe verb proxy, HTTP routes) have no
     // ToolActionBridge to broadcast them to the frontend, so do it directly.
     if (event.agentId?.startsWith('iframe:')) {
-      const action = event.action;
-      const raw = rawWindowId;
-      const handle = windowHandle;
-      // Carry the requestId through, as ToolActionBridge does on the agent path.
-      // An action awaiting feedback is only answerable if the frontend knows which
-      // request to answer: `window.capture` reads the id off the action itself and
-      // skips the capture without one. Dropping it here is why devtools could open a
-      // preview and never screenshot it — the request went out, nothing came back, and
-      // the read timed out into "no screenshot" every time.
-      const patch = {
-        ...(handle && handle !== raw ? { windowId: handle } : {}),
-        ...(event.requestId ? { requestId: event.requestId } : {}),
-      };
-      const stamped = (
-        Object.keys(patch).length > 0 ? { ...action, ...patch } : action
-      ) as OSAction;
+      const stamped = stampWindowHandle(event.action, windowHandle, event.requestId);
       this.broadcast({
         type: ServerEventType.ACTIONS,
         actions: [stamped],
@@ -487,14 +474,16 @@ export class LiveSession {
           const action = hook.action.payload as OSAction;
           const hookLogger = this.getSessionLogger();
           if (action.type.startsWith('window.')) {
+            // Resolved before *and* after the registry write, for the same reason every
+            // other emit path does it: a launch hook that closes a window resolves to
+            // nothing once the close has been applied. See `window-handle-stamp.ts`.
+            const raw = actionWindowId(action);
+            const priorHandle = raw ? this.resolveWindowHandle(raw, DEFAULT_MONITOR_ID) : undefined;
             this.windowState.handleAction(action, DEFAULT_MONITOR_ID);
-            // Stamp the handle onto the action so frontend receives the scoped windowId
-            const raw = (action as { windowId?: string }).windowId;
-            const resolved = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
-            const stamped =
-              resolved && resolved !== raw
-                ? ({ ...action, windowId: resolved } as OSAction)
-                : action;
+            const stamped = stampWindowHandle(
+              action,
+              windowHandleFor(action, this.resolveWindowHandle, DEFAULT_MONITOR_ID, priorHandle),
+            );
             hookLogger?.logAction(stamped);
             this.broadcast({
               type: ServerEventType.ACTIONS,

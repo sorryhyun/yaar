@@ -33,7 +33,7 @@ export interface ControlResult {
 
 /** List all monitors with basic stats. */
 export function listMonitors(session: LiveSession, pool: ContextPool): MonitorSummary[] {
-  const monitorIds = pool.getMonitorAgentIds();
+  const monitorIds = pool.agentPool.getMonitorAgentIds();
   const allWindows = session.windowState.listWindows();
 
   const handleMap = session.windowState.handleMap;
@@ -42,7 +42,7 @@ export function listMonitors(session: LiveSession, pool: ContextPool): MonitorSu
     const windowCount = allWindows.filter((w) => monitorHandles.has(w.id)).length;
     return {
       monitorId: id,
-      hasMonitorAgent: pool.hasMonitorAgent(id),
+      hasMonitorAgent: pool.agentPool.hasMonitorAgent(id),
       windowCount,
     };
   });
@@ -54,7 +54,7 @@ export function getMonitorStatus(
   pool: ContextPool,
   monitorId: string,
 ): MonitorStatus | null {
-  if (!pool.hasMonitorAgent(monitorId)) return null;
+  if (!pool.agentPool.hasMonitorAgent(monitorId)) return null;
 
   const monitorHandles = new Set(session.windowState.handleMap.listByMonitor(monitorId));
   const allWindows = session.windowState.listWindows();

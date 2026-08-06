@@ -15,7 +15,7 @@
  */
 import { describe, it, expect } from 'bun:test';
 import type { OSAction, UserInteraction } from '@yaar/shared';
-import { WindowStateRegistry } from '../session/window-state.js';
+import { WindowStateRegistry, windowCreateAction } from '../session/window-state.js';
 import { getWindowRestoreActions } from '../logging/window-restore.js';
 import type { ParsedMessage } from '../logging/types.js';
 
@@ -130,11 +130,11 @@ describe('getWindowRestoreActions', () => {
   /**
    * The visibility half of the same drift.
    *
-   * `WindowStateRegistry.handleAction` grew `focus`/`minimize`/`restore` when the stack
-   * was added; this reducer did not, and its `switch` has no `default` — so a window the
-   * user minimized before shutdown came back on screen with nothing logged anywhere. The
-   * reducer is now exhaustive over `window.*` by type, which is what keeps the next
-   * action type from landing the same way.
+   * `WindowStateRegistry.handleAction` grew `focus`/`minimize`/`restore` when the stack was
+   * added; the separate restore reducer that used to live in `window-restore.ts` did not,
+   * and its `switch` had no `default` — so a window the user minimized before shutdown came
+   * back on screen with nothing logged anywhere. Restore now runs the live registry, which
+   * is exhaustive over `window.*` by type, so there is no second reducer left to drift.
    */
   describe('visibility survives the restart', () => {
     const created = (windowId: string, variant?: string) =>
@@ -204,6 +204,98 @@ describe('getWindowRestoreActions', () => {
         ]),
       ),
     ).toEqual([]);
+  });
+
+  /**
+   * What collapsing the two reducers onto one is worth.
+   *
+   * The old restore reducer accumulated its answer by mutating the `window.create` it had
+   * replayed; the live registry accumulates `WindowState`. Both are now the latter, read
+   * back out through the single `windowCreateAction` mapping the reconnect snapshot also
+   * uses — so "what is open, and what does it look like" has exactly one answer, and these
+   * pin that it is the *right* one for every field a log can move.
+   */
+  describe('one reducer, read back through one mapping', () => {
+    const logged = (entries: OSAction[]) =>
+      getWindowRestoreActions(transcript(entries))[0] as {
+        title: string;
+        bounds: { x: number; y: number; w: number; h: number };
+        content: { renderer: string; data: unknown };
+        appId?: string;
+        variant?: string;
+      };
+
+    const create = (): OSAction =>
+      ({
+        type: 'window.create',
+        windowId: '0/notes',
+        title: 'Notes',
+        bounds: { x: 10, y: 20, w: 640, h: 480 },
+        content: { renderer: 'markdown', data: 'first' },
+        appId: 'notes',
+        variant: 'standard',
+      }) as OSAction;
+
+    it('carries every mutation the log recorded into the restored create', () => {
+      const restored = logged([
+        create(),
+        { type: 'window.setTitle', windowId: '0/notes', title: 'Renamed' } as OSAction,
+        { type: 'window.move', windowId: '0/notes', x: 100, y: 200 } as OSAction,
+        { type: 'window.resize', windowId: '0/notes', w: 800, h: 600 } as OSAction,
+        {
+          type: 'window.updateContent',
+          windowId: '0/notes',
+          operation: { op: 'append', data: ' + more' },
+        } as OSAction,
+      ]);
+
+      expect(restored.title).toBe('Renamed');
+      expect(restored.bounds).toEqual({ x: 100, y: 200, w: 800, h: 600 });
+      expect(restored.content.data).toBe('first + more');
+      // Presentation fields the window keeps: they are state, not per-run.
+      expect(restored.appId).toBe('notes');
+      expect(restored.variant).toBe('standard');
+    });
+
+    it('takes a later setContent over the create’s own', () => {
+      const restored = logged([
+        create(),
+        {
+          type: 'window.setContent',
+          windowId: '0/notes',
+          content: { renderer: 'html', data: '<p>later</p>' },
+        } as OSAction,
+      ]);
+      expect(restored.content).toEqual({ renderer: 'html', data: '<p>later</p>' });
+    });
+
+    it('comes back unlocked — the agent that held the lock did not survive the restart', () => {
+      const restored = getWindowRestoreActions(
+        transcript([
+          create(),
+          { type: 'window.lock', windowId: '0/notes', agentId: 'monitor-0' } as OSAction,
+        ]),
+      )[0];
+      expect(Object.keys(restored)).not.toContain('locked');
+      expect(Object.keys(restored)).not.toContain('lockedBy');
+    });
+
+    it('is stable under a replay: restoring its own output changes nothing', () => {
+      // The restore path feeds these actions straight into a live `WindowStateRegistry`,
+      // which the reconnect snapshot then maps back out. A second pass that disagreed with
+      // the first would mean the two ends of the round trip still had separate opinions.
+      const first = getWindowRestoreActions(
+        transcript([
+          create(),
+          { type: 'window.setTitle', windowId: '0/notes', title: 'Renamed' } as OSAction,
+          { type: 'window.minimize', windowId: '0/notes' } as OSAction,
+        ]),
+      );
+
+      const registry = new WindowStateRegistry();
+      registry.restoreFromActions(first);
+      expect(registry.listWindows().map(windowCreateAction)).toEqual(first);
+    });
   });
 });
 

@@ -14,7 +14,7 @@
 
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
 import type { AppTaskProcessor } from './app-task-processor.js';
-import type { PoolContext, Task } from './pool-types.js';
+import type { WindowEventPoolContext, Task } from './pool-types.js';
 
 /** Per-window app-event rate cap: emits beyond this within the window are dropped. */
 const APP_EVENT_RATE_LIMIT = 20;
@@ -28,7 +28,7 @@ export class WindowEventCoordinator {
   >();
 
   constructor(
-    private readonly ctx: PoolContext,
+    private readonly ctx: WindowEventPoolContext,
     private readonly appProcessor: AppTaskProcessor,
     /** Route a notification task back through the pool's single task entry point. */
     private readonly deliver: (task: Task) => void,

@@ -85,7 +85,7 @@ export class ClientEventController {
       [ClientEventType.INTERRUPT]: () => this.deps.getPool()?.interruptAll(),
       [ClientEventType.RESET]: (_event, connectionId) => this.deps.resetSession(connectionId),
       [ClientEventType.INTERRUPT_AGENT]: (event) =>
-        this.deps.getPool()?.interruptAgent(event.agentId),
+        this.deps.getPool()?.agentPool.interruptByIdOrRole(event.agentId),
       [ClientEventType.RENDERING_FEEDBACK]: (event) => this.handleRenderingFeedback(event),
       [ClientEventType.DIALOG_FEEDBACK]: (event) => this.handleDialogFeedback(event),
       [ClientEventType.APP_PROTOCOL_RESPONSE]: (event) =>
@@ -171,7 +171,8 @@ export class ClientEventController {
     // user's deputy, the one principal that can drive the real browser.
     if (event.target === 'session') {
       await this.deps.getPool()?.handleSessionTask({
-        type: 'session',
+        requestedType: 'session',
+        kind: 'user',
         messageId: event.messageId,
         content: event.content,
         interactions: event.interactions,
@@ -181,7 +182,7 @@ export class ClientEventController {
     }
     // The monitor exists (checked above); its agent is created on first use.
     const pool = this.deps.getPool();
-    if (pool && !pool.hasMonitorAgent(monitorId)) {
+    if (pool && !pool.agentPool.hasMonitorAgent(monitorId)) {
       await pool.createMonitorAgent(monitorId);
     }
     // Re-read rather than reusing `pool`: a session eviction can complete during the await
@@ -194,7 +195,8 @@ export class ClientEventController {
     // guard and queues against disposed state. Reading fresh is what makes the null the
     // one that stops it.
     await this.deps.getPool()?.handleTask({
-      type: 'monitor',
+      requestedType: 'monitor',
+      kind: 'user',
       messageId: event.messageId,
       content: event.content,
       interactions: event.interactions,
@@ -206,7 +208,8 @@ export class ClientEventController {
     event: ClientEventOf<typeof ClientEventType.WINDOW_MESSAGE>,
   ): Promise<void> {
     await this.deps.getPool()?.handleTask({
-      type: 'app',
+      requestedType: 'app',
+      kind: 'user',
       messageId: event.messageId,
       windowId: event.windowId,
       content: event.content,
@@ -218,7 +221,8 @@ export class ClientEventController {
     event: ClientEventOf<typeof ClientEventType.APP_INTERACTION>,
   ): Promise<void> {
     await this.deps.getPool()?.handleTask({
-      type: 'app',
+      requestedType: 'app',
+      kind: 'user',
       messageId: event.messageId,
       windowId: event.windowId,
       content: event.content,
@@ -243,7 +247,8 @@ export class ClientEventController {
     }
 
     await this.deps.getPool()?.handleTask({
-      type: 'app',
+      requestedType: 'app',
+      kind: 'user',
       messageId: event.actionId ?? genId('component'),
       windowId: event.windowId,
       content,

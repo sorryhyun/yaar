@@ -316,7 +316,8 @@ describe('F-11 — a window-scoped task derives its monitor from the window', ()
     // resolves it via getMonitorForWindow, and a plain-window task is re-typed to
     // 'monitor' with that derived id, so it runs on the window's own monitor.
     await pool.handleTask({
-      type: 'app',
+      requestedType: 'app',
+      kind: 'user',
       messageId: 'click-1',
       windowId: '1/notes',
       content: '<ui:click>button "Save" in window "notes"</ui:click>',
@@ -331,7 +332,8 @@ describe('F-11 — a window-scoped task derives its monitor from the window', ()
 
   it('runs a window message in a plain window on monitor 1 on monitor 1’s agent', async () => {
     await pool.handleTask({
-      type: 'app',
+      requestedType: 'app',
+      kind: 'user',
       messageId: 'msg-1',
       windowId: '1/notes',
       content: 'summarize this',
@@ -367,20 +369,36 @@ describe('F-12 — a monitor that cannot be resolved is an error, not a default'
     // A user-scoped task's monitor comes from the connection and is always present;
     // one that arrives without it is a bug upstream, and must say so.
     await expect(
-      pool.handleTask({ type: 'monitor', messageId: 'm1', content: 'hello' }),
+      pool.handleTask({
+        requestedType: 'monitor',
+        kind: 'user',
+        messageId: 'm1',
+        content: 'hello',
+      }),
     ).rejects.toThrow(/monitor/i);
   });
 
   it('rejects a window task whose window is not registered', async () => {
     // No window → no monitor to derive, and no default to fall back to.
     await expect(
-      pool.handleTask({ type: 'app', messageId: 'm2', windowId: 'ghost', content: 'hello' }),
+      pool.handleTask({
+        requestedType: 'app',
+        kind: 'user',
+        messageId: 'm2',
+        windowId: 'ghost',
+        content: 'hello',
+      }),
     ).rejects.toThrow(/monitor|window/i);
   });
 
   it('rejects a session task that names no monitor', async () => {
     await expect(
-      pool.handleSessionTask({ type: 'session', messageId: 'm3', content: 'hello' }),
+      pool.handleSessionTask({
+        requestedType: 'session',
+        kind: 'user',
+        messageId: 'm3',
+        content: 'hello',
+      }),
     ).rejects.toThrow(/monitor/i);
   });
 
@@ -390,7 +408,8 @@ describe('F-12 — a monitor that cannot be resolved is an error, not a default'
     // it is running. The session agent runs on a monitor like everyone else; say which.
     await pool.createMonitorAgent('1');
     await pool.handleSessionTask({
-      type: 'session',
+      requestedType: 'session',
+      kind: 'user',
       messageId: 's1',
       content: 'look at this',
       monitorId: '1',

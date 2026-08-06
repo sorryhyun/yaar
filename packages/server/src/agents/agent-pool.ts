@@ -607,13 +607,6 @@ export class AgentPool {
   }
 
   /**
-   * Get the monitor agent's session for a monitor.
-   */
-  getMonitorAgentSession(monitorId = '0'): AgentSession | null {
-    return this.monitorAgents.get(monitorId)?.session ?? null;
-  }
-
-  /**
    * Check if a monitor agent exists for the given monitor.
    */
   hasMonitorAgent(monitorId: string): boolean {

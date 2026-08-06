@@ -1,6 +1,12 @@
 import type { OSAction } from '@yaar/shared';
-import { applyContentOperation, extractAppId, DEFAULT_MONITOR_ID } from '@yaar/shared';
+import { extractAppId, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import type { ParsedMessage } from './types.js';
+import {
+  WindowStateRegistry,
+  isWindowAction,
+  windowCreateAction,
+  type WindowAction,
+} from '../session/window-state.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
 import { isolatedAppOrigin, isOriginBoundaryActive } from '../http/origin-boundary.js';
 import { resolveAppSource } from '../features/apps/roots.js';
@@ -32,148 +38,64 @@ function scopedWindowId(windowId: string): string {
   return windowId.includes('/') ? windowId : `${DEFAULT_MONITOR_ID}/${windowId}`;
 }
 
-/** Every action that says something about a window. The union this reducer is total over. */
-type WindowAction = Extract<OSAction, { type: `window.${string}` }>;
-
-function isWindowAction(action: OSAction): action is WindowAction {
-  return action.type.startsWith('window.');
-}
-
 /**
  * Extract window restore actions from parsed messages.
  * Returns the final state of all windows that should still be open.
  *
- * This is a second hand-written reducer over `window.*` — the live one is
- * `WindowStateRegistry.handleAction`, and the two are supposed to agree on what a session
- * looks like. They drifted: this one handled 9 of the 12 window actions, and `focus`,
- * `minimize` and `restore` fell through a `switch` with no `default`, so a window the user
- * minimized before shutdown came back on screen and nothing anywhere said a word. Same
- * failure family as the scoped-id incident in this file's header.
+ * The reducer is `WindowStateRegistry` — the same one the live session runs — fed this
+ * log's window actions into a throwaway instance, and read back out through
+ * `windowCreateAction`. There is no second implementation here any more, which is the
+ * point: this file used to hold a hand-written `switch` that was *supposed* to agree with
+ * the live one and did not. It handled 9 of the 12 window actions, so `focus`, `minimize`
+ * and `restore` fell through with no `default` and a window the user minimized before
+ * shutdown came back on screen with nothing anywhere saying a word. Exhaustiveness was
+ * added there afterwards, but two reducers can still disagree about what a case *means*;
+ * one cannot.
  *
- * Hence the `never` at the bottom: the union is narrowed to `window.*` first, so the next
- * action type added to it is a **compile error here**, not a silent no-op. The two
- * reducers can still disagree on what a case *means* — collapsing them onto one implementation
- * is the durable fix — but neither can quietly not have one.
+ * Two things restore must supply that a live session gets for free:
+ *
+ * - **The monitor, explicitly.** `WindowStateRegistry` falls back to the ambient agent
+ *   context for a raw id, and a log replay runs inside no agent turn. The monitor is
+ *   parsed off the scoped handle instead (see {@link scopedWindowId}), so the placement
+ *   comes from the log rather than from whoever happens to be running.
+ * - **The handle registered first.** Same reason `restoreFromActions` does it: a scoped id
+ *   arriving at `actionKey` *with* a monitor would be registered a second time under it,
+ *   minting `0/0/dock` — a key nothing else ever produces.
  */
 export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
-  // Track window states by scoped handle — see scopedWindowId for why not "as written".
-  const windows = new Map<string, OSAction>();
+  const registry = new WindowStateRegistry();
 
   for (const msg of messages) {
-    // Handle interaction entries (e.g., user closing a window)
+    // An interaction entry: the user closed a window themselves.
     if (msg.type === 'interaction' && msg.interaction?.startsWith('close:')) {
-      const windowId = msg.interaction.slice('close:'.length);
-      windows.delete(scopedWindowId(windowId));
+      applyScoped(registry, {
+        type: 'window.close',
+        windowId: msg.interaction.slice('close:'.length),
+      });
       continue;
     }
 
     if (msg.type !== 'action' || !msg.action) continue;
-    const action = msg.action;
-    // Everything else in the log — notifications, toasts, component updates — says
-    // nothing about which windows are open. Narrowed here rather than case-by-case so
-    // the switch below can be exhaustive over the actions that do.
-    if (!isWindowAction(action)) continue;
-
-    switch (action.type) {
-      case 'window.create': {
-        // The id is rewritten, not only re-keyed: this action is replayed into both
-        // registries, and a bare id there is a window on no monitor.
-        const windowId = scopedWindowId(action.windowId);
-        windows.set(windowId, { ...action, windowId });
-        break;
-      }
-
-      case 'window.close':
-        // Remove the window
-        windows.delete(scopedWindowId(action.windowId));
-        break;
-
-      case 'window.setContent': {
-        const win = windows.get(scopedWindowId(action.windowId));
-        if (win && win.type === 'window.create') {
-          win.content = { ...action.content };
-        }
-        break;
-      }
-
-      case 'window.updateContent': {
-        const win = windows.get(scopedWindowId(action.windowId));
-        if (win && win.type === 'window.create') {
-          win.content = {
-            renderer: action.renderer ?? win.content?.renderer ?? 'text',
-            data: applyContentOperation(win.content?.data ?? '', action.operation),
-          };
-        }
-        break;
-      }
-
-      case 'window.setTitle': {
-        const win = windows.get(scopedWindowId(action.windowId));
-        if (win && win.type === 'window.create') {
-          win.title = action.title;
-        }
-        break;
-      }
-
-      case 'window.move': {
-        const win = windows.get(scopedWindowId(action.windowId));
-        if (win && win.type === 'window.create' && win.bounds) {
-          win.bounds.x = action.x;
-          win.bounds.y = action.y;
-        }
-        break;
-      }
-
-      case 'window.resize': {
-        const win = windows.get(scopedWindowId(action.windowId));
-        if (win && win.type === 'window.create' && win.bounds) {
-          win.bounds.w = action.w;
-          win.bounds.h = action.h;
-        }
-        break;
-      }
-
-      // A lock belongs to the agent that took it, and that agent does not survive the
-      // restart. Windows come back unlocked, so both actions are deliberate no-ops.
-      case 'window.lock':
-      case 'window.unlock':
-        break;
-
-      // The three below were missing entirely, which is what made a minimized window come
-      // back on screen. `minimized` is a field on `window.create`, so the restored action
-      // carries the state directly — same as `WindowStateRegistry`, which also declines to
-      // minimize a widget or a panel.
-      case 'window.minimize': {
-        const win = windows.get(scopedWindowId(action.windowId));
-        if (win?.type !== 'window.create') break;
-        if (win.variant === 'widget' || win.variant === 'panel') break;
-        win.minimized = true;
-        break;
-      }
-
-      case 'window.focus':
-      case 'window.restore': {
-        const win = windows.get(scopedWindowId(action.windowId));
-        if (win?.type !== 'window.create') break;
-        win.minimized = false;
-        break;
-      }
-
-      // Neither is window state. A maximize's bounds are the frontend's to restore (the
-      // live registry does not record them either), and a capture is a screenshot request.
-      case 'window.maximize':
-      case 'window.capture':
-        break;
-
-      default: {
-        const unhandled: never = action;
-        void unhandled;
-        break;
-      }
-    }
+    // `handleAction` declines a non-window action on its own; the narrowing here is for
+    // `applyScoped`, which has to read a `windowId` off it.
+    if (isWindowAction(msg.action)) applyScoped(registry, msg.action);
   }
 
-  return Array.from(windows.values());
+  return registry.listWindows().map(windowCreateAction);
+}
+
+/**
+ * Apply one logged window action under its monitor-scoped handle.
+ *
+ * The id is rewritten, not only re-keyed: the actions this function's registry produces are
+ * replayed into the live registry *and* sent to the frontend, and a bare id there is a
+ * window on no monitor.
+ */
+function applyScoped(registry: WindowStateRegistry, action: WindowAction): void {
+  const windowId = scopedWindowId(action.windowId);
+  const monitorId = windowId.slice(0, windowId.indexOf('/'));
+  if (action.type === 'window.create') registry.handleMap.registerHandle(windowId);
+  registry.handleAction({ ...action, windowId }, monitorId);
 }
 
 /**

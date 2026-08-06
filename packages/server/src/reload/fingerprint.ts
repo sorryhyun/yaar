@@ -87,7 +87,10 @@ export function computeFingerprint(task: Task, windows: WindowState[]): Fingerpr
   const windowStateHash = computeWindowStateHash(windows);
 
   return {
-    triggerType: task.type,
+    // The tier the producer asked for, deliberately not the executor: a fingerprint is
+    // matched against earlier tasks, and re-deriving the executor here would make one
+    // cache key depend on the window registry's current state.
+    triggerType: task.requestedType,
     triggerTarget: task.windowId,
     ngrams,
     contentHash,

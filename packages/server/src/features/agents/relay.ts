@@ -24,7 +24,7 @@ export function relayToMonitor(
   const content = `<relay from="${agentId}">\n${message}\n</relay>`;
 
   pool
-    .handleTask({ type: 'monitor', messageId, content, monitorId })
+    .handleTask({ requestedType: 'monitor', kind: 'relay', messageId, content, monitorId })
     .catch((err: unknown) => console.error('[relay_to_main] Failed:', err));
 
   return messageId;

@@ -101,7 +101,7 @@ src/
 │   ├── window-event-coordinator.ts  # subscription/notification fan-out + window-close teardown
 │   ├── interaction-timeline.ts / pool-types.ts / turn-helpers.ts
 │   ├── profiles/         # app-agent, session-agent, sub-agent, orchestrator, model-tiers, shared-sections, types, index (barrel)
-│   ├── session-policies/       # StreamToEventMapper, ProviderLifecycleManager, ToolActionBridge
+│   ├── session-policies/       # StreamToEventMapper, ToolActionBridge
 │   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends
 │   ├── types.ts          # AITransport interface, StreamMessage, TransportOptions

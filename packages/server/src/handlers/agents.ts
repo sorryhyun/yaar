@@ -115,7 +115,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       if (resolved.id === 'session' || resolved.id === 'monitor') return true;
       const pool = getPool();
       if (!pool) return false;
-      if (pool.hasAgent(resolved.id)) return true;
+      if (pool.agentPool.hasAgent(resolved.id)) return true;
       // An app agent is also addressable by appId — that is what `delete` accepts.
       return pool.agentPool.listAgents().some((a) => a.type === 'app' && a.appId === resolved.id);
     },
@@ -140,7 +140,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
       const pool = getPool();
       if (!pool) return error('No agents — session not initialized.');
 
-      const exists = pool.hasAgent(resolved.id);
+      const exists = pool.agentPool.hasAgent(resolved.id);
       if (!exists) return error(`Agent "${resolved.id}" not found.`);
 
       return okJsonResource(resolved.sourceUri, { id: resolved.id, exists: true });
@@ -180,7 +180,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
             return ok('Interrupted session agent.');
           }
 
-          const interrupted = await pool.interruptAgent(resolved.id);
+          const interrupted = await pool.agentPool.interruptByIdOrRole(resolved.id);
           if (!interrupted) return error(`Agent "${resolved.id}" not found or not running.`);
           return ok(`Interrupted agent "${resolved.id}".`);
         }
@@ -219,7 +219,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
           return error('Session agent does not exist.');
         }
 
-        await pool.disposeSessionAgent();
+        await pool.agentPool.disposeSessionAgent();
         return ok('Session agent disposed.');
       }
 

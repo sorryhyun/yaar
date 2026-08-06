@@ -460,7 +460,8 @@ export function registerAppAgentTools(server: McpServer): void {
       const messageId = genId('relay');
       pool
         .handleTask({
-          type: 'monitor',
+          requestedType: 'monitor',
+          kind: 'relay',
           messageId,
           content: args.message,
           monitorId: getMonitorId(),

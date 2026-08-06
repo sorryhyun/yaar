@@ -10,7 +10,8 @@
 import { ServerEventType } from '@yaar/shared';
 import type { WindowState, OSAction } from '@yaar/shared';
 import type { ContextSource } from './context.js';
-import type { PoolContext, Task } from './pool-types.js';
+import type { MonitorBudgetPolicy } from './context-pool-policies/index.js';
+import type { TurnContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-pool.js';
 import type { Fingerprint } from '../reload/types.js';
 
@@ -24,7 +25,7 @@ export interface PreparedReloadContext {
 }
 
 export function buildReloadContext(
-  ctx: PoolContext,
+  ctx: TurnContext,
   task: Task,
   options?: { currentWindowId?: string; monitorId?: string },
 ): PreparedReloadContext {
@@ -82,7 +83,7 @@ export interface AgentTurnOptions {
  * 6. onAfterRun(actions)
  * 7. finally: clear role, onFinally()
  */
-export async function runAgentTurn(ctx: PoolContext, opts: AgentTurnOptions): Promise<OSAction[]> {
+export async function runAgentTurn(ctx: TurnContext, opts: AgentTurnOptions): Promise<OSAction[]> {
   const { agent, role, source, task, prompt, fp } = opts;
 
   agent.currentRole = role;
@@ -132,7 +133,7 @@ export async function runAgentTurn(ctx: PoolContext, opts: AgentTurnOptions): Pr
 // ── Budget output callback ──────────────────────────────────────────────────
 
 export function createBudgetOutputCallback(
-  ctx: PoolContext,
+  ctx: { budgetPolicy: MonitorBudgetPolicy },
   agent: PooledAgent,
   monitorId: string,
   label = 'agent',

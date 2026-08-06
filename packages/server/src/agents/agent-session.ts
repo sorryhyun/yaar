@@ -26,8 +26,8 @@ import type { ContextSource } from './context.js';
 import { genId } from '../lib/ids.js';
 import { errMessage } from '../lib/errors.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
-import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
 import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
+import { acquireWarmProvider } from '../providers/factory.js';
 import { runInAgentContext } from './agent-context.js';
 import { principalRole } from './roles.js';
 import { assembleSystemPromptForRole } from './system-prompt.js';
@@ -105,7 +105,6 @@ export class AgentSession {
     cacheWriteTokens: 0,
   };
 
-  private providerLifecycle: ProviderLifecycleManager;
   private toolActionBridge: ToolActionBridge;
 
   constructor(
@@ -126,36 +125,6 @@ export class AgentSession {
 
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const connection = this;
-
-    this.providerLifecycle = new ProviderLifecycleManager(
-      {
-        get provider() {
-          return connection.provider;
-        },
-        set provider(value: AITransport | null) {
-          connection.provider = value;
-        },
-        get sessionId() {
-          return connection.sessionId;
-        },
-        set sessionId(value: string | null) {
-          connection.sessionId = value;
-        },
-        get hasProcessedFirstUserTurn() {
-          return connection.hasProcessedFirstUserTurn;
-        },
-        set hasProcessedFirstUserTurn(value: boolean) {
-          connection.hasProcessedFirstUserTurn = value;
-        },
-        get sessionLogger() {
-          return connection.sessionLogger;
-        },
-        set sessionLogger(value: SessionLogger | null) {
-          connection.sessionLogger = value;
-        },
-      },
-      this.sendEvent.bind(this),
-    );
 
     this.toolActionBridge = new ToolActionBridge(
       {
@@ -311,8 +280,27 @@ export class AgentSession {
     this.onOutput = cb;
   }
 
+  /**
+   * Attach this agent's provider — the pool's warm one, or a fresh one from the factory.
+   *
+   * Acquire and attach is *all* this does. It used to also mint a `SessionLogger` and emit
+   * `CONNECTION_STATUS`, duplicating both from `ContextPool.initialize()`: the log mint
+   * created a second `session_logs/` directory for a session that already had one, and the
+   * status event went out with no `sessionId` on it — the exact hazard `ContextPool` names
+   * at its own emit, where the client adopting the wrong id left every app it launched
+   * holding a token for a session the hub does not hold. Two owners for one fact is one
+   * too many, and the pool is the owner: it knows both ids and mints the log once.
+   */
   async initialize(preWarmedProvider?: AITransport): Promise<boolean> {
-    return this.providerLifecycle.initialize(preWarmedProvider);
+    this.provider = preWarmedProvider ?? (await acquireWarmProvider());
+    if (!this.provider) {
+      await this.sendEvent({
+        type: ServerEventType.ERROR,
+        error: 'No AI provider available. Install Claude CLI.',
+      });
+      return false;
+    }
+    return true;
   }
 
   getSessionLogger(): SessionLogger | null {

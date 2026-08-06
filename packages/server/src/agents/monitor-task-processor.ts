@@ -6,12 +6,13 @@
  */
 
 import { ServerEventType } from '@yaar/shared';
-import type { PoolContext, Task } from './pool-types.js';
+import type { MonitorPoolContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-pool.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { monitorSource } from './context.js';
 import { monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
+import { enqueueOrReject } from './queue-refusal.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
 
 /**
@@ -29,58 +30,63 @@ function monitorOf(task: Task): string {
 }
 
 export class MonitorTaskProcessor {
-  constructor(private readonly ctx: PoolContext) {}
+  constructor(private readonly ctx: MonitorPoolContext) {}
 
   /**
    * Route a monitor task: to the monitor agent if idle, or to an ephemeral agent.
+   *
+   * No budget slot is taken here. A slot is "one background monitor allowed to run a
+   * query", and this method mostly does not run one — it may steer an already-running
+   * turn, or simply enqueue. Held from here, a slot covered the whole queue *drain* that
+   * `processMonitorTask` performs on its way out (many turns, one slot) while
+   * `ContextPool.resumeMonitor` entered exactly the same drain holding **none**, so
+   * `MONITOR_MAX_CONCURRENT` meant a different thing depending on which door the work came
+   * in by. It is taken around each turn instead — see {@link withBudgetSlot}.
    */
   async queueMonitorTask(task: Task): Promise<void> {
-    const monitorId = monitorOf(task);
+    await this.queueMonitorTaskInner(task, monitorOf(task));
+  }
 
-    // Acquire budget slot for background monitors (blocks until available)
+  /**
+   * Run one background monitor's turn against its concurrency budget.
+   *
+   * Wraps a *turn*, never a drain: `processMonitorTask` re-enters `processMonitorQueue`
+   * when its turn finishes, so a slot held across that would be held while the next turn
+   * asks for one of its own — with `MONITOR_MAX_CONCURRENT` background monitors draining,
+   * that is a deadlock against a semaphore each of them is waiting on and holding.
+   * The primary monitor is never throttled, so this is a straight pass-through for it.
+   */
+  private async withBudgetSlot(monitorId: string, run: () => Promise<void>): Promise<void> {
     await this.ctx.budgetPolicy.acquireTaskSlot(monitorId);
-
     try {
-      await this.queueMonitorTaskInner(task, monitorId);
+      await run();
     } finally {
       this.ctx.budgetPolicy.releaseTaskSlot(monitorId);
     }
   }
 
   /**
-   * Enqueue a task, or tell the client the queue is full. Returns whether it was queued.
+   * Enqueue a monitor task, or tell the client the queue is full.
    *
-   * `why` is the second sentence of the refusal. The plan proposed collapsing the two
-   * wordings into one, but they are not the same message: "Monitor is suspended" says
-   * the queue will not drain until someone resumes it, while "Please wait" says it is
-   * draining already. Losing that leaves the suspended case advising the user to wait
-   * for something that is not going to happen.
+   * The mechanism is shared with the window queue (`agents/queue-refusal.ts`); `why` — the
+   * refusal's second sentence — deliberately is not. See that module's header.
    */
-  private async enqueueOrReject(
+  private enqueueOrReject(
     queue: { canEnqueue(): boolean; enqueue(task: Task): number },
     task: Task,
     monitorId: string,
     why: string,
     queuedLog: (position: number) => string,
   ): Promise<boolean> {
-    if (!queue.canEnqueue()) {
-      await this.ctx.sendEvent({
-        type: ServerEventType.ERROR,
-        error: `Message queue is full (${MAX_QUEUE_SIZE} messages). ${why}`,
-        messageId: task.messageId,
-        monitorId,
-      });
-      return false;
-    }
-
-    const position = queue.enqueue(task);
-    console.log(queuedLog(position));
-    await this.ctx.sendEvent({
-      type: ServerEventType.MESSAGE_QUEUED,
-      messageId: task.messageId,
-      position,
+    return enqueueOrReject({
+      sendEvent: (event) => this.ctx.sendEvent(event),
+      queue: { canEnqueue: () => queue.canEnqueue(), enqueue: () => queue.enqueue(task) },
+      task,
+      monitorId,
+      maxQueueSize: MAX_QUEUE_SIZE,
+      why,
+      queuedLog,
     });
-    return true;
   }
 
   private async queueMonitorTaskInner(task: Task, monitorId: string): Promise<void> {
@@ -104,11 +110,14 @@ export class MonitorTaskProcessor {
       return;
     }
 
-    // Monitor agent busy → interrupt + queue for relay/hook messages so they
-    // never silently evaporate (streamInput can succeed but the model may not
-    // actually process the injected message).
-    const isRelay = task.messageId.startsWith('relay-') || task.messageId.startsWith('hook-resp-');
-    if (isRelay) {
+    // Monitor agent busy → interrupt + queue for agent-to-agent traffic (a relay, or an
+    // app agent's answer coming back) so it never silently evaporates: `streamInput` can
+    // succeed while the model never actually processes the injected message, and unlike a
+    // user, nothing behind these will notice and ask again.
+    //
+    // This used to be decided by sniffing `task.messageId` for `relay-`/`hook-resp-`
+    // prefixes minted in three unrelated files. `Task.kind` says it instead.
+    if (task.kind === 'relay' || task.kind === 'hook') {
       const queued = await this.enqueueOrReject(
         this.ctx.getOrCreateMonitorQueue(monitorId),
         task,
@@ -169,11 +178,18 @@ export class MonitorTaskProcessor {
   }
 
   /**
-   * Process a monitor task on the monitor agent (provider session continuity).
-   * Drains callback queue before processing.
+   * Process a monitor task on the monitor agent (provider session continuity), then drain
+   * whatever queued behind it.
+   *
+   * The turn holds a budget slot; the drain does not, and each turn it starts takes its own.
    */
   async processMonitorTask(agent: PooledAgent, task: Task): Promise<void> {
     const monitorId = monitorOf(task);
+    await this.withBudgetSlot(monitorId, () => this.runMonitorTurn(agent, task, monitorId));
+    await this.processMonitorQueue(monitorId);
+  }
+
+  private async runMonitorTurn(agent: PooledAgent, task: Task, monitorId: string): Promise<void> {
     const turnRole = monitorTurnRole(monitorId, task.messageId);
 
     agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
@@ -214,8 +230,6 @@ export class MonitorTaskProcessor {
         agent.session.setOutputCallback(null);
       },
     });
-
-    await this.processMonitorQueue(monitorId);
   }
 
   /**
@@ -224,6 +238,13 @@ export class MonitorTaskProcessor {
    */
   async processEphemeralTask(agent: PooledAgent, task: Task): Promise<void> {
     const monitorId = monitorOf(task);
+    // An ephemeral agent consumes a provider exactly as the monitor agent does, so it
+    // is billed the same slot — this is the one turn that used to be covered only
+    // incidentally, by the slot `queueMonitorTask` happened to be holding.
+    await this.withBudgetSlot(monitorId, () => this.runEphemeralTurn(agent, task, monitorId));
+  }
+
+  private async runEphemeralTurn(agent: PooledAgent, task: Task, monitorId: string): Promise<void> {
     const turnRole = ephemeralRole(monitorId, task.messageId);
 
     agent.session.setOutputCallback(
