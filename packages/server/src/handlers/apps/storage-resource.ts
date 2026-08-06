@@ -21,6 +21,7 @@ import {
 import { subscriptionRegistry } from '../../http/subscriptions.js';
 import { appStoragePath, parseAppStoragePath } from './paths.js';
 import { copyStorageBytes, decodeWriteContent } from '../storage-bytes.js';
+import { COPY_FROM_REQUIRED, copyFrom, isCopyPayload } from '../storage-copy.js';
 import { describeStoragePath } from '../storage-describe.js';
 
 /**
@@ -158,14 +159,15 @@ export async function invokeStorage(
   const prefixedPath = appStoragePath(storagePath.appId, storagePath.path);
 
   // `copy` is how a file crosses between this app's storage and the shared tree
-  // without its bytes passing through whoever asked for the move.
-  if (payload.action === 'copy') {
-    if (typeof payload.from !== 'string')
-      return error('"from" (a yaar:// storage URI) is required for copy.');
-    const copied = await copyStorageBytes(payload.from, prefixedPath);
+  // without its bytes passing through whoever asked for the move. The source is
+  // authorized at the door, against this same field — handlers/storage-copy.ts.
+  if (isCopyPayload(payload)) {
+    const from = copyFrom(payload);
+    if (from === null) return error(COPY_FROM_REQUIRED);
+    const copied = await copyStorageBytes(from, prefixedPath);
     if ('error' in copied) return error(copied.error);
     subscriptionRegistry.notifyChange(resolved.sourceUri);
-    return ok(`Copied ${payload.from} → ${resolved.sourceUri} (${copied.bytes} bytes)`);
+    return ok(`Copied ${from} → ${resolved.sourceUri} (${copied.bytes} bytes)`);
   }
 
   if (payload.action !== 'write') return error(`Unknown storage action "${payload.action}".`);

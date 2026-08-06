@@ -21,6 +21,13 @@ import {
 import { ok, okJson, okWithImages, okResource, okLinks, error } from './utils.js';
 import { prependNote, applyEdit, applyReadOptions, mimeFromPath } from './utils.js';
 import { copyStorageBytes, decodeWriteContent } from './storage-bytes.js';
+import {
+  COPY_ACTION,
+  COPY_FROM_REQUIRED,
+  COPY_FROM_SCHEMA,
+  copyFrom,
+  isCopyPayload,
+} from './storage-copy.js';
 import { describeStoragePath } from './storage-describe.js';
 
 // ── Helpers ──
@@ -54,7 +61,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       type: 'object',
       required: ['action'],
       properties: {
-        action: { type: 'string', enum: ['write', 'copy', 'edit', 'grep'] },
+        action: { type: 'string', enum: ['write', COPY_ACTION, 'edit', 'grep'] },
         pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
         glob: { type: 'string', description: 'Glob pattern to filter files (grep)' },
         content: { type: 'string', description: 'File content (for write)' },
@@ -65,12 +72,7 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
             'Set to "base64" when "content" is base64-encoded binary (images, PDFs). ' +
             'Omit for text. Writing binary without it stores the base64 text itself.',
         },
-        from: {
-          type: 'string',
-          description:
-            'Source yaar:// storage URI to copy bytes from (copy). Either spelling works: ' +
-            'yaar://storage/… or yaar://apps/{id}/storage/…',
-        },
+        from: COPY_FROM_SCHEMA,
         old_string: { type: 'string', description: 'Text to find (edit string mode)' },
         new_string: { type: 'string', description: 'Replacement text (edit)' },
         start_line: {
@@ -201,13 +203,15 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
         return ok(`Written to yaar://storage/${path}`);
       }
 
-      if (action === 'copy') {
+      if (isCopyPayload(payload)) {
         if (!path) return error('Cannot copy onto the storage root. Provide a destination path.');
-        if (typeof payload.from !== 'string')
-          return error('"from" (a yaar:// storage URI) is required for copy.');
-        const copied = await copyStorageBytes(payload.from, path);
+        // The same field `POST /api/verb` checks `read` on before dispatching here —
+        // see handlers/storage-copy.ts. This handler authorizes nothing itself.
+        const from = copyFrom(payload);
+        if (from === null) return error(COPY_FROM_REQUIRED);
+        const copied = await copyStorageBytes(from, path);
         if ('error' in copied) return error(copied.error);
-        return ok(`Copied ${payload.from} → yaar://storage/${path} (${copied.bytes} bytes)`);
+        return ok(`Copied ${from} → yaar://storage/${path} (${copied.bytes} bytes)`);
       }
 
       if (action === 'edit') {

@@ -13,6 +13,7 @@
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
+import { copySources } from '../../handlers/storage-copy.js';
 import type { InvokePayload, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   namesSelf,
@@ -338,16 +339,14 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   // for the whole tree, spelled as a write. The source is checked under the same rules
   // as reading it directly; `copy` adds no authority, only a cheaper route.
   //
-  // Applied per *element*, because a batched invoke is N calls and the registry runs them
-  // without coming back through this door — checking only the object form would make the
-  // array form the bypass.
+  // `copySources` is shared with the handlers that implement `copy` (handlers/storage-copy.ts)
+  // so the field this gate reads and the field they act on cannot drift apart. It covers
+  // both payload axes: a batched invoke is N calls the registry runs without coming back
+  // through this door, so checking only the object form would make the array form the bypass.
   if (verb === 'invoke') {
-    for (const element of Array.isArray(body.payload) ? body.payload : [body.payload]) {
-      if (element?.action !== 'copy') continue;
-      const from = element.from;
-      if (typeof from !== 'string') {
-        return errorResponse('"from" (a yaar:// storage URI) is required for copy', 400);
-      }
+    const copies = copySources(body.payload);
+    if ('error' in copies) return errorResponse(copies.error, 400);
+    for (const from of copies.sources) {
       const deniedSource = requirePermission(principal, from, 'read');
       if (deniedSource) return deniedSource;
     }
