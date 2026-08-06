@@ -46,16 +46,21 @@ export class WindowStateRegistry {
    */
   private appNoReplay: Map<string, Set<string>> = new Map();
   /**
-   * Per window: storage files a more-privileged principal named *to* this window's app,
-   * each readable by it for as long as the window lives.
+   * Per window: everything a caller granted *to this window* at runtime — the storage
+   * files a more-privileged principal named to its app, the permissions such a caller
+   * added on top of the manifest, and the document the window was told to render. Each
+   * readable by the window's app for as long as the window lives.
    *
-   * Kept here rather than on the iframe token because the token is not durable — it is
-   * re-minted on remount and on reconnect (`/api/iframe-token`), and a grant recorded on
-   * the old one would vanish the first time the desktop reloaded. Keyed like
-   * `appCommands`, and dropped by the same `window.close` that drops them.
+   * This is the single home of window-scoped **authority**; the iframe token carries only
+   * **identity**. The token is not durable — it is re-minted on remount and on reconnect
+   * (`/api/iframe-token`) from identity alone — so authority recorded on it vanishes the
+   * first time the desktop reloads. Keyed like `appCommands`, and dropped by the same
+   * `window.close` that drops them.
    *
-   * Minted by `features/window/delegated-grants.ts`, which is also where the rules for
-   * what may be delegated live; read at the access gate via `getWindowGrants`.
+   * The producers narrow, this only stores: `features/window/delegated-grants.ts` holds
+   * the rules for what a payload may delegate, and `features/window/create.ts` gates the
+   * caller-supplied permissions on the same `mayDelegateGrants` check. Read at the access
+   * gate via `getWindowGrants`.
    */
   private delegatedGrants: Map<string, PermissionEntry[]> = new Map();
   /**
@@ -275,10 +280,11 @@ export class WindowStateRegistry {
         this.windows.delete(key);
         this.appCommands.delete(key);
         this.appNoReplay.delete(key);
-        // Both spellings — see getWindowGrants for why a grant can be filed under the
-        // raw id. A revoked grant that survives under the other key is a live one.
+        // Every spelling — see getWindowGrants for why a grant can be filed under the
+        // raw id. A revoked grant that survives under another key is a live one.
         this.delegatedGrants.delete(key);
         this.delegatedGrants.delete(action.windowId);
+        this.delegatedGrants.delete(this.handleMap.getRawWindowId(key));
         this.stack = this.stack.filter((id) => id !== key);
         this.refocusIfHolding(key);
         this.handleMap.remove(key);
@@ -536,7 +542,12 @@ export class WindowStateRegistry {
    */
   grantWindowAccess(windowId: string, entries: readonly PermissionEntry[], monitorId?: string) {
     if (entries.length === 0) return;
-    const key = this.targetKey(windowId, monitorId) ?? windowId;
+    // `window.create` records its grants *before* the emit, so the window does not exist
+    // yet and `targetKey` finds nothing. Falling back to the bare raw id filed the grant
+    // under a key every monitor's copy of the same app resolves to; `handleFor` gives the
+    // handle the create is about to register, without registering it.
+    const key =
+      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
     const existing = this.delegatedGrants.get(key) ?? [];
     const seen = new Set(existing.map((e) => (typeof e === 'string' ? e : e.uri)));
     const added = entries.filter((e) => {
@@ -558,14 +569,22 @@ export class WindowStateRegistry {
    * monitor at mint time precisely so this lookup can be exact.
    */
   getWindowGrants(windowId: string, monitorId?: string): PermissionEntry[] {
-    const key = this.targetKey(windowId, monitorId) ?? windowId;
-    const resolved = this.delegatedGrants.get(key) ?? [];
-    // Also read the raw id when it is not the key we just resolved. A grant recorded
-    // before the frontend confirmed the window exists lands under the raw id; every
-    // later one lands under the handle. Unioning is how a file named at create time
-    // stays granted once the window is registered.
-    const raw = key === windowId ? [] : (this.delegatedGrants.get(windowId) ?? []);
-    return raw.length === 0 ? resolved : [...resolved, ...raw];
+    const key =
+      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
+    // Every spelling of this one window, unioned. A caller may ask by raw id (an agent
+    // turn) or by handle (an iframe token minted at reconnect), and a grant recorded by a
+    // path that had no monitor to scope it with still sits under the bare raw id. Reading
+    // only the resolved key is how a file named at create time stopped being granted the
+    // moment the desktop reloaded and the token came back naming the handle.
+    const out: PermissionEntry[] = [];
+    const seen = new Set<string>();
+    for (const spelling of [key, windowId, this.handleMap.getRawWindowId(windowId)]) {
+      if (seen.has(spelling)) continue;
+      seen.add(spelling);
+      const entries = this.delegatedGrants.get(spelling);
+      if (entries) out.push(...entries);
+    }
+    return out;
   }
 
   /**

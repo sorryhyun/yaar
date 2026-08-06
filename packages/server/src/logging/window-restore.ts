@@ -153,10 +153,17 @@ export async function refreshRestoredWindowActions(
     actions.map(async (action) => {
       if (action.type !== 'window.create' || action.content?.renderer !== 'iframe') return action;
       const data = action.content.data;
+      // The action's own `appId` first. Deriving it from the content *path* alone is a
+      // guess that only works for the two shapes below, and a window whose document is
+      // storage-served — which is every devtools preview — matches neither: it came back
+      // as an anonymous iframe principal, losing `self` resolution and with it the
+      // automatic `yaar://apps/self/{storage,db,agents}/` grants. A token is supposed to
+      // be the pure carrier of identity; identity did not survive the refresh either.
       const appId =
-        typeof data === 'string'
+        action.appId ??
+        (typeof data === 'string'
           ? (extractAppId(data) ?? extractAppIdFromPath(data) ?? undefined)
-          : undefined;
+          : undefined);
       // Restored ids are scoped handles ("0/dock"), so the monitor is right there in
       // the id — carry it onto the token rather than making the verb route re-derive it.
       const slashIdx = action.windowId.indexOf('/');

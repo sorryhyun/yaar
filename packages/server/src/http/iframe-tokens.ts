@@ -4,6 +4,30 @@
  * Tokens are generated when creating iframe windows and injected into the iframe SDK.
  * The server uses these tokens to identify iframe-originated requests and restrict
  * them to PUBLIC_ENDPOINTS only.
+ *
+ * ── A token is identity, not authority ──
+ *
+ * What a token carries is *who this iframe is*: its window, its session, its monitor,
+ * and what its own manifest declares (`permissions`, `systemApp`, `bundles`, `streams`).
+ * What a caller granted **to this window** at runtime — a file an agent named to it, the
+ * document it was told to render, permissions a privileged caller added on top — is not
+ * here. It lives on `WindowStateRegistry` (see its `delegatedGrants`) and is read per
+ * request at the access gate.
+ *
+ * The reason is that a token is not durable and a window is: every reconnect re-mints one
+ * per open iframe window, per connection, from identity alone. Authority baked in at mint
+ * time therefore vanishes on the first page refresh — which is exactly what made devtools
+ * previews 403 on their own document after a reload. Identity is re-mintable at will;
+ * authority survives remount and dies with the window.
+ *
+ * ── Several live tokens per window is the design ──
+ *
+ * Two tabs on one session each hold their own token for the same window, and a re-mint
+ * deliberately does not revoke its predecessor — the other tab is still showing that
+ * window. What must not happen is a token outliving the window it is a credential for,
+ * which is what `revokeTokensForWindow` (wired into the close pipeline in
+ * `LiveSession`) is for. The 24h TTL remains the backstop for windows that never see a
+ * clean close.
  */
 
 import { join } from 'node:path';
@@ -85,18 +109,51 @@ interface TokenEntry {
 
 const tokens = new Map<string, TokenEntry>();
 
+/**
+ * Every live token for one window, so a close can revoke all of them at once.
+ *
+ * Scoped by monitor as well as session, because a raw window id repeats across monitors
+ * — the same app open on two of them mints two tokens both spelled `memo`, and closing
+ * one window must not revoke the other window's credential.
+ */
+const tokensByWindow = new Map<string, Set<string>>();
+
+function windowIndexKey(sessionId: string, windowId: string, monitorId?: string): string {
+  return `${sessionId}::${monitorId ?? ''}::${windowId}`;
+}
+
+/**
+ * Drop the app's cookie jar only once nothing is left holding it.
+ *
+ * The jar is keyed by (session, app), not by window, so an app with two windows open
+ * shares one. Clearing it whenever *a* token dies was harmless while the only caller was
+ * the 24h TTL; with revocation wired to window close it would log the app's other window
+ * out of whatever it had fetched.
+ */
+function clearJarIfOrphaned(entry: TokenEntry): void {
+  for (const other of tokens.values()) {
+    if (other.sessionId === entry.sessionId && other.appId === entry.appId) return;
+  }
+  clearJar(jarKey(entry.sessionId, entry.appId));
+}
+
+/** Remove one token from every structure that holds it. The single teardown path. */
+function forgetToken(token: string, entry: TokenEntry): void {
+  clearTimeout(entry.timer);
+  tokens.delete(token);
+  const key = windowIndexKey(entry.sessionId, entry.windowId, entry.monitorId);
+  const live = tokensByWindow.get(key);
+  if (live) {
+    live.delete(token);
+    if (live.size === 0) tokensByWindow.delete(key);
+  }
+  clearJarIfOrphaned(entry);
+}
+
 /** Identity carried by an iframe token, beyond the window and session it belongs to. */
 export interface IframeTokenOptions {
   appId?: string;
   permissions?: PermissionEntry[];
-  /**
-   * Permissions a privileged caller is adding on top of the app's declared list.
-   *
-   * Distinct from `permissions`, which *is* the list. Only `generateAppIframeToken`
-   * reads this, and only after its caller has established that the caller outranks the
-   * app — see the note at the `window.create` call site.
-   */
-  extraPermissions?: PermissionEntry[];
   /** Monitor the window lives on. See TokenEntry.monitorId. */
   monitorId?: string;
   systemApp?: boolean;
@@ -104,11 +161,6 @@ export interface IframeTokenOptions {
   bundles?: string[];
   /** Streamable capabilities from app.json `streams`. See TokenEntry.streams. */
   streams?: string[];
-  /**
-   * The `yaar://` URI of the document this iframe was told to render, if it is
-   * one storage serves. Auto-granted `read`. See generateAppIframeToken.
-   */
-  documentUri?: string;
 }
 
 /**
@@ -123,8 +175,7 @@ export function generateIframeToken(
   const token = crypto.randomUUID();
   const timer = setTimeout(() => {
     const entry = tokens.get(token);
-    if (entry) clearJar(jarKey(entry.sessionId, entry.appId));
-    tokens.delete(token);
+    if (entry) forgetToken(token, entry);
   }, TOKEN_TTL_MS);
   tokens.set(token, {
     windowId,
@@ -138,6 +189,13 @@ export function generateIframeToken(
     createdAt: Date.now(),
     timer,
   });
+  const key = windowIndexKey(sessionId, windowId, monitorId);
+  let live = tokensByWindow.get(key);
+  if (!live) {
+    live = new Set();
+    tokensByWindow.set(key, live);
+  }
+  live.add(token);
   return token;
 }
 
@@ -185,18 +243,11 @@ export async function previewBundles(
 export async function generateAppIframeToken(
   windowId: string,
   sessionId: string,
-  {
-    appId,
-    permissions: explicitPermissions,
-    extraPermissions,
-    monitorId,
-    documentUri,
-  }: IframeTokenOptions = {},
+  { appId, permissions: explicitPermissions, monitorId }: IframeTokenOptions = {},
 ): Promise<string> {
   const { getAppMeta } = await import('../features/apps/discovery.js');
   const appMeta = appId ? await getAppMeta(appId) : null;
   let permissions = explicitPermissions ?? appMeta?.permissions ?? [];
-  if (extraPermissions?.length) permissions = [...permissions, ...extraPermissions];
 
   // Auto-grant the app's own namespace (see SELF_GRANTS).
   if (appId) {
@@ -209,22 +260,11 @@ export async function generateAppIframeToken(
     }
   }
 
-  // An iframe may always read the document it was told to render. The window's
-  // content URL is chosen by the server, not the iframe, and the browser fetches
-  // it under this very token — so without this the gate can deny a window the one
-  // file it exists to display. It did: devtools previews are served out of
-  // *devtools'* storage (`/api/storage/apps/devtools/projects/{id}/dist/…`) while
-  // the preview window runs under a `preview--{id}` principal of its own, which
-  // holds no permission there. Every preview 403'd on its own document.
-  //
-  // Narrow on purpose: this exact file, `read` only. It grants no prefix, so it
-  // cannot become a foothold in the storage namespace that happens to host it.
-  if (
-    documentUri &&
-    !permissions.some((p) => (typeof p === 'string' ? p : p.uri) === documentUri)
-  ) {
-    permissions = [...permissions, { uri: documentUri, verbs: ['read'] }];
-  }
+  // The document this iframe was told to render, and any permissions a privileged
+  // caller added on top, used to be folded in here. They are window-scoped authority,
+  // not identity, so they now live on `WindowStateRegistry` and are read per request at
+  // the access gate — see this file's header, and `features/window/create.ts` for the
+  // producers. Nothing is left for a re-mint to forget.
 
   // systemApp, bundles and streams come from the app's own manifest, never from the
   // caller — they are the app's declared identity, not a property of the request
@@ -247,22 +287,40 @@ export function validateIframeToken(token: string): TokenEntry | null {
   const entry = tokens.get(token);
   if (!entry) return null;
   if (Date.now() - entry.createdAt > TOKEN_TTL_MS) {
-    clearTimeout(entry.timer);
-    clearJar(jarKey(entry.sessionId, entry.appId));
-    tokens.delete(token);
+    forgetToken(token, entry);
     return null;
   }
   return entry;
 }
 
 /**
- * Revoke a token (e.g., when a window is closed).
+ * Revoke every token out for one window — the close pipeline's call.
+ *
+ * A window closing is the end of the thing its tokens are credentials *for*, and every
+ * other trace of it (delegated grants, app commands, subscriptions, the context tape, the
+ * app agent) is already dropped at that point. Without this the token stayed valid, with
+ * the same appId and the same permissions, for the remainder of its 24h TTL.
+ *
+ * **Both id spellings must be revoked, and that is the caller's job**: a token minted by
+ * `window.create` is keyed by the raw id, one minted by restore or a reconnect by the
+ * monitor-scoped handle, and this module deliberately does not know how to parse a handle
+ * (`WindowHandleMap` owns that format). `LiveSession` calls this once per spelling.
+ *
+ * Returns how many tokens were revoked.
  */
-export function revokeIframeToken(token: string): void {
-  const entry = tokens.get(token);
-  if (entry) {
-    clearTimeout(entry.timer);
-    clearJar(jarKey(entry.sessionId, entry.appId));
-    tokens.delete(token);
+export function revokeTokensForWindow(
+  sessionId: string,
+  windowId: string,
+  monitorId?: string,
+): number {
+  const live = tokensByWindow.get(windowIndexKey(sessionId, windowId, monitorId));
+  if (!live) return 0;
+  let revoked = 0;
+  for (const token of [...live]) {
+    const entry = tokens.get(token);
+    if (!entry) continue;
+    forgetToken(token, entry);
+    revoked++;
   }
+  return revoked;
 }

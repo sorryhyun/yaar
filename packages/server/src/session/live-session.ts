@@ -54,6 +54,8 @@ import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
 import { getHooksByEvent } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
+import { revokeTokensForWindow } from '../http/iframe-tokens.js';
+import { storageDocumentUri } from '../features/window/helpers.js';
 import type { SessionLogger } from '../logging/index.js';
 import {
   normalizeAgentKey,
@@ -195,6 +197,7 @@ export class LiveSession {
     // Restore windows from previous session
     if (options.restoreActions && options.restoreActions.length > 0) {
       this.windowState.restoreFromActions(options.restoreActions);
+      this.regrantRestoredDocuments(options.restoreActions);
     }
 
     this.monitorRegistry = new MonitorRegistry({
@@ -222,6 +225,28 @@ export class LiveSession {
       windowState: this.windowState,
       broadcast: (event) => this.broadcast(event),
       getPool: () => this.pool,
+    });
+
+    // Everything scoped to a window dies with it: its iframe tokens, its cached actions,
+    // its subscriptions, its app agent's queue, and its readiness record.
+    //
+    // Registered here rather than after pool init, where the pool half of it used to
+    // live, because **windows outlive the pool**: a restore replays them into the
+    // constructor above, and `POST /api/iframe-token` mints against sessions that never
+    // get one. A teardown a pool-less session cannot reach is a credential that is never
+    // revoked — which is the state this whole chain was in for tokens.
+    this.windowState.setOnWindowClose((wid, appId, monitorId) => {
+      // Both id spellings: a token minted by `window.create` is keyed by the raw id, one
+      // minted by restore or a reconnect by the scoped handle, and several may be out at
+      // once (one per connected tab). Scoped to this window's own monitor, so the same
+      // app open on another monitor keeps its own token.
+      const raw = this.windowState.handleMap.getRawWindowId(wid);
+      revokeTokensForWindow(this.sessionId, wid, monitorId);
+      if (raw !== wid) revokeTokensForWindow(this.sessionId, raw, monitorId);
+      this.reloadCache.invalidateForWindow(wid);
+      this.pool?.handleWindowClose(wid, appId, monitorId);
+      subscriptionRegistry.clearForWindow(wid);
+      this.appWindows.forgetReady(wid);
     });
 
     this.router = new ClientEventRouter(
@@ -259,6 +284,30 @@ export class LiveSession {
       broadcast: (event) => this.broadcast(event),
     };
     sessionEventRouter.attach(sessionId, this.eventSink);
+  }
+
+  /**
+   * Re-grant each restored window the document it renders.
+   *
+   * A server restart starts with an empty grant registry, but the `window.create` being
+   * replayed still carries its content path — so the one piece of window-scoped authority
+   * a restart *can* recover is recovered here, and restart-restore ends up strictly better
+   * than it was when this lived on the token (a stale token is not in the map at all).
+   *
+   * Deliberately not recovered: the permissions a caller added at create time and the
+   * files it named to the app. Neither was ever written to the session log, and inventing
+   * them would be a grant nobody made — the same accepted loss delegated grants already
+   * carry across a restart.
+   *
+   * Restored ids are monitor-scoped handles ("0/dock") and `restoreFromActions` has just
+   * registered them, so no monitor need be passed: the handle resolves exactly.
+   */
+  private regrantRestoredDocuments(actions: OSAction[]): void {
+    for (const action of actions) {
+      if (action.type !== 'window.create' || action.content?.renderer !== 'iframe') continue;
+      const uri = storageDocumentUri(action.content.data);
+      if (uri) this.windowState.grantWindowAccess(action.windowId, [{ uri, verbs: ['read'] }]);
+    }
   }
 
   /**
@@ -525,15 +574,8 @@ export class LiveSession {
       this.acquireProvider,
     );
 
-    // Chain window close handlers: reload cache invalidation + pool agent cleanup
-    const pool = this.pool;
-    const reloadCache = this.reloadCache;
-    this.windowState.setOnWindowClose((wid, appId, monitorId) => {
-      reloadCache.invalidateForWindow(wid);
-      pool.handleWindowClose(wid, appId, monitorId);
-      subscriptionRegistry.clearForWindow(wid);
-      this.appWindows.forgetReady(wid);
-    });
+    // The window-close teardown (including `pool.handleWindowClose`) is wired in the
+    // constructor — see there for why it cannot wait for the pool to exist.
 
     // Pass the session-owned logger (if already created by early user interactions)
     // so the pool reuses the same log directory instead of creating a second one.

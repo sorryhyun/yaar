@@ -42,6 +42,22 @@ export class WindowHandleMap {
   }
 
   /**
+   * The handle a raw ID *would* have on a monitor, without registering anything.
+   *
+   * `register` is for a window that exists. This is for the moment before one does:
+   * `window.create` records the grants it is handing the new window *before* the emit,
+   * and a grant filed under the bare raw ID is one that every monitor's copy of the same
+   * app can read. Returns the ID unchanged when there is no monitor to scope it to, or
+   * when it is already a handle — scoping a handle again mints "0/1/memo", a key nothing
+   * else ever produces.
+   */
+  handleFor(rawWindowId: string, monitorId?: string): string {
+    if (!monitorId) return rawWindowId;
+    if (this.handleToMonitor.has(rawWindowId) || rawWindowId.includes('/')) return rawWindowId;
+    return `${monitorId}/${rawWindowId}`;
+  }
+
+  /**
    * Remove a handle and its index entries. Only the owning monitor's entry is
    * dropped — another monitor's window with the same raw ID keeps its mapping.
    */

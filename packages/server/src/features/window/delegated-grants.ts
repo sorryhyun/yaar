@@ -27,9 +27,25 @@
  * never exceed what the delegator already had, and the delegator is naming one file on
  * purpose.
  *
- * It generalises a rule that already existed for exactly one case — `documentUri` in
- * `http/iframe-tokens.ts`, "an iframe may always read the document it was told to
- * render" — from *the window's own URL* to *any reference the server passes inward*.
+ * It generalises a rule that already existed for exactly one case — "an iframe may always
+ * read the document it was told to render" — from *the window's own URL* to *any reference
+ * the server passes inward*.
+ *
+ * ── This module is one of two producers ──
+ *
+ * `WindowStateRegistry.delegatedGrants` is the single home of window-scoped authority, and
+ * it only *stores*; the narrowing is each producer's job:
+ *
+ *  - **This module** — URIs walked out of a payload. All four narrowings below apply.
+ *  - **`create.ts`** — the two grants `window.create` makes directly: the caller-supplied
+ *    `permissions` list (gated on the same `mayDelegateGrants` check, and additive so it
+ *    can never subtract from the manifest) and the window's own document URI (one exact
+ *    file, `read` only). These lived on the iframe token until they were found to be lost
+ *    on every reconnect, which is the lesson narrowing 4 below had already recorded.
+ *
+ * So "read-only, exact files" describes what *this* producer mints. A caller-supplied
+ * permission entry may legitimately be a prefix — its authority is the caller's own, and
+ * the caller outranks the app by construction.
  *
  * ── Four things keep it narrow ──
  *

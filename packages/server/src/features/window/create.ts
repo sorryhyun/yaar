@@ -19,8 +19,6 @@ import { getSessionId } from '../../agents/agent-context.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { resolveResourceUri } from '../../handlers/uri-resolve.js';
 import { generateAppIframeToken } from '../../http/iframe-tokens.js';
-import { storageUriForPath } from '../../http/access.js';
-import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
 import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
@@ -31,32 +29,11 @@ import {
   deriveWindowId,
   allocateWindowId,
   getAppMetaOverrides,
+  storageDocumentUri,
 } from './helpers.js';
 
 /** How long an iframe window gets to report that its content rendered. */
 const IFRAME_RENDER_TIMEOUT_MS = 2_000;
-
-/**
- * Name the `yaar://` URI of an iframe's own document, when storage is what serves it.
- *
- * The browser fetches this URL under the window's iframe token, so it passes through
- * the same gate as any other storage read — and it is parsed here the same way the
- * gate parses it (`parseContentPath` over a decoded pathname), so the URI granted is
- * the URI checked. Returns undefined for content storage does not serve — an external
- * site, or a bundled app under `/api/apps/`, which is not permission-gated at all.
- */
-function storageDocumentUri(data: unknown): string | undefined {
-  if (typeof data !== 'string') return undefined;
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(data.split('?')[0]);
-  } catch {
-    return undefined; // malformed escape — names no file
-  }
-  const parsed = parseContentPath(decoded);
-  if (parsed?.authority !== 'storage') return undefined;
-  return storageUriForPath(parsed.path) ?? undefined;
-}
 
 /**
  * Single source of truth for a new window's bounds.
@@ -247,6 +224,12 @@ export async function handleCreate(
   // client has no way to compute `https://<magic-dns>:8443` from where it is standing.
   const appOrigin = isolateOrigin ? isolatedAppOrigin() : null;
 
+  // Pin the monitor now, using the same resolution the emitter will stamp on the create
+  // action below. Left to be derived later from the window id, it is ambiguous whenever
+  // the app is open on more than one monitor. Used twice: on the token, and as the scope
+  // of the grants recorded for this window.
+  const windowMonitorId = renderer === 'iframe' ? actionEmitter.resolveWindowMonitor() : undefined;
+
   const osAction: OSAction = {
     type: 'window.create',
     windowId: actualId,
@@ -260,37 +243,51 @@ export async function handleCreate(
     ...(payload.minimized ? { minimized: true } : {}),
     ...(renderer === 'iframe'
       ? {
+          // Identity only — see http/iframe-tokens.ts. Everything this window was
+          // *granted* goes on the registry, below.
           iframeToken: await generateAppIframeToken(actualId, getSessionId() ?? '', {
             appId,
-            // Caller-supplied permissions are honoured only for a caller that outranks
-            // the app (`mayDelegateGrants`) — `window.create` is reachable from any app
-            // declaring `yaar://windows/`, and these used to be taken from the payload
-            // unconditionally *and* to replace the manifest's list. An app could
-            // therefore mint itself a window whose token held `yaar://storage/`. It is
-            // additive now for the same reason: a grant must never subtract.
-            extraPermissions:
-              Array.isArray(payload.permissions) && mayDelegateGrants()
-                ? (payload.permissions as PermissionEntry[])
-                : undefined,
-            // Pin the monitor now, using the same resolution the emitter will stamp on
-            // the create action below. Left to be derived later from the window id, it
-            // is ambiguous whenever the app is open on more than one monitor.
-            monitorId: actionEmitter.resolveWindowMonitor(),
-            documentUri: storageDocumentUri(data),
+            monitorId: windowMonitorId,
           }),
         }
       : {}),
   };
 
   if (renderer === 'iframe') {
-    // Files this create named to the app it is opening — a `?file=yaar://storage/…` on
-    // the content URL, a path in an `open` payload. The window's own document is already
-    // covered by `documentUri` above; this is everything else the caller pointed at.
-    // Recorded before the emit so the app can read them on its very first turn, and
-    // filed under the raw id, which is the only key that exists until the window is.
-    if (appId) {
-      session?.windowState.grantWindowAccess(actualId, grantsFromPayload(payload));
-    }
+    // Everything this window is granted at runtime, as opposed to what its manifest
+    // declares. Three producers, one home:
+    //
+    //  - **Files this create named to the app** — a `?file=yaar://storage/…` on the
+    //    content URL, a path in an `open` payload. `grantsFromPayload` applies all four
+    //    narrowings (privileged caller only, exact files, `read` only, window-scoped).
+    //  - **Permissions a privileged caller added on top.** Honoured only for a caller
+    //    that outranks the app (`mayDelegateGrants`) — `window.create` is reachable from
+    //    any app declaring `yaar://windows/`, and these were once taken from the payload
+    //    unconditionally *and* used to replace the manifest's list, so an app could mint
+    //    itself a window holding `yaar://storage/`. Additive for the same reason: a
+    //    grant must never subtract.
+    //  - **The document the window exists to render**, when storage is what serves it.
+    //    The content URL is the server's choice and the browser fetches it under this
+    //    window's token, so without this the gate can deny a window its own document —
+    //    it did, for every devtools preview. This exact file, `read` only, no prefix.
+    //
+    // All three used to be baked into the token, which is re-minted on every reconnect:
+    // they were silently lost on the first page refresh. Recorded before the emit so the
+    // app can read them on its very first turn, and scoped to the monitor the window is
+    // about to be registered on — filed under the bare raw id, a grant is one every
+    // monitor's copy of the same app can read.
+    const docUri = storageDocumentUri(data);
+    session?.windowState.grantWindowAccess(
+      actualId,
+      [
+        ...grantsFromPayload(payload),
+        ...(Array.isArray(payload.permissions) && mayDelegateGrants()
+          ? (payload.permissions as PermissionEntry[])
+          : []),
+        ...(docUri ? [{ uri: docUri, verbs: ['read' as const] }] : []),
+      ],
+      windowMonitorId,
+    );
 
     const outcome = await actionEmitter.emitActionWithFeedback(osAction, IFRAME_RENDER_TIMEOUT_MS);
 

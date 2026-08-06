@@ -7,7 +7,36 @@ import type { WindowStateRegistry } from '../../session/window-state.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { error } from '../../handlers/utils.js';
+import { storageUriForPath } from '../../http/access.js';
+import { parseContentPath } from '../../lib/yaar-uri-server.js';
 import type { WindowVariant } from '@yaar/shared';
+
+/**
+ * Name the `yaar://` URI of an iframe's own document, when storage is what serves it.
+ *
+ * The browser fetches this URL under the window's iframe token, so it passes through
+ * the same gate as any other storage read — and it is parsed here the same way the
+ * gate parses it (`parseContentPath` over a decoded pathname), so the URI granted is
+ * the URI checked. Returns undefined for content storage does not serve — an external
+ * site, or a bundled app under `/api/apps/`, which is not permission-gated at all.
+ *
+ * Lives here rather than in `create.ts` because the restore path needs the same answer:
+ * a server restart replays the `window.create` with its content path intact, so the one
+ * piece of window-scoped authority a restart *can* recover is recovered by calling this
+ * (`LiveSession`). Everything else a caller granted was never written to the log.
+ */
+export function storageDocumentUri(data: unknown): string | undefined {
+  if (typeof data !== 'string') return undefined;
+  let decoded: string;
+  try {
+    decoded = decodeURIComponent(data.split('?')[0]);
+  } catch {
+    return undefined; // malformed escape — names no file
+  }
+  const parsed = parseContentPath(decoded);
+  if (parsed?.authority !== 'storage') return undefined;
+  return storageUriForPath(parsed.path) ?? undefined;
+}
 
 /** Format a window ID as a yaar:// resource URI. */
 export function formatWindowRef(windowId: string): string {

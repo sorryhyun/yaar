@@ -3,118 +3,53 @@
 **Responds to:** `audit_report.md` (2026-08-05)
 **Scope:** `packages/server/src` — iframe tokens, window-scoped authority, the session-principal gate, and the drift-surface consolidations around `/api/verb`.
 
-## The one decision everything else follows from
+## Phases 0 & 1 — ✅ landed (findings 1, 2, most of 5)
 
-The audit's diagnosis is that window-scoped authority has two competing homes — the token
-(frozen at mint) and `WindowStateRegistry` (read per request) — and the token is the one
-that keeps losing. `delegated-grants.ts` already recorded the lesson explicitly: *"tokens
-are re-minted on remount and would otherwise silently lose it."*
-
-So the decision this proposal commits to:
+The audit's diagnosis was that window-scoped authority had two competing homes — the token
+(frozen at mint) and `WindowStateRegistry` (read per request) — and the token kept losing.
+The rule now in force:
 
 > **The token is pure identity** — who this iframe is (window, session, app, monitor) and
 > what its manifest declares (`permissions`, `systemApp`, `bundles`, `streams`).
 > **`WindowStateRegistry` is the single home of window-scoped authority** — everything a
-> caller granted *to this window* at runtime (`delegatedGrants`, and now `documentUri` and
-> `extraPermissions` too). Identity is re-mintable at will; authority survives remount and
-> dies with the window.
+> caller granted *to this window* at runtime. Identity is re-mintable at will; authority
+> survives remount and dies with the window.
 
-Everything in Phase 1 is a consequence of that sentence. Phases 2–4 are independent of it
-and can land in any order after it.
+It is documented where it is enforced, not here: `packages/server/CLAUDE.md` (access
+chokepoint — the split, the three producers, the revocation), `http/iframe-tokens.ts`'s
+header, `WindowStateRegistry.delegatedGrants`, and `delegated-grants.ts`'s header.
 
----
-
-## Phase 0 — pin behavior with tests (land with Phase 1, write first)
-
-Fixes nothing; pins what both fix shapes must preserve (audit's closing recommendation).
-
-1. **Mint → refresh survival** (finding 2, currently failing): create an iframe window with
-   a storage-served document and caller-supplied `permissions`, simulate a reconnect
-   (`refreshRestoredWindowActions`), assert the app can still `read` its own document URI
-   and still holds the extra permissions. Extends `tests/iframe-document-access.test.ts`,
-   which today exercises only the mint path.
-2. **Close → revoked** (finding 1, currently failing): open an iframe window, capture its
-   token, close the window, assert `validateIframeToken` returns null — under both the raw
-   and the scoped windowId spelling, and via the app-retire path
-   (`features/apps/retire.ts`) as well as a plain close.
-3. **Multi-tab characterization** (keep passing): two connections to one session each get
-   their own token for the same window; both stay valid until the window closes. This is
-   the intended behavior finding 1's "singular token" comments contradict — pin it so the
-   revocation work cannot "fix" it away.
-
-## Phase 1 — token = identity, registry = authority (findings 1, 2, most of 5)
-
-### 1a. Move `extraPermissions` and `documentUri` off the token
-
-- `features/window/create.ts` stops passing `extraPermissions` / `documentUri` into
-  `generateAppIframeToken`. Instead the existing `grantWindowAccess` call (already made
-  before the emit, already keyed by the raw id) grows to:
-
-  ```ts
-  session?.windowState.grantWindowAccess(actualId, [
-    ...grantsFromPayload(payload),
-    ...(mayDelegateGrants() ? callerPermissions : []),      // was extraPermissions
-    ...(docUri ? [{ uri: docUri, verbs: ['read'] }] : []),  // was documentUri
-  ]);
-  ```
-
-  Two caveats found while tracing, both must be handled:
-  - **The `if (appId)` gate on that call must go.** `documentUri` matters for *plain*
-    iframe windows rendering storage-served content too (no appId), and
-    `resolveWindowGrants` in `access.ts` is not appId-conditional, so the read side
-    already supports this.
-  - **The "read-only, exact files" doc on `delegatedGrants` needs updating**, not
-    weakening: payload-derived grants keep all four narrowings (they still come through
-    `grantsFromPayload`); caller-supplied `permissions` entries stay gated on
-    `mayDelegateGrants()` exactly as they are today at the mint site. The registry stores;
-    the producers narrow. Rewrite the `delegated-grants.ts` header to name both producers.
-
-- `IframeTokenOptions` loses `extraPermissions` and `documentUri`; `generateAppIframeToken`
-  loses the corresponding blocks. This collapses the four-site options-bag drift the audit's
-  finding 13 lists — after this change, every mint site passes the same shape
-  (`{ appId, monitorId }` + optional explicit `permissions`), and there is nothing left for
-  a refresh to forget.
-
-- `storageDocumentUri` moves out of `create.ts` into a shared helper
-  (`features/window/helpers.ts` is the natural home) so the restore path can call it.
-
-### 1b. Make restore re-derive what it can
-
-- **Reconnect** (`SessionSnapshotService` → `refreshRestoredWindowActions`): nothing to do —
-  the registry survives on the live `LiveSession`, so grants now survive automatically.
-  This is the fix for the recurring devtools-preview 403.
-- **Server-restart restore** (session log replay): the registry is fresh, but
-  `action.content.data` is right there in the replayed `window.create` — call the shared
-  `storageDocumentUri(data)` and `grantWindowAccess` during replay. Restart-restore becomes
-  strictly better than today. `extraPermissions` are *not* recoverable after a restart
-  (they were never logged); document that as the accepted loss, matching what delegated
-  grants already accept.
-
-### 1c. Wire revocation to window close
-
-- `iframe-tokens.ts` gains a secondary index `Map<"{sessionId}::{windowId}", Set<token>>`
-  maintained by mint/expire/revoke, and a `revokeTokensForWindow(sessionId, windowId)`.
-- Wire it into the close pipeline at the point that holds both the sessionId and the
-  window key — the same callback chain that already reaches
-  `WindowEventCoordinator.handleWindowClose` (its `PoolContext` / the `LiveSession` that
-  registered `onWindowCloseCallback`). Revoke under **both** id spellings, exactly as
-  `window-state.ts:280-281` deletes `delegatedGrants` under both — a token minted by
-  `create.ts` is keyed by the raw id, one minted by restore by the scoped handle.
-  App retire (`features/apps/retire.ts`) inherits the fix for free, since it goes through
-  the same close pipeline.
-- **Deliberately not done:** revoking the old token on re-mint. Multi-tab is real
-  (`SessionSnapshotService` mints per connection); several live tokens per window is the
-  design, not the bug. The bug was only that none of them died with the window. Fix the
-  `TokenEntry` comments that reason about "the" token as singular.
-- The 24h TTL timer stays as the backstop for windows that never see a clean close.
+Pinned by `tests/iframe-token-lifecycle.test.ts` and `tests/iframe-document-access.test.ts`,
+both driving the real paths (`handleCreate` for the mint, `LiveSession.generateSnapshot()`
+for the reconnect, `actionEmitter` for the close). The eight cases written as `it.failing`
+ratchets in Phase 0 all flipped.
 
 ### Behavior deltas (intentional)
 
 | Before | After |
 |---|---|
 | Closed window's token valid up to 24h | Revoked at close/retire |
-| `documentUri` / `extraPermissions` lost on first reconnect | Survive for the window's lifetime |
+| Document URI / caller-supplied `permissions` lost on first reconnect | Survive for the window's lifetime |
 | Token map grows with reconnect count | Grows with open-window count |
+| A storage-served window came back from a refresh as an anonymous principal | Restore prefers the action's own `appId` |
+
+### Four things worth remembering
+
+- **The key had to agree, not just the home.** A create records grants *before* the emit,
+  so the window does not exist and `targetKey` resolves nothing — the fallback was the bare
+  raw id, which every monitor's copy of the same app resolves to, while the reconnect token
+  names the scoped handle. `WindowHandleMap.handleFor` names the handle the create is about
+  to register without registering it; `getWindowGrants` unions every spelling on read.
+- **The close teardown lives in `LiveSession`'s constructor**, not after pool init. Windows
+  outlive the pool (restore replays them; `POST /api/iframe-token` mints against pool-less
+  sessions), so revocation wired into `doInitialize` would have been dead for exactly the
+  cases the tests pin.
+- **The cookie jar is cleared only once nothing holds it** (`clearJarIfOrphaned`). It is
+  keyed by (session, app), not by window — clearing on every token drop was harmless while
+  the TTL was the only caller, but on window close it would log an app's *other* window out.
+- **Not done, deliberately:** revoking the old token on re-mint. Several live tokens per
+  window is the design (one per connected tab); the bug was only that none died with the
+  window. The 24h TTL stays as the backstop for windows that never see a clean close.
 
 ## Phase 2 — one session-principal policy (finding 3)
 
@@ -196,12 +131,11 @@ Real refactors with their own risk budgets; none blocks Phases 1–3.
 
 ## Sequencing & risk
 
-- **Order:** 0 → 1 → 2, then 3's items in any order, 4 when convenient. Each phase is one
+- **Remaining order:** 2, then 3's items in any order, 4 when convenient. Each phase is one
   PR against `dev`; Phase 3 can be one PR of small commits.
-- Phases 1 and 2 change behavior on purpose (deltas tabled above); Phase 3 is intended to
-  be behavior-preserving except items 4 and 6's error-message/coarse-gate tightening.
+- Phase 2 changes behavior on purpose (delta tabled above); Phase 3 is intended to be
+  behavior-preserving except items 4 and 6's error-message/coarse-gate tightening.
 - Test partitions: token/grant tests are plain units; anything booting the hub follows the
   existing partition rules (`scripts/test/partitions.ts`).
-- Docs to update in the same PRs: `packages/server/CLAUDE.md` (access chokepoint section —
-  the token/registry split and the widened session-principal definition),
-  `delegated-grants.ts` header, `TokenEntry` comments.
+- Docs to update in the same PR: `packages/server/CLAUDE.md` (access chokepoint section —
+  the widened session-principal definition).
