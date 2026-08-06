@@ -154,16 +154,49 @@ Real refactors with their own risk budgets; none blocks Phases 1–3.
 - **Consolidate the two setter globals** (finding 6): one `access-wiring.ts` owning both
   resolvers (plus Phase 2's extended one), with an explicit `resetForTest()` — tests stop
   hand-rewiring module globals per file, and a third door reuses instead of copying.
-- **`previewBundles` relocation** (finding 10): move the devtools-projects path knowledge
-  next to its owner (`features/dev/` or the devtools app boundary), log on the soft-fail
-  path so a layout change produces a traceable warning instead of a distant 403, and
-  either justify or inline the dynamic `discovery.js` import (comment says nothing; if no
-  cycle exists, make it static).
+- **`previewBundles`** (finding 10): the traceability and import halves are ✅ **landed**;
+  the relocation is **not done, deliberately** (below).
+
+### Finding 10, in detail
+
+Two of the three parts landed, pinned by new rows in `tests/preview-bundles.test.ts`:
+
+- **The soft-fail path now says something — on the two paths where silence is a bug.**
+  `previewBundles` has five ways to return `undefined` and three are ordinary (not a
+  preview at all, which is most calls; the project declares no bundles; the project is
+  gone), so a blanket log would be noise on the common path. The two anomalies warn: a
+  project id that would climb out of the directory, and a manifest that *exists* and will
+  not parse (an extra `exists()` only on the failure path distinguishes it from a missing
+  file). The traceable message the finding actually wanted is at the **403**, not the
+  mint: `requireBundle` gives a preview principal its own wording, because the generic one
+  names "app.json" and for a preview that is the *project's* file, not an installed app's.
+  That is where the developer hitting the refusal is standing; the mint that came up empty
+  happened windows ago.
+- **The dynamic `discovery.js` import is now static.** There is no cycle: `discovery.ts`'s
+  runtime import closure is 11 modules and reaches neither `http/access.ts` nor
+  `http/iframe-tokens.ts` — its only edge back into `http/` is `import type
+  { PermissionEntry }`, which erases. That type-only edge is the whole reason the cycle
+  stays hypothetical, so it now carries a comment saying it must stay type-only; turning it
+  into a value import would fail as an undefined binding at module init, not as a build
+  error.
+
+**Not done, deliberately: the relocation.** `features/dev/` is not the owner — nothing in
+it mentions `projects` at all. The real owner is the devtools *app*
+(`apps/devtools/src/lib/paths.ts`), across a boundary the server cannot import, so moving
+the string one directory over renames the layering violation without removing it. The
+duplicate worth attention is a different one: `http/routes/dev.ts` reads the same `bundles`
+key off the same file for the same reason at compile time, but *generically* —
+`resolveAppPath(callerAppId, path)`, no `devtools` anywhere — while the token mint
+hardcodes the layout. Single-sourcing that pair is the real version of this finding; both
+readings now cross-reference each other in comments. Reading from disk stays either way: a
+preview window reloaded after a server restart re-mints with no compile in front of it, so
+anything cached at compile time is back to failing soft.
 
 ## Sequencing & risk
 
-- **Remaining:** Phase 4 only, when convenient. Its three items are independent of each
-  other and of everything above.
+- **Remaining:** findings 8 and 6 of Phase 4, when convenient — the two that remove real
+  structural duplication. Finding 10 is closed. All are independent of each other and of
+  everything above.
 - Phases 2 and 3 changed behavior on purpose; each phase's deltas are tabled in its own
   section.
 - Test partitions: token/grant tests are plain units; anything booting the hub follows the

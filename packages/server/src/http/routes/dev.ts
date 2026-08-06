@@ -327,6 +327,15 @@ async function dispatchDevAction(
   }
 
   // Both typecheck and compile must enforce gated @bundled/yaar-* imports.
+  //
+  // The second reader of this same key on this same file is `previewBundles`
+  // (http/iframe-tokens.ts), which puts it on the preview's iframe token so the
+  // *runtime* doors admit what the compiler bundled. The two must agree. They resolve
+  // the file differently and cannot be merged as they stand: a compile names its own
+  // source directory (`resolveAppPath(callerAppId, path)` — caller-relative, no app id
+  // hardcoded), while a token mint has only `preview--{projectId}` and reconstructs
+  // devtools' project layout. Anything that changes where a project's app.json lives
+  // has to change both.
   let bundles: string[] | undefined;
   try {
     const appJson = JSON.parse(await Bun.file(join(absolutePath, 'app.json')).text());

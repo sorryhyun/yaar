@@ -46,6 +46,7 @@
  * app can no longer flip global switches like `allowAllDomains` by accident.
  */
 
+import { isPreviewAppId } from '@yaar/shared';
 import type { Verb } from '../handlers/uri-registry.js';
 import { requestCarriesAppOrigin } from './origin-boundary.js';
 import { validateIframeToken } from './iframe-tokens.js';
@@ -362,10 +363,24 @@ export function requireApp(principal: Principal): AppPrincipal | Response {
  * nothing about what a hand-written `fetch()` can reach at runtime. The doors
  * those SDKs open (`/api/dev/*`, `/api/browser`, `/api/bridge`, `/api/ml-*`)
  * have to check for themselves.
+ *
+ * A devtools *preview* gets its own sentence because its `bundles` came from a file
+ * (`previewBundles` in iframe-tokens.ts), not from an installed manifest — so the
+ * generic wording sends the reader to an app.json that is not the one consulted.
+ * This is where the person hitting the refusal actually is; the mint that came up
+ * empty happened windows ago and, on the ordinary paths, silently.
  */
 export function requireBundle(principal: Principal, bundle: string): Response | null {
   if (principal.kind === 'host') return null;
   if (principal.bundles.includes(bundle)) return null;
+  if (isPreviewAppId(principal.appId)) {
+    return errorResponse(
+      `"${bundle}" is not declared in this preview project's own app.json "bundles" — ` +
+        `a preview's gated SDKs are read from the project file, not from an installed app. ` +
+        `Add it there and reopen the preview.`,
+      403,
+    );
+  }
   return errorResponse(
     `"${bundle}" must be declared in app.json "bundles" to use this endpoint`,
     403,

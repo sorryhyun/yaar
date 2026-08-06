@@ -212,9 +212,19 @@ export function generateIframeToken(
  * keeps it the project's declared identity rather than the request's claim.
  *
  * The compiler already honours this exact list when it builds the preview (see
- * `handleDevRoutes`), so a bundle that reaches the iframe is a bundle that was
- * declared. The preview principal is neither bundled nor system, so the sharper
- * guards — `canWriteApp`, `controls`, `streams` — still refuse it.
+ * `handleDevRoutes`, which reads the same `bundles` key off the same file — by a
+ * caller-relative path, since a compile names its own source directory and a mint
+ * only has `preview--{projectId}` to go on). The two readings must agree: a bundle
+ * that reaches the iframe is a bundle that was declared. The preview principal is
+ * neither bundled nor system, so the sharper guards — `canWriteApp`, `controls`,
+ * `streams` — still refuse it.
+ *
+ * Returning `undefined` is ordinary on three of the five paths — not a preview at
+ * all (most calls), the project declares no bundles, the project is gone — so those
+ * are silent. The two that are *not* ordinary say so: a project id that would climb
+ * out of the directory, and a manifest that exists and will not parse. Without those
+ * two lines a devtools layout change or a broken app.json surfaces only as a 403
+ * from a gated door nowhere near here.
  */
 export async function previewBundles(
   appId: string | undefined,
@@ -224,16 +234,29 @@ export async function previewBundles(
   const projectId = appId!.slice(PREVIEW_APP_PREFIX.length);
   // Reject anything that could climb out of the projects directory. Project ids are
   // timestamps in practice, but this string reaches a path join.
-  if (!projectId || !/^[\w.-]+$/.test(projectId) || projectId.includes('..')) return undefined;
-  try {
-    const manifest = await Bun.file(
-      join(storageRoot, 'apps', 'devtools', 'projects', projectId, 'app.json'),
-    ).json();
-    const bundles = (manifest as { bundles?: unknown }).bundles;
-    return Array.isArray(bundles) ? bundles.filter((b) => typeof b === 'string') : undefined;
-  } catch {
-    return undefined; // no project, no app.json, or malformed — no bundles
+  if (!projectId || !/^[\w.-]+$/.test(projectId) || projectId.includes('..')) {
+    console.warn(
+      `[IframeToken] Refusing preview project id ${JSON.stringify(projectId.slice(0, 80))}: not a bare id.`,
+    );
+    return undefined;
   }
+  const manifestPath = join(storageRoot, 'apps', 'devtools', 'projects', projectId, 'app.json');
+  let manifest: unknown;
+  try {
+    manifest = await Bun.file(manifestPath).json();
+  } catch (err) {
+    // A project with no app.json is ordinary: devtools deletes projects, and a preview
+    // window can outlive the project it previews. A file that is *there* and unreadable
+    // is not — that is a broken manifest or a moved layout.
+    if (await Bun.file(manifestPath).exists()) {
+      console.warn(
+        `[IframeToken] Preview manifest unreadable at ${manifestPath} — granting no bundles: ${String(err)}`,
+      );
+    }
+    return undefined;
+  }
+  const bundles = (manifest as { bundles?: unknown }).bundles;
+  return Array.isArray(bundles) ? bundles.filter((b) => typeof b === 'string') : undefined;
 }
 
 /**
