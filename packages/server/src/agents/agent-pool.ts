@@ -32,6 +32,7 @@ import { monitorSource } from './context.js';
 import { acquireWarmProvider } from '../providers/factory.js';
 import { getSessionHub } from '../session/session-hub.js';
 import { notifyAgentsChanged } from '../http/subscriptions.js';
+import { genId } from '../lib/ids.js';
 import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from '../session/types.js';
 import type { SessionLogger } from '../logging/index.js';
@@ -401,10 +402,17 @@ export class AgentPool {
     notifyAgentsChanged(this.sessionId);
   }
 
-  private untrackAgent(instanceId: string): void {
-    this.agentIds.delete(instanceId);
+  /**
+   * Returns false if this id was already untracked — which is also the answer to
+   * "has someone else already disposed this agent?", and the whole of
+   * {@link disposeAgent}'s idempotence. The `delete` is synchronous, so two
+   * concurrent disposers cannot both win it.
+   */
+  private untrackAgent(instanceId: string): boolean {
+    if (!this.agentIds.delete(instanceId)) return false;
     getSessionHub().unregisterAgent(instanceId);
     notifyAgentsChanged(this.sessionId);
+    return true;
   }
 
   // ── Iteration ────────────────────────────────────────────────────────
@@ -458,18 +466,25 @@ export class AgentPool {
    * `interruptIfRunning` is false for exactly one caller — `disposeEphemeral`, which
    * runs after its one task has finished and never interrupted. Cleanup is allowed to
    * throw through to the caller; the limiter slot is released either way.
+   *
+   * **Idempotent per agent, and that is load-bearing.** Two dispose paths reach the
+   * same agent whenever a fire-and-forget disposer races `cleanup()`'s roster
+   * snapshot — `MonitorRegistry.remove` never awaits `removeMonitorAgent`, and
+   * `WindowEventCoordinator` only `.catch()`es `disposeSubAgentsForApp`. A second
+   * `release()` would take the process-global count *below* the number of live
+   * agents, permanently, and the process then admits past `MAX_AGENTS`. The
+   * `agentIds` delete decides the race before the first await; the loser returns
+   * having touched nothing.
    */
   private async disposeAgent(
     agent: PooledAgent,
     label: string,
     { interruptIfRunning = true }: { interruptIfRunning?: boolean } = {},
   ): Promise<void> {
-    this.untrackAgent(agent.instanceId);
+    if (!this.untrackAgent(agent.instanceId)) return;
     // The layout deltas are keyed by agent id and were never dropped, so the map only
-    // ever grew — and, since ids are minted per pool from a counter, a later agent could
-    // be handed a "delta" computed against a dead one's last view. Through the hub
-    // because the session owns the LayoutContext and a pool that outlives its session
-    // has nothing to clear.
+    // ever grew. Through the hub because the session owns the LayoutContext and a pool
+    // that outlives its session has nothing to clear.
     getSessionHub().get(this.sessionId)?.layoutContext.removeAgent(agent.instanceId);
     // Before cleanup: the agent's counter goes away with it.
     this.retiredUsage = addUsage(this.retiredUsage, agent.session.getUsage());
@@ -489,6 +504,13 @@ export class AgentPool {
   /**
    * Create a new agent session with a provider.
    * Does NOT add it to any tracked collection — caller must manage lifecycle.
+   *
+   * The slot is acquired before the first await and handed to the agent only on the
+   * success path. Every other exit — a refused initialize, or a *throw* out of it
+   * (`acquireWarmProvider` raises `CodexVersionError`, and nothing in the pool's call
+   * chain catches it) — gives the slot back here. Held on the throwing path, it was
+   * held for the life of the process, invisibly: no agent exists to show in
+   * `/api/agents/stats`, and no dispose path will ever reach one.
    */
   private async createAgentCore(preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
     const limiter = getAgentLimiter();
@@ -496,39 +518,51 @@ export class AgentPool {
       console.log('[AgentPool] Global agent limit reached');
       return null;
     }
+    let slotHandedOver = false;
 
-    const id = this.nextAgentId++;
-    const instanceId = `agent-${id}-${Date.now()}`;
+    try {
+      const id = this.nextAgentId++;
+      // `agent-${id}-${Date.now()}` was not unique across pools: the counter restarts
+      // at 0 in every pool, so two sessions creating their first agent in the same
+      // millisecond minted the same id — and the three registries keyed by it are all
+      // process-global. `SessionHub.registerAgent` silently overwrites (so
+      // `findSessionByAgent` routes one session's agent to the other),
+      // `actionEmitter.interruptedAgents` gates both from either one's stop, and
+      // `getAgentToken` hands both the same MCP credential. The counter stays for
+      // readable logs; `genId` is what makes the string an identity.
+      const instanceId = genId(`agent-${id}`);
 
-    const session = new AgentSession(
-      this.sessionId, // connectionId (legacy, used as fallback)
-      undefined,
-      this.logger ?? undefined,
-      instanceId,
-      this.sessionId, // liveSessionId for session-scoped broadcasting
-      this.broadcastFn,
-      this.resolveWindowHandle,
-    );
+      const session = new AgentSession(
+        this.sessionId, // connectionId (legacy, used as fallback)
+        undefined,
+        this.logger ?? undefined,
+        instanceId,
+        this.sessionId, // liveSessionId for session-scoped broadcasting
+        this.broadcastFn,
+        this.resolveWindowHandle,
+      );
 
-    const initialized = await session.initialize(preWarmedProvider);
-    if (!initialized) {
-      limiter.release();
-      return null;
+      const initialized = await session.initialize(preWarmedProvider);
+      if (!initialized) return null;
+
+      const agent: PooledAgent = {
+        session,
+        id,
+        instanceId,
+        lastUsed: Date.now(),
+        currentRole: null,
+        idleTimer: null,
+      };
+
+      // Past this line the agent owns the slot and `disposeAgent` releases it.
+      this.trackAgent(instanceId);
+      slotHandedOver = true;
+
+      console.log(`[AgentPool] Created agent ${id} (${instanceId})`);
+      return agent;
+    } finally {
+      if (!slotHandedOver) limiter.release();
     }
-
-    const agent: PooledAgent = {
-      session,
-      id,
-      instanceId,
-      lastUsed: Date.now(),
-      currentRole: null,
-      idleTimer: null,
-    };
-
-    this.trackAgent(instanceId);
-
-    console.log(`[AgentPool] Created agent ${id} (${instanceId})`);
-    return agent;
   }
 
   /**
@@ -542,15 +576,20 @@ export class AgentPool {
    *
    * `createMonitorAgent` is deliberately not a caller — `ContextPool` supplies that
    * tier's provider from the warm pool and owns its disposal.
+   *
+   * A *throw* out of `createAgentCore` gets the same compensation as a `null`: the
+   * `if (!agent)` shape it replaced was skipped entirely on that path, so the child
+   * process outlived every reference to it.
    */
   private async createWithFreshProvider(): Promise<PooledAgent | null> {
     const provider = await this.acquireProvider();
-    const agent = await this.createAgentCore(provider ?? undefined);
-    if (!agent) {
-      if (provider) await provider.dispose();
-      return null;
+    let agent: PooledAgent | null = null;
+    try {
+      agent = await this.createAgentCore(provider ?? undefined);
+      return agent;
+    } finally {
+      if (!agent && provider) await provider.dispose();
     }
-    return agent;
   }
 
   /**
@@ -1248,9 +1287,19 @@ export class AgentPool {
 
   /**
    * Clean up all agents and release resources.
+   *
+   * Every teardown goes through {@link disposeAgent}, one agent at a time, and no
+   * agent's failure ends the sweep. This used to be a hand-rolled
+   * `await cleanup(); limiter.release()` loop with no `try/finally`: the first
+   * throwing agent leaked its own slot *and* every slot after it, the collections
+   * below never cleared, and the throw propagated into `ContextPool.teardown`, which
+   * swallows it — so a single provider that failed to die took a permanent bite out
+   * of the process-global `MAX_AGENTS` with nothing anywhere saying so.
+   *
+   * Never throws, for the same reason: the caller has no recovery to offer, and a
+   * teardown that stops early is the failure mode being fixed.
    */
   async cleanup(): Promise<void> {
-    const limiter = getAgentLimiter();
     // Before the snapshot: a persona still mid-spawn is in no collection, so it would
     // land in `subAgents` after the clear below and outlive the pool that owns it.
     await this.settlePersonaSpawns(() => true);
@@ -1258,22 +1307,40 @@ export class AgentPool {
     // Snapshot before the first await: the two phases must walk the same roster.
     const allAgents = [...this.allAgents()].map((e) => e.agent);
 
-    // Phase 1: interrupt all running agents
-    for (const agent of allAgents) {
-      await agent.session.interrupt();
-    }
-
-    // Phase 2: dispose providers and release limiter slots
-    for (const agent of allAgents) {
-      await agent.session.cleanup();
-      limiter.release();
-    }
-
+    // Emptied before the first dispose await, not after: `disposeAgent`'s contract is
+    // that its caller has already removed the agent from whichever collection held it,
+    // and a dispose that throws must not leave the pool advertising an agent it has
+    // torn down. Double-release is impossible regardless — `disposeAgent` is
+    // idempotent per agent id.
     this.sessionAgent = null;
     this.monitorAgents.clear();
     this.appAgents.clear();
     this.subAgents.clear();
     this.ephemeralAgents.clear();
+
+    // Phase 1: stop everything before tearing anything down, so no agent is still
+    // streaming while a sibling's provider goes away.
+    for (const agent of allAgents) {
+      try {
+        await agent.session.interrupt();
+      } catch (err) {
+        console.error(`[AgentPool] Interrupt failed for ${agent.instanceId}:`, err);
+      }
+    }
+
+    // Phase 2: dispose providers and release limiter slots.
+    for (const agent of allAgents) {
+      try {
+        await this.disposeAgent(agent, 'Agent disposed (pool cleanup)', {
+          interruptIfRunning: false,
+        });
+      } catch (err) {
+        console.error(`[AgentPool] Cleanup failed for ${agent.instanceId}:`, err);
+      }
+    }
+
+    // Backstop for an id tracked but held by no collection — the leak class the spawn
+    // reservations exist to prevent. `disposeAgent` has already untracked the rest.
     for (const id of this.agentIds) {
       getSessionHub().unregisterAgent(id);
     }

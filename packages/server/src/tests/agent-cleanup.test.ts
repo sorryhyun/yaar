@@ -245,16 +245,82 @@ describe('AgentPool limiter slot release on error', () => {
       }
     });
 
-    // Pool-wide cleanup currently does NOT use try/finally in its Phase 2 loop,
-    // so when the first agent's cleanup() throws, subsequent agents never get
-    // cleanup() or release() called.
+    // Pool-wide cleanup routes every agent through `disposeAgent` (try/finally on
+    // the release) and logs rather than rethrows, so one agent's failure is not the
+    // next agent's. It used to abort the whole Phase 2 loop on the first throw,
+    // leaking that agent's slot and every slot after it for the life of the process.
     const cleanupErr = await pool.cleanup().catch((e: Error) => e);
-    expect(cleanupErr).toBeInstanceOf(Error);
-    expect((cleanupErr as Error).message).toBe('first agent cleanup failed');
+    expect(cleanupErr).toBeUndefined();
 
-    // BUG: Only 0 release() calls happen because the error in Phase 2's first
-    // iteration aborts the entire loop before any release() call.
-    // When fixed, all 3 slots should be released regardless of individual failures.
-    expect(mockRelease).toHaveBeenCalledTimes(0);
+    // All three cleanups were attempted...
+    expect(mockCleanup).toHaveBeenCalledTimes(3);
+    // ...and all three slots came back, including the one whose cleanup threw.
+    expect(mockRelease).toHaveBeenCalledTimes(3);
+  });
+
+  it('cleanup() does not double-release a slot a concurrent disposer already took', async () => {
+    const pool = new AgentPool(
+      'test-session' as SessionId,
+      mock(() => {}),
+    );
+
+    await pool.createMonitorAgent('0');
+    await pool.createMonitorAgent('1');
+    expect(mockTryAcquire).toHaveBeenCalledTimes(2);
+
+    // `MonitorRegistry.remove` never awaits this, so it interleaves with teardown.
+    // Both paths reach the same agent; only one may release its slot, or the global
+    // count under-runs and the process admits past MAX_AGENTS while agents are live.
+    const racing = pool.removeMonitorAgent('0');
+    await pool.cleanup();
+    await racing;
+
+    expect(mockRelease).toHaveBeenCalledTimes(2);
+  });
+
+  it('createAgentCore returns its slot when initialize throws', async () => {
+    const pool = new AgentPool(
+      'test-session' as SessionId,
+      mock(() => {}),
+    );
+
+    // What `acquireWarmProvider()` does on an under-versioned Codex CLI. No caller in
+    // the pool's chain catches it, so the slot was held with no agent to show for it.
+    mockInitialize.mockRejectedValueOnce(new Error('CodexVersionError'));
+
+    const err = await pool.createMonitorAgent('0').catch((e: Error) => e);
+    expect(err).toBeInstanceOf(Error);
+    expect(mockTryAcquire).toHaveBeenCalledTimes(1);
+    expect(mockRelease).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Lives beside the cleanup tests because it needs the same mocked AgentPool
+// scaffolding, and a second `mock.module` file would cost another test partition.
+describe('AgentPool agent identity', () => {
+  it('mints instance ids that do not collide across pools', async () => {
+    // Per-pool counters both start at 0, so under the old
+    // `agent-${counter}-${Date.now()}` these two pools minted the *same* id whenever
+    // they created their first agent in the same millisecond — which is exactly what
+    // two browser tabs connecting together do.
+    const poolA = new AgentPool(
+      'session-a' as SessionId,
+      mock(() => {}),
+    );
+    const poolB = new AgentPool(
+      'session-b' as SessionId,
+      mock(() => {}),
+    );
+
+    const ids = new Set<string>();
+    for (const pool of [poolA, poolB]) {
+      for (const monitorId of ['0', '1', '2']) {
+        const agent = await pool.createMonitorAgent(monitorId);
+        expect(agent).not.toBeNull();
+        ids.add(agent!.instanceId);
+      }
+    }
+
+    expect(ids.size).toBe(6);
   });
 });
