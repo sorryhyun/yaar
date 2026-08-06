@@ -8,9 +8,11 @@
  */
 
 import { describe, expect, test } from 'bun:test';
-import { toEnvelope } from '../http/routes/verb.js';
-import { okJson, okLinks } from '../handlers/utils.js';
+import { handleVerbRoutes, toEnvelope } from '../http/routes/verb.js';
+import { formatBatchResults, okJson, okLinks } from '../handlers/utils.js';
+import { generateIframeToken } from '../http/iframe-tokens.js';
 import type { VerbResult } from '../handlers/uri-registry.js';
+import type { SessionId } from '../session/types.js';
 
 describe('okLinks', () => {
   test('carries the links as structuredContent.items and as resource_link blocks', () => {
@@ -67,6 +69,46 @@ describe('the { items } wrapper', () => {
     };
 
     expect(toEnvelope(appResult)).toEqual({ ok: true, data: { items: [] } });
+  });
+});
+
+describe('brace expansion is MCP-only', () => {
+  test('a brace URI is refused at the door, by name', async () => {
+    const token = generateIframeToken('win-brace', 'sess-envelope' as SessionId, {
+      appId: 'notes',
+      permissions: ['yaar://storage/'],
+    });
+    const req = new Request('http://localhost:8000/api/verb', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-iframe-token': token },
+      body: JSON.stringify({ verb: 'read', uri: 'yaar://storage/{a.txt,b.txt}' }),
+    });
+    const res = await handleVerbRoutes(req, new URL(req.url));
+
+    // It used to reach the registry as a literal URI and come back "No handler
+    // registered for …", which points an app at the wrong problem entirely.
+    expect(res?.status).toBe(400);
+    const text = await res!.text();
+    expect(text).toContain('Brace expansion is MCP-only');
+    expect(text).not.toContain('No handler registered');
+  });
+
+  test('so the envelope has no batch shape to produce', () => {
+    // `formatBatchResults` is what the MCP `exec` wrapper builds from an expansion.
+    // Nothing hands one of these to `toEnvelope`, and it no longer sniffs for the
+    // `--- uri ---` headers — the two are coupled by nothing but that string format.
+    const batch = formatBatchResults(
+      ['yaar://storage/a.txt', 'yaar://storage/b.txt'],
+      [
+        { status: 'fulfilled', value: { content: [{ type: 'text', text: 'A' }] } },
+        { status: 'fulfilled', value: { content: [{ type: 'text', text: 'B' }] } },
+      ],
+    );
+    const envelope = toEnvelope(batch);
+    // No `{ [uri]: parsed }` map any more — the door reads the first text block like
+    // any other single result. Should expansion ever reach this door, it must be
+    // handled deliberately rather than by re-parsing a display string.
+    expect(envelope.data).not.toHaveProperty('yaar://storage/a.txt');
   });
 });
 

@@ -10,6 +10,7 @@
  * Iframe token auth is reused (X-Iframe-Token header).
  */
 
+import { expandBraceUri } from '@yaar/shared';
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
@@ -40,7 +41,8 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     description:
       'Execute a yaar:// verb from an iframe app. Body: `{ verb, uri, payload? }`, where an ' +
       'invoke `payload` may be an array of payloads to run against the same URI in order ' +
-      '(stops at the first failure). Restricted to allowed URI prefixes.',
+      '(stops at the first failure). One URI per call — brace expansion is MCP-only and is ' +
+      'refused here. Restricted to allowed URI prefixes.',
   },
   {
     method: 'POST',
@@ -85,10 +87,15 @@ function tryParseJson(raw: string): unknown {
  * Transform a VerbResult into a standard JSON envelope for iframe apps.
  *
  * Single-URI results have one text block → `{ ok, data }`.
- * Batch results (from brace expansion) have interleaved URI headers and data blocks
- * produced by formatBatchResults() → `{ ok, data: { [uri]: parsed } }`.
  * Resource blocks → extract embedded text.
  * Resource link blocks → return as array of link objects.
+ *
+ * There is no brace-expansion case to handle. Expansion is `handlers/index.ts`'s
+ * `exec` wrapper, which only the MCP tools go through; this door dispatches the URI
+ * verbatim, so `formatBatchResults`' interleaved `--- uri ---` headers never reach
+ * here. The branch that sniffed for them was dead, and coupled to that helper's
+ * string format by nothing but convention. A brace URI is now refused at the door
+ * with a pointed message rather than reaching the registry as an unknown one.
  */
 export function toEnvelope(result: VerbResult): Record<string, unknown> {
   // Collect blocks by type
@@ -169,33 +176,10 @@ export function toEnvelope(result: VerbResult): Record<string, unknown> {
     return envelope;
   }
 
-  // Detect batch results: formatBatchResults() produces "--- uri ---" header blocks
-  // interleaved with data blocks.
-  const isBatch =
-    textItems.length > 1 &&
-    textItems[0].text.startsWith('--- ') &&
-    textItems[0].text.endsWith(' ---');
-
-  let data: unknown;
-  if (isBatch) {
-    const batchData: Record<string, unknown> = {};
-    let currentUri: string | null = null;
-    for (const item of textItems) {
-      const headerMatch = item.text.match(/^--- (.+) ---$/);
-      if (headerMatch) {
-        currentUri = headerMatch[1];
-      } else if (currentUri) {
-        batchData[currentUri] = tryParseJson(item.text);
-        currentUri = null;
-      }
-    }
-    data = batchData;
-  } else {
-    const raw = textItems[0]?.text ?? '';
-    data = tryParseJson(raw);
-  }
-
-  const envelope: Record<string, unknown> = { ok: true, data };
+  const envelope: Record<string, unknown> = {
+    ok: true,
+    data: tryParseJson(textItems[0]?.text ?? ''),
+  };
   if (images.length > 0) envelope.images = images;
   return envelope;
 }
@@ -320,6 +304,20 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   const uri = body.uri;
   if (!uri || typeof uri !== 'string') {
     return errorResponse('Missing or invalid "uri" field', 400);
+  }
+
+  // Brace expansion lives in the MCP `exec` wrapper (handlers/index.ts); this door
+  // dispatches the URI verbatim. So `yaar://storage/{a,b}` used to reach the registry
+  // as a literal URI and come back as "No handler registered for …", which points an
+  // app at the wrong problem entirely. Say what the asymmetry actually is, and name
+  // the batching this door *does* support.
+  if (expandBraceUri(uri).length > 1) {
+    return errorResponse(
+      `Brace expansion is MCP-only — "${uri}" is not a URI this endpoint can resolve. ` +
+        'Send one call per URI, or (for invoke) an array payload to run several payloads ' +
+        'against the same URI in order.',
+      400,
+    );
   }
 
   // This endpoint is the *app* door, so a caller presenting no iframe token gets

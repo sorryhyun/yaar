@@ -358,7 +358,7 @@ paths:
                 type: object
   /api/verb:
     post:
-      summary: 'Execute a yaar:// verb from an iframe app. Body: `{ verb, uri, payload? }`, where an invoke `payload` may be an array of payloads to run against the same URI in order (stops at the first failure). Restricted to allowed URI prefixes.'
+      summary: 'Execute a yaar:// verb from an iframe app. Body: `{ verb, uri, payload? }`, where an invoke `payload` may be an array of payloads to run against the same URI in order (stops at the first failure). One URI per call — brace expansion is MCP-only and is refused here. Restricted to allowed URI prefixes.'
       responses:
         '200':
           description: JSON
