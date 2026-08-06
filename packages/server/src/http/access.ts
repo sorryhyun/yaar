@@ -193,6 +193,19 @@ function isSessionUri(uri: string): boolean {
 }
 
 /**
+ * Does this URI still name `self` — i.e. is it written in the app's own dialect
+ * rather than in real ids?
+ *
+ * The counterpart to {@link resolveSelf}, which leaves such a URI untouched when it
+ * has no appId to expand against. Callers that must not store or match an
+ * unresolved URI (the subscription registry keys by literal string) test the
+ * *result* of `resolveSelf` with this rather than re-deriving the spelling.
+ */
+export function namesSelf(uri: string): boolean {
+  return uri === 'yaar://apps/self' || uri.startsWith('yaar://apps/self/');
+}
+
+/**
  * Rewrite `yaar://apps/self/…` to the calling app's real id.
  *
  * Applied to *both* sides of the match — the URI being requested and the app's
@@ -200,8 +213,23 @@ function isSessionUri(uri: string): boolean {
  * app.json says `yaar://apps/self/storage/`; a storage URI derived from an HTTP path
  * says `yaar://apps/notes/storage/todo.json`. Matching those literally denies an app
  * its own storage. Canonicalizing both means either spelling works and they agree.
+ *
+ * Exported because the permission gate is not the only place `self` has to be
+ * expanded: `POST /api/verb` resolves it before dispatching, and
+ * `/api/verb/subscribe` before *storing* the URI (a subscription keyed by the
+ * `self` spelling would never match the real-id URI a producer notifies with). All
+ * three used to spell the rewrite out by hand, so a change to the spelling — or a
+ * future `windows/self` — was a three-site edit that would fail silently in the two
+ * sites that were missed. Returns the URI unchanged when there is no appId to
+ * expand against; the caller decides whether that is fatal ({@link namesSelf}).
+ *
+ * The path-flavored variant in {@link storageUriFor} is deliberately *not* folded in:
+ * it expands `apps/self` inside an HTTP **path** (`apps/self/x.json`), not a URI, and
+ * round-tripping it through the URI form to share these five lines would be more
+ * indirection than the duplication costs. The two must agree on the literal `self`
+ * segment and nothing else.
  */
-function resolveSelf(uri: string, appId?: string): string {
+export function resolveSelf(uri: string, appId?: string): string {
   if (!appId) return uri;
   if (uri === 'yaar://apps/self') return `yaar://apps/${appId}`;
   if (uri.startsWith('yaar://apps/self/')) {
@@ -375,6 +403,10 @@ export function requireStream(principal: Principal, capability: string): Respons
  * `yaar://storage/apps/notes/x.json` instead, every app would be denied its own
  * storage over HTTP, and a permission for `yaar://storage/` would silently be a
  * permission for every other app's secrets.
+ *
+ * The `self` expansion here is the *path* flavor of {@link resolveSelf} — same
+ * literal segment, different dialect (`apps/self/x.json`, not
+ * `yaar://apps/self/x.json`). Change one and check the other.
  */
 export function storageUriFor(principal: Principal, path: string): string | Response {
   let p = path;

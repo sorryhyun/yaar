@@ -15,10 +15,12 @@ import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
 import type { InvokePayload, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
+  namesSelf,
   requireBundle,
   requirePermission,
   requireStream,
   resolvePrincipal,
+  resolveSelf,
   type Principal,
 } from '../access.js';
 import { subscriptionRegistry } from '../subscriptions.js';
@@ -253,15 +255,11 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
 
       // Resolve `self` → real appId so notifyChange() (which fires with real
       // appId URIs) reaches subscriptions made from inside the app's iframe.
-      let subscribeUri = body.uri;
-      if (body.uri === 'yaar://apps/self' || body.uri.startsWith('yaar://apps/self/')) {
-        if (!principal.appId) {
-          return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
-        }
-        subscribeUri =
-          body.uri === 'yaar://apps/self'
-            ? `yaar://apps/${principal.appId}`
-            : body.uri.replace('yaar://apps/self/', `yaar://apps/${principal.appId}/`);
+      // `resolveSelf` leaves the URI alone when there is no appId to expand
+      // against, so what is left bearing `self` is a token that cannot name one.
+      const subscribeUri = resolveSelf(body.uri, principal.appId);
+      if (namesSelf(subscribeUri)) {
+        return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
       }
 
       const subscriptionId = subscriptionRegistry.subscribe(
@@ -335,16 +333,12 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
   const tokenEntry: Extract<Principal, { kind: 'app' }> | null =
     principal.kind === 'app' ? principal : null;
 
-  // Resolve `self` → real appId from iframe token
-  let resolvedUri = uri;
-  if (uri === 'yaar://apps/self' || uri.startsWith('yaar://apps/self/')) {
-    if (!tokenEntry?.appId) {
-      return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
-    }
-    resolvedUri =
-      uri === 'yaar://apps/self'
-        ? `yaar://apps/${tokenEntry.appId}`
-        : uri.replace('yaar://apps/self/', `yaar://apps/${tokenEntry.appId}/`);
+  // Resolve `self` → real appId from iframe token. Anything still naming `self`
+  // afterwards is a caller with no appId to expand against — `describe` from an
+  // anonymous caller, or a plain (non-app) iframe window.
+  const resolvedUri = resolveSelf(uri, tokenEntry?.appId);
+  if (namesSelf(resolvedUri)) {
+    return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
   }
 
   // Log to session logs. Data-plane verbs (an app's proxied fetch) and the devtools
