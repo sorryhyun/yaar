@@ -6,6 +6,7 @@
 import { extname } from 'path';
 import { IS_REMOTE } from '../config.js';
 import { validateIframeToken } from './iframe-tokens.js';
+import { extractIframeToken } from './access.js';
 
 let remoteToken: string | null = null;
 
@@ -116,18 +117,18 @@ export function checkHttpAuth(req: Request, url: URL): Response | null {
 /**
  * Is the caller presenting an iframe token that checks out?
  *
- * Both spellings, matching `access.ts`: the header the SDK sends, and the query
- * parameter a subresource that cannot set headers (`<img src>`, `EventSource`) rides
- * on. This says nothing about *what* the caller may reach — that is
- * `requirePermission`'s job — only that it is a real, live app identity rather than an
- * anonymous network caller.
+ * Both spellings, because `extractIframeToken` (access.ts) is the one rule for what
+ * "presenting a token" means: the header the SDK sends, and the query parameter a
+ * subresource that cannot set headers (`<img src>`, `EventSource`) rides on. This says
+ * nothing about *what* the caller may reach — that is `requirePermission`'s job — only
+ * that it is a real, live app identity rather than an anonymous network caller.
  *
  * Exported for tests, like `isStaticAsset`: `IS_REMOTE` is fixed at module load, so the
  * predicate is the honest unit under test rather than a process with REMOTE=1 in its
  * environment.
  */
 export function hasValidIframeToken(req: Request, url: URL): boolean {
-  const token = req.headers.get('x-iframe-token') ?? url.searchParams.get('__yaar_token');
+  const token = extractIframeToken(req, url);
   return !!token && !!validateIframeToken(token);
 }
 

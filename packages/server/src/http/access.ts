@@ -117,8 +117,14 @@ export function setWindowGrantResolver(fn: typeof resolveWindowGrants): void {
  * carries it — an `<img src="/api/storage/…">` inside an app cannot set headers,
  * and IframeRenderer already appends `__yaar_token` to the iframe's own URL, so
  * the same parameter works on asset URLs the app builds.
+ *
+ * This is the one definition of "presenting a token", and the three layers that ask
+ * the question all call it: this module's `resolvePrincipal`, `auth.ts`'s remote-mode
+ * credential check, and `server.ts`'s coarse route allowlist. `server.ts` used to read
+ * the header alone, so a subresource riding the query parameter skipped the allowlist
+ * entirely and was caught only by the fine-grained gates behind it.
  */
-function extractIframeToken(req: Request, url: URL): string | null {
+export function extractIframeToken(req: Request, url: URL): string | null {
   return req.headers.get('x-iframe-token') ?? url.searchParams.get('__yaar_token');
 }
 

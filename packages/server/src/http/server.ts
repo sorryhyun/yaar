@@ -36,6 +36,7 @@ import {
   handleVerbRoutes,
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
+import { extractIframeToken } from './access.js';
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
 import { PUBLIC_ENDPOINTS as AUTH_PUBLIC } from './routes/auth.js';
 import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from './routes/bridge.js';
@@ -212,7 +213,15 @@ function createFetchHandlerInner() {
     // A route not on the iframe allowlist is refused outright; the routes that *are*
     // on it then run the permission check in http/access.ts. This is the coarse gate,
     // not the only one.
-    const iframeToken = req.headers.get('x-iframe-token');
+    //
+    // "Presenting a token" is `extractIframeToken`'s definition and nobody else's.
+    // This gate used to read the header alone, so an `<img src>` or `EventSource`
+    // carrying `?__yaar_token=` — the only way a subresource can carry one — skipped
+    // the allowlist entirely and met only the fine-grained gates behind it. Every
+    // legitimate query-param consumer (`/api/storage/{path}`, `/api/pdf/{path}/{page}`,
+    // `/api/apps/{appId}/{path}`, `/api/browser/{id}/screenshot`, `/api/browser/{id}/events`)
+    // is on the allowlist; tests/iframe-token-extraction.test.ts holds one row per consumer.
+    const iframeToken = extractIframeToken(req, url);
     if (iframeToken) {
       const tokenEntry = validateIframeToken(iframeToken);
 
