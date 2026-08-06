@@ -7,6 +7,7 @@ import type {
   ActiveAgentSnapshot,
   StreamFrame,
   StreamFrameEvent,
+  CliEntry,
 } from '@/types';
 import { ServerEventType, SUBAGENT_TOOL_NAME } from '@/types';
 
@@ -55,7 +56,7 @@ export interface ServerEventDispatchHandlers {
   ) => void;
   finalizeCliStreaming: (agentId: string) => void;
   addCliEntry: (entry: {
-    type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary';
+    type: CliEntry['type'];
     content: string;
     agentId?: string;
     monitorId?: string;
@@ -70,7 +71,7 @@ export interface ServerEventDispatchHandlers {
   handleStreamFrame: (windowId: string, subscriptionId: string, frame: StreamFrame) => void;
   restoreCliHistory: (
     entries: {
-      type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary';
+      type: CliEntry['type'];
       content: string;
       agentId?: string;
       monitorId: string;
@@ -116,6 +117,7 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
     message.type === ServerEventType.SESSION_ATTACHED ||
     message.type === ServerEventType.CONNECTION_STATUS ||
     message.type === ServerEventType.ERROR ||
+    message.type === ServerEventType.AGENT_NOTICE ||
     (message.type === ServerEventType.AGENT_RESPONSE &&
       (message as { isComplete?: boolean }).isComplete) ||
     // `pending` and `output` are one event per fragment — a firehose that would
@@ -398,6 +400,19 @@ export function dispatchServerEvent(message: ServerEvent, handlers: ServerEventD
         handlers.failMessage(message.messageId, message.error);
         handlers.settleOutbox(message.messageId);
       }
+      break;
+    }
+    case ServerEventType.AGENT_NOTICE: {
+      // The turn is still running, so this deliberately does none of what ERROR
+      // does: no `setConnectionError` (the desktop is not broken), no
+      // `failMessage` (the message has not failed). It is a line in the CLI
+      // explaining a pause the user would otherwise experience as a freeze.
+      handlers.addCliEntry({
+        type: 'notice',
+        content: message.code ? `[${message.code}] ${message.text}` : message.text,
+        agentId: message.agentId,
+        monitorId: message.monitorId,
+      });
       break;
     }
     case ServerEventType.WINDOW_AGENT_STATUS: {

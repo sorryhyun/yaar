@@ -8,6 +8,13 @@ import type { SDKMessage, SDKResultMessage } from '@anthropic-ai/claude-agent-sd
 import { SUBAGENT_TOOL_NAME } from '@yaar/shared';
 import type { StreamMessage, TokenUsage } from '../types.js';
 import { consumeLastCall } from '../../mcp/tool-call-buffer.js';
+import {
+  assistantNotice,
+  describeResultError,
+  rateLimitNotice,
+  systemNotice,
+  type ProviderNotice,
+} from './errors.js';
 
 /** Track tool_use_id → toolName from content_block_start events */
 const toolNameById = new Map<string, string>();
@@ -145,6 +152,17 @@ export class TurnUsageTracker {
   }
 }
 
+/** Lift a {@link ProviderNotice} onto the wire, carrying the session id along. */
+function toNoticeMessage(notice: ProviderNotice, sessionId?: string): StreamMessage {
+  return {
+    type: 'notice',
+    content: notice.text,
+    noticeLevel: notice.level,
+    errorCode: notice.code,
+    ...(sessionId ? { sessionId } : {}),
+  };
+}
+
 /**
  * Map a Claude SDK message to a StreamMessage.
  * Returns null for messages that should be skipped.
@@ -214,7 +232,19 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
     };
   }
 
+  // Every remaining `system` subtype that says something went wrong. Placed after
+  // the `init`/`task_*` branches above, which claim their subtypes and return.
+  const sysNotice = systemNotice(msg);
+  if (sysNotice) return toNoticeMessage(sysNotice, (msg as { session_id?: string }).session_id);
+
   if (msg.type === 'assistant') {
+    // An assistant frame can carry a typed failure (`error`) or an interrupt-
+    // truncation flag (`aborted`). Both are notices, never `error`: the SDK
+    // retries the transient codes on its own, so latching the turn closed here
+    // would end it in the UI while the CLI went on to answer. When the failure
+    // really is fatal, the `result` terminal below says so.
+    const notice = assistantNotice(msg);
+    if (notice) return toNoticeMessage(notice, msg.session_id);
     // Don't return content here - it was already streamed via stream_event.
     // Only return sessionId for session tracking.
     return { type: 'text', sessionId: msg.session_id };
@@ -231,6 +261,8 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
       subtype?: string;
       is_error?: boolean;
       errors?: string[];
+      terminal_reason?: string;
+      stop_reason?: string | null;
       session_id: string;
     };
 
@@ -263,9 +295,18 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
 
     // Check for errors (SDKResultError type)
     if (result.is_error || result.subtype?.startsWith('error')) {
-      const errorMessage = result.errors?.join('; ') || 'Unknown SDK error';
-      console.error(`[message-mapper] SDK error: ${errorMessage} (subtype: ${result.subtype})`);
-      return { type: 'error', error: errorMessage, sessionId: result.session_id, ...accounting };
+      // `errors[]` is routinely empty, which is how every failed turn used to
+      // read "Unknown SDK error" regardless of cause. `describeResultError`
+      // assembles the message out of `terminal_reason` and `stop_reason` too.
+      const { text, code } = describeResultError(result);
+      console.error(`[message-mapper] SDK error: ${text} (subtype: ${result.subtype})`);
+      return {
+        type: 'error',
+        error: text,
+        errorCode: code,
+        sessionId: result.session_id,
+        ...accounting,
+      };
     }
 
     return { type: 'complete', sessionId: result.session_id, ...accounting };
@@ -275,6 +316,11 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
   if (msg.type === 'user') {
     return extractToolResult(msg.message);
   }
+
+  // Subscription-level rate limiting — its own top-level message type, not a
+  // `system` subtype, and only forwarded when the limit actually rejected a call.
+  const rateNotice = rateLimitNotice(msg);
+  if (rateNotice) return toNoticeMessage(rateNotice, (msg as { session_id?: string }).session_id);
 
   // Skip other types
   return null;

@@ -29,9 +29,32 @@
  * from the query loop's own lifecycle instead, which makes them identical for
  * both providers and guarantees the pair even when the provider stream doesn't.
  */
-export type AgentStreamKind = 'start' | 'text' | 'thinking' | 'tool' | 'usage' | 'done' | 'error';
+export type AgentStreamKind =
+  | 'start'
+  | 'text'
+  | 'thinking'
+  | 'tool'
+  | 'usage'
+  | 'notice'
+  | 'done'
+  | 'error';
 
 export type AgentTurnStatus = 'completed' | 'interrupted';
+
+/**
+ * A non-terminal provider notice — a retry, a denial, a refusal, a hit limit.
+ *
+ * Distinct from the `error` frame, which is terminal and pairs with `done` as a
+ * turn boundary. A `notice` says nothing about whether the turn survived; an
+ * observer that treats one as an ending will strand itself, and one that ignores
+ * them will show a turn that sat silent for thirty seconds with no explanation.
+ */
+export interface AgentNoticeFrameData {
+  level: 'info' | 'warning';
+  text: string;
+  /** The provider's own discriminant, e.g. `rate_limit`, `api_retry`. */
+  code?: string;
+}
 
 export interface AgentStartFrameData {
   messageId?: string;

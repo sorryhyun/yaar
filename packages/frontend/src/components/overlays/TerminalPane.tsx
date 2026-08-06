@@ -108,6 +108,8 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
         return styles.tool;
       case 'error':
         return styles.error;
+      case 'notice':
+        return styles.notice;
       case 'action-summary':
         return styles.actionSummary;
       default:

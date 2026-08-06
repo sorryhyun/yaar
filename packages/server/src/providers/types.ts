@@ -59,6 +59,15 @@ export interface StreamMessage {
    * other message to hang it on; Claude reports it once at the end, so there it
    * rides on `complete`/`error` instead. Either way the payload is `usage` +
    * `usageScope`, folded in one place by `StreamToEventMapper`.
+   *
+   * `notice` is everything a provider says about trouble that did **not** end the
+   * turn: a retry after a 529, an auto-denied tool call, a model refusal that a
+   * fallback recovered from, an exhausted subscription limit. It exists because
+   * `error` is terminal by contract — `StreamToEventMapper.map` latches the turn
+   * closed on it — so reporting a recoverable failure that way would end the turn
+   * in the UI while the provider carried on working. `content` holds the text,
+   * `noticeLevel` how loudly to say it, `errorCode` the provider's own
+   * discriminant. A provider that surfaces none of this (Codex) never emits one.
    */
   type:
     | 'text'
@@ -69,6 +78,7 @@ export interface StreamMessage {
     | 'tool_output_delta'
     | 'tool_result'
     | 'usage'
+    | 'notice'
     | 'complete'
     | 'error';
   /**
@@ -94,6 +104,18 @@ export interface StreamMessage {
   toolInputEscapes?: { unicodeEscapes: number; literalBackslashU: number };
   toolUseId?: string;
   error?: string;
+  /**
+   * The provider's own discriminant for an `error` or a `notice` — Claude's
+   * `SDKAssistantMessageError` code, its `TerminalReason`, or the mapper's name
+   * for the frame (`api_retry`, `permission_denied`, …).
+   *
+   * Carried alongside the prose rather than baked into it so a consumer can key
+   * off the failure without parsing English: `authentication_failed` is worth a
+   * "run `claude login`" affordance, `overloaded` is worth nothing but patience.
+   */
+  errorCode?: string;
+  /** How prominently to show a `notice`. See the `notice` type above. */
+  noticeLevel?: 'info' | 'warning';
   isError?: boolean;
   /** Token accounting, normalized. Present on `usage`, and on Claude's terminals. */
   usage?: TokenUsage;

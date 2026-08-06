@@ -226,6 +226,16 @@
   color: var(--color-danger);
 }
 
+/*
+ * A provider notice the turn survived (a retry, a denied tool, a hit limit).
+ * Warning-coloured rather than danger-coloured on purpose: it must read as
+ * "this is why nothing is happening", not as "the request failed".
+ */
+.notice {
+  color: var(--color-warning);
+  opacity: 0.85;
+}
+
 .actionSummary {
   color: var(--color-accent);
 }

@@ -263,6 +263,35 @@ export class StreamToEventMapper {
       case 'usage':
         break;
 
+      // A provider notice: something went wrong and the turn is still going.
+      // Deliberately does **not** touch `finish`/`fail`, does not enter
+      // `responseText`, and does not reset `blockText` — it is commentary beside
+      // the answer, not part of it. See `providers/claude/errors.ts` for why the
+      // recoverable failures must not be reported as `error`.
+      case 'notice': {
+        if (message.sessionId && this.onSessionId) {
+          await this.onSessionId(message.sessionId);
+        }
+        const text = message.content;
+        if (!text) break;
+        const level = message.noticeLevel ?? 'warning';
+        console.warn(`[${this.providerName}] notice (${message.errorCode ?? level}): ${text}`);
+        await this.sendEvent({
+          type: ServerEventType.AGENT_NOTICE,
+          level,
+          text,
+          ...(message.errorCode ? { code: message.errorCode } : {}),
+          agentId: this.role,
+          monitorId: this.monitorId,
+        });
+        this.emitStreamFrame('notice', {
+          level,
+          text,
+          ...(message.errorCode ? { code: message.errorCode } : {}),
+        });
+        break;
+      }
+
       case 'text':
         if (message.sessionId && this.onSessionId) {
           await this.onSessionId(message.sessionId);

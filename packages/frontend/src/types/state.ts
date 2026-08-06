@@ -27,7 +27,13 @@ export interface WindowModel {
 
 export interface CliEntry {
   id: string;
-  type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'action-summary';
+  /**
+   * `notice` is a provider complaint the turn survived (a retry, a denied tool,
+   * a hit rate limit) — distinct from `error`, which is the turn's obituary.
+   * Rendering the two the same way would make every 529 backoff look like a
+   * failed request.
+   */
+  type: 'user' | 'thinking' | 'response' | 'tool' | 'error' | 'notice' | 'action-summary';
   content: string;
   agentId?: string;
   monitorId: string;

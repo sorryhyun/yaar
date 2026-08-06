@@ -153,6 +153,32 @@ export interface ErrorEvent {
   messageId?: string;
 }
 
+/**
+ * Something the provider said about trouble that did **not** end the turn.
+ *
+ * The sibling of {@link ErrorEvent}, and deliberately not the same event. `ERROR`
+ * is an obituary: the client sets `connectionError` from it and, when it names a
+ * `messageId`, marks that message failed and stops redelivering it. A Claude
+ * `rate_limit` or a 529 retry is none of those things — the CLI backs off and
+ * answers a moment later — so routing them through `ERROR` would have reported a
+ * dead turn that was in fact still running.
+ *
+ * What it carries is a rendered sentence plus the provider's own `code`, so a
+ * consumer can react to `authentication_failed` without matching on English.
+ * Producers: `StreamToEventMapper`, from `StreamMessage.type === 'notice'`.
+ */
+export interface AgentNoticeEvent {
+  type: typeof ServerEventType.AGENT_NOTICE;
+  /** `warning` — a real problem the user may need to act on. `info` — bookkeeping. */
+  level: 'info' | 'warning';
+  /** Human-readable, already assembled by the provider's mapper. */
+  text: string;
+  /** The provider's discriminant, e.g. `rate_limit`, `api_retry`, `permission_denied`. */
+  code?: string;
+  agentId?: string;
+  monitorId?: string;
+}
+
 export interface WindowAgentStatusEvent {
   type: typeof ServerEventType.WINDOW_AGENT_STATUS;
   windowId: string;
@@ -312,6 +338,7 @@ export type ServerEvent =
   | ConnectionStatusEvent
   | ToolProgressEvent
   | ErrorEvent
+  | AgentNoticeEvent
   | WindowAgentStatusEvent
   | MessageAcceptedEvent
   | MessageQueuedEvent

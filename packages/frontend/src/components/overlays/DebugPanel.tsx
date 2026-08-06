@@ -35,6 +35,8 @@ function getSummary(entry: DebugEntry): string {
       return `${data.toolName}: ${data.status}`;
     case ServerEventType.ERROR:
       return truncate(String(data.error || 'Unknown error'), 60);
+    case ServerEventType.AGENT_NOTICE:
+      return truncate(`${data.code ? `[${data.code}] ` : ''}${String(data.text || '')}`, 60);
     default:
       return '';
   }
