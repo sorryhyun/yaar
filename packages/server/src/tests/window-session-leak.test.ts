@@ -127,6 +127,68 @@ describe('getWindowRestoreActions', () => {
     expect((actions[0] as { windowId: string }).windowId).toBe('0/lab');
   });
 
+  /**
+   * The visibility half of the same drift.
+   *
+   * `WindowStateRegistry.handleAction` grew `focus`/`minimize`/`restore` when the stack
+   * was added; this reducer did not, and its `switch` has no `default` — so a window the
+   * user minimized before shutdown came back on screen with nothing logged anywhere. The
+   * reducer is now exhaustive over `window.*` by type, which is what keeps the next
+   * action type from landing the same way.
+   */
+  describe('visibility survives the restart', () => {
+    const created = (windowId: string, variant?: string) =>
+      ({
+        type: 'window.create',
+        windowId,
+        title: windowId,
+        bounds: { x: 0, y: 0, w: 640, h: 480 },
+        content: { renderer: 'markdown', data: 'x' },
+        ...(variant ? { variant } : {}),
+      }) as OSAction;
+
+    const restoredMinimized = (entries: Array<OSAction | string>) =>
+      (getWindowRestoreActions(transcript(entries))[0] as { minimized?: boolean }).minimized;
+
+    it('restores a minimized window minimized', () => {
+      expect(
+        restoredMinimized([created('0/notes'), { type: 'window.minimize', windowId: '0/notes' }]),
+      ).toBe(true);
+    });
+
+    it('un-minimizes on a later restore or focus', () => {
+      expect(
+        restoredMinimized([
+          created('0/notes'),
+          { type: 'window.minimize', windowId: '0/notes' },
+          { type: 'window.restore', windowId: '0/notes' },
+        ]),
+      ).toBeFalsy();
+      expect(
+        restoredMinimized([
+          created('0/notes'),
+          { type: 'window.minimize', windowId: '0/notes' },
+          { type: 'window.focus', windowId: '0/notes' },
+        ]),
+      ).toBeFalsy();
+    });
+
+    it('declines to minimize a widget, as the live registry does', () => {
+      expect(
+        restoredMinimized([
+          created('0/clock', 'widget'),
+          { type: 'window.minimize', windowId: '0/clock' },
+        ]),
+      ).toBeFalsy();
+    });
+
+    it('scopes a bare id the same way as every other case', () => {
+      expect(
+        restoredMinimized([created('notes'), { type: 'window.minimize', windowId: 'notes' }]),
+      ).toBe(true);
+    });
+  });
+
   it('still cancels a create whose close was recorded in the same spelling', () => {
     expect(
       getWindowRestoreActions(

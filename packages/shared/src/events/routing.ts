@@ -42,7 +42,6 @@ export const ClientEventType = {
   INTERRUPT: 'INTERRUPT',
   INTERRUPT_AGENT: 'INTERRUPT_AGENT',
   RESET: 'RESET',
-  SET_PROVIDER: 'SET_PROVIDER',
   RENDERING_FEEDBACK: 'RENDERING_FEEDBACK',
   COMPONENT_ACTION: 'COMPONENT_ACTION',
   DIALOG_FEEDBACK: 'DIALOG_FEEDBACK',
@@ -119,7 +118,11 @@ export function isAnswerEvent(type: string): boolean {
  * agent's cancel signal) and never enters `ContextPool`'s task queues as a *producer*, so
  * no frame it overtakes reads its effect as a sequence.
  *
- * The monitor handlers are synchronous, so they stay ordered among themselves by arrival.
+ * The monitor handlers do all of their own state — the list, the subscriptions, the
+ * layout, the broadcast — before their first `await`, so they stay ordered among
+ * themselves by arrival even though `REMOVE_MONITOR` goes on to await its monitor's agent
+ * teardown. What a later frame can observe is settled synchronously; what it cannot is
+ * the provider going away.
  * The two interrupts are not: stopping an agent now waits for the provider to say the turn
  * actually stopped (`AITransport.interrupt`), because reporting a stop we had not observed
  * is what let a "stopped" agent keep working. Two overlapping interrupts are harmless —

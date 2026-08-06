@@ -248,20 +248,16 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
       return result.success ? ok(result.message) : error(result.message);
     },
 
+    // Deletion is the session's, not the pool's — a monitor exists whether or not it has
+    // ever been messaged, and removing its agent is only one of the four things deleting
+    // one means. See `disposeMonitor`.
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
       const sessionResolved = resolved as ResolvedSession;
       const monitorId = sessionResolved.id;
       if (!monitorId) return error('Monitor ID required.');
 
-      const pool = getActiveSession().getPool();
-      if (!pool) return error('Session not initialized.');
-
-      if (!pool.hasMonitorAgent(monitorId)) {
-        return error(`Monitor "${monitorId}" not found.`);
-      }
-
-      await disposeMonitor(pool, monitorId);
-      return ok(`Monitor "${monitorId}" disposed.`);
+      const result = await disposeMonitor(getActiveSession(), monitorId);
+      return result.success ? ok(result.message) : error(result.message);
     },
   });
 

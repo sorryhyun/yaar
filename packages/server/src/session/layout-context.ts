@@ -112,9 +112,25 @@ export class LayoutContext {
 
   /**
    * Clean up state for a removed agent.
+   *
+   * Called from agent disposal. Without it `agentStates` only ever grows, and a monitor
+   * id that comes back (they are the lowest free integers) hands its successor's agent a
+   * "delta" computed against a dead agent's last view.
    */
   removeAgent(agentId: string): void {
     this.agentStates.delete(agentId);
+  }
+
+  /**
+   * Forget a removed monitor.
+   *
+   * The viewport is the load-bearing half: `features/window/create.ts` reads it to size
+   * new windows, and monitor ids are reused, so a removed monitor's viewport became the
+   * default for whatever monitor next took its id — on a client that had never reported
+   * one.
+   */
+  clearMonitor(monitorId: string): void {
+    this.viewports.delete(monitorId);
   }
 
   // ── Snapshot building ──

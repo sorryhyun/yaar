@@ -38,6 +38,8 @@ export interface MonitorRegistryDeps {
   unsubscribeMonitor(monitorId: string): void;
   /** Record a connection's viewport for layout. */
   setViewport(monitorId: string, viewport: Viewport): void;
+  /** Forget a removed monitor's viewport, so its id's successor does not inherit it. */
+  clearLayout(monitorId: string): void;
   /** Tear down the monitor's agent. Absent before the pool is initialized. */
   removeMonitorAgent(monitorId: string): Promise<void> | void;
 }
@@ -110,27 +112,44 @@ export class MonitorRegistry {
   }
 
   /**
-   * Delete a monitor: its agent, its subscribers, and its place in the list.
+   * Delete a monitor: its agent, its subscribers, its layout, and its place in the list.
    *
    * Removing the agent used to be the whole of it — the connections watching the monitor
    * stayed subscribed, so a deleted desktop kept delivering events and the frontend
    * dutifully re-created its windows. Detaching the subscribers is what makes the deletion
    * mean anything.
+   *
+   * This is the *only* definition of deleting a monitor, and the verb door
+   * (`delete('yaar://session/monitors/{id}')`) goes through it for that reason: it used to
+   * remove the agent alone, so the id stayed in this list, the frontend kept rendering the
+   * desktop, and the next message on it lazily minted a fresh agent — a deletion that
+   * silently undid itself.
+   *
+   * The returned promise settles when the agent is gone. Callers that only fire the
+   * deletion may ignore it; the agent-removal failure is logged either way, so an ignored
+   * return is never an unhandled rejection.
    */
-  remove(monitorId: string): void {
+  async remove(monitorId: string): Promise<void> {
     if (monitorId === DEFAULT_MONITOR_ID) return; // the session always has monitor 0
     if (!this.has(monitorId)) return;
 
     this.monitors = this.monitors.filter((m) => m.id !== monitorId);
     this.deps.unsubscribeMonitor(monitorId);
+    // The ids are the lowest free integers, so this one comes back — and inherited the
+    // dead monitor's viewport, which is what sizes the windows created on it.
+    this.deps.clearLayout(monitorId);
 
-    void Promise.resolve(this.deps.removeMonitorAgent(monitorId)).catch((err) => {
+    // Broadcast before awaiting the agent: the list is already true, and the frontend
+    // should stop rendering the desktop without waiting on a provider teardown.
+    this.deps.broadcast({ type: ServerEventType.MONITORS, monitors: this.list() });
+
+    try {
+      await this.deps.removeMonitorAgent(monitorId);
+    } catch (err) {
       console.error(
         `[MonitorRegistry ${this.deps.sessionId}] Failed to remove monitor agent for ${monitorId}:`,
         err,
       );
-    });
-
-    this.deps.broadcast({ type: ServerEventType.MONITORS, monitors: this.list() });
+    }
   }
 }

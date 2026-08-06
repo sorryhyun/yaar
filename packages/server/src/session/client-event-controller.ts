@@ -86,8 +86,6 @@ export class ClientEventController {
       [ClientEventType.RESET]: (_event, connectionId) => this.deps.resetSession(connectionId),
       [ClientEventType.INTERRUPT_AGENT]: (event) =>
         this.deps.getPool()?.interruptAgent(event.agentId),
-      [ClientEventType.SET_PROVIDER]: (event) =>
-        this.deps.getPool()?.getPrimaryAgent()?.setProvider(event.provider),
       [ClientEventType.RENDERING_FEEDBACK]: (event) => this.handleRenderingFeedback(event),
       [ClientEventType.DIALOG_FEEDBACK]: (event) => this.handleDialogFeedback(event),
       [ClientEventType.APP_PROTOCOL_RESPONSE]: (event) =>

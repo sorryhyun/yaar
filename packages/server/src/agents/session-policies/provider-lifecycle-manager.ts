@@ -1,9 +1,17 @@
-import type { AITransport, ProviderType } from '../../providers/types.js';
-import {
-  acquireWarmProvider,
-  createProvider,
-  getAvailableProviders,
-} from '../../providers/factory.js';
+/**
+ * Provider acquisition for one `AgentSession`.
+ *
+ * It used to also own a live `setProvider` — swap this agent's provider at runtime, on a
+ * `SET_PROVIDER` frame from the client. That frame is gone, and so is the switch: it
+ * changed the provider of **monitor 0's agent alone**, leaving `ContextPool.providerType`
+ * (written once, in `initialize()`), every other agent, and the warm pool pointing at the
+ * old one. Provider identity was owned in two places with no invariant tying them, so
+ * every `providerType === 'codex'` branch downstream read stale data after a switch. The
+ * documented way to choose a provider is the `PROVIDER` env var, which is decided before
+ * anything holds a stale copy of the answer.
+ */
+import type { AITransport } from '../../providers/types.js';
+import { acquireWarmProvider } from '../../providers/factory.js';
 import { createSession, SessionLogger } from '../../logging/index.js';
 import { ServerEventType, type ServerEvent } from '@yaar/shared';
 
@@ -43,31 +51,5 @@ export class ProviderLifecycleManager {
     });
 
     return true;
-  }
-
-  async setProvider(providerType: ProviderType): Promise<void> {
-    const available = await getAvailableProviders();
-    if (!available.includes(providerType)) {
-      await this.sendEvent({
-        type: ServerEventType.ERROR,
-        error: `Provider ${providerType} is not available.`,
-      });
-      return;
-    }
-
-    if (this.state.provider) {
-      await this.state.provider.dispose();
-    }
-
-    const newProvider = await createProvider(providerType);
-    this.state.provider = newProvider;
-    this.state.sessionId = null;
-    this.state.hasProcessedFirstUserTurn = false;
-
-    await this.sendEvent({
-      type: ServerEventType.CONNECTION_STATUS,
-      status: 'connected',
-      provider: newProvider.name,
-    });
   }
 }

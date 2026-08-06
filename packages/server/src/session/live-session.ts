@@ -208,6 +208,7 @@ export class LiveSession {
       unsubscribeMonitor: (monitorId) =>
         getBroadcastCenter().unsubscribeMonitor(sessionId, monitorId),
       setViewport: (monitorId, viewport) => this.layoutContext.setViewport(monitorId, viewport),
+      clearLayout: (monitorId) => this.layoutContext.clearMonitor(monitorId),
       removeMonitorAgent: (monitorId) => this.pool?.removeMonitorAgent(monitorId),
     });
 
@@ -635,6 +636,19 @@ export class LiveSession {
   /** The session's monitors. Authoritative — the client renders this, it does not mint it. */
   getMonitors(): MonitorInfo[] {
     return this.monitorRegistry.list();
+  }
+
+  /** Whether this session has that monitor. The same question the client's list answers. */
+  hasMonitor(monitorId: string): boolean {
+    return this.monitorRegistry.has(monitorId);
+  }
+
+  /**
+   * Delete a monitor. The verb door's route to the one definition of what that means —
+   * see `MonitorRegistry.remove`. Resolves once the monitor's agent is gone.
+   */
+  removeMonitor(monitorId: string): Promise<void> {
+    return this.monitorRegistry.remove(monitorId);
   }
 
   hasWindow(windowId: string): boolean {

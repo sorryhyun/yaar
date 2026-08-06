@@ -388,13 +388,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     useDesktopStore.getState().resetDesktop();
   }, [send]);
 
-  const setProvider = useCallback(
-    (provider: 'claude' | 'codex') => {
-      send({ type: ClientEventType.SET_PROVIDER, provider });
-    },
-    [send],
-  );
-
   const interruptAgent = useCallback(
     (agentId: string) => {
       send({ type: ClientEventType.INTERRUPT_AGENT, agentId });
@@ -433,7 +426,6 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     sendUserPromptResponse,
     interrupt,
     interruptAgent,
-    setProvider,
     reset,
   };
 }

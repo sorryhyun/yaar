@@ -32,9 +32,28 @@ function scopedWindowId(windowId: string): string {
   return windowId.includes('/') ? windowId : `${DEFAULT_MONITOR_ID}/${windowId}`;
 }
 
+/** Every action that says something about a window. The union this reducer is total over. */
+type WindowAction = Extract<OSAction, { type: `window.${string}` }>;
+
+function isWindowAction(action: OSAction): action is WindowAction {
+  return action.type.startsWith('window.');
+}
+
 /**
  * Extract window restore actions from parsed messages.
  * Returns the final state of all windows that should still be open.
+ *
+ * This is a second hand-written reducer over `window.*` — the live one is
+ * `WindowStateRegistry.handleAction`, and the two are supposed to agree on what a session
+ * looks like. They drifted: this one handled 9 of the 12 window actions, and `focus`,
+ * `minimize` and `restore` fell through a `switch` with no `default`, so a window the user
+ * minimized before shutdown came back on screen and nothing anywhere said a word. Same
+ * failure family as the scoped-id incident in this file's header.
+ *
+ * Hence the `never` at the bottom: the union is narrowed to `window.*` first, so the next
+ * action type added to it is a **compile error here**, not a silent no-op. The two
+ * reducers can still disagree on what a case *means* — collapsing them onto one implementation
+ * is the durable fix — but neither can quietly not have one.
  */
 export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
   // Track window states by scoped handle — see scopedWindowId for why not "as written".
@@ -50,6 +69,10 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
 
     if (msg.type !== 'action' || !msg.action) continue;
     const action = msg.action;
+    // Everything else in the log — notifications, toasts, component updates — says
+    // nothing about which windows are open. Narrowed here rather than case-by-case so
+    // the switch below can be exhaustive over the actions that do.
+    if (!isWindowAction(action)) continue;
 
     switch (action.type) {
       case 'window.create': {
@@ -110,16 +133,41 @@ export function getWindowRestoreActions(messages: ParsedMessage[]): OSAction[] {
         break;
       }
 
-      case 'window.lock': {
+      // A lock belongs to the agent that took it, and that agent does not survive the
+      // restart. Windows come back unlocked, so both actions are deliberate no-ops.
+      case 'window.lock':
+      case 'window.unlock':
+        break;
+
+      // The three below were missing entirely, which is what made a minimized window come
+      // back on screen. `minimized` is a field on `window.create`, so the restored action
+      // carries the state directly — same as `WindowStateRegistry`, which also declines to
+      // minimize a widget or a panel.
+      case 'window.minimize': {
         const win = windows.get(scopedWindowId(action.windowId));
-        if (win && win.type === 'window.create') {
-          // Don't restore locked state - windows should start unlocked
-        }
+        if (win?.type !== 'window.create') break;
+        if (win.variant === 'widget' || win.variant === 'panel') break;
+        win.minimized = true;
         break;
       }
 
-      case 'window.unlock': {
-        // Already handled by not restoring locked state
+      case 'window.focus':
+      case 'window.restore': {
+        const win = windows.get(scopedWindowId(action.windowId));
+        if (win?.type !== 'window.create') break;
+        win.minimized = false;
+        break;
+      }
+
+      // Neither is window state. A maximize's bounds are the frontend's to restore (the
+      // live registry does not record them either), and a capture is a screenshot request.
+      case 'window.maximize':
+      case 'window.capture':
+        break;
+
+      default: {
+        const unhandled: never = action;
+        void unhandled;
         break;
       }
     }

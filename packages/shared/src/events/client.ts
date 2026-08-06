@@ -83,11 +83,6 @@ export interface ResetEvent {
   type: typeof ClientEventType.RESET;
 }
 
-export interface SetProviderEvent {
-  type: typeof ClientEventType.SET_PROVIDER;
-  provider: 'claude' | 'codex';
-}
-
 export interface RenderingFeedbackEvent {
   type: typeof ClientEventType.RENDERING_FEEDBACK;
   requestId: string;
@@ -288,7 +283,6 @@ export type ClientEvent =
   | InterruptEvent
   | InterruptAgentEvent
   | ResetEvent
-  | SetProviderEvent
   | RenderingFeedbackEvent
   | ComponentActionEvent
   | DialogFeedbackEvent

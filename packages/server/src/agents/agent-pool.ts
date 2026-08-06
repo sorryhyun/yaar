@@ -465,6 +465,12 @@ export class AgentPool {
     { interruptIfRunning = true }: { interruptIfRunning?: boolean } = {},
   ): Promise<void> {
     this.untrackAgent(agent.instanceId);
+    // The layout deltas are keyed by agent id and were never dropped, so the map only
+    // ever grew — and, since ids are minted per pool from a counter, a later agent could
+    // be handed a "delta" computed against a dead one's last view. Through the hub
+    // because the session owns the LayoutContext and a pool that outlives its session
+    // has nothing to clear.
+    getSessionHub().get(this.sessionId)?.layoutContext.removeAgent(agent.instanceId);
     // Before cleanup: the agent's counter goes away with it.
     this.retiredUsage = addUsage(this.retiredUsage, agent.session.getUsage());
     if (interruptIfRunning && agent.session.isRunning()) {

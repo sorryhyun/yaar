@@ -4,6 +4,7 @@
  * Pure business logic — returns plain data objects, never VerbResult.
  */
 
+import { DEFAULT_MONITOR_ID } from '@yaar/shared';
 import type { LiveSession } from '../../session/live-session.js';
 import type { ContextPool } from '../../agents/context-pool.js';
 
@@ -108,7 +109,26 @@ export async function controlMonitor(
   return { success: true, message: `Monitor "${monitorId}" interrupted.` };
 }
 
-/** Dispose a monitor agent and clean up its resources. */
-export async function disposeMonitor(pool: ContextPool, monitorId: string): Promise<void> {
-  await pool.removeMonitorAgent(monitorId);
+/**
+ * Delete a monitor — the whole deletion, not just its agent.
+ *
+ * Deliberately routed through the session rather than the pool. Removing the agent alone
+ * left the monitor in the session's authoritative list, so the frontend kept rendering the
+ * desktop and the next message on it lazily minted a new agent; `MonitorRegistry.remove`
+ * is the one place that also drops the id, detaches its watchers, clears its layout, and
+ * broadcasts the new list. The registry answers "does this monitor exist", not the pool: a
+ * monitor that has not been messaged yet has no agent and is still perfectly real.
+ */
+export async function disposeMonitor(
+  session: LiveSession,
+  monitorId: string,
+): Promise<ControlResult> {
+  if (monitorId === DEFAULT_MONITOR_ID) {
+    return { success: false, message: `Monitor "${monitorId}" is the session's primary desktop.` };
+  }
+  if (!session.hasMonitor(monitorId)) {
+    return { success: false, message: `Monitor "${monitorId}" not found.` };
+  }
+  await session.removeMonitor(monitorId);
+  return { success: true, message: `Monitor "${monitorId}" deleted.` };
 }

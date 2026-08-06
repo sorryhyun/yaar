@@ -9,7 +9,6 @@ import type {
   AITransport,
   InterruptReceipt,
   TransportOptions,
-  ProviderType,
   TokenUsage,
 } from '../providers/types.js';
 import {
@@ -563,10 +562,6 @@ export class AgentSession {
       );
     }
     return receipt;
-  }
-
-  async setProvider(providerType: ProviderType): Promise<void> {
-    await this.providerLifecycle.setProvider(providerType);
   }
 
   private async sendEvent(event: ServerEvent): Promise<void> {
