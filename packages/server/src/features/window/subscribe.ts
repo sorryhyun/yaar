@@ -8,6 +8,7 @@
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { okJson, error } from '../../handlers/utils.js';
 import { getAgentId, requireMonitorId } from '../../agents/agent-context.js';
+import { monitorRole } from '../../agents/roles.js';
 import { getActivePool } from '../../handlers/utils.js';
 import { WINDOW_CHANGE_EVENTS, type WindowChangeEvent } from '@yaar/shared';
 import { requireWindowExists } from './helpers.js';
@@ -32,7 +33,7 @@ export function handleSubscribe(
   // Determine subscriber type and key from agentId pattern
   // Monitor agents: "monitor-{monitorId}", App agents: "app-{appId}"
   const subscriberType = 'monitor';
-  const subscriberAgentKey = `monitor-${monitorId}`;
+  const subscriberAgentKey = monitorRole(monitorId);
   const subscriberWindowId: string | undefined = undefined;
 
   // Parse events from payload
@@ -96,7 +97,7 @@ export function handleAppSubscribe(
 
   // Monitor agent only for now (app-agent subscribe is a later add).
   const subscriberType = 'monitor';
-  const subscriberAgentKey = `monitor-${monitorId}`;
+  const subscriberAgentKey = monitorRole(monitorId);
 
   // Parse channels: array, single string, or default to all ('*').
   const rawChannels = payload.channels;

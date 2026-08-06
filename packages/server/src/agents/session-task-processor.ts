@@ -12,8 +12,9 @@
 
 import { ServerEventType } from '@yaar/shared';
 import { monitorSource } from './context.js';
+import { sessionRole } from './roles.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
-import { SESSION_AGENT_PROFILE, claudeModelToCodex } from './profiles/index.js';
+import { SESSION_AGENT_PROFILE, turnOptionsFor } from './profiles/index.js';
 import type { PooledAgent } from './agent-pool.js';
 import type { PoolContext, Task } from './pool-types.js';
 
@@ -62,7 +63,7 @@ export class SessionTaskProcessor {
     this.ctx.agentPool.setSessionAgentMonitor(monitorId);
 
     const source = monitorSource(monitorId);
-    const role = `session-${task.messageId}`;
+    const role = sessionRole(task.messageId);
 
     // If the deputy is mid-turn, steer it rather than spawning a parallel run.
     if (agent.session.isRunning()) {
@@ -82,7 +83,6 @@ export class SessionTaskProcessor {
     const prompt = openWindowsContext + reloadPrefix + task.content;
     this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
 
-    const isCodex = this.ctx.providerType === 'codex';
     await runAgentTurn(this.ctx, {
       agent,
       role,
@@ -92,10 +92,7 @@ export class SessionTaskProcessor {
       fp,
       monitorId,
       systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
-      allowedTools: isCodex ? undefined : SESSION_AGENT_PROFILE.allowedTools,
-      model: isCodex
-        ? claudeModelToCodex(SESSION_AGENT_PROFILE.model)
-        : SESSION_AGENT_PROFILE.model,
+      ...turnOptionsFor(SESSION_AGENT_PROFILE, this.ctx.providerType ?? ''),
     });
   }
 }

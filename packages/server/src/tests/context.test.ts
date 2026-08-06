@@ -13,7 +13,7 @@ describe('ContextTape', () => {
     tape.append('assistant', 'hi', monitorSource('0'));
 
     expect(tape.length).toBe(2);
-    const all = tape.getAllMessages();
+    const all = tape.getMessages();
     expect(all[0].role).toBe('user');
     expect(all[0].content).toBe('hello');
     expect(all[1].role).toBe('assistant');
@@ -53,40 +53,7 @@ describe('ContextTape', () => {
       const pruned = tape.pruneWindow('w1');
       expect(pruned).toHaveLength(2);
       expect(tape.length).toBe(1);
-      expect(tape.getAllMessages()[0].content).toBe('main');
-    });
-  });
-
-  describe('formatForPrompt', () => {
-    it('returns empty string for empty tape', () => {
-      expect(tape.formatForPrompt()).toBe('');
-    });
-
-    it('formats main messages with role tags', () => {
-      tape.append('user', 'hello', monitorSource('0'));
-      tape.append('assistant', 'hi', monitorSource('0'));
-
-      const formatted = tape.formatForPrompt();
-      expect(formatted).toContain('<user>hello</user>');
-      expect(formatted).toContain('<assistant>hi</assistant>');
-      expect(formatted).toContain('<previous_conversation>');
-    });
-
-    it('excludes window messages by default', () => {
-      tape.append('user', 'main', monitorSource('0'));
-      tape.append('user', 'window', windowSource('w1'));
-
-      const formatted = tape.formatForPrompt();
-      expect(formatted).not.toContain('window');
-    });
-
-    it('includes specific window when requested', () => {
-      tape.append('user', 'main', monitorSource('0'));
-      tape.append('user', 'win1', windowSource('w1'));
-
-      const formatted = tape.formatForPrompt({ includeWindows: true, windowId: 'w1' });
-      expect(formatted).toContain('user:w1');
-      expect(formatted).toContain('win1');
+      expect(tape.getMessages()[0].content).toBe('main');
     });
   });
 

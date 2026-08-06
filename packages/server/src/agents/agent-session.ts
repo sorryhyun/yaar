@@ -28,7 +28,8 @@ import { errMessage } from '../lib/errors.js';
 import { StreamToEventMapper } from './session-policies/stream-to-event-mapper.js';
 import { ProviderLifecycleManager } from './session-policies/provider-lifecycle-manager.js';
 import { ToolActionBridge } from './session-policies/tool-action-bridge.js';
-import { runInAgentContext, principalRole } from './agent-context.js';
+import { runInAgentContext } from './agent-context.js';
+import { principalRole } from './roles.js';
 import { assembleSystemPromptForRole } from './system-prompt.js';
 
 /**

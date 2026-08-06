@@ -4,8 +4,6 @@
  */
 import { mock, describe, it, expect } from 'bun:test';
 import { InteractionTimeline } from '../agents/interaction-timeline.js';
-import { ContextTape, monitorSource, windowSource } from '../agents/context.js';
-import { ContextAssemblyPolicy } from '../agents/context-pool-policies/context-assembly-policy.js';
 
 // ── AppServer turn queue drain ──────────────────────────────────────────
 
@@ -394,58 +392,11 @@ describe('Timeline injection into main prompt', () => {
 
     expect(timeline.size).toBe(2);
 
-    // Format for prompt injection
-    const formatted = timeline.format();
+    // Format for prompt injection — and clear, in the one step production uses.
+    const formatted = timeline.drainAndFormat();
     expect(formatted).toContain('<timeline>');
     expect(formatted).toContain('agent="ephemeral-1"');
     expect(formatted).toContain('agent="window-settings"');
-
-    // Drain clears the timeline
-    const drained = timeline.drain();
-    expect(drained).toHaveLength(2);
     expect(timeline.size).toBe(0);
-  });
-});
-
-// ── ContextAssemblyPolicy: buildWindowInitialContext ─────────────────────
-
-describe('ContextAssemblyPolicy.buildWindowInitialContext', () => {
-  it('includes last N main turns for new window agents', () => {
-    const tape = new ContextTape();
-    const policy = new ContextAssemblyPolicy();
-
-    tape.append('user', 'Hello', monitorSource('0'));
-    tape.append('assistant', 'Hi there!', monitorSource('0'));
-    tape.append('user', 'Open calendar', monitorSource('0'));
-    tape.append('assistant', 'Opening calendar...', monitorSource('0'));
-    tape.append('user', 'Show settings', monitorSource('0'));
-    tape.append('assistant', 'Here are your settings.', monitorSource('0'));
-
-    // Default 3 turns = 6 messages
-    const context = policy.buildWindowInitialContext(tape, 3);
-    expect(context).toContain('<recent_conversation>');
-    expect(context).toContain('Hello');
-    expect(context).toContain('Here are your settings.');
-  });
-
-  it('returns empty string when no main messages', () => {
-    const tape = new ContextTape();
-    const policy = new ContextAssemblyPolicy();
-
-    expect(policy.buildWindowInitialContext(tape)).toBe('');
-  });
-
-  it('excludes window messages', () => {
-    const tape = new ContextTape();
-    const policy = new ContextAssemblyPolicy();
-
-    tape.append('user', 'Main message', monitorSource('0'));
-    tape.append('assistant', 'Main response', monitorSource('0'));
-    tape.append('user', 'Window message', windowSource('win-1'));
-    tape.append('assistant', 'Window response', windowSource('win-1'));
-
-    const context = policy.buildWindowInitialContext(tape, 3);
-    expect(context).toContain('Main message');
-    expect(context).not.toContain('Window message');
   });
 });

@@ -11,16 +11,29 @@
 import { ServerEventType } from '@yaar/shared';
 import type { PoolContext, Task } from './pool-types.js';
 import type { AgentProfile } from './profiles/types.js';
-import {
-  buildAppAgentProfile,
-  APP_AGENT_TOOL_NAMES,
-  claudeModelToCodex,
-} from './profiles/index.js';
+import { buildAppAgentProfile, turnOptionsFor } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn } from './turn-helpers.js';
 import { windowSource, monitorSource } from './context.js';
+import { appRolePrefix, monitorRole } from './roles.js';
 import { appAgentKey } from './agent-pool.js';
 import { AppStateHandoffStore, formatAppStateHandoffNotice } from './app-state-handoff.js';
 import { captureDeclaredAppState } from '../features/window/app-protocol.js';
+
+/**
+ * The window queue's key for a (monitor, app) pair — what `WindowQueuePolicy` files
+ * this app's queue and its is-processing flag under.
+ *
+ * A third spelling of the same pair, beside {@link appAgentKey} (the pool's map key)
+ * and {@link appRolePrefix} (the per-turn role, in `roles.ts`). The three keyspaces
+ * are deliberately distinct — this one shares a namespace with plain-window queue
+ * keys — but each has exactly one owner now, because all three were hand-rebuilt at
+ * call sites and two of them had already drifted: this key and the role prefix put
+ * the monitor and the app in **opposite orders**, which reads as a typo right up
+ * until you swap them and the queue silently stops matching.
+ */
+export function appProcessingKey(monitorId: string, appId: string): string {
+  return `app-${monitorId}-${appId}`;
+}
 
 export class AppTaskProcessor {
   /** Track the most recent windowId per `{monitorId}::{appId}` (for tool resolution). */
@@ -73,7 +86,7 @@ export class AppTaskProcessor {
 
     this.activeWindows.set(appAgentKey(monitorId, appId), windowId);
 
-    const processingKey = `app-${monitorId}-${appId}`;
+    const processingKey = appProcessingKey(monitorId, appId);
     const isParallel = !!task.actionId;
 
     // If the app agent is already busy, try to steer (inject mid-turn message).
@@ -117,11 +130,10 @@ export class AppTaskProcessor {
 
     this.ctx.windowQueuePolicy.setProcessing(processingKey, true);
 
-    // Roles keep the `app-{appId}` prefix (principalRole() and hasRolePrefix()
-    // both key off it) and carry the owning monitor after it.
+    const rolePrefix = appRolePrefix(monitorId, appId);
     const agentRole = isParallel
-      ? `app-${appId}-m${monitorId}-${windowId}/${task.actionId}`
-      : `app-${appId}-m${monitorId}-${task.messageId}`;
+      ? `${rolePrefix}-${windowId}/${task.actionId}`
+      : `${rolePrefix}-${task.messageId}`;
 
     try {
       // Retire the incumbent before asking for one, so the turn below runs on an agent
@@ -176,19 +188,13 @@ export class AppTaskProcessor {
         // window handles the agent's actions resolve against, and the monitor its
         // `relay` reaches.
         monitorId,
-        // Codex doesn't filter tools per-thread via allowedTools — its per-thread
-        // mcp_servers override selects whole namespaces, not tools within one (see
-        // codexServerFilter) — so pass undefined and let it use all of them. Mirrors
-        // the monitor/session agents' Codex handling.
-        allowedTools: this.ctx.providerType === 'codex' ? undefined : [...APP_AGENT_TOOL_NAMES],
         systemPromptOverride: profile.systemPrompt,
-        model:
-          this.ctx.providerType === 'codex' ? claudeModelToCodex(profile.model) : profile.model,
+        ...turnOptionsFor(profile, this.ctx.providerType ?? ''),
         onAssistantResponse: (text) => {
           appResponseText = text;
         },
         onBeforeRun: async () => {
-          await this.ctx.sharedLogger?.registerAgent(agentRole, `monitor-${monitorId}`, windowId);
+          await this.ctx.sharedLogger?.registerAgent(agentRole, monitorRole(monitorId), windowId);
           await this.sendWindowStatus(windowId, agentRole, 'assigned');
           await this.sendWindowStatus(windowId, agentRole, 'active');
         },
@@ -246,8 +252,8 @@ export class AppTaskProcessor {
    * Retire one app's agent on one monitor so the next turn starts from nothing.
    *
    * The agent's memory lives in its provider session, which `disposeAppAgent` ends —
-   * the context tape is a log, not a prompt source (nothing calls `formatForPrompt`),
-   * so there is no branch to prune here.
+   * the context tape is a log, and nothing reads it back into a prompt, so there is
+   * no branch to prune here.
    *
    * The handoff fingerprints must go with it. They exist to tell an agent that comes
    * *back* to a window whether the app's state moved while it was away; handed to an
@@ -286,7 +292,7 @@ export class AppTaskProcessor {
     // caller passes the monitor it belonged to.
     const owner = monitorId ?? this.ownerMonitor(windowId);
     const key = appAgentKey(owner, appId);
-    const processingKey = `app-${owner}-${appId}`;
+    const processingKey = appProcessingKey(owner, appId);
 
     // Clear any queued tasks for this app on this monitor. Each is a click or message the
     // user made in a window that has since closed — it will not run, and saying so is the

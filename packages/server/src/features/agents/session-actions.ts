@@ -5,7 +5,8 @@
  */
 
 import type { ContextPool } from '../../agents/context-pool.js';
-import { SESSION_AGENT_PROFILE, claudeModelToCodex } from '../../agents/profiles/index.js';
+import { SESSION_AGENT_PROFILE, turnOptionsFor } from '../../agents/profiles/index.js';
+import { sessionRole } from '../../agents/roles.js';
 
 export type SessionAction = 'audit' | 'coordinate' | 'query';
 
@@ -49,7 +50,7 @@ export async function executeSessionAction(
     prompt = payload.question;
   }
 
-  const role = `session-${action}-${Date.now()}`;
+  const role = sessionRole(`${action}-${Date.now()}`);
   agent.currentRole = role;
   agent.lastUsed = Date.now();
 
@@ -58,12 +59,8 @@ export async function executeSessionAction(
       role,
       source: `yaar://monitors/0`, // Session agent is monitor-less; use monitor-0 for routing
       messageId: role,
-      allowedTools: SESSION_AGENT_PROFILE.allowedTools,
       systemPromptOverride: SESSION_AGENT_PROFILE.systemPrompt,
-      model:
-        pool.providerType === 'codex'
-          ? claudeModelToCodex(SESSION_AGENT_PROFILE.model)
-          : SESSION_AGENT_PROFILE.model,
+      ...turnOptionsFor(SESSION_AGENT_PROFILE, pool.providerType ?? ''),
     });
   } finally {
     agent.currentRole = null;

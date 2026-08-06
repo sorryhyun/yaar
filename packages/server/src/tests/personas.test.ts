@@ -33,7 +33,8 @@ import { getContextRestoreMessages } from '../logging/context-restore.js';
 import { parseSessionMessages } from '../logging/session-reader.js';
 import { monitorSource } from '../agents/context.js';
 import { assembleSystemPromptForRole } from '../agents/system-prompt.js';
-import { principalRole, runWithAgentContext } from '../agents/agent-context.js';
+import { runWithAgentContext } from '../agents/agent-context.js';
+import { principalRole } from '../agents/roles.js';
 import {
   listPersonas,
   readPersonas,

@@ -13,7 +13,8 @@ import type { SessionId } from '../session/types.js';
 /**
  * Principal tier of an agent — the identity that access control is keyed on.
  * Only the session agent acts as the user's deputy; monitor/app agents are
- * sandboxed workers.
+ * sandboxed workers. `roles.ts` maps a per-turn role string onto this
+ * (`principalRole`) and owns the prefixes that decide it.
  */
 export type AgentRole = 'session' | 'monitor' | 'app';
 
@@ -58,18 +59,6 @@ interface AgentContext {
 export interface AccessPrincipal {
   role?: AgentRole;
   systemApp?: boolean;
-}
-
-/**
- * Map a dynamic per-turn role string (e.g. "monitor-0-msg1", "app-foo-msg2",
- * "session-audit-123") to its principal tier. Anything that is not explicitly
- * the session agent (monitor, ephemeral, window workers) is a non-privileged
- * 'monitor'-tier principal.
- */
-export function principalRole(dynamicRole: string): AgentRole {
-  if (dynamicRole.startsWith('session-')) return 'session';
-  if (dynamicRole.startsWith('app-')) return 'app';
-  return 'monitor';
 }
 
 const agentContext = new AsyncLocalStorage<AgentContext>();

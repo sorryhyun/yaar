@@ -187,6 +187,7 @@ mock.module('../agents/profiles/index.js', () => ({
   getDeveloperAllowedTools: mock(() => []),
   claudeModelToCodex: mock(() => undefined),
   getMonitorTurnOptions: mock(() => ({ model: undefined, allowedTools: [] })),
+  turnOptionsFor: mock(() => ({ model: undefined, allowedTools: [] })),
   CODEX_AGENT_ROLES: {},
   codexRoleToToml: mock(() => ''),
 }));
@@ -280,18 +281,18 @@ describe('Multi-monitor lifecycle', () => {
 
     expect(created).toBe(true);
     expect(pool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.getMonitorAgentCount()).toBe(2);
+    expect(pool.agentPool.getMonitorAgentCount()).toBe(2);
   });
 
   it('removeMonitorAgent cleans up the agent and queue', async () => {
     await pool.createMonitorAgent('1');
     expect(pool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.getMonitorAgentCount()).toBe(2);
+    expect(pool.agentPool.getMonitorAgentCount()).toBe(2);
 
     await pool.removeMonitorAgent('1');
 
     expect(pool.hasMonitorAgent('1')).toBe(false);
-    expect(pool.getMonitorAgentCount()).toBe(1);
+    expect(pool.agentPool.getMonitorAgentCount()).toBe(1);
     // Only default monitor should remain
     expect(pool.hasMonitorAgent('0')).toBe(true);
   });
@@ -301,14 +302,14 @@ describe('Multi-monitor lifecycle', () => {
 
     expect(pool.hasMonitorAgent('0')).toBe(true);
     expect(pool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.getMonitorAgentCount()).toBe(2);
+    expect(pool.agentPool.getMonitorAgentCount()).toBe(2);
 
     // Removing default monitor should not affect monitor 1
     await pool.removeMonitorAgent('0');
 
     expect(pool.hasMonitorAgent('0')).toBe(false);
     expect(pool.hasMonitorAgent('1')).toBe(true);
-    expect(pool.getMonitorAgentCount()).toBe(1);
+    expect(pool.agentPool.getMonitorAgentCount()).toBe(1);
   });
 
   it('hasMonitorAgent returns false after removal', async () => {

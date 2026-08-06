@@ -92,11 +92,6 @@ export class PendingStore<TResult, TMeta = void> {
     return { resolved: true, meta: entry.meta };
   }
 
-  /** Whether an id is still awaiting an answer. */
-  has(id: string): boolean {
-    return this.entries.has(id);
-  }
-
   /**
    * Force-clear every pending entry belonging to a session, settling each as `cancelled`
    * so an awaiting tool unblocks now rather than at its own deadline.

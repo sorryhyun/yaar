@@ -25,7 +25,7 @@ describe('ContextTape auto-pruning', () => {
     }
 
     expect(tape.length).toBe(199);
-    const all = tape.getAllMessages();
+    const all = tape.getMessages();
     expect(all[0].content).toBe('msg-0');
     expect(all[198].content).toBe('msg-198');
   });
@@ -40,7 +40,7 @@ describe('ContextTape auto-pruning', () => {
     const keepCount = Math.floor(MAX_MONITOR_MESSAGES / 2);
     expect(tape.length).toBe(keepCount);
 
-    const all = tape.getAllMessages();
+    const all = tape.getMessages();
     // The oldest surviving message should be msg-101 (index 101 of original 201)
     expect(all[0].content).toBe(`msg-${MAX_MONITOR_MESSAGES + 1 - keepCount}`);
     // The newest should be the last appended
@@ -68,7 +68,7 @@ describe('ContextTape auto-pruning', () => {
 
     // All window messages must survive
     const windowMessages = tape
-      .getAllMessages()
+      .getMessages()
       .filter((m) => isWindowSource(m.source) && extractWindowId(m.source) === 'w1');
     expect(windowMessages).toHaveLength(windowContents.length);
     for (const expected of windowContents) {
@@ -92,7 +92,7 @@ describe('ContextTape auto-pruning', () => {
     expect(tape.length).toBe(keepCount);
 
     // Verify the most recent messages survived
-    const all = tape.getAllMessages();
+    const all = tape.getMessages();
     expect(all[all.length - 1].content).toBe(`batch2-${keepCount}`);
 
     // None of batch1 should remain since batch2 filled the second half

@@ -7,7 +7,6 @@ import {
   WindowSubscriptionPolicy,
   frameAppEvent,
 } from '../agents/context-pool-policies/window-subscription-policy.js';
-import { ContextTape, monitorSource } from '../agents/context.js';
 import type { Task } from '../agents/pool-types.js';
 
 describe('MonitorQueuePolicy', () => {
@@ -137,61 +136,6 @@ describe('ContextAssemblyPolicy', () => {
     );
     expect(windows).toContain('monitor="0"');
     expect(windows).toContain('yaar://windows/chat — Chat (you)');
-  });
-
-  describe('buildWindowInitialContext with configurable maxTurns', () => {
-    function buildTape(turnCount: number) {
-      const tape = new ContextTape();
-      for (let i = 1; i <= turnCount; i++) {
-        tape.append('user', `User message ${i}`, monitorSource('0'));
-        tape.append('assistant', `Assistant reply ${i}`, monitorSource('0'));
-      }
-      return tape;
-    }
-
-    it('defaults to 5 turns (10 messages) when no constructor arg is given', () => {
-      const policy = new ContextAssemblyPolicy(); // default windowInitialMaxTurns = 5
-      const tape = buildTape(8); // 16 messages total
-
-      const context = policy.buildWindowInitialContext(tape);
-      // Should include turns 4-8 (last 5 turns = 10 messages)
-      expect(context).not.toContain('User message 3');
-      expect(context).toContain('User message 4');
-      expect(context).toContain('Assistant reply 8');
-    });
-
-    it('respects custom windowInitialMaxTurns from constructor', () => {
-      const policy = new ContextAssemblyPolicy(2); // 2 turns = 4 messages
-      const tape = buildTape(5); // 10 messages total
-
-      const context = policy.buildWindowInitialContext(tape);
-      // Should only include turns 4 and 5 (last 2 turns)
-      expect(context).not.toContain('User message 3');
-      expect(context).toContain('User message 4');
-      expect(context).toContain('Assistant reply 5');
-    });
-
-    it('allows per-call override of maxTurns', () => {
-      const policy = new ContextAssemblyPolicy(5); // default 5
-      const tape = buildTape(10); // 20 messages
-
-      // Override to 1 turn = 2 messages
-      const context = policy.buildWindowInitialContext(tape, 1);
-      expect(context).not.toContain('User message 9');
-      expect(context).toContain('User message 10');
-      expect(context).toContain('Assistant reply 10');
-    });
-
-    it('includes all messages when fewer turns than maxTurns', () => {
-      const policy = new ContextAssemblyPolicy(10); // 10 turns
-      const tape = buildTape(3); // only 3 turns = 6 messages
-
-      const context = policy.buildWindowInitialContext(tape);
-      expect(context).toContain('User message 1');
-      expect(context).toContain('User message 2');
-      expect(context).toContain('User message 3');
-      expect(context).toContain('Assistant reply 3');
-    });
   });
 });
 

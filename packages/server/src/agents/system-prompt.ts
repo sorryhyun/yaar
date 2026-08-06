@@ -9,6 +9,7 @@
 import type { ProviderType } from '../providers/types.js';
 import { buildEnvironmentSection } from '../providers/environment.js';
 import { CLAUDE_PROVIDER_SECTION, CODEX_PROVIDER_SECTION } from './profiles/shared-sections.js';
+import { isAppRole, isSessionRole } from './roles.js';
 import { configRead } from '../storage/storage-manager.js';
 
 export interface SystemPromptLoaders {
@@ -26,7 +27,7 @@ function buildScopeSection(role: string, monitorId?: string): string {
   }
 
   // Profile-driven agents define their own identity — no generic scope.
-  if (role.startsWith('session-') || role.startsWith('app-')) {
+  if (isSessionRole(role) || isAppRole(role)) {
     return '';
   }
 
@@ -81,7 +82,7 @@ export async function assembleSystemPromptForRole(
 ): Promise<string> {
   const scopedPrompt = basePrompt + buildScopeSection(role, monitorId);
 
-  if (role.startsWith('app-')) {
+  if (isAppRole(role)) {
     return scopedPrompt;
   }
 

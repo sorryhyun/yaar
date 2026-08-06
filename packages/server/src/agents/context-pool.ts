@@ -16,6 +16,7 @@
 
 import { ContextTape, type ContextMessage } from './context.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
+import { monitorRole } from './roles.js';
 import { AgentPool, type PooledAgent, type AgentEntry } from './agent-pool.js';
 import type { AgentSession } from './agent-session.js';
 import { InteractionTimeline } from './interaction-timeline.js';
@@ -43,7 +44,7 @@ import {
 } from './context-pool-policies/index.js';
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
 import { MonitorTaskProcessor } from './monitor-task-processor.js';
-import { AppTaskProcessor } from './app-task-processor.js';
+import { AppTaskProcessor, appProcessingKey } from './app-task-processor.js';
 import { SessionTaskProcessor } from './session-task-processor.js';
 import { WindowEventCoordinator } from './window-event-coordinator.js';
 import type { PoolContext, PoolStats, Task } from './pool-types.js';
@@ -270,7 +271,7 @@ export class ContextPool implements PoolContext {
    * user message starts instantly instead of paying spawn + MCP handshake.
    */
   private prewarmMonitorAgent(agent: PooledAgent, monitorId: string): void {
-    void agent.session.prewarm(`monitor-${monitorId}`, {
+    void agent.session.prewarm(monitorRole(monitorId), {
       monitorId,
       ...getMonitorTurnOptions(this.providerType ?? ''),
     });
@@ -278,10 +279,6 @@ export class ContextPool implements PoolContext {
 
   hasMonitorAgent(monitorId: string): boolean {
     return this.agentPool.hasMonitorAgent(monitorId);
-  }
-
-  getMonitorAgentCount(): number {
-    return this.agentPool.getMonitorAgentCount();
   }
 
   getMonitorAgentIds(): string[] {
@@ -525,20 +522,12 @@ export class ContextPool implements PoolContext {
     this.windowEvents.handleWindowClose(windowId, appId, monitorId);
   }
 
-  getContextTape(): ContextTape {
-    return this.contextTape;
-  }
-
-  getTimeline(monitorId: string): InteractionTimeline {
-    return this.timelineFor(monitorId);
-  }
-
   /** Whether an app interaction for this window addresses a currently active app turn. */
   hasActiveAppAgentTurn(windowId: string): boolean {
     const appId = this.windowState.getAppIdForWindow(windowId);
     const monitorId = this.windowState.getMonitorForWindow(windowId);
     if (!appId || !monitorId || isPreviewAppId(appId)) return false;
-    return this.windowQueuePolicy.isProcessing(`app-${monitorId}-${appId}`);
+    return this.windowQueuePolicy.isProcessing(appProcessingKey(monitorId, appId));
   }
 
   /**
@@ -565,11 +554,6 @@ export class ContextPool implements PoolContext {
       }
       this.timelineFor(monitorId).pushUser(interaction);
     }
-  }
-
-  pruneWindowContext(windowId: string): void {
-    const pruned = this.contextTape.pruneWindow(windowId);
-    console.log(`[ContextPool] Pruned ${pruned.length} messages from window ${windowId}`);
   }
 
   getSessionLogger(): SessionLogger | null {
@@ -611,21 +595,6 @@ export class ContextPool implements PoolContext {
 
   hasAgent(agentId: string): boolean {
     return this.agentPool.hasAgent(agentId);
-  }
-
-  hasActiveAgent(windowId: string): boolean {
-    // Check app agents via appId lookup, scoped to the window's own monitor —
-    // the same app running on another monitor is a different agent.
-    const appId = this.windowState.getAppIdForWindow(windowId);
-    if (appId) {
-      const monitorId = this.windowState.getMonitorForWindow(windowId);
-      // No monitor means no such window, and no window means no agent driving it.
-      // Asking about monitor 0 instead would report the wrong monitor's agent as busy.
-      if (!monitorId) return false;
-      return this.agentPool.hasRolePrefix(`app-${appId}-m${monitorId}`);
-    }
-    // Plain windows are handled by the monitor agent, so check for monitor agent activity
-    return false;
   }
 
   getStats(): PoolStats {

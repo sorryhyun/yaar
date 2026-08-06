@@ -13,12 +13,6 @@ function rectsOverlap(a: WindowBounds, b: WindowBounds): boolean {
 }
 
 export class ContextAssemblyPolicy {
-  private readonly windowInitialMaxTurns: number;
-
-  constructor(windowInitialMaxTurns = 5) {
-    this.windowInitialMaxTurns = windowInitialMaxTurns;
-  }
-
   /**
    * The `<open_windows>` block, in stacking order — bottom of the screen's pile first, so
    * the last line is the window the user is looking at.
@@ -105,45 +99,6 @@ export class ContextAssemblyPolicy {
       prompt: timelinePrefix + options.openWindows + options.reloadPrefix + content,
       contextContent: content,
     };
-  }
-
-  /**
-   * Build prompt for window agent interactions (subsequent turns, session continuity).
-   * No contextPrefix — window agents maintain their own provider session.
-   */
-  buildWindowPrompt(
-    content: string,
-    options: {
-      openWindows: string;
-      reloadPrefix: string;
-    },
-  ): string {
-    return options.openWindows + options.reloadPrefix + content;
-  }
-
-  /**
-   * Build initial context for a new window agent.
-   * Includes the last N monitor conversation turns so the window agent has context
-   * about what the user and monitor agent have been discussing.
-   */
-  buildWindowInitialContext(
-    tape: ContextTape,
-    maxTurns: number = this.windowInitialMaxTurns,
-  ): string {
-    const mainMessages = tape.getMessages({ includeWindows: false });
-    if (mainMessages.length === 0) return '';
-
-    // Take the last N turns (each turn = user + assistant pair)
-    const recent = mainMessages.slice(-maxTurns * 2);
-    if (recent.length === 0) return '';
-
-    const formatted = recent
-      .map((m) => {
-        return `<${m.role}>${m.content}</${m.role}>`;
-      })
-      .join('\n\n');
-
-    return `<recent_conversation>\n${formatted}\n</recent_conversation>\n\n`;
   }
 
   appendUserMessage(tape: ContextTape, content: string, source: ContextSource): void {

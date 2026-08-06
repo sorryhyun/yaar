@@ -532,6 +532,28 @@ export class AgentPool {
   }
 
   /**
+   * Acquire a provider, build an agent on it, and hand the provider back if the
+   * build fails. Every tier that supplies its own provider goes through here.
+   *
+   * The compensation is the whole point: `createAgentCore` returns `null` for a
+   * refused limiter slot, and a provider acquired a line earlier is a live child
+   * process (or a warm-pool slot) that nothing else holds a reference to. Written
+   * out at four call sites before this existed, which is four chances to forget it.
+   *
+   * `createMonitorAgent` is deliberately not a caller — `ContextPool` supplies that
+   * tier's provider from the warm pool and owns its disposal.
+   */
+  private async createWithFreshProvider(): Promise<PooledAgent | null> {
+    const provider = await this.acquireProvider();
+    const agent = await this.createAgentCore(provider ?? undefined);
+    if (!agent) {
+      if (provider) await provider.dispose();
+      return null;
+    }
+    return agent;
+  }
+
+  /**
    * Create a monitor agent for the given monitor with the given provider.
    */
   async createMonitorAgent(
@@ -551,12 +573,8 @@ export class AgentPool {
    * The caller is responsible for calling disposeEphemeral() after the task.
    */
   async createEphemeral(): Promise<PooledAgent | null> {
-    const provider = await this.acquireProvider();
-    const agent = await this.createAgentCore(provider ?? undefined);
-    if (!agent) {
-      if (provider) await provider.dispose();
-      return null;
-    }
+    const agent = await this.createWithFreshProvider();
+    if (!agent) return null;
     this.ephemeralAgents.add(agent);
     console.log(`[AgentPool] Ephemeral agent created: ${agent.instanceId}`);
     return agent;
@@ -669,12 +687,8 @@ export class AgentPool {
    * the `appAgents.set` below the only writer for that key.
    */
   private async createAppAgent(monitorId: string, appId: string): Promise<PooledAgent | null> {
-    const provider = await this.acquireProvider();
-    const agent = await this.createAgentCore(provider ?? undefined);
-    if (!agent) {
-      if (provider) await provider.dispose();
-      return null;
-    }
+    const agent = await this.createWithFreshProvider();
+    if (!agent) return null;
 
     this.appAgents.set(appKey(monitorId, appId), agent);
     console.log(
@@ -827,12 +841,8 @@ export class AgentPool {
     subId: string,
     options: SpawnSubAgentOptions,
   ): Promise<SubAgent | null> {
-    const provider = await this.acquireProvider();
-    const agent = await this.createAgentCore(provider ?? undefined);
-    if (!agent) {
-      if (provider) await provider.dispose();
-      return null;
-    }
+    const agent = await this.createWithFreshProvider();
+    if (!agent) return null;
 
     const tools = options.tools ?? [];
     const record: SubAgent = {
@@ -991,12 +1001,8 @@ export class AgentPool {
   async createSessionAgent(): Promise<PooledAgent | null> {
     if (this.sessionAgent) return this.sessionAgent;
 
-    const provider = await this.acquireProvider();
-    const agent = await this.createAgentCore(provider ?? undefined);
-    if (!agent) {
-      if (provider) await provider.dispose();
-      return null;
-    }
+    const agent = await this.createWithFreshProvider();
+    if (!agent) return null;
 
     this.sessionAgent = agent;
     console.log(`[AgentPool] Session agent created: ${agent.instanceId}`);
@@ -1148,16 +1154,6 @@ export class AgentPool {
         if (agent.session.isRunning()) await agent.session.interrupt();
         return true;
       }
-    }
-    return false;
-  }
-
-  /**
-   * Check if any agent has a role starting with the given prefix.
-   */
-  hasRolePrefix(prefix: string): boolean {
-    for (const { agent } of this.allAgents()) {
-      if (agent.currentRole?.startsWith(prefix)) return true;
     }
     return false;
   }

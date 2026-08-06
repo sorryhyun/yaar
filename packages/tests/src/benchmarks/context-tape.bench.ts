@@ -92,25 +92,9 @@ group('ContextTape.getMessages (200 messages)', () => {
   });
 });
 
-// ── ContextTape formatForPrompt ───────────────────────────────────────────────
-
-group('ContextTape.formatForPrompt (200 messages)', () => {
-  bench('monitor-only (default for monitor agents)', () => {
-    TAPE_200.formatForPrompt({ includeWindows: false });
-  });
-
-  bench('main + one window (default for window agents)', () => {
-    TAPE_200.formatForPrompt({ includeWindows: true, windowId: 'win-0' });
-  });
-
-  bench('all windows included', () => {
-    TAPE_200.formatForPrompt({ includeWindows: true });
-  });
-});
-
-group('ContextTape.formatForPrompt (400 messages)', () => {
+group('ContextTape.getMessages (400 messages)', () => {
   bench('monitor-only on large tape', () => {
-    TAPE_400.formatForPrompt({ includeWindows: false });
+    TAPE_400.getMessages({ includeWindows: false });
   });
 });
 

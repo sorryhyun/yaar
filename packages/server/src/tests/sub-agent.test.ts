@@ -36,7 +36,8 @@ import {
   toolSpecChars,
   MAX_SUB_AGENT_TOOLS,
 } from '../agents/profiles/sub-agent.js';
-import { principalRole, runWithAgentContext } from '../agents/agent-context.js';
+import { runWithAgentContext } from '../agents/agent-context.js';
+import { principalRole } from '../agents/roles.js';
 import { assembleSystemPromptForRole } from '../agents/system-prompt.js';
 import { invokePersonas } from '../handlers/apps/agents-resource.js';
 import type { ResolvedUri } from '../handlers/uri-resolve.js';

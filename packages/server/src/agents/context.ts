@@ -67,16 +67,6 @@ export interface GetMessagesOptions {
 }
 
 /**
- * Options for formatting context for prompt injection.
- */
-export interface FormatOptions {
-  /** Include messages from window branches (default: false for window agents) */
-  includeWindows?: boolean;
-  /** Only include messages from this specific window (for window-specific context) */
-  windowId?: string;
-}
-
-/**
  * Maximum number of monitor messages before pruning.
  * Window messages are pruned on window close, so only monitor messages accumulate unbounded.
  */
@@ -88,7 +78,6 @@ const MAX_MONITOR_MESSAGES = 200;
  * Messages are stored with their source (monitor or window) and can be:
  * - Retrieved with optional filtering
  * - Pruned by window (manual operation)
- * - Formatted for prompt injection
  *
  * A sliding window limits monitor-source messages to prevent unbounded memory growth.
  */
@@ -150,13 +139,6 @@ export class ContextTape {
   }
 
   /**
-   * Get all messages (unfiltered).
-   */
-  getAllMessages(): ContextMessage[] {
-    return [...this.messages];
-  }
-
-  /**
    * Prune all messages from a specific window branch.
    * Returns the pruned messages for logging/debugging.
    *
@@ -173,37 +155,6 @@ export class ContextTape {
       return true;
     });
     return pruned;
-  }
-
-  /**
-   * Format messages for injection into agent prompts.
-   *
-   * For monitor agents: Include only monitor conversation (default)
-   * For window agents: Include monitor + optionally their own window history
-   */
-  formatForPrompt(options?: FormatOptions): string {
-    const { includeWindows = false, windowId } = options ?? {};
-
-    const filtered = this.messages.filter((msg) => {
-      if (!isWindowSource(msg.source)) return true;
-      if (!includeWindows) return false;
-      if (windowId) return extractWindowId(msg.source) === windowId;
-      return true;
-    });
-
-    if (filtered.length === 0) {
-      return '';
-    }
-
-    const formatted = filtered
-      .map((m) => {
-        const wid = extractWindowId(m.source);
-        const tag = wid ? `${m.role}:${wid}` : m.role;
-        return `<${tag}>${m.content}</${tag}>`;
-      })
-      .join('\n\n');
-
-    return `<previous_conversation>\n${formatted}\n</previous_conversation>\n\n`;
   }
 
   /**

@@ -34,10 +34,6 @@ export class WindowQueuePolicy {
     return dropped;
   }
 
-  getQueueSize(key: string): number {
-    return this.queues.get(key)?.length ?? 0;
-  }
-
   getQueueSizes(): Record<string, number> {
     const sizes: Record<string, number> = {};
     for (const [key, queue] of this.queues.entries()) {

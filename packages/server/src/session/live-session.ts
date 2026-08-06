@@ -35,7 +35,7 @@ import {
   type ServerEvent,
   type OSAction,
   type MonitorInfo,
-  type ActiveAgentSnapshot,
+  DEFAULT_MONITOR_ID,
 } from '@yaar/shared';
 import { SurfaceRegistry } from './surface-state.js';
 import type { YaarWebSocket } from './types.js';
@@ -416,10 +416,6 @@ export class LiveSession {
     return this.connections.size > 0;
   }
 
-  getConnectionCount(): number {
-    return this.connections.size;
-  }
-
   /**
    * Single gateway for all server→frontend events.
    *
@@ -461,11 +457,6 @@ export class LiveSession {
     return this.pool?.getSessionLogger() ?? this.sessionLogger;
   }
 
-  /** Everything this session currently holds. See `session-snapshot-service.ts`. */
-  async buildSnapshot(): Promise<{ actions: OSAction[]; agents: ActiveAgentSnapshot[] }> {
-    return this.snapshots.build();
-  }
-
   /**
    * Generate a snapshot of current windows as window.create actions.
    * Used when a new connection joins an existing session.
@@ -496,7 +487,7 @@ export class LiveSession {
           const action = hook.action.payload as OSAction;
           const hookLogger = this.getSessionLogger();
           if (action.type.startsWith('window.')) {
-            this.windowState.handleAction(action, '0');
+            this.windowState.handleAction(action, DEFAULT_MONITOR_ID);
             // Stamp the handle onto the action so frontend receives the scoped windowId
             const raw = (action as { windowId?: string }).windowId;
             const resolved = raw ? (this.windowState.handleMap.resolve(raw) ?? raw) : undefined;
@@ -508,14 +499,14 @@ export class LiveSession {
             this.broadcast({
               type: ServerEventType.ACTIONS,
               actions: [stamped],
-              monitorId: '0',
+              monitorId: DEFAULT_MONITOR_ID,
             });
           } else {
             hookLogger?.logAction(action);
             this.broadcast({
               type: ServerEventType.ACTIONS,
               actions: [action],
-              monitorId: '0',
+              monitorId: DEFAULT_MONITOR_ID,
             });
           }
         }
@@ -649,10 +640,6 @@ export class LiveSession {
    */
   removeMonitor(monitorId: string): Promise<void> {
     return this.monitorRegistry.remove(monitorId);
-  }
-
-  hasWindow(windowId: string): boolean {
-    return this.windowState.hasWindow(windowId);
   }
 
   getPool(): ContextPool | null {

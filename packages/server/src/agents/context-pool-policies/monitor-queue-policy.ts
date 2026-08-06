@@ -65,8 +65,4 @@ export class MonitorQueuePolicy {
   endProcessing(): void {
     this.processing = false;
   }
-
-  isProcessing(): boolean {
-    return this.processing;
-  }
 }

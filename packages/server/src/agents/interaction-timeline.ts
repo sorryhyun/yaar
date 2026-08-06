@@ -88,21 +88,10 @@ export class InteractionTimeline {
   }
 
   /**
-   * Format all pending entries as an XML block for prompt injection.
-   * Returns empty string if no entries are pending.
-   */
-  format(): string {
-    if (this.entries.length === 0) return '';
-
-    const lines = this.entries.map((e) => this.formatEntry(e));
-
-    return `<timeline>\n${lines.join('\n')}\n</timeline>\n\n`;
-  }
-
-  /**
    * Atomically format and drain all entries.
-   * Returns the formatted string and clears the timeline in one step,
-   * preventing race conditions where entries could be added between format() and drain().
+   *
+   * One step on purpose: a separate format-then-clear pair loses every entry that
+   * arrives between the two.
    */
   drainAndFormat(): string {
     if (this.entries.length === 0) return '';
@@ -111,15 +100,6 @@ export class InteractionTimeline {
 
     this.entries = [];
     return `<timeline>\n${lines.join('\n')}\n</timeline>\n\n`;
-  }
-
-  /**
-   * Drain all entries, returning them and clearing the timeline.
-   */
-  drain(): TimelineEntry[] {
-    const items = this.entries;
-    this.entries = [];
-    return items;
   }
 
   /**

@@ -17,40 +17,18 @@ The debt is concentrated: two god objects that stopped halfway through decomposi
 drifted**, and a leaky `ContextPool` facade. Phases are ordered so each shrinks the blast
 radius of the next.
 
-## Phase 1 — dead surface & drift-prone encodings (an afternoon, near-zero risk)
+**Phase 1 (dead surface & drift-prone encodings) landed 2026-08-06** and has been removed
+from this document; the code is the record. Three notes worth carrying forward:
 
-**Dead code, zero non-test callers (verified by grep):**
-
-- `session/index.ts` — all 18 lines, zero importers (received 6 commits in 6 months while
-  unreachable).
-- `LiveSession.buildSnapshot`, `.getConnectionCount`, `.hasWindow`; `SessionSnapshot`
-  (`session/types.ts:12`); `PendingStore.has`.
-- `ContextTape.formatForPrompt` / `.getAllMessages`;
-  `ContextAssemblyPolicy.buildWindowPrompt` / `.buildWindowInitialContext` (last traces of
-  the abandoned "window agent" design — `buildWindowInitialContext` is the sole reason the
-  class holds `windowInitialMaxTurns` state); `ContextPool.pruneWindowContext`,
-  `.hasActiveAgent`, `.getContextTape`, `.getTimeline`, `.getMonitorAgentCount`;
-  `MonitorQueuePolicy.isProcessing`; `WindowQueuePolicy.getQueueSize`;
-  `InteractionTimeline.format` / `.drain`. Delete each with its keep-alive tests.
-- Stale comment `action-emitter.ts:953` (references deleted `event-sequencer.ts`).
-- `live-session.ts:498,510,517`: `'0'` literals → `DEFAULT_MONITOR_ID`.
-
-**Encodings with one owner each (drift already observed):**
-
-- The (monitor, app) pair is spelled three ways: `` `${m}::${a}` `` (`agent-pool.ts:48`),
-  `` `app-${m}-${a}` `` (`app-task-processor.ts:76` — hand-rebuilt at
-  `context-pool.ts:541`), `` `app-${a}-m${m}` `` (**reversed order**,
-  `app-task-processor.ts:123` — hand-rebuilt at `context-pool.ts:625`).
-  Export `appProcessingKey()` / `appRolePrefix()` from `app-task-processor.ts`; both
-  `ContextPool` sites call them.
-- Role strings are minted in five files and parsed in one (`agent-context.ts:69`
-  `principalRole` — a security boundary; also `system-prompt.ts:198`). New `agents/roles.ts`
-  owns mint + parse.
-- The acquire-provider/create/dispose-on-failure triplet is copied verbatim four times
-  (`agent-pool.ts:548,666,824,988`) → one private `createWithFreshProvider()`.
-- The Codex-vs-Claude turn-options branch is written independently three times
-  (`profiles/index.ts:59`, `session-task-processor.ts:85`, `app-task-processor.ts:183`) →
-  one `turnOptionsFor(profile, providerType)` in `profiles/index.ts`.
+- Deleting `ContextPool.hasActiveAgent` left `AgentPool.hasRolePrefix` with no callers, so
+  it went too. `appRolePrefix()` now lives in `agents/roles.ts` beside the other role
+  minters rather than in `app-task-processor.ts` as proposed — one home for every role
+  string, with `appProcessingKey()` (a queue key, not a role) staying behind.
+- `agents/roles.ts` also took `principalRole` off `agent-context.ts`, so the prefixes and
+  the access tier they decide sit in one file.
+- `turnOptionsFor()` was applied to the fourth site as well
+  (`features/agents/session-actions.ts`), which fixes the unconditional-`allowedTools`-on-
+  Codex divergence Phase 4.5 records. That is the one behavior change in the phase.
 
 ## Phase 2 — seams & honest contracts (a day or two each)
 

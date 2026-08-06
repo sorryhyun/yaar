@@ -949,8 +949,8 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       onExpire: (id, meta) => this.expireDialog(id, sessionId, meta),
     });
 
-    // Emit through the event system so LiveSession.broadcast() handles delivery
-    // (same pattern as 'app-protocol' events — ensures seq stamping and proper routing)
+    // Emit through the event system so LiveSession.broadcast() handles delivery and
+    // monitor-scoped routing — the same door 'app-protocol' events go through.
     this.emit('approval-request', {
       sessionId,
       event: {

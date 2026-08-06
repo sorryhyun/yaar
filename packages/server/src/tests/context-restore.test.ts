@@ -72,15 +72,17 @@ describe('context restore pipeline', () => {
     const tape = new ContextTape();
     tape.restore(restored);
 
-    const promptForW1 = tape.formatForPrompt({ includeWindows: true, windowId: 'w1' });
-    expect(promptForW1).toContain('<user:w1>w1 ask</user:w1>');
-    expect(promptForW1).toContain('<assistant:w1>w1 answer</assistant:w1>');
-    expect(promptForW1).not.toContain('w2 ask');
+    // The branches stay separate after the restore: asking for one window's history
+    // never hands back the other's.
+    const forW1 = tape.getMessages({ windowIds: ['w1'] }).map((m) => `${m.role}:${m.content}`);
+    expect(forW1).toContain('user:w1 ask');
+    expect(forW1).toContain('assistant:w1 answer');
+    expect(forW1).not.toContain('user:w2 ask');
 
-    const promptForW2 = tape.formatForPrompt({ includeWindows: true, windowId: 'w2' });
-    expect(promptForW2).toContain('<user:w2>w2 ask</user:w2>');
-    expect(promptForW2).toContain('<assistant:w2>w2 answer</assistant:w2>');
-    expect(promptForW2).not.toContain('w1 ask');
+    const forW2 = tape.getMessages({ windowIds: ['w2'] }).map((m) => `${m.role}:${m.content}`);
+    expect(forW2).toContain('user:w2 ask');
+    expect(forW2).toContain('assistant:w2 answer');
+    expect(forW2).not.toContain('user:w1 ask');
   });
 
   it('supports restore policy for monitor + selected windows', () => {

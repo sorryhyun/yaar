@@ -11,6 +11,7 @@ import type { PooledAgent } from './agent-pool.js';
 import { getMonitorTurnOptions } from './profiles/index.js';
 import { buildReloadContext, runAgentTurn, createBudgetOutputCallback } from './turn-helpers.js';
 import { monitorSource } from './context.js';
+import { monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
 
 /**
@@ -173,7 +174,7 @@ export class MonitorTaskProcessor {
    */
   async processMonitorTask(agent: PooledAgent, task: Task): Promise<void> {
     const monitorId = monitorOf(task);
-    const monitorRole = `monitor-${monitorId}-${task.messageId}`;
+    const turnRole = monitorTurnRole(monitorId, task.messageId);
 
     agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
 
@@ -194,13 +195,13 @@ export class MonitorTaskProcessor {
       monitorSource(monitorId),
     );
 
-    const canonicalMonitor = `monitor-${monitorId}`;
+    const canonicalMonitor = monitorRole(monitorId);
     const resumeSessionId = this.ctx.savedThreadIds?.[canonicalMonitor];
     delete this.ctx.savedThreadIds?.[canonicalMonitor];
 
     await runAgentTurn(this.ctx, {
       agent,
-      role: monitorRole,
+      role: turnRole,
       source: monitorSource(monitorId),
       task,
       prompt: monitorContext.prompt,
@@ -223,7 +224,7 @@ export class MonitorTaskProcessor {
    */
   async processEphemeralTask(agent: PooledAgent, task: Task): Promise<void> {
     const monitorId = monitorOf(task);
-    const ephemeralRole = `ephemeral-${monitorId}-${task.messageId}`;
+    const turnRole = ephemeralRole(monitorId, task.messageId);
 
     agent.session.setOutputCallback(
       createBudgetOutputCallback(this.ctx, agent, monitorId, 'ephemeral agent'),
@@ -244,7 +245,7 @@ export class MonitorTaskProcessor {
     try {
       await runAgentTurn(this.ctx, {
         agent,
-        role: ephemeralRole,
+        role: turnRole,
         source: monitorSource(monitorId),
         task,
         prompt,
@@ -253,7 +254,7 @@ export class MonitorTaskProcessor {
         onAfterRun: (recordedActions) => {
           this.ctx
             .timelineFor(monitorId)
-            .pushAI(ephemeralRole, task.content.slice(0, 100), recordedActions);
+            .pushAI(turnRole, task.content.slice(0, 100), recordedActions);
         },
         onFinally: () => {
           agent.session.setOutputCallback(null);
