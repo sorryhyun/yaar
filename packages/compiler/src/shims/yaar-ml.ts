@@ -71,37 +71,50 @@ function mlHeaders(): Record<string, string> {
 }
 
 /**
- * Put the REMOTE-mode token on a same-origin URL that ORT will fetch *itself*.
+ * Put BOTH of YAAR's credentials on a same-origin URL that ORT will fetch *itself*.
  *
- * This is the same shape as the /api/ml-runtime/ bug, one hop further on. In REMOTE
- * mode — which every bundled exe is (`IS_REMOTE = REMOTE === '1' || IS_BUNDLED_EXE`)
- * — `/api/storage/*` demands the remote token, and an app's own `fetch` only passes
- * because the browser sends the iframe's URL (which carries `?token=`) as `Referer`.
- * Nothing ORT fetches gets that Referer: `env.wasm.proxy` above moves session
- * creation onto a worker spawned from the *ORT script*, so an `externalData` URL is
- * fetched with `/api/ml-runtime/ort…mjs` as its Referer — no token — and 401s.
+ * This is the same shape as the /api/ml-runtime/ bug, one hop further on. `env.wasm.proxy`
+ * above moves session creation onto a worker spawned from the *ORT script*, so every
+ * `externalData` URL is fetched from a context that carries neither of the two things a
+ * weight route asks for:
  *
- * The app never sees it coming: it resolves the URL with a `fetch` of its own (main
- * thread, Referer carries the token → 200), so the file demonstrably exists, and then
- * ORT reports it as unloadable. Installed builds only; dev has no gate to fail.
+ * - **The REMOTE token.** In REMOTE mode — which every bundled exe is (`IS_REMOTE =
+ *   REMOTE === '1' || IS_BUNDLED_EXE`) — `/api/storage/*` demands it, and an app's own
+ *   `fetch` only passes because the browser sends the iframe's URL (which carries
+ *   `?token=`) as `Referer`. ORT's worker fetches with `/api/ml-runtime/ort…mjs` as its
+ *   Referer, so it 401s.
+ * - **The iframe token.** Under app-origin isolation (`http/origin-boundary.ts`) an
+ *   isolated app is a *different browser origin* from the desktop, and `resolvePrincipal`
+ *   refuses any app-origin request presenting no token — 403 `App-origin request must
+ *   present a valid iframe token`. The app's own `fetch` passes because the prelude puts
+ *   `X-Iframe-Token` on it; ORT's worker has no such patch. This one is NOT remote-only:
+ *   isolation is on by default locally, which is why `/api/storage/*` and
+ *   `/api/ml-weights` both 403 on a plain `make claude-dev` box.
+ *
+ * The app never sees either coming: it resolves the URL with a `fetch` of its own (main
+ * thread, both credentials attached → 200), so the file demonstrably exists and a probe
+ * reports `ok:true`, and then ORT reports it as unloadable ~4ms later.
  *
  * The URL is the only channel ORT leaves open — there is no hook to add a header to
- * these requests — so the token rides in the query string, exactly as `resolveAssetUrl`
- * does for the iframe URL itself. Only same-origin URLs are touched: this token is
- * YAAR's, and must not leak to another host.
+ * these requests — so both tokens ride in the query string, exactly as `resolveAssetUrl`
+ * does for the iframe URL and `storage-sdk`'s `url()` does for `<img src>`. Only
+ * same-origin URLs are touched: these tokens are YAAR's, and must not leak to another host.
  */
 function authorizeOrtUrl(u: string): string {
-  let token: string | null = null;
+  let remoteToken: string | null = null;
   try {
-    token = new URLSearchParams(location.search).get('token');
+    remoteToken = new URLSearchParams(location.search).get('token');
   } catch {
-    return u;
+    // No readable search — the iframe token below may still apply, so don't bail yet.
   }
-  if (!token) return u; // not REMOTE, or no token to carry — nothing to add
+  const iframeToken = (window as unknown as { __YAAR_TOKEN__?: string }).__YAAR_TOKEN__ || null;
+  if (!remoteToken && !iframeToken) return u; // nothing to carry
   try {
     const url = new URL(u, location.href);
     if (url.origin !== location.origin) return u;
-    if (!url.searchParams.has('token')) url.searchParams.set('token', token);
+    if (remoteToken && !url.searchParams.has('token')) url.searchParams.set('token', remoteToken);
+    if (iframeToken && !url.searchParams.has('__yaar_token'))
+      url.searchParams.set('__yaar_token', iframeToken);
     return url.href;
   } catch {
     return u;
