@@ -284,17 +284,17 @@ export const DISABLED_FEATURES = [
  * inherits — if a codex release regresses it, drop the entry and the stateful leg silently
  * catches the fallback.
  *
- * **`code_mode_host`** is the *host* half of code mode: the separate runtime process codex
- * spawns and delegates `exec` cells to ("spawned code-mode host has no stdin", "remote
- * code-mode host requires the code_mode_host feature to be enabled"). It is `stable` + on by
- * default and is listed here to say so deliberately rather than inherit it. The half that
- * decides whether a *model* ever gets an `exec` tool is `code_mode`, which stays in
- * {@link DISABLED_FEATURES} — that is the one carrying the "explicit MCP calls, not a JS
- * shell" rule. Turning the host on without the model side gives the runtime no caller; if
- * `code_mode` is ever enabled, this entry stops being inert and that decision has to be made
- * on its own terms.
+ * **`code_mode_host`** is deliberately *not* here. It is the *host* half of code mode: the
+ * separate runtime process codex spawns and delegates `exec` cells to ("spawned code-mode
+ * host has no stdin", "remote code-mode host requires the code_mode_host feature to be
+ * enabled"). It is `stable` + on by default, so naming it here asserted a default we already
+ * had. The half that decides whether a *model* ever gets an `exec` tool is `code_mode`, which
+ * stays in {@link DISABLED_FEATURES} — that is the one carrying the "explicit MCP calls, not
+ * a JS shell" rule. With the model side off the host has no caller, so the entry bought
+ * nothing and only read as an opinion YAAR does not hold. If `code_mode` is ever enabled,
+ * enabling the host becomes a real decision to make on its own terms.
  */
-export const ENABLED_FEATURES = ['mcp_2026_07_28', 'code_mode_host'];
+export const ENABLED_FEATURES = ['mcp_2026_07_28'];
 
 /**
  * Build the CLI args for `codex app-server`.
