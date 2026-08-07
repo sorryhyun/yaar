@@ -6,6 +6,7 @@ import type { GitInfo } from "./GitInfo.js";
 import type { SessionSource } from "./SessionSource.js";
 import type { ThreadExtra } from "./ThreadExtra.js";
 import type { ThreadHistoryMode } from "./ThreadHistoryMode.js";
+import type { ThreadSection } from "./ThreadSection.js";
 import type { ThreadSource } from "./ThreadSource.js";
 import type { ThreadStatus } from "./ThreadStatus.js";
 import type { Turn } from "./Turn.js";
@@ -40,9 +41,13 @@ preview: string,
  */
 ephemeral: boolean,
 /**
- * Whether the thread has been pinned by the user.
+ * The independently persisted section selected for this thread, if any.
  */
-isPinned: boolean,
+section: ThreadSection | null,
+/**
+ * Unix timestamp in seconds when the thread entered its current section.
+ */
+sectionEnteredAt: number | null,
 /**
  * Persisted thread history contract selected when this thread was created.
  */
