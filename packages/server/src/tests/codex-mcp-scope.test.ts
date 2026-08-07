@@ -20,8 +20,11 @@
  */
 import { describe, it, expect } from 'bun:test';
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CodexProvider } from '../providers/codex/provider.js';
-import { getCodexAppServerArgs } from '../config/providers/codex.js';
+import { getCodexAppServerArgs, detectUserMcpServers } from '../config/providers/codex.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 import type { AppServer } from '../providers/codex/app-server.js';
 import type { JsonRpcWsClient } from '../providers/codex/jsonrpc-ws-client.js';
@@ -155,14 +158,93 @@ describe('codex per-thread MCP scope', () => {
     // which is how a server the *user's* ~/.codex/config.toml declares gets taken away —
     // per-thread it could not be.
     //
-    // The rule, not a roster: which servers are named is `DISABLED_MCP_SERVERS`'s business
-    // (currently none — the block is commented out in `config/providers/codex.ts`), and
-    // asserting the two entries it used to carry made this fail the moment that changed
-    // while the containment it exists to guard still held perfectly. What must never
-    // change is the *shape*: a takeaway is the only thing this list may contain.
+    // The rule, not a roster: which servers are named is `detectUserMcpServers()`'s business
+    // — it reads them off the machine's own `$CODEX_HOME/config.toml`, so asserting on the
+    // two entries this list used to carry by name made this fail the moment a machine had
+    // different ones while the containment it exists to guard still held perfectly. What
+    // must never change is the *shape*: a takeaway is the only thing this list may contain.
     const mcpArgs = getCodexAppServerArgs().filter((a) => a.includes('mcp_servers'));
     for (const arg of mcpArgs) {
       expect(arg).toMatch(/^mcp_servers\.[^.]+\.enabled=false$/);
     }
+  });
+});
+
+/**
+ * The takeaway list is read off the machine, and it has to be: naming a server the user's
+ * config does *not* declare does not disable anything — it leaves codex with an
+ * `mcp_servers.<name>` table holding only `enabled`, and the CLI refuses to boot on it
+ * ("invalid transport in `mcp_servers.<name>`"). Measured against codex-cli 0.147.0; it is
+ * why the hard-coded roster had to be reverted. So the interesting assertions here are the
+ * *absences*: an undeclared name and an unaddressable one must never reach `-c`.
+ */
+describe('user MCP server detection', () => {
+  const withCodexHome = <T>(config: string | null, fn: () => T): T => {
+    const previous = process.env.CODEX_HOME;
+    const home = mkdtempSync(join(tmpdir(), 'yaar-codex-home-'));
+    if (config !== null) writeFileSync(join(home, 'config.toml'), config);
+    process.env.CODEX_HOME = home;
+    try {
+      return fn();
+    } finally {
+      if (previous === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous;
+      rmSync(home, { recursive: true, force: true });
+    }
+  };
+
+  it('names every server the config declares, in either TOML spelling', () => {
+    const detected = withCodexHome(
+      [
+        // A dotted key has to precede the headers, or it lands inside the last table.
+        'mcp_servers.inline = { command = "/nope/inline" }',
+        '',
+        '[mcp_servers.node_repl]',
+        'command = "/nope/node_repl"',
+        '[mcp_servers.node_repl.env]',
+        'CODEX_HOME = "/nope"',
+        '',
+        '[mcp_servers.computer-use]',
+        'command = "/nope/cua"',
+        'enabled = false',
+      ].join('\n'),
+      detectUserMcpServers,
+    );
+
+    // A sub-table (`.env`) is the same server, not a second one.
+    expect(detected.sort()).toEqual(['computer-use', 'inline', 'node_repl']);
+  });
+
+  it('names nothing when there is no config to read', () => {
+    expect(withCodexHome(null, detectUserMcpServers)).toEqual([]);
+    expect(withCodexHome('', detectUserMcpServers)).toEqual([]);
+    expect(withCodexHome('model = "gpt-5"\n', detectUserMcpServers)).toEqual([]);
+  });
+
+  it('names nothing when the config cannot be parsed', () => {
+    // Fails open: a miss lets one user server ride along, a guess stops codex from starting.
+    expect(withCodexHome('[mcp_servers.broken\ncommand =', detectUserMcpServers)).toEqual([]);
+  });
+
+  it('skips a name a dotted `-c` path cannot address', () => {
+    // `-c mcp_servers.my server.enabled=false` does not name that server; depending on how
+    // the value parses it either fails or lands on a different key. Leave it enabled.
+    const detected = withCodexHome(
+      '[mcp_servers."my server"]\ncommand = "/nope"\n[mcp_servers.ok]\ncommand = "/nope"\n',
+      detectUserMcpServers,
+    );
+    expect(detected).toEqual(['ok']);
+  });
+
+  it('turns each detected server into exactly one takeaway arg', () => {
+    const args = withCodexHome(
+      '[mcp_servers.alpha]\ncommand = "/nope"\n[mcp_servers.beta]\ncommand = "/nope"\n',
+      () => getCodexAppServerArgs(),
+    );
+
+    const mcpArgs = args.filter((a) => a.includes('mcp_servers'));
+    expect(mcpArgs).toEqual(['mcp_servers.alpha.enabled=false', 'mcp_servers.beta.enabled=false']);
+    // Each rides behind its own `-c`.
+    for (const arg of mcpArgs) expect(args[args.indexOf(arg) - 1]).toBe('-c');
   });
 });

@@ -14,8 +14,11 @@
  *   speaks, and it is unchanged.
  * - **2026-07-28 (modern)** — stateless, no `initialize` and no session ID. Reached by
  *   clients that negotiate up, which **both** of YAAR's providers are now asked to do:
- *   Codex via `CODEX_MCP_PROTOCOL_VERSION` (`providers/codex/app-server.ts`), Claude via
- *   `MCP_SDK_GENERATION` + `MCP_PROTOCOL_NEGOTIATION` (`config/providers/claude.ts`).
+ *   Codex via `features.mcp_2026_07_28` (`ENABLED_FEATURES` in `config/providers/codex.ts`),
+ *   Claude via `MCP_SDK_GENERATION` + `MCP_PROTOCOL_NEGOTIATION` (`config/providers/claude.ts`).
+ *   Codex's `CODEX_MCP_PROTOCOL_VERSION` env var is **not** the gate for these servers — it
+ *   applies to stdio MCP servers, and YAAR's are all HTTP; see the flag's comment for the
+ *   measurement that separates the two.
  *
  * So the modern leg is where real traffic is *meant* to land, and the legacy leg is
  * **deprecated** — retained as a fallback, not as a supported path. It is not dead weight
@@ -243,7 +246,7 @@ function warnLegacyEra(serverName: McpServerName, clientLabel: string): void {
       `stateful 2025-era leg instead of negotiating 2026-07-28. YAAR asks both providers to ` +
       `negotiate up, so this means the client could not — a stale CLI, or a renamed opt-in ` +
       `gate (Claude: MCP_SDK_GENERATION/MCP_PROTOCOL_NEGOTIATION, Codex: ` +
-      `CODEX_MCP_PROTOCOL_VERSION). Tools still work; the fallback is why. See ` +
+      `features.mcp_2026_07_28). Tools still work; the fallback is why. See ` +
       `docs/proposals/mcp_modern_only_proposal.md.`,
   );
 }

@@ -55,6 +55,7 @@ const SCRUBBED = [
   'MONITOR_MAX_OUTPUT_PER_MIN',
   'APP_AGENT_IDLE_MINUTES',
   'CODEX_WS_PORT',
+  'CODEX_HOME',
   'CHROME_PATH',
   'CHROME_DEBUG_PORT',
   'LAUNCH_CHROME',
@@ -102,6 +103,11 @@ process.env.YAAR_STORAGE = scratchDir('storage');
 // app-agent and sub-agent suites left `session_logs/{timestamp}/agents/app-persona-….jsonl`
 // in the working tree on every run — indistinguishable, once there, from a real session.
 process.env.YAAR_SESSION_LOGS = scratchDir('session-logs');
+// Scrubbing this one is not enough: unset means `~/.codex`, so the codex spawn args would still
+// be decided by whether the developer has the ChatGPT desktop app installed
+// (`detectUserMcpServers()` in `config/providers/codex.ts`). An empty dir is the pinned answer;
+// a suite that wants a config writes one and points this at it.
+process.env.CODEX_HOME = scratchDir('codex-home');
 
 // One process, one set of dirs — removed on the way out. `exit` (not a signal handler) so a
 // suite that is killed mid-run leaves them in the OS temp dir rather than half-deleted under

@@ -289,8 +289,9 @@ These are routed through YAAR's existing permission dialog system (`actionEmitte
 
 Built by `getCodexAppServerArgs()` (`config/providers/codex.ts`): every entry in its
 `DISABLED_FEATURES` list becomes a `-c features.<name>=false` flag, every entry in
-`CONFIG_OVERRIDES` becomes a `-c <key>=<value>` flag, then it loops over `CORE_SERVERS`
-(`system`, `verbs`, `app`, `messaging`) to emit the MCP server flags:
+`ENABLED_FEATURES` a `-c features.<name>=true`, every server `detectUserMcpServers()` finds in
+the user's `config.toml` a `-c mcp_servers.<name>.enabled=false`, and every entry in
+`CONFIG_OVERRIDES` a `-c <key>=<value>`:
 
 ```bash
 codex app-server \
@@ -302,20 +303,28 @@ codex app-server \
   -c 'features.collaboration_modes=false' \
   -c 'features.personality=false' \
   -c 'features.unified_exec=false' \
-  -c 'features.code_mode.enabled=false' \
-  -c 'features.code_mode_host=false' \
+  -c 'features.code_mode=false' \
   -c 'features.fast_mode=false' \
   -c 'features.skill_mcp_dependency_install=false' \
   -c 'features.image_generation=false' \
   -c 'features.computer_use=false' \
   -c 'features.browser_use=false' \
   -c 'features.skill_search=false' \
-  -c 'features.tool_search_always_defer_mcp_tools=false' \
   -c 'features.workspace_dependencies=false' \
   -c 'features.memories=false' \
   -c 'features.apps=false' \
   -c 'features.remote_plugin=false' \
+  # Enabled feature surfaces (ENABLED_FEATURES) — the modern MCP protocol era for
+  # HTTP servers (all of YAAR's), and code mode's host-side runtime (its model-side
+  # half, `code_mode`, stays off above — that is the one that would hand a model an
+  # `exec` tool)
+  -c 'features.mcp_2026_07_28=true' \
+  -c 'features.code_mode_host=true' \
+  # Every MCP server the user's own config.toml declares, forced off — the names are
+  # detected, not hard-coded (naming an undeclared server makes codex refuse to boot)
+  -c 'mcp_servers.<detected>.enabled=false' \
   # Non-feature config overrides (CONFIG_OVERRIDES)
+  -c 'suppress_unstable_features_warning=true' \
   -c 'apps._default.enabled=false' \
   -c 'include_permissions_instructions=false' \
   -c 'skills.include_instructions=false' \
@@ -323,19 +332,39 @@ codex app-server \
   -c 'sandbox_mode=danger-full-access' \
   -c 'approval_policy=never' \
   -c 'project_doc_max_bytes=0' \
-  -c 'web_search=disabled' \
-  # MCP servers (YAAR's 5 core namespaces — CORE_SERVERS)
-  -c 'mcp_servers.system.url=http://127.0.0.1:8000/mcp/system' \
-  -c 'mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.verbs.url=http://127.0.0.1:8000/mcp/verbs' \
-  -c 'mcp_servers.verbs.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.app.url=http://127.0.0.1:8000/mcp/app' \
-  -c 'mcp_servers.app.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.messaging.url=http://127.0.0.1:8000/mcp/messaging' \
-  -c 'mcp_servers.messaging.bearer_token_env_var=YAAR_MCP_TOKEN' \
-  -c 'mcp_servers.subagent.url=http://127.0.0.1:8000/mcp/subagent' \
-  -c 'mcp_servers.subagent.bearer_token_env_var=YAAR_MCP_TOKEN'
+  -c 'web_search=disabled'
 ```
+
+**No `mcp_servers.*` URLs at the process level, deliberately.** YAAR's namespaces are declared
+*per thread* by `CodexProvider.buildMcpScope`, which is the only place that can stamp the calling
+agent's identity onto them — a process-level entry carries none, and a per-thread override merges
+over the loaded config rather than replacing it, so a server declared here could never be taken
+away from a sub-agent. See `app-server.ts`'s `spawnProcess`.
+
+**Two overrides codex does not accept**, both verified against `codex-cli 0.147.0` with
+`codex doctor --json` (whose `feature flag overrides` line reports exactly which ones landed):
+
+- `features.tool_search_always_defer_mcp_tools=false` — a `removed`-stage flag pinned to `true`.
+  Neither `-c` nor `--disable` moves it. Commented out in `DISABLED_FEATURES` rather than left in
+  looking honored. (Not a property of the `removed` stage: `collaboration_modes` is also
+  `removed` and does take the override.)
+- `features.code_mode.enabled=false` — the flag is the plain bool `features.code_mode`; the
+  dotted form builds a table matching no flag and is silently ignored. Fixed to `code_mode`.
+
+Unknown config keys are accepted silently (`-c totally_bogus_key=1` exits 0), so a clean boot is
+not evidence that a key landed — check `codex doctor --json` or `codex features list`. Because of
+that, `AppServer.spawnProcess` prints both rosters at launch:
+
+```
+[codex] feature opt-outs (17): shell_tool, apply_patch_freeform, multi_agent, …
+[codex] feature opt-ins (2): mcp_2026_07_28, code_mode_host
+[codex] user MCP servers disabled (2): node_repl, computer-use
+```
+
+That is what YAAR **asked** for. What codex **accepted** is `codex doctor --json` →
+`checks['config.load'].details['feature flag overrides']`; codex omits an override that changes
+nothing, so a name missing there is either inert or refused, and `codex features list` tells you
+which. Diffing the two after a codex upgrade is how a silently-dropped override gets caught.
 
 ### Environment Variables
 

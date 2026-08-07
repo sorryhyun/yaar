@@ -23,6 +23,9 @@ import {
   getCodexSpawnArgs,
   getCodexAppServerArgs,
   getCodexWsPort,
+  detectUserMcpServers,
+  DISABLED_FEATURES,
+  ENABLED_FEATURES,
   STORAGE_DIR,
 } from '../../config.js';
 import { CODEX_AGENT_ROLES, codexRoleToToml } from '../../agents/profiles/index.js';
@@ -48,6 +51,41 @@ export interface AppServerConfig {
   requestTimeout?: number;
 }
 
+/** No-op 'error' subscriber; see the AppServer constructor. */
+const NOOP = (): void => {};
+
+/**
+ * Print what this launch is *asking* codex for: the feature opt-outs, the opt-ins, and the
+ * user MCP servers being switched off.
+ *
+ * Worth a line at boot because a `-c` codex declines is otherwise invisible — it exits 0, and
+ * even a key that names no flag at all is accepted silently (`-c totally_bogus_key=1` → exit
+ * 0). Two overrides sat in `DISABLED_FEATURES` for a while looking honored while doing
+ * nothing: `code_mode.enabled` (wrong key shape — the flag is the plain bool `code_mode`) and
+ * `tool_search_always_defer_mcp_tools` (a `removed`-stage flag pinned to `true` that no `-c`
+ * or `--disable` moves).
+ *
+ * So this is deliberately the list YAAR **sent**, not the list codex **accepted** — printing
+ * an accepted list we did not measure would be the same false assurance in a new place. To
+ * get the accepted one, run `codex doctor --json` with the same args and read
+ * `checks['config.load'].details['feature flag overrides']`; diffing the two after a codex
+ * upgrade is how a silently-dropped override gets caught. Note codex omits an override that
+ * changes nothing (a flag already at that value), so an entry missing from its list is either
+ * inert or refused — `codex features list` distinguishes them.
+ */
+function logRequestedFeatures(): void {
+  const userServers = detectUserMcpServers();
+  console.log(
+    `[codex] feature opt-outs (${DISABLED_FEATURES.length}): ${DISABLED_FEATURES.join(', ')}`,
+  );
+  console.log(
+    `[codex] feature opt-ins (${ENABLED_FEATURES.length}): ${ENABLED_FEATURES.join(', ')}`,
+  );
+  console.log(
+    `[codex] user MCP servers disabled (${userServers.length}): ${userServers.join(', ') || 'none'}`,
+  );
+}
+
 /**
  * Resolve `setsid`, used to launch the app-server as its own
  * process-group / session leader. When available, the whole codex process tree
@@ -58,9 +96,6 @@ export interface AppServerConfig {
  * platforms where it isn't installed (e.g. stock macOS) — there we fall back to
  * single-PID kill. Cached after the first probe.
  */
-/** No-op 'error' subscriber; see the AppServer constructor. */
-const NOOP = (): void => {};
-
 let setsidPathCache: string | null | undefined;
 function getSetsidPath(): string | null {
   if (setsidPathCache === undefined) {
@@ -254,6 +289,8 @@ export class AppServer extends EventEmitter {
     // every namespace listed here. Declaring none makes the per-thread set authoritative.
     const args = getCodexAppServerArgs();
 
+    logRequestedFeatures();
+
     args.push('--listen', `ws://127.0.0.1:${this.wsPort}`);
 
     if (this.config.model) {
@@ -304,11 +341,15 @@ export class AppServer extends EventEmitter {
         ...process.env,
         CI: '1',
         YAAR_MCP_TOKEN: getMcpToken(),
-        // Ask codex's MCP client to negotiate YAAR's stateless 2026-07-28 leg
-        // (`mcp/server.ts`'s `getModernHandler`) instead of the 2025-era stateful
-        // default. An unsupported value is refused loudly by the CLI rather than
-        // silently downgraded; a CLI without the var ignores it and stays on the
-        // stateful leg, which YAAR still serves.
+        // Protocol era for **stdio** MCP servers only. This is deliberately not the switch
+        // that puts YAAR's own servers on the modern leg — those are HTTP, and the CLI reads
+        // this var only on the stdio path ("unsupported CODEX_MCP_PROTOCOL_VERSION `…` for
+        // stdio MCP server; expected `2026-07-28`"). Setting it alone left every YAAR thread
+        // on the 2025-era stateful leg; `features.mcp_2026_07_28` in `getCodexAppServerArgs()`
+        // is what actually moves them, and that comment carries the measurement. Kept because
+        // a stdio server can still reach a thread (the user's config declares one, YAAR's
+        // blanket disable misses it) and a bad value here is refused loudly rather than
+        // silently downgraded.
         CODEX_MCP_PROTOCOL_VERSION: '2026-07-28',
       },
     });

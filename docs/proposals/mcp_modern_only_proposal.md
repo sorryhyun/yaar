@@ -70,15 +70,33 @@ the v2 arm reads `MCP_PROTOCOL_NEGOTIATION` at all — which is why setting the 
 itself changes nothing observable. Neither name appears in `PARENT_HARNESS_ENV_VARS`, so no scrub
 interaction to work around.
 
-**Codex** — the app-server spawn env in `providers/codex/app-server.ts:303`:
+**Codex** — a feature flag in the app-server spawn args (`ENABLED_FEATURES` in
+`config/providers/codex.ts`):
 
 ```ts
-CODEX_MCP_PROTOCOL_VERSION: '2026-07-28',
+'-c', 'features.mcp_2026_07_28=true',
 ```
 
-Verified present in the installed `codex-cli 0.147.0` (14 occurrences of the var name, 18 of the
-revision string, including an `unsupported CODEX_MCP_PROTOCOL_VERSION` refusal path — so a bad
-value fails loudly rather than silently downgrading).
+This was originally written as the `CODEX_MCP_PROTOCOL_VERSION: '2026-07-28'` spawn env var, on
+the strength of the var name and revision string being present in the binary. Presence was not
+behavior. Measured against `codex-cli 0.147.0` by pointing a real app-server at a probe MCP
+endpoint and recording what it sent:
+
+| spawn config | first request to the MCP server |
+|---|---|
+| env var only | `POST initialize`, `protocolVersion: 2025-06-18`, takes an `mcp-session-id`, opens the GET common stream, `tools/list` — **stateful 2025-era leg** |
+| flag only (env var unset) | `POST server/discover`, `mcp-protocol-version: 2026-07-28`, no session id — **modern leg** |
+
+So the flag is necessary and sufficient and the var is neither. The var is not a dead letter — it
+is the **stdio** path's era selector, which its own refusal message says outright ("unsupported
+`CODEX_MCP_PROTOCOL_VERSION` `…` for stdio MCP server; expected `2026-07-28`") — and YAAR's servers
+are all HTTP. It is kept in the spawn env for the stdio case, not for this one.
+
+Two consequences for this proposal. The flag's stage is `under development` (`codex features list`),
+so the Codex opt-in is ahead of stabilization rather than merely undocumented — a stronger version
+of the §3a risk, and one more reason the stateful fallback earns its keep. And Phase-2 telemetry
+gathered before this correction measured the *old* config, in which Codex never left the legacy leg
+at all; it says nothing about the modern one.
 
 That is the whole switch-on. Everything else in this proposal is about whether it is safe to then
 remove the other leg.
@@ -163,7 +181,10 @@ revision — the counters prove the fork works under a synthetic client, not tha
 1. The two Claude gates are documented, or default-on, or YAAR gains a `CLAUDE_MIN_VERSION`-style
    refusal that fails the boot loudly when the gate is gone (mirroring `providers/codex/version.ts`,
    which exists for exactly this class of problem).
-2. `CODEX_MIN_VERSION` raised to the verified version that introduced `CODEX_MCP_PROTOCOL_VERSION`.
+2. `features.mcp_2026_07_28` reaches `stable` stage, **and** `CODEX_MIN_VERSION` is raised to the
+   verified version that ships it that way. Deleting the fallback while the gate is still
+   `under development` means a codex release can withdraw the flag and take every Codex tool call
+   with it.
 3. Phase-2 telemetry shows zero legacy connections across a meaningful window, including at least
    one bundled-exe release.
 4. Per-request factory cost measured and accepted.
