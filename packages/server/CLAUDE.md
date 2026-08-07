@@ -244,6 +244,8 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 
 The active MCP namespaces (`CORE_SERVERS` in `mcp/server.ts`) are `system`, `verbs`, `app`, `messaging`, and `subagent`. The `verbs` server exposes 5 generic tools (`describe`, `read`, `list`, `invoke`, `delete`) that dispatch to thin handler files in `handlers/` (which import domain logic from `features/`) via `yaar://` URIs.
 
+**Two protocol eras, one endpoint.** `handleMcpRequest` forks per request. 2025-era traffic keeps the **stateful** path it has always had — `initialize` mints an `mcp-session-id`, and the `mcpSessions` map, the idle eviction loop, and the GET common-stream keep-alive all belong to it. A **2026-07-28** client is stateless: it probes `server/discover`, sends no `initialize` and carries no session id, so it is routed to `createMcpHandler`, whose per-request server factory is just `createServerForName`. Only a session-less POST can be modern, which keeps every tool call off the classifier. Two traps, both documented at `getModernHandler`: adding `2026-07-28` to `supportedProtocolVersions` is *not* the opt-in (the probe is refused before it reaches an instance and the client silently drops to 2025-11-25), and the modern handler is built with `legacy: 'reject'` so it can never answer 2025-era traffic statelessly and quietly drop the session stream. Codex reaches the modern leg only via its `CODEX_MCP_PROTOCOL_VERSION` opt-in, which YAAR does not set. Both rows are pinned by `tests/mcp-protocol-eras.test.ts`.
+
 | Domain | Namespace | Summary |
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching to `handlers/` via `yaar://` URIs |

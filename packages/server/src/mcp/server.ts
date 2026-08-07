@@ -4,15 +4,26 @@
  * Provides HTTP endpoints for MCP tool calls across namespaced servers,
  * allowing multiple agents to connect independently without state corruption issues.
  *
- * Uses stateful mode (sessionIdGenerator) so each SDK client gets its own MCP
- * session. The transport is created on the first `initialize` request from each
- * client and reused for subsequent requests carrying the same session ID.
+ * Serves both MCP protocol eras off the same endpoint, forked per request in
+ * `handleMcpRequest` (the reasoning, and why one shape cannot serve both, is at
+ * `getModernHandler`):
+ *
+ * - **2025-era (legacy)** — stateful. Each SDK client gets its own MCP session; the
+ *   transport is created on that client's first `initialize` and reused for every later
+ *   request carrying the same session ID. This is what Claude's CLI and a default-configured
+ *   Codex speak, and it is unchanged.
+ * - **2026-07-28 (modern)** — stateless, no `initialize` and no session ID. Reached by
+ *   clients that negotiate up, which for Codex means the `CODEX_MCP_PROTOCOL_VERSION`
+ *   opt-in; YAAR does not set it, so this leg is dormant until a client asks for it.
  */
 
 import {
+  createMcpHandler,
   isInitializeRequest,
+  isLegacyRequest,
   McpServer,
   WebStandardStreamableHTTPServerTransport,
+  type McpHttpHandler,
 } from '@modelcontextprotocol/server';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
@@ -190,6 +201,47 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
 }
 
 /**
+ * Per-namespace handler for the **modern** (MCP revision 2026-07-28) era.
+ *
+ * The two eras are served by two different SDK shapes, and neither one can do the
+ * other's job:
+ *
+ * - 2025-era ("legacy") is **stateful**: the client sends `initialize`, the transport
+ *   mints an `mcp-session-id`, and every later request rides that session. That is
+ *   `WebStandardStreamableHTTPServerTransport` and the `mcpSessions` map below.
+ * - 2026-07-28 is **stateless**: there is no `initialize` and no session id. A client
+ *   probes `server/discover`, then sends each request standalone, carrying a `_meta`
+ *   envelope naming the revision. That is `createMcpHandler`, whose factory is called
+ *   **per request** — which is why `createServerForName` being a factory already is the
+ *   whole port, and why nothing here needs the keep-alive or eviction machinery.
+ *
+ * Adding `2026-07-28` to the `McpServer` `supportedProtocolVersions` list is *not* the
+ * opt-in, despite registering a `server/discover` handler on the instance: the probe is
+ * session-less, so it is refused by the "no session ID and not an initialize request"
+ * branch below long before it reaches any instance, and the client silently falls back
+ * to legacy. Measured — a negotiating client still lands on 2025-11-25.
+ *
+ * `legacy: 'reject'` because the classifier below already routed every legacy request to
+ * the stateful path. This handler must never be the one to answer 2025-era traffic: it
+ * would answer *statelessly*, quietly dropping the session and the GET common stream
+ * that the keep-alive above exists to hold open. Rejecting turns a routing mistake into
+ * a loud error instead of a subtle regression for Claude and legacy Codex alike.
+ *
+ * Memoized per namespace: the handler holds no per-connection state (the factory does),
+ * so one is enough, and building it per request would allocate for nothing.
+ */
+const modernHandlers = new Map<McpServerName, McpHttpHandler>();
+
+function getModernHandler(serverName: McpServerName): McpHttpHandler {
+  let handler = modernHandlers.get(serverName);
+  if (!handler) {
+    handler = createMcpHandler(() => createServerForName(serverName), { legacy: 'reject' });
+    modernHandlers.set(serverName, handler);
+  }
+  return handler;
+}
+
+/**
  * Initialize MCP subsystem.
  * Generates the auth token and probes browser availability.
  * Actual per-session McpServer instances are created on demand in handleMcpRequest.
@@ -303,6 +355,18 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
           },
           { status: 400 },
         );
+      }
+
+      // Fork the two protocol eras (see getModernHandler). Only a session-less POST can
+      // be modern — a 2026-07-28 connection is stateless, so anything carrying a session
+      // id is legacy by construction and already returned above, which keeps the hot
+      // path (every tool call rides a session id) off the classifier entirely.
+      //
+      // Handing the classifier the body we already parsed matters: given `parsedBody` it
+      // inspects that instead of re-reading the request, so the stream is consumed once
+      // and both eras are dispatched with the same object.
+      if (!(await isLegacyRequest(req, body))) {
+        return getModernHandler(serverName).fetch(req, { parsedBody: body });
       }
 
       // Validate it is an initialize request
