@@ -304,6 +304,12 @@ export class AppServer extends EventEmitter {
         ...process.env,
         CI: '1',
         YAAR_MCP_TOKEN: getMcpToken(),
+        // Ask codex's MCP client to negotiate YAAR's stateless 2026-07-28 leg
+        // (`mcp/server.ts`'s `getModernHandler`) instead of the 2025-era stateful
+        // default. An unsupported value is refused loudly by the CLI rather than
+        // silently downgraded; a CLI without the var ignores it and stays on the
+        // stateful leg, which YAAR still serves.
+        CODEX_MCP_PROTOCOL_VERSION: '2026-07-28',
       },
     });
 

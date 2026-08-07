@@ -17,9 +17,15 @@
  * client, because the thing under test is HTTP dispatch — a hand-built Request would let
  * the classifier see a shape no client actually sends.
  */
-import { describe, it, expect, beforeAll } from 'bun:test';
+import { describe, it, expect, beforeAll, beforeEach } from 'bun:test';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
-import { handleMcpRequest, initMcpServer, getMcpToken } from '../mcp/server.js';
+import {
+  handleMcpRequest,
+  initMcpServer,
+  getMcpToken,
+  getMcpEraStats,
+  resetMcpEraStats,
+} from '../mcp/server.js';
 
 /** Serve `handleMcpRequest` for the `verbs` namespace on an ephemeral port. */
 function serve() {
@@ -69,12 +75,23 @@ describe('MCP protocol eras', () => {
     await initMcpServer();
   });
 
+  beforeEach(() => {
+    resetMcpEraStats();
+  });
+
   it('serves 2026-07-28 to a negotiating client', async () => {
     const result = await connectAndReport('auto');
     expect(result.negotiated).toBe('2026-07-28');
     // The modern leg must expose the same surface, not an empty/degraded one.
     expect(result.toolNames).toContain('describe');
     expect(result.toolNames).toContain('invoke');
+    // A negotiating client must touch the deprecated leg zero times. This is the
+    // assertion that makes "no legacy traffic" checkable rather than asserted by
+    // eyeballing logs — the metric Phase 3's deletion is gated on.
+    const stats = getMcpEraStats();
+    expect(stats.legacyRequestsServed).toBe(0);
+    expect(stats.legacySessionsCreated).toBe(0);
+    expect(stats.modernRequestsServed).toBeGreaterThan(0);
     await result.close();
   });
 
@@ -83,6 +100,11 @@ describe('MCP protocol eras', () => {
     expect(result.negotiated).toBe('2025-11-25');
     expect(result.toolNames).toContain('describe');
     expect(result.toolNames).toContain('invoke');
+    // ...and is counted as legacy, so a regression that silently drops clients back to
+    // 2025-era shows up as a number instead of as nothing at all.
+    const stats = getMcpEraStats();
+    expect(stats.legacySessionsCreated).toBe(1);
+    expect(stats.legacyRequestsServed).toBeGreaterThan(0);
     await result.close();
   });
 
