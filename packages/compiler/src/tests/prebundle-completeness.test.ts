@@ -14,8 +14,18 @@
  * then compile a consumer against the artifact — and asserting the consumer
  * builds. A dropped binding surfaces here as a failed consumer compile, at test
  * time, for the specific library, instead of at install time in the field.
+ *
+ * The consumer imports the artifact the way an app is *allowed* to: a namespace
+ * import always, plus a default import for every library whose `.d.ts` block
+ * declares one. The default half was added after `@bundled/mammoth` — CommonJS,
+ * typed `export = mammoth` — shipped an artifact with named exports and no
+ * default, so `import mammoth from '@bundled/mammoth'` typechecked, compiled in
+ * dev, and failed at install time against the release with `No matching export
+ * in "bundled-lib:mammoth" for import "default"`. A namespace import never asks
+ * for `default`, so this test passed the whole time.
  */
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
+import { readFileSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -26,6 +36,25 @@ import {
   resolvePrebundleEntrypoint,
   toForwardSlash,
 } from '../index.js';
+import { BUNDLED_TYPES_DTS } from '../paths.js';
+
+const DTS = readFileSync(BUNDLED_TYPES_DTS, 'utf-8');
+
+/**
+ * Does `declare module '@bundled/<name>'` promise a default export?
+ *
+ * Derived from the `.d.ts` rather than listed here, so a library that gains or
+ * loses a default is probed accordingly without anyone remembering to say so.
+ * The block is matched by exact module name (never a `/…` subpath): `solid-js`
+ * has no default of its own, `solid-js/html` does.
+ */
+function declaresDefaultExport(name: string): boolean {
+  const start = DTS.indexOf(`declare module '@bundled/${name}' {`);
+  if (start === -1) return false;
+  const next = DTS.indexOf(`\ndeclare module '`, start + 1);
+  const block = DTS.slice(start, next === -1 ? undefined : next);
+  return /^\s*export\s+(default\b|=|\{[^}]*\bdefault\b)/m.test(block);
+}
 
 // Each case pays for a real prebundle (some libraries are megabytes) plus a
 // consumer Bun.build(). Big libs (mermaid, three, mammoth) dominate the cost.
@@ -52,11 +81,17 @@ describe('prebundle completeness', () => {
         // list; referencing `lib` keeps it from being tree-shaken away. If any
         // export references a dropped/renamed identifier, this build fails with
         // `"<id>" is not declared in this file` — exactly the field failure.
+        // A library whose type surface promises a default is imported both ways,
+        // because only the default import fails when the default is missing.
+        const spec = JSON.stringify(toForwardSlash(artifact));
+        const wantsDefault = declaresDefaultExport(name);
         const consumer = join(dir, 'consumer.ts');
         await Bun.write(
           consumer,
-          `import * as lib from ${JSON.stringify(toForwardSlash(artifact))};\n` +
-            `(globalThis as Record<string, unknown>).__probe = lib;\n`,
+          `import * as lib from ${spec};\n` +
+            (wantsDefault ? `import def from ${spec};\n` : '') +
+            `(globalThis as Record<string, unknown>).__probe = ` +
+            `${wantsDefault ? '[lib, def]' : 'lib'};\n`,
         );
 
         const result = await Bun.build({
