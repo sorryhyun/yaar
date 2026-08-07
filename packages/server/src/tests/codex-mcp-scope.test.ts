@@ -20,7 +20,7 @@
  */
 import { describe, it, expect } from 'bun:test';
 import { EventEmitter } from 'node:events';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { CodexProvider } from '../providers/codex/provider.js';
@@ -246,5 +246,85 @@ describe('user MCP server detection', () => {
     expect(mcpArgs).toEqual(['mcp_servers.alpha.enabled=false', 'mcp_servers.beta.enabled=false']);
     // Each rides behind its own `-c`.
     for (const arg of mcpArgs) expect(args[args.indexOf(arg) - 1]).toBe('-c');
+  });
+});
+
+/**
+ * The model catalog rewrite — the only override that reaches tool mode and multi-agent, and
+ * the one that fails silently when it breaks.
+ *
+ * It exists because `model_info` outranks `features.*`: `effective_tool_mode()` is
+ * `model_info.tool_mode.unwrap_or_else(|| …features…)` and `resolve_multi_agent_version_for_model()`
+ * prefers `model_info.multi_agent_version`. Measured against codex-cli 0.147.0, `gpt-5.6-terra`
+ * ships `tool_mode = "code_mode_only"` / `multi_agent_version = "v2"`, so every
+ * `-c features.code_mode=false` / `features.multi_agent=false` was inert — accepted by
+ * `codex doctor`, and the thread still ran model-authored JS against `ALL_TOOLS` with six
+ * `collaboration.*` tools attached.
+ *
+ * What must hold is the *shape*, not the roster: the two fields YAAR has an opinion about are
+ * overwritten on every model, everything else is passed through, and an unreadable cache drops
+ * the override rather than breaking the boot.
+ */
+describe('codex model catalog rewrite', () => {
+  const withCache = <T>(cache: string | null, fn: () => T): T => {
+    const previous = process.env.CODEX_HOME;
+    const home = mkdtempSync(join(tmpdir(), 'yaar-codex-home-'));
+    if (cache !== null) writeFileSync(join(home, 'models_cache.json'), cache);
+    process.env.CODEX_HOME = home;
+    try {
+      return fn();
+    } finally {
+      if (previous === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous;
+      rmSync(home, { recursive: true, force: true });
+    }
+  };
+
+  const catalogArg = (args: string[]): string | undefined =>
+    args.find((a) => a.startsWith('model_catalog_json='));
+
+  it('pins tool_mode and multi-agent off, and passes every other field through', () => {
+    const args = withCache(
+      JSON.stringify({
+        models: [
+          {
+            slug: 'gpt-5.6-terra',
+            tool_mode: 'code_mode_only',
+            multi_agent_version: 'v2',
+            apply_patch_tool_type: 'freeform',
+          },
+          { slug: 'gpt-5.5', base_instructions: 'keep me', context_window: 123 },
+        ],
+      }),
+      () => getCodexAppServerArgs(),
+    );
+
+    const arg = catalogArg(args);
+    expect(arg).toBeDefined();
+    // Each override rides behind its own `-c`, and the path is quoted (it can contain spaces).
+    expect(args[args.indexOf(arg!) - 1]).toBe('-c');
+    const path = JSON.parse(arg!.slice('model_catalog_json='.length));
+
+    const written = JSON.parse(readFileSync(path, 'utf8'));
+    expect(
+      written.models.map((m: any) => [m.tool_mode, m.multi_agent_version, m.apply_patch_tool_type]),
+    ).toEqual([
+      ['direct', 'disabled', null],
+      ['direct', 'disabled', null],
+    ]);
+    // `ModelInfo` carries the model's whole definition; rewriting two fields must not amount
+    // to pinning a hand-authored snapshot of the rest.
+    expect(written.models[1].base_instructions).toBe('keep me');
+    expect(written.models[1].context_window).toBe(123);
+  });
+
+  it('drops the override rather than breaking the boot when there is no cache to read', () => {
+    // A machine where codex has never run has no cache. The cost of missing is that the model
+    // preset keeps deciding; the cost of throwing is a provider that will not start.
+    expect(catalogArg(withCache(null, getCodexAppServerArgs))).toBeUndefined();
+    expect(catalogArg(withCache('{ not json', getCodexAppServerArgs))).toBeUndefined();
+    // `load_catalog_json` refuses a catalog with no models — emitting one would turn this
+    // fail-open into a refused boot.
+    expect(catalogArg(withCache('{"models":[]}', getCodexAppServerArgs))).toBeUndefined();
   });
 });

@@ -90,6 +90,7 @@ export {
   CODEX_WS_PORT,
   getCodexWsPort,
   getCodexAppServerArgs,
+  getModelCatalogPath,
   detectUserMcpServers,
   DISABLED_FEATURES,
   ENABLED_FEATURES,

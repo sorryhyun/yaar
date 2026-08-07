@@ -22,6 +22,7 @@ import { getMcpToken } from '../../mcp/index.js';
 import {
   getCodexSpawnArgs,
   getCodexAppServerArgs,
+  getModelCatalogPath,
   getCodexWsPort,
   detectUserMcpServers,
   DISABLED_FEATURES,
@@ -83,6 +84,14 @@ function logRequestedFeatures(): void {
   );
   console.log(
     `[codex] user MCP servers disabled (${userServers.length}): ${userServers.join(', ') || 'none'}`,
+  );
+  // The one override above that is not a flag, and the only one that reaches tool mode and
+  // multi-agent at all — those live on the model preset, which outranks every `features.*`
+  // entry printed above. Worth its own line precisely because it is the load-bearing one and
+  // it fails open: a launch missing this line is a launch where `code_mode_only` and `v2` are
+  // still whatever the model says, however clean the two rosters above look.
+  console.log(
+    `[codex] model catalog (tool_mode=direct, multi-agent off): ${getModelCatalogPath() ?? 'not applied — codex keeps its own'}`,
   );
 }
 

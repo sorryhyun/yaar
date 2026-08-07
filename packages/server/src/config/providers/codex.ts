@@ -3,9 +3,10 @@
  */
 
 import { join, dirname } from 'path';
-import { existsSync, readFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { getEnvInt, IS_BUNDLED_EXE } from '../env.js';
+import { getConfigDir } from '../paths.js';
 
 /**
  * Get the codex CLI spawn args (command + prefix args).
@@ -86,6 +87,103 @@ export function detectUserMcpServers(): string[] {
   return names;
 }
 
+/**
+ * Rewrite codex's model catalog so YAAR's models run in **direct** tool mode with multi-agent
+ * off, and return the path to the rewritten file (or `null` to leave the catalog alone).
+ *
+ * This exists because the model preset, not the feature flags, is what actually decides those
+ * two things. `effective_tool_mode()` is `model_info.tool_mode.unwrap_or_else(|| …features…)` and
+ * `resolve_multi_agent_version_for_model()` prefers `model_info.multi_agent_version` — so a
+ * `-c features.code_mode=false` that `codex doctor` reports as *accepted* still changes nothing
+ * when the model declares a mode, and `gpt-5.6-terra` declares both:
+ *
+ *   gpt-5.6-terra   tool_mode = "code_mode_only"   multi_agent_version = "v2"
+ *
+ * That is the whole reason YAAR's Codex agents were running model-authored JS against
+ * `ALL_TOOLS` / `tools.mcp__verbs__invoke` inside an `exec` cell — the second, untracked path to
+ * every tool that `code_mode` in {@link DISABLED_FEATURES} was supposed to close — and were
+ * being handed six `collaboration.*` spawn/wait tools besides.
+ *
+ * `model_catalog_json` is the only door to those fields (`with_config_overrides` exposes
+ * context window, auto-compact, tool-output limit, base instructions and personality — not
+ * these). Pointing it at a file swaps the whole `ModelsManager` implementation: codex builds a
+ * `StaticModelsManager` from this catalog instead of an `OpenAiModelsManager`, which is exactly
+ * the behavior we want (nothing re-fetches and re-overrides our two fields) and also its one
+ * cost — **while YAAR is driving, codex will not refresh `models_cache.json` or discover a new
+ * model.** The cache still refreshes whenever the user runs codex normally, and this reads it
+ * fresh on every spawn, so the roster tracks their CLI rather than a snapshot pinned here.
+ *
+ * Deriving from `models_cache.json` rather than writing a catalog by hand is the point.
+ * `ModelInfo` carries the model's entire definition — `base_instructions`, context windows,
+ * reasoning levels, truncation policy — and hand-authoring that would pin the model's system
+ * prompt to whatever it looked like the day this was written. Here the two fields YAAR has an
+ * opinion about are overwritten and every other field is passed through untouched.
+ *
+ * Fails open in every uncertain case (no cache file, unparseable JSON, no models, unwritable
+ * config dir): the override is dropped and codex keeps its own catalog, which is the behavior
+ * YAAR had before this existed. A machine where codex has never run has no cache to read — the
+ * first plain `codex` run creates one and the next YAAR launch picks it up.
+ */
+let lastCatalogPath: string | null = null;
+
+/**
+ * The catalog path {@link getCodexAppServerArgs} last resolved, or `null` if it fell open and
+ * the override was dropped. Read by the launch log so the line reports what the spawn actually
+ * carries rather than recomputing (and rewriting) it.
+ */
+export function getModelCatalogPath(): string | null {
+  return lastCatalogPath;
+}
+
+export function buildDirectToolModeCatalog(): string | null {
+  const codexHome = process.env.CODEX_HOME?.trim() || join(homedir(), '.codex');
+  const cachePath = join(codexHome, 'models_cache.json');
+  if (!existsSync(cachePath)) {
+    console.warn(
+      `[codex] No ${cachePath}; leaving the model catalog alone (code mode and multi-agent ` +
+        `stay whatever the model preset says). Run \`codex\` once to populate it.`,
+    );
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(cachePath, 'utf8')) as {
+      models?: Array<Record<string, unknown>>;
+    };
+    const models = parsed?.models;
+    // `load_catalog_json` refuses a catalog with no models, so an empty one would turn a
+    // fail-open into a refused boot.
+    if (!Array.isArray(models) || models.length === 0) return null;
+
+    const patched = models.map((model) => ({
+      ...model,
+      tool_mode: 'direct',
+      multi_agent_version: 'disabled',
+      // `apply_patch` is gated on `model_info.apply_patch_tool_type.is_some()`, so nulling it
+      // here is what takes the tool away — there is no `features.apply_patch`, and the
+      // `apply_patch_freeform` flag in DISABLED_FEATURES only ever covered the freeform
+      // spelling. YAAR's Codex agents edit through the clone-revise-compile-deploy flow and
+      // MCP verbs, never by patching files, which is the same argument `shell_tool=false`
+      // rests on; direct tool mode is what first made this tool *visible* (code mode had it
+      // behind `exec`), not what introduced it.
+      //
+      // Its neighbor `update_plan` has no door at all: `add_core_utility_tools` calls
+      // `planned_tools.add(PlanHandler)` unconditionally, there is no feature flag, and the
+      // old `include_plan_tool` config key is gone. It stays on the tool list and that is not
+      // something config can change.
+      apply_patch_tool_type: null,
+    }));
+
+    const outPath = join(getConfigDir(), 'codex-model-catalog.json');
+    mkdirSync(dirname(outPath), { recursive: true });
+    writeFileSync(outPath, JSON.stringify({ models: patched }, null, 1));
+    return outPath;
+  } catch (err) {
+    console.warn(`[codex] Could not rewrite the model catalog, leaving codex's own in place:`, err);
+    return null;
+  }
+}
+
 export const CODEX_WS_PORT = getEnvInt('CODEX_WS_PORT', 4510);
 
 export function getCodexWsPort(): number {
@@ -110,6 +208,10 @@ export const DISABLED_FEATURES = [
   'apply_patch_freeform',
   'multi_agent', // orchestration is separate YAAR-tracked threads, not Codex-internal subagents
   'collaboration_modes', // native multi-agent collab (mirrors multi_agent)
+  // Codex's own goal/plan surface: a second, Codex-internal place for an agent to record what
+  // it intends to do next, which YAAR neither reads nor renders. A monitor agent's plan belongs
+  // in the windows it opens and the context tape, not in a tracker only codex can see.
+  'goals',
   'personality',
   'unified_exec',
   // "code mode": Codex otherwise exposes a single `exec` tool that runs model-authored JS
@@ -146,6 +248,15 @@ export const DISABLED_FEATURES = [
   // noise for YAAR's short-lived, app-scoped agents.
   'memories',
   'apps',
+  // The whole plugin tier. `remote_plugin` was already here, but it only covers the *remote*
+  // fetch path — `plugins` is the surface itself (a user's `~/.codex` plugins loading into
+  // every YAAR thread, carrying tools and hooks nobody declared) and `plugin_sharing` is the
+  // publish/consume half of it. Same argument as `detectUserMcpServers()` below: what a thread
+  // holds is `buildMcpScope`'s to declare per thread, stamped with the caller's identity, and a
+  // process-level tier cannot be taken away from a sub-agent whose containment is an empty tool
+  // set. (`plugin_hooks` and `recommended_plugins` are already false by default.)
+  'plugins',
+  'plugin_sharing',
   'remote_plugin',
 ];
 
@@ -222,6 +333,16 @@ export function getCodexAppServerArgs(): string[] {
     args.push('-c', `mcp_servers.${name}.enabled=false`);
   }
 
+  // The rewritten catalog that puts the model in `tool_mode = "direct"` with multi-agent off —
+  // the only lever that reaches those two, since the model preset outranks every `features.*`
+  // flag above (see `buildDirectToolModeCatalog`). Omitted entirely when it cannot be built, so
+  // a machine without a codex model cache still boots.
+  const catalogPath = buildDirectToolModeCatalog();
+  lastCatalogPath = catalogPath;
+  if (catalogPath) {
+    args.push('-c', `model_catalog_json=${JSON.stringify(catalogPath)}`);
+  }
+
   // Non-feature scalar config overrides (`-c key=value`), in order: suppressions first,
   // then model behavior.
   const CONFIG_OVERRIDES: Array<[string, string]> = [
@@ -238,6 +359,40 @@ export function getCodexAppServerArgs(): string[] {
     // ENABLED_FEATURES holds nothing under development — the advisory is correct, and the
     // only reason to hide it is that YAAR has already recorded the tradeoff at the flag.
     ['suppress_unstable_features_warning', 'true'],
+    // The two multi-agent developer messages, silenced. Normally redundant now — the rewritten
+    // catalog above sets `multi_agent_version = "disabled"`, and both injection sites return
+    // early when the version is not v2 — but kept as the belt to that suspenders: the catalog
+    // rewrite fails open, and on a machine with no codex model cache these are the only thing
+    // standing between the model and a 2.2 KB instruction to go be a team lead.
+    //
+    // What follows is why they had to exist at all. `features.multi_agent=false` above does
+    // **not** reach them: `codex app-server` threads run `multi_agent_version: v2` no matter what
+    // the feature flags say, because the model preset wins. `effective_tool_mode` and
+    // `resolve_multi_agent_version_for_model` both read `model_info` first and only fall back to
+    // `multi_agent_version_from_features()` when the model declares nothing — and `gpt-5.6-terra`
+    // declares v2. Measured against codex-cli 0.147.0 with YAAR's own arg set: `codex doctor`
+    // reports `multi_agent=false` accepted, and a real turn still opens with the 2.2 KB
+    // "You are `/root`, the primary agent in a team of agents…" developer message plus a
+    // `<multi_agent_mode>` follow-up telling the model to ignore it. Adding an explicit
+    // `features.multi_agent_v2=false` changes nothing (doctor: "none").
+    //
+    // An **empty string** is the off switch, not a missing key: `resolve_optional_prompt_text`
+    // maps `Some("")` to `None`, and the injection site only pushes an item when the text is
+    // `Some`. Both messages disappear entirely — verified by reading the rollout, not inferred.
+    //
+    // The path is the `[features]` sub-table, not a top-level one. `multi_agent_v2.*` parses,
+    // loads, and does nothing; only `features.multi_agent_v2.*` lands. Declaring the table does
+    // not enable the feature (doctor still lists it disabled).
+    //
+    // This buys the *instructions*, not the *tools*: `collab_tools_enabled` returns true
+    // unconditionally at v2, so the six `collaboration.*` tools (`spawn_agent`, `send_message`,
+    // `followup_task`, `wait_agent`, `interrupt_agent`, `list_agents`) stay on the model's tool
+    // list undocumented. Nothing config-reachable removes them; the only lever that would is
+    // `model_catalog_json`, which means pinning the whole `ModelInfo` — `base_instructions`
+    // included — to a hand-authored snapshot.
+    ['features.multi_agent_v2.root_agent_usage_hint_text', '""'],
+    ['features.multi_agent_v2.subagent_usage_hint_text', '""'],
+    ['features.multi_agent_v2.multi_agent_mode_hint_text', '""'],
     ['apps._default.enabled', 'false'],
     ['include_permissions_instructions', 'false'],
     ['skills.include_instructions', 'false'],
