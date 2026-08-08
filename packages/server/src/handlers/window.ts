@@ -51,11 +51,9 @@ import {
 } from '../features/window/app-protocol.js';
 import { listApps } from '../features/apps/discovery.js';
 import { buildWindowResourceUri, parseWindowResourceUri } from '../lib/yaar-uri-server.js';
-import {
-  RESERVED_COMMAND_KEYS,
-  declaredParamNames,
-  renderSignature,
-} from '../lib/command-signature.js';
+import { RESERVED_COMMAND_KEYS, declaredParamNames } from '../lib/command-signature.js';
+import { defsOf } from '../lib/schema-refs.js';
+import { commandLinkDescription, firstSentence, descriptionOf } from '../lib/protocol-index.js';
 import {
   handleSubscribe,
   handleUnsubscribe,
@@ -775,6 +773,9 @@ export function registerWindowHandlers(
         );
       }
 
+      // The shared subschemas a hoisted `params` points at; without them a param the
+      // compiler deduplicated renders as `any` and the list stops being enough to call from.
+      const defs = defsOf(manifest);
       const links = [
         ...builtins,
         // `__`-named app keys are shadowed by the built-ins, so they are dropped here rather
@@ -784,7 +785,7 @@ export function registerWindowHandlers(
           .map(([key, desc]) => ({
             uri: buildWindowResourceUri(resolved.windowId, 'state', key),
             name: `state/${key}`,
-            description: (desc as { description?: string }).description,
+            description: firstSentence(descriptionOf(desc)),
           })),
         // A command's name is not enough to call it, and `list` is the door an agent
         // reaches for first. The signature rides in `description` rather than in a field
@@ -792,20 +793,24 @@ export function registerWindowHandlers(
         // read — and the round trip it saves (a `describe` spent only on learning param
         // names) is the whole point. `renderSignature` returns the bare name when the
         // command declares no schema, so nothing is invented for one that documents none.
-        ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => {
-          const signature = renderSignature(key, desc);
-          const description = (desc as { description?: string }).description;
-          return {
-            uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
-            name: `commands/${key}`,
-            description:
-              signature === key
-                ? description
-                : `${signature}${description ? ` — ${description}` : ''}`,
-          };
-        }),
+        //
+        // The prose is summarized to its opening sentence (`commandLinkDescription`, shared with
+        // `list('yaar://apps/{id}/protocol')`): a list is for *finding* the command, and
+        // carrying every word of every description made this door 79.9 KB for a
+        // 52-command app — past the size at which the CLI stops delivering a result
+        // inline at all, which for a verbs-only agent means it is not delivered. The full
+        // text is one `describe` away at the per-command URI each row already names.
+        ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => ({
+          uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
+          name: `commands/${key}`,
+          description: commandLinkDescription(key, desc, defs),
+        })),
       ];
-      return okLinks(links);
+      return prependNote(
+        okLinks(links),
+        'descriptions are summarized to their first sentence — ' +
+          'describe("yaar://windows/{windowId}/commands/{name}") for one in full',
+      );
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {

@@ -83,11 +83,22 @@ answered by a new agent with no memory of the old one:
 for it when a long, unrelated history would mislead more than it helps — not as routine cleanup,
 since a new agent pays a full startup. If the app agent is mid-turn, that turn finishes first.
 
-**Learn before you use:** \`describe('yaar://apps/{appId}')\` is the app's manual — its protocol
-(every command and state key, with schemas) plus its SKILL.md if it ships one. That is what you
-want before using an unfamiliar app. \`read('yaar://apps/{appId}')\` is a different question: the
-installed app's effective manifest — version, source, permissions, what it actually holds after
-the user's grants — which is what you want when the question is about the *installation*.
+**Learn before you use:** \`describe('yaar://apps/{appId}')\` is the app's manual — its SKILL.md
+if it ships one, plus the names of every command and state key. That is what you want first for an
+unfamiliar app. The protocol lives beside it and you choose the size you need:
+
+\`\`\`
+list('yaar://apps/{appId}/protocol')                      # every command's signature + first
+                                                          #   sentence. Start here.
+read('yaar://apps/{appId}/protocol/commands/{name}')      # one command, full schema. Brace-batch
+                                                          #   related ones: .../commands/{a,b,c}
+read('yaar://apps/{appId}/protocol')                      # the whole manifest. Tens of KB for a
+                                                          #   big app — prefer the two above.
+\`\`\`
+
+\`read('yaar://apps/{appId}')\` is a different question: the installed app's effective manifest —
+version, source, permissions, what it actually holds after the user's grants — which is what you
+want when the question is about the *installation*.
 
 **Driving a running app.** An open app window has two doors, and they do the same thing:
 

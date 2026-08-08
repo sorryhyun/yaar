@@ -78,6 +78,26 @@ export function parseAppAgentsPath(uri: string): { appId: string; personaId?: st
   return { appId: match[1], ...(match[2] ? { personaId: match[2] } : {}) };
 }
 
+/**
+ * Parse `yaar://apps/{appId}/protocol[/{rest}]` → { appId, rest } or null.
+ *
+ * The tail is returned unsplit on purpose. `/protocol/commands/moveNode` and
+ * `/protocol/hamsters` are both syntactically fine here; the resource module decides
+ * which sections exist and says so by name, because "no such section — state or
+ * commands" is a better answer than the composite's generic unknown-sub-path refusal.
+ *
+ * Note what this URI is *not*: `yaar://apps/{id}/commands/{key}` stays refused on every
+ * verb (`INSTANCE_SUBPATHS` in `register.ts`). The distinction is the one the apps/windows
+ * split already draws — `/protocol/commands/{key}` is the *documentation of* a command
+ * and belongs to the installed app, while `yaar://windows/{id}/commands/{key}` is the
+ * command as something callable right now and belongs to a running window.
+ */
+export function parseAppProtocolPath(uri: string): { appId: string; rest: string } | null {
+  const match = uri.match(/^yaar:\/\/apps\/([^/]+)\/protocol(?:\/(.*))?$/);
+  if (!match) return null;
+  return { appId: match[1], rest: (match[2] ?? '').replace(/\/+$/, '') };
+}
+
 /** Parse `yaar://apps/{appId}/db[/{collection}[/{docId}]]` or null. */
 export function parseAppDbPath(
   uri: string,

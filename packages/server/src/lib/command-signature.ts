@@ -12,7 +12,17 @@
  *
  * Lives in `lib/` because it reads a JSON Schema fragment and returns a string:
  * no session, no registry, nothing to inject.
+ *
+ * Every renderer takes the manifest's `$defs` as a trailing optional argument. A
+ * param whose schema the compiler hoisted arrives as `{"$ref": "#/$defs/x"}`, and a
+ * ref rendered without the table is `any` — a signature that quietly says less than
+ * the one it replaced. Optional because a caller holding a descriptor and no manifest
+ * (a test, an app that shares nothing) still renders exactly what it used to.
  */
+
+import { resolveRef, type SchemaDefs } from './schema-refs.js';
+
+export type { SchemaDefs };
 
 /** The JSON Schema shape these renderers read — the `params` of one protocol command. */
 interface ParamsSchema {
@@ -30,15 +40,20 @@ interface ParamsSchema {
  */
 export const RESERVED_COMMAND_KEYS = ['action', 'params', 'timeoutMs'] as const;
 
-function paramsOf(descriptor: unknown): ParamsSchema | undefined {
-  const schema = (descriptor as { params?: unknown } | undefined)?.params;
+function paramsOf(descriptor: unknown, defs?: SchemaDefs): ParamsSchema | undefined {
+  const declared = (descriptor as { params?: unknown } | undefined)?.params;
+  // The dedup pass never hoists a descriptor's top-level schema — the iframe bridge
+  // reads `properties`/`required` off it — so this hop is for a hand-authored
+  // protocol.json that points its `params` at a def of its own.
+  const schema = resolveRef(declared, defs);
   return schema && typeof schema === 'object' ? (schema as ParamsSchema) : undefined;
 }
 
 /** A parameter's declared type, rendered the way a signature reads it. */
-export function renderType(prop: unknown): string {
-  if (!prop || typeof prop !== 'object') return 'any';
-  const p = prop as {
+export function renderType(prop: unknown, defs?: SchemaDefs): string {
+  const resolved = resolveRef(prop, defs);
+  if (!resolved || typeof resolved !== 'object') return 'any';
+  const p = resolved as {
     type?: string | string[];
     enum?: unknown[];
     items?: unknown;
@@ -55,11 +70,11 @@ export function renderType(prop: unknown): string {
 
   const union = p.oneOf ?? p.anyOf;
   if (Array.isArray(union) && union.length) {
-    return [...new Set(union.map(renderType))].join('|');
+    return [...new Set(union.map((member) => renderType(member, defs)))].join('|');
   }
 
   if (Array.isArray(p.type)) return p.type.join('|');
-  if (p.type === 'array') return p.items ? `${renderType(p.items)}[]` : 'array';
+  if (p.type === 'array') return p.items ? `${renderType(p.items, defs)}[]` : 'array';
   return p.type ?? 'any';
 }
 
@@ -73,8 +88,8 @@ export function renderType(prop: unknown): string {
  * the schema's size and answers the two questions that were being guessed — what is this
  * called, and what shape is it.
  */
-export function renderSignature(name: string, descriptor: unknown): string {
-  const schema = paramsOf(descriptor);
+export function renderSignature(name: string, descriptor: unknown, defs?: SchemaDefs): string {
+  const schema = paramsOf(descriptor, defs);
   const props = schema?.properties;
   // No declared params is not the same as "takes none" — say nothing rather than
   // render `name()` and turn an undocumented command into a documented empty one.
@@ -82,21 +97,21 @@ export function renderSignature(name: string, descriptor: unknown): string {
 
   const required = new Set(Array.isArray(schema?.required) ? (schema.required as string[]) : []);
   const parts = Object.entries(props).map(
-    ([key, prop]) => `${key}${required.has(key) ? '' : '?'}: ${renderType(prop)}`,
+    ([key, prop]) => `${key}${required.has(key) ? '' : '?'}: ${renderType(prop, defs)}`,
   );
   if (schema?.additionalProperties === true) parts.push('...');
   return `${name}(${parts.join(', ')})`;
 }
 
 /** The param names one command declares. Empty when it declares no schema at all. */
-export function declaredParamNames(descriptor: unknown): string[] {
-  const props = paramsOf(descriptor)?.properties;
+export function declaredParamNames(descriptor: unknown, defs?: SchemaDefs): string[] {
+  const props = paramsOf(descriptor, defs)?.properties;
   return props && typeof props === 'object' ? Object.keys(props) : [];
 }
 
 /** The reserved keys this command declares as params of its own — usually none. */
-export function reservedParamsOf(descriptor: unknown): string[] {
-  const declared = new Set(declaredParamNames(descriptor));
+export function reservedParamsOf(descriptor: unknown, defs?: SchemaDefs): string[] {
+  const declared = new Set(declaredParamNames(descriptor, defs));
   return RESERVED_COMMAND_KEYS.filter((key) => declared.has(key));
 }
 
@@ -108,26 +123,39 @@ export function reservedParamsOf(descriptor: unknown): string[] {
  * *is* `params`") reads as a prohibition on a payload containing a key called `params` —
  * which is precisely the shape `setGeometryParams(id, params, points)` requires.
  */
-export function renderInvokeExample(uri: string, descriptor: unknown): string {
-  const schema = paramsOf(descriptor);
+export function renderInvokeExample(uri: string, descriptor: unknown, defs?: SchemaDefs): string {
+  const payload = renderPayloadExample(descriptor, defs);
+  return payload ? `invoke("${uri}", ${payload})` : `invoke("${uri}")`;
+}
+
+/**
+ * Just the payload object of that example — `{ id: <string>, to?: <vec3> }` — or null for
+ * a command that declares no params.
+ *
+ * Split out because the same command is called through two different vocabularies and
+ * only the verb differs: the verbs door says `invoke("yaar://windows/…", …)`, an app agent
+ * says `command("name", …)`. Sharing the payload rather than the whole line is what keeps
+ * a third caller from inventing a third spelling of the literal keys.
+ */
+export function renderPayloadExample(descriptor: unknown, defs?: SchemaDefs): string | null {
+  const schema = paramsOf(descriptor, defs);
   const props = schema?.properties;
-  if (!props || typeof props !== 'object' || !Object.keys(props).length) {
-    return `invoke("${uri}")`;
-  }
+  if (!props || typeof props !== 'object' || !Object.keys(props).length) return null;
+
   const required = new Set(Array.isArray(schema?.required) ? (schema.required as string[]) : []);
   const parts = Object.entries(props).map(
-    ([key, prop]) => `${key}${required.has(key) ? '' : '?'}: <${renderType(prop)}>`,
+    ([key, prop]) => `${key}${required.has(key) ? '' : '?'}: <${renderType(prop, defs)}>`,
   );
   if (schema?.additionalProperties === true) parts.push('...');
-  return `invoke("${uri}", { ${parts.join(', ')} })`;
+  return `{ ${parts.join(', ')} }`;
 }
 
 /**
  * The note a command earns by declaring a key the sub-path spelling would otherwise
  * claim. Null for every command that declares none, which is nearly all of them.
  */
-export function reservedKeyNote(descriptor: unknown): string | null {
-  const collisions = reservedParamsOf(descriptor);
+export function reservedKeyNote(descriptor: unknown, defs?: SchemaDefs): string | null {
+  const collisions = reservedParamsOf(descriptor, defs);
   if (!collisions.length) return null;
   const names = collisions.map((k) => `\`${k}\``).join(' and ');
   return (

@@ -70,6 +70,17 @@ export interface AppManifest {
    * cursor movement from a text input. `Ctrl` also matches `Cmd`.
    */
   keybindings?: Record<string, string>;
+  /**
+   * Subschemas shared by more than one descriptor, hoisted here by the compiler's
+   * `dedupe-schemas` pass; every `{"$ref": "#/$defs/name"}` inside a `params`,
+   * `returns` or state `schema` resolves against *this* table.
+   *
+   * The manifest is the schema document, so a consumer that hands one descriptor's
+   * schema on alone (`describe` of a single command) must carry the defs it needs
+   * with it — a sliced schema holding a dangling pointer is corrupt. Absent for the
+   * apps that share nothing, which is most of them.
+   */
+  $defs?: Record<string, object>;
 }
 
 // ── Keybinding combos ───────────────────────────────────────────────

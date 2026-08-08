@@ -36,7 +36,7 @@ import type { AppManifest } from '@yaar/shared';
 import { listKeybindingIssues } from '@yaar/shared';
 import { buildAppBundle, formatBuildLogs } from '../build/build-app.js';
 
-type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
+type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings' | '$defs'>;
 
 export interface FoldSuccess {
   ok: true;
@@ -235,7 +235,14 @@ function foldSchema(value, path, io) {
       return undefined;
     }
     try {
-      const json = toolkit.toJSONSchema(value, { io: io });
+      // \`reused: 'ref'\` is zod's own within-schema dedup: a schema *instance*
+      // referenced more than once (\`const textureSlot = z.object(...)\` used for
+      // five texture slots) is emitted once into a local \`\$defs\` and pointed at,
+      // instead of restated. The names it picks are opaque (\`__schema0\`) and its
+      // \`\$defs\` is local to this descriptor, whose pointers would resolve against
+      // the wrong root once the descriptor sits inside protocol.json — both are
+      // the reason \`dedupe-schemas.ts\` runs after extraction and promotes them.
+      const json = toolkit.toJSONSchema(value, { io: io, reused: 'ref' });
       // Every descriptor schema is an inline subschema of protocol.json; a
       // per-entry \$schema is noise in the agent's context.
       delete json.\$schema;

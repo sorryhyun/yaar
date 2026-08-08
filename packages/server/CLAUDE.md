@@ -146,6 +146,7 @@ src/
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
 └── lib/                  # Standalone utilities (no server internal imports)
     ├── browser/ pdf/ pick-directory.ts
+    ├── schema-refs.ts         # resolveRef/selfContained — following a protocol schema's `$defs` pointers
     ├── format-interaction.ts  # formatCompactInteraction() — compact log string for UserInteraction
     └── yaar-uri-server.ts     # Server-only URI parsers: parseContentPath, parseWindowResourceUri/buildWindowResourceUri, parseConfigUri/buildConfigUri, parseSessionUri/buildSessionUri (+ associated types)
 ```
@@ -261,17 +262,18 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 
 | | `yaar://apps/{id}` — the *installed* app | `yaar://windows/{id}` — the *running* instance |
 |---|---|---|
-| `describe` | identity + `dist/protocol.json` verbatim + `agent/SKILL.md` + permissions + this door's `verbs`/`invokeActions`/`subPaths` | this instance's manual, tagged `source: 'live'` (the iframe's registration) or `'manifest'` (disk), plus `builtinState` |
+| `describe` | identity + `agent/SKILL.md` + permissions + the **names** of its state keys and commands + this door's `verbs`/`invokeActions`/`subPaths` | this instance's manual, tagged `source: 'live'` (the iframe's registration) or `'manifest'` (disk), plus `builtinState` |
 | `read` | the effective, **post-grant** manifest from `getAppMeta` | metadata + `__content`, or metadata + `__screenshot` for an iframe |
-| `list` | ✗ not a collection | this window's built-in keys, then the app's state keys and commands |
-| sub-paths | `storage/`, `db/`, `agents/` | `state/{key}`, `commands/{key}` |
+| `list` | ✗ not a collection | this window's built-in keys, then the app's state keys and commands, as an **index** (signature + first sentence) |
+| sub-paths | `protocol`, `storage/`, `db/`, `agents/` | `state/{key}`, `commands/{key}` |
 
-Five rules hold this together, each closing a false success (each is documented in full at the
+Six rules hold this together, each closing a false success (each is documented in full at the
 named site):
 
 - **`exists?(resolved)` on `ResourceHandler`** is consulted before the auto-generated `describe`; a `/*` wildcard that declares neither `exists` nor `describe` makes `register()` **throw**. (`handlers/uri-registry.ts`)
 - **The same action list is declared once** — `defineActions` derives the schema `enum`, `describe`'s `invokeActions`, and the dispatch from one table, so they cannot drift. (`handlers/define-actions.ts`)
 - **`yaar://apps/{id}/state/…` and `/commands/…` are refused on every verb** — protocol state belongs to a running window, and the same app on two monitors is two states. (`handlers/apps/register.ts`)
+- **Every other unclaimed sub-path is refused too** — the app handlers take their id from the first segment with `extractIdFromUri` and ignore the rest, so anything the resource modules declined used to answer as the bare app. A false success is worse than a 404. (`rejectUnhandledSubPath`, same file)
 - **A missing directory is an error, not an empty list** (`storageList` sets `notFound`); namespace roots opt back in explicitly.
 - **A resource that exists and holds nothing answers, it does not complain** — every window has the three built-in state keys (`BUILTIN_STATE`: `__content`, `__screenshot`, `__console`; `__` is reserved, an app key by those names is shadowed). (`handlers/window.ts`)
 
@@ -287,7 +289,36 @@ Everything else is refused — default-deny, so `undefined` is neither. **That g
 
 The role is resolved from the pool (`AgentPool.getRoleForAgent` via `SessionHub.findRoleForAgent`) in the MCP path and from the per-turn role string (`principalRole()`) in-process — `agents/roles.ts` owns both the prefixes a role is minted with and the parse that maps one onto a tier, so the string and the gate that reads it cannot drift apart; `systemApp` is set by `routes/verb.ts` from the **validated iframe token**, never from the request body, so it is exactly as forgeable as the token (i.e. not — `getAppMeta` sets it for bundled `kind: "system"` apps only). The gate's principal resolver is injected via `setAccessPrincipalResolver()` (wired in `lifecycle.ts`) to avoid a runtime import cycle.
 
-**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas. A fourth request kind, `describe`, documents **one** state key or command on demand (`handleAppDescribe` in `features/window/app-protocol.ts`) — never folded into the manifest, or every manifest read would pay for every key. A command's answer carries its rendered `signature`, an `invoke` example, and its `schema` (`lib/command-signature.ts`); the signature also prefixes each command's `description` in `list('yaar://windows/{id}')`, so the list is enough to call from.
+**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas. A fourth request kind, `describe`, documents **one** state key or command on demand (`handleAppDescribe` in `features/window/app-protocol.ts`) — never folded into the manifest, or every manifest read would pay for every key. A command's answer carries its rendered `signature`, an `invoke` example, and its `schema` (`lib/command-signature.ts`); the signature also prefixes each command's `description` in `list('yaar://windows/{id}')`, so the list is enough to call from. That list is an **index**: the description is summarized to its first sentence (`lib/protocol-index.ts`, shared with `list('yaar://apps/{id}/protocol')`), because a list is for *finding* the command and every-word-of-every-description made the door 79.9 KB for a 52-command app.
+
+**A protocol has two honest sizes, and they get two doors.** `describe('yaar://apps/{id}')` used
+to inline `dist/protocol.json`, making one answer responsible for "what is this app" (identity +
+SKILL.md, a fixed ~10 KB) and "what does every one of its 52 commands accept" (41.8 KB, unbounded
+in command count). Their sum crossed the size at which the Claude CLI stops delivering a tool
+result inline and substitutes a path on disk — which for a monitor agent, holding five `yaar://`
+verbs and no filesystem tools, is a dead end. The protocol is now its own resource
+(`handlers/apps/protocol-resource.ts`) where the verbs mean what they mean everywhere else:
+`describe` is counts and doors, `list` is the index, `read` is the manifest, and
+`read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. So the
+index is *what `list` means*, not a degradation a byte budget switches on, and nothing is
+truncated behind a caller's back. Measured on studio-3d: describe 54.6 KB → 13.6 KB, index 10.7 KB.
+`features/apps/describe.ts` emits command **names** for the verbs door and the full index for the
+app agent's `describe` **tool** — that caller holds no `read` verb, so a URI it cannot open would
+be the same dead end at one remove, and `describe({ command })` is its spelling of the
+per-command read. Rationale and the incident: `docs/proposals/app_describe_size_proposal.md`.
+
+**A schema may point at the manifest, so every reader has to follow the pointer.** The compiler
+hoists a shape an app repeats into `manifest.$defs` and leaves `{"$ref": "#/$defs/x}"` at each
+use (`compiler/src/protocol/dedupe-schemas.ts`). `lib/schema-refs.ts` is the one resolver:
+`resolveRef` for the renderers — a ref rendered without the table is `any`, a signature that
+silently says *less* than the one it replaced — and `selfContained` for any door that hands one
+descriptor's schema on **alone**. The three renderers take `$defs` as a trailing optional
+argument, passed at the three seams that hold a manifest: `list` on a window
+(`handlers/window.ts`), the per-command `describe` (`features/window/app-protocol.ts`, which
+also makes its `schema:` self-contained), and the app agent's prompt
+(`agents/profiles/app-agent.ts`). A descriptor's *top-level* schema is never hoisted, so
+`params.properties`/`required` — what the iframe bridge validates against — are always readable
+without a hop.
 
 **A reserved payload key (`action`/`params`/`timeoutMs`) is checked against the command's schema, not against its name** — a command that *declares* one of those params keeps it, and a declared `timeoutMs` also steers the transport deadline. Full story at `invokeSubResource` in `handlers/window.ts`.
 

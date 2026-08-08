@@ -375,6 +375,10 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         }
       }
       if (registration.keybindings) manifest.keybindings = registration.keybindings;
+      // The table every \`{"$ref": "#/$defs/x"}\` in the schemas below resolves against.
+      // This builder copies field by field, so a manifest served without it would hand
+      // agents schemas full of pointers into nothing.
+      if (registration.$defs) manifest.$defs = registration.$defs;
       if (registration.state) {
         for (var key in registration.state) {
           var s = registration.state[key];

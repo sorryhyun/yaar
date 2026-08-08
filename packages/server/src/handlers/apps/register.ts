@@ -34,6 +34,12 @@ import {
   deleteStorage,
 } from './storage-resource.js';
 import {
+  describeAppProtocol,
+  readAppProtocol,
+  listAppProtocol,
+  rejectProtocolMutation,
+} from './protocol-resource.js';
+import {
   appActions,
   appsListHandler,
   describeApplication,
@@ -66,7 +72,42 @@ function rejectInstanceSubPath(uri: string): VerbResult | null {
   return error(
     `"${uri}" is not addressable. An app's protocol ${segment} belong to a running window, ` +
       'not to the installed app — use yaar://windows/{windowId}/' +
-      `${segment}/{key} instead. Find the window with list("yaar://windows").`,
+      `${segment}/{key} instead. Find the window with list("yaar://windows").` +
+      ` For the *documentation* of a ${segment} key, which does belong to the installed app, ` +
+      `read the compiled protocol: yaar://apps/{appId}/protocol/${segment}/{key}.`,
+  );
+}
+
+/** Every sub-path under `yaar://apps/{id}` that some resource module owns. */
+const KNOWN_SUBPATHS = ['storage', 'db', 'agents', 'protocol'] as const;
+
+/**
+ * The refusal for any sub-path that reached the terminal — `yaar://apps/notes/hamsters`.
+ *
+ * The composite's terminal case is the app itself, and the app handlers take their id with
+ * `extractIdFromUri`, which matches the *first* segment and ignores everything after it. So
+ * before this existed, every unclaimed sub-path silently answered as the bare app:
+ * `read('yaar://apps/notes/protocol')` cheerfully returned the app's effective manifest,
+ * and a caller had no way to tell a real answer from a typo that had been rounded off to
+ * one. A false success is worse than a 404 precisely because nothing looks wrong.
+ *
+ * Runs *last*, so it only ever sees a URI every owning module declined — including a URI
+ * whose segment *is* known but whose tail is malformed (a traversing storage path), which
+ * is equally not the bare app. `rejectInstanceSubPath` runs first and has a better
+ * sentence for the two segments it knows about.
+ *
+ * A launch parameter is not a sub-path: `yaar://apps/memo?file=yaar://storage/x` names the
+ * app itself, so the query and fragment come off before the split.
+ */
+function rejectUnhandledSubPath(uri: string): VerbResult | null {
+  const match = uri.split(/[?#]/)[0].match(/^yaar:\/\/apps\/([^/]+)\/(.+)$/);
+  if (!match) return null;
+  const [, appId, rest] = match;
+  return error(
+    `"${uri}" is not addressable. An app's sub-paths are ` +
+      `${KNOWN_SUBPATHS.map((s) => `${s}/`).join(', ')} — "${rest}" is neither one of those ` +
+      `nor a valid path under one. describe("yaar://apps/${appId}") lists what this app ` +
+      'answers to.',
   );
 }
 
@@ -78,8 +119,11 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://apps/*', {
     description:
       'A specific app — the *installed* app, not a running one. Describe for its manual ' +
-      '(protocol + SKILL.md), read for its effective manifest, invoke to ' +
-      `${appActions.names.join('/')}, delete to uninstall. ` +
+      '(SKILL.md, permissions, and the names of its state keys and commands), read for its ' +
+      `effective manifest, invoke to ${appActions.names.join('/')}, delete to uninstall. ` +
+      'Sub-path /protocol is the compiled protocol: list it for an index of command ' +
+      'signatures, read it for the manifest in full, read /protocol/commands/{name} for one ' +
+      'command self-contained. ' +
       'Sub-path /storage/{path} provides app-scoped file storage. ' +
       'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search). ' +
       "Sub-path /agents[/{personaId}] provides the app's own tool-less persona agents. " +
@@ -131,7 +175,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const personaResult = describePersonas(resolved.sourceUri);
       if (personaResult) return personaResult;
 
-      return describeApplication(resolved);
+      const protocolResult = await describeAppProtocol(resolved.sourceUri);
+      if (protocolResult) return protocolResult;
+
+      return rejectUnhandledSubPath(resolved.sourceUri) ?? describeApplication(resolved);
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
@@ -147,7 +194,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const personaResult = await readPersonas(resolved);
       if (personaResult) return personaResult;
 
-      return readApplication(resolved);
+      const protocolResult = await readAppProtocol(resolved.sourceUri);
+      if (protocolResult) return protocolResult;
+
+      return rejectUnhandledSubPath(resolved.sourceUri) ?? readApplication(resolved);
     },
 
     async list(resolved: ResolvedUri): Promise<VerbResult> {
@@ -163,7 +213,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const personaResult = await listPersonas(resolved);
       if (personaResult) return personaResult;
 
-      return listApplication();
+      const protocolResult = await listAppProtocol(resolved.sourceUri);
+      if (protocolResult) return protocolResult;
+
+      return rejectUnhandledSubPath(resolved.sourceUri) ?? listApplication();
     },
 
     async invoke(resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
@@ -179,7 +232,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const personaResult = await invokePersonas(resolved, payload);
       if (personaResult) return personaResult;
 
-      return invokeApplication(resolved, payload);
+      const protocolResult = rejectProtocolMutation(resolved.sourceUri, 'invoke');
+      if (protocolResult) return protocolResult;
+
+      return rejectUnhandledSubPath(resolved.sourceUri) ?? invokeApplication(resolved, payload);
     },
 
     async delete(resolved: ResolvedUri): Promise<VerbResult> {
@@ -195,7 +251,10 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const personaResult = await deletePersonas(resolved);
       if (personaResult) return personaResult;
 
-      return deleteApplication(resolved);
+      const protocolResult = rejectProtocolMutation(resolved.sourceUri, 'delete');
+      if (protocolResult) return protocolResult;
+
+      return rejectUnhandledSubPath(resolved.sourceUri) ?? deleteApplication(resolved);
     },
   });
 }

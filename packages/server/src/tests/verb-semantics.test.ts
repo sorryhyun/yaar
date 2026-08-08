@@ -50,7 +50,20 @@ const text = (r: VerbResult) => {
   if (first.type === 'resource' && 'text' in first.resource) return first.resource.text;
   return '';
 };
-const json = (r: VerbResult) => JSON.parse(text(r));
+// A result may lead with a `prependNote` block, so the JSON is "the first block that
+// parses as an object", not "the first block".
+const json = (r: VerbResult) => {
+  for (const block of r.content) {
+    const body =
+      block.type === 'text'
+        ? block.text
+        : block.type === 'resource' && 'text' in block.resource
+          ? block.resource.text
+          : '';
+    if (body.startsWith('{')) return JSON.parse(body);
+  }
+  throw new Error(`no JSON block in result: ${text(r)}`);
+};
 
 beforeAll(async () => {
   mkdirSync(join(appDir, 'dist'), { recursive: true });
@@ -89,9 +102,9 @@ describe('the apps/ boundary', () => {
     }
   });
 
-  it('leaves storage, db and agents sub-paths addressable', async () => {
+  it('leaves storage, db, agents and protocol sub-paths addressable', async () => {
     const registry = initRegistry();
-    for (const sub of ['storage/', 'db/notes', 'agents']) {
+    for (const sub of ['storage/', 'db/notes', 'agents', 'protocol']) {
       const result = await registry.execute('describe', `yaar://apps/${APP_ID}/${sub}`);
       expect(result.isError, sub).toBeFalsy();
     }
@@ -99,17 +112,34 @@ describe('the apps/ boundary', () => {
 });
 
 describe('describe on an app', () => {
-  it('returns the protocol verbatim plus SKILL.md', async () => {
+  it('names the protocol and carries SKILL.md, rather than inlining the manifest', async () => {
     const body = json(await initRegistry().execute('describe', `yaar://apps/${APP_ID}`));
 
     expect(body.uri).toBe(`yaar://apps/${APP_ID}`);
     expect(body.name).toBe('Verb Semantics Fixture');
     expect(body.icon).toBe('🧪');
-    // Verbatim: a build artifact carries no drift risk, which is the whole reason it
-    // can be returned whole where a hand-written restatement could not.
-    expect(body.protocol).toEqual(PROTOCOL);
+
+    // The manifest used to be inlined here verbatim. It is a build artifact, so that was
+    // never a drift risk — it was a *size* risk: identity + SKILL.md is fixed at ~10 KB
+    // while the manifest grows without bound in the app's command count, and their sum
+    // crossed the size at which the CLI stops delivering a result inline at all. So this
+    // door now carries the table of contents and names the URI that serves the table.
+    expect(body.protocol.uri).toBe(`yaar://apps/${APP_ID}/protocol`);
+    expect(body.protocol.commands).toEqual(Object.keys(PROTOCOL.commands));
+    expect(body.protocol.stateKeys).toEqual(Object.keys(PROTOCOL.state));
+    expect(body.protocol.state).toBeUndefined();
+
+    // SKILL.md is what this door is *for*, and it is unabridged.
     expect(body.skill).toBe(SKILL);
     expect(body.permissions).toEqual(['yaar://apps/self/db/']);
+  });
+
+  it('the named protocol URI answers with the manifest verbatim', async () => {
+    // The other half of the split: nothing was dropped, it moved. Asserted through the
+    // registry, so the composite's dispatch order is part of the claim.
+    const body = json(await initRegistry().execute('read', `yaar://apps/${APP_ID}/protocol`));
+    expect(body.commands).toEqual(PROTOCOL.commands);
+    expect(body.state).toEqual(PROTOCOL.state);
   });
 
   it('derives invokeActions from the table that dispatches them', async () => {

@@ -52,18 +52,22 @@ The same protocol has a direct spelling in which the **URI** names the state key
 | Call | Description |
 |------|-------------|
 | `describe('yaar://windows/{windowId}')` | *This instance's* manual. The live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). The two diverge after a deploy without a reload, so a manual that doesn't say which it read makes that divergence invisible. A non-app window has no protocol at all and answers with its applicable action set instead. |
-| `list('yaar://windows/{windowId}')` | This window's state keys and commands, as `yaar://windows/{w}/state/{key}` / `.../commands/{key}` resource links. (It used to ignore the window id and return every window on the monitor — that is what `list('yaar://windows')` is for.) |
+| `list('yaar://windows/{windowId}')` | This window's state keys and commands, as `yaar://windows/{w}/state/{key}` / `.../commands/{key}` resource links — **the index**: each row carries its rendered signature and the *first sentence* of its description, which is enough to pick a command and call it. The full prose is one `describe` away at the row's own URI. (It used to ignore the window id and return every window on the monitor — that is what `list('yaar://windows')` is for.) |
 | `read('yaar://windows/{windowId}/state/{key}')` | One state value — the same executor as `app_query` with that `stateKey`. Reading a `commands/{key}` URI is an error: commands are invoked. |
 | `invoke('yaar://windows/{windowId}/commands/{key}', { ...params })` | Run one command. The payload **is** the params — an `action` or a nested `params` in it is refused rather than guessed at, since two spellings of one call with unclear precedence is how such lists drift, and `timeoutMs` is consumed as the transport deadline. **Unless the command declares one of those three names as a param of its own**, in which case it is that param: the reservation is checked against the command's schema, not against the key name (see below). An **array** payload runs the command once per element, in order. Invoking a `state/{key}` URI is an error. |
 | `describe('yaar://windows/{windowId}/{state,commands}/{key}')` | That one key's documentation — see [Describe](#describe) below. |
 
 Both spellings reach the same `handleAppQuery` / `handleAppCommand`, so readiness wait, replay recording, and truncation are identical.
 
-Note the contrast with `yaar://apps/{appId}`, the **installed** app: `state/` and `commands/` are not addressable there on any verb and the handler refuses them by name. Protocol state has no value and a command has nothing to act on until a window is open, and the same app open on two monitors is two states — an `apps/` spelling would name one arbitrarily or name none. `storage/`, `db/`, and `agents/` stay unchanged under `apps/`.
+Note the contrast with `yaar://apps/{appId}`, the **installed** app: `state/` and `commands/` are not addressable there on any verb and the handler refuses them by name. Protocol state has no value and a command has nothing to act on until a window is open, and the same app open on two monitors is two states — an `apps/` spelling would name one arbitrarily or name none. `storage/`, `db/`, `agents/`, and `protocol` stay addressable under `apps/`.
+
+`yaar://apps/{appId}/protocol/commands/{key}` is the other side of that same line rather than an exception to it: it serves the *documentation* of a command, which is a property of the installed app and identical on every monitor, and it cannot run anything. Read it when you want a command's schema without opening a window; use the `windows/` spelling to call it, and to get the manual of the instance actually running (a devtools preview's live protocol routinely differs from what is on disk). Full table in [`uri_reference.md`](./uri_reference.md#the-protocol--yaarappsappidprotocol).
 
 ### Scoped tools (app agents)
 
-Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. `describe` is the app's manual and is built by the same `describeApp` behind `describe('yaar://apps/{appId}')` — one question, one shape, whichever door asks it. These tools:
+Each persistent app agent (one per `appId`) instead gets dedicated `query` / `command` / `describe` MCP tools (`mcp/app-agent/index.ts`, namespace `app` — full names `mcp__app__query` etc.), which call the same `handleAppQuery` / `handleAppCommand` functions. `describe` is the app's manual and is built by the same `describeApp` behind `describe('yaar://apps/{appId}')` — one question, one shape, whichever door asks it. It answers with SKILL.md plus an **index** of the protocol (every command's signature and opening sentence), and takes an optional `command` to return that one command in full instead, schema included.
+
+The two doors differ in exactly one respect, and for a stated reason: the verbs door emits command *names* and the URIs that serve the rest, while the tool emits the whole index inline. Its caller holds four scoped tools and no `read` verb, so a URI it cannot open is the same dead end this split exists to remove — and `describe({ command })` is that caller's spelling of `read('yaar://apps/{id}/protocol/commands/{name}')`. These tools:
 - Default to the agent's own window; pass `appId` to target another app, permitted only when the *calling* app's own `app.json` `controls` list names that target (see root `CLAUDE.md` "Cross-app control"). The target need not already be open — resolution is the target's most recently active window on the caller's monitor, else any window of it on that monitor, else a fresh one opened for the call (`features/window/resolve-app-window.ts`, shared with `direct_message`); the result says when one was opened.
 - Intercept `stateKey`/`command` values prefixed `storage/` / `storage:` to read/write app-scoped storage directly, bypassing the app protocol entirely (own app only — storage is not cross-app controllable).
 - `command` accepts an optional `timeoutMs` to override the default wait (30s, max 180s) for slow commands like a compile or a deploy.
@@ -106,6 +110,7 @@ interface AppManifest {
   state: Record<string, AppStateDescriptor>;
   commands: Record<string, AppCommandDescriptor>;
   events?: Record<string, AppEventDescriptor>;  // declared app.emit() channels (optional)
+  $defs?: Record<string, object>;               // subschemas shared by more than one descriptor
 }
 
 interface AppStateDescriptor {
@@ -126,6 +131,24 @@ interface AppEventDescriptor {
 ```
 
 The manifest is built automatically from the registration config by stripping handler functions and exposing only descriptions and schemas. A per-key `describe()` is stripped along with the handlers — it is answered on demand (see [Describe](#describe)) and never rides in the manifest.
+
+**`$defs` — a shape stated once.** A schema an app repeats (one texture-slot object used
+by five material maps; `{x, y, z}` on every command that takes a position) is hoisted by the
+compiler into `$defs` and replaced at each use with `{"$ref": "#/$defs/<name>"}`. Names are
+derived from the shape (`x_y_z`, `uri_repeat_offset_etc`), not generated, because the reader
+is a model. **The manifest is the schema document**: a pointer resolves against
+`manifest.$defs` and nothing else. Two consequences worth knowing:
+
+- A **descriptor's top-level** `params`/`returns`/`schema` is never replaced by a pointer, so
+  `properties` and `required` are always readable straight off it — the iframe bridge rejects
+  a bad call by reading exactly those two.
+- A door that hands **one** descriptor's schema on by itself carries the defs that schema
+  reaches, as a `$defs` on the returned schema. `describe('yaar://windows/{id}/commands/{key}')`
+  does this; the slice is self-contained and its pointers resolve against itself.
+
+Apps that share nothing carry no `$defs` at all. The pass is content-neutral — resolving every
+pointer reproduces the pre-fold manifest exactly — and lives in
+`packages/compiler/src/protocol/dedupe-schemas.ts`.
 
 ---
 
@@ -221,7 +244,7 @@ Documents one state key or one command, on demand — `describe('yaar://windows/
 
 `protocol.json` already carries a one-line `description` per key, so erroring on a key that *is* documented would report it as missing — the same false signal the registry's `exists` hook exists to remove.
 
-**A command's answer also says how to call it** — `signature` (`setGeometryParams(id: string, params?: object, points?: array)`), a rendered `invoke` example carrying the literal param names, and its `schema`. Both spellings of the doc (computed and manifest) carry them, which is why a command's describe reads the manifest either way. The prose these replace — "the payload *is* `params`" — reads as a prohibition on a payload containing a key called `params`, and no rewording fixes a sentence that has to be applied to a name it collides with; a rendered example cannot be read that way. The same signature prefixes each command's `description` in `list('yaar://windows/{windowId}')`, so the list is enough to call from without a second round trip.
+**A command's answer also says how to call it** — `signature` (`setGeometryParams(id: string, params?: object, points?: array)`), a rendered `invoke` example carrying the literal param names, and its `schema`. Both spellings of the doc (computed and manifest) carry them, which is why a command's describe reads the manifest either way. The prose these replace — "the payload *is* `params`" — reads as a prohibition on a payload containing a key called `params`, and no rewording fixes a sentence that has to be applied to a name it collides with; a rendered example cannot be read that way. The same signature prefixes each command's `description` in `list('yaar://windows/{windowId}')`, so the list is enough to call from without a second round trip — there the description is summarized to its first sentence, since a list is for *finding* the command and carrying every word of every description made that door 79.9 KB for a 52-command app, past the size at which the CLI stops delivering a result inline at all.
 
 **Reserved keys are checked against the schema, not the name.** `action`, `params` and `timeoutMs` mean something to the sub-path spelling — the first two are refused, the third is consumed as the transport deadline. That was applied to the key name alone, which made every command whose own schema declares one of them unreachable through this spelling (`studio-3d.setGeometryParams(id, params, points)`, `devtools.previewCommand(command, params, timeoutMs)`) and made one of them *silently* wrong: `devtools.previewEval(expression, timeoutMs, …)` declares how long the preview may take to settle, and the server ate it as its own deadline and told the app nothing. A command that declares one of the three now receives it as the param it is — and a declared `timeoutMs` is *both*, steering the transport deadline as well, so the server does not cut off a wait it just authorized. The schema is consulted only when one of the three names is present in the payload, so an ordinary call pays for no lookup; when the manifest cannot account for the command (an app that never registered and ships no `protocol.json`) the old refusals stand, since sending an undeclared key gets the whole command rejected by the bridge.
 

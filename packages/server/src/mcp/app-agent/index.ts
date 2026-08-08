@@ -90,6 +90,8 @@ import { genId } from '../../lib/ids.js';
 import { getAppMeta, type ControlEntry } from '../../features/apps/discovery.js';
 import type { VerbResult } from '../../handlers/uri-registry.js';
 import { describeApp } from '../../features/apps/describe.js';
+import { findProtocolCommand, commandDocument } from '../../handlers/apps/protocol-resource.js';
+import { renderPayloadExample } from '../../lib/command-signature.js';
 import {
   storageRead,
   storageWrite,
@@ -137,6 +139,28 @@ function withLaunchNote(result: VerbResult, appId: string, windowId: string): Ve
       ...result.content,
     ],
   };
+}
+
+/**
+ * One command of an installed app, documented in full — the app agent's spelling of
+ * `read('yaar://apps/{id}/protocol/commands/{name}')`.
+ *
+ * The document itself is the shared `commandDocument`; only the call example is rewritten
+ * into this caller's vocabulary, because an app agent runs a command with its `command`
+ * tool and has no `invoke` verb to point a window URI at. Rendering the example it *cannot*
+ * use would be the same dead end at one remove.
+ */
+async function describeOneCommand(appId: string, name: string) {
+  const found = await findProtocolCommand(appId, name);
+  if ('content' in found) return found;
+
+  const { descriptor, defs } = found;
+  const payload = renderPayloadExample(descriptor, defs);
+  const target = `"${name}"${payload ? `, ${payload}` : ''}`;
+  return okJson({
+    appId,
+    ...commandDocument(name, descriptor, defs, { call: `command(${target})` }),
+  });
 }
 
 export function registerAppAgentTools(server: McpServer): void {
@@ -388,8 +412,10 @@ export function registerAppAgentTools(server: McpServer): void {
     'describe',
     {
       description:
-        "An app's manual — its protocol (every state key and command, with schemas) plus its " +
-        'SKILL.md if it ships one. The same answer describe("yaar://apps/{id}") gives. ' +
+        "An app's manual — its SKILL.md if it ships one, plus an index of its protocol: " +
+        "every state key and every command's call signature with its opening sentence. " +
+        'Pass `command` to get one command in full instead, with its complete parameter schema — ' +
+        'that is the door to use when a signature leaves you unsure, not a second full describe. ' +
         'Omit appId to describe your own app; pass appId to inspect another app you are permitted to control.',
       inputSchema: {
         appId: z
@@ -397,6 +423,12 @@ export function registerAppAgentTools(server: McpServer): void {
           .optional()
           .describe(
             'App to describe (omit for your own app). Other apps require "controls" permission.',
+          ),
+        command: z
+          .string()
+          .optional()
+          .describe(
+            'One command to document in full (name as it appears in the index), instead of the whole manual.',
           ),
       },
     },
@@ -418,11 +450,23 @@ export function registerAppAgentTools(server: McpServer): void {
         }
       }
 
+      // One command in full. An app agent holds four scoped tools and no `read` verb, so
+      // the per-command URI the verbs door points at (`yaar://apps/{id}/protocol/
+      // commands/{name}`) is a door it cannot open — this param is that door, reached
+      // through the one tool it does hold, answering with the same builder.
+      if (args.command) {
+        return describeOneCommand(targetAppId, args.command);
+      }
+
       // One shape for one verb: this is `describeApp`, the same builder behind
       // describe("yaar://apps/{id}"). It used to assemble a third shape of its own here
       // — distinct from both the verbs door and `read` — so the same question answered
       // differently depending on which tool asked it.
-      const facts = await describeApp(targetAppId);
+      //
+      // `protocol: 'index'` rather than the verbs door's 'names': that door's caller can
+      // follow a URI to the index and this one cannot, and a pointer its holder cannot
+      // follow is the exact dead end the protocol split exists to remove.
+      const facts = await describeApp(targetAppId, { protocol: 'index' });
       if (!facts) return error(`app "${targetAppId}" not found.`);
       if (!facts.protocol && !facts.skill) {
         return error(`app "${targetAppId}" exposes no protocol and ships no SKILL.md.`);

@@ -16,6 +16,7 @@ import { PAYLOAD_LITERALS_SECTION } from './shared-sections.js';
 // The same renderer `describe`/`list` answer with, so a signature read in this prompt
 // and one read from a verb are the same string (`lib/command-signature.ts`).
 import { renderSignature } from '../../lib/command-signature.js';
+import { defsOf } from '../../lib/schema-refs.js';
 
 /**
  * The parts of the app-authoring contract the compiler owns, stated by the compiler.
@@ -135,12 +136,18 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
       systemPrompt += '\n## Available Commands — run with `command(command, params)`\n\n';
       systemPrompt +=
         'Signatures below are exact — `?` marks an optional param. Pass params under the ' +
-        'names shown; an undeclared name is rejected, not ignored. `describe()` returns the ' +
-        'full schema with per-param descriptions when a signature leaves you unsure.\n\n';
+        'names shown; an undeclared name is rejected, not ignored. ' +
+        '`describe({ command: "name" })` returns that one command with its full schema and ' +
+        'per-param descriptions when a signature leaves you unsure — ask for the command, ' +
+        'not for the whole manual again.\n\n';
+      // Shared subschemas the compiler hoisted onto the manifest. A signature rendered
+      // without them shows `any` for every deduplicated param, which is the one thing
+      // this section exists to stop an agent from guessing.
+      const defs = defsOf(protocol);
       for (const [key, desc] of Object.entries(protocol.commands)) {
         const description =
           typeof desc === 'string' ? desc : ((desc as { description?: string })?.description ?? '');
-        systemPrompt += `- \`${renderSignature(key, desc)}\`: ${description}\n`;
+        systemPrompt += `- \`${renderSignature(key, desc, defs)}\`: ${description}\n`;
       }
     }
   }

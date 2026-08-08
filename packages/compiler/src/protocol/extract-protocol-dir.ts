@@ -23,9 +23,10 @@ import {
   type ProtocolError,
 } from './extract-protocol-ast.js';
 import { loadTypeScript } from '../load-typescript.js';
+import { dedupeProtocolSchemas } from './dedupe-schemas.js';
 import { foldAppSchemas, type FoldSuccess } from './fold-schemas.js';
 
-type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings'>;
+type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings' | '$defs'>;
 
 /** Entry candidates, in order. The first that holds a registration wins. */
 const ENTRY_FILES = ['main.ts', 'protocol.ts'] as const;
@@ -199,6 +200,19 @@ function mergeFold(
   return errors;
 }
 
+/**
+ * The one place the `$defs` fold is applied, so both readers answer alike.
+ *
+ * It sits here rather than in `compile.ts` because this function is what the deploy
+ * path re-derives a manifest with (`features/dev/deploy.ts` diffs the two): a pass
+ * applied on only one of the two roads would report every deploy as a protocol
+ * change. The pass is idempotent, so re-running it over a manifest that already
+ * carries `$defs` is a no-op.
+ */
+function folded(protocol: Protocol | null): Protocol | null {
+  return protocol ? dedupeProtocolSchemas(protocol) : protocol;
+}
+
 /** Read `appId` from the app.json beside `srcDir`, or undefined if there is none. */
 async function readAppJsonId(srcDir: string): Promise<string | undefined> {
   try {
@@ -264,7 +278,7 @@ export async function extractProtocolFromDir(
             ];
       }
       return {
-        protocol: errors.length > 0 ? null : result.protocol,
+        protocol: errors.length > 0 ? null : folded(result.protocol),
         errors,
         degraded: false,
       };
@@ -315,7 +329,7 @@ export async function extractProtocolFromDir(
             ]
           : [];
       return {
-        protocol: mismatch.length > 0 ? null : fold.protocol,
+        protocol: mismatch.length > 0 ? null : folded(fold.protocol),
         errors: mismatch,
         degraded: true,
       };

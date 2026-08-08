@@ -229,6 +229,11 @@ function toRegistration(definition) {
     state,
     commands,
   };
+  // Shared subschemas the build hoisted out of the descriptors above
+  // (`protocol/dedupe-schemas.ts`). They belong to the manifest, not to any one
+  // descriptor, and every `$ref` the schemas carry resolves against them — so the
+  // registration has to hand them on for the served manifest to mean anything.
+  if (manifest && manifest.$defs !== undefined) registration.$defs = manifest.$defs;
   if (definition.events !== undefined) registration.events = definition.events;
   if (definition.onCapture !== undefined) registration.onCapture = definition.onCapture;
   if (definition.keybindings !== undefined) registration.keybindings = definition.keybindings;
