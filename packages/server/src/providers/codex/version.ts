@@ -18,9 +18,23 @@
  * generated against and `codex-version.test.ts` refuses to let it ship.
  *
  * So the floor moves only when a release actually breaks something we send or read — not
- * on every codex version. It currently sits at 0.145.0 with bindings from 0.146.0, whose
- * diff was additive (`Thread.isPinned`, `ThreadItem.commandExecution.pluginId`/`scriptPath`,
- * a `PlanType` variant) and touched no request type this provider builds.
+ * on every codex version. It currently sits at 0.145.0 with bindings from 0.147.0.
+ *
+ * 0.147.0 is the first regeneration whose diff is *not* purely additive, so the "only adds
+ * fields" reasoning above does not cover it on its own and the floor was re-derived by hand.
+ * It replaced pinning with sections (`Thread.isPinned` → `section`/`sectionEnteredAt`,
+ * `ThreadListParams.isPinned` → `sectionId`, `ThreadMetadataUpdateParams.isPinned` dropped
+ * for a `thread/section/move` method), narrowed `ThreadSearchParams.sortKey` to its own
+ * `ThreadSearchSortKey`, retyped two `AbsolutePathBuf` fields as `LegacyAppPathString`, and
+ * re-shaped `ExternalAgentConfigImportHistoryRecordParams`. Every one of those types is
+ * unreferenced outside `generated/` — this provider builds `thread/{start,resume,fork}`,
+ * `turn/*` and `initialize`, none of which changed — so a 0.145/0.146 CLI still speaks
+ * every shape we actually send, and its extra `isPinned` on a response is a field we never
+ * read. Grep before trusting that: the argument is "unused", not "compatible".
+ *
+ * The additive half worth knowing about: `InitializeCapabilities.extensions`, the successor
+ * to the `mcpServerOpenaiFormElicitation` flag and the seam a client declares MCP extensions
+ * through. YAAR sends neither (`app-server.ts`'s `initializeParams`).
  *
  * This module is dependency-free on purpose: `scripts/codegen/codex-types.js` imports it
  * directly, so it must not drag in server internals.

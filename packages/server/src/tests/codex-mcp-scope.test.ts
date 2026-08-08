@@ -20,8 +20,11 @@
  */
 import { describe, it, expect } from 'bun:test';
 import { EventEmitter } from 'node:events';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { CodexProvider } from '../providers/codex/provider.js';
-import { getCodexAppServerArgs } from '../config/providers/codex.js';
+import { getCodexAppServerArgs, detectUserMcpServers } from '../config/providers/codex.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 import type { AppServer } from '../providers/codex/app-server.js';
 import type { JsonRpcWsClient } from '../providers/codex/jsonrpc-ws-client.js';
@@ -155,14 +158,173 @@ describe('codex per-thread MCP scope', () => {
     // which is how a server the *user's* ~/.codex/config.toml declares gets taken away —
     // per-thread it could not be.
     //
-    // The rule, not a roster: which servers are named is `DISABLED_MCP_SERVERS`'s business
-    // (currently none — the block is commented out in `config/providers/codex.ts`), and
-    // asserting the two entries it used to carry made this fail the moment that changed
-    // while the containment it exists to guard still held perfectly. What must never
-    // change is the *shape*: a takeaway is the only thing this list may contain.
+    // The rule, not a roster: which servers are named is `detectUserMcpServers()`'s business
+    // — it reads them off the machine's own `$CODEX_HOME/config.toml`, so asserting on the
+    // two entries this list used to carry by name made this fail the moment a machine had
+    // different ones while the containment it exists to guard still held perfectly. What
+    // must never change is the *shape*: a takeaway is the only thing this list may contain.
     const mcpArgs = getCodexAppServerArgs().filter((a) => a.includes('mcp_servers'));
     for (const arg of mcpArgs) {
       expect(arg).toMatch(/^mcp_servers\.[^.]+\.enabled=false$/);
     }
+  });
+});
+
+/**
+ * The takeaway list is read off the machine, and it has to be: naming a server the user's
+ * config does *not* declare does not disable anything — it leaves codex with an
+ * `mcp_servers.<name>` table holding only `enabled`, and the CLI refuses to boot on it
+ * ("invalid transport in `mcp_servers.<name>`"). Measured against codex-cli 0.147.0; it is
+ * why the hard-coded roster had to be reverted. So the interesting assertions here are the
+ * *absences*: an undeclared name and an unaddressable one must never reach `-c`.
+ */
+describe('user MCP server detection', () => {
+  const withCodexHome = <T>(config: string | null, fn: () => T): T => {
+    const previous = process.env.CODEX_HOME;
+    const home = mkdtempSync(join(tmpdir(), 'yaar-codex-home-'));
+    if (config !== null) writeFileSync(join(home, 'config.toml'), config);
+    process.env.CODEX_HOME = home;
+    try {
+      return fn();
+    } finally {
+      if (previous === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous;
+      rmSync(home, { recursive: true, force: true });
+    }
+  };
+
+  it('names every server the config declares, in either TOML spelling', () => {
+    const detected = withCodexHome(
+      [
+        // A dotted key has to precede the headers, or it lands inside the last table.
+        'mcp_servers.inline = { command = "/nope/inline" }',
+        '',
+        '[mcp_servers.node_repl]',
+        'command = "/nope/node_repl"',
+        '[mcp_servers.node_repl.env]',
+        'CODEX_HOME = "/nope"',
+        '',
+        '[mcp_servers.computer-use]',
+        'command = "/nope/cua"',
+        'enabled = false',
+      ].join('\n'),
+      detectUserMcpServers,
+    );
+
+    // A sub-table (`.env`) is the same server, not a second one.
+    expect(detected.sort()).toEqual(['computer-use', 'inline', 'node_repl']);
+  });
+
+  it('names nothing when there is no config to read', () => {
+    expect(withCodexHome(null, detectUserMcpServers)).toEqual([]);
+    expect(withCodexHome('', detectUserMcpServers)).toEqual([]);
+    expect(withCodexHome('model = "gpt-5"\n', detectUserMcpServers)).toEqual([]);
+  });
+
+  it('names nothing when the config cannot be parsed', () => {
+    // Fails open: a miss lets one user server ride along, a guess stops codex from starting.
+    expect(withCodexHome('[mcp_servers.broken\ncommand =', detectUserMcpServers)).toEqual([]);
+  });
+
+  it('skips a name a dotted `-c` path cannot address', () => {
+    // `-c mcp_servers.my server.enabled=false` does not name that server; depending on how
+    // the value parses it either fails or lands on a different key. Leave it enabled.
+    const detected = withCodexHome(
+      '[mcp_servers."my server"]\ncommand = "/nope"\n[mcp_servers.ok]\ncommand = "/nope"\n',
+      detectUserMcpServers,
+    );
+    expect(detected).toEqual(['ok']);
+  });
+
+  it('turns each detected server into exactly one takeaway arg', () => {
+    const args = withCodexHome(
+      '[mcp_servers.alpha]\ncommand = "/nope"\n[mcp_servers.beta]\ncommand = "/nope"\n',
+      () => getCodexAppServerArgs(),
+    );
+
+    const mcpArgs = args.filter((a) => a.includes('mcp_servers'));
+    expect(mcpArgs).toEqual(['mcp_servers.alpha.enabled=false', 'mcp_servers.beta.enabled=false']);
+    // Each rides behind its own `-c`.
+    for (const arg of mcpArgs) expect(args[args.indexOf(arg) - 1]).toBe('-c');
+  });
+});
+
+/**
+ * The model catalog rewrite — the only override that reaches tool mode and multi-agent, and
+ * the one that fails silently when it breaks.
+ *
+ * It exists because `model_info` outranks `features.*`: `effective_tool_mode()` is
+ * `model_info.tool_mode.unwrap_or_else(|| …features…)` and `resolve_multi_agent_version_for_model()`
+ * prefers `model_info.multi_agent_version`. Measured against codex-cli 0.147.0, `gpt-5.6-terra`
+ * ships `tool_mode = "code_mode_only"` / `multi_agent_version = "v2"`, so every
+ * `-c features.code_mode=false` / `features.multi_agent=false` was inert — accepted by
+ * `codex doctor`, and the thread still ran model-authored JS against `ALL_TOOLS` with six
+ * `collaboration.*` tools attached.
+ *
+ * What must hold is the *shape*, not the roster: the two fields YAAR has an opinion about are
+ * overwritten on every model, everything else is passed through, and an unreadable cache drops
+ * the override rather than breaking the boot.
+ */
+describe('codex model catalog rewrite', () => {
+  const withCache = <T>(cache: string | null, fn: () => T): T => {
+    const previous = process.env.CODEX_HOME;
+    const home = mkdtempSync(join(tmpdir(), 'yaar-codex-home-'));
+    if (cache !== null) writeFileSync(join(home, 'models_cache.json'), cache);
+    process.env.CODEX_HOME = home;
+    try {
+      return fn();
+    } finally {
+      if (previous === undefined) delete process.env.CODEX_HOME;
+      else process.env.CODEX_HOME = previous;
+      rmSync(home, { recursive: true, force: true });
+    }
+  };
+
+  const catalogArg = (args: string[]): string | undefined =>
+    args.find((a) => a.startsWith('model_catalog_json='));
+
+  it('pins tool_mode and multi-agent off, and passes every other field through', () => {
+    const args = withCache(
+      JSON.stringify({
+        models: [
+          {
+            slug: 'gpt-5.6-terra',
+            tool_mode: 'code_mode_only',
+            multi_agent_version: 'v2',
+            apply_patch_tool_type: 'freeform',
+          },
+          { slug: 'gpt-5.5', base_instructions: 'keep me', context_window: 123 },
+        ],
+      }),
+      () => getCodexAppServerArgs(),
+    );
+
+    const arg = catalogArg(args);
+    expect(arg).toBeDefined();
+    // Each override rides behind its own `-c`, and the path is quoted (it can contain spaces).
+    expect(args[args.indexOf(arg!) - 1]).toBe('-c');
+    const path = JSON.parse(arg!.slice('model_catalog_json='.length));
+
+    const written = JSON.parse(readFileSync(path, 'utf8'));
+    expect(
+      written.models.map((m: any) => [m.tool_mode, m.multi_agent_version, m.apply_patch_tool_type]),
+    ).toEqual([
+      ['direct', 'disabled', null],
+      ['direct', 'disabled', null],
+    ]);
+    // `ModelInfo` carries the model's whole definition; rewriting two fields must not amount
+    // to pinning a hand-authored snapshot of the rest.
+    expect(written.models[1].base_instructions).toBe('keep me');
+    expect(written.models[1].context_window).toBe(123);
+  });
+
+  it('drops the override rather than breaking the boot when there is no cache to read', () => {
+    // A machine where codex has never run has no cache. The cost of missing is that the model
+    // preset keeps deciding; the cost of throwing is a provider that will not start.
+    expect(catalogArg(withCache(null, getCodexAppServerArgs))).toBeUndefined();
+    expect(catalogArg(withCache('{ not json', getCodexAppServerArgs))).toBeUndefined();
+    // `load_catalog_json` refuses a catalog with no models — emitting one would turn this
+    // fail-open into a refused boot.
+    expect(catalogArg(withCache('{"models":[]}', getCodexAppServerArgs))).toBeUndefined();
   });
 });

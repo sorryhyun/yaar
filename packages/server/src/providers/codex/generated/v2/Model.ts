@@ -8,7 +8,7 @@ import type { ModelServiceTier } from "./ModelServiceTier.js";
 import type { ModelUpgradeInfo } from "./ModelUpgradeInfo.js";
 import type { ReasoningEffortOption } from "./ReasoningEffortOption.js";
 
-export type Model = { id: string, model: string, upgrade: string | null, upgradeInfo: ModelUpgradeInfo | null, availabilityNux: ModelAvailabilityNux | null, displayName: string, description: string, hidden: boolean, supportedReasoningEfforts: Array<ReasoningEffortOption>, defaultReasoningEffort: ReasoningEffort, inputModalities: Array<InputModality>, supportsPersonality: boolean,
+export type Model = { id: string, model: string, upgrade: string | null, upgradeInfo: ModelUpgradeInfo | null, availabilityNux: ModelAvailabilityNux | null, displayName: string, description: string, modelSpecialty: string | null, hidden: boolean, supportedReasoningEfforts: Array<ReasoningEffortOption>, defaultReasoningEffort: ReasoningEffort, inputModalities: Array<InputModality>, supportsPersonality: boolean,
 /**
  * Deprecated: use `serviceTiers` instead.
  */

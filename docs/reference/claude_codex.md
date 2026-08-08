@@ -185,21 +185,23 @@ mcpServers: {
 
 ### Codex
 
-MCP servers are configured via CLI flags at process spawn, looping over `CORE_SERVERS` (`getCodexAppServerArgs()`):
+MCP servers are declared **per thread**, not at process spawn — `CodexProvider.buildMcpScope`
+builds an `mcp_servers` override for each `thread/start`/`resume`/`fork`, because that is the only
+place that can stamp the calling agent's identity onto them:
 
-```
-codex app-server \
-  -c mcp_servers.system.url=http://127.0.0.1:8000/mcp/system \
-  -c mcp_servers.system.bearer_token_env_var=YAAR_MCP_TOKEN \
-  -c mcp_servers.verbs.url=http://127.0.0.1:8000/mcp/verbs \
-  -c mcp_servers.verbs.bearer_token_env_var=YAAR_MCP_TOKEN \
-  -c mcp_servers.app.url=http://127.0.0.1:8000/mcp/app \
-  -c mcp_servers.app.bearer_token_env_var=YAAR_MCP_TOKEN \
-  -c mcp_servers.messaging.url=http://127.0.0.1:8000/mcp/messaging \
-  -c mcp_servers.messaging.bearer_token_env_var=YAAR_MCP_TOKEN
+```jsonc
+// thread/start params.config
+{ "mcp_servers": {
+    "verbs": { "url": "http://127.0.0.1:8000/mcp/verbs",
+               "bearer_token_env_var": "YAAR_MCP_TOKEN",
+               "http_headers": { "x-agent-token": "<minted for this agent>" } },
+    /* …plus system, app, messaging — `subagent` only for a sub-agent */ }}
 ```
 
-The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than directly in headers.
+The shared bearer token rides in an environment variable (`YAAR_MCP_TOKEN`); the per-agent
+credential is the `x-agent-token` header. `getCodexAppServerArgs()` deliberately declares no
+`mcp_servers` at the process level — an override merges over the loaded config rather than
+replacing it, so anything declared there could never be taken away from a thread.
 
 ## Model Configuration
 
@@ -212,7 +214,9 @@ The auth token is passed via environment variable (`YAAR_MCP_TOKEN`) rather than
 | Sandbox | N/A | `danger-full-access` |
 | Personality | Default | Feature disabled outright (`features.personality=false`) — no personality value is ever set |
 | Permissions | `bypassPermissions` | `approval_policy = "never"` |
-| Multi-agent | Task tool (profile-based delegation) | Native Codex multi-agent/collab features disabled (`features.multi_agent=false`, `features.collaboration_modes=false`) — orchestration stays YAAR-tracked, not Codex-internal. Also disabled: `apply_patch_freeform`, `unified_exec`, `code_mode.enabled`/`code_mode_host`, `fast_mode`, `skill_mcp_dependency_install`, `image_generation`, `computer_use`, `browser_use`, `skill_search`, `tool_search_always_defer_mcp_tools`, `workspace_dependencies`, `memories`, `apps`, `remote_plugin` — see `DISABLED_FEATURES` in `config/providers/codex.ts` |
+| Multi-agent | Task tool (profile-based delegation) | Native Codex multi-agent/collab features disabled (`features.multi_agent=false`, `features.collaboration_modes=false`) — orchestration stays YAAR-tracked, not Codex-internal. Also disabled: `apply_patch_freeform`, `unified_exec`, `code_mode`, `fast_mode`, `skill_mcp_dependency_install`, `image_generation`, `computer_use`, `browser_use`, `skill_search`, `workspace_dependencies`, `memories`, `apps`, `goals` (Codex's own plan tracker — YAAR neither reads nor renders it), and the whole plugin tier (`plugins`, `plugin_sharing`, `remote_plugin`) — see `DISABLED_FEATURES` in `config/providers/codex.ts`. Both rosters are logged at launch (`[codex] feature opt-outs/opt-ins`). **`multi_agent=false` is not what stops it** — the model preset outranks the feature flags, so `gpt-5.6-terra`'s `multi_agent_version = "v2"` won until `model_catalog_json` rewrote it to `"disabled"` (`buildDirectToolModeCatalog()`). That is what removes the six `collaboration.*` tools; the `features.multi_agent_v2.*_hint_text=""` entries only silence the prompting, and remain as the fallback for when the catalog rewrite fails open |
+| Code mode | N/A | Off via the **model catalog**, not the flag: `gpt-5.6-terra` ships `tool_mode = "code_mode_only"`, and `effective_tool_mode()` reads the model before the features, so `features.code_mode=false` was inert and YAAR's agents really were running model-authored JS against `ALL_TOOLS` / `tools.mcp__verbs__invoke`. `model_catalog_json` pins `tool_mode = "direct"`. The flag stays as the fallback path; `code_mode_host` stays on because turning it off leaves a broken `exec` rather than no `exec` |
+| MCP protocol era | `MCP_SDK_GENERATION=v2` + `MCP_PROTOCOL_NEGOTIATION=auto` (both required) | `features.mcp_2026_07_28=true` (`ENABLED_FEATURES`) — the gate for HTTP MCP servers, which is all of YAAR's. `CODEX_MCP_PROTOCOL_VERSION` is the stdio-server equivalent and does **not** move these |
 
 ## Image Handling
 

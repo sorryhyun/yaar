@@ -90,6 +90,10 @@ export {
   CODEX_WS_PORT,
   getCodexWsPort,
   getCodexAppServerArgs,
+  getModelCatalogPath,
+  detectUserMcpServers,
+  DISABLED_FEATURES,
+  ENABLED_FEATURES,
 } from './config/providers/codex.js';
 
 export { CHROME_DEBUG_PORT, isClipboardGrantEnabled } from './config/browser.js';

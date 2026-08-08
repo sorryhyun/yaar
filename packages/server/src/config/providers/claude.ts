@@ -94,10 +94,21 @@ const PARENT_HARNESS_ENV_VARS = [
  * waits are longer on purpose. Left at the default, a prompt the agent had already given
  * up on stayed live on the user's screen until its own deadline passed minutes later. See
  * `config/deadlines.ts` for the three nested bounds.
+ *
+ * The two `MCP_*` generation/negotiation vars put the CLI on YAAR's **stateless**
+ * 2026-07-28 MCP leg (`mcp/server.ts`'s `getModernHandler`), which needs no session id,
+ * no idle eviction, and survives a server restart with no re-handshake. Both are required
+ * — `MCP_SDK_GENERATION` selects the v2 runtime arm, and only that arm reads
+ * `MCP_PROTOCOL_NEGOTIATION`, so either one alone is a no-op. They are **undocumented**
+ * internal gates in a CLI YAAR does not pin, which is exactly why the stateful leg stays
+ * in place: a renamed gate silently falls back to legacy `initialize` and every tool keeps
+ * working. Do not delete the other leg on the strength of these two lines.
  */
 const CLAUDE_ENV_OVERRIDES = {
   MAX_MCP_OUTPUT_TOKENS: '131072',
   MCP_TOOL_TIMEOUT: String(MCP_TOOL_CALL_TIMEOUT_MS),
+  MCP_SDK_GENERATION: 'v2',
+  MCP_PROTOCOL_NEGOTIATION: 'auto',
   CLAUDE_CODE_DISABLE_BUILTIN_AGENTS: '1',
   CLAUDE_CODE_DISABLE_AUTO_MEMORY: '1',
   ENABLE_CLAUDEAI_MCP_SERVERS: 'false',

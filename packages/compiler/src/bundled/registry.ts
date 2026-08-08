@@ -28,6 +28,7 @@ export const BUNDLED_SHIMS: Record<string, string> = {
   anime: toForwardSlash(join(SHIMS_DIR, 'anime.ts')),
   dompurify: toForwardSlash(join(SHIMS_DIR, 'dompurify.ts')),
   lodash: toForwardSlash(join(SHIMS_DIR, 'lodash.ts')),
+  mammoth: toForwardSlash(join(SHIMS_DIR, 'mammoth.ts')),
   mediabunny: toForwardSlash(join(SHIMS_DIR, 'mediabunny.ts')),
   mermaid: toForwardSlash(join(SHIMS_DIR, 'mermaid.ts')),
   'pixi.js': toForwardSlash(join(SHIMS_DIR, 'pixi.ts')),

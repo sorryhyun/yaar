@@ -63,6 +63,7 @@ src/
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
     ├── anime.ts           # v3→v4 easing name compat wrapper
+    ├── mammoth.ts         # CommonJS default-export workaround (see below)
     ├── mediabunny.ts      # re-export barrel workaround (see below)
     ├── mermaid.ts         # lazy init, token theming, forced strict mode, serialized renders
     ├── dompurify.ts       # keeps purify.es.mjs off the entrypoint slot (see below)
@@ -341,6 +342,14 @@ header comment with its full rationale — read it before changing or removing o
   does not survive (spurious `EISDIR` on later builds; two days of CI-only failures). The shim
   demotes `purify.es.mjs` to an inner module in both builds; a `prebundle-completeness.test.ts`
   case pins the entrypoint to the shim because the failure reproduces only most of the time.
+- **`mammoth.ts`** — same asymmetry as the barrels, reached through CJS interop: mammoth is
+  CommonJS typed `export = mammoth`, so the default import is the *only* spelling that
+  typechecks, and it is exactly the one the prebundled artifact dropped (named exports only, no
+  `default`). Dev resolves the npm file and Bun synthesizes the default; the exe resolves the
+  artifact and an installed app died with `No matching export in "bundled-lib:mammoth" for import
+  "default"`. **A library's declared default is now probed** — the completeness test derives which
+  libraries promise one from the `.d.ts` and default-imports those artifacts, because a namespace
+  import never asks for `default` and so never saw this.
 
 ## Build Manifest & Staleness
 

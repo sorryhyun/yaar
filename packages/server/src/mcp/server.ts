@@ -4,15 +4,48 @@
  * Provides HTTP endpoints for MCP tool calls across namespaced servers,
  * allowing multiple agents to connect independently without state corruption issues.
  *
- * Uses stateful mode (sessionIdGenerator) so each SDK client gets its own MCP
- * session. The transport is created on the first `initialize` request from each
- * client and reused for subsequent requests carrying the same session ID.
+ * Serves both MCP protocol eras off the same endpoint, forked per request in
+ * `handleMcpRequest` (the reasoning, and why one shape cannot serve both, is at
+ * `getModernHandler`):
+ *
+ * - **2025-era (legacy)** — stateful. Each SDK client gets its own MCP session; the
+ *   transport is created on that client's first `initialize` and reused for every later
+ *   request carrying the same session ID. This is what a client that does not negotiate up
+ *   speaks, and it is unchanged.
+ * - **2026-07-28 (modern)** — stateless, no `initialize` and no session ID. Reached by
+ *   clients that negotiate up, which **both** of YAAR's providers are now asked to do:
+ *   Codex via `features.mcp_2026_07_28` (`ENABLED_FEATURES` in `config/providers/codex.ts`),
+ *   Claude via `MCP_SDK_GENERATION` + `MCP_PROTOCOL_NEGOTIATION` (`config/providers/claude.ts`).
+ *   Codex's `CODEX_MCP_PROTOCOL_VERSION` env var is **not** the gate for these servers — it
+ *   applies to stdio MCP servers, and YAAR's are all HTTP; see the flag's comment for the
+ *   measurement that separates the two.
+ *
+ * So the modern leg is where real traffic is *meant* to land, and the legacy leg is
+ * **deprecated** — retained as a fallback, not as a supported path. It is not dead weight
+ * behind the modern one: those provider opt-ins are undocumented CLI gates in binaries YAAR
+ * does not pin, and a client that cannot negotiate up falls back to `initialize` silently.
+ * The stateful path is what makes that fallback cost nothing. Deleting it converts any gate
+ * rename — or one stale CLI on one machine — into every agent losing every tool at once.
+ *
+ * Everything the legacy leg needs is fenced into one section below, marked `@deprecated`
+ * and bounded by banner comments, so the eventual deletion is a cut along a line that is
+ * already drawn. Nothing outside that fence is era-specific.
+ *
+ * Because "is anything still on the legacy leg?" is the question that gates that deletion,
+ * the fork is **counted**, not just documented: `getMcpEraStats()` reports requests served
+ * per era plus legacy sessions minted, and the first legacy session in a process logs a
+ * one-time deprecation warning naming the client. A run that never prints it and reports
+ * `legacyRequestsServed: 0` is the evidence; see `docs/proposals/mcp_modern_only_proposal.md`
+ * for the full exit criteria (the counters answer #3 and nothing else).
  */
 
 import {
+  createMcpHandler,
   isInitializeRequest,
+  isLegacyRequest,
   McpServer,
   WebStandardStreamableHTTPServerTransport,
+  type McpHttpHandler,
 } from '@modelcontextprotocol/server';
 import { runWithAgentContext } from '../agents/agent-context.js';
 import { getSessionHub } from '../session/session-hub.js';
@@ -41,9 +74,19 @@ import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
 export const CORE_SERVERS = ['system', 'verbs', 'app', 'messaging', SUB_AGENT_MCP_SERVER] as const;
 export type McpServerName = (typeof CORE_SERVERS)[number];
 
+// ─── BEGIN deprecated: 2025-era stateful leg ──────────────────────────────────
+//
+// Everything from here to the END banner exists only to serve clients that did not
+// negotiate 2026-07-28. It is scheduled for deletion once the exit criteria in
+// `docs/proposals/mcp_modern_only_proposal.md` are met. Do not add to this section,
+// and do not reach into it from the modern path — the modern handler holds no
+// session, no stream, and no timer, and must keep needing none of them.
+
 /**
  * Per-session MCP transport entry.
  * Each Claude SDK client gets its own McpServer + transport pair per server name.
+ *
+ * @deprecated 2025-era only. The modern leg is stateless and stores nothing per client.
  */
 interface McpSessionEntry {
   server: McpServer;
@@ -54,6 +97,9 @@ interface McpSessionEntry {
 /**
  * Map of `${serverName}:${mcpSessionId}` -> McpSessionEntry.
  * Created on `initialize` requests, reused for subsequent calls.
+ *
+ * @deprecated 2025-era only. A stateless request needs no lookup, which is also why a
+ * server restart stops orphaning sessions once this is gone.
  */
 const mcpSessions = new Map<string, McpSessionEntry>();
 
@@ -62,10 +108,16 @@ const mcpSessions = new Map<string, McpSessionEntry>();
  * "common stream" that a streamable-HTTP client (rmcp/codex) holds open for
  * server-pushed messages. Matches
  * `WebStandardStreamableHTTPServerTransport._standaloneSseStreamId`.
+ *
+ * @deprecated 2025-era only.
  */
 const STANDALONE_GET_STREAM_ID = '_GET_stream';
 
-/** Minimal view of one entry in the SDK transport's private stream registry. */
+/**
+ * Minimal view of one entry in the SDK transport's private stream registry.
+ *
+ * @deprecated 2025-era only.
+ */
 interface StandaloneStreamHandle {
   controller: ReadableStreamDefaultController<Uint8Array>;
   encoder: TextEncoder;
@@ -81,6 +133,10 @@ interface StandaloneStreamHandle {
  * package split unchanged, v2 only adds a `cleanup` key we don't read). Guarded
  * with optional chaining so a future shape change degrades to "no keep-alive /
  * eligible for eviction" rather than throwing.
+ *
+ * @deprecated 2025-era only — and the single strongest reason to retire this leg. It is
+ * the one place YAAR depends on an SDK-private field, so every SDK bump owes it a re-check
+ * by hand. The modern handler holds no stream and needs none of this.
  */
 function getOpenGetStream(
   transport: WebStandardStreamableHTTPServerTransport,
@@ -96,6 +152,9 @@ function getOpenGetStream(
  * made a tool call recently (e.g. the agent is busy driving the browser);
  * reaping it would drop the stream and make rmcp log "fail to get common
  * stream" on its next reconnect.
+ *
+ * @deprecated 2025-era only. Nothing accumulates on the stateless leg, so nothing has to
+ * be reclaimed.
  */
 const MCP_SESSION_TTL_MS = 5 * 60 * 1000;
 setInterval(() => {
@@ -127,8 +186,84 @@ setInterval(() => {
  * transport's own timer cannot. That was belt-and-suspenders — a session holding
  * the GET stream open is already skipped by the eviction loop above via
  * `getOpenGetStream()`, which is the load-bearing guard and is unaffected.
+ *
+ * @deprecated 2025-era only. This constant is the coupling between YAAR's MCP layer and
+ * Bun's socket policy; a stateless endpoint holds no long-lived socket, so retiring this
+ * leg removes the coupling outright rather than re-tuning the margin.
  */
 const MCP_KEEPALIVE_MS = 60 * 1000;
+
+/**
+ * Per-era traffic counters — the evidence behind "is anything still on the legacy leg?".
+ *
+ * `legacyRequestsServed` is the number that gates deletion: it counts every request that
+ * took the stateful path, including the `initialize` that mints a session. A window in
+ * which it stays 0 while `modernRequestsServed` climbs is what criterion 3 of
+ * `docs/proposals/mcp_modern_only_proposal.md` asks for.
+ *
+ * Deliberately a plain in-process counter, not a metrics backend: it exists to answer one
+ * question once, and it dies with the leg it measures.
+ */
+const eraStats = {
+  /** Requests dispatched to the stateless 2026-07-28 handler. */
+  modernRequestsServed: 0,
+  /** Requests dispatched to the deprecated stateful path (initialize + all follow-ups). */
+  legacyRequestsServed: 0,
+  /** `mcp-session-id`s minted — i.e. distinct legacy client connections. */
+  legacySessionsCreated: 0,
+};
+
+/** Snapshot of the per-era traffic counters. See `eraStats`. */
+export function getMcpEraStats(): Readonly<typeof eraStats> {
+  return { ...eraStats };
+}
+
+/**
+ * Zero the counters.
+ * @internal — exposed for testing.
+ */
+export function resetMcpEraStats(): void {
+  eraStats.modernRequestsServed = 0;
+  eraStats.legacyRequestsServed = 0;
+  eraStats.legacySessionsCreated = 0;
+  legacyDeprecationWarned = false;
+}
+
+/**
+ * One-time-per-process deprecation warning, emitted when a client actually lands on the
+ * stateful leg. Once, not per session: five namespaces times every agent would bury it,
+ * and the counters above already carry the volume. The client name comes from the
+ * `initialize` body, since knowing *which* CLI failed to negotiate up is the whole
+ * diagnostic value — a stale binary and a renamed gate look identical without it.
+ */
+let legacyDeprecationWarned = false;
+
+function warnLegacyEra(serverName: McpServerName, clientLabel: string): void {
+  if (legacyDeprecationWarned) return;
+  legacyDeprecationWarned = true;
+  console.warn(
+    `[MCP] DEPRECATED protocol era: ${clientLabel} connected to "${serverName}" over the ` +
+      `stateful 2025-era leg instead of negotiating 2026-07-28. YAAR asks both providers to ` +
+      `negotiate up, so this means the client could not — a stale CLI, or a renamed opt-in ` +
+      `gate (Claude: MCP_SDK_GENERATION/MCP_PROTOCOL_NEGOTIATION, Codex: ` +
+      `features.mcp_2026_07_28). Tools still work; the fallback is why. See ` +
+      `docs/proposals/mcp_modern_only_proposal.md.`,
+  );
+}
+
+/** Best-effort client name from an `initialize` body, for the warning above. */
+function clientLabelFrom(messages: unknown[]): string {
+  for (const m of messages) {
+    const info = (m as { params?: { clientInfo?: { name?: unknown; version?: unknown } } })?.params
+      ?.clientInfo;
+    if (typeof info?.name === 'string') {
+      return typeof info.version === 'string' ? `${info.name} ${info.version}` : info.name;
+    }
+  }
+  return 'an unidentified client';
+}
+
+// ─── END deprecated: 2025-era stateful leg ────────────────────────────────────
 
 // Bearer token for MCP authentication (generated at startup)
 let mcpToken: string | null = null;
@@ -187,6 +322,47 @@ async function createServerForName(name: McpServerName): Promise<McpServer> {
   }
 
   return server;
+}
+
+/**
+ * Per-namespace handler for the **modern** (MCP revision 2026-07-28) era.
+ *
+ * The two eras are served by two different SDK shapes, and neither one can do the
+ * other's job:
+ *
+ * - 2025-era ("legacy") is **stateful**: the client sends `initialize`, the transport
+ *   mints an `mcp-session-id`, and every later request rides that session. That is
+ *   `WebStandardStreamableHTTPServerTransport` and the `mcpSessions` map below.
+ * - 2026-07-28 is **stateless**: there is no `initialize` and no session id. A client
+ *   probes `server/discover`, then sends each request standalone, carrying a `_meta`
+ *   envelope naming the revision. That is `createMcpHandler`, whose factory is called
+ *   **per request** — which is why `createServerForName` being a factory already is the
+ *   whole port, and why nothing here needs the keep-alive or eviction machinery.
+ *
+ * Adding `2026-07-28` to the `McpServer` `supportedProtocolVersions` list is *not* the
+ * opt-in, despite registering a `server/discover` handler on the instance: the probe is
+ * session-less, so it is refused by the "no session ID and not an initialize request"
+ * branch below long before it reaches any instance, and the client silently falls back
+ * to legacy. Measured — a negotiating client still lands on 2025-11-25.
+ *
+ * `legacy: 'reject'` because the classifier below already routed every legacy request to
+ * the stateful path. This handler must never be the one to answer 2025-era traffic: it
+ * would answer *statelessly*, quietly dropping the session and the GET common stream
+ * that the keep-alive above exists to hold open. Rejecting turns a routing mistake into
+ * a loud error instead of a subtle regression for Claude and legacy Codex alike.
+ *
+ * Memoized per namespace: the handler holds no per-connection state (the factory does),
+ * so one is enough, and building it per request would allocate for nothing.
+ */
+const modernHandlers = new Map<McpServerName, McpHttpHandler>();
+
+function getModernHandler(serverName: McpServerName): McpHttpHandler {
+  let handler = modernHandlers.get(serverName);
+  if (!handler) {
+    handler = createMcpHandler(() => createServerForName(serverName), { legacy: 'reject' });
+    modernHandlers.set(serverName, handler);
+  }
+  return handler;
 }
 
 /**
@@ -266,6 +442,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
         const entry = mcpSessions.get(key);
         if (entry) {
           entry.lastUsed = Date.now();
+          eraStats.legacyRequestsServed++;
           return entry.transport.handleRequest(req);
         }
         // Session not found — return 404 per MCP spec
@@ -305,6 +482,19 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
         );
       }
 
+      // Fork the two protocol eras (see getModernHandler). Only a session-less POST can
+      // be modern — a 2026-07-28 connection is stateless, so anything carrying a session
+      // id is legacy by construction and already returned above, which keeps the hot
+      // path (every tool call rides a session id) off the classifier entirely.
+      //
+      // Handing the classifier the body we already parsed matters: given `parsedBody` it
+      // inspects that instead of re-reading the request, so the stream is consumed once
+      // and both eras are dispatched with the same object.
+      if (!(await isLegacyRequest(req, body))) {
+        eraStats.modernRequestsServed++;
+        return getModernHandler(serverName).fetch(req, { parsedBody: body });
+      }
+
       // Validate it is an initialize request
       const messages = Array.isArray(body) ? body : [body];
       const isInit = messages.some((m) => isInitializeRequest(m));
@@ -323,6 +513,13 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
         );
       }
 
+      // Past this point the request is on the deprecated stateful leg. Counted here rather
+      // than at the top of the branch so a malformed body that never got served doesn't
+      // read as legacy traffic — the counters gate a deletion, so they should undercount
+      // rather than over.
+      eraStats.legacyRequestsServed++;
+      warnLegacyEra(serverName, clientLabelFrom(messages));
+
       // Create new McpServer + transport for this session
       const server = await createServerForName(serverName);
       const transport = new WebStandardStreamableHTTPServerTransport({
@@ -332,7 +529,8 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
         onsessioninitialized: (newSessionId: string) => {
           const key = `${serverName}:${newSessionId}`;
           mcpSessions.set(key, { server, transport, lastUsed: Date.now() });
-          console.log(`[MCP] New session for ${serverName}: ${newSessionId}`);
+          eraStats.legacySessionsCreated++;
+          console.log(`[MCP] New legacy-era session for ${serverName}: ${newSessionId}`);
         },
       });
 
