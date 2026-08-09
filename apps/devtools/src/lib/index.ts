@@ -7,3 +7,4 @@ export * from './paths';
 export * from './scaffold';
 export * from './edits';
 export * from './parse-diagnostics';
+export * from './diff';

@@ -10,6 +10,7 @@ export {};
 // belong here now like any other service.
 
 export * from './fs-walk';
+export * from './changes';
 export * from './files';
 export * from './projects';
 export * from './console';

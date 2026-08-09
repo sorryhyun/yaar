@@ -322,8 +322,21 @@
   flex-direction: column;
 }
 
-.diagnostics:has(.diff-panel) {
-  max-height: 50vh;
+/* A fixed height rather than a cap. The bottom area sizes to its content, and a
+   diff's content height is the whole diff — so a two-line change gave a two-line
+   panel that jumped taller on the next edit. The Changes tab is opened deliberately;
+   holding its geometry still is worth the space. */
+.diagnostics:has(.changes-panel) {
+  flex: none;
+  height: 45vh;
+  max-height: 45vh;
+}
+
+/* The panel's own Expand button, rather than a drag handle: the bottom area has no
+   resizer, and two heights cover the two things a reader does here (glance, read). */
+.diagnostics:has(.changes-panel.tall) {
+  height: 80vh;
+  max-height: 80vh;
 }
 
 .bottom-tabs {
@@ -460,19 +473,149 @@
   word-break: break-all;
 }
 
-/* ── Diff Panel ── */
-.diff-panel {
-  overflow: auto;
+/* ── Changes Panel ── */
+.changes-panel {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
+}
+
+.changes-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  padding: 3px var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.changes-toolbar-gap {
+  flex: 1;
+}
+
+.changes-body {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  flex: 1;
+  min-height: 0;
+}
+
+.changes-body.list-collapsed {
+  grid-template-columns: 0 1fr;
+}
+
+.changes-body.list-collapsed .changes-list {
+  display: none;
+}
+
+.changes-list {
+  overflow-y: auto;
+  border-right: 1px solid var(--yaar-border);
+  min-height: 0;
+}
+
+.change-item {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  padding: 3px var(--yaar-sp-2);
+  cursor: pointer;
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.change-item:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+
+.change-item.active {
+  background: var(--yaar-wash-accent);
+  box-shadow: inset 2px 0 0 var(--yaar-accent);
+}
+
+.change-kind {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.change-path {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--yaar-font-mono);
+}
+
+.change-dir {
+  color: var(--yaar-text-dim);
+}
+
+.change-name {
+  color: var(--yaar-text);
+}
+
+.change-stats {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  font-family: var(--yaar-font-mono);
+}
+
+.change-added {
+  color: var(--yaar-success);
+}
+
+.change-removed {
+  color: var(--yaar-error);
+}
+
+.change-time {
+  flex-shrink: 0;
+  color: var(--yaar-text-dim);
+  font-family: var(--yaar-font-mono);
+}
+
+.changes-detail {
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  min-width: 0;
+  min-height: 0;
+}
+
+.change-head {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 4px var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+  position: sticky;
+  top: 0;
+  background: var(--yaar-bg-surface);
+  z-index: 1;
+}
+
+.change-head-path {
+  max-width: 55%;
+}
+
+.diff-more {
+  padding: var(--yaar-sp-2);
+  display: flex;
+  justify-content: center;
+}
+
+.diff-manual-output {
+  grid-column: 1 / -1;
 }
 
 .diff-input-area {
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-template-rows: minmax(80px, 1fr) auto auto;
   gap: var(--yaar-sp-2);
   padding: var(--yaar-sp-2);
-  height: 100%;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
 }
 
 .diff-input-col {
@@ -526,8 +669,43 @@
 }
 
 /* diff2html theme overrides for dark mode */
+.diff-output {
+  font-family: var(--yaar-font-mono);
+}
+
 .diff-output .d2h-wrapper {
   background: var(--yaar-bg);
+}
+
+/* The panel prints the path, the kind and the +/- counts in its own header, so
+   diff2html's file header would be the same facts twice — plus a "Viewed"
+   checkbox that does nothing here. */
+.diff-output .d2h-file-header {
+  display: none;
+}
+
+/* diff2html pads empty lines with a literal U+200B. The IDE's UI font has no glyph
+   for it, so every blank line and every empty line-number cell rendered as a
+   missing-glyph box — small grey specks down the gutter that read as content. A
+   plain space holds the line box open without asking the font for anything. */
+.diff-output .d2h-code-line:after,
+.diff-output .d2h-code-line-ctn:after,
+.diff-output .d2h-code-linenumber:after,
+.diff-output .d2h-code-side-linenumber:after,
+.diff-output .d2h-code-side-line:after {
+  content: ' ';
+}
+
+/* Stock diff2html sizes each line as `calc(100% - 8em)` with 8em of padding on both
+   sides — room it reserves for an absolutely positioned gutter on a full-page layout.
+   The left half is load-bearing — the line-number cell is positioned absolutely over
+   it, so removing it slides the gutter on top of the code. The right half is not: it
+   hangs a 104px slab of row background off the end of every line. Drop that half and
+   let the line size to its text. */
+.diff-output .d2h-code-line,
+.diff-output .d2h-code-line-ctn {
+  width: auto;
+  padding-right: 0;
 }
 
 .diff-output .d2h-file-header,
@@ -536,9 +714,16 @@
   border-color: var(--yaar-border);
 }
 
-.diff-output .d2h-code-linenumber,
-.diff-output .d2h-code-line {
+/* Only the gutter takes a background of its own. A row's colour belongs to its
+   cell (d2h-cntx / d2h-ins / d2h-del / d2h-info) — painting the line box too meant
+   the darker box covered the row wash and showed as a slab beside the code. */
+.diff-output .d2h-code-linenumber {
   background: var(--yaar-bg);
+  color: var(--yaar-text);
+  border-color: var(--yaar-border);
+}
+
+.diff-output .d2h-code-line {
   color: var(--yaar-text);
   border-color: var(--yaar-border);
 }

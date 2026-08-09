@@ -76,6 +76,35 @@ alarming answer than "could not tell".
 An empty list is an answer. Make sure it is the true one. Keep this pattern in any new state getter
 that can fail.
 
+## Every mutation is recorded, and that is a UI contract
+
+Writes used to announce themselves as one line of status text ("Saved src/foo.ts"), which
+told the user that something changed but never what. The Changes tab in the bottom panel now
+shows the diff, so:
+
+- **Every path that mutates a file goes through `services/files.ts` and calls `recordChange`.**
+  `writeFile` does it for writes, edits and copies (edit and copy both route through it);
+  `deleteFile` does it for removals. A new mutation path that saves via `appStorage` directly is
+  invisible in the panel — which is exactly the bug this feature closes.
+- The exception is deliberate: `createProject` scaffolds through `appStorage.save`, because a
+  new project's dozen skeleton files are noise, not changes the user made.
+- `recordChange` holds **both** versions of the file, not a rendered patch. The panel re-renders
+  on a view-mode switch, and re-reading the file later would show its current state rather than
+  the state at that moment. Two copies per entry is also why the history is capped at 40.
+- A write whose content is identical to what was there is dropped rather than recorded as an
+  empty diff. Deletes are exempt — removing an empty file is still a removal.
+
+`lib/diff.ts` is the pure half (stats, patch, truncation) and has no signals, per the layer rule.
+The UI cannot call into services for tab state either: the Changes tab raises itself by watching
+`fileChanges()` in a `createEffect` inside `DiagnosticsPanel`, not by a call from the recorder.
+
+**diff2html needs three overrides to survive inside a panel** (`styles.css`, near the bottom), and
+each one is load-bearing: its `padding: 0 8em` on a code line reserves room for a gutter that is
+absolutely positioned over the *left* half — remove that and the line numbers land on the code —
+while the right half is pure overhang that painted a slab of row colour past the end of every
+line. It also pads empty lines with a literal U+200B, which the IDE's UI font has no glyph for,
+so every blank line rendered a missing-glyph box until `:after` was given a plain space.
+
 ## agent/prompt.md
 
 The app agent's base prompt — it **replaces** the generic one rather than extending it, so it has

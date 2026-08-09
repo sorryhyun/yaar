@@ -43,6 +43,36 @@ export interface ConsoleEntry {
   source?: 'evaluation';
 }
 
+/**
+ * Which shape of write produced a change. `create` and `delete` are the two cases
+ * a diff cannot infer from its own text: an empty `before` also describes writing
+ * into a file that happened to be empty, and the reader wants those distinguished.
+ */
+export type FileChangeKind = 'create' | 'update' | 'delete';
+
+/**
+ * One recorded file mutation, kept so the user can see *what* changed rather than
+ * only that something did.
+ *
+ * Both versions of the text are held verbatim: the panel re-renders the patch when
+ * the view mode changes, and re-reading the file would show the file as it is now,
+ * not as it was at the moment of this change.
+ */
+export interface FileChange {
+  id: string;
+  path: string;
+  kind: FileChangeKind;
+  /** Content before the operation — '' for a create. */
+  before: string;
+  /** Content after the operation — '' for a delete. */
+  after: string;
+  /** What performed it: 'write', 'edit ×2', 'copy from src/a.ts', 'delete'. */
+  label: string;
+  added: number;
+  removed: number;
+  timestamp: number;
+}
+
 /** What the dev-server compile reported about the app's statically extracted protocol. */
 export interface StaticProtocolInfo {
   /** Command/state names the compiler extracted, or null when it extracted none. */

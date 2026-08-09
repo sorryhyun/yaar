@@ -1,6 +1,13 @@
 export {};
 import { createSignal } from '@bundled/solid-js';
-import type { ProjectMeta, FileEntry, Diagnostic, ConsoleEntry, StaticProtocolInfo } from './types';
+import type {
+  ProjectMeta,
+  FileEntry,
+  Diagnostic,
+  ConsoleEntry,
+  StaticProtocolInfo,
+  FileChange,
+} from './types';
 
 // Shared reactive state for the IDE.
 //
@@ -58,6 +65,19 @@ export const [consoleLogs, setConsoleLogs] = createSignal<ConsoleEntry[]>([]);
 
 // ── Feature: Preview Window ──
 export const [previewWindowId, setPreviewWindowId] = createSignal<string | null>(null);
+
+// ── Feature: File change history (the Changes panel) ──
+/**
+ * Recent file mutations, newest first and bounded by the recorder.
+ *
+ * Every write, edit, copy and delete lands here so the bottom panel can show the
+ * actual diff. The status line reports that *a* write happened; this is what it
+ * was. Holding the before/after text is the point — re-reading the file later
+ * shows its current state, which is a different question.
+ */
+export const [fileChanges, setFileChanges] = createSignal<FileChange[]>([]);
+/** Which change the panel is showing. Null means "the newest one". */
+export const [selectedChangeId, setSelectedChangeId] = createSignal<string | null>(null);
 
 // ── Feature: Static protocol manifest (from the last successful compile) ──
 export const [staticProtocol, setStaticProtocol] = createSignal<StaticProtocolInfo | null>(null);

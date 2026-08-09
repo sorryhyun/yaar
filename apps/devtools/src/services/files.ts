@@ -16,6 +16,7 @@ import {
 import { projectPath, isImagePath, isBinaryPath } from '../lib/paths';
 import { applyEdits, formatRemoved, type EditSpec } from '../lib/edits';
 import { listAllFiles } from './fs-walk';
+import { recordChange } from './changes';
 
 // File I/O against the active project's sandbox: listing, reading, writing,
 // editing, copying, deleting. The edit *algebra* lives in ../lib/edits — this
@@ -160,6 +161,23 @@ export async function openFile(path: string): Promise<void> {
   }
 }
 
+/**
+ * A file's current text, or null when there is nothing there to read.
+ *
+ * Null is the create/update distinction: a failed read here means the path does
+ * not exist yet, which the change history reports differently from overwriting a
+ * file that happened to be empty. JSON is rendered the way readFile renders it so
+ * the recorded "before" matches what a reader was shown.
+ */
+async function currentText(projectId: string, path: string): Promise<string | null> {
+  try {
+    const raw = await appStorage.read(projectPath(projectId, path));
+    return typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+  } catch {
+    return null;
+  }
+}
+
 export interface WriteReceipt {
   path: string;
   lines: number;
@@ -175,10 +193,31 @@ export interface WriteReceipt {
  * line count is also the cheapest way to catch the mistake this command invites:
  * passing a JSON object and getting the serialization you did not expect.
  */
-export async function writeFile(path: string, content: string): Promise<WriteReceipt> {
+export async function writeFile(
+  path: string,
+  content: string,
+  change?: {
+    /**
+     * The text this write replaces, when the caller already has it. `editFile` does
+     * — re-reading here would fetch the bytes it just wrote in the same tick on a
+     * slow store, and reading twice is wasted work regardless.
+     */
+    before?: string | null;
+    /** How the change history labels this write. Defaults to 'write'. */
+    label?: string;
+  },
+): Promise<WriteReceipt> {
   const proj = activeProject();
   if (!proj) throw new Error('No active project. Open or create one first.');
+  const before = change?.before !== undefined ? change.before : await currentText(proj.id, path);
   await appStorage.save(projectPath(proj.id, path), content);
+  recordChange({
+    path,
+    kind: before === null ? 'create' : 'update',
+    before: before ?? '',
+    after: content,
+    label: change?.label ?? 'write',
+  });
   if (openFilePath() === path) setOpenFileContent(content);
   // Whatever tsc last concluded, it concluded about the previous bytes.
   setTypecheckState('unknown');
@@ -203,7 +242,10 @@ export async function editFile(
   // search string copied from a readFile result matches.
   const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
   const { content: updated, removals } = applyEdits(content, edits);
-  await writeFile(path, updated);
+  await writeFile(path, updated, {
+    before: content,
+    label: edits.length > 1 ? `edit ×${edits.length}` : 'edit',
+  });
   return {
     editsApplied: edits.length,
     lines: updated.split('\n').length,
@@ -216,17 +258,29 @@ export async function copyFile(from: string, to: string): Promise<void> {
   if (!proj) throw new Error('No active project');
   const raw = await appStorage.read(projectPath(proj.id, from));
   const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-  await appStorage.save(projectPath(proj.id, to), content);
-  // A copy is a new module in the program — an orphan still gets type checked.
-  setTypecheckState('unknown');
-  await refreshFiles();
+  // Routed through writeFile rather than saving directly, so a copy records a diff
+  // like any other write. It also carries the typecheck reset and the file refresh:
+  // a copy is a new module in the program, and an orphan still gets type checked.
+  await writeFile(to, content, { label: `copy from ${from}` });
   setStatusText(`Copied ${from} → ${to}`);
 }
 
 export async function deleteFile(path: string): Promise<void> {
   const proj = activeProject();
   if (!proj) return;
+  // Bytes that are not text decode to mojibake, and a diff of mojibake tells the
+  // reader nothing. Binary deletions are recorded as the fact, not as content.
+  const before = isBinaryPath(path)
+    ? `(binary file removed: ${path})`
+    : await currentText(proj.id, path);
   await appStorage.remove(projectPath(proj.id, path));
+  recordChange({
+    path,
+    kind: 'delete',
+    before: before ?? '',
+    after: '',
+    label: 'delete',
+  });
   if (openFilePath() === path) {
     batch(() => {
       setOpenFilePath(null);
