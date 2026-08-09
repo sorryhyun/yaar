@@ -124,43 +124,64 @@ export class WindowEventCoordinator {
     this.ctx.contextTape.pruneWindow(windowId);
     this.appEventRate.delete(key);
 
-    // If this window belongs to an app, interrupt the running agent and clear its queue
+    // If this window belongs to an app, interrupt the running agent and clear its queue —
+    // and if the app has just left this desktop, reclaim both tiers it owns here.
+    //
+    // One question, asked once. Both reclaims turn on "is the app still on this monitor",
+    // and both used to be free to answer it their own way; asking here and spending the
+    // answer twice is what keeps the app agent and its personas from disagreeing about
+    // whether the app is gone.
     if (appId) {
-      this.appProcessor.handleWindowClose(windowId, appId, monitorId).catch((err) => {
+      const lastWindow = this.isLastWindowForApp(appId, monitorId);
+      this.appProcessor.handleWindowClose(windowId, appId, monitorId, lastWindow).catch((err) => {
         console.error(
-          `[WindowEventCoordinator] Error interrupting app agent on window close:`,
+          `[WindowEventCoordinator] Error tearing down app agent on window close:`,
           err,
         );
       });
-      this.disposePersonasIfLastWindow(appId, monitorId);
+      if (lastWindow) this.disposePersonas(appId, monitorId!);
     }
   }
 
   /**
-   * Reclaim an app's personas once its last window on this monitor is gone.
+   * Whether the app has no windows left on this monitor.
    *
-   * App agents survive a window close — the next window reuses the agent and its
-   * context, which is the behavior a user feels as the app remembering them. Personas
-   * cannot follow that rule: a room of four holds four slots out of the global
-   * `MAX_AGENTS` semaphore, and an app that is no longer on screen holding almost
-   * half the machine's agents starves everything else. The app persists what it needs
-   * (appDb/appStorage) and replays it into a respawned persona's first message, which
-   * is the recovery path the ChitChats port was designed around anyway.
+   * Asked of the window registry rather than the app processor's `activeWindows`, which
+   * tracks the most-recently-active window per app and is cleared by the close above —
+   * reading it here would report "no windows left" while a second window of the same app
+   * is still open.
    *
-   * "Last window" is asked of the window registry rather than the app processor's
-   * `activeWindows`, which tracks the most-recently-active window per app and is
-   * cleared by the close above — reading it here would report "no windows left" while
-   * a second window of the same app is still open.
+   * Without a monitor there is no question to answer: the reclaims below are per-monitor
+   * (the same app on another desktop is a different agent), so an unscoped close reclaims
+   * nothing rather than guessing.
    */
-  private disposePersonasIfLastWindow(appId: string, monitorId?: string): void {
-    if (!monitorId) return;
-    const stillOpen = this.ctx.windowState
+  private isLastWindowForApp(appId: string, monitorId?: string): boolean {
+    if (!monitorId) return false;
+    return !this.ctx.windowState
       .listWindows()
       .some(
         (w) => w.appId === appId && this.ctx.windowState.getMonitorForWindow(w.id) === monitorId,
       );
-    if (stillOpen) return;
+  }
 
+  /**
+   * Reclaim an app's personas, its last window on this monitor having just closed.
+   *
+   * Their operator goes at the same moment and on the same condition (see
+   * `AppTaskProcessor.handleWindowClose`), but the two are still separate calls rather
+   * than one cascade, because the ownership is genuinely separate: a persona's owner is
+   * the (monitor, app) pair, not the app agent — the iframe spawns them, and they exist
+   * whether or not an app agent ever did. Retiring the operator for any *other* reason
+   * (`fresh: true`, the idle reaper) deliberately leaves the cast standing.
+   *
+   * What makes reclaiming them here non-negotiable is the arithmetic: a room of four
+   * holds four slots out of the global `MAX_AGENTS` semaphore, and an app that is no
+   * longer on screen holding almost half the machine's agents starves everything else.
+   * The app persists what it needs (appDb/appStorage) and replays it into a respawned
+   * persona's first message, which is the recovery path the ChitChats port was designed
+   * around anyway.
+   */
+  private disposePersonas(appId: string, monitorId: string): void {
     this.ctx.agentPool.subAgents.disposeForApp(monitorId, appId).catch((err: unknown) => {
       console.error(`[WindowEventCoordinator] Error disposing personas for ${appId}:`, err);
     });

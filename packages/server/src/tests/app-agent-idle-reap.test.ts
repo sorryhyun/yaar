@@ -1,11 +1,12 @@
 /**
  * The app-agent idle reaper.
  *
- * App agents are the one tier nothing else reclaims — not window close, not idleness,
- * only `fresh:true`, monitor removal, explicit delete, or session teardown. Against a
- * *process-global* `MAX_AGENTS` of ten, that meant eight apps opened once and left
- * alone permanently held eight slots, and the ninth app — plus every other session on
- * the machine — got "Agent limit reached" until the process restarted.
+ * Closing an app's last window on a monitor retires its agent, so this tier is the app
+ * the user *left open* and stopped using. It had no reclaim path at all: not window
+ * close, not idleness, only `fresh:true`, monitor removal, explicit delete, or session
+ * teardown. Against a *process-global* `MAX_AGENTS` of ten, that meant eight apps opened
+ * once and left alone permanently held eight slots, and the ninth app — plus every other
+ * session on the machine — got "Agent limit reached" until the process restarted.
  * `PooledAgent.idleTimer` was always null and `lastUsed` was written and never read:
  * the struct advertised a reaper that did not exist, on the one tier that needed one.
  *

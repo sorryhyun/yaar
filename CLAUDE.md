@@ -175,7 +175,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
   → Reconnection: existing LiveSession returned (state preserved)
   → First message → ContextPool initialized → AgentPool created → Warm provider acquired
   → Messages routed: USER_MESSAGE → monitor's main queue (sequential), WINDOW_MESSAGE/COMPONENT_ACTION → monitor agent (plain windows) or AppTaskProcessor (app windows)
-  → App window interaction → persistent app agent created on first interaction (keyed by `monitorId::appId` — one per app per monitor, not shared across monitors)
+  → App window interaction → app agent created on first interaction (keyed by `monitorId::appId` — one per app per monitor, not shared across monitors), retired when the app's last window on that monitor closes
   → WebSocket disconnects → session stays alive for reconnection
 ```
 
@@ -212,7 +212,7 @@ Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata
 
 ### App Agent Architecture
 
-When a user interacts with an app window, a **persistent app agent** is created (one per `monitorId::appId`, reused across all windows of that app on that monitor — not shared across monitors). App agents have four scoped tools — `describe` (an app's manual: its `agent/SKILL.md` plus an index of its protocol, one signature and opening sentence per command, or one command in full via `describe({ command })`; the same builder behind `describe('yaar://apps/{id}')`), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
+When a user interacts with an app window, an **app agent** is created (one per `monitorId::appId`, reused across all windows of that app on that monitor — not shared across monitors) and retired, with its memory, when the app's **last** window on that monitor closes. Closing one of several windows leaves it standing: it is driving the others. App agents have four scoped tools — `describe` (an app's manual: its `agent/SKILL.md` plus an index of its protocol, one signature and opening sentence per command, or one command in full via `describe({ command })`; the same builder behind `describe('yaar://apps/{id}')`), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
 
 **Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window; passing another app's id targets that app — gated by the caller's `app.json` `controls` list (**bundled apps only**), which can also restrict which commands may be issued. The target app needn't have an open window (`resolveTarget` reuses or auto-launches one). This is direct synchronous protocol control; `direct_message` to `app:{id}` is the natural-language alternative handled by the other app's own agent. Parsing and the bundled-only guard: `features/apps/discovery.ts`.
 

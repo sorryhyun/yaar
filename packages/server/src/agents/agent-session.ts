@@ -89,6 +89,13 @@ export class AgentSession {
   private currentMonitorId: string | undefined;
   private onOutput: ((bytes: number) => void) | null = null;
   private broadcastFn: (event: ServerEvent) => void;
+  /**
+   * The turn running on this session right now, or null. See {@link handleMessage}.
+   *
+   * Resolves — never rejects — when that turn has finished unwinding, so the next
+   * caller can be chained behind it without inheriting its failure.
+   */
+  private turnInFlight: Promise<void> | null = null;
 
   /**
    * This agent's lifetime token consumption, across every turn it has run.
@@ -349,7 +356,52 @@ export class AgentSession {
     }
   }
 
+  /**
+   * Run one turn. One session, one provider, one turn — a second caller waits.
+   *
+   * Callers are supposed to serialize: the monitor queue, the window queue's
+   * is-processing flag, and the session processor each admit one turn at a time. But
+   * every piece of per-turn state on this class is a single field — `running`,
+   * `interrupted`, `currentRole`, `currentMessageId`, `recordedActions` — and the
+   * provider's stream is one stream, so a caller race did not degrade, it corrupted:
+   * two overlapping turns shared `running`, and the *first* one's `finally` cleared it
+   * under the second, whose read loop (`if (!this.running) break`) then stopped at its
+   * next message and answered with silence. The same flag going the other way brought
+   * the interrupted turn back to life, so a window the user had just closed got its
+   * cancelled answer anyway.
+   *
+   * The race that found this: closing an app window interrupts its agent and clears the
+   * window queue's flag, but `interrupt()` returns when the *provider* has stopped, not
+   * when the turn has unwound — so a re-invoke landing in between started turn two on an
+   * agent still finishing turn one (`AppTaskProcessor.handleWindowClose`). That door is
+   * shut on its own side; this is the invariant, kept where the state actually lives, so
+   * the next caller to race cannot silently lose a turn.
+   */
   async handleMessage(content: string, options: HandleMessageOptions): Promise<void> {
+    const previous = this.turnInFlight;
+    let settle!: () => void;
+    const mine = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    this.turnInFlight = mine;
+
+    if (previous) {
+      console.warn(
+        `[AgentSession] ${this.instanceId}: turn "${options.role}" arrived while another ` +
+          `was still running; waiting for it rather than overlapping.`,
+      );
+      await previous;
+    }
+
+    try {
+      await this.runTurn(content, options);
+    } finally {
+      settle();
+      if (this.turnInFlight === mine) this.turnInFlight = null;
+    }
+  }
+
+  private async runTurn(content: string, options: HandleMessageOptions): Promise<void> {
     const { role, interactions, messageId, onContextMessage } = options;
 
     this.currentRole = role;

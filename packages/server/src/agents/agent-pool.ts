@@ -14,11 +14,14 @@
  *
  * **What reclaims what is not symmetric, and readers assume it is.** Disposing a
  * monitor takes its app agents and their sub-agents with it. Closing a *window*
- * reclaims only sub-agents — an app agent survives every one of its windows closing,
- * because it is keyed by (monitor, app) and the next window of that app is meant to
- * find it still holding the conversation. What eventually reclaims it is idleness
- * (`reapIdleAppAgents`), `fresh:true`, monitor removal, explicit delete, or session
- * teardown.
+ * reclaims nothing on its own — an app agent is keyed by (monitor, app) and drives
+ * every window of that app on that monitor, so a close that leaves another one open
+ * must leave the agent standing. It is the app's **last** window on the monitor that
+ * takes both tiers, app agent and sub-agents, on the same condition and at the same
+ * moment (`WindowEventCoordinator.handleWindowClose`). The other reclaim paths —
+ * idleness (`reapIdleAppAgents`), `fresh:true`, monitor removal, explicit delete,
+ * session teardown — remain, and of those only monitor removal and teardown also take
+ * the sub-agents.
  *
  * Agent types:
  * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
@@ -519,11 +522,12 @@ export class AgentPool {
 
   // ── App-agent idle reaper ────────────────────────────────────────────
   //
-  // App agents are the one tier nothing else reclaims: not window close, not idleness,
-  // only `fresh:true`, monitor removal, explicit delete, or session teardown. Against a
-  // *process-global* limit of ten, eight apps opened once and left alone permanently
-  // held eight slots — and the ninth app, plus every other session on the machine, got
-  // "Agent limit reached" with no way to get a slot back short of a restart.
+  // The last window of an app on a monitor now takes its agent with it, which is what
+  // reclaims the common case. This is the backstop for the rest: an app whose window
+  // stays open all day, and whose agent sat busy-free behind it. Against a
+  // *process-global* limit of ten, eight such apps permanently held eight slots — and
+  // the ninth app, plus every other session on the machine, got "Agent limit reached"
+  // with no way to get a slot back short of a restart.
   //
   // One pool-level interval rather than a timer per agent: `lastUsed` is already
   // written on every turn, so a sweep needs no new call sites, cannot leave a timer
