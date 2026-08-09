@@ -1,6 +1,6 @@
 import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
-import './styles.css';
+import './styles/index';
 import { activeTab, setActiveTab } from './store';
 import type { Tab } from './types';
 import { SettingsView } from './views/settings-view';

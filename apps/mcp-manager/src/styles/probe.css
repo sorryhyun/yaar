@@ -1,0 +1,20 @@
+/* ── Probe (add by URL) ───────────────────────────── */
+
+.probe-row {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  align-items: center;
+}
+
+.probe-input {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+}
+
+.proto-badge {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-accent);
+}

@@ -22,7 +22,7 @@ import {
   getFilteredMemos,
   getMemoById,
 } from './store';
-import './styles.css';
+import './styles/index';
 
 function formatDate(iso: string): string {
   const d = new Date(iso);

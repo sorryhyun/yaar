@@ -1,0 +1,36 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  /* Role accent colors for transcript message cards (left border + label).
+     --yaar-warning is Primer's #c69026 (a duller, more "caution" amber);
+     the assistant role wants a brighter, more legible gold, so no token
+     fits — kept as a local identity color. */
+  --sl-role-assistant: #f0c060;
+  /* No --yaar-* token has a "thinking/reasoning" role — kept as a local
+     identity color. */
+  --sl-role-thinking: #a371f7;
+  /* No --yaar-* token has a "tool" role distinct from success/error —
+     kept as a local identity color. */
+  --sl-role-tool: #2dd4bf;
+  /* No --yaar-* token has an "action" role — kept as a local identity
+     color (deliberately distinct from --yaar-warning so action and
+     assistant read differently side by side). */
+  --sl-role-action: #ff9f45;
+  /* No --yaar-* token has an "interaction" role — kept as a local
+     identity color. */
+  --sl-role-interaction: #ec6cb9;
+}
+
+body,
+#app {
+  height: 100vh;
+  overflow: hidden;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  font-family: var(--yaar-font, system-ui, sans-serif);
+  font-size: 13px;
+}

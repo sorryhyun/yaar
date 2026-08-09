@@ -23,7 +23,7 @@ import {
   McpToolListResponse,
 } from './schema';
 import { deriveName, probePort, probeUrl, type DiscoveredServer, type McpTool } from './mcp';
-import './styles.css';
+import './styles/index';
 
 // ── Types ────────────────────────────────────────────────
 

@@ -1,0 +1,83 @@
+/* ── Discovered cards ──────────────────────────── */
+
+.discovered-card {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+
+.discovered-row {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+
+.server-url {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+}
+
+.version {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-sm);
+}
+
+.tool-count {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-sm);
+}
+
+/* ── Server cards ─────────────────────────────── */
+
+.server-card {
+  padding: 0;
+  overflow: hidden;
+}
+
+.server-row {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  cursor: pointer;
+}
+
+.server-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.server-type {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.server-error {
+  color: var(--yaar-error);
+  font-size: var(--yaar-text-xs);
+}
+
+.server-actions {
+  display: flex;
+  gap: var(--yaar-sp-1);
+  flex-shrink: 0;
+}
+
+.server-tools {
+  border-top: 1px solid var(--yaar-border);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+}
+
+.no-tools {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-sm);
+  font-style: italic;
+}

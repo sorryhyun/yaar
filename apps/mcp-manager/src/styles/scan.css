@@ -1,0 +1,41 @@
+/* ── Scan ───────────────────────────────────────── */
+
+.scan-fields {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+
+.scan-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-1);
+  flex: 1;
+  min-width: 80px;
+}
+
+.scan-field-sm {
+  flex: 0 0 80px;
+}
+
+.scan-field-btn {
+  flex: 0 0 auto;
+}
+
+.field-label {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.scan-progress {
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-sm);
+}
+
+.scan-done {
+  color: var(--yaar-text);
+  font-size: var(--yaar-text-sm);
+}

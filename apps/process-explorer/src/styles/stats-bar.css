@@ -1,0 +1,46 @@
+/* ── Stats bar ────────────────────────────────────────────── */
+
+.stats-bar {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-3) var(--yaar-sp-3) 0;
+}
+
+.stat-card {
+  flex: 1;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.stat-card.active {
+  border-color: var(--yaar-accent);
+}
+
+.stat-card:hover {
+  background: var(--yaar-bg-surface-hover);
+  border-color: var(--pe-border-hover);
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--yaar-text);
+}
+
+.stat-label {
+  font-size: 0.7rem;
+  color: var(--yaar-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-sub {
+  font-size: 0.7rem;
+  color: var(--yaar-text-dim);
+}

@@ -1,0 +1,21 @@
+:root {
+  /* Diff inline add/remove highlights need a stronger tint than any shipped
+     --yaar-wash-* strength (0.4 vs. the shipped 10%/16%) — app-local, not a
+     redefinition of a shipped token. */
+  --dt-diff-del-strong: color-mix(in srgb, var(--yaar-error) 40%, transparent);
+  --dt-diff-ins-strong: color-mix(in srgb, var(--yaar-success) 40%, transparent);
+}
+
+#app {
+  height: 100%;
+}
+
+.devtools {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  height: 100%;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  font-family: var(--yaar-font);
+  font-size: 13px;
+}

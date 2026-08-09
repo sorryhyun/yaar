@@ -1,0 +1,56 @@
+/* ── File tree ── */
+.file-tree {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--yaar-sp-1) 0;
+}
+
+.file-tree-empty {
+  padding: var(--yaar-sp-3);
+  text-align: center;
+}
+
+.file-tree-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  border-radius: 3px;
+  margin: 0 4px;
+  min-width: 0;
+}
+
+.file-tree-item:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+
+.file-tree-item.active {
+  background: var(--yaar-accent);
+  color: #fff;
+}
+
+.file-tree-item.dir {
+  font-weight: 500;
+}
+
+.file-icon {
+  font-size: 10px;
+  flex-shrink: 0;
+  width: 14px;
+  text-align: center;
+  color: var(--yaar-text-muted);
+  font-family: 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji', sans-serif;
+}
+
+.file-tree-item.active .file-icon {
+  color: inherit;
+}
+
+.file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}

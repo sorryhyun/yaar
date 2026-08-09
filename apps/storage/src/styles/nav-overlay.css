@@ -1,0 +1,16 @@
+  /* ── Left hover-open overlay panel ──────────────────────────────────────────
+     The panel chrome (root / hover-zone / hamburger / resizer / panel / header /
+     title / count / pin) is the shared y-nav-* family in the design-token layer.
+     Only storage-specific bits stay here: the grayscale pin emoji (grayed until
+     pinned) and the controls block below. */
+  .y-nav-pin { filter: grayscale(0.6); opacity: 0.7; }
+  .y-nav-pin:hover { opacity: 1; }
+  .y-nav-pin-active { filter: none; opacity: 1; }
+  .nav-panel-controls {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--yaar-border);
+  }

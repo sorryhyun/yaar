@@ -1,0 +1,93 @@
+/* ── Header actions (settings + refresh) ─────────────────────────────────── */
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Anchor for the settings popover. */
+.config-wrap {
+  position: relative;
+  display: flex;
+}
+
+.config-btn {
+  font-size: 16px;
+  padding: 7px 12px;
+  line-height: 1;
+}
+
+/* ── Settings popover ────────────────────────────────────────────────────── */
+
+/* Transparent full-screen catcher so an outside click closes the panel. */
+.config-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.config-panel {
+  position: absolute;
+  top: 58px;
+  right: 14px;
+  z-index: 41;
+  width: 300px;
+  max-width: calc(100vw - 28px);
+  padding: var(--yaar-sp-3) var(--yaar-sp-4) var(--yaar-sp-4);
+  border: 1px solid var(--yaar-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.config-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+  margin-bottom: var(--yaar-sp-2);
+}
+
+.config-panel-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--yaar-text);
+}
+
+.config-section {
+  padding: var(--yaar-sp-3) 0;
+  border-top: 1px solid var(--yaar-border);
+}
+
+.config-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--yaar-sp-2);
+}
+
+/* ── Account controls (inside the settings popover) ──────────────────────── */
+
+.account-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.account-info {
+  font-size: 13px;
+  color: var(--yaar-text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.account-controls .y-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
+}

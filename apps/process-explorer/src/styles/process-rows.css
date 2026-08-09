@@ -1,0 +1,130 @@
+/* ── Process rows ─────────────────────────────────────────── */
+
+.process-row {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-radius: var(--yaar-radius);
+  color: var(--yaar-text);
+}
+
+.process-row:hover {
+  background: var(--yaar-bg-surface);
+}
+
+.process-info {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  min-width: 0;
+}
+
+.process-detail {
+  flex: 1;
+  min-width: 0;
+}
+
+.process-title {
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--yaar-text);
+}
+
+/*
+ * Solid's html`` templates strip leading whitespace inside a tag, so adjacent
+ * <span>s in a meta line render flush against each other ("1 windowno agent").
+ * Space them here rather than smuggling separators into the markup.
+ */
+.process-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-size: 0.75rem;
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.process-meta > * {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/*
+ * Token readout. Tabular figures so a column of rows lines up digit-for-digit —
+ * the whole value of the number here is comparing agents at a glance — and never
+ * the first thing to be ellipsed, since it is the shortest field in the line.
+ */
+.meta-tokens {
+  flex-shrink: 0;
+  font-family: var(--yaar-font-mono, ui-monospace, monospace);
+  font-variant-numeric: tabular-nums;
+  color: var(--yaar-text-muted);
+}
+
+/*
+ * Live activity line, folded from the agent's stream. Sits under the meta line;
+ * the tool name reads as a code-ish accent, the text tail as muted body.
+ */
+.process-activity {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin-top: 2px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.activity-tool {
+  flex-shrink: 0;
+  max-width: 55%;
+  font-family: var(--yaar-font-mono, ui-monospace, monospace);
+  color: var(--yaar-accent);
+}
+
+.activity-text {
+  min-width: 0;
+  color: var(--yaar-text-muted);
+}
+
+/*
+ * Turn state + freshness — the pair that says "this row is live" versus "this is
+ * what the agent was doing a while ago". Fixed-width-ish and first in the line so
+ * a column of rows scans vertically.
+ */
+.activity-state {
+  display: flex;
+  align-items: baseline;
+  flex-shrink: 0;
+  gap: 5px;
+}
+
+.activity-badge {
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.66rem;
+}
+
+.activity-age {
+  color: var(--yaar-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.activity-error {
+  min-width: 0;
+  color: var(--yaar-error);
+}
+
+.process-actions {
+  display: flex;
+  gap: var(--yaar-sp-1);
+  flex-shrink: 0;
+}

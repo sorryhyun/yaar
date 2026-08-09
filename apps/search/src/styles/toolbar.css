@@ -1,0 +1,52 @@
+/* ── Toolbar ──────────────────────────────────────────────────────────── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+.scope-crumb {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.scope-crumb button {
+  background: none;
+  border: none;
+  color: var(--yaar-accent);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--yaar-radius);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.scope-crumb button:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+.scope-crumb .sep {
+  color: var(--yaar-text-muted);
+  font-size: 11px;
+}
+.search-inputs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.search-inputs input {
+  height: 28px;
+  box-sizing: border-box;
+}
+.search-inputs .pattern-input {
+  flex: 1;
+  min-width: 100px;
+}
+.search-inputs .glob-input {
+  width: 120px;
+  flex-shrink: 0;
+}
