@@ -416,6 +416,8 @@ const autosave = createAutosave(
 
 For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice. Its `revive` option runs on the loaded value before it reaches the signal — the place to clamp a stored width against the current window, migrate a renamed key, or `z.safeParse` JSON an older version wrote in another shape. It also runs on the fallback when nothing is stored, so keep it total; if it throws, the fallback is used and the failure is logged.
 
+**Bind it to a text input and pass `debounceMs`.** It writes on every set by default, which is right for the toggle it usually holds — a set is a click. An `onInput` handler is not a click: it fires per keystroke, and under an IME per composition step, so a five-letter Korean name was a dozen writes, a dozen disk hits, and a dozen lines in the session log for one field. `debounceMs: 400` collapses the burst into one write, and a pending write is flushed when the page is hidden or unloaded, so closing the window mid-debounce still saves. The signal itself is never delayed — only the write.
+
 **`createStaleGuard`** — the generation counter that keeps a slow response from overwriting a newer one.
 
 ```typescript

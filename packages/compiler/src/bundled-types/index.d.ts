@@ -1567,6 +1567,12 @@ declare module '@bundled/yaar' {
    * stale value, migrate a renamed key, or `z.safeParse` JSON a previous version
    * wrote in another shape. It also runs on `fallback` when nothing is stored,
    * so it must be total; if it throws, the fallback is used and it is logged.
+   *
+   * `debounceMs` coalesces a burst of sets into one write, and is off by default.
+   * Reach for it when the signal is bound to a **text input** — `onInput` fires
+   * per keystroke, and an IME per composition step, so one typed name is a dozen
+   * writes. Leave it off for a toggle, where a set is a click. A pending write is
+   * flushed when the page is hidden or unloaded, so closing mid-debounce saves.
    */
   export function createPersistedSignal<T>(
     key: string,
@@ -1575,6 +1581,8 @@ declare module '@bundled/yaar' {
       label?: string;
       onError?: (message: string, error: unknown) => void;
       revive?: (raw: unknown) => T;
+      /** Coalesce a burst of sets into one write. Default 0 (write on every set). */
+      debounceMs?: number;
     },
   ): [get: () => T, set: (v: T | ((prev: T) => T)) => void];
 

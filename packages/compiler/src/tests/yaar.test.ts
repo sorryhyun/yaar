@@ -217,6 +217,66 @@ describe('createPersistedSignal', () => {
     expect(seen).toEqual(['quota exceeded']);
     expect(toasts).toBeEmpty();
   });
+
+  /**
+   * The reason `debounceMs` exists is a text input: `onInput` fires per keystroke
+   * and an IME per composition step, so one typed name was a dozen writes. What
+   * has to hold is that the burst collapses to one write carrying the *last*
+   * value, that the default is still write-on-every-set, and that a window closing
+   * mid-debounce does not eat the keystroke that made it worth debouncing.
+   */
+  describe('debounceMs', () => {
+    const writes: string[] = [];
+
+    beforeEach(() => {
+      writes.length = 0;
+      invokeImpl = async (_uri, payload) => {
+        writes.push((payload as { content: string }).content);
+        return {};
+      };
+    });
+
+    test('writes on every set when it is not given', async () => {
+      const [, set] = createPersistedSignal('eager.json', '');
+      set('a');
+      set('ab');
+      set('abc');
+      await tick();
+      expect(writes).toEqual(['"a"', '"ab"', '"abc"']);
+    });
+
+    test('collapses a burst into one write carrying the last value', async () => {
+      const [get, set] = createPersistedSignal('debounced.json', '', { debounceMs: 20 });
+      for (const v of ['ㅈ', '주', '중', '주이', '주인']) set(v);
+      // The signal is never debounced — only the write is. A box that lagged the
+      // keystrokes by 20ms would be a worse bug than the one this fixes.
+      expect(get()).toBe('주인');
+      expect(writes).toBeEmpty();
+      await new Promise((r) => setTimeout(r, 50));
+      expect(writes).toEqual(['"주인"']);
+    });
+
+    test('flushes the pending write when the page is hidden', async () => {
+      const [, set] = createPersistedSignal('hidden.json', '', { debounceMs: 5000 });
+      set('typed, then closed');
+      expect(writes).toBeEmpty();
+      (globalThis as any).document.visibilityState = 'hidden';
+      for (const fn of docListeners['visibilitychange'] ?? []) fn({});
+      await tick();
+      expect(writes).toEqual(['"typed, then closed"']);
+      (globalThis as any).document.visibilityState = 'visible';
+    });
+
+    test('a flush leaves nothing owed, so the timer fires into a no-op', async () => {
+      const [, set] = createPersistedSignal('once.json', '', { debounceMs: 20 });
+      set('x');
+      (globalThis as any).document.visibilityState = 'hidden';
+      for (const fn of docListeners['visibilitychange'] ?? []) fn({});
+      await new Promise((r) => setTimeout(r, 50));
+      expect(writes).toEqual(['"x"']);
+      (globalThis as any).document.visibilityState = 'visible';
+    });
+  });
 });
 
 /**

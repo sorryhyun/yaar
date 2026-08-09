@@ -25,6 +25,14 @@ import { showToast } from './ui.js';
  * `z.safeParse` persisted JSON that a previous version wrote in another shape.
  * It runs on the `fallback` too when nothing is stored, so it must be total;
  * if it throws, the fallback is used and the error is logged (never silent).
+ *
+ * `debounceMs` coalesces a burst of sets into one write. Off by default, because
+ * for the toggle this primitive usually holds, a set is a click and writing it at
+ * once is both correct and free. It is for a signal bound to a **text input**:
+ * `onInput` fires per keystroke, and an IME fires it per composition step, so a
+ * five-letter name typed in Korean was ~14 writes — 14 disk writes, and 14 lines
+ * in the session log, for one field. A pending write is flushed when the page is
+ * hidden or unloaded, so closing the window mid-debounce still saves.
  */
 export function createPersistedSignal<T>(
   key: string,
@@ -33,9 +41,11 @@ export function createPersistedSignal<T>(
     label?: string;
     onError?: (message: string, error: unknown) => void;
     revive?: (raw: unknown) => T;
+    debounceMs?: number;
   },
 ): [() => T, (v: T | ((prev: T) => T)) => void] {
   const [value, setValue] = createSignal<T>(fallback);
+  const debounceMs = options?.debounceMs ?? 0;
   let written = false;
   appStorage.readJsonOr<T>(key, fallback).then((stored) => {
     if (written) return;
@@ -50,13 +60,54 @@ export function createPersistedSignal<T>(
     }
     setValue(() => next);
   });
-  const set = (v: T | ((prev: T) => T)) => {
-    written = true;
-    const next = setValue(v as any);
-    void appStorage.trySave(key, JSON.stringify(next), {
+
+  // The serialized value waiting to be written, or null when nothing is owed.
+  // Serialized at set time rather than at flush time so a caller that mutates the
+  // object it just handed over cannot change what gets persisted.
+  let queued: string | null = null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+
+  const flush = () => {
+    if (timer !== null) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    if (queued === null) return;
+    const body = queued;
+    queued = null;
+    void appStorage.trySave(key, body, {
       label: options?.label,
       onError: options?.onError,
     });
+  };
+
+  // A debounce that can lose the last keystroke is worse than no debounce: the one
+  // thing not saved is the most recent thing typed. `pagehide` covers the window
+  // being closed; `visibilitychange` covers a hidden tab the browser discards
+  // without ever firing it. Both are cheap and idempotent — `flush` no-ops when
+  // nothing is queued. Feature-detected because the SDK's own tests run against a
+  // hand-rolled DOM rather than a browser.
+  if (debounceMs > 0) {
+    if (typeof window?.addEventListener === 'function') {
+      window.addEventListener('pagehide', flush);
+    }
+    if (typeof document?.addEventListener === 'function') {
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'hidden') flush();
+      });
+    }
+  }
+
+  const set = (v: T | ((prev: T) => T)) => {
+    written = true;
+    const next = setValue(v as any);
+    queued = JSON.stringify(next);
+    if (debounceMs <= 0) {
+      flush();
+      return;
+    }
+    if (timer !== null) clearTimeout(timer);
+    timer = setTimeout(flush, debounceMs);
   };
   return [value, set];
 }
