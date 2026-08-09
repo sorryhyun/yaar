@@ -2,18 +2,27 @@ export {};
 import { createSignal, onCleanup, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { app, errMsg, onShortcut, tryToast } from '@bundled/yaar';
-import { activeProject, projects, previewUrl, type ProjectMeta } from '../core';
-import { openProject, compile, cloneApp, listInstalledApps, type InstalledApp } from '../services';
+import { activeProject, projects, openTabs, previewUrl, type ProjectMeta } from '../core';
+import {
+  openProject,
+  closeTab,
+  compile,
+  cloneApp,
+  listInstalledApps,
+  type InstalledApp,
+} from '../services';
 
 // Project selection and build actions in the app chrome.
 //
-// Four buttons and a label. Switching projects is Load, cloning one is Clone, and
-// the name of whatever is open is text — not a `<select>`. The dropdown it replaces
-// was doing three jobs badly: it reported the active project, it switched between
-// projects, and its last entry ("+ New Project") performed an action rather than
-// selecting one, which put a destructive-ish path one keystroke away from every
-// project name. The picker does the switching, with a filter box the dropdown
-// never had; ProjectTabs and the status bar report what is open.
+// The active project's name is the dropdown trigger: clicking it lists every open
+// project, switches between them, and closes them. That list used to be a second
+// toolbar row (ProjectTabs), which cost a permanent ~26px of vertical space to show
+// information that is only consulted when switching. The row is gone; the trigger
+// still reports what is open at a glance, and the status bar still carries the rest.
+//
+// Load and Clone remain their own buttons — they open the filtered picker modal,
+// which the dropdown deliberately does not try to replace (a filter box inside a
+// menu that also closes projects is two interactions fighting over one surface).
 
 type PickerMode = 'load' | 'clone';
 
@@ -22,6 +31,11 @@ const [filter, setFilter] = createSignal('');
 const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
 const [appsError, setAppsError] = createSignal<string | null>(null);
 const [busy, setBusy] = createSignal(false);
+const [menuOpen, setMenuOpen] = createSignal(false);
+
+function closeMenu(): void {
+  setMenuOpen(false);
+}
 
 function closePicker(): void {
   setPicker(null);
@@ -89,6 +103,12 @@ async function chooseApp(appId: string): Promise<void> {
   }
 }
 
+async function selectFromMenu(id: string): Promise<void> {
+  closeMenu();
+  if (activeProject()?.id === id) return;
+  await tryToast(() => openProject(id));
+}
+
 function requestPreview(): void {
   const url = previewUrl();
   if (!url) return;
@@ -97,6 +117,112 @@ function requestPreview(): void {
     previewUrl: url,
     projectName: activeProject()?.name ?? 'Preview',
   });
+}
+
+/** The project name, doubling as the open-project menu. */
+function ProjectMenu() {
+  let root: HTMLElement | undefined;
+
+  // Outside-click dismissal, decided by containment rather than by
+  // stopPropagation inside the menu. Solid delegates click at the document, so a
+  // handler that stops propagation cannot shield a *sibling* document listener
+  // from the same event: the trigger would close the menu here and reopen it in
+  // the same click. Asking "was the click inside this element" has no such
+  // ordering problem.
+  //
+  // Capture phase, and that is load-bearing: Solid's delegated handler fires at
+  // the document during the bubble phase and re-renders synchronously, so by the
+  // time a bubble-phase listener saw the click on a project's close (×) button,
+  // that button had already been detached and `contains` reported it as outside.
+  // The menu dismissed itself on every row action. Capture runs before any of
+  // that, while the target is still in the tree.
+  const onDocumentClick = (event: MouseEvent) => {
+    if (!menuOpen()) return;
+    const target = event.target as Node | null;
+    if (root && target && root.contains(target)) return;
+    closeMenu();
+  };
+  document.addEventListener('click', onDocumentClick, true);
+  onCleanup(() => document.removeEventListener('click', onDocumentClick, true));
+
+  return html`
+    <div class="project-menu" ref=${(el: HTMLElement) => (root = el)}>
+      <button
+        class=${() =>
+          `project-menu-trigger${menuOpen() ? ' open' : ''}${activeProject() ? '' : ' empty'}`}
+        title=${() => activeProject()?.name ?? 'No project open'}
+        onClick=${() => setMenuOpen(!menuOpen())}
+      >
+        <span class="project-menu-name y-truncate"
+          >${() => activeProject()?.name ?? 'No project open'}</span
+        >
+        <span class="project-menu-caret">▾</span>
+      </button>
+
+      <${Show} when=${menuOpen}>
+        <div class="project-menu-panel">
+          <div class="project-menu-section y-text-xs y-text-dim">Open projects</div>
+
+          <${Show} when=${() => openTabs().length === 0}>
+            <div class="project-menu-empty y-text-xs y-text-muted">
+              No project open — use Load or Clone
+            </div>
+          <//>
+
+          <${For} each=${openTabs}>
+            ${(tabId: string) => {
+              const project = () => projects().find((item) => item.id === tabId);
+              const isActive = () => activeProject()?.id === tabId;
+              return html`
+                <div
+                  class=${() => `project-menu-item${isActive() ? ' active' : ''}`}
+                  onClick=${() => selectFromMenu(tabId)}
+                >
+                  <span class="project-menu-check">${() => (isActive() ? '✓' : '')}</span>
+                  <span class="project-menu-label y-truncate"
+                    >${() => project()?.name ?? tabId}</span
+                  >
+                  <span
+                    class="project-menu-close"
+                    title="Close project"
+                    onClick=${(event: Event) => {
+                      event.stopPropagation();
+                      closeTab(tabId);
+                    }}
+                    >×</span
+                  >
+                </div>
+              `;
+            }}
+          <//>
+
+          <div class="project-menu-sep"></div>
+
+          <div
+            class="project-menu-item project-menu-action"
+            onClick=${() => {
+              closeMenu();
+              openLoadPicker();
+            }}
+          >
+            <span class="project-menu-check"></span>
+            <span class="project-menu-label">Load project…</span>
+          </div>
+
+          <div
+            class="project-menu-item project-menu-action"
+            onClick=${() => {
+              closeMenu();
+              void openClonePicker();
+            }}
+          >
+            <span class="project-menu-check"></span>
+            <span class="project-menu-label">Clone installed app…</span>
+          </div>
+        </div>
+      <//>
+    </div>
+  `;
 }
 
 function PickerModal() {
@@ -161,24 +287,19 @@ function PickerModal() {
 }
 
 export function ProjectToolbar() {
-  // Escape closes the picker, as it does for every other modal in the shell. The
-  // guard matters: the handler is registered for the toolbar's whole lifetime, so
-  // without it Escape would be swallowed while nothing is open.
+  // Escape closes whichever surface is open, as it does for every other modal in
+  // the shell. The guards matter: the handler is registered for the toolbar's whole
+  // lifetime, so without them Escape would be swallowed while nothing is open.
   onCleanup(
     onShortcut('escape', () => {
       if (picker()) closePicker();
+      else if (menuOpen()) closeMenu();
     }),
   );
 
   return html`
     <div class="toolbar">
-      <span
-        class=${() =>
-          `toolbar-project y-truncate${activeProject() ? '' : ' y-text-dim'}`}
-        title=${() => activeProject()?.name ?? 'No project open'}
-      >
-        ${() => activeProject()?.name ?? 'No project open'}
-      </span>
+      <${ProjectMenu} />
 
       <button
         class="y-btn y-btn-sm"

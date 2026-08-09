@@ -118,6 +118,19 @@ The three signals they agree on (`sidebarTab`, `mainView`, and the diff's own vi
 `ui/panel-state.ts`, which imports nothing app-local. Putting them in any one component would close
 an import cycle with the other two — `sidebar → changes-panel → sidebar` is the one that bites.
 
+**The chrome is one row, not two.** The open-project list used to be a second toolbar row
+(`ui/project-tabs.ts`); it is now the dropdown behind the project name in `ui/project-toolbar.ts`,
+and the file is gone. The row cost ~26px permanently to show something only consulted when
+switching, and the name in the corner was already reporting the same fact.
+
+Its outside-click dismissal listens on the document in the **capture** phase, and that is
+load-bearing rather than stylistic. Solid delegates `click` at the document, so a bubble-phase
+listener is a sibling of Solid's own dispatch, not a parent of it: `stopPropagation` inside the
+menu cannot shield it (the trigger closed and reopened in one click), and by the time it ran,
+Solid had already re-rendered synchronously and detached the clicked node, so `root.contains`
+called every row action "outside" and dismissed the menu mid-use. Capture runs before all of that,
+while the target is still in the tree. Any other popover added to this app wants the same shape.
+
 **Anything that opens a file must call `showFiles()` first.** The main pane may be showing a diff,
 so `openFile` alone opens a file nobody can see. There are exactly two such call sites (the tree,
 and a click on a problem); `openFile` cannot do it itself, because a service must not reach into UI
