@@ -41,6 +41,9 @@ import type {
   CancelLoginAccountParams,
   CancelLoginAccountResponse,
 } from './types.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('codex:app-server');
 
 /**
  * Configuration for the app-server.
@@ -76,23 +79,26 @@ const NOOP = (): void => {};
  */
 function logRequestedFeatures(): void {
   const userServers = detectUserMcpServers();
-  console.log(
-    `[codex] feature opt-outs (${DISABLED_FEATURES.length}): ${DISABLED_FEATURES.join(', ')}`,
-  );
-  console.log(
-    `[codex] feature opt-ins (${ENABLED_FEATURES.length}): ${ENABLED_FEATURES.join(', ')}`,
-  );
-  console.log(
-    `[codex] user MCP servers disabled (${userServers.length}): ${userServers.join(', ') || 'none'}`,
-  );
+  log.info('feature opt-outs', {
+    count: DISABLED_FEATURES.length,
+    features: DISABLED_FEATURES.join(', '),
+  });
+  log.info('feature opt-ins', {
+    count: ENABLED_FEATURES.length,
+    features: ENABLED_FEATURES.join(', '),
+  });
+  log.info('user MCP servers disabled', {
+    count: userServers.length,
+    servers: userServers.join(', ') || 'none',
+  });
   // The one override above that is not a flag, and the only one that reaches tool mode and
   // multi-agent at all — those live on the model preset, which outranks every `features.*`
   // entry printed above. Worth its own line precisely because it is the load-bearing one and
   // it fails open: a launch missing this line is a launch where `code_mode_only` and `v2` are
   // still whatever the model says, however clean the two rosters above look.
-  console.log(
-    `[codex] model catalog (tool_mode=direct, multi-agent off): ${getModelCatalogPath() ?? 'not applied — codex keeps its own'}`,
-  );
+  log.info('model catalog (tool_mode=direct, multi-agent off)', {
+    path: getModelCatalogPath() ?? 'not applied — codex keeps its own',
+  });
 }
 
 /**
@@ -232,7 +238,7 @@ export class AppServer extends EventEmitter {
           timeout: 5000,
         });
         if (r.exitCode === 0) {
-          console.log(`[codex] Killed stale process on port ${this.wsPort} (fuser)`);
+          log.info('killed stale process on port', { port: this.wsPort, via: 'fuser' });
           return;
         }
       } catch {
@@ -256,7 +262,7 @@ export class AppServer extends EventEmitter {
               }
             }
           }
-          console.log(`[codex] Killed stale process on port ${this.wsPort} (lsof)`);
+          log.info('killed stale process on port', { port: this.wsPort, via: 'lsof' });
           return;
         }
       } catch {
@@ -374,7 +380,7 @@ export class AppServer extends EventEmitter {
           if (done) break;
           const message = decoder.decode(value).trim();
           if (message) {
-            console.error(`[codex app-server stderr] ${message}`);
+            log.error('app-server stderr', { message });
           }
         }
       } catch {
@@ -399,7 +405,7 @@ export class AppServer extends EventEmitter {
    */
   private async connectControlClient(): Promise<void> {
     const url = `ws://127.0.0.1:${this.wsPort}`;
-    console.log(`[codex] Connecting control client to ${url}...`);
+    log.info('connecting control client', { url });
 
     this.controlClient = await this.connectAndInitialize(url, 20, 250);
 
@@ -412,7 +418,7 @@ export class AppServer extends EventEmitter {
       this.emit('error', err);
     });
 
-    console.log(`[codex] Control client connected`);
+    log.info('control client connected');
   }
 
   /**
@@ -466,9 +472,11 @@ export class AppServer extends EventEmitter {
         if (err instanceof CodexVersionError) throw err;
         lastError = err instanceof Error ? err : new Error(String(err));
         if (attempt === 0 || (attempt + 1) % 5 === 0) {
-          console.warn(
-            `[codex] connect+initialize attempt ${attempt + 1}/${maxRetries} failed: ${lastError.message}`,
-          );
+          log.warn('connect+initialize attempt failed', {
+            attempt: attempt + 1,
+            maxRetries,
+            err: lastError.message,
+          });
         }
         if (attempt < maxRetries - 1) {
           await new Promise((r) => setTimeout(r, retryDelay));

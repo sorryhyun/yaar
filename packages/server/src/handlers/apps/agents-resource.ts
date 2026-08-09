@@ -49,6 +49,9 @@ import {
 import type { AgentPool } from '../../agents/agent-pool.js';
 import type { SubAgent } from '../../agents/sub-agent-registry.js';
 import { genId } from '../../lib/ids.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('subagents');
 
 const DESCRIBE = {
   description:
@@ -399,7 +402,7 @@ async function message(scope: Scope, payload?: Record<string, unknown>): Promise
     .pool()
     .subAgents.runTurn(record, content, taskId)
     .catch((err: unknown) => {
-      console.error(`[personas] turn failed for ${record.appId}/${record.subId}:`, err);
+      log.error('sub-agent turn failed', { appId: record.appId, subId: record.subId, err });
     });
 
   return okJson({

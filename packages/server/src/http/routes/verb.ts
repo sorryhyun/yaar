@@ -32,6 +32,9 @@ import { getSessionHub } from '../../session/session-hub.js';
 import { runWithAgentContext } from '../../agents/agent-context.js';
 import { compactVerbPayload, shouldLogVerb } from '../../lib/format-verb-log.js';
 import type { SessionId } from '../../session/types.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('verb');
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
   {
@@ -433,10 +436,12 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     // after a handful of tries) or the session was evicted. Say so as a retryable 503;
     // the SDK backs off a couple of times in case a reconnect is still in flight.
     if (err instanceof NoActiveSessionError) {
-      console.warn(
-        `[verb] ${verb} ${resolvedUri} from iframe:${tokenEntry?.appId ?? 'unknown'} names ` +
-          `session ${sessionId ?? '(none)'}, which the hub does not hold — is the desktop connected?`,
-      );
+      log.warn('call names a session the hub does not hold — is the desktop connected?', {
+        verb,
+        uri: resolvedUri,
+        appId: tokenEntry?.appId ?? 'unknown',
+        sessionId: sessionId ?? '(none)',
+      });
       return jsonResponse({ ok: false, error: err.message, retryable: true }, 503);
     }
     const message = err instanceof Error ? err.message : 'Verb execution failed';

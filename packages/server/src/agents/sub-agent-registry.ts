@@ -24,6 +24,9 @@ import type { SubAgentToolSpec } from './profiles/sub-agent.js';
 import { monitorSource } from './context.js';
 import { isAgentBusy, subAgentKey, type PooledAgent, type RosterMember } from './agent-roster.js';
 import { SpawnReservations } from './spawn-reservations.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('SubAgentRegistry');
 
 /**
  * A sub-agent and the metadata its owning app spawned it with.
@@ -191,10 +194,13 @@ export class SubAgentRegistry {
       createdAt: Date.now(),
     };
     this.records.set(subAgentKey(monitorId, appId, subId), record);
-    console.log(
-      `[AgentPool] Sub-agent "${subId}" (${tools.length} tools) spawned for ${appId} ` +
-        `on monitor ${monitorId}: ${agent.instanceId}`,
-    );
+    log.info('sub-agent spawned', {
+      subId,
+      tools: tools.length,
+      appId,
+      monitorId,
+      instanceId: agent.instanceId,
+    });
     return record;
   }
 

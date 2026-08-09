@@ -19,6 +19,9 @@ import type {
 } from './types.js';
 import { describeTurnError, notificationNotice, NOTICE_METHODS } from './errors.js';
 import { toNoticeMessage } from '../notice.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('codex:mapper');
 
 type McpToolCallItem = Extract<ThreadItem, { type: 'mcpToolCall' }>;
 type CommandExecutionItem = Extract<ThreadItem, { type: 'commandExecution' }>;
@@ -109,9 +112,11 @@ function mapItemStarted(p: ItemStartedNotification): StreamMessage | null {
         toolInput: { prompt: item.prompt, agents: item.receiverThreadIds },
       };
     default:
-      console.debug(
-        `[codex] item/started: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
-      );
+      log.debug('item/started', {
+        itemType: item?.type ?? 'unknown',
+        itemId: item?.id ?? 'unknown',
+        turnId: p.turnId ?? '?',
+      });
       return null;
   }
 }
@@ -138,9 +143,11 @@ function mapItemCompleted(p: ItemCompletedNotification): StreamMessage | null {
         content: formatCollabResult(item as CollabAgentToolCallItem),
       };
     default:
-      console.debug(
-        `[codex] item/completed: type=${item?.type ?? 'unknown'} id=${item?.id ?? 'unknown'} turn=${p.turnId ?? '?'}`,
-      );
+      log.debug('item/completed', {
+        itemType: item?.type ?? 'unknown',
+        itemId: item?.id ?? 'unknown',
+        turnId: p.turnId ?? '?',
+      });
       return null;
   }
 }
@@ -323,7 +330,7 @@ export function mapNotification(method: string, params: unknown): StreamMessage 
       if (isIgnoredNotification(method)) {
         return null;
       }
-      console.debug(`[codex] Unknown notification: ${method}`, params);
+      log.debug('unknown notification', { method, params });
       return null;
     }
   }

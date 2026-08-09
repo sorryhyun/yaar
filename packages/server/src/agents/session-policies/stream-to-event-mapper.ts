@@ -13,6 +13,9 @@ import {
   type AgentTurnStatus,
 } from '../../streams/agent-stream.js';
 import { recordSourceDelta } from '../../streams/stream-diagnostics.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('StreamToEventMapper');
 
 export interface StreamMappingState {
   responseText: string;
@@ -281,7 +284,11 @@ export class StreamToEventMapper {
         const text = message.content;
         if (!text) break;
         const level = message.noticeLevel ?? 'warning';
-        console.warn(`[${this.providerName}] notice (${message.errorCode ?? level}): ${text}`);
+        log.warn('provider notice', {
+          provider: this.providerName,
+          code: message.errorCode ?? level,
+          text,
+        });
         await this.sendEvent({
           type: ServerEventType.AGENT_NOTICE,
           level,
@@ -522,9 +529,13 @@ export class StreamToEventMapper {
           status: isError ? 'error' : 'complete',
         });
         if (isError) {
-          console.warn(
-            `[ToolError] ${formatToolDisplay(message.toolName ?? 'tool')}: ${message.content?.slice(0, 200)}`,
-          );
+          // The one place a payload excerpt is deliberately kept: a tool error is the
+          // server's own diagnostic, and without the text "a tool failed" is unactionable.
+          // Still an excerpt, and still the only one — see observability/log.ts.
+          log.warn('tool error', {
+            tool: formatToolDisplay(message.toolName ?? 'tool'),
+            detail: message.content?.slice(0, 200),
+          });
         }
         let meta: { isError?: boolean; errorCategory?: string; durationMs?: number } | undefined;
         if (message.toolUseId) {

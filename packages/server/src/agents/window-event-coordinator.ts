@@ -15,6 +15,9 @@
 import type { WindowChangeEvent } from './context-pool-policies/index.js';
 import type { AppTaskProcessor } from './app-task-processor.js';
 import type { WindowEventPoolContext, Task } from './pool-types.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('WindowEventCoordinator');
 
 /** Per-window app-event rate cap: emits beyond this within the window are dropped. */
 const APP_EVENT_RATE_LIMIT = 20;
@@ -79,9 +82,7 @@ export class WindowEventCoordinator {
       const entry = this.appEventRate.get(key);
       if (entry && !entry.warned) {
         entry.warned = true;
-        console.warn(
-          `[WindowEventCoordinator] App event rate limit hit for window "${key}" (channel "${channel}") — dropping until the window resets.`,
-        );
+        log.warn('app event rate limit hit — dropping until the window resets', { key, channel });
       }
       return;
     }
@@ -134,10 +135,7 @@ export class WindowEventCoordinator {
     if (appId) {
       const lastWindow = this.isLastWindowForApp(appId, monitorId);
       this.appProcessor.handleWindowClose(windowId, appId, monitorId, lastWindow).catch((err) => {
-        console.error(
-          `[WindowEventCoordinator] Error tearing down app agent on window close:`,
-          err,
-        );
+        log.error('tearing down app agent on window close failed', { appId, windowId, err });
       });
       if (lastWindow) this.disposePersonas(appId, monitorId!);
     }
@@ -183,7 +181,7 @@ export class WindowEventCoordinator {
    */
   private disposePersonas(appId: string, monitorId: string): void {
     this.ctx.agentPool.subAgents.disposeForApp(monitorId, appId).catch((err: unknown) => {
-      console.error(`[WindowEventCoordinator] Error disposing personas for ${appId}:`, err);
+      log.error('disposing personas failed', { appId, monitorId, err });
     });
   }
 

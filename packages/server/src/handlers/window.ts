@@ -64,6 +64,9 @@ import { actionEmitter } from '../session/action-emitter.js';
 import { genId } from '../lib/ids.js';
 import { valueOf } from '../session/pending-store.js';
 import { defineActions } from './define-actions.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('window.message');
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -272,7 +275,7 @@ export function registerWindowHandlers(
           hook,
           fresh,
         })
-        .catch((err: unknown) => console.error('[window.message] Failed:', err));
+        .catch((err: unknown) => log.error('failed', { appId, windowId, messageId, err }));
 
       return ok(
         `Message sent to app "${appId}" via window "${windowId}" (messageId: ${messageId})` +

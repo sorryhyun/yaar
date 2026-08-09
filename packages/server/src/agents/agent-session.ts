@@ -31,6 +31,9 @@ import { acquireWarmProvider } from '../providers/factory.js';
 import { runInAgentContext } from './agent-context.js';
 import { principalRole } from './roles.js';
 import { assembleSystemPromptForRole } from './system-prompt.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('AgentSession');
 
 /**
  * Options for handling a message with dynamic role assignment.
@@ -352,7 +355,7 @@ export class AgentSession {
         monitorId: options.monitorId,
       });
     } catch (err) {
-      console.warn('[AgentSession] prewarm failed (first turn will cold-start):', err);
+      log.warn('prewarm failed, first turn will cold-start', { err });
     }
   }
 
@@ -386,10 +389,10 @@ export class AgentSession {
     this.turnInFlight = mine;
 
     if (previous) {
-      console.warn(
-        `[AgentSession] ${this.instanceId}: turn "${options.role}" arrived while another ` +
-          `was still running; waiting for it rather than overlapping.`,
-      );
+      log.warn('turn arrived while another was still running; waiting rather than overlapping', {
+        instanceId: this.instanceId,
+        role: options.role,
+      });
       await previous;
     }
 
@@ -498,7 +501,7 @@ export class AgentSession {
             try {
               this.sessionLogger?.logThreadId(canonical, sessionId);
             } catch (err) {
-              console.warn(`[AgentSession] Failed to persist thread ID for ${canonical}:`, err);
+              log.warn('failed to persist thread id', { canonical, err });
             }
           }
         },
@@ -510,9 +513,11 @@ export class AgentSession {
       });
       mapper = turnMapper;
 
-      console.log(
-        `[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`,
-      );
+      // A char count, not a sample. This used to log `content.slice(0, 50)`, which put
+      // the opening of every user prompt into the operational log — a different file,
+      // a different retention, and a different audience than `SessionLogger`, which is
+      // where content is supposed to live.
+      log.info('starting query', { role, contentChars: fullContent.length });
       // Open the observed turn before the first provider message, so a stream
       // subscriber can clear last turn's state rather than appending to it.
       turnMapper.start();
@@ -526,7 +531,7 @@ export class AgentSession {
           role: principalRole(role),
         },
         async () => {
-          console.log(`[AgentSession] ${role} entered agentContext.run`);
+          log.debug('entered agent context', { role });
           for await (const message of this.provider!.query(fullContent, transportOptions)) {
             if (!this.running) break;
             await turnMapper.map(message);
@@ -534,7 +539,7 @@ export class AgentSession {
         },
       );
     } catch (err) {
-      console.error(`[AgentSession] ${role} error:`, err);
+      log.error('turn failed', { role, err });
       // Terminal for stream observers too — a throw ends the turn as surely as a
       // provider `error` message does. Latched, so the `finish` below won't add
       // a second close after it.
@@ -597,10 +602,7 @@ export class AgentSession {
     const receipt = await this.provider.interrupt();
     if (receipt.outcome === 'escalated') {
       const queued = receipt.stillQueued?.length ?? 0;
-      console.warn(
-        `[AgentSession] ${this.instanceId}: interrupt escalated to a hard stop` +
-          (queued > 0 ? ` (${queued} message(s) still queued)` : ''),
-      );
+      log.warn('interrupt escalated to a hard stop', { instanceId: this.instanceId, queued });
     }
     return receipt;
   }

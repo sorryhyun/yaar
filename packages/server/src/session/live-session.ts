@@ -68,6 +68,7 @@ import {
   mapActionToSubscriptionEvent,
   summarizeAction,
 } from '../features/window/subscription-events.js';
+import { createLogger, type Logger } from '../observability/log.js';
 
 export interface LiveSessionOptions {
   restoreActions?: OSAction[];
@@ -186,8 +187,16 @@ export class LiveSession {
    */
   private readonly eventSink: SessionEventSink;
 
+  /**
+   * Bound to this session's id, because most of what this class logs happens outside an
+   * agent turn — connection add/remove, pool init, teardown — where the ambient context
+   * resolver has nothing to report.
+   */
+  private readonly log: Logger;
+
   constructor(sessionId: SessionId, options: LiveSessionOptions = {}) {
     this.sessionId = sessionId;
+    this.log = createLogger('LiveSession').child({ sessionId });
     this.restoredContext = options.contextMessages ?? [];
     this.savedThreadIds = options.savedThreadIds;
     this.acquireProvider = options.acquireProvider;
@@ -381,9 +390,7 @@ export class LiveSession {
 
   addConnection(connectionId: ConnectionId, ws: YaarWebSocket): void {
     this.connections.set(connectionId, ws);
-    console.log(
-      `[LiveSession ${this.sessionId}] Connection added: ${connectionId} (total: ${this.connections.size})`,
-    );
+    this.log.info('connection added', { connectionId, total: this.connections.size });
     // Warm the pool (provider + monitor agent + persistent provider stream)
     // while the user is still looking at an empty desktop, so their first
     // message skips provider setup, process spawn, and the MCP handshake.
@@ -394,9 +401,7 @@ export class LiveSession {
 
   removeConnection(connectionId: ConnectionId): void {
     this.connections.delete(connectionId);
-    console.log(
-      `[LiveSession ${this.sessionId}] Connection removed: ${connectionId} (total: ${this.connections.size})`,
-    );
+    this.log.info('connection removed', { connectionId, total: this.connections.size });
   }
 
   hasConnections(): boolean {
@@ -501,7 +506,7 @@ export class LiveSession {
         }
       }
     } catch (err) {
-      console.error('Failed to execute launch hooks:', err);
+      this.log.error('failed to execute launch hooks', { err });
     }
   }
 
@@ -516,7 +521,7 @@ export class LiveSession {
   }
 
   private async doInitialize(): Promise<boolean> {
-    console.log(`[LiveSession ${this.sessionId}] Initializing pool`);
+    this.log.info('initializing pool');
 
     await this.reloadCache.load();
 
@@ -570,7 +575,7 @@ export class LiveSession {
     } else {
       // Pool not yet initialized — still flush stale warm-pool providers
       // and clear restored state so the next pool init starts fresh
-      console.log('[LiveSession] Reset before pool init — flushing warm-pool providers');
+      this.log.info('reset before pool init — flushing warm-pool providers');
       this.restoredContext = [];
       this.savedThreadIds = undefined;
       await getWarmPool().resetCodexProviders();
@@ -600,7 +605,7 @@ export class LiveSession {
         // The message is dead, and the client is holding an id for it. Saying so is the
         // whole point: this used to console.error and return, and the chip on the user's
         // screen sat at "queued" for a message that was never going to run.
-        console.error(`[LiveSession ${this.sessionId}] Failed to initialize pool`);
+        this.log.error('failed to initialize pool', { connectionId });
         this.sendTo(connectionId, {
           type: ServerEventType.ERROR,
           error: 'Message dropped: the agent pool could not be initialized.',

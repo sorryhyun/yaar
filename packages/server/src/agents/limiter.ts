@@ -6,6 +6,9 @@
  */
 
 import { getEnvInt } from '../config.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('AgentLimiter');
 
 interface WaitingRequest {
   resolve: () => void;
@@ -109,7 +112,7 @@ export class AgentLimiter {
    */
   release(): void {
     if (this.currentCount <= 0) {
-      console.warn('[AgentLimiter] release() called when currentCount is 0');
+      log.warn('release() called when currentCount is 0');
       return;
     }
 

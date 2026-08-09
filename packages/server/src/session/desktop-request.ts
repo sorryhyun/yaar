@@ -26,6 +26,9 @@
  */
 
 import { PendingStore, type PendingOutcome } from './pending-store.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('ActionEmitter');
 
 /**
  * How long an expired entry is remembered so a reply already on its way still counts.
@@ -56,10 +59,10 @@ export function mintRequestId(prefix: string): string {
  * what identifies the call site that needs a session threaded through it.
  */
 export function reportUnaddressed(what: string): void {
-  console.error(
-    `[ActionEmitter] Dropped ${what}: no session in context and none passed. ` +
-      'Frontend-directed emits must run inside an agent turn or an iframe verb call, ' +
-      'or name their session explicitly.',
+  log.error(
+    'dropped: no session in context and none passed. Frontend-directed emits must run ' +
+      'inside an agent turn or an iframe verb call, or name their session explicitly.',
+    { what },
   );
 }
 

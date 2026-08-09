@@ -36,6 +36,9 @@ import { genId } from '../lib/ids.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { getAppMeta } from '../features/apps/discovery.js';
 import type { SessionId } from './types.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('ClientEventController');
 
 export interface ClientEventDeps {
   sessionId: SessionId;
@@ -306,9 +309,7 @@ export class ClientEventController {
 
   private handleToastAction(event: ClientEventOf<typeof ClientEventType.TOAST_ACTION>): void {
     this.deps.reloadCache.markFailed(event.eventId);
-    console.log(
-      `[ClientEventController] Reload cache entry "${event.eventId}" reported as failed by user`,
-    );
+    log.info('reload cache entry reported as failed by user', { eventId: event.eventId });
   }
 
   private handleUserPromptResponse(

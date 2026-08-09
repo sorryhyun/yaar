@@ -99,6 +99,9 @@ import {
   storageDelete,
 } from '../../storage/storage-manager.js';
 import type { StorageListResult } from '../../storage/types.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('AppAgent');
 
 export const APP_TOOL_NAMES = [
   'mcp__app__query',
@@ -511,7 +514,7 @@ export function registerAppAgentTools(server: McpServer): void {
           monitorId: getMonitorId(),
         })
         .catch((err) => {
-          console.error('[AppAgent] Relay error:', err);
+          log.error('relay failed', { err });
         });
 
       return ok('Message relayed to monitor agent.');

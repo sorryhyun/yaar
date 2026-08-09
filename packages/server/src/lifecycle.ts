@@ -34,7 +34,8 @@ import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub, getSessionHub } from './session/session-hub.js';
 import { setAccessPrincipalResolver } from './handlers/uri-registry.js';
 import { setWindowGrantResolver } from './http/access.js';
-import { getAccessPrincipal } from './agents/agent-context.js';
+import { getAccessPrincipal, getLogContext } from './agents/agent-context.js';
+import { createLogger, setLogContextResolver } from './observability/log.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
 import {
   loadTunnelConfig,
@@ -43,6 +44,10 @@ import {
   type TunnelConfig,
   type TunnelProvider,
 } from './lib/tunnel/index.js';
+
+const log = createLogger('lifecycle');
+/** The banner points at "[Tunnel] warnings above", so the tunnel keeps its own name. */
+const tunnelLog = createLogger('Tunnel');
 
 let activeTunnel: TunnelProvider | null = null;
 
@@ -61,10 +66,15 @@ let plannedTunnel: TunnelConfig | null = null;
  * Returns the options to pass to createWsHandlers.
  */
 export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
+  // First, so that everything below logs with its ids attached. Same injected-resolver
+  // shape as the two access resolvers under it, for the same import-graph reason:
+  // observability/log.ts imports nothing, and agent-context is a long way up from it.
+  setLogContextResolver(getLogContext);
+
   // Don't let stray async rejections (e.g. from the browser/CDP layer) take
   // down the whole server. Log and continue.
   process.on('unhandledRejection', (reason) => {
-    console.warn('[unhandledRejection]', reason);
+    log.warn('unhandled rejection', { reason });
   });
 
   initCompiler({ projectRoot: PROJECT_ROOT, isBundledExe: IS_BUNDLED_EXE });
@@ -93,10 +103,10 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
       try {
         await fsStat(m.hostPath);
       } catch {
-        console.warn(`Mount "${m.alias}" → ${m.hostPath} — host path not found`);
+        log.warn('mount host path not found', { alias: m.alias, hostPath: m.hostPath });
       }
     }
-    console.log(`Loaded ${mounts.length} mount(s)`);
+    log.info('loaded mounts', { count: mounts.length });
   }
 
   if (IS_BUNDLED_EXE) {
@@ -141,10 +151,10 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
     try {
       const pruned = await pruneEmptySessions();
       if (pruned.length > 0) {
-        console.log(`Pruned ${pruned.length} empty session log(s)`);
+        log.info('pruned empty session logs', { count: pruned.length });
       }
     } catch (err) {
-      console.warn('[SessionPrune] Failed to prune empty session logs:', err);
+      log.warn('failed to prune empty session logs', { err });
     }
   }
 
@@ -162,33 +172,31 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
       const restoreActions = getWindowRestoreActions(messages);
       if (restoreActions.length > 0) {
         options.restoreActions = restoreActions;
-        console.log(
-          `Restored ${restoreActions.length} window(s) from session ${lastSession.sessionId}`,
-        );
+        log.info('restored windows', { count: restoreActions.length, from: lastSession.sessionId });
       }
       const contextMessages = getContextRestoreMessages(messages);
       if (contextMessages.length > 0) {
         options.contextMessages = contextMessages;
-        console.log(
-          `Restored ${contextMessages.length} context message(s) from session ${lastSession.sessionId}`,
-        );
+        log.info('restored context messages', {
+          count: contextMessages.length,
+          from: lastSession.sessionId,
+        });
       }
       const cliEntries = getCliRestoreEntries(messages);
       if (cliEntries.length > 0) {
         options.cliEntries = cliEntries;
-        console.log(
-          `Restored ${cliEntries.length} CLI entries from session ${lastSession.sessionId}`,
-        );
+        log.info('restored CLI entries', { count: cliEntries.length, from: lastSession.sessionId });
       }
       if (lastSession.metadata?.threadIds) {
         options.savedThreadIds = lastSession.metadata.threadIds;
-        console.log(
-          `Restored ${Object.keys(lastSession.metadata.threadIds).length} thread ID(s) from session ${lastSession.sessionId}`,
-        );
+        log.info('restored thread ids', {
+          count: Object.keys(lastSession.metadata.threadIds).length,
+          from: lastSession.sessionId,
+        });
       }
     }
   } catch (err) {
-    console.error('Failed to restore previous session:', err);
+    log.error('failed to restore previous session', { err });
   }
 
   // Create session log eagerly so user interactions are logged from the start
@@ -239,8 +247,9 @@ export async function startTunnel(appLocalPort: number | null): Promise<void> {
 
   const tunnel = createTunnel(plannedTunnel, getPort(), appLocalPort);
   if (!(await tunnel.connect())) {
-    console.warn(
-      '[Tunnel] Could not establish tunnel — localhost-only. Check `tailscale status` and that MagicDNS + HTTPS Certificates are enabled.',
+    tunnelLog.warn(
+      'could not establish tunnel — localhost-only. Check `tailscale status` and that ' +
+        'MagicDNS + HTTPS Certificates are enabled.',
     );
     // Nothing outside this machine can reach the server now, which is precisely where the
     // `localhost`/`127.0.0.1` split *does* work — so the degraded path keeps a boundary
@@ -274,15 +283,16 @@ export async function compileAppsAndSyncShortcuts(): Promise<void> {
     const { autoCompileApps } = await import('./features/apps/auto-compile.js');
     const compileResult = await autoCompileApps();
     if (compileResult.compiled.length > 0) {
-      console.log(
-        `Auto-compiled ${compileResult.compiled.length} app(s): ${compileResult.compiled.join(', ')}`,
-      );
+      log.info('auto-compiled apps', {
+        count: compileResult.compiled.length,
+        apps: compileResult.compiled.join(', '),
+      });
     }
     for (const f of compileResult.failed) {
-      console.warn(`Failed to compile ${f.appId}: ${f.errors.join('; ')}`);
+      log.warn('failed to compile app', { appId: f.appId, errors: f.errors.join('; ') });
     }
   } catch (err) {
-    console.error('Auto-compile error:', err);
+    log.error('auto-compile error', { err });
   }
 
   // Sync desktop shortcuts: create missing, remove stale
@@ -290,7 +300,7 @@ export async function compileAppsAndSyncShortcuts(): Promise<void> {
     const apps = await listApps();
     const removedIds = await syncAppShortcuts(apps);
     if (removedIds.length > 0) {
-      console.log(`Cleaned up ${removedIds.length} stale shortcut(s)`);
+      log.info('cleaned up stale shortcuts', { count: removedIds.length });
     }
   } catch {
     // Non-fatal: shortcuts will be created on next app interaction
@@ -316,9 +326,10 @@ export async function initWarmProviders(): Promise<void> {
   }
   if (warmPoolReady) {
     const stats = getWarmPool().getStats();
-    console.log(
-      `Provider warm pool ready: ${stats.available} ${stats.preferredProvider} provider(s)`,
-    );
+    log.info('provider warm pool ready', {
+      available: stats.available,
+      provider: stats.preferredProvider,
+    });
   }
 }
 
@@ -404,7 +415,7 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
   // On Windows, process.exit() can hang when Bun has active server handles,
   // so we use taskkill to force-terminate the entire process tree.
   const forceKillTimer = setTimeout(() => {
-    console.error('Graceful shutdown timed out — force-killing process.');
+    log.error('graceful shutdown timed out — force-killing process');
     forceKillProcess();
   }, 5_000);
 
@@ -461,7 +472,7 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
     server.stop();
     for (const extra of alsoStop) extra.stop();
   } catch (err) {
-    console.error('Error during shutdown:', err);
+    log.error('error during shutdown', { err });
   }
 
   clearTimeout(forceKillTimer);

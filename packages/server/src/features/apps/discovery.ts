@@ -16,6 +16,9 @@ import type { PermissionEntry } from '../../http/access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 import { withoutPersonaCommands } from './persona-commands.js';
 import { readAppGrant, type AppGrant } from '../../storage/app-grants.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('apps');
 
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
 
@@ -517,9 +520,10 @@ export async function getAppMeta(appId: string): Promise<{
     // Say so once, at the one place manifests are read, rather than leaving the author
     // to discover it when a spawn fails much later.
     if (usesRetiredPersonasKey(meta)) {
-      console.warn(
-        `[apps] "${appId}" declares "personas", which is no longer read — rename it to ` +
-          '"subagents" in app.json. It cannot spawn sub-agents until then.',
+      log.warn(
+        'app declares "personas", which is no longer read — rename it to "subagents" in ' +
+          'app.json. It cannot spawn sub-agents until then.',
+        { appId },
       );
     }
     const granted = applyGrant(source, source === 'bundled' ? null : await readAppGrant(appId), {
@@ -692,11 +696,12 @@ async function loadAgentDoc(appId: string, kind: AgentDocKind): Promise<string |
     // and this runs once per app agent profile — which is built once and cached.
     const retiredDoc = await loadAppDoc(appId, spec.retired);
     if (retiredDoc !== null) {
-      console.warn(
-        `[apps] "${appId}" has a root ${spec.retired} and no ${path}. ${spec.retired} is the ` +
-          'coding-agent doc and is no longer read as the app agent’s prompt — if this app ' +
-          `meant it as one, copy it to ${path}. If it is notes for whoever edits the app, ` +
+      log.warn(
+        'app has a retired root agent doc and nothing at the new path. The retired file is ' +
+          'the coding-agent doc and is no longer read as the app agent’s prompt — if this app ' +
+          'meant it as one, copy it to the new path. If it is notes for whoever edits the app, ' +
           'nothing to do.',
+        { appId, retired: spec.retired, path },
       );
     }
     return null;
@@ -705,9 +710,10 @@ async function loadAgentDoc(appId: string, kind: AgentDocKind): Promise<string |
   if (!spec.legacy) return null;
   const legacyDoc = await loadAppDoc(appId, spec.legacy);
   if (legacyDoc !== null) {
-    console.warn(
-      `[apps] "${appId}" still keeps its agent doc at ${spec.legacy}. Move it to ${path} — the ` +
-        'old location is read for now, but the app root no longer owns that name.',
+    log.warn(
+      'app still keeps its agent doc at the legacy path — the old location is read for now, ' +
+        'but the app root no longer owns that name',
+      { appId, legacy: spec.legacy, path },
     );
   }
   return legacyDoc;

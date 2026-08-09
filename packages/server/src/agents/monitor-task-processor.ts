@@ -14,6 +14,9 @@ import { monitorSource } from './context.js';
 import { monitorRole, monitorTurnRole, ephemeralRole } from './roles.js';
 import { enqueueOrReject } from './queue-refusal.js';
 import { MAX_QUEUE_SIZE } from '../config.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('MonitorTaskProcessor');
 
 /**
  * The monitor a task runs on. Required — a task without a monitor is a routing bug
@@ -76,7 +79,7 @@ export class MonitorTaskProcessor {
     task: Task,
     monitorId: string,
     why: string,
-    queuedLog: (position: number) => string,
+    onQueued: (position: number) => void,
   ): Promise<boolean> {
     return enqueueOrReject({
       sendEvent: (event) => this.ctx.sendEvent(event),
@@ -85,7 +88,7 @@ export class MonitorTaskProcessor {
       monitorId,
       maxQueueSize: MAX_QUEUE_SIZE,
       why,
-      queuedLog,
+      onQueued,
     });
   }
 
@@ -99,7 +102,11 @@ export class MonitorTaskProcessor {
         monitorId,
         'Monitor is suspended.',
         (position) =>
-          `[ContextPool] Monitor ${monitorId} is suspended — queued task ${task.messageId}, queue size: ${position}`,
+          log.info('monitor suspended — task queued', {
+            monitorId,
+            messageId: task.messageId,
+            position,
+          }),
       );
       return;
     }
@@ -124,7 +131,11 @@ export class MonitorTaskProcessor {
         monitorId,
         'Please wait for current operations to complete.',
         (position) =>
-          `[ContextPool] Relay/hook arrived while monitor ${monitorId} busy — interrupting and queuing ${task.messageId} (position: ${position})`,
+          log.info('relay/hook arrived while monitor busy — interrupting and queuing', {
+            monitorId,
+            messageId: task.messageId,
+            position,
+          }),
       );
       if (!queued) return;
 
@@ -142,9 +153,7 @@ export class MonitorTaskProcessor {
     // Non-relay: try to steer the active turn (Codex mid-turn injection)
     const steered = await this.ctx.agentPool.steerMonitorAgent(monitorId, task.content);
     if (steered) {
-      console.log(
-        `[ContextPool] Steered active turn for ${monitorId} with message ${task.messageId}`,
-      );
+      log.info('steered active turn', { monitorId, messageId: task.messageId });
       this.ctx.contextAssembly.appendUserMessage(
         this.ctx.contextTape,
         task.content,
@@ -173,7 +182,7 @@ export class MonitorTaskProcessor {
       monitorId,
       'Please wait for current operations to complete.',
       (position) =>
-        `[ContextPool] Queued monitor task ${task.messageId} for ${monitorId}, queue size: ${position}`,
+        log.info('queued monitor task', { monitorId, messageId: task.messageId, position }),
     );
   }
 
@@ -194,9 +203,7 @@ export class MonitorTaskProcessor {
 
     agent.session.setOutputCallback(createBudgetOutputCallback(this.ctx, agent, monitorId));
 
-    console.log(
-      `[ContextPool] Processing monitor task ${task.messageId} with monitor agent ${agent.id} (monitor: ${monitorId})`,
-    );
+    log.info('processing monitor task', { messageId: task.messageId, agent: agent.id, monitorId });
 
     const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
     const monitorContext = this.ctx.contextAssembly.buildMonitorPrompt(task.content, {
@@ -251,9 +258,11 @@ export class MonitorTaskProcessor {
       createBudgetOutputCallback(this.ctx, agent, monitorId, 'ephemeral agent'),
     );
 
-    console.log(
-      `[ContextPool] Processing monitor task ${task.messageId} with ephemeral agent ${agent.id}`,
-    );
+    log.info('processing monitor task on ephemeral agent', {
+      messageId: task.messageId,
+      agent: agent.id,
+      monitorId,
+    });
 
     const { openWindowsContext, fp, reloadPrefix } = buildReloadContext(this.ctx, task);
     const prompt = openWindowsContext + reloadPrefix + task.content;
@@ -312,13 +321,11 @@ export class MonitorTaskProcessor {
   recordMonitorAction(monitorId: string): void {
     this.ctx.budgetPolicy.recordAction(monitorId);
     if (!this.ctx.budgetPolicy.checkActionBudget(monitorId)) {
-      console.warn(
-        `[ContextPool] Monitor ${monitorId} exceeded action budget — interrupting agent`,
-      );
+      log.warn('monitor exceeded action budget — interrupting agent', { monitorId });
       const agent = this.ctx.agentPool.getMonitorAgent(monitorId);
       if (agent?.session.isRunning()) {
         agent.session.interrupt().catch((err) => {
-          console.error(`[ContextPool] Failed to interrupt agent for ${monitorId}:`, err);
+          log.error('failed to interrupt agent', { monitorId, err });
         });
       }
     }

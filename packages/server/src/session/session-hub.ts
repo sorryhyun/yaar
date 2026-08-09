@@ -10,6 +10,9 @@ import type { SessionId } from './types.js';
 import { generateSessionId } from './types.js';
 import type { RecoveryMode } from '@yaar/shared';
 import type { AgentRole } from '../agents/agent-context.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('SessionHub');
 
 /** What `attach()` did with the id the client asked for. See RecoveryMode in @yaar/shared. */
 export interface AttachResult {
@@ -59,9 +62,9 @@ export class SessionHub {
     this.cancelEviction(sessionId);
     const timer = setTimeout(() => {
       this.evictionTimers.delete(sessionId);
-      console.log(`[SessionHub] Evicting abandoned session: ${sessionId}`);
+      log.info('evicting abandoned session', { sessionId });
       this.remove(sessionId).catch((err) => {
-        console.error(`[SessionHub] Failed to evict session ${sessionId}:`, err);
+        log.error('failed to evict session', { sessionId, err });
       });
     }, delayMs);
     this.evictionTimers.set(sessionId, timer);
@@ -120,9 +123,7 @@ export class SessionHub {
       this.defaultSessionId = sessionId;
     }
 
-    console.log(
-      `[SessionHub] Created session: ${sessionId} (epoch ${session.epoch}, ${recoveryMode})`,
-    );
+    log.info('created session', { sessionId, epoch: session.epoch, recoveryMode });
 
     // Release anything parked in waitFor() — typically an app's iframe whose verb
     // call beat its own desktop's WebSocket to the server.
@@ -228,14 +229,14 @@ export class SessionHub {
     if (ids.length === 0) return;
 
     const removals = ids.map((id) =>
-      this.remove(id).catch((err) => console.error(`[SessionHub] Drain failed for ${id}:`, err)),
+      this.remove(id).catch((err) => log.error('drain failed', { sessionId: id, err })),
     );
     let bell: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       Promise.all(removals),
       new Promise<void>((resolve) => {
         bell = setTimeout(() => {
-          console.error(`[SessionHub] Drain timed out after ${timeoutMs}ms; abandoning the rest.`);
+          log.error('drain timed out; abandoning the rest', { timeoutMs });
           resolve();
         }, timeoutMs);
       }),
@@ -267,7 +268,7 @@ export class SessionHub {
       if (this.defaultSessionId === sessionId) {
         this.defaultSessionId = null;
       }
-      console.log(`[SessionHub] Removed session: ${sessionId}`);
+      log.info('removed session', { sessionId });
     }
   }
 }

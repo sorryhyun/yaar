@@ -61,6 +61,8 @@ client can only answer over a socket the server is holding is a deadlock waiting
 - `YAAR_REMOTE_TOKEN` - Adopt this remote token instead of minting one, so a launcher can build the `#remote=<token>` URL before the server starts (`scripts/dev/start.sh` does this for `make claude`). Under 32 chars it is ignored with a warning — remote mode hands the token to every device that can reach the server. See `http/auth.ts`.
 - `YAAR_STORAGE` / `YAAR_CONFIG` / `YAAR_SESSION_LOGS` - Override storage/config/session-log directory paths. All three are pinned to temp dirs by `scripts/test/env.ts` — a suite that builds a `SessionLogger` mints a log directory, which is how `session_logs/` used to collect `app-persona-…` logs from `bun run test`.
 - `YAAR_KEEP_EMPTY_SESSIONS` - `1` keeps session logs that recorded nothing. Off by default: `createSession()` runs at boot so a click before the first message is still logged, so every launch the user closed without typing left a directory behind — in `yaar://history/` and `GET /api/sessions` as much as on disk. The launch that would add the next one sweeps them first. What counts as empty (exactly the created shape, every log zero-length) and what protects a concurrently-running instance's log (the creating `pid` in `metadata.json`, plus a 5-minute grace window) is `logging/prune.ts`.
+- `YAAR_LOG_LEVEL` - `debug` | `info` (default) | `warn` | `error`. The floor for `observability/log.ts`. `debug` is off by default, which is the one visibility change the console→logger conversion made: everything that used to be `console.log` is `info` and still prints, but genuinely chatty lines (`codex` item/started, the Claude SDK message trace, `entered agent context`) were demoted and now need `YAAR_LOG_LEVEL=debug`.
+- `YAAR_LOG_FORMAT` - `pretty` (default) or `json`. Pretty is the terminal format the `[Component] message` lines always had, plus `key=value` fields and the monitor/agent ids; `json` is one object per line carrying **every** context id (session, monitor, agent, window, app) and an ISO timestamp. Both are scrubbed by `scripts/test/env.ts`'s `YAAR_` prefix sweep, so a suite never inherits a developer's setting.
 - `YAAR_SKIP_DOTENV` - `1` skips loading the root `.env` in `config/env.ts`. Set by `scripts/test/env.ts`: a test run pins every knob explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk back through.
 - `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test/env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
 - `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop; `resolvePrincipal` refuses a token-less request carrying the app origin. **Which two origins** (`loopback-alias` locally, `proxy-port` over Tailscale Serve, `off`) is `http/origin-boundary.ts`'s business and the one place to ask — its header explains both modes and why the proxy-port attribution is unforgeable. See [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
@@ -142,6 +144,7 @@ src/
 │   └── window/           # Window create/update/manage, app protocol, app query/command, subscribe/unsubscribe
 ├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder
 ├── reload/               # Fingerprint-based action cache
+├── observability/        # log.ts — structured logging; the ONLY sanctioned console.* in the server
 ├── logging/              # Session logging (JSONL), reading, context/window restore, empty-log prune
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
 └── lib/                  # Standalone utilities (no server internal imports)
@@ -223,6 +226,47 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 | Factory | `providers/factory.ts` | Auto-detect and create providers |
 | Observer | `actionEmitter` | Decouple tools from sessions |
 | AsyncLocalStorage | `AgentSession` | Track agentId in async context |
+| Injected resolver | `setLogContextResolver`, `setAccessPrincipalResolver`, `setWindowGrantResolver` | Give a low-level module a fact that lives above it in the import graph, wired once in `lifecycle.ts` |
+
+### Logging
+
+**Operational logging goes through `observability/log.ts`; `no-console` is an ESLint error
+everywhere else in `src/`.** A component takes a logger once and names events, not sentences:
+
+```ts
+const log = createLogger('AgentSession');
+log.warn('turn overlapped', { role, waitedFor: previousRole });
+```
+
+The session/monitor/agent/window/app ids are attached automatically, from an
+`AsyncLocalStorage` resolver wired in `lifecycle.ts` (`setLogContextResolver`) — that is the
+whole point, and why a bare `console.log` is refused: it carries none of them, and 300 of them
+is what made a message's path across eight seams and three agent tiers unreconstructable. For a
+class whose work happens *outside* an agent turn (`LiveSession`'s connection and pool events),
+bind the id instead: `createLogger('LiveSession').child({ sessionId })`.
+
+Three rules:
+
+- **Fields, not interpolation.** `log.info('created monitor agent', { monitorId })`, never
+  `` log.info(`created monitor agent for ${monitorId}`) `` — the field is what `YAAR_LOG_FORMAT=json`
+  emits as a queryable key, and the interpolated string is what it cannot.
+- **Ids and counts, never content.** The rule `streams/stream-diagnostics.ts` states for its
+  samples ("a transcript must not be reachable through a debug switch") holds here too. The
+  conversion removed two live violations: `AgentSession` logged the first 50 chars of every user
+  prompt, and the Claude provider logged an image data-URL prefix. Both are counts now. The one
+  deliberate excerpt left is the tool-error `detail` in `StreamToEventMapper`, kept because "a
+  tool failed" without its text is unactionable, and commented as such at the call site.
+- **The component name comes from `createLogger`, not the string.** The old `[Bracket]` prefixes
+  had drifted — `MonitorTaskProcessor` and `turn-helpers` both logged as `[ContextPool]`.
+
+Levels: `debug` (off by default), `info`, `warn`, `error`, floor set by `YAAR_LOG_LEVEL`. Each
+maps to its own console method, so `warn` reaches `console.warn` — several test helpers spy on
+exactly that, and routing warn through `console.error` keeps the stream right while making every
+one of those spies observe nothing. The exemptions to `no-console` are listed with their reasons
+in `eslint.config.js`: the boot banner and QR code (`lifecycle.ts`, `main.ts`, `exe-entry.ts`) are
+the CLI talking to its user, `dev-bundle-worker.ts`'s stdout *is* its result channel, and `lib/**`
+plus `providers/codex/version.ts` are the dependency-free modules whose contracts forbid the
+import.
 
 ## Providers
 

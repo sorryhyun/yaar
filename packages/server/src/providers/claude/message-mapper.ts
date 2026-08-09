@@ -10,6 +10,9 @@ import type { StreamMessage, TokenUsage } from '../types.js';
 import { consumeLastCall } from '../../mcp/tool-call-buffer.js';
 import { assistantNotice, describeResultError, rateLimitNotice, systemNotice } from './errors.js';
 import { toNoticeMessage } from '../notice.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('claude:mapper');
 
 /** Track tool_use_id → toolName from content_block_start events */
 const toolNameById = new Map<string, string>();
@@ -160,7 +163,7 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
   const msgSubtype = (msg as { subtype?: string }).subtype;
   if (msgType !== 'stream_event' && msgSubtype !== 'thinking_tokens') {
     const subtypeStr = msgSubtype ? `, subtype=${msgSubtype}` : '';
-    console.log(`[message-mapper] ${msgType}${subtypeStr}`);
+    log.debug('sdk message', { type: `${msgType}${subtypeStr}` });
   }
 
   // SDK message types: system, assistant, user, result, stream_event
@@ -282,7 +285,7 @@ export function mapClaudeMessage(msg: SDKMessage, turn?: TurnUsageTracker): Stre
       // read "Unknown SDK error" regardless of cause. `describeResultError`
       // assembles the message out of `terminal_reason` and `stop_reason` too.
       const { text, code } = describeResultError(result);
-      console.error(`[message-mapper] SDK error: ${text} (subtype: ${result.subtype})`);
+      log.error('SDK error', { error: text, subtype: result.subtype });
       return {
         type: 'error',
         error: text,

@@ -137,6 +137,10 @@ export class CodexVersionError extends Error {
  */
 export function assertSupportedCodex(
   userAgent: string,
+  // Deliberately `console.warn`, not the structured logger: this module is dependency-free
+  // (see the header — `scripts/codegen/codex-types.js` imports it directly), and importing
+  // `observability/log.js` here would make the codegen script drag in a server internal.
+  // The parameter is the seam for a caller that wants it routed elsewhere.
   warn: (message: string) => void = console.warn,
 ): void {
   const version = parseCodexUserAgent(userAgent);

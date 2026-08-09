@@ -32,6 +32,9 @@ import { genId } from '../../lib/ids.js';
 import { getAppMeta } from '../../features/apps/discovery.js';
 import { resolveAppWindowOnMonitor } from '../../features/window/resolve-app-window.js';
 import { showNotification } from '../../features/user/notifications.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('DirectMessage');
 
 export const MESSAGING_TOOL_NAMES = ['mcp__messaging__direct_message'] as const;
 
@@ -129,7 +132,7 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
           content: wrap(message),
           monitorId,
         })
-        .catch((err: unknown) => console.error('[DirectMessage] monitor route:', err));
+        .catch((err: unknown) => log.error('monitor route failed', { monitorId, err }));
       return {
         ok: true,
         text: `Message delivered to monitor "${monitorId}" (messageId: ${messageId}).`,
@@ -172,7 +175,9 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
           content: wrap(message),
           monitorId: senderMonitorId,
         })
-        .catch((err: unknown) => console.error('[DirectMessage] app route:', err));
+        .catch((err: unknown) =>
+          log.error('app route failed', { appId: targetAppId, windowId, err }),
+        );
       return {
         ok: true,
         text:
@@ -192,7 +197,7 @@ async function routeDirectMessage(to: string, message: string): Promise<RouteRes
           content: wrap(message),
           monitorId: senderMonitorId,
         })
-        .catch((err: unknown) => console.error('[DirectMessage] window route:', err));
+        .catch((err: unknown) => log.error('window route failed', { windowId: target.id, err }));
       return {
         ok: true,
         text: `Message delivered to window "${target.id}" (app ${appId}, messageId: ${messageId}).`,

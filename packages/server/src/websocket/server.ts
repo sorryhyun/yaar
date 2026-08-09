@@ -24,6 +24,9 @@ import type { ContextMessage } from '../agents/context.js';
 import type { SessionLogger } from '../logging/session-logger.js';
 import { checkWsAuth } from '../http/auth.js';
 import { handleBridgeOpen, handleBridgeMessage, handleBridgeClose } from './bridge-handlers.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('WebSocket');
 
 export interface WebSocketServerOptions {
   restoreActions: OSAction[];
@@ -93,10 +96,12 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         broadcastCenter.subscribeToMonitor(connectionId, monitorId);
       }
 
-      console.log(
-        `WebSocket client connected: ${connectionId} → session ${session.sessionId} ` +
-          `(epoch ${session.epoch}, ${recoveryMode})`,
-      );
+      log.info('client connected', {
+        connectionId,
+        sessionId: session.sessionId,
+        epoch: session.epoch,
+        recoveryMode,
+      });
 
       // The attachment handshake. An open socket says only that transport exists; this is
       // what tells the client which session incarnation it is now bound to, and whether
@@ -138,7 +143,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
       // Execute launch hooks for fresh sessions (not reconnections)
       if (!requestedSessionId) {
         session.executeLaunchHooks(connectionId).catch((err) => {
-          console.error('Failed to execute launch hooks:', err);
+          log.error('failed to execute launch hooks', { connectionId, err });
         });
       }
     },
@@ -183,7 +188,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
     close(ws: ServerWebSocket<WsData>) {
       if (ws.data.kind === 'bridge') return handleBridgeClose(ws);
       const { connectionId, sessionId } = ws.data;
-      console.log(`WebSocket client disconnected: ${connectionId}`);
+      log.info('client disconnected', { connectionId, sessionId });
 
       const hub = getSessionHub();
       const session = hub.get(sessionId!);
@@ -228,7 +233,7 @@ async function routeOne(
     }
     await session.routeMessage(event, connectionId);
   } catch (err) {
-    console.error('Failed to process message:', err);
+    log.error('failed to process message', { err });
     sendError(ws, err instanceof Error ? err.message : 'Failed to process message', event);
   }
 }

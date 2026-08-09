@@ -20,6 +20,9 @@ import type {
   ConnectionState,
   McpServerStatus,
 } from './types.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('MCP External');
 
 const CONNECT_TIMEOUT_MS = 30_000;
 /**
@@ -62,7 +65,7 @@ class McpClientManager {
       }
       this.configs = parsed;
     } catch {
-      console.warn('[MCP External] Invalid mcp-servers.json — using empty config');
+      log.warn('invalid mcp-servers.json — using empty config');
       this.configs = {};
     }
   }
@@ -107,7 +110,7 @@ class McpClientManager {
       this.clients.set(name, client);
       this.transports.set(name, transport);
       this.states.set(name, 'connected');
-      console.log(`[MCP External] Connected to "${name}"`);
+      log.info('connected to external server', { server: name });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Unknown connection error';
       this.states.set(name, 'error');

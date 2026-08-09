@@ -23,6 +23,9 @@ import type { ServerEvent } from '@yaar/shared';
 import type { Viewport } from './layout-context.js';
 import type { ConnectionId } from './broadcast-center.js';
 import type { SessionId } from './types.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('MonitorRegistry');
 
 export interface MonitorRegistryDeps {
   sessionId: SessionId;
@@ -146,10 +149,11 @@ export class MonitorRegistry {
     try {
       await this.deps.removeMonitorAgent(monitorId);
     } catch (err) {
-      console.error(
-        `[MonitorRegistry ${this.deps.sessionId}] Failed to remove monitor agent for ${monitorId}:`,
+      log.error('failed to remove monitor agent', {
+        sessionId: this.deps.sessionId,
+        monitorId,
         err,
-      );
+      });
     }
   }
 }

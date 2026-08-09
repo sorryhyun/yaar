@@ -8,6 +8,10 @@
  * - Clear separation between monitor flow and window branches
  */
 
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('ContextTape');
+
 const MONITOR_PREFIX = 'yaar://monitors/';
 const WINDOW_PREFIX = 'yaar://windows/';
 
@@ -113,9 +117,10 @@ export class ContextTape {
     const monitorToRemove = new Set(monitorMessages.slice(0, monitorMessages.length - keepCount));
     const before = this.messages.length;
     this.messages = this.messages.filter((m) => !monitorToRemove.has(m));
-    console.log(
-      `[ContextTape] Pruned ${before - this.messages.length} oldest monitor messages (${this.messages.length} remaining)`,
-    );
+    log.info('pruned oldest monitor messages', {
+      pruned: before - this.messages.length,
+      remaining: this.messages.length,
+    });
   }
 
   /**

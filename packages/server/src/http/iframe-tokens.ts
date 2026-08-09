@@ -39,6 +39,9 @@ import type { PermissionEntry } from './access.js';
 import { getAppMeta } from '../features/apps/discovery.js';
 import { getStorageDir } from '../config.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('IframeToken');
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -239,9 +242,9 @@ export async function previewBundles(
   // Reject anything that could climb out of the projects directory. Project ids are
   // timestamps in practice, but this string reaches a path join.
   if (!projectId || !/^[\w.-]+$/.test(projectId) || projectId.includes('..')) {
-    console.warn(
-      `[IframeToken] Refusing preview project id ${JSON.stringify(projectId.slice(0, 80))}: not a bare id.`,
-    );
+    log.warn('refusing preview project id: not a bare id', {
+      projectId: JSON.stringify(projectId.slice(0, 80)),
+    });
     return undefined;
   }
   const manifestPath = join(storageRoot, 'apps', 'devtools', 'projects', projectId, 'app.json');
@@ -253,9 +256,7 @@ export async function previewBundles(
     // window can outlive the project it previews. A file that is *there* and unreadable
     // is not — that is a broken manifest or a moved layout.
     if (await Bun.file(manifestPath).exists()) {
-      console.warn(
-        `[IframeToken] Preview manifest unreadable at ${manifestPath} — granting no bundles: ${String(err)}`,
-      );
+      log.warn('preview manifest unreadable — granting no bundles', { manifestPath, err });
     }
     return undefined;
   }

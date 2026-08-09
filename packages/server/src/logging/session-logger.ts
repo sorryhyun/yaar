@@ -6,6 +6,9 @@ import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
 import type { ContextSource } from '../agents/context.js';
 import type { EscapeGuardRecord } from '../providers/types.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('SessionLogger');
 
 const LOG_FLUSH_MS = 200;
 const METADATA_FLUSH_MS = 300;
@@ -212,7 +215,7 @@ export class SessionLogger {
     this.flushTimer = setTimeout(() => {
       this.flushTimer = null;
       this.flush().catch((err) => {
-        console.error('[SessionLogger] Flush failed:', err);
+        log.error('flush failed', { err });
       });
     }, LOG_FLUSH_MS);
   }
@@ -389,7 +392,7 @@ export class SessionLogger {
       this.metadataTimer = null;
       this.metadataDirty = false;
       this.saveMetadataToDisk().catch((err) => {
-        console.error('[SessionLogger] Metadata save failed:', err);
+        log.error('metadata save failed', { err });
       });
     }, METADATA_FLUSH_MS);
   }

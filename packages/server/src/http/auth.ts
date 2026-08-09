@@ -7,6 +7,9 @@ import { extname } from 'path';
 import { IS_REMOTE } from '../config.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import { extractIframeToken } from './access.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('Auth');
 
 let remoteToken: string | null = null;
 
@@ -35,9 +38,9 @@ export function generateRemoteToken(): string {
     return remoteToken;
   }
   if (supplied) {
-    console.warn(
-      `[Auth] Ignoring YAAR_REMOTE_TOKEN: shorter than ${MIN_SUPPLIED_TOKEN_LENGTH} characters. Generating a random token instead.`,
-    );
+    log.warn('ignoring YAAR_REMOTE_TOKEN: too short. Generating a random token instead.', {
+      minLength: MIN_SUPPLIED_TOKEN_LENGTH,
+    });
   }
   remoteToken = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('base64url');
   return remoteToken;

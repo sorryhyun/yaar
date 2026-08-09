@@ -20,6 +20,9 @@ import { appAgentKey } from './agent-roster.js';
 import { enqueueOrReject } from './queue-refusal.js';
 import { AppStateHandoffStore, formatAppStateHandoffNotice } from './app-state-handoff.js';
 import { captureDeclaredAppState } from '../features/window/app-protocol.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('AppTaskProcessor');
 
 /**
  * The window queue's key for a (monitor, app) pair — what `WindowQueuePolicy` files
@@ -90,7 +93,7 @@ export class AppTaskProcessor {
    */
   async handleAppTask(task: Task, appId: string): Promise<void> {
     if (!task.windowId) {
-      console.error('[AppTaskProcessor] Task missing windowId');
+      log.error('task missing windowId', { messageId: task.messageId, appId });
       return;
     }
 
@@ -124,9 +127,7 @@ export class AppTaskProcessor {
       const steered =
         !task.fresh && (await this.ctx.agentPool.steerAppAgent(monitorId, appId, task.content));
       if (steered) {
-        console.log(
-          `[AppTaskProcessor] Steered task ${task.messageId} into running ${appId} agent`,
-        );
+        log.info('steered task into running app agent', { messageId: task.messageId, appId });
         const source = windowSource(windowId);
         this.ctx.contextAssembly.appendUserMessage(this.ctx.contextTape, task.content, source);
         await this.ctx.sendEvent({
@@ -150,8 +151,8 @@ export class AppTaskProcessor {
         monitorId,
         maxQueueSize: this.ctx.windowQueuePolicy.maxSize,
         why: 'Please wait for current operations to complete.',
-        queuedLog: (position) =>
-          `[AppTaskProcessor] Queued task ${task.messageId} for ${appId}, queue size: ${position}`,
+        onQueued: (position) =>
+          log.info('queued app task', { messageId: task.messageId, appId, monitorId, position }),
       });
       return;
     }
@@ -186,7 +187,7 @@ export class AppTaskProcessor {
       const agent = await this.ctx.agentPool.getOrCreateAppAgent(monitorId, appId);
       if (!agent) {
         this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
-        console.error(`[AppTaskProcessor] Failed to create app agent for ${appId}`);
+        log.error('failed to create app agent', { appId, monitorId });
         await this.ctx.sendEvent({
           type: ServerEventType.ERROR,
           error: `Failed to create agent for app ${appId}`,
@@ -385,9 +386,11 @@ export class AppTaskProcessor {
 
     const agent = this.ctx.agentPool.getAppAgent(owner, appId);
     if (agent?.session.isRunning()) {
-      console.log(
-        `[AppTaskProcessor] Interrupting app agent for ${appId} on monitor ${owner} (window ${windowId} closed)`,
-      );
+      log.info('interrupting app agent — its window closed', {
+        appId,
+        monitorId: owner,
+        windowId,
+      });
       await agent.session.interrupt();
     }
 

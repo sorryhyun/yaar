@@ -65,6 +65,9 @@ import type { SessionLogger } from '../logging/index.js';
 import type { AITransport, TokenUsage } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
 import type { AgentPoolStats } from './pool-types.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('AgentPool');
 
 const appKey = appAgentKey;
 
@@ -287,7 +290,7 @@ export class AgentPool {
     } finally {
       getAgentLimiter().release();
     }
-    console.log(`[AgentPool] ${label}: ${agent.instanceId}`);
+    log.info(label, { instanceId: agent.instanceId });
   }
 
   // ── Agent creation ───────────────────────────────────────────────────
@@ -306,7 +309,7 @@ export class AgentPool {
   private async createAgentCore(preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
     const limiter = getAgentLimiter();
     if (!limiter.tryAcquire()) {
-      console.log('[AgentPool] Global agent limit reached');
+      log.warn('global agent limit reached');
       return null;
     }
     let slotHandedOver = false;
@@ -348,7 +351,7 @@ export class AgentPool {
       this.trackAgent(instanceId);
       slotHandedOver = true;
 
-      console.log(`[AgentPool] Created agent ${id} (${instanceId})`);
+      log.info('created agent', { id, instanceId });
       return agent;
     } finally {
       if (!slotHandedOver) limiter.release();
@@ -392,7 +395,7 @@ export class AgentPool {
     const agent = await this.createAgentCore(preWarmedProvider);
     if (agent) {
       this.monitorAgents.set(monitorId, agent);
-      console.log(`[AgentPool] Monitor agent created for ${monitorId}: ${agent.instanceId}`);
+      log.info('monitor agent created', { monitorId, instanceId: agent.instanceId });
     }
     return agent;
   }
@@ -405,7 +408,7 @@ export class AgentPool {
     const agent = await this.createWithFreshProvider();
     if (!agent) return null;
     this.ephemeralAgents.add(agent);
-    console.log(`[AgentPool] Ephemeral agent created: ${agent.instanceId}`);
+    log.info('ephemeral agent created', { instanceId: agent.instanceId });
     return agent;
   }
 
@@ -487,9 +490,7 @@ export class AgentPool {
       // caller that has not begun its turn yet is neither busy nor idle, and the reaper
       // must not take it out from under them.
       existing.lastUsed = Date.now();
-      console.log(
-        `[AgentPool] Reusing app agent for ${appId} on monitor ${monitorId}: ${existing.instanceId}`,
-      );
+      log.info('reusing app agent', { appId, monitorId, instanceId: existing.instanceId });
       return existing;
     }
 
@@ -514,9 +515,7 @@ export class AgentPool {
 
     this.appAgents.set(appKey(monitorId, appId), agent);
     this.armIdleSweep();
-    console.log(
-      `[AgentPool] App agent created for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
-    );
+    log.info('app agent created', { appId, monitorId, instanceId: agent.instanceId });
     return agent;
   }
 
@@ -662,7 +661,7 @@ export class AgentPool {
     if (!agent) return null;
 
     this.sessionAgent = agent;
-    console.log(`[AgentPool] Session agent created: ${agent.instanceId}`);
+    log.info('session agent created', { instanceId: agent.instanceId });
     return agent;
   }
 
@@ -910,7 +909,7 @@ export class AgentPool {
       try {
         await agent.session.interrupt();
       } catch (err) {
-        console.error(`[AgentPool] Interrupt failed for ${agent.instanceId}:`, err);
+        log.error('interrupt failed', { instanceId: agent.instanceId, err });
       }
     }
 
@@ -921,7 +920,7 @@ export class AgentPool {
           interruptIfRunning: false,
         });
       } catch (err) {
-        console.error(`[AgentPool] Cleanup failed for ${agent.instanceId}:`, err);
+        log.error('cleanup failed', { instanceId: agent.instanceId, err });
       }
     }
 

@@ -15,6 +15,9 @@ import { AppServer } from './codex/app-server.js';
 import { CodexVersionError } from './codex/version.js';
 import { getForcedProvider } from './get-forced-provider.js';
 import { PROVIDER_PREFERENCE, instantiateProvider } from './instantiate.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('WarmPool');
 
 interface WarmPoolConfig {
   /** Number of providers to pre-warm (default: 1) */
@@ -66,7 +69,7 @@ class ProviderWarmPool {
   }
 
   private async doInitialize(): Promise<void> {
-    console.log('[WarmPool] Initializing provider warm pool...');
+    log.info('initializing provider warm pool');
 
     const forcedProvider = getForcedProvider();
     const providerTypes: readonly ProviderType[] = forcedProvider
@@ -84,19 +87,19 @@ class ProviderWarmPool {
         // case: an unsupported codex is simply not a candidate, and Claude is the right answer.
         if (!(err instanceof CodexVersionError)) throw err;
         if (forcedProvider) throw err;
-        console.warn(`[WarmPool] Skipping codex: ${err.message}`);
+        log.warn('skipping codex', { reason: err.message });
         continue;
       }
       if (provider) {
         this.preferredProvider = providerType;
         this.pool.push(provider);
-        console.log(`[WarmPool] Using provider: ${providerType}`);
+        log.info('using provider', { provider: providerType });
         break;
       }
     }
 
     if (this.pool.length === 0) {
-      console.log('[WarmPool] No provider available');
+      log.warn('no provider available');
       return;
     }
 
@@ -107,7 +110,7 @@ class ProviderWarmPool {
       }
     }
 
-    console.log(`[WarmPool] Warmed ${this.pool.length} provider(s)`);
+    log.info('warmed providers', { count: this.pool.length });
     this.initialized = true;
   }
 
@@ -146,7 +149,7 @@ class ProviderWarmPool {
       // what to upgrade. doInitialize() decides how loud that is — fatal when the user named
       // the provider, a skip when we were only auto-detecting.
       if (err instanceof CodexVersionError) throw err;
-      console.error(`[WarmPool] Failed to create ${providerType} provider:`, err);
+      log.error('failed to create provider', { provider: providerType, err });
       return null;
     }
   }
@@ -170,11 +173,11 @@ class ProviderWarmPool {
       await new Promise((r) => setTimeout(r, 500));
     }
 
-    console.log('[WarmPool] Starting shared Codex AppServer');
+    log.info('starting shared Codex AppServer');
     this.sharedCodexAppServer = new AppServer({ model: 'gpt-5.6-terra' });
 
     this.sharedCodexAppServer.on('error', (err) => {
-      console.error('[WarmPool] Codex AppServer error:', err);
+      log.error('Codex AppServer error', { err });
     });
 
     await this.sharedCodexAppServer.start();
@@ -182,9 +185,10 @@ class ProviderWarmPool {
     // Listen for unexpected exit so next ensureCodexAppServer() call restarts it
     this.sharedCodexAppServer.on('exit', (code, signal) => {
       if (!this.sharedCodexAppServer?.isRunning) {
-        console.warn(
-          `[WarmPool] Codex AppServer exited unexpectedly (code: ${code}, signal: ${signal}). Will restart on next provider creation.`,
-        );
+        log.warn('Codex AppServer exited unexpectedly; will restart on next provider creation', {
+          code,
+          signal,
+        });
       }
     });
 
@@ -192,7 +196,7 @@ class ProviderWarmPool {
     const authenticated = await checkAndLoginCodex(this.sharedCodexAppServer);
 
     if (!authenticated) {
-      console.error('[WarmPool] Codex authentication failed, stopping AppServer');
+      log.error('Codex authentication failed, stopping AppServer');
       await this.sharedCodexAppServer.stop();
       this.sharedCodexAppServer = null;
     }
@@ -210,9 +214,10 @@ class ProviderWarmPool {
     const provider = this.pool.shift();
     if (provider) {
       const sessionId = provider.getSessionId?.() ?? 'no-session';
-      console.log(
-        `[WarmPool] Acquired warm provider (session: ${sessionId}), pool size: ${this.pool.length}`,
-      );
+      log.info('acquired warm provider', {
+        providerSession: sessionId,
+        poolSize: this.pool.length,
+      });
 
       // Replenish in background — each Codex provider now has its own WS
       // connection, so background replenish is safe for both providers.
@@ -224,7 +229,7 @@ class ProviderWarmPool {
     }
 
     if (this.preferredProvider) {
-      console.log('[WarmPool] Pool empty, creating provider on demand');
+      log.info('pool empty, creating provider on demand');
       return this.createWarmProvider(this.preferredProvider);
     }
 
@@ -244,15 +249,13 @@ class ProviderWarmPool {
         if (this.pool.length < this.config.poolSize) {
           this.pool.push(provider);
           const sessionId = provider.getSessionId?.() ?? 'no-session';
-          console.log(
-            `[WarmPool] Replenished pool (session: ${sessionId}), size: ${this.pool.length}`,
-          );
+          log.info('replenished pool', { providerSession: sessionId, poolSize: this.pool.length });
         } else {
           provider.dispose();
         }
       })
       .catch((err) => {
-        console.error('[WarmPool] Failed to replenish pool:', err);
+        log.error('failed to replenish pool', { err });
       });
   }
 

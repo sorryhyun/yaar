@@ -16,9 +16,12 @@ import type { WsData } from './server.js';
 import { bridgeMessageSchema, BRIDGE_PROTOCOL_VERSION } from '@yaar/shared/schemas';
 import { getBridgeHub } from '../features/browser/bridge.js';
 import { actionEmitter } from '../session/action-emitter.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('bridge');
 
 export function handleBridgeOpen(ws: ServerWebSocket<WsData>): void {
-  console.log(`[bridge] extension connected: ${ws.data.connectionId}`);
+  log.info('extension connected', { connectionId: ws.data.connectionId });
 }
 
 export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | Buffer): void {
@@ -26,13 +29,13 @@ export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | 
   try {
     raw = JSON.parse(typeof data === 'string' ? data : data.toString());
   } catch {
-    console.warn('[bridge] dropped non-JSON frame');
+    log.warn('dropped non-JSON frame');
     return;
   }
 
   const parsed = bridgeMessageSchema.safeParse(raw);
   if (!parsed.success) {
-    console.warn('[bridge] dropped invalid frame:', parsed.error.issues[0]?.message ?? 'unknown');
+    log.warn('dropped invalid frame', { reason: parsed.error.issues[0]?.message ?? 'unknown' });
     return;
   }
   const msg = parsed.data;
@@ -42,21 +45,24 @@ export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | 
     case 'hello': {
       const { name, version } = msg.browser;
       if (msg.protocolVersion !== BRIDGE_PROTOCOL_VERSION) {
-        console.warn(
-          `[bridge] protocol mismatch: extension v${msg.protocolVersion}, ` +
-            `server v${BRIDGE_PROTOCOL_VERSION} (${name} ${version}) — accepting; may misbehave`,
-        );
+        log.warn('protocol mismatch — accepting; may misbehave', {
+          extensionProtocol: msg.protocolVersion,
+          serverProtocol: BRIDGE_PROTOCOL_VERSION,
+          browser: `${name} ${version}`,
+        });
       }
       // Pass the socket so the hub can send T2 commands / activity cues back down it (Slice 2).
       hub.setConnection({ browser: msg.browser, protocolVersion: msg.protocolVersion }, ws);
-      console.log(
-        `[bridge] hello from ${name} ${version} — protocol v${msg.protocolVersion}, ${msg.tabCount} tabs`,
-      );
+      log.info('hello from extension', {
+        browser: `${name} ${version}`,
+        protocol: msg.protocolVersion,
+        tabs: msg.tabCount,
+      });
       return;
     }
     case 'tabs': {
       hub.updateTabs(msg.tabs);
-      console.log(`[bridge] tabs update: ${msg.tabs.length} tabs`);
+      log.debug('tabs update', { tabs: msg.tabs.length });
       return;
     }
     case 'command-result': {
@@ -76,5 +82,5 @@ export function handleBridgeMessage(ws: ServerWebSocket<WsData>, data: string | 
 
 export function handleBridgeClose(ws: ServerWebSocket<WsData>): void {
   getBridgeHub().clearConnection();
-  console.log(`[bridge] extension disconnected: ${ws.data.connectionId}`);
+  log.info('extension disconnected', { connectionId: ws.data.connectionId });
 }

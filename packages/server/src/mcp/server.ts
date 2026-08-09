@@ -61,6 +61,9 @@ import { registerAppAgentTools } from './app-agent/index.js';
 import { registerMessagingTools, MESSAGING_TOOL_NAMES } from './messaging/index.js';
 import { registerSubAgentTools } from './sub-agent/index.js';
 import { SUB_AGENT_MCP_SERVER } from '../agents/profiles/sub-agent.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('MCP');
 
 /**
  * Core MCP servers (always active).
@@ -241,13 +244,13 @@ let legacyDeprecationWarned = false;
 function warnLegacyEra(serverName: McpServerName, clientLabel: string): void {
   if (legacyDeprecationWarned) return;
   legacyDeprecationWarned = true;
-  console.warn(
-    `[MCP] DEPRECATED protocol era: ${clientLabel} connected to "${serverName}" over the ` +
-      `stateful 2025-era leg instead of negotiating 2026-07-28. YAAR asks both providers to ` +
-      `negotiate up, so this means the client could not — a stale CLI, or a renamed opt-in ` +
-      `gate (Claude: MCP_SDK_GENERATION/MCP_PROTOCOL_NEGOTIATION, Codex: ` +
-      `features.mcp_2026_07_28). Tools still work; the fallback is why. See ` +
-      `docs/proposals/mcp_modern_only_proposal.md.`,
+  log.warn(
+    'DEPRECATED protocol era: client connected over the stateful 2025-era leg instead of ' +
+      'negotiating 2026-07-28. YAAR asks both providers to negotiate up, so this means the ' +
+      'client could not — a stale CLI, or a renamed opt-in gate (Claude: ' +
+      'MCP_SDK_GENERATION/MCP_PROTOCOL_NEGOTIATION, Codex: features.mcp_2026_07_28). Tools ' +
+      'still work; the fallback is why. See docs/proposals/mcp_modern_only_proposal.md.',
+    { client: clientLabel, server: serverName },
   );
 }
 
@@ -378,9 +381,7 @@ export async function initMcpServer(): Promise<void> {
   await probeBrowserAvailability();
 
   initialized = true;
-  console.log(
-    `[MCP] HTTP server initialized (${CORE_SERVERS.join(', ')})${skipAuth ? ' (auth disabled)' : ''}`,
-  );
+  log.info('HTTP server initialized', { servers: CORE_SERVERS.join(', '), authDisabled: skipAuth });
 }
 
 /**
@@ -403,7 +404,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
   if (!skipAuth) {
     const authHeader = req.headers.get('authorization');
     if (authHeader !== `Bearer ${mcpToken}`) {
-      console.log(`[MCP] Unauthorized request (invalid or missing token)`);
+      log.warn('unauthorized request (invalid or missing token)');
       return Response.json({ error: 'Unauthorized' }, { status: 401 });
     }
   }
@@ -530,7 +531,7 @@ export async function handleMcpRequest(req: Request, serverName: McpServerName):
           const key = `${serverName}:${newSessionId}`;
           mcpSessions.set(key, { server, transport, lastUsed: Date.now() });
           eraStats.legacySessionsCreated++;
-          console.log(`[MCP] New legacy-era session for ${serverName}: ${newSessionId}`);
+          log.info('new legacy-era session', { server: serverName, mcpSessionId: newSessionId });
         },
       });
 

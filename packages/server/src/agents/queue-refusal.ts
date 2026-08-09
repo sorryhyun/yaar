@@ -34,8 +34,14 @@ export interface EnqueueOrRejectOptions {
   maxQueueSize: number;
   /** The refusal's second sentence. See the header for why this is not shared. */
   why: string;
-  /** Logged on success, given the queued position. */
-  queuedLog(position: number): string;
+  /**
+   * Called with the queued position once the task is taken.
+   *
+   * The caller logs, rather than handing a pre-formatted string down here to be printed:
+   * a shared helper writing the line would stamp its own module name onto two different
+   * queues' events, which is exactly the drift `createLogger(component)` exists to stop.
+   */
+  onQueued(position: number): void;
 }
 
 /** Returns whether the task was taken. A `false` has already been reported to the client. */
@@ -53,7 +59,7 @@ export async function enqueueOrReject(opts: EnqueueOrRejectOptions): Promise<boo
   }
 
   const position = queue.enqueue();
-  console.log(opts.queuedLog(position));
+  opts.onQueued(position);
   await sendEvent({
     type: ServerEventType.MESSAGE_QUEUED,
     messageId: task.messageId,

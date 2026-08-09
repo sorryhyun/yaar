@@ -9,6 +9,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import type { ConnectionId } from '../session/broadcast-center.js';
 import type { SessionId } from '../session/types.js';
+import type { LogContext } from '../observability/log.js';
 
 /**
  * Principal tier of an agent — the identity that access control is keyed on.
@@ -114,6 +115,26 @@ export function getAgentRole(): AgentRole | undefined {
 export function getAccessPrincipal(): AccessPrincipal {
   const store = agentContext.getStore();
   return { role: store?.role, systemApp: store?.systemApp };
+}
+
+/**
+ * The ambient identity as the structured logger wants it. Wired into
+ * `setLogContextResolver` in lifecycle.ts.
+ *
+ * `sessionId` is emptied rather than passed through when it is the `'' as SessionId`
+ * placeholder `runWithAgentContext` falls back to — an empty id in a log line reads as
+ * "session unknown" spelled the confusing way.
+ */
+export function getLogContext(): LogContext | undefined {
+  const store = agentContext.getStore();
+  if (!store) return undefined;
+  return {
+    sessionId: store.sessionId || undefined,
+    monitorId: store.monitorId,
+    agentId: store.agentId,
+    windowId: store.windowId,
+    appId: store.appId,
+  };
 }
 
 /**
