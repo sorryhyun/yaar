@@ -1,7 +1,7 @@
-import { Show } from '@bundled/solid-js';
+import { createEffect, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { addCell, deleteCell, moveCell, updateCell } from '../state/cells';
-import { runningCell } from '../state/signals';
+import { flashCell, runningCell } from '../state/signals';
 import { runCell } from '../state/run';
 import { busy } from '../kernel/worker';
 import { renderMarkdown } from '../lib/markdown';
@@ -15,8 +15,17 @@ export function CellRow(cell: () => Cell, index: number) {
   const id = () => cell().id;
   const isCode = () => cell().type === 'code';
   const running = () => runningCell() === id();
+  const flashed = () => flashCell() === id();
+  let root: HTMLDivElement | undefined;
+  // An agent-driven run marks its cell; bring it into view so the user sees which.
+  createEffect(() => {
+    if (flashed() && root) root.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
   return html`
-    <div class=${() => 'lab-cell' + (running() ? ' lab-cell-running' : '')}>
+    <div
+      ref=${(el: HTMLDivElement) => (root = el)}
+      class=${() => 'lab-cell' + (running() ? ' lab-cell-running' : '') + (flashed() ? ' lab-cell-flash' : '')}
+    >
       <div class="lab-cell-gutter">
         <button
           class="lab-run"

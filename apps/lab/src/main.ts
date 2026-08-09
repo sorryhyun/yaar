@@ -15,6 +15,7 @@ import './styles/table.css';
 import './styles/json.css';
 import './styles/chart.css';
 import './styles/markdown.css';
+import './styles/agent.css';
 
 export default defineApp({
   id: 'lab',

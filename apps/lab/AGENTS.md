@@ -21,10 +21,11 @@ src/kernel/
   store-ops.ts         the five store operations behind the bridge
 
 src/state/
-  signals.ts           the signals everything else reads; uid()
+  signals.ts           the signals everything else reads; uid(); flashCellFor()
+  agent-runs.ts        the Agent runs log + which main view is showing
   persistence.ts       appStorage layout, autosave, open/new/delete, bootstrap
   cells.ts             every mutation of the open notebook's cells
-  run.ts               cell execution orchestration, lastRun, timeout setting
+  run.ts               cell execution orchestration, lastRun, timeout setting, RunOrigin
   starter.ts           the cells a new notebook opens with
 
 src/lib/               no app state, no DOM ownership; safe to call from anywhere
@@ -37,7 +38,7 @@ src/lib/               no app state, no DOM ownership; safe to call from anywher
   trim.ts              the on-disk output cap (see the truncation layers below)
 
 src/components/        App shell, Sidebar, CellRow, CellEditor, OutputView,
-                       ChartView, ImageView, JsonView, TableView,
+                       ChartView, ImageView, JsonView, TableView, AgentPanel,
                        editor-registry.ts (textarea map + edit-mode signals)
 
 src/protocol/          state.ts, run.ts, notebook.ts, export.ts, shape.ts
@@ -117,6 +118,38 @@ take different paths.
 There is no soft interrupt for a runaway `while (true)`. Timeout and Cancel both
 `worker.terminate()`, which is why both report that the scope was wiped. Do not try to make
 them preserve state.
+
+## Protocol runs must be visible
+
+The original bug: an agent called `runCode` over the protocol, got its result, and the
+window showed nothing — the user was looking at a notebook with no trace that anything had
+happened. Two things caused it, and both fixes must stay.
+
+1. **The kernel used to drop UI parts for agent runs** (`out.parts = msg.agent ? [] :
+   __labS.parts` in `source/run-loop.ts`). It now always sends them: `parts` cross the
+   worker boundary, not the protocol boundary, and `__labEncode` has already capped them.
+   The agent-facing `out.agent` summary is unchanged and is still what `runCode` returns.
+2. **`runCode` bypassed every UI signal.** `src/protocol/run.ts` now also calls
+   `logAgentRun`, and `state/run.ts` takes a `RunOrigin` so `runCell`/`runAll` know they
+   were called by an agent.
+
+The UI half is `state/agent-runs.ts` + `components/AgentPanel.ts`:
+
+- `mainView` is `'notebook' | 'agent'` — the log is a **sibling view**, full pane, switched
+  by the tabs in the toolbar. It is not a panel stacked under the cells (it was, briefly;
+  the user asked for tabs).
+- `runCode` logs with `focus: true`, which pulls the view over — it has no cell to render
+  into. `runCell`/`runAll` do not: their output lands in the cell, so they flash and scroll
+  the cell (`flashCellFor` + the `createEffect` in `CellRow`) and only badge the tab.
+- Entries render through `OutputView`, the same component a cell uses, which is the whole
+  reason a table looks like a table and a chart like a chart in there. Do not fork it.
+- Two caps: 50 entries, and every entry's payload goes through `trimOutput` — the layer
+  below. The rendered block is height-capped in CSS so one huge result scrolls instead of
+  stretching the pane.
+
+**`runCode`'s return value is UI-independent and must stay that way.** Agents parse
+`{ ok, logs, result, resultType, truncated, durationMs }`; anything added for the panel
+goes into `logAgentRun`, never into the returned object.
 
 ## Two truncation layers, do not confuse them
 
