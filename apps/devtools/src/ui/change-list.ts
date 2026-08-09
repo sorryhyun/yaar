@@ -4,10 +4,12 @@ import html from '@bundled/solid-js/html';
 import { formatClock } from '@bundled/yaar';
 import { fileChanges, selectedChangeId, type FileChange } from '../core';
 import { selectChange } from '../services';
+import { setMainView } from './panel-state';
 
 // The change-history list. Split out of changes-panel.ts so that file holds the
-// diff rendering and this one holds the row markup; both are still one component
-// tree, composed by ChangesPanel.
+// diff rendering and this one holds the row markup. They are no longer one
+// component tree: the list is a tab of the sidebar (see sidebar.ts) and the diff
+// fills the editor area, so picking a row here is what opens the diff there.
 
 const KIND_ICON: Record<FileChange['kind'], string> = {
   create: '➕',
@@ -43,7 +45,10 @@ export function ChangeList() {
           <div
             class=${() =>
               `change-item${isActive(change, index()) ? ' active' : ''} ${change.kind}`}
-            onClick=${() => selectChange(change.id)}
+            onClick=${() => {
+              selectChange(change.id);
+              setMainView('changes');
+            }}
           >
             <span class="change-kind">${KIND_ICON[change.kind]}</span>
             <span class="change-path y-text-xs y-truncate">

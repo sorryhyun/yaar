@@ -30,9 +30,20 @@
   border-bottom: 1px solid var(--yaar-border);
 }
 
-.toolbar .project-select {
-  flex: 1;
+/* The active project's name, where the project `<select>` used to be. Capped
+   rather than free-growing so a long name never pushes Compile off the bar. */
+.toolbar-project {
+  flex: 0 1 auto;
+  max-width: 240px;
   min-width: 0;
+  font-weight: 600;
+  padding-left: var(--yaar-sp-1);
+}
+
+/* Pushes Compile/Preview to the right so the project controls (select, Load,
+   Clone) read as one group and the build actions as another. */
+.toolbar-gap {
+  flex: 1;
 }
 
 /* ── Tab Bar ── */
@@ -88,14 +99,75 @@
 /* ── Main area ── */
 .main-area {
   display: grid;
-  grid-template-columns: 180px 1fr;
+  grid-template-columns: 200px 1fr;
   min-height: 0;
   overflow: hidden;
 }
 
+/* A change row carries a path, a +/- pair and a clock; 200px truncates all three.
+   The tree does not need the extra width, so the column widens only for the tab
+   that does. */
+.main-area.wide-sidebar {
+  grid-template-columns: 280px 1fr;
+}
+
+/* ── Sidebar (Files / Changes) ── */
+.sidebar-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--yaar-border);
+}
+
+.sidebar-tabs {
+  display: flex;
+  align-items: center;
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.sidebar-tab:hover {
+  color: var(--yaar-text);
+}
+
+.sidebar-tab.active {
+  color: var(--yaar-text);
+  border-bottom-color: var(--yaar-accent);
+}
+
+.sidebar-tab-action {
+  margin-left: auto;
+  padding: 2px var(--yaar-sp-2);
+  background: none;
+  border: none;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sidebar-tab-action:hover {
+  color: var(--yaar-text);
+}
+
 /* ── File tree ── */
 .file-tree {
-  border-right: 1px solid var(--yaar-border);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   padding: var(--yaar-sp-1) 0;
 }
@@ -322,22 +394,9 @@
   flex-direction: column;
 }
 
-/* A fixed height rather than a cap. The bottom area sizes to its content, and a
-   diff's content height is the whole diff — so a two-line change gave a two-line
-   panel that jumped taller on the next edit. The Changes tab is opened deliberately;
-   holding its geometry still is worth the space. */
-.diagnostics:has(.changes-panel) {
-  flex: none;
-  height: 45vh;
-  max-height: 45vh;
-}
-
-/* The panel's own Expand button, rather than a drag handle: the bottom area has no
-   resizer, and two heights cover the two things a reader does here (glance, read). */
-.diagnostics:has(.changes-panel.tall) {
-  height: 80vh;
-  max-height: 80vh;
-}
+/* The height overrides that used to sit here belonged to the Changes tab, which
+   needed a tall bottom panel to show a diff. The diff moved to the editor area, so
+   the panel is back to the 200px cap the two log views were always sized for. */
 
 .bottom-tabs {
   display: flex;
@@ -473,45 +532,34 @@
   word-break: break-all;
 }
 
-/* ── Changes Panel ── */
-.changes-panel {
+/* ── Change view (fills the editor area) ── */
+.change-view {
   display: flex;
   flex-direction: column;
-  flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
+/* Wraps rather than clips: the change view sits in whatever width the sidebar
+   leaves it, and a narrow window used to cut the Close button in half. */
 .changes-toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: var(--yaar-sp-1);
   padding: 3px var(--yaar-sp-2);
   background: var(--yaar-bg-surface);
   border-bottom: 1px solid var(--yaar-border);
+  flex-shrink: 0;
 }
 
 .changes-toolbar-gap {
   flex: 1;
 }
 
-.changes-body {
-  display: grid;
-  grid-template-columns: 260px 1fr;
-  flex: 1;
-  min-height: 0;
-}
-
-.changes-body.list-collapsed {
-  grid-template-columns: 0 1fr;
-}
-
-.changes-body.list-collapsed .changes-list {
-  display: none;
-}
-
 .changes-list {
+  flex: 1;
   overflow-y: auto;
-  border-right: 1px solid var(--yaar-border);
   min-height: 0;
 }
 
@@ -576,6 +624,7 @@
 .changes-detail {
   display: flex;
   flex-direction: column;
+  flex: 1;
   overflow: auto;
   min-width: 0;
   min-height: 0;
@@ -769,6 +818,66 @@
 .diff-output .d2h-ins .d2h-code-line-ctn ins {
   background: var(--dt-diff-ins-strong);
   text-decoration: none;
+}
+
+/* ── Load / Clone picker ── */
+.picker-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.picker-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  width: min(560px, 90vw);
+  max-height: 70vh;
+  min-height: 0;
+}
+
+.picker-filter {
+  width: 100%;
+}
+
+.picker-list {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+}
+
+.picker-empty {
+  padding: var(--yaar-sp-3);
+  text-align: center;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 5px var(--yaar-sp-2);
+  cursor: pointer;
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.picker-item:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+
+.picker-item.active {
+  background: var(--yaar-wash-accent);
+  box-shadow: inset 2px 0 0 var(--yaar-accent);
+}
+
+.picker-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-meta {
+  flex-shrink: 0;
 }
 
 /* ── Statusbar ── */

@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, invoke, del, errMsg, safeParseOr } from '@bundled/yaar';
+import { appStorage, invoke, list, del, errMsg, safeParseOr } from '@bundled/yaar';
 import type * as z from '@bundled/zod';
 import { ProjectAppJsonSchema } from '../schema';
 import {
@@ -90,6 +90,45 @@ export async function createProject(name: string): Promise<string> {
   await openProject(id);
   setStatusText(`Created project "${name}"`);
   return id;
+}
+
+export interface InstalledApp {
+  id: string;
+  name: string;
+  description?: string;
+  /** 'app' or 'system' — shown so a clone target that is part of the OS is obvious. */
+  kind?: string;
+  version?: string;
+}
+
+/**
+ * The installed apps, as clone targets for the toolbar's Clone button.
+ *
+ * `yaar://apps/` answers with `uri` and metadata, never source; the id is the last
+ * segment, and it is what `cloneApp` takes. Sorted by name because this list is
+ * read by a human picking one, not by a caller matching an id.
+ */
+export async function listInstalledApps(): Promise<InstalledApp[]> {
+  const items = await list<
+    { uri?: string; name?: string; description?: string; kind?: string; version?: string }[]
+  >('yaar://apps/');
+  const rows = Array.isArray(items) ? items : [];
+  return rows
+    .map((item) => {
+      const id = String(item.uri ?? '')
+        .replace(/\/$/, '')
+        .split('/')
+        .pop();
+      return {
+        id: id ?? '',
+        name: item.name ?? id ?? '',
+        description: item.description,
+        kind: item.kind,
+        version: item.version,
+      };
+    })
+    .filter((app) => app.id.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface CloneAppResult {

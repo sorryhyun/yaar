@@ -7,25 +7,26 @@ import 'diff2html/bundles/css/diff2html.min.css';
 import { fileChanges, type FileChange } from '../core';
 import { clearChanges, currentChange } from '../services';
 import { buildPatch, truncatePatch } from '../lib';
-import { ChangeList } from './change-list';
+import { changesMode, diffViewMode, setChangesMode, setDiffViewMode, setMainView } from './panel-state';
 
-// The Changes panel: every write, edit, copy and delete the IDE performs, with the
+// The Changes view: every write, edit, copy and delete the IDE performs, with the
 // actual diff. It replaces a one-line status message ("Saved src/foo.ts") that said
 // something happened without ever saying what.
+//
+// It fills the editor area rather than the bottom panel. A diff is read the way a
+// file is read — wide, and for minutes — so it takes the pane sized for that, and
+// the bottom panel goes back to being the short one for Problems and Console. The
+// list of changed files is a tab of the sidebar; this file holds only the diff.
 
 /**
  * How much of a patch renders before the reader has to ask for the rest.
  *
  * A whole-file create can run to thousands of lines; drawing it eagerly stalls the
- * panel and buries every other entry. The head of a diff is the part that gets
+ * view and buries every other entry. The head of a diff is the part that gets
  * read, so the cap keeps that and puts the tail behind a button.
  */
 const MAX_PATCH_LINES = 400;
 
-const [viewMode, setViewMode] = createSignal<'side-by-side' | 'unified'>('unified');
-const [panelMode, setPanelMode] = createSignal<'changes' | 'manual'>('changes');
-const [listCollapsed, setListCollapsed] = createSignal(false);
-const [tallPanel, setTallPanel] = createSignal(false);
 /** Which change the reader asked to see whole. An id, so a new selection re-caps. */
 const [showFullId, setShowFullId] = createSignal<string | null>(null);
 
@@ -38,20 +39,21 @@ const [manualHtml, setManualHtml] = createSignal('');
 function renderPatch(patch: string): string {
   return diff2Html(patch, {
     drawFileList: false,
-    outputFormat: viewMode() === 'side-by-side' ? 'side-by-side' : 'line-by-line',
+    outputFormat: diffViewMode() === 'side-by-side' ? 'side-by-side' : 'line-by-line',
     matching: 'lines',
     colorScheme: 'dark' as never,
   });
 }
 
 /**
- * Show an arbitrary before/after pair, outside the recorded history. The panel's
+ * Show an arbitrary before/after pair, outside the recorded history. The view's
  * only entry point for a diff no file operation produced.
  */
 export function showDiff(oldContent: string, newContent: string, name = 'file.ts'): void {
   setOldText(oldContent);
   setNewText(newContent);
-  setPanelMode('manual');
+  setChangesMode('manual');
+  setMainView('changes');
   setManualHtml(renderPatch(buildPatch(name, oldContent, newContent)));
 }
 
@@ -69,7 +71,7 @@ const KIND_LABEL: Record<FileChange['kind'], string> = {
  * The patch for the change on screen, already capped.
  *
  * A memo because it re-runs on selection, view mode and "show full" — diffing a
- * large file on every unrelated signal read is the one expensive thing this panel
+ * large file on every unrelated signal read is the one expensive thing this view
  * does.
  */
 const patchView = createMemo(() => {
@@ -166,50 +168,39 @@ function ManualCompare() {
   `;
 }
 
-export function ChangesPanel() {
+/** The diff pane. Rendered by Workspace in place of the editor. */
+export function ChangeView() {
   return html`
-    <div class=${() => `changes-panel${tallPanel() ? ' tall' : ''}`}>
+    <div class="change-view">
       <div class="changes-toolbar">
-        <button
-          class="y-btn y-btn-sm y-btn-ghost"
-          title="Collapse/expand the change list"
-          onClick=${() => setListCollapsed(!listCollapsed())}
-        >
-          ${() => (listCollapsed() ? '▸ List' : '▾ List')}
-        </button>
+        <span class="y-text-xs y-text-muted">Changes</span>
         <select
           class="y-select y-text-xs"
-          value=${viewMode}
+          value=${diffViewMode}
           onChange=${(e: Event) =>
-            setViewMode((e.target as HTMLSelectElement).value as 'side-by-side' | 'unified')}
+            setDiffViewMode((e.target as HTMLSelectElement).value as 'side-by-side' | 'unified')}
         >
           <option value="unified">Unified</option>
           <option value="side-by-side">Side by side</option>
         </select>
         <button
           class="y-btn y-btn-sm y-btn-ghost"
-          onClick=${() => setPanelMode(panelMode() === 'manual' ? 'changes' : 'manual')}
+          onClick=${() => setChangesMode(changesMode() === 'manual' ? 'changes' : 'manual')}
         >
-          ${() => (panelMode() === 'manual' ? 'Back to changes' : 'Compare text…')}
+          ${() => (changesMode() === 'manual' ? 'Back to changes' : 'Compare text…')}
         </button>
         <span class="changes-toolbar-gap"></span>
+        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => clearChanges()}>Clear</button>
         <button
           class="y-btn y-btn-sm y-btn-ghost"
-          title="Taller panel"
-          onClick=${() => setTallPanel(!tallPanel())}
+          title="Back to the editor"
+          onClick=${() => setMainView('editor')}
         >
-          ${() => (tallPanel() ? '⤓ Shrink' : '⤒ Expand')}
+          ✕ Close
         </button>
-        <button class="y-btn y-btn-sm y-btn-ghost" onClick=${() => clearChanges()}>Clear</button>
       </div>
-      <${Show}
-        when=${() => panelMode() === 'changes'}
-        fallback=${html`<${ManualCompare} />`}
-      >
-        <div class=${() => `changes-body${listCollapsed() ? ' list-collapsed' : ''}`}>
-          <${ChangeList} />
-          <${ChangeDetail} />
-        </div>
+      <${Show} when=${() => changesMode() === 'changes'} fallback=${html`<${ManualCompare} />`}>
+        <${ChangeDetail} />
       <//>
     </div>
   `;

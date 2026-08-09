@@ -3,6 +3,7 @@ import { createSignal, For, Show } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { files, openFilePath, activeProject, type FileEntry } from '../core';
 import { openFile } from '../services';
+import { setMainView } from './panel-state';
 
 function getFileIcon(path: string): string {
   if (path.endsWith('.ts') || path.endsWith('.tsx')) return '📄';
@@ -91,6 +92,9 @@ export function FileTree() {
         if (isDir) {
           toggleDir(path);
         } else {
+          // Opening a file has to reclaim the main pane from the diff view; the
+          // editor is only one of the two things that can be showing there.
+          setMainView('editor');
           openFile(path);
         }
       }}
