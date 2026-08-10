@@ -15,6 +15,21 @@ export interface ProjectMeta {
    * working in"). It now comes from the storage listing's own timestamps.
    */
   lastModified: number;
+  /**
+   * Where this project came from — `"new"` for a scaffold, `"clone:{appId}"` for a
+   * `cloneApp` sandbox — or `undefined` for one that predates the marker.
+   *
+   * Exists so cleanup can be safe. Without it `projectList` carried no signal for who
+   * created a project, so an agent could not tell its own throwaway clones from the
+   * user's work in progress, and the only responsible rule was "never sweep the list" —
+   * a standing prohibition rather than a solution. The pile only grew: 145 projects had
+   * accumulated by 2026-08-10, all of them clone debris, none of them distinguishable
+   * from a real project by anything better than a guess at `app.json`'s shape.
+   *
+   * `undefined` still means "do not touch": an unmarked project is one this app cannot
+   * account for, which is precisely the case for the user's own work.
+   */
+  origin?: string;
 }
 
 export interface FileEntry {
