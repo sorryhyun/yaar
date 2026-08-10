@@ -65,6 +65,24 @@ export const [consoleLogs, setConsoleLogs] = createSignal<ConsoleEntry[]>([]);
 
 // ── Feature: Preview Window ──
 export const [previewWindowId, setPreviewWindowId] = createSignal<string | null>(null);
+/**
+ * Which build the open preview is showing, against which build exists.
+ *
+ * `buildSerial` counts successful compiles; `previewBuildSerial` records the one the
+ * preview window was last mounted from. They are equal when the preview shows current
+ * code. They diverge only when a compile deliberately skipped the refresh
+ * (`compile({ refreshPreview: false })`, which is how in-app state survives a build) —
+ * and that divergence has to be *reported*, because a preview silently showing the
+ * previous build is the failure the unconditional remount existed to prevent: a
+ * screenshot taken to confirm a fix showed the code from before the fix and agreed.
+ */
+export const [buildSerial, setBuildSerial] = createSignal(0);
+export const [previewBuildSerial, setPreviewBuildSerial] = createSignal(0);
+
+/** True when a preview is open and rendering a build older than the last compile. */
+export function previewIsStale(): boolean {
+  return previewWindowId() !== null && previewBuildSerial() < buildSerial();
+}
 
 // ── Feature: File change history (the Changes panel) ──
 /**

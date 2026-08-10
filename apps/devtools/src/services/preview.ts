@@ -4,8 +4,12 @@ import * as z from '@bundled/zod';
 import { ProjectAppJsonSchema, type PermissionEntry } from '../schema';
 import {
   activeProject,
+  buildSerial,
+  previewBuildSerial,
+  previewIsStale,
   previewUrl,
   previewWindowId,
+  setPreviewBuildSerial,
   setPreviewWindowId,
   type ConsoleEntry,
 } from '../core';
@@ -142,7 +146,29 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   // A remount starts the app from zero, so every value in the previous snapshot
   // "changed" — a diff across it would be all noise and no signal.
   resetInspectBaseline();
+  // This window now shows the current build; nothing downstream needs to warn.
+  setPreviewBuildSerial(buildSerial());
   return { previewUrl: url, windowId };
+}
+
+/**
+ * The warning a stale preview owes every reader of it, or null when it is current.
+ *
+ * `compile({ refreshPreview: false })` buys state preservation by leaving the window
+ * on the previous build. That is only a safe trade while every window onto the
+ * preview says so — an unlabelled screenshot of last build's code is precisely the
+ * evidence that makes a wrong fix look confirmed.
+ */
+export function previewStaleNote(): string | null {
+  if (!previewIsStale()) return null;
+  const behind = buildSerial() - previewBuildSerial();
+  return (
+    `STALE PREVIEW: this window is showing a build ${behind} compile(s) old — ` +
+    'the source has been compiled since it was mounted, without a refresh ' +
+    '(compile({ refreshPreview: false })). Anything you read here describes the ' +
+    'older build. Run `preview` to remount on the current one, at the cost of ' +
+    'resetting in-app state.'
+  );
 }
 
 /**
@@ -367,6 +393,11 @@ export interface InspectResult extends InspectSnapshot {
     state: Record<string, { from: string; to: string }>;
     dom: boolean;
   };
+  /**
+   * Present only when the window is showing an older build than the last compile.
+   * Everything else in this snapshot then describes that older build.
+   */
+  previewStale?: string;
 }
 
 export interface InspectOptions {
@@ -557,7 +588,8 @@ export async function inspectPreview(opts: InspectOptions = {}): Promise<Inspect
   const snapshot = await captureSnapshot(wid, opts);
   const changed = lastInspect ? diffSnapshots(lastInspect, snapshot) : undefined;
   lastInspect = snapshot;
-  return { ...snapshot, ...(changed ? { changed } : {}) };
+  const stale = previewStaleNote();
+  return { ...snapshot, ...(changed ? { changed } : {}), ...(stale ? { previewStale: stale } : {}) };
 }
 
 /**

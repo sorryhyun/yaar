@@ -5,6 +5,7 @@ import {
   inspectPreview,
   openPreview,
   previewEvaluate,
+  previewStaleNote,
   queryPreviewState,
   readPreview,
 } from '../services';
@@ -19,7 +20,11 @@ export const previewCommands = {
     description:
       'Screenshot of the running preview. With `info: true`, also returns window ' +
       'geometry/size as a leading text block. Throws on capture failure with `reason`: ' +
-      "'taint' | 'zero-size' | 'serialize-error' | 'no-provider' | 'no-response' | undefined.",
+      "'taint' | 'zero-size' | 'serialize-error' | 'no-provider' | 'no-response' | undefined. " +
+      'A capture that succeeded while omitting content (an unreadable canvas, an image it ' +
+      'could not inline, or a composite that fell back to the largest canvas alone) leads ' +
+      'with a warning block naming what is missing — a blank region under such a warning ' +
+      'is not evidence the app drew nothing there.',
     params: {
       type: 'object',
       properties: {
@@ -47,9 +52,27 @@ export const previewCommands = {
         data: img.data,
         mimeType: img.mimeType,
       }));
-      return p.info === true
-        ? [{ type: 'text', text: JSON.stringify(info, null, 2) }, ...imageBlocks]
-        : imageBlocks;
+      // Two ways a screenshot can be true of nothing you care about: it pictures an
+      // older build, or the capture dropped part of the picture. Both lead, and both
+      // regardless of `info` — they are not extra detail, they are how to read the
+      // image below them.
+      const warnings: string[] = [];
+      const stale = previewStaleNote();
+      if (stale) warnings.push(stale);
+      const degraded = info.captureDegraded;
+      if (Array.isArray(degraded) && degraded.length > 0) {
+        warnings.push(
+          'INCOMPLETE CAPTURE: the screenshot succeeded but left content out:\n' +
+            degraded.map((n) => `- ${String(n)}`).join('\n') +
+            '\nA blank region here may be the capture, not the app. An app that paints ' +
+            'imperatively can supply its own image via defineApp({ onCapture }).',
+        );
+      }
+      return [
+        ...(warnings.length > 0 ? [{ type: 'text', text: warnings.join('\n\n') }] : []),
+        ...(p.info === true ? [{ type: 'text', text: JSON.stringify(info, null, 2) }] : []),
+        ...imageBlocks,
+      ];
     },
   }),
   previewEval: defineAppCommand({
