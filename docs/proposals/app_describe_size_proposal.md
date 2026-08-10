@@ -85,6 +85,20 @@ Two properties of the cliff make this worth a design rather than a shrug:
   bump can move it silently in either direction. YAAR cannot read the threshold; it can
   only stay conservatively below where it has been observed.
 
+> **Superseded on 2026-08-10 (issue #64).** The second bullet was wrong in its conclusion,
+> though right about the bracket. The threshold is **50,000 characters** —
+> `Math.min(tool.maxResultSizeChars, 50_000)`, which every unannotated MCP tool gets — and it
+> is **not** `MAX_MCP_OUTPUT_TOKENS`, which YAAR had already raised to 131072 with no effect
+> on it. A server can raise its own: `_meta["anthropic/maxResultSizeChars"]` on the tool's
+> `tools/list` entry, honored up to a 500,000 ceiling
+> ([docs](https://code.claude.com/docs/en/mcp#raise-the-limit-for-a-specific-tool)). YAAR
+> declares 150,000 on its content-bearing tools — see `packages/server/src/mcp/result-size.ts`
+> for why not 500,000 (a second, un-annotatable ~200,000-char budget across one message's tool
+> results makes anything above it moot). §6's "detecting or pinning the CLI's threshold" entry
+> goes with it. **Everything else in this document stands**: raising the cliff is not a licence
+> to stop staying under it, and Change 3's two-doors shape is still the right answer for a
+> payload YAAR composes itself.
+
 Two doors crossed it in one session: `describe` on the app (63.7 KB) and `list` on the
 window (79.9 KB — 62 resource-link rows, each carrying its full description).
 
@@ -287,9 +301,9 @@ of the per-command read is a new `command` param on the same tool.
 - **Changing the compact-JSON threshold.** `COMPACT_JSON_THRESHOLD`
   (`handlers/utils.ts`) already solved the indentation half of this problem and its
   rationale stands.
-- **Detecting or pinning the CLI's threshold.** It is undocumented in an unpinned CLI;
-  a conservative named budget with the observation recorded beside it is the honest
-  version.
+- ~~**Detecting or pinning the CLI's threshold.**~~ **Retracted** — see the note in §1. The
+  threshold is 50,000 chars and a server may declare its own; YAAR does, in
+  `packages/server/src/mcp/result-size.ts`.
 
 ## 7. Tests and exit criteria
 

@@ -346,6 +346,17 @@ verbs and no filesystem tools, is a dead end. The protocol is now its own resour
 `read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. So the
 index is *what `list` means*, not a degradation a byte budget switches on, and nothing is
 truncated behind a caller's back. Measured on studio-3d: describe 54.6 KB → 13.6 KB, index 10.7 KB.
+
+**The cliff itself has since been named and moved** (`mcp/result-size.ts`). It is 50,000
+*characters* for any unannotated MCP tool — not `MAX_MCP_OUTPUT_TOKENS`, which YAAR had already
+raised to 131072 and which governs image content and the warning, not the persist decision. A
+server raises its own by declaring `_meta["anthropic/maxResultSizeChars"]` on the `tools/list`
+entry, and YAAR declares 150,000 on the four content-bearing verbs and the three app-agent
+doors. Not the 500,000 the CLI ceiling allows: a second, un-annotatable ~200,000-char budget
+across one assistant message's tool results persists the largest anyway, so 150,000 is that
+maximum with room for a sibling call. Pinned over the wire by `tests/mcp-result-size.test.ts`.
+This raises the floor under the reads YAAR does not compose; it does **not** retire the
+two-doors design above, which is still how a payload YAAR *does* compose should be sized.
 `features/apps/describe.ts` emits command **names** for the verbs door and the full index for the
 app agent's `describe` **tool** — that caller holds no `read` verb, so a URI it cannot open would
 be the same dead end at one remove, and `describe({ command })` is its spelling of the

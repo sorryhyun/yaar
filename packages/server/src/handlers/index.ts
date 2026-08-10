@@ -23,6 +23,7 @@ import { registerSystemHandlers } from './system.js';
 import { registerHttpHandlers } from './http.js';
 import { registerMcpGatewayHandlers } from './mcp-gateway.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
+import { LARGE_RESULT_META } from '../mcp/result-size.js';
 import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
 
 export const VERB_TOOL_NAMES = [
@@ -136,6 +137,7 @@ export function registerVerbTools(server: McpServer): void {
       inputSchema: {
         uri: z.string().describe('yaar:// URI to describe'),
       },
+      _meta: LARGE_RESULT_META,
     },
     async ({ uri }) => exec(reg, 'describe', uri),
   );
@@ -186,6 +188,7 @@ export function registerVerbTools(server: McpServer): void {
               'reads normally apply. Only when the exact pixels matter.',
           ),
       },
+      _meta: LARGE_RESULT_META,
     },
     async ({ uri, lines, pattern, context, pdfText, pdfPages, rawImage }) =>
       exec(reg, 'read', uri, undefined, { lines, pattern, context, pdfText, pdfPages, rawImage }),
@@ -200,6 +203,7 @@ export function registerVerbTools(server: McpServer): void {
       inputSchema: {
         uri: z.string().describe('yaar:// URI to list children of'),
       },
+      _meta: LARGE_RESULT_META,
     },
     async ({ uri }) => exec(reg, 'list', uri),
   );
@@ -227,6 +231,7 @@ export function registerVerbTools(server: McpServer): void {
               'to run against this URI in order.',
           ),
       },
+      _meta: LARGE_RESULT_META,
     },
     async ({ uri, payload }) => exec(reg, 'invoke', uri, payload),
   );

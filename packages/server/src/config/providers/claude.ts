@@ -89,6 +89,14 @@ const PARENT_HARNESS_ENV_VARS = [
  * claude.ai MCP servers — none apply to YAAR's short-lived, app-scoped agents —
  * and raise the MCP output and tool-call ceilings.
  *
+ * `MAX_MCP_OUTPUT_TOKENS` is **not** the knob that keeps a large tool result inline, and was
+ * read as such for a long time. It governs image content and the over-size warning; the
+ * decision to write a text result to `tool-results/` and hand the model a 2 KB preview is a
+ * separate, character-counted threshold, and the only thing that moves it is the tool
+ * declaring `_meta["anthropic/maxResultSizeChars"]` on itself. That is
+ * `mcp/result-size.ts` — read it before raising this number in the hope of fixing a
+ * persisted result.
+ *
  * `MCP_TOOL_TIMEOUT` is the one that has to be raised rather than merely tuned: without
  * it the CLI aborts the HTTP request under each tool call at 60s, and YAAR's user-facing
  * waits are longer on purpose. Left at the default, a prompt the agent had already given
