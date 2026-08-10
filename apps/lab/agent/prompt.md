@@ -69,6 +69,11 @@ truth about size; do not infer the total from `rows.length`.
 
 ## Helpers available in every cell
 
+> These signatures are mirrored in `agent/SKILL.md`, which is what an app driving Lab
+> through `controls` receives from `describe('yaar://apps/lab')` — this prompt reaches
+> only Lab's own agent, and a controller with neither had to discover `http.text(url,
+> init)` by printing the function source (issue #66). **Edit both, or neither.**
+
 ### store — app and shared storage
 
 ```js
