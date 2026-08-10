@@ -22,6 +22,7 @@ import { join, resolve } from 'path';
 import { compileTypeScript } from '../compile.js';
 import { initCompiler } from '../config.js';
 import { extractProtocolFromDir } from '../protocol/extract-protocol-dir.js';
+import { explainImportFailure } from '../protocol/fold-schemas.js';
 
 setDefaultTimeout(60_000);
 
@@ -357,6 +358,40 @@ describe('a fold that cannot answer fails the build', () => {
     const errors = (result.errors ?? []).join('\n');
     expect(errors).toContain('commands.add.params');
     expect(errors).toContain('threw while being imported');
+  });
+
+  test('a module-scope solid-js/html template is named as the cause, not left as a stack', async () => {
+    // The failure this whole hint exists for: `html` compiles its template on
+    // import, the fold's DOM is a stub, and what the author used to get was
+    // eight lines of bundled Solid internals at a worker.mjs line number.
+    const result = await compileApp({
+      'src/main.ts': `${HEAD}import html from '@bundled/solid-js/html';
+        const view = html\`<div><span>hi</span></div>\`;
+        export default defineApp({
+          id: 'folder',
+          name: 'Folder',
+          commands: {
+            add: { description: 'Add', params: z.object({ t: z.string() }), run: () => 1 },
+          },
+          view: { mount: (el: HTMLElement) => el.appendChild(view as Node) },
+        });`,
+    });
+
+    expect(result.success).toBe(false);
+    const errors = (result.errors ?? []).join('\n');
+    expect(errors).toContain('commands.add.params');
+    expect(errors).toContain('@bundled/solid-js/html at module scope');
+    expect(errors).toContain('JSON Schema literal');
+    // The stack still ships, after the diagnosis — it is the evidence for it.
+    expect(errors).toContain('at createTemplate');
+  });
+
+  test('an unrelated import failure keeps the generic message', () => {
+    // The hint tests for Solid's own frame, so an app whose own module scope
+    // throws is not told to rewrite a template it never wrote.
+    expect(explainImportFailure('TypeError: missing.gone is not a function\n  at main.ts:3')).toBe(
+      null,
+    );
   });
 
   test('an app.register() app is refused before any schema is folded', async () => {

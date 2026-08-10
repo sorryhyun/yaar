@@ -44,6 +44,12 @@ export function appIdFromName(name: string, projectId: string): string {
  * JSON-Schema form leaves open — presence and unknown keys are validated, declared
  * *types* are not, so a `type: "string"` param accepts the number 12345 and stores
  * it. An app that starts from a validating schema never meets that.
+ *
+ * The two are only compatible because the `` html`` `` template lives inside `App()`.
+ * A Zod `params` makes the compiler import the app to read the schema back, in a
+ * worker with a stubbed DOM; a template evaluated at *module scope* builds a
+ * `<template>` element on import and dies there, taking the whole manifest with it.
+ * Hoisting the template out of the function would break every new project.
  */
 export function scaffoldMain(name: string, appId: string): string {
   // `\${...}` is a literal Solid interpolation in the generated file, not one here.

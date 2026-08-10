@@ -355,6 +355,40 @@ function asAscii(text: string): string {
   return text.replace(/[^\x20-\x7e\n]/g, '?');
 }
 
+/**
+ * The one import failure the stub DOM above makes inevitable, said in words.
+ *
+ * `html` from `@bundled/solid-js/html` compiles its template eagerly: the tagged
+ * template call does `document.createElement('template')` and assigns
+ * `.innerHTML`. Evaluated at module scope, that runs on *import* — so it happens
+ * during the fold, against `__yaarInert`, and dies as `TypeError: No default
+ * value` from inside Solid.
+ *
+ * Neither this layer nor `foldFailureMessage` above it knows why an import
+ * threw, so what the author saw was eight lines of bundled Solid internals at a
+ * line number in a generated, throwaway worker bundle, naming neither Zod, nor
+ * `solid-js/html`, nor the stub. Reconstructing the chain from that cost about
+ * three turns. Nothing else in the fold can name this, because by the time the
+ * error exists the only evidence left is the stack.
+ *
+ * `createTemplate` is Solid's own frame and the fold builds unminified precisely
+ * so it survives, which is why the test is that name and not the DOM call: an
+ * app whose *own* code calls `createElement` at module scope gets the generic
+ * message, correctly, since the advice below would not help it.
+ */
+const SOLID_HTML_TEMPLATE_HINT =
+  'This app evaluates an html`` template from @bundled/solid-js/html at module scope, ' +
+  'which builds a <template> element as soon as the module is imported. Reading a schema ' +
+  'off the running app means importing it here, where the DOM is a stub, so that throws ' +
+  'before the app can be read. Two ways out: declare `params` as a JSON Schema literal ' +
+  'instead of a Zod schema (nothing has to run, so this pass never happens), or move the ' +
+  'html`` call inside a function so it runs at mount rather than on import.';
+
+/** The hint for a worker error, or null when this is not that failure. */
+export function explainImportFailure(message: string): string | null {
+  return message.includes('at createTemplate') ? SOLID_HTML_TEMPLATE_HINT : null;
+}
+
 interface WorkerReply {
   ok: boolean;
   error?: string;
@@ -394,9 +428,15 @@ async function runInWorker(scriptPath: string, timeoutMs: number): Promise<Worke
       worker.addEventListener('error', (event: unknown) => {
         clearTimeout(timer);
         const message = (event as { message?: string })?.message;
+        // Cause first, evidence after: the stack is what the hint is derived
+        // from, so a reader who doubts the diagnosis can check it, but nobody
+        // has to read eight lines of Solid internals to get to the fix.
+        const hint = explainImportFailure(message ?? '');
         resolve({
           ok: false,
-          error: `the app threw while being imported: ${message || 'unknown error'}`,
+          error: hint
+            ? `the app threw while being imported. ${hint}\nThe error it threw:\n${message}`
+            : `the app threw while being imported: ${message || 'unknown error'}`,
         });
       });
     });

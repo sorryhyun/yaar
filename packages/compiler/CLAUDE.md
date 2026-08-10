@@ -151,6 +151,15 @@ binary. The `window` stub is load-bearing: `@bundled/yaar`'s barrel reads `windo
 module scope, so a compiled entry dies on import without it. `document` is stubbed with
 `getElementById → null`, which is what makes `defineApp`'s mount a no-op.
 
+That stub also makes one failure inevitable, so it is named rather than left as a stack:
+`createElement` returns an inert proxy, and `@bundled/solid-js/html` compiles its template
+eagerly, so an `` html`` `` evaluated at **module scope** throws on import — the author saw eight
+lines of bundled Solid internals at a line in a throwaway worker bundle, naming neither Zod nor
+Solid nor the stub. `explainImportFailure` tests for Solid's own `createTemplate` frame (which is
+why the fold builds unminified) and puts the cause and both fixes ahead of the stack. Keep it
+that narrow: an app whose *own* code calls `createElement` at module scope gets the generic
+message, because this advice would not help it.
+
 Three consumers, one artifact:
 
 - `dist/protocol.json` gets the folded JSON Schema.
