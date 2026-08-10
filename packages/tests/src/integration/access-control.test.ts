@@ -125,28 +125,45 @@ describe('requirePermission', () => {
     expect(requirePermission(readOnly, 'yaar://storage/x.txt', 'delete')?.status).toBe(403);
   });
 
-  // ── The flat spelling of app storage ──
+  // ── The two spellings of app storage ──
   //
-  // `yaar://storage/apps/{id}/…` names the same file as `yaar://apps/{id}/storage/…`.
-  // Permissions are written against the second, so the first is canonicalized before
-  // matching — otherwise `yaar://storage/` is prefix-matched straight onto every
-  // other app's storage, which thirteen bundled apps declare.
+  // `yaar://storage/apps/{id}/…` names the same file as `yaar://apps/{id}/storage/…`, and
+  // the first is the real one — on disk an app's storage is a plain subtree of the flat
+  // root. Both are canonicalized onto it before matching, so a grant means the same thing
+  // however it was written. `yaar://storage/` therefore covers app storage too, and what
+  // stops that being a hole is who may hold it: `discovery.ts` drops the grant from every
+  // non-bundled manifest (`coversForeignAppStorage`). A principal built by hand here has
+  // been through no manifest, so it stands for a bundled app.
 
   const broadStorage: Principal = { ...notes, permissions: ['yaar://storage/'] };
 
-  it("refuses another app's storage spelled through the flat tree", () => {
-    const denied = requirePermission(
-      broadStorage,
-      'yaar://storage/apps/vault/credentials.json',
-      'read',
-    );
-    expect(denied?.status).toBe(403);
+  it('admits app storage through the root grant, in either spelling', () => {
+    expect(
+      requirePermission(broadStorage, 'yaar://storage/apps/vault/credentials.json', 'read'),
+    ).toBeNull();
+    expect(
+      requirePermission(broadStorage, 'yaar://apps/vault/storage/credentials.json', 'read'),
+    ).toBeNull();
   });
 
   it('still admits the flat tree proper', () => {
     expect(requirePermission(broadStorage, 'yaar://storage/media/logo.png', 'read')).toBeNull();
-    // "apps" itself is a directory in the flat tree, not an app's storage.
+    // "apps" itself is a directory in the flat tree, and used to be the one thing under
+    // the namespace this grant could reach — listable, with every child refused.
     expect(requirePermission(broadStorage, 'yaar://storage/apps', 'list')).toBeNull();
+  });
+
+  it('does not let the app-registry prefix reach app storage', () => {
+    // `yaar://apps/` grants the registry (list installed apps, install one). It is not a
+    // storage grant, and before the canonicalization was flipped it silently was one:
+    // `yaar://apps/vault/storage/x` prefix-matched it directly.
+    const registry: Principal = { ...notes, permissions: ['yaar://apps/'] };
+    expect(requirePermission(registry, 'yaar://apps/vault/storage/x.json', 'read')?.status).toBe(
+      403,
+    );
+    expect(requirePermission(registry, 'yaar://storage/apps/vault/x.json', 'read')?.status).toBe(
+      403,
+    );
   });
 
   it('lets an app reach its own storage through the flat spelling', () => {

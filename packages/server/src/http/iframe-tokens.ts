@@ -35,7 +35,13 @@ import { isPreviewAppId, PREVIEW_APP_PREFIX } from '@yaar/shared';
 import type { PermissionEntry } from './access.js';
 // The matching rule lives in a leaf module precisely so this file can use it: `access.js`
 // imports *this* one at runtime, so importing the gate here would close a cycle.
-import { entryUri, entryVerbs, isUriAllowed } from './uri-match.js';
+import {
+  capForeignAppStorage,
+  coversForeignAppStorage,
+  entryUri,
+  entryVerbs,
+  isUriAllowed,
+} from './uri-match.js';
 // Static, and safe to be: `discovery.js` reaches back into `http/` only through
 // `import type { PermissionEntry } from '../../http/access.js'`, which erases. That
 // type-only edge is the whole reason there is no cycle here — see the note on it.
@@ -343,6 +349,15 @@ export async function previewPermissions(
     if (typeof entry !== 'string' && (typeof entry !== 'object' || entry === null)) continue;
     const uri = entryUri(entry as PermissionEntry);
     if (typeof uri !== 'string' || !uri) continue;
+    // The cap itself is applied at the mint (`generateAppIframeToken`), the one site every
+    // branch converges on. This is only the diagnostic: it can name the project file the
+    // grant came from, which is where the author has to go to change it.
+    if (coversForeignAppStorage(uri, appId ?? '')) {
+      log.debug('preview declares a grant over app storage — capping it to the shared tree', {
+        appId,
+        uri,
+      });
+    }
     const wanted = entryVerbs(entry as PermissionEntry).filter((v) => typeof v === 'string');
     const allowed = wanted.filter((verb) => isUriAllowed(uri, verb, ceiling));
     if (allowed.length === 0) {
@@ -376,6 +391,17 @@ export async function generateAppIframeToken(
   // devtools' own reach). See `previewPermissions`.
   let permissions =
     explicitPermissions ?? appMeta?.permissions ?? (await previewPermissions(appId)) ?? [];
+
+  // A preview never holds a grant over app storage, whichever of those three branches
+  // supplied the list. It is project code the user is still authoring, running under an
+  // id that owns no app storage of its own; devtools' `yaar://storage/` honestly covers
+  // `storage/apps/`, and devtools' subtree is where every *other* project's source lives.
+  // Its own document reaches it as a delegated window grant — one exact file, `read` only
+  // — which is the shape this must not be allowed to widen into a foothold. Capped rather
+  // than dropped, so a preview keeps the shared tree (`media/`) it can legitimately use.
+  if (appId && isPreviewAppId(appId)) {
+    permissions = capForeignAppStorage(permissions, appId).capped;
+  }
 
   // Auto-grant the app's own namespace (see SELF_GRANTS).
   if (appId) {

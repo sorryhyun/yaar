@@ -12,10 +12,12 @@
  *
  *  1. the spelling — a `yaar://storage/...` URI names the shared tree and a relative
  *     path still names the app's own, with no argument that could mean both;
- *  2. the gate — `permissionsAllow`, the same rule the iframe door asks, and in
- *     particular that a declared `yaar://storage/` is *not* a permission for
- *     `yaar://storage/apps/{other}/`. That prefix reads as if it covered every other
- *     app's private storage, and only `canonicalStorageUri` stops it from doing so.
+ *  2. the gate — `permissionsAllow`, the same rule the iframe door asks, including what
+ *     a declared `yaar://storage/` covers. It covers the whole tree, app storage
+ *     included: `storage/apps/{id}/` is a plain subtree of the root, and a prefix that
+ *     quietly excluded it was a prefix no reader could predict. What keeps that from
+ *     being a hole is `coversForeignAppStorage`, which decides who may *hold* the grant
+ *     — pinned below, and applied to every non-bundled manifest by `discovery.ts`.
  */
 import { describe, it, expect } from 'bun:test';
 import {
@@ -24,7 +26,12 @@ import {
   sharedStorageUri,
   authorizeSharedStorage,
 } from '../mcp/app-agent/shared-storage.js';
-import { permissionsAllow, type PermissionEntry } from '../http/access.js';
+import {
+  capForeignAppStorage,
+  coversForeignAppStorage,
+  permissionsAllow,
+  type PermissionEntry,
+} from '../http/access.js';
 
 describe('naming the shared tree', () => {
   it('recognizes the URI spelling, root included', () => {
@@ -74,20 +81,111 @@ describe('the gate the door asks', () => {
     expect(permissionsAllow([], 'notes', 'yaar://storage/report.md', 'read')).toBe(false);
   });
 
-  it('never lets the full root reach another app’s private storage', () => {
-    // `yaar://storage/apps/{id}/…` and `yaar://apps/{id}/storage/…` are the same file, and
-    // only the second spelling is what a permission is written against. Without the
-    // rewrite this is plain prefix matching and `yaar://storage/` reads every app's
-    // credentials, databases, and project sources.
-    expect(permissionsAllow(FULL, 'github', 'yaar://storage/apps/vault/secrets.json', 'read')).toBe(
+  it('lets the full root reach app storage, in either spelling', () => {
+    // `yaar://storage/apps/{id}/…` and `yaar://apps/{id}/storage/…` are the same file, so
+    // the two must answer alike — a gate that admitted one and refused the other is the
+    // seam the file manager fell into: it could list `storage/apps` and open nothing
+    // under it. Who is allowed to *hold* this grant is the next test.
+    for (const uri of [
+      'yaar://storage/apps/vault/secrets.json',
+      'yaar://apps/vault/storage/secrets.json',
+      'yaar://storage/apps/github/x.json',
+      'yaar://apps/github/storage/x.json',
+    ]) {
+      expect(permissionsAllow(FULL, 'github', uri, 'read')).toBe(true);
+    }
+  });
+
+  it('is a grant only an app shipped with the repo may declare', () => {
+    // The containment `canonicalStorageUri` used to do by rewriting the URI. Stated over
+    // the whole class, so naming one app outright is refused too — the old rewrite only
+    // ever caught the broad prefix and let `yaar://storage/apps/vault/` straight through.
+    for (const entry of [
+      'yaar://storage/',
+      'yaar://storage/apps/',
+      'yaar://storage/apps/vault/',
+      'yaar://apps/vault/storage/',
+      'yaar://storage/apps/notes/../vault/',
+    ]) {
+      expect(coversForeignAppStorage(entry, 'notes')).toBe(true);
+    }
+
+    // Its own subtree in either dialect, a narrowed shared prefix, and the bare root
+    // listing (no trailing slash — it names the directory, not everything under it).
+    for (const entry of [
+      'yaar://apps/self/storage/',
+      'yaar://apps/notes/storage/',
+      'yaar://storage/apps/notes/',
+      'yaar://storage/media/',
+      'yaar://storage',
+      'yaar://windows/',
+    ]) {
+      expect(coversForeignAppStorage(entry, 'notes')).toBe(false);
+    }
+  });
+
+  it('reads the verbs off an object entry when deciding it is foreign', () => {
+    // `{ uri, verbs }` is the other spelling of an entry, and a check that only handled
+    // the string form would let the object form carry the same grant through unnarrowed.
+    expect(coversForeignAppStorage({ uri: 'yaar://storage/', verbs: ['read'] }, 'notes')).toBe(
+      true,
+    );
+    expect(coversForeignAppStorage({ uri: 'yaar://apps/self/storage/' }, 'notes')).toBe(false);
+  });
+
+  it('caps that grant for an installed app instead of taking it away', () => {
+    // `yaar://storage/` is one entry doing two jobs. An installed app never gets the
+    // reach into `apps/`; it keeps the shared tree, which is what it always actually had.
+    // Dropping the entry outright would have been a silent regression for every installed
+    // app that writes to `media/`.
+    const { capped, changed } = capForeignAppStorage(
+      ['yaar://storage/', 'yaar://windows/'],
+      'github',
+    );
+    expect(changed).toBe(1);
+    expect(capped).toEqual([{ uri: 'yaar://storage/', sharedOnly: true }, 'yaar://windows/']);
+
+    for (const uri of ['yaar://storage/media/shot.png', 'yaar://storage/reports/x.md']) {
+      expect(permissionsAllow(capped, 'github', uri, 'read')).toBe(true);
+    }
+    // Its own storage is still its own, in either spelling.
+    expect(permissionsAllow(capped, 'github', 'yaar://storage/apps/github/x.json', 'read')).toBe(
+      true,
+    );
+    expect(permissionsAllow(capped, 'github', 'yaar://apps/github/storage/x.json', 'read')).toBe(
+      true,
+    );
+    // And the reach the cap exists to remove is gone, in either spelling.
+    expect(permissionsAllow(capped, 'github', 'yaar://storage/apps/vault/x.json', 'read')).toBe(
       false,
     );
-    expect(permissionsAllow(FULL, 'github', 'yaar://apps/vault/storage/secrets.json', 'read')).toBe(
+    expect(permissionsAllow(capped, 'github', 'yaar://apps/vault/storage/x.json', 'read')).toBe(
       false,
     );
-    // Including its own — a relative `storage/x` is how an app reads that tree, and it
-    // needs no permission, so the flat spelling gaining one would be a second door.
-    expect(permissionsAllow(FULL, 'github', 'yaar://storage/apps/github/x.json', 'read')).toBe(
+  });
+
+  it('leaves nothing behind when the entry named only foreign storage', () => {
+    // The mark is a ceiling, so an entry with nothing under the ceiling grants nothing.
+    const { capped } = capForeignAppStorage(['yaar://storage/apps/vault/'], 'github');
+    expect(permissionsAllow(capped, 'github', 'yaar://storage/apps/vault/x.json', 'read')).toBe(
+      false,
+    );
+  });
+
+  it('lets a grant over the app’s whole namespace still reach its storage', () => {
+    // `yaar://apps/self/` covers `storage/`, `db/` and `agents/` alike in the dialect it
+    // is written in — but the storage half canonicalizes into the flat tree, out of that
+    // prefix entirely. `grantEntries` carries the flat spelling alongside it.
+    const whole = ['yaar://apps/self/'];
+    expect(permissionsAllow(whole, 'notes', 'yaar://apps/notes/storage/todo.json', 'read')).toBe(
+      true,
+    );
+    expect(permissionsAllow(whole, 'notes', 'yaar://storage/apps/notes/todo.json', 'read')).toBe(
+      true,
+    );
+    expect(permissionsAllow(whole, 'notes', 'yaar://apps/notes/db/main', 'read')).toBe(true);
+    // Still one app's namespace, not the registry's.
+    expect(permissionsAllow(whole, 'notes', 'yaar://apps/vault/storage/x.json', 'read')).toBe(
       false,
     );
   });

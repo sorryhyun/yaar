@@ -67,8 +67,10 @@ ${describeDesignTokens()}
  * Rendered from the app's own declared entries rather than written as prose, so the
  * verbs an agent is told it has are the verbs the door will actually admit: a grant of
  * `{ verbs: ["read", "list"] }` says look-but-don't-write here exactly as it does at
- * the gate. The cross-app exclusion is stated because the prefix reads as if it covered
- * `yaar://storage/apps/…` and does not (`canonicalStorageUri`).
+ * the gate. It used to carry a paragraph warning that the prefix did *not* cover
+ * `yaar://storage/apps/…` however broad it looked — true then, and a sentence no prompt
+ * should ever have needed. The tree is now what its name says, so the warning is gone
+ * along with the exclusion that made it necessary.
  */
 function buildSharedStorageSection(grants: { uri: string; verbs: readonly string[] }[]): string {
   const lines = grants.map(({ uri, verbs }) => `- \`${uri}\` — ${verbs.join(', ')}`).join('\n');
@@ -84,8 +86,7 @@ ${lines}
 - **Delete:** \`command(command: "storage:delete", params: { path: "yaar://storage/reports/out.md" })\` (needs \`delete\`)
 
 Paths a shared listing returns are already in these coordinates: prefix \`yaar://storage/\` and
-read one back directly. Another app's private storage (\`yaar://storage/apps/{id}/…\`) is not
-covered by any of the above, however broad the prefix looks. Files the user or the monitor put
+read one back directly. Files the user or the monitor put
 at the shared root live here, not in your app storage — so when a file you were told about is
 "not found" under \`storage/{path}\`, look for it at \`yaar://storage/{path}\` before reporting it
 missing.`;
