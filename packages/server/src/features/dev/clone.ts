@@ -33,6 +33,20 @@ interface CloneResult {
  */
 const strictUtf8 = new TextDecoder('utf-8', { fatal: true });
 
+/**
+ * Filesystem droppings that are not source, by exact basename.
+ *
+ * `.gitignore` keeps these out of the repo, which is why they went unnoticed here:
+ * the clone walks the app directory on disk, not the index, so a `src/.DS_Store` the
+ * Finder left behind was cloned into every sandbox and then read back by `deploy`.
+ * Harmless bytes, but they are noise in the file list an agent reads to understand
+ * the app, and each clone was one more chance to write one back into a real app.
+ *
+ * An exact-name denylist rather than "skip dotfiles": a leading dot is how plenty of
+ * meaningful config is spelled, and dropping a file an app needs is the worse failure.
+ */
+const JUNK_BASENAMES = new Set(['.DS_Store', 'Thumbs.db', 'desktop.ini']);
+
 async function readCloneFile(absPath: string, relPath: string): Promise<CloneFile> {
   const bytes = await Bun.file(absPath).arrayBuffer();
   try {
@@ -92,6 +106,7 @@ export async function cloneAppSource(appId: string): Promise<CloneResult> {
     const entries = await readdir(srcDir, { recursive: true, withFileTypes: true });
     for (const entry of entries) {
       if (entry.isDirectory()) continue;
+      if (JUNK_BASENAMES.has(entry.name)) continue;
       const relPath = entry.parentPath
         ? join(entry.parentPath, entry.name).slice(srcDir.length + 1)
         : entry.name;

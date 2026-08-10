@@ -10,6 +10,9 @@ import { cpSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, watch } f
 import { PROJECT_ROOT, FRONTEND_DIST } from '../config.js';
 import { errMessage } from '../lib/errors.js';
 import { registerDevReloadHandler } from './server.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('dev');
 
 const FRONTEND_ROOT = join(PROJECT_ROOT, 'packages', 'frontend');
 const FRONTEND_SRC = join(FRONTEND_ROOT, 'src');
@@ -27,7 +30,7 @@ export async function initDevBundler(): Promise<void> {
   await scheduleBuild();
   startWatcher();
   registerDevReloadHandler(handleDevReload);
-  console.log('[dev] Frontend bundler ready with live reload');
+  log.info('frontend bundler ready with live reload');
 }
 
 /** SSE endpoint handler — keeps connection open, sends reload events. */
@@ -120,9 +123,7 @@ async function buildFrontend(retry: boolean): Promise<void> {
     await buildFrontendInner();
   } catch (err) {
     const msg = errMessage(err);
-    console.error(
-      `[dev] Frontend rebuild failed — server stays up${retry ? ', retrying…' : ''}\n${msg}`,
-    );
+    log.error('frontend rebuild failed — server stays up', { retrying: retry, err: msg });
     rmSync(FRONTEND_STAGE, { recursive: true, force: true });
     if (retry) {
       // Let a half-written file land, then rebuild.
@@ -179,7 +180,7 @@ async function buildFrontendInner(): Promise<void> {
   renameSync(stageDir, FRONTEND_DIST);
 
   const elapsed = (performance.now() - start).toFixed(0);
-  console.log(`[dev] Frontend built in ${elapsed}ms (${total} files)`);
+  log.info('frontend built', { elapsedMs: elapsed, files: total });
 
   // Notify SSE clients to reload
   notifyClients();

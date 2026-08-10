@@ -1,0 +1,27 @@
+/* ── GitHub outage banner ──────────────────────────────────────────── */
+/* Only in the DOM while GitHub is degraded, so it can afford to be loud. */
+
+.github-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--yaar-sp-3);
+  padding: var(--yaar-sp-3) var(--yaar-sp-4);
+  background: color-mix(in srgb, var(--yaar-error) 12%, var(--yaar-bg-surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--yaar-error) 40%, transparent);
+  font-size: 13px;
+}
+
+.github-banner-icon {
+  color: var(--yaar-error);
+  line-height: 1.4;
+}
+
+.github-banner-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.github-banner-detail {
+  margin-top: var(--yaar-sp-1);
+  font-size: 12px;
+}

@@ -18,6 +18,8 @@ import {
   setStaticProtocol,
   previewWindowId,
   setPreviewWindowId,
+  buildSerial,
+  setBuildSerial,
 } from '../core';
 import { projectPath, relativizeProjectPaths } from '../lib/paths';
 import { parseDiagnostics } from '../lib/parse-diagnostics';
@@ -47,6 +49,9 @@ export async function compile(): Promise<void> {
         setPreviewUrl(result.previewUrl ?? null);
         setConsoleLogs([]);
         setStatusText('Compilation successful');
+        // A new build exists. Whether the open preview is showing it is a separate
+        // fact, recorded by openPreview — see previewIsStale.
+        setBuildSerial(buildSerial() + 1);
       });
     } else {
       // The dev server reports bundler errors with host-absolute paths

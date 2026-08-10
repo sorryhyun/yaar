@@ -1,7 +1,7 @@
 export {};
 import { For, Show, createMemo } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import './styles.css';
+import './styles/index';
 import type { SearchMatch } from './types';
 import { state, setState } from './store';
 import {

@@ -8,6 +8,9 @@
 import { existsSync } from 'fs';
 import { join, extname } from 'path';
 import { FRONTEND_DIST, IS_BUNDLED_EXE, MIME_TYPES } from '../../config.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('static');
 
 // ── Embedded asset serving (bundled exe) ─────────────────────────────
 
@@ -30,7 +33,7 @@ function getEmbeddedAssets(): Map<string, string> {
     }
   }
 
-  console.log(`[static] Loaded ${embeddedAssets.size} embedded frontend assets`);
+  log.info('loaded embedded frontend assets', { assets: embeddedAssets.size });
   return embeddedAssets;
 }
 

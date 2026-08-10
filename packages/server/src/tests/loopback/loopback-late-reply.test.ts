@@ -106,13 +106,16 @@ describe('S7 — the emitter says a late reply out loud', () => {
 
     // But it is not lost. This log line is the difference between "the app is broken" and
     // "something between us is holding the answer", and only one of those is true.
-    const late = warnings.find((w) => w.includes('Late reply'));
+    const late = warnings.find((w) => w.includes('late reply'));
     expect(late).toBeDefined();
     expect(late!).toContain(requestId);
     expect(late!).toContain(WINDOW);
     expect(late!).toContain('command');
-    // The number is the finding, so the line has to carry one.
-    expect(late!).toMatch(/arrived after \d+ms, \d+ms past its 30ms deadline/);
+    // The number is the finding, so the line has to carry one. Structured fields now, so
+    // the latency and the overdue amount are named rather than embedded in a sentence.
+    expect(late!).toMatch(/latencyMs=\d+/);
+    expect(late!).toMatch(/overdueMs=\d+/);
+    expect(late!).toContain('timeoutMs=30');
   });
 
   it('a reply nobody asked for is unknown — a different fault, and it says a different thing', () => {
@@ -124,7 +127,7 @@ describe('S7 — the emitter says a late reply out loud', () => {
     expect(unknown!).toContain('req-never-issued');
     // Not "late": nothing was ever waiting, so there is no latency to report and no app to
     // exonerate. Reporting this as a late reply would invent a request that never existed.
-    expect(warnings.some((w) => w.includes('Late reply'))).toBe(false);
+    expect(warnings.some((w) => w.includes('late reply'))).toBe(false);
   });
 
   it('remembers an expired request for the grace window, and forgets it after', async () => {
@@ -156,14 +159,14 @@ describe('S7 — the emitter says a late reply out loud', () => {
     // The old one is gone: its reply is now a stranger, not a straggler.
     actionEmitter.resolveAppProtocolResponse(staleId, reply);
     expect(warnings.some((w) => w.includes('unknown request') && w.includes(staleId))).toBe(true);
-    expect(warnings.some((w) => w.includes('Late reply') && w.includes(staleId))).toBe(false);
+    expect(warnings.some((w) => w.includes('late reply') && w.includes(staleId))).toBe(false);
 
     // The recent one is still remembered, so a reply that is merely late still gets named as
     // late. Both halves matter: a map that forgot everything at once would pass the check
     // above and lose every real diagnosis.
     warnings = [];
     actionEmitter.resolveAppProtocolResponse(freshId, { kind: 'query', data: 'late' });
-    expect(warnings.some((w) => w.includes('Late reply') && w.includes(freshId))).toBe(true);
+    expect(warnings.some((w) => w.includes('late reply') && w.includes(freshId))).toBe(true);
   });
 });
 
@@ -222,10 +225,11 @@ describe('S7 — a late reply on a live socket is logged, and costs the connecti
     // The one piece of evidence that the app is *not* broken. Without it, this session looks
     // identical to a session where the iframe never answered at all — which is exactly the
     // ambiguity that made the original deadlock take so long to find.
-    const late = warnings.find((w) => w.includes('Late reply'));
+    const late = warnings.find((w) => w.includes('late reply'));
     expect(late).toBeDefined();
     expect(late!).toContain(windowKey);
-    expect(late!).toMatch(/past its 60ms deadline/);
+    expect(late!).toContain('timeoutMs=60');
+    expect(late!).toMatch(/overdueMs=\d+/);
 
     // And the socket is fine. A reply for a request nobody is waiting for must not throw out
     // of `routeMessage`, or the dead request takes the whole connection with it.

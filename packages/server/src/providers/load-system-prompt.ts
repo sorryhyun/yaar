@@ -6,6 +6,9 @@
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 import { getConfigDir } from '../config.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('SystemPrompt');
 
 const CUSTOM_PROMPT_FILE = 'system-prompt.txt';
 
@@ -19,7 +22,7 @@ export function loadCustomSystemPrompt(): string | null {
     try {
       const content = readFileSync(path, 'utf-8').trim();
       if (content) {
-        console.log(`[SystemPrompt] Using custom prompt from ${path}`);
+        log.info('using custom prompt', { path });
         cached = content;
         return cached;
       }

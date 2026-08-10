@@ -1,0 +1,133 @@
+/* ── App card ────────────────────────────────────────────────────────────── */
+
+.app-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 76px;
+  padding: 12px 14px;
+}
+
+.app-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--yaar-text);
+  /* Never truncate the name — wrap instead. */
+  white-space: normal;
+  overflow-wrap: anywhere;
+  line-height: 1.3;
+}
+
+.app-subtitle {
+  font-size: 12px;
+  line-height: 1.4;
+  /* Show up to two lines of description before clamping. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* Actions are two side-by-side columns: badge column, then button column. */
+.app-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  /* Span the card's full height so the badge can centre against it. */
+  align-self: stretch;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.action-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.action-group .y-btn {
+  width: 100%;
+  white-space: nowrap;
+}
+
+/* Installed badge — icon only in its own fixed-width, vertically centred column. */
+.installed-badge {
+  flex-shrink: 0;
+  width: 22px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: default;
+  padding: 0;
+}
+
+/* Push-to-marketplace button ("Publish" / "Publish update") — accent outline */
+.publish-btn {
+  font-size: 13px;
+}
+
+/* Pull-from-marketplace button ("Install update") — warning outline (y-btn-warning).
+   It shares a column with Publish / Publish update but moves bytes in the opposite
+   direction, so it must not read as another shade of the same action. Yellow is the
+   "this machine is behind" colour, matching y-badge-warning. */
+.install-update-btn {
+  font-size: 13px;
+}
+
+/* Official badge — a small accent pill next to the title marking YAAR-authored
+   apps. Subtle: it annotates the name, matching the dark theme. */
+.official-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--yaar-sp-1);
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  line-height: 1.4;
+  color: var(--yaar-accent);
+  background: color-mix(in srgb, var(--yaar-accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--yaar-accent) 45%, transparent);
+  border-radius: var(--yaar-radius-full);
+  vertical-align: middle;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* Publisher badge — marks apps the signed-in user published. Deliberately
+   quiet: it annotates the name, it is not an action. */
+.publisher-badge {
+  margin-left: var(--yaar-sp-1);
+  font-size: var(--yaar-text-sm);
+  line-height: 1;
+  opacity: 0.75;
+  cursor: default;
+  vertical-align: baseline;
+}
+
+/* Uninstall button — muted danger style */
+.uninstall-btn {
+  background: transparent !important;
+  font-size: 13px;
+}
+
+.uninstall-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--yaar-error) 12%, transparent) !important;
+}
+
+.uninstall-btn:disabled {
+  opacity: 0.4;
+}

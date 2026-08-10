@@ -1,0 +1,145 @@
+/* ── Diagnostics / Bottom Panel ── */
+.diagnostics {
+  border-top: 1px solid var(--yaar-border);
+  max-height: 200px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The height overrides that used to sit here belonged to the Changes tab, which
+   needed a tall bottom panel to show a diff. The diff moved to the editor area, so
+   the panel is back to the 200px cap the two log views were always sized for. */
+
+.bottom-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.bottom-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.bottom-tab:hover {
+  color: var(--yaar-text);
+}
+
+.bottom-tab.active {
+  color: var(--yaar-text);
+  border-bottom-color: var(--yaar-accent);
+}
+
+.bottom-tab-action {
+  margin-left: auto;
+  padding: 2px var(--yaar-sp-2);
+  background: none;
+  border: none;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.bottom-tab-action:hover {
+  color: var(--yaar-text);
+}
+
+.diagnostics-count {
+  font-size: 10px;
+  padding: 1px 5px;
+}
+
+.diagnostics-list,
+.console-list {
+  overflow-y: auto;
+  flex: 1;
+}
+
+.diagnostics-empty {
+  padding: var(--yaar-sp-2);
+  text-align: center;
+}
+
+.diagnostics-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--yaar-sp-1);
+  padding: 3px var(--yaar-sp-2);
+  cursor: pointer;
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.diagnostics-item:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+
+.diagnostics-item.error {
+  color: var(--yaar-error);
+}
+
+.diagnostics-item.warning {
+  color: var(--yaar-warning);
+}
+
+.diag-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.diag-location {
+  flex-shrink: 0;
+  opacity: 0.7;
+  font-family: monospace;
+}
+
+.diag-message {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Console entries ── */
+.console-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--yaar-sp-1);
+  padding: 2px var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.console-entry.warn {
+  color: var(--yaar-warning);
+}
+
+.console-entry.error {
+  color: var(--yaar-error);
+}
+
+.console-level {
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.console-time {
+  flex-shrink: 0;
+  opacity: 0.5;
+  font-family: monospace;
+}
+
+.console-args {
+  flex: 1;
+  min-width: 0;
+  font-family: monospace;
+  white-space: pre-wrap;
+  word-break: break-all;
+}

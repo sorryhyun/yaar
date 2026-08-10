@@ -12,6 +12,9 @@ import { homedir } from 'os';
 import { openUrl } from '../../lib/open-url.js';
 import type { AppServer } from './app-server.js';
 import type { AccountLoginCompletedNotification } from './types.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('codex:auth');
 
 function authJsonPath(): string {
   return join(homedir(), '.codex', 'auth.json');
@@ -32,10 +35,10 @@ export function invalidateCodexAuth(): void {
   try {
     if (existsSync(path)) {
       unlinkSync(path);
-      console.log('[codex] Removed stale auth.json');
+      log.info('removed stale auth.json');
     }
   } catch (err) {
-    console.error('[codex] Failed to remove auth.json:', err);
+    log.error('failed to remove auth.json', { err });
   }
 }
 
@@ -55,34 +58,37 @@ export async function checkAndLoginCodex(appServer: AppServer): Promise<boolean>
     // Already authenticated
     if (status.account !== null) {
       const label = status.account.type === 'chatgpt' ? status.account.email : status.account.type;
-      console.log(`[codex] Authenticated as ${label}`);
+      // The account label (an email, for a ChatGPT login) is kept: this is the user's own
+      // machine and their own account, and "authenticated" without saying *as whom* is the
+      // one thing that makes a wrong-account session impossible to diagnose.
+      log.info('authenticated', { account: label });
       return true;
     }
 
     // No auth required (e.g. OPENAI_API_KEY set externally)
     if (!status.requiresOpenaiAuth) {
-      console.log('[codex] No OpenAI auth required');
+      log.info('no OpenAI auth required');
       return true;
     }
 
     // Need to login — initiate ChatGPT OAuth
-    console.log('[codex] No authentication found, initiating browser login...');
+    log.info('no authentication found, initiating browser login');
     const loginResponse = await appServer.accountLoginStart({ type: 'chatgpt' });
 
     if (loginResponse.type !== 'chatgpt') {
-      console.error('[codex] Unexpected login response type:', loginResponse.type);
+      log.error('unexpected login response type', { type: loginResponse.type });
       return false;
     }
 
     const { authUrl, loginId } = loginResponse;
-    console.log(`[codex] Opening browser for OAuth login...`);
+    log.info('opening browser for OAuth login');
     openUrl(authUrl);
 
     // Wait for the login completion notification
     const result = await new Promise<boolean>((resolve) => {
       const timeout = setTimeout(() => {
         appServer.off('notification', handler);
-        console.error('[codex] Login timed out after 120s');
+        log.error('login timed out', { waitedMs: 120_000 });
         // Cancel the pending login
         appServer.accountLoginCancel({ loginId }).catch(() => {});
         resolve(false);
@@ -96,9 +102,9 @@ export async function checkAndLoginCodex(appServer: AppServer): Promise<boolean>
             clearTimeout(timeout);
             appServer.off('notification', handler);
             if (notification.success) {
-              console.log('[codex] Browser login successful');
+              log.info('browser login successful');
             } else {
-              console.error('[codex] Browser login failed:', notification.error);
+              log.error('browser login failed', { err: notification.error });
             }
             resolve(notification.success);
           }
@@ -110,7 +116,7 @@ export async function checkAndLoginCodex(appServer: AppServer): Promise<boolean>
 
     return result;
   } catch (err) {
-    console.error('[codex] Auth check failed:', err);
+    log.error('auth check failed', { err });
     return false;
   }
 }

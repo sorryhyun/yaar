@@ -21,7 +21,7 @@ import {
   killAppAgent,
   closeAppWindows,
 } from './data';
-import './styles.css';
+import './styles/index';
 
 // ── Helpers ──────────────────────────────────────────────────
 

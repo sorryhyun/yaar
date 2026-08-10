@@ -24,6 +24,9 @@ import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { PROJECT_ROOT, getStorageDir } from '../../config.js';
 import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('app-git');
 
 /**
  * Shadow repos live under the storage dir (git-ignored), never inside the app dir.
@@ -202,13 +205,13 @@ export async function snapshotApp(appId: string, message: string): Promise<void>
     if (!dir) return; // app dir not created yet (first deploy) — nothing to snapshot
     const initErr = await ensureRepo(appId, dir);
     if (initErr) {
-      console.warn(`[app-git] ${initErr.error}`);
+      log.warn(initErr.error, { appId });
       return;
     }
     const err = await commitAll(appId, dir, message);
-    if (err) console.warn(`[app-git] ${err.error}`);
+    if (err) log.warn(err.error, { appId });
   } catch (err) {
-    console.warn(`[app-git] snapshot of "${appId}" failed:`, err);
+    log.warn('snapshot failed', { appId, err });
   }
 }
 

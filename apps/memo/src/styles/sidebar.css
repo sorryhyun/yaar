@@ -1,0 +1,66 @@
+/* Layout */
+.memo-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* Sidebar */
+.memo-sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--yaar-border);
+  overflow: hidden;
+}
+
+.memo-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--yaar-sp-1) 0;
+}
+
+.memo-list-item {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition:
+    background 0.15s,
+    border-color 0.15s;
+  position: relative;
+}
+
+.memo-list-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.memo-list-item.active {
+  background: var(--yaar-wash-accent);
+  border-left-color: var(--yaar-accent);
+}
+
+.memo-list-item-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--yaar-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 2px;
+}
+
+.memo-list-item-preview {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memo-list-item-date {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  opacity: 0.6;
+  margin-top: 2px;
+}

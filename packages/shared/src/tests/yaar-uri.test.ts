@@ -141,6 +141,61 @@ describe('resolveContentUri', () => {
     // take the no-slash `/dist/index.html` branch; it falls through to the generic app route.
     expect(resolveContentUri('yaar://apps/anima/')).toBe('/api/apps/anima/');
   });
+
+  // A launch parameter must not reach the path-splitting logic. `extractAppId` strips it
+  // and this sibling did not, which is one bug wearing two faces — both reproduced below.
+  describe('launch parameters', () => {
+    it('serves the entry point and re-appends the query, for a bare app id', () => {
+      // Was `/api/apps/anima?file=faq.md/dist/index.html`: no `/` in the path at all, so
+      // the entire query became the appId. Hard failure — "Not found" at window create.
+      expect(resolveContentUri('yaar://apps/anima?file=faq.md')).toBe(
+        '/api/apps/anima/dist/index.html?file=faq.md',
+      );
+    });
+
+    it('is not fooled by a slash inside a nested yaar:// value', () => {
+      // The worse face: the first `/` sat inside `yaar://`, so `rest` was defined but
+      // matched no branch, and the fall-through returned the query-bearing path with no
+      // `/dist/index.html` at all. Not a 404 and not the app — the window reported
+      // renderConfirmed: true and then never registered.
+      expect(resolveContentUri('yaar://apps/anima?file=yaar://storage/files/x.md')).toBe(
+        '/api/apps/anima/dist/index.html?file=yaar://storage/files/x.md',
+      );
+    });
+
+    it('carries a fragment the same way', () => {
+      expect(resolveContentUri('yaar://apps/anima#top')).toBe(
+        '/api/apps/anima/dist/index.html#top',
+      );
+    });
+
+    it('appends the query after a subpath rather than inside it', () => {
+      expect(resolveContentUri('yaar://apps/anima/dist/index.html?v=2')).toBe(
+        '/api/apps/anima/dist/index.html?v=2',
+      );
+    });
+
+    it('appends the query after an app-scoped storage path', () => {
+      expect(resolveContentUri('yaar://apps/anima/storage/generated/x.png?v=2')).toBe(
+        '/api/storage/apps/anima/generated/x.png?v=2',
+      );
+    });
+
+    it('agrees with extractAppId on which part is the id', () => {
+      const uri = 'yaar://apps/anima?file=yaar://storage/files/x.md';
+      // The pair that drifted. Both now read the same URI the same way.
+      expect(extractAppId(uri)).toBe('anima');
+      expect(resolveContentUri(uri)).toContain('/api/apps/anima/');
+    });
+
+    it('leaves a `?` in a shared-storage path alone — there it is a filename character', () => {
+      // Scoped to `apps` on purpose: `storage` has no launch-parameter concept, and
+      // splitting here would make a real (if oddly named) file unreachable.
+      expect(resolveContentUri('yaar://storage/notes/what?.md')).toBe(
+        '/api/storage/notes/what?.md',
+      );
+    });
+  });
 });
 
 describe('extractAppId', () => {

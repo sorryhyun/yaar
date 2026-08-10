@@ -31,6 +31,9 @@ import { join, dirname } from 'path';
 import { mkdir, readFile, writeFile, unlink, chmod } from 'fs/promises';
 import { getConfigDir, getPort, GOOGLE_CLIENT_ID, MARKET_URL } from '../../config.js';
 import { openUrl } from '../../lib/open-url.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('market');
 
 const AUTH_ENDPOINT = 'https://accounts.google.com/o/oauth2/v2/auth';
 
@@ -281,7 +284,7 @@ export async function completeLogin(code: string, state: string): Promise<{ emai
     expiresAt: Date.now() + (body.expires_in ?? 3600) * 1000,
   };
 
-  console.log(`[market] Signed in to Google as ${claims.email}`);
+  log.info('signed in to Google', { account: claims.email });
   return { email: claims.email };
 }
 

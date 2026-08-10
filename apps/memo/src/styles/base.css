@@ -1,0 +1,11 @@
+/* ===== Memo App Styles ===== */
+
+.memo-app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  font-family: var(--yaar-font);
+  overflow: hidden;
+}

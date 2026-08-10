@@ -76,6 +76,9 @@ import { WindowEventCoordinator } from './window-event-coordinator.js';
 import type { PoolContext, PoolStats, Task } from './pool-types.js';
 
 import { MAX_QUEUE_SIZE } from '../config.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('ContextPool');
 
 // Re-export Task for barrel compatibility
 export type { Task } from './pool-types.js';
@@ -156,9 +159,7 @@ export class ContextPool implements PoolContext {
     this.contextTape = new ContextTape();
     if (restoredContext.length > 0) {
       this.contextTape.restore(restoredContext);
-      console.log(
-        `[ContextPool] Restored ${restoredContext.length} context messages from previous session`,
-      );
+      log.info('restored context from previous session', { messages: restoredContext.length });
     }
     this.agentPool = new AgentPool(
       sessionId,
@@ -186,7 +187,7 @@ export class ContextPool implements PoolContext {
     // any other task.
     this.windowEvents = new WindowEventCoordinator(this, this.appProcessor, (task) => {
       this.handleTask(task).catch((err) => {
-        console.error('[ContextPool] Error delivering window notification:', err);
+        log.error('window notification delivery failed', { err });
       });
     });
   }
@@ -230,7 +231,7 @@ export class ContextPool implements PoolContext {
       monitorId,
       content: `<agent-hook type="response" appId="${appId}" windowId="${windowId}">${responseText || '(no response text)'}</agent-hook>`,
     }).catch((err) => {
-      console.error('[ContextPool] Hook response delivery failed:', err);
+      log.error('hook response delivery failed', { err });
     });
   }
 
@@ -300,7 +301,7 @@ export class ContextPool implements PoolContext {
     }
 
     this.prewarmMonitorAgent(agent, monitorId);
-    console.log(`[ContextPool] Created monitor agent for ${monitorId}`);
+    log.info('created monitor agent', { monitorId });
     return true;
   }
 
@@ -342,7 +343,7 @@ export class ContextPool implements PoolContext {
     const removed = await this.agentPool.removeMonitorAgent(monitorId);
     this.appProcessor.clearMonitor(monitorId);
     if (removed) {
-      console.log(`[ContextPool] Removed monitor agent for ${monitorId}`);
+      log.info('removed monitor agent', { monitorId });
     }
   }
 
@@ -355,7 +356,7 @@ export class ContextPool implements PoolContext {
     if (!this.agentPool.hasMonitorAgent(monitorId)) return false;
     const queue = this.getOrCreateMonitorQueue(monitorId);
     queue.suspend();
-    console.log(`[ContextPool] Suspended monitor ${monitorId}`);
+    log.info('suspended monitor', { monitorId });
     return true;
   }
 
@@ -363,10 +364,10 @@ export class ContextPool implements PoolContext {
     const queue = this.monitorQueues.get(monitorId);
     if (!queue || !queue.isSuspended()) return false;
     queue.resume();
-    console.log(`[ContextPool] Resumed monitor ${monitorId}`);
+    log.info('resumed monitor', { monitorId });
     this.monitorProcessor
       .processMonitorQueue(monitorId)
-      .catch((err) => console.error(`[ContextPool] Error draining queue after resume:`, err));
+      .catch((err) => log.error('queue drain after resume failed', { monitorId, err }));
     return true;
   }
 
@@ -391,7 +392,7 @@ export class ContextPool implements PoolContext {
    */
   async handleSessionTask(task: Task): Promise<void> {
     if (this.resetting) {
-      console.log(`[ContextPool] Rejecting session task ${task.messageId} — pool is resetting`);
+      log.info('rejecting session task — pool is resetting', { messageId: task.messageId });
       this.reportDropped([task], 'the agent pool is resetting');
       return;
     }
@@ -468,7 +469,7 @@ export class ContextPool implements PoolContext {
    */
   async handleTask(task: Task): Promise<void> {
     if (this.resetting) {
-      console.log(`[ContextPool] Rejecting task ${task.messageId} — pool is resetting`);
+      log.info('rejecting task — pool is resetting', { messageId: task.messageId });
       this.reportDropped([task], 'the agent pool is resetting');
       return;
     }
@@ -588,9 +589,9 @@ export class ContextPool implements PoolContext {
           ? this.windowState.getMonitorForWindow(interaction.windowId)
           : undefined);
       if (!monitorId) {
-        console.warn(
-          `[ContextPool] Dropping "${interaction.type}" interaction — no monitor could be resolved for it.`,
-        );
+        log.warn('dropping interaction — no monitor could be resolved for it', {
+          type: interaction.type,
+        });
         continue;
       }
       this.timelineFor(monitorId).pushUser(interaction);
@@ -661,7 +662,7 @@ export class ContextPool implements PoolContext {
     try {
       await this.agentPool.interruptAll();
     } catch (err) {
-      console.error('[ContextPool] Teardown: interruptAll failed:', err);
+      log.error('teardown: interruptAll failed', { err });
     }
 
     // 4. Wait for all in-flight task functions to return (with timeout)
@@ -671,7 +672,7 @@ export class ContextPool implements PoolContext {
         new Promise<void>((resolve) => setTimeout(resolve, 30_000)),
       ]);
     } catch (err) {
-      console.error('[ContextPool] Teardown: awaitInflight failed:', err);
+      log.error('teardown: awaitInflight failed', { err });
     }
 
     // 5. Dispose agents. "No in-flight references" holds for every tier `inflightCount`
@@ -682,7 +683,7 @@ export class ContextPool implements PoolContext {
     try {
       await this.agentPool.cleanup();
     } catch (err) {
-      console.error('[ContextPool] Teardown: agentPool.cleanup failed:', err);
+      log.error('teardown: agentPool.cleanup failed', { err });
     }
 
     // 6. Close all tracked windows on the frontend (skip during reset — frontend preserves windows)
@@ -729,7 +730,7 @@ export class ContextPool implements PoolContext {
     try {
       await getWarmPool().resetCodexProviders();
     } catch (err) {
-      console.error('[ContextPool] Reset: resetCodexProviders failed:', err);
+      log.error('reset: resetCodexProviders failed', { err });
     }
 
     // Clear saved thread IDs so we don't resume old sessions
@@ -761,17 +762,15 @@ export class ContextPool implements PoolContext {
           }
         } else {
           await provider.dispose();
-          console.warn(`[ContextPool] Reset: failed to recreate agent for ${monitorId}`);
+          log.warn('reset: failed to recreate agent', { monitorId });
         }
       } else {
-        console.warn(`[ContextPool] Reset: no provider available for ${monitorId}`);
+        log.warn('reset: no provider available', { monitorId });
       }
     }
 
     this.resetting = false;
-    console.log(
-      `[ContextPool] Reset complete: recreated ${activeMonitorIds.length} monitor agent(s), cleared all state`,
-    );
+    log.info('reset complete, all state cleared', { monitorAgents: activeMonitorIds.length });
   }
 
   async cleanup(): Promise<void> {

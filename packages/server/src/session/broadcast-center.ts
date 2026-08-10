@@ -12,6 +12,9 @@ import type { ServerEvent } from '@yaar/shared';
 import type { SessionId } from './types.js';
 import { type YaarWebSocket, WS_OPEN } from './types.js';
 import { genId } from '../lib/ids.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('BroadcastCenter');
 
 export type ConnectionId = string;
 
@@ -37,7 +40,7 @@ export class BroadcastCenter {
    */
   subscribe(connectionId: ConnectionId, ws: YaarWebSocket, sessionId: SessionId): void {
     this.connections.set(connectionId, { ws, sessionId });
-    console.log(`[BroadcastCenter] Connection subscribed: ${connectionId} (session: ${sessionId})`);
+    log.info('connection subscribed', { connectionId, sessionId });
   }
 
   /**
@@ -45,7 +48,7 @@ export class BroadcastCenter {
    */
   unsubscribe(connectionId: ConnectionId): void {
     this.connections.delete(connectionId);
-    console.log(`[BroadcastCenter] Connection unsubscribed: ${connectionId}`);
+    log.info('connection unsubscribed', { connectionId });
   }
 
   /**
@@ -63,9 +66,7 @@ export class BroadcastCenter {
       const changed = entry.monitorId !== monitorId;
       entry.monitorId = monitorId;
       if (changed) {
-        console.log(
-          `[BroadcastCenter] Connection ${connectionId} subscribed to monitor ${monitorId}`,
-        );
+        log.info('connection subscribed to monitor', { connectionId, monitorId });
       }
     }
   }
@@ -86,9 +87,7 @@ export class BroadcastCenter {
     for (const [connectionId, entry] of this.connections) {
       if (entry.sessionId === sessionId && entry.monitorId === monitorId) {
         entry.monitorId = undefined;
-        console.log(
-          `[BroadcastCenter] Connection ${connectionId} detached from removed monitor ${monitorId}`,
-        );
+        log.info('connection detached from removed monitor', { connectionId, monitorId });
       }
     }
   }
@@ -108,7 +107,7 @@ export class BroadcastCenter {
   publishToConnection(event: ServerEvent, connectionId: ConnectionId): boolean {
     const entry = this.connections.get(connectionId);
     if (!entry || entry.ws.readyState !== WS_OPEN) {
-      console.warn(`[BroadcastCenter] Connection not available: ${connectionId}`);
+      log.warn('connection not available', { connectionId });
       return false;
     }
 
@@ -116,7 +115,7 @@ export class BroadcastCenter {
       entry.ws.send(JSON.stringify(event));
       return true;
     } catch (err) {
-      console.error(`[BroadcastCenter] Failed to send event to ${connectionId}:`, err);
+      log.error('failed to send event to connection', { connectionId, err });
       return false;
     }
   }
@@ -134,7 +133,7 @@ export class BroadcastCenter {
           entry.ws.send(data);
           count++;
         } catch (err) {
-          console.error(`[BroadcastCenter] Failed to send session event:`, err);
+          log.error('failed to send session event', { sessionId, err });
         }
       }
     }
@@ -158,7 +157,7 @@ export class BroadcastCenter {
           entry.ws.send(data);
           count++;
         } catch (err) {
-          console.error(`[BroadcastCenter] Failed to send monitor event:`, err);
+          log.error('failed to send monitor event', { sessionId, monitorId, err });
         }
       }
     }
@@ -178,7 +177,7 @@ export class BroadcastCenter {
           entry.ws.send(data);
           count++;
         } catch (err) {
-          console.error(`[BroadcastCenter] Failed to broadcast:`, err);
+          log.error('failed to broadcast', { err });
         }
       }
     }

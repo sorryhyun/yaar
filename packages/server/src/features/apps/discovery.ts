@@ -13,9 +13,15 @@ import { buildYaarUri } from '@yaar/shared';
 // this edge erases at compile time. Making it a value import would make it real, and
 // the symptom is an undefined binding at module init, not a build error.
 import type { PermissionEntry } from '../../http/access.js';
+// The value import goes to the leaf, not to `access.ts` — see the note above, and
+// `uri-match.ts`'s header for why this rule lives there.
+import { capForeignAppStorage } from '../../http/uri-match.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 import { withoutPersonaCommands } from './persona-commands.js';
 import { readAppGrant, type AppGrant } from '../../storage/app-grants.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('apps');
 
 const ICON_IMAGE_EXTENSIONS = ['.png', '.webp', '.jpg', '.jpeg', '.gif', '.svg'];
 
@@ -45,6 +51,36 @@ function parsePermissions(raw: unknown[]): PermissionEntry[] {
     }
   }
   return result;
+}
+
+/**
+ * Cap every grant reaching into another app's private storage, unless the app ships with
+ * the repo.
+ *
+ * The storage root is one tree: `storage/apps/{id}/` is a plain subtree of it, so a
+ * declared `yaar://storage/` honestly covers every app's credentials, databases and
+ * project sources. That used to be prevented by canonicalizing the flat spelling away at
+ * the gate, which left the prefix meaning something no reader could predict and stopped
+ * only the broad form — `yaar://storage/apps/vault/`, named outright, was always granted
+ * in full. The rule belongs here instead: it is about *who may ask*, and at this layer we
+ * know whether the manifest shipped with YAAR or arrived from the market.
+ *
+ * Bundled apps are taken at their word — the file manager's whole job is the whole tree.
+ * For anything installed the grant is capped rather than removed (`capForeignAppStorage`),
+ * so the app keeps the shared tree it has always had and loses only the reach into `apps/`
+ * it never actually had. Same shape as the `controls` guard below, and the same reason.
+ */
+function narrowForeignStorage(
+  permissions: PermissionEntry[],
+  appId: string,
+  source: AppSource,
+): PermissionEntry[] {
+  if (source === 'bundled') return permissions;
+  const { capped, changed } = capForeignAppStorage(permissions, appId);
+  if (changed > 0) {
+    log.debug('capped cross-app storage grants to the shared tree', { appId, capped: changed });
+  }
+  return capped;
 }
 
 /**
@@ -224,7 +260,7 @@ export interface AppInfo {
   createShortcut?: boolean;
   run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/dist/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
-  protocol?: Pick<AppManifest, 'state' | 'commands' | 'keybindings'>; // From protocol.json — implies appProtocol support
+  protocol?: Pick<AppManifest, 'state' | 'commands' | 'keybindings' | '$defs'>; // From protocol.json — implies appProtocol support
   fileAssociations?: FileAssociation[];
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
@@ -261,7 +297,7 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   let createShortcut: boolean | undefined;
   let run: string | undefined;
   let kind: AppKind = 'app';
-  let protocol: Pick<AppManifest, 'state' | 'commands' | 'keybindings'> | undefined;
+  let protocol: Pick<AppManifest, 'state' | 'commands' | 'keybindings' | '$defs'> | undefined;
   let fileAssociations: FileAssociation[] | undefined;
   let variant: WindowVariantType | undefined;
   let dockEdge: DockEdgeType | undefined;
@@ -292,7 +328,9 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     if (meta.windowStyle && typeof meta.windowStyle === 'object') windowStyle = meta.windowStyle;
     if (typeof meta.defaultWidth === 'number') defaultWidth = meta.defaultWidth;
     if (typeof meta.defaultHeight === 'number') defaultHeight = meta.defaultHeight;
-    if (Array.isArray(meta.permissions)) permissions = parsePermissions(meta.permissions);
+    if (Array.isArray(meta.permissions)) {
+      permissions = narrowForeignStorage(parsePermissions(meta.permissions), appId, source);
+    }
     if (typeof meta.agentType === 'string') agentType = meta.agentType;
     if (Array.isArray(meta.controls)) controls = parseControls(meta.controls);
     if (Array.isArray(meta.bundles)) {
@@ -486,7 +524,15 @@ export async function getAppMeta(appId: string): Promise<{
       result.windowStyle = meta.windowStyle;
     if (typeof meta.defaultWidth === 'number') result.defaultWidth = meta.defaultWidth;
     if (typeof meta.defaultHeight === 'number') result.defaultHeight = meta.defaultHeight;
-    if (Array.isArray(meta.permissions)) result.permissions = parsePermissions(meta.permissions);
+    // This is the list that reaches the iframe token, so the narrowing has to happen
+    // here too — `readAppInfo` above only feeds listings.
+    if (Array.isArray(meta.permissions)) {
+      result.permissions = narrowForeignStorage(
+        parsePermissions(meta.permissions),
+        appId,
+        resolveAppSource(appId) ?? 'user',
+      );
+    }
     // Gated SDKs — carried onto the iframe token so the HTTP doors those SDKs open
     // can check the declaration at runtime, not just at compile time (see access.ts).
     if (Array.isArray(meta.bundles)) {
@@ -517,9 +563,10 @@ export async function getAppMeta(appId: string): Promise<{
     // Say so once, at the one place manifests are read, rather than leaving the author
     // to discover it when a spawn fails much later.
     if (usesRetiredPersonasKey(meta)) {
-      console.warn(
-        `[apps] "${appId}" declares "personas", which is no longer read — rename it to ` +
-          '"subagents" in app.json. It cannot spawn sub-agents until then.',
+      log.warn(
+        'app declares "personas", which is no longer read — rename it to "subagents" in ' +
+          'app.json. It cannot spawn sub-agents until then.',
+        { appId },
       );
     }
     const granted = applyGrant(source, source === 'bundled' ? null : await readAppGrant(appId), {
@@ -692,11 +739,12 @@ async function loadAgentDoc(appId: string, kind: AgentDocKind): Promise<string |
     // and this runs once per app agent profile — which is built once and cached.
     const retiredDoc = await loadAppDoc(appId, spec.retired);
     if (retiredDoc !== null) {
-      console.warn(
-        `[apps] "${appId}" has a root ${spec.retired} and no ${path}. ${spec.retired} is the ` +
-          'coding-agent doc and is no longer read as the app agent’s prompt — if this app ' +
-          `meant it as one, copy it to ${path}. If it is notes for whoever edits the app, ` +
+      log.warn(
+        'app has a retired root agent doc and nothing at the new path. The retired file is ' +
+          'the coding-agent doc and is no longer read as the app agent’s prompt — if this app ' +
+          'meant it as one, copy it to the new path. If it is notes for whoever edits the app, ' +
           'nothing to do.',
+        { appId, retired: spec.retired, path },
       );
     }
     return null;
@@ -705,9 +753,10 @@ async function loadAgentDoc(appId: string, kind: AgentDocKind): Promise<string |
   if (!spec.legacy) return null;
   const legacyDoc = await loadAppDoc(appId, spec.legacy);
   if (legacyDoc !== null) {
-    console.warn(
-      `[apps] "${appId}" still keeps its agent doc at ${spec.legacy}. Move it to ${path} — the ` +
-        'old location is read for now, but the app root no longer owns that name.',
+    log.warn(
+      'app still keeps its agent doc at the legacy path — the old location is read for now, ' +
+        'but the app root no longer owns that name',
+      { appId, legacy: spec.legacy, path },
     );
   }
   return legacyDoc;

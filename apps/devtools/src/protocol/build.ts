@@ -12,6 +12,7 @@ import {
   typecheck,
   deploy,
   openPreview,
+  previewStaleNote,
   getStaticManifest,
   getRuntimeManifest,
   diffManifestNames,
@@ -23,8 +24,9 @@ export const buildCommands = {
       'Type check and compile the active project; refreshes the preview window if one is ' +
       'open. `built` reflects the bundle, `status` reflects type checking too — they can ' +
       'differ, and the `compileStatus` state key reports the same combined verdict. ' +
-      'Refreshing the preview remounts the iframe, so in-app state resets to a cold start. ' +
-      'Slow: pass timeoutMs (e.g. 60000).',
+      'Refreshing the preview remounts the iframe, so in-app state resets to a cold start; ' +
+      'pass `refreshPreview: false` to keep that state and leave the window on the old ' +
+      'build. Slow: pass timeoutMs (e.g. 60000).',
     params: {
       type: 'object',
       properties: {
@@ -34,6 +36,16 @@ export const buildCommands = {
             'Build without type checking first. Faster, but ships blind — and typecheck is ' +
             "the only half that reads import paths, because Bun tree-shakes an unused bad " +
             'import away and reports a clean build. Leaves `compileStatus` at "unchecked".',
+        },
+        refreshPreview: {
+          type: 'boolean',
+          description:
+            'Whether to remount the open preview onto this build. Default true. Pass false ' +
+            'when the preview holds expensive state (a loaded fixture, a scrape, a ' +
+            'multi-step form) that a cold start would cost you more than the stale build ' +
+            'costs — the window then keeps running the previous build, and every preview ' +
+            'read says so until you run `preview`. Skips the manifest-drift check, which ' +
+            'needs a preview on the current build.',
         },
       },
     },
@@ -70,11 +82,20 @@ export const buildCommands = {
       // showing the previous one — so a screenshot taken to confirm a fix showed the
       // code from before the fix, and agreed with you. Re-opening remounts the iframe,
       // which resets app state: a new build is a new app.
+      //
+      // That remount is the whole cost of a build for an app whose state took several
+      // interactions to establish, so it is now declinable — but only because the
+      // silent half of the original failure is closed: with `refreshPreview: false`
+      // the window is *marked* stale (previewIsStale), and every preview read leads
+      // with that. A stale preview you know about is a tradeoff; the one you don't is
+      // the bug this comment was written for.
+      const wantRefresh = p.refreshPreview !== false;
       let previewRefreshed = false;
-      if (built && previewWindowId()) {
+      if (built && previewWindowId() && wantRefresh) {
         await openPreview();
         previewRefreshed = true;
       }
+      const previewStale = previewStaleNote();
 
       // Best-effort manifest drift check: with a freshly refreshed preview,
       // compare what the compiler extracted (what agents will see after
@@ -103,6 +124,7 @@ export const buildCommands = {
         built,
         previewUrl: previewUrl(),
         ...(previewRefreshed ? { previewRefreshed } : {}),
+        ...(previewStale ? { previewStale } : {}),
         ...(typeErrors > 0 ? { typeErrors } : {}),
         ...(!built && errors.length > 0 ? { errors } : {}),
         ...(diags.length > 0 ? { diagnostics: diags } : {}),

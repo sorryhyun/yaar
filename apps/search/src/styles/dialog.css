@@ -1,0 +1,41 @@
+/* ── Clone dialog ─────────────────────────────────────────────────────── */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+}
+.modal-card {
+  width: min(420px, calc(100vw - 32px));
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-lg);
+  padding: 14px;
+  box-shadow: var(--yaar-shadow);
+}
+.modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.modal-form {
+  display: grid;
+  gap: 10px;
+}
+.modal-label {
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+}
+.modal-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}

@@ -1,0 +1,71 @@
+/* ── Transcript section ─────────────────────────── */
+
+.transcript-section {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  overflow: hidden;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  /* Fills the remaining vertical space. min-height:0 lets the inner
+     transcript-body establish its own scroll region instead of forcing
+     the section to grow to its content height. */
+  min-height: 0;
+}
+
+.transcript-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--yaar-border);
+  background: rgba(255, 255, 255, 0.02);
+  flex-shrink: 0;
+}
+
+.transcript-title {
+  font-size: 10px;
+}
+
+.msg-count {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+}
+
+.transcript-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--yaar-sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* This is a bounded-height flex column, so its children inherit the flex
+   default `flex-shrink: 1` and would shrink proportionally to fit — with a
+   long transcript that collapses every turn to a 2-4px sliver. The usual
+   `min-height: auto` floor does NOT save us here because .msg-card sets
+   `overflow: hidden`, which resolves the automatic minimum size to 0.
+   Pin the children at their natural content height and let the body scroll. */
+.transcript-body > * {
+  flex-shrink: 0;
+}
+
+.transcript-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+}
+
+.transcript-raw {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.55;
+}

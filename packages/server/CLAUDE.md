@@ -61,11 +61,13 @@ client can only answer over a socket the server is holding is a deadlock waiting
 - `YAAR_REMOTE_TOKEN` - Adopt this remote token instead of minting one, so a launcher can build the `#remote=<token>` URL before the server starts (`scripts/dev/start.sh` does this for `make claude`). Under 32 chars it is ignored with a warning — remote mode hands the token to every device that can reach the server. See `http/auth.ts`.
 - `YAAR_STORAGE` / `YAAR_CONFIG` / `YAAR_SESSION_LOGS` - Override storage/config/session-log directory paths. All three are pinned to temp dirs by `scripts/test/env.ts` — a suite that builds a `SessionLogger` mints a log directory, which is how `session_logs/` used to collect `app-persona-…` logs from `bun run test`.
 - `YAAR_KEEP_EMPTY_SESSIONS` - `1` keeps session logs that recorded nothing. Off by default: `createSession()` runs at boot so a click before the first message is still logged, so every launch the user closed without typing left a directory behind — in `yaar://history/` and `GET /api/sessions` as much as on disk. The launch that would add the next one sweeps them first. What counts as empty (exactly the created shape, every log zero-length) and what protects a concurrently-running instance's log (the creating `pid` in `metadata.json`, plus a 5-minute grace window) is `logging/prune.ts`.
+- `YAAR_LOG_LEVEL` - `debug` | `info` (default) | `warn` | `error`. The floor for `observability/log.ts`. `debug` is off by default, which is the one visibility change the console→logger conversion made: everything that used to be `console.log` is `info` and still prints, but genuinely chatty lines (`codex` item/started, the Claude SDK message trace, `entered agent context`) were demoted and now need `YAAR_LOG_LEVEL=debug`.
+- `YAAR_LOG_FORMAT` - `pretty` (default) or `json`. Pretty is the terminal format the `[Component] message` lines always had, plus `key=value` fields and the monitor/agent ids; `json` is one object per line carrying **every** context id (session, monitor, agent, window, app) and an ISO timestamp. Both are scrubbed by `scripts/test/env.ts`'s `YAAR_` prefix sweep, so a suite never inherits a developer's setting.
 - `YAAR_SKIP_DOTENV` - `1` skips loading the root `.env` in `config/env.ts`. Set by `scripts/test/env.ts`: a test run pins every knob explicitly, and "fill in what is unset" is the one door a developer's `.env` could otherwise walk back through.
 - `YAAR_TEST_REMOTE` - Test-runner only. `1` makes `scripts/test/env.ts` pin `REMOTE=1` for the process, which is how `src/tests/remote/` gets a genuine remote-mode `IS_REMOTE`.
 - `YAAR_APP_ORIGIN_ISOLATION` - App-origin isolation (**on by default**; set `=0` to disable). Serves `source:'user'` app iframes from a distinct browser origin so they are cross-origin to the desktop; `resolvePrincipal` refuses a token-less request carrying the app origin. **Which two origins** (`loopback-alias` locally, `proxy-port` over Tailscale Serve, `off`) is `http/origin-boundary.ts`'s business and the one place to ask — its header explains both modes and why the proxy-port attribution is unforgeable. See [`docs/guides/remote_mode.md`](../../docs/guides/remote_mode.md).
 - `MONITOR_MAX_CONCURRENT` (default: 2), `MONITOR_MAX_ACTIONS_PER_MIN` (30), `MONITOR_MAX_OUTPUT_PER_MIN` (50000) - Background monitor budget limits
-- `APP_AGENT_IDLE_MINUTES` (default: 15) - How long an app agent may sit idle before `AgentPool` reclaims it; `0` disables the reaper. App agents are the one tier nothing else reclaims — not window close, only `fresh:true`, monitor removal, explicit delete, or session teardown — so against a process-global `MAX_AGENTS` of 10, apps opened once and left alone used to hold their slots until restart. Reaping ends the agent's provider session, so its memory goes with it (the same thing `fresh: true` does deliberately); its sub-agents survive, because their owner is the (monitor, app) pair.
+- `APP_AGENT_IDLE_MINUTES` (default: 15) - How long an app agent may sit idle before `AgentPool` reclaims it; `0` disables the reaper. Closing an app's **last** window on a monitor already retires its agent, so this is the backstop for the app left open and unused: app agents had no other reclaim path — not window close, only `fresh:true`, monitor removal, explicit delete, or session teardown — so against a process-global `MAX_AGENTS` of 10, apps opened once and left alone used to hold their slots until restart. Reaping ends the agent's provider session, so its memory goes with it (the same thing `fresh: true` and a last-window close both do deliberately); reaping leaves its sub-agents alone, because their owner is the (monitor, app) pair — only a last-window close, monitor removal, or teardown takes those.
 - `CODEX_WS_PORT` (default: 4510), `CHROME_PATH` (auto-detected), `MARKET_URL`
 - `CODEX_HOME` - Codex's own var, inherited by the spawn — and read by YAAR *before* it, because `getCodexAppServerArgs()` derives one `-c mcp_servers.<name>.enabled=false` per server `$CODEX_HOME/config.toml` declares (`detectUserMcpServers()` in `config/providers/codex.ts`). That list has to be detected, not written down: naming a server the config does not declare leaves codex with a table holding only `enabled` and it refuses to boot (`invalid transport in mcp_servers.<name>`). Pinned to an empty temp dir by `scripts/test/env.ts` so the spawn args do not depend on whether the developer has the ChatGPT desktop app installed.
 - `YAAR_BROWSER_PROVIDER` - **No longer a selector.** `POST /api/browser` is always the headless sandbox (`getHeadlessBrowser()`); the user's real Chrome is reached only through the session-agent door `yaar://session/browser` (`getLocalBrowser()`), which auto-attaches whenever a debuggable Chrome is reachable. The var survives only as a **force-headless opt-out**: set `=headless` to keep the agent away from your real browser (the session door then uses the sandbox too).
@@ -142,10 +144,12 @@ src/
 │   └── window/           # Window create/update/manage, app protocol, app query/command, subscribe/unsubscribe
 ├── db/                   # Per-app SQLite (appDb): AppDatabase wrapper, LRU pool, Mongo-style filter → SQL query builder
 ├── reload/               # Fingerprint-based action cache
+├── observability/        # log.ts — structured logging; the ONLY sanctioned console.* in the server
 ├── logging/              # Session logging (JSONL), reading, context/window restore, empty-log prune
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts
 └── lib/                  # Standalone utilities (no server internal imports)
     ├── browser/ pdf/ pick-directory.ts
+    ├── schema-refs.ts         # resolveRef/selfContained — following a protocol schema's `$defs` pointers
     ├── format-interaction.ts  # formatCompactInteraction() — compact log string for UserInteraction
     └── yaar-uri-server.ts     # Server-only URI parsers: parseContentPath, parseWindowResourceUri/buildWindowResourceUri, parseConfigUri/buildConfigUri, parseSessionUri/buildSessionUri (+ associated types)
 ```
@@ -222,6 +226,47 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 | Factory | `providers/factory.ts` | Auto-detect and create providers |
 | Observer | `actionEmitter` | Decouple tools from sessions |
 | AsyncLocalStorage | `AgentSession` | Track agentId in async context |
+| Injected resolver | `setLogContextResolver`, `setAccessPrincipalResolver`, `setWindowGrantResolver` | Give a low-level module a fact that lives above it in the import graph, wired once in `lifecycle.ts` |
+
+### Logging
+
+**Operational logging goes through `observability/log.ts`; `no-console` is an ESLint error
+everywhere else in `src/`.** A component takes a logger once and names events, not sentences:
+
+```ts
+const log = createLogger('AgentSession');
+log.warn('turn overlapped', { role, waitedFor: previousRole });
+```
+
+The session/monitor/agent/window/app ids are attached automatically, from an
+`AsyncLocalStorage` resolver wired in `lifecycle.ts` (`setLogContextResolver`) — that is the
+whole point, and why a bare `console.log` is refused: it carries none of them, and 300 of them
+is what made a message's path across eight seams and three agent tiers unreconstructable. For a
+class whose work happens *outside* an agent turn (`LiveSession`'s connection and pool events),
+bind the id instead: `createLogger('LiveSession').child({ sessionId })`.
+
+Three rules:
+
+- **Fields, not interpolation.** `log.info('created monitor agent', { monitorId })`, never
+  `` log.info(`created monitor agent for ${monitorId}`) `` — the field is what `YAAR_LOG_FORMAT=json`
+  emits as a queryable key, and the interpolated string is what it cannot.
+- **Ids and counts, never content.** The rule `streams/stream-diagnostics.ts` states for its
+  samples ("a transcript must not be reachable through a debug switch") holds here too. The
+  conversion removed two live violations: `AgentSession` logged the first 50 chars of every user
+  prompt, and the Claude provider logged an image data-URL prefix. Both are counts now. The one
+  deliberate excerpt left is the tool-error `detail` in `StreamToEventMapper`, kept because "a
+  tool failed" without its text is unactionable, and commented as such at the call site.
+- **The component name comes from `createLogger`, not the string.** The old `[Bracket]` prefixes
+  had drifted — `MonitorTaskProcessor` and `turn-helpers` both logged as `[ContextPool]`.
+
+Levels: `debug` (off by default), `info`, `warn`, `error`, floor set by `YAAR_LOG_LEVEL`. Each
+maps to its own console method, so `warn` reaches `console.warn` — several test helpers spy on
+exactly that, and routing warn through `console.error` keeps the stream right while making every
+one of those spies observe nothing. The exemptions to `no-console` are listed with their reasons
+in `eslint.config.js`: the boot banner and QR code (`lifecycle.ts`, `main.ts`, `exe-entry.ts`) are
+the CLI talking to its user, `dev-bundle-worker.ts`'s stdout *is* its result channel, and `lib/**`
+plus `providers/codex/version.ts` are the dependency-free modules whose contracts forbid the
+import.
 
 ## Providers
 
@@ -261,17 +306,18 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 
 | | `yaar://apps/{id}` — the *installed* app | `yaar://windows/{id}` — the *running* instance |
 |---|---|---|
-| `describe` | identity + `dist/protocol.json` verbatim + `agent/SKILL.md` + permissions + this door's `verbs`/`invokeActions`/`subPaths` | this instance's manual, tagged `source: 'live'` (the iframe's registration) or `'manifest'` (disk), plus `builtinState` |
+| `describe` | identity + `agent/SKILL.md` + permissions + the **names** of its state keys and commands + this door's `verbs`/`invokeActions`/`subPaths` | this instance's manual, tagged `source: 'live'` (the iframe's registration) or `'manifest'` (disk), plus `builtinState` |
 | `read` | the effective, **post-grant** manifest from `getAppMeta` | metadata + `__content`, or metadata + `__screenshot` for an iframe |
-| `list` | ✗ not a collection | this window's built-in keys, then the app's state keys and commands |
-| sub-paths | `storage/`, `db/`, `agents/` | `state/{key}`, `commands/{key}` |
+| `list` | ✗ not a collection | this window's built-in keys, then the app's state keys and commands, as an **index** (signature + first sentence) |
+| sub-paths | `protocol`, `storage/`, `db/`, `agents/` | `state/{key}`, `commands/{key}` |
 
-Five rules hold this together, each closing a false success (each is documented in full at the
+Six rules hold this together, each closing a false success (each is documented in full at the
 named site):
 
 - **`exists?(resolved)` on `ResourceHandler`** is consulted before the auto-generated `describe`; a `/*` wildcard that declares neither `exists` nor `describe` makes `register()` **throw**. (`handlers/uri-registry.ts`)
 - **The same action list is declared once** — `defineActions` derives the schema `enum`, `describe`'s `invokeActions`, and the dispatch from one table, so they cannot drift. (`handlers/define-actions.ts`)
 - **`yaar://apps/{id}/state/…` and `/commands/…` are refused on every verb** — protocol state belongs to a running window, and the same app on two monitors is two states. (`handlers/apps/register.ts`)
+- **Every other unclaimed sub-path is refused too** — the app handlers take their id from the first segment with `extractIdFromUri` and ignore the rest, so anything the resource modules declined used to answer as the bare app. A false success is worse than a 404. (`rejectUnhandledSubPath`, same file)
 - **A missing directory is an error, not an empty list** (`storageList` sets `notFound`); namespace roots opt back in explicitly.
 - **A resource that exists and holds nothing answers, it does not complain** — every window has the three built-in state keys (`BUILTIN_STATE`: `__content`, `__screenshot`, `__console`; `__` is reserved, an app key by those names is shadowed). (`handlers/window.ts`)
 
@@ -287,7 +333,36 @@ Everything else is refused — default-deny, so `undefined` is neither. **That g
 
 The role is resolved from the pool (`AgentPool.getRoleForAgent` via `SessionHub.findRoleForAgent`) in the MCP path and from the per-turn role string (`principalRole()`) in-process — `agents/roles.ts` owns both the prefixes a role is minted with and the parse that maps one onto a tier, so the string and the gate that reads it cannot drift apart; `systemApp` is set by `routes/verb.ts` from the **validated iframe token**, never from the request body, so it is exactly as forgeable as the token (i.e. not — `getAppMeta` sets it for bundled `kind: "system"` apps only). The gate's principal resolver is injected via `setAccessPrincipalResolver()` (wired in `lifecycle.ts`) to avoid a runtime import cycle.
 
-**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas. A fourth request kind, `describe`, documents **one** state key or command on demand (`handleAppDescribe` in `features/window/app-protocol.ts`) — never folded into the manifest, or every manifest read would pay for every key. A command's answer carries its rendered `signature`, an `invoke` example, and its `schema` (`lib/command-signature.ts`); the signature also prefixes each command's `description` in `list('yaar://windows/{id}')`, so the list is enough to call from.
+**App Protocol:** Bidirectional agent-iframe communication via `query`/`command` tools (in the `app` MCP server). Flow: Agent → ActionEmitter → WebSocket → Iframe → response back. See shared CLAUDE.md for event schemas. A fourth request kind, `describe`, documents **one** state key or command on demand (`handleAppDescribe` in `features/window/app-protocol.ts`) — never folded into the manifest, or every manifest read would pay for every key. A command's answer carries its rendered `signature`, an `invoke` example, and its `schema` (`lib/command-signature.ts`); the signature also prefixes each command's `description` in `list('yaar://windows/{id}')`, so the list is enough to call from. That list is an **index**: the description is summarized to its first sentence (`lib/protocol-index.ts`, shared with `list('yaar://apps/{id}/protocol')`), because a list is for *finding* the command and every-word-of-every-description made the door 79.9 KB for a 52-command app.
+
+**A protocol has two honest sizes, and they get two doors.** `describe('yaar://apps/{id}')` used
+to inline `dist/protocol.json`, making one answer responsible for "what is this app" (identity +
+SKILL.md, a fixed ~10 KB) and "what does every one of its 52 commands accept" (41.8 KB, unbounded
+in command count). Their sum crossed the size at which the Claude CLI stops delivering a tool
+result inline and substitutes a path on disk — which for a monitor agent, holding five `yaar://`
+verbs and no filesystem tools, is a dead end. The protocol is now its own resource
+(`handlers/apps/protocol-resource.ts`) where the verbs mean what they mean everywhere else:
+`describe` is counts and doors, `list` is the index, `read` is the manifest, and
+`read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. So the
+index is *what `list` means*, not a degradation a byte budget switches on, and nothing is
+truncated behind a caller's back. Measured on studio-3d: describe 54.6 KB → 13.6 KB, index 10.7 KB.
+`features/apps/describe.ts` emits command **names** for the verbs door and the full index for the
+app agent's `describe` **tool** — that caller holds no `read` verb, so a URI it cannot open would
+be the same dead end at one remove, and `describe({ command })` is its spelling of the
+per-command read. Rationale and the incident: `docs/proposals/app_describe_size_proposal.md`.
+
+**A schema may point at the manifest, so every reader has to follow the pointer.** The compiler
+hoists a shape an app repeats into `manifest.$defs` and leaves `{"$ref": "#/$defs/x}"` at each
+use (`compiler/src/protocol/dedupe-schemas.ts`). `lib/schema-refs.ts` is the one resolver:
+`resolveRef` for the renderers — a ref rendered without the table is `any`, a signature that
+silently says *less* than the one it replaced — and `selfContained` for any door that hands one
+descriptor's schema on **alone**. The three renderers take `$defs` as a trailing optional
+argument, passed at the three seams that hold a manifest: `list` on a window
+(`handlers/window.ts`), the per-command `describe` (`features/window/app-protocol.ts`, which
+also makes its `schema:` self-contained), and the app agent's prompt
+(`agents/profiles/app-agent.ts`). A descriptor's *top-level* schema is never hoisted, so
+`params.properties`/`required` — what the iframe bridge validates against — are always readable
+without a hop.
 
 **A reserved payload key (`action`/`params`/`timeoutMs`) is checked against the command's schema, not against its name** — a command that *declares* one of those params keeps it, and a declared `timeoutMs` also steers the transport deadline. Full story at `invokeSubResource` in `handlers/window.ts`.
 
@@ -348,6 +423,7 @@ This is the same check `POST /api/verb` runs, shared rather than duplicated — 
 
 - **`host`** — the desktop (no iframe token). Unconfined; in `REMOTE=1` it has already proven the remote token in `auth.ts`.
 - **`app`** — an iframe token. Confined to its app.json `permissions`, plus the auto-granted `yaar://apps/self/{storage,db,agents}/` (`SELF_GRANTS` in `iframe-tokens.ts` — `self` resolves to the token's own appId, so these can never name another app), plus whatever a caller **granted to its window** at runtime (below).
+- **A devtools preview's identity comes off disk.** `preview--{projectId}` resolves to no installed app, so `getAppMeta` returns nothing and both `bundles` and `permissions` used to be empty — a project could only be tested after it shipped, and a declared grant 403'd in the one environment built for iterating. `previewBundles`/`previewPermissions` (`iframe-tokens.ts`) read the project's own `app.json` under `storage/apps/devtools/projects/{id}/`. Read from the **file**, never from the caller: `openPreview` passes neither, because a caller-supplied list is exactly what `mayDelegateGrants` refuses an app (and must keep refusing). `permissions` is additionally intersected with devtools' own installed list — devtools writes that file, so an unbounded read would let it mint a principal outranking itself.
 - **The token is identity; `WindowStateRegistry` is authority.** A token carries who an iframe *is* — window, session, monitor, and what its own manifest declares (`permissions`, `systemApp`, `bundles`, `streams`). Everything a caller granted *to this window* at runtime lives on `WindowStateRegistry.delegatedGrants` and is read per request through `setWindowGrantResolver` (wired in `lifecycle.ts` for the same import-cycle reason as `setAccessPrincipalResolver`). The split exists because a token is not durable and a window is: every reconnect re-mints one per open iframe window, per connection, from identity alone — so authority baked in at mint time vanished on the first page refresh, which is what made devtools previews 403 on their own document after a reload. Identity is re-mintable at will; authority survives remount and dies with the window. Grants are filed under the **monitor-scoped handle** (`WindowHandleMap.handleFor`, since `window.create` records them before the window exists), and `getWindowGrants` unions every spelling on read.
 - **Three producers, one home** — the registry only stores; each producer narrows:
   - **Delegated grants** (`features/window/delegated-grants.ts`) — a storage URI a *more privileged* caller names in a `window.create` payload or in `app_command` params becomes readable by that window's app. It is what makes "open this app on this file" work at all: the agent is unconfined, the app is not, and the app used to 403 on the one path it had just been handed. Four narrowings keep it delegation rather than escalation — only a caller that is neither an app agent nor an app iframe (`mayDelegateGrants`), exact files never prefixes, `read` only, and revoked when the window closes.
@@ -357,6 +433,7 @@ This is the same check `POST /api/verb` runs, shared rather than duplicated — 
 - `requireApp()` — insist the caller is a real app, and hand back the narrowed `AppPrincipal`. The app doors (`/api/verb`, `/api/verb/subscribe`, `requireBundledApp`) need it because `requirePermission` returns `null` for a `host` principal — correctly, the host is the user — so a door that only asks `requirePermission` is open to anyone who simply omits a token. `/api/verb`'s one carve-out is anonymous `describe`, which is metadata-only.
 - `requireHost()` — routes no app can hold a permission for (`/api/iframe-token`, `/api/pick-directory`, `/api/remote-info`, `/api/agents/stats`, `/api/dev/preview/{appId}`, session restore). The preview route serves an installed app as a *top-level* page with its own iframe token injected (the supported standalone/CDP verification path — see `docs/guides/app-development.md`); it hands out an app's identity, so it carries the same gate as the token mint.
 - `requireBundle()` — gated SDK doors (`/api/dev/*` → `yaar-dev`; `/api/browser`, `/api/bridge` → `yaar-web`; `/api/ml-weights*` → `yaar-ml`). The compiler's `bundles` gate only sees an app's *source*; a hand-written `fetch()` never went near it.
+- `permissionsAllow()` — the matching rule `requirePermission` applies (canonicalization, `self`, verbs), minus the principal-level gates around it, as a boolean. For a caller that has a permission list and no `Principal`: the **app agent** door (`mcp/app-agent/shared-storage.ts`) takes its appId from its own window, presents no iframe token, and answers on a tool call, so it can neither be resolved by `resolvePrincipal` nor return a 403. It asks this rather than re-deriving the match — a second copy that skipped `canonicalStorageUri` would make a declared `yaar://storage/` a permission for every other app's private storage.
 - `storageUriFor()` — maps an HTTP storage path to the URI that names the same file. `/api/storage/apps/{id}/x` **is** `yaar://apps/{id}/storage/x`; only that spelling is what an app holds a permission for. `self` is resolved on both sides of the match (app.json says `apps/self`, a URI from a path says `apps/notes`).
 - `resolveSelf()`/`namesSelf()` — **the** expansion of `yaar://apps/self/…`, used by the permission gate, by `POST /api/verb` before dispatch, and by `/api/verb/subscribe` before *storing* the URI (subscriptions are keyed by literal string, so a `self` key never matches the real-id URI a producer notifies with — `subscriptions.ts` now refuses one at `subscribe` and logs one at `notifyChange`/`publishFrame`). `resolveSelf` returns the URI untouched when there is no appId to expand against; testing the result with `namesSelf` is how each door decides whether that is fatal. `storageUriFor`'s expansion is the *path* flavor of the same literal segment and is deliberately separate.
 - **The same rewrite runs inside `requirePermission`**, so a URI taken from a request body (`POST /api/verb`) is canonicalized too — `yaar://storage/apps/vault/x` is matched as `yaar://apps/vault/storage/x`. Without it, prefix matching made a declared `yaar://storage/` a permission for every app's private storage; thirteen bundled apps declare it. Applied to grants as well as targets, so either spelling works and they agree. A traversing storage URI names no resource and is refused.

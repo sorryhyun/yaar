@@ -1,0 +1,30 @@
+/* ── Tools list ──────────────────────────────── */
+
+.tool-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-radius: var(--yaar-radius-sm);
+  background: var(--yaar-bg);
+}
+
+.tool-name {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-accent);
+}
+
+.tool-desc {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+}

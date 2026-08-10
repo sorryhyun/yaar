@@ -1,0 +1,77 @@
+/* ── Sidebar view layout ── */
+.view-panel {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.view-add-section {
+  padding: var(--yaar-sp-3) var(--yaar-sp-4);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  flex-shrink: 0;
+}
+
+.view-add-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.view-add-form {
+  margin-top: var(--yaar-sp-3);
+}
+
+.view-split {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Sidebar */
+.view-sidebar {
+  width: 210px;
+  border-right: 1px solid var(--yaar-border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  background: var(--yaar-bg);
+}
+
+.sidebar-empty {
+  padding: var(--yaar-sp-4) var(--yaar-sp-3);
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.sidebar-item {
+  padding: 10px var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.sidebar-item-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.sidebar-item-label {
+  font-size: 13px;
+  color: var(--yaar-text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+
+.sidebar-item-sub {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

@@ -16,6 +16,12 @@ Shared types between frontend and server.
     the key exists and the app defines no `describe()` for it, so the server falls back to the
     manifest's static `description`; only a key that is absent is an error. It is answered on
     demand and never folded into the manifest, or the cheapest call would pay for every key.
+  - `AppManifest.$defs` carries subschemas more than one descriptor shares; every
+    `{"$ref": "#/$defs/name"}` inside a `params`/`returns`/state `schema` resolves against it,
+    so **the manifest is the schema document**. Filled by the compiler
+    (`compiler/src/protocol/dedupe-schemas.ts`), absent for the apps that share nothing.
+    `iframe-scripts/app-protocol.ts` copies the manifest field by field, so the table has to be
+    copied with them or the served schemas point at nothing.
   - A command's `params` JSON Schema is **enforced** by the iframe bridge before the handler
     runs: a missing `required` key or a key absent from `properties` is rejected naming both
     the wrong keys and the accepted ones. `additionalProperties: true` opts a pass-through

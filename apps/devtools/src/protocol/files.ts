@@ -14,6 +14,39 @@ import {
 
 import { getMimeType, imageBlocks, type ReadBlock } from './read-blocks';
 
+/** A string lands verbatim; anything else is the JSON the caller most likely meant. */
+function serialize(content: unknown): string {
+  return typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+}
+
+/**
+ * Join an array-of-lines payload into a file body.
+ *
+ * The array form exists because a whole file as one JSON string is a single long
+ * token full of `\n` and `\"` escapes, and that is the payload that has been
+ * arriving truncated (issue #60). One element per line keeps every string short.
+ * Elements are lines, so nothing is added between them but the newline, and no
+ * trailing newline is appended — a caller that wants one passes a final `''`.
+ *
+ * A nested object here would stringify to "[object Object]" and be written to disk,
+ * the same silent corruption the scalar path guards against, so it is refused by
+ * index rather than coerced.
+ */
+function joinLines(lines: unknown[]): string {
+  return lines
+    .map((line, i) => {
+      if (typeof line === 'string') return line;
+      if (line === null || typeof line === 'object')
+        throw new AppCommandError(
+          `content[${i}] is ${line === null ? 'null' : 'an object'}; every element of a ` +
+            'content array must be a string (one line of the file). Pass the object as ' +
+            '`content` on its own to get JSON serialization.',
+        );
+      return String(line);
+    })
+    .join('\n');
+}
+
 export const fileCommands = {
   readFile: defineAppCommand({
     description:
@@ -78,15 +111,20 @@ export const fileCommands = {
   }),
   writeFile: defineAppCommand({
     description:
-      'Write content to a file. Objects are serialized as pretty-printed JSON. Returns ' +
-      '{ path, lines, bytes } for what landed — check it when you passed an object, since ' +
+      'Write content to a file. Content may be a string, an array of lines (joined with "\\n", ' +
+      'no trailing newline added), or an object (serialized as pretty-printed JSON). Prefer the ' +
+      'array form for anything longer than a few lines: one line per element keeps each JSON ' +
+      'string short and avoids the long escaped-newline blob that has been arriving truncated. ' +
+      'Returns { path, lines, bytes } for what landed — check it when you passed an object, since ' +
       'that is where the serialization can surprise you.',
     params: {
       type: 'object',
       properties: {
         path: { type: 'string' },
         content: {
-          description: 'File body. A string is written verbatim; an object is JSON-serialized.',
+          description:
+            'File body. A string is written verbatim; an array of strings is joined with ' +
+            'newlines (one element per line); an object is JSON-serialized.',
         },
       },
       required: ['path', 'content'],
@@ -95,8 +133,7 @@ export const fileCommands = {
       // `String(content)` turned an object into the literal "[object Object]" and wrote that
       // to disk — silent corruption, and passing an object is the natural thing to do for
       // app.json. Mirrors copyFile/readFileContent, which already guard this way.
-      const content =
-        typeof p.content === 'string' ? p.content : JSON.stringify(p.content, null, 2);
+      const content = Array.isArray(p.content) ? joinLines(p.content) : serialize(p.content);
       return await writeFile(String(p.path), content);
     },
   }),

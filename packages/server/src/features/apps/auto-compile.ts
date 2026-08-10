@@ -19,6 +19,21 @@ interface AutoCompileResult {
   failed: { appId: string; errors: string[] }[];
 }
 
+export interface AutoCompileOptions {
+  /**
+   * Compile only these app ids. An id matching no app is a failure, not a
+   * silent no-op — a typo'd id would otherwise report "0 failed" and look
+   * like a clean build of the app you meant.
+   */
+  only?: string[];
+  /**
+   * Compile regardless of the build manifest. Naming apps explicitly implies
+   * this: you asked for *this* app, and "skipped, unchanged" is the wrong
+   * answer when what changed is something the source hash does not cover.
+   */
+  force?: boolean;
+}
+
 async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number): Promise<T[]> {
   const results: T[] = new Array(tasks.length);
   let i = 0;
@@ -32,8 +47,11 @@ async function runWithConcurrency<T>(tasks: (() => Promise<T>)[], limit: number)
   return results;
 }
 
-export async function autoCompileApps(): Promise<AutoCompileResult> {
+export async function autoCompileApps(
+  options: AutoCompileOptions = {},
+): Promise<AutoCompileResult> {
   const result: AutoCompileResult = { compiled: [], skipped: [], failed: [] };
+  const only = options.only?.length ? new Set(options.only) : null;
 
   // Find apps with src/main.ts across all roots (bundled wins on id collision).
   const appDirs: { appId: string; appPath: string }[] = [];
@@ -60,12 +78,26 @@ export async function autoCompileApps(): Promise<AutoCompileResult> {
     }
   }
 
-  if (appDirs.length === 0) return result;
+  if (only) {
+    for (const appId of only) {
+      if (!appDirs.some((d) => d.appId === appId)) {
+        const known = appDirs
+          .map((d) => d.appId)
+          .sort()
+          .join(', ');
+        result.failed.push({ appId, errors: [`no app with src/main.ts. Known: ${known}`] });
+      }
+    }
+    if (result.failed.length > 0) return result;
+  }
+
+  const selected = only ? appDirs.filter((d) => only.has(d.appId)) : appDirs;
+  if (selected.length === 0) return result;
 
   // Check staleness and compile
-  const tasks = appDirs.map(({ appId, appPath }) => async () => {
+  const tasks = selected.map(({ appId, appPath }) => async () => {
     try {
-      const stale = await isAppStale(appPath);
+      const stale = options.force || (await isAppStale(appPath));
       if (!stale) {
         result.skipped.push(appId);
         return;

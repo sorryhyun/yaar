@@ -1,5 +1,6 @@
 import { current, notebooks } from '../state/signals';
 import { lastRun, timeoutMs } from '../state/run';
+import { agentRunsForState } from '../state/agent-runs';
 import { cellsForState } from './shape';
 
 export const labState = {
@@ -19,6 +20,11 @@ export const labState = {
   lastRun: {
     description: 'The most recent cell execution: { cellId, ok, summary, durationMs, at }.',
     get: () => lastRun(),
+  },
+  agentRuns: {
+    description:
+      'The Agent runs panel, oldest first, last 50: { id, at, kind: runCode|runCell|runAll, cellId, ok, durationMs, summary, savedTo, error }[]. Every protocol-initiated execution is logged here and rendered in the window; sources and result payloads stay in the UI and are deliberately not exposed.',
+    get: () => agentRunsForState(),
   },
   kernel: {
     description: 'Kernel settings: { defaultTimeoutMs }.',

@@ -1,0 +1,42 @@
+/* ── Layout ─────────────────────────────────────── */
+
+.layout {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  flex-shrink: 0;
+}
+
+.app-title {
+  font-size: 14px;
+  font-weight: 600;
+  flex: 1;
+}
+
+.count-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--yaar-wash-accent);
+  color: var(--yaar-accent);
+  border: 1px solid var(--yaar-accent);
+}
+
+.refresh-btn {
+  flex-shrink: 0;
+}
+
+.body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}

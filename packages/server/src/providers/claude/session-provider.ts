@@ -22,6 +22,9 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { getClaudeSpawnArgs } from '../../config.js';
 import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('ClaudeSessionProvider');
 
 interface ImageContentBlock {
   type: 'image';
@@ -246,7 +249,7 @@ export class ClaudeSessionProvider extends BaseTransport {
       try {
         await withDeadline(started, STEER_TURN_START_MS);
       } catch {
-        console.warn('[claude] steer: turn never started; not steering');
+        log.warn('steer: turn never started; not steering');
         return false;
       }
     }
@@ -266,9 +269,11 @@ export class ClaudeSessionProvider extends BaseTransport {
     // Determine which session to resume
     // Priority: options.sessionId > this.sessionId (warmed up)
     const resumeSession = options.sessionId ?? this.sessionId ?? undefined;
-    console.log(
-      `[ClaudeSessionProvider] query() - options.sessionId: ${options.sessionId}, this.sessionId: ${this.sessionId}, resumeSession: ${resumeSession}`,
-    );
+    log.debug('query', {
+      optionsSessionId: options.sessionId,
+      providerSessionId: this.sessionId,
+      resumeSession,
+    });
 
     const messageContent = this.buildMessageContent(prompt, options);
 
@@ -278,20 +283,19 @@ export class ClaudeSessionProvider extends BaseTransport {
   private buildMessageContent(prompt: string, options: TransportOptions): string | ContentBlock[] {
     let messageContent: string | ContentBlock[] = prompt;
 
-    console.log(`[ClaudeSessionProvider] options.images: ${options.images?.length ?? 0} images`);
+    log.debug('building message content', { images: options.images?.length ?? 0 });
     if (options.images && options.images.length > 0) {
-      console.log(
-        `[ClaudeSessionProvider] First image prefix: ${options.images[0].slice(0, 50)}...`,
-      );
-
       const contentBlocks: ContentBlock[] = [];
 
       for (const dataUrl of options.images) {
         const parsed = parseDataUrl(dataUrl);
         if (parsed) {
-          console.log(
-            `[ClaudeSessionProvider] Adding image block: ${parsed.mediaType}, data length: ${parsed.data.length}`,
-          );
+          // Media type and size only. This used to log the first 50 chars of the image's
+          // data URL, which is payload however short the slice.
+          log.debug('adding image block', {
+            mediaType: parsed.mediaType,
+            dataLength: parsed.data.length,
+          });
           contentBlocks.push({
             type: 'image',
             source: {
@@ -301,9 +305,7 @@ export class ClaudeSessionProvider extends BaseTransport {
             },
           });
         } else {
-          console.warn(
-            `[ClaudeSessionProvider] Failed to parse data URL: ${dataUrl.slice(0, 100)}...`,
-          );
+          log.warn('failed to parse image data URL', { urlChars: dataUrl.length });
         }
       }
 
@@ -312,9 +314,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         text: prompt,
       });
 
-      console.log(
-        `[ClaudeSessionProvider] Using multimodal prompt with ${contentBlocks.length} content blocks`,
-      );
+      log.debug('using multimodal prompt', { contentBlocks: contentBlocks.length });
       messageContent = contentBlocks;
     }
 
@@ -423,16 +423,12 @@ export class ClaudeSessionProvider extends BaseTransport {
           // no completion at all. Resend on a fresh stream instead: the
           // original message is still the one that needs answering.
           if (awaitingEscapeRetry && !session.abortController.signal.aborted) {
-            console.warn(
-              '[ClaudeSessionProvider] Stream ended during escape retry; resending fresh',
-            );
+            log.warn('stream ended during escape retry; resending fresh');
             yield* this.executeQuery(messageContent, this.sessionId ?? undefined, options);
             return;
           }
           if (messageCount === 0 && !session.abortController.signal.aborted) {
-            console.warn(
-              '[ClaudeSessionProvider] Persistent stream ended before responding; retrying fresh',
-            );
+            log.warn('persistent stream ended before responding; retrying fresh');
             this.sessionId = null;
             yield* this.executeQuery(messageContent, undefined, options);
           }
@@ -465,9 +461,7 @@ export class ClaudeSessionProvider extends BaseTransport {
           if (tripped) {
             escapeRetries++;
             awaitingEscapeRetry = true;
-            console.warn(
-              `[ClaudeSessionProvider] Escaped-text tripwire on ${tripped.toolName}; restarting turn`,
-            );
+            log.warn('escaped-text tripwire; restarting turn', { tool: tripped.toolName });
             // Before the interrupt: this notice carries the only record that
             // the cancelled call ever happened, and the turn is about to be
             // torn down. See `EscapeGuardRecord`.
@@ -490,9 +484,7 @@ export class ClaudeSessionProvider extends BaseTransport {
 
         // Detect stale session error and retry without resume
         if (resumeSession && isStaleSessionError(mapped)) {
-          console.warn(
-            `[ClaudeSessionProvider] Stale session ${resumeSession}, retrying without resume`,
-          );
+          log.warn('stale session; retrying without resume', { resumeSession });
           this.sessionId = null;
           await this.closePersistentSession();
           yield* this.executeQuery(messageContent, undefined, options);
@@ -512,7 +504,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         // 'complete'/'error' map the SDK result message: the turn is over but
         // the stream stays open for the next one.
         if (mapped.type === 'complete' || mapped.type === 'error') {
-          console.log(`[ClaudeSessionProvider] Turn finished after ${messageCount} messages`);
+          log.info('turn finished', { messages: messageCount });
           return;
         }
       }
@@ -573,7 +565,7 @@ export class ClaudeSessionProvider extends BaseTransport {
     const sdkOptions = this.getSDKOptions({ resumeSession, options });
     this.openPersistentSession(sdkOptions, this.turnFingerprint(options), resumeSession);
     await this.persistentSession!.mcpReady;
-    console.log('[ClaudeSessionProvider] Prewarmed persistent stream (MCP connected)');
+    log.info('prewarmed persistent stream (MCP connected)');
   }
 
   /** Tear down the long-lived stream; conversation context survives via resume. */
@@ -629,9 +621,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         if (mapped) {
           // Detect stale session error and retry without resume
           if (isStaleSessionError(mapped)) {
-            console.warn(
-              `[ClaudeSessionProvider] Stale session ${resumeSession}, retrying without resume`,
-            );
+            log.warn('stale session; retrying without resume', { resumeSession });
             this.sessionId = null;
             yield* this.executeQuery(messageContent, undefined, options);
             return;
@@ -640,7 +630,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         }
       }
 
-      console.log(`[ClaudeSessionProvider] Fork turn finished after ${messageCount} messages`);
+      log.info('fork turn finished', { messages: messageCount });
     } catch (err) {
       if (this.isAbortError(err)) {
         return;
@@ -672,9 +662,7 @@ export class ClaudeSessionProvider extends BaseTransport {
         // A failed server won't recover within this wait — don't burn it.
         const failed = expected.filter((name) => byName.get(name) === 'failed');
         if (failed.length > 0) {
-          console.warn(
-            `[ClaudeSessionProvider] MCP server(s) failed to connect: ${failed.join(', ')}`,
-          );
+          log.warn('MCP server(s) failed to connect', { servers: failed.join(', ') });
           return;
         }
       } catch {
@@ -682,9 +670,9 @@ export class ClaudeSessionProvider extends BaseTransport {
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    console.warn(
-      `[ClaudeSessionProvider] MCP server(s) still pending after ${MCP_CONNECT_WAIT_MS}ms; starting turn without them`,
-    );
+    log.warn('MCP server(s) still pending; starting turn without them', {
+      waitedMs: MCP_CONNECT_WAIT_MS,
+    });
   }
 
   /**
@@ -724,13 +712,13 @@ export class ClaudeSessionProvider extends BaseTransport {
       const receipt = await withDeadline(session.stream.interrupt(), INTERRUPT_ACK_MS);
       const stillQueued = receipt?.still_queued ?? [];
       if (stillQueued.length === 0) return { outcome: 'acknowledged' };
-      console.warn(
-        `[ClaudeSessionProvider] Interrupt left ${stillQueued.length} message(s) queued; closing the stream`,
-      );
+      log.warn('interrupt left messages queued; closing the stream', {
+        stillQueued: stillQueued.length,
+      });
       await this.closePersistentSession();
       return { outcome: 'escalated', stillQueued };
     } catch (err) {
-      console.warn('[ClaudeSessionProvider] Control interrupt failed; killing process:', err);
+      log.warn('control interrupt failed; killing process', { err });
       await this.closePersistentSession();
       return { outcome: 'escalated' };
     }

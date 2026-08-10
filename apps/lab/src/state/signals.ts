@@ -16,6 +16,16 @@ const [current, setCurrent] = createSignal<Notebook | null>(null);
 const [dirty, setDirty] = createSignal(false);
 const [status, setStatus] = createSignal('');
 const [runningCell, setRunningCell] = createSignal<string | null>(null);
+/** The cell an agent just touched — CellRow scrolls to it and highlights it briefly. */
+const [flashCell, setFlashCell] = createSignal<string | null>(null);
+
+let flashTimer = 0;
+/** Mark a cell as agent-touched for ~2s. Repeated calls restart the timer. */
+export function flashCellFor(id: string, ms = 2000): void {
+  setFlashCell(id);
+  clearTimeout(flashTimer);
+  flashTimer = window.setTimeout(() => setFlashCell(null), ms);
+}
 
 export {
   notebooks, setNotebooks,
@@ -23,4 +33,5 @@ export {
   dirty, setDirty,
   status, setStatus,
   runningCell, setRunningCell,
+  flashCell, setFlashCell,
 };

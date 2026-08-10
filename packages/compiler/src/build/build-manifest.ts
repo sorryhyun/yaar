@@ -65,9 +65,17 @@ import { join, basename } from 'path';
  * so a bundle's helper set is otherwise a function of when that app last
  * happened to be stale. The bump makes every dist/ carry one SDK vintage, which
  * is what keeps "does this build have `formatBytes`?" answerable from the
- * manifest instead of from the app's edit history.
+ * manifest instead of from the app's edit history. '20': repeated subschemas fold
+ * into one protocol-level `$defs` (`protocol/dedupe-schemas.ts`, plus zod's own
+ * `reused: 'ref'` in the fold). This is the case the bump exists for in its purest
+ * form — the pass changes what the *compiler emits*, not what the app's source
+ * says, so every hash stays identical and no existing `dist/protocol.json` would
+ * ever be reached. Without it the shrink applies only to apps that happen to be
+ * edited afterwards, which is the opposite of the point: the app it was written
+ * for (studio-3d, whose manual crossed the CLI's inline-delivery cliff) is a
+ * user-installed app nobody is about to edit.
  */
-export const COMPILER_VERSION = '19';
+export const COMPILER_VERSION = '20';
 
 export interface BuildManifest {
   sourceHash: string;

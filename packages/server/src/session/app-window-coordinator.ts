@@ -21,6 +21,9 @@ import type { AppProtocolRequestData } from './emitter-channels.js';
 import type { SessionId } from './types.js';
 import type { WindowStateRegistry } from './window-state.js';
 import { actionEmitter } from './action-emitter.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('AppWindowCoordinator');
 
 /** The pool operations this coordinator needs, narrowed so `ContextPool` stays out. */
 export interface AppChannelTarget {
@@ -154,13 +157,15 @@ export class AppWindowCoordinator {
     );
     const skipped = commands.length - replayable.length;
 
-    console.log(
-      `[AppWindowCoordinator ${this.deps.sessionId}] Replaying ${replayable.length} app commands to window ${windowId}` +
-        // Named, not silent: an app author who set `replay: 'never'` has no other way to
-        // see the policy took effect, and a command that vanishes without a word reads
-        // exactly like a command the server forgot to send.
-        (skipped > 0 ? ` (${skipped} skipped by replay:'never')` : ''),
-    );
+    // `skipped` is named, not silent: an app author who set `replay: 'never'` has no other
+    // way to see the policy took effect, and a command that vanishes without a word reads
+    // exactly like a command the server forgot to send.
+    log.info('replaying app commands to window', {
+      sessionId: this.deps.sessionId,
+      windowId,
+      replayed: replayable.length,
+      skippedByNeverReplay: skipped,
+    });
     for (let i = 0; i < replayable.length; i++) {
       const request = replayable[i]!;
       this.deps.broadcast({

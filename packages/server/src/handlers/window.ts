@@ -51,11 +51,9 @@ import {
 } from '../features/window/app-protocol.js';
 import { listApps } from '../features/apps/discovery.js';
 import { buildWindowResourceUri, parseWindowResourceUri } from '../lib/yaar-uri-server.js';
-import {
-  RESERVED_COMMAND_KEYS,
-  declaredParamNames,
-  renderSignature,
-} from '../lib/command-signature.js';
+import { RESERVED_COMMAND_KEYS, declaredParamNames } from '../lib/command-signature.js';
+import { defsOf } from '../lib/schema-refs.js';
+import { commandLinkDescription, firstSentence, descriptionOf } from '../lib/protocol-index.js';
 import {
   handleSubscribe,
   handleUnsubscribe,
@@ -66,6 +64,9 @@ import { actionEmitter } from '../session/action-emitter.js';
 import { genId } from '../lib/ids.js';
 import { valueOf } from '../session/pending-store.js';
 import { defineActions } from './define-actions.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('window.message');
 
 function isWindowCollection(resolved: ResolvedUri): resolved is ResolvedWindow & { windowId: '' } {
   return resolved.kind === 'window' && (resolved as ResolvedWindow).windowId === '';
@@ -193,6 +194,23 @@ function badSubPath(resolved: ResolvedWindow, subPath: string): VerbResult {
   );
 }
 
+/**
+ * The sentence that has to sit next to a degraded screenshot.
+ *
+ * A `__screenshot` read answers with the image alone, so there is no JSON field to
+ * hang the caveat on — and an image that quietly omits a region is believed. The
+ * text block leads the response for the same reason.
+ */
+function describeCaptureDegraded(notes: string[]): string {
+  return (
+    'This screenshot is incomplete — the capture succeeded but knows it left ' +
+    'content out:\n' +
+    notes.map((n) => `- ${n}`).join('\n') +
+    '\nDo not read a blank region here as "the app rendered nothing there". An app ' +
+    'that paints imperatively can supply its own image via defineApp({ onCapture }).'
+  );
+}
+
 export function registerWindowHandlers(
   registry: ResourceRegistry,
   getWindowState: () => WindowStateRegistry,
@@ -274,7 +292,7 @@ export function registerWindowHandlers(
           hook,
           fresh,
         })
-        .catch((err: unknown) => console.error('[window.message] Failed:', err));
+        .catch((err: unknown) => log.error('failed', { appId, windowId, messageId, err }));
 
       return ok(
         `Message sent to app "${appId}" via window "${windowId}" (messageId: ${messageId})` +
@@ -301,7 +319,7 @@ export function registerWindowHandlers(
    */
   async function captureWindow(
     win: WindowState,
-  ): Promise<{ imageData?: string; captureFailure?: string }> {
+  ): Promise<{ imageData?: string; captureFailure?: string; captureDegraded?: string[] }> {
     const outcome = await actionEmitter.emitActionWithFeedback(
       { type: 'window.capture', windowId: win.id },
       5000,
@@ -309,7 +327,16 @@ export function registerWindowHandlers(
       getWindowState().getMonitorForWindow(win.id),
     );
     const feedback = valueOf(outcome);
-    if (feedback?.success && feedback.imageData) return { imageData: feedback.imageData };
+    if (feedback?.success && feedback.imageData) {
+      // A capture that succeeded while omitting content says so here, or the
+      // omission reaches the reader as an ordinary picture. See
+      // RenderingFeedbackEvent.captureDegraded.
+      const degraded = feedback.captureDegraded;
+      return {
+        imageData: feedback.imageData,
+        ...(degraded && degraded.length > 0 ? { captureDegraded: degraded } : {}),
+      };
+    }
     return { captureFailure: feedback?.captureFailure };
   }
 
@@ -342,13 +369,22 @@ export function registerWindowHandlers(
     }
 
     if (key === '__screenshot') {
-      const { imageData, captureFailure } = await captureWindow(win);
+      const { imageData, captureFailure, captureDegraded } = await captureWindow(win);
       if (!imageData) {
         return error(
           `Could not capture window "${windowId}"${captureFailure ? ` (${captureFailure})` : ''}.`,
         );
       }
-      return { content: [{ type: 'image', data: imageData, mimeType: 'image/webp' }] };
+      const image = { type: 'image' as const, data: imageData, mimeType: 'image/webp' };
+      // The caveat leads, because it changes how the image below should be read.
+      return captureDegraded
+        ? {
+            content: [
+              { type: 'text' as const, text: describeCaptureDegraded(captureDegraded) },
+              image,
+            ],
+          }
+        : { content: [image] };
     }
 
     return null;
@@ -775,6 +811,9 @@ export function registerWindowHandlers(
         );
       }
 
+      // The shared subschemas a hoisted `params` points at; without them a param the
+      // compiler deduplicated renders as `any` and the list stops being enough to call from.
+      const defs = defsOf(manifest);
       const links = [
         ...builtins,
         // `__`-named app keys are shadowed by the built-ins, so they are dropped here rather
@@ -784,7 +823,7 @@ export function registerWindowHandlers(
           .map(([key, desc]) => ({
             uri: buildWindowResourceUri(resolved.windowId, 'state', key),
             name: `state/${key}`,
-            description: (desc as { description?: string }).description,
+            description: firstSentence(descriptionOf(desc)),
           })),
         // A command's name is not enough to call it, and `list` is the door an agent
         // reaches for first. The signature rides in `description` rather than in a field
@@ -792,20 +831,24 @@ export function registerWindowHandlers(
         // read — and the round trip it saves (a `describe` spent only on learning param
         // names) is the whole point. `renderSignature` returns the bare name when the
         // command declares no schema, so nothing is invented for one that documents none.
-        ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => {
-          const signature = renderSignature(key, desc);
-          const description = (desc as { description?: string }).description;
-          return {
-            uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
-            name: `commands/${key}`,
-            description:
-              signature === key
-                ? description
-                : `${signature}${description ? ` — ${description}` : ''}`,
-          };
-        }),
+        //
+        // The prose is summarized to its opening sentence (`commandLinkDescription`, shared with
+        // `list('yaar://apps/{id}/protocol')`): a list is for *finding* the command, and
+        // carrying every word of every description made this door 79.9 KB for a
+        // 52-command app — past the size at which the CLI stops delivering a result
+        // inline at all, which for a verbs-only agent means it is not delivered. The full
+        // text is one `describe` away at the per-command URI each row already names.
+        ...Object.entries(manifest.commands ?? {}).map(([key, desc]) => ({
+          uri: buildWindowResourceUri(resolved.windowId, 'commands', key),
+          name: `commands/${key}`,
+          description: commandLinkDescription(key, desc, defs),
+        })),
       ];
-      return okLinks(links);
+      return prependNote(
+        okLinks(links),
+        'descriptions are summarized to their first sentence — ' +
+          'describe("yaar://windows/{windowId}/commands/{name}") for one in full',
+      );
     },
 
     async read(resolved: ResolvedUri): Promise<VerbResult> {
@@ -888,7 +931,7 @@ export function registerWindowHandlers(
       // depended on whether the frontend answered in time — and the half that was dropped was
       // addressable by nothing. `__content` is that half, and this says where it went.
       if (win.content.renderer === 'iframe') {
-        const { imageData, captureFailure } = await captureWindow(win);
+        const { imageData, captureFailure, captureDegraded } = await captureWindow(win);
         if (imageData) {
           const { content: _content, ...infoWithoutContent } = windowInfo;
           return {
@@ -901,6 +944,9 @@ export function registerWindowHandlers(
                     {
                       ...infoWithoutContent,
                       contentOmitted: `The screenshot below is this window's content. For the raw value, read("${buildWindowResourceUri(resolved.windowId, 'state', '__content')}").`,
+                      // A degraded capture is reported next to the picture it
+                      // qualifies, not swallowed by the success that carried it.
+                      ...(captureDegraded ? { captureDegraded } : {}),
                     },
                     null,
                     2,

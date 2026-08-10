@@ -1,0 +1,180 @@
+/* Agent run log — components/AgentPanel.ts. A sibling of the notebook, not a panel
+   under it: whichever view is selected owns the whole main pane.
+   Absolute positioning, like the rest of the shell: Solid's `html` inserts comment
+   markers into reactive slots and breaks flex chains. */
+
+.lab-agent {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 38px;
+  bottom: 26px;
+  background: var(--yaar-bg);
+}
+
+/* Notebook / Agent runs view switch, in the toolbar. */
+.lab-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg);
+}
+.lab-tab {
+  background: transparent;
+  border: none;
+  border-radius: var(--yaar-radius-sm);
+  color: var(--yaar-text-dim);
+  font-family: var(--yaar-font);
+  font-size: var(--yaar-text-sm);
+  padding: 2px var(--yaar-sp-3);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    background var(--yaar-ease),
+    color var(--yaar-ease);
+}
+.lab-tab:hover {
+  color: var(--yaar-text);
+}
+.lab-tab-on {
+  background: var(--yaar-accent-emphasis);
+  color: #fff;
+}
+.lab-tab-badge {
+  display: inline-block;
+  min-width: 14px;
+  margin-left: 6px;
+  padding: 0 4px;
+  border-radius: var(--yaar-radius-full);
+  background: var(--yaar-accent);
+  color: var(--yaar-bg);
+  font-size: var(--yaar-text-xs);
+  font-weight: 700;
+}
+.lab-tab-on .lab-tab-badge {
+  background: #fff;
+  color: var(--yaar-accent-emphasis);
+}
+
+.lab-agent-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 0 var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  background: rgba(0, 0, 0, 0.15);
+}
+.lab-agent-title {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+  font-weight: 600;
+}
+.lab-agent-body {
+  position: absolute;
+  top: 26px;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  overflow-y: auto;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+}
+.lab-agent-empty {
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+}
+
+.lab-run-entry {
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg);
+  margin-bottom: var(--yaar-sp-2);
+  overflow: hidden;
+}
+.lab-run-bad {
+  border-color: var(--yaar-error);
+}
+.lab-run-new {
+  animation: lab-run-in 1.4s ease-out;
+}
+@keyframes lab-run-in {
+  0% {
+    border-color: var(--yaar-accent);
+    background: var(--yaar-wash-accent-strong);
+  }
+  100% {
+    background: var(--yaar-bg);
+  }
+}
+
+.lab-run-head {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 3px var(--yaar-sp-2);
+  font-size: var(--yaar-text-xs);
+  background: rgba(0, 0, 0, 0.12);
+  border-bottom: 1px solid var(--yaar-border);
+}
+/* The peek line is the only part allowed to give up width. */
+.lab-run-head > * {
+  flex: 0 0 auto;
+}
+.lab-run-head .lab-run-peek {
+  flex: 0 1 auto;
+}
+.lab-run-head .lab-spacer {
+  flex: 1 1 auto;
+}
+.lab-run-head .lab-mini {
+  white-space: nowrap;
+}
+.lab-run-kind {
+  font-family: var(--yaar-font-mono);
+  color: var(--yaar-accent);
+  white-space: nowrap;
+}
+.lab-run-peek {
+  font-family: var(--yaar-font-mono);
+  color: var(--yaar-text-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 46%;
+}
+.lab-run-src {
+  margin: 0;
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+}
+.lab-run-note {
+  padding: 0 var(--yaar-sp-3) var(--yaar-sp-2);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+}
+
+/* A huge result must not stretch the view — the entry scrolls instead. */
+.lab-run-entry .lab-output {
+  max-height: 480px;
+  overflow: auto;
+}
+
+/* The cell an agent just ran — CellRow scrolls to it and this marks it. */
+.lab-cell-flash .lab-cell-body {
+  border-color: var(--yaar-accent);
+  box-shadow: 0 0 0 2px var(--yaar-wash-accent-strong);
+  transition: box-shadow var(--yaar-ease);
+}

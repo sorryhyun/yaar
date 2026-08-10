@@ -11,6 +11,7 @@ import {
   compileErrors,
   previewUrl,
   previewWindowId,
+  previewIsStale,
   files,
   bundledLibs,
   consoleLogs,
@@ -57,7 +58,11 @@ export const devtoolsState = {
   },
   projectList: {
     description:
-      'List of all projects (id/name only). Distinct from `project`, the active project with its files.',
+      'Every project as { id, name, lastModified, origin }. Distinct from `project`, the ' +
+      'active project with its files. `origin` is "clone:{appId}" for a cloneApp sandbox, ' +
+      '"new" for a scaffold, and absent for a project created before the marker existed. ' +
+      'It is what makes cleanup safe: delete only what you cloned this session, and treat ' +
+      'an absent `origin` as the user\'s work — never as "old enough to remove".',
     get: () => [...projects()],
   },
   openFile: {
@@ -119,8 +124,24 @@ export const devtoolsState = {
     get: () => [...compileErrors()],
   },
   previewUrl: {
-    description: 'URL of last successful compilation',
+    description:
+      'URL of last successful compilation. A *build* fact, not a window fact: it is set ' +
+      'by compiling and survives the preview being closed, so it answers "is there ' +
+      'something to show", never "is it on screen". For the latter read `previewOpen`.',
     get: () => previewUrl(),
+  },
+  previewOpen: {
+    description:
+      'Whether a preview window is open right now, and whether what it shows is current. ' +
+      '`manifest`, `previewQuery`, `previewCommand`, `previewEval` and `previewScreenshot` ' +
+      'all require an open preview and fail after the fact without one — read this instead ' +
+      'of guessing, and instead of calling `preview` defensively, which remounts the iframe ' +
+      'and resets all in-app state. `stale: true` means a compile ran with ' +
+      '`refreshPreview: false`, so the window is rendering the *previous* build.',
+    get: () => ({
+      open: previewWindowId() !== null,
+      stale: previewIsStale(),
+    }),
   },
   bundledLibraries: {
     description:

@@ -34,6 +34,12 @@ bun run format:check             # Check formatting without writing
 # Run individual packages
 make server                                  # Start server only
 
+# Apps (see "Compiling one app" below)
+bun run build:apps                           # Compile every stale app in apps/
+bun run build:apps devtools                  # Compile just these app ids, stale or not
+bun run build:apps devtools --typecheck      # ...and run tsc over the app's src/
+bun run check:apps                           # App guardrail lint (no localStorage, etc.)
+
 # Testing
 bun run --filter @yaar/frontend test                 # Run all frontend tests
 bun run --filter @yaar/server test                    # Run all server tests
@@ -175,7 +181,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
   → Reconnection: existing LiveSession returned (state preserved)
   → First message → ContextPool initialized → AgentPool created → Warm provider acquired
   → Messages routed: USER_MESSAGE → monitor's main queue (sequential), WINDOW_MESSAGE/COMPONENT_ACTION → monitor agent (plain windows) or AppTaskProcessor (app windows)
-  → App window interaction → persistent app agent created on first interaction (keyed by `monitorId::appId` — one per app per monitor, not shared across monitors)
+  → App window interaction → app agent created on first interaction (keyed by `monitorId::appId` — one per app per monitor, not shared across monitors), retired when the app's last window on that monitor closes
   → WebSocket disconnects → session stays alive for reconnection
 ```
 
@@ -210,9 +216,32 @@ When the main agent is **Fable**, always pass an explicit `model` to the `Agent`
 
 Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata, `protocol.json` for agent-iframe communication — AI context is generated from the two at read time, with `agent/prompt.md` as an opt-in override (see below). See [`docs/guides/app-development.md`](./docs/guides/app-development.md) for full URI verbs reference and [`docs/reference/app_protocol_reference.md`](./docs/reference/app_protocol_reference.md) for protocol details.
 
+### Compiling one app (checking an edit without starting the server)
+
+`bun run build:apps <appId>` compiles the named apps to `apps/{id}/dist/`, whether or not the
+build manifest thinks they are stale — naming an app means "compile this one", and the staleness
+hash only covers the app's own sources, so an edit outside them (a bundled-library bump,
+`agent/prompt.md`) would otherwise report "skipped". With no ids it is the release/dev-server
+sweep and staleness applies. An id matching no app fails and lists the known ids, rather than
+reporting a clean build of nothing. Run it after `bun run --filter '*' build` — the script uses
+the compiler's built `dist/`.
+
+Three checks, and each only answers its own question:
+
+- `bun run build:apps <appId>` — Bun.build, the guards (Solid `html` templates, mount targets,
+  design tokens) and protocol extraction. It **transpiles types away**, so a green compile says
+  nothing about tsc.
+- `bun run build:apps <appId> --typecheck` — adds `tsc --noEmit` over the app's `src/`, with the
+  gated `@bundled/*` types its `app.json` `bundles` allows. Opt-in because it is the slow half.
+- `bun run check:apps` — the repo's app guardrail lint (`no-web-storage`, `no-promise-sleep`, …),
+  across every app at once.
+
+None of these run the app. For a change whose effect is visual or stateful, still open it — the
+`preview` route or a real session; `docs/guides/headless_driving.md` covers driving one.
+
 ### App Agent Architecture
 
-When a user interacts with an app window, a **persistent app agent** is created (one per `monitorId::appId`, reused across all windows of that app on that monitor — not shared across monitors). App agents have four scoped tools — `describe` (an app's manual: its protocol plus its `agent/SKILL.md`, the same answer `describe('yaar://apps/{id}')` gives), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
+When a user interacts with an app window, an **app agent** is created (one per `monitorId::appId`, reused across all windows of that app on that monitor — not shared across monitors) and retired, with its memory, when the app's **last** window on that monitor closes. Closing one of several windows leaves it standing: it is driving the others. App agents have four scoped tools — `describe` (an app's manual: its `agent/SKILL.md` plus an index of its protocol, one signature and opening sentence per command, or one command in full via `describe({ command })`; the same builder behind `describe('yaar://apps/{id}')`), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
 
 **Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window; passing another app's id targets that app — gated by the caller's `app.json` `controls` list (**bundled apps only**), which can also restrict which commands may be issued. The target app needn't have an open window (`resolveTarget` reuses or auto-launches one). This is direct synchronous protocol control; `direct_message` to `app:{id}` is the natural-language alternative handled by the other app's own agent. Parsing and the bundled-only guard: `features/apps/discovery.ts`.
 
@@ -220,7 +249,7 @@ When a user interacts with an app window, a **persistent app agent** is created 
 
 - `agent/prompt.md` — **replaces** the app agent's generic base prompt entirely (no append tier); either way the `protocol.json` manifest is appended as rendered call signatures.
 - `agent/hint.md` — injected into the **monitor agent's** system prompt (orchestration hints, auto-synced with install/uninstall). Legacy root `HINT.md` still read with a warning.
-- `agent/SKILL.md` — injected into no prompt; it is the hand-written manual `describe('yaar://apps/{id}')` returns beside `protocol.json` (workflows, ordering, when *not* to use the app). `scripts/check/apps.ts` warns when it restates the protocol.
+- `agent/SKILL.md` — injected into no prompt; it is the hand-written manual `describe('yaar://apps/{id}')` returns (workflows, ordering, when *not* to use the app). `scripts/check/apps.ts` warns when it restates the protocol. The generated protocol it complements is served separately, at `yaar://apps/{id}/protocol` — `list` for the command index, `read` for the manifest, `read('…/protocol/commands/{name}')` for one command; a describe carrying both used to be big enough that the CLI would not deliver it (`docs/proposals/app_describe_size_proposal.md`).
 
 Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }` (traversing/absolute overrides ignored). Root `AGENTS.md` is deliberately **not** read as a prompt — it keeps its ecosystem meaning (instructions to a coding agent editing that directory). Clone and deploy carry all of these; the full rules and rationale live in `discovery.ts`'s doc comments.
 

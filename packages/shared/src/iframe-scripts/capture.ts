@@ -27,6 +27,18 @@
  *                       came back empty).
  * The reason field is what makes a null terminal for the parent — a bare null
  * from an older compiled-in handler stays ignorable. See iframe-bridge/capture.ts.
+ *
+ * Degraded successes. A capture can also *succeed* while omitting real content, and
+ * silence there is worse than a failure: the caller gets a plausible picture and
+ * believes it. Three ways that happens, all of them now reported in `degraded` on
+ * the successful response:
+ *   - the composite failed and the largest-canvas fallback rescued the pixels — the
+ *     returned image is one canvas, not the window (this is the one that rendered an
+ *     app's whole chrome as an empty dark box while the DOM held it)
+ *   - a <canvas> could not be snapshotted (tainted or zero-size), so it composites blank
+ *   - an <img> could not be inlined, so it composites as a transparent placeholder
+ * `degraded` is advisory text for whoever is looking at the image; its absence means
+ * the composite believes it drew everything.
  */
 import { APP_MSG } from '../app-protocol.js';
 export const IFRAME_CAPTURE_HELPER_SCRIPT = `
@@ -36,13 +48,16 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
     window.removeEventListener('message', window.__yaarCaptureHandler);
   }
 
-  function respond(requestId, imageData, reason) {
+  function respond(requestId, imageData, reason, degraded) {
     window.parent.postMessage({
       type: '${APP_MSG.captureResponse}',
       requestId: requestId,
       imageData: imageData,
       // Only attach a reason to failures — a successful response is unchanged.
-      reason: imageData ? undefined : (reason || 'no-provider')
+      reason: imageData ? undefined : (reason || 'no-provider'),
+      // Only attach to a success that knows it dropped something. An unqualified
+      // success stays byte-identical to what it always was.
+      degraded: (imageData && degraded && degraded.length) ? degraded : undefined
     }, '*');
   }
 
@@ -153,10 +168,15 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
    * After inlining, sanitizes ALL remaining external URLs to prevent canvas tainting.
    * Like inlineStyles, pairs original and clone elements by index — call it
    * before anything mutates the clone's element list.
+   *
+   * Resolves with a count of the images it had to blank out. Those become transparent
+   * pixels in the output — a hole the viewer cannot distinguish from a blank region
+   * the app meant to draw, so the count rides along to the response.
    */
   function inlineResources(clone, original) {
     return new Promise(function(resolve) {
       var tasks = [];
+      var dropped = 0;
 
       // Inline <img> elements by fetching through the iframe fetch proxy
       var origImgs = original.querySelectorAll('img[src]');
@@ -190,7 +210,10 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
         var imgs = clone.querySelectorAll('img[src]');
         for (var i = 0; i < imgs.length; i++) {
           var s = imgs[i].getAttribute('src') || '';
-          if (s && !s.startsWith('data:')) imgs[i].setAttribute('src', PIXEL);
+          if (s && !s.startsWith('data:')) {
+            imgs[i].setAttribute('src', PIXEL);
+            dropped++;
+          }
         }
         // Remove <link> stylesheets (computed styles already inlined)
         var links = clone.querySelectorAll('link[rel="stylesheet"]');
@@ -231,7 +254,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
           var v = srcEls[i].getAttribute('src') || '';
           if (v && !v.startsWith('data:')) srcEls[i].removeAttribute('src');
         }
-        resolve();
+        resolve(dropped);
       };
 
       if (tasks.length === 0) { after(); return; }
@@ -348,6 +371,25 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
   }
 
   /**
+   * The largest-canvas rescue, told honestly.
+   *
+   * When the composite fails, this may still produce pixels — but they are one
+   * canvas, not the window: no app chrome, no overlay, no DOM-rendered region.
+   * Returning that as a bare success is how a screenshot came back looking
+   * plausible while omitting the very thing it was taken to check. So the rescue
+   * either goes out labelled, or the original failure goes out as a failure.
+   */
+  function respondWithFallback(requestId, reason, notes) {
+    var fb = null;
+    try { fb = largestCanvasCapture(); } catch (ex) {}
+    if (!fb) { respond(requestId, null, reason); return; }
+    respond(requestId, fb, undefined, (notes || []).concat([
+      'fallback:largest-canvas (' + reason + ') — this image is the largest <canvas> ' +
+      'alone. Everything the DOM rendered around it is missing from this picture.'
+    ]));
+  }
+
+  /**
    * Default capture: full window screenshot. Clones the document, inlines
    * computed styles and external resources, composites live canvas pixels in
    * place, then renders through the browser's native CSS engine via
@@ -361,7 +403,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
       if (!(w > 0 && h > 0)) {
         // No layout box. The canvas fallback may still have pixels; if it doesn't,
         // the window simply has not been laid out yet.
-        respond(requestId, largestCanvasCapture(), 'zero-size');
+        respondWithFallback(requestId, 'zero-size', []);
         return;
       }
 
@@ -372,20 +414,36 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
       // clone afterwards.
       inlineStyles(clone, docEl);
       inlineFormState(clone, docEl);
-      inlineResources(clone, docEl).then(function() {
+      inlineResources(clone, docEl).then(function(imgsDropped) {
+        var notes = [];
+        if (imgsDropped > 0) {
+          notes.push(imgsDropped + ' <img> element(s) could not be inlined and composite ' +
+            'as transparent placeholders (an external URL would taint the canvas).');
+        }
         // Composite canvases: swap each cloned <canvas> for an <img> carrying
         // the live pixels — canvas content never survives cloneNode.
         var origCanvases = docEl.querySelectorAll('canvas');
         var cloneCanvases = clone.querySelectorAll('canvas');
+        var canvasesBlank = 0;
         for (var i = 0; i < origCanvases.length && i < cloneCanvases.length; i++) {
           var data = snapshotCanvas(origCanvases[i]);
-          if (!data) continue;
+          if (!data) {
+            // The cloned canvas stays, and it is empty — the region renders blank.
+            // Silently, until now: this is indistinguishable from an app that drew
+            // nothing there.
+            canvasesBlank++;
+            continue;
+          }
           var img = document.createElement('img');
           img.src = data;
           var cc = cloneCanvases[i];
           // The inlined cssText already carries the canvas's layout box
           if (cc.style && cc.style.cssText) img.style.cssText = cc.style.cssText;
           if (cc.parentNode) cc.parentNode.replaceChild(img, cc);
+        }
+        if (canvasesBlank > 0) {
+          notes.push(canvasesBlank + ' <canvas> element(s) could not be snapshotted ' +
+            '(tainted or zero-size) and render blank in this image.');
         }
         // Remove scripts from clone (after index-paired passes)
         var scripts = clone.querySelectorAll('script');
@@ -401,21 +459,20 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
           svg = '<svg xmlns="http://www.w3.org/2000/svg" width="' + w + '" height="' + h + '">' +
             '<foreignObject width="100%" height="100%">' + xhtml + '</foreignObject></svg>';
         } catch (ex) {
-          respond(requestId, largestCanvasCapture(), 'serialize-error');
+          respondWithFallback(requestId, 'serialize-error', notes);
           return;
         }
         svgToCanvas(svg, w, h, function(data, reason) {
-          // The canvas fallback can rescue the pixels, but not the diagnosis: if it
-          // also comes back empty, report why the real capture failed.
-          respond(requestId, data || largestCanvasCapture(), reason);
+          // The canvas fallback can rescue the pixels, but not the picture: a
+          // labelled success says which of the two arrived.
+          if (data) { respond(requestId, data, undefined, notes); return; }
+          respondWithFallback(requestId, reason, notes);
         });
       }).catch(function() {
-        respond(requestId, largestCanvasCapture(), 'serialize-error');
+        respondWithFallback(requestId, 'serialize-error', []);
       });
     } catch (ex) {
-      var fallback = null;
-      try { fallback = largestCanvasCapture(); } catch (ex2) {}
-      respond(requestId, fallback, 'serialize-error');
+      respondWithFallback(requestId, 'serialize-error', []);
     }
   }
 

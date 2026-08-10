@@ -6,6 +6,9 @@
 
 import type { ContextPool } from '../../agents/context-pool.js';
 import { genId } from '../../lib/ids.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('relay_to_main');
 
 /**
  * Relay a message from the current agent to the monitor agent.
@@ -25,7 +28,7 @@ export function relayToMonitor(
 
   pool
     .handleTask({ requestedType: 'monitor', kind: 'relay', messageId, content, monitorId })
-    .catch((err: unknown) => console.error('[relay_to_main] Failed:', err));
+    .catch((err: unknown) => log.error('relay failed', { messageId, err }));
 
   return messageId;
 }

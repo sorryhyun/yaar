@@ -14,11 +14,14 @@
  *
  * **What reclaims what is not symmetric, and readers assume it is.** Disposing a
  * monitor takes its app agents and their sub-agents with it. Closing a *window*
- * reclaims only sub-agents — an app agent survives every one of its windows closing,
- * because it is keyed by (monitor, app) and the next window of that app is meant to
- * find it still holding the conversation. What eventually reclaims it is idleness
- * (`reapIdleAppAgents`), `fresh:true`, monitor removal, explicit delete, or session
- * teardown.
+ * reclaims nothing on its own — an app agent is keyed by (monitor, app) and drives
+ * every window of that app on that monitor, so a close that leaves another one open
+ * must leave the agent standing. It is the app's **last** window on the monitor that
+ * takes both tiers, app agent and sub-agents, on the same condition and at the same
+ * moment (`WindowEventCoordinator.handleWindowClose`). The other reclaim paths —
+ * idleness (`reapIdleAppAgents`), `fresh:true`, monitor removal, explicit delete,
+ * session teardown — remain, and of those only monitor removal and teardown also take
+ * the sub-agents.
  *
  * Agent types:
  * - Monitor agents: persistent per-monitor, handle USER_MESSAGE, provider session continuity
@@ -62,6 +65,9 @@ import type { SessionLogger } from '../logging/index.js';
 import type { AITransport, TokenUsage } from '../providers/types.js';
 import type { AgentRole } from './agent-context.js';
 import type { AgentPoolStats } from './pool-types.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('AgentPool');
 
 const appKey = appAgentKey;
 
@@ -284,7 +290,7 @@ export class AgentPool {
     } finally {
       getAgentLimiter().release();
     }
-    console.log(`[AgentPool] ${label}: ${agent.instanceId}`);
+    log.info(label, { instanceId: agent.instanceId });
   }
 
   // ── Agent creation ───────────────────────────────────────────────────
@@ -303,7 +309,7 @@ export class AgentPool {
   private async createAgentCore(preWarmedProvider?: AITransport): Promise<PooledAgent | null> {
     const limiter = getAgentLimiter();
     if (!limiter.tryAcquire()) {
-      console.log('[AgentPool] Global agent limit reached');
+      log.warn('global agent limit reached');
       return null;
     }
     let slotHandedOver = false;
@@ -345,7 +351,7 @@ export class AgentPool {
       this.trackAgent(instanceId);
       slotHandedOver = true;
 
-      console.log(`[AgentPool] Created agent ${id} (${instanceId})`);
+      log.info('created agent', { id, instanceId });
       return agent;
     } finally {
       if (!slotHandedOver) limiter.release();
@@ -389,7 +395,7 @@ export class AgentPool {
     const agent = await this.createAgentCore(preWarmedProvider);
     if (agent) {
       this.monitorAgents.set(monitorId, agent);
-      console.log(`[AgentPool] Monitor agent created for ${monitorId}: ${agent.instanceId}`);
+      log.info('monitor agent created', { monitorId, instanceId: agent.instanceId });
     }
     return agent;
   }
@@ -402,7 +408,7 @@ export class AgentPool {
     const agent = await this.createWithFreshProvider();
     if (!agent) return null;
     this.ephemeralAgents.add(agent);
-    console.log(`[AgentPool] Ephemeral agent created: ${agent.instanceId}`);
+    log.info('ephemeral agent created', { instanceId: agent.instanceId });
     return agent;
   }
 
@@ -484,9 +490,7 @@ export class AgentPool {
       // caller that has not begun its turn yet is neither busy nor idle, and the reaper
       // must not take it out from under them.
       existing.lastUsed = Date.now();
-      console.log(
-        `[AgentPool] Reusing app agent for ${appId} on monitor ${monitorId}: ${existing.instanceId}`,
-      );
+      log.info('reusing app agent', { appId, monitorId, instanceId: existing.instanceId });
       return existing;
     }
 
@@ -511,19 +515,18 @@ export class AgentPool {
 
     this.appAgents.set(appKey(monitorId, appId), agent);
     this.armIdleSweep();
-    console.log(
-      `[AgentPool] App agent created for ${appId} on monitor ${monitorId}: ${agent.instanceId}`,
-    );
+    log.info('app agent created', { appId, monitorId, instanceId: agent.instanceId });
     return agent;
   }
 
   // ── App-agent idle reaper ────────────────────────────────────────────
   //
-  // App agents are the one tier nothing else reclaims: not window close, not idleness,
-  // only `fresh:true`, monitor removal, explicit delete, or session teardown. Against a
-  // *process-global* limit of ten, eight apps opened once and left alone permanently
-  // held eight slots — and the ninth app, plus every other session on the machine, got
-  // "Agent limit reached" with no way to get a slot back short of a restart.
+  // The last window of an app on a monitor now takes its agent with it, which is what
+  // reclaims the common case. This is the backstop for the rest: an app whose window
+  // stays open all day, and whose agent sat busy-free behind it. Against a
+  // *process-global* limit of ten, eight such apps permanently held eight slots — and
+  // the ninth app, plus every other session on the machine, got "Agent limit reached"
+  // with no way to get a slot back short of a restart.
   //
   // One pool-level interval rather than a timer per agent: `lastUsed` is already
   // written on every turn, so a sweep needs no new call sites, cannot leave a timer
@@ -658,7 +661,7 @@ export class AgentPool {
     if (!agent) return null;
 
     this.sessionAgent = agent;
-    console.log(`[AgentPool] Session agent created: ${agent.instanceId}`);
+    log.info('session agent created', { instanceId: agent.instanceId });
     return agent;
   }
 
@@ -906,7 +909,7 @@ export class AgentPool {
       try {
         await agent.session.interrupt();
       } catch (err) {
-        console.error(`[AgentPool] Interrupt failed for ${agent.instanceId}:`, err);
+        log.error('interrupt failed', { instanceId: agent.instanceId, err });
       }
     }
 
@@ -917,7 +920,7 @@ export class AgentPool {
           interruptIfRunning: false,
         });
       } catch (err) {
-        console.error(`[AgentPool] Cleanup failed for ${agent.instanceId}:`, err);
+        log.error('cleanup failed', { instanceId: agent.instanceId, err });
       }
     }
 

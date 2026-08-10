@@ -1,0 +1,9 @@
+/* ── Status bar ───────────────────────────────────────────────────────── */
+.statusbar {
+  padding: 4px 12px;
+  background: var(--yaar-bg-surface);
+  border-top: 1px solid var(--yaar-border);
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  flex-shrink: 0;
+}

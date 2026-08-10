@@ -40,7 +40,8 @@ src/
 │   ├── extract-protocol-ast.ts   # What `defineApp` means: locate the call, build the manifest, public entry points
 │   ├── protocol-extractor.ts     # The reader: resolve a name, unwrap a value, flatten an object literal
 │   ├── protocol-module-graph.ts  # Specifier resolution + per-module binding index (ModuleScope), ProtocolError
-│   └── fold-schemas.ts    # Runs a defineApp app in a Worker to read Zod schemas (and the whole manifest, without `typescript`)
+│   ├── fold-schemas.ts    # Runs a defineApp app in a Worker to read Zod schemas (and the whole manifest, without `typescript`)
+│   └── dedupe-schemas.ts  # Post-pass: repeated subschemas → one protocol-level `$defs` (content-neutral, idempotent)
 ├── bundled-types/
 │   └── index.d.ts         # Type declarations for all @bundled/* imports
 └── shims/
@@ -150,6 +151,15 @@ binary. The `window` stub is load-bearing: `@bundled/yaar`'s barrel reads `windo
 module scope, so a compiled entry dies on import without it. `document` is stubbed with
 `getElementById → null`, which is what makes `defineApp`'s mount a no-op.
 
+That stub also makes one failure inevitable, so it is named rather than left as a stack:
+`createElement` returns an inert proxy, and `@bundled/solid-js/html` compiles its template
+eagerly, so an `` html`` `` evaluated at **module scope** throws on import — the author saw eight
+lines of bundled Solid internals at a line in a throwaway worker bundle, naming neither Zod nor
+Solid nor the stub. `explainImportFailure` tests for Solid's own `createTemplate` frame (which is
+why the fold builds unminified) and puts the cause and both fixes ahead of the stack. Keep it
+that narrow: an app whose *own* code calls `createElement` at module scope gets the generic
+message, because this advice would not help it.
+
 Three consumers, one artifact:
 
 - `dist/protocol.json` gets the folded JSON Schema.
@@ -185,6 +195,41 @@ green:
 - **Which bindings are readable.** `const` only, and lexical scope is honored (a local
   shadowing a module binding wins). A `let`, a parameter, or a destructured binding is
   unreadable and errors rather than falling back to a same-named module binding.
+
+### Shared subschemas (`protocol/dedupe-schemas.ts`)
+
+The manual an agent reads has a hard ceiling nobody here controls: past ~50 KB the Claude CLI
+stops delivering a tool result inline and replaces it with a path on disk, which a verbs-only
+monitor agent cannot open. The failure is total, not gradual. Most of the excess is
+*restatement* — one texture-slot shape appeared 5× inside a single `setMaterial` and ~15×
+across studio-3d's protocol — so this pass hoists any subschema stated twice into one
+protocol-level `$defs` and points at it. It runs in `extract-protocol-dir.ts`, after **both**
+readers, so a JSON-literal app that hand-duplicates a shape is folded like a Zod one, and the
+compile and `deploy.ts`'s re-derivation cannot disagree.
+
+Its counterpart is one option in the fold: `toJSONSchema(..., { reused: 'ref' })`, which is
+zod's own within-schema dedup. Zod names its defs `__schema0` and puts them in a `$defs` local
+to one descriptor — whose pointers would resolve against the wrong root once the descriptor
+sits inside protocol.json — so this pass promotes and renames them. The two ship together.
+
+Four rules, each with a failure behind it (full rationale in the file header):
+
+- **A descriptor's top-level schema is never hoisted.** The iframe bridge rejects a bad call by
+  reading `params.properties`/`params.required` straight off it, and `renderSignature` reads the
+  same two. Behind a pointer both become "declares nothing" — weaker validation, no error.
+- **Refs are protocol-relative** (`#/$defs/name`); the manifest is the schema document.
+- **Renaming and orphan-pruning read `$ref` generically**, not through the schema-aware walk, so
+  a pointer in a position this file does not recognize is never left dangling. Counting and
+  substitution stay schema-aware — treating a `properties` map or an `examples` entry as a
+  schema is how a dedup pass corrupts a manifest.
+- **Idempotent, and lossless byte-for-byte.** `resolveSchemaRefs` (exported for the tests) is
+  the contract as code: resolve every ref and the input comes back, property order included.
+
+Names are derived from the shape (`x_y_z`, `uri_repeat_offset_etc`) because the reader is a
+model and the name is documentation. Anything under ~120 bytes stays inline — a pointer costs
+about what it would save. Consumers must resolve: server-side that is
+`server/src/lib/schema-refs.ts`, threaded into `command-signature.ts` and into the per-command
+`describe`, which attaches the defs its slice reaches so the slice stands alone.
 
 ## Runtime-Contract Guards
 

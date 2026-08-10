@@ -10,6 +10,9 @@ import { dirname } from 'path';
 import type { OSAction } from '@yaar/shared';
 import type { CacheEntry, CacheMatch, Fingerprint } from './types.js';
 import { computeSimilarity } from './fingerprint.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('ReloadCache');
 
 const MAX_ENTRIES = 100;
 const MIN_SIMILARITY = 0.85;
@@ -43,12 +46,12 @@ export class ReloadCache {
         this.exactMap.set(entry.fingerprintKey, entry);
       }
 
-      console.log(`[ReloadCache] Loaded ${this.entries.length} entries from disk`);
+      log.info('loaded entries from disk', { entries: this.entries.length });
     } catch {
       // File doesn't exist or is invalid - start fresh
       this.entries = [];
       this.exactMap.clear();
-      console.log('[ReloadCache] No existing cache found, starting fresh');
+      log.info('no existing cache found, starting fresh');
     }
   }
 
@@ -62,7 +65,7 @@ export class ReloadCache {
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
       this.saveToDisk().catch((err) => {
-        console.error('[ReloadCache] Failed to save:', err);
+        log.error('failed to save', { err });
       });
     }, SAVE_DEBOUNCE_MS);
   }
@@ -73,7 +76,7 @@ export class ReloadCache {
       const data = JSON.stringify({ entries: this.entries, idCounter: this.idCounter }, null, 2);
       await Bun.write(this.filePath, data);
     } catch (err) {
-      console.error('[ReloadCache] Failed to write cache file:', err);
+      log.error('failed to write cache file', { path: this.filePath, err });
     }
   }
 
@@ -97,7 +100,7 @@ export class ReloadCache {
       existing.lastUsedAt = Date.now();
       existing.requiredWindowIds = opts?.requiredWindowIds;
       this.scheduleSave();
-      console.log(`[ReloadCache] Updated existing entry "${label}" (${existing.id})`);
+      log.info('updated existing entry', { label, id: existing.id });
       return existing;
     }
 
@@ -122,9 +125,7 @@ export class ReloadCache {
     this.evict();
     this.scheduleSave();
 
-    console.log(
-      `[ReloadCache] Recorded new entry "${label}" (${entry.id}), total: ${this.entries.length}`,
-    );
+    log.info('recorded new entry', { label, id: entry.id, total: this.entries.length });
     return entry;
   }
 
@@ -195,7 +196,12 @@ export class ReloadCache {
     const totalAttempts = entry.useCount + entry.failureCount;
     if (totalAttempts >= 3 && entry.failureCount / totalAttempts > 0.5) {
       this.removeEntry(id);
-      console.log(`[ReloadCache] Removed entry "${entry.label}" due to high failure rate`);
+      log.info('removed entry due to high failure rate', {
+        label: entry.label,
+        id,
+        failures: entry.failureCount,
+        attempts: totalAttempts,
+      });
     } else {
       this.scheduleSave();
     }
@@ -208,7 +214,7 @@ export class ReloadCache {
     const toRemove = this.entries.filter((e) => e.requiredWindowIds?.includes(windowId));
     for (const entry of toRemove) {
       this.removeEntry(entry.id);
-      console.log(`[ReloadCache] Invalidated entry "${entry.label}" (window ${windowId} closed)`);
+      log.info('invalidated entry — its window closed', { label: entry.label, windowId });
     }
   }
 

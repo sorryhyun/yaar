@@ -1,0 +1,128 @@
+/* ── Detail panel ───────────────────────────────── */
+
+.detail-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.detail-loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.detail-empty {
+  flex: 1;
+}
+
+.empty-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.empty-sub {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  opacity: 0.7;
+}
+
+.detail-content {
+  flex: 1;
+  min-height: 0;
+  /* Do not scroll the whole panel: the header + metadata grid stay fixed
+     at the top and the transcript section fills the remaining space and
+     scrolls internally, so it is never pushed below the fold. */
+  overflow: hidden;
+  padding: var(--yaar-sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-3);
+}
+
+.detail-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+
+.detail-header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-2);
+}
+
+.download-btn {
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.detail-session-id {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--yaar-accent);
+  word-break: break-all;
+}
+
+.current-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--yaar-wash-success);
+  color: var(--yaar-success);
+  border: 1px solid var(--yaar-success);
+  align-self: flex-start;
+}
+
+/* ── Detail grid ────────────────────────────────── */
+
+.detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--yaar-sp-2);
+  flex-shrink: 0;
+}
+
+.detail-field {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.span-2 {
+  grid-column: span 2;
+}
+
+.field-label {
+  font-size: 9px;
+}
+
+.field-value {
+  font-size: 13px;
+  color: var(--yaar-text);
+  line-height: 1.4;
+}
+
+.field-value.mono {
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.field-value.agent-value {
+  font-size: 14px;
+}

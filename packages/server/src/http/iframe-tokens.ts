@@ -33,12 +33,24 @@
 import { join } from 'node:path';
 import { isPreviewAppId, PREVIEW_APP_PREFIX } from '@yaar/shared';
 import type { PermissionEntry } from './access.js';
+// The matching rule lives in a leaf module precisely so this file can use it: `access.js`
+// imports *this* one at runtime, so importing the gate here would close a cycle.
+import {
+  capForeignAppStorage,
+  coversForeignAppStorage,
+  entryUri,
+  entryVerbs,
+  isUriAllowed,
+} from './uri-match.js';
 // Static, and safe to be: `discovery.js` reaches back into `http/` only through
 // `import type { PermissionEntry } from '../../http/access.js'`, which erases. That
 // type-only edge is the whole reason there is no cycle here — see the note on it.
 import { getAppMeta } from '../features/apps/discovery.js';
 import { getStorageDir } from '../config.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('IframeToken');
 
 const TOKEN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
@@ -234,33 +246,134 @@ export async function previewBundles(
   appId: string | undefined,
   storageRoot: string = getStorageDir(),
 ): Promise<string[] | undefined> {
+  const bundles = (await previewManifest(appId, storageRoot))?.bundles;
+  return Array.isArray(bundles) ? bundles.filter((b) => typeof b === 'string') : undefined;
+}
+
+/**
+ * The previewed project's own app.json, or undefined when there is no such file to read.
+ *
+ * Shared by the two fields a preview's identity comes off disk for (`bundles`,
+ * `permissions`) so the path, the id validation and the "what counts as ordinary"
+ * judgement are stated once.
+ *
+ * Returning `undefined` is ordinary on three paths — not a preview at all (most calls),
+ * the project is gone, the project has no manifest — so those are silent. The two that
+ * are *not* ordinary say so: a project id that would climb out of the directory, and a
+ * manifest that exists and will not parse. Without those two lines a devtools layout
+ * change or a broken app.json surfaces only as a 403 from a door nowhere near here.
+ */
+async function previewManifest(
+  appId: string | undefined,
+  storageRoot: string,
+): Promise<{ bundles?: unknown; permissions?: unknown } | undefined> {
   if (!isPreviewAppId(appId)) return undefined;
   const projectId = appId!.slice(PREVIEW_APP_PREFIX.length);
   // Reject anything that could climb out of the projects directory. Project ids are
   // timestamps in practice, but this string reaches a path join.
   if (!projectId || !/^[\w.-]+$/.test(projectId) || projectId.includes('..')) {
-    console.warn(
-      `[IframeToken] Refusing preview project id ${JSON.stringify(projectId.slice(0, 80))}: not a bare id.`,
-    );
+    log.warn('refusing preview project id: not a bare id', {
+      projectId: JSON.stringify(projectId.slice(0, 80)),
+    });
     return undefined;
   }
-  const manifestPath = join(storageRoot, 'apps', 'devtools', 'projects', projectId, 'app.json');
-  let manifest: unknown;
+  const manifestPath = join(
+    storageRoot,
+    'apps',
+    DEVTOOLS_APP_ID,
+    'projects',
+    projectId,
+    'app.json',
+  );
   try {
-    manifest = await Bun.file(manifestPath).json();
+    return await Bun.file(manifestPath).json();
   } catch (err) {
     // A project with no app.json is ordinary: devtools deletes projects, and a preview
     // window can outlive the project it previews. A file that is *there* and unreadable
     // is not — that is a broken manifest or a moved layout.
     if (await Bun.file(manifestPath).exists()) {
-      console.warn(
-        `[IframeToken] Preview manifest unreadable at ${manifestPath} — granting no bundles: ${String(err)}`,
-      );
+      log.warn('preview manifest unreadable — granting nothing from it', { manifestPath, err });
     }
     return undefined;
   }
-  const bundles = (manifest as { bundles?: unknown }).bundles;
-  return Array.isArray(bundles) ? bundles.filter((b) => typeof b === 'string') : undefined;
+}
+
+/** The app whose sandbox holds every preview project, and whose reach is their ceiling. */
+const DEVTOOLS_APP_ID = 'devtools';
+
+/**
+ * Permissions a devtools *preview* holds, read from the project's own app.json.
+ *
+ * Same problem as {@link previewBundles} and the same answer. A preview runs under
+ * `preview--{projectId}`, which `getAppMeta` cannot resolve, so its permission list was
+ * empty and only the automatic `SELF_GRANTS` worked: `appStorage` and `appDb` ran, and
+ * every entry the project *declared* 403'd. An app whose whole job was writing to
+ * `yaar://storage/media/` could not exercise that path in the only environment built for
+ * iterating on it — the devtools prompt promised otherwise, so the failure read as a typo
+ * in app.json rather than as a platform gap.
+ *
+ * `openPreview` did pass the list into `window.create`, but that door only honours a
+ * caller-supplied `permissions` array for a caller that outranks the app
+ * (`mayDelegateGrants`), and devtools *is* an app — so the array was discarded before the
+ * window existed. Nor should that gate move: it is what stops any app declaring
+ * `yaar://windows/` from minting itself a window holding the storage tree. Reading the
+ * file instead keeps this the project's declared identity rather than the request's
+ * claim, which is exactly the distinction that made `bundles` disk-read too.
+ *
+ * ── The ceiling ──
+ *
+ * The project file is written by devtools, so without a bound a project could declare
+ * `yaar://config/` — which devtools itself does not hold — and the preview would outrank
+ * the app that spawned it. Every entry is therefore intersected with devtools' own
+ * installed permissions, verb by verb: a preview reaches what devtools reaches, never
+ * more. An entry that survives in part is narrowed to the verbs that survived; one that
+ * survives not at all is dropped with a warning, since a silently missing grant is the
+ * symptom this whole function exists to end.
+ *
+ * The grant is otherwise real: a preview writing to `media/` writes to the shared tree
+ * the deployed app will write to. That is the point — a throwaway copy would exercise a
+ * path the shipped app never takes. The preview's *own* namespace stays throwaway
+ * (`preview--{id}`, deleted with the project); only what the project explicitly declared
+ * reaches beyond it.
+ */
+export async function previewPermissions(
+  appId: string | undefined,
+  storageRoot: string = getStorageDir(),
+): Promise<PermissionEntry[] | undefined> {
+  const declared = (await previewManifest(appId, storageRoot))?.permissions;
+  if (!Array.isArray(declared)) return undefined;
+
+  const ceiling = (await getAppMeta(DEVTOOLS_APP_ID))?.permissions ?? [];
+  const granted: PermissionEntry[] = [];
+  for (const entry of declared) {
+    if (typeof entry !== 'string' && (typeof entry !== 'object' || entry === null)) continue;
+    const uri = entryUri(entry as PermissionEntry);
+    if (typeof uri !== 'string' || !uri) continue;
+    // The cap itself is applied at the mint (`generateAppIframeToken`), the one site every
+    // branch converges on. This is only the diagnostic: it can name the project file the
+    // grant came from, which is where the author has to go to change it.
+    if (coversForeignAppStorage(uri, appId ?? '')) {
+      log.debug('preview declares a grant over app storage — capping it to the shared tree', {
+        appId,
+        uri,
+      });
+    }
+    const wanted = entryVerbs(entry as PermissionEntry).filter((v) => typeof v === 'string');
+    const allowed = wanted.filter((verb) => isUriAllowed(uri, verb, ceiling));
+    if (allowed.length === 0) {
+      log.warn('preview declares a permission devtools does not hold — dropping it', {
+        appId,
+        uri,
+      });
+      continue;
+    }
+    granted.push(
+      allowed.length === wanted.length && typeof entry === 'string'
+        ? uri
+        : { uri, verbs: [...allowed] },
+    );
+  }
+  return granted.length > 0 ? granted : undefined;
 }
 
 /**
@@ -273,7 +386,22 @@ export async function generateAppIframeToken(
   { appId, permissions: explicitPermissions, monitorId }: IframeTokenOptions = {},
 ): Promise<string> {
   const appMeta = appId ? await getAppMeta(appId) : null;
-  let permissions = explicitPermissions ?? appMeta?.permissions ?? [];
+  // A devtools preview has no installed manifest to resolve — that is the point, it is
+  // not deployed yet — so its declared list is read off the project file (and capped by
+  // devtools' own reach). See `previewPermissions`.
+  let permissions =
+    explicitPermissions ?? appMeta?.permissions ?? (await previewPermissions(appId)) ?? [];
+
+  // A preview never holds a grant over app storage, whichever of those three branches
+  // supplied the list. It is project code the user is still authoring, running under an
+  // id that owns no app storage of its own; devtools' `yaar://storage/` honestly covers
+  // `storage/apps/`, and devtools' subtree is where every *other* project's source lives.
+  // Its own document reaches it as a delegated window grant — one exact file, `read` only
+  // — which is the shape this must not be allowed to widen into a foothold. Capped rather
+  // than dropped, so a preview keeps the shared tree (`media/`) it can legitimately use.
+  if (appId && isPreviewAppId(appId)) {
+    permissions = capForeignAppStorage(permissions, appId).capped;
+  }
 
   // Auto-grant the app's own namespace (see SELF_GRANTS).
   if (appId) {

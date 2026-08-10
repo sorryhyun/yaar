@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage, invoke, del, errMsg, safeParseOr } from '@bundled/yaar';
+import { appStorage, invoke, list, del, errMsg, safeParseOr } from '@bundled/yaar';
 import type * as z from '@bundled/zod';
 import { ProjectAppJsonSchema } from '../schema';
 import {
@@ -33,10 +33,47 @@ import { refreshFiles, openFile } from './files';
 /** What `safeParseOr` falls back to for a missing or unreadable app.json — every field is optional. */
 const EMPTY_APP_JSON: z.infer<typeof ProjectAppJsonSchema> = {};
 
+/**
+ * Where each project came from, keyed by project id.
+ *
+ * A sidecar at the appStorage root rather than a field in the project's own
+ * `app.json`, because that file is the app's manifest: `deploy` ships it, so a
+ * bookkeeping key written there would leak into every installed app. It is also not a
+ * dotfile inside the project, which would show up in the file listing the agent reads.
+ * Nothing outside this module writes it.
+ */
+const ORIGINS_PATH = 'project-origins.json';
+
+async function readOrigins(): Promise<Record<string, string>> {
+  const raw = await appStorage.readJsonOr<unknown>(ORIGINS_PATH, undefined);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [id, origin] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof origin === 'string') out[id] = origin;
+  }
+  return out;
+}
+
+/**
+ * Record where a project came from. Best effort on purpose: failing to write the
+ * marker must not fail the create or clone that produced the project — an unmarked
+ * project is merely one cleanup will leave alone, which is the safe direction.
+ */
+async function recordOrigin(id: string, origin: string): Promise<void> {
+  try {
+    const origins = await readOrigins();
+    origins[id] = origin;
+    await appStorage.save(ORIGINS_PATH, JSON.stringify(origins, null, 2));
+  } catch (err) {
+    console.error('[devtools] recording project origin failed', err);
+  }
+}
+
 export async function loadProjects(): Promise<void> {
   try {
     const entries = await appStorage.list('projects/');
     const dirs = entries.filter((e) => e.isDirectory);
+    const origins = await readOrigins();
     const metas: ProjectMeta[] = [];
     for (const dir of dirs) {
       const id = dir.path.replace(/\/$/, '').split('/').pop()!;
@@ -61,9 +98,22 @@ export async function loadProjects(): Promise<void> {
         label: `projects/${id}/app.json`,
       });
       if (meta.name) name = meta.name;
-      metas.push({ id, name, lastModified });
+      metas.push({ id, name, lastModified, origin: origins[id] });
     }
     setProjects(metas);
+    // Prune markers for projects that no longer exist. `deleteProject` drops its own,
+    // but a project removed any other way (storage edited directly, an older build)
+    // would otherwise leave a marker that a recycled id could inherit.
+    const live = new Set(metas.map((m) => m.id));
+    const stale = Object.keys(origins).filter((id) => !live.has(id));
+    if (stale.length > 0) {
+      for (const id of stale) delete origins[id];
+      try {
+        await appStorage.save(ORIGINS_PATH, JSON.stringify(origins, null, 2));
+      } catch {
+        /* best effort — the markers are a convenience, not the source of truth */
+      }
+    }
   } catch (err) {
     // A failed listing is not "you have no projects" — without this line the
     // sidebar renders its empty state and the user reaches for New Project.
@@ -86,10 +136,50 @@ export async function createProject(name: string): Promise<string> {
     projectPath(id, 'app.json'),
     JSON.stringify({ appId, name, icon: '🧩', version: '1.0.0' }, null, 2),
   );
+  await recordOrigin(id, 'new');
   await loadProjects();
   await openProject(id);
   setStatusText(`Created project "${name}"`);
   return id;
+}
+
+export interface InstalledApp {
+  id: string;
+  name: string;
+  description?: string;
+  /** 'app' or 'system' — shown so a clone target that is part of the OS is obvious. */
+  kind?: string;
+  version?: string;
+}
+
+/**
+ * The installed apps, as clone targets for the toolbar's Clone button.
+ *
+ * `yaar://apps/` answers with `uri` and metadata, never source; the id is the last
+ * segment, and it is what `cloneApp` takes. Sorted by name because this list is
+ * read by a human picking one, not by a caller matching an id.
+ */
+export async function listInstalledApps(): Promise<InstalledApp[]> {
+  const items = await list<
+    { uri?: string; name?: string; description?: string; kind?: string; version?: string }[]
+  >('yaar://apps/');
+  const rows = Array.isArray(items) ? items : [];
+  return rows
+    .map((item) => {
+      const id = String(item.uri ?? '')
+        .replace(/\/$/, '')
+        .split('/')
+        .pop();
+      return {
+        id: id ?? '',
+        name: item.name ?? id ?? '',
+        description: item.description,
+        kind: item.kind,
+        version: item.version,
+      };
+    })
+    .filter((app) => app.id.length > 0)
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export interface CloneAppResult {
@@ -133,6 +223,7 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
     if (typeof raw !== 'string') throw new Error('Cloned AGENTS.md is not text');
     agentsMd = raw;
   }
+  await recordOrigin(id, `clone:${appId}`);
   await loadProjects();
   await openProject(id);
   setStatusText(`Cloned "${name}"`);
@@ -188,6 +279,15 @@ export async function deleteProject(id: string): Promise<void> {
     await del(`yaar://apps/preview--${id}/storage/`);
   } catch {
     /* best effort — the project may never have been previewed */
+  }
+  try {
+    const origins = await readOrigins();
+    if (id in origins) {
+      delete origins[id];
+      await appStorage.save(ORIGINS_PATH, JSON.stringify(origins, null, 2));
+    }
+  } catch {
+    /* best effort — loadProjects prunes anything left behind */
   }
   // Remove from tabs
   setOpenTabs(openTabs().filter((t) => t !== id));

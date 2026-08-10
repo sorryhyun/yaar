@@ -16,8 +16,12 @@ export const VERB_TOOLS_TABLE = `You have 5 generic verbs that operate on \`yaar
 **describe = the manual. read = the current value. list = what's addressable.** They are
 not interchangeable, and the difference is sharpest on apps and windows:
 
-- \`describe('yaar://apps/notes')\` → what Notes is: its protocol (every state key and
-  command, with schemas) and its SKILL.md if it ships one.
+- \`describe('yaar://apps/notes')\` → what Notes is: its SKILL.md if it ships one, plus the
+  names of its state keys and commands. The protocol itself is one hop away and comes in
+  three sizes: \`list('yaar://apps/notes/protocol')\` for every command's signature and
+  opening sentence (start here), \`read('yaar://apps/notes/protocol/commands/{name}')\` for
+  one command with its full schema, \`read('yaar://apps/notes/protocol')\` for the whole
+  manifest. Prefer the first two — a big app's manifest is tens of KB.
 - \`read('yaar://apps/notes')\` → Notes' effective manifest: version, source, permissions,
   and the capabilities it actually holds after the user's install-time grant.
 - \`describe('yaar://windows/win-1')\` → *that running window's* manual, from the live

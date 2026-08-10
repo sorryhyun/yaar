@@ -3,9 +3,9 @@
   "name": "Memo",
   "icon": "📝",
   "description": "Simple persistent memo/notes app",
-  "permissions": ["yaar://storage/"],
+  "permissions": [],
   "run": "dist/index.html",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "author": "YAAR",
   "kind": "system"
 }

@@ -13,6 +13,9 @@ import { applyContentOperation, DEFAULT_MONITOR_ID } from '@yaar/shared';
 import { getMonitorId } from '../agents/agent-context.js';
 import type { PermissionEntry } from '../http/access.js';
 import { WindowHandleMap } from './window-handle-map.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('WindowStateRegistry');
 
 export type { WindowState } from '@yaar/shared';
 
@@ -196,10 +199,11 @@ export class WindowStateRegistry {
     const resolved = this.resolve(rawId);
     if (resolved) return resolved[0];
     if (!rawId.includes('/')) {
-      console.warn(
-        `[WindowStateRegistry] Unscoped window key "${rawId}" — the action carried no monitor ` +
-          `and none could be resolved. The frontend will place this window on its active ` +
-          `monitor, so the two registries now disagree about its key.`,
+      log.warn(
+        'unscoped window key — the action carried no monitor and none could be resolved; ' +
+          'the frontend will place this window on its active monitor, so the two registries ' +
+          'now disagree about its key',
+        { rawId },
       );
     }
     return rawId;

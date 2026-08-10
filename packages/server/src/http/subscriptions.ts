@@ -14,6 +14,9 @@ import { ServerEventType, type StreamFrame } from '@yaar/shared';
 import { actionEmitter } from '../session/action-emitter.js';
 import { namesSelf } from './access.js';
 import { recordDeliveredFrame } from '../streams/stream-diagnostics.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('subscriptions');
 
 /**
  * A subscription is either a change *ping* (`'change'` — the callback gets a URI
@@ -119,10 +122,11 @@ let counter = 0;
  */
 function checkResolved(uri: string, method: string): boolean {
   if (!namesSelf(uri)) return true;
-  console.error(
-    `[subscriptions] ${method}("${uri}") was given an unresolved "self" URI. ` +
-      "Subscriptions are keyed by literal string, so this can never match a producer's " +
-      "real-id URI — resolve it against the caller's appId first (resolveSelf in http/access.ts).",
+  log.error(
+    'given an unresolved "self" URI. Subscriptions are keyed by literal string, so this can ' +
+      "never match a producer's real-id URI — resolve it against the caller's appId first " +
+      '(resolveSelf in http/access.ts).',
+    { method, uri },
   );
   return false;
 }

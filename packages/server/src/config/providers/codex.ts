@@ -7,6 +7,9 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { getEnvInt, IS_BUNDLED_EXE } from '../env.js';
 import { getConfigDir } from '../paths.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('codex:config');
 
 /**
  * Get the codex CLI spawn args (command + prefix args).
@@ -72,7 +75,7 @@ export function detectUserMcpServers(): string[] {
     };
     servers = parsed?.mcp_servers;
   } catch (err) {
-    console.warn(`[codex] Could not read ${configPath}, leaving its MCP servers alone:`, err);
+    log.warn('could not read config, leaving its MCP servers alone', { configPath, err });
     return [];
   }
   if (!servers || typeof servers !== 'object') return [];
@@ -82,7 +85,7 @@ export function detectUserMcpServers(): string[] {
     // TOML permits quoted keys; `-c` addresses a dotted path, so a name with a dot, a space,
     // or a quote in it cannot be named without changing which key the override lands on.
     if (/^[A-Za-z0-9_-]+$/.test(name)) names.push(name);
-    else console.warn(`[codex] MCP server "${name}" cannot be addressed by -c; leaving it on`);
+    else log.warn('MCP server cannot be addressed by -c; leaving it on', { server: name });
   }
   return names;
 }
@@ -139,9 +142,10 @@ export function buildDirectToolModeCatalog(): string | null {
   const codexHome = process.env.CODEX_HOME?.trim() || join(homedir(), '.codex');
   const cachePath = join(codexHome, 'models_cache.json');
   if (!existsSync(cachePath)) {
-    console.warn(
-      `[codex] No ${cachePath}; leaving the model catalog alone (code mode and multi-agent ` +
-        `stay whatever the model preset says). Run \`codex\` once to populate it.`,
+    log.warn(
+      'no model catalog cache; leaving the catalog alone (code mode and multi-agent stay ' +
+        'whatever the model preset says). Run `codex` once to populate it.',
+      { cachePath },
     );
     return null;
   }
@@ -179,7 +183,7 @@ export function buildDirectToolModeCatalog(): string | null {
     writeFileSync(outPath, JSON.stringify({ models: patched }, null, 1));
     return outPath;
   } catch (err) {
-    console.warn(`[codex] Could not rewrite the model catalog, leaving codex's own in place:`, err);
+    log.warn("could not rewrite the model catalog, leaving codex's own in place", { err });
     return null;
   }
 }

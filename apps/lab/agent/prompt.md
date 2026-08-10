@@ -21,6 +21,22 @@ runCode({ code: "const e = await store.readJSON('data/events.json');\ndf(e).grou
 runCode({ code: "df(rows).filter(r => r.score > 90)", saveResultTo: 'reports/top.csv' })
 ```
 
+## The user is watching
+
+Everything you run over the protocol is logged to the **Agent runs** view in the window —
+the source, the captured logs, the result rendered the way a cell would render it (table,
+chart, JSON), the duration, and the error on failure. Last 50 entries, with a Clear button.
+
+- `runCode` **switches the window to that view**, so the user sees the result in front of
+  them. Nothing about the value you get back changes.
+- `runCell` / `runAll` leave the user on the Notebook view — that is where their output
+  renders — and scroll the cell they touched into view with a brief highlight. The Agent
+  runs tab gets an unread badge.
+
+So write code whose *visible* result reads well: a `df(...).head(10)` or a `plot.bar(...)`
+as the last expression is worth more to the user than a bare count, at no extra cost to you.
+Read the log back with the `agentRuns` state key (summaries only, never the data).
+
 ## runCode
 
 `runCode({ code, timeoutMs?, resultLimit?, saveResultTo? })` runs code without creating a
@@ -188,7 +204,9 @@ for throwaway questions.
 - `resetKernel()` — restart the worker, clearing every variable.
 
 Read `currentNotebook` for cell ids and sources; it deliberately excludes outputs. Read
-`lastRun` for the summary of the most recent execution.
+`lastRun` for the summary of the most recent execution, and `agentRuns` for the log of
+everything you have run in this session: `{ id, at, kind, cellId, ok, durationMs, summary,
+savedTo, error }[]`, oldest first, capped at 50.
 
 ## Building a notebook for a user
 

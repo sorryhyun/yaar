@@ -1,0 +1,67 @@
+/* ── Main area ── */
+.main-area {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* A change row carries a path, a +/- pair and a clock; 200px truncates all three.
+   The tree does not need the extra width, so the column widens only for the tab
+   that does. */
+.main-area.wide-sidebar {
+  grid-template-columns: 280px 1fr;
+}
+
+/* ── Sidebar (Files / Changes) ── */
+.sidebar-pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--yaar-border);
+}
+
+.sidebar-tabs {
+  display: flex;
+  align-items: center;
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-weight: 600;
+  font-family: inherit;
+}
+
+.sidebar-tab:hover {
+  color: var(--yaar-text);
+}
+
+.sidebar-tab.active {
+  color: var(--yaar-text);
+  border-bottom-color: var(--yaar-accent);
+}
+
+.sidebar-tab-action {
+  margin-left: auto;
+  padding: 2px var(--yaar-sp-2);
+  background: none;
+  border: none;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.sidebar-tab-action:hover {
+  color: var(--yaar-text);
+}

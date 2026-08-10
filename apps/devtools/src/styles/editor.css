@@ -1,0 +1,164 @@
+/* ── Editor area ── */
+.editor-area {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.editor-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+}
+
+.editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+}
+
+.editor-content {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+  background: var(--yaar-bg);
+}
+
+.editor-file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-line-number-toggle {
+  margin-left: auto;
+}
+
+.editor-gutter {
+  flex: 0 0 auto;
+  min-width: 3.5ch;
+  overflow: hidden;
+  border-right: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-text-dim);
+  user-select: none;
+}
+
+.editor-line-numbers {
+  margin: 0;
+  padding: var(--yaar-sp-2);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: right;
+  white-space: pre;
+  will-change: transform;
+}
+
+/* Image files render as a picture instead of the textarea — see openFile(). */
+.editor-image {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--yaar-sp-4);
+  background:
+    linear-gradient(45deg, var(--yaar-bg-surface) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, var(--yaar-bg-surface) 25%, transparent 25%) 0 8px / 16px 16px,
+    linear-gradient(45deg, transparent 75%, var(--yaar-bg-surface) 75%) 8px -8px / 16px 16px,
+    linear-gradient(-45deg, transparent 75%, var(--yaar-bg-surface) 75%) -8px 0 / 16px 16px;
+}
+
+.editor-image img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.editor-overlay {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.editor-highlight,
+.editor-textarea {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: var(--yaar-sp-2);
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.5;
+  tab-size: 2;
+  white-space: pre;
+  overflow: auto;
+  border: none;
+  box-sizing: border-box;
+}
+
+.editor-highlight {
+  pointer-events: none;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  z-index: 0;
+}
+
+.editor-highlight code {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  tab-size: inherit;
+}
+
+.editor-textarea {
+  background: transparent;
+  color: transparent;
+  caret-color: var(--yaar-text);
+  outline: none;
+  resize: none;
+  z-index: 1;
+  -webkit-text-fill-color: transparent;
+}
+
+/* ── Prism token overrides ──
+   The base .token.* palette is compiler-injected; only deviations are kept here.
+   mirrors compiler-injected Prism palette */
+.editor-highlight .token.comment,
+.editor-highlight .token.prolog,
+.editor-highlight .token.doctype,
+.editor-highlight .token.cdata {
+  color: #6a737d;
+}
+
+.editor-highlight .token.punctuation,
+.editor-highlight .token.operator,
+.editor-highlight .token.entity,
+.editor-highlight .token.url {
+  color: var(--yaar-text);
+}
+
+.editor-highlight .token.builtin {
+  color: #79c0ff;
+}

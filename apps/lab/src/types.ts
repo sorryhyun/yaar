@@ -76,6 +76,27 @@ export interface NotebookMeta {
   cellCount: number;
 }
 
+/**
+ * One execution that arrived over the app protocol, kept for the Agent runs panel
+ * so an agent-driven run is never invisible in the window. `output` is the same
+ * shape a cell renders, so OutputView draws both.
+ */
+export interface AgentRun {
+  id: string;
+  at: number;
+  kind: 'runCode' | 'runCell' | 'runAll';
+  cellId?: string;
+  source: string;
+  ok: boolean;
+  durationMs: number;
+  summary: string;
+  output?: CellOutput;
+  savedTo?: string;
+  saveError?: string;
+  error?: string;
+  truncated?: boolean;
+}
+
 /** What the worker sends back for one execution. */
 export interface RunResult {
   ok: boolean;

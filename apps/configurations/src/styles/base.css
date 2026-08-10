@@ -1,0 +1,50 @@
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+}
+
+.cfg-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--yaar-bg);
+}
+
+.cfg-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 0 var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+  flex-shrink: 0;
+}
+
+.cfg-tab {
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.cfg-tab:hover {
+  color: var(--yaar-text);
+}
+
+.cfg-tab.active {
+  color: var(--yaar-accent);
+  border-bottom-color: var(--yaar-accent);
+}
+
+.cfg-content {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}

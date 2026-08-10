@@ -1,0 +1,145 @@
+/* ── Sidebar ─────────────────────────────────────── */
+
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--yaar-border);
+  display: flex;
+  flex-direction: column;
+  background: var(--yaar-bg);
+  min-height: 0;
+}
+
+.search-wrap {
+  padding: var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+
+.search-input {
+  width: 100%;
+  font-size: 12px;
+}
+
+.session-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.list-status {
+  padding: 28px 16px;
+  text-align: center;
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  display: flex;
+  justify-content: center;
+}
+
+/* ── Date group ─────────────────────────────────── */
+
+.date-group-label {
+  font-size: 10px;
+  padding: 10px 12px 4px;
+  position: sticky;
+  top: 0;
+  background: var(--yaar-bg);
+  z-index: 1;
+}
+
+/* ── Session item ───────────────────────────────── */
+
+.session-item {
+  flex-direction: column;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+}
+
+.session-item.active {
+  border-left: 2px solid var(--yaar-accent);
+  padding-left: 10px;
+}
+
+.session-item.current-session .session-id {
+  color: var(--yaar-accent);
+}
+
+.session-id {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--yaar-text);
+}
+
+.session-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+/* ── Provider badge ─────────────────────────────── */
+
+.provider-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+/* claude / anthropic — same identity color as .role-assistant (both are
+   "this came from the Claude/Anthropic assistant") */
+.provider-claude,
+.provider-anthropic {
+  background: rgba(205, 157, 57, 0.15);
+  color: var(--sl-role-assistant);
+  border: 1px solid rgba(205, 157, 57, 0.3);
+}
+
+/* openai / gpt / codex */
+.provider-openai,
+.provider-gpt,
+.provider-codex {
+  background: var(--yaar-wash-accent-strong);
+  color: var(--yaar-accent);
+  border: 1px solid var(--yaar-accent);
+}
+
+/* gemini / google */
+.provider-gemini,
+.provider-google {
+  background: var(--yaar-wash-success-strong);
+  color: var(--yaar-success);
+  border: 1px solid var(--yaar-success);
+}
+
+/* unknown / fallback */
+.provider-unknown {
+  background: rgba(139, 148, 158, 0.12);
+  color: var(--yaar-text-muted);
+  border: 1px solid rgba(139, 148, 158, 0.2);
+}
+
+.session-datetime {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.agent-count {
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  flex-shrink: 0;
+  white-space: nowrap;
+}

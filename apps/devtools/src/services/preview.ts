@@ -1,11 +1,13 @@
 export {};
-import { appStorage, errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
-import * as z from '@bundled/zod';
-import { ProjectAppJsonSchema, type PermissionEntry } from '../schema';
+import { errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
 import {
   activeProject,
+  buildSerial,
+  previewBuildSerial,
+  previewIsStale,
   previewUrl,
   previewWindowId,
+  setPreviewBuildSerial,
   setPreviewWindowId,
   type ConsoleEntry,
 } from '../core';
@@ -75,34 +77,20 @@ export function captureFailureHint(reason: string): string {
  *
  * Re-creating the window remounts the iframe, which is how a preview picks up a new build —
  * so `compile` calls this too. Shared with the `preview` command rather than duplicated:
- * the window id, the preview principal and the permissions below are all load-bearing, and
- * a second copy of them that drifted would be its own bug.
+ * the window id and the preview principal below are both load-bearing, and a second copy
+ * of them that drifted would be its own bug.
  */
 export async function openPreview(): Promise<{ previewUrl: string; windowId: string }> {
   const url = previewUrl();
   if (!url) throw new AppCommandError('No compiled output. Run compile first.');
   const proj = activeProject();
   const name = proj?.name ?? 'Preview';
-  // Read project's app.json to get declared permissions for the preview iframe
-  let permissions: PermissionEntry[] | undefined;
-  if (proj) {
-    const raw = await appStorage.readJsonOr<unknown>(`projects/${proj.id}/app.json`, null);
-    if (raw != null) {
-      const appJson = z.safeParse(ProjectAppJsonSchema, raw);
-      if (appJson.success) {
-        permissions = appJson.data.permissions;
-      } else {
-        // Previewing without the declared grants still works — the app just 403s
-        // on its verbs — so this degrades rather than refusing to open. It has to
-        // say so, though: "my app can't read storage in the preview" is otherwise
-        // an unexplainable symptom of a typo in app.json.
-        console.error(
-          `[devtools] projects/${proj.id}/app.json failed validation — previewing with no declared permissions`,
-          appJson.error.issues,
-        );
-      }
-    }
-  }
+  // The project's declared `permissions` are deliberately *not* passed here. `window.create`
+  // honours a caller-supplied list only for a caller that outranks the app it is creating a
+  // window for — devtools is an app, so the array was silently discarded and every declared
+  // grant 403'd in preview. The server reads the same list off the project's app.json when it
+  // mints the preview's token instead (`previewPermissions` in http/iframe-tokens.ts), capped
+  // by devtools' own reach, which is also how `bundles` already worked. Nothing to send.
   // Address the window by an explicit, namespaced id. Left to the server, the id is
   // derived by slugging the title — and the title is the project name, so previewing a
   // clone of `ai-chat` produced the window id `ai-chat`, colliding with the *running*
@@ -134,7 +122,6 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
     renderer: 'iframe',
     content: url,
     ...(previewAppId ? { appId: previewAppId } : {}),
-    ...(permissions ? { permissions } : {}),
   });
   // Trust the id the server actually registered, not the one we asked for.
   const windowId = result?.windowId ?? previewId;
@@ -142,7 +129,29 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   // A remount starts the app from zero, so every value in the previous snapshot
   // "changed" — a diff across it would be all noise and no signal.
   resetInspectBaseline();
+  // This window now shows the current build; nothing downstream needs to warn.
+  setPreviewBuildSerial(buildSerial());
   return { previewUrl: url, windowId };
+}
+
+/**
+ * The warning a stale preview owes every reader of it, or null when it is current.
+ *
+ * `compile({ refreshPreview: false })` buys state preservation by leaving the window
+ * on the previous build. That is only a safe trade while every window onto the
+ * preview says so — an unlabelled screenshot of last build's code is precisely the
+ * evidence that makes a wrong fix look confirmed.
+ */
+export function previewStaleNote(): string | null {
+  if (!previewIsStale()) return null;
+  const behind = buildSerial() - previewBuildSerial();
+  return (
+    `STALE PREVIEW: this window is showing a build ${behind} compile(s) old — ` +
+    'the source has been compiled since it was mounted, without a refresh ' +
+    '(compile({ refreshPreview: false })). Anything you read here describes the ' +
+    'older build. Run `preview` to remount on the current one, at the cost of ' +
+    'resetting in-app state.'
+  );
 }
 
 /**
@@ -367,6 +376,11 @@ export interface InspectResult extends InspectSnapshot {
     state: Record<string, { from: string; to: string }>;
     dom: boolean;
   };
+  /**
+   * Present only when the window is showing an older build than the last compile.
+   * Everything else in this snapshot then describes that older build.
+   */
+  previewStale?: string;
 }
 
 export interface InspectOptions {
@@ -557,7 +571,8 @@ export async function inspectPreview(opts: InspectOptions = {}): Promise<Inspect
   const snapshot = await captureSnapshot(wid, opts);
   const changed = lastInspect ? diffSnapshots(lastInspect, snapshot) : undefined;
   lastInspect = snapshot;
-  return { ...snapshot, ...(changed ? { changed } : {}) };
+  const stale = previewStaleNote();
+  return { ...snapshot, ...(changed ? { changed } : {}), ...(stale ? { previewStale: stale } : {}) };
 }
 
 /**

@@ -9,6 +9,9 @@
  *
  * Storage access is built-in: query/command with storage paths are intercepted server-side
  * and resolved against the app's scoped storage (storage/apps/{appId}/...) automatically.
+ * A path spelled as a `yaar://storage/...` URI names the *shared* tree instead, gated on
+ * what the caller's app.json declares — see ./shared-storage.ts for why that door exists
+ * and why it is a URI rather than a second relative spelling.
  *
  * Cross-app control: describe/query/command take an optional `appId`. Omitting it (or passing
  * your own id) targets your own window — no permission needed. Passing another app's id targets
@@ -43,12 +46,13 @@ import { getActiveSession, getActivePool, ok, okJson, error } from '../../handle
 import { scopedAppStoragePath } from '../../handlers/apps.js';
 
 /**
- * The URI that names what a `storage/...` tool argument actually resolved to.
+ * The URI that names what a relative `storage/...` tool argument actually resolved to.
  *
- * `storage/x` is silently rewritten to this app's own storage. Reporting the
- * resolved URI is what makes the rewrite visible: an agent that asked for
- * `storage/reports/x` and got "not found" otherwise has no way to see that it
- * looked under its own app, not the shared root.
+ * `storage/x` is rewritten to this app's own storage. Reporting the resolved URI is
+ * what makes the rewrite visible: an agent that asked for `storage/reports/x` and got
+ * "not found" otherwise has no way to see that it looked under its own app, not the
+ * shared root. `sharedStorageHint` is the other half — when the app *may* reach the
+ * shared root, a miss here says so instead of leaving the caller to infer it.
  */
 function resolvedStorageUri(appId: string, relativePath: string): string {
   return `yaar://apps/${appId}/storage/${relativePath}`;
@@ -62,7 +66,9 @@ function resolvedStorageUri(appId: string, relativePath: string): string {
  * relative to the app's own root (`reports/x.md`). So a caller that listed a
  * directory and read one of the results back got "not found" for a file it had just
  * been shown, and had to strip a prefix nothing told it about. One coordinate system
- * per door, and this door's is app-relative.
+ * per *spelling*: a relative argument is answered app-relative, and the shared
+ * `yaar://storage/...` one is answered in root coordinates, which is what it is already
+ * written in. Either way, a listed path reads back exactly as it was printed.
  */
 /**
  * An app's storage namespace exists from the moment the app does; the directory on
@@ -88,8 +94,10 @@ function appRelativeEntries(appId: string, result: StorageListResult): StorageLi
 import type { WindowStateRegistry } from '../../session/window-state.js';
 import { genId } from '../../lib/ids.js';
 import { getAppMeta, type ControlEntry } from '../../features/apps/discovery.js';
-import type { VerbResult } from '../../handlers/uri-registry.js';
+import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { describeApp } from '../../features/apps/describe.js';
+import { findProtocolCommand, commandDocument } from '../../handlers/apps/protocol-resource.js';
+import { renderPayloadExample } from '../../lib/command-signature.js';
 import {
   storageRead,
   storageWrite,
@@ -97,6 +105,16 @@ import {
   storageDelete,
 } from '../../storage/storage-manager.js';
 import type { StorageListResult } from '../../storage/types.js';
+import {
+  namesSharedStorage,
+  sharedStoragePath,
+  sharedStorageUri,
+  authorizeSharedStorage,
+  sharedStorageHint,
+} from './shared-storage.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('AppAgent');
 
 export const APP_TOOL_NAMES = [
   'mcp__app__query',
@@ -107,11 +125,18 @@ export const APP_TOOL_NAMES = [
 
 /**
  * Rejection for a storage path that leaves this app's subtree. Worded as the prompt's own
- * promise ("Storage is scoped to this app") so the model reads it as the rule, not a bug.
+ * promise ("a relative path is scoped to this app") so the model reads it as the rule, not
+ * a bug — and pointing at the spelling that does leave the subtree, since `storage/../x` is
+ * what an agent looking for the shared tree types before it knows the URI form exists.
  */
 const STORAGE_PATH_ERROR =
-  'invalid storage path. Storage is scoped to this app — paths are relative to your own ' +
-  'storage root and may not contain "..".';
+  'invalid storage path. A relative path is scoped to this app — it is resolved under your ' +
+  'own storage root and may not contain "..". To reach the shared storage tree, name it by ' +
+  'URI ("yaar://storage/{path}"), which requires a covering permission in your app.json.';
+
+/** Rejection for a `yaar://storage/...` argument that names no resource. */
+const SHARED_PATH_ERROR =
+  'invalid shared storage path: "yaar://storage/{path}" may not contain "..".';
 
 /** Resolve the appId for the current window context. */
 function getAppId(windowState: WindowStateRegistry, windowId: string): string | undefined {
@@ -137,6 +162,83 @@ function withLaunchNote(result: VerbResult, appId: string, windowId: string): Ve
       ...result.content,
     ],
   };
+}
+
+/**
+ * One command of an installed app, documented in full — the app agent's spelling of
+ * `read('yaar://apps/{id}/protocol/commands/{name}')`.
+ *
+ * The document itself is the shared `commandDocument`; only the call example is rewritten
+ * into this caller's vocabulary, because an app agent runs a command with its `command`
+ * tool and has no `invoke` verb to point a window URI at. Rendering the example it *cannot*
+ * use would be the same dead end at one remove.
+ */
+async function describeOneCommand(appId: string, name: string) {
+  const found = await findProtocolCommand(appId, name);
+  if ('content' in found) return found;
+
+  const { descriptor, defs } = found;
+  const payload = renderPayloadExample(descriptor, defs);
+  const target = `"${name}"${payload ? `, ${payload}` : ''}`;
+  return okJson({
+    appId,
+    ...commandDocument(name, descriptor, defs, { call: `command(${target})` }),
+  });
+}
+
+/**
+ * `storage:write` / `storage:delete` / `storage:list` against the shared tree.
+ *
+ * A sibling of the app-scoped switch in `command` rather than a shared implementation:
+ * the two differ in every leaf that matters — which verb each sub-command needs (the
+ * app-scoped tree needs none), which coordinate system the listing answers in, and what
+ * a failure is allowed to say. Only the layout is common, and neither door owns that.
+ *
+ * The verb per sub-command is the one the verbs door would charge for the same work, so
+ * `{ "uri": "yaar://storage/reports/", "verbs": ["read", "list"] }` means here what it
+ * means there: this app may look and may not write.
+ */
+async function sharedStorageCommand(
+  appId: string,
+  subCommand: string,
+  arg: string,
+  content: unknown,
+) {
+  const verbs: Record<string, Verb> = { write: 'invoke', delete: 'delete', list: 'list' };
+  const verb = verbs[subCommand];
+  if (!verb) {
+    return error(
+      `Unknown storage command: ${subCommand}. Use storage:write, storage:delete, or storage:list.`,
+    );
+  }
+
+  const path = sharedStoragePath(arg);
+  if (path === null) return error(SHARED_PATH_ERROR);
+  const denied = await authorizeSharedStorage(appId, path, verb);
+  if (denied) return error(denied);
+  const uri = sharedStorageUri(path);
+
+  switch (subCommand) {
+    case 'write': {
+      if (typeof content !== 'string') {
+        return error('"content" (string) is required for storage:write.');
+      }
+      const result = await storageWrite(path, content);
+      if (!result.success) return error(`${result.error ?? 'write failed.'} (resolved to ${uri})`);
+      return ok(`Written to ${uri}`);
+    }
+    case 'delete': {
+      if (!path) return error('"path" is required for storage:delete.');
+      const result = await storageDelete(path);
+      if (!result.success) return error(`${result.error ?? 'delete failed.'} (resolved to ${uri})`);
+      return ok(`Deleted ${uri}`);
+    }
+    default: {
+      // Root-relative entries, the coordinate system this spelling is already in: each
+      // path reads back as `yaar://storage/{path}` with nothing to strip or prepend.
+      return okJson({ uri, ...(await storageList(path)) });
+    }
+  }
 }
 
 export function registerAppAgentTools(server: McpServer): void {
@@ -218,15 +320,18 @@ export function registerAppAgentTools(server: McpServer): void {
     {
       description:
         'Query the app state. Pass a stateKey to read specific state, or omit for the app manifest. ' +
-        'Use stateKey starting with "storage/" to read from app-scoped storage (e.g. "storage/config.json"). ' +
-        'Storage is always YOUR app\'s — "storage/x" resolves to yaar://apps/{yourApp}/storage/x, never the shared root.',
+        'Use stateKey starting with "storage/" to read from app-scoped storage (e.g. "storage/config.json"): ' +
+        'a relative path is always YOUR app\'s — "storage/x" resolves to yaar://apps/{yourApp}/storage/x. ' +
+        'The shared storage root is a separate tree, named by URI: "yaar://storage/x" reads it, and works ' +
+        'only if your app.json declares a permission covering that URI (a refusal says so by name).',
       inputSchema: {
         stateKey: z
           .string()
           .optional()
           .describe(
             'State key to query (omit for manifest). Use "storage/{path}" to read app storage — ' +
-              'resolved under your own app, not the shared storage root.',
+              'resolved under your own app — or "yaar://storage/{path}" for the shared storage root, ' +
+              'which needs a covering permission in your app.json.',
           ),
         appId: z
           .string()
@@ -242,7 +347,34 @@ export function registerAppAgentTools(server: McpServer): void {
 
       const windowState = getWindowState();
 
-      // Intercept storage reads — storage is app-scoped, so only your own app.
+      // Intercept shared-tree reads — a `yaar://storage/...` URI names the storage root,
+      // and is admitted only by what app.json declares. Checked before the relative
+      // branch, which would otherwise never see it (a URI is not a `storage/` path).
+      if (args.stateKey && namesSharedStorage(args.stateKey)) {
+        if (args.appId)
+          return error('shared storage is not addressed per app — drop appId to read it.');
+        const appId = getAppId(windowState, windowId);
+        if (!appId) return error('could not resolve appId for this window.');
+        const path = sharedStoragePath(args.stateKey);
+        if (path === null) return error(SHARED_PATH_ERROR);
+        // The root is a listing and a file is a read, so they are different verbs and an
+        // app.json may well grant one without the other.
+        const denied = await authorizeSharedStorage(appId, path, path ? 'read' : 'list');
+        if (denied) return error(denied);
+        const uri = sharedStorageUri(path);
+        if (!path) {
+          // Entries come back in storage-root coordinates, which is this spelling's own
+          // coordinate system — each reads back directly as `yaar://storage/{path}`.
+          return okJson({ uri, ...(await storageList('')) });
+        }
+        const result = await storageRead(path);
+        if (!result.success) {
+          return error(`${result.error ?? 'read failed.'} (resolved to ${uri})`);
+        }
+        return ok(result.content ?? '');
+      }
+
+      // Intercept storage reads — a relative path is app-scoped, so only your own app.
       if (args.stateKey?.startsWith('storage/') || args.stateKey === 'storage') {
         if (args.appId)
           return error("storage is app-scoped; you cannot read another app's storage.");
@@ -260,7 +392,8 @@ export function registerAppAgentTools(server: McpServer): void {
         }
         const result = await storageRead(scoped);
         if (!result.success) {
-          return error(`${result.error ?? 'read failed.'} (resolved to ${uri})`);
+          const hint = await sharedStorageHint(appId, relativePath, 'read');
+          return error(`${result.error ?? 'read failed.'} (resolved to ${uri})${hint}`);
         }
         return ok(result.content ?? '');
       }
@@ -284,9 +417,11 @@ export function registerAppAgentTools(server: McpServer): void {
       description:
         'Send a command to the app. Specify the command name and optional parameters. ' +
         'Built-in storage commands: "storage:write" (params: {path, content}), ' +
-        '"storage:delete" (params: {path}), "storage:list" (params: {path?}). Every storage ' +
-        "path — argument and listed result alike — is relative to your own app's storage " +
-        'root, so a path from storage:list can be read back as query("storage/{path}").',
+        '"storage:delete" (params: {path}), "storage:list" (params: {path?}). A relative storage ' +
+        "path — argument and listed result alike — is your own app's, so a path from storage:list " +
+        'reads back as query("storage/{path}"). A path spelled "yaar://storage/{path}" targets the ' +
+        'shared storage root instead (needs a covering permission in your app.json; write needs ' +
+        '"invoke", delete needs "delete"), and its listing answers in that same URI spelling.',
       inputSchema: {
         command: z
           .string()
@@ -315,7 +450,8 @@ export function registerAppAgentTools(server: McpServer): void {
 
       const windowState = getWindowState();
 
-      // Intercept storage commands — storage is app-scoped, so only your own app.
+      // Intercept storage commands — a relative path is app-scoped, so only your own app;
+      // a `yaar://storage/...` one names the shared tree and is gated on app.json.
       if (args.command.startsWith('storage:')) {
         if (args.appId)
           return error("storage is app-scoped; you cannot modify another app's storage.");
@@ -323,6 +459,9 @@ export function registerAppAgentTools(server: McpServer): void {
         if (!appId) return error('could not resolve appId for this window.');
         const subCommand = args.command.slice('storage:'.length);
         const path = (args.params?.path as string) ?? '';
+        if (namesSharedStorage(path)) {
+          return sharedStorageCommand(appId, subCommand, path, args.params?.content);
+        }
         const scoped = scopedAppStoragePath(appId, path);
         if (!scoped) return error(STORAGE_PATH_ERROR);
         const uri = resolvedStorageUri(appId, path);
@@ -388,8 +527,10 @@ export function registerAppAgentTools(server: McpServer): void {
     'describe',
     {
       description:
-        "An app's manual — its protocol (every state key and command, with schemas) plus its " +
-        'SKILL.md if it ships one. The same answer describe("yaar://apps/{id}") gives. ' +
+        "An app's manual — its SKILL.md if it ships one, plus an index of its protocol: " +
+        "every state key and every command's call signature with its opening sentence. " +
+        'Pass `command` to get one command in full instead, with its complete parameter schema — ' +
+        'that is the door to use when a signature leaves you unsure, not a second full describe. ' +
         'Omit appId to describe your own app; pass appId to inspect another app you are permitted to control.',
       inputSchema: {
         appId: z
@@ -397,6 +538,12 @@ export function registerAppAgentTools(server: McpServer): void {
           .optional()
           .describe(
             'App to describe (omit for your own app). Other apps require "controls" permission.',
+          ),
+        command: z
+          .string()
+          .optional()
+          .describe(
+            'One command to document in full (name as it appears in the index), instead of the whole manual.',
           ),
       },
     },
@@ -418,11 +565,23 @@ export function registerAppAgentTools(server: McpServer): void {
         }
       }
 
+      // One command in full. An app agent holds four scoped tools and no `read` verb, so
+      // the per-command URI the verbs door points at (`yaar://apps/{id}/protocol/
+      // commands/{name}`) is a door it cannot open — this param is that door, reached
+      // through the one tool it does hold, answering with the same builder.
+      if (args.command) {
+        return describeOneCommand(targetAppId, args.command);
+      }
+
       // One shape for one verb: this is `describeApp`, the same builder behind
       // describe("yaar://apps/{id}"). It used to assemble a third shape of its own here
       // — distinct from both the verbs door and `read` — so the same question answered
       // differently depending on which tool asked it.
-      const facts = await describeApp(targetAppId);
+      //
+      // `protocol: 'index'` rather than the verbs door's 'names': that door's caller can
+      // follow a URI to the index and this one cannot, and a pointer its holder cannot
+      // follow is the exact dead end the protocol split exists to remove.
+      const facts = await describeApp(targetAppId, { protocol: 'index' });
       if (!facts) return error(`app "${targetAppId}" not found.`);
       if (!facts.protocol && !facts.skill) {
         return error(`app "${targetAppId}" exposes no protocol and ships no SKILL.md.`);
@@ -467,7 +626,7 @@ export function registerAppAgentTools(server: McpServer): void {
           monitorId: getMonitorId(),
         })
         .catch((err) => {
-          console.error('[AppAgent] Relay error:', err);
+          log.error('relay failed', { err });
         });
 
       return ok('Message relayed to monitor agent.');

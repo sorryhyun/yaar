@@ -1,0 +1,12 @@
+/* ── Scrollbars ─────────────────────────────────── */
+
+::-webkit-scrollbar {
+  width: 5px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--yaar-border);
+  border-radius: 3px;
+}

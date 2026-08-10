@@ -7,7 +7,7 @@
 import { onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
-import './styles.css';
+import './styles/index';
 import { App } from './components.js';
 import { refreshAccount, refreshData, startGithubStatusPolling } from './actions.js';
 import {

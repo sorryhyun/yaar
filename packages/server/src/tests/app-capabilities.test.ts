@@ -225,7 +225,10 @@ describe('describing one permission', () => {
 
   it('separates a root grant from something under it', () => {
     const root = describePermission('yaar://storage/');
-    expect(root.detail).toBe('Full access to YAAR storage');
+    // Not "full access": an installed app — the only kind this screen is shown for — has
+    // the entry capped to the shared tree by `discovery.ts`. The row has to describe the
+    // grant the gate hands out, not the one the URI literally names.
+    expect(root.detail).toBe('All of YAAR storage except other apps’ private data');
     expect(root.warn).toBe(true);
 
     const folder = describePermission('yaar://storage/notes/');

@@ -22,6 +22,9 @@
 import type { HookCallback } from '@anthropic-ai/claude-agent-sdk';
 import { repairToolInput } from './escape-repair.js';
 import { escapeSample, type EscapeGuardRecord } from '../types.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('claude:escape-repair');
 
 /** Human-readable summary of a repair, fed back to the model as context. */
 function describeRepair(overEscaped: string[], underEscaped: string[]): string {
@@ -84,7 +87,7 @@ export function createEscapeRepairHook(
     if (overEscaped.length === 0 && underEscaped.length === 0) return {};
 
     const summary = describeRepair(overEscaped, underEscaped);
-    console.warn(`[claude:escape-repair] ${input.tool_name}: ${summary}`);
+    log.warn('repaired escaped tool input', { tool: input.tool_name, summary });
     onRepair({
       stage: 'repair',
       toolName: input.tool_name,

@@ -17,6 +17,9 @@
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionHub } from '../../session/session-hub.js';
 import { getMonitorId, getSessionId, getWindowId } from '../../agents/agent-context.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('retireStaleApp');
 
 /**
  * Close every window of `appId` in the calling session and drop its cached agent profile.
@@ -64,7 +67,7 @@ export function retireStaleApp(appId: string): string[] {
     } catch (err) {
       // An unscoped window (no monitor on the handle, none in context) cannot be placed,
       // and one of those must not fail a deploy that has already written its files.
-      console.warn(`[retireStaleApp] Could not close ${win.id} for ${appId}:`, err);
+      log.warn('could not close window', { windowId: win.id, appId, err });
     }
   }
 

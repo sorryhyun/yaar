@@ -1,5 +1,5 @@
 import { defineApp } from '@bundled/yaar';
-import './styles.css';
+import './styles/index';
 import { AppShell } from './app-shell';
 import { loadProjects, loadBundledLibraries, startConsolePolling } from './services';
 import {

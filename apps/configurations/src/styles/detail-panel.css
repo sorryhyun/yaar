@@ -1,0 +1,84 @@
+/* Detail panel */
+.view-detail {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--yaar-sp-4);
+}
+
+.detail-empty {
+  height: 100%;
+  font-size: 13px;
+}
+
+.detail-empty-icon {
+  font-size: 32px;
+}
+
+.detail-card {
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: var(--yaar-sp-4);
+}
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-3);
+  margin-bottom: var(--yaar-sp-4);
+  padding-bottom: var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.detail-big-icon {
+  font-size: 28px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--yaar-bg);
+  border-radius: var(--yaar-radius);
+  border: 1px solid var(--yaar-border);
+  flex-shrink: 0;
+}
+
+.detail-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--yaar-text);
+}
+
+.detail-title-sub {
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  margin-top: 2px;
+}
+
+.detail-field {
+  margin-bottom: var(--yaar-sp-3);
+}
+
+.detail-field-label {
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.detail-field-value {
+  font-size: 13px;
+  color: var(--yaar-text);
+  word-break: break-all;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  padding: 6px 10px;
+  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+.detail-actions {
+  margin-top: var(--yaar-sp-4);
+  padding-top: var(--yaar-sp-3);
+  border-top: 1px solid var(--yaar-border);
+  display: flex;
+  gap: var(--yaar-sp-2);
+}

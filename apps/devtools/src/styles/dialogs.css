@@ -1,0 +1,59 @@
+/* ── Load / Clone picker ── */
+.picker-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.picker-modal {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+  width: min(560px, 90vw);
+  max-height: 70vh;
+  min-height: 0;
+}
+
+.picker-filter {
+  width: 100%;
+}
+
+.picker-list {
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+}
+
+.picker-empty {
+  padding: var(--yaar-sp-3);
+  text-align: center;
+}
+
+.picker-item {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: 5px var(--yaar-sp-2);
+  cursor: pointer;
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+.picker-item:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+
+.picker-item.active {
+  background: var(--yaar-wash-accent);
+  box-shadow: inset 2px 0 0 var(--yaar-accent);
+}
+
+.picker-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-meta {
+  flex-shrink: 0;
+}

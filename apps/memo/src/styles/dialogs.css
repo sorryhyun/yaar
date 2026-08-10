@@ -1,0 +1,21 @@
+/* Delete confirm */
+.memo-delete-confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  background: var(--yaar-wash-error);
+  border-top: 1px solid var(--yaar-error);
+  font-size: 12px;
+  color: var(--yaar-text-muted);
+  flex-shrink: 0;
+}
+
+.memo-count-badge {
+  font-size: 10px;
+  background: var(--yaar-border);
+  color: var(--yaar-text-muted);
+  border-radius: 10px;
+  padding: 1px 6px;
+  margin-left: auto;
+}

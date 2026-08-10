@@ -14,6 +14,9 @@ import type { MonitorBudgetPolicy } from './context-pool-policies/index.js';
 import type { TurnContext, Task } from './pool-types.js';
 import type { PooledAgent } from './agent-roster.js';
 import type { Fingerprint } from '../reload/types.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('TurnHelpers');
 
 // ── Reload context ──────────────────────────────────────────────────────────
 
@@ -141,11 +144,9 @@ export function createBudgetOutputCallback(
   return (bytes) => {
     ctx.budgetPolicy.recordOutput(monitorId, bytes);
     if (!ctx.budgetPolicy.checkOutputBudget(monitorId)) {
-      console.warn(
-        `[ContextPool] Monitor ${monitorId} exceeded output budget — interrupting ${label}`,
-      );
+      log.warn('monitor exceeded output budget — interrupting', { monitorId, label });
       agent.session.interrupt().catch((err) => {
-        console.error(`[ContextPool] Failed to interrupt ${label} for ${monitorId}:`, err);
+        log.error('failed to interrupt', { monitorId, label, err });
       });
     }
   };

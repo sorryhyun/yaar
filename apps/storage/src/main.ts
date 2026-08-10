@@ -1,7 +1,7 @@
 export {};
 import { For, Show, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import './styles.css';
+import './styles/index';
 import type { StorageEntry } from './types';
 import { state, setState, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody } from './state';
 import { basename, formatSize, getFileIcon, sanitizeAlias } from './helpers';

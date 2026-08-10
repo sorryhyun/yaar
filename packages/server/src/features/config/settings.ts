@@ -10,6 +10,9 @@ import type { DesktopUpdateSettingsAction } from '@yaar/shared';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getWarmPool } from '../../providers/factory.js';
 import { getSessionHub } from '../../session/session-hub.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('settings');
 
 export const settingsContentSchema = z.object({
   userName: z.string().optional(),
@@ -67,7 +70,7 @@ async function applyProviderSwitch(): Promise<void> {
     try {
       await session.getPool()?.reset();
     } catch (err) {
-      console.error('[settings] Provider switch: session reset failed:', err);
+      log.error('provider switch: session reset failed', { err });
     }
   }
 }

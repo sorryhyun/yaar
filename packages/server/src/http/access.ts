@@ -50,14 +50,27 @@ import { isPreviewAppId } from '@yaar/shared';
 import type { Verb } from '../handlers/uri-registry.js';
 import { requestCarriesAppOrigin } from './origin-boundary.js';
 import { validateIframeToken } from './iframe-tokens.js';
+import {
+  canonicalStorageUri,
+  grantEntries,
+  isSharedOnly,
+  isUriAllowed,
+  namesForeignAppStorage,
+  resolveSelf,
+} from './uri-match.js';
 import { errorResponse } from './utils.js';
 
 /**
  * A permission entry is either:
  * - a URI prefix string (allows all verbs), or
  * - an object with `uri` and optional `verbs` array (restricts to listed verbs).
+ *
+ * `sharedOnly` is never written in an app.json — `parsePermissions` copies only `uri` and
+ * `verbs`, so a manifest cannot set it. It is stamped by `capForeignAppStorage` when a
+ * caller that may not hold a grant over app storage declares one anyway, and it caps that
+ * one entry to the shared tree instead of discarding it. See {@link permissionsAllow}.
  */
-export type PermissionEntry = string | { uri: string; verbs?: Verb[] };
+export type PermissionEntry = string | { uri: string; verbs?: Verb[]; sharedOnly?: true };
 
 /** The desktop itself. Not confined — it is the user. */
 interface HostPrincipal {
@@ -179,105 +192,68 @@ export function resolvePrincipal(req: Request, url: URL): Principal | Response {
 
 // ── Matching a URI against declared permissions ─────────────────────────────
 
-function uriMatches(uri: string, pattern: string): boolean {
-  return (
-    uri === pattern || (pattern.endsWith('/') && (uri.startsWith(pattern) || uri + '/' === pattern))
-  );
-}
-
-export function isUriAllowed(uri: string, verb: Verb, entries: PermissionEntry[]): boolean {
-  return entries.some((entry) => {
-    if (typeof entry === 'string') {
-      return uriMatches(uri, entry); // string entry → all verbs allowed
-    }
-    return uriMatches(uri, entry.uri) && (!entry.verbs || entry.verbs.includes(verb));
-  });
-}
+// The rule itself lives in `uri-match.ts`, a leaf this module, `iframe-tokens.ts` and
+// `features/apps/discovery.ts` can all reach — see that file for why. Re-exported so this
+// stays the module you import a permission check from.
+export {
+  capForeignAppStorage,
+  coversForeignAppStorage,
+  isUriAllowed,
+  namesSelf,
+  resolveSelf,
+  uriMatches,
+} from './uri-match.js';
 
 /** Is this the session principal's private namespace? */
 function isSessionUri(uri: string): boolean {
   return uri === 'yaar://session' || uri.startsWith('yaar://session/');
 }
 
-/**
- * Does this URI still name `self` — i.e. is it written in the app's own dialect
- * rather than in real ids?
- *
- * The counterpart to {@link resolveSelf}, which leaves such a URI untouched when it
- * has no appId to expand against. Callers that must not store or match an
- * unresolved URI (the subscription registry keys by literal string) test the
- * *result* of `resolveSelf` with this rather than re-deriving the spelling.
- */
-export function namesSelf(uri: string): boolean {
-  return uri === 'yaar://apps/self' || uri.startsWith('yaar://apps/self/');
-}
-
-/**
- * Rewrite `yaar://apps/self/…` to the calling app's real id.
- *
- * Applied to *both* sides of the match — the URI being requested and the app's
- * declared permissions — because the two are not written in the same dialect. An
- * app.json says `yaar://apps/self/storage/`; a storage URI derived from an HTTP path
- * says `yaar://apps/notes/storage/todo.json`. Matching those literally denies an app
- * its own storage. Canonicalizing both means either spelling works and they agree.
- *
- * Exported because the permission gate is not the only place `self` has to be
- * expanded: `POST /api/verb` resolves it before dispatching, and
- * `/api/verb/subscribe` before *storing* the URI (a subscription keyed by the
- * `self` spelling would never match the real-id URI a producer notifies with). All
- * three used to spell the rewrite out by hand, so a change to the spelling — or a
- * future `windows/self` — was a three-site edit that would fail silently in the two
- * sites that were missed. Returns the URI unchanged when there is no appId to
- * expand against; the caller decides whether that is fatal ({@link namesSelf}).
- *
- * The path-flavored variant in {@link storageUriFor} is deliberately *not* folded in:
- * it expands `apps/self` inside an HTTP **path** (`apps/self/x.json`), not a URI, and
- * round-tripping it through the URI form to share these five lines would be more
- * indirection than the duplication costs. The two must agree on the literal `self`
- * segment and nothing else.
- */
-export function resolveSelf(uri: string, appId?: string): string {
-  if (!appId) return uri;
-  if (uri === 'yaar://apps/self') return `yaar://apps/${appId}`;
-  if (uri.startsWith('yaar://apps/self/')) {
-    return uri.replace('yaar://apps/self/', `yaar://apps/${appId}/`);
-  }
-  return uri;
-}
-
-/**
- * Rewrite the flat spelling of an app's storage to the namespaced one.
- *
- * `yaar://storage/apps/notes/todo.json` and `yaar://apps/notes/storage/todo.json`
- * are the same file — `storage/apps/{id}/` is a plain subtree of the flat root, not
- * a separate volume. Only the second spelling is the one permissions are written
- * against, so without this rewrite `isUriAllowed` is plain prefix matching and an
- * app declaring `yaar://storage/` holds a permission for *every other app's*
- * storage: credentials, databases, project sources.
- *
- * `/api/storage/*` already avoided that by naming its URI through `storageUriFor`
- * (see its docstring), but `/api/verb` took the URI from the request body verbatim.
- * Doing the rewrite here rather than at each door means every caller of
- * `requirePermission` gets it, and the two spellings can never disagree.
- *
- * Returns the URI unchanged when it does not name flat storage, and `null` for a
- * traversing path — which names no resource and must not be matched against
- * anything.
- */
-function canonicalStorageUri(uri: string): string | null {
-  if (uri !== 'yaar://storage' && !uri.startsWith('yaar://storage/')) return uri;
-
-  // A trailing slash is what makes a permission entry a *prefix* (uriMatches), so it
-  // has to survive the round trip. `storageUriForPath` names a concrete resource and
-  // drops it.
-  const trailing = uri.endsWith('/') ? '/' : '';
-  const path = uri.slice('yaar://storage'.length).replace(/^\//, '').replace(/\/$/, '');
-
-  const rewritten = storageUriForPath(path);
-  return rewritten === null ? null : rewritten + trailing;
-}
-
 // ── The gates ───────────────────────────────────────────────────────────────
+
+/**
+ * Does this permission list cover `verb` on `uri`?
+ *
+ * The rule `requirePermission` applies, minus the principal-level gates around it
+ * (host bypass, the `yaar://session/*` refusal) — those are about *who* is asking,
+ * this is about what was declared.
+ *
+ * Exported because the app-agent MCP door has a permission list to check and no
+ * `Principal` to check it for: an app agent presents no iframe token, takes its appId
+ * from its own window, and answers on a tool call rather than an HTTP request, so it
+ * can neither produce a 403 `Response` nor be resolved by `resolvePrincipal`. What it
+ * must not do is carry a second copy of the matching — a copy that skipped
+ * `canonicalStorageUri` would answer differently for the two spellings of the same file,
+ * and one that drifted later would do it at one door only.
+ *
+ * `describe` is metadata-only (it reveals a handler's schema, not its data), so it
+ * bypasses the list — matching the verb endpoint's existing rule.
+ */
+export function permissionsAllow(
+  permissions: PermissionEntry[],
+  appId: string | undefined,
+  uri: string,
+  verb: Verb,
+): boolean {
+  // Both sides are normalized before matching, but not symmetrically: a target names one
+  // resource and canonicalizes onto it, while a grant is a *prefix* and expands into every
+  // coordinate system that prefix reaches (`grantEntries`). `self` is expanded first on
+  // both — it is a precondition for canonicalization, not an independent pass, since
+  // `yaar://apps/self/storage/` names no subtree of the flat tree until `self` is real.
+  const target = canonicalStorageUri(resolveSelf(uri, appId));
+  if (target === null) return false;
+
+  // A capped entry (`sharedOnly`) is the shared tree only: it never answers for another
+  // app's private storage, however broad the prefix it was written as. That is the whole
+  // ceiling — it applies to the URIs the entry should not have covered, and to nothing
+  // else, so the same grant still reaches `yaar://storage/media/` as it always did.
+  const foreign = namesForeignAppStorage(target, appId);
+  const granted = permissions.flatMap((entry) =>
+    foreign && isSharedOnly(entry) ? [] : grantEntries(entry, appId),
+  );
+
+  return verb === 'describe' || isUriAllowed(target, verb, granted);
+}
 
 /**
  * May `principal` perform `verb` on `uri`? Returns a 403 Response if not.
@@ -303,21 +279,7 @@ export function requirePermission(principal: Principal, uri: string, verb: Verb)
     return errorResponse('yaar://session/* is restricted to the session agent', 403);
   }
 
-  // Canonicalize both sides, as with `self` below: an app.json may spell a grant
-  // either way, and a URI from a request body certainly may.
-  const canonical = canonicalStorageUri(uri);
-  if (canonical === null) return errorResponse(`Not permitted: ${verb} ${uri}`, 403);
-
-  const target = resolveSelf(canonical, principal.appId);
-  const granted = principal.permissions.flatMap((entry) => {
-    const raw = typeof entry === 'string' ? entry : entry.uri;
-    const rewritten = canonicalStorageUri(raw);
-    if (rewritten === null) return [];
-    const resolved = resolveSelf(rewritten, principal.appId);
-    return [typeof entry === 'string' ? resolved : { ...entry, uri: resolved }];
-  });
-
-  if (verb !== 'describe' && !isUriAllowed(target, verb, granted)) {
+  if (!permissionsAllow(principal.permissions, principal.appId, uri, verb)) {
     return errorResponse(`Not permitted: ${verb} ${uri}`, 403);
   }
 
@@ -434,14 +396,12 @@ export function requireStream(principal: Principal, capability: string): Respons
  * Map a `/api/storage/{path}` request to the `yaar://` URI that names the same
  * resource, resolving `apps/self/` against the calling app.
  *
- * The two spellings matter. On disk, an app's storage lives at
- * `storage/apps/{appId}/…`, so the HTTP path `/api/storage/apps/notes/x.json`
- * and the URI `yaar://apps/notes/storage/x.json` are the *same file*. Only the
- * second is the one apps hold a permission for — `yaar://apps/self/storage/` is
- * auto-granted to every app at mint time. If this returned the flat
- * `yaar://storage/apps/notes/x.json` instead, every app would be denied its own
- * storage over HTTP, and a permission for `yaar://storage/` would silently be a
- * permission for every other app's secrets.
+ * It emits the **namespaced** spelling (`yaar://apps/notes/storage/x.json`), which is the
+ * dialect app.json is written in — `yaar://apps/self/storage/` is auto-granted to every
+ * app at mint time — and the one worth showing a reader. Which of the two spellings comes
+ * out is no longer load-bearing: `canonicalStorageUri` folds them together at the gate, so
+ * either would match the same grants. It was load-bearing once, when the namespaced form
+ * was canonical and the flat one arrived at the gate rewritten.
  *
  * The `self` expansion here is the *path* flavor of {@link resolveSelf} — same
  * literal segment, different dialect (`apps/self/x.json`, not

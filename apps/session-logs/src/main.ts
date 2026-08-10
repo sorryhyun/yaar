@@ -1,7 +1,7 @@
 import { createMemo, For, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
-import './styles.css';
+import './styles/index';
 
 import { state, setState } from './store';
 import { loadSessions, loadDetail } from './api';

@@ -1,0 +1,159 @@
+/* ── Toolbar ── */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  background: var(--yaar-bg-surface);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+/* ── Project menu (the active project's name, doubling as the open-project
+   dropdown that the old second toolbar row used to be). Capped rather than
+   free-growing so a long name never pushes Compile off the bar. ── */
+.project-menu {
+  position: relative;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.project-menu-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  max-width: 240px;
+  min-width: 0;
+  padding: 3px var(--yaar-sp-2);
+  font-family: inherit;
+  font-size: var(--yaar-text-base);
+  font-weight: 600;
+  color: var(--yaar-text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--yaar-radius);
+  cursor: pointer;
+  user-select: none;
+}
+
+.project-menu-trigger:hover {
+  background: var(--yaar-bg-surface-hover);
+  border-color: var(--yaar-border);
+}
+
+.project-menu-trigger.open {
+  background: var(--yaar-wash-accent);
+  border-color: var(--yaar-wash-accent-border);
+  color: var(--yaar-accent);
+}
+
+.project-menu-trigger.empty {
+  color: var(--yaar-text-dim);
+  font-weight: 500;
+}
+
+.project-menu-name {
+  min-width: 0;
+}
+
+.project-menu-caret {
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.project-menu-panel {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 60;
+  min-width: 260px;
+  max-width: 360px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: var(--yaar-sp-1);
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  box-shadow: var(--yaar-shadow-lg);
+}
+
+.project-menu-section {
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.project-menu-empty {
+  padding: var(--yaar-sp-2);
+}
+
+.project-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-radius: var(--yaar-radius-sm);
+  color: var(--yaar-text-muted);
+  cursor: pointer;
+  user-select: none;
+}
+
+.project-menu-item:hover {
+  background: var(--yaar-bg-surface-hover);
+  color: var(--yaar-text);
+}
+
+.project-menu-item.active {
+  background: var(--yaar-wash-accent);
+  color: var(--yaar-text);
+}
+
+.project-menu-check {
+  width: 12px;
+  flex-shrink: 0;
+  color: var(--yaar-accent);
+  font-size: var(--yaar-text-sm);
+  text-align: center;
+}
+
+.project-menu-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.project-menu-close {
+  flex-shrink: 0;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0 4px;
+  border-radius: var(--yaar-radius-sm);
+  opacity: 0;
+  cursor: pointer;
+}
+
+.project-menu-item:hover .project-menu-close {
+  opacity: 0.6;
+}
+
+.project-menu-close:hover {
+  opacity: 1;
+  background: var(--yaar-bg-surface);
+  color: var(--yaar-error);
+}
+
+.project-menu-action .project-menu-label {
+  color: var(--yaar-text-muted);
+}
+
+.project-menu-sep {
+  height: 1px;
+  margin: var(--yaar-sp-1) 0;
+  background: var(--yaar-border);
+}
+
+/* Pushes Compile/Preview to the right so the project controls (menu, Load,
+   Clone) read as one group and the build actions as another. */
+.toolbar-gap {
+  flex: 1;
+}

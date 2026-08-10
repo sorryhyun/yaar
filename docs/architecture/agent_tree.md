@@ -68,8 +68,11 @@ feature.
 
 4. **Lifecycle cascades down.** Disposing an owner disposes its subtree: removing a monitor
    tears down its app agents and their sub-agents; an app's last window on a monitor closing
-   tears down that app's sub-agents. No node outlives its owner and none survives the session.
-   Durable identity is app data (`appDb`/`appStorage`), replayed into a fresh node's first turn.
+   tears down that app agent *and* its sub-agents — the same condition, spent on both tiers at
+   once, because "the app has left this desktop" is one fact. (Closing a window the app still
+   has siblings of takes nothing: the agent is keyed by `monitor::app` and is driving them.)
+   No node outlives its owner and none survives the session. Durable identity is app data
+   (`appDb`/`appStorage`), replayed into a fresh node's first turn.
 
 `list('yaar://session/agents')` returns both views of this — `agents` flat and `tree` nested. A
 `tree` node with `id: null` is a vacant owner slot: ownership follows the key, not the instance,

@@ -31,6 +31,9 @@ import { acquireWarmProvider } from '../providers/factory.js';
 import { runInAgentContext } from './agent-context.js';
 import { principalRole } from './roles.js';
 import { assembleSystemPromptForRole } from './system-prompt.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('AgentSession');
 
 /**
  * Options for handling a message with dynamic role assignment.
@@ -89,6 +92,13 @@ export class AgentSession {
   private currentMonitorId: string | undefined;
   private onOutput: ((bytes: number) => void) | null = null;
   private broadcastFn: (event: ServerEvent) => void;
+  /**
+   * The turn running on this session right now, or null. See {@link handleMessage}.
+   *
+   * Resolves — never rejects — when that turn has finished unwinding, so the next
+   * caller can be chained behind it without inheriting its failure.
+   */
+  private turnInFlight: Promise<void> | null = null;
 
   /**
    * This agent's lifetime token consumption, across every turn it has run.
@@ -345,11 +355,56 @@ export class AgentSession {
         monitorId: options.monitorId,
       });
     } catch (err) {
-      console.warn('[AgentSession] prewarm failed (first turn will cold-start):', err);
+      log.warn('prewarm failed, first turn will cold-start', { err });
     }
   }
 
+  /**
+   * Run one turn. One session, one provider, one turn — a second caller waits.
+   *
+   * Callers are supposed to serialize: the monitor queue, the window queue's
+   * is-processing flag, and the session processor each admit one turn at a time. But
+   * every piece of per-turn state on this class is a single field — `running`,
+   * `interrupted`, `currentRole`, `currentMessageId`, `recordedActions` — and the
+   * provider's stream is one stream, so a caller race did not degrade, it corrupted:
+   * two overlapping turns shared `running`, and the *first* one's `finally` cleared it
+   * under the second, whose read loop (`if (!this.running) break`) then stopped at its
+   * next message and answered with silence. The same flag going the other way brought
+   * the interrupted turn back to life, so a window the user had just closed got its
+   * cancelled answer anyway.
+   *
+   * The race that found this: closing an app window interrupts its agent and clears the
+   * window queue's flag, but `interrupt()` returns when the *provider* has stopped, not
+   * when the turn has unwound — so a re-invoke landing in between started turn two on an
+   * agent still finishing turn one (`AppTaskProcessor.handleWindowClose`). That door is
+   * shut on its own side; this is the invariant, kept where the state actually lives, so
+   * the next caller to race cannot silently lose a turn.
+   */
   async handleMessage(content: string, options: HandleMessageOptions): Promise<void> {
+    const previous = this.turnInFlight;
+    let settle!: () => void;
+    const mine = new Promise<void>((resolve) => {
+      settle = resolve;
+    });
+    this.turnInFlight = mine;
+
+    if (previous) {
+      log.warn('turn arrived while another was still running; waiting rather than overlapping', {
+        instanceId: this.instanceId,
+        role: options.role,
+      });
+      await previous;
+    }
+
+    try {
+      await this.runTurn(content, options);
+    } finally {
+      settle();
+      if (this.turnInFlight === mine) this.turnInFlight = null;
+    }
+  }
+
+  private async runTurn(content: string, options: HandleMessageOptions): Promise<void> {
     const { role, interactions, messageId, onContextMessage } = options;
 
     this.currentRole = role;
@@ -446,7 +501,7 @@ export class AgentSession {
             try {
               this.sessionLogger?.logThreadId(canonical, sessionId);
             } catch (err) {
-              console.warn(`[AgentSession] Failed to persist thread ID for ${canonical}:`, err);
+              log.warn('failed to persist thread id', { canonical, err });
             }
           }
         },
@@ -458,9 +513,11 @@ export class AgentSession {
       });
       mapper = turnMapper;
 
-      console.log(
-        `[AgentSession] ${role} starting query with content: "${fullContent.slice(0, 50)}..."`,
-      );
+      // A char count, not a sample. This used to log `content.slice(0, 50)`, which put
+      // the opening of every user prompt into the operational log — a different file,
+      // a different retention, and a different audience than `SessionLogger`, which is
+      // where content is supposed to live.
+      log.info('starting query', { role, contentChars: fullContent.length });
       // Open the observed turn before the first provider message, so a stream
       // subscriber can clear last turn's state rather than appending to it.
       turnMapper.start();
@@ -474,7 +531,7 @@ export class AgentSession {
           role: principalRole(role),
         },
         async () => {
-          console.log(`[AgentSession] ${role} entered agentContext.run`);
+          log.debug('entered agent context', { role });
           for await (const message of this.provider!.query(fullContent, transportOptions)) {
             if (!this.running) break;
             await turnMapper.map(message);
@@ -482,7 +539,7 @@ export class AgentSession {
         },
       );
     } catch (err) {
-      console.error(`[AgentSession] ${role} error:`, err);
+      log.error('turn failed', { role, err });
       // Terminal for stream observers too — a throw ends the turn as surely as a
       // provider `error` message does. Latched, so the `finish` below won't add
       // a second close after it.
@@ -545,10 +602,7 @@ export class AgentSession {
     const receipt = await this.provider.interrupt();
     if (receipt.outcome === 'escalated') {
       const queued = receipt.stillQueued?.length ?? 0;
-      console.warn(
-        `[AgentSession] ${this.instanceId}: interrupt escalated to a hard stop` +
-          (queued > 0 ? ` (${queued} message(s) still queued)` : ''),
-      );
+      log.warn('interrupt escalated to a hard stop', { instanceId: this.instanceId, queued });
     }
     return receipt;
   }

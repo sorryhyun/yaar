@@ -30,13 +30,29 @@ The **installed** app. (The *running* instance is `yaar://windows/{windowId}` �
 | Verb | URI | Effect |
 |------|-----|--------|
 | `list` | `yaar://apps` | Every installed app, as resource links |
-| `describe` | `yaar://apps/{appId}` | The app's manual: name/description/icon, `dist/protocol.json` **verbatim**, `agent/SKILL.md` when it ships one, permissions, plus this door's `verbs`, `invokeActions`, and `subPaths`. `persona:*` commands are filtered out — they are a sub-agent's half of the protocol, written for a character rather than an operator |
+| `describe` | `yaar://apps/{appId}` | The app's manual: name/description/icon, `agent/SKILL.md` when it ships one, permissions, the **names** of its state keys and commands with the URIs that serve them in full, plus this door's `verbs`, `invokeActions`, and `subPaths`. `persona:*` commands are filtered out — they are a sub-agent's half of the protocol, written for a character rather than an operator |
 | `read` | `yaar://apps/{appId}` | The app's effective manifest: id, name, kind, source, version, author, `isCompiled`, `hasProtocol`, `hasConfig`, permissions, `bundles`, `controls`, `subagents`, `streams`, `messaging`, `variant`, `dockEdge` |
 | `invoke` | `yaar://apps/{appId}` | `set_badge`, `install`, `publish`, `publish_prepare`, `publish_confirm`, `publish_cancel`, `clone` — the enum and `describe`'s `invokeActions` are both derived from the table that dispatches them |
 | `delete` | `yaar://apps/{appId}` | Uninstall |
-| `list` | `yaar://apps/{appId}` | Not a collection — an app's addressable children are its `storage/`, `db/`, and `agents/` sub-paths |
+| `list` | `yaar://apps/{appId}` | Not a collection — an app's addressable children are its `protocol`, `storage/`, `db/`, and `agents/` sub-paths |
 
-Returning `protocol.json` whole is safe because it is a build artifact: the compiler writes it from the source AST, `fold-schemas.ts` inlines the Zod param schemas, and deploy re-derives and diffs it. It cannot drift from the code the way a hand-written restatement can.
+#### The protocol — `yaar://apps/{appId}/protocol`
+
+The compiled `dist/protocol.json` of the **installed** app, addressable at its own granularity. It used to be inlined into `describe` above, which made one answer responsible for two questions an order of magnitude apart in size — identity + SKILL.md is a fixed ~10 KB, the manifest is 41.8 KB for a 52-command app and grows without bound. Their sum crossed the size at which the Claude CLI stops delivering a tool result inline and substitutes a path on disk, and a monitor agent holds the five `yaar://` verbs and no filesystem tools, so that path is a dead end. Split out, each verb answers its own question and the caller picks the size:
+
+| Verb | URI | Effect |
+|------|-----|--------|
+| `describe` | `…/protocol` | What the document is: counts, byte size, and the doors below. Never grows with the app |
+| `list` | `…/protocol` | **The index** — one resource link per state key and command, each carrying its rendered signature and the first sentence of its description. ~8 KB for 52 commands. Start here |
+| `read` | `…/protocol` | The manifest verbatim, `$defs` included. The one large answer, and only on request |
+| `read` | `…/protocol/commands/{name}` | One command, **self-contained**: signature, full description, `params`/`returns` carrying the `$defs` they reference, and a rendered call example. Brace-batchable: `…/commands/{a,b,c}` |
+| `read` | `…/protocol/state/{key}` | One state key's documentation (its *value* is `read('yaar://windows/{windowId}/state/{key}')`) |
+| `list` | `…/protocol/{commands,state}` | The index, narrowed to one section |
+| `invoke`/`delete` | any `…/protocol` path | Refused — a protocol is documentation, and a command needs a running window to act on |
+
+Serving `protocol.json` is safe because it is a build artifact: the compiler writes it from the source AST, `fold-schemas.ts` inlines the Zod param schemas, `dedupe-schemas.ts` hoists what repeats into `$defs`, and deploy re-derives and diffs it. It cannot drift from the code the way a hand-written restatement can.
+
+This is the app **as compiled**. A running instance registers its protocol live and may not agree (a devtools preview routinely does not) — that instance's manual is `describe('yaar://windows/{windowId}')`.
 
 `read`'s `subagents` and `streams` are **post-grant** — the intersection of the manifest with what the user approved at install (`config/app-grants.json`), not what `app.json` declares. An app holding `yaar-dev` can rewrite its own manifest, so the declaration is a request and the grant is the ceiling.
 
@@ -46,6 +62,14 @@ Returning `protocol.json` whole is safe because it is a build artifact: the comp
 > Use `yaar://windows/{windowId}/{state,commands}/{key}`. The refusal is deliberately narrow:
 > `storage/`, `db/`, and `agents/` keep all five verbs, since `appStorage` and `appDb` are built
 > entirely on reads and lists under `yaar://apps/self/{storage,db}/`.
+>
+> `yaar://apps/{appId}/protocol/commands/{key}` is **not** an exception to this — it is the other
+> side of the same line. The *documentation* of a command is a property of the installed app and is
+> the same on every monitor; the *command* is a thing that runs, and needs an instance to run on.
+>
+> Any other sub-path (`yaar://apps/{appId}/hamsters`) is refused too. It used to be silently
+> answered as the bare app, because the app handlers take their id from the first path segment and
+> ignore the rest — a false success with nothing about it that looks wrong.
 
 Handlers: `packages/server/src/handlers/apps/` (`register.ts` is the one composite registration —
 `ResourceRegistry` has no middle wildcard).
@@ -135,7 +159,7 @@ The canonical way agents address windows. The monitor is injected automatically 
 |------|-----|--------|
 | `describe` | `yaar://windows/{windowId}` | This instance's manual — the live manifest when the iframe has registered (`source: 'live'`), the app's on-disk `protocol.json` when it has not (`source: 'manifest'`). A non-app window answers with the action set filtered to its renderer instead. Either way, `builtinState` carries the window's own keys |
 | `read` | `yaar://windows/{windowId}` | Metadata (including `z` and `focused` — see below) + `__content`; on an iframe window, metadata + `__screenshot` instead, with `contentOmitted` naming where the content went |
-| `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links. A command's `description` is prefixed with its rendered signature, so the list is enough to call from |
+| `list` | `yaar://windows/{windowId}` | *That window's* built-in keys, then the app's state keys and commands, as sub-path resource links. **The index**: a command's `description` is its rendered signature plus the *first sentence* of its documentation, so the list is enough to call from without being the whole manual — for a 52-command app it is ~10 KB rather than 80. `describe` on the row's own URI has the full text |
 | `read` | `yaar://windows/{windowId}/state/{key}` | One state value — the same executor as `app_query` |
 | `invoke` | `yaar://windows/{windowId}/commands/{key}` | Run one command; the payload **is** its params. An **array** payload runs it once per element, in order (see [Batching](#batching)) |
 | `describe` | `yaar://windows/{windowId}/{state,commands}/{key}` | That key's doc — the app's computed `describe()` if it defines one, otherwise the manifest's static `description`. A command also carries `signature`, a rendered `invoke` example, and its `schema` |

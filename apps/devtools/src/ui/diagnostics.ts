@@ -4,11 +4,16 @@ import html from '@bundled/solid-js/html';
 import { diagnostics, consoleLogs, type Diagnostic } from '../core';
 import { openFile, clearConsoleLogs } from '../services';
 import { ConsolePanel } from './console-panel';
-import { DiffPanel, hasDiff, clearDiff } from './diff-panel';
+import { showFiles } from './panel-state';
 
-const [activeBottomTab, setActiveBottomTab] = createSignal<'problems' | 'console' | 'diff'>(
-  'problems',
-);
+// The bottom panel: Problems and Console, and nothing else.
+//
+// Changes was a third tab here until it moved to the sidebar (see sidebar.ts and
+// changes-panel.ts). What is left are the two short, scrolling logs the panel was
+// sized for — which is why the `:has(.changes-panel)` height overrides went with
+// it, and why this panel is back to a plain 200px cap.
+
+const [activeBottomTab, setActiveBottomTab] = createSignal<'problems' | 'console'>('problems');
 
 function ProblemsPanel() {
   return html`
@@ -18,7 +23,16 @@ function ProblemsPanel() {
       <//>
       <${For} each=${diagnostics}>
         ${(d: Diagnostic) => html`
-          <div class=${`diagnostics-item ${d.severity}`} onClick=${() => openFile(d.file)}>
+          <div
+            class=${`diagnostics-item ${d.severity}`}
+            onClick=${() => {
+              // The editor is not necessarily what the main pane is showing — a diff
+              // may be. Jumping to a problem has to bring the file forward too, or
+              // the click opens a file nobody can see.
+              showFiles();
+              openFile(d.file);
+            }}
+          >
             <span class="diag-icon">${d.severity === 'error' ? '❌' : '⚠️'}</span>
             <span class="diag-location y-text-xs">${d.file}:${d.line}</span>
             <span class="diag-message y-text-xs">${d.message}</span>
@@ -53,22 +67,10 @@ export function DiagnosticsPanel() {
             <span class="diagnostics-count y-badge">${() => consoleLogs().length}</span>
           <//>
         </button>
-        <button
-          class=${() => `bottom-tab y-text-xs${activeBottomTab() === 'diff' ? ' active' : ''}`}
-          onClick=${() => setActiveBottomTab('diff')}
-        >
-          Diff
-          <${Show} when=${hasDiff}>
-            <span class="diagnostics-count y-badge">•</span>
-          <//>
-        </button>
         <${Show} when=${() => activeBottomTab() === 'console' && consoleLogs().length > 0}>
           <button class="bottom-tab-action y-text-xs" onClick=${() => clearConsoleLogs()}>
             Clear
           </button>
-        <//>
-        <${Show} when=${() => activeBottomTab() === 'diff' && hasDiff()}>
-          <button class="bottom-tab-action y-text-xs" onClick=${() => clearDiff()}>Clear</button>
         <//>
       </div>
       <${Show} when=${() => activeBottomTab() === 'problems'}>
@@ -76,9 +78,6 @@ export function DiagnosticsPanel() {
       <//>
       <${Show} when=${() => activeBottomTab() === 'console'}>
         <${ConsolePanel} />
-      <//>
-      <${Show} when=${() => activeBottomTab() === 'diff'}>
-        <${DiffPanel} />
       <//>
     </div>
   `;

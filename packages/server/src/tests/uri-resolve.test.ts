@@ -139,12 +139,20 @@ describe('resolveUri', () => {
     // making the app id `dock?file=yaar:` — so this resolved to nothing and
     // `window.create` reported an unknown app for every parameterized launch. The query
     // must still reach the iframe, which is what the apiPath assertion pins.
+    //
+    // That assertion used to expect `/api/apps/dock?file=…` — no `/dist/index.html`,
+    // because `resolveContentUri` had the same unsplit-query bug this file's own fix
+    // worked around, and this test pinned its output rather than the right answer. That
+    // URL is not a 404 and is not the app either, so window.create reported
+    // `renderConfirmed: true` for a window that then never registered. Fixing the id
+    // here and not the served path there left half the bug in place, with a green test
+    // over it.
     const r = resolveUri('yaar://apps/dock?file=yaar://storage/files/report.md');
     expect(r?.kind).toBe('app-static');
     if (r?.kind === 'app-static') {
       expect(r.appId).toBe('dock');
       expect(r.absolutePath).toContain('dist/index.html');
-      expect(r.apiPath).toBe('/api/apps/dock?file=yaar://storage/files/report.md');
+      expect(r.apiPath).toBe('/api/apps/dock/dist/index.html?file=yaar://storage/files/report.md');
     }
   });
 

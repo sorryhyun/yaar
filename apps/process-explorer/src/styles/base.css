@@ -1,0 +1,20 @@
+/*
+ * Local custom property for a color with no `--yaar-*` token equivalent.
+ * app-css.ts exposes only --yaar-border (no hover step) to app iframes, so
+ * the brighter hover edge this app's cards/scrollbar-thumb/ghost-buttons use
+ * has nowhere else to live. Named --pe-*, not --yaar-*, since that prefix is
+ * reserved for the compiler-generated palette.
+ */
+.pe-app {
+  --pe-border-hover: #4a6080;
+}
+
+.pe-app {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+}

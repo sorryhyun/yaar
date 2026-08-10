@@ -43,6 +43,7 @@ import type { PendingOutcome } from './pending-store.js';
 import { DesktopRequest, LATE_ANSWER_GRACE_MS, reportUnaddressed } from './desktop-request.js';
 import { AppReadyRegistry } from './app-ready-registry.js';
 import { InterruptGate } from './interrupt-gate.js';
+import { createLogger } from '../observability/log.js';
 
 /**
  * The channel payloads live in `emitter-channels.ts` alongside the map that says which
@@ -55,6 +56,10 @@ export type {
   AppReadyEvent,
   SessionScopedEvent,
 } from './emitter-channels.js';
+
+const log = createLogger('ActionEmitter');
+/** App-protocol reply bookkeeping is its own subject; it keeps the name it always logged under. */
+const appProtocolLog = createLogger('AppProtocol');
 
 /**
  * Rendering feedback from frontend.
@@ -70,6 +75,8 @@ export interface RenderingFeedback {
   imageData?: string;
   /** Why a capture produced no image. See RenderingFeedbackEvent.captureFailure. */
   captureFailure?: string;
+  /** What a successful capture left out. See RenderingFeedbackEvent.captureDegraded. */
+  captureDegraded?: string[];
 }
 
 /**
@@ -273,10 +280,11 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     const agentId = this.resolveAgentId() ?? 'no-agent';
     if (this.fallbackReported.has(agentId)) return;
     this.fallbackReported.add(agentId);
-    console.warn(
-      `[ActionEmitter] Agent ${agentId} stamped monitor ${this.currentMonitorId} from the ` +
-        'turn-scoped fallback: no monitor in its async context, and the MCP boundary could ' +
-        'not resolve one either. This field is slated for deletion — please report this line.',
+    log.warn(
+      'agent stamped monitor from the turn-scoped fallback: no monitor in its async context, ' +
+        'and the MCP boundary could not resolve one either. This field is slated for deletion — ' +
+        'please report this line.',
+      { agentId, monitorId: this.currentMonitorId },
     );
   }
 
@@ -351,7 +359,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     }
     const aid = this.resolveAgentId(agentId);
     if (this.interrupts.blocks(aid)) {
-      console.log(`[ActionEmitter] Dropping ${action.type} from interrupted agent ${aid}`);
+      log.info('dropping action from interrupted agent', { action: action.type, agentId: aid });
       return;
     }
     this.emit('action', {
@@ -389,7 +397,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
       // Same drop as `emitAction`, settled the way an undelivered action is settled:
       // `cancelled` says the action never reached a screen, which is exactly what
       // happened, and is the one answer that cannot be read as a refusal.
-      console.log(`[ActionEmitter] Dropping ${action.type} from interrupted agent ${agentId}`);
+      log.info('dropping action from interrupted agent', { action: action.type, agentId });
       return Promise.resolve({ ok: false, reason: 'cancelled' });
     }
     const actionWithAgent = agentId ? { ...action, agentId } : action;
@@ -502,7 +510,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   async showPermissionDialog(request: PermissionDialogRequest): Promise<boolean> {
     const sessionId = getSessionId();
     if (!sessionId) {
-      console.warn('[ActionEmitter] showPermissionDialog called without agent context');
+      log.warn('showPermissionDialog called without agent context');
       return false;
     }
     return this.showPermissionDialogToSession(sessionId, request);
@@ -766,15 +774,19 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
     const expired = this.appRequests.takeLate(requestId);
     if (expired) {
       const latency = Date.now() - expired.startedAt;
-      console.warn(
-        `[AppProtocol] Late reply for ${requestId} (${expired.kind} on ${expired.windowId}): ` +
-          `arrived after ${latency}ms, ${latency - expired.timeoutMs}ms past its ${expired.timeoutMs}ms ` +
-          `deadline. The agent was already told the app did not respond.`,
-      );
+      appProtocolLog.warn('late reply — the agent was already told the app did not respond', {
+        requestId,
+        kind: expired.kind,
+        windowId: expired.windowId,
+        latencyMs: latency,
+        overdueMs: latency - expired.timeoutMs,
+        timeoutMs: expired.timeoutMs,
+      });
     } else {
-      console.warn(
-        `[AppProtocol] Reply for unknown request ${requestId} (${response.kind}) — no pending ` +
-          `entry, and none expired recently. Duplicate reply, or a request from a dead session.`,
+      appProtocolLog.warn(
+        'reply for unknown request — no pending entry, and none expired recently; ' +
+          'duplicate reply, or a request from a dead session',
+        { requestId, kind: response.kind },
       );
     }
     return false;

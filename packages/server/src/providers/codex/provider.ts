@@ -37,6 +37,9 @@ import type {
   CommandExecutionRequestApprovalParams,
   FileChangeRequestApprovalParams,
 } from './types.js';
+import { createLogger } from '../../observability/log.js';
+
+const log = createLogger('codex:provider');
 
 interface ThreadSession {
   threadId: string;
@@ -133,7 +136,7 @@ export class CodexProvider extends BaseTransport {
       this.client = await this.appServer.createConnection();
       return true;
     } catch (err) {
-      console.error('[codex] Failed to establish WS connection during warmup:', err);
+      log.error('failed to establish WS connection during warmup', { err });
       return false;
     }
   }
@@ -158,7 +161,7 @@ export class CodexProvider extends BaseTransport {
       this.client = await this.appServer.createConnection();
       return true;
     } catch (err) {
-      console.error('[codex] Failed to re-establish WS connection:', err);
+      log.error('failed to re-establish WS connection', { err });
       return false;
     }
   }
@@ -226,7 +229,7 @@ export class CodexProvider extends BaseTransport {
       // Handle server-initiated requests (approval dialogs)
       const serverRequestHandler = (id: number, method: string, params: unknown) => {
         this.handleServerRequest(client, id, method, params).catch((err) => {
-          console.error(`[codex] Failed to handle server request ${method}:`, err);
+          log.error('failed to handle server request', { method, err });
           client.respondError(id, -32000, err instanceof Error ? err.message : 'Internal error');
         });
       };
@@ -344,7 +347,7 @@ export class CodexProvider extends BaseTransport {
       });
       return true;
     } catch (err) {
-      console.warn('[codex] turn/steer failed:', err);
+      log.warn('turn/steer failed', { err });
       return false;
     }
   }
@@ -373,7 +376,7 @@ export class CodexProvider extends BaseTransport {
       } catch (err) {
         // The turn is still stopped locally — we abort below — but nothing
         // confirmed the model stopped, so this is not a clean acknowledgement.
-        console.warn(`[codex] turn/interrupt failed:`, err);
+        log.warn('turn/interrupt failed', { err });
         outcome = 'escalated';
       }
     }
@@ -436,7 +439,7 @@ export class CodexProvider extends BaseTransport {
       }
 
       default:
-        console.warn(`[codex] Unhandled server request: ${method}`);
+        log.warn('unhandled server request', { method });
         client.respondError(id, -32601, `Unhandled method: ${method}`);
         break;
     }
@@ -526,7 +529,7 @@ export class CodexProvider extends BaseTransport {
 
     // Case 1: Fork from parent session
     if (options.forkSession && options.sessionId) {
-      console.log(`[codex] Forking thread from parent ${options.sessionId}`);
+      log.info('forking thread from parent', { parentThreadId: options.sessionId });
       try {
         const fullParams: ThreadForkParams = {
           threadId: options.sessionId,
@@ -546,7 +549,7 @@ export class CodexProvider extends BaseTransport {
         };
         return true;
       } catch (err) {
-        console.warn(`[codex] Fork failed, falling back to new thread:`, err);
+        log.warn('fork failed, falling back to new thread', { err });
       }
     }
 
@@ -563,7 +566,7 @@ export class CodexProvider extends BaseTransport {
     // from a previous run's session log, on the first turn). `thread/resume` on a thread
     // this app-server already has loaded rejoins it and ignores config overrides.
     if (options.resumeThread && options.sessionId) {
-      console.log(`[codex] Resuming thread ${options.sessionId}`);
+      log.info('resuming thread', { threadId: options.sessionId });
       try {
         const fullParams: ThreadResumeParams = {
           threadId: options.sessionId,
@@ -574,7 +577,9 @@ export class CodexProvider extends BaseTransport {
           fullParams,
         );
         if (result.thread.turns.length === 0) {
-          console.warn(`[codex] Resumed thread has no turns, starting fresh instead`);
+          log.warn('resumed thread has no turns, starting fresh instead', {
+            threadId: options.sessionId,
+          });
         } else {
           this.currentSession = {
             threadId: options.sessionId,
@@ -585,7 +590,7 @@ export class CodexProvider extends BaseTransport {
           return true;
         }
       } catch (err) {
-        console.warn(`[codex] Resume failed, falling back to new thread:`, err);
+        log.warn('resume failed, falling back to new thread', { err });
       }
     }
 

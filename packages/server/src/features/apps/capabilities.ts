@@ -61,10 +61,17 @@ interface PermissionDescription extends CapabilityLine {
  * - **Longest prefix wins.** `yaar://apps/{id}/storage/` and `yaar://storage/media/` are
  *   narrow grants underneath two of the widest entries here; first-match-wins would
  *   describe an app that wants one private folder as one that wants everything.
- * - **An `exact` entry outranks every prefix.** `yaar://storage/` is the whole disk;
+ * - **An `exact` entry outranks every prefix.** `yaar://storage/` is the whole tree;
  *   `yaar://storage/notes/` is one folder. Prefix matching alone cannot tell them apart,
- *   so it would put "Full access to YAAR storage" on both — the direction of error this
- *   screen can least afford, since the user learns to ignore a warning that is always on.
+ *   so it would put the whole-tree warning on both — the direction of error this screen
+ *   can least afford, since the user learns to ignore a warning that is always on.
+ *
+ * The whole-tree row says "except other apps' private data" because that is what an
+ * installed app is actually granted: `discovery.ts` caps the entry to the shared tree
+ * (`capForeignAppStorage`), and only an app shipped with the repo holds it in full. This
+ * screen is never shown for those. A row that promised the reach the URI literally names
+ * would be describing a grant the gate declines to hand out — which is the failure the
+ * old canonicalization had, moved one layer up.
  *
  * `warn` marks a grant that is *wide* rather than dangerous in itself — the storage root,
  * system settings, the app registry — so a whole-disk request reads differently from a
@@ -73,7 +80,7 @@ interface PermissionDescription extends CapabilityLine {
 // One grant per line is the point here; reflowing to 100 columns hides the table.
 // prettier-ignore
 const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
-  { match: 'yaar://storage/',  exact: true, icon: '📁',  title: 'Read and write your files',            detail: 'Full access to YAAR storage', warn: true },
+  { match: 'yaar://storage/',  exact: true, icon: '📁',  title: 'Read and write your files',            detail: 'All of YAAR storage except other apps’ private data', warn: true },
   { match: 'yaar://storage/',               icon: '📁',  title: 'Read and write files',                 detail: 'Limited to one folder in YAAR storage' },
   { match: 'yaar://storage/media/',         icon: '🖼️',  title: 'Share images and media with other apps' },
   { match: 'yaar://apps/',     exact: true, icon: '🧩',  title: 'See and manage installed apps',        warn: true },

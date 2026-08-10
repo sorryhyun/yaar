@@ -1,0 +1,188 @@
+/* ── Message cards ─────────────────────────── */
+
+.msg-card {
+  border: 1px solid var(--yaar-border);
+  border-left: 3px solid var(--yaar-border);
+  border-radius: var(--yaar-radius);
+  background: var(--yaar-bg-surface);
+  overflow: hidden;
+}
+
+.msg-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(48, 54, 61, 0.5);
+}
+
+.msg-role {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.msg-sub {
+  font-size: 10px;
+  color: var(--yaar-text);
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 240px;
+}
+
+.msg-agent {
+  font-size: 9px;
+  color: var(--yaar-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.msg-time {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--yaar-text-muted);
+  flex-shrink: 0;
+}
+
+.msg-body {
+  padding: 8px 10px;
+}
+
+.msg-body:empty {
+  display: none;
+}
+
+.msg-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.msg-para {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--yaar-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg-code {
+  font-size: 11px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: 4px;
+  padding: 8px;
+  color: var(--yaar-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+
+.msg-inline {
+  font-size: 11px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--yaar-accent);
+}
+
+.msg-collapse {
+  border: 1px solid var(--yaar-border);
+  border-radius: 4px;
+  background: var(--yaar-bg);
+  overflow: hidden;
+}
+
+.msg-summary {
+  cursor: pointer;
+  font-size: 11px;
+  padding: 5px 8px;
+  color: var(--yaar-text-muted);
+  user-select: none;
+  list-style: none;
+}
+
+.msg-summary::-webkit-details-marker {
+  display: none;
+}
+
+.msg-summary::before {
+  content: '▸ ';
+  color: var(--yaar-text-muted);
+}
+
+.msg-collapse[open] > .msg-summary::before {
+  content: '▾ ';
+}
+
+.msg-collapse > .msg-code {
+  border: none;
+  border-top: 1px solid var(--yaar-border);
+  border-radius: 0;
+}
+
+/* Role accents */
+.role-user {
+  border-left-color: var(--yaar-accent);
+}
+.role-user .msg-role {
+  color: var(--yaar-accent);
+}
+
+.role-assistant {
+  border-left-color: var(--sl-role-assistant);
+}
+.role-assistant .msg-role {
+  color: var(--sl-role-assistant);
+}
+
+.role-thinking {
+  border-left-color: var(--sl-role-thinking);
+}
+.role-thinking .msg-role {
+  color: var(--sl-role-thinking);
+}
+
+.role-tool {
+  border-left-color: var(--sl-role-tool);
+}
+.role-tool .msg-role {
+  color: var(--sl-role-tool);
+}
+
+.role-result {
+  border-left-color: var(--yaar-success);
+}
+.role-result .msg-role {
+  color: var(--yaar-success);
+}
+
+.role-action {
+  border-left-color: var(--sl-role-action);
+}
+.role-action .msg-role {
+  color: var(--sl-role-action);
+}
+
+.role-interaction {
+  border-left-color: var(--sl-role-interaction);
+}
+.role-interaction .msg-role {
+  color: var(--sl-role-interaction);
+}
+
+.role-unknown {
+  border-left-color: var(--yaar-text-muted);
+}
+.role-unknown .msg-role {
+  color: var(--yaar-text-muted);
+}

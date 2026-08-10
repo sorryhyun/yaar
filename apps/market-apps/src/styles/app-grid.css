@@ -1,0 +1,19 @@
+/* ── App list grid ───────────────────────────────────────────────────────── */
+
+.list-grid {
+  padding: 14px 18px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  align-content: start;
+}
+
+.empty-msg {
+  grid-column: 1 / -1;
+  padding: 32px 0;
+  text-align: center;
+  font-size: 14px;
+}

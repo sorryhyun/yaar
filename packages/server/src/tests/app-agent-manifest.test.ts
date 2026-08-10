@@ -22,7 +22,7 @@ describe('app agent protocol manifest', () => {
     );
     // Required params carry no marker; optional ones carry `?`.
     expect(systemPrompt).toContain('`gitRestore(appId: string, ref: string)`');
-    expect(systemPrompt).toContain('`compile(skipTypecheck?: boolean)`');
+    expect(systemPrompt).toContain('`compile(skipTypecheck?: boolean, refreshPreview?: boolean)`');
     // An enum shows its values — the type alone invites a fourth one.
     expect(systemPrompt).toContain('against?: "snapshot"|"repo"');
     // Declared-but-empty params means the command really takes none.

@@ -9,6 +9,9 @@ import { getWarmPool } from './warm-pool.js';
 import { getForcedProvider } from './get-forced-provider.js';
 import { PROVIDER_PREFERENCE, instantiateProvider } from './instantiate.js';
 import { cliVersionOutput } from './base-transport.js';
+import { createLogger } from '../observability/log.js';
+
+const log = createLogger('providers');
 
 /**
  * Registry of available providers with metadata.
@@ -63,9 +66,10 @@ const availabilityCheckers: Record<ProviderType, () => Promise<boolean>> = {
       // Unparseable → fail open. The version string is OpenAI's to reformat, and a
       // cosmetic change there must not un-detect a working install.
       if (version && isAtLeast(version, CODEX_MIN_VERSION) === false) {
-        console.warn(
-          `[providers] Ignoring codex ${version}: YAAR requires >= ${CODEX_MIN_VERSION}.`,
-        );
+        log.warn('ignoring codex: version below minimum', {
+          version,
+          required: CODEX_MIN_VERSION,
+        });
         return false;
       }
     } catch {

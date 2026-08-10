@@ -18,6 +18,7 @@ import {
   renderInvokeExample,
   reservedKeyNote,
 } from '../../lib/command-signature.js';
+import { defsOf, selfContained } from '../../lib/schema-refs.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
 import { grantsFromPayload } from './delegated-grants.js';
 
@@ -326,16 +327,24 @@ export async function handleAppDescribe(
     return okJson({ uri, doc: entry?.description ?? null, source: 'manifest' });
   }
 
-  const note = reservedKeyNote(entry);
+  // Shared subschemas live on the manifest, not on the descriptor. This answer is one
+  // command sliced out of it, so the schema has to carry the defs it points at — a
+  // slice with a dangling `#/$defs/...` is corrupt, and it is exactly the door an
+  // agent reaches for when a signature left it unsure.
+  const defs = defsOf(manifest);
+  const note = reservedKeyNote(entry, defs);
   return okJson({
     uri,
     doc: response.doc ?? entry?.description ?? null,
     // Attribution belongs to the doc, so it is claimed only when the doc came from here.
     ...(response.doc === null ? { source: 'manifest' } : {}),
     ...(entry
-      ? { signature: renderSignature(key, entry), invoke: renderInvokeExample(uri, entry) }
+      ? {
+          signature: renderSignature(key, entry, defs),
+          invoke: renderInvokeExample(uri, entry, defs),
+        }
       : {}),
-    ...(entry?.params !== undefined ? { schema: entry.params } : {}),
+    ...(entry?.params !== undefined ? { schema: selfContained(entry.params, defs) } : {}),
     ...(note ? { note } : {}),
   });
 }

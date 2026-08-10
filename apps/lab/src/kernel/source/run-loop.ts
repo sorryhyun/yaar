@@ -58,7 +58,7 @@ async function __labRun(msg) {
   }
 
   out.logs = __labS.logs;
-  out.parts = msg.agent ? [] : __labS.parts;
+  out.parts = __labS.parts; /* agent runs render in the UI too — see AgentPanel */
   out.hasChart = __labS.parts.some(function (p) { return p && p.kind === 'chart'; });
   out.durationMs = Date.now() - t0;
 
