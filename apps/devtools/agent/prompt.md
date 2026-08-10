@@ -259,6 +259,8 @@ Direct control (`appId`) is synchronous and precise — use it when you know the
 
 `command({ command: "runCode", params: { code }, appId: "lab" })` runs JS in a kernel that persists across calls — last expression is the result, no open window needed. Reduce inside the kernel rather than returning rows; pass `saveResultTo` a storage path when you want the full data set and only the path comes back. `describe({ appId: "lab" })` for the in-scope helpers, the notebook commands and `exportChart`.
 
+**Its `http` helper is `http.raw(url, init)` / `http.text(url, init)` / `http.json(url, init)`** — no `get`/`post`, the method goes in `init`. Worth knowing because guessing `http.get(url)` costs two turns to recover from, but it is rarely what you want here: for probing an endpoint's request/response shape use your own `httpProbe`, which needs no second app and no open window. Lab's belongs to a *cell* — a step that loads a remote CSV before reducing it, where the bytes should never leave the sandbox.
+
 ## Markdown Files in an App
 
 Three files, three readers. All optional; all carried by clone and deploy, so what you write into the project survives the deploy and comes back on the next clone.
