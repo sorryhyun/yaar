@@ -17,14 +17,14 @@
     }
   ],
   "permissions": [
-    "yaar://storage/media/",
+    "yaar://storage/",
     "yaar://apps/",
     "yaar://http",
     "yaar://windows/",
     "yaar://skills/"
   ],
   "run": "dist/index.html",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "author": "YAAR",
   "kind": "system",
   "appId": "devtools"

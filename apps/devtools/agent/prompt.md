@@ -228,7 +228,7 @@ Verify a URI before writing code against it with `command({ command: "inspectUri
 | URI | Verbs | Notes |
 |-----|-------|-------|
 | `yaar://apps/` | describe, list | Installed apps. `yaar://apps/{id}` gives metadata + protocol + skill — **not source**. |
-| `yaar://storage/media/` | describe, read, list, invoke, del | The shared media tree — **the only part of `yaar://storage/` devtools may reach**. `invoke` actions: `write`, `edit`, `grep`. An app's own files go in `appStorage`, which needs no permission. |
+| `yaar://storage/` | describe, read, list, invoke, del | The **whole** shared storage tree, not just `media/`: read the file the user is pointing at, write a report where they asked for it, `grep` across a directory. `invoke` actions: `write`, `edit`, `grep`. `media/` is the sub-tree apps publish artifacts to for each other — `listMedia`/`importMedia` are the named shortcuts into it. An app's *own* files go in `appStorage`, which needs no permission and is a separate tree (`yaar://apps/{id}/storage/…`) that this grant does **not** cover. |
 | `yaar://windows/` | describe, list | Open windows. |
 | `yaar://http` | describe, invoke | HTTP proxy (SSRF-protected, domain allowlist). |
 | `yaar://skills/{topic}` | describe, read | Reference docs. Topics: `components`, `config`, `marketplace`, `remote`. Fetch with `read: true` — a topic is a document, so `list` is not one of its verbs. |
@@ -267,7 +267,7 @@ Direct control (`appId`) is synchronous and precise — use it when you know the
 
 ### Lab — compute over data instead of pulling data into context
 
-**Lab (`appId: "lab"`) holds `yaar://storage/` and `yaar://http`; you hold only `yaar://storage/media/`.** That asymmetry is the whole point: Lab can already read any file you would otherwise have to pull through the conversation, so **send it paths, never contents.** Reading a 40MB log into your context to count error lines is the exact mistake this app exists to prevent.
+**You and Lab (`appId: "lab"`) both hold `yaar://storage/`, so a path is a currency you share.** That is the whole point: anything you can name, Lab can already open — so **send it paths, never contents.** Reading a 40MB log into your context to count error lines is the exact mistake this app exists to prevent, and holding the permission yourself makes it *easier* to make, not harder. The question to ask is not "can I read this" but "does the answer need the bytes in my context".
 
 Reach for it when the question is *arithmetic over data* rather than *a change to code*:
 
