@@ -99,11 +99,26 @@ function splitFirst(path: string): [string, string | undefined] {
 }
 
 /**
+ * Split a path from its `?query`/`#fragment` suffix at the first `?` or `#`.
+ *
+ *   splitSuffix('memo?file=a.md')  → ['memo', '?file=a.md']
+ *   splitSuffix('memo/dist')       → ['memo/dist', '']
+ *
+ * The suffix is kept verbatim rather than parsed: it is handed to the browser,
+ * which is the thing that knows how to read it.
+ */
+function splitSuffix(path: string): [string, string] {
+  const idx = path.search(/[?#]/);
+  return idx === -1 ? [path, ''] : [path.slice(0, idx), path.slice(idx)];
+}
+
+/**
  * Resolve a yaar:// URI to an API path.
  *
  *   yaar://apps/{appId}                  → /api/apps/{appId}/dist/index.html
  *   yaar://apps/{appId}/storage/{path}   → /api/storage/apps/{appId}/{path}
  *   yaar://apps/{appId}/{subpath}        → /api/apps/{appId}/{subpath}
+ *   yaar://apps/{appId}?k=v              → /api/apps/{appId}/dist/index.html?k=v
  *   yaar://storage/{path}                → /api/storage/{path}
  *
  * App-scoped storage is the one case where the URI and the HTTP path disagree:
@@ -111,19 +126,35 @@ function splitFirst(path: string): [string, string | undefined] {
  * they are served by `/api/storage/…` (which runs the permission gate), not by
  * `/api/apps/…` (which serves an app's own source/dist directory). Resolving it
  * the naive way yields a 404 — e.g. an `<img>` pointing at a generated PNG.
+ *
+ * A launch parameter (`?file=…`, the documented way to hand an app a file) is
+ * split off **before** the path is split and re-appended to the finished URL, so
+ * it never participates in path logic. This is the same strip `extractAppId`
+ * does, and doing it in only one of the two siblings was one bug with two faces:
+ * `yaar://apps/memo?file=faq.md` has no `/` at all, so the whole query became the
+ * appId (`/api/apps/memo?file=faq.md/dist/index.html`, a hard "Not found"), while
+ * `yaar://apps/x?file=yaar://storage/y.md` found its first `/` *inside the nested
+ * URI* and fell through to a path with no `/dist/index.html` at all — a URL that
+ * is not a 404 and is not the app either, so the window reported
+ * `renderConfirmed: true` and then never registered.
+ *
+ * Scoped to the `apps` authority deliberately. Under `storage` a `?` is an
+ * ordinary (if unusual) filename character with no launch-parameter meaning, and
+ * treating it as a delimiter there would make a real file unreachable.
  */
 export function resolveContentUri(uri: string): string | null {
   const parsed = parseYaarUri(uri);
   if (!parsed) return null;
   switch (parsed.authority) {
     case 'apps': {
-      const [appId, rest] = splitFirst(parsed.path);
-      if (rest === undefined) return `/api/apps/${appId}/dist/index.html`;
+      const [appPath, suffix] = splitSuffix(parsed.path);
+      const [appId, rest] = splitFirst(appPath);
+      if (rest === undefined) return `/api/apps/${appId}/dist/index.html${suffix}`;
       if (rest === 'storage' || rest.startsWith('storage/')) {
         const filePath = rest.slice('storage'.length).replace(/^\//, '');
-        return `/api/storage/apps/${appId}${filePath ? `/${filePath}` : ''}`;
+        return `/api/storage/apps/${appId}${filePath ? `/${filePath}` : ''}${suffix}`;
       }
-      return `/api/apps/${parsed.path}`;
+      return `/api/apps/${appPath}${suffix}`;
     }
     case 'storage':
       return `/api/storage/${parsed.path}`;
