@@ -127,6 +127,35 @@ const APP_STORAGE_URI = /^yaar:\/\/apps\/([^/]+)\/storage(?:\/(.*))?$/;
 /** The flat tree every app's private storage actually lives under. */
 const APP_STORAGE_ROOT = 'yaar://storage/apps/';
 
+/**
+ * The commons: the one storage prefix every app holds without declaring it.
+ *
+ * Its counterpart is {@link APP_STORAGE_ROOT} — that tree is one app each, this one is
+ * all of them. Apps exchange files by publishing here under their own name
+ * (`shared/{producer}/`), which is a convention for tidiness, not a boundary: the grant
+ * is the whole prefix, so an app can read what another published without either of them
+ * having asked the user for anything.
+ *
+ * Granted at token mint time (`SHARED_GRANT` in iframe-tokens.ts) and therefore
+ * *subtracted* from what an install dialog asks about (`capabilities.ts`) — a manifest
+ * that declares it is asking for something it already has, and a dialog row for a
+ * capability the user cannot decline teaches them to click through.
+ */
+export const SHARED_STORAGE_ROOT = 'yaar://storage/shared/';
+
+/**
+ * Is this entry asking for nothing but the commons, which every app already holds?
+ *
+ * The prefix and anything under it both answer true — an app declaring
+ * `yaar://storage/shared/anima/` is naming a corner of a tree it already reaches in
+ * full. The storage root itself does not: `yaar://storage/` covers `apps/` too, which
+ * is exactly the grant that has to keep being asked about.
+ */
+export function coversSharedTreeOnly(entry: PermissionEntry): boolean {
+  const uri = entryUri(entry);
+  return uri === 'yaar://storage/shared' || uri.startsWith(SHARED_STORAGE_ROOT);
+}
+
 /** A path segment that climbs out of the subtree it was resolved against. */
 function traverses(path: string): boolean {
   return path.split('/').includes('..');
@@ -256,7 +285,7 @@ export function isSharedOnly(entry: PermissionEntry): boolean {
  * Cap every grant that reaches into another app's storage, rather than dropping it.
  *
  * The difference matters: `yaar://storage/` is one entry doing two jobs, and only one of
- * them is contentious. Discarding it would take the shared tree — `media/`, whatever the
+ * them is contentious. Discarding it would take the shared tree — `shared/`, whatever the
  * user or the monitor left at the root — away from apps that have always had it, to close
  * a reach into `apps/` they never did. So the entry survives, marked, and
  * `permissionsAllow` declines it for exactly the URIs it should never have covered.

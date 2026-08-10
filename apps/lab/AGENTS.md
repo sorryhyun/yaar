@@ -31,7 +31,7 @@ src/state/
 src/lib/               no app state, no DOM ownership; safe to call from anywhere
   chart-config.ts      kernel chart spec -> Chart.js config
   chart-render.ts      live canvas + offscreen PNG rendering
-  media.ts             media/lab path rules, saving a data URL to the shared tree
+  shared-tree.ts       shared/lab path rules, saving a data URL to the shared tree
   data-url.ts          data URL <-> blob, browser download
   markdown.ts          marked + sanitizeHtml
   summarize.ts         a run result -> the one line the agent reads
@@ -197,9 +197,9 @@ differently from the others.
 - A **bare or relative path is this app's own storage.** That is the default and must stay
   the default: notebooks in the wild are full of `store.readJSON('data/x.json')`.
 - **Shared storage takes an explicit `yaar://storage/...` URI** (or the `shared:` shorthand).
-- `media` / `media/...` is a *legacy* shared shorthand that predates the URI form. It is the
-  one exception to "bare means private", kept because `plot.save` and `exportChart` document
-  it. Do not add more exceptions — new ones go through the URI.
+- `shared` / `shared/...` is a bare shorthand for the shared tree. It is the one exception to
+  "bare means private", kept because `plot.save` and `exportChart` document it. Do not add
+  more exceptions — new ones go through the URI.
 - `..` is refused in every form. It used to resolve server-side out of `apps/lab/` into
   neighbouring apps' directories; a URI is the sanctioned way out.
 - Errors name the resolved location as a **canonical URI**, never a physical path: under the
@@ -216,7 +216,7 @@ every shared listing with `G.endsWith is not a function`, and the type declarati
 one, and do not trust that signature.
 
 Note the two backends also differ in what they return: app storage yields paths relative to
-the app root, shared storage yields paths including the directory prefix (`media/lab/x.png`).
+the app root, shared storage yields paths including the directory prefix (`shared/lab/x.png`).
 
 ## Storage layout
 

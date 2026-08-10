@@ -33,7 +33,7 @@ function totalSizeOf(entries: Array<{ isDirectory: boolean; size?: number }>): n
  * Describe one path under `STORAGE_DIR`.
  *
  * @param uri   The URI to echo back — whichever spelling the caller used.
- * @param path  That URI's path under `STORAGE_DIR` (`apps/notes/x.png`, `media/a.webp`).
+ * @param path  That URI's path under `STORAGE_DIR` (`apps/notes/x.png`, `shared/a.webp`).
  */
 export async function describeStoragePath(uri: string, path: string): Promise<VerbResult> {
   const cleaned = path.replace(/^\/+|\/+$/g, '');

@@ -37,7 +37,7 @@ sitting in the wrong layer.
 ## The protocol is split on purpose
 
 `src/main.ts` holds the single `defineApp`, spreading seven descriptor maps from `src/protocol/`
-(projects, files, build, git, preview, introspect, media) plus `devtoolsState` from
+(projects, files, build, git, preview, introspect, shared-tree) plus `devtoolsState` from
 `protocol/index.ts`. The extractor resolves imported consts and spreads, so every command still
 reaches `dist/protocol.json` intact.
 

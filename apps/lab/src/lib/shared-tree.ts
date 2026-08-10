@@ -3,18 +3,18 @@ import { chartToPNG } from './chart-render';
 import { dataUrlToBlob } from './data-url';
 import type { ChartSpec } from '../types';
 
-/** Normalise a caller-supplied path into the shared media tree under media/lab/. */
-export function mediaPath(raw?: string, fallbackName?: string): string {
+/** Normalise a caller-supplied path into the shared tree under shared/lab/. */
+export function sharedPath(raw?: string, fallbackName?: string): string {
   let p = (raw || '').trim();
-  if (!p) p = 'media/lab/' + (fallbackName || 'chart-' + Date.now()) + '.png';
+  if (!p) p = 'shared/lab/' + (fallbackName || 'chart-' + Date.now()) + '.png';
   if (p.startsWith('yaar://storage/')) p = p.slice('yaar://storage/'.length);
   if (p.startsWith('/')) p = p.slice(1);
-  if (!p.startsWith('media/')) p = 'media/lab/' + p.replace(/^lab\//, '');
+  if (!p.startsWith('shared/')) p = 'shared/lab/' + p.replace(/^lab\//, '');
   if (!/\.(png|jpg|jpeg|webp)$/i.test(p)) p += '.png';
   return p;
 }
 
-/** Save a data URL into the shared media tree. Returns the stored path + uri. */
+/** Save a data URL into the shared tree. Returns the stored path + uri. */
 export async function saveDataUrl(
   dataUrl: string,
   path: string,
@@ -30,5 +30,5 @@ export async function saveChart(
   opts?: { width?: number; height?: number; scale?: number; background?: string },
 ): Promise<{ path: string; uri: string; bytes: number }> {
   const png = await chartToPNG(spec, opts);
-  return await saveDataUrl(png, mediaPath(path));
+  return await saveDataUrl(png, sharedPath(path));
 }

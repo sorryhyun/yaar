@@ -1,15 +1,15 @@
 /**
- * Shared-media discovery and asset import.
+ * Shared-tree discovery and asset import.
  *
- * `storage/media/` is the shared tree where apps publish artifacts for each other —
- * an image generated in anima, an edit from image-edit. These two commands are how a
- * project picks one up.
+ * `storage/shared/` is the shared tree where apps publish artifacts for each other —
+ * an image generated in anima, an edit from image-edit, a dataset lab computed. These
+ * two commands are how a project picks one up.
  *
  * They run **in the iframe**, not as agent tools, and that is the whole design. The
  * app agent has `describe`/`query`/`command`/`relay` and no verb tools at all; its
- * storage is confined to its own window's app. It cannot reach `media/` itself and
+ * storage is confined to its own window's app. It cannot reach `shared/` itself and
  * gains no ability to here — it asks this app to do what this app's declared,
- * user-visible `yaar://storage/media/` permission already allows, through a named
+ * user-visible `yaar://storage/` permission already allows, through a named
  * command that shows up in `dist/protocol.json`. Same shape as compile and deploy:
  * the agent does not hold `yaar-dev`, the iframe does.
  *
@@ -33,7 +33,7 @@ import { projectPath } from '../lib';
 import { refreshFiles } from '../services';
 
 /** The shared tree. Everything here is relative to the flat storage root. */
-const MEDIA_ROOT = 'media';
+const SHARED_ROOT = 'shared';
 
 /**
  * Inlined assets land in the bundle as base64, which costs ~33% on top of the raw
@@ -45,7 +45,7 @@ const SIZE_WARN_BYTES = 1_000_000;
 /** Formats worth re-encoding. WebP and SVG are already what we would convert to. */
 const RECOMPRESSIBLE = new Set(['png', 'jpg', 'jpeg', 'bmp']);
 
-interface MediaEntry {
+interface SharedEntry {
   path: string;
   isDirectory: boolean;
   size?: number;
@@ -60,19 +60,19 @@ function baseName(path: string): string {
 }
 
 /**
- * Accept either spelling of a media reference and return its storage path.
+ * Accept either spelling of a shared-tree reference and return its storage path.
  *
- * The agent will have got the URI from `listMedia`, but a user relaying it by hand
- * says "media/anima/dragon.png" as often as the full URI, and a producer's publish
+ * The agent will have got the URI from `listShared`, but a user relaying it by hand
+ * says "shared/anima/dragon.png" as often as the full URI, and a producer's publish
  * confirmation may say either.
  */
-function mediaPathFrom(raw: string): string {
+function sharedPathFrom(raw: string): string {
   let path = raw.trim();
   if (path.startsWith('yaar://storage/')) path = path.slice('yaar://storage/'.length);
   path = path.replace(/^\/+/, '');
-  if (!path.startsWith(`${MEDIA_ROOT}/`) && path !== MEDIA_ROOT) path = `${MEDIA_ROOT}/${path}`;
+  if (!path.startsWith(`${SHARED_ROOT}/`) && path !== SHARED_ROOT) path = `${SHARED_ROOT}/${path}`;
   if (path.split('/').includes('..')) {
-    throw new AppCommandError(`"${raw}" is not a path under ${MEDIA_ROOT}/`);
+    throw new AppCommandError(`"${raw}" is not a path under ${SHARED_ROOT}/`);
   }
   return path;
 }
@@ -85,39 +85,39 @@ function mediaPathFrom(raw: string): string {
  * artifact whose producer was `.DS_Store`, which is a file nothing published and
  * nothing can import.
  */
-async function listDir(path: string): Promise<MediaEntry[]> {
+async function listDir(path: string): Promise<SharedEntry[]> {
   try {
-    const entries = ((await storage.list(path)) ?? []) as unknown as MediaEntry[];
+    const entries = ((await storage.list(path)) ?? []) as unknown as SharedEntry[];
     return entries.filter((e) => !baseName(e.path).startsWith('.'));
   } catch {
-    // A missing `media/` is the ordinary state before anything has been published,
+    // A missing `shared/` is the ordinary state before anything has been published,
     // not an error worth failing the command over.
     return [];
   }
 }
 
-export const mediaCommands = {
-  listMedia: defineAppCommand({
+export const sharedCommands = {
+  listShared: defineAppCommand({
     description:
-      'List artifacts other apps have published to the shared media tree ' +
-      '(yaar://storage/media/), keyed by producer app. Pass `prefix` to look inside one ' +
+      'List artifacts other apps have published to the shared tree ' +
+      '(yaar://storage/shared/), keyed by producer app. Pass `prefix` to look inside one ' +
       'producer, e.g. "anima". Empty result means nothing has been published yet.',
     params: {
       type: 'object',
       properties: {
         prefix: {
           type: 'string',
-          description: 'Sub-path under media/ to list, e.g. "anima". Omit for everything.',
+          description: 'Sub-path under shared/ to list, e.g. "anima". Omit for everything.',
         },
       },
     },
     run: async (p) => {
-      const prefix = p.prefix ? mediaPathFrom(String(p.prefix)) : MEDIA_ROOT;
+      const prefix = p.prefix ? sharedPathFrom(String(p.prefix)) : SHARED_ROOT;
       const top = await listDir(prefix);
 
-      // media/ itself holds one directory per producer, so a bare listing shows only
+      // shared/ itself holds one directory per producer, so a bare listing shows only
       // folder names — useless for picking a file. Descend one level.
-      const files: MediaEntry[] = [];
+      const files: SharedEntry[] = [];
       for (const entry of top) {
         if (!entry.isDirectory) {
           files.push(entry);
@@ -141,7 +141,7 @@ export const mediaCommands = {
 
   importAsset: defineAppCommand({
     description:
-      'Copy a file from the shared media tree (yaar://storage/media/) into the active ' +
+      'Copy a file from the shared tree (yaar://storage/shared/) into the active ' +
       'project as a build-time asset, under src/assets/ by default. Returns the import line ' +
       'to add; the bundler inlines the file as a data: URI. Raster images are re-encoded to ' +
       'WebP unless `recompress: false`.',
@@ -151,7 +151,7 @@ export const mediaCommands = {
         from: {
           type: 'string',
           description:
-            'Source in the media tree — a yaar://storage/media/… URI from listMedia, or a ' +
+            'Source in the shared tree — a yaar://storage/shared/… URI from listShared, or a ' +
             'path like "anima/dragon.png".',
         },
         to: {
@@ -171,7 +171,7 @@ export const mediaCommands = {
       const proj = activeProject();
       if (!proj) throw new AppCommandError('No active project. Open or create one first.');
 
-      const sourcePath = mediaPathFrom(String(p.from));
+      const sourcePath = sharedPathFrom(String(p.from));
       const sourceExt = extOf(sourcePath);
       const wantsRecompress = p.recompress !== false && RECOMPRESSIBLE.has(sourceExt);
 
@@ -272,7 +272,7 @@ async function copyIntoProject(
 }
 
 /**
- * Read a media file and re-encode it to WebP.
+ * Read a shared-tree file and re-encode it to WebP.
  *
  * The canvas round-trip itself is `toWebP` from the SDK; this is the storage read in
  * front of it. Null (from either half) means the browser could not decode or encode

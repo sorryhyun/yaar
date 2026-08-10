@@ -5,7 +5,7 @@
  * project is not installed, that is the point — so the token was minted with an empty
  * permission list and only the automatic `SELF_GRANTS` worked. `appStorage`/`appDb` ran;
  * everything in the project's `permissions` 403'd, so an app whose job was writing to
- * `yaar://storage/media/` could not exercise that path in the environment built for
+ * `yaar://storage/shared/` could not exercise that path in the environment built for
  * iterating on it. `openPreview` did forward the list, but `window.create` honours a
  * caller-supplied one only for a caller that outranks the app, and devtools is an app.
  *
@@ -36,20 +36,22 @@ function writeProject(id: string, manifest: unknown) {
 }
 
 beforeAll(() => {
-  writeProject('media', { name: 'Media', permissions: ['yaar://storage/media/'] });
+  writeProject('shared', { name: 'Shared', permissions: ['yaar://storage/shared/'] });
   writeProject('plain', { name: 'Plain' });
   writeProject('verbs', {
     permissions: [{ uri: 'yaar://storage/reports/', verbs: ['read', 'invoke'] }],
   });
   writeProject('over', { permissions: ['yaar://config/', 'yaar://history/'] });
-  writeProject('mixed', { permissions: ['yaar://config/', 'yaar://storage/media/'] });
-  writeProject('junk', { permissions: [7, null, { verbs: ['read'] }, 'yaar://storage/media/'] });
+  writeProject('mixed', { permissions: ['yaar://config/', 'yaar://storage/shared/'] });
+  writeProject('junk', { permissions: [7, null, { verbs: ['read'] }, 'yaar://storage/shared/'] });
   writeProject('devtools', { permissions: ['yaar://storage/'] });
 });
 
 describe('preview iframe permissions', () => {
   it('carries the entry the previewed project declared', async () => {
-    expect(await previewPermissions('preview--media', STORAGE)).toEqual(['yaar://storage/media/']);
+    expect(await previewPermissions('preview--shared', STORAGE)).toEqual([
+      'yaar://storage/shared/',
+    ]);
   });
 
   it('keeps a verb-restricted entry restricted', async () => {
@@ -71,7 +73,7 @@ describe('preview iframe permissions', () => {
   });
 
   it('drops malformed entries rather than trusting the file’s shape', async () => {
-    expect(await previewPermissions('preview--junk', STORAGE)).toEqual(['yaar://storage/media/']);
+    expect(await previewPermissions('preview--junk', STORAGE)).toEqual(['yaar://storage/shared/']);
   });
 
   it('leaves a non-preview app to its real manifest', async () => {
@@ -92,12 +94,12 @@ describe('preview permissions are capped by devtools’ own reach', () => {
   });
 
   it('keeps the entries that survive and drops only the rest', async () => {
-    expect(await previewPermissions('preview--mixed', STORAGE)).toEqual(['yaar://storage/media/']);
+    expect(await previewPermissions('preview--mixed', STORAGE)).toEqual(['yaar://storage/shared/']);
   });
 
   it('never grants a preview more than the granted entries allow', async () => {
-    const granted = (await previewPermissions('preview--media', STORAGE)) ?? [];
-    expect(isUriAllowed('yaar://storage/media/slides/probe.txt', 'invoke', granted)).toBe(true);
+    const granted = (await previewPermissions('preview--shared', STORAGE)) ?? [];
+    expect(isUriAllowed('yaar://storage/shared/slides/probe.txt', 'invoke', granted)).toBe(true);
     expect(isUriAllowed('yaar://storage/private/secrets.json', 'read', granted)).toBe(false);
     expect(isUriAllowed('yaar://config/domains', 'read', granted)).toBe(false);
   });
@@ -117,7 +119,7 @@ describe('the minted token carries them', () => {
     mkdirSync(dir, { recursive: true });
     writeFileSync(
       join(dir, 'app.json'),
-      JSON.stringify({ permissions: ['yaar://storage/media/', 'yaar://config/'] }),
+      JSON.stringify({ permissions: ['yaar://storage/shared/', 'yaar://config/'] }),
     );
   });
 
@@ -126,7 +128,7 @@ describe('the minted token carries them', () => {
       appId: `preview--${PROJECT}`,
     });
     const entry = validateIframeToken(token);
-    expect(entry?.permissions).toContain('yaar://storage/media/');
+    expect(entry?.permissions).toContain('yaar://storage/shared/');
     expect(entry?.permissions).not.toContain('yaar://config/');
     // The automatic self-grants are still there — this adds to identity, never replaces it.
     expect(entry?.permissions).toContain('yaar://apps/self/storage/');

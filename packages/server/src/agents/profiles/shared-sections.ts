@@ -137,7 +137,7 @@ delete('yaar://storage/docs/readme.txt')
 
 | Prefix | What lives there |
 |---|---|
-| \`media/{producer}/\` | Artifacts apps publish for **each other** — a generated image, an edited logo. It is the one prefix apps hold a *standing* permission for, so a file here keeps working after the window that introduced it closes. |
+| \`shared/{producer}/\` | Artifacts apps publish for **each other** — a generated image, an exported deck, a computed dataset. Every app can read and write it **without declaring anything**, so a file here keeps working after the window that introduced it closes. |
 | \`temp/\` | Scratch, including OS file drops. Safe to prune. |
 | \`files/\` | The user's own documents. |
 | \`apps/{id}/\` | One app's **private** storage — the same files as \`yaar://apps/{id}/storage/\`. You can read it; the app itself cannot read any other app's. |
@@ -145,7 +145,7 @@ delete('yaar://storage/docs/readme.txt')
 **Moving a file — use \`copy\`, never read-then-write.**
 
 \`\`\`
-invoke('yaar://storage/media/anima/dragon.png', { action: "copy", from: "yaar://apps/anima/storage/generated/2026-07-19T10-02-seed42.png" })
+invoke('yaar://storage/shared/anima/dragon.png', { action: "copy", from: "yaar://apps/anima/storage/generated/2026-07-19T10-02-seed42.png" })
 \`\`\`
 
 \`copy\` moves the bytes server-side and works in either direction between the two
@@ -175,8 +175,8 @@ invoke('yaar://windows/<id>', { action: "app_command", command: "open",
 The lend is narrow on purpose: that one file, \`read\` only, dropped when the window
 closes. An app that must *write* the file, or reach a whole folder, needs that in its own
 app.json \`permissions\`. To hand a file to an app **for keeps** — across windows and
-sessions — \`copy\` it into \`media/{producer}/\` and \`direct_message\` the app naming the new
-URI; \`media/\` is the one prefix apps hold a standing permission for.`;
+sessions — \`copy\` it into \`shared/{producer}/\` and \`direct_message\` the app naming the new
+URI; every app reaches \`shared/\` with no permission to declare and none to grant.`;
 
 export const HTTP_SECTION = `## HTTP Access
 

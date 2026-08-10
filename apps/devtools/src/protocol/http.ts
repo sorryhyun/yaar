@@ -7,7 +7,7 @@
  * answers had to drive the Lab app through `controls` and reverse-engineer its in-sandbox
  * `http` helper — two apps and a window to make one GET (issue #65).
  *
- * It runs **in the iframe**, like `media.ts`'s commands and for the same reason: the app
+ * It runs **in the iframe**, like `shared-tree.ts`'s commands and for the same reason: the app
  * agent holds no verb tools, so it asks this app to do what this app's declared,
  * user-visible permission already allows, through a named command that appears in
  * `dist/protocol.json`. Allowlist and SSRF checks stay server-side either way.
@@ -146,7 +146,7 @@ export const httpCommands = {
           contentType,
           bytes: buf?.byteLength ?? null,
           note:
-            'Non-text response — bytes are not returned. Use the media commands to import ' +
+            'Non-text response — bytes are not returned. Use the shared-tree commands to import ' +
             'an asset into the project, or an app that can fetch it directly.',
         };
       }

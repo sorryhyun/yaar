@@ -1396,6 +1396,44 @@ delete('yaar://apps/my-app/storage/data.json')
 
 A `list` of a directory that does not exist is an **error**, not an empty success — the two used to be indistinguishable. A namespace root is the exception both ways: an app's `storage/` exists from the moment the app does (the directory is only created by the first write), so listing it before anything is written is empty rather than missing.
 
+## Shared Storage (`yaar://storage/shared/`)
+
+App storage is private; `yaar://storage/shared/` is the commons. It is where apps hand
+files to each other — an image generated in one app, a deck exported by another, a dataset
+a notebook computed — and **every app can read and write it without declaring anything**.
+There is no `permissions` entry to add; adding one grants nothing and the install dialog
+drops it.
+
+Publish under your own app id, one directory per producer:
+
+```typescript
+import { storage, invoke } from '@bundled/yaar';
+
+// Publish: server-side copy, so the bytes never pass through the iframe.
+await invoke('yaar://storage/shared/my-app/logo.png', {
+  action: 'copy',
+  from: 'yaar://apps/self/storage/generated/logo.png',
+});
+
+// Or write directly.
+await storage.save('shared/my-app/report.md', markdown);
+
+// Read what another app published.
+const png = await storage.read('shared/anima/dragon.png', { as: 'blob' });
+const published = await storage.list('shared');
+```
+
+Three properties follow from it being the commons rather than a grant:
+
+- **It is not private.** Any app can read, overwrite or delete anything under `shared/`.
+  Data that must stay yours belongs in app storage (`appStorage`), which no other app can
+  reach. The per-producer directory is tidiness, not a boundary.
+- **It is a staging area.** The user prunes it; a file published last week may be gone.
+  An app that needs an asset at runtime should keep its own copy.
+- **It does not widen anything else.** `storage/apps/{id}/` is a different subtree, so the
+  commons never reaches another app's private files — that still takes a declared
+  `permissions` entry, and for an installed app it is capped to the shared tree anyway.
+
 ## App-Scoped Database (`appDb`)
 
 For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`

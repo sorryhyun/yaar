@@ -43,7 +43,7 @@ await store.exists(path)
 ```
 
 A bare path (`notes/x.json`) is always Lab's own private storage. Shared storage takes a
-URI: `yaar://storage/media/lab/x.png`, or the `shared:` shorthand. `..` is refused in
+URI: `yaar://storage/shared/lab/x.png`, or the `shared:` shorthand. `..` is refused in
 every form — leave app storage with a URI, not traversal.
 
 ### http — proxied, allowlisted requests

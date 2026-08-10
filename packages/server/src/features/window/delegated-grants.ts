@@ -15,8 +15,8 @@
  *
  * The agent has the file, names the file, and the app it named it *to* cannot open it.
  * The only escape today is the convention in the monitor prompt — `copy` the bytes into
- * `media/{producer}/` first — which duplicates the file, breaks write-back, and only
- * works for apps that happen to declare `yaar://storage/media/`. Most declare either
+ * `shared/{producer}/` first — which duplicates the file, breaks write-back, and only
+ * works for apps that happen to declare `yaar://storage/shared/`. Most declare either
  * everything (`yaar://storage/`) or nothing.
  *
  * ── The rule ──

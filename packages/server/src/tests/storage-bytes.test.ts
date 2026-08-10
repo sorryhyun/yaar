@@ -40,8 +40,8 @@ describe('storagePathForUri', () => {
   });
 
   it('maps a flat path to itself', () => {
-    expect(storagePathForUri('yaar://storage/media/anima/dragon.png')).toBe(
-      'media/anima/dragon.png',
+    expect(storagePathForUri('yaar://storage/shared/anima/dragon.png')).toBe(
+      'shared/anima/dragon.png',
     );
   });
 
