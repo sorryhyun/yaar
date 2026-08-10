@@ -44,6 +44,8 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 `editFile`'s line-range and multi-edit modes anchor on content from *this* turn — a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset, with `lineNum: true` before a line-range edit. `readFile` takes an array of paths, so read everything you are about to work on in one call.
 
+**`writeFile` takes `content` as an array of lines** — one element per line, joined with newlines, no trailing newline added. Prefer it over one long string for anything past a few lines: a whole file as a single JSON string is one long token of `\n` and `\"` escapes, and that is the payload that comes back truncated as "your JSON is bad". An object still means "serialize this as JSON" (that is how `app.json` is written), so an array of *objects* is refused rather than stringified into the file.
+
 **Check `removed` in the edit result before moving on.** It is the cheapest way to confirm a splice hit what you meant — this turn, instead of at the next compile.
 
 ## Preview & Debugging
