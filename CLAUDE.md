@@ -34,6 +34,12 @@ bun run format:check             # Check formatting without writing
 # Run individual packages
 make server                                  # Start server only
 
+# Apps (see "Compiling one app" below)
+bun run build:apps                           # Compile every stale app in apps/
+bun run build:apps devtools                  # Compile just these app ids, stale or not
+bun run build:apps devtools --typecheck      # ...and run tsc over the app's src/
+bun run check:apps                           # App guardrail lint (no localStorage, etc.)
+
 # Testing
 bun run --filter @yaar/frontend test                 # Run all frontend tests
 bun run --filter @yaar/server test                    # Run all server tests
@@ -209,6 +215,29 @@ When the main agent is **Fable**, always pass an explicit `model` to the `Agent`
 ## Apps System
 
 Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata, `protocol.json` for agent-iframe communication — AI context is generated from the two at read time, with `agent/prompt.md` as an opt-in override (see below). See [`docs/guides/app-development.md`](./docs/guides/app-development.md) for full URI verbs reference and [`docs/reference/app_protocol_reference.md`](./docs/reference/app_protocol_reference.md) for protocol details.
+
+### Compiling one app (checking an edit without starting the server)
+
+`bun run build:apps <appId>` compiles the named apps to `apps/{id}/dist/`, whether or not the
+build manifest thinks they are stale — naming an app means "compile this one", and the staleness
+hash only covers the app's own sources, so an edit outside them (a bundled-library bump,
+`agent/prompt.md`) would otherwise report "skipped". With no ids it is the release/dev-server
+sweep and staleness applies. An id matching no app fails and lists the known ids, rather than
+reporting a clean build of nothing. Run it after `bun run --filter '*' build` — the script uses
+the compiler's built `dist/`.
+
+Three checks, and each only answers its own question:
+
+- `bun run build:apps <appId>` — Bun.build, the guards (Solid `html` templates, mount targets,
+  design tokens) and protocol extraction. It **transpiles types away**, so a green compile says
+  nothing about tsc.
+- `bun run build:apps <appId> --typecheck` — adds `tsc --noEmit` over the app's `src/`, with the
+  gated `@bundled/*` types its `app.json` `bundles` allows. Opt-in because it is the slow half.
+- `bun run check:apps` — the repo's app guardrail lint (`no-web-storage`, `no-promise-sleep`, …),
+  across every app at once.
+
+None of these run the app. For a change whose effect is visual or stateful, still open it — the
+`preview` route or a real session; `docs/guides/headless_driving.md` covers driving one.
 
 ### App Agent Architecture
 
