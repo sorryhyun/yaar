@@ -104,6 +104,17 @@ export interface RenderingFeedbackEvent {
    * merely slow (retrying is the fix).
    */
   captureFailure?: string;
+  /**
+   * What a *successful* `renderer: 'capture'` feedback left out of the image.
+   *
+   * A composite capture can drop real content and still return a plausible
+   * picture — a canvas it could not read, an image it could not inline, or a
+   * failed composite rescued by the largest-canvas fallback, which returns one
+   * canvas and none of the surrounding DOM. Each of those used to arrive as an
+   * unqualified success, so a screenshot taken to check a region could show that
+   * region empty and be believed. Absent when the capture drew everything.
+   */
+  captureDegraded?: string[];
 }
 
 export interface ComponentActionEvent {

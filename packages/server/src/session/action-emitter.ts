@@ -75,6 +75,8 @@ export interface RenderingFeedback {
   imageData?: string;
   /** Why a capture produced no image. See RenderingFeedbackEvent.captureFailure. */
   captureFailure?: string;
+  /** What a successful capture left out. See RenderingFeedbackEvent.captureDegraded. */
+  captureDegraded?: string[];
 }
 
 /**

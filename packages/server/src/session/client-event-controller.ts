@@ -280,6 +280,7 @@ export class ClientEventController {
       locked: event.locked,
       imageData: event.imageData,
       captureFailure: event.captureFailure,
+      captureDegraded: event.captureDegraded,
     });
   }
 

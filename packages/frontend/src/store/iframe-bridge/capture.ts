@@ -14,10 +14,16 @@ import {
  * Outcome of a self-capture attempt. A failure always names its cause, so the
  * agent that asked can tell "the canvas is tainted, retrying is futile" from
  * "the page had not painted yet, retry".
+ *
+ * A *success* can carry `degraded`: the image arrived, but the capture knows it
+ * left something out (a canvas it could not read, an image it could not inline,
+ * or a composite that failed and was rescued by the largest-canvas fallback —
+ * which returns one canvas, not the window). Without it a partial picture is
+ * indistinguishable from a complete one, and the caller believes the wrong thing.
  */
 export type IframeCaptureResult =
-  | { imageData: string; reason?: undefined }
-  | { imageData: null; reason: string };
+  | { imageData: string; reason?: undefined; degraded?: string[] }
+  | { imageData: null; reason: string; degraded?: undefined };
 
 /**
  * Try capturing iframe content via the postMessage self-capture protocol.
@@ -58,7 +64,13 @@ export function tryIframeSelfCapture(
         }
         clearTimeout(timer);
         window.removeEventListener('message', handler);
-        resolve({ imageData: e.data.imageData });
+        const degraded = Array.isArray(e.data.degraded)
+          ? (e.data.degraded as unknown[]).filter((n): n is string => typeof n === 'string')
+          : undefined;
+        resolve({
+          imageData: e.data.imageData,
+          ...(degraded && degraded.length > 0 ? { degraded } : {}),
+        });
       }
     }
 
@@ -81,7 +93,12 @@ export function tryIframeSelfCapture(
 export async function captureWindow(windowId: string, requestId: string) {
   const sendFeedback = (
     success: boolean,
-    extra?: { imageData?: string; error?: string; captureFailure?: string },
+    extra?: {
+      imageData?: string;
+      error?: string;
+      captureFailure?: string;
+      captureDegraded?: string[];
+    },
   ) => {
     sendEvent(wsManager, {
       type: ClientEventType.RENDERING_FEEDBACK,
@@ -112,7 +129,10 @@ export async function captureWindow(windowId: string, requestId: string) {
     const result = await tryIframeSelfCapture(iframe);
     if (result.imageData) {
       const base64 = result.imageData.replace(/^data:image\/[^;]+;base64,/, '');
-      sendFeedback(true, { imageData: base64 });
+      sendFeedback(true, {
+        imageData: base64,
+        ...(result.degraded ? { captureDegraded: result.degraded } : {}),
+      });
     } else {
       sendFeedback(false, {
         error: `Capture returned empty (${result.reason})`,

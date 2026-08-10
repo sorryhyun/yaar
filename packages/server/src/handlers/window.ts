@@ -194,6 +194,23 @@ function badSubPath(resolved: ResolvedWindow, subPath: string): VerbResult {
   );
 }
 
+/**
+ * The sentence that has to sit next to a degraded screenshot.
+ *
+ * A `__screenshot` read answers with the image alone, so there is no JSON field to
+ * hang the caveat on — and an image that quietly omits a region is believed. The
+ * text block leads the response for the same reason.
+ */
+function describeCaptureDegraded(notes: string[]): string {
+  return (
+    'This screenshot is incomplete — the capture succeeded but knows it left ' +
+    'content out:\n' +
+    notes.map((n) => `- ${n}`).join('\n') +
+    '\nDo not read a blank region here as "the app rendered nothing there". An app ' +
+    'that paints imperatively can supply its own image via defineApp({ onCapture }).'
+  );
+}
+
 export function registerWindowHandlers(
   registry: ResourceRegistry,
   getWindowState: () => WindowStateRegistry,
@@ -302,7 +319,7 @@ export function registerWindowHandlers(
    */
   async function captureWindow(
     win: WindowState,
-  ): Promise<{ imageData?: string; captureFailure?: string }> {
+  ): Promise<{ imageData?: string; captureFailure?: string; captureDegraded?: string[] }> {
     const outcome = await actionEmitter.emitActionWithFeedback(
       { type: 'window.capture', windowId: win.id },
       5000,
@@ -310,7 +327,16 @@ export function registerWindowHandlers(
       getWindowState().getMonitorForWindow(win.id),
     );
     const feedback = valueOf(outcome);
-    if (feedback?.success && feedback.imageData) return { imageData: feedback.imageData };
+    if (feedback?.success && feedback.imageData) {
+      // A capture that succeeded while omitting content says so here, or the
+      // omission reaches the reader as an ordinary picture. See
+      // RenderingFeedbackEvent.captureDegraded.
+      const degraded = feedback.captureDegraded;
+      return {
+        imageData: feedback.imageData,
+        ...(degraded && degraded.length > 0 ? { captureDegraded: degraded } : {}),
+      };
+    }
     return { captureFailure: feedback?.captureFailure };
   }
 
@@ -343,13 +369,22 @@ export function registerWindowHandlers(
     }
 
     if (key === '__screenshot') {
-      const { imageData, captureFailure } = await captureWindow(win);
+      const { imageData, captureFailure, captureDegraded } = await captureWindow(win);
       if (!imageData) {
         return error(
           `Could not capture window "${windowId}"${captureFailure ? ` (${captureFailure})` : ''}.`,
         );
       }
-      return { content: [{ type: 'image', data: imageData, mimeType: 'image/webp' }] };
+      const image = { type: 'image' as const, data: imageData, mimeType: 'image/webp' };
+      // The caveat leads, because it changes how the image below should be read.
+      return captureDegraded
+        ? {
+            content: [
+              { type: 'text' as const, text: describeCaptureDegraded(captureDegraded) },
+              image,
+            ],
+          }
+        : { content: [image] };
     }
 
     return null;
@@ -896,7 +931,7 @@ export function registerWindowHandlers(
       // depended on whether the frontend answered in time — and the half that was dropped was
       // addressable by nothing. `__content` is that half, and this says where it went.
       if (win.content.renderer === 'iframe') {
-        const { imageData, captureFailure } = await captureWindow(win);
+        const { imageData, captureFailure, captureDegraded } = await captureWindow(win);
         if (imageData) {
           const { content: _content, ...infoWithoutContent } = windowInfo;
           return {
@@ -909,6 +944,9 @@ export function registerWindowHandlers(
                     {
                       ...infoWithoutContent,
                       contentOmitted: `The screenshot below is this window's content. For the raw value, read("${buildWindowResourceUri(resolved.windowId, 'state', '__content')}").`,
+                      // A degraded capture is reported next to the picture it
+                      // qualifies, not swallowed by the success that carried it.
+                      ...(captureDegraded ? { captureDegraded } : {}),
                     },
                     null,
                     2,
