@@ -271,6 +271,48 @@ function canonicalStorageUri(uri: string): string | null {
 // ── The gates ───────────────────────────────────────────────────────────────
 
 /**
+ * Does this permission list cover `verb` on `uri`?
+ *
+ * The rule `requirePermission` applies, minus the principal-level gates around it
+ * (host bypass, the `yaar://session/*` refusal) — those are about *who* is asking,
+ * this is about what was declared.
+ *
+ * Exported because the app-agent MCP door has a permission list to check and no
+ * `Principal` to check it for: an app agent presents no iframe token, takes its appId
+ * from its own window, and answers on a tool call rather than an HTTP request, so it
+ * can neither produce a 403 `Response` nor be resolved by `resolvePrincipal`. What it
+ * must not do is carry a second copy of the matching — see `canonicalStorageUri`: a
+ * copy that skipped the rewrite would make a declared `yaar://storage/` a permission
+ * for every other app's private storage, which is the exact bug the rewrite exists to
+ * close, and a copy that drifted later would reopen it at one door only.
+ *
+ * `describe` is metadata-only (it reveals a handler's schema, not its data), so it
+ * bypasses the list — matching the verb endpoint's existing rule.
+ */
+export function permissionsAllow(
+  permissions: PermissionEntry[],
+  appId: string | undefined,
+  uri: string,
+  verb: Verb,
+): boolean {
+  // Canonicalize both sides, as with `self` below: an app.json may spell a grant
+  // either way, and a URI from a request body certainly may.
+  const canonical = canonicalStorageUri(uri);
+  if (canonical === null) return false;
+
+  const target = resolveSelf(canonical, appId);
+  const granted = permissions.flatMap((entry) => {
+    const raw = typeof entry === 'string' ? entry : entry.uri;
+    const rewritten = canonicalStorageUri(raw);
+    if (rewritten === null) return [];
+    const resolved = resolveSelf(rewritten, appId);
+    return [typeof entry === 'string' ? resolved : { ...entry, uri: resolved }];
+  });
+
+  return verb === 'describe' || isUriAllowed(target, verb, granted);
+}
+
+/**
  * May `principal` perform `verb` on `uri`? Returns a 403 Response if not.
  *
  * `describe` is metadata-only (it reveals a handler's schema, not its data), so
@@ -294,21 +336,7 @@ export function requirePermission(principal: Principal, uri: string, verb: Verb)
     return errorResponse('yaar://session/* is restricted to the session agent', 403);
   }
 
-  // Canonicalize both sides, as with `self` below: an app.json may spell a grant
-  // either way, and a URI from a request body certainly may.
-  const canonical = canonicalStorageUri(uri);
-  if (canonical === null) return errorResponse(`Not permitted: ${verb} ${uri}`, 403);
-
-  const target = resolveSelf(canonical, principal.appId);
-  const granted = principal.permissions.flatMap((entry) => {
-    const raw = typeof entry === 'string' ? entry : entry.uri;
-    const rewritten = canonicalStorageUri(raw);
-    if (rewritten === null) return [];
-    const resolved = resolveSelf(rewritten, principal.appId);
-    return [typeof entry === 'string' ? resolved : { ...entry, uri: resolved }];
-  });
-
-  if (verb !== 'describe' && !isUriAllowed(target, verb, granted)) {
+  if (!permissionsAllow(principal.permissions, principal.appId, uri, verb)) {
     return errorResponse(`Not permitted: ${verb} ${uri}`, 403);
   }
 
