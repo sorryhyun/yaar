@@ -50,6 +50,7 @@ import { isPreviewAppId } from '@yaar/shared';
 import type { Verb } from '../handlers/uri-registry.js';
 import { requestCarriesAppOrigin } from './origin-boundary.js';
 import { validateIframeToken } from './iframe-tokens.js';
+import { isUriAllowed } from './uri-match.js';
 import { errorResponse } from './utils.js';
 
 /**
@@ -179,20 +180,10 @@ export function resolvePrincipal(req: Request, url: URL): Principal | Response {
 
 // ── Matching a URI against declared permissions ─────────────────────────────
 
-function uriMatches(uri: string, pattern: string): boolean {
-  return (
-    uri === pattern || (pattern.endsWith('/') && (uri.startsWith(pattern) || uri + '/' === pattern))
-  );
-}
-
-export function isUriAllowed(uri: string, verb: Verb, entries: PermissionEntry[]): boolean {
-  return entries.some((entry) => {
-    if (typeof entry === 'string') {
-      return uriMatches(uri, entry); // string entry → all verbs allowed
-    }
-    return uriMatches(uri, entry.uri) && (!entry.verbs || entry.verbs.includes(verb));
-  });
-}
+// The rule itself lives in `uri-match.ts`, a leaf this module and `iframe-tokens.ts`
+// can both reach — see that file for why. Re-exported so this stays the module you
+// import a permission check from.
+export { isUriAllowed, uriMatches } from './uri-match.js';
 
 /** Is this the session principal's private namespace? */
 function isSessionUri(uri: string): boolean {
