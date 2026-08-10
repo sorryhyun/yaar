@@ -11,11 +11,13 @@ import {
   previewCommands,
   introspectCommands,
   mediaCommands,
+  httpCommands,
 } from './protocol/index';
 
 // Registers the protocol and mounts `AppShell` into the compiler's `#app`.
 // The descriptor maps stay split by domain — the protocol extractor resolves
-// imported consts and spreads, so all 28 commands reach `dist/protocol.json`.
+// imported consts and spreads, so every command reaches `dist/protocol.json`
+// (a count here would be one map away from being wrong; read the manifest).
 export default defineApp({
   id: 'devtools',
   name: 'Devtools',
@@ -28,6 +30,7 @@ export default defineApp({
     ...previewCommands,
     ...introspectCommands,
     ...mediaCommands,
+    ...httpCommands,
   },
   view: AppShell,
 });
