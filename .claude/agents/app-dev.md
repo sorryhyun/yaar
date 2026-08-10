@@ -156,7 +156,7 @@ Always available. Key exports:
 - **Dialogs**: `showConfirm`, `showPrompt` (there is no `showAlert` — use `showToast`)
 - **Storage**: `appStorage.save(path, content)`, `.trySave(path, content)`, `.read(path)`, `.readJson(path)`, `.readJsonOr(path, fallback)`, `.readBinary(path)`, `.readBlob(path)`, `.list(dirPath?)`, `.remove(path)`
 - **Database**: `appDb` — SQLite-backed collections scoped to the app
-- **Persisted state**: `createPersistedSignal(key, defaultValue, opts?)` — Solid.js signal that persists to appStorage; `opts.revive` clamps/migrates/validates the loaded value before it reaches the signal. Also `createAutosave`, `createCollapsiblePanel`
+- **Persisted state**: `createPersistedSignal(key, defaultValue, opts?)` → `[get, set, ready]` — Solid.js signal that persists to appStorage; `opts.revive` clamps/migrates/validates the loaded value before it reaches the signal. `await ready` before any **one-shot** use of the value (an `onMount` fetch): until the load lands the getter returns the fallback, and a request already sent cannot be taken back. Also `createAutosave`, `createCollapsiblePanel`
 - **Validation**: `@bundled/zod` (Zod Mini) at every trust boundary — see below
 
 ### Validate at trust boundaries

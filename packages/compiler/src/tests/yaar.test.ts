@@ -38,6 +38,10 @@ const errors: string[] = [];
 const docListeners: Record<string, ((e: unknown) => void)[]> = {};
 
 let invokeImpl: (uri: string, payload: unknown) => Promise<unknown> = async () => ({});
+/** Default: nothing stored, so `readJsonOr` swallows the rejection and yields its fallback. */
+let readImpl: (uri: string) => Promise<unknown> = async () => {
+  throw new Error('no such file');
+};
 
 function makeEl(tag: string): FakeEl {
   const el: FakeEl = {
@@ -83,8 +87,7 @@ function makeEl(tag: string): FakeEl {
 (globalThis as any).window = {
   yaar: {
     invoke: (uri: string, payload: unknown) => invokeImpl(uri, payload),
-    // readJsonOr swallows the rejection and yields its fallback.
-    read: async () => Promise.reject(new Error('no such file')),
+    read: (uri: string) => readImpl(uri),
     delete: async () => {},
     list: async () => [],
   },
@@ -113,6 +116,15 @@ const succeed = () => {
 };
 const failWith = (message: string) => {
   invokeImpl = async () => Promise.reject(new Error(message));
+};
+const nothingStored = () => {
+  readImpl = async () => {
+    throw new Error('no such file');
+  };
+};
+/** A stored value that arrives a macrotask late — the gap `ready` exists to close. */
+const storedLate = (value: unknown) => {
+  readImpl = () => new Promise((resolve) => setTimeout(() => resolve(value), 0));
 };
 
 describe('appStorage.trySave', () => {
@@ -185,6 +197,53 @@ describe('createPersistedSignal', () => {
     toasts.length = 0;
     errors.length = 0;
     succeed();
+    nothingStored();
+  });
+
+  /**
+   * The gap `ready` closes: a value only rendered self-corrects when the load lands,
+   * but a one-shot side effect (`onMount`'s first fetch) reads the signal once and
+   * cannot un-send what it sent. So the promise must resolve with the *stored* value,
+   * must still resolve when nothing is stored, and must yield to a set that beat it —
+   * awaiting it can never hand back a value the signal itself no longer holds.
+   */
+  describe('ready', () => {
+    test('resolves with the stored value once the load lands', async () => {
+      storedLate(true);
+      const [get, , ready] = createPersistedSignal('concept-mode.json', false);
+      expect(get()).toBe(false); // the window the bug lived in
+      expect(await ready).toBe(true);
+      expect(get()).toBe(true);
+    });
+
+    test('resolves with the fallback when nothing is stored', async () => {
+      const [, , ready] = createPersistedSignal('absent.json', 'fallback');
+      expect(await ready).toBe('fallback');
+    });
+
+    test('resolves with the revived value, not the raw one', async () => {
+      storedLate(999);
+      const [, , ready] = createPersistedSignal('clamped.json', 0, {
+        revive: (raw) => Math.min(Number(raw), 100),
+      });
+      expect(await ready).toBe(100);
+    });
+
+    test('yields to a set that landed first, rather than reporting the stored value', async () => {
+      storedLate('stored');
+      const [get, set, ready] = createPersistedSignal('raced.json', '');
+      set('typed');
+      expect(await ready).toBe('typed');
+      expect(get()).toBe('typed');
+    });
+
+    test('resolves rather than rejecting when the read fails', async () => {
+      readImpl = async () => {
+        throw new Error('storage offline');
+      };
+      const [, , ready] = createPersistedSignal('unreachable.json', 'fallback');
+      expect(await ready).toBe('fallback');
+    });
   });
 
   test('reports a failed save rather than dropping it', async () => {

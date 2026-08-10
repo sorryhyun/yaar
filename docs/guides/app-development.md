@@ -416,6 +416,21 @@ const autosave = createAutosave(
 
 For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice. Its `revive` option runs on the loaded value before it reaches the signal — the place to clamp a stored width against the current window, migrate a renamed key, or `z.safeParse` JSON an older version wrote in another shape. It also runs on the fallback when nothing is stored, so keep it total; if it throws, the fallback is used and the failure is logged.
 
+**Await its third element before a one-shot side effect.** The signal starts at the fallback and updates when the load lands, which is invisible for a value that is only *rendered* — the late load re-renders and nobody sees the wrong frame. It is not invisible for a value that decides something done **once**: an `onMount` that fetches "the concept feed if concept mode is on" reads the signal a single time, fires with the fallback, and there is no un-sending that request. `ready` resolves once the load settles, with the value the signal then holds:
+
+```typescript
+const [conceptMode, setConceptMode, conceptModeReady] = createPersistedSignal(
+  'preferences/concept-mode.json',
+  false,
+);
+onMount(async () => {
+  await conceptModeReady; // otherwise the first fetch always sees `false`
+  void loadFeed(conceptMode());
+});
+```
+
+It never rejects (a failed read resolves with the fallback, logged), and a set that landed before the load still wins — awaiting it cannot hand back a value the signal no longer holds.
+
 **Bind it to a text input and pass `debounceMs`.** It writes on every set by default, which is right for the toggle it usually holds — a set is a click. An `onInput` handler is not a click: it fires per keystroke, and under an IME per composition step, so a five-letter Korean name was a dozen writes, a dozen disk hits, and a dozen lines in the session log for one field. `debounceMs: 400` collapses the burst into one write, and a pending write is flushed when the page is hidden or unloaded, so closing the window mid-debounce still saves. The signal itself is never delayed — only the write.
 
 **`createStaleGuard`** — the generation counter that keeps a slow response from overwriting a newer one.

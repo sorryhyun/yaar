@@ -33,6 +33,22 @@ import { showToast } from './ui.js';
  * five-letter name typed in Korean was ~14 writes — 14 disk writes, and 14 lines
  * in the session log, for one field. A pending write is flushed when the page is
  * hidden or unloaded, so closing the window mid-debounce still saves.
+ *
+ * The third tuple element, `ready`, resolves once the initial load has settled,
+ * with the value the signal then holds. A value only *rendered* does not need it —
+ * the late load re-renders and the wrong frame is never seen. A value that decides
+ * a **one-shot side effect** does: `onMount`'s first fetch reads the signal once,
+ * gets the fallback, and there is no un-sending that request. Every app that hit
+ * this hand-rolled the same touched-guard (issue #67), so it belongs here:
+ *
+ * ```js
+ * const [conceptMode, setConceptMode, conceptModeReady] =
+ *   createPersistedSignal('preferences/concept-mode.json', false);
+ * onMount(async () => { await conceptModeReady; void loadFeed(conceptMode()); });
+ * ```
+ *
+ * It never rejects, and it honours a set that landed first: awaiting it always
+ * yields the value in force, not the stored one.
  */
 export function createPersistedSignal<T>(
   key: string,
@@ -43,23 +59,33 @@ export function createPersistedSignal<T>(
     revive?: (raw: unknown) => T;
     debounceMs?: number;
   },
-): [() => T, (v: T | ((prev: T) => T)) => void] {
+): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>] {
   const [value, setValue] = createSignal<T>(fallback);
   const debounceMs = options?.debounceMs ?? 0;
   let written = false;
-  appStorage.readJsonOr<T>(key, fallback).then((stored) => {
-    if (written) return;
-    let next = stored as any;
-    if (options?.revive) {
-      try {
-        next = options.revive(stored);
-      } catch (e) {
-        console.error(`[yaar] revive failed for "${key}", using the fallback:`, e);
-        next = fallback;
+  const ready = appStorage
+    .readJsonOr<T>(key, fallback)
+    .then((stored) => {
+      if (written) return value();
+      let next = stored as any;
+      if (options?.revive) {
+        try {
+          next = options.revive(stored);
+        } catch (e) {
+          console.error(`[yaar] revive failed for "${key}", using the fallback:`, e);
+          next = fallback;
+        }
       }
-    }
-    setValue(() => next);
-  });
+      setValue(() => next);
+      return next as T;
+    })
+    // A rejection here would land on whoever awaits `ready` — turning a primitive
+    // meant to *unblock* a first fetch into the thing that cancels it. The signal
+    // already falls back on a failed read; `ready` reports the same value.
+    .catch((e) => {
+      console.error(`[yaar] persisted load failed for "${key}", using the fallback:`, e);
+      return value();
+    });
 
   // The serialized value waiting to be written, or null when nothing is owed.
   // Serialized at set time rather than at flush time so a caller that mutates the
@@ -109,7 +135,7 @@ export function createPersistedSignal<T>(
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(flush, debounceMs);
   };
-  return [value, set];
+  return [value, set, ready];
 }
 
 /**
