@@ -27,7 +27,7 @@ export function resolveAgentModel(agentType?: string): string | undefined {
 /** Map Claude capability tiers to their Codex equivalents. */
 export function claudeModelToCodex(model?: string): string | undefined {
   if (!model) return undefined;
-  if (model.includes('opus')) return 'gpt-5.6-terra';
+  if (model.includes('opus')) return 'gpt-5.6-sol';
   if (model.includes('sonnet')) return 'gpt-5.6-terra';
   return undefined;
 }

@@ -25,6 +25,6 @@ describe('app agent model selection', () => {
     const profile = await buildAppAgentProfile('devtools');
 
     expect(profile.model).toBe('claude-opus-5');
-    expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-terra');
+    expect(claudeModelToCodex(profile.model)).toBe('gpt-5.6-sol');
   });
 });
