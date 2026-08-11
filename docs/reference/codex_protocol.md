@@ -25,6 +25,34 @@ for the running platform so a version error does not send you down the other pat
 YAAR requires **codex >= `CODEX_MIN_VERSION`** (`packages/server/src/providers/codex/version.ts`).
 See [Version policy](#version-policy) — an older CLI is refused rather than driven.
 
+#### Pinning the CLI to the repo (recommended for Codex work)
+
+```bash
+bun add @openai/codex          # from the repo root, once
+```
+
+This is the way out of "whichever binary PATH resolves first": the version is then recorded in
+`bun.lock` like any other dependency, and `getCodexSpawnArgs()` prefers it over PATH. It is an
+**optional peer dependency** of `@yaar/server`, so a plain `bun install` never downloads it —
+the package is an 11 KB launcher whose real binary arrives as one `os`/`cpu`-gated optional
+dependency weighing 275–370 MB depending on platform, and nobody running the Claude provider
+should pay for that.
+
+Two details worth knowing:
+
+- **Auth is shared, not duplicated.** Credentials live in `$CODEX_HOME` (default `~/.codex`),
+  so a pinned binary reads whatever `codex login` already wrote — including a login performed
+  by a globally installed codex.
+- **YAAR spawns the vendored binary directly**, not the package's `bin/codex.js` launcher. The
+  launcher would cost a Node process in front of every app-server and installs its own
+  SIGINT/SIGTERM/SIGHUP forwarding, which would sit between `AppServer` and the process group
+  `setsid -w` exists to let it signal. The platform→target-triple table is duplicated in
+  `config/providers/codex.ts` for that reason.
+
+The accepted range is declared once per side and pinned to `CODEX_MIN_VERSION` by
+`codex-version.test.ts`, so `bun add @openai/codex` can never resolve a version the runtime
+gates below would refuse.
+
 ### Running App Server
 
 ```bash
@@ -66,6 +94,7 @@ speaks, and it surfaces later as a notification whose params do not match or a r
 |---|---|---|
 | `CODEX_MIN_VERSION` | Oldest CLI YAAR will run against | Hand-edited |
 | `CODEX_GENERATED_FROM` (`generated/codex-version.ts`) | Version the bindings were generated from | `make codex-types` |
+| `peerDependencies["@openai/codex"]` (`packages/server/package.json`) | Range a repo-pinned CLI may resolve to | Hand-edited, `>=CODEX_MIN_VERSION` |
 
 Three gates enforce it, each seeing something the others cannot:
 
@@ -91,6 +120,14 @@ is refused.
 
 Raising the floor without re-running `make codex-types` is caught by
 `src/tests/codex-version.test.ts`, which asserts `CODEX_GENERATED_FROM >= CODEX_MIN_VERSION`.
+The same test pins the peer range to `>=CODEX_MIN_VERSION`: stated in two files, it would
+otherwise drift into admitting a CLI the gates then refuse.
+
+**Pinning does not retire the gates.** Gate 1 still checks the binary `make codex-types` is
+pointed at (which need not be the pinned one). Gate 2 still matters for anyone who did not opt
+in and is running a PATH codex. Gate 3 is untouched by pinning altogether — it exists for a
+stale app-server squatting `CODEX_WS_PORT`, and no dependency version says anything about the
+process already listening there.
 
 ---
 

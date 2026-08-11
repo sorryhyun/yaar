@@ -5,6 +5,7 @@
 import { join, dirname } from 'path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
+import { createRequire } from 'module';
 import { getEnvInt, IS_BUNDLED_EXE } from '../env.js';
 import { getConfigDir } from '../paths.js';
 import { createLogger } from '../../observability/log.js';
@@ -12,10 +13,80 @@ import { createLogger } from '../../observability/log.js';
 const log = createLogger('codex:config');
 
 /**
+ * Where the `@openai/codex` npm package puts the real binary, per platform — the package
+ * itself is an 11 KB launcher whose `bin/codex.js` resolves one of six `os`/`cpu`-gated
+ * optional dependencies (the esbuild pattern; only the host's ~275-370 MB package installs).
+ *
+ * This table mirrors `PLATFORM_PACKAGE_BY_TARGET` in that launcher, because YAAR resolves the
+ * vendored binary itself rather than spawning `bin/codex.js`. Two reasons not to go through
+ * the launcher: it costs a Node process in front of every app-server, and it installs its own
+ * SIGINT/SIGTERM/SIGHUP forwarding, which would sit between `AppServer` and the process group
+ * `setsid -w` exists to let it signal directly (see `app-server.ts`'s `spawnProcess`).
+ */
+const CODEX_VENDOR_TARGETS: Record<string, { pkg: string; triple: string } | undefined> = {
+  'darwin-arm64': { pkg: '@openai/codex-darwin-arm64', triple: 'aarch64-apple-darwin' },
+  'darwin-x64': { pkg: '@openai/codex-darwin-x64', triple: 'x86_64-apple-darwin' },
+  'linux-arm64': { pkg: '@openai/codex-linux-arm64', triple: 'aarch64-unknown-linux-musl' },
+  'linux-x64': { pkg: '@openai/codex-linux-x64', triple: 'x86_64-unknown-linux-musl' },
+  'win32-arm64': { pkg: '@openai/codex-win32-arm64', triple: 'aarch64-pc-windows-msvc' },
+  'win32-x64': { pkg: '@openai/codex-win32-x64', triple: 'x86_64-pc-windows-msvc' },
+};
+
+/** Memoized {@link resolveVendoredCodex} — a fact of the install, not of the moment. */
+let vendoredCodex: string | null | undefined;
+
+/**
+ * The `codex` binary from an installed `@openai/codex`, or null if it isn't installed.
+ *
+ * It is declared as an **optional peer dependency** (`packages/server/package.json`), so
+ * `bun install` never downloads it and a contributor running the Claude provider pays
+ * nothing. A Codex user opts in with `bun add @openai/codex`, and from then on the CLI
+ * driving YAAR is pinned by the lockfile instead of being whichever binary PATH resolves
+ * first — the "two codex installs at different versions" hazard `CODEX_UPGRADE_HINT`
+ * warns about. `codex-version.test.ts` pins the declared range to `CODEX_MIN_VERSION` so
+ * the two cannot drift.
+ *
+ * Auth is unaffected either way: credentials live in `$CODEX_HOME`, so a vendored binary
+ * reads whatever `codex login` already wrote.
+ */
+function resolveVendoredCodex(): string | null {
+  if (vendoredCodex !== undefined) return vendoredCodex;
+  vendoredCodex = null;
+
+  const target = CODEX_VENDOR_TARGETS[`${process.platform}-${process.arch}`];
+  if (!target) return null;
+
+  const require = createRequire(import.meta.url);
+  const roots: string[] = [];
+  for (const pkg of [target.pkg, '@openai/codex']) {
+    try {
+      roots.push(dirname(require.resolve(`${pkg}/package.json`)));
+    } catch {
+      // Not installed (or, for the launcher, not resolvable from here) — try the next root.
+    }
+  }
+
+  const bin = process.platform === 'win32' ? 'codex.exe' : 'codex';
+  for (const root of roots) {
+    const candidate = join(root, 'vendor', target.triple, 'bin', bin);
+    if (existsSync(candidate)) {
+      vendoredCodex = candidate;
+      return candidate;
+    }
+  }
+  return null;
+}
+
+/**
  * Get the codex CLI spawn args (command + prefix args).
  * When running as a bundled exe, looks for codex next to the executable first,
  * then resolves the npm global bin directory (handles Windows .cmd wrappers).
+ * Then an `@openai/codex` vendored into `node_modules` ({@link resolveVendoredCodex}).
  * Falls back to 'codex' from PATH.
+ *
+ * The bundled-exe branch stays first: a release artifact ships its own codex beside the
+ * executable and has no `node_modules` to resolve against, so what it found is what the
+ * release was built and smoke-tested with.
  *
  * Returns `[cmd, ...prefixArgs]` — callers should spread this before their own args:
  *   `Bun.spawn([...getCodexSpawnArgs(), 'app-server', ...])`
@@ -37,6 +108,11 @@ export function getCodexSpawnArgs(): string[] {
       }
     }
   }
+
+  // 3. A version-pinned codex installed as an npm package
+  const vendored = resolveVendoredCodex();
+  if (vendored) return [vendored];
+
   return ['codex'];
 }
 

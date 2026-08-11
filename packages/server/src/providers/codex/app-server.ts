@@ -30,7 +30,7 @@ import {
   STORAGE_DIR,
 } from '../../config.js';
 import { CODEX_AGENT_ROLES, codexRoleToToml } from '../../agents/profiles/index.js';
-import { assertSupportedCodex, CodexVersionError } from './version.js';
+import { assertSupportedCodex, CODEX_UPGRADE_HINT, CodexVersionError } from './version.js';
 import type {
   InitializeParams,
   InitializeResponse,
@@ -336,7 +336,8 @@ export class AppServer extends EventEmitter {
     if (!codexFound) {
       throw new Error(
         `Codex CLI not found (tried: ${codexBin}). ` +
-          `Install it (npm install -g @openai/codex) or place the codex binary next to the executable.`,
+          `Pin it to this repo with \`bun add @openai/codex\`, install it globally ` +
+          `(${CODEX_UPGRADE_HINT}), or place the codex binary next to the executable.`,
       );
     }
 

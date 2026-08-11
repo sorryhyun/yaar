@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
+import { readFileSync } from 'fs';
 import {
   assertSupportedCodex,
   CODEX_MIN_VERSION,
@@ -145,5 +146,23 @@ describe('generated bindings provenance', () => {
   it('was generated from a CLI that satisfies the floor', () => {
     // Fails when CODEX_MIN_VERSION is raised without re-running `make codex-types`.
     expect(isAtLeast(CODEX_GENERATED_FROM, CODEX_MIN_VERSION)).toBe(true);
+  });
+});
+
+describe('the @openai/codex peer range', () => {
+  // `getCodexSpawnArgs()` prefers a codex vendored into node_modules, and the range below is
+  // the only thing telling a user which versions that opt-in may resolve to. Stated twice, it
+  // would drift: raising CODEX_MIN_VERSION while the peer range still admits the old CLI means
+  // `bun add @openai/codex` can install a binary the three runtime gates then refuse.
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+
+  it('admits exactly the versions CODEX_MIN_VERSION admits', () => {
+    expect(pkg.peerDependencies?.['@openai/codex']).toBe(`>=${CODEX_MIN_VERSION}`);
+  });
+
+  it('is optional, so installing YAAR never downloads a 275 MB binary', () => {
+    // The whole reason it is a peer and not a dependency: optional peers are not
+    // auto-installed, so a contributor on the Claude provider pays nothing for it.
+    expect(pkg.peerDependenciesMeta?.['@openai/codex']?.optional).toBe(true);
   });
 });
