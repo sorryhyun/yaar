@@ -78,6 +78,14 @@ export interface DirExtractOptions {
    * throwaway bundle it builds resolves gated SDKs exactly as the app build did
    * — an app importing `@bundled/yaar-web` must not fail the fold on a gate it
    * already passed.
+   *
+   * Left out, it is read from the same `app.json` `appId` comes from, for the
+   * same reason: a caller that extracts from an app directory and passes no
+   * bundles used to fail every gated-SDK app on a gate its manifest grants.
+   * Devtools declares `yaar-dev` and defers one Zod schema, so it extracted to
+   * *no protocol at all* for any such caller — which is what the app agent's
+   * manifest tests saw on CI, where no `dist/protocol.json` exists to short-
+   * circuit the read.
    */
   bundles?: string[];
   /**
@@ -213,14 +221,22 @@ function folded(protocol: Protocol | null): Protocol | null {
   return protocol ? dedupeProtocolSchemas(protocol) : protocol;
 }
 
-/** Read `appId` from the app.json beside `srcDir`, or undefined if there is none. */
-async function readAppJsonId(srcDir: string): Promise<string | undefined> {
+/**
+ * Read `appId` and `bundles` from the app.json beside `srcDir`. Either is
+ * undefined when there is no app.json, or the field is absent or the wrong shape.
+ */
+async function readAppJson(srcDir: string): Promise<{ appId?: string; bundles?: string[] }> {
   try {
     const json = JSON.parse(await Bun.file(join(srcDir, '..', 'app.json')).text());
     const id = json?.appId;
-    return typeof id === 'string' && id ? id : undefined;
+    const bundles = json?.bundles;
+    return {
+      appId: typeof id === 'string' && id ? id : undefined,
+      bundles:
+        Array.isArray(bundles) && bundles.every((b) => typeof b === 'string') ? bundles : undefined,
+    };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -230,7 +246,9 @@ export async function extractProtocolFromDir(
   options: DirExtractOptions = {},
 ): Promise<DirExtraction> {
   const ts = await loadTypeScript();
-  const appId = options.appId ?? (await readAppJsonId(srcDir));
+  const fromAppJson = await readAppJson(srcDir);
+  const appId = options.appId ?? fromAppJson.appId;
+  const bundles = options.bundles ?? fromAppJson.bundles;
   const appPath = dirname(srcDir);
 
   if (ts) {
@@ -265,7 +283,7 @@ export async function extractProtocolFromDir(
 
       let errors = result.errors;
       if (result.protocol && errors.length === 0 && result.pendingFolds.length > 0) {
-        const fold = await foldAppSchemas({ appPath, bundles: options.bundles });
+        const fold = await foldAppSchemas({ appPath, bundles });
         errors = fold.ok
           ? mergeFold(result.protocol, result.pendingFolds, fold, entry)
           : [
@@ -297,7 +315,7 @@ export async function extractProtocolFromDir(
     // reachable at runtime: the fold builds the entry and asks its default
     // export directly, which is the registration the iframe will serve.
     if (/\bdefineApp\s*\(/.test(source)) {
-      const fold = await foldAppSchemas({ appPath, bundles: options.bundles });
+      const fold = await foldAppSchemas({ appPath, bundles });
       if (!fold.ok) {
         return {
           protocol: null,
