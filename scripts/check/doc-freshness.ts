@@ -32,14 +32,13 @@ import { BUNDLED_LIBRARIES } from '../../packages/compiler/src/index.ts';
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 /**
  * Docs that enumerate the `@bundled/*` surface and must match it exactly.
- * The root `CLAUDE.md` is deliberately absent: it summarizes the surface and
- * points at `BUNDLED_LIBRARIES` rather than restating every import.
+ *
+ * Both `CLAUDE.md` files are deliberately absent: they summarize the surface and
+ * point at `BUNDLED_LIBRARIES` rather than restating every import. A doc earns a
+ * row here by *enumerating* the list — add one only if it does, and prefer
+ * pointing at the registry over adding a fourth copy to keep in sync.
  */
-const BUNDLED_LIBRARY_DOCS = [
-  'packages/compiler/CLAUDE.md',
-  'docs/guides/app-development.md',
-  'docs/ko/app-development.md',
-];
+const BUNDLED_LIBRARY_DOCS = ['docs/guides/app-development.md', 'docs/ko/app-development.md'];
 
 /** Section headings that introduce a prose list of `@bundled/*` imports, per locale. */
 const BUNDLED_LIBRARY_HEADING = /^#{2,6}\s+.*(Bundled Libraries|번들 라이브러리)\s*$/;

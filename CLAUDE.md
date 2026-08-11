@@ -241,27 +241,31 @@ None of these run the app. For a change whose effect is visual or stateful, stil
 
 ### App Agent Architecture
 
-When a user interacts with an app window, an **app agent** is created (one per `monitorId::appId`, reused across all windows of that app on that monitor — not shared across monitors) and retired, with its memory, when the app's **last** window on that monitor closes. Closing one of several windows leaves it standing: it is driving the others. App agents have four scoped tools — `describe` (an app's manual: its `agent/SKILL.md` plus an index of its protocol, one signature and opening sentence per command, or one command in full via `describe({ command })`; the same builder behind `describe('yaar://apps/{id}')`), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`.
+When a user interacts with an app window, an **app agent** is created — one per `monitorId::appId`, reused across all windows of that app on that monitor, **not** shared across monitors — and retired, with its memory, when the app's **last** window on that monitor closes. Closing one of several windows leaves it standing: it is driving the others.
 
-**Cross-app control:** `describe`/`query`/`command` take an optional `appId`. Omitting it targets the agent's own window; passing another app's id targets that app — gated by the caller's `app.json` `controls` list (**bundled apps only**), which can also restrict which commands may be issued. The target app needn't have an open window (`resolveTarget` reuses or auto-launches one). This is direct synchronous protocol control; `direct_message` to `app:{id}` is the natural-language alternative handled by the other app's own agent. Parsing and the bundled-only guard: `features/apps/discovery.ts`.
+App agents have four scoped tools: `describe` (the app's manual), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`. The first three take an optional `appId` for **cross-app control**, gated by the caller's `app.json` `controls` list (**bundled apps only**); `discovery.ts` holds the parsing and that guard.
 
-**Agent docs (`AGENT_DOCS` in `features/apps/discovery.ts`):** three files, three readers:
+Full tool surface, lifecycle and containment rules: `packages/server/CLAUDE.md` (Tools/MCP).
 
-- `agent/prompt.md` — **replaces** the app agent's generic base prompt entirely (no append tier); either way the `protocol.json` manifest is appended as rendered call signatures.
-- `agent/hint.md` — injected into the **monitor agent's** system prompt (orchestration hints, auto-synced with install/uninstall). Legacy root `HINT.md` still read with a warning.
-- `agent/SKILL.md` — injected into no prompt; it is the hand-written manual `describe('yaar://apps/{id}')` returns (workflows, ordering, when *not* to use the app). `scripts/check/apps.ts` warns when it restates the protocol. The generated protocol it complements is served separately, at `yaar://apps/{id}/protocol` — `list` for the command index, `read` for the manifest, `read('…/protocol/commands/{name}')` for one command; a describe carrying both used to be big enough that the CLI would not deliver it (`docs/proposals/app_describe_size_proposal.md`).
+**Agent docs — three files, three readers** (`AGENT_DOCS` in `features/apps/discovery.ts`):
 
-Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }` (traversing/absolute overrides ignored). Root `AGENTS.md` is deliberately **not** read as a prompt — it keeps its ecosystem meaning (instructions to a coding agent editing that directory). Clone and deploy carry all of these; the full rules and rationale live in `discovery.ts`'s doc comments.
+| File | Read by |
+|---|---|
+| `agent/prompt.md` | **Replaces** the app agent's base prompt entirely (no append tier). Either way the `protocol.json` manifest is appended as rendered call signatures. |
+| `agent/hint.md` | The **monitor agent's** system prompt — orchestration hints, auto-synced with install/uninstall |
+| `agent/SKILL.md` | No prompt. It is the hand-written manual `describe('yaar://apps/{id}')` returns — workflows, ordering, when *not* to use the app. `scripts/check/apps.ts` warns when it restates the protocol, which is served separately at `yaar://apps/{id}/protocol`. |
 
-Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (describe/query/command/relay tools).
+Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }`. Root `AGENTS.md` is deliberately **not** read as a prompt — it keeps its ecosystem meaning (instructions to a coding agent editing that directory). **The full rules and rationale — override handling, legacy `HINT.md`, what clone and deploy carry — live in `discovery.ts`'s doc comments.**
 
-### Sub-agents / Persona Agents (app-spawned AI instances)
+Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (the four tools).
 
-An app that declares `"subagents": { "max": N }` in `app.json` can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with an app-supplied system prompt, each its own provider session and memory. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe (`persona:{toolName}` commands).
+### Sub-agents (app-spawned AI instances)
 
-`subagents` and `streams` are **granted by the user at install time**, not by the manifest alone (unlike `controls`, which stays bundled-only): an installed app's declaration is a *request*, recorded in `config/app-grants.json` and applied by `discovery.ts` as a **ceiling** — see `features/apps/capabilities.ts` for why intersecting rather than trusting matters. The old `"personas"` manifest alias is retired and refused by name.
+An app declaring `"subagents": { "max": N }` in `app.json` can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with an app-supplied system prompt, each its own provider session and memory. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe.
 
-See `packages/server/CLAUDE.md` (Tools/MCP section) for the full verb surface, lifecycle, and containment details, and [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md) for the design record.
+`subagents` and `streams` are **granted by the user at install time**, not by the manifest alone (unlike `controls`, which stays bundled-only) — the declaration is a *request*, recorded in `config/app-grants.json` and applied as a **ceiling**.
+
+Verb surface and containment rules: `packages/server/CLAUDE.md` (Tools/MCP). Design record and the four laws every new node must satisfy: [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md).
 
 ### Compiler & Bundled Libraries
 
@@ -269,7 +273,7 @@ Apps are compiled via Bun into a single self-contained HTML file. Entry point is
 
 **`@bundled/*` imports** — no `npm install` needed. 30+ libraries across UI (Solid.js), utilities, graphics/3D, data/charts, animation, audio, media files (`mediabunny` — read/write/convert mp4/webm/mp3/wav, frame-accurate and not real-time-bound like `MediaRecorder`), parsing, diagrams (`mermaid` — `renderMermaid()` returns token-themed SVG that is already sanitized; at 3.3 MB it is by far the largest, so import it only where diagrams are drawn), sanitization (`dompurify` — mandatory for any externally-sourced HTML), and validation (`zod` Mini functional API). Plus the **YAAR SDK** (`@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `defineApp()`, `appStorage`, `appDb`, etc.) and **gated SDKs** requiring `"bundles"` in `app.json`: `@bundled/yaar-dev` (compile/typecheck/deploy + per-app version history), `@bundled/yaar-web` (browser automation), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/guides/yaar_ml_runtime.md`](./docs/guides/yaar_ml_runtime.md)).
 
-The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries` (full category breakdown in `packages/compiler/CLAUDE.md`).
+The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries` and linted against the docs by `scripts/check/doc-freshness.ts`. Don't keep a second copy anywhere.
 
 Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/bundled/` (registry.ts = the library list, plugins.ts = resolution + gated SDK enforcement), `packages/compiler/src/shims/` (per-library shims, e.g. `yaar/` the SDK barrel, plus `yaar-dev.ts`, `yaar-web.ts`), `packages/compiler/src/protocol/` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
 

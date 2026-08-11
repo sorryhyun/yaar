@@ -280,10 +280,38 @@ Maps from JSON-RPC notification methods:
 
 ## Error Recovery
 
+Both SDKs report trouble on far more channels than they report *fatal* trouble on, and both were
+once read for the fatal one alone. The rule that governs the mapping — **a recoverable failure
+becomes `StreamMessage.type === 'notice'`, never `error`, because `error` is terminal by
+contract** — is stated in [`packages/server/CLAUDE.md`](../../packages/server/CLAUDE.md#the-notice-contract-providersnoticets).
+This section is the per-provider channel vocabulary.
+
+**Source:** `packages/server/src/providers/notice.ts`, `packages/server/src/providers/claude/errors.ts`, `packages/server/src/providers/codex/errors.ts`
+
 ### Claude
 
+Channels mapped to **notice** (`providers/claude/errors.ts`):
+
+| Channel | Note |
+|---|---|
+| `assistant.error` | A typed `SDKAssistantMessageError` |
+| `system/api_retry` | The SDK is retrying |
+| `system/permission_denied` | |
+| `system/model_refusal_*` | |
+| `rate_limit_event` | |
+
+Only the SDK's `result` terminal stays an **error**. Its text is assembled from `terminal_reason`
+and `stop_reason` when `errors[]` is empty — it usually is, and that is where "Unknown SDK error"
+came from. `errors[]` still goes first verbatim, since the stale-session retry matches
+`No conversation found` in it.
+
+The code→sentence tables are **total over the SDK's unions**, so a CLI bump that adds a code
+breaks the build rather than degrading to the code name. Covered by
+`tests/claude-error-notices.test.ts`.
+
+Retry and interruption:
+
 - Abort controller for interruption (`this.createAbortController()`)
-- Errors caught and yielded as `error` StreamMessage
 - Three auto-retry paths in `session-provider.ts`: the persistent stream ending before any
   message came back retries fresh with a new session (no `resume`); a stale-session error
   detected mid-turn on the main persistent-session path retries without `resume`; the same
@@ -292,9 +320,30 @@ Maps from JSON-RPC notification methods:
 
 ### Codex
 
-- Process-level resilience: If the AppServer exits unexpectedly, `ensureCodexAppServer()` restarts it on next provider creation
-- Session recovery: If a thread becomes invalid, the session is invalidated and the query retries with a new thread
-- Connection-level resilience: Each provider checks `client.isConnected` before queries; stale connections are detected via `isAvailable()`
+The load-bearing channel is **`ErrorNotification.willRetry`** (`providers/codex/errors.ts`). Every
+`error` notification used to map to a terminal message, which latched the turn closed *and* tripped
+the `done` short-circuit in `CodexProvider`'s read loop — so a transient failure the app-server was
+about to retry ended the turn, and the retry's answer was never read.
+
+`willRetry: true` is now a notice, and **the mapper and the loop must agree**: `provider.ts` skips
+its turn-done check for the same case. Changing one without the other reintroduces the bug.
+
+Beyond that:
+
+| Channel | Was | Now |
+|---|---|---|
+| `warning`, `guardianWarning`, `configWarning`, `deprecationNotice` | fell through to `console.debug` | notice |
+| `account/rateLimits/updated`, `model/rerouted` | in `IGNORED_METHODS` by name | notice |
+| Turn failure | reduced to `TurnError.message`, discarding the typed `CodexErrorInfo` beside it | both carried |
+
+`NOTICE_METHODS` exists so a handled method's *quiet* state (`status: 'ready'`, a gauge below its
+limit) is not logged as unhandled. Covered by `tests/codex-error-notices.test.ts`.
+
+Process and connection resilience:
+
+- If the AppServer exits unexpectedly, `ensureCodexAppServer()` restarts it on next provider creation
+- If a thread becomes invalid, the session is invalidated and the query retries with a new thread
+- Each provider checks `client.isConnected` before queries; stale connections are detected via `isAvailable()`
 
 ## Shared Process Architecture (Codex-specific)
 
