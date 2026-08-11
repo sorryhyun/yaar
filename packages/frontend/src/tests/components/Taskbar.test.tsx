@@ -15,11 +15,19 @@ function createMinimizedWindow(id: string, title: string, renderer = 'markdown')
   };
 }
 
+const open = (id: string, title: string, renderer = 'markdown') => ({
+  ...createMinimizedWindow(id, title, renderer),
+  minimized: false,
+});
+
 describe('Taskbar', () => {
   beforeEach(() => {
     useDesktopStore.setState({
       windows: {},
       zOrder: [],
+      // Pinned: the selector filters by monitor, and the MonitorTabs block below
+      // shares this file's store singleton.
+      activeMonitorId: '0',
       focusedWindowId: null,
       notifications: {},
       toasts: {},
@@ -36,18 +44,20 @@ describe('Taskbar', () => {
   });
 
   // Monitor controls moved onto the command-palette input bar (MonitorTabs); the
-  // taskbar row below it is now minimized-window tabs and nothing else.
+  // taskbar row below it is window tabs and nothing else.
   it('renders nothing but window tabs — no monitor controls', () => {
     render(<Taskbar />);
     expect(screen.queryByTitle('Create new monitor')).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Close/ })).not.toBeInTheDocument();
   });
 
-  it('renders tabs for each minimized window', () => {
+  // The row used to be minimized-only, which left an open-but-buried window with no
+  // tab to click and the row silent about what the desktop was holding.
+  it('renders a tab for every window, open or minimized', () => {
     useDesktopStore.setState({
       windows: {
         w1: createMinimizedWindow('w1', 'Notes'),
-        w2: createMinimizedWindow('w2', 'Browser', 'html'),
+        w2: open('w2', 'Browser', 'html'),
       },
     });
 
@@ -56,17 +66,54 @@ describe('Taskbar', () => {
     expect(screen.getByText('Browser')).toBeInTheDocument();
   });
 
-  it('does not render non-minimized windows', () => {
+  it('marks the minimized ones and the focused one apart', () => {
     useDesktopStore.setState({
       windows: {
-        w1: createMinimizedWindow('w1', 'Minimized'),
-        w2: { ...createMinimizedWindow('w2', 'Visible'), minimized: false },
+        w1: createMinimizedWindow('w1', 'Put Away'),
+        w2: open('w2', 'In Front'),
+        w3: open('w3', 'Behind'),
+      },
+      focusedWindowId: 'w2',
+    });
+
+    render(<Taskbar />);
+    const tabOf = (title: string) => screen.getByText(title).closest('button')!;
+    expect(tabOf('Put Away')).toHaveAttribute('data-minimized');
+    expect(tabOf('Put Away')).not.toHaveAttribute('data-active');
+    expect(tabOf('In Front')).toHaveAttribute('data-active');
+    expect(tabOf('Behind')).not.toHaveAttribute('data-active');
+    expect(tabOf('Behind')).not.toHaveAttribute('data-minimized');
+  });
+
+  // A window that is focused *and* minimized is not in front of anything, so its tab is
+  // the way back — not a second click that puts away what is already away.
+  it('treats a focused-but-minimized window as put away', () => {
+    const focusSpy = mock(() => {});
+    const minimizeSpy = mock(() => {});
+    useDesktopStore.setState({
+      windows: { w1: createMinimizedWindow('w1', 'Stale Focus') },
+      focusedWindowId: 'w1',
+      userFocusWindow: focusSpy,
+      userMinimizeWindow: minimizeSpy,
+    } as any);
+
+    render(<Taskbar />);
+    fireEvent.click(screen.getByText('Stale Focus'));
+    expect(focusSpy).toHaveBeenCalledWith('w1');
+    expect(minimizeSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not render windows from another monitor', () => {
+    useDesktopStore.setState({
+      windows: {
+        w1: open('w1', 'Here'),
+        w2: { ...open('w2', 'Elsewhere'), monitorId: '1' },
       },
     });
 
     render(<Taskbar />);
-    expect(screen.getByText('Minimized')).toBeInTheDocument();
-    expect(screen.queryByText('Visible')).not.toBeInTheDocument();
+    expect(screen.getByText('Here')).toBeInTheDocument();
+    expect(screen.queryByText('Elsewhere')).not.toBeInTheDocument();
   });
 
   it('shows renderer-type icon', () => {
@@ -97,6 +144,26 @@ describe('Taskbar', () => {
     render(<Taskbar />);
     fireEvent.click(screen.getByText('Restore Me'));
     expect(focusSpy).toHaveBeenCalledWith('w1');
+  });
+
+  it('click raises a buried window, and clicking the front one puts it away', () => {
+    const focusSpy = mock(() => {});
+    const minimizeSpy = mock(() => {});
+    useDesktopStore.setState({
+      windows: { w1: open('w1', 'In Front'), w2: open('w2', 'Behind') },
+      focusedWindowId: 'w1',
+      userFocusWindow: focusSpy,
+      userMinimizeWindow: minimizeSpy,
+    } as any);
+
+    render(<Taskbar />);
+    fireEvent.click(screen.getByText('Behind'));
+    expect(focusSpy).toHaveBeenCalledWith('w2');
+    expect(minimizeSpy).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByText('In Front'));
+    expect(minimizeSpy).toHaveBeenCalledWith('w1');
+    expect(focusSpy).toHaveBeenCalledTimes(1);
   });
 
   it('click close button closes window without restoring', () => {

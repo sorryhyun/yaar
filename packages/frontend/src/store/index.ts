@@ -14,8 +14,7 @@ export {
 export {
   selectWindowsInOrder,
   selectVisibleWindows,
-  selectMinimizedWindows,
-  selectMinimizedIframeWindows,
+  selectTaskbarWindows,
   selectAllIframeWindows,
   selectWidgetWindows,
   selectPanelWindows,

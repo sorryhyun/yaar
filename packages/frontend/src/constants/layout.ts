@@ -7,7 +7,7 @@ export const TASKBAR_HEIGHT = 36;
 
 /**
  * Vertical space the command palette occupies at the bottom of the viewport:
- * the minimized-tab slot (36) + the input bar (~56) + its bottom margin (12).
+ * the window-tab slot (36) + the input bar (~56) + its bottom margin (12).
  *
  * Re-exported from `@yaar/shared` rather than redeclared: the server's normal
  * window placement reserves the same strip when centering, and two copies would

@@ -8,7 +8,7 @@
   z-index: var(--z-panel);
 }
 
-/* Reserve space below input for minimized tabs so input position is stable.
+/* Reserve space below input for the window tabs so input position is stable.
    Sized to one tab (27px) plus the taskbar's own padding — any tighter and tabs clip. */
 .taskbarSlot {
   height: 31px;

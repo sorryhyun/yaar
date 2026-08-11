@@ -2,7 +2,7 @@
  * MonitorTabs - Monitor switcher + "new monitor" button.
  *
  * Rendered as its own row directly above the command palette's input bar — the
- * mirror of the minimized-window taskbar row below it. It used to sit in that
+ * mirror of the window taskbar row below it. It used to sit in that
  * bottom row; it is not inside the bar itself.
  */
 import { useDesktopStore } from '@/store';
