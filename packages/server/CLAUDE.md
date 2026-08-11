@@ -427,9 +427,9 @@ every manifest read would pay for every key.
 `describe` is counts and doors, `list` is the index, `read` is the manifest, and
 `read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. So the
 index is *what `list` means*, not a degradation a byte budget switches on, and nothing is truncated
-behind a caller's back. The incident that forced the split — and the CLI result-size cliff behind
-it — is [`docs/proposals/app_describe_size_proposal.md`](../../docs/proposals/app_describe_size_proposal.md);
-the cliff itself is named and moved in `mcp/result-size.ts`.
+behind a caller's back. The incident that forced the split is recorded in
+`handlers/apps/protocol-resource.ts`'s header; the CLI result-size cliff behind it is named and
+moved in `mcp/result-size.ts`.
 
 **A schema may point at the manifest, so every reader has to follow the pointer.** The compiler
 hoists a repeated shape into `manifest.$defs` and leaves `{"$ref": "#/$defs/x"}` at each use.

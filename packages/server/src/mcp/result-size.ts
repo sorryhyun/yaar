@@ -8,12 +8,13 @@
  * path. For a YAAR principal that is a **total** loss, not a degradation: monitor agents hold
  * the five `yaar://` verbs and app agents hold four scoped tools — neither has a filesystem
  * read, so the pointer resolves to nothing (`No handler registered for URI: /home/…`). The
- * incident that first named this is `docs/proposals/app_describe_size_proposal.md`; issue #64
- * is the same cliff reached from the app-agent side, via a batched `command`.
+ * incident that first named this was a 63.7 KB `describe('yaar://apps/{id}')`, which is what
+ * split the protocol onto its own URI (`handlers/apps/protocol-resource.ts`); issue #64 is the
+ * same cliff reached from the app-agent side, via a batched `command`.
  *
- * That document could only say the threshold was "undocumented, unpinned, observed somewhere
- * between 51 KB and 64 KB" and conclude that YAAR's job was to stay conservatively under it.
- * Both halves of that are now wrong, and this module is the correction:
+ * That split could only assume the threshold was "undocumented, unpinned, observed somewhere
+ * between 51 KB and 64 KB", and that YAAR's job was to stay conservatively under it. Both
+ * halves of that are wrong, and this module is the correction:
  *
  * - **The number is 50,000 characters**, and it is not `MAX_MCP_OUTPUT_TOKENS`. YAAR already
  *   sets that to 131072 (`config/providers/claude.ts`) and it never touched this: the token
@@ -38,7 +39,7 @@
  * 150,000 is that maximum with a sibling's worth of headroom: 3x the CLI's clamp, ~2.5x the
  * 58.7 KB batch in issue #64, and ~37k tokens — steep for one result, which is the point of it
  * being a ceiling rather than a target. Staying small is still the better answer wherever YAAR
- * can choose (the protocol doors in `app_describe_size_proposal.md` did exactly that, and
+ * can choose (the protocol doors in `handlers/apps/protocol-resource.ts` did exactly that, and
  * should stay that way); this only decides what happens to the reads YAAR does not control,
  * where the alternative is losing them entirely.
  *
