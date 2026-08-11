@@ -3,7 +3,10 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 
 const sendUserPromptResponse = mock(
-  (_id: string, _values?: string[], _text?: string, _dismissed?: boolean) => {},
+  (
+    _prompt: { id: string; title: string; monitorId?: string },
+    _answer: { selectedValues?: string[]; text?: string; dismissed?: boolean },
+  ) => true,
 );
 
 // Mock useAgentConnection — must be before importing UserPrompt
@@ -55,7 +58,10 @@ describe('UserPrompt option selection', () => {
     expect(submit.disabled).toBe(false);
 
     fireEvent.click(submit);
-    expect(sendUserPromptResponse).toHaveBeenCalledWith('p1', ['a'], undefined);
+    expect(sendUserPromptResponse).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), {
+      selectedValues: ['a'],
+      text: undefined,
+    });
   });
 
   it('selects when the click lands on the row label text', () => {
@@ -110,6 +116,9 @@ describe('UserPrompt option selection', () => {
     expect(boxes[1].checked).toBe(true);
 
     fireEvent.click(screen.getByText('Submit'));
-    expect(sendUserPromptResponse).toHaveBeenCalledWith('p1', ['b'], undefined);
+    expect(sendUserPromptResponse).toHaveBeenCalledWith(expect.objectContaining({ id: 'p1' }), {
+      selectedValues: ['b'],
+      text: undefined,
+    });
   });
 });

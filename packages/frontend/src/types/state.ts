@@ -86,6 +86,8 @@ export interface UserPromptModel {
   multiSelect?: boolean;
   inputField?: { label?: string; placeholder?: string; type?: 'text' | 'textarea' | 'password' };
   allowDismiss?: boolean;
+  /** The monitor whose agent asked. Attribution only — the prompt shows on every monitor. */
+  monitorId?: string;
   timestamp: number;
 }
 

@@ -102,6 +102,7 @@
     }
   },
   "userPrompt": {
+    "askedBy": "{{monitor}}의 질문",
     "skip": "건너뛰기",
     "submit": "제출"
   },

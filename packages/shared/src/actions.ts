@@ -357,6 +357,18 @@ export interface UserPromptShowAction {
   multiSelect?: boolean;
   inputField?: UserPromptInputField;
   allowDismiss?: boolean;
+  /**
+   * The monitor whose agent asked. Attribution only — the prompt itself is session-scoped
+   * and reaches every connection regardless (see the `'user-prompt'` channel), because a
+   * question the user cannot see is a question that times out.
+   *
+   * What it buys is the answer to "who is asking": a prompt raised by monitor 1's agent
+   * while the user is watching monitor 0 used to be indistinguishable from one raised by
+   * the desktop in front of them, and the windows it went on to open landed somewhere the
+   * user was not looking. It rides on the action rather than the event envelope for
+   * exactly that reason — the envelope's `monitorId` is a *delivery* filter.
+   */
+  monitorId?: string;
 }
 
 export interface UserPromptDismissAction {

@@ -103,6 +103,7 @@
     }
   },
   "userPrompt": {
+    "askedBy": "Asked by {{monitor}}",
     "skip": "Skip",
     "submit": "Submit"
   },

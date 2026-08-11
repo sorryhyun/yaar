@@ -325,9 +325,22 @@ export class ClientEventController {
     });
     // Answered after the agent stopped waiting. Silently dropping it left the user
     // believing they had replied.
-    if (!resolved && !event.dismissed) {
-      this.notifyTooLate('That prompt expired before you answered, so your answer was not sent.');
+    if (!resolved) {
+      if (!event.dismissed) {
+        this.notifyTooLate('That prompt expired before you answered, so your answer was not sent.');
+      }
+      return;
     }
+    // One answer settles the question for *every* screen showing it. A prompt is broadcast
+    // session-wide, but only the client that answered took its own box down — so a second
+    // tab (or the same tab on another monitor) kept a live-looking prompt wired to an id
+    // that was already resolved, and clicking Submit there was told the prompt had expired.
+    // The expiry path has always emitted this action; the answer path had no equivalent.
+    this.deps.broadcast({
+      type: ServerEventType.ACTIONS,
+      actions: [{ type: 'user.prompt.dismiss', id: event.promptId }],
+      agentId: 'system',
+    });
   }
 
   /**

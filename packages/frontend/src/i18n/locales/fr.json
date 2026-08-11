@@ -102,6 +102,7 @@
     }
   },
   "userPrompt": {
+    "askedBy": "Demandé par {{monitor}}",
     "skip": "Ignorer",
     "submit": "Soumettre"
   },

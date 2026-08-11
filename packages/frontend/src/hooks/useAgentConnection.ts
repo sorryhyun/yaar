@@ -341,15 +341,49 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     [send],
   );
 
+  /**
+   * Answer a prompt an agent is parked on.
+   *
+   * Returns whether the answer reached the wire, because the caller has to know: the box
+   * is the only copy of an answer that never got sent, and taking it down anyway left the
+   * user certain they had replied while the agent waited out its full deadline.
+   *
+   * Deliberately *not* held in the outbox, unlike a user message. The outbox settles on a
+   * `MESSAGE_ACCEPTED`/`MESSAGE_QUEUED`/`ERROR` naming a message id, and a prompt answer
+   * has neither an id nor an ack — it would sit there and be resent on every reconnect
+   * forever. Recovery is the snapshot instead: the server still holds the prompt as a live
+   * surface until it is answered, so reconnecting re-shows it.
+   *
+   * The answer is also echoed into the asking monitor's CLI history. Without it the tmux
+   * view showed the agent acting on something the transcript never recorded.
+   */
   const sendUserPromptResponse = useCallback(
-    (promptId: string, selectedValues?: string[], text?: string, dismissed?: boolean) => {
-      send({
+    (
+      prompt: { id: string; title: string; monitorId?: string },
+      answer: { selectedValues?: string[]; text?: string; dismissed?: boolean },
+    ): boolean => {
+      const delivered = send({
         type: ClientEventType.USER_PROMPT_RESPONSE,
-        promptId,
-        selectedValues,
-        text,
-        dismissed,
+        promptId: prompt.id,
+        selectedValues: answer.selectedValues,
+        text: answer.text,
+        dismissed: answer.dismissed,
       });
+      if (!delivered) return false;
+
+      const parts = [
+        answer.selectedValues?.length ? answer.selectedValues.join(', ') : '',
+        answer.text ?? '',
+      ].filter(Boolean);
+      const store = useDesktopStore.getState();
+      store.addCliEntry({
+        type: 'user',
+        content: `[${prompt.title}] ${answer.dismissed ? '(skipped)' : parts.join(' — ')}`,
+        // A prompt from before this field existed, or from an agent with no monitor at
+        // all, is echoed where the user is looking rather than into pane 0 by default.
+        monitorId: prompt.monitorId ?? store.activeMonitorId,
+      });
+      return true;
     },
     [send],
   );
