@@ -16,12 +16,9 @@ import { spawn } from 'bun';
 import { MARKET_URL } from '../../config.js';
 import { getAuthStatus, getIdToken } from '../market/google-auth.js';
 import { termsGateError } from './publisher-terms.js';
-import { resolveAppDir } from './roots.js';
+import { appIdRefusal, resolveAppDir } from './roots.js';
 import { readAppVersion, versionPublishError } from './version.js';
 import { errMessage } from '../../lib/errors.js';
-
-/** Matches the marketplace's own app id rule; a mismatch is rejected there anyway. */
-const APP_ID_RE = /^[a-z][a-z0-9-]*$/;
 
 /** Upstream hiccups, not a rejection of this publish — worth another shot. */
 const TRANSIENT_STATUS = new Set([429, 500, 502, 503, 504]);
@@ -96,11 +93,6 @@ export async function packageAppTarball(appId: string, appDir: string): Promise<
     throw new Error(stderr.trim() || `tar exited with code ${exitCode}`);
   }
   return Buffer.from(tarball);
-}
-
-/** Reject an id that would break the marketplace's own id rule before we bother packaging. */
-export function isValidAppId(appId: string): boolean {
-  return APP_ID_RE.test(appId);
 }
 
 /** Said in one voice by every path that needs a publisher and hasn't got one. */
@@ -199,9 +191,8 @@ export async function uploadTarball(appId: string, tarball: Buffer): Promise<Pub
  * window (freeze at prepare, upload at confirm) and adds the detection for it.
  */
 export async function publishApp(appId: string): Promise<PublishResult> {
-  if (!isValidAppId(appId)) {
-    return { success: false, error: `Invalid app id "${appId}".` };
-  }
+  const refusal = appIdRefusal(appId);
+  if (refusal) return { success: false, error: refusal };
 
   const appDir = resolveAppDir(appId);
   if (!appDir) return { success: false, error: `App "${appId}" is not installed.` };

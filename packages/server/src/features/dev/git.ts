@@ -23,7 +23,7 @@ import { join, relative } from 'path';
 import { mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import { PROJECT_ROOT, getStorageDir } from '../../config.js';
-import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
+import { APPS_DIR, appIdRefusal, resolveAppDir, resolveAppSource } from '../apps/roots.js';
 import { createLogger } from '../../observability/log.js';
 
 const log = createLogger('app-git');
@@ -78,8 +78,6 @@ const REF_PATTERN = /^(?:[0-9a-f]{7,40}|HEAD(?:~\d+)?)$/;
 function isValidRef(ref: string): boolean {
   return REF_PATTERN.test(ref);
 }
-
-const APP_ID_PATTERN = /^[a-z][a-z0-9-]*$/;
 
 interface GitResult {
   ok: boolean;
@@ -138,9 +136,8 @@ function shadowEnv(appId: string, appPath: string): Record<string, string> {
 
 /** Resolve an app's directory, or an error if it doesn't exist. */
 function appDirOrError(appId: string): { path: string } | GitFailure {
-  if (!APP_ID_PATTERN.test(appId)) {
-    return { success: false, error: `Invalid app id "${appId}".` };
-  }
+  const refusal = appIdRefusal(appId);
+  if (refusal) return { success: false, error: refusal };
   const path = resolveAppDir(appId);
   if (!path) return { success: false, error: `App "${appId}" not found.` };
   return { path };

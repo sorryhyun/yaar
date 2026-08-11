@@ -31,9 +31,9 @@ import { mkdir, rm, readFile } from 'fs/promises';
 import { computeSourceHash, computeAppJsonHash } from '@yaar/compiler';
 import { getStorageDir } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
-import { resolveAppDir } from './roots.js';
+import { appIdRefusal, resolveAppDir } from './roots.js';
 import { readAppVersion, versionPublishError } from './version.js';
-import { isValidAppId, packageAppTarball, uploadTarball, type PublishResult } from './publish.js';
+import { packageAppTarball, uploadTarball, type PublishResult } from './publish.js';
 import {
   acceptForSignedInPublisher,
   getTermsAcceptanceForSignedInPublisher,
@@ -178,7 +178,8 @@ export async function preparePublication(
   appId: string,
   opts: { publishedVersionOf?: (id: string) => Promise<string | null> } = {},
 ): Promise<{ success: true; summary: PreparedSummary } | { success: false; error: string }> {
-  if (!isValidAppId(appId)) return { success: false, error: `Invalid app id "${appId}".` };
+  const refusal = appIdRefusal(appId);
+  if (refusal) return { success: false, error: refusal };
 
   const appDir = resolveAppDir(appId);
   if (!appDir) return { success: false, error: `App "${appId}" is not installed.` };

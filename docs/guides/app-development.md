@@ -183,7 +183,7 @@ Publishing uploads a **tar.gz of the app directory**, entries prefixed `{appId}/
 
 App secrets are not a concern here because they don't live in the app directory in the first place: credentials are stored separately under `config/{appId}.json` (git-ignored, see [Credential Management](#credential-management)), never inside `apps/{appId}/`.
 
-The marketplace commits the app into its own git repo, so publishing is queued rather than instant — the response says "live in ~1 minute", once the redeploy lands. The app id must match `^[a-z][a-z0-9-]*$`.
+The marketplace commits the app into its own git repo, so publishing is queued rather than instant — the response says "live in ~1 minute", once the redeploy lands. The app id must match `^[a-z][a-z0-9-]*$`, and two names are reserved on top of that shape: `self` (the pronoun every app writes to address its own namespace) and anything starting with `preview--` (a devtools preview's identity). `appIdRefusal` in `packages/server/src/features/apps/roots.ts` is the one definition, checked wherever an id is claimed — deploy, install, publish.
 
 ### Version policy — bump before you publish
 

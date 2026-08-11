@@ -11,7 +11,7 @@ import { ok, error } from '../../handlers/utils.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getSessionId } from '../../agents/agent-context.js';
 import { listApps, invalidateAppsCache } from './discovery.js';
-import { INSTALL_ROOT, resolveAppDir } from './roots.js';
+import { INSTALL_ROOT, appIdRefusal, resolveAppDir } from './roots.js';
 import { saveAppGrant, clearAppGrant } from '../../storage/app-grants.js';
 import {
   readAppCapabilities,
@@ -50,6 +50,13 @@ function broadcastDesktopAction(action: OSAction): void {
 }
 
 export async function installApp(appId: string): Promise<VerbResult> {
+  // The id becomes a path segment under INSTALL_ROOT and an identity every permission
+  // check is written against, so it is checked before either use. Nothing downstream
+  // vetted it: the marketplace 404 was doing the job by accident, for ids that happen
+  // not to exist there.
+  const refusal = appIdRefusal(appId);
+  if (refusal) return error(refusal);
+
   // Update an existing app in place; fresh installs land in the user-apps root
   // (git-ignored) so they never pollute the tracked bundled tree.
   const existingDir = resolveAppDir(appId);
