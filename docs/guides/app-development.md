@@ -660,7 +660,7 @@ Common mistakes to avoid when building apps:
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState`, `storagePath` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
 - **Don't hand-roll a canvas re-encode** — `toWebP(source, { quality, maxSize })` from `@bundled/yaar` is the bitmap → canvas → `convertToBlob` round-trip, including the check that the encoder did not quietly fall back to PNG and the chunked base64 conversion a storage write needs. It returns `null` (never throws) when the browser cannot do it, so the fallback is `if (!encoded) keepTheOriginal()`. No `@bundled/*` package ships a WebP codec — Chromium already has one; this is the boilerplate around it.
 - **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
@@ -1433,6 +1433,48 @@ Three properties follow from it being the commons rather than a grant:
 - **It does not widen anything else.** `storage/apps/{id}/` is a different subtree, so the
   commons never reaches another app's private files — that still takes a declared
   `permissions` entry, and for an installed app it is capped to the shared tree anyway.
+
+### One file, four names (`storagePath`)
+
+A stored file is spelled differently by each layer that hands it to you, and all four
+name the same bytes:
+
+| Spelling | Where it comes from |
+|---|---|
+| `shared/anima/dragon.png` | a `storage.list` entry, another app's publish confirmation |
+| `yaar://storage/shared/anima/dragon.png` | a verb result, an agent, an `app.json` permission |
+| `yaar://apps/self/storage/x.png` | `appStorage`, an agent naming your own tree |
+| `/api/storage/shared/anima/dragon.png` | an HTTP route, an `<img src>` you built earlier |
+
+**Every `storage.*` method accepts all four**, so a reference you were handed can go
+straight into `read`/`save`/`list`/`remove`/`url` with no unwrapping. Reach for
+`storagePath` only when you need the path *itself*:
+
+```typescript
+import { storage, storagePath } from '@bundled/yaar';
+
+// "Is this a stored file or a remote URL?" — null means not storage.
+const path = storagePath(slide.image);
+img.src = path ? storage.url(path) : slide.image;
+```
+
+Two rules worth knowing, because both have cost real bugs:
+
+- **Never hand-roll the parsing.** Recognising only the flat spelling is how a deck ends
+  up with an image the editor shows and the export leaves blank — the namespaced URI
+  passes through verbatim and becomes a request for a directory named `yaar:`.
+- **Never hand-build a `/api/storage/…` URL.** Only `storage.url()` carries the iframe
+  token in the query string, which is the sole way a subresource fetch (`<img>`,
+  `<video>`, CSS `url()`) can present one. A hand-built URL is refused as
+  unauthenticated the moment app-origin isolation is on, and reaches the element as an
+  indistinguishable load failure.
+
+`null` from `storagePath` means "not a storage reference" (a remote URL, a `data:` URL,
+another kind of `yaar://` resource) or a path containing `..`. It does **not** mean
+forbidden — an agent may have delegated a single file to your window, a grant no code in
+the iframe can see, so a path outside your own trees still resolves and the server
+decides. `self` is left unexpanded for the same reason: the server resolves it against
+the calling app, and under a devtools preview that is `preview--{id}`, not your app id.
 
 ## App-Scoped Database (`appDb`)
 

@@ -25,6 +25,7 @@ import {
   errMsg,
   invoke,
   storage,
+  storagePath,
   toWebP,
   defineAppCommand,
 } from '@bundled/yaar';
@@ -60,21 +61,20 @@ function baseName(path: string): string {
 }
 
 /**
- * Accept either spelling of a shared-tree reference and return its storage path.
+ * Accept any spelling of a shared-tree reference and return its storage path.
  *
  * The agent will have got the URI from `listShared`, but a user relaying it by hand
  * says "shared/anima/dragon.png" as often as the full URI, and a producer's publish
- * confirmation may say either.
+ * confirmation may say either. `storagePath` reads all four dialects; what is left
+ * here is this command's own rule, that a reference which does not name the shared
+ * tree is *placed* in it rather than refused ("anima/dragon.png" is how a user says
+ * it), and that nothing outside it is reachable.
  */
 function sharedPathFrom(raw: string): string {
-  let path = raw.trim();
-  if (path.startsWith('yaar://storage/')) path = path.slice('yaar://storage/'.length);
-  path = path.replace(/^\/+/, '');
-  if (!path.startsWith(`${SHARED_ROOT}/`) && path !== SHARED_ROOT) path = `${SHARED_ROOT}/${path}`;
-  if (path.split('/').includes('..')) {
-    throw new AppCommandError(`"${raw}" is not a path under ${SHARED_ROOT}/`);
-  }
-  return path;
+  const path = storagePath(raw);
+  if (path === null) throw new AppCommandError(`"${raw}" is not a path under ${SHARED_ROOT}/`);
+  if (path === SHARED_ROOT || path.startsWith(`${SHARED_ROOT}/`)) return path;
+  return `${SHARED_ROOT}/${path}`;
 }
 
 /**

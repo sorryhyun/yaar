@@ -74,8 +74,15 @@ import { join, basename } from 'path';
  * edited afterwards, which is the opposite of the point: the app it was written
  * for (studio-3d, whose manual crossed the CLI's inline-delivery cliff) is a
  * user-installed app nobody is about to edit.
+ *
+ * '21': the injected storage SDK resolves every spelling of a storage reference
+ * (`storage-sdk.ts`), and `@bundled/yaar` exports `storagePath`. Same reason as '18'
+ * and '20' together — the SDK script is injected into each `dist/`, so which dialects
+ * an app understands would otherwise be a function of when it last happened to be
+ * stale, and the four apps this fixes (a namespaced URI silently mishandled, a
+ * token-less `/api/storage` URL) are exactly the ones nobody is about to edit.
  */
-export const COMPILER_VERSION = '20';
+export const COMPILER_VERSION = '21';
 
 export interface BuildManifest {
   sourceHash: string;

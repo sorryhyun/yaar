@@ -29,6 +29,7 @@ export {
   httpFetch,
   stream,
   storage,
+  storagePath,
   app,
   notifications,
   windows,

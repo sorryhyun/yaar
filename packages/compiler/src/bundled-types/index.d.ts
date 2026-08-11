@@ -717,12 +717,27 @@ interface YaarStorageReadOptions {
   as?: 'text' | 'json' | 'blob' | 'arraybuffer' | 'auto';
 }
 
+/**
+ * Storage, addressed by a storage-root-relative path: `shared/x.png` for the commons,
+ * `apps/self/x.png` for this app's own tree.
+ *
+ * Every method accepts **any** spelling of a stored file — a bare path, a
+ * `yaar://storage/…` URI, a `yaar://apps/{id|self}/storage/…` URI, or an
+ * `/api/storage/…` URL — because one file has all four names and which one you hold
+ * depends on the layer that handed it over. A reference that is not storage at all
+ * (an `https://` URL, a `data:` URL, a path containing `..`) is refused by name.
+ * Use `storagePath()` to test a reference instead of catching.
+ */
 interface YaarStorage {
   save(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<{ ok: boolean }>;
   read(path: string, options?: YaarStorageReadOptions): Promise<unknown>;
+  /** Omit (or pass an empty string) for the storage root. */
   list(dirPath?: string): Promise<string[]>;
   remove(path: string): Promise<{ ok: boolean }>;
+  /** A URL an `<img src>`/`<video>`/CSS `url()` can load — carries the iframe token. */
   url(path: string): string;
+  /** See the exported `storagePath`. */
+  path(ref: string | undefined | null): string | null;
 }
 
 // -- App-scoped Storage SDK --
@@ -1093,6 +1108,31 @@ declare module '@bundled/yaar' {
 
   /** Re-exported sub-objects from window.yaar. */
   export const storage: YaarStorage;
+
+  /**
+   * Any spelling of a stored file, reduced to a storage-root-relative path — or `null`
+   * when the reference names something that is not storage.
+   *
+   * One file has four names: `shared/anima/dragon.png` from a listing,
+   * `yaar://storage/…` from a verb, `yaar://apps/self/storage/…` from an app.json
+   * permission or an agent, `/api/storage/…` from an HTTP route. Every `storage.*`
+   * method already accepts all four, so reach for this only when you need the path
+   * *itself* — to store in a document, to take a dirname, or to ask "is this a stored
+   * file or a remote URL?".
+   *
+   * ```ts
+   * const path = storagePath(slide.image);
+   * img.src = path ? storage.url(path) : slide.image; // storage, or a plain URL
+   * ```
+   *
+   * `null` means not-storage (an `https://` URL, a `data:` URL, a non-storage
+   * `yaar://` resource) or a path containing `..`. It does **not** mean forbidden —
+   * the iframe cannot see what a caller delegated to this window, so a path outside
+   * the app's own trees still resolves and the server answers. `self` is left
+   * unexpanded; `/api/storage` resolves it against the calling app.
+   */
+  export function storagePath(ref: string | undefined | null): string | null;
+
   export const app: YaarApp;
   export const notifications: YaarNotifications;
   export const windows: YaarWindows;
