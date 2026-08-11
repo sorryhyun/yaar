@@ -10,7 +10,7 @@
 import type { AgentProfile } from './types.js';
 import { APP_AGENT_TOOL_NAMES } from './types.js';
 import { loadAppPrompt, listApps } from '../../features/apps/discovery.js';
-import { APP_MOUNT_ID, describeDesignTokens } from '@yaar/compiler';
+import { APP_MOUNT_ID, describeDesignTokensBrief } from '@yaar/compiler';
 import { resolveAgentModel } from './model-tiers.js';
 import { PAYLOAD_LITERALS_SECTION } from './shared-sections.js';
 // The door this section documents, asked for the grant it is rendered from — so a prompt
@@ -33,6 +33,16 @@ import { defsOf } from '../../lib/schema-refs.js';
  * (`--yaar-space-2`) that silently render to nothing.
  *
  * Generated on each profile build, so it cannot go stale.
+ *
+ * The token section is the *brief* tier: every token name, no values, and a
+ * starter set of classes rather than all 122. This appendix is re-appended in
+ * full on every session of every app holding `yaar-dev` — today that is devtools
+ * alone — whether or not the session writes a line of CSS, so what it carries has
+ * to be what an agent cannot afford to look up. Names qualify (a wrong one is a
+ * build error, but only if you know the real one exists); values and the long
+ * class tail do not, and stay one `describeBundledLibrary({ name:
+ * 'design-tokens' })` away. `describeDesignTokensBrief`'s own header has the
+ * asymmetry that decides which half is which.
  */
 function buildAuthoringContract(): string {
   return `
@@ -57,7 +67,7 @@ and the app renders nothing at all, with no error, because the wrapper hides an 
 The compiler rejects a wrong render target.
 
 ### Design tokens
-${describeDesignTokens()}
+${describeDesignTokensBrief()}
 `;
 }
 

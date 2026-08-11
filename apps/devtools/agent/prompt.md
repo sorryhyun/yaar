@@ -135,7 +135,7 @@ src/
 └── sprite.png     # Static assets — imported, not fetched
 ```
 
-**Mounting and design tokens are specified in the App Authoring Contract at the end of this prompt** — generated from the compiler itself and authoritative. Read it rather than guessing a token name or a mount id; the compiler rejects both a wrong render target and an undefined token, so a build error naming one is telling you the truth.
+**Mounting and design tokens are specified in the App Authoring Contract at the end of this prompt** — generated from the compiler itself and authoritative. Read it rather than guessing a token name or a mount id; the compiler rejects both a wrong render target and an undefined token, so a build error naming one is telling you the truth. The Contract carries every `--yaar-*` name that exists plus a starter set of `y-` classes; the token *values*, the full class list and the classes the SDK emits for you are one call away — `command({ command: "describeBundledLibrary", params: { name: "design-tokens" } })`. Make that call before using any `y-` class the Contract does not list: an undefined class is the one failure with no error at all, just unstyled markup.
 
 ## Bundled Libraries
 

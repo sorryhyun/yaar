@@ -68,7 +68,11 @@ export {
   type DirExtractOptions,
 } from './protocol/extract-protocol-dir.js';
 export { loadTypeScript } from './load-typescript.js';
-export { YAAR_DESIGN_TOKENS_CSS, describeDesignTokens } from './design-tokens.js';
+export {
+  YAAR_DESIGN_TOKENS_CSS,
+  describeDesignTokens,
+  describeDesignTokensBrief,
+} from './design-tokens.js';
 export {
   isAppStale,
   writeBuildManifest,
