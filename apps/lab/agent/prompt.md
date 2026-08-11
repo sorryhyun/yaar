@@ -69,6 +69,11 @@ truth about size; do not infer the total from `rows.length`.
 
 ## Helpers available in every cell
 
+> These signatures are mirrored in `agent/SKILL.md`, which is what an app driving Lab
+> through `controls` receives from `describe('yaar://apps/lab')` — this prompt reaches
+> only Lab's own agent, and a controller with neither had to discover `http.text(url,
+> init)` by printing the function source (issue #66). **Edit both, or neither.**
+
 ### store — app and shared storage
 
 ```js
@@ -90,28 +95,28 @@ Path rules — **two tiers, chosen by the form of the path.** This applies ident
 | `notes/x.json`, `/notes/x.json` (default) | this app's private storage |
 | `app:notes/x.json` | the same, written explicitly |
 | `yaar://apps/self/storage/notes/x.json` | the same, absolute |
-| `yaar://storage/media/lab/x.png` | **shared storage** — the sanctioned way out of app storage |
-| `shared:media/lab/x.png` | the same, shorthand |
-| `media/...` or `media` | the shared media tree (legacy shorthand, still supported) |
+| `yaar://storage/shared/lab/x.png` | **shared storage** — the sanctioned way out of app storage |
+| `shared:shared/lab/x.png` | the same, shorthand |
+| `shared/...` or `shared` | the shared tree (bare shorthand, the one exception to "bare means private") |
 
 So a bare path is *always* this app's own storage, and reaching anything else takes a
 `yaar://storage/...` URI. Shared reads and writes are subject to the `yaar://storage/`
 permission in `app.json`; without it they fail with a 403 rather than falling back.
 
 Trailing slashes, doubled slashes and `.` segments are normalised away, so
-`yaar://storage//media//` and `media/` both work. `..` is refused in every form — use a
+`yaar://storage//shared//` and `shared/` both work. `..` is refused in every form — use a
 URI to leave app storage, not traversal.
 
 When a path is refused the message names the location it resolved to and the URI that
 would have reached shared storage:
 
 ```
-store.list failed for 'yaar://apps/self/storage/media' (Directory not found).
-Paths are this app's private storage by default — use 'yaar://storage/media' for shared storage.
+store.list failed for 'yaar://apps/self/storage/shared' (Directory not found).
+Paths are this app's private storage by default — use 'yaar://storage/shared' for shared storage.
 ```
 
 Writing a base64 `data:` URL stores real bytes, so
-`store.write('yaar://storage/media/lab/c.png', await plot.toPNG())` produces a usable image.
+`store.write('yaar://storage/shared/lab/c.png', await plot.toPNG())` produces a usable image.
 
 ### df — mini dataframe
 
@@ -176,7 +181,7 @@ the x axis and every numeric column becomes a series.
 To hand a chart to another app:
 
 ```js
-await plot.save(spec, 'media/lab/sales.png', { width: 800, height: 400 })
+await plot.save(spec, 'shared/lab/sales.png', { width: 800, height: 400 })
 // -> { path, uri, bytes }
 await plot.toPNG(spec)   // data URL, if you need the bytes in-cell
 ```
@@ -200,7 +205,7 @@ for throwaway questions.
 - `runAll({ timeoutMs? })` -> one summary per code cell, stopping at the first failure
 - `newNotebook({ title })`, `openNotebook({ id })`, `saveNotebook({ title? })`, `listNotebooks()`
 - `exportChart({ cellId?, path?, width?, height?, background? })` -> saves a PNG under
-  `media/lab/` and returns the path. Omit `cellId` for the newest chart in the notebook.
+  `shared/lab/` and returns the path. Omit `cellId` for the newest chart in the notebook.
 - `resetKernel()` — restart the worker, clearing every variable.
 
 Read `currentNotebook` for cell ids and sources; it deliberately excludes outputs. Read
@@ -225,7 +230,7 @@ keeps.
 - Re-reading a file in every cell. Read once; the variable persists.
 - Assuming state survived a timeout, a `resetKernel`, or a window reload. It does not — if
   a variable is missing, re-run the setup.
-- `store.write` to a `media/` path for private scratch data. `media/` is shared and visible;
+- `store.write` to a `shared/` path for private scratch data. `shared/` is shared and visible;
   default (app-scoped) paths are not.
 - Reaching for `../..` to get at another app's files. Traversal is refused; shared storage
   is `yaar://storage/...` and nothing else is reachable.

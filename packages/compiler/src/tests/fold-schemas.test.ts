@@ -39,10 +39,13 @@ afterEach(async () => {
 });
 
 /** Lay out a real app directory — the fold needs one on disk to build from. */
-async function writeApp(files: Record<string, string>, appId = 'folder') {
+async function writeApp(files: Record<string, string>, appId = 'folder', bundles?: string[]) {
   appDir = await mkdtemp(join(tmpdir(), 'yaar-fold-'));
   await mkdir(join(appDir, 'src'), { recursive: true });
-  await Bun.write(join(appDir, 'app.json'), JSON.stringify({ appId, name: 'Folder' }));
+  await Bun.write(
+    join(appDir, 'app.json'),
+    JSON.stringify({ appId, name: 'Folder', ...(bundles ? { bundles } : {}) }),
+  );
   for (const [rel, content] of Object.entries(files)) {
     await Bun.write(join(appDir, rel), content);
   }
@@ -414,6 +417,54 @@ describe('a fold that cannot answer fails the build', () => {
     const errors = (result.errors ?? []).join('\n');
     expect(errors).toContain('`app.register({...})` has been removed');
     expect(errors).toContain('defineApp');
+  });
+});
+
+/**
+ * The fold builds the app, so it meets the gated-SDK check the compile met — and a
+ * caller that hands it no `bundles` is not thereby asking for a stricter build than
+ * the app's own manifest grants. Devtools is exactly this app: `yaar-dev` plus one
+ * deferred schema. Extracted with no options it reported *no protocol at all*, and
+ * the only reason nobody saw it locally is that a built `dist/protocol.json` is read
+ * first — on CI, which builds no apps, the app agent lost all 28 of its commands.
+ */
+describe('a gated SDK is read from app.json when the caller passes no bundles', () => {
+  const MAIN = `${HEAD}
+    import { compile } from '@bundled/yaar-dev';
+    export default defineApp({
+      id: 'folder',
+      name: 'Folder',
+      commands: {
+        build: {
+          description: 'Compile an app',
+          params: z.object({ path: z.string() }),
+          run: (p) => compile(p.path),
+        },
+      },
+    });`;
+
+  test('the app.json grant is enough', async () => {
+    const dir = await writeApp({ 'src/main.ts': MAIN }, 'folder', ['yaar-dev']);
+
+    const result = await extractProtocolFromDir(join(dir, 'src'));
+
+    expect(result.errors).toEqual([]);
+    expect(result.protocol!.commands.build.params).toEqual({
+      type: 'object',
+      properties: { path: { type: 'string' } },
+      required: ['path'],
+    });
+  });
+
+  test('an app.json without the grant is still refused', async () => {
+    // Derivation reads the manifest; it does not widen it. An app importing a
+    // gated SDK it never declared must fail the fold exactly as it fails the build.
+    const dir = await writeApp({ 'src/main.ts': MAIN });
+
+    const result = await extractProtocolFromDir(join(dir, 'src'));
+
+    expect(result.protocol).toBeNull();
+    expect(result.errors.map((e) => e.message).join('\n')).toContain('yaar-dev');
   });
 });
 

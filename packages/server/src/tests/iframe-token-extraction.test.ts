@@ -96,8 +96,8 @@ describe('every query-param consumer is on the coarse allowlist', () => {
   // tightening above is safe. Each of these is fetched by the browser on an app's
   // behalf, with no way to set a header.
   const consumers: Array<[label: string, method: string, path: string]> = [
-    ['storage file (<img src>)', 'GET', '/api/storage/media/example.png'],
-    ['storage listing', 'GET', '/api/storage/media?list=true'],
+    ['storage file (<img src>)', 'GET', '/api/storage/shared/example.png'],
+    ['storage listing', 'GET', '/api/storage/shared?list=true'],
     ['app static file (the iframe document itself)', 'GET', '/api/apps/notes/index.html'],
     ['PDF page raster (<img src>)', 'GET', '/api/pdf/files/example.pdf/1'],
     ['browser screenshot (<img src>)', 'GET', '/api/browser/sess-1/screenshot'],

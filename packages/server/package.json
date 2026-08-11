@@ -16,7 +16,7 @@
     "test": "bun run scripts/run-tests.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.224",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.227",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "@yaar/compiler": "workspace:*",
@@ -40,6 +40,14 @@
     "globals": "catalog:",
     "typescript": "catalog:",
     "typescript-eslint": "catalog:"
+  },
+  "peerDependencies": {
+    "@openai/codex": ">=0.145.0"
+  },
+  "peerDependenciesMeta": {
+    "@openai/codex": {
+      "optional": true
+    }
   },
   "engines": {
     "bun": ">=1.1.22"

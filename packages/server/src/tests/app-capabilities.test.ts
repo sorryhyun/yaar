@@ -87,6 +87,33 @@ describe('reading a manifest', () => {
     }
   });
 
+  it('drops a declared commons entry — every app already holds it', async () => {
+    // `yaar://storage/shared/` is granted for being an app (`permissionsAllow`), so a
+    // dialog row for it offers a choice the user does not have. The entries around it
+    // survive, including a narrower folder elsewhere in the tree.
+    const sharingDir = join(USER_APPS_DIR, 'capability-sharing-fixture');
+    mkdirSync(sharingDir, { recursive: true });
+    writeFileSync(
+      join(sharingDir, 'app.json'),
+      JSON.stringify({
+        permissions: [
+          'yaar://storage/shared/',
+          { uri: 'yaar://storage/shared/anima/', verbs: ['read'] },
+          'yaar://storage/reports/',
+          'yaar://http',
+        ],
+      }),
+    );
+    try {
+      expect((await readAppCapabilities(sharingDir)).permissions).toEqual([
+        'yaar://storage/reports/',
+        'yaar://http',
+      ]);
+    } finally {
+      rmSync(sharingDir, { recursive: true, force: true });
+    }
+  });
+
   it('reads nothing from a directory with no manifest', async () => {
     expect(isEmpty(await readAppCapabilities(join(USER_APPS_DIR, 'no-such-app')))).toBe(true);
   });
@@ -216,9 +243,7 @@ describe('the dialog rows', () => {
  */
 describe('describing one permission', () => {
   it('lets the longest prefix win', () => {
-    expect(describePermission('yaar://storage/media/').title).toBe(
-      'Share images and media with other apps',
-    );
+    expect(describePermission('yaar://storage/shared/').title).toBe('Share files with other apps');
     expect(describePermission('yaar://apps/self/storage/').title).toBe('Store its own data');
     expect(describePermission('yaar://config/mcp/').title).toBe('Manage external tool connections');
   });

@@ -1,14 +1,14 @@
 import * as z from '@bundled/zod';
 import { defineAppCommand, AppCommandError } from '@bundled/yaar';
-import { saveChart, mediaPath } from '../lib/media';
+import { saveChart, sharedPath } from '../lib/shared-tree';
 import { current } from '../state/signals';
 import type { ChartSpec } from '../types';
 
-/** Handing a rendered chart to other apps through the shared media tree. */
+/** Handing a rendered chart to other apps through the shared tree. */
 export const exportCommands = {
   exportChart: defineAppCommand({
     description:
-      'Render a chart produced by a cell to PNG and save it into the shared media tree (media/lab/... by default), so other apps can pick it up. Returns the path only. Omit cellId to use the most recent chart in the notebook.',
+      'Render a chart produced by a cell to PNG and save it into the shared tree (shared/lab/... by default), so other apps can pick it up. Returns the path only. Omit cellId to use the most recent chart in the notebook.',
     params: z.object({
       cellId: z.optional(z.string()),
       path: z.optional(z.string()),
@@ -39,7 +39,7 @@ export const exportCommands = {
             : 'No cell in this notebook has a chart output yet.',
         );
       }
-      const r = await saveChart(spec, mediaPath(p.path, 'chart-' + fromCell + '-' + Date.now()), {
+      const r = await saveChart(spec, sharedPath(p.path, 'chart-' + fromCell + '-' + Date.now()), {
         width: p.width,
         height: p.height,
         background: p.background,

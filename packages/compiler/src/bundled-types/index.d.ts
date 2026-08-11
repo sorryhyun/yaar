@@ -1573,6 +1573,18 @@ declare module '@bundled/yaar' {
    * per keystroke, and an IME per composition step, so one typed name is a dozen
    * writes. Leave it off for a toggle, where a set is a click. A pending write is
    * flushed when the page is hidden or unloaded, so closing mid-debounce saves.
+   *
+   * The third element, `ready`, resolves once the initial load settles, with the
+   * value the signal then holds. A value only *rendered* can ignore it — the late
+   * load re-renders. A value that decides a **one-shot side effect** must await it,
+   * or that effect runs on the fallback and cannot be taken back:
+   *
+   * ```js
+   * const [mode, setMode, modeReady] = createPersistedSignal('prefs/mode.json', false);
+   * onMount(async () => { await modeReady; void loadFeed(mode()); });
+   * ```
+   *
+   * It never rejects, and a set that landed first still wins.
    */
   export function createPersistedSignal<T>(
     key: string,
@@ -1584,7 +1596,7 @@ declare module '@bundled/yaar' {
       /** Coalesce a burst of sets into one write. Default 0 (write on every set). */
       debounceMs?: number;
     },
-  ): [get: () => T, set: (v: T | ((prev: T) => T)) => void];
+  ): [get: () => T, set: (v: T | ((prev: T) => T)) => void, ready: Promise<T>];
 
   /**
    * The hover-expand + pin sidebar/overlay state machine.

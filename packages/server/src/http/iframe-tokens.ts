@@ -308,7 +308,7 @@ const DEVTOOLS_APP_ID = 'devtools';
  * `preview--{projectId}`, which `getAppMeta` cannot resolve, so its permission list was
  * empty and only the automatic `SELF_GRANTS` worked: `appStorage` and `appDb` ran, and
  * every entry the project *declared* 403'd. An app whose whole job was writing to
- * `yaar://storage/media/` could not exercise that path in the only environment built for
+ * `yaar://storage/shared/` could not exercise that path in the only environment built for
  * iterating on it — the devtools prompt promised otherwise, so the failure read as a typo
  * in app.json rather than as a platform gap.
  *
@@ -330,7 +330,7 @@ const DEVTOOLS_APP_ID = 'devtools';
  * survives not at all is dropped with a warning, since a silently missing grant is the
  * symptom this whole function exists to end.
  *
- * The grant is otherwise real: a preview writing to `media/` writes to the shared tree
+ * The grant is otherwise real: a preview writing to `shared/` writes to the shared tree
  * the deployed app will write to. That is the point — a throwaway copy would exercise a
  * path the shipped app never takes. The preview's *own* namespace stays throwaway
  * (`preview--{id}`, deleted with the project); only what the project explicitly declared
@@ -398,12 +398,14 @@ export async function generateAppIframeToken(
   // `storage/apps/`, and devtools' subtree is where every *other* project's source lives.
   // Its own document reaches it as a delegated window grant — one exact file, `read` only
   // — which is the shape this must not be allowed to widen into a foothold. Capped rather
-  // than dropped, so a preview keeps the shared tree (`media/`) it can legitimately use.
+  // than dropped, so a preview keeps the shared tree (`shared/`) it can legitimately use.
   if (appId && isPreviewAppId(appId)) {
     permissions = capForeignAppStorage(permissions, appId).capped;
   }
 
-  // Auto-grant the app's own namespace (see SELF_GRANTS).
+  // Auto-grant the app's own namespace (see SELF_GRANTS). The commons
+  // (`yaar://storage/shared/`) is granted at the gate instead — `permissionsAllow` —
+  // because the app *agent* reaches storage through a door that never sees a token.
   if (appId) {
     for (const grant of SELF_GRANTS) {
       const held = permissions.some((p) => {

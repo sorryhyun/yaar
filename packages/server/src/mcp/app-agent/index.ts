@@ -113,6 +113,7 @@ import {
   sharedStorageHint,
 } from './shared-storage.js';
 import { createLogger } from '../../observability/log.js';
+import { LARGE_RESULT_META } from '../result-size.js';
 
 const log = createLogger('AppAgent');
 
@@ -340,6 +341,7 @@ export function registerAppAgentTools(server: McpServer): void {
             'Target another app you are permitted to control (via "controls"). Omit to read your own app.',
           ),
       },
+      _meta: LARGE_RESULT_META,
     },
     async (args) => {
       const windowId = getWindowId();
@@ -443,6 +445,7 @@ export function registerAppAgentTools(server: McpServer): void {
               'commands that do real work, like a compile or a deploy.',
           ),
       },
+      _meta: LARGE_RESULT_META,
     },
     async (args) => {
       const windowId = getWindowId();
@@ -546,6 +549,7 @@ export function registerAppAgentTools(server: McpServer): void {
             'One command to document in full (name as it appears in the index), instead of the whole manual.',
           ),
       },
+      _meta: LARGE_RESULT_META,
     },
     async (args) => {
       const windowId = getWindowId();

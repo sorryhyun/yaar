@@ -2,7 +2,7 @@ import { createEffect, onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { showToast, errMsg } from '@bundled/yaar';
 import { renderChart, chartToPNG } from '../lib/chart-render';
-import { saveChart, mediaPath } from '../lib/media';
+import { saveChart, sharedPath } from '../lib/shared-tree';
 import { downloadDataUrl } from '../lib/data-url';
 import type { ChartSpec } from '../types';
 
@@ -24,7 +24,7 @@ export function ChartView(props: { spec: ChartSpec }) {
 
   const save = async () => {
     try {
-      const r = await saveChart(props.spec, mediaPath(undefined, 'chart-' + Date.now()));
+      const r = await saveChart(props.spec, sharedPath(undefined, 'chart-' + Date.now()));
       showToast('Saved ' + r.path, 'success', 4000);
     } catch (e) {
       showToast('Save failed: ' + errMsg(e), 'error');
@@ -45,7 +45,7 @@ export function ChartView(props: { spec: ChartSpec }) {
         <canvas ref=${(el: HTMLCanvasElement) => (canvasEl = el)}></canvas>
       </div>
       <div class="lab-chart-actions">
-        <button class="lab-mini" onClick=${save}>Save to media/lab</button>
+        <button class="lab-mini" onClick=${save}>Save to shared/lab</button>
         <button class="lab-mini" onClick=${download}>Download PNG</button>
       </div>
     </div>`;

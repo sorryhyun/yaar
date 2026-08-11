@@ -9,11 +9,11 @@
  *     "yaar://apps/self/storage/x.json"   absolute
  *
  *   EXPLICIT — the shared storage tree, subject to the yaar://storage/ permission in app.json
- *     "yaar://storage/media/lab/x.png"    absolute; the sanctioned way out of app storage
- *     "shared:media/lab/x.png"            shorthand
- *     "media" / "media/..."               legacy shorthand for the shared media tree, kept
- *                                         so notebooks written before the URI form existed
- *                                         (and plot.save / exportChart) keep working
+ *     "yaar://storage/shared/lab/x.png"   absolute; the sanctioned way out of app storage
+ *     "shared:shared/lab/x.png"           shorthand
+ *     "shared" / "shared/..."             bare shorthand for the shared tree, so the
+ *                                         paths plot.save / exportChart take read the
+ *                                         same way they are stored
  *
  * Trailing slashes, doubled slashes and "." segments normalise away instead of throwing.
  * ".." is refused outright: traversal used to escape app storage into neighbouring apps,
@@ -89,7 +89,7 @@ export function resolvePath(
   } else if (p.startsWith('shared:')) {
     shared = true;
     p = p.slice(7);
-  } else if (p === 'media' || p.startsWith('media/')) {
+  } else if (p === 'shared' || p.startsWith('shared/')) {
     shared = true;
   } else if (/^yaar:\/\//i.test(p)) {
     throw new Error(

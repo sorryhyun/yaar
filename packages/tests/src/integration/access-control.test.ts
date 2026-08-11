@@ -147,7 +147,7 @@ describe('requirePermission', () => {
   });
 
   it('still admits the flat tree proper', () => {
-    expect(requirePermission(broadStorage, 'yaar://storage/media/logo.png', 'read')).toBeNull();
+    expect(requirePermission(broadStorage, 'yaar://storage/shared/logo.png', 'read')).toBeNull();
     // "apps" itself is a directory in the flat tree, and used to be the one thing under
     // the namespace this grant could reach — listable, with every child refused.
     expect(requirePermission(broadStorage, 'yaar://storage/apps', 'list')).toBeNull();

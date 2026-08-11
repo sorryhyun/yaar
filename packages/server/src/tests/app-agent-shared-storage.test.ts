@@ -116,7 +116,7 @@ describe('the gate the door asks', () => {
       'yaar://apps/self/storage/',
       'yaar://apps/notes/storage/',
       'yaar://storage/apps/notes/',
-      'yaar://storage/media/',
+      'yaar://storage/shared/',
       'yaar://storage',
       'yaar://windows/',
     ]) {
@@ -137,7 +137,7 @@ describe('the gate the door asks', () => {
     // `yaar://storage/` is one entry doing two jobs. An installed app never gets the
     // reach into `apps/`; it keeps the shared tree, which is what it always actually had.
     // Dropping the entry outright would have been a silent regression for every installed
-    // app that writes to `media/`.
+    // app that writes to `shared/`.
     const { capped, changed } = capForeignAppStorage(
       ['yaar://storage/', 'yaar://windows/'],
       'github',
@@ -145,7 +145,7 @@ describe('the gate the door asks', () => {
     expect(changed).toBe(1);
     expect(capped).toEqual([{ uri: 'yaar://storage/', sharedOnly: true }, 'yaar://windows/']);
 
-    for (const uri of ['yaar://storage/media/shot.png', 'yaar://storage/reports/x.md']) {
+    for (const uri of ['yaar://storage/shared/shot.png', 'yaar://storage/reports/x.md']) {
       expect(permissionsAllow(capped, 'github', uri, 'read')).toBe(true);
     }
     // Its own storage is still its own, in either spelling.
@@ -191,9 +191,31 @@ describe('the gate the door asks', () => {
   });
 
   it('honours a narrowed prefix', () => {
-    const media = ['yaar://storage/media/'];
-    expect(permissionsAllow(media, 'devtools', 'yaar://storage/media/shot.png', 'read')).toBe(true);
-    expect(permissionsAllow(media, 'devtools', 'yaar://storage/reports/x.md', 'read')).toBe(false);
+    // Narrowed to one folder that is *not* the commons — `yaar://storage/shared/` would
+    // prove nothing here, since every app holds it whether it declares it or not.
+    const reports = ['yaar://storage/reports/'];
+    expect(permissionsAllow(reports, 'devtools', 'yaar://storage/reports/x.md', 'read')).toBe(true);
+    expect(permissionsAllow(reports, 'devtools', 'yaar://storage/files/tax.pdf', 'read')).toBe(
+      false,
+    );
+  });
+
+  it('gives every app the commons, declared or not', () => {
+    // The grant that is not a grant: `yaar://storage/shared/` is granted for being an
+    // app, so an empty permission list reaches it and the rest of the tree stays shut.
+    for (const verb of ['read', 'list', 'invoke', 'delete'] as const) {
+      expect(permissionsAllow([], 'anima', 'yaar://storage/shared/anima/x.png', verb)).toBe(true);
+    }
+    expect(permissionsAllow([], 'anima', 'yaar://storage/files/tax.pdf', 'read')).toBe(false);
+    expect(permissionsAllow([], 'anima', 'yaar://storage/apps/vault/keys', 'read')).toBe(false);
+    // No app, nothing to grant to — a plain iframe token carries no appId.
+    expect(permissionsAllow([], undefined, 'yaar://storage/shared/anima/x.png', 'read')).toBe(
+      false,
+    );
+    // A traversing spelling names no resource, commons or not.
+    expect(permissionsAllow([], 'anima', 'yaar://storage/shared/../files/tax.pdf', 'read')).toBe(
+      false,
+    );
   });
 
   it('honours a verb-restricted entry — look, do not write', () => {

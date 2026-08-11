@@ -1,6 +1,6 @@
 import { httpFetch } from '@bundled/yaar';
 import { chartToPNG } from '../lib/chart-render';
-import { saveChart } from '../lib/media';
+import { saveChart } from '../lib/shared-tree';
 import { storeRead, storeWrite, storeList, storeRemove, storeExists } from './store-ops';
 import type { ChartSpec } from '../types';
 

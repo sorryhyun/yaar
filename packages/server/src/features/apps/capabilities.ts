@@ -11,6 +11,7 @@
 import { join } from 'path';
 import type { CapabilityLine } from '@yaar/shared';
 import type { PermissionEntry } from '../../http/access.js';
+import { coversSharedTreeOnly } from '../../http/uri-match.js';
 import { parseSubAgents, type SubAgentsEntry } from './discovery.js';
 import { resolveAppSource } from './roots.js';
 import { readAppGrant, type AppGrant } from '../../storage/app-grants.js';
@@ -58,7 +59,7 @@ interface PermissionDescription extends CapabilityLine {
  * Two rules make this a list rather than a lookup, and both exist because the broad
  * entries sit directly above the narrow ones:
  *
- * - **Longest prefix wins.** `yaar://apps/{id}/storage/` and `yaar://storage/media/` are
+ * - **Longest prefix wins.** `yaar://apps/{id}/storage/` and `yaar://storage/shared/` are
  *   narrow grants underneath two of the widest entries here; first-match-wins would
  *   describe an app that wants one private folder as one that wants everything.
  * - **An `exact` entry outranks every prefix.** `yaar://storage/` is the whole tree;
@@ -82,7 +83,7 @@ interface PermissionDescription extends CapabilityLine {
 const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
   { match: 'yaar://storage/',  exact: true, icon: '📁',  title: 'Read and write your files',            detail: 'All of YAAR storage except other apps’ private data', warn: true },
   { match: 'yaar://storage/',               icon: '📁',  title: 'Read and write files',                 detail: 'Limited to one folder in YAAR storage' },
-  { match: 'yaar://storage/media/',         icon: '🖼️',  title: 'Share images and media with other apps' },
+  { match: 'yaar://storage/shared/',        icon: '🤝',  title: 'Share files with other apps',           detail: 'The shared tree only — not your documents' },
   { match: 'yaar://apps/',     exact: true, icon: '🧩',  title: 'See and manage installed apps',        warn: true },
   { match: 'yaar://apps/',                  icon: '🧩',  title: "Use another app's resources" },
   { match: 'yaar://apps/{id}/storage/',     icon: '📁',  title: 'Store its own data',                   detail: 'Private to this app' },
@@ -203,13 +204,22 @@ function permissionKey(p: PermissionEntry): string {
  * the dialog is the number the app will actually get — the parser clamps to the per-app
  * ceiling, and a dialog that promised 40 while the grant was 16 would be a lie the user
  * could not detect.
+ *
+ * A declared `yaar://storage/shared/` is dropped for the mirror-image reason: every app
+ * is granted the commons at token mint time (`SHARED_GRANT` in iframe-tokens.ts), so a
+ * row asking the user to approve it offers a choice they do not have. Apps should not
+ * declare it at all; one that still does is describing the status quo, not a request.
  */
 export async function readAppCapabilities(appDir: string): Promise<AppCapabilities> {
   const caps: AppCapabilities = { permissions: [], bundles: [], streams: [] };
   try {
     const metaContent = await Bun.file(join(appDir, 'app.json')).text();
     const meta = JSON.parse(metaContent);
-    if (Array.isArray(meta.permissions)) caps.permissions = meta.permissions;
+    if (Array.isArray(meta.permissions)) {
+      caps.permissions = (meta.permissions as PermissionEntry[]).filter(
+        (p) => !coversSharedTreeOnly(p),
+      );
+    }
     if (Array.isArray(meta.bundles)) {
       caps.bundles = meta.bundles.filter((b: unknown): b is string => typeof b === 'string');
     }

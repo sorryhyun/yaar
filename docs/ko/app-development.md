@@ -388,6 +388,21 @@ const autosave = createAutosave(
 
 저장 상태 머신 없이 단순히 영속화만 하려면, `createPersistedSignal`(`trySave`를 통해 `appStorage`에 자동 동기화되는 Solid 시그널)이 더 가벼운 선택입니다.
 
+**한 번만 일어나는 부수 효과 앞에서는 세 번째 반환값을 await하세요.** 시그널은 fallback으로 시작해 저장된 값이 도착하면 갱신됩니다. 값이 *렌더링*에만 쓰인다면 이는 보이지 않습니다 — 늦게 도착한 값이 다시 렌더링하므로 잘못된 프레임을 볼 일이 없습니다. 하지만 **한 번만** 실행되는 결정에는 보입니다. "개념글 모드가 켜져 있으면 개념글 피드를 가져온다"는 `onMount`는 시그널을 딱 한 번 읽고 fallback으로 요청을 보내며, 보낸 요청은 되돌릴 수 없습니다. `ready`는 로드가 끝난 시점에 시그널이 담고 있는 값으로 resolve됩니다:
+
+```typescript
+const [conceptMode, setConceptMode, conceptModeReady] = createPersistedSignal(
+  'preferences/concept-mode.json',
+  false,
+);
+onMount(async () => {
+  await conceptModeReady; // 없으면 첫 fetch는 항상 `false`를 봅니다
+  void loadFeed(conceptMode());
+});
+```
+
+reject되는 일은 없고(읽기 실패는 로그를 남긴 뒤 fallback으로 resolve), 로드보다 먼저 도착한 set이 이깁니다 — await한 결과가 시그널이 더 이상 갖고 있지 않은 값일 수는 없습니다.
+
 **텍스트 입력에 연결한다면 `debounceMs`를 넘기세요.** 기본값은 매 set마다 쓰기이고, 이 프리미티브가 주로 담는 토글에는 그것이 맞습니다 — set 한 번이 클릭 한 번이니까요. 하지만 `onInput` 핸들러는 클릭이 아닙니다. 키 입력마다, IME에서는 조합 단계마다 발생하므로 한글 이름 다섯 글자가 쓰기 열두 번, 디스크 쓰기 열두 번, 세션 로그 열두 줄이 됐습니다. `debounceMs: 400`은 그 연속 입력을 한 번의 쓰기로 합칩니다. 대기 중인 쓰기는 페이지가 숨겨지거나 언로드될 때 flush되므로, 디바운스 도중에 창을 닫아도 저장됩니다. 시그널 자체는 지연되지 않습니다 — 쓰기만 지연됩니다.
 
 ## 런타임 제약 사항

@@ -57,6 +57,7 @@ import {
   isUriAllowed,
   namesForeignAppStorage,
   resolveSelf,
+  SHARED_STORAGE_ROOT,
 } from './uri-match.js';
 import { errorResponse } from './utils.js';
 
@@ -204,6 +205,11 @@ export {
   uriMatches,
 } from './uri-match.js';
 
+/** Is this the commons every app holds without declaring it? */
+function namesSharedTree(canonical: string): boolean {
+  return canonical === 'yaar://storage/shared' || canonical.startsWith(SHARED_STORAGE_ROOT);
+}
+
 /** Is this the session principal's private namespace? */
 function isSessionUri(uri: string): boolean {
   return uri === 'yaar://session' || uri.startsWith('yaar://session/');
@@ -228,6 +234,15 @@ function isSessionUri(uri: string): boolean {
  *
  * `describe` is metadata-only (it reveals a handler's schema, not its data), so it
  * bypasses the list — matching the verb endpoint's existing rule.
+ *
+ * So does the commons. `yaar://storage/shared/` is granted to every app for being an
+ * app, exactly as `yaar://apps/self/…` is (`SELF_GRANTS`), and it is granted *here*
+ * rather than on the token because the app agent's storage door has a permission list
+ * and no token — a grant minted at mint time would reach an app's iframe and not its
+ * agent. The tree is the one every app publishes to for the others to read, so a
+ * declaration was guarding a boundary that does not exist, while forgetting it 403'd
+ * an app on the one path whose whole purpose is being reachable. It widens nothing
+ * else: `storage/apps/{id}/` is a different subtree and still takes a declared entry.
  */
 export function permissionsAllow(
   permissions: PermissionEntry[],
@@ -243,10 +258,14 @@ export function permissionsAllow(
   const target = canonicalStorageUri(resolveSelf(uri, appId));
   if (target === null) return false;
 
+  // The commons, granted for being an app — `appId` is the whole condition, since a
+  // non-app iframe has no app identity to grant to.
+  if (appId && namesSharedTree(target)) return true;
+
   // A capped entry (`sharedOnly`) is the shared tree only: it never answers for another
   // app's private storage, however broad the prefix it was written as. That is the whole
   // ceiling — it applies to the URIs the entry should not have covered, and to nothing
-  // else, so the same grant still reaches `yaar://storage/media/` as it always did.
+  // else, so the same grant still reaches `yaar://storage/shared/` as it always did.
   const foreign = namesForeignAppStorage(target, appId);
   const granted = permissions.flatMap((entry) =>
     foreign && isSharedOnly(entry) ? [] : grantEntries(entry, appId),

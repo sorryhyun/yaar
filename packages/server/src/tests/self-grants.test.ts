@@ -1,15 +1,20 @@
 /**
- * An app is granted its own namespace without declaring it.
+ * An app is granted its own namespace, and the commons, without declaring either.
  *
  * `yaar://apps/self/{storage,db,agents}/` resolve against the token's own appId, so
  * they can only ever name the app asking. Making apps declare them bought no
  * confinement and cost a class of bug that only showed up at runtime: an app that
  * forgot `yaar://apps/self/db/` got a 403 from `appDb` for a database nobody else
- * can see. `SELF_GRANTS` (iframe-tokens.ts) adds all three at mint time.
+ * can see. `yaar://storage/shared/` is the fourth for the same reason from the other
+ * direction: it is the tree apps publish to *for each other*, so a declaration was
+ * guarding a boundary that does not exist, and forgetting it 403'd an app on the one
+ * path whose whole purpose is being reachable. `AUTOMATIC_GRANTS` (iframe-tokens.ts)
+ * adds all four at mint time.
  *
  * What must stay true is the other half: naming *another* app is still a declared
- * permission, and the sharper gates behind these URIs (persona ownership, the
- * `personas` manifest cap, `streams`) are untouched by the grant.
+ * permission, `storage/apps/` is not reachable through the commons, and the sharper
+ * gates behind these URIs (persona ownership, the `personas` manifest cap, `streams`)
+ * are untouched by the grant.
  */
 import { describe, it, expect } from 'bun:test';
 import { requirePermission, resolvePrincipal } from '../http/access.js';
@@ -61,9 +66,21 @@ describe('self grants', () => {
     }
   });
 
-  it('grants nothing outside the app’s own namespace', async () => {
+  it('gives an app with no permissions the shared tree', async () => {
     const principal = await bareApp();
-    expect(requirePermission(principal, 'yaar://storage/media/', 'read')?.status).toBe(403);
+    for (const uri of ['yaar://storage/shared/', 'yaar://storage/shared/anima/dragon.png']) {
+      expect(requirePermission(principal, uri, 'read')).toBeNull();
+      expect(requirePermission(principal, uri, 'invoke')).toBeNull();
+    }
+  });
+
+  it('grants nothing outside the app’s own namespace and the commons', async () => {
+    const principal = await bareApp();
+    // The commons is one subtree of storage, not a foothold in the rest of it.
+    expect(requirePermission(principal, 'yaar://storage/files/tax.pdf', 'read')?.status).toBe(403);
+    expect(requirePermission(principal, 'yaar://storage/apps/vault/keys', 'read')?.status).toBe(
+      403,
+    );
     expect(requirePermission(principal, 'yaar://config/domains', 'invoke')?.status).toBe(403);
     expect(requirePermission(principal, 'yaar://session/browser', 'invoke')?.status).toBe(403);
   });
@@ -74,12 +91,13 @@ describe('self grants', () => {
       permissions: ['yaar://storage/'],
     });
     const principal = principalFor(token);
-    expect(requirePermission(principal, 'yaar://storage/media/', 'read')).toBeNull();
+    expect(requirePermission(principal, 'yaar://storage/shared/', 'read')).toBeNull();
     expect(requirePermission(principal, 'yaar://apps/self/db/notes', 'invoke')).toBeNull();
   });
 
-  it('grants nothing to a non-app iframe — there is no "self" to resolve', async () => {
+  it('grants nothing to a non-app iframe — there is no app to grant to', async () => {
     const principal = principalFor(await generateAppIframeToken('win-plain', 'sess-1'));
     expect(requirePermission(principal, 'yaar://apps/self/db/rooms', 'invoke')?.status).toBe(403);
+    expect(requirePermission(principal, 'yaar://storage/shared/x.png', 'read')?.status).toBe(403);
   });
 });

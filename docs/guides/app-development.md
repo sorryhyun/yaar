@@ -416,6 +416,21 @@ const autosave = createAutosave(
 
 For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice. Its `revive` option runs on the loaded value before it reaches the signal — the place to clamp a stored width against the current window, migrate a renamed key, or `z.safeParse` JSON an older version wrote in another shape. It also runs on the fallback when nothing is stored, so keep it total; if it throws, the fallback is used and the failure is logged.
 
+**Await its third element before a one-shot side effect.** The signal starts at the fallback and updates when the load lands, which is invisible for a value that is only *rendered* — the late load re-renders and nobody sees the wrong frame. It is not invisible for a value that decides something done **once**: an `onMount` that fetches "the concept feed if concept mode is on" reads the signal a single time, fires with the fallback, and there is no un-sending that request. `ready` resolves once the load settles, with the value the signal then holds:
+
+```typescript
+const [conceptMode, setConceptMode, conceptModeReady] = createPersistedSignal(
+  'preferences/concept-mode.json',
+  false,
+);
+onMount(async () => {
+  await conceptModeReady; // otherwise the first fetch always sees `false`
+  void loadFeed(conceptMode());
+});
+```
+
+It never rejects (a failed read resolves with the fallback, logged), and a set that landed before the load still wins — awaiting it cannot hand back a value the signal no longer holds.
+
 **Bind it to a text input and pass `debounceMs`.** It writes on every set by default, which is right for the toggle it usually holds — a set is a click. An `onInput` handler is not a click: it fires per keystroke, and under an IME per composition step, so a five-letter Korean name was a dozen writes, a dozen disk hits, and a dozen lines in the session log for one field. `debounceMs: 400` collapses the burst into one write, and a pending write is flushed when the page is hidden or unloaded, so closing the window mid-debounce still saves. The signal itself is never delayed — only the write.
 
 **`createStaleGuard`** — the generation counter that keeps a slow response from overwriting a newer one.
@@ -1380,6 +1395,44 @@ delete('yaar://apps/my-app/storage/data.json')
 `describe` on a storage path describes **that path**: an error when it isn't there, `{ kind: 'directory', entries, totalSize, verbs }` for a folder, `{ kind: 'file', size, modifiedAt, mimeType, verbs }` for a file (a PDF adds its page count and the `pdfText` / `pdfPages` read options). The bare `…/storage` root is the exception — it answers with the app-storage manual plus a root entry count, which is what a caller landing there is actually asking. The same shape answers for `yaar://storage/…`; they are two spellings of one directory tree.
 
 A `list` of a directory that does not exist is an **error**, not an empty success — the two used to be indistinguishable. A namespace root is the exception both ways: an app's `storage/` exists from the moment the app does (the directory is only created by the first write), so listing it before anything is written is empty rather than missing.
+
+## Shared Storage (`yaar://storage/shared/`)
+
+App storage is private; `yaar://storage/shared/` is the commons. It is where apps hand
+files to each other — an image generated in one app, a deck exported by another, a dataset
+a notebook computed — and **every app can read and write it without declaring anything**.
+There is no `permissions` entry to add; adding one grants nothing and the install dialog
+drops it.
+
+Publish under your own app id, one directory per producer:
+
+```typescript
+import { storage, invoke } from '@bundled/yaar';
+
+// Publish: server-side copy, so the bytes never pass through the iframe.
+await invoke('yaar://storage/shared/my-app/logo.png', {
+  action: 'copy',
+  from: 'yaar://apps/self/storage/generated/logo.png',
+});
+
+// Or write directly.
+await storage.save('shared/my-app/report.md', markdown);
+
+// Read what another app published.
+const png = await storage.read('shared/anima/dragon.png', { as: 'blob' });
+const published = await storage.list('shared');
+```
+
+Three properties follow from it being the commons rather than a grant:
+
+- **It is not private.** Any app can read, overwrite or delete anything under `shared/`.
+  Data that must stay yours belongs in app storage (`appStorage`), which no other app can
+  reach. The per-producer directory is tidiness, not a boundary.
+- **It is a staging area.** The user prunes it; a file published last week may be gone.
+  An app that needs an asset at runtime should keep its own copy.
+- **It does not widen anything else.** `storage/apps/{id}/` is a different subtree, so the
+  commons never reaches another app's private files — that still takes a declared
+  `permissions` entry, and for an installed app it is capped to the shared tree anyway.
 
 ## App-Scoped Database (`appDb`)
 

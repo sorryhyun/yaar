@@ -23,7 +23,8 @@ export { buildCommands } from './build';
 export { gitCommands } from './git';
 export { previewCommands } from './preview';
 export { introspectCommands } from './introspect';
-export { mediaCommands } from './media';
+export { sharedCommands } from './shared-tree';
+export { httpCommands } from './http';
 
 /**
  * The `defineApp({ state })` map. Split from `main.ts` for the same reason the

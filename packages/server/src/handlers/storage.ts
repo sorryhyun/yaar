@@ -51,8 +51,8 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
     description:
       'Persistent storage file. Read to view contents, list to browse directory, ' +
       'invoke with action "write", "copy" or "edit" to modify, delete to remove. ' +
-      'Reserved prefixes: "media/" (artifacts shared between apps — publish here to hand ' +
-      'an image to another app), "temp/" (scratch, safe to prune), "files/" (user documents), ' +
+      'Reserved prefixes: "shared/" (artifacts apps publish for each other — publish here to ' +
+      'hand a file to another app), "temp/" (scratch, safe to prune), "files/" (user documents), ' +
       'and "apps/{id}/" (an app\'s private storage — also spelled yaar://apps/{id}/storage/). ' +
       'To move a file, prefer action "copy" over reading it and writing it back: copy moves ' +
       'the bytes server-side, a read/write round-trip drags them through the conversation.',
