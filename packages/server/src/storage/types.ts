@@ -62,5 +62,12 @@ export interface StorageGrepResult {
   success: boolean;
   matches?: StorageGrepMatch[];
   truncated?: boolean;
+  /**
+   * How many text files the pattern was actually tested against, after the glob
+   * filter. Zero matches with `scannedFiles: 0` means the glob excluded every
+   * candidate; zero matches with a positive count means the pattern is genuinely
+   * absent. Without it the two are the same well-formed empty answer.
+   */
+  scannedFiles?: number;
   error?: string;
 }

@@ -319,7 +319,12 @@ export default defineApp({
         type: 'object',
         properties: {
           pattern: { type: 'string', description: 'Regex pattern to search for' },
-          glob: { type: 'string', description: 'File glob filter (e.g. "*.ts")' },
+          glob: {
+            type: 'string',
+            description:
+              'File glob filter. No "/" means match that name at any depth ("*.ts"); ' +
+              'with a "/" it matches the path from the scope root ("apps/**/*.ts").',
+          },
           scope: { type: 'string', description: 'Directory scope within storage' },
         },
         required: ['pattern'],

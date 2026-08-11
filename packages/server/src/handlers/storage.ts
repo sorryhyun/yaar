@@ -63,7 +63,14 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
       properties: {
         action: { type: 'string', enum: ['write', COPY_ACTION, 'edit', 'grep'] },
         pattern: { type: 'string', description: 'Regex pattern to search for (grep)' },
-        glob: { type: 'string', description: 'Glob pattern to filter files (grep)' },
+        glob: {
+          type: 'string',
+          description:
+            'Glob pattern to filter files (grep). A pattern with no "/" matches that ' +
+            'name at any depth ("*.md" is every markdown file under the scope); a ' +
+            'pattern with a "/" is matched against the path relative to the scope root ' +
+            '("apps/**/*.ts"), where "*" does not cross a separator.',
+        },
         content: { type: 'string', description: 'File content (for write)' },
         encoding: {
           type: 'string',
@@ -232,7 +239,11 @@ export function registerStorageHandlers(registry: ResourceRegistry): void {
           return error('"pattern" (string) is required for grep.');
         const result = await storageGrep(path, payload.pattern, payload.glob as string | undefined);
         if (!result.success) return error(result.error!);
-        return okJson({ matches: result.matches, truncated: result.truncated });
+        return okJson({
+          matches: result.matches,
+          truncated: result.truncated,
+          scannedFiles: result.scannedFiles,
+        });
       }
 
       return error(`Unknown action "${action}". Use "write", "copy", "edit", or "grep".`);
