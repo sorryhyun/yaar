@@ -91,25 +91,6 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
   }
 
   /**
-   * Inline computed styles on a cloned DOM tree so foreignObject renders
-   * correctly (resolves CSS custom properties, color-mix, etc.).
-   * The clone must still mirror the original 1:1 — both trees are walked
-   * in parallel by index.
-   */
-  function inlineStyles(clone, original) {
-    var originals = original.querySelectorAll('*');
-    var clones = clone.querySelectorAll('*');
-    try { clone.style.cssText = window.getComputedStyle(original).cssText; } catch(e) {}
-    for (var i = 0; i < originals.length && i < clones.length; i++) {
-      try {
-        if (clones[i].style) {
-          clones[i].style.cssText = window.getComputedStyle(originals[i]).cssText;
-        }
-      } catch(e) {}
-    }
-  }
-
-  /**
    * Copy live form state onto the clone as attributes.
    *
    * cloneNode(true) copies attributes, not IDL properties. A value assigned in
@@ -119,8 +100,8 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
    * screenshots as a form of empty boxes while the live DOM is populated.
    * Same for textarea text, option selection, and checkbox/radio state.
    *
-   * Index-paired against the original like inlineStyles, so it must run while
-   * the clone is still an exact mirror.
+   * Index-paired against the original, so it must run while the clone is still
+   * an exact mirror.
    */
   function inlineFormState(clone, original) {
     // Only the tags handled below, so both trees pair on the same element set.
@@ -166,7 +147,7 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
    * them correctly (external URLs are blocked inside SVG foreignObject).
    * Fetches each <img> src as a blob and replaces with a data URI.
    * After inlining, sanitizes ALL remaining external URLs to prevent canvas tainting.
-   * Like inlineStyles, pairs original and clone elements by index — call it
+   * Like inlineFormState, pairs original and clone elements by index — call it
    * before anything mutates the clone's element list.
    *
    * Resolves with a count of the images it had to blank out. Those become transparent
@@ -215,13 +196,14 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
             dropped++;
           }
         }
-        // Remove <link> stylesheets (computed styles already inlined)
+        // Remove <link> stylesheets — an SVG-as-image loads no external
+        // resource, so they would be dead weight in the serialized markup.
         var links = clone.querySelectorAll('link[rel="stylesheet"]');
         for (var i = links.length - 1; i >= 0; i--) links[i].remove();
         // Strip ALL url() except data: URIs from inline styles — any non-data
         // URL in foreignObject-as-image taints the canvas, even same-origin ones.
         // The lookahead must swallow the quote/whitespace itself ([\\s"']*), not sit
-        // after it: getComputedStyle() emits url("data:...") WITH double quotes, and a
+        // after it: CSS spells data URIs as url("data:...") WITH double quotes, and a
         // quote-first pattern (["']?(?!data:)) — or one with a separate \\s* the engine
         // can backtrack to zero — lets the lookahead pass at the quote and strips the
         // very data-URI backgrounds we mean to keep.
@@ -390,10 +372,9 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
   }
 
   /**
-   * Default capture: full window screenshot. Clones the document, inlines
-   * computed styles and external resources, composites live canvas pixels in
-   * place, then renders through the browser's native CSS engine via
-   * foreignObject SVG.
+   * Default capture: full window screenshot. Clones the document, inlines live
+   * form state and external resources, composites live canvas pixels in place,
+   * then renders through the browser's native CSS engine via foreignObject SVG.
    */
   function defaultCapture(requestId) {
     try {
@@ -408,11 +389,19 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
       }
 
       var clone = docEl.cloneNode(true);
-      // Order matters: inlineStyles/inlineFormState/inlineResources pair
-      // original and clone elements by index, so they must run while the clone
-      // is still an exact mirror. Canvas swapping and script removal mutate the
-      // clone afterwards.
-      inlineStyles(clone, docEl);
+      // Order matters: inlineFormState/inlineResources pair original and clone
+      // elements by index, so they must run while the clone is still an exact
+      // mirror. Canvas swapping and script removal mutate the clone afterwards.
+      //
+      // Nothing inlines *computed* style, deliberately: style reaches the
+      // foreignObject through the cloned <head><style>, which the SVG document
+      // applies itself, custom properties and color-mix() included. A loop
+      // assigning \`clone.style.cssText = getComputedStyle(orig).cssText\` sat
+      // here and was worse than useless — CSSOM defines that getter as the empty
+      // string on a computed declaration, so it wiped every inline \`style\`
+      // attribute cloneNode had just copied. Enumerating the properties instead
+      // reads non-empty, but that is ~500 of them per node in the serialized
+      // SVG, and it freezes layout and re-applies transforms. Don't.
       inlineFormState(clone, docEl);
       inlineResources(clone, docEl).then(function(imgsDropped) {
         var notes = [];
