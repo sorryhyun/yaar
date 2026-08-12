@@ -142,15 +142,29 @@ process.on('exit', () => {
   console.error = originalError;
 });
 
-const {
-  appStorage,
-  createCollapsiblePanel,
-  createPersistedSignal,
-  createProtocolContext,
-  sharedStorage,
-  showConfirm,
-  showPrompt,
-} = await import('../shims/yaar/index.js');
+/**
+ * Imported per module, **not** through `../shims/yaar/index.js`.
+ *
+ * The barrel reaches `sanitize.ts`, which imports `dompurify`. Loading that through Bun's
+ * *runtime* loader poisons the same `dist/purify.es.mjs` a later `Bun.build()` in this
+ * process has to read, and the build dies with `EISDIR reading file:` on a file that is an
+ * ordinary 118 KB regular file. It is the sibling of the defect `shims/dompurify.ts`
+ * documents (there: entrypoint first, dependency second), reached from the other side, and
+ * the shim's demotion trick does not help — the runtime loader is not the bundler.
+ *
+ * The damage lands in *another file*: `bun test yaar.test.ts define-app.test.ts` failed
+ * four of define-app's app compiles, while either file alone passed. So the rule is not
+ * "prefer narrow imports" but "no compiler test may load dompurify at runtime", and
+ * `prebundle-completeness.test.ts` guards it by name rather than trusting this comment.
+ *
+ * What the barrel re-exports is covered where it can be checked without loading anything:
+ * that same file prebundles `@bundled/yaar` and probes every export the artifact declares.
+ */
+const { appStorage } = await import('../shims/yaar/app-storage.js');
+const { sharedStorage } = await import('../shims/yaar/shared-storage.js');
+const { createCollapsiblePanel, createPersistedSignal } = await import('../shims/yaar/reactive.js');
+const { createProtocolContext } = await import('../shims/yaar/protocol-context.js');
+const { showConfirm, showPrompt } = await import('../shims/yaar/dialogs.js');
 const { setAppId } = await import('../shims/yaar/app-identity.js');
 
 /**
