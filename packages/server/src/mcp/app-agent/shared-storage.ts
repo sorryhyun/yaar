@@ -1,7 +1,20 @@
 /**
- * The app agent's door onto the *shared* storage tree (`yaar://storage/...`).
+ * The app agent's storage door — both trees, and who is exposed to it at all.
  *
- * ── Why this exists ──
+ * Two questions live here, and they are not the same question:
+ *
+ *   - **Exposure** ({@link declaresSharedStorage}) — does this app's agent hold the
+ *     `storage:*` built-ins and the relative `storage/...` spelling *at all*? An app
+ *     whose `app.json` declares nothing under `yaar://storage/` holds neither, in the
+ *     prompt, in the tool descriptions, or at execution.
+ *   - **Authorization** ({@link authorizeSharedStorage}) — given that it holds the door,
+ *     may it perform *this verb* on *this path*? That is `permissionsAllow`, unchanged.
+ *
+ * A declaration is not a per-verb grant: `{ uri: "yaar://storage/reports/", verbs:
+ * ["read","list"] }` opens the door and still refuses `storage:write`. Collapsing the
+ * two would make a narrow declaration mean a broad one.
+ *
+ * ── Why the shared door exists ──
  *
  * `query`/`command`'s `storage/...` argument is rewritten to the caller's own
  * app-scoped tree unconditionally, *before* any permission is consulted. So an app
@@ -24,10 +37,17 @@
  *
  * ── What is not decided here ──
  *
- * The permission. {@link permissionsAllow} is the same gate the iframe door asks,
+ * The *matching rule*. {@link permissionsAllow} is the same gate the iframe door asks,
  * canonicalization included — which is what keeps a declared `yaar://storage/` from
  * prefix-matching `yaar://storage/apps/{other}/`, i.e. every other app's private tree.
- * This module only names the target and reports the refusal in the app agent's terms.
+ * This module names the target, decides exposure, and reports either refusal in the app
+ * agent's terms; it never re-implements the match.
+ *
+ * The **iframe** side, entirely. `SELF_GRANTS` (`http/iframe-tokens.ts`), the commons in
+ * `permissionsAllow`, and every `POST /api/verb` path are untouched by the exposure gate:
+ * an iframe is app-authored code and an agent is a model, so an app that reaches its own
+ * storage from `@bundled/yaar` while its agent may not is the intended asymmetry, not an
+ * inconsistency to iron out.
  */
 
 import { validateRelativePath } from '../../handlers/utils.js';
@@ -118,13 +138,18 @@ export async function sharedStorageHint(appId: string, path: string, verb: Verb)
 }
 
 /**
- * The app's declared entries that name part of the shared tree, for the prompt to
- * render.
+ * The app's declared entries that name part of the shared tree.
  *
- * Presentation only — {@link authorizeSharedStorage} is the gate, and this list is
- * never consulted to admit anything. It filters on the manifest's own spelling
- * (`yaar://storage/...`, minus the `apps/{id}/` subtree, which is a different tree
- * wearing the flat spelling) so an author reads back the line they wrote.
+ * Two readers, and they ask different things of it. The prompt renders it — it filters
+ * on the manifest's own spelling (`yaar://storage/...`, minus the `apps/{id}/` subtree,
+ * which is a different tree wearing the flat spelling) so an author reads back the line
+ * they wrote. {@link declaresSharedStorage} asks only whether it is *empty*.
+ *
+ * It used to say "presentation only … never consulted to admit anything". That stopped
+ * being true when exposure became a decision: emptiness is now a gate. The entries
+ * themselves still admit nothing — {@link authorizeSharedStorage} does that, from
+ * `permissionsAllow` — so what this list decides is whether the door is *offered*, never
+ * what passes through it.
  */
 export async function sharedStorageGrants(
   appId: string,
@@ -136,4 +161,70 @@ export async function sharedStorageGrants(
       return namesSharedStorage(uri) && !uri.startsWith(`${SHARED_ROOT}/apps/`);
     })
     .map((entry) => ({ uri: entryUri(entry), verbs: entryVerbs(entry) }));
+}
+
+/**
+ * How long a resolved declaration is trusted before the manifest is read again.
+ *
+ * {@link getAppMeta} is uncached — one `Bun.file().text()` + `JSON.parse` per call — and
+ * the modern MCP era builds a server per *request*, so an ungated predicate would put a
+ * disk read on every `app`-namespace call. Short enough that an author editing app.json
+ * sees the door open within a turn, long enough that a burst of tool calls reads once.
+ */
+const DECLARATION_TTL_MS = 5_000;
+const declarationCache = new Map<string, { value: boolean; at: number }>();
+
+/**
+ * Is this app's agent exposed to the storage door at all?
+ *
+ * True iff the manifest declares at least one entry under `yaar://storage/` (excluding
+ * the `yaar://storage/apps/` subtree). The aggressive reading is deliberate and applies
+ * to the app's *own* tree as well: a capability the author never declared is not one the
+ * agent should hold, even confined to the author's own directory. An undeclared app
+ * reaches storage the way the design always intended — its iframe uses `@bundled/yaar`
+ * inside a command declared in `protocol.json`, and the agent calls that command by name.
+ *
+ * The commons is deliberately *not* a declaration. `permissionsAllow` grants
+ * `yaar://storage/shared/` to every app for being an app, so counting it would make the
+ * predicate true for everyone and gate nothing.
+ */
+export async function declaresSharedStorage(appId: string): Promise<boolean> {
+  const hit = declarationCache.get(appId);
+  if (hit && Date.now() - hit.at < DECLARATION_TTL_MS) return hit.value;
+  const value = (await sharedStorageGrants(appId)).length > 0;
+  declarationCache.set(appId, { value, at: Date.now() });
+  return value;
+}
+
+/** Drop the memoized declarations. Tests only — a fixture manifest changes within the TTL. */
+export function resetStorageDeclarationCache(): void {
+  declarationCache.clear();
+}
+
+/**
+ * The refusal for an app agent that reached for a door its app never declared.
+ *
+ * Worded for the reader, which is the one difference from `direct_message`'s refusal:
+ * that one tells the model to add `"messaging": "all"` to app.json, which is right for a
+ * *monitor* agent. An app agent cannot edit its own manifest, so the actionable half is
+ * its app's own commands — `describe` already lists them — and the manifest line is an
+ * author-facing note, not an instruction.
+ *
+ * The commons is named because it is the one storage spelling that still answers: it is
+ * granted for being an app, so a read of `yaar://storage/shared/...` goes through
+ * whatever the manifest says. Naming it here rather than in the prompt keeps the
+ * undeclared agent's prompt free of a storage door it mostly does not have, while still
+ * making the part that works discoverable at the moment it is wanted.
+ */
+export function storageNotDeclared(appId: string, attempted: string): string {
+  return (
+    `not available: ${attempted} — "${appId}" declares no storage permission, so this agent ` +
+    `holds no built-in storage commands, not even for its own tree. Use this app's own ` +
+    `commands instead: \`describe()\` lists every command it declares, and an app that ` +
+    `persists anything exposes one — its iframe holds the storage SDK, your tools do not. ` +
+    `Reading \`yaar://storage/shared/{path}\` with \`query\` still works; that tree is the ` +
+    `commons and needs no declaration. ` +
+    `(Author note: adding an entry under "${SHARED_ROOT}/" to "permissions" in ${appId}'s ` +
+    `app.json restores the built-ins — an agent cannot do this for itself.)`
+  );
 }

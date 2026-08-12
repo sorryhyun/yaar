@@ -1,6 +1,6 @@
 import { createMemo, For, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { defineApp } from '@bundled/yaar';
+import { appStorage, defineApp } from '@bundled/yaar';
 import './styles/index';
 
 import { state, setState } from './store';
@@ -165,6 +165,44 @@ export default defineApp({
       run: async () => {
         await loadSessions();
         return { success: true, count: state.sessions.length };
+      },
+    },
+    // The agent's only route to storage. It used to write audits with the built-in
+    // `command('storage:write', …)`, which is no longer offered to an app whose app.json
+    // declares no storage permission — this app's does not, and the built-in reaching its
+    // own tree regardless was the capability that gate closed. A declared command is the
+    // intended shape: the iframe holds the SDK (`yaar://apps/self/storage/` is granted for
+    // being an app), the agent asks for the write by name, and the app decides where
+    // reports may land.
+    saveReport: {
+      description:
+        'Save an analysis report into this app\'s own storage under "reports/". ' +
+        'Returns the storage URI it was written to.',
+      params: {
+        type: 'object',
+        properties: {
+          name: {
+            type: 'string',
+            description:
+              'File name, e.g. "audit-2026-08-12.md". A ".md" suffix is added if missing; ' +
+              'path separators are not allowed.',
+          },
+          content: { type: 'string', description: 'Report body (markdown)' },
+        },
+        required: ['name', 'content'],
+      },
+      run: async (params) => {
+        const raw = String(params.name ?? '').trim();
+        if (!raw) throw new Error('"name" is required.');
+        if (/[\\/]/.test(raw) || raw.includes('..')) {
+          throw new Error('"name" is a file name, not a path — reports all live in "reports/".');
+        }
+        const content = String(params.content ?? '');
+        if (!content) throw new Error('"content" is required.');
+        const file = raw.endsWith('.md') ? raw : `${raw}.md`;
+        const path = `reports/${file}`;
+        await appStorage.save(path, content);
+        return { success: true, path, uri: `yaar://apps/session-logs/storage/${path}` };
       },
     },
   },

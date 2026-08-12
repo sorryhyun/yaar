@@ -333,7 +333,7 @@ domain logic from `features/`) via `yaar://` URIs.
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching via `yaar://` URIs |
 | `mcp/system/` | system | reload_cached, list_reload_options |
-| `mcp/app-agent/` | app | describe, query, command, relay (+ direct_message when granted) |
+| `mcp/app-agent/` | app | describe, query, command, relay (+ direct_message when granted). The `storage:*` built-ins are **declared, not automatic** — see below |
 | `mcp/messaging/` | messaging | Cross-agent direct messaging |
 | `mcp/sub-agent/` | subagent | app-defined tools of the *calling* sub-agent — the only namespace whose tool list depends on who connects; empty for everyone else |
 
@@ -445,6 +445,35 @@ per-command `describe` (`features/window/app-protocol.ts`), and the app agent's 
 
 **A reserved payload key (`action`/`params`/`timeoutMs`) is checked against the command's schema,
 not against its name.** Full story at `invokeSubResource` in `handlers/window.ts`.
+
+### App agent storage is declared, not automatic
+
+`query`/`command` intercept storage paths before the app protocol — `storage:write`,
+`storage:delete`, `storage:list`, and the relative `storage/{path}` spelling on `query`. An app
+agent holds them **iff** its `app.json` declares at least one entry under `yaar://storage/`
+(`yaar://storage/apps/` excluded). Four bundled apps do; the rest are refused by name, **including
+against their own tree** — a capability the author never declared is not one the agent should hold.
+
+Two layers, one predicate (`declaresSharedStorage`, `mcp/app-agent/shared-storage.ts`):
+
+- **The prompt** — both storage sections are rendered only for a declaring app, at the single site
+  in `agents/profiles/app-agent.ts` that assembles them into *either* prompt branch (a `prompt.md`
+  app issues the same payloads, and the two sections drifted apart once already).
+- **The handler** — refused at call time, with `storageNotDeclared` naming the app's own protocol
+  commands as the way forward. An app agent cannot edit its own manifest, so the app.json line is
+  an author-facing note, not an instruction (this is the one difference from `direct_message`'s
+  refusal, whose reader is a monitor agent).
+
+There is deliberately **no third copy in the tool descriptions**: a description is written once for
+every caller, so making it honest per app would mean an appId resolution and an uncached
+`getAppMeta` read on every `app`-namespace MCP request — the modern era builds a server per
+request. `query`/`command` mention storage nowhere.
+
+**Exposure is not authorization.** A declaration opens the door; `permissionsAllow` still decides
+each call, so `{ uri: "yaar://storage/reports/", verbs: ["read","list"] }` exposes the built-ins
+and still refuses `storage:write`. The **iframe** side is untouched — `SELF_GRANTS`, the commons in
+`permissionsAllow`, and every `POST /api/verb` path. An undeclared app persists through a command
+its own `protocol.json` declares (`apps/session-logs`'s `saveReport` is the worked example).
 
 ### Monitor ↔ App Agent communication
 

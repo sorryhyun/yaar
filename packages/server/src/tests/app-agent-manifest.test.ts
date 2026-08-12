@@ -74,17 +74,28 @@ describe('app agent base prompt', () => {
 });
 
 /**
- * Both storage doors are the same two tools, so replacing the base prompt must not
- * drop either. The shared tree was already moved out of the generic branch once; the
- * app-scoped one was left behind, so every `prompt.md` app — devtools among them —
- * was never told that `storage/{path}` names a tree it holds unconditionally, and the
- * shared section's opening contrast with "the app-scoped one above" pointed at nothing.
+ * Layer A of the storage exposure gate: an app agent is told about the storage door iff
+ * its app.json declares an entry under `yaar://storage/`.
+ *
+ * Two failure modes are pinned here, and they pull in opposite directions:
+ *
+ *  - For a **declaring** app, both doors must reach *either* prompt branch. The shared
+ *    tree was already moved out of the generic branch once and the app-scoped one was
+ *    left behind, so every `prompt.md` app — devtools among them — was never told that
+ *    `storage/{path}` names its own tree, and the shared section's opening contrast with
+ *    "the app-scoped one above" pointed at nothing.
+ *  - For an **undeclared** app, neither may appear. `mcp/app-agent` refuses these calls
+ *    at execution, so a section describing them is a prompt that lies — the one defect
+ *    the gate itself could introduce.
+ *
+ * devtools declares `yaar://storage/`; memo declares nothing. Both ends of the rule are
+ * therefore covered by bundled fixtures, without a synthetic manifest.
  */
 describe('app agent storage doors', () => {
-  const APP_SCOPED = '## App Storage (built-in)';
+  const APP_SCOPED = '## App Storage';
   const SHARED = '## Shared Storage (`yaar://storage/`)';
 
-  it('documents both doors for an app that replaces the base prompt', async () => {
+  it('documents both doors for a declaring app that replaces the base prompt', async () => {
     const { systemPrompt } = await buildAppAgentProfile('devtools');
 
     expect(systemPrompt).toContain(APP_SCOPED);
@@ -94,24 +105,39 @@ describe('app agent storage doors', () => {
     expect(systemPrompt).toContain('command(command: "storage:list", params: { path: "subdir" })');
   });
 
-  it('documents both doors for an app on the generic prompt', async () => {
-    const { systemPrompt } = await buildAppAgentProfile('memo');
-
-    expect(systemPrompt).toContain(APP_SCOPED);
-    expect(systemPrompt).toContain(SHARED);
-  });
-
   it('states the app-scoped door before the shared one refers back to it', async () => {
-    for (const appId of ['devtools', 'memo']) {
-      const { systemPrompt } = await buildAppAgentProfile(appId);
-      expect(systemPrompt.indexOf(APP_SCOPED)).toBeLessThan(systemPrompt.indexOf(SHARED));
-    }
+    const { systemPrompt } = await buildAppAgentProfile('devtools');
+    expect(systemPrompt.indexOf(APP_SCOPED)).toBeLessThan(systemPrompt.indexOf(SHARED));
   });
 
   it('states each door exactly once', async () => {
-    const { systemPrompt } = await buildAppAgentProfile('memo');
+    const { systemPrompt } = await buildAppAgentProfile('devtools');
 
     expect(systemPrompt.split(APP_SCOPED).length - 1).toBe(1);
     expect(systemPrompt.split(SHARED).length - 1).toBe(1);
+  });
+
+  it('names no storage door at all for an app that declares none', async () => {
+    // memo ships no storage permission, so it holds neither tree from its agent — not
+    // even its own, which is the aggressive half of the rule.
+    const { systemPrompt } = await buildAppAgentProfile('memo');
+
+    expect(systemPrompt).not.toContain(APP_SCOPED);
+    expect(systemPrompt).not.toContain(SHARED);
+    // And no stray call spelling survives outside the headings.
+    expect(systemPrompt).not.toContain('storage:write');
+    expect(systemPrompt).not.toContain('storage:list');
+    expect(systemPrompt).not.toContain('storage:delete');
+  });
+
+  it('replaces the unevaluable conditional with the app’s own declaration', async () => {
+    // The defect the gate was written for: the prompt stated "open to you only if your
+    // app.json declares a permission covering it" and never said whether this app did,
+    // so the agent found out by trying and reading a refusal.
+    const { systemPrompt } = await buildAppAgentProfile('devtools');
+
+    expect(systemPrompt).not.toContain('only if your app.json declares');
+    expect(systemPrompt).toContain('Your app.json reaches further into the same tree');
+    expect(systemPrompt).toContain('- `yaar://storage/`');
   });
 });

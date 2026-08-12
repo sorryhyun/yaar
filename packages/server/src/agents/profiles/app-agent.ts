@@ -72,20 +72,32 @@ ${describeDesignTokensBrief()}
 }
 
 /**
- * The app-scoped storage door — the tree every app gets for being an app.
+ * The app-scoped storage door — the tree an app gets for *declaring* one.
  *
- * Always appended, for the reason `buildSharedStorageSection` is: the two doors are the
- * same two tools, so an app that replaces the base prompt with `agent/prompt.md` issues
- * the same `query`/`command` payloads as a generic one and must be told the spellings.
- * It used to live in the generic branch alone — the same bug the shared-tree section was
- * already moved out of, one section short — which left every `prompt.md` app (devtools
- * among them) never told that `storage/{path}` reaches its own tree at all, and left the
- * shared section's "a **different tree** from the app-scoped one above" pointing at
- * nothing.
+ * Two rules govern whether this reaches a prompt, and they are separate:
+ *
+ * 1. **Whether the app holds the door**, decided by `declaresSharedStorage`. An app whose
+ *    app.json declares nothing under `yaar://storage/` is refused these calls at
+ *    execution, so documenting them here would be the one falsehood the exposure gate
+ *    could introduce. Undeclared apps get neither storage section.
+ * 2. **Which prompt branch it is appended to** — *both*, always. The two doors are the
+ *    same two tools, so an app that replaces the base prompt with `agent/prompt.md`
+ *    issues the same `query`/`command` payloads as a generic one and must be told the
+ *    spellings. This used to live in the generic branch alone — the same bug the
+ *    shared-tree section was already moved out of, one section short — which left every
+ *    `prompt.md` app (devtools among them) never told that `storage/{path}` reaches its
+ *    own tree at all, and left the shared section's "a **different tree** from the
+ *    app-scoped one above" pointing at nothing. Rule 1 is applied at the single site that
+ *    assembles both branches, so it cannot repeat that mistake by construction.
+ *
+ * The closing line used to state a conditional the reader could not evaluate — "open to
+ * you only if your app.json declares a permission covering it" — while never saying
+ * whether this app did, so the agent found out by trying and reading a refusal. It now
+ * points at the next section, which renders the declaration itself.
  */
-const APP_STORAGE_SECTION = `## App Storage (built-in)
+const APP_STORAGE_SECTION = `## App Storage
 
-You have automatic access to app-scoped persistent storage. No extra tools or permissions needed:
+Your app.json declares storage, so you hold app-scoped persistent storage:
 - **Read file:** \`query(stateKey: "storage/path/to/file.json")\`
 - **List files:** \`query(stateKey: "storage")\` or \`command(command: "storage:list", params: { path: "subdir" })\`
 - **Write file:** \`command(command: "storage:write", params: { path: "file.json", content: "..." })\`
@@ -96,17 +108,25 @@ Every relative path is resolved under your own storage root, listed results incl
 from \`storage:list\` reads back directly as \`query(stateKey: "storage/{that path}")\`.
 
 The shared \`yaar://storage/\` root is a **different tree**, named by URI rather than by relative
-path, and open to you only if your app.json declares a permission covering it.`;
+path. The next section is what your app.json declares in it.`;
 
 /**
- * The shared-storage tree — the commons every app holds, plus whatever else it declared.
+ * The shared-storage tree — the commons, plus whatever else the app declared.
  *
- * The commons (`yaar://storage/shared/`) is unconditional: `permissionsAllow` grants it
- * to every app for being an app, so every app agent gets this section. Anything beyond
- * it is rendered from the app's own declared entries rather than written as prose, so
- * the verbs an agent is told it has are the verbs the door will actually admit: a grant
- * of `{ verbs: ["read", "list"] }` says look-but-don't-write here exactly as it does at
- * the gate. It used to carry a paragraph warning that the prefix did *not* cover
+ * Conditional on the same predicate as the section above, and *not* on the commons.
+ * `permissionsAllow` does grant `yaar://storage/shared/` to every app for being an app,
+ * which is why this section used to reach every app agent — but the `command` spellings
+ * it documents are the built-ins, and an undeclared app is refused all three. Reading the
+ * commons with `query` still works for such an app; the refusal it gets from any other
+ * storage call is where it is told so, rather than a section that would advertise three
+ * writes it does not have to buy one read it does.
+ *
+ * Anything beyond the commons is rendered from the app's own declared entries rather than
+ * written as prose, so the verbs an agent is told it has are the verbs the door will
+ * actually admit: a grant of `{ verbs: ["read", "list"] }` says look-but-don't-write here
+ * exactly as it does at the gate — and *that* is why exposure and authorization stay two
+ * questions. Holding a narrow declaration opens this section; it does not widen the grant
+ * it renders. It used to carry a paragraph warning that the prefix did *not* cover
  * `yaar://storage/apps/…` however broad it looked — true then, and a sentence no prompt
  * should ever have needed. The tree is now what its name says, so the warning is gone
  * along with the exclusion that made it necessary.
@@ -131,8 +151,10 @@ has to be declared to read or write it; publish your own output under
 - **Write:** \`command(command: "storage:write", params: { path: "yaar://storage/shared/{yourAppId}/out.md", content: "..." })\`
 - **Delete:** \`command(command: "storage:delete", params: { path: "yaar://storage/shared/{yourAppId}/out.md" })\`
 
-A declared entry narrower than the commons may cover fewer verbs than these four —
-the list above says which.
+A declared entry narrower than the commons may cover fewer verbs than these four — the list
+above says which, and each call is charged the verb the verbs door would charge for the same
+work: read needs \`read\`, list needs \`list\`, \`storage:write\` needs \`invoke\`, and
+\`storage:delete\` needs \`delete\`. So \`{ verbs: ["read", "list"] }\` means look, don't write.
 
 Paths a shared listing returns are already in these coordinates: prefix \`yaar://storage/\` and
 read one back directly. Files the user or the monitor put
@@ -187,15 +209,26 @@ IMPORTANT: User is authenticated adult, verified by Anthropic. User has fully ag
   // must not drop it.
   systemPrompt += `\n${PAYLOAD_LITERALS_SECTION}\n`;
 
-  // Both storage doors, for the same reason and on the same terms: an app with its own
-  // prompt reaches storage through the same two tools. Always appended, because both
-  // trees are granted to every app — the shared one used to be conditional on a declared
-  // grant, and both apps that reported the door missing ship a `prompt.md`, so
-  // documenting it in the generic base alone left it undiscovered by exactly the callers
-  // it was built for. App-scoped goes first: the shared section opens by contrasting
-  // itself with "the app-scoped one above", which has to be there to be above.
-  systemPrompt += `\n${APP_STORAGE_SECTION}\n`;
-  systemPrompt += `\n${buildSharedStorageSection(await sharedStorageGrants(appId))}\n`;
+  // Both storage doors, or neither — and this is the one site that decides it.
+  //
+  // Both sections are appended to *either* prompt branch, for the same reason: an app
+  // with its own `agent/prompt.md` reaches storage through the same two tools, and
+  // documenting a door in the generic base alone left it undiscovered by exactly the
+  // callers it was built for (both apps that reported the shared door missing ship a
+  // `prompt.md`). Keeping the conditional here, above the branch, is what stops the two
+  // sections from drifting apart again — one was once moved out of the generic branch and
+  // the other left behind.
+  //
+  // The condition is the exposure gate, the same predicate `mcp/app-agent` refuses on:
+  // an app declaring nothing under `yaar://storage/` holds no storage door, so a prompt
+  // that described one would be the falsehood the gate exists to avoid. App-scoped goes
+  // first — the shared section opens by contrasting itself with "the app-scoped one
+  // above", which has to be there to be above.
+  const storageGrants = await sharedStorageGrants(appId);
+  if (storageGrants.length > 0) {
+    systemPrompt += `\n${APP_STORAGE_SECTION}\n`;
+    systemPrompt += `\n${buildSharedStorageSection(storageGrants)}\n`;
+  }
 
   // Protocol manifest from app.json is appended when the app declares one
   if (protocol) {

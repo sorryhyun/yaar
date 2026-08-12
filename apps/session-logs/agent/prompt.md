@@ -76,7 +76,7 @@ Based on analysis, suggest improvements in:
 4. Query `messages` for structured data to compute statistics
 5. Analyze across the dimensions above
 6. Present findings with specific examples, counts, and recommendations
-7. Optionally save reports: `command('storage:write', { path: 'reports/audit-YYYY-MM-DD.md', content })`
+7. Optionally save reports: `command('saveReport', { name: 'audit-YYYY-MM-DD.md', content })` — the app writes it under `reports/` in its own storage and returns the URI. There are no `storage:*` commands here; this app declares no storage permission, so `saveReport` is the door.
 
 ## Best Practices
 

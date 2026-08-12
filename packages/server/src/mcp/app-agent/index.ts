@@ -7,10 +7,13 @@
  * - command: send commands to the app via app protocol (also handles storage write/delete/list)
  * - relay: hand off a message to the monitor agent
  *
- * Storage access is built-in: query/command with storage paths are intercepted server-side
- * and resolved against the app's scoped storage (storage/apps/{appId}/...) automatically.
- * A path spelled as a `yaar://storage/...` URI names the *shared* tree instead, gated on
- * what the caller's app.json declares — see ./shared-storage.ts for why that door exists
+ * Storage access is *declared*, not built in. `query`/`command` intercept storage paths
+ * server-side and resolve a relative one against the app's scoped storage
+ * (storage/apps/{appId}/...), but only for an app whose app.json declares an entry under
+ * `yaar://storage/`; every other app is refused at the door and reaches storage through a
+ * command its own `protocol.json` declares. A path spelled as a `yaar://storage/...` URI
+ * names the *shared* tree instead, and is additionally permission-checked per verb — see
+ * ./shared-storage.ts for the exposure/authorization split, why the shared door exists,
  * and why it is a URI rather than a second relative spelling.
  *
  * Cross-app control: describe/query/command take an optional `appId`. Omitting it (or passing
@@ -111,6 +114,8 @@ import {
   sharedStorageUri,
   authorizeSharedStorage,
   sharedStorageHint,
+  declaresSharedStorage,
+  storageNotDeclared,
 } from './shared-storage.js';
 import { createLogger } from '../../observability/log.js';
 import { LARGE_RESULT_META } from '../result-size.js';
@@ -143,6 +148,29 @@ const SHARED_PATH_ERROR =
 function getAppId(windowState: WindowStateRegistry, windowId: string): string | undefined {
   return windowState.getAppIdForWindow(windowId);
 }
+
+/**
+ * The four descriptions the storage door used to appear in — and no longer does.
+ *
+ * `query` and `command` are the app *protocol* tools; storage is a door they happen to
+ * intercept. Documenting it here meant documenting it for every app, including the ones
+ * refused at execution, and the only fix from inside a description would have been to
+ * build all four per app: an appId resolution and an uncached `getAppMeta` read on every
+ * `app`-namespace MCP request, since the modern era builds a server per request.
+ *
+ * The conditional lives in the **system prompt** instead (`agents/profiles/app-agent.ts`),
+ * where it is computed once per agent, from the same predicate, and where the door is
+ * already described in full. So there is exactly one place that decides whether an agent
+ * is told about storage, and these descriptions say nothing about it at all — for a
+ * declaring app either, which is the point: two sources would be two things to keep true.
+ */
+export const APP_TOOL_DESCRIPTIONS = {
+  command: 'Send a command to the app. Specify the command name and optional parameters.',
+  commandParam: 'Command name to execute.',
+  query:
+    'Query the app state. Pass a stateKey to read specific state, or omit for the app manifest.',
+  queryParam: 'State key to query (omit for manifest).',
+} as const;
 
 /**
  * Tell the model a window was opened on its behalf.
@@ -244,6 +272,7 @@ async function sharedStorageCommand(
 
 export function registerAppAgentTools(server: McpServer): void {
   const getWindowState = (): WindowStateRegistry => getActiveSession().windowState;
+  const docs = APP_TOOL_DESCRIPTIONS; // storage is documented in the prompt, not here
 
   /**
    * Resolve which window a query/command should target.
@@ -319,21 +348,9 @@ export function registerAppAgentTools(server: McpServer): void {
   server.registerTool(
     'query',
     {
-      description:
-        'Query the app state. Pass a stateKey to read specific state, or omit for the app manifest. ' +
-        'Use stateKey starting with "storage/" to read from app-scoped storage (e.g. "storage/config.json"): ' +
-        'a relative path is always YOUR app\'s — "storage/x" resolves to yaar://apps/{yourApp}/storage/x. ' +
-        'The shared storage root is a separate tree, named by URI: "yaar://storage/x" reads it, and works ' +
-        'only if your app.json declares a permission covering that URI (a refusal says so by name).',
+      description: docs.query,
       inputSchema: {
-        stateKey: z
-          .string()
-          .optional()
-          .describe(
-            'State key to query (omit for manifest). Use "storage/{path}" to read app storage — ' +
-              'resolved under your own app — or "yaar://storage/{path}" for the shared storage root, ' +
-              'which needs a covering permission in your app.json.',
-          ),
+        stateKey: z.string().optional().describe(docs.queryParam),
         appId: z
           .string()
           .optional()
@@ -394,6 +411,14 @@ export function registerAppAgentTools(server: McpServer): void {
           return error("storage is app-scoped; you cannot read another app's storage.");
         const appId = getAppId(windowState, windowId);
         if (!appId) return error('could not resolve appId for this window.');
+        // The exposure gate. The relative spelling is gated as well as the `storage:*`
+        // commands, or `query("storage")` — which falls through to a listing below —
+        // would leave the door open for reads and make the gate cosmetic. The *shared*
+        // branch above is deliberately not gated: the commons is granted for being an
+        // app, and `authorizeSharedStorage` already refuses the rest of that tree by name.
+        if (!(await declaresSharedStorage(appId))) {
+          return error(storageNotDeclared(appId, `query("${args.stateKey}")`));
+        }
         const relativePath =
           args.stateKey === 'storage' ? '' : args.stateKey.slice('storage/'.length);
         const scoped = scopedAppStoragePath(appId, relativePath);
@@ -435,20 +460,9 @@ export function registerAppAgentTools(server: McpServer): void {
   server.registerTool(
     'command',
     {
-      description:
-        'Send a command to the app. Specify the command name and optional parameters. ' +
-        'Built-in storage commands: "storage:write" (params: {path, content}), ' +
-        '"storage:delete" (params: {path}), "storage:list" (params: {path?}). A relative storage ' +
-        "path — argument and listed result alike — is your own app's, so a path from storage:list " +
-        'reads back as query("storage/{path}"). A path spelled "yaar://storage/{path}" targets the ' +
-        'shared storage root instead (needs a covering permission in your app.json; write needs ' +
-        '"invoke", delete needs "delete"), and its listing answers in that same URI spelling.',
+      description: docs.command,
       inputSchema: {
-        command: z
-          .string()
-          .describe(
-            'Command name to execute. Use "storage:write", "storage:delete", or "storage:list" for app storage.',
-          ),
+        command: z.string().describe(docs.commandParam),
         params: z.record(z.string(), z.unknown()).optional().describe('Command parameters'),
         appId: z
           .string()
@@ -474,11 +488,18 @@ export function registerAppAgentTools(server: McpServer): void {
 
       // Intercept storage commands — a relative path is app-scoped, so only your own app;
       // a `yaar://storage/...` one names the shared tree and is gated on app.json.
+      //
+      // appId → exposure → spelling, in that order. The split on `namesSharedStorage`
+      // used to come first, which put the app-scoped branch beyond any check at all; the
+      // exposure gate governs both branches, so it has to be asked before the split.
       if (args.command.startsWith('storage:')) {
         if (args.appId)
           return error("storage is app-scoped; you cannot modify another app's storage.");
         const appId = getAppId(windowState, windowId);
         if (!appId) return error('could not resolve appId for this window.');
+        if (!(await declaresSharedStorage(appId))) {
+          return error(storageNotDeclared(appId, `command("${args.command}")`));
+        }
         const subCommand = args.command.slice('storage:'.length);
         const path = (args.params?.path as string) ?? '';
         if (namesSharedStorage(path)) {
