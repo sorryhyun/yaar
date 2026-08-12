@@ -72,3 +72,46 @@ describe('app agent base prompt', () => {
     expect(generic.systemPrompt).toContain('## Available Commands');
   });
 });
+
+/**
+ * Both storage doors are the same two tools, so replacing the base prompt must not
+ * drop either. The shared tree was already moved out of the generic branch once; the
+ * app-scoped one was left behind, so every `prompt.md` app — devtools among them —
+ * was never told that `storage/{path}` names a tree it holds unconditionally, and the
+ * shared section's opening contrast with "the app-scoped one above" pointed at nothing.
+ */
+describe('app agent storage doors', () => {
+  const APP_SCOPED = '## App Storage (built-in)';
+  const SHARED = '## Shared Storage (`yaar://storage/`)';
+
+  it('documents both doors for an app that replaces the base prompt', async () => {
+    const { systemPrompt } = await buildAppAgentProfile('devtools');
+
+    expect(systemPrompt).toContain(APP_SCOPED);
+    expect(systemPrompt).toContain(SHARED);
+    // The spellings, not just the heading — a section naming no tool call is not a door.
+    expect(systemPrompt).toContain('query(stateKey: "storage/path/to/file.json")');
+    expect(systemPrompt).toContain('command(command: "storage:list", params: { path: "subdir" })');
+  });
+
+  it('documents both doors for an app on the generic prompt', async () => {
+    const { systemPrompt } = await buildAppAgentProfile('memo');
+
+    expect(systemPrompt).toContain(APP_SCOPED);
+    expect(systemPrompt).toContain(SHARED);
+  });
+
+  it('states the app-scoped door before the shared one refers back to it', async () => {
+    for (const appId of ['devtools', 'memo']) {
+      const { systemPrompt } = await buildAppAgentProfile(appId);
+      expect(systemPrompt.indexOf(APP_SCOPED)).toBeLessThan(systemPrompt.indexOf(SHARED));
+    }
+  });
+
+  it('states each door exactly once', async () => {
+    const { systemPrompt } = await buildAppAgentProfile('memo');
+
+    expect(systemPrompt.split(APP_SCOPED).length - 1).toBe(1);
+    expect(systemPrompt.split(SHARED).length - 1).toBe(1);
+  });
+});

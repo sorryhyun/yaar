@@ -371,6 +371,18 @@ export function registerAppAgentTools(server: McpServer): void {
         }
         const result = await storageRead(path);
         if (!result.success) {
+          // A directory is the wrong shape for this verb, not a missing file — and this
+          // is how the tree gets walked, so dead-ending here made every subdirectory a
+          // wall. `query` listed the root and nothing below it: the read said "use list
+          // instead", naming a verb this door does not have, and descending meant
+          // knowing to switch to `command storage:list`. Fall through to the listing,
+          // re-authorized as `list` — a grant may cover one verb and not the other, so
+          // the recovery has to ask the gate again rather than ride the `read` check.
+          if (result.isDirectory) {
+            const listDenied = await authorizeSharedStorage(appId, path, 'list');
+            if (listDenied) return error(listDenied);
+            return okJson({ uri, ...(await storageList(path)) });
+          }
           return error(`${result.error ?? 'read failed.'} (resolved to ${uri})`);
         }
         return ok(result.content ?? '');
@@ -394,6 +406,13 @@ export function registerAppAgentTools(server: McpServer): void {
         }
         const result = await storageRead(scoped);
         if (!result.success) {
+          // Descend rather than dead-end, as on the shared branch above. No gate to
+          // re-ask here: app-scoped storage is granted for being an app, so the same
+          // caller that may read a file may list the folder holding it.
+          if (result.isDirectory) {
+            const listed = await storageList(scoped);
+            return okJson({ uri, ...appRelativeEntries(appId, listed) });
+          }
           const hint = await sharedStorageHint(appId, relativePath, 'read');
           return error(`${result.error ?? 'read failed.'} (resolved to ${uri})${hint}`);
         }

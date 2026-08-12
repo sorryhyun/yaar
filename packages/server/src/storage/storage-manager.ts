@@ -228,7 +228,11 @@ export async function storageRead(
       return { success: false, error: `File not found: ${filePath}` };
     }
     if (fileStat.isDirectory()) {
-      return { success: false, error: `"${filePath}" is a directory. Use list instead.` };
+      return {
+        success: false,
+        isDirectory: true,
+        error: `"${filePath}" is a directory. Use list instead.`,
+      };
     }
 
     // PDFs. View-first: by default return metadata only and let the caller steer the agent
