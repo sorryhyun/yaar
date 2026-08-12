@@ -34,6 +34,7 @@ import { initCompiler } from '../config.js';
 import { APP_MOUNT_ID } from '../guards/mount-guard.js';
 import { prebundleLibrary } from '../bundled/prebundle.js';
 import { defineApp } from '../shims/yaar/define-app.js';
+import { getAppId } from '../shims/yaar/app-identity.js';
 import { AppCommandError } from '../shims/yaar/ui.js';
 
 // Real Bun.build()s and real tsc runs.
@@ -166,6 +167,15 @@ describe('defineApp registration', () => {
     // The definition comes back unchanged — the default export stays inspectable,
     // which is what lets the build read it.
     expect(definition.id).toBe('memo');
+  });
+
+  test('records the app id, which is what names this app’s directory in the commons', () => {
+    // `sharedStorage` derives `shared/{appId}` from this and throws without it, so the
+    // wiring is load-bearing at runtime while being invisible to every other assertion
+    // here — a dropped `setAppId` call would leave the whole suite green.
+    installStubs();
+    defineApp({ id: 'anima', name: 'Anima' });
+    expect(getAppId()).toBe('anima');
   });
 
   test('omits fields the app did not declare rather than sending undefined', () => {

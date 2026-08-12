@@ -84,12 +84,55 @@ function makeEl(tag: string): FakeEl {
   cb();
   return 0;
 };
+/**
+ * The subset of `storageRefPath` (iframe-scripts/storage-sdk.ts) that `sharedStorage`
+ * builds on. Stubbed with the real folding semantics rather than as an identity function:
+ * what `sharedStorage` does is decide what to do *after* a reference is folded, and a
+ * stub that folded nothing would pass while the real thing nested a path twice.
+ */
+function storageRefPath(ref: unknown): string | null {
+  if (typeof ref !== 'string') return null;
+  let p = ref.trim();
+  if (!p) return null;
+  const appScoped = /^yaar:\/\/apps\/([^/]+)\/storage(?:\/|$)/.exec(p);
+  if (appScoped) {
+    const rest = p.slice(appScoped[0].length);
+    p = 'apps/' + appScoped[1] + (rest ? '/' + rest : '');
+  } else if (/^yaar:\/\/storage(?:\/|$)/.test(p)) {
+    p = p.slice('yaar://storage'.length);
+  } else if (p.startsWith('yaar://')) {
+    return null;
+  } else if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(p)) {
+    return null;
+  }
+  p = p.replace(/^\/+/, '');
+  return p.split('/').includes('..') ? null : p;
+}
+
+/** Every `window.yaar.storage` call, in order — what `sharedStorage` scoped and passed on. */
+const storageCalls: { method: string; path: string; extra?: unknown }[] = [];
+
 (globalThis as any).window = {
   yaar: {
     invoke: (uri: string, payload: unknown) => invokeImpl(uri, payload),
     read: (uri: string) => readImpl(uri),
     delete: async () => {},
     list: async () => [],
+    storage: {
+      path: storageRefPath,
+      save: async (path: string, data: unknown) =>
+        void storageCalls.push({ method: 'save', path, extra: data }),
+      read: async (path: string, options?: unknown) => {
+        storageCalls.push({ method: 'read', path, extra: options });
+        return 'contents';
+      },
+      list: async (path: string) => {
+        storageCalls.push({ method: 'list', path });
+        return [{ path: path + '/a.png', isDirectory: false }];
+      },
+      remove: async (path: string) => void storageCalls.push({ method: 'remove', path }),
+      url: (path: string) => '/api/storage/' + path + '?__yaar_token=t',
+    },
   },
 };
 
@@ -104,9 +147,24 @@ const {
   createCollapsiblePanel,
   createPersistedSignal,
   createProtocolContext,
+  sharedStorage,
   showConfirm,
   showPrompt,
 } = await import('../shims/yaar/index.js');
+const { setAppId } = await import('../shims/yaar/app-identity.js');
+
+/**
+ * The app id is module-global and empty exactly once — here, before anything registers.
+ * `setAppId('')` cannot recreate the state (it ignores an empty id on purpose), so the
+ * pre-registration failure has to be captured at load or not at all.
+ */
+let preRegistrationFailure: string | null = null;
+try {
+  sharedStorage.path('x.png');
+} catch (e) {
+  preRegistrationFailure = (e as Error).message;
+}
+setAppId('anima');
 
 /** Lets microtask-scheduled saves (`void trySave(...)`) settle. */
 const tick = () => new Promise((r) => setTimeout(r, 0));
@@ -543,5 +601,162 @@ describe('createProtocolContext', () => {
     set(context);
     set(context);
     expect(get()).toBe(context);
+  });
+});
+
+/**
+ * `sharedStorage` replaced three hand-rolled spellings of "my directory in the commons" —
+ * anima's `const SHARED_DIR = 'shared/anima'`, lab's `sharedPath()`, slides-lite's
+ * `SHARED_PREFIX` — so what is worth pinning is what those three disagreed about: whether
+ * a subdirectory survives, what happens to a name that already starts with `shared/`, and
+ * where the app id comes from.
+ *
+ * The refusals are here for the same reason. Nesting a path the caller meant for `storage`
+ * (`shared/anima/apps/anima/…`) writes real bytes somewhere nobody will look, and a name
+ * resolved before `defineApp` produces `shared//x.png`, which the server accepts. Both
+ * used to be silent.
+ */
+describe('sharedStorage naming', () => {
+  beforeEach(() => {
+    storageCalls.length = 0;
+    setAppId('anima');
+  });
+
+  test('a bare name lands in this app’s commons directory', () => {
+    expect(sharedStorage.dir).toBe('shared/anima');
+    expect(sharedStorage.path('final.png')).toBe('shared/anima/final.png');
+    expect(sharedStorage.uri('final.png')).toBe('yaar://storage/shared/anima/final.png');
+  });
+
+  test('a name is a subpath, not a flattened filename', () => {
+    // anima flattened `/` to `-`; lab kept subdirectories. Subdirectories win — the
+    // commons is a tree, and a producer with 200 renders wants to organize them.
+    expect(sharedStorage.path('renders/final.png')).toBe('shared/anima/renders/final.png');
+  });
+
+  test('a leading slash is ignored rather than making an empty segment', () => {
+    expect(sharedStorage.path('/final.png')).toBe('shared/anima/final.png');
+  });
+
+  test('a path this app’s own directory already spells out round-trips', () => {
+    // What `list()` hands back, and the obvious thing to feed straight to `url()`.
+    expect(sharedStorage.path('shared/anima/final.png')).toBe('shared/anima/final.png');
+    expect(sharedStorage.path('yaar://storage/shared/anima/final.png')).toBe(
+      'shared/anima/final.png',
+    );
+  });
+
+  test('no argument names the directory itself', () => {
+    expect(sharedStorage.path()).toBe('shared/anima');
+  });
+});
+
+describe('sharedStorage refusals', () => {
+  beforeEach(() => setAppId('anima'));
+
+  test('another app’s directory in the commons', () => {
+    expect(() => sharedStorage.path('shared/lab/chart.png')).toThrow(/another app's directory/);
+  });
+
+  test('a path in another top-level tree is not nested under the commons', () => {
+    expect(() => sharedStorage.path('apps/anima/generated/x.png')).toThrow(/"apps\/" tree/);
+    expect(() => sharedStorage.path('yaar://apps/self/storage/x.png')).toThrow(/"apps\/" tree/);
+    expect(() => sharedStorage.path('mounts/lectures/x.mp4')).toThrow(/"mounts\/" tree/);
+  });
+
+  test('traversal, and a reference that is not storage at all', () => {
+    expect(() => sharedStorage.path('../lab/chart.png')).toThrow(/not a storage path/);
+    expect(() => sharedStorage.path('https://example.com/x.png')).toThrow(/not a storage path/);
+  });
+
+  test('a name resolved before defineApp explains itself', () => {
+    expect(preRegistrationFailure).toMatch(/no id yet/);
+    expect(preRegistrationFailure).toMatch(/defineApp/);
+  });
+});
+
+describe('sharedStorage operations', () => {
+  beforeEach(() => {
+    storageCalls.length = 0;
+    setAppId('anima');
+  });
+
+  test('save, read, remove and url all scope to the directory', async () => {
+    await sharedStorage.save('final.png', 'bytes');
+    await sharedStorage.read('final.png');
+    await sharedStorage.readBlob('final.png');
+    await sharedStorage.remove('final.png');
+
+    expect(storageCalls.map((c) => [c.method, c.path])).toEqual([
+      ['save', 'shared/anima/final.png'],
+      ['read', 'shared/anima/final.png'],
+      ['read', 'shared/anima/final.png'],
+      ['remove', 'shared/anima/final.png'],
+    ]);
+    expect(storageCalls[2].extra).toEqual({ as: 'blob' });
+    expect(sharedStorage.url('final.png')).toBe(
+      '/api/storage/shared/anima/final.png?__yaar_token=t',
+    );
+  });
+
+  test('list defaults to the directory itself', async () => {
+    await sharedStorage.list();
+    await sharedStorage.list('renders');
+    expect(storageCalls.map((c) => c.path)).toEqual(['shared/anima', 'shared/anima/renders']);
+  });
+});
+
+describe('sharedStorage.publish', () => {
+  let copies: { uri: string; payload: unknown }[] = [];
+
+  beforeEach(() => {
+    storageCalls.length = 0;
+    copies = [];
+    setAppId('anima');
+    invokeImpl = async (uri, payload) => {
+      copies.push({ uri, payload });
+      return {};
+    };
+  });
+
+  test('copies server-side and reports where it landed', async () => {
+    const result = await sharedStorage.publish('yaar://apps/anima/storage/generated/x.png', {
+      as: 'dragon.png',
+    });
+
+    expect(copies).toEqual([
+      {
+        uri: 'yaar://storage/shared/anima/dragon.png',
+        payload: { action: 'copy', from: 'yaar://apps/anima/storage/generated/x.png' },
+      },
+    ]);
+    expect(result).toEqual({
+      path: 'shared/anima/dragon.png',
+      uri: 'yaar://storage/shared/anima/dragon.png',
+      name: 'dragon.png',
+    });
+    // The bytes never came back through the iframe — that is the whole point of `publish`.
+    expect(storageCalls).toEqual([]);
+  });
+
+  test('a yaar:// source is passed through unchanged so `self` survives', async () => {
+    await sharedStorage.publish('yaar://apps/self/storage/generated/x.png');
+    // Folding it to a root-relative path and rebuilding would yield
+    // `yaar://storage/apps/self/x.png`, naming a literal directory called `self`:
+    // `resolveSelf` expands only the `yaar://apps/self/…` dialect.
+    expect((copies[0].payload as { from: string }).from).toBe(
+      'yaar://apps/self/storage/generated/x.png',
+    );
+  });
+
+  test('the name defaults to the source’s basename', async () => {
+    const result = await sharedStorage.publish('yaar://apps/anima/storage/generated/x.png');
+    expect(result.path).toBe('shared/anima/x.png');
+  });
+
+  test('a source that is not stored bytes is refused', async () => {
+    await expect(sharedStorage.publish('https://example.com/x.png')).rejects.toThrow(
+      /not a stored file/,
+    );
   });
 });

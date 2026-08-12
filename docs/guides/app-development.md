@@ -1179,6 +1179,39 @@ await appStorage.remove('data.json');
 
 > **`readBlob()` on a PDF does not return the PDF bytes.** `readBlob()` takes no options, so the server's page-rasterization opt-in (`pdfPages`) can never fire through this path; the default branch returns the ASCII string `PDF document with N page(s), N bytes.` wrapped in a Blob (`packages/server/src/storage/storage-manager.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
 
+### Publishing for other apps (`sharedStorage`)
+
+`appStorage` is private — nothing else can read it. When an app *produces* something
+other apps should be able to pick up (a render, an export, a chart), that goes in the
+commons: `yaar://storage/shared/{appId}/`, granted to every app for being an app, one
+directory per producing app. `sharedStorage` is that directory, named from the app's own
+id so it isn't a `const SHARED_DIR = 'shared/anima'` in every app that publishes:
+
+```typescript
+import { sharedStorage } from '@bundled/yaar';
+
+// Copy a file already in storage into the commons — the copy happens server-side.
+const { uri } = await sharedStorage.publish('yaar://apps/self/storage/generated/x.png', {
+  as: 'dragon.png',
+});                                   // → yaar://storage/shared/anima/dragon.png
+
+// Or write straight there. Names are subpaths, so subdirectories work.
+await sharedStorage.save('renders/final.png', blob);
+
+const files = await sharedStorage.list();       // this app's commons directory
+img.src = sharedStorage.url('renders/final.png'); // carries the iframe token
+```
+
+> **Prefer `publish()` over read-then-`save()`.** `from` is a reference, not bytes, so the
+> file never travels through the iframe — and once an agent asks about it, never through a
+> model context. A 550KB PNG round-tripped as base64 costs that on every hop.
+
+Names are relative to the app's own directory; a name naming *another* app's directory, or
+another top-level tree (`apps/`, `mounts/`, …), is refused rather than nested inside this
+one. Use the raw `storage` API to reach those deliberately — that is also what to use when
+you hold a path someone *else* produced. Every method needs the app's id, so call them
+after `defineApp({ id })` has run, not at module scope.
+
 ### Never swallow a failed save
 
 A `try { await appStorage.save(...) } catch { /* ignore */ }` around an autosave turns

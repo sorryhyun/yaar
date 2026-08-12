@@ -728,11 +728,21 @@ interface YaarStorageReadOptions {
  * (an `https://` URL, a `data:` URL, a path containing `..`) is refused by name.
  * Use `storagePath()` to test a reference instead of catching.
  */
+/** One entry from a storage listing. Paths are storage-root-relative. */
+interface YaarStorageEntry {
+  path: string;
+  isDirectory: boolean;
+  /** Bytes. `0` for directories. */
+  size?: number;
+  /** ISO timestamp of the last write. */
+  modifiedAt?: string;
+}
+
 interface YaarStorage {
   save(path: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<{ ok: boolean }>;
   read(path: string, options?: YaarStorageReadOptions): Promise<unknown>;
   /** Omit (or pass an empty string) for the storage root. */
-  list(dirPath?: string): Promise<string[]>;
+  list(dirPath?: string): Promise<YaarStorageEntry[]>;
   remove(path: string): Promise<{ ok: boolean }>;
   /** A URL an `<img src>`/`<video>`/CSS `url()` can load — carries the iframe token. */
   url(path: string): string;
@@ -783,6 +793,61 @@ interface YaarAppStorage {
   readBlob(path: string): Promise<Blob>;
   list(dirPath?: string): Promise<YaarAppStorageEntry[]>;
   remove(path: string): Promise<void>;
+}
+
+// -- The commons, scoped to this app's directory in it --
+
+interface YaarPublishOptions {
+  /** Name for the file in the commons. Defaults to `from`'s own basename. */
+  as?: string;
+}
+
+interface YaarPublishResult {
+  /** Root-relative path: `shared/{appId}/{name}`. */
+  path: string;
+  /** The same file as a `yaar://storage/…` URI. */
+  uri: string;
+  /** The name inside this app's commons directory. */
+  name: string;
+}
+
+/**
+ * `yaar://storage/shared/{appId}/…` — the tree apps publish artifacts to for each other,
+ * granted to every app for being an app, and scoped here to the directory this app owns.
+ *
+ * Use it when the app is producing something for others to find; use `appStorage` for
+ * files nobody else should see, and the flat `storage` API when you hold a path someone
+ * else produced. Names are subpaths (`'renders/final.png'`), a leading slash is ignored
+ * and `..` is refused; a name that already spells out this app's own commons directory is
+ * taken as-is rather than nested twice, so a path from `list()` round-trips.
+ *
+ * Every method needs the app's id, so call them after `defineApp({ id })` has run — from
+ * a command, an event handler or the view, not at module scope.
+ */
+interface YaarSharedStorage {
+  /** This app's directory in the commons, as a root-relative path: `shared/{appId}`. */
+  readonly dir: string;
+  /** A name inside this app's commons directory, as a root-relative path. */
+  path(name?: string): string;
+  /** A name inside this app's commons directory, as a `yaar://storage/…` URI. */
+  uri(name?: string): string;
+  /** A URL an `<img src>`/`<video>`/CSS `url()` can load — carries the iframe token. */
+  url(name: string): string;
+  save(name: string, data: string | Blob | ArrayBuffer | Uint8Array): Promise<void>;
+  read(name: string, options?: YaarStorageReadOptions): Promise<unknown>;
+  /** Read as a Blob — the form an `<img>`, a canvas or `mediabunny` wants. */
+  readBlob(name: string): Promise<Blob>;
+  /** List this app's commons directory, or a subdirectory of it. */
+  list(subdir?: string): Promise<YaarStorageEntry[]>;
+  remove(name: string): Promise<void>;
+  /**
+   * Copy a file already in storage into this app's commons directory.
+   *
+   * The copy happens **server-side** — `from` is a reference, not bytes, so publishing a
+   * 500KB image does not route it through the iframe (or, once an agent asks about it,
+   * through a model context). `from` accepts any spelling of a stored file.
+   */
+  publish(from: string, options?: YaarPublishOptions): Promise<YaarPublishResult>;
 }
 
 // -- App-scoped database (SQLite collections) --
@@ -1096,8 +1161,17 @@ declare module '@bundled/yaar' {
     opts?: { kinds?: string[] },
   ): Promise<() => void>;
 
-  /** App-scoped storage (wraps yaar://apps/self/storage/ verbs). */
+  /** App-scoped storage (wraps yaar://apps/self/storage/ verbs). Private to this app. */
   export const appStorage: YaarAppStorage;
+
+  /**
+   * The commons — `yaar://storage/shared/{appId}/…` — scoped to this app's directory.
+   *
+   * The tree apps publish artifacts to for each other, so that a render from one app is
+   * a build-time asset in another. `publish()` copies server-side, without routing the
+   * bytes through the iframe. Needs `defineApp({ id })` to have run.
+   */
+  export const sharedStorage: YaarSharedStorage;
 
   /**
    * App-scoped SQLite database (wraps yaar://apps/self/db/ verbs).

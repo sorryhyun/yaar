@@ -40,6 +40,9 @@ export type { StreamFrame } from './verbs.js';
 export { appStorage } from './app-storage.js';
 export type { YaarAppStorageEntry } from './app-storage.js';
 
+// ── The commons, scoped to this app's directory in it ────────────
+export { sharedStorage } from './shared-storage.js';
+
 // ── App-scoped database ─────────────────────────────────────────
 export { appDb } from './app-db.js';
 

@@ -49,6 +49,8 @@ src/
     │   ├── index.ts       # Barrel — the entire @bundled/yaar public surface
     │   ├── verbs.ts       # window.yaar global, read/invoke/list/describe/del/subscribe, stream, httpFetch
     │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
+    │   ├── shared-storage.ts # sharedStorage — the commons, scoped to shared/{appId}/ (+ publish, a server-side copy)
+    │   ├── app-identity.ts # setAppId/getAppId — the app's own id, recorded by defineApp for shared-storage.ts
     │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)
     │   ├── dialogs.ts     # showConfirm / showPrompt (no showAlert — showToast covers it)
     │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, tryToast, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
