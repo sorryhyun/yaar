@@ -4,7 +4,9 @@
  * The commons, scoped to this app's directory in it.
  *
  * Two storage trees are reachable without declaring any permission. `appStorage` is the
- * first — `yaar://apps/self/storage/…`, private to this app, readable by nobody else.
+ * first — `yaar://apps/self/storage/…`, scoped to this app, reachable by no other installed
+ * app (it is still a plain subtree of storage, `yaar://storage/apps/{appId}/`, which the user
+ * and agents see).
  * This is the second: `yaar://storage/shared/{appId}/…`, the tree apps publish artifacts
  * to for each other, granted to every app for being an app.
  *

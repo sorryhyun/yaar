@@ -12,7 +12,9 @@ PROJECT_ROOT/
 │   ├── temp/                    # Dropped images (auto WebP conversion)
 │   ├── files/                   # Uploaded files
 │   ├── mounts/                  # Virtual — maps to host directories
-│   └── {app-specific}/          # App data
+│   ├── shared/{appId}/          # The commons — every app may read and write it
+│   └── apps/{appId}/            # Per-app storage + data.db; also spelled
+│                                #   yaar://apps/{appId}/storage/ — same files, not a separate store
 └── config/                      # Configuration (git-ignored)
     ├── {appId}.json             # App credentials / config
     ├── mounts.json              # Mount definitions
@@ -433,7 +435,7 @@ Apps access storage via `@bundled/yaar` imports. The underlying SDK is injected 
 
 | Import | Tree | Who else can read it |
 |---|---|---|
-| `appStorage` | `apps/self/…` | nobody — private to this app |
+| `appStorage` | `apps/self/…` | no other installed app — but it is a plain subtree, addressable as `yaar://storage/apps/{appId}/`, so the user, the Storage app and agents all see it |
 | `sharedStorage` | `shared/{appId}/…` | every app, and agents |
 | `storage` | the whole storage root | — it is the raw, unscoped API |
 

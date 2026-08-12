@@ -358,7 +358,7 @@ Show a modal confirmation dialog.
 |-------|------|-------------|
 | `icon` | `string` | Single emoji, rendered as the row's icon |
 | `title` | `string` | The capability in plain language: "Read and write your files" |
-| `detail` | `string?` | Optional qualifier: "Private to this app" |
+| `detail` | `string?` | Optional qualifier: "Requests to allowed domains" |
 | `raw` | `string?` | The literal grant this describes (`yaar://storage/`, `yaar-web`), shown demoted |
 | `warn` | `boolean?` | Broad or privileged — rendered with a warning accent |
 

@@ -923,7 +923,9 @@ config/
 
 ## 앱 전용 스토리지
 
-각 앱은 `storage/apps/{appId}/`에 격리된 파일 저장소를 가집니다. 앱 코드에서는 `self`를 약칭으로 사용할 수 있으며, 서버가 iframe 토큰에서 실제 appId로 변환합니다.
+각 앱은 `storage/apps/{appId}/`에 자기 폴더를 가집니다. 앱 코드에서는 `self`를 약칭으로 사용할 수 있으며, 서버가 iframe 토큰에서 실제 appId로 변환합니다.
+
+**격리된 별도 저장소가 아니라, 범위가 좁혀진 하위 트리입니다.** `storage/apps/{appId}/`는 YAAR 스토리지의 평범한 하위 트리이므로 `yaar://apps/self/storage/x.json`과 `yaar://storage/apps/{appId}/x.json`은 같은 파일의 두 가지 표기입니다. 이 범위가 보장하는 것은 **설치된 다른 앱이 접근할 수 없다**는 것뿐입니다 — `yaar://storage/`를 선언한 마켓 앱은 설치 시점에 공유 트리로 제한됩니다(`http/uri-match.ts`의 `capForeignAppStorage`). 반면 비밀은 아닙니다: 사용자는 디스크에서 폴더로 보고, Storage 앱을 비롯해 YAAR와 함께 배포되는 앱은 전체 트리를 가지며, 모니터/세션 에이전트는 `yaar://storage/apps/{appId}/`로 직접 접근합니다. 앱 자신의 상태를 두는 곳이지, 아무도 들여다보지 않을 것이라 기대하고 무언가를 숨겨 두는 곳은 아닙니다.
 
 ### 앱 코드에서 (`@bundled/yaar`)
 

@@ -288,7 +288,7 @@ export interface CapabilityLine {
   icon: string;
   /** The capability in plain language: "Read and write your files". */
   title: string;
-  /** Optional qualifier: "Private to this app". */
+  /** Optional qualifier: "Requests to allowed domains". */
   detail?: string;
   /** The literal grant this describes (`yaar://storage/`, `yaar-web`), shown demoted. */
   raw?: string;

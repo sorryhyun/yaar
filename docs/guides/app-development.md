@@ -1143,7 +1143,17 @@ config/
 
 ## App-Scoped Storage
 
-Each app has isolated file storage at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token.
+Each app gets its own folder at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token.
+
+**It is a scoped tree, not a hidden one.** `storage/apps/{appId}/` is a plain subtree of YAAR
+storage, so `yaar://apps/self/storage/x.json` and `yaar://storage/apps/{appId}/x.json` are two
+spellings of the same file. What the scope buys is that **no other installed app can reach it**: a
+market app declaring `yaar://storage/` is capped to the shared tree at install time
+(`capForeignAppStorage` in `http/uri-match.ts`), so it keeps the commons and loses the reach into
+`apps/`. What it does *not* buy is secrecy — the user sees a folder on disk, the Storage app and any
+other app shipped with YAAR hold the whole tree, and monitor/session agents address it directly as
+`yaar://storage/apps/{appId}/`. Put your app's own state here; don't put anything here on the theory
+that nothing else will look.
 
 ### From App Code (`@bundled/yaar`)
 
@@ -1181,7 +1191,7 @@ await appStorage.remove('data.json');
 
 ### Publishing for other apps (`sharedStorage`)
 
-`appStorage` is private — nothing else can read it. When an app *produces* something
+`appStorage` is yours — no other installed app can read it. When an app *produces* something
 other apps should be able to pick up (a render, an export, a chart), that goes in the
 commons: `yaar://storage/shared/{appId}/`, granted to every app for being an app, one
 directory per producing app. `sharedStorage` is that directory, named from the app's own
@@ -1516,14 +1526,14 @@ const published = await storage.list('shared');
 
 Three properties follow from it being the commons rather than a grant:
 
-- **It is not private.** Any app can read, overwrite or delete anything under `shared/`.
-  Data that must stay yours belongs in app storage (`appStorage`), which no other app can
-  reach. The per-producer directory is tidiness, not a boundary.
+- **It is not scoped to anyone.** Any app can read, overwrite or delete anything under
+  `shared/`. Data that must stay yours belongs in app storage (`appStorage`), which no other
+  *installed* app can reach. The per-producer directory is tidiness, not a boundary.
 - **It is a staging area.** The user prunes it; a file published last week may be gone.
   An app that needs an asset at runtime should keep its own copy.
-- **It does not widen anything else.** `storage/apps/{id}/` is a different subtree, so the
-  commons never reaches another app's private files — that still takes a declared
-  `permissions` entry, and for an installed app it is capped to the shared tree anyway.
+- **It does not widen anything else.** `storage/apps/{id}/` is a sibling subtree, so the
+  commons never reaches another app's own tree — that still takes a declared `permissions`
+  entry, and for an installed app it is capped to the shared tree anyway.
 
 ### One file, four names (`storagePath`)
 

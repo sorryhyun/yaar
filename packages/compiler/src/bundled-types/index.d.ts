@@ -816,7 +816,7 @@ interface YaarPublishResult {
  * granted to every app for being an app, and scoped here to the directory this app owns.
  *
  * Use it when the app is producing something for others to find; use `appStorage` for
- * files nobody else should see, and the flat `storage` API when you hold a path someone
+ * files no other app should see, and the flat `storage` API when you hold a path someone
  * else produced. Names are subpaths (`'renders/final.png'`), a leading slash is ignored
  * and `..` is refused; a name that already spells out this app's own commons directory is
  * taken as-is rather than nested twice, so a path from `list()` round-trips.
@@ -1161,7 +1161,11 @@ declare module '@bundled/yaar' {
     opts?: { kinds?: string[] },
   ): Promise<() => void>;
 
-  /** App-scoped storage (wraps yaar://apps/self/storage/ verbs). Private to this app. */
+  /**
+   * App-scoped storage (wraps yaar://apps/self/storage/ verbs). Scoped to this app: no other
+   * installed app can reach it. It is still a plain subtree of YAAR storage
+   * (`yaar://storage/apps/{appId}/`), visible to the user, the Storage app and agents.
+   */
   export const appStorage: YaarAppStorage;
 
   /**
