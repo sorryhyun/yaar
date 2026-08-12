@@ -10,7 +10,6 @@ import {
   gitCommands,
   previewCommands,
   introspectCommands,
-  sharedCommands,
   httpCommands,
 } from './protocol/index';
 
@@ -29,7 +28,6 @@ export default defineApp({
     ...gitCommands,
     ...previewCommands,
     ...introspectCommands,
-    ...sharedCommands,
     ...httpCommands,
   },
   view: AppShell,

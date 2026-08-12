@@ -197,7 +197,9 @@ The bundler inlines the bytes into `dist/index.html`, so no request is made at r
 
 ### Assets the user made in another app
 
-When the user says *"the dragon image I generated in anima"* or *"the logo I edited"*, it is almost certainly in the shared tree: `listShared`, then `importAsset`, then compile — inlined like any other asset. If `listShared` comes back empty the file exists but was never published (app storage is private to its owner): ask the user to publish it from the producing app, or `relay` to the monitor, which can reach both trees. **Never ask another app for the bytes** — `exportDataUrl` and anything shaped like it pushes a several-hundred-KB base64 string through the conversation, where publish + import moves the same bytes server-side.
+When the user says *"the dragon image I generated in anima"* or *"the logo I edited"*, it is almost certainly in the shared tree — `yaar://storage/shared/{producer}/`, one directory per producing app. List it with `storage:list` (or `inspectUri` with `list: true`), then `copyFile` the `yaar://storage/...` URI into the project and compile; it inlines like any other asset. Nothing there means the file exists but was never published (app storage is private to its owner): ask the user to publish it from the producing app, or `relay` to the monitor, which can reach both trees.
+
+**A `yaar://` prefix on `copyFile`'s `from` is what makes it an import** — every other spelling is a path inside the project, so `shared/anima/dragon.png` copies from the project and fails. The import re-encodes rasters to WebP by default and hands back the `import` line to paste; pass `recompress: false` for an SVG, an animated GIF, or anything that must stay lossless. **Never ask another app for the bytes** — `exportDataUrl` and anything shaped like it pushes a several-hundred-KB base64 string through the conversation, where publishing and importing moves the same bytes server-side.
 
 ## App Protocol & Verb API
 

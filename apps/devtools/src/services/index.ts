@@ -12,6 +12,7 @@ export {};
 export * from './fs-walk';
 export * from './changes';
 export * from './files';
+export * from './storage-import';
 export * from './projects';
 export * from './console';
 export * from './grep';

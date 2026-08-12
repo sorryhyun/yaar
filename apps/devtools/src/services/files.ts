@@ -1,6 +1,6 @@
 export {};
 import { batch } from '@bundled/solid-js';
-import { appStorage } from '@bundled/yaar';
+import { appStorage, blobToDataUrl, errMsg } from '@bundled/yaar';
 import {
   activeProject,
   setActiveProject,
@@ -13,7 +13,7 @@ import {
   setStatusText,
   setTypecheckState,
 } from '../core';
-import { projectPath, isImagePath, isBinaryPath } from '../lib/paths';
+import { projectPath, isImagePath, isBinaryPath, relativizeProjectPaths } from '../lib/paths';
 import { applyEdits, formatRemoved, type EditSpec } from '../lib/edits';
 import { listAllFiles } from './fs-walk';
 import { recordChange } from './changes';
@@ -253,16 +253,97 @@ export async function editFile(
   };
 }
 
-export async function copyFile(from: string, to: string): Promise<void> {
+/**
+ * Read a source file for a copy, naming the path the caller used when it is missing.
+ *
+ * The storage error names the file by its real location
+ * (`apps/devtools/projects/1786…/src/x.ts`), which is both unpastable — every input in
+ * this protocol is project-relative — and a publication of where the sandbox lives on
+ * the host.
+ */
+async function readCopyText(
+  projectId: string,
+  path: string,
+): Promise<string> {
+  try {
+    const raw = await appStorage.read(projectPath(projectId, path));
+    return typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
+  } catch {
+    throw new Error(`File not found: ${path}`);
+  }
+}
+
+/**
+ * Copy a file's bytes, for the files that are not text.
+ *
+ * Reading one as text and writing the string back corrupted every image it touched, so
+ * the bytes travel as bytes: `readBlob`, then `blobToDataUrl` for the base64 `save`
+ * wants. Non-image binaries round-trip exactly this way.
+ *
+ * Images cannot, and no client-side read can fix it: **storage serves images re-encoded
+ * to WebP**. A 408,746-byte PNG reads back as a 40,472-byte `image/webp` blob through
+ * `readBinary` and `readBlob` alike. So an image copy yields WebP, and the destination
+ * is renamed to match rather than left claiming to be a PNG.
+ *
+ * A server-side `action: 'copy'` would avoid the read entirely — it is how a storage
+ * *import* stays byte-exact — but it cannot express this case. `from` does not expand
+ * `self`, and an app's own storage is reachable by no other spelling: both
+ * `yaar://apps/{id}/storage/` and `yaar://storage/apps/{id}/` are refused, the flat-root
+ * grant deliberately excluding `apps/`.
+ */
+async function copyBytes(projectId: string, from: string, to: string): Promise<string> {
+  try {
+    const blob = await appStorage.readBlob(projectPath(projectId, from));
+    // Storage serves images re-encoded to WebP, so a .png read back is WebP bytes and
+    // writing them under the original name would produce a file whose contents and
+    // extension disagree — the corruption this function exists to end, one layer up.
+    // The destination follows the bytes instead, and the caller is told where it landed.
+    const dest =
+      isImagePath(from) && blob.type === 'image/webp' && !/\.webp$/i.test(to)
+        ? to.replace(/\.[^.]+$/, '.webp')
+        : to;
+    const dataUrl = await blobToDataUrl(blob);
+    await appStorage.save(projectPath(projectId, dest), dataUrl.slice(dataUrl.indexOf(',') + 1), {
+      encoding: 'base64',
+    });
+    return dest;
+  } catch (err) {
+    // Keeps the server's reason, drops the host path it names it with.
+    throw new Error(
+      relativizeProjectPaths([`Could not copy ${from}: ${errMsg(err)}`], projectId)[0] ?? '',
+    );
+  }
+}
+
+/** Copies `from` to `to`, returning where it actually landed — see `copyBytes`. */
+export async function copyFile(from: string, to: string): Promise<string> {
   const proj = activeProject();
   if (!proj) throw new Error('No active project');
-  const raw = await appStorage.read(projectPath(proj.id, from));
-  const content = typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);
-  // Routed through writeFile rather than saving directly, so a copy records a diff
-  // like any other write. It also carries the typecheck reset and the file refresh:
-  // a copy is a new module in the program, and an orphan still gets type checked.
-  await writeFile(to, content, { label: `copy from ${from}` });
-  setStatusText(`Copied ${from} → ${to}`);
+
+  // Text goes through writeFile, so a copy records a diff like any other write. It also
+  // carries the typecheck reset and the file refresh: a copy is a new module in the
+  // program, and an orphan still gets type checked.
+  if (!isBinaryPath(from)) {
+    await writeFile(to, await readCopyText(proj.id, from), { label: `copy from ${from}` });
+    setStatusText(`Copied ${from} → ${to}`);
+    return to;
+  }
+
+  // Binary cannot go through writeFile at all: it takes a string, and would record
+  // mojibake as the diff. Recorded as the fact instead — the shape deleteFile already
+  // uses to report removing one.
+  const landed = await copyBytes(proj.id, from, to);
+  recordChange({
+    path: landed,
+    kind: 'create',
+    before: '',
+    after: `(binary file copied from ${from})`,
+    label: `copy from ${from}`,
+  });
+  setTypecheckState('unknown');
+  await refreshFiles();
+  setStatusText(`Copied ${from} → ${landed}`);
+  return landed;
 }
 
 export async function deleteFile(path: string): Promise<void> {

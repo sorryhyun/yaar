@@ -46,3 +46,27 @@ export function isImagePath(path: string): boolean {
 export function isBinaryPath(path: string): boolean {
   return BINARY_EXT.test(path);
 }
+
+// What the bundler inlines as a data: URI when a module imports it. Broader than
+// BINARY_EXT because SVG belongs here and not there: it is text the editor should let
+// you edit, and still an asset an import turns into a data: URI.
+const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav)$/i;
+
+/**
+ * The `import` line that turns a file in the project into an inlined asset, or null
+ * when the path is not one the bundler would inline.
+ *
+ * Only files under `src/` qualify: the import specifier is written relative to
+ * `src/main.ts`, which is where the caller is being told to paste it, and a path
+ * outside `src/` has no stable spelling from there.
+ */
+export function assetImportLine(destination: string): string | null {
+  if (!destination.startsWith('src/') || !ASSET_EXT.test(destination)) return null;
+  const name = destination.split('/').pop() ?? destination;
+  const varName =
+    name
+      .replace(/\.[^.]+$/, '')
+      .replace(/[^a-zA-Z0-9]+(.)/g, (_, c: string) => c.toUpperCase())
+      .replace(/^[^a-zA-Z_$]+/, '') || 'asset';
+  return `import ${varName} from '${destination.replace(/^src\//, './')}';`;
+}
