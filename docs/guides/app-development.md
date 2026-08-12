@@ -660,8 +660,10 @@ Common mistakes to avoid when building apps:
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState`, `storagePath` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState`, `storagePath`, `fonts`, `rasterize` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
 - **Don't hand-roll a canvas re-encode** — `toWebP(source, { quality, maxSize })` from `@bundled/yaar` is the bitmap → canvas → `convertToBlob` round-trip, including the check that the encoder did not quietly fall back to PNG and the chunked base64 conversion a storage write needs. It returns `null` (never throws) when the browser cannot do it, so the fallback is `if (!encoded) keepTheOriginal()`. No `@bundled/*` package ships a WebP codec — Chromium already has one; this is the boilerplate around it.
+- **Don't hand-roll a DOM → image pipeline** — `rasterize(element, { css })` from `@bundled/yaar` is the `foreignObject` → `img` → canvas dance with all six of its quiet failures closed: the subtree inherits no stylesheet, a webfont cannot be *fetched* into it (only inlined, which `rasterize` does for you via `fonts`), a `body {}` rule matches nothing there, the markup must be well-formed XML, every `<img>` must already be a `data:` URL, and a `blob:` URL taints the canvas. Each of those produces a blank or wrong-looking picture with no error. See [Rasterizing your own DOM](#rasterizing-your-own-dom).
+- **Don't fetch and subset a font yourself** — `fonts.inline(text, { weights })` returns YAAR's faces cut down to the characters you name, as a `data:` URL `@font-face` block, plus the glyph ids and metrics a PDF writer needs. The full face is ~1.6 MB and subsetting it in the iframe means writing an OpenType reader; the server already has the file open. Needs no permission.
 - **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
 - **Don't hand-roll a sanitizer** — see [the rule above](#rendering-untrusted-html) for what an element denylist plus `^on` attribute stripping misses.
@@ -1357,6 +1359,62 @@ Calendar *dates* are deliberately not here — date style is a legitimate per-ap
 `@bundled/date-fns` is bundled for it. For an image you are about to store or show, prefer
 `toWebP` over `blobToDataUrl`: it re-encodes and hands back both the data URL and the raw
 base64 that `appStorage.save(..., 'base64')` wants.
+
+### Rasterizing your own DOM
+
+There is exactly one way to get pixels out of laid-out HTML in a browser sandbox with no
+rendering library bundled — `DOM → SVG foreignObject → img → canvas` — and it is four
+lines to write and about six ways to get wrong, each of which fails *quietly*: a blank
+picture, a picture in the wrong font, or a canvas that throws when you read it back.
+
+```typescript
+import { rasterize, downloadBlob } from '@bundled/yaar';
+
+const { blob, fonts, skippedImages } = await rasterize(pageEl, { css: exportCss, scale: 2 });
+downloadBlob(blob, 'page.png');
+// fonts.missing — characters no face covered; skippedImages — sources that wouldn't inline.
+// Both are reported rather than thrown: one bad glyph should not cost the whole picture.
+```
+
+The element must be **in the document and laid out** — `position:fixed; left:-99999px` is
+the usual trick, since a `display:none` subtree has no metrics and rasterises as nothing.
+It is cloned, so your live DOM is not touched.
+
+The one thing you must supply is `css`. Chrome draws that SVG in **secure static mode**:
+the subtree reaches no page stylesheet, no `--yaar-*` tokens, and no network, so anything
+not stated in `css` is simply missing from the picture. Everything else the SDK handles —
+inlining `<img>` sources as `data:` URLs, serialising as well-formed XML (a Markdown
+renderer's `<br>` would otherwise abort the parse), avoiding the `blob:` URL that taints
+the canvas, painting a background before a JPEG encode turns transparency black, and
+putting the font stack on the subtree's root rather than on `body`, which does not exist
+inside a `foreignObject`.
+
+### The platform's fonts (`fonts`)
+
+Your app's own DOM gets YAAR's webfont for free. A *picture* of that DOM does not: the SVG
+rasteriser above cannot fetch a font at all, and honours only an `@font-face` whose `src`
+is a `data:` URL. A whole face is ~1.6 MB, so it has to be subsetted first — which used to
+mean an app shipping its own OpenType reader and CFF subsetter.
+
+```typescript
+import { fonts } from '@bundled/yaar';
+
+const { css, faces, missing } = await fonts.inline(pageEl.textContent, {
+  weights: [400, 700],       // resolved by CSS font matching against what's served
+  outlineTable: true,        // + raw CFF bytes, only if you're writing a PDF
+});
+```
+
+`rasterize` calls this for you; call it directly when you are driving the SVG yourself, or
+when you also need `faces[n].gids` / `advances` / `metrics` to paint the *same* glyphs as
+vectors over the raster. Take both from one call: a raster laid out with one font under
+text placed with another drifts ~10% on Latin, which is lines down a page.
+
+`fonts.faces()` lists what this build serves — currently `NanumSquareNeo` (proportional,
+four weights) and `D2Coding` (monospace, for code). `fonts.faceCss(family)` gives the
+by-URL rules for a *measuring* pass; the subset keeps every glyph index and metrics table
+identical, so measurements taken against the full face stay valid. No permission needed —
+the font files are already served unauthenticated.
 
 ### Dialog helpers
 

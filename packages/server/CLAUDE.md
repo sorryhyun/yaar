@@ -132,7 +132,7 @@ src/
 │   ├── storage-describe.ts # describeStoragePath() — describe for a path on disk, shared by both storage doors
 │   ├── apps/             # register.ts, app-resource.ts, protocol-resource.ts, agents-resource.ts, storage-resource.ts, db-resource.ts, paths.ts
 │   ├── agents.ts / apps.ts (barrel) / storage.ts / storage-bytes.ts / config.ts / history.ts / http.ts / mcp-gateway.ts
-│   └── session.ts / skills.ts / system.ts / user.ts / window.ts
+│   └── fonts.ts / session.ts / skills.ts / system.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS; the two protocol eras
 │   ├── result-size.ts    # The MCP result-size cliff and the per-tool annotation that moves it
@@ -148,6 +148,7 @@ src/
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)
+│   ├── fonts/            # The served-face catalog + subsetForText() behind yaar://system/fonts
 │   ├── http/             # fetch.ts — proxied HTTP fetch
 │   ├── market/ session/ skills/ user/   # Marketplace, session ops, skills, clipboard + secret-scan
 │   ├── update/           # Self-update: semver.ts, release.ts, installer.ts, updater.ts
@@ -159,6 +160,8 @@ src/
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts, app-grants.ts
 └── lib/                  # Standalone utilities (no server internal imports)
     ├── browser/ pdf/ tunnel/ download/
+    ├── fonts/                 # OpenType reader + CFF and glyf subsetters — bytes in, bytes out
+    │                          #   (the catalog and loading are features/fonts/)
     ├── ssrf.ts               # URL validation, safe fetch with redirect following
     ├── image.ts              # data-URL parsing + toWebPForModel()
     ├── schema-refs.ts        # resolveRef/selfContained — following a protocol schema's `$defs` pointers

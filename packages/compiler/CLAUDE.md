@@ -58,6 +58,8 @@ src/
     │   ├── files.ts       # downloadBlob, blobToDataUrl
     │   ├── format.ts      # formatBytes, formatDuration, formatClock — one rendering per value, OS-wide
     │   ├── image.ts       # toWebP — the canvas re-encode round-trip apps kept hand-rolling
+    │   ├── fonts.ts       # fonts.faces/faceCss/inline — YAAR's faces, subsetted server-side into a data: URL @font-face
+    │   ├── rasterize.ts   # rasterize() — DOM → SVG foreignObject → canvas, with the six quiet failures closed
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])

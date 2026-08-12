@@ -210,6 +210,21 @@ function namesSharedTree(canonical: string): boolean {
   return canonical === 'yaar://storage/shared' || canonical.startsWith(SHARED_STORAGE_ROOT);
 }
 
+/**
+ * Is this the font catalog — the other thing granted for being an app?
+ *
+ * The faces themselves are already public: `isStaticAsset` serves `.otf`/`.ttf`
+ * unauthenticated, because a CSS-initiated font fetch cannot attach a token. So
+ * a permission here would guard nothing — an app can already `fetch()` the whole
+ * 1.6 MB file. What it *would* do is make an app declare a permission to get the
+ * same bytes in the only form a rasteriser can use, and the user approve a
+ * grant, for typography. Read-only by construction: the handler has no `delete`
+ * and its `invoke` returns a subset of a file the caller could already read.
+ */
+function namesFonts(canonical: string): boolean {
+  return canonical === 'yaar://system/fonts' || canonical.startsWith('yaar://system/fonts/');
+}
+
 /** Is this the session principal's private namespace? */
 function isSessionUri(uri: string): boolean {
   return uri === 'yaar://session' || uri.startsWith('yaar://session/');
@@ -243,6 +258,10 @@ function isSessionUri(uri: string): boolean {
  * declaration was guarding a boundary that does not exist, while forgetting it 403'd
  * an app on the one path whose whole purpose is being reachable. It widens nothing
  * else: `storage/apps/{id}/` is a different subtree and still takes a declared entry.
+ *
+ * `yaar://system/fonts` is the second commons, for the reason given at `namesFonts`:
+ * the font files are already served unauthenticated, so the grant would guard bytes
+ * an app can fetch anyway.
  */
 export function permissionsAllow(
   permissions: PermissionEntry[],
@@ -261,6 +280,7 @@ export function permissionsAllow(
   // The commons, granted for being an app — `appId` is the whole condition, since a
   // non-app iframe has no app identity to grant to.
   if (appId && namesSharedTree(target)) return true;
+  if (appId && namesFonts(target)) return true;
 
   // A capped entry (`sharedOnly`) is the shared tree only: it never answers for another
   // app's private storage, however broad the prefix it was written as. That is the whole

@@ -1547,6 +1547,208 @@ declare module '@bundled/yaar' {
     opts?: EncodeImageOptions,
   ): Promise<EncodedImage | null>;
 
+  // ── The platform's fonts ──────────────────────────────────────
+
+  export interface YaarServedFace {
+    family: string;
+    /** CSS `font-weight` this file answers for. */
+    weight: number;
+    style: 'normal' | 'italic';
+    /** Where the full face can be fetched, same-origin. */
+    url: string;
+    /** True when the family is monospaced — what a code block should ask for. */
+    mono: boolean;
+  }
+
+  export interface YaarFontCatalog {
+    families: Array<{ family: string; mono: boolean; weights: number[] }>;
+    faces: YaarServedFace[];
+    /** `@font-face` rules pointing at the full files, by URL. */
+    css: string;
+  }
+
+  export interface YaarFontMetrics {
+    unitsPerEm: number;
+    /** Typographic ascent/descent in font units; descent is negative. */
+    ascent: number;
+    descent: number;
+    capHeight: number;
+    /** [xMin, yMin, xMax, yMax] in font units. */
+    bbox: [number, number, number, number];
+  }
+
+  export interface YaarInlinedFace {
+    family: string;
+    /** The weight you asked for — key your CSS by this. */
+    weight: number;
+    /** The weight actually served, when CSS matching landed on another file. */
+    servedWeight: number;
+    style: 'normal' | 'italic';
+    /** PostScript-style name for a PDF `/BaseFont`. */
+    baseFont: string;
+    /** The subsetted face as a `data:` URL. */
+    dataUrl: string;
+    bytes: number;
+    /** Glyphs carried, excluding `.notdef`. */
+    glyphs: number;
+    outlines: 'cff' | 'glyf';
+    /** Base64 `CFF ` table, when `outlineTable` was asked for. */
+    outlineTableBase64?: string;
+    /** Character -> glyph id. A character the face lacks is absent. */
+    gids: Record<string, number>;
+    /** Character -> advance width, in font units. */
+    advances: Record<string, number>;
+    metrics: YaarFontMetrics;
+  }
+
+  export interface YaarInlinedFonts {
+    /** `@font-face` rules carrying the subsets inline. */
+    css: string;
+    faces: YaarInlinedFace[];
+    /**
+     * Characters no returned face has a glyph for. Not an error — what to do
+     * about them is a decision only the caller can make.
+     */
+    missing: string[];
+  }
+
+  export interface InlineFontsOptions {
+    /** Family to subset. Defaults to the first proportional family served. */
+    family?: string;
+    /**
+     * CSS weights to cover, e.g. `[400, 700]`. Each is resolved by CSS font
+     * matching against the files served. Defaults to `[400]`.
+     */
+    weights?: number[];
+    /**
+     * Also return the raw CFF table for a PDF `/FontFile3`. Roughly doubles the
+     * response; only a caller embedding glyphs in a PDF wants it.
+     */
+    outlineTable?: boolean;
+  }
+
+  /**
+   * The fonts YAAR ships, in the form a *picture* of your DOM needs them.
+   *
+   * An app's own DOM already gets the platform webfont for free. This is for the
+   * moment you rasterise that DOM (SVG `foreignObject` -> `img` -> canvas):
+   * Chrome draws such an image in secure static mode, where a webfont cannot be
+   * fetched at all and only a `data:` URL `@font-face` is honoured. A whole face
+   * is ~1.6 MB, so it has to be subsetted first — which is what `inline()` does,
+   * on the server, in one call.
+   *
+   * ```ts
+   * const { css, missing } = await fonts.inline(pageEl.textContent, { weights: [400, 700] });
+   * // …put `css` inside the SVG's <style>, alongside your own rules.
+   * ```
+   *
+   * The same result carries `gids`, `advances` and `metrics`, so a caller also
+   * writing a PDF over that raster paints the *same* glyphs the picture used.
+   * Getting those from a second call risks a different subset, and a raster laid
+   * out with one font under text placed with another drifts by ~10% on Latin.
+   *
+   * Needs no permission — the font files are already served unauthenticated.
+   *
+   * For the whole pipeline rather than just the fonts, see `rasterize`.
+   */
+  export const fonts: {
+    /** The faces this build serves, with the by-URL `@font-face` rules. */
+    faces(): Promise<YaarFontCatalog>;
+    /**
+     * `@font-face` rules pointing at the full files, for a *measuring* pass.
+     * Measure against these, rasterise with `inline()` — the subset keeps every
+     * glyph index and metrics table identical, so the measurements stay valid.
+     */
+    faceCss(family?: string): Promise<string>;
+    /**
+     * Subset the platform's faces down to `text` and return them inline.
+     *
+     * Pass the *whole* page's text, not a sample: a character left out renders
+     * in a fallback face. Only distinct characters count, up to 5000 per call.
+     */
+    inline(text: string, opts?: InlineFontsOptions): Promise<YaarInlinedFonts>;
+  };
+
+  // ── Rasterizing your own DOM ──────────────────────────────────
+
+  export interface RasterizeFontOptions {
+    /** Family to embed. Defaults to the first proportional family YAAR serves. */
+    family?: string;
+    /**
+     * Weights to embed. Defaults to the weights the subtree actually computes
+     * to, so a page of plain body text pays for one face rather than four.
+     */
+    weights?: number[];
+    /** Characters to cover. Defaults to the subtree's text. */
+    text?: string;
+  }
+
+  export interface RasterizeOptions {
+    /**
+     * The stylesheet the picture carries. Required in practice: the subtree
+     * reaches none of the page's CSS, so anything not stated here is missing
+     * from the result.
+     */
+    css?: string;
+    /** Source box in CSS pixels. Defaults to the element's own bounding rect. */
+    width?: number;
+    height?: number;
+    /**
+     * Device pixels per CSS pixel. Default 2 — real sharpness for CJK and code.
+     * The canvas costs `width * height * 4 * scale²` bytes.
+     */
+    scale?: number;
+    /** Output format. Default `image/png`. */
+    type?: 'image/png' | 'image/jpeg' | 'image/webp';
+    /** Encoder quality, 0–1, for the lossy formats. Default 0.92. */
+    quality?: number;
+    /**
+     * Painted before the subtree. JPEG has no alpha, so without this every
+     * transparent pixel encodes as **black**. Defaults to white for
+     * `image/jpeg`, transparent otherwise.
+     */
+    background?: string;
+    /** Embed YAAR's webfonts as a `data:` URL `@font-face`. `false` to skip. */
+    fonts?: RasterizeFontOptions | false;
+    /** Rewrite every `<img src>` to a `data:` URL first. Default true. */
+    inlineImages?: boolean;
+  }
+
+  export interface RasterizeResult {
+    blob: Blob;
+    /** The canvas, so a caller wanting pixels does not rasterise twice. */
+    canvas: HTMLCanvasElement;
+    /** Device pixels. */
+    width: number;
+    height: number;
+    /** What `fonts.inline()` returned, or null when fonts were skipped. */
+    fonts: YaarInlinedFonts | null;
+    /** Image sources that could not be inlined, so those boxes are empty. */
+    skippedImages: string[];
+  }
+
+  /**
+   * Rasterise a laid-out element to an image.
+   *
+   * ```ts
+   * const { blob } = await rasterize(pageEl, { css: exportCss, scale: 2 });
+   * downloadBlob(blob, 'page.png');
+   * ```
+   *
+   * The element must be **in the document and laid out** —
+   * `position:fixed; left:-99999px` is the usual trick, since a `display:none`
+   * subtree has no metrics and rasterises as nothing. It is cloned, so the live
+   * DOM is not touched.
+   *
+   * The rasterised subtree **inherits nothing**: no page stylesheet, no
+   * `--yaar-*` tokens, no network. Whatever the picture needs ships in `css`.
+   * Fonts, images and the XML/tainting traps are handled for you.
+   */
+  export function rasterize(
+    element: HTMLElement,
+    opts?: RasterizeOptions,
+  ): Promise<RasterizeResult>;
+
   /**
    * Register a keyboard shortcut. Returns a cleanup function.
    *

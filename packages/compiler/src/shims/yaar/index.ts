@@ -75,6 +75,21 @@ export { formatBytes, formatDuration, formatClock } from './format.js';
 export { toWebP } from './image.js';
 export type { EncodeImageOptions, EncodedImage, ImageSource } from './image.js';
 
+// ── The platform's fonts, subsetted and inlinable ───────────────
+export { fonts } from './fonts.js';
+export type {
+  YaarFontCatalog,
+  YaarServedFace,
+  YaarFontMetrics,
+  YaarInlinedFace,
+  YaarInlinedFonts,
+  InlineFontsOptions,
+} from './fonts.js';
+
+// ── A picture of your own DOM ───────────────────────────────────
+export { rasterize } from './rasterize.js';
+export type { RasterizeOptions, RasterizeResult, RasterizeFontOptions } from './rasterize.js';
+
 // ── Protocol handler context ────────────────────────────────────
 export { createProtocolContext } from './protocol-context.js';
 

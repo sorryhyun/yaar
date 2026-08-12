@@ -24,7 +24,7 @@ import {
 export function registerSystemHandlers(registry: ResourceRegistry): void {
   // ── yaar://system — namespace root ──
   registry.register('yaar://system', {
-    description: 'The running YAAR installation — version and updates.',
+    description: 'The running YAAR installation — version, updates, and the fonts it serves.',
     verbs: ['describe', 'list'],
 
     async list() {
@@ -33,6 +33,11 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
           uri: 'yaar://system/update',
           name: 'update',
           description: 'Running version, latest release, and self-update',
+        },
+        {
+          uri: 'yaar://system/fonts',
+          name: 'fonts',
+          description: 'The webfonts YAAR serves, and subsets of them inlined as data: URLs',
         },
       ]);
     },

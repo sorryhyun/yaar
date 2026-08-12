@@ -101,6 +101,7 @@ const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
   { match: 'yaar://mcp/',                   icon: '🔌',  title: 'Use connected external tools',         detail: 'MCP servers' },
   { match: 'yaar://skills/',                icon: '📘',  title: 'Read system skills' },
   { match: 'yaar://system/',                icon: '🖥️',  title: 'Read system status' },
+  { match: 'yaar://system/fonts',           icon: '🔤',  title: 'Use the fonts YAAR ships',             detail: 'Granted to every app — no approval needed' },
   { match: 'yaar://system/update',          icon: '⬇️',  title: 'Check for and install YAAR updates',   warn: true },
 ];
 

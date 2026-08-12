@@ -55,6 +55,7 @@ export {
 export {
   MIME_TYPES,
   MAX_UPLOAD_SIZE,
+  getFrontendAsset,
   getMlRuntimeDir,
   getMlRuntimeArtifact,
 } from './config/assets.js';
