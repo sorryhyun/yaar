@@ -108,11 +108,17 @@ export async function reclaimOrphanedPreviewStorage(): Promise<void> {
         .filter((id): id is string => !!id),
     );
 
-    const entries = await list<{ path: string; isDirectory?: boolean }[]>('yaar://storage/apps');
+    // `yaar://storage/*` answers with resource links (`uri`/`name`), not the internal
+    // `path` shape `appStorage.list` maps back for its callers. Reading `path` here threw
+    // on the first entry and the catch below swallowed it, so nothing was ever reclaimed.
+    const entries = await list<{ uri?: string; name?: string }[]>('yaar://storage/apps');
     if (!Array.isArray(entries)) return;
 
     for (const entry of entries) {
-      const appId = entry.path.replace(/\/$/, '').split('/').pop();
+      const appId = String(entry.name ?? entry.uri ?? '')
+        .replace(/\/$/, '')
+        .split('/')
+        .pop();
       if (!appId || !appId.startsWith('preview--')) continue;
       if (live.has(appId.slice('preview--'.length))) continue;
       try {
