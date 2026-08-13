@@ -1,8 +1,9 @@
 import { httpFetch } from '@bundled/yaar';
 import { chartToPNG } from '../lib/chart-render';
-import { saveChart } from '../lib/shared-tree';
+import { graphToPNG } from '../lib/graph-render';
+import { saveChart, saveGraph } from '../lib/shared-tree';
 import { storeRead, storeWrite, storeList, storeRemove, storeExists } from './store-ops';
-import type { ChartSpec } from '../types';
+import type { ChartSpec, GraphSpec } from '../types';
 
 /**
  * The one door the sandboxed worker has back into the app. Everything the kernel
@@ -40,6 +41,10 @@ export async function handleBridgeCall(method: string, args: unknown[]): Promise
       return await chartToPNG(a[0] as ChartSpec, (a[1] as Record<string, number>) || undefined);
     case 'chart.save':
       return await saveChart(a[0] as ChartSpec, (a[1] as string) || undefined, (a[2] as Record<string, number>) || undefined);
+    case 'graph.png':
+      return await graphToPNG(a[0] as GraphSpec, (a[1] as Record<string, number>) || undefined);
+    case 'graph.save':
+      return await saveGraph(a[0] as GraphSpec, (a[1] as string) || undefined, (a[2] as Record<string, number>) || undefined);
     default:
       throw new Error('unknown bridge method: ' + method);
   }

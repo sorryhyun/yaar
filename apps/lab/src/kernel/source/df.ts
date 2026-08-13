@@ -1,4 +1,4 @@
-// KERNEL PART 5/11 — the `df` mini dataframe: rows, columns, groupBy, agg.
+// KERNEL PART 5/12 — the `df` mini dataframe: rows, columns, groupBy, agg.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const DF = String.raw`
 /* --------------------------------------------------------------- df / rows -- */

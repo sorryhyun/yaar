@@ -1,4 +1,4 @@
-// KERNEL PART 4/11 — the `stats` helper: descriptive statistics and histograms.
+// KERNEL PART 4/12 — the `stats` helper: descriptive statistics and histograms.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const STATS = String.raw`
 /* ------------------------------------------------------------------ stats -- */

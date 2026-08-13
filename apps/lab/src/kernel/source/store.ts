@@ -1,4 +1,4 @@
-// KERNEL PART 6/11 — the `store` and `http` helpers plus `sleep`, all bridge-backed.
+// KERNEL PART 6/12 — the `store` and `http` helpers plus `sleep`, all bridge-backed.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const STORE = String.raw`
 /* ------------------------------------------------------------------ store -- */

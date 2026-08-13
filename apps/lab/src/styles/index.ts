@@ -7,5 +7,6 @@ import './output.css';
 import './table.css';
 import './json.css';
 import './chart.css';
+import './graph.css';
 import './markdown.css';
 import './agent.css';

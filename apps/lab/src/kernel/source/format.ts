@@ -1,4 +1,4 @@
-// KERNEL PART 2/11 — value formatting: cycle-safe stringify, clipping, console capture.
+// KERNEL PART 2/12 — value formatting: cycle-safe stringify, clipping, console capture.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const FORMAT = String.raw`
 /* ---------------------------------------------------------------- bridge -- */

@@ -1,4 +1,4 @@
-// KERNEL PART 7/11 — the `plot` helper: chart specs the main thread renders.
+// KERNEL PART 7/12 — the `plot` helper: chart specs the main thread renders.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const PLOT = String.raw`
 /* ------------------------------------------------------------------- plot -- */

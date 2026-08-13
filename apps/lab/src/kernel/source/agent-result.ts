@@ -1,4 +1,4 @@
-// KERNEL PART 9/11 — the runCode result: a byte budget, a row sample and a shape
+// KERNEL PART 10/12 — the runCode result: a byte budget, a row sample and a shape
 // summary, so large data never crosses the protocol boundary.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const AGENT_RESULT = String.raw`
@@ -52,6 +52,21 @@ function __labAgentResult(v, limit) {
         labels: (v.data.labels || []).slice(0, 20)
       },
       resultType: 'chart', truncated: false
+    };
+  }
+  if (v && v.__labGraph) {
+    return {
+      result: {
+        title: v.options.title || null,
+        xRange: [v.options.xMin, v.options.xMax],
+        params: v.options.params || {},
+        series: v.series.map(function (s) {
+          return s.expr
+            ? { expr: s.expr, resample: true }
+            : { label: s.label || null, points: (s.points || []).length, resample: false };
+        })
+      },
+      resultType: 'graph', truncated: false
     };
   }
   if (v instanceof Error) return { result: { name: v.name, message: v.message }, resultType: 'error', truncated: false };

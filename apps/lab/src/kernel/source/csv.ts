@@ -1,4 +1,4 @@
-// KERNEL PART 3/11 — the `csv` helper: type casting, parse, stringify.
+// KERNEL PART 3/12 — the `csv` helper: type casting, parse, stringify.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const CSV = String.raw`
 /* -------------------------------------------------------------------- csv -- */

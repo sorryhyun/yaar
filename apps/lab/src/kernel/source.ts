@@ -21,6 +21,7 @@ import { STATS } from './source/stats';
 import { DF } from './source/df';
 import { STORE } from './source/store';
 import { PLOT } from './source/plot';
+import { GRAPH } from './source/graph';
 import { ENCODE } from './source/encode';
 import { AGENT_RESULT } from './source/agent-result';
 import { TRANSFORM } from './source/transform';
@@ -34,6 +35,7 @@ export const KERNEL_SRC = [
   DF,
   STORE,
   PLOT,
+  GRAPH,
   ENCODE,
   AGENT_RESULT,
   TRANSFORM,

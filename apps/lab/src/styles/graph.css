@@ -1,0 +1,107 @@
+/* Interactive function graph output — components/GraphView.ts */
+
+.lab-graph-block {
+  margin-bottom: var(--yaar-sp-2);
+}
+.lab-graph {
+  position: relative;
+  width: 100%;
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+  overflow: hidden;
+  background: var(--yaar-bg-surface);
+  box-sizing: border-box;
+}
+/* Absolute, not flex: Solid's html inserts comment markers that break flex chains. */
+.lab-graph-canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+  touch-action: none;
+}
+.lab-graph-hud,
+.lab-graph-hint {
+  position: absolute;
+  bottom: 6px;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  pointer-events: none;
+}
+.lab-graph-hud {
+  left: 8px;
+}
+.lab-graph-hint {
+  right: 8px;
+  font-family: var(--yaar-font);
+}
+.lab-graph-reset {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+.lab-graph-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--yaar-sp-3);
+  margin-top: var(--yaar-sp-1);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+}
+.lab-graph-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--yaar-font-mono);
+}
+.lab-graph-key-bad {
+  color: var(--yaar-error);
+}
+.lab-graph-sw {
+  display: inline-block;
+  width: 10px;
+  height: 3px;
+  border-radius: var(--yaar-radius-full);
+}
+.lab-graph-sliders {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--yaar-sp-2) var(--yaar-sp-4);
+  margin-top: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+  background: var(--yaar-bg-surface);
+}
+.lab-graph-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+}
+.lab-graph-var {
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text);
+  min-width: 14px;
+}
+.lab-graph-slider input[type='range'] {
+  width: 130px;
+  accent-color: var(--yaar-accent);
+}
+.lab-graph-num {
+  width: 68px;
+  padding: 2px 4px;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text);
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
+}
+.lab-graph-num:focus {
+  outline: none;
+  border-color: var(--yaar-accent);
+}

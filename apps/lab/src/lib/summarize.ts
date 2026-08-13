@@ -11,6 +11,11 @@ function describePart(p: OutputPart): string {
       return 'table ' + (p.totalRows ?? 0) + ' rows x ' + (p.columns?.length ?? 0) + ' cols [' + (p.columns || []).slice(0, 8).join(', ') + ']';
     case 'chart':
       return 'chart(' + (p.spec?.type || '?') + ', ' + (p.spec?.data.datasets.length || 0) + ' series)';
+    case 'graph': {
+      const series = p.graph?.series || [];
+      const exprs = series.filter((s) => s.expr).map((s) => s.expr!);
+      return 'graph(' + series.length + ' series' + (exprs.length ? ': ' + exprs.slice(0, 4).join(', ') : '') + ')';
+    }
     case 'image':
       return 'image (' + Math.round((p.src?.length || 0) / 1024) + ' KB)';
     case 'json':

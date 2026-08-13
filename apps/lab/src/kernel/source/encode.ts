@@ -1,4 +1,4 @@
-// KERNEL PART 8/11 — UI-facing encoding: output parts plus show()/md().
+// KERNEL PART 9/12 — UI-facing encoding: output parts plus show()/md().
 // Generous caps here (5000 table rows, 250 KB JSON); the agent budget lives in
 // agent-result.ts and the on-disk cap in ../../lib/trim.ts. Do not confuse them.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
@@ -19,6 +19,7 @@ function __labCell(v) {
 function __labEncode(v) {
   if (v === undefined) return null;
   if (v && v.__labChart) return { kind: 'chart', spec: v };
+  if (v && v.__labGraph) return { kind: 'graph', graph: v };
   if (typeof v === 'string') {
     if (/^data:image\//.test(v)) return { kind: 'image', src: v };
     var tr = v.length > __labLIM.maxStringChars;

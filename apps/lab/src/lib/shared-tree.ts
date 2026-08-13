@@ -1,7 +1,8 @@
 import { storage, storagePath } from '@bundled/yaar';
 import { chartToPNG } from './chart-render';
+import { graphToPNG, type GraphRenderOpts } from './graph-render';
 import { dataUrlToBlob } from './data-url';
-import type { ChartSpec } from '../types';
+import type { ChartSpec, GraphSpec } from '../types';
 
 /**
  * Normalise a caller-supplied path into the shared tree under shared/lab/.
@@ -37,5 +38,15 @@ export async function saveChart(
   opts?: { width?: number; height?: number; scale?: number; background?: string },
 ): Promise<{ path: string; uri: string; bytes: number }> {
   const png = await chartToPNG(spec, opts);
+  return await saveDataUrl(png, sharedPath(path));
+}
+
+/** Same for a function graph: rendered at the spec's own viewport, saved as PNG. */
+export async function saveGraph(
+  spec: GraphSpec,
+  path?: string,
+  opts?: GraphRenderOpts,
+): Promise<{ path: string; uri: string; bytes: number }> {
+  const png = await graphToPNG(spec, opts);
   return await saveDataUrl(png, sharedPath(path));
 }

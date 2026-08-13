@@ -1,7 +1,7 @@
 export type CellType = 'code' | 'markdown';
 
 export interface OutputPart {
-  kind: 'text' | 'json' | 'table' | 'chart' | 'image' | 'error' | 'markdown';
+  kind: 'text' | 'json' | 'table' | 'chart' | 'graph' | 'image' | 'error' | 'markdown';
   // text
   text?: string;
   truncated?: boolean;
@@ -13,6 +13,8 @@ export interface OutputPart {
   totalRows?: number;
   // chart
   spec?: ChartSpec;
+  // graph
+  graph?: GraphSpec;
   // image
   src?: string;
   // error
@@ -36,6 +38,46 @@ export interface ChartSpec {
     height?: number;
     colors?: string[] | null;
     beginAtZero?: boolean;
+  };
+}
+
+/**
+ * One curve in a graph. Exactly one of `expr` / `points` is meaningful:
+ *
+ * - `expr` is a source string, parsed and compiled **in the renderer**, so panning
+ *   and zooming re-sample it at the new viewport. This is the interactive case.
+ * - `points` is an eagerly sampled polyline, which is all a JS function input can
+ *   become: closures cannot cross the worker boundary. Such a series carries
+ *   `resample: false` and is drawn as given.
+ */
+export interface GraphSeries {
+  expr?: string;
+  points?: (number[] | null)[];
+  resample?: boolean;
+  color?: string;
+  label?: string;
+  tMin?: number;
+  tMax?: number;
+}
+
+/**
+ * A function-graph spec. Serializable by construction — it crosses from the Web
+ * Worker to the window by structured clone, so it holds strings and numbers only.
+ */
+export interface GraphSpec {
+  __labGraph: true;
+  series: GraphSeries[];
+  options: {
+    xMin?: number;
+    xMax?: number;
+    yMin?: number;
+    yMax?: number;
+    params?: Record<string, number>;
+    equalAspect?: boolean;
+    grid?: boolean;
+    title?: string;
+    height?: number;
+    colors?: string[] | null;
   };
 }
 
@@ -105,6 +147,7 @@ export interface RunResult {
   durationMs: number;
   error?: { name: string; message: string; stack: string };
   hasChart?: boolean;
+  hasGraph?: boolean;
   savedTo?: string;
   saveError?: string;
   agent?: {

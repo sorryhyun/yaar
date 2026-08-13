@@ -2,6 +2,7 @@ import { Show, For, Switch, Match } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { renderMarkdown } from '../lib/markdown';
 import { ChartView } from './ChartView';
+import { GraphView } from './GraphView';
 import { ImageView } from './ImageView';
 import { JsonView } from './JsonView';
 import { TableView } from './TableView';
@@ -25,6 +26,9 @@ function PartView(props: { part: OutputPart }) {
       <//>
       <${Match} when=${() => kind() === 'chart'}>
         <${ChartView} spec=${() => props.part.spec} />
+      <//>
+      <${Match} when=${() => kind() === 'graph' && props.part.graph}>
+        <${GraphView} spec=${() => props.part.graph} />
       <//>
       <${Match} when=${() => kind() === 'image'}>
         <${ImageView} src=${() => props.part.src || ''} />

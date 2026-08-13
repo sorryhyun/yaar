@@ -13,7 +13,7 @@ src/main.ts            defineApp: state, commands, view, onClose
 src/types.ts           every shared type (Cell, Notebook, OutputPart, ChartSpec, RunResult)
 
 src/kernel/
-  source/              the worker source, split into 11 String.raw parts <- read the warnings below
+  source/              the worker source, split into 12 String.raw parts <- read the warnings below
   source.ts            joins the parts into KERNEL_SRC (order is load-bearing)
   worker.ts            main-thread lifecycle: queue, timeout, terminate, restart
   bridge.ts            dispatch for calls the worker makes back into the app
@@ -28,9 +28,17 @@ src/state/
   run.ts               cell execution orchestration, lastRun, timeout setting, RunOrigin
   starter.ts           the cells a new notebook opens with
 
+src/graph/             the function-graph engine: expression string -> curve on a canvas
+  lexer.ts             tokenizer
+  parser.ts            recursive descent + implicit multiplication -> AST
+  compile.ts           AST -> closure, free-variable scan, the y=/x=/r=/(fx,fy)/implicit dispatch
+  sample.ts            viewport transform, nice-number ticks, the four samplers
+  render.ts            grid, axes, tick labels, series; planSeries/defaultParams
+
 src/lib/               no app state, no DOM ownership; safe to call from anywhere
   chart-config.ts      kernel chart spec -> Chart.js config
   chart-render.ts      live canvas + offscreen PNG rendering
+  graph-render.ts      offscreen PNG for a graph spec (mirrors chart-render's contract)
   shared-tree.ts       shared/lab path rules, saving a data URL to the shared tree
   data-url.ts          data URL <-> blob, browser download
   markdown.ts          marked + sanitizeHtml
@@ -38,7 +46,7 @@ src/lib/               no app state, no DOM ownership; safe to call from anywher
   trim.ts              the on-disk output cap (see the truncation layers below)
 
 src/components/        App shell, Sidebar, CellRow, CellEditor, OutputView,
-                       ChartView, ImageView, JsonView, TableView, AgentPanel,
+                       ChartView, GraphView, ImageView, JsonView, TableView, AgentPanel,
                        editor-registry.ts (textarea map + edit-mode signals)
 
 src/protocol/          state.ts, run.ts, notebook.ts, export.ts, shape.ts
@@ -65,7 +73,7 @@ The worker cannot be a separate bundle: the compiler inlines everything into one
 so there is no second entry point to load. The kernel is therefore a **string**, turned into
 a Blob URL at runtime. Consequences:
 
-It is split across `src/kernel/source/*.ts` as 11 exported parts that `source.ts`
+It is split across `src/kernel/source/*.ts` as 12 exported parts that `source.ts`
 concatenates with `join('')`. The split is byte-exact and must stay that way:
 **each part after the first begins with the newline that follows its opening backtick,
 and that newline is the blank separator line between sections.** So a part starts at
@@ -172,6 +180,44 @@ carries the categories — that is what the `o.horizontal` branch in `buildConfi
 PNG export renders a second, offscreen chart at `scale` device pixels rather than reading the
 live canvas, so exports are crisp and independent of the on-screen size. The background fill
 is a tiny plugin using `destination-over`, because a bare canvas exports transparent.
+
+## src/graph/ — the function grapher
+
+`graph(...)` in a cell produces a **`GraphSpec`**, and the rule that shapes the whole module
+is that the spec must survive structured clone from the worker to the window. So a series
+carries either an expression **string** or an array of sampled **points**, never a closure:
+
+- A string is parsed and compiled **in the renderer** (`src/graph/`), which is what makes
+  zooming re-sample instead of magnifying. This is the feature; keep it.
+- A JS function input cannot cross, so the kernel samples it eagerly over `[xMin, xMax]` and
+  marks the series `resample: false`. The legend says `(static)` and the SKILL documents the
+  difference. Do not try to make these equivalent — the boundary is real.
+
+`src/graph/` is pure and main-thread: no app state, no DOM ownership, same rules as `lib/`.
+The expression language is deliberately closed (a fixed `FN` table in `compile.ts`), so a
+cell cannot smuggle arbitrary JS into the renderer through an expression string.
+
+Two things that bit during the port, both fixed and both easy to re-break:
+
+- **A `ref` callback runs before the node is in the document**, so the first
+  `getBoundingClientRect()` is 0x0. Deriving the viewport there pinned it to a 1x1 canvas
+  and every later resize kept the broken scale, which renders as a plausible-looking grid
+  with the curves off-screen. `measure()` now returns false until it has a real box, and it
+  discards a spec-derived viewport on resize — but keeps a viewport the user panned or
+  zoomed to (the `userView` flag). Both halves matter.
+- **The viewport is not a signal.** Panning fires at pointer rate; a signal there pushes a
+  full reactive update per frame. `view` is plain local state and the pointer handlers call
+  `draw()` directly. Only the spec, the compiled plans and the parameter values are
+  reactive.
+
+`previewScreenshot` renders a canvas at its backing-store size, not its CSS size, so a
+graph looks zoomed and cropped in a devtools screenshot even when it is correct. Verify a
+graph by exporting a PNG (`graph.save`) and reading that back, or by counting pixels of a
+known series colour with `previewEval` — not from a screenshot.
+
+`exportChart` handles both output kinds: it takes the newest `chart` **or** `graph` part in
+the notebook and returns `{ path, uri, bytes, cellId, kind }`. It stayed one command on
+purpose — an agent should not have to know which kind a cell produced to export it.
 
 ## UI
 

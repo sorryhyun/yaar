@@ -101,6 +101,65 @@ gives a data URL.
 height colors beginAtZero labels label bins`. With no `x`/`y`, the first non-numeric
 column becomes the x axis and every numeric column a series.
 
+### graph — interactive function graphing
+
+`graph(input, opts)` returns a graph spec. As a cell's last expression it renders as an
+**interactive** plot: drag to pan, wheel to zoom, a slider per free parameter, live cursor
+readout. `await graph.save(spec, path, { width, height })` writes a PNG and returns
+`{ path, uri, bytes }`; `await graph.toPNG(spec)` gives a data URL — the same contract as
+`plot.save` / `plot.toPNG`.
+
+```js
+graph('y=sin(a*x)')
+graph(['y=sin(a*x)', 'x^2+y^2=9', '(3cos(t),2sin(t))', 'r=1+cos(theta)'], { params: { a: 2 } })
+graph([{ expr: 'y=x^2', color: '#4b7bec', label: 'parabola' }])
+graph(x => Math.sin(x) / x, { xMin: -20, xMax: 20 })
+```
+
+`input` is one item or an array of them. An item is a **string** (an expression), a **JS
+function** (`x => y`), or an **object** `{ expr | fn | points, color, label, tMin, tMax }`.
+
+**Expression forms** — the left side decides:
+
+| form | example | drawn as |
+| --- | --- | --- |
+| `y = f(x)` | `y=sin(x)/x` | one sample per pixel column, broken at asymptotes |
+| `x = f(y)` | `x=y^2-1` | one sample per pixel row |
+| `r = f(theta)` | `r=1+cos(theta)` | polar, theta over 0..2π |
+| `(fx, fy)` | `(3cos(t),2sin(t))` | parametric in t over 0..2π |
+| `f(x,y) = g(x,y)` | `x^2+y^2=9` | implicit contour of f−g, by marching squares |
+| bare expression | `sin(x)` | same as `y=` |
+
+Per-series `tMin`/`tMax` widen the parametric and polar range (`{ expr: 'r=theta', tMax: 20 }`).
+
+**Syntax**: `+ - * / ^`, parentheses, `|x|` for absolute value, and implicit multiplication
+— `2x`, `3cos(t)` and `x(x+1)` all parse as products. Constants: `pi e tau phi`. Functions:
+`sin cos tan asin acos atan sinh cosh tanh sqrt cbrt abs exp ln log log2 floor ceil round
+sign min max mod atan2 hypot nthroot` (`log` is base 10, `ln` natural, `nthroot(x, n)` keeps
+the sign of x).
+
+Any **other** name is a free parameter and gets a slider: default 1, range −10..10, with a
+number box beside it that accepts values outside that range. `x y t theta` are bound by the
+samplers and never become sliders. Seed values with `{ params: { a: 2 } }`.
+
+**Strings re-sample; closures do not.** The kernel is a Web Worker and a closure cannot
+cross to the window, so the two inputs behave differently and the difference shows on zoom:
+
+- A **string expression** travels as a string and is parsed and compiled *in the renderer*,
+  so panning and zooming re-sample it at the new viewport — a real function graph, sharp at
+  any magnification.
+- A **JS function** is sampled eagerly in the worker over `[xMin, xMax]` (2 000 points by
+  default, `samples` to change it) and ships as a fixed polyline. It is marked `(static)` in
+  the legend, and zooming magnifies it rather than re-sampling. Prefer a string when the
+  expression can be written as one.
+
+`opts`: `xMin xMax yMin yMax params equalAspect grid title height colors samples`. The x
+range defaults to −10..10. Leave `yMin`/`yMax` off and the aspect ratio is kept square;
+set them and the view stretches to fit unless `equalAspect: true`.
+
+`exportChart` handles a graph output as well as a chart, so the same command saves either
+into `shared/lab/`. It renders the spec's own viewport — not wherever the user has panned.
+
 ### misc
 
 `show(x)` adds an extra output block to a cell, `md(text)` adds rendered markdown, and

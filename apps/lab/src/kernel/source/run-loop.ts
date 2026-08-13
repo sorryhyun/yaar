@@ -1,4 +1,4 @@
-// KERNEL PART 11/11 — the message loop: run one cell, catch errors, post results,
+// KERNEL PART 12/12 — the message loop: run one cell, catch errors, post results,
 // and expose the helpers on self. Must stay last; it closes the worker source.
 // Fragment of the worker source; see ../source.ts for the String.raw rules.
 export const RUN_LOOP = String.raw`
@@ -60,6 +60,7 @@ async function __labRun(msg) {
   out.logs = __labS.logs;
   out.parts = __labS.parts; /* agent runs render in the UI too — see AgentPanel */
   out.hasChart = __labS.parts.some(function (p) { return p && p.kind === 'chart'; });
+  out.hasGraph = __labS.parts.some(function (p) { return p && p.kind === 'graph'; });
   out.durationMs = Date.now() - t0;
 
   if (msg.agent) {
@@ -92,7 +93,7 @@ self.onerror = function (e) {
   try { console.error('worker error: ' + (e && e.message ? e.message : String(e))); } catch (x) {}
 };
 
-self.df = df; self.csv = csv; self.stats = stats; self.plot = plot;
+self.df = df; self.csv = csv; self.stats = stats; self.plot = plot; self.graph = graph;
 self.store = store; self.http = http; self.show = show; self.md = md; self.sleep = sleep;
 
 self.postMessage({ type: 'ready' });

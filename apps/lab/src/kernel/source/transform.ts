@@ -1,4 +1,4 @@
-// KERNEL PART 10/11 — the source transform: scan, hoist top-level declarations onto
+// KERNEL PART 11/12 — the source transform: scan, hoist top-level declarations onto
 // globalThis, split off a trailing expression as the cell's value. Every stage
 // verifies itself and falls back to the untransformed source. Read the AGENTS.md
 // section before touching this — especially why a `function` tail is refused.

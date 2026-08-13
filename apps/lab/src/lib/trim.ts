@@ -31,6 +31,15 @@ export function trimOutput(o: CellOutput | undefined): CellOutput | undefined {
     if (p.kind === 'image' && p.src && p.src.length > MAX_SNAPSHOT_IMAGE) {
       return { kind: 'text' as const, text: '[image dropped from saved snapshot: ' + p.src.length + ' bytes]' };
     }
+    if (p.kind === 'graph' && p.graph) {
+      // Expression series are strings and cost nothing; only eagerly sampled point
+      // series (a JS function input) can be large.
+      const g = p.graph;
+      const series = g.series.map((s) =>
+        s.points && s.points.length > MAX_SNAPSHOT_POINTS ? { ...s, points: s.points.slice(0, MAX_SNAPSHOT_POINTS) } : s,
+      );
+      return { ...p, graph: { ...g, series } };
+    }
     if (p.kind === 'chart' && p.spec) {
       const spec = p.spec;
       const datasets = spec.data.datasets.map((d) => ({ ...d, data: (d.data || []).slice(0, MAX_SNAPSHOT_POINTS) }));
