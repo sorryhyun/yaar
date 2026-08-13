@@ -121,6 +121,28 @@ function isSameOrigin(url: string): boolean {
   }
 }
 
+/**
+ * The host the loading overlay names, or null when it should just say "Loading…".
+ *
+ * A hostname is the useful thing to name for an embedded external site, and pure
+ * noise for local content: every app and every stored file is served off the
+ * desktop's own socket, so a window opening `yaar://apps/memo` announced itself as
+ * "Loading 127.0.0.1..." — or "localhost", or the tailnet host in remote mode,
+ * depending on which alias origin isolation put that frame on. The window's title
+ * bar already names the app, so local content needs no target at all.
+ *
+ * Takes the *resolved* URL rather than the finished one: an isolated app is moved
+ * onto the sibling loopback alias afterwards, which would read as cross-origin here.
+ */
+function loadingHost(resolvedUrl: string): string | null {
+  if (isSameOrigin(resolvedUrl)) return null;
+  try {
+    return new URL(resolvedUrl, window.location.origin).hostname || null;
+  } catch {
+    return null;
+  }
+}
+
 function IframeRenderer({
   data,
   requestId,
@@ -211,6 +233,8 @@ function IframeRenderer({
     ? (customSandbox ?? ISOLATED_APP_SANDBOX)
     : (customSandbox ??
       (isSameOrigin(url) ? undefined : 'allow-scripts allow-forms allow-same-origin'));
+
+  const loadingTarget = loadingHost(resolved);
 
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const [loadState, setLoadState] = useState<LoadState>('loading');
@@ -412,17 +436,7 @@ function IframeRenderer({
       {loadState === 'loading' && (
         <div className={styles.iframeLoading}>
           <div className={styles.iframeLoadingSpinner} />
-          <span>
-            Loading{' '}
-            {(() => {
-              try {
-                return new URL(url, window.location.origin).hostname;
-              } catch {
-                return url;
-              }
-            })()}
-            ...
-          </span>
+          <span>{loadingTarget ? `Loading ${loadingTarget}…` : 'Loading…'}</span>
         </div>
       )}
       <iframe
