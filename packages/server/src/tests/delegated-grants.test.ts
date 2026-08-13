@@ -18,8 +18,14 @@ import {
   collectDelegatableUris,
   grantsFromPayload,
   mayDelegateGrants,
+  undelegatedUris,
 } from '../features/window/delegated-grants.js';
-import { requirePermission, resolvePrincipal, setWindowGrantResolver } from '../http/access.js';
+import {
+  requirePermission,
+  resolvePrincipal,
+  setUndelegatedUriResolver,
+  setWindowGrantResolver,
+} from '../http/access.js';
 import { generateAppIframeToken } from '../http/iframe-tokens.js';
 import { runWithAgentContext } from '../agents/agent-context.js';
 
@@ -191,5 +197,88 @@ describe('the grant at the access gate', () => {
     createAppWindow(fresh, 'notes');
     const principal = await appPrincipal('notes');
     expect(requirePermission(principal, FILE, 'read')).toBeNull();
+  });
+});
+
+/**
+ * The refusal narrowing 1 produces, told apart from an ordinary one.
+ *
+ * Both are 403s and both were the same sentence, so an agent could not distinguish "this
+ * app was never granted the path" from "the caller that named it to you is an app-role
+ * principal and cannot delegate" — the second being what devtools' `previewCommand` relay
+ * hits. It cost a real audit two round trips and nearly recorded a correct permission
+ * removal as a regression. The rule is unchanged here; only the sentence is.
+ */
+describe('telling the two 403s apart', () => {
+  let reg: WindowStateRegistry;
+
+  beforeEach(() => {
+    reg = new WindowStateRegistry();
+    createAppWindow(reg, 'notes');
+    setWindowGrantResolver((_s, windowId, monitorId) => reg.getWindowGrants(windowId, monitorId));
+    setUndelegatedUriResolver((_s, windowId, uri, monitorId) =>
+      reg.wasUndelegated(uri, windowId, monitorId),
+    );
+  });
+
+  afterEach(() => {
+    setWindowGrantResolver(() => []);
+    setUndelegatedUriResolver(() => false);
+  });
+
+  it('an app-role caller’s payload records what it could not hand over', () => {
+    runWithAgentContext({ agentId: 'app-devtools', role: 'app' }, () => {
+      expect(grantsFromPayload({ uri: FILE })).toEqual([]);
+      expect(undelegatedUris({ uri: FILE })).toEqual([FILE]);
+    });
+  });
+
+  it('a caller that may delegate records nothing — it granted the file instead', () => {
+    runWithAgentContext({ agentId: 'monitor-0', role: 'monitor' }, () => {
+      expect(undelegatedUris({ uri: FILE })).toEqual([]);
+    });
+  });
+
+  it('names the relay in the refusal, and only for the path that was named', async () => {
+    reg.noteUndelegatedUris('notes', [FILE], '0');
+    const principal = await appPrincipal('notes');
+
+    const relayed = requirePermission(principal, FILE, 'read');
+    expect(relayed?.status).toBe(403);
+    expect(await relayed!.text()).toMatch(/cannot delegate grants/);
+
+    // The ordinary refusal is untouched: nothing named this one, so nothing is claimed.
+    const ordinary = requirePermission(principal, SIBLING, 'read');
+    expect(ordinary?.status).toBe(403);
+    expect(await ordinary!.text()).not.toMatch(/cannot delegate/);
+  });
+
+  it('matches across dialects, since the app may ask in the other one', async () => {
+    // The caller wrote the flat spelling; the app asks with the namespaced one.
+    runWithAgentContext({ agentId: 'app-devtools', role: 'app' }, () => {
+      reg.noteUndelegatedUris(
+        'notes',
+        undelegatedUris({ p: 'yaar://storage/apps/anima/x.png' }),
+        '0',
+      );
+    });
+    const principal = await appPrincipal('notes');
+    const denied = requirePermission(principal, 'yaar://apps/anima/storage/x.png', 'read');
+    expect(await denied!.text()).toMatch(/cannot delegate grants/);
+  });
+
+  it('says nothing extra once the file is actually granted', async () => {
+    reg.noteUndelegatedUris('notes', [FILE], '0');
+    reg.grantWindowAccess('notes', [{ uri: FILE, verbs: ['read'] }], '0');
+    const principal = await appPrincipal('notes');
+    expect(requirePermission(principal, FILE, 'read')).toBeNull();
+  });
+
+  it('is dropped with the window, like the grants', async () => {
+    reg.noteUndelegatedUris('notes', [FILE], '0');
+    reg.handleAction({ type: 'window.close', windowId: 'notes' } as OSAction, '0');
+    const principal = await appPrincipal('notes');
+    const denied = requirePermission(principal, FILE, 'read');
+    expect(await denied!.text()).not.toMatch(/cannot delegate/);
   });
 });

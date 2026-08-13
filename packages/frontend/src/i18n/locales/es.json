@@ -102,6 +102,7 @@
     }
   },
   "userPrompt": {
+    "askedBy": "Preguntado por {{monitor}}",
     "skip": "Omitir",
     "submit": "Enviar"
   },

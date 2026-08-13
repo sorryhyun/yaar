@@ -24,6 +24,14 @@ export interface StorageReadResult {
   /** Set for PDFs. When true, the result carries metadata only (no rasterized images) and the
    *  caller should steer the agent to open the PDF in a viewer window instead of ingesting it. */
   pdfMeta?: boolean;
+  /**
+   * The path exists but is a directory — as distinct from not existing. The mirror of
+   * `StorageListResult.notFound`, and for the same reason: the error string already said
+   * so, but a caller that wants to recover (fall through to a listing) had to match on
+   * prose to tell "wrong shape, ask again" apart from "nothing there". Set only
+   * alongside `success: false`.
+   */
+  isDirectory?: boolean;
   error?: string;
 }
 
@@ -62,5 +70,12 @@ export interface StorageGrepResult {
   success: boolean;
   matches?: StorageGrepMatch[];
   truncated?: boolean;
+  /**
+   * How many text files the pattern was actually tested against, after the glob
+   * filter. Zero matches with `scannedFiles: 0` means the glob excluded every
+   * candidate; zero matches with a positive count means the pattern is genuinely
+   * absent. Without it the two are the same well-formed empty answer.
+   */
+  scannedFiles?: number;
   error?: string;
 }

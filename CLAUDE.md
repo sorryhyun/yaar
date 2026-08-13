@@ -245,6 +245,8 @@ When a user interacts with an app window, an **app agent** is created — one pe
 
 App agents have four scoped tools: `describe` (the app's manual), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`. The first three take an optional `appId` for **cross-app control**, gated by the caller's `app.json` `controls` list (**bundled apps only**); `discovery.ts` holds the parsing and that guard.
 
+The `storage:*` built-ins those tools intercept are **declared, not automatic**: an agent holds them only if its `app.json` names an entry under `yaar://storage/`, its own tree included. Every other app persists through a command its `protocol.json` declares — the iframe holds the SDK, the agent calls the command by name. The iframe side is untouched.
+
 Full tool surface, lifecycle and containment rules: `packages/server/CLAUDE.md` (Tools/MCP).
 
 **Agent docs — three files, three readers** (`AGENT_DOCS` in `features/apps/discovery.ts`):

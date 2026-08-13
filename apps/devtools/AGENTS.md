@@ -37,7 +37,7 @@ sitting in the wrong layer.
 ## The protocol is split on purpose
 
 `src/main.ts` holds the single `defineApp`, spreading seven descriptor maps from `src/protocol/`
-(projects, files, build, git, preview, introspect, shared-tree) plus `devtoolsState` from
+(projects, files, build, git, preview, introspect, http) plus `devtoolsState` from
 `protocol/index.ts`. The extractor resolves imported consts and spreads, so every command still
 reaches `dist/protocol.json` intact.
 
@@ -52,6 +52,25 @@ verbatim to the prompt of every agent driving this app, which is why they are wr
 not as terse labels. Corollary: do not restate them in `agent/prompt.md`. A fact asserted in both
 places is a fact that will eventually disagree with itself, and the descriptor is the copy that
 cannot go stale.
+
+## Storage re-encodes images on read
+
+Reading a stored image gives you **WebP**, not the bytes on disk. A 408,746-byte PNG comes
+back from `appStorage.readBinary` and `appStorage.readBlob` alike as a 40,472-byte
+`image/webp` blob. This is invisible until something round-trips a file: `copyFile` used to
+read images as *text* and write the string back, which corrupted every image it touched,
+and reading them as bytes only narrowed the corruption rather than ending it.
+
+So: **no client-side read can duplicate a non-WebP image faithfully.** `copyBytes` in
+`services/files.ts` therefore renames an image copy to `.webp`, because a file whose
+contents and extension disagree is the bug, not the fix.
+
+The byte-exact path is server-side — `invoke(dest, { action: 'copy', from })`, which never
+reads the file into the iframe. A storage *import* uses it and stays exact. A copy within
+the project **cannot**: `from` does not expand `self`, and an app's own storage is reachable
+by no other spelling (`yaar://apps/{id}/storage/` and `yaar://storage/apps/{id}/` are both
+refused — the flat-root grant deliberately excludes `apps/`). Do not re-litigate those three
+spellings; they were each tried and each fails differently.
 
 ## compileStatus is three-valued, and that is load-bearing
 

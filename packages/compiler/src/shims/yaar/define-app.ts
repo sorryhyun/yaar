@@ -34,6 +34,7 @@
  */
 
 import { render } from 'solid-js/web';
+import { setAppId } from './app-identity.js';
 import { describeIssues, isStandardSchema } from './standard-schema.js';
 import { AppCommandError, isEditableTarget, parseShortcut, shortcutMatches } from './ui.js';
 
@@ -347,6 +348,11 @@ export function defineApp(definition) {
   if (!definition || typeof definition !== 'object') {
     throw new Error('[yaar] defineApp(definition) requires a definition object { id, name, ... }.');
   }
+
+  // Recorded before registration, and before any of the throwing validation below, so
+  // that a helper naming the app after itself (`sharedStorage`) has an answer even for
+  // an app whose mount later fails.
+  setAppId(definition.id);
 
   let cleanup;
   let removeKeybindings;

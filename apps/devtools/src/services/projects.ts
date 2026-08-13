@@ -69,6 +69,64 @@ async function recordOrigin(id: string, origin: string): Promise<void> {
   }
 }
 
+/**
+ * Delete the throwaway storage tree of every preview whose project is gone.
+ *
+ * A preview runs under `preview--{projectId}` and writes to `apps/preview--{projectId}/`,
+ * a namespace nothing else in YAAR knows about: a `preview--*` app is not installed, so it
+ * appears in no app list and no uninstall reclaims it. `deleteProject` drops its own, best
+ * effort — and best effort is exactly how six of these accumulated across ten days on one
+ * machine, one carrying a whole cloned source tree and another ~600KB of PDF and draft
+ * data, none of them mappable back to the project that wrote them once the id is gone.
+ *
+ * ── Why `openPreview` calls this and not `loadProjects` ──
+ *
+ * Opening a project is a read; previewing is what *creates* these trees, so it is what
+ * should retire them. Hanging the sweep off the project listing meant deleting storage on
+ * a path that only meant to populate a sidebar — and running it on every create, delete
+ * and tab switch, none of which can have produced a new orphan.
+ *
+ * The orphan test is exact rather than time-based: a directory whose `{projectId}` names
+ * no project. A live project's preview tree is left alone even between previews, since it
+ * is that project's storage and the next preview should find it.
+ *
+ * The live set is read from storage here rather than taken from the `projects` signal:
+ * with an empty or half-loaded list every tree looks like an orphan, and this function
+ * deletes. A failed listing therefore throws before any delete is attempted, which is the
+ * safe direction — nothing is reclaimed this time round.
+ *
+ * Deliberately silent about what it removed; a toast would report platform bookkeeping to
+ * someone who asked for a preview.
+ */
+export async function reclaimOrphanedPreviewStorage(): Promise<void> {
+  try {
+    const projectDirs = await appStorage.list('projects/');
+    const live = new Set(
+      projectDirs
+        .filter((e) => e.isDirectory)
+        .map((e) => e.path.replace(/\/$/, '').split('/').pop())
+        .filter((id): id is string => !!id),
+    );
+
+    const entries = await list<{ path: string; isDirectory?: boolean }[]>('yaar://storage/apps');
+    if (!Array.isArray(entries)) return;
+
+    for (const entry of entries) {
+      const appId = entry.path.replace(/\/$/, '').split('/').pop();
+      if (!appId || !appId.startsWith('preview--')) continue;
+      if (live.has(appId.slice('preview--'.length))) continue;
+      try {
+        await del(`yaar://apps/${appId}/storage/`);
+      } catch (err) {
+        // One undeletable tree must not stop the sweep reaching the rest.
+        console.error(`[devtools] reclaiming ${appId} failed`, err);
+      }
+    }
+  } catch (err) {
+    console.error('[devtools] preview storage cleanup failed', err);
+  }
+}
+
 export async function loadProjects(): Promise<void> {
   try {
     const entries = await appStorage.list('projects/');

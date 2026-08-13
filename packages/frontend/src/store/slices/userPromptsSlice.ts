@@ -18,6 +18,7 @@ export const applyUserPromptAction = createApplyAction<
     multiSelect?: boolean;
     inputField?: UserPromptShowAction['inputField'];
     allowDismiss?: boolean;
+    monitorId?: string;
     timestamp: number;
   }
 >(
@@ -31,6 +32,7 @@ export const applyUserPromptAction = createApplyAction<
     multiSelect: action.multiSelect,
     inputField: action.inputField,
     allowDismiss: action.allowDismiss,
+    monitorId: action.monitorId,
     timestamp: Date.now(),
   }),
   'user.prompt.dismiss',

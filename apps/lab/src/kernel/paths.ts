@@ -7,9 +7,11 @@
  *     "/state.json"                       leading slash ignored
  *     "app:scratch.csv"                   explicit
  *     "yaar://apps/self/storage/x.json"   absolute
+ *     "yaar://apps/lab/storage/x.json"    absolute, naming the app by id
  *
  *   EXPLICIT — the shared storage tree, subject to the yaar://storage/ permission in app.json
  *     "yaar://storage/shared/lab/x.png"   absolute; the sanctioned way out of app storage
+ *     "/api/storage/shared/lab/x.png"     the same file as an HTTP route spells it
  *     "shared:shared/lab/x.png"           shorthand
  *     "shared" / "shared/..."             bare shorthand for the shared tree, so the
  *                                         paths plot.save / exportChart take read the
@@ -18,10 +20,32 @@
  * Trailing slashes, doubled slashes and "." segments normalise away instead of throwing.
  * ".." is refused outright: traversal used to escape app storage into neighbouring apps,
  * and a URI is now the only way out.
+ *
+ * Reading the dialects apart is the SDK's `storagePath`, which folds every spelling of a
+ * storage reference onto one root-relative path. What stays here is what is genuinely
+ * this app's: the two shorthands, the bare-path default, and the *tier* each resolved
+ * path belongs to — none of which the SDK has an opinion about.
  */
+
+import { storagePath } from '@bundled/yaar';
 
 const SHARED_URI = 'yaar://storage';
 const SELF_URI = 'yaar://apps/self/storage';
+
+/** This app's own tree, under either spelling the storage root uses for it. */
+const OWN_ROOTS = ['apps/self/', 'apps/lab/'];
+
+/**
+ * A reference written in one of the URI/URL dialects, as opposed to a bare path or one
+ * of the `app:`/`shared:` shorthands below.
+ *
+ * The distinction is the whole two-tier rule: a dialect says which tree it means, a
+ * bare path does not and therefore defaults to this app's storage. Reading the dialects
+ * apart is `storagePath`'s job, but *whether* one was used has to be asked of the raw
+ * string, because after resolution `notebooks/x.json` and `yaar://storage/notebooks/x.json`
+ * are the same string and mean opposite tiers.
+ */
+const DIALECT = /^(yaar:\/\/|https?:\/\/|\/?api\/storage(\/|$))/i;
 
 export interface ResolvedPath {
   /** True when the path targets the shared tree rather than this app's storage. */
@@ -39,10 +63,12 @@ export interface ResolvedPath {
   raw: string;
 }
 
-/** Strip `prefix` (with or without a trailing slash) off `p`, or null if it isn't there. */
-function stripPrefix(p: string, prefix: string): string | null {
-  if (p === prefix || p === prefix + '/') return '';
-  if (p.startsWith(prefix + '/')) return p.slice(prefix.length + 1);
+/** The part of a resolved storage path inside this app's own tree, or null. */
+function stripOwnRoot(resolved: string): string | null {
+  for (const root of OWN_ROOTS) {
+    if (resolved === root.slice(0, -1)) return '';
+    if (resolved.startsWith(root)) return resolved.slice(root.length);
+  }
   return null;
 }
 
@@ -76,26 +102,39 @@ export function resolvePath(
   let p = original.trim();
   let shared = false;
 
-  const self = stripPrefix(p, SELF_URI);
-  const sharedRest = self === null ? stripPrefix(p, SHARED_URI) : null;
-
-  if (self !== null) {
-    p = self;
-  } else if (sharedRest !== null) {
-    shared = true;
-    p = sharedRest;
-  } else if (p.startsWith('app:')) {
+  if (p.startsWith('app:')) {
     p = p.slice(4);
   } else if (p.startsWith('shared:')) {
     shared = true;
     p = p.slice(7);
+  } else if (DIALECT.test(p)) {
+    // `storagePath` reads every spelling of a storage reference — both URI dialects
+    // and the `/api/storage/` URL — so this branch decides only which *tier* the
+    // resolved path lands in, not how to parse it.
+    const resolved = storagePath(p);
+    if (resolved === null) {
+      // `storagePath` answers null for a traversing path as well as for a reference
+      // that is not storage at all. Traversal has its own message, so ask separately
+      // rather than reporting "unsupported URI" for a URI that was perfectly well formed.
+      if (p.split('/').includes('..')) normalize(p, op, original);
+      throw new Error(
+        `store.${op}: unsupported URI '${original}'. Use 'yaar://storage/<path>' for shared ` +
+          `storage, 'yaar://apps/self/storage/<path>' or a bare path for this app's storage.`,
+      );
+    }
+    const own = stripOwnRoot(resolved);
+    if (own !== null) {
+      p = own;
+    } else if (resolved.startsWith('apps/')) {
+      throw new Error(
+        `store.${op}: '${original}' names another app's storage, which this app cannot reach.`,
+      );
+    } else {
+      shared = true;
+      p = resolved;
+    }
   } else if (p === 'shared' || p.startsWith('shared/')) {
     shared = true;
-  } else if (/^yaar:\/\//i.test(p)) {
-    throw new Error(
-      `store.${op}: unsupported URI '${original}'. Use 'yaar://storage/<path>' for shared ` +
-        `storage, 'yaar://apps/self/storage/<path>' or a bare path for this app's storage.`,
-    );
   }
 
   const path = normalize(p, op, original);

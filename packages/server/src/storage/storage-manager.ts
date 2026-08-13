@@ -228,7 +228,11 @@ export async function storageRead(
       return { success: false, error: `File not found: ${filePath}` };
     }
     if (fileStat.isDirectory()) {
-      return { success: false, error: `"${filePath}" is a directory. Use list instead.` };
+      return {
+        success: false,
+        isDirectory: true,
+        error: `"${filePath}" is a directory. Use list instead.`,
+      };
     }
 
     // PDFs. View-first: by default return metadata only and let the caller steer the agent
@@ -507,6 +511,26 @@ async function collectFiles(dir: string): Promise<string[]> {
 const MAX_GREP_MATCHES = 100;
 
 /**
+ * Read a caller's glob the way every caller writes one.
+ *
+ * `Bun.Glob`'s `*` does not cross a `/` (standard glob semantics), and the
+ * matcher is applied to the path *relative to the scope root*. So a bare
+ * `*.md` — the spelling both this verb's schema and the Search app's own tool
+ * schema use as their example — could only ever match a file sitting directly
+ * in the scope root, and silently dropped every nested one. A search over a
+ * tree of markdown returned `{ matches: [], truncated: false }`, which reads
+ * exactly like "this string does not occur here".
+ *
+ * A pattern with no separator is therefore a *basename* pattern, as it is in
+ * ripgrep and `git grep`: it matches that name at any depth. `**\/` still
+ * matches a zero-directory prefix, so root-level files keep matching too.
+ * A glob that names a separator meant a path and is left alone.
+ */
+function normalizeGlob(glob: string): string {
+  return glob.includes('/') ? glob : `**/${glob}`;
+}
+
+/**
  * Search for a regex pattern across text files in a storage directory.
  */
 export async function storageGrep(
@@ -540,16 +564,18 @@ export async function storageGrep(
 
   const allFiles = await collectFiles(basePath);
 
-  const globMatcher = glob ? new Bun.Glob(glob) : null;
+  const globMatcher = glob ? new Bun.Glob(normalizeGlob(glob)) : null;
 
   const matches: StorageGrepMatch[] = [];
   let truncated = false;
+  let scannedFiles = 0;
 
   for (const filePath of allFiles) {
     if (!isTextFile(filePath)) continue;
 
     const relativePath = relative(basePath, filePath).replaceAll('\\', '/');
     if (globMatcher && !globMatcher.match(relativePath)) continue;
+    scannedFiles++;
 
     try {
       const content = await Bun.file(filePath).text();
@@ -574,7 +600,7 @@ export async function storageGrep(
     if (truncated) break;
   }
 
-  return { success: true, matches, truncated };
+  return { success: true, matches, truncated, scannedFiles };
 }
 
 // --- Config directory helpers ---

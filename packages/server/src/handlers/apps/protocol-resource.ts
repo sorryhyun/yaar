@@ -14,8 +14,8 @@
  * accept" (41.8 KB for studio-3d, and unbounded in the app's command count). The sum
  * crossed the Claude CLI's large-output threshold, which replaces the result with a path on
  * disk — and a monitor agent holds the five `yaar:// `verbs and no filesystem tools, so the
- * pointer is a dead end for every YAAR principal. Full incident and measurements:
- * `docs/proposals/app_describe_size_proposal.md`.
+ * pointer is a dead end for every YAAR principal. The cliff itself — where it actually sits,
+ * and how a server raises it — is named and moved in `mcp/result-size.ts`.
  *
  * Splitting the protocol onto its own URI is not just a size fix, though; it is what lets
  * the three verbs mean here what they mean everywhere else, and the granularity falls out

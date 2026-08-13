@@ -25,7 +25,7 @@
  * for `default`, so this test passed the whole time.
  */
 import { describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { readFileSync } from 'fs';
+import { readdirSync, readFileSync } from 'fs';
 import { mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -129,5 +129,40 @@ describe('prebundle completeness', () => {
    */
   test('dompurify prebundles through its shim, never as the npm file itself', () => {
     expect(resolvePrebundleEntrypoint('dompurify')).toBe(BUNDLED_SHIMS.dompurify);
+  });
+
+  /**
+   * The same defect from the other side, which the shim above cannot reach.
+   *
+   * A test file that *imports* dompurify — directly, or transitively through the
+   * `shims/yaar/index.js` barrel, whose `sanitizeHtml` pulls it in — loads
+   * `dist/purify.es.mjs` through Bun's **runtime loader**. Every later
+   * `Bun.build()` in that process then fails to read the same file with `EISDIR`.
+   * Demoting it to an inner module fixes the bundler-vs-bundler collision; it does
+   * nothing for loader-vs-bundler.
+   *
+   * The failures land in whichever file compiles an app afterwards, never in the
+   * one that did the import: `bun test yaar.test.ts define-app.test.ts` failed
+   * four of define-app's compiles while either file alone passed, and which four
+   * depends on run order. So this is asserted over the source text — a test that
+   * reproduced it would have to poison the process it runs in.
+   *
+   * A test that needs the sanitizer itself is not forbidden by this, but it does
+   * need its own process; see `scripts/test/partitions.ts`.
+   */
+  test('no compiler test loads dompurify at runtime, directly or via the yaar barrel', () => {
+    const offenders: string[] = [];
+    for (const file of readdirSync(import.meta.dir)) {
+      if (!file.endsWith('.test.ts')) continue;
+      const source = readFileSync(join(import.meta.dir, file), 'utf-8');
+      // Import forms only — a mention inside a comment (this block is one) is not a load.
+      const specs = [...source.matchAll(/(?:\bfrom|\bimport\s*\()\s*'([^']+)'/g)].map((m) => m[1]);
+      for (const spec of specs) {
+        if (spec === 'dompurify' || /shims\/yaar\/index(\.js)?$/.test(spec)) {
+          offenders.push(`${file} imports '${spec}'`);
+        }
+      }
+    }
+    expect(offenders).toEqual([]);
   });
 });

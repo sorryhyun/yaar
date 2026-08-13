@@ -43,24 +43,22 @@ export const selectVisibleWindows = createCachedWindowSelector(
     !w.minimized && (!w.variant || w.variant === 'standard') && w.content.renderer !== 'iframe',
 );
 
-export const selectMinimizedWindows = (state: DesktopStore) =>
-  Object.values(state.windows).filter(
-    (w): w is WindowModel =>
-      w != null &&
-      w.minimized &&
-      (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
-  );
-
-export const selectMinimizedIframeWindows = (state: DesktopStore): WindowModel[] =>
-  Object.values(state.windows).filter(
-    (w): w is WindowModel =>
-      w != null &&
-      w.minimized &&
-      w.content.renderer === 'iframe' &&
-      (!w.variant || w.variant === 'standard') &&
-      (w.monitorId ?? DEFAULT_MONITOR_ID) === state.activeMonitorId,
-  );
+/**
+ * Every standard window on the active monitor — the row the taskbar under the input bar
+ * renders.
+ *
+ * It used to be the minimized ones only, which made that row a place windows went rather
+ * than a way to reach them: an open window had no tab, so there was nothing to click to
+ * raise one buried under three others, and nothing at all to look at that said what the
+ * desktop was holding. Minimized is a *state* of a tab here, not the condition for having
+ * one.
+ *
+ * Insertion order, like `selectVisibleWindows` and for the same reason: focus must not
+ * reorder the row, or a tab moves out from under the pointer between clicks.
+ */
+export const selectTaskbarWindows = createCachedWindowSelector(
+  (w) => !w.variant || w.variant === 'standard',
+);
 
 /**
  * ALL iframe windows across every monitor — rendered in a single React list so

@@ -183,7 +183,7 @@ Publishing uploads a **tar.gz of the app directory**, entries prefixed `{appId}/
 
 App secrets are not a concern here because they don't live in the app directory in the first place: credentials are stored separately under `config/{appId}.json` (git-ignored, see [Credential Management](#credential-management)), never inside `apps/{appId}/`.
 
-The marketplace commits the app into its own git repo, so publishing is queued rather than instant — the response says "live in ~1 minute", once the redeploy lands. The app id must match `^[a-z][a-z0-9-]*$`.
+The marketplace commits the app into its own git repo, so publishing is queued rather than instant — the response says "live in ~1 minute", once the redeploy lands. The app id must match `^[a-z][a-z0-9-]*$`, and two names are reserved on top of that shape: `self` (the pronoun every app writes to address its own namespace) and anything starting with `preview--` (a devtools preview's identity). `appIdRefusal` in `packages/server/src/features/apps/roots.ts` is the one definition, checked wherever an id is claimed — deploy, install, publish.
 
 ### Version policy — bump before you publish
 
@@ -660,8 +660,10 @@ Common mistakes to avoid when building apps:
 - **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
 - **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
 - **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
+- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState`, `storagePath`, `fonts`, `rasterize` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
 - **Don't hand-roll a canvas re-encode** — `toWebP(source, { quality, maxSize })` from `@bundled/yaar` is the bitmap → canvas → `convertToBlob` round-trip, including the check that the encoder did not quietly fall back to PNG and the chunked base64 conversion a storage write needs. It returns `null` (never throws) when the browser cannot do it, so the fallback is `if (!encoded) keepTheOriginal()`. No `@bundled/*` package ships a WebP codec — Chromium already has one; this is the boilerplate around it.
+- **Don't hand-roll a DOM → image pipeline** — `rasterize(element, { css })` from `@bundled/yaar` is the `foreignObject` → `img` → canvas dance with all six of its quiet failures closed: the subtree inherits no stylesheet, a webfont cannot be *fetched* into it (only inlined, which `rasterize` does for you via `fonts`), a `body {}` rule matches nothing there, the markup must be well-formed XML, every `<img>` must already be a `data:` URL, and a `blob:` URL taints the canvas. Each of those produces a blank or wrong-looking picture with no error. See [Rasterizing your own DOM](#rasterizing-your-own-dom).
+- **Don't fetch and subset a font yourself** — `fonts.inline(text, { weights })` returns YAAR's faces cut down to the characters you name, as a `data:` URL `@font-face` block, plus the glyph ids and metrics a PDF writer needs. The full face is ~1.6 MB and subsetting it in the iframe means writing an OpenType reader; the server already has the file open. Needs no permission.
 - **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
 - **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
 - **Don't hand-roll a sanitizer** — see [the rule above](#rendering-untrusted-html) for what an element denylist plus `^on` attribute stripping misses.
@@ -1141,7 +1143,17 @@ config/
 
 ## App-Scoped Storage
 
-Each app has isolated file storage at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token.
+Each app gets its own folder at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token.
+
+**It is a scoped tree, not a hidden one.** `storage/apps/{appId}/` is a plain subtree of YAAR
+storage, so `yaar://apps/self/storage/x.json` and `yaar://storage/apps/{appId}/x.json` are two
+spellings of the same file. What the scope buys is that **no other installed app can reach it**: a
+market app declaring `yaar://storage/` is capped to the shared tree at install time
+(`capForeignAppStorage` in `http/uri-match.ts`), so it keeps the commons and loses the reach into
+`apps/`. What it does *not* buy is secrecy — the user sees a folder on disk, the Storage app and any
+other app shipped with YAAR hold the whole tree, and monitor/session agents address it directly as
+`yaar://storage/apps/{appId}/`. Put your app's own state here; don't put anything here on the theory
+that nothing else will look.
 
 ### From App Code (`@bundled/yaar`)
 
@@ -1176,6 +1188,42 @@ await appStorage.remove('data.json');
 > **`size` and `modifiedAt` are optional on a listing entry.** A directory has no `size`, and neither field is present if the server predates them. They come from the listing itself, so "how big is this asset" and "which file did I touch last" need no extra read — which is what makes an audit of, say, total inlined asset bytes cheap. `size` is the bytes on disk; a JSON file read back through `readJson` and re-serialized will not match it exactly.
 
 > **`readBlob()` on a PDF does not return the PDF bytes.** `readBlob()` takes no options, so the server's page-rasterization opt-in (`pdfPages`) can never fire through this path; the default branch returns the ASCII string `PDF document with N page(s), N bytes.` wrapped in a Blob (`packages/server/src/storage/storage-manager.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
+
+### Publishing for other apps (`sharedStorage`)
+
+`appStorage` is yours — no other installed app can read it. When an app *produces* something
+other apps should be able to pick up (a render, an export, a chart), that goes in the
+commons: `yaar://storage/shared/{appId}/`, granted to every app for being an app, one
+directory per producing app. `sharedStorage` is that directory, so it isn't a
+`const SHARED_DIR = 'shared/anima'` in every app that publishes. **Which directory is
+yours the server decides**, from the iframe token — paths go out as `shared/self/…`, like
+`apps/self` — so a devtools preview writes to its own directory instead of the shipped
+app's, and none of this needs `defineApp` to have run first:
+
+```typescript
+import { sharedStorage } from '@bundled/yaar';
+
+// Copy a file already in storage into the commons — the copy happens server-side.
+const { uri } = await sharedStorage.publish('yaar://apps/self/storage/generated/x.png', {
+  as: 'dragon.png',
+});                                   // → yaar://storage/shared/anima/dragon.png
+
+// Or write straight there. Names are subpaths, so subdirectories work.
+await sharedStorage.save('renders/final.png', blob);
+
+const files = await sharedStorage.list();       // this app's commons directory
+img.src = sharedStorage.url('renders/final.png'); // carries the iframe token
+```
+
+> **Prefer `publish()` over read-then-`save()`.** `from` is a reference, not bytes, so the
+> file never travels through the iframe — and once an agent asks about it, never through a
+> model context. A 550KB PNG round-tripped as base64 costs that on every hop.
+
+Names are relative to the app's own directory; a name naming *another* app's directory, or
+another top-level tree (`apps/`, `mounts/`, …), is refused rather than nested inside this
+one. Use the raw `storage` API to reach those deliberately — that is also what to use when
+you hold a path someone *else* produced. Every method needs the app's id, so call them
+after `defineApp({ id })` has run, not at module scope.
 
 ### Never swallow a failed save
 
@@ -1358,6 +1406,62 @@ Calendar *dates* are deliberately not here — date style is a legitimate per-ap
 `toWebP` over `blobToDataUrl`: it re-encodes and hands back both the data URL and the raw
 base64 that `appStorage.save(..., 'base64')` wants.
 
+### Rasterizing your own DOM
+
+There is exactly one way to get pixels out of laid-out HTML in a browser sandbox with no
+rendering library bundled — `DOM → SVG foreignObject → img → canvas` — and it is four
+lines to write and about six ways to get wrong, each of which fails *quietly*: a blank
+picture, a picture in the wrong font, or a canvas that throws when you read it back.
+
+```typescript
+import { rasterize, downloadBlob } from '@bundled/yaar';
+
+const { blob, fonts, skippedImages } = await rasterize(pageEl, { css: exportCss, scale: 2 });
+downloadBlob(blob, 'page.png');
+// fonts.missing — characters no face covered; skippedImages — sources that wouldn't inline.
+// Both are reported rather than thrown: one bad glyph should not cost the whole picture.
+```
+
+The element must be **in the document and laid out** — `position:fixed; left:-99999px` is
+the usual trick, since a `display:none` subtree has no metrics and rasterises as nothing.
+It is cloned, so your live DOM is not touched.
+
+The one thing you must supply is `css`. Chrome draws that SVG in **secure static mode**:
+the subtree reaches no page stylesheet, no `--yaar-*` tokens, and no network, so anything
+not stated in `css` is simply missing from the picture. Everything else the SDK handles —
+inlining `<img>` sources as `data:` URLs, serialising as well-formed XML (a Markdown
+renderer's `<br>` would otherwise abort the parse), avoiding the `blob:` URL that taints
+the canvas, painting a background before a JPEG encode turns transparency black, and
+putting the font stack on the subtree's root rather than on `body`, which does not exist
+inside a `foreignObject`.
+
+### The platform's fonts (`fonts`)
+
+Your app's own DOM gets YAAR's webfont for free. A *picture* of that DOM does not: the SVG
+rasteriser above cannot fetch a font at all, and honours only an `@font-face` whose `src`
+is a `data:` URL. A whole face is ~1.6 MB, so it has to be subsetted first — which used to
+mean an app shipping its own OpenType reader and CFF subsetter.
+
+```typescript
+import { fonts } from '@bundled/yaar';
+
+const { css, faces, missing } = await fonts.inline(pageEl.textContent, {
+  weights: [400, 700],       // resolved by CSS font matching against what's served
+  outlineTable: true,        // + raw CFF bytes, only if you're writing a PDF
+});
+```
+
+`rasterize` calls this for you; call it directly when you are driving the SVG yourself, or
+when you also need `faces[n].gids` / `advances` / `metrics` to paint the *same* glyphs as
+vectors over the raster. Take both from one call: a raster laid out with one font under
+text placed with another drifts ~10% on Latin, which is lines down a page.
+
+`fonts.faces()` lists what this build serves — currently `NanumSquareNeo` (proportional,
+four weights) and `D2Coding` (monospace, for code). `fonts.faceCss(family)` gives the
+by-URL rules for a *measuring* pass; the subset keeps every glyph index and metrics table
+identical, so measurements taken against the full face stay valid. No permission needed —
+the font files are already served unauthenticated.
+
 ### Dialog helpers
 
 Never use native `alert()` / `confirm()` / `prompt()` — they look foreign, block the whole
@@ -1425,14 +1529,56 @@ const published = await storage.list('shared');
 
 Three properties follow from it being the commons rather than a grant:
 
-- **It is not private.** Any app can read, overwrite or delete anything under `shared/`.
-  Data that must stay yours belongs in app storage (`appStorage`), which no other app can
-  reach. The per-producer directory is tidiness, not a boundary.
+- **It is not scoped to anyone.** Any app can read, overwrite or delete anything under
+  `shared/`. Data that must stay yours belongs in app storage (`appStorage`), which no other
+  *installed* app can reach. The per-producer directory is tidiness, not a boundary.
 - **It is a staging area.** The user prunes it; a file published last week may be gone.
   An app that needs an asset at runtime should keep its own copy.
-- **It does not widen anything else.** `storage/apps/{id}/` is a different subtree, so the
-  commons never reaches another app's private files — that still takes a declared
-  `permissions` entry, and for an installed app it is capped to the shared tree anyway.
+- **It does not widen anything else.** `storage/apps/{id}/` is a sibling subtree, so the
+  commons never reaches another app's own tree — that still takes a declared `permissions`
+  entry, and for an installed app it is capped to the shared tree anyway.
+
+### One file, four names (`storagePath`)
+
+A stored file is spelled differently by each layer that hands it to you, and all four
+name the same bytes:
+
+| Spelling | Where it comes from |
+|---|---|
+| `shared/anima/dragon.png` | a `storage.list` entry, another app's publish confirmation |
+| `yaar://storage/shared/anima/dragon.png` | a verb result, an agent, an `app.json` permission |
+| `yaar://apps/self/storage/x.png` | `appStorage`, an agent naming your own tree |
+| `/api/storage/shared/anima/dragon.png` | an HTTP route, an `<img src>` you built earlier |
+
+**Every `storage.*` method accepts all four**, so a reference you were handed can go
+straight into `read`/`save`/`list`/`remove`/`url` with no unwrapping. Reach for
+`storagePath` only when you need the path *itself*:
+
+```typescript
+import { storage, storagePath } from '@bundled/yaar';
+
+// "Is this a stored file or a remote URL?" — null means not storage.
+const path = storagePath(slide.image);
+img.src = path ? storage.url(path) : slide.image;
+```
+
+Two rules worth knowing, because both have cost real bugs:
+
+- **Never hand-roll the parsing.** Recognising only the flat spelling is how a deck ends
+  up with an image the editor shows and the export leaves blank — the namespaced URI
+  passes through verbatim and becomes a request for a directory named `yaar:`.
+- **Never hand-build a `/api/storage/…` URL.** Only `storage.url()` carries the iframe
+  token in the query string, which is the sole way a subresource fetch (`<img>`,
+  `<video>`, CSS `url()`) can present one. A hand-built URL is refused as
+  unauthenticated the moment app-origin isolation is on, and reaches the element as an
+  indistinguishable load failure.
+
+`null` from `storagePath` means "not a storage reference" (a remote URL, a `data:` URL,
+another kind of `yaar://` resource) or a path containing `..`. It does **not** mean
+forbidden — an agent may have delegated a single file to your window, a grant no code in
+the iframe can see, so a path outside your own trees still resolves and the server
+decides. `self` is left unexpanded for the same reason: the server resolves it against
+the calling app, and under a devtools preview that is `preview--{id}`, not your app id.
 
 ## App-Scoped Database (`appDb`)
 

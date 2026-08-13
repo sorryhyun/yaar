@@ -132,7 +132,7 @@ src/
 │   ├── storage-describe.ts # describeStoragePath() — describe for a path on disk, shared by both storage doors
 │   ├── apps/             # register.ts, app-resource.ts, protocol-resource.ts, agents-resource.ts, storage-resource.ts, db-resource.ts, paths.ts
 │   ├── agents.ts / apps.ts (barrel) / storage.ts / storage-bytes.ts / config.ts / history.ts / http.ts / mcp-gateway.ts
-│   └── session.ts / skills.ts / system.ts / user.ts / window.ts
+│   └── fonts.ts / session.ts / skills.ts / system.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
 │   ├── server.ts         # Tool registration, request handling; CORE_SERVERS; the two protocol eras
 │   ├── result-size.ts    # The MCP result-size cliff and the per-tool annotation that moves it
@@ -148,6 +148,7 @@ src/
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)
+│   ├── fonts/            # The served-face catalog + subsetForText() behind yaar://system/fonts
 │   ├── http/             # fetch.ts — proxied HTTP fetch
 │   ├── market/ session/ skills/ user/   # Marketplace, session ops, skills, clipboard + secret-scan
 │   ├── update/           # Self-update: semver.ts, release.ts, installer.ts, updater.ts
@@ -159,6 +160,8 @@ src/
 ├── storage/              # StorageManager, permissions, shortcuts, settings, mounts, app-grants.ts
 └── lib/                  # Standalone utilities (no server internal imports)
     ├── browser/ pdf/ tunnel/ download/
+    ├── fonts/                 # OpenType reader + CFF and glyf subsetters — bytes in, bytes out
+    │                          #   (the catalog and loading are features/fonts/)
     ├── ssrf.ts               # URL validation, safe fetch with redirect following
     ├── image.ts              # data-URL parsing + toWebPForModel()
     ├── schema-refs.ts        # resolveRef/selfContained — following a protocol schema's `$defs` pointers
@@ -330,7 +333,7 @@ domain logic from `features/`) via `yaar://` URIs.
 |--------|-----------|---------|
 | `handlers/` | verbs | describe, read, list, invoke, delete — 5 generic URI verbs dispatching via `yaar://` URIs |
 | `mcp/system/` | system | reload_cached, list_reload_options |
-| `mcp/app-agent/` | app | describe, query, command, relay (+ direct_message when granted) |
+| `mcp/app-agent/` | app | describe, query, command, relay (+ direct_message when granted). The `storage:*` built-ins are **declared, not automatic** — see below |
 | `mcp/messaging/` | messaging | Cross-agent direct messaging |
 | `mcp/sub-agent/` | subagent | app-defined tools of the *calling* sub-agent — the only namespace whose tool list depends on who connects; empty for everyone else |
 
@@ -427,9 +430,9 @@ every manifest read would pay for every key.
 `describe` is counts and doors, `list` is the index, `read` is the manifest, and
 `read('…/protocol/commands/{name}')` is one command self-contained and brace-batchable. So the
 index is *what `list` means*, not a degradation a byte budget switches on, and nothing is truncated
-behind a caller's back. The incident that forced the split — and the CLI result-size cliff behind
-it — is [`docs/proposals/app_describe_size_proposal.md`](../../docs/proposals/app_describe_size_proposal.md);
-the cliff itself is named and moved in `mcp/result-size.ts`.
+behind a caller's back. The incident that forced the split is recorded in
+`handlers/apps/protocol-resource.ts`'s header; the CLI result-size cliff behind it is named and
+moved in `mcp/result-size.ts`.
 
 **A schema may point at the manifest, so every reader has to follow the pointer.** The compiler
 hoists a repeated shape into `manifest.$defs` and leaves `{"$ref": "#/$defs/x"}` at each use.
@@ -442,6 +445,35 @@ per-command `describe` (`features/window/app-protocol.ts`), and the app agent's 
 
 **A reserved payload key (`action`/`params`/`timeoutMs`) is checked against the command's schema,
 not against its name.** Full story at `invokeSubResource` in `handlers/window.ts`.
+
+### App agent storage is declared, not automatic
+
+`query`/`command` intercept storage paths before the app protocol — `storage:write`,
+`storage:delete`, `storage:list`, and the relative `storage/{path}` spelling on `query`. An app
+agent holds them **iff** its `app.json` declares at least one entry under `yaar://storage/`
+(`yaar://storage/apps/` excluded). Four bundled apps do; the rest are refused by name, **including
+against their own tree** — a capability the author never declared is not one the agent should hold.
+
+Two layers, one predicate (`declaresSharedStorage`, `mcp/app-agent/shared-storage.ts`):
+
+- **The prompt** — both storage sections are rendered only for a declaring app, at the single site
+  in `agents/profiles/app-agent.ts` that assembles them into *either* prompt branch (a `prompt.md`
+  app issues the same payloads, and the two sections drifted apart once already).
+- **The handler** — refused at call time, with `storageNotDeclared` naming the app's own protocol
+  commands as the way forward. An app agent cannot edit its own manifest, so the app.json line is
+  an author-facing note, not an instruction (this is the one difference from `direct_message`'s
+  refusal, whose reader is a monitor agent).
+
+There is deliberately **no third copy in the tool descriptions**: a description is written once for
+every caller, so making it honest per app would mean an appId resolution and an uncached
+`getAppMeta` read on every `app`-namespace MCP request — the modern era builds a server per
+request. `query`/`command` mention storage nowhere.
+
+**Exposure is not authorization.** A declaration opens the door; `permissionsAllow` still decides
+each call, so `{ uri: "yaar://storage/reports/", verbs: ["read","list"] }` exposes the built-ins
+and still refuses `storage:write`. The **iframe** side is untouched — `SELF_GRANTS`, the commons in
+`permissionsAllow`, and every `POST /api/verb` path. An undeclared app persists through a command
+its own `protocol.json` declares (`apps/session-logs`'s `saveReport` is the worked example).
 
 ### Monitor ↔ App Agent communication
 

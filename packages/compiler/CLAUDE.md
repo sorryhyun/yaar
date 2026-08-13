@@ -20,7 +20,7 @@ src/
 ├── config.ts              # CompilerConfig (projectRoot, isBundledExe)
 ├── paths.ts               # MODULE_ROOT / PACKAGE_ROOT / SHIMS_DIR — the one src-vs-dist derivation
 ├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
-├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens() (generated token reference)
+├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens()/…Brief() (generated token reference, two tiers)
 ├── build/
 │   ├── build-app.ts       # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs
 │   ├── source-cache.ts    # AppSourceCache — one read of each source file per compile, never across two
@@ -49,6 +49,8 @@ src/
     │   ├── index.ts       # Barrel — the entire @bundled/yaar public surface
     │   ├── verbs.ts       # window.yaar global, read/invoke/list/describe/del/subscribe, stream, httpFetch
     │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
+    │   ├── shared-storage.ts # sharedStorage — the commons, scoped to shared/{appId}/ (+ publish, a server-side copy)
+    │   ├── app-identity.ts # setAppId/getAppId — the app's own id, recorded by defineApp for shared-storage.ts
     │   ├── app-db.ts      # appDb + CollectionHandle (yaar://apps/self/db/*)
     │   ├── dialogs.ts     # showConfirm / showPrompt (no showAlert — showToast covers it)
     │   ├── ui.ts          # showToast, onShortcut, createKeyState, withLoading, tryToast, errMsg, wait, createStaleGuard, AppCommandError, defineAppCommand
@@ -58,6 +60,8 @@ src/
     │   ├── files.ts       # downloadBlob, blobToDataUrl
     │   ├── format.ts      # formatBytes, formatDuration, formatClock — one rendering per value, OS-wide
     │   ├── image.ts       # toWebP — the canvas re-encode round-trip apps kept hand-rolling
+    │   ├── fonts.ts       # fonts.faces/faceCss/inline — YAAR's faces, subsetted server-side into a data: URL @font-face
+    │   ├── rasterize.ts   # rasterize() — DOM → SVG foreignObject → canvas, with the six quiet failures closed
     │   ├── define-app.ts  # defineApp() — registration timing, mounting, error contract, Zod params validation, keybinding dispatch, per-key describe()
     │   └── reactive.ts    # createPersistedSignal, createCollapsiblePanel, createAutosave
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
@@ -281,9 +285,12 @@ Two rules about `bundled-types/index.d.ts` itself:
   including that **Solid does not diff**, so `produce` (not an Immer-style copy) is the right
   store-update primitive. `@bundled/mediabunny` carries the same kind of block.
 - Beyond real modules it serves **pseudo-libraries** — describable but not importable.
-  `design-tokens` returns `describeDesignTokens()` generated from `YAAR_DESIGN_TOKENS_CSS`; the
-  same list feeds the App Authoring Contract in `server/agents/profiles/app-agent.ts`, so what the
-  compiler *rejects* and what it *tells agents exists* come from one source (asserted by a test).
+  `design-tokens` returns `describeDesignTokens()` generated from `YAAR_DESIGN_TOKENS_CSS`. Its
+  short form, `describeDesignTokensBrief()`, is what the App Authoring Contract embeds in
+  `server/agents/profiles/app-agent.ts` — so the always-on copy carries every token *name* while
+  values and the long class tail stay one describe away. Both tiers come from the same parse, and
+  a test asserts **both** advertise every token the guard accepts, so what the compiler *rejects*
+  and what it *tells agents exists* cannot diverge in either tier.
 
 ## Shims
 

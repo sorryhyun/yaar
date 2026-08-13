@@ -102,6 +102,7 @@
     }
   },
   "userPrompt": {
+    "askedBy": "{{monitor}} からの質問",
     "skip": "スキップ",
     "submit": "送信"
   },

@@ -16,7 +16,7 @@ import { publishFrame } from '../../streams/stream-hub.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
-import { APPS_DIR, resolveAppDir } from '../apps/roots.js';
+import { APPS_DIR, appIdRefusal, resolveAppDir } from '../apps/roots.js';
 import { agentDocPaths, APP_ROOT_DOCS, invalidateAppsCache } from '../apps/discovery.js';
 import { retireStaleApp } from '../apps/retire.js';
 import { snapshotApp } from './git.js';
@@ -150,13 +150,8 @@ export async function doDeploy(
     if (args.sessionId) publishFrame(deployUri, kind, { appId, ...data }, args.sessionId);
   };
 
-  if (!/^[a-z][a-z0-9-]*$/.test(appId)) {
-    return {
-      success: false,
-      error:
-        'Invalid app ID. Use lowercase letters, numbers, and hyphens. Must start with a letter.',
-    };
-  }
+  const refusal = appIdRefusal(appId);
+  if (refusal) return { success: false, error: refusal };
 
   emit('progress', { step: 'start', message: `Deploying ${appId}…` });
 

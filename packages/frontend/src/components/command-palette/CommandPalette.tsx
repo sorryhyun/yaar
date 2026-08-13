@@ -555,7 +555,7 @@ export function CommandPalette() {
         {activeStatus && (
           <div className={statusClass(activeStatus.status)}>{statusLabel(activeStatus)}</div>
         )}
-        {/* Fixed slot for minimized window tabs */}
+        {/* Fixed slot for the window tabs */}
         <div className={styles.taskbarSlot}>
           <Taskbar />
         </div>

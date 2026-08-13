@@ -581,7 +581,8 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
           id,
         } as UserPromptDismissAction as OSAction),
       // Deliver via dedicated event -> LiveSession.broadcast() (session-scoped, no
-      // monitor filter)
+      // monitor filter). The monitor rides on the *action* instead, as attribution: a
+      // prompt only the monitor it came from can see is a prompt nobody answers.
       send: (promptId, sid) => {
         const action: UserPromptShowAction = {
           type: 'user.prompt.show',
@@ -592,6 +593,7 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
           multiSelect: opts.multiSelect,
           inputField: opts.inputField,
           allowDismiss: opts.allowDismiss ?? true,
+          monitorId: this.resolveMonitorId(),
         };
         this.emit('user-prompt', {
           sessionId: sid,

@@ -148,7 +148,11 @@ export async function invokeStorage(
       payload.glob as string | undefined,
     );
     if (!result.success) return error(result.error!);
-    return okJson({ matches: result.matches, truncated: result.truncated });
+    return okJson({
+      matches: result.matches,
+      truncated: result.truncated,
+      scannedFiles: result.scannedFiles,
+    });
   }
 
   if (!storagePath.path) return error('Provide a file path under /storage/.');

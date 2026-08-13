@@ -86,8 +86,8 @@ const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
   { match: 'yaar://storage/shared/',        icon: '🤝',  title: 'Share files with other apps',           detail: 'The shared tree only — not your documents' },
   { match: 'yaar://apps/',     exact: true, icon: '🧩',  title: 'See and manage installed apps',        warn: true },
   { match: 'yaar://apps/',                  icon: '🧩',  title: "Use another app's resources" },
-  { match: 'yaar://apps/{id}/storage/',     icon: '📁',  title: 'Store its own data',                   detail: 'Private to this app' },
-  { match: 'yaar://apps/{id}/db/',          icon: '🗄️',  title: 'Keep its own database',                detail: 'Private to this app' },
+  { match: 'yaar://apps/{id}/storage/',     icon: '📁',  title: 'Store its own data',                   detail: 'Its own folder in YAAR storage — no other app' },
+  { match: 'yaar://apps/{id}/db/',          icon: '🗄️',  title: 'Keep its own database',                detail: 'Its own database in YAAR storage — no other app' },
   { match: 'yaar://http',                   icon: '🌐',  title: 'Access the internet',                  detail: 'Requests to allowed domains' },
   { match: 'yaar://windows/',               icon: '🪟',  title: 'Open and control windows' },
   { match: 'yaar://user/notifications',     icon: '🔔',  title: 'Send you notifications' },
@@ -101,6 +101,7 @@ const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
   { match: 'yaar://mcp/',                   icon: '🔌',  title: 'Use connected external tools',         detail: 'MCP servers' },
   { match: 'yaar://skills/',                icon: '📘',  title: 'Read system skills' },
   { match: 'yaar://system/',                icon: '🖥️',  title: 'Read system status' },
+  { match: 'yaar://system/fonts',           icon: '🔤',  title: 'Use the fonts YAAR ships',             detail: 'Granted to every app — no approval needed' },
   { match: 'yaar://system/update',          icon: '⬇️',  title: 'Check for and install YAAR updates',   warn: true },
 ];
 

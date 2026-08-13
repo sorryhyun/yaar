@@ -12,7 +12,7 @@
 }
 
 /* Monitor row — its own row directly above the command-palette bar, mirroring the
-   minimized-window taskbar row below it. Deliberately *not* inside the glass bar:
+   window taskbar row below it. Deliberately *not* inside the glass bar:
    it's navigation between surfaces, not a control belonging to the input. */
 .monitorBar {
   display: flex;
@@ -118,6 +118,30 @@
 .tab:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* The three states the row now has to tell apart. Focused gets the accent underline
+   rather than a fill, so it reads against `:hover` instead of competing with it; put
+   away is a dimmed tab, not an absent one. */
+.tab[data-active] {
+  border-color: var(--color-accent);
+  box-shadow:
+    0 1px 4px rgba(0, 0, 0, 0.2),
+    inset 0 -2px 0 var(--color-accent);
+}
+
+.tab[data-minimized] {
+  background: transparent;
+  color: var(--color-muted);
+}
+
+.tab[data-minimized] .tabIcon {
+  opacity: 0.6;
+}
+
+.tab[data-minimized]:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--color-text);
 }
 
 .tabIcon {

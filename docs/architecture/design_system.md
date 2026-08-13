@@ -14,7 +14,7 @@ waiting to drift.
 |---|---|
 | App iframes (`--yaar-*` vars, `y-*` classes) | `buildAppTokensCss()` → re-exported by the compiler as `YAAR_DESIGN_TOKENS_CSS`, injected into every compiled app |
 | OS shell (`--color-*`, `--space-*`, …) | `buildShellTokensCss()` → checked-in generated file `packages/frontend/src/styles/base/tokens.css`; a frontend test fails if it's out of sync |
-| Agent-facing token reference | `describeDesignTokens()` parses the generated CSS — what agents are told exists is what the compiler injects, mechanically |
+| Agent-facing token reference | `describeDesignTokens()` / `describeDesignTokensBrief()` parse the generated CSS — what agents are told exists is what the compiler injects, mechanically |
 | Compile-time token guard | parses the same CSS — what the compiler rejects and what it advertises share one source |
 | Shell accent picker | `ACCENT_PRESETS_DATA` from the same module (preset **keys** are persisted in user settings — never rename them) |
 | TS code needing a color (canvas, QR, error boundaries) | imports `PALETTE_DARK` / `alpha()` from `@yaar/shared` |
@@ -97,9 +97,14 @@ session-logs) so a reader can tell an extension from an override at a glance.
 - Canonical data + generators: `packages/shared/src/design/`
 - Regeneration: `bun scripts/codegen/design-tokens.ts`
 - Sync test: `packages/frontend/src/tests/design/tokens-sync.test.ts`
-- Token reference for agents/humans: `describeDesignTokens()` in
-  `@yaar/compiler`, served at `GET /api/dev/bundled-libraries` (name
-  `design-tokens`); the same text is embedded in app-agent prompts.
+- Token reference for agents/humans: two tiers in `@yaar/compiler`, both parsed
+  from the same injected CSS. `describeDesignTokens()` is the full reference —
+  every token with its value, every class grouped by family — served on demand at
+  `GET /api/dev/bundled-libraries` (name `design-tokens`).
+  `describeDesignTokensBrief()` is what the App Authoring Contract embeds in the
+  prompt of every app holding `yaar-dev`: every token *name*, no values, and a
+  starter set of classes. Names stay in both tiers because a wrong `--yaar-*` is
+  a build error while a wrong `y-*` fails silently — see that function's header.
 - Browsable previews: `make design` regenerates tokens + preview cards;
   `make design-preview` serves them at `http://127.0.0.1:4321/previews/` for visual
   review **without running the app** (override with `DESIGN_PREVIEW_PORT`). Also

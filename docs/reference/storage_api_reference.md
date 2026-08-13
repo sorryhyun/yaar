@@ -12,7 +12,9 @@ PROJECT_ROOT/
 │   ├── temp/                    # Dropped images (auto WebP conversion)
 │   ├── files/                   # Uploaded files
 │   ├── mounts/                  # Virtual — maps to host directories
-│   └── {app-specific}/          # App data
+│   ├── shared/{appId}/          # The commons — every app may read and write it
+│   └── apps/{appId}/            # Per-app storage + data.db; also spelled
+│                                #   yaar://apps/{appId}/storage/ — same files, not a separate store
 └── config/                      # Configuration (git-ignored)
     ├── {appId}.json             # App credentials / config
     ├── mounts.json              # Mount definitions
@@ -429,7 +431,15 @@ Non-image files are uploaded to `storage/files/` with sanitized filenames.
 
 **Source:** `packages/shared/src/iframe-scripts/storage-sdk.ts` (`IFRAME_STORAGE_SDK_SCRIPT`)
 
-Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `storage` for raw). The underlying SDK is injected automatically.
+Apps access storage via `@bundled/yaar` imports. The underlying SDK is injected automatically. Three shapes, and which one to reach for is decided by who else should be able to read the file:
+
+| Import | Tree | Who else can read it |
+|---|---|---|
+| `appStorage` | `apps/self/…` | no other installed app — but it is a plain subtree, addressable as `yaar://storage/apps/{appId}/`, so the user, the Storage app and agents all see it |
+| `sharedStorage` | `shared/{appId}/…` | every app, and agents |
+| `storage` | the whole storage root | — it is the raw, unscoped API |
+
+Reach for `storage` when you hold a path *someone else* produced (an image under `shared/anima/`, a file under `mounts/`); reach for `sharedStorage` when this app is producing something for others to find.
 
 `storage` (raw, `window.yaar.storage` — dispatches straight to `/api/storage/*`):
 
@@ -454,6 +464,39 @@ Apps access storage via `@bundled/yaar` imports (`appStorage` for app-scoped, `s
 | `readBlob` | `(path) → Promise<Blob>` | `readBinary`, decoded into a `Blob`. |
 | `list` | `(dirPath?) → Promise<YaarAppStorageEntry[]>` | Each entry is `{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }`. `path` is relative to the app's own storage root, so it can be handed straight back to `read`/`save`. `size`/`modifiedAt` carry the same values as `StorageEntry` above but are optional here — a directory has no size. |
 | `remove` | `(path) → Promise<void>` | Delete file. |
+
+`sharedStorage` (the commons, scoped to this app's directory in it — `packages/compiler/src/shims/yaar/shared-storage.ts`). `yaar://storage/shared/` is granted to every app for being an app, and the convention is one directory per producing app; this is that directory, without each app writing it out as a constant.
+
+**Which directory is yours is decided by the server.** Paths go out spelled `shared/self/…` and `resolveSelf` expands them against the calling principal, exactly as it does for `apps/self`. The name used to be built in the iframe from the id passed to `defineApp` — which is the shipped app's id even under a devtools preview, so a preview published into the *live* app's directory beside real user files. One principal now decides both trees.
+
+Names are subpaths (`'renders/final.png'`), a leading slash is ignored, and `..` is refused. A name that already spells out this app's own commons directory — in any dialect — is taken as-is rather than nested a second time, so a path from `list()` round-trips. A name in *another* app's directory, or in another top-level tree (`apps/`, `mounts/`, `temp/`, `files/`), is refused by name rather than nested; use `storage` to reach those deliberately.
+
+Nothing here needs the app's id, so module scope is fine — `defineApp` does not have to have run.
+
+| Method | Signature | Description |
+|--------|-----------|-------------|
+| `dir` | `string` | This app's directory in the commons, as a root-relative path — `shared/{appId}` once a call has reported the resolved path back (any `save`, `list` or `publish`), `shared/self` until then. Both name the same directory to every YAAR door; only a *monitor* agent, which has no app identity, cannot resolve the pronoun. |
+| `path` | `(name?) → string` | A name inside that directory, as a root-relative path. |
+| `uri` | `(name?) → string` | The same, as a `yaar://storage/…` URI. |
+| `url` | `(name) → string` | A URL an `<img src>`/`<video>`/CSS `url()` can load — carries the iframe token, which a subresource fetch cannot attach as a header. |
+| `save` | `(name, data) → Promise<void>` | Write. Accepts `string`, `Blob`, `ArrayBuffer`, `Uint8Array`. |
+| `read` | `(name, options?) → Promise<*>` | Read; `options.as` as for `storage.read`. |
+| `readBlob` | `(name) → Promise<Blob>` | Read as a `Blob` — the form an `<img>`, a canvas or `mediabunny` wants. |
+| `list` | `(subdir?) → Promise<StorageEntry[]>` | List this app's commons directory, or a subdirectory of it. |
+| `remove` | `(name) → Promise<void>` | Delete. |
+| `publish` | `(from, options?) → Promise<{path, uri, name}>` | Copy a file already in storage into this app's commons directory. `from` accepts any spelling of a stored file; `options.as` names it, defaulting to `from`'s basename. |
+
+`publish` copies **server-side** — `from` is a reference, not bytes. Reading a file out and writing it back through `save()` routes it through the iframe, and for an image an agent then asks about, through a model context; anima's ~550KB PNG is the case that made this a method:
+
+```typescript
+import { sharedStorage } from '@bundled/yaar';
+
+// A generation in the app's private gallery becomes an asset devtools can import.
+const { uri } = await sharedStorage.publish('yaar://apps/self/storage/generated/x.png', {
+  as: 'dragon.png',
+});
+// → yaar://storage/shared/anima/dragon.png
+```
 
 ---
 

@@ -1,14 +1,21 @@
-import { storage } from '@bundled/yaar';
+import { storage, storagePath } from '@bundled/yaar';
 import { chartToPNG } from './chart-render';
 import { dataUrlToBlob } from './data-url';
 import type { ChartSpec } from '../types';
 
-/** Normalise a caller-supplied path into the shared tree under shared/lab/. */
+/**
+ * Normalise a caller-supplied path into the shared tree under shared/lab/.
+ *
+ * `storagePath` reads every spelling of a storage reference; what is left here is this
+ * function's own rule, that anything not already naming the shared tree is *placed*
+ * under `shared/lab/` rather than refused. A reference it cannot read at all — a remote
+ * URL, a traversing path — falls back to a generated name for the same reason: the
+ * caller asked for a chart to be saved, and refusing over the filename is not the
+ * answer this is for.
+ */
 export function sharedPath(raw?: string, fallbackName?: string): string {
-  let p = (raw || '').trim();
+  let p = storagePath(raw) ?? '';
   if (!p) p = 'shared/lab/' + (fallbackName || 'chart-' + Date.now()) + '.png';
-  if (p.startsWith('yaar://storage/')) p = p.slice('yaar://storage/'.length);
-  if (p.startsWith('/')) p = p.slice(1);
   if (!p.startsWith('shared/')) p = 'shared/lab/' + p.replace(/^lab\//, '');
   if (!/\.(png|jpg|jpeg|webp)$/i.test(p)) p += '.png';
   return p;

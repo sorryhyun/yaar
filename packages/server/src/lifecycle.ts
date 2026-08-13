@@ -33,7 +33,7 @@ import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub, getSessionHub } from './session/session-hub.js';
 import { setAccessPrincipalResolver } from './handlers/uri-registry.js';
-import { setWindowGrantResolver } from './http/access.js';
+import { setUndelegatedUriResolver, setWindowGrantResolver } from './http/access.js';
 import { getAccessPrincipal, getLogContext } from './agents/agent-context.js';
 import { createLogger, setLogContextResolver } from './observability/log.js';
 import { generateRemoteToken, getRemoteToken } from './http/auth.js';
@@ -93,6 +93,12 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   setWindowGrantResolver(
     (sessionId, windowId, monitorId) =>
       getSessionHub().get(sessionId)?.windowState.getWindowGrants(windowId, monitorId) ?? [],
+  );
+  // Diagnostics for the other half of the same rule — which paths a caller named to this
+  // window and could *not* delegate, so the gate's 403 can say which refusal it is.
+  setUndelegatedUriResolver(
+    (sessionId, windowId, uri, monitorId) =>
+      getSessionHub().get(sessionId)?.windowState.wasUndelegated(uri, windowId, monitorId) ?? false,
   );
 
   await ensureStorageDir();

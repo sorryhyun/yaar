@@ -102,6 +102,7 @@
     }
   },
   "userPrompt": {
+    "askedBy": "来自 {{monitor}} 的提问",
     "skip": "跳过",
     "submit": "提交"
   },

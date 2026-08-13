@@ -16,12 +16,15 @@ import styles from '@/styles/overlays/UserPrompt.module.css';
 
 function PromptBox({
   prompt,
+  askedBy,
   onSubmit,
   onDismiss,
 }: {
   prompt: UserPromptModel;
-  onSubmit: (promptId: string, selectedValues?: string[], text?: string) => void;
-  onDismiss: (promptId: string) => void;
+  /** Label of the monitor whose agent asked, when that is not the one on screen. */
+  askedBy: string | null;
+  onSubmit: (prompt: UserPromptModel, selectedValues?: string[], text?: string) => void;
+  onDismiss: (prompt: UserPromptModel) => void;
 }) {
   const { t } = useTranslation();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -57,7 +60,7 @@ function PromptBox({
   const handleSubmit = () => {
     const selectedValues = selected.size > 0 ? Array.from(selected) : undefined;
     const inputText = text.trim() || undefined;
-    onSubmit(prompt.id, selectedValues, inputText);
+    onSubmit(prompt, selectedValues, inputText);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
@@ -70,6 +73,12 @@ function PromptBox({
 
   return (
     <div className={styles.prompt}>
+      {/* Who is asking. A prompt reaches every monitor, so one raised by an agent the user
+          is not watching used to be indistinguishable from one raised by the desktop in
+          front of them — and answering it sent that agent off to open windows elsewhere. */}
+      {askedBy && (
+        <div className={styles.askedBy}>{t('userPrompt.askedBy', { monitor: askedBy })}</div>
+      )}
       <div className={styles.title}>{prompt.title}</div>
       <div className={styles.message}>{prompt.message}</div>
 
@@ -138,7 +147,7 @@ function PromptBox({
 
       <div className={styles.buttons}>
         {prompt.allowDismiss !== false && (
-          <button className={styles.dismissButton} onClick={() => onDismiss(prompt.id)}>
+          <button className={styles.dismissButton} onClick={() => onDismiss(prompt)}>
             {t('userPrompt.skip')}
           </button>
         )}
@@ -153,19 +162,37 @@ function PromptBox({
 export function UserPrompt() {
   const prompts = useDesktopStore(useShallow(selectUserPrompts)) as UserPromptModel[];
   const dismissUserPrompt = useDesktopStore((s) => s.dismissUserPrompt);
+  const monitors = useDesktopStore(useShallow((s) => s.monitors));
+  const activeMonitorId = useDesktopStore((s) => s.activeMonitorId);
+  const switchMonitor = useDesktopStore((s) => s.switchMonitor);
   const { sendUserPromptResponse } = useAgentConnection();
 
-  const handleSubmit = (promptId: string, selectedValues?: string[], text?: string) => {
-    sendUserPromptResponse(promptId, selectedValues, text);
-    dismissUserPrompt(promptId);
+  /**
+   * Take the box down only once the answer is on the wire, and follow the agent to its own
+   * monitor. Dismissing unconditionally destroyed answers that a dead socket swallowed;
+   * leaving the box up means the retry is one click away, and a reconnect re-shows it from
+   * the server's snapshot regardless.
+   */
+  const settle = (
+    prompt: UserPromptModel,
+    answer: { selectedValues?: string[]; text?: string; dismissed?: boolean },
+  ) => {
+    if (!sendUserPromptResponse(prompt, answer)) return;
+    dismissUserPrompt(prompt.id);
+    if (!answer.dismissed && prompt.monitorId && prompt.monitorId !== activeMonitorId) {
+      switchMonitor(prompt.monitorId);
+    }
   };
 
-  const handleDismiss = (promptId: string) => {
-    sendUserPromptResponse(promptId, undefined, undefined, true);
-    dismissUserPrompt(promptId);
-  };
+  const handleSubmit = (prompt: UserPromptModel, selectedValues?: string[], text?: string) =>
+    settle(prompt, { selectedValues, text });
+
+  const handleDismiss = (prompt: UserPromptModel) => settle(prompt, { dismissed: true });
 
   if (prompts.length === 0) return null;
+
+  const labelOf = (monitorId: string) =>
+    monitors.find((m) => m.id === monitorId)?.label ?? monitorId;
 
   return (
     <div className={styles.overlay}>
@@ -173,6 +200,11 @@ export function UserPrompt() {
         <PromptBox
           key={prompt.id}
           prompt={prompt}
+          askedBy={
+            prompt.monitorId && prompt.monitorId !== activeMonitorId
+              ? labelOf(prompt.monitorId)
+              : null
+          }
           onSubmit={handleSubmit}
           onDismiss={handleDismiss}
         />

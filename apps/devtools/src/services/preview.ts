@@ -13,6 +13,7 @@ import {
 } from '../core';
 import { addConsoleEntry } from './console';
 import { getRuntimeManifest } from './manifest';
+import { reclaimOrphanedPreviewStorage } from './projects';
 
 // Preview window mechanics: how it is opened and how pixels are read back out.
 //
@@ -126,6 +127,13 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   // Trust the id the server actually registered, not the one we asked for.
   const windowId = result?.windowId ?? previewId;
   setPreviewWindowId(windowId);
+  // Retire the preview storage of projects that no longer exist. Here because previewing
+  // is what *creates* those trees — `apps/preview--{projectId}/`, which nothing else in
+  // YAAR knows to reclaim — so the same command owns both ends of their lifetime. After
+  // the create, so a slow sweep never delays the window the caller asked for; it swallows
+  // its own failures, and the project being previewed is live, so its tree is never a
+  // candidate.
+  await reclaimOrphanedPreviewStorage();
   // A remount starts the app from zero, so every value in the previous snapshot
   // "changed" — a diff across it would be all noise and no signal.
   resetInspectBaseline();

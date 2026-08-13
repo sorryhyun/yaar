@@ -29,6 +29,7 @@ export {
   httpFetch,
   stream,
   storage,
+  storagePath,
   app,
   notifications,
   windows,
@@ -38,6 +39,9 @@ export type { StreamFrame } from './verbs.js';
 // ── App-scoped storage ──────────────────────────────────────────
 export { appStorage } from './app-storage.js';
 export type { YaarAppStorageEntry } from './app-storage.js';
+
+// ── The commons, scoped to this app's directory in it ────────────
+export { sharedStorage } from './shared-storage.js';
 
 // ── App-scoped database ─────────────────────────────────────────
 export { appDb } from './app-db.js';
@@ -73,6 +77,21 @@ export { formatBytes, formatDuration, formatClock } from './format.js';
 // ── Image re-encoding ───────────────────────────────────────────
 export { toWebP } from './image.js';
 export type { EncodeImageOptions, EncodedImage, ImageSource } from './image.js';
+
+// ── The platform's fonts, subsetted and inlinable ───────────────
+export { fonts } from './fonts.js';
+export type {
+  YaarFontCatalog,
+  YaarServedFace,
+  YaarFontMetrics,
+  YaarInlinedFace,
+  YaarInlinedFonts,
+  InlineFontsOptions,
+} from './fonts.js';
+
+// ── A picture of your own DOM ───────────────────────────────────
+export { rasterize } from './rasterize.js';
+export type { RasterizeOptions, RasterizeResult, RasterizeFontOptions } from './rasterize.js';
 
 // ── Protocol handler context ────────────────────────────────────
 export { createProtocolContext } from './protocol-context.js';

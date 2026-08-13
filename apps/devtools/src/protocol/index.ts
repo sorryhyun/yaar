@@ -23,7 +23,6 @@ export { buildCommands } from './build';
 export { gitCommands } from './git';
 export { previewCommands } from './preview';
 export { introspectCommands } from './introspect';
-export { sharedCommands } from './shared-tree';
 export { httpCommands } from './http';
 
 /**

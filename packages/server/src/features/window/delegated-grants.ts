@@ -66,6 +66,8 @@
 
 import { getAgentRole, getAppId } from '../../agents/agent-context.js';
 import type { PermissionEntry } from '../../http/access.js';
+// The leaf, not `access.js`: a value import of the gate from here closes a cycle.
+import { canonicalStorageUri } from '../../http/uri-match.js';
 
 /** Ceiling on grants minted from one payload — a runaway walk mints nothing sensible. */
 const MAX_DELEGATED_URIS = 16;
@@ -170,4 +172,32 @@ export function collectDelegatableUris(value: unknown, depth = 0, out = new Set<
 export function grantsFromPayload(payload: unknown): PermissionEntry[] {
   if (!mayDelegateGrants()) return [];
   return [...collectDelegatableUris(payload)].map((uri) => ({ uri, verbs: ['read' as const] }));
+}
+
+/**
+ * The storage files this payload names that narrowing 1 refused to delegate — empty for
+ * a caller that may delegate, and empty when the payload names none.
+ *
+ * The refusal is right; being *unlabelled* is not. An app-role caller relaying a command
+ * (devtools' `previewCommand` is the one in the tree) hands the app a path it will then be
+ * refused, and the refusal reads exactly like a missing `app.json` permission. An agent
+ * auditing whether a permission is still needed cannot tell the two apart, and the honest
+ * reading of "not permitted" in that moment is "the removal broke it" — which is how one
+ * correct permission narrowing nearly got reverted, and cost two agents and the user a
+ * round trip to disprove.
+ *
+ * So this returns what was *not* granted, for `WindowStateRegistry.noteUndelegatedUris`
+ * to remember and the access gate to name. It confers nothing: same call, same 403, and
+ * the caller that could not delegate still cannot.
+ */
+export function undelegatedUris(payload: unknown): string[] {
+  if (mayDelegateGrants()) return [];
+  // Canonical spelling, because the app may ask for the file in the other dialect than
+  // the caller wrote it in, and the gate matches on the canonical form.
+  const out: string[] = [];
+  for (const uri of collectDelegatableUris(payload)) {
+    const canonical = canonicalStorageUri(uri);
+    if (canonical !== null) out.push(canonical);
+  }
+  return out;
 }

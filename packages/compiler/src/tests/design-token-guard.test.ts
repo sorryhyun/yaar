@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { knownTokens, scanTokens, suggestToken } from '../guards/design-token-guard.js';
-import { describeDesignTokens } from '../design-tokens.js';
+import { describeDesignTokens, describeDesignTokensBrief } from '../design-tokens.js';
 
 const file = (text: string, path = 'src/main.ts') => ({ path, text });
 
@@ -9,11 +9,20 @@ describe('the guard and the prompt agree', () => {
   // and what it *tells an agent exists* can never disagree. A hand-written list
   // is exactly how devtools ended up being told `design-tokens` was describable
   // when it was not, and guessing `--yaar-space-2` from its priors.
-  test('every token the guard accepts is advertised to agents', () => {
-    const reference = describeDesignTokens();
-    const missing = [...knownTokens()].filter((t) => !reference.includes(t));
-    expect(missing).toEqual([]);
-  });
+  //
+  // The reference comes in two tiers and this invariant is why the *brief* one
+  // still names every token: it is the tier an authoring agent has in front of
+  // it, and a summarized token list would put the guessing back.
+  for (const [tier, describeFn] of [
+    ['full', describeDesignTokens],
+    ['brief', describeDesignTokensBrief],
+  ] as const) {
+    test(`every token the guard accepts is advertised to agents (${tier})`, () => {
+      const reference = describeFn();
+      const missing = [...knownTokens()].filter((t) => !reference.includes(t));
+      expect(missing).toEqual([]);
+    });
+  }
 
   test('every token advertised to agents passes the guard', () => {
     const advertised = [...describeDesignTokens().matchAll(/(--yaar-[a-z0-9-]+):/g)].map(
@@ -29,6 +38,43 @@ describe('the guard and the prompt agree', () => {
     const reference = describeDesignTokens();
     for (const cls of ['y-flex-col', 'y-gap-2', 'y-p-4', 'y-btn-danger', 'y-clamp-3']) {
       expect(reference).toContain(`.${cls}`);
+    }
+  });
+});
+
+describe('the brief tier', () => {
+  // It is the tier every authoring session pays for, so what it drops has to be
+  // what an agent can look up — and it has to say where.
+  test('is a fraction of the full reference', () => {
+    expect(describeDesignTokensBrief().length).toBeLessThan(describeDesignTokens().length * 0.6);
+  });
+
+  test('names the door to everything it left out', () => {
+    expect(describeDesignTokensBrief()).toContain(
+      "describeBundledLibrary({ name: 'design-tokens' })",
+    );
+  });
+
+  test('advertises only classes that really exist', () => {
+    // A curated list can name a class the CSS renamed away, and a y- class that
+    // does not exist fails silently — which is the one failure this list exists
+    // to prevent. The generator filters, so a drift shows up as a short list.
+    const brief = describeDesignTokensBrief();
+    const starters = [...brief.matchAll(/\.(y-[a-z0-9-]+)/g)].map((m) => m[1]);
+    const full = describeDesignTokens();
+    expect(starters.length).toBe(15);
+    for (const cls of starters) expect(full).toContain(`.${cls}`);
+  });
+});
+
+describe('the full tier', () => {
+  test('marks the classes the SDK writes itself', () => {
+    const full = describeDesignTokens();
+    expect(full).toContain('do not hand-write');
+    // Curated, so it can drift; the section only prints classes that still exist.
+    const section = full.split('do not hand-write')[1] ?? '';
+    for (const cls of ['y-toast', 'y-modal', 'y-overlay']) {
+      expect(section).toContain(`.${cls}`);
     }
   });
 });

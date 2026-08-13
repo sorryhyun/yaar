@@ -1,6 +1,6 @@
 import { AppCommandError, errMsg, defineAppCommand } from '@bundled/yaar';
 import { activeProject } from '../core';
-import { isImagePath, type EditSpec } from '../lib';
+import { assetImportLine, isImagePath, type EditSpec } from '../lib';
 import {
   openFile,
   writeFile,
@@ -10,6 +10,11 @@ import {
   grep,
   readFileContent,
   readImageFile,
+  copyFromStorage,
+  defaultAssetPath,
+  isStorageRef,
+  resolveStorageSource,
+  SIZE_WARN_BYTES,
 } from '../services';
 
 import { getMimeType, imageBlocks, type ReadBlock } from './read-blocks';
@@ -45,6 +50,21 @@ function joinLines(lines: unknown[]): string {
       return String(line);
     })
     .join('\n');
+}
+
+/**
+ * A destination inside the active project, with no way out of the sandbox.
+ *
+ * Leading slashes are tolerated because a caller pasting a path from a listing tends
+ * to bring one; `..` is refused outright rather than normalized, since a caller who
+ * wrote it meant somewhere this command does not go.
+ */
+function projectDestination(raw: string): string {
+  const to = raw.replace(/^\/+/, '');
+  if (!to) throw new AppCommandError('Destination path is empty.');
+  if (to.split('/').includes('..'))
+    throw new AppCommandError(`Destination "${raw}" escapes the project.`);
+  return to;
 }
 
 export const fileCommands = {
@@ -243,25 +263,116 @@ export const fileCommands = {
   }),
   copyFile: defineAppCommand({
     description:
-      'Copy a file to another path within the active project; destination directories are ' +
-      'created automatically. Does NOT delete the original — pair with deleteFile to move.',
+      'Copy a file into the active project. `from` is either a project-relative path — an ' +
+      'internal copy, byte for byte — or a `yaar://storage/...` URI, which imports the file ' +
+      'from the storage tree: that is how an artifact another app published under shared/ ' +
+      'becomes a build-time asset. ONLY a `yaar://` prefix means storage, so a file in ' +
+      'storage can never shadow one in the project. `to` is required for an internal copy ' +
+      'and defaults to src/assets/<source name> for a storage import. Raster images imported ' +
+      'from storage are re-encoded to WebP unless `recompress: false`, and kept only if that ' +
+      'came out smaller; the result carries the import line when the destination is an asset ' +
+      'under src/, since the bundler inlines it as a data: URI instead of fetching it at ' +
+      'runtime. Destination directories are created automatically. One caveat for copies ' +
+      'WITHIN the project: storage serves images re-encoded to WebP, so copying a .png ' +
+      'already in the project yields WebP and the destination is renamed accordingly — to ' +
+      'preserve an original encoding, copy from its yaar://storage/... source, which is ' +
+      'server-side and byte-exact. Does NOT delete the original — pair with deleteFile to ' +
+      'move.',
     params: {
       type: 'object',
       properties: {
-        from: { type: 'string', description: 'Source file path (e.g. "src/Foo.ts")' },
-        to: { type: 'string', description: 'Destination file path (e.g. "src/ui/Foo.ts")' },
+        from: {
+          type: 'string',
+          description:
+            'Source: a project-relative path ("src/Foo.ts"), or a yaar://storage/... URI ' +
+            '("yaar://storage/shared/anima/dragon.png") to import a file from storage.',
+        },
+        to: {
+          type: 'string',
+          description:
+            'Destination path within the project ("src/ui/Foo.ts"). Required when copying ' +
+            'within the project; defaults to src/assets/<source name> for a storage import.',
+        },
+        recompress: {
+          type: 'boolean',
+          description:
+            'Storage imports only. Re-encode raster images to WebP (default true). Set false ' +
+            'to keep the original bytes exactly — needed for SVG, GIF animation, or anything ' +
+            'lossless.',
+        },
       },
-      required: ['from', 'to'],
+      required: ['from'],
     },
     run: async (p) => {
+      if (!activeProject())
+        throw new AppCommandError('No active project. Open or create one first.');
       const from = String(p.from);
-      const to = String(p.to);
-      if (from === to) throw new AppCommandError('Source and destination are the same path');
+
+      // A copy within the project: unchanged behaviour, and deliberately never
+      // re-encoded. `recompress` is refused rather than ignored here — silently
+      // dropping it would report a WebP conversion that did not happen.
+      if (!isStorageRef(from)) {
+        if (p.to === undefined)
+          throw new AppCommandError(
+            '`to` is required when copying within the project. Only a yaar://storage/... ' +
+              'source defaults to src/assets/.',
+          );
+        if (p.recompress !== undefined)
+          throw new AppCommandError(
+            '`recompress` applies only to a yaar://storage/... import; a copy within the ' +
+              'project is byte for byte.',
+          );
+        const to = projectDestination(String(p.to));
+        if (from === to) throw new AppCommandError('Source and destination are the same path');
+        try {
+          const landed = await copyFile(from, to);
+          if (landed === to) return { from, to };
+          return {
+            from,
+            to: landed,
+            note:
+              `Storage serves images re-encoded to WebP, so "${to}" would have held WebP ` +
+              'bytes under its original extension. The copy was renamed to match what it ' +
+              'actually contains. To keep an original encoding, copy it from its ' +
+              'yaar://storage/... source instead — that path is server-side and exact.',
+          };
+        } catch (err) {
+          throw new AppCommandError(errMsg(err));
+        }
+      }
+
+      const requested = p.to !== undefined;
       try {
-        await copyFile(from, to);
-        return { from, to };
+        const sourcePath = resolveStorageSource(from);
+        const result = await copyFromStorage(
+          sourcePath,
+          projectDestination(requested ? String(p.to) : defaultAssetPath(sourcePath)),
+          {
+            ...(p.recompress !== undefined ? { recompress: Boolean(p.recompress) } : {}),
+            // An explicit `to` is honoured as written, extension included; only a
+            // defaulted path follows the bytes to .webp.
+            renameToWebP: !requested,
+          },
+        );
+        const importLine = assetImportLine(result.path);
+        return {
+          from: `yaar://storage/${sourcePath}`,
+          to: result.path,
+          bytes: result.bytes,
+          recompressed: result.recompressed,
+          ...(importLine ? { importLine } : {}),
+          ...(result.bytes > SIZE_WARN_BYTES
+            ? {
+                warning:
+                  `${result.path} is ${Math.round(result.bytes / 1000)}KB and will be inlined ` +
+                  `as base64 (~${Math.round((result.bytes * 1.33) / 1000)}KB in the bundle). ` +
+                  `Consider a smaller source, or deploying the file to the app's own storage ` +
+                  `and fetching it at runtime.`,
+              }
+            : {}),
+        };
       } catch (err) {
-        throw new AppCommandError(errMsg(err));
+        throw err instanceof AppCommandError ? err : new AppCommandError(errMsg(err));
       }
     },
   }),

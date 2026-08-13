@@ -108,6 +108,31 @@ export async function stream(
 // ── Sub-object re-exports ────────────────────────────────────────
 
 export const storage = y.storage;
+
+/**
+ * Any spelling of a stored file, reduced to a storage-root-relative path — or `null`
+ * when the reference names something that is not storage.
+ *
+ * One file has four names, and which one you are holding depends on the layer that
+ * handed it over: `shared/anima/dragon.png` from a listing, `yaar://storage/…` from a
+ * verb, `yaar://apps/self/storage/…` from an app.json permission or an agent,
+ * `/api/storage/…` from an HTTP route. All four resolve to the same bytes; every
+ * `storage.*` method already accepts all four, so reach for this only when you need the
+ * path *itself* — to store in a document, to take a dirname, or to ask "is this a
+ * stored file or a remote URL?".
+ *
+ * `null` means not-storage (an `https://` URL, a `data:` URL, a non-storage `yaar://`
+ * resource) or a path containing `..`, which names no resource. It does **not** mean
+ * forbidden: this runs in the iframe and cannot see what a caller delegated to this
+ * window, so a path outside the app's own trees still resolves and the server answers.
+ *
+ * `self` is deliberately left unexpanded — `/api/storage` resolves it against the
+ * calling app, and a second copy of that mapping here would be free to drift (and is
+ * simply wrong under a devtools preview, where the principal is `preview--{id}`).
+ */
+export function storagePath(ref: string | undefined | null): string | null {
+  return y.storage.path(ref);
+}
 export const app = y.app;
 export const notifications = y.notifications;
 export const windows = y.windows;
