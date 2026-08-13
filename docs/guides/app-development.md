@@ -1194,8 +1194,11 @@ await appStorage.remove('data.json');
 `appStorage` is yours — no other installed app can read it. When an app *produces* something
 other apps should be able to pick up (a render, an export, a chart), that goes in the
 commons: `yaar://storage/shared/{appId}/`, granted to every app for being an app, one
-directory per producing app. `sharedStorage` is that directory, named from the app's own
-id so it isn't a `const SHARED_DIR = 'shared/anima'` in every app that publishes:
+directory per producing app. `sharedStorage` is that directory, so it isn't a
+`const SHARED_DIR = 'shared/anima'` in every app that publishes. **Which directory is
+yours the server decides**, from the iframe token — paths go out as `shared/self/…`, like
+`apps/self` — so a devtools preview writes to its own directory instead of the shipped
+app's, and none of this needs `defineApp` to have run first:
 
 ```typescript
 import { sharedStorage } from '@bundled/yaar';

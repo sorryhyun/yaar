@@ -1,33 +1,32 @@
 // @ts-nocheck — This file runs in browser iframes, not the server.
 // It is compiled by the Bun plugin for @bundled/yaar imports.
 /**
- * Which app this bundle is, as the app itself declared it.
+ * Which app this bundle *says* it is — the id passed to `defineApp`, recorded before
+ * registration so a helper can ask synchronously rather than take it as an argument.
  *
- * `defineApp({ id })` records it here before it registers, so a helper that needs the
- * app's own name can ask synchronously rather than take it as an argument at every call
- * site. `sharedStorage` is the reason this exists: the commons is one flat tree with a
- * directory per producing app, and an app that has to be told its own directory name
- * ends up spelling it out in a `const SHARED_DIR = 'shared/anima'`, which is what three
- * apps were doing.
+ * ## This is not the app's identity
  *
- * ## Why this is not `apps/self`
+ * Identity is the iframe token's, and only the server can read it. This is a claim the
+ * bundle makes about itself, and the two differ exactly where it matters most: under a
+ * devtools preview the principal is `preview--{projectId}` while this still says
+ * `image-edit`.
  *
- * The server owns the `self` mapping — `yaar://apps/self/storage/…` is expanded against
- * the *principal*, and no iframe-side copy of that mapping is allowed, because a second
- * copy is free to drift and is simply wrong under a devtools preview (where the
- * principal is `preview--{id}`). That rule holds because in `apps/`, the app id **is**
- * the authorization boundary: which tree you reach is decided by who you are.
+ * `sharedStorage` used to build the commons directory name out of this value, on the
+ * argument that `shared/{producer}/` is a naming convention rather than a boundary (it
+ * is — every app reaches the whole commons) and that a preview publishing to
+ * `shared/image-edit/` is the *useful* answer, since that is where the released build
+ * publishes. What that missed is that "useful" and "throwaway" were being decided per
+ * tree: `apps/self` sandboxed a preview and the commons did not, so unshipped code wrote
+ * into the live app's directory beside real user files, with nothing marking it as a
+ * preview's work. The server now expands `shared/self/…` the same way it expands
+ * `apps/self/…`, and one principal decides both.
  *
- * In the commons it is not. `yaar://storage/shared/` is granted to every app for being
- * an app (`permissionsAllow`), so `shared/anima/` and `shared/lab/` are equally reachable
- * from either app and the directory name is a *naming convention*, not a gate. Deriving
- * it from the app's own manifest is therefore the app's own business, and it gives the
- * better answer under a preview besides: a previewed app publishes to `shared/anima/`,
- * where its released build publishes, instead of stranding artifacts in
- * `shared/preview--anima/`.
+ * ## What it is still for
  *
- * Nothing here grants anything. Every call still goes through the same gate with the
- * same principal; this only decides what to *name*.
+ * Recognising the app's *own* name in a path a caller passed back in
+ * (`sharedStorage`'s `ownSuffix`), so a round-tripped `shared/image-edit/x.png` is
+ * re-based onto the pronoun instead of being nested or refused. Naming a tree to write
+ * to is not on the list — reach for `self` and let the gate resolve it.
  */
 
 let appId = '';
@@ -37,28 +36,14 @@ export function setAppId(id) {
   if (typeof id === 'string' && id) appId = id;
 }
 
-/** The registered app id, or `''` before `defineApp` has run. */
-export function getAppId() {
-  return appId;
-}
-
 /**
- * The registered app id, or a thrown explanation naming `op`.
+ * The registered app id, or `''` before `defineApp` has run.
  *
- * Reached when a helper that needs the app's own name is called before `defineApp` — at
- * module scope, or from an app that never registers. The failure is otherwise a path
- * with an empty segment (`shared//x.png`), which the server accepts and writes to the
- * wrong place.
+ * An empty answer is ordinary now and every caller must tolerate it. `requireAppId` —
+ * which threw "this app has no id yet" at module scope — is gone with the need for it:
+ * `sharedStorage` names `shared/self`, so nothing here has to be known before a path can
+ * be built, and calling it at module scope is no longer a footgun.
  */
-export function requireAppId(op) {
-  if (!appId) {
-    throw new Error(
-      '[yaar] ' +
-        op +
-        ': this app has no id yet. `sharedStorage` names a directory in the commons after ' +
-        'the app that owns it, so it works only after `defineApp({ id })` has run. Call it ' +
-        'from a command, an event handler or the view — not at module scope.',
-    );
-  }
+export function getAppId() {
   return appId;
 }

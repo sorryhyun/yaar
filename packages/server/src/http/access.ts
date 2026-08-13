@@ -52,10 +52,12 @@ import { requestCarriesAppOrigin } from './origin-boundary.js';
 import { validateIframeToken } from './iframe-tokens.js';
 import {
   canonicalStorageUri,
+  expandSelfPath,
   grantEntries,
   isSharedOnly,
   isUriAllowed,
   namesForeignAppStorage,
+  namesSelfPath,
   resolveSelf,
   SHARED_STORAGE_ROOT,
 } from './uri-match.js';
@@ -121,6 +123,27 @@ let resolveWindowGrants: (
 
 export function setWindowGrantResolver(fn: typeof resolveWindowGrants): void {
   resolveWindowGrants = fn;
+}
+
+/**
+ * Was this exact path named to the window by a caller that may not delegate grants?
+ *
+ * Injected the same way and for the same cycle, and read for one purpose: telling the two
+ * 403s apart in the sentence the caller gets. "You were never given this" and "the caller
+ * that named it to you could not hand it over" are different problems with different
+ * fixes, and they were the same string — which is how a *correct* permission removal read
+ * as a regression to the agent verifying it. Defaults to false, so an unwired server (and
+ * every test that boots no hub) simply keeps the generic wording.
+ */
+let resolveUndelegated: (
+  sessionId: string,
+  windowId: string,
+  uri: string,
+  monitorId?: string,
+) => boolean = () => false;
+
+export function setUndelegatedUriResolver(fn: typeof resolveUndelegated): void {
+  resolveUndelegated = fn;
 }
 
 // ── Resolving the caller ────────────────────────────────────────────────────
@@ -199,8 +222,10 @@ export function resolvePrincipal(req: Request, url: URL): Principal | Response {
 export {
   capForeignAppStorage,
   coversForeignAppStorage,
+  expandSelfPath,
   isUriAllowed,
   namesSelf,
+  namesSelfPath,
   resolveSelf,
   uriMatches,
 } from './uri-match.js';
@@ -295,6 +320,38 @@ export function permissionsAllow(
 }
 
 /**
+ * The sentence that separates the two 403s, or `''` when this is the ordinary one.
+ *
+ * Appended to the refusal when a caller *did* name this exact path to this window and the
+ * grant was withheld only because that caller was an app-role principal (`mayDelegateGrants`
+ * — devtools' `previewCommand` relay is the case in the tree). Nothing about the decision
+ * changes; the reader learns which fix applies. Without it the message points at the app's
+ * `app.json`, which is the wrong file, and pointed there hardest during a permission audit
+ * — the one moment "not permitted" reads as confirmation that the removal broke something.
+ */
+function undelegatedNote(principal: AppPrincipal, uri: string): string {
+  // Matched on the canonical spelling, the same one the recording side stores: the caller
+  // writes `yaar://storage/files/x.stl` in its payload and the app may ask for the file in
+  // either dialect, and a note that only fires when the two happen to agree is worse than
+  // none — it would be absent exactly where the spellings differ.
+  const target = canonicalStorageUri(resolveSelf(uri, principal.appId));
+  if (target === null) return '';
+  const named = resolveUndelegated(
+    principal.sessionId,
+    principal.windowId,
+    target,
+    principal.monitorId,
+  );
+  if (!named) return '';
+  return (
+    ` — this path was named to this window by a caller that cannot delegate grants ` +
+    `(an app-role principal, e.g. a devtools preview relay), so it was never handed over. ` +
+    `This is not a missing app.json permission; re-run the same command as the session ` +
+    `principal to reach the file.`
+  );
+}
+
+/**
  * May `principal` perform `verb` on `uri`? Returns a 403 Response if not.
  *
  * `describe` is metadata-only (it reveals a handler's schema, not its data), so
@@ -319,7 +376,7 @@ export function requirePermission(principal: Principal, uri: string, verb: Verb)
   }
 
   if (!permissionsAllow(principal.permissions, principal.appId, uri, verb)) {
-    return errorResponse(`Not permitted: ${verb} ${uri}`, 403);
+    return errorResponse(`Not permitted: ${verb} ${uri}${undelegatedNote(principal, uri)}`, 403);
   }
 
   return null;
@@ -433,7 +490,7 @@ export function requireStream(principal: Principal, capability: string): Respons
 
 /**
  * Map a `/api/storage/{path}` request to the `yaar://` URI that names the same
- * resource, resolving `apps/self/` against the calling app.
+ * resource, resolving `apps/self/` and `shared/self/` against the calling app.
  *
  * It emits the **namespaced** spelling (`yaar://apps/notes/storage/x.json`), which is the
  * dialect app.json is written in — `yaar://apps/self/storage/` is auto-granted to every
@@ -442,21 +499,25 @@ export function requireStream(principal: Principal, capability: string): Respons
  * either would match the same grants. It was load-bearing once, when the namespaced form
  * was canonical and the flat one arrived at the gate rewritten.
  *
- * The `self` expansion here is the *path* flavor of {@link resolveSelf} — same
- * literal segment, different dialect (`apps/self/x.json`, not
- * `yaar://apps/self/x.json`). Change one and check the other.
+ * The `self` expansion is {@link expandSelfPath}, the *path* flavor of
+ * {@link resolveSelf} — same literal segment, different dialect (`apps/self/x.json`,
+ * not `yaar://apps/self/x.json`). It is shared with `handleStorage`, which builds the
+ * filesystem path from the same input: two literals here is a one-line drift away from
+ * checking the permission on one file and writing another.
+ *
+ * The refusal below is what keeps that safe. An unexpandable `self` never reaches
+ * `expandSelfPath`'s caller in `files.ts`, because this door has already turned it into
+ * a 403 — a path naming `self` with no app to resolve it against names no file, and
+ * passing it through would mint a literal `self` directory on disk.
  */
 export function storageUriFor(principal: Principal, path: string): string | Response {
-  let p = path;
+  const appId = principal.kind === 'app' ? principal.appId : undefined;
 
-  if (p === 'apps/self' || p.startsWith('apps/self/')) {
-    if (principal.kind !== 'app' || !principal.appId) {
-      return errorResponse('Cannot resolve "self": caller is not an app', 403);
-    }
-    p = p.replace('apps/self', `apps/${principal.appId}`);
+  if (namesSelfPath(path) && !appId) {
+    return errorResponse('Cannot resolve "self": caller is not an app', 403);
   }
 
-  const uri = storageUriForPath(p);
+  const uri = storageUriForPath(expandSelfPath(path, appId));
   if (!uri) return errorResponse('Invalid path', 403);
   return uri;
 }

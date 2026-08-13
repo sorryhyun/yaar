@@ -34,6 +34,12 @@ export interface AppWindowMeta {
 /** Shared empty result for `getNoReplayCommands` — nothing may mutate it. */
 const NO_COMMANDS: ReadonlySet<string> = new Set<string>();
 
+/**
+ * Ceiling on the diagnostic set behind {@link WindowStateRegistry.noteUndelegatedUris}.
+ * A caller can name a fresh path on every command, and one 403 needs one match.
+ */
+const MAX_UNDELEGATED_URIS = 32;
+
 /** Every action that says something about a window. The union `handleAction` is total over. */
 export type WindowAction = Extract<OSAction, { type: `window.${string}` }>;
 
@@ -99,6 +105,21 @@ export class WindowStateRegistry {
    * gate via `getWindowGrants`.
    */
   private delegatedGrants: Map<string, PermissionEntry[]> = new Map();
+  /**
+   * Per window: storage files a caller named to this app that were **not** delegated,
+   * because the caller was an app-role principal and may not delegate at all
+   * (`mayDelegateGrants`). Diagnostics, never authority — nothing reads this to decide
+   * an answer, only to explain one.
+   *
+   * The rule is correct and stays; what it lacked was a way to tell its refusal apart
+   * from an ordinary one. devtools' `previewCommand` relays a command through its own
+   * app agent, so a file the caller named reaches the preview ungranted and the app's
+   * `read` comes back "Not permitted" — the same sentence a genuinely undeclared path
+   * gets. An agent auditing whether a permission is still needed reads that as proof the
+   * removal broke something. Recording the paths lets the gate say which of the two it
+   * is (`requirePermission`). Bounded and dropped with the window, like the grants.
+   */
+  private undelegatedUris: Map<string, Set<string>> = new Map();
   /**
    * Stacking order, bottom to top — this registry's mirror of the desktop's `zOrder`.
    *
@@ -331,6 +352,9 @@ export class WindowStateRegistry {
         this.delegatedGrants.delete(key);
         this.delegatedGrants.delete(action.windowId);
         this.delegatedGrants.delete(this.handleMap.getRawWindowId(key));
+        this.undelegatedUris.delete(key);
+        this.undelegatedUris.delete(action.windowId);
+        this.undelegatedUris.delete(this.handleMap.getRawWindowId(key));
         this.stack = this.stack.filter((id) => id !== key);
         this.refocusIfHolding(key);
         this.handleMap.remove(key);
@@ -627,6 +651,39 @@ export class WindowStateRegistry {
    * lookup finds nothing for any app open on two of them. The iframe token pins the
    * monitor at mint time precisely so this lookup can be exact.
    */
+  /**
+   * Record storage files a caller named to this window but could not delegate.
+   *
+   * Same keying and the same three spellings on read as {@link grantWindowAccess}, for
+   * the same reason — the recording happens inside an agent turn and the reading happens
+   * on an HTTP request. Capped per window: this exists to explain one 403, and an
+   * unbounded set fed by a caller's payloads is a leak wearing a diagnostic's clothes.
+   */
+  noteUndelegatedUris(windowId: string, uris: readonly string[], monitorId?: string) {
+    if (uris.length === 0) return;
+    const key =
+      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
+    let set = this.undelegatedUris.get(key);
+    if (!set) {
+      set = new Set();
+      this.undelegatedUris.set(key, set);
+    }
+    for (const uri of uris) {
+      if (set.size >= MAX_UNDELEGATED_URIS) break;
+      set.add(uri);
+    }
+  }
+
+  /** Was this exact URI named to this window by a caller that may not delegate grants? */
+  wasUndelegated(uri: string, windowId: string, monitorId?: string): boolean {
+    const key =
+      this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);
+    for (const spelling of [key, windowId, this.handleMap.getRawWindowId(windowId)]) {
+      if (this.undelegatedUris.get(spelling)?.has(uri)) return true;
+    }
+    return false;
+  }
+
   getWindowGrants(windowId: string, monitorId?: string): PermissionEntry[] {
     const key =
       this.targetKey(windowId, monitorId) ?? this.handleMap.handleFor(windowId, monitorId);

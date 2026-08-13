@@ -11,7 +11,13 @@ import { appHtmlCsp } from '../csp.js';
 import { resolvePath } from '../../storage/storage-manager.js';
 import { resolveAppDir } from '../../features/apps/roots.js';
 import { parseContentPath, type ParsedContentPath } from '../../lib/yaar-uri-server.js';
-import { requirePermission, resolvePrincipal, storageUriFor, type Principal } from '../access.js';
+import {
+  expandSelfPath,
+  requirePermission,
+  resolvePrincipal,
+  storageUriFor,
+  type Principal,
+} from '../access.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 
 export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
@@ -203,17 +209,21 @@ async function handleStorage(
   if (!verb) return null;
 
   // Name the resource in the permission model's own vocabulary, then ask. This also
-  // resolves `apps/self/` → `apps/{appId}/` and rejects traversal, so `filePath`
-  // below is the real path and the URI is the one the app holds a permission for.
+  // resolves the `self` pronoun (`apps/self/`, `shared/self/`) against the calling app
+  // and rejects traversal, so the URI is the one the app holds a permission for.
   const uri = storageUriFor(principal, parsed.path);
   if (uri instanceof Response) return uri;
   const denied = requirePermission(principal, uri, verb);
   if (denied) return denied;
 
-  const filePath =
-    principal.kind === 'app' && principal.appId
-      ? parsed.path.replace(/^apps\/self(?=\/|$)/, `apps/${principal.appId}`)
-      : parsed.path;
+  // The same expansion, on the path the bytes are actually read from and written to.
+  // `storageUriFor` has already refused a `self` it could not expand, so this cannot
+  // leave one standing — and sharing the function is what keeps the file checked and
+  // the file touched from ever being two different files.
+  const filePath = expandSelfPath(
+    parsed.path,
+    principal.kind === 'app' ? principal.appId : undefined,
+  );
 
   const resolved = resolvePath(filePath);
   if (!resolved) return errorResponse('Access denied', 403);

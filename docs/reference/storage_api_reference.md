@@ -465,15 +465,17 @@ Reach for `storage` when you hold a path *someone else* produced (an image under
 | `list` | `(dirPath?) → Promise<YaarAppStorageEntry[]>` | Each entry is `{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }`. `path` is relative to the app's own storage root, so it can be handed straight back to `read`/`save`. `size`/`modifiedAt` carry the same values as `StorageEntry` above but are optional here — a directory has no size. |
 | `remove` | `(path) → Promise<void>` | Delete file. |
 
-`sharedStorage` (the commons, scoped to this app's directory in it — `packages/compiler/src/shims/yaar/shared-storage.ts`). `yaar://storage/shared/` is granted to every app for being an app, and the convention is one directory per producing app; this is that directory, named from the app's own id rather than written out as a constant in each app.
+`sharedStorage` (the commons, scoped to this app's directory in it — `packages/compiler/src/shims/yaar/shared-storage.ts`). `yaar://storage/shared/` is granted to every app for being an app, and the convention is one directory per producing app; this is that directory, without each app writing it out as a constant.
+
+**Which directory is yours is decided by the server.** Paths go out spelled `shared/self/…` and `resolveSelf` expands them against the calling principal, exactly as it does for `apps/self`. The name used to be built in the iframe from the id passed to `defineApp` — which is the shipped app's id even under a devtools preview, so a preview published into the *live* app's directory beside real user files. One principal now decides both trees.
 
 Names are subpaths (`'renders/final.png'`), a leading slash is ignored, and `..` is refused. A name that already spells out this app's own commons directory — in any dialect — is taken as-is rather than nested a second time, so a path from `list()` round-trips. A name in *another* app's directory, or in another top-level tree (`apps/`, `mounts/`, `temp/`, `files/`), is refused by name rather than nested; use `storage` to reach those deliberately.
 
-Every method needs the app's id, so call them after `defineApp({ id })` has run — from a command, an event handler or the view, not at module scope.
+Nothing here needs the app's id, so module scope is fine — `defineApp` does not have to have run.
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `dir` | `string` | This app's directory in the commons, as a root-relative path: `shared/{appId}`. |
+| `dir` | `string` | This app's directory in the commons, as a root-relative path — `shared/{appId}` once a call has reported the resolved path back (any `save`, `list` or `publish`), `shared/self` until then. Both name the same directory to every YAAR door; only a *monitor* agent, which has no app identity, cannot resolve the pronoun. |
 | `path` | `(name?) → string` | A name inside that directory, as a root-relative path. |
 | `uri` | `(name?) → string` | The same, as a `yaar://storage/…` URI. |
 | `url` | `(name) → string` | A URL an `<img src>`/`<video>`/CSS `url()` can load — carries the iframe token, which a subresource fetch cannot attach as a header. |

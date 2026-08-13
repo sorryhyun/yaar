@@ -803,7 +803,7 @@ interface YaarPublishOptions {
 }
 
 interface YaarPublishResult {
-  /** Root-relative path: `shared/{appId}/{name}`. */
+  /** Root-relative path: `shared/{appId}/{name}`, with the real id — safe to hand outward. */
   path: string;
   /** The same file as a `yaar://storage/…` URI. */
   uri: string;
@@ -821,11 +821,18 @@ interface YaarPublishResult {
  * and `..` is refused; a name that already spells out this app's own commons directory is
  * taken as-is rather than nested twice, so a path from `list()` round-trips.
  *
- * Every method needs the app's id, so call them after `defineApp({ id })` has run — from
- * a command, an event handler or the view, not at module scope.
+ * Which directory is yours is decided by the **server**, from the iframe token: paths go
+ * out spelled `shared/self/…` and are expanded against the calling principal, exactly like
+ * `apps/self`. So a devtools preview writes to its own directory instead of the shipped
+ * app's, and these methods work at module scope — they no longer need `defineApp` first.
  */
 interface YaarSharedStorage {
-  /** This app's directory in the commons, as a root-relative path: `shared/{appId}`. */
+  /**
+   * This app's directory in the commons, as a root-relative path — `shared/{appId}` once
+   * a call has reported the resolved path back (any `save`, `list` or `publish` does),
+   * `shared/self` until then. Both name the same directory to every YAAR door; only a
+   * *monitor* agent, which has no app identity, cannot resolve the pronoun.
+   */
   readonly dir: string;
   /** A name inside this app's commons directory, as a root-relative path. */
   path(name?: string): string;
@@ -1173,7 +1180,8 @@ declare module '@bundled/yaar' {
    *
    * The tree apps publish artifacts to for each other, so that a render from one app is
    * a build-time asset in another. `publish()` copies server-side, without routing the
-   * bytes through the iframe. Needs `defineApp({ id })` to have run.
+   * bytes through the iframe. Which directory is this app's is resolved by the server
+   * from the iframe token, so it works at module scope and is preview-safe.
    */
   export const sharedStorage: YaarSharedStorage;
 

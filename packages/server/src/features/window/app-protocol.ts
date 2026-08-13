@@ -20,7 +20,7 @@ import {
 } from '../../lib/command-signature.js';
 import { defsOf, selfContained } from '../../lib/schema-refs.js';
 import { withoutPersonaCommands } from '../apps/persona-commands.js';
-import { grantsFromPayload } from './delegated-grants.js';
+import { grantsFromPayload, undelegatedUris } from './delegated-grants.js';
 
 /** Max text size for app protocol results (bytes). Keeps tool output under Claude Code limits. */
 const MAX_TEXT_BYTES = 400_000;
@@ -463,6 +463,11 @@ export async function handleAppCommand(
   // about. `grantsFromPayload` returns nothing unless the caller outranks the app, so
   // an app driving another app's window through `yaar://windows/` grants nothing.
   windowState.grantWindowAccess(key, grantsFromPayload(req.params));
+  // The other half of that sentence: when the caller may *not* delegate, remember which
+  // paths it named, so the 403 the app is about to get says which refusal it is rather
+  // than reading as a missing app.json permission. Diagnostics only — see
+  // `undelegatedUris`.
+  windowState.noteUndelegatedUris(key, undelegatedUris(req.params));
 
   const timeoutMs = resolveTimeout(payload, deadlines.appCommandMs);
 

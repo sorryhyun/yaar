@@ -65,20 +65,46 @@ export function entryUri(entry: PermissionEntry): string {
  * unresolved URI (the subscription registry keys by literal string) test the
  * *result* of `resolveSelf` with this rather than re-deriving the spelling.
  *
- * Both dialects count, for the reason given on `resolveSelf`.
+ * All three dialects count, for the reason given on `resolveSelf`.
  */
 export function namesSelf(uri: string): boolean {
   return (
     uri === 'yaar://apps/self' ||
     uri.startsWith('yaar://apps/self/') ||
     uri === `${APP_STORAGE_ROOT}self` ||
-    uri.startsWith(`${APP_STORAGE_ROOT}self/`)
+    uri.startsWith(`${APP_STORAGE_ROOT}self/`) ||
+    uri === `${SHARED_STORAGE_ROOT}self` ||
+    uri.startsWith(`${SHARED_STORAGE_ROOT}self/`)
   );
 }
 
+/** The `self` pronoun as it appears in a storage **path** (`apps/self/x`, `shared/self/x`). */
+const SELF_PATH = /^(apps|shared)\/self(?=\/|$)/;
+
+/** Does this storage path name `self` — i.e. does it need an appId before it names a file? */
+export function namesSelfPath(path: string): boolean {
+  return SELF_PATH.test(path);
+}
+
 /**
- * Rewrite `yaar://apps/self/…` — and its flat twin `yaar://storage/apps/self/…` — to the
- * calling app's real id.
+ * {@link resolveSelf} for an HTTP storage **path** (`shared/self/x.png`), not a URI.
+ *
+ * Two callers need this flavor and they must agree: `storageUriFor` names the URI the
+ * permission is checked against, and `handleStorage` builds the filesystem path the
+ * bytes are then read from or written to. They were separate literals, which is a
+ * one-line drift away from checking a permission on one file and writing another.
+ *
+ * Returns the path unchanged when there is no appId — `storageUriFor` refuses that case
+ * up front, so an unexpanded `self` never reaches a filesystem path.
+ */
+export function expandSelfPath(path: string, appId?: string): string {
+  if (!appId) return path;
+  return path.replace(SELF_PATH, (_, tree: string) => `${tree}/${appId}`);
+}
+
+/**
+ * Rewrite `yaar://apps/self/…` — its flat twin `yaar://storage/apps/self/…`, and the
+ * commons dialect `yaar://storage/shared/self/…` — to the calling app's real id.
  *
  * Applied to *both* sides of the match — the URI being requested and the app's
  * declared permissions — because the two are not written in the same dialect. An
@@ -102,17 +128,33 @@ export function namesSelf(uri: string): boolean {
  * sites that were missed. Returns the URI unchanged when there is no appId to
  * expand against; the caller decides whether that is fatal ({@link namesSelf}).
  *
- * The path-flavored variant in {@link storageUriFor} is deliberately *not* folded in:
- * it expands `apps/self` inside an HTTP **path** (`apps/self/x.json`), not a URI, and
- * round-tripping it through the URI form to share these five lines would be more
- * indirection than the duplication costs. The two must agree on the literal `self`
- * segment and nothing else.
+ * The path flavor is {@link expandSelfPath}, which the two HTTP-path callers share.
+ *
+ * ── Why the commons has a `self` too ──
+ *
+ * `shared/{producer}/` is a naming convention rather than a boundary — every app reaches
+ * the whole commons — so `sharedStorage` used to build the directory name in the
+ * **iframe**, from the id the app declared to `defineApp`. That is a second copy of an
+ * identity mapping the server owns, and under a devtools preview it was simply wrong:
+ * the principal is `preview--{projectId}` while the declared id is the shipped app's, so
+ * unshipped code published into the live app's commons directory, indistinguishably from
+ * the deployed app and on top of whatever was already there. Private storage never had
+ * that problem, because `apps/self` is expanded *here*, against the principal.
+ *
+ * So the commons gets the same pronoun, and the preview sandbox extends to it for the
+ * same reason it covers `apps/self`: identity is the token's, not the bundle's. An app
+ * that deliberately writes under another app's name still spells that name out and is
+ * still allowed to — the grant is unchanged, only the pronoun is new.
  */
 export function resolveSelf(uri: string, appId?: string): string {
   if (!appId) return uri;
   if (uri === `${APP_STORAGE_ROOT}self`) return `${APP_STORAGE_ROOT}${appId}`;
   if (uri.startsWith(`${APP_STORAGE_ROOT}self/`)) {
     return `${APP_STORAGE_ROOT}${appId}/${uri.slice(`${APP_STORAGE_ROOT}self/`.length)}`;
+  }
+  if (uri === `${SHARED_STORAGE_ROOT}self`) return `${SHARED_STORAGE_ROOT}${appId}`;
+  if (uri.startsWith(`${SHARED_STORAGE_ROOT}self/`)) {
+    return `${SHARED_STORAGE_ROOT}${appId}/${uri.slice(`${SHARED_STORAGE_ROOT}self/`.length)}`;
   }
   if (uri === 'yaar://apps/self') return `yaar://apps/${appId}`;
   if (uri.startsWith('yaar://apps/self/')) {

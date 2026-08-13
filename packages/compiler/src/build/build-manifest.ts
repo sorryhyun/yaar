@@ -81,8 +81,15 @@ import { join, basename } from 'path';
  * an app understands would otherwise be a function of when it last happened to be
  * stale, and the four apps this fixes (a namespaced URI silently mishandled, a
  * token-less `/api/storage` URL) are exactly the ones nobody is about to edit.
+ *
+ * '22': `sharedStorage` names `shared/self/…` and lets the server resolve it, instead of
+ * building `shared/{declaredId}/` in the iframe. The bump is load-bearing rather than
+ * tidy here: the old naming is *baked into every existing `dist/`*, and it is what makes
+ * a devtools preview publish into the shipped app's commons directory on top of real user
+ * files. An app whose source nobody edits would keep doing that forever, and the apps
+ * being previewed are precisely the ones that have not been edited yet.
  */
-export const COMPILER_VERSION = '21';
+export const COMPILER_VERSION = '22';
 
 export interface BuildManifest {
   sourceHash: string;

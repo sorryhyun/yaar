@@ -14,7 +14,14 @@
  * is no appId to expand against.
  */
 import { describe, it, expect } from 'bun:test';
-import { namesSelf, resolveSelf, storageUriFor, type Principal } from '../http/access.js';
+import {
+  expandSelfPath,
+  namesSelf,
+  permissionsAllow,
+  resolveSelf,
+  storageUriFor,
+  type Principal,
+} from '../http/access.js';
 import { handleVerbRoutes } from '../http/routes/verb.js';
 import { generateIframeToken } from '../http/iframe-tokens.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
@@ -87,6 +94,80 @@ describe('resolveSelf / namesSelf', () => {
     expect(resolveSelf('yaar://apps/self/storage/todo.json', 'notes')).toBe(
       'yaar://apps/notes/storage/todo.json',
     );
+  });
+});
+
+/**
+ * The commons got the same pronoun, and for a sharper reason than tidiness.
+ *
+ * `sharedStorage` used to build `shared/{appId}/` in the **iframe**, from the id the app
+ * declared to `defineApp` — a second copy of an identity mapping the server owns, and the
+ * wrong answer under a devtools preview, where the principal is `preview--{projectId}`
+ * but the bundle still says `image-edit`. So a preview published into the *live* app's
+ * commons directory, beside real user files, indistinguishably from the deployed app.
+ * `apps/self` never had that failure because it is expanded here, against the principal.
+ */
+describe('the commons `self`', () => {
+  const principalFor = (appId?: string): Principal => ({
+    kind: 'app',
+    appId,
+    sessionId: SESSION,
+    windowId: `win-${appId ?? 'plain'}`,
+    permissions: [],
+    systemApp: false,
+    bundles: [],
+    streams: [],
+    token: 'irrelevant',
+  });
+
+  it('expands the directory and anything under it', () => {
+    expect(resolveSelf('yaar://storage/shared/self', 'anima')).toBe('yaar://storage/shared/anima');
+    expect(resolveSelf('yaar://storage/shared/self/renders/x.png', 'anima')).toBe(
+      'yaar://storage/shared/anima/renders/x.png',
+    );
+  });
+
+  it('sends a preview to its own directory, not the shipped app’s', () => {
+    // The bug this closes: same bundle, same `defineApp({ id: 'image-edit' })`, and the
+    // write must not land in `shared/image-edit/`.
+    expect(resolveSelf('yaar://storage/shared/self/probe.png', 'preview--1786428720812')).toBe(
+      'yaar://storage/shared/preview--1786428720812/probe.png',
+    );
+  });
+
+  it('names a self, and never matches a look-alike', () => {
+    expect(namesSelf('yaar://storage/shared/self/x.png')).toBe(true);
+    expect(namesSelf('yaar://storage/shared/selfie/x.png')).toBe(false);
+    expect(resolveSelf('yaar://storage/shared/selfie/x.png', 'anima')).toBe(
+      'yaar://storage/shared/selfie/x.png',
+    );
+  });
+
+  it('still lands inside the commons every app is granted', () => {
+    // The grant is unchanged — the pronoun only decides *which* directory, and a preview
+    // holds the commons for being an app exactly as a deployed app does.
+    const target = resolveSelf('yaar://storage/shared/self/probe.png', 'preview--1786428720812');
+    expect(permissionsAllow([], 'preview--1786428720812', target, 'invoke')).toBe(true);
+  });
+
+  it('agrees with the path flavor the storage route builds from', () => {
+    // `storageUriFor` names the URI the permission is checked against and `handleStorage`
+    // builds the filesystem path — from the same `expandSelfPath`, because two literals
+    // would be one drift away from checking one file and writing another.
+    expect(storageUriFor(principalFor('anima'), 'shared/self/x.png')).toBe(
+      'yaar://storage/shared/anima/x.png',
+    );
+    expect(expandSelfPath('shared/self/x.png', 'anima')).toBe('shared/anima/x.png');
+    expect(expandSelfPath('apps/self/x.json', 'anima')).toBe('apps/anima/x.json');
+    expect(expandSelfPath('shared/selfie/x.png', 'anima')).toBe('shared/selfie/x.png');
+  });
+
+  it('refuses rather than minting a literal `self` directory on disk', () => {
+    // A caller with no app identity — the desktop, an agent — names nothing by `self`.
+    // The refusal here is what lets `handleStorage` expand without re-checking.
+    const denied = storageUriFor(principalFor(undefined), 'shared/self/x.png');
+    expect(denied).toBeInstanceOf(Response);
+    expect((denied as Response).status).toBe(403);
   });
 });
 

@@ -22,7 +22,7 @@ import { generateAppIframeToken } from '../../http/iframe-tokens.js';
 import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
 import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
-import { grantsFromPayload, mayDelegateGrants } from './delegated-grants.js';
+import { grantsFromPayload, mayDelegateGrants, undelegatedUris } from './delegated-grants.js';
 import type { PermissionEntry } from '../../http/access.js';
 import {
   formatWindowRef,
@@ -286,6 +286,10 @@ export async function handleCreate(
       ],
       windowMonitorId,
     );
+    // What the same payload named and did *not* get, when the caller may not delegate —
+    // `openPreview` passing a `permissions` array is this case, and its discard is as
+    // silent as the relay's. Remembered so the resulting 403 can name its own reason.
+    session?.windowState.noteUndelegatedUris(actualId, undelegatedUris(payload), windowMonitorId);
 
     const outcome = await actionEmitter.emitActionWithFeedback(osAction, IFRAME_RENDER_TIMEOUT_MS);
 
