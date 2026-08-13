@@ -188,6 +188,22 @@
   font-family: var(--yaar-font-mono);
 }
 
+/* The line-number gutter is a `position: absolute` cell, and diff2html assumes a
+   page-shaped layout where the page is its containing block. Inside a panel
+   nothing in the diff claimed that role, so the gutter resolved against the
+   BODY: `top` came out as an absolute page coordinate, the numbers stopped
+   scrolling with the code they label, and no ancestor's overflow could clip
+   them — a long diff painted its gutter straight down over the Console panel
+   below it.
+
+   Making the file diff a containing block fixes both halves at once: the numbers
+   keep their static positions (nothing sets `top`/`left`), they now scroll with
+   the diff, and the pane's own overflow clips them to the diff body. */
+.diff-output,
+.diff-output .d2h-file-diff {
+  position: relative;
+}
+
 .diff-output .d2h-wrapper {
   background: var(--yaar-bg);
 }

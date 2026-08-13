@@ -155,12 +155,23 @@ so `openFile` alone opens a file nobody can see. There are exactly two such call
 and a click on a problem); `openFile` cannot do it itself, because a service must not reach into UI
 state.
 
-**diff2html needs three overrides to survive inside a panel** (`styles.css`, near the bottom), and
+**diff2html needs four overrides to survive inside a panel** (`styles/diff.css`), and
 each one is load-bearing: its `padding: 0 8em` on a code line reserves room for a gutter that is
 absolutely positioned over the *left* half — remove that and the line numbers land on the code —
 while the right half is pure overhang that painted a slab of row colour past the end of every
 line. It also pads empty lines with a literal U+200B, which the IDE's UI font has no glyph for,
 so every blank line rendered a missing-glyph box until `:after` was given a plain space.
+
+The fourth is the one that took longest to see: the gutter cell is `position: absolute` and
+diff2html assumes the page is its containing block. Nothing in the diff claimed that role, so it
+resolved against the **body** — `top` came out as a page coordinate, the numbers stopped scrolling
+with the code they label, and no ancestor's overflow could clip them, so a long diff painted its
+gutter down over the Console panel below. `.diff-output` and `.d2h-file-diff` are therefore both
+`position: relative` (unified positions against the second, side-by-side against the first), and
+`.diagnostics` carries `position: relative; z-index: 1` and an opaque background so the bottom
+panel is a sibling in the paint order and not only in the DOM. Any future absolutely positioned
+thing diff2html adds needs a containing block *inside* the scroller — check `offsetParent`, not
+appearance, since this bug is invisible until a diff is long enough to run past the pane.
 
 ## agent/prompt.md
 

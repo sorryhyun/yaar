@@ -1,5 +1,12 @@
 /* ── Diagnostics / Bottom Panel ── */
+/* `position: relative` + `z-index` + an opaque background are belt to the diff
+   gutter's braces (see diff.css): the panel is a sibling of the diff, not part
+   of its scroller, and this is what makes that true in the paint order as well
+   as in the DOM. Anything the main pane positions loosely stops here. */
 .diagnostics {
+  position: relative;
+  z-index: 1;
+  background: var(--yaar-bg);
   border-top: 1px solid var(--yaar-border);
   max-height: 200px;
   display: flex;
