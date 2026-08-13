@@ -10,6 +10,8 @@
  * than leaving a stale one behind.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { render, cleanup, waitFor } from '@testing-library/react';
 import { useDesktopStore } from '@/store';
 import { CursorSpinner } from '@/components/overlays/CursorSpinner';
@@ -114,5 +116,26 @@ describe('the cursor spinner', () => {
     renderSpinner();
 
     expect(spinnerEl()).toBeNull();
+  });
+
+  /**
+   * A CSS animation outranks an inline style in the cascade. The first cut of
+   * this component put the rAF's `translate3d` and the `spin` keyframe on one
+   * element, so the rotation replaced the position 60 times a second and the
+   * spinner sat at the origin — invisible to every test above, since happy-dom
+   * runs no animations. Hence the two elements, asserted against the stylesheet.
+   */
+  it('keeps the positioned element and the animated one apart', () => {
+    renderSpinner();
+
+    const css = readFileSync(
+      join(import.meta.dir, '../../styles/overlays/CursorSpinner.module.css'),
+      'utf8',
+    );
+    const block = (name: string) => css.match(new RegExp(`\\.${name}\\s*\\{([^}]*)\\}`))?.[1] ?? '';
+
+    expect(block('host')).not.toContain('animation');
+    expect(block('spinner')).toContain('animation');
+    expect(spinnerEl()?.firstElementChild).not.toBeNull();
   });
 });

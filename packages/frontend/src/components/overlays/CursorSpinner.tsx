@@ -127,5 +127,12 @@ export function CursorSpinner() {
     return null;
   }
 
-  return <div ref={elRef} className={styles.spinner} style={{ opacity: 0 }} aria-hidden="true" />;
+  // The ring spins with a `transform` keyframe, and a CSS animation outranks an
+  // inline style — so the position gets its own element or the rotation wipes it
+  // out every frame and the spinner sits at the origin.
+  return (
+    <div ref={elRef} className={styles.host} style={{ opacity: 0 }} aria-hidden="true">
+      <div className={styles.spinner} />
+    </div>
+  );
 }

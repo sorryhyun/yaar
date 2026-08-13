@@ -1,16 +1,22 @@
-/* Positioned by `transform` from a rAF in CursorSpinner.tsx — left/top stay at
-   the origin so the paint never touches layout. */
-.spinner {
+/* Two elements, and they must stay two: `.host` is placed by a `transform` from
+   a rAF in CursorSpinner.tsx, `.spinner` spins via a `transform` keyframe. A CSS
+   animation outranks an inline style in the cascade, so putting both on one
+   element means the rotation replaces the position every frame and the spinner
+   sits at the origin. */
+.host {
   position: fixed;
   left: 0;
   top: 0;
   will-change: transform;
+  pointer-events: none;
+  z-index: var(--z-cursor);
+}
+
+.spinner {
   width: var(--space-3);
   height: var(--space-3);
   border: 2px solid var(--color-success-dim);
   border-top-color: var(--color-success);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
-  pointer-events: none;
-  z-index: var(--z-cursor);
 }
