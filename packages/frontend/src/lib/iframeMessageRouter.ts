@@ -70,6 +70,7 @@ type RoutedMessageKey =
   | 'arrowDragStart'
   | 'arrowDragMove'
   | 'arrowDragEnd'
+  | 'cursorMove'
   | 'keydown'
   // IFRAME_APP_PROTOCOL_SCRIPT — the fire-and-forget iframe → parent messages.
   | 'ready'

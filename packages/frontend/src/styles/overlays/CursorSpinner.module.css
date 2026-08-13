@@ -1,5 +1,10 @@
+/* Positioned by `transform` from a rAF in CursorSpinner.tsx — left/top stay at
+   the origin so the paint never touches layout. */
 .spinner {
   position: fixed;
+  left: 0;
+  top: 0;
+  will-change: transform;
   width: var(--space-3);
   height: var(--space-3);
   border: 2px solid var(--color-success-dim);

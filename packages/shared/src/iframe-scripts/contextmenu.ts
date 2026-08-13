@@ -4,8 +4,10 @@
  * Handles interactions inside same-origin iframes:
  * 1. Right-click drawing — forwards pointer events to parent for freehand drawing
  * 2. Context menu — always suppressed (drawing uses right-click drag)
- * 3. Left click — posts `yaar:click` so parent can dismiss overlays
- * 4. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
+ * 3. Cursor tracking — posts `yaar:cursor-move` so parent overlays pinned to the
+ *    cursor keep following it while the pointer is inside the frame
+ * 4. Left click — posts `yaar:click` so parent can dismiss overlays
+ * 5. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
  */
 import { APP_MSG } from '../app-protocol.js';
 import { installGuard } from './prelude.js';
@@ -50,6 +52,30 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       clientX: e.clientX,
       clientY: e.clientY
     }, '*');
+  });
+
+  // Cursor position forwarding — the desktop draws a spinner pinned to the
+  // cursor while an agent runs. Pointer events don't cross the frame boundary,
+  // so without this the parent's last sighting of the cursor is the frame's
+  // edge and the spinner parks there for as long as the pointer is inside an
+  // app. Coalesced to one post per animation frame; only the frame under the
+  // cursor sends anything, so this is a single small message per painted frame
+  // while the mouse is moving, and none at all while it is still.
+  var cursorX = 0, cursorY = 0, cursorQueued = false;
+
+  document.addEventListener('pointermove', function(e) {
+    cursorX = e.clientX;
+    cursorY = e.clientY;
+    if (cursorQueued) return;
+    cursorQueued = true;
+    requestAnimationFrame(function() {
+      cursorQueued = false;
+      window.parent.postMessage({
+        type: '${APP_MSG.cursorMove}',
+        clientX: cursorX,
+        clientY: cursorY
+      }, '*');
+    });
   });
 
   // Left click — notify parent so it can dismiss overlays, etc.

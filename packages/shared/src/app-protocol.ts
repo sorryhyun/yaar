@@ -219,6 +219,13 @@ export const APP_MSG = {
   // so the parent is told about the ones it owns.
   click: 'yaar:click',
   dragStart: 'yaar:drag-start',
+  /**
+   * The cursor's position inside the frame, coalesced to one post per animation
+   * frame. The desktop pins a spinner to the cursor while an agent runs, and it
+   * would otherwise freeze at the frame's edge for as long as the pointer is
+   * inside an app.
+   */
+  cursorMove: 'yaar:cursor-move',
   arrowDragStart: 'yaar:arrow-drag-start',
   arrowDragMove: 'yaar:arrow-drag-move',
   arrowDragEnd: 'yaar:arrow-drag-end',
