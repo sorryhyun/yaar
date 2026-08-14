@@ -120,7 +120,8 @@ src/
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)
 │   ├── fonts/            # The served-face catalog + subsetForText() behind yaar://system/fonts
-│   ├── http/             # fetch.ts — proxied HTTP fetch
+│   ├── http/             # fetch.ts — proxied HTTP fetch; binary-body.ts — what a *model* gets
+│   │                     #   when the response is bytes (an app still gets the base64 envelope)
 │   ├── market/ session/ skills/ user/   # Marketplace, session ops, skills, clipboard + secret-scan
 │   ├── update/           # Self-update: semver.ts, release.ts, installer.ts, updater.ts
 │   └── window/           # Window create/update/manage, app protocol, app query/command, delegated-grants, subscribe

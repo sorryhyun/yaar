@@ -21,6 +21,15 @@ export interface FetchOptions {
   cookieJarKey?: string;
   /** Set to 'manual' to not follow redirects (returns 3xx as-is with Location header). */
   redirect?: 'follow' | 'manual';
+  /**
+   * Hand the body back as raw bytes on {@link FetchResult.bytes} instead of a string.
+   *
+   * The default shape — text inline, binary base64-encoded — is what an iframe caller
+   * wants, because `responseFromProxyPayload` (shared/iframe-scripts/prelude.ts) turns it
+   * straight back into a `Response`. A caller that is going to write the bytes to disk, or
+   * hand them to a model as an image, only pays for the base64 round trip. This skips it.
+   */
+  raw?: boolean;
 }
 
 export interface FetchResult {
@@ -30,6 +39,33 @@ export interface FetchResult {
   headers: Record<string, string>;
   body: string;
   bodyEncoding?: 'base64';
+  /**
+   * The undecoded body. Set only under {@link FetchOptions.raw}, where `body` is `''` and
+   * `bodyEncoding` is absent — so a `raw` result must never be JSON-serialized as-is (a
+   * Buffer stringifies to `{"type":"Buffer","data":[…]}`). Read this field and build the
+   * response shape you actually want.
+   */
+  bytes?: Buffer;
+}
+
+/**
+ * Whether a content-type names something that survives being read as UTF-8.
+ *
+ * A substring test, not a parse: `application/problem+json` and `text/html; charset=utf-8`
+ * both have to pass, and neither is a bare type/subtype pair. Anything unmatched is treated
+ * as binary — including the `application/octet-stream` that servers hand back for images
+ * they decline to type, which is why the callers that care sniff the bytes rather than
+ * trusting the negative.
+ */
+export function isTextContentType(contentType: string): boolean {
+  return (
+    contentType.includes('text/') ||
+    contentType.includes('json') ||
+    contentType.includes('xml') ||
+    contentType.includes('javascript') ||
+    contentType.includes('css') ||
+    contentType.includes('svg')
+  );
 }
 
 /**
@@ -148,13 +184,18 @@ export async function performFetch(url: string, options?: FetchOptions): Promise
 
     // Determine if response is text or binary
     const responseContentType = response.headers.get('content-type') || '';
-    const isText =
-      responseContentType.includes('text/') ||
-      responseContentType.includes('json') ||
-      responseContentType.includes('xml') ||
-      responseContentType.includes('javascript') ||
-      responseContentType.includes('css') ||
-      responseContentType.includes('svg');
+    const isText = isTextContentType(responseContentType);
+
+    if (options?.raw) {
+      return {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
+        headers: responseHeaders,
+        body: '',
+        bytes: responseBuffer,
+      };
+    }
 
     const result: FetchResult = {
       ok: response.ok,

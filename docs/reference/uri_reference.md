@@ -424,6 +424,8 @@ describe('yaar://config/settings')             -> { verbs: ['describe', 'read', 
 
 HTTP requests also flow through the verb layer: `invoke('yaar://http', { url, ... })`, with domain allowlisting at `invoke('yaar://config/domains', { domain })`. `delete('yaar://http')` clears the caller's stored cookie jar (use on app logout).
 
+The response shape depends on who asked, because base64 is useful to one caller and useless to the other. An **app iframe** gets the envelope it can decode — `{ ok, status, headers, body, bodyEncoding: 'base64' }` — which `yaarFetch` turns back into a real `Response`. An **agent** gets text on `body` as before, but a binary body never arrives as base64: an image (identified from its bytes, not its content-type) comes back as an image block, and anything else is omitted with `bodyOmitted`, `bodyBytes`, and a hint. To actually retrieve binary content, the session and monitor agents pass `saveTo` — a path relative to `yaar://storage/` — and get `{ saved: { uri, bytes } }` back to `read` or open.
+
 ### Batching
 
 A call batches on **either axis**, and the two are independent:
