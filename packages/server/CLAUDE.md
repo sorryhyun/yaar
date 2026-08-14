@@ -45,7 +45,7 @@ before changing a default or adding a knob.
 | `CODEX_WS_PORT` / `CODEX_HOME` | `4510` / codex's | App-server port; codex config dir, **read by YAAR before the spawn** |
 | `CHROME_PATH` / `CHROME_DEBUG_PORT` | auto / `9222` | Chrome binary; DevTools port for the session-door browser |
 | `YAAR_BROWSER_PROVIDER` | — | **Not a selector** — force-headless opt-out only |
-| `MARKET_URL` | — | App marketplace endpoint |
+| `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
 
 ## Directory Structure
 
@@ -60,7 +60,7 @@ src/
 │   ├── iframe-tokens.ts  # generateIframeToken(), validateIframeToken()
 │   ├── origin-boundary.ts # THE ORIGIN BOUNDARY — which two origins, and which side a request is on
 │   ├── subscriptions.ts  # subscriptionRegistry — reactive verb URI subscriptions
-│   └── routes/           # api.ts (REST), verb.ts (iframe verb proxy), files.ts, browse.ts, proxy.ts, static.ts
+│   └── routes/           # api.ts (REST), verb.ts (iframe verb proxy), files.ts, browser.ts, proxy.ts, static.ts
 ├── session/              # LiveSession (aggregate root), SessionHub, BroadcastCenter, ActionEmitter, SessionEventRouter, WindowStateRegistry, types
 │   ├── monitor-registry.ts          # MonitorRegistry — authoritative monitor list, id minting, subscription + viewport, removal
 │   ├── client-event-controller.ts   # ClientEventController — the total ClientEventRoutes table + frame handlers
@@ -78,7 +78,8 @@ src/
 │   ├── context-pool.ts   # ContextPool — unified task orchestration
 │   ├── context.ts        # ContextTape — hierarchical message history
 │   ├── limiter.ts        # AgentLimiter — global agent semaphore
-│   ├── agent-session.ts  # AgentSession + AsyncLocalStorage (getAgentId, getSessionId)
+│   ├── agent-session.ts  # AgentSession — one agent's provider session + turn state
+│   ├── agent-context.ts  # AsyncLocalStorage (runWithAgentContext, getAgentId, getSessionId, getMonitorId, getWindowId)
 │   ├── roles.ts          # Role prefixes + the parse that maps one onto an access tier
 │   ├── monitor-task-processor.ts / app-task-processor.ts / session-task-processor.ts
 │   ├── window-event-coordinator.ts  # subscription/notification fan-out + window-close teardown
@@ -213,7 +214,7 @@ Use `ServerEventType` and `ClientEventType` const objects from `@yaar/shared` fo
 | Context Tape | `ContextTape` | Track messages by source for injection |
 | Factory | `providers/factory.ts` | Auto-detect and create providers |
 | Observer | `actionEmitter` | Decouple tools from sessions |
-| AsyncLocalStorage | `AgentSession` | Track agentId in async context |
+| AsyncLocalStorage | `agents/agent-context.ts` | Track agentId in async context |
 | Injected resolver | `setLogContextResolver`, `setAccessPrincipalResolver`, `setWindowGrantResolver` | Give a low-level module a fact that lives above it in the import graph, wired once in `lifecycle.ts` |
 
 ### Logging

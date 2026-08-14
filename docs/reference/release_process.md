@@ -30,8 +30,9 @@ Enforced by repo rulesets, not files — inspect with `gh api repos/sorryhyun/ya
 - `main` and `dev` both block deletion and force-push.
 - `refs/tags/v*` blocks deletion and force-update, so a botched release is retried with a new
   patch version rather than by moving a tag.
-- `main` additionally requires the `ci / check` status — which is why `ci.yml`'s job id must stay
-  `check` (the reusable-workflow name is `<caller job> / <called job>`).
+- `main` additionally requires the `ci / check` status. The reusable-workflow name is
+  `<caller job> / <called job>`, so that string is `ci.yml`'s job id (`ci`) followed by
+  `checks.yml`'s (`check`) — renaming *either* silently detaches the rule.
 
 Nothing bypasses these; the Actions bot *cannot* be given a bypass on a user-owned repo, which is
 what shaped the release flow below. A fast-forward `dev` → `main` push is still allowed: the commit

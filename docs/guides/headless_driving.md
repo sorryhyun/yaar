@@ -2,8 +2,9 @@
 
 YAAR can be launched and driven by an external agent — including from inside another Claude Code
 session. The Claude provider spawns the `claude` CLI as a subprocess; the harness scrubs
-nested-Claude env vars before the spawn (see
-`packages/server/src/providers/claude/session-provider.ts`), so it works inside cloud sandboxes
+nested-Claude env vars before the spawn (`buildClaudeEnv` / `PARENT_HARNESS_ENV_VARS` in
+`packages/server/src/config/providers/claude.ts`, wired in via
+`packages/server/src/providers/claude/sdk-options.ts`), so it works inside cloud sandboxes
 without IPC clashes.
 
 ## Launch (cloud / headless)
@@ -12,7 +13,7 @@ without IPC clashes.
 export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...   # required if not already logged in
 export CLAUDE_CODE_PATH=/path/to/claude           # optional; only if not in ~/.local/bin or PATH
 make claude-dev                                   # PROVIDER=claude, MCP_SKIP_AUTH=1, port 8000
-# server is ready when you see "[banner] YAAR running at ..."
+# server is ready when you see "YAAR server running at http://..."
 ```
 
 ## Drive YAAR like a user — through the browser
@@ -71,6 +72,6 @@ tail -f session_logs/$(ls -t session_logs | head -1)/*.jsonl
 The parent agent (an outer Claude Code session) launches `make claude-dev`, opens Chromium at
 `http://127.0.0.1:8000`, and types prompts into the command palette like a user. YAAR's own Claude
 provider spawns its own `claude` subprocess to handle each prompt — that's two separate Claude
-sessions stacked. The env-scrub in `session-provider.ts` is what makes this stacking work; without
+sessions stacked. The env-scrub in `config/providers/claude.ts` is what makes this stacking work; without
 it the inner `claude` inherits the outer's FD-based auth and
 `CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST=1`, and immediately exits with code 1.

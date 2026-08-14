@@ -64,14 +64,14 @@ Filters match against the verb tool context. All filter fields are optional — 
 
 ## Example: App-Dev Progress Tracking
 
-An example config at `docs/guides/example_hooks.json` demonstrates toasts that track app development:
+An example config at `docs/guides/example_hooks.json` demonstrates toasts that track app development, plus one `launch` hook:
 
-| Stage | Filter | Status |
-|-------|--------|--------|
-| Clone | `verb: invoke, uri: yaar://apps/*, action: clone` | "Cloning..." |
-| Write | `verb: invoke, uri: yaar://apps/*, action: [write, edit]` | "Writing code..." |
-| Compile | `verb: invoke, uri: yaar://apps/*, action: compile` | "Compiling..." |
-| Deploy | `verb: invoke, uri: yaar://apps/*, action: deploy` | "Deployed!" |
+| Hook | Event | Filter | Effect |
+|-------|--------|--------|--------|
+| `hook-1` | `tool_use` | `verb: invoke, uri: yaar://apps/*, action: clone` | "Cloning..." toast |
+| `hook-2` | `tool_use` | `verb: invoke, uri: yaar://apps/*, action: [write, edit]` | "Writing code..." toast |
+| `hook-5` | `tool_use` | `verb: invoke, uri: yaar://windows/*, action: app_command` | "Sending command to app..." toast |
+| `hook-8` | `launch` | — | Opens the Dock window at boot |
 
 ### Activating the Example
 
@@ -88,7 +88,7 @@ Then start the server with `make dev`. When the AI uses app-dev tools, toasts wi
 The AI can manage hooks through verb tools:
 
 - **`invoke('yaar://config/hooks', { event, label, action, filter? })`** — Register a new hook (shows a permission dialog)
-- **`read('yaar://config/hooks/')`** or **`list('yaar://config/hooks/')`** — Read registered hooks
+- **`read('yaar://config/hooks/')`** — Read registered hooks (the resource registers `describe`/`read`/`invoke` only; `list` is refused as not-a-collection)
 - **`delete('yaar://config/hooks/{id}')`** — Delete a hook by ID (shows a confirmation dialog)
 
 ### Example: Adding a Hook

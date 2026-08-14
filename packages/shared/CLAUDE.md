@@ -5,7 +5,7 @@ Shared types between frontend and server.
 ## Exports
 
 - `actions.ts` - OS Actions DSL (includes `WindowState` with `appProtocol?: boolean`), plus the runtime validation helpers `isWindowContentData` / `isContentUpdateOperationValid` / `applyContentOperation`
-- `events.ts` - WebSocket event types, `ClientEventType`/`ServerEventType` constants
+- `events/` - WebSocket event types, split by concern: `routing.ts` (`ClientEventType`/`ServerEventType` constants and the queue-bypass predicates, holding no interfaces so the other two can share it), `client.ts` (Client→Server interfaces + union), `server.ts` (Server→Client interfaces + union). `index.ts` re-exports all three
 - `component-types.ts` - The Zod-free half of the Component DSL: enum value lists (`GAP_VALUES`, `BUTTON_VARIANTS`, …), the narrow renderer-facing types, `isComponent`. This is what the barrel exports.
 - `components.ts` - The Zod half: `componentSchema`, `componentLayoutSchema`, `displayContentSchema`, and the inferred `ComponentLayout` / `DisplayContent`
 - `schemas.ts` - The `@yaar/shared/schemas` entry point: every Zod-bearing export (component schemas + the whole bridge contract), kept off the barrel so the frontend does not bundle Zod
@@ -44,7 +44,7 @@ Window actions (create, close, focus, minimize, maximize, restore, move, resize,
 
 ## WebSocket Events
 
-See `src/events.ts` for full Client→Server and Server→Client event types.
+See `src/events/client.ts` and `src/events/server.ts` for full Client→Server and Server→Client event types.
 
 `UserMessageEvent` carries an optional `target?: 'monitor' | 'session'` (default `'monitor'`): set
 to `'session'` by the CLI-panel toggle to route the message to the session agent (the user's

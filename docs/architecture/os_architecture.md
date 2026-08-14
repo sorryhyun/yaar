@@ -12,18 +12,18 @@ For runtime details, see the linked docs in each section. For the Session/Monito
 | Process table | `AgentPool` | `yaar://agents/` | `agents/agent-pool.ts` |
 | Process types | Session (root), monitor (init), app (daemon), ephemeral (one-shot), sub-agent (thread) | `yaar://agents/{instanceId}` | `agents/profiles/` |
 | Threading model | The agent tree (key extends owner's, disposal cascades) | — | [`agent_tree.md`](./agent_tree.md) |
-| Scheduler | `MainQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |
+| Scheduler | `MonitorQueuePolicy`, `WindowQueuePolicy`, `MonitorBudgetPolicy` | — | `agents/context-pool-policies/` |
 | Syscalls | 5 URI verbs + system tools (5 MCP namespaces) | — | `mcp/server.ts` |
-| Instruction set | System prompt (~108 lines) | — | `providers/claude/system-prompt.ts` |
+| Instruction set | System prompt (~94 lines) | — | `agents/system-prompt.ts` |
 | Boot | `initializeSubsystems()` | — | `lifecycle.ts` |
 | Filesystem | `storage/` + mount system | `yaar://storage/` | `storage/storage-manager.ts`, `storage/mounts.ts` |
-| Window manager | `WindowStateRegistry` | `yaar://monitors/` | `mcp/window-state.ts` |
+| Window manager | `WindowStateRegistry` | `yaar://monitors/` | `session/window-state.ts` |
 | Display server | `BroadcastCenter` | — | `session/broadcast-center.ts` |
-| IPC | `ActionEmitter`, `InteractionTimeline`, App Protocol | — | `mcp/action-emitter.ts`, `agents/interaction-timeline.ts` |
+| IPC | `ActionEmitter`, `InteractionTimeline`, App Protocol | — | `session/action-emitter.ts`, `agents/interaction-timeline.ts` |
 | Device drivers | `AITransport` implementations | — | `providers/types.ts`, `providers/claude/`, `providers/codex/` |
 | Desktop environment | React frontend + Zustand store | — | `packages/frontend/` |
-| Package manager | Apps marketplace | `yaar://apps/` | `mcp/apps/` |
-| User interaction | Notifications, prompts, clipboard | `yaar://user/` | `mcp/user/` |
+| Package manager | Apps marketplace | `yaar://apps/` | `features/market/`, `handlers/apps.ts`, `handlers/apps/` |
+| User interaction | Notifications, prompts, clipboard | `yaar://user/` | `handlers/user.ts` |
 | Configuration | Settings, hooks, shortcuts, mounts | `yaar://config/` | `storage/settings.ts`, `mcp/system/` |
 
 All paths are relative to `packages/server/src/` unless noted otherwise. All resources are addressable via the `yaar://` URI scheme — see [`verbalized-with-uri.md`](./verbalized-with-uri.md) for the rationale and the [URI & Verb Reference](../reference/uri_reference.md) for the full namespace tables.
@@ -60,7 +60,7 @@ These are not four independent registries but one **ownership tree** — session
 
 Agents carry a **principal `role`** (`session` / `monitor` / `app`) that access control is keyed on. The session agent is the privileged tier — the only principal allowed to reach `yaar://session/*` (enforced centrally in `ResourceRegistry.execute()`); monitor/app agents are sandboxed workers. Sub-agents hold no principal at all — see [The Agent Tree](./agent_tree.md) for the full containment rule.
 
-Monitor agents can also spawn **task subagents** via the `Task` tool (like `fork()`). These are *provider-internal* — YAAR only enables the builtin (`providers/claude/sdk-options.ts`; Codex uses the roles in `profiles/index.ts`, `CODEX_AGENT_ROLES`) and they never enter `AgentPool`. Distinct from the app-spawned **sub-agent** tier above, which does.
+Monitor agents can also spawn **task subagents** via the `Task` tool (like `fork()`). These are *provider-internal* — YAAR only enables the builtin (`providers/claude/sdk-options.ts`; Codex uses the roles in `agents/profiles/index.ts`, `CODEX_AGENT_ROLES`) and they never enter `AgentPool`. Distinct from the app-spawned **sub-agent** tier above, which does.
 
 Global process limit: `AgentLimiter` enforces `MAX_AGENTS` (default 10).
 
@@ -70,7 +70,7 @@ Global process limit: `AgentLimiter` enforces `MAX_AGENTS` (default 10).
 
 Three policies in `agents/context-pool-policies/` control task dispatch:
 
-**`MainQueuePolicy`** — Per-monitor FIFO queue. Tasks run sequentially (one at a time per monitor). Like a single-core scheduler per virtual desktop.
+**`MonitorQueuePolicy`** — Per-monitor FIFO queue. Tasks run sequentially (one at a time per monitor). Like a single-core scheduler per virtual desktop.
 
 **`WindowQueuePolicy`** — Per-window FIFO queues. Different windows run in parallel; within one window, tasks serialize. Like multi-core scheduling across independent subsystems.
 
@@ -117,7 +117,7 @@ The system prompt **is** the instruction set architecture. It defines:
 - The `Task` tool delegation pattern (when to handle directly vs. spawn subagents)
 - Mandatory `skill()` calls before using app/component tools
 
-Located at `providers/claude/system-prompt.ts` (Claude) and `providers/codex/system-prompt.ts` (Codex). Users can override with `config/system-prompt.txt`.
+Located at `agents/system-prompt.ts` — one shared prompt, not one per provider. The provider-specific half is a section picked at build time (`CLAUDE_PROVIDER_SECTION` / `CODEX_PROVIDER_SECTION` from `agents/profiles/shared-sections.ts`). Users can override with `config/system-prompt.txt`.
 
 No separate formal ISA document is needed — the prompt itself is concise (~108 lines) and readable.
 
@@ -182,7 +182,7 @@ See [`monitor_and_windows_guide.md`](./monitor_and_windows_guide.md) for the ful
 
 Four IPC mechanisms:
 
-**`ActionEmitter`** (`mcp/action-emitter.ts`) — The syscall return path. MCP tools emit OS Actions here; listeners route them to WebSocket delivery. Supports fire-and-forget (`emitAction`) and request/response (`emitActionWithFeedback`, `showConfirmDialog`, `showPermissionDialog`, `showUserPrompt`).
+**`ActionEmitter`** (`session/action-emitter.ts`) — The syscall return path. MCP tools emit OS Actions here; listeners route them to WebSocket delivery. Supports fire-and-forget (`emitAction`) and request/response (`emitActionWithFeedback`, `showConfirmDialog`, `showPermissionDialog`, `showUserPrompt`).
 
 **`BroadcastCenter`** (`session/broadcast-center.ts`) — Display server. Routes serialized events to WebSocket connections, scoped by session or monitor. Connections with no monitor subscription receive all events (backward compat).
 
@@ -239,7 +239,7 @@ See [`claude_codex.md`](../reference/claude_codex.md) for behavioral differences
 │  ReloadCache                                        │
 ├──────────────────────┬──────────────────────────────┤
 │   Scheduler          │     Agents (Processes)       │
-│  MainQueuePolicy     │  Main · App · Ephemeral ·    │
+│  MonitorQueuePolicy  │  Main · App · Ephemeral ·    │
 │  WindowQueuePolicy   │  Task subagents              │
 │  MonitorBudgetPolicy │                              │
 ├──────────────────────┴──────────────────────────────┤

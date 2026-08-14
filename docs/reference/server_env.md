@@ -22,7 +22,7 @@ passes in review.
 | `PORT` | `8000` | Server port |
 | `MAX_AGENTS` | `10` | Global agent limit (process-wide) |
 | `CODEX_WS_PORT` | `4510` | Codex app-server WebSocket listener |
-| `MARKET_URL` | — | App marketplace endpoint |
+| `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
 
 ### `CODEX_HOME`
 

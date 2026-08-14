@@ -174,7 +174,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - `make dev` runs `scripts/dev/start.sh` which: builds shared package first → starts server (serves both API and frontend on single port)
 - Git branches: `dev` is where work lands; `main` is the stable branch (the default, so it is what `git clone` gives you) and only receives merges from `dev`; releases are cut by publishing a GitHub draft release targeting `main`. Open PRs against `dev` unless the change is a release promotion.
 - **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
-- **CI & release**: `.github/workflows/checks.yml` is the one definition of "is this tree good?" (three escalating tiers; `ci.yml`'s job id must stay `check`). Releases: `bun run release:prepare <version>` on `dev`, promote to `main`, publish a draft release targeting `main`. Tiers, rulesets, and the full flow: the `release` skill and [`docs/reference/release_process.md`](./docs/reference/release_process.md).
+- **CI & release**: `.github/workflows/checks.yml` is the one definition of "is this tree good?" (three escalating tiers; its job id must stay `check`, and `ci.yml`'s must stay `ci`). Releases: `bun run release:prepare <version>` on `dev`, promote to `main`, publish a draft release targeting `main`. Tiers, rulesets, and the full flow: the `release` skill and [`docs/reference/release_process.md`](./docs/reference/release_process.md).
 
 ### Subagent Model Selection
 

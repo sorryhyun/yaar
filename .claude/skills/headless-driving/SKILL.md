@@ -15,11 +15,11 @@ plumbing.
 export CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-...   # required if not already logged in
 export CLAUDE_CODE_PATH=/path/to/claude           # optional, only if claude isn't in ~/.local/bin or PATH
 make claude-dev                                   # PROVIDER=claude, MCP_SKIP_AUTH=1, port 8000
-# ready when you see "[banner] YAAR running at ..."
+# ready when you see "YAAR server running at http://..."
 ```
 
 This is Claude-in-Claude: the outer session launches YAAR, which spawns its own `claude`
-subprocess per prompt. `packages/server/src/providers/claude/session-provider.ts` scrubs
+subprocess per prompt. `buildClaudeEnv` in `packages/server/src/config/providers/claude.ts` scrubs
 nested-Claude env vars before that inner spawn — without it the inner `claude` inherits the
 outer's FD-based auth and exits immediately with code 1.
 

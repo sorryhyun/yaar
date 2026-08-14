@@ -64,14 +64,14 @@
 
 ## 예시: 앱 개발 진행 상황 추적
 
-`docs/guides/example_hooks.json`의 예시 설정은 앱 개발 과정을 추적하는 토스트를 보여줍니다:
+`docs/guides/example_hooks.json`의 예시 설정은 앱 개발 과정을 추적하는 토스트와 `launch` 훅 하나를 보여줍니다:
 
-| 단계 | 필터 | 상태 |
-|-------|--------|------|
-| Clone | `verb: invoke, uri: yaar://apps/*, action: clone` | "Cloning..." |
-| Write | `verb: invoke, uri: yaar://apps/*, action: [write, edit]` | "Writing code..." |
-| Compile | `verb: invoke, uri: yaar://apps/*, action: compile` | "Compiling..." |
-| Deploy | `verb: invoke, uri: yaar://apps/*, action: deploy` | "Deployed!" |
+| 훅 | 이벤트 | 필터 | 효과 |
+|-------|--------|--------|------|
+| `hook-1` | `tool_use` | `verb: invoke, uri: yaar://apps/*, action: clone` | "Cloning..." 토스트 |
+| `hook-2` | `tool_use` | `verb: invoke, uri: yaar://apps/*, action: [write, edit]` | "Writing code..." 토스트 |
+| `hook-5` | `tool_use` | `verb: invoke, uri: yaar://windows/*, action: app_command` | "Sending command to app..." 토스트 |
+| `hook-8` | `launch` | — | 부팅 시 Dock 창을 엽니다 |
 
 ### 예시 활성화하기
 
@@ -88,7 +88,7 @@ cp docs/guides/example_hooks.json config/hooks.json
 AI는 verb 도구를 통해 훅을 관리할 수 있습니다:
 
 - **`invoke('yaar://config/hooks', { event, label, action, filter? })`** — 새 훅 등록 (권한 대화상자 표시)
-- **`read('yaar://config/hooks/')`** 또는 **`list('yaar://config/hooks/')`** — 등록된 훅 읽기
+- **`read('yaar://config/hooks/')`** — 등록된 훅 읽기 (이 리소스는 `describe`/`read`/`invoke`만 등록하며, `list`는 컬렉션이 아니라는 이유로 거부됩니다)
 - **`delete('yaar://config/hooks/{id}')`** — ID로 훅 삭제 (확인 대화상자 표시)
 
 ### 예시: 훅 추가하기

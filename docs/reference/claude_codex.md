@@ -207,7 +207,7 @@ replacing it, so anything declared there could never be taken away from a thread
 
 | Setting | Claude | Codex |
 |---------|--------|-------|
-| Model | Sonnet/Opus by agent tier | `gpt-5.6-terra` for both Sonnet-tier and Opus-tier agents (and the default) — `claudeModelToCodex()` maps both to the same Codex model; per-query `options.model` honored via `thread/start`/`thread/fork` |
+| Model | Sonnet/Opus by agent tier | `claudeModelToCodex()` maps Opus-tier → `gpt-5.6-sol` and Sonnet-tier → `gpt-5.6-terra` (Terra is also the default, since app agents default to the Sonnet tier); per-query `options.model` honored via `thread/start`/`thread/fork` |
 | Thinking | Not explicitly configured (no `thinking`/`maxThinkingTokens` option set anywhere in the Claude provider — default SDK behavior) | High reasoning effort (`-c model_reasoning_effort=high`) |
 | Web search | Enabled (`tools: ['WebSearch', 'Task']`) | Disabled by design (`-c web_search=disabled`) — YAAR controls HTTP access via MCP tools |
 | Shell tool | N/A (MCP tools only) | Explicitly disabled (`features.shell_tool=false`) |
