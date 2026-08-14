@@ -13,7 +13,9 @@ export function formatDateTime(iso: string | undefined): string {
     const hh = String(d.getHours()).padStart(2, '0');
     const min = String(d.getMinutes()).padStart(2, '0');
     return `${yy}-${mm}-${dd} ${hh}:${min}`;
-  } catch { return '-'; }
+  } catch {
+    return '-';
+  }
 }
 
 /** Full datetime with seconds for detail view */
@@ -29,7 +31,9 @@ export function formatFull(iso: string | undefined): string {
     const min = String(d.getMinutes()).padStart(2, '0');
     const sec = String(d.getSeconds()).padStart(2, '0');
     return `${yy}-${mm}-${dd} ${hh}:${min}:${sec}`;
-  } catch { return '-'; }
+  } catch {
+    return '-';
+  }
 }
 
 /** HH:MM:SS local time for a transcript turn */
@@ -50,7 +54,24 @@ export function durationBetween(a: string | undefined, b: string | undefined): s
     if (mn < 60) return `${mn}m ${s % 60}s`;
     const h = Math.floor(mn / 60);
     return `${h}h ${mn % 60}m`;
-  } catch { return '-'; }
+  } catch {
+    return '-';
+  }
+}
+
+/**
+ * Compact "start → end" range for the metadata strip: the end drops to a bare
+ * HH:MM when it falls on the same calendar day as the start, which is the
+ * common case and the difference between one line and two at 640px.
+ */
+export function formatRange(a: string | undefined, b: string | undefined): string {
+  const start = formatDateTime(a);
+  if (!b) return start;
+  const end = formatDateTime(b);
+  if (end === '-') return start;
+  if (start === '-') return end;
+  const sameDay = start.slice(0, 10) === end.slice(0, 10);
+  return `${start} → ${sameDay ? end.slice(11) : end}`;
 }
 
 /** YYYY-MM-DD date key from createdAt (with sessionId fallback) */
@@ -59,7 +80,9 @@ export function getDateKey(s: SessionSummary): string {
     try {
       const d = new Date(s.createdAt);
       if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
   const match = s.sessionId.match(/^(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : 'unknown';
@@ -88,6 +111,8 @@ export function providerLabel(p: string | undefined): string {
 
 /** CSS class string for provider badge */
 export function providerCls(p: string | undefined): string {
-  const slug = providerLabel(p).toLowerCase().replace(/[^a-z0-9]/g, '-');
+  const slug = providerLabel(p)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-');
   return `provider-badge provider-${slug}`;
 }

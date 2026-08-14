@@ -1,9 +1,9 @@
-/* ── Message cards ─────────────────────────── */
+/* ── Prose cards (user / assistant) ────────── */
 
 .msg-card {
   border: 1px solid var(--yaar-border);
-  border-left: 3px solid var(--yaar-border);
-  border-radius: var(--yaar-radius);
+  border-left: 2px solid var(--yaar-border);
+  border-radius: var(--yaar-radius-sm);
   background: var(--yaar-bg-surface);
   overflow: hidden;
 }
@@ -11,8 +11,8 @@
 .msg-head {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
+  gap: 6px;
+  padding: 3px 8px;
   background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid rgba(48, 54, 61, 0.5);
 }
@@ -22,18 +22,6 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-}
-
-.msg-sub {
-  font-size: 10px;
-  color: var(--yaar-text);
-  background: rgba(255, 255, 255, 0.06);
-  padding: 1px 6px;
-  border-radius: 3px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 240px;
 }
 
 .msg-agent {
@@ -52,7 +40,7 @@
 }
 
 .msg-body {
-  padding: 8px 10px;
+  padding: 6px 8px;
 }
 
 .msg-body:empty {
@@ -67,7 +55,7 @@
 
 .msg-para {
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.5;
   color: var(--yaar-text);
   white-space: pre-wrap;
   word-break: break-word;
@@ -78,7 +66,7 @@
   background: var(--yaar-bg);
   border: 1px solid var(--yaar-border);
   border-radius: 4px;
-  padding: 8px;
+  padding: 6px 8px;
   color: var(--yaar-text-muted);
   white-space: pre-wrap;
   word-break: break-word;
@@ -95,42 +83,153 @@
   color: var(--yaar-accent);
 }
 
-.msg-collapse {
-  border: 1px solid var(--yaar-border);
-  border-radius: 4px;
-  background: var(--yaar-bg);
+/* ── Compact log rows ───────────────────────── */
+/* One line per tool call / result / thought / action. The row IS the
+   disclosure control, so a collapsed call costs 20px instead of a card
+   plus a nested "View input" box. */
+
+.log-row {
+  border-left: 2px solid var(--yaar-border);
+  border-radius: 0 var(--yaar-radius-sm) var(--yaar-radius-sm) 0;
+  background: var(--yaar-bg-surface);
+}
+
+.log-summary,
+.log-static {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 2px 8px;
+  min-height: 20px;
+  /* The single hard rule: a log row is one line, always. */
+  white-space: nowrap;
   overflow: hidden;
-}
-
-.msg-summary {
-  cursor: pointer;
-  font-size: 11px;
-  padding: 5px 8px;
-  color: var(--yaar-text-muted);
-  user-select: none;
   list-style: none;
+  cursor: pointer;
+  user-select: none;
 }
 
-.msg-summary::-webkit-details-marker {
+.log-static {
+  cursor: default;
+}
+
+.log-summary::-webkit-details-marker {
   display: none;
 }
 
-.msg-summary::before {
-  content: '▸ ';
+.log-summary::before {
+  content: '▸';
+  font-size: 9px;
+  color: var(--yaar-text-dim);
+  flex-shrink: 0;
+  width: 8px;
+}
+
+.log-row[open] > .log-summary::before {
+  content: '▾';
+}
+
+/* Keeps the static rows' text aligned with the disclosure rows' text. */
+.log-static::before {
+  content: '';
+  width: 8px;
+  flex-shrink: 0;
+}
+
+.log-summary:hover,
+.log-row[open] > .log-summary {
+  background: var(--yaar-bg-surface-hover);
+}
+
+.log-time {
+  font-size: 10px;
+  color: var(--yaar-text-dim);
+  flex-shrink: 0;
+}
+
+.log-verb {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+  /* A fixed column so verbs line up down the log and the eye can skim them. */
+  min-width: 54px;
+  text-align: center;
+}
+
+.log-name {
+  font-size: 10px;
+  color: var(--yaar-text);
+  flex-shrink: 0;
+  max-width: 30%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Head shrinks and takes the ellipsis; tail is pinned. See splitTarget(). */
+.log-target {
+  font-size: 11px;
   color: var(--yaar-text-muted);
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.msg-collapse[open] > .msg-summary::before {
-  content: '▾ ';
+.log-target-head {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.msg-collapse > .msg-code {
-  border: none;
-  border-top: 1px solid var(--yaar-border);
-  border-radius: 0;
+.log-target-tail {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  color: var(--yaar-text);
 }
 
-/* Role accents */
+.log-agent {
+  font-size: 9px;
+  color: var(--yaar-text-dim);
+  flex-shrink: 0;
+  max-width: 25%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The agent repeats on nearly every row; below this width the URI needs those
+   pixels more than the reader needs to re-read "monitor". Still in the row's
+   title tooltip and the expanded payload. */
+@media (max-width: 800px) {
+  .log-agent {
+    display: none;
+  }
+}
+
+.log-detail {
+  font-size: 11px;
+  margin: 0 8px 6px 23px;
+  padding: 6px 8px;
+  background: var(--yaar-bg);
+  border: 1px solid var(--yaar-border);
+  border-radius: 4px;
+  color: var(--yaar-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.5;
+  max-height: 320px;
+  overflow: auto;
+}
+
+/* ── Role accents ───────────────────────────── */
+/* Same identity colors as before — now carried by a thin left border and
+   the verb chip instead of a full-width uppercase label. */
+
 .role-user {
   border-left-color: var(--yaar-accent);
 }
@@ -148,41 +247,50 @@
 .role-thinking {
   border-left-color: var(--sl-role-thinking);
 }
-.role-thinking .msg-role {
+.role-thinking .log-verb {
   color: var(--sl-role-thinking);
 }
 
 .role-tool {
   border-left-color: var(--sl-role-tool);
 }
-.role-tool .msg-role {
+.role-tool .log-verb {
   color: var(--sl-role-tool);
 }
 
 .role-result {
   border-left-color: var(--yaar-success);
 }
-.role-result .msg-role {
+.role-result .log-verb {
   color: var(--yaar-success);
+}
+
+.role-error {
+  border-left-color: var(--yaar-error);
+}
+.role-error .log-verb {
+  color: var(--yaar-error);
+  background: var(--yaar-wash-error);
 }
 
 .role-action {
   border-left-color: var(--sl-role-action);
 }
-.role-action .msg-role {
+.role-action .log-verb {
   color: var(--sl-role-action);
 }
 
 .role-interaction {
   border-left-color: var(--sl-role-interaction);
 }
-.role-interaction .msg-role {
+.role-interaction .log-verb {
   color: var(--sl-role-interaction);
 }
 
 .role-unknown {
   border-left-color: var(--yaar-text-muted);
 }
-.role-unknown .msg-role {
+.role-unknown .msg-role,
+.role-unknown .log-verb {
   color: var(--yaar-text-muted);
 }

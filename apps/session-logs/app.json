@@ -14,5 +14,6 @@
   "version": "1.1.2",
   "author": "YAAR",
   "description": "Browse and audit session logs — analyze workflows, tool usage, and suggest improvements",
-  "kind": "system"
+  "kind": "system",
+  "appId": "session-logs"
 }

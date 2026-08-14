@@ -33,21 +33,21 @@
 .detail-content {
   flex: 1;
   min-height: 0;
-  /* Do not scroll the whole panel: the header + metadata grid stay fixed
+  /* Do not scroll the whole panel: the header + metadata strip stay fixed
      at the top and the transcript section fills the remaining space and
      scrolls internally, so it is never pushed below the fold. */
   overflow: hidden;
-  padding: var(--yaar-sp-3);
+  padding: var(--yaar-sp-2);
   display: flex;
   flex-direction: column;
-  gap: var(--yaar-sp-3);
+  gap: var(--yaar-sp-2);
 }
 
 .detail-header {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-bottom: var(--yaar-sp-3);
+  gap: 5px;
+  padding-bottom: var(--yaar-sp-2);
   border-bottom: 1px solid var(--yaar-border);
   flex-shrink: 0;
 }
@@ -55,20 +55,24 @@
 .detail-header-top {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: var(--yaar-sp-2);
 }
 
 .download-btn {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 12px;
+  padding: 2px 8px;
 }
 
 .detail-session-id {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--yaar-accent);
-  word-break: break-all;
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .current-chip {
@@ -77,12 +81,50 @@
   gap: 4px;
   font-size: 10px;
   font-weight: 700;
-  padding: 2px 8px;
+  padding: 1px 6px;
   border-radius: 10px;
   background: var(--yaar-wash-success);
   color: var(--yaar-success);
   border: 1px solid var(--yaar-success);
-  align-self: flex-start;
+  flex-shrink: 0;
+}
+
+/* ── Compact metadata strip ─────────────────── */
+
+/* One or two lines instead of five cards: at 640×480 the card grid ate ~40%
+   of the panel and pushed the transcript — the actual content — below the
+   fold. The cards are still one click away via .meta-toggle. */
+.meta-strip {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 11px;
+  color: var(--yaar-text-muted);
+  line-height: 1.5;
+}
+
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+/* Dot separators drawn by CSS, so the markup stays a plain list of chips. */
+.meta-chip + .meta-chip::before,
+.provider-badge + .meta-chip::before {
+  content: '·';
+  margin-right: 7px;
+  color: var(--yaar-border);
+}
+
+.meta-toggle {
+  margin-left: auto;
+  font-size: 10px;
+  padding: 1px 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ── Detail grid ────────────────────────────────── */
@@ -90,8 +132,13 @@
 .detail-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: var(--yaar-sp-2);
+  gap: 6px;
   flex-shrink: 0;
+  margin-top: 2px;
+  /* Expanded is opt-in, but it must never squeeze the transcript out of the
+     window on a short one — the grid scrolls before the transcript shrinks. */
+  max-height: 42vh;
+  overflow-y: auto;
 }
 
 .detail-field {

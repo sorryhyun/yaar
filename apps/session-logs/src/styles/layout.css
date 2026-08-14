@@ -1,4 +1,4 @@
-/* ── Layout ─────────────────────────────────────── */
+/* ── Layout ────────────────────────────────── */
 
 .layout {
   display: flex;
@@ -10,25 +10,38 @@
   display: flex;
   align-items: center;
   gap: var(--yaar-sp-2);
-  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
   border-bottom: 1px solid var(--yaar-border);
   background: var(--yaar-bg-surface);
   flex-shrink: 0;
 }
 
+.sidebar-toggle {
+  flex-shrink: 0;
+  font-size: 13px;
+  line-height: 1;
+  padding: 4px 7px;
+  min-width: 26px;
+}
+
 .app-title {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .count-badge {
-  font-size: 11px;
-  padding: 2px 8px;
+  font-size: 10px;
+  padding: 1px 7px;
   border-radius: 10px;
   background: var(--yaar-wash-accent);
   color: var(--yaar-accent);
   border: 1px solid var(--yaar-accent);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .refresh-btn {
@@ -39,4 +52,39 @@
   display: flex;
   flex: 1;
   min-height: 0;
+  /* Anchor for the narrow-layout sidebar, which overlays the transcript
+     instead of taking width away from it. */
+  position: relative;
+  overflow: hidden;
+}
+
+/* The sidebar is kept in the DOM (search text and scroll position survive a
+   toggle) but taken fully out of flow when hidden, so the transcript really
+   does get the whole width — not 280px of empty column. */
+.body.sidebar-hidden > .sidebar {
+  display: none;
+}
+
+/* ── Narrow layout (<= 600px): sidebar as an overlay drawer ── */
+
+.drawer-scrim {
+  display: none;
+}
+
+.body.narrow > .sidebar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 20;
+  width: min(280px, 82%);
+  box-shadow: var(--yaar-shadow-lg);
+}
+
+.body.narrow:not(.sidebar-hidden) > .drawer-scrim {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(0, 0, 0, 0.45);
 }
