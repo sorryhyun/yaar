@@ -7,6 +7,7 @@ import type { AgentInfo, SessionInfo, SessionMetadata } from './types.js';
 import type { ContextSource } from '../agents/context.js';
 import type { EscapeGuardRecord } from '../providers/types.js';
 import { createLogger } from '../observability/log.js';
+import { offloadContent, writeBlobs, type BlobRef } from './blobs.js';
 
 const log = createLogger('SessionLogger');
 
@@ -47,6 +48,31 @@ export function reviveJson(value: unknown): unknown {
     return out;
   }
   return value;
+}
+
+/**
+ * Serialize a value that came from outside the logger. A verb result is whatever a
+ * handler returned, so it can carry a cycle or a BigInt — neither of which is worth
+ * losing the entry over, let alone throwing out of a logging call.
+ */
+function safeStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    // `JSON.stringify` yields undefined for a bare function or undefined — fall back
+    // rather than handing a non-string to a signature that promises one.
+    return (
+      JSON.stringify(value, (_key, v) => {
+        if (typeof v === 'bigint') return `${v}n`;
+        if (v && typeof v === 'object') {
+          if (seen.has(v as object)) return '[Circular]';
+          seen.add(v as object);
+        }
+        return v;
+      }) ?? String(value)
+    );
+  } catch {
+    return String(value);
+  }
 }
 
 /**
@@ -115,6 +141,12 @@ export class SessionLogger {
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
   private metadataTimer: ReturnType<typeof setTimeout> | null = null;
   private metadataDirty = false;
+
+  // Blobs awaiting write (sha256 → bytes), and the hashes already stored this session.
+  // `knownBlobs` is what makes a re-read of the same resource cost a set lookup instead
+  // of a filesystem round trip — see logging/blobs.ts.
+  private pendingBlobs = new Map<string, string>();
+  private knownBlobs = new Set<string>();
 
   constructor(sessionInfo: SessionInfo) {
     this.sessionInfo = sessionInfo;
@@ -224,7 +256,7 @@ export class SessionLogger {
    * Flush all buffered log lines to disk.
    */
   async flush(): Promise<void> {
-    if (this.writeBuffer.size === 0 && !this.metadataDirty) return;
+    if (this.writeBuffer.size === 0 && this.pendingBlobs.size === 0 && !this.metadataDirty) return;
 
     // Snapshot and clear the buffer
     const entries = [...this.writeBuffer.entries()];
@@ -232,6 +264,20 @@ export class SessionLogger {
     if (this.flushTimer) {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
+    }
+
+    // Blobs first, lines second. A line carrying a `contentRef` is a promise that the
+    // bytes are resolvable; writing it before its blob would make a reader tailing the
+    // log — or a crash landing between the two writes — see a reference to nothing.
+    // The reverse order only ever leaves an unreferenced blob, which is inert.
+    if (this.pendingBlobs.size > 0) {
+      const blobs = new Map(this.pendingBlobs);
+      this.pendingBlobs.clear();
+      try {
+        await writeBlobs(this.sessionInfo.directory, blobs, this.knownBlobs);
+      } catch (err) {
+        log.error('blob write failed', { err, count: blobs.size });
+      }
     }
 
     // Write each file's accumulated lines in a single appendFile call
@@ -312,6 +358,31 @@ export class SessionLogger {
     });
   }
 
+  /**
+   * Render a result payload for the log: inline when small, a `contentRef` when not.
+   *
+   * Offloading is decided on the *raw* string and stores it verbatim, before
+   * `reviveJson` gets a chance to reshape it. The blob is meant to be the bytes the
+   * call actually returned — a replay reading a prettied-up parse of them is reading
+   * something the session never saw.
+   */
+  private resolveContent(content: string | undefined): {
+    content?: unknown;
+    contentRef?: BlobRef;
+  } {
+    if (content === undefined) return {};
+
+    const offloaded = offloadContent(content);
+    if (!offloaded) return { content: reviveJson(content) };
+
+    // Already stored (a re-read of the same resource) or already queued this flush —
+    // either way the bytes are accounted for and only the reference needs logging.
+    if (!this.knownBlobs.has(offloaded.ref.sha256)) {
+      this.pendingBlobs.set(offloaded.ref.sha256, offloaded.bytes);
+    }
+    return { contentRef: offloaded.ref };
+  }
+
   logToolResult(
     toolName: string,
     content: string | undefined,
@@ -329,8 +400,37 @@ export class SessionLogger {
     }
     this.appendEntry('tool_result', agentId, {
       toolName,
-      content: reviveJson(content),
+      ...this.resolveContent(content),
       toolUseId,
+      ...meta,
+    });
+  }
+
+  /**
+   * Record what an iframe verb call returned.
+   *
+   * The counterpart to the `logToolUse` that `POST /api/verb` writes before dispatch.
+   * Without it the log holds the intent of every app-initiated call and the outcome of
+   * none — and on a busy session those calls are the overwhelming majority of entries,
+   * so the transcript describes what was asked for and never what came back.
+   *
+   * Kept as its own method rather than folded into `logToolResult` because there is no
+   * `toolUseId` to pair on: the verb route logs the call and the result back to back,
+   * and the pairing is positional.
+   */
+  logVerbResult(
+    toolName: string,
+    result: unknown,
+    meta?: { isError?: boolean; durationMs?: number },
+  ): void {
+    if (meta?.isError) {
+      this.sessionInfo.metadata.failureCount = (this.sessionInfo.metadata.failureCount ?? 0) + 1;
+      this.scheduleMetadataSave();
+    }
+    const serialized = typeof result === 'string' ? result : safeStringify(result);
+    this.appendEntry('verb_result', undefined, {
+      toolName,
+      ...this.resolveContent(serialized),
       ...meta,
     });
   }

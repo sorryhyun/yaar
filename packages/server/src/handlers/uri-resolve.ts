@@ -66,6 +66,8 @@ export interface ResolvedHistory {
   kind: 'history';
   sessionId?: string;
   subPath?: HistorySubPath;
+  /** Blob hash, when `subPath` is `blobs` and one was named. */
+  blobRef?: string;
   sourceUri: string;
 }
 
@@ -213,6 +215,7 @@ export function resolveUri(uri: string): ResolvedUri | null {
       kind: 'history',
       sessionId: history.sessionId,
       subPath: history.subPath,
+      blobRef: history.blobRef,
       sourceUri: uri,
     };
   }

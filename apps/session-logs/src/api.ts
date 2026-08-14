@@ -132,6 +132,27 @@ function toMessage(raw: unknown): ParsedMessage {
     toolInput: e.toolInput,
     toolUseId: typeof e.toolUseId === 'string' ? e.toolUseId : undefined,
     interaction: asText(e.interaction),
+    contentRef: asBlobRef(e.contentRef),
+    isError: typeof e.isError === 'boolean' ? e.isError : undefined,
+    durationMs: typeof e.durationMs === 'number' ? e.durationMs : undefined,
+  };
+}
+
+/**
+ * A `contentRef`, if this entry carries a well-formed one.
+ *
+ * `sha256` and `bytes` are what the row renders from, so an entry missing either is
+ * treated as having no ref at all — better a result row that falls back to `content`
+ * than one claiming a blob it cannot name.
+ */
+function asBlobRef(raw: unknown): ParsedMessage['contentRef'] {
+  const r = asRecord(raw);
+  if (!r || typeof r.sha256 !== 'string' || typeof r.bytes !== 'number') return undefined;
+  return {
+    sha256: r.sha256,
+    bytes: r.bytes,
+    mimeType: typeof r.mimeType === 'string' ? r.mimeType : undefined,
+    preview: asText(r.preview),
   };
 }
 

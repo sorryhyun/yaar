@@ -11,6 +11,8 @@ import {
   splitTarget,
   firstLine,
   looksLikeError,
+  blobSummary,
+  blobDetail,
 } from './summarize';
 
 /** Role → header label + CSS class (drives the left color bar & label color). */
@@ -126,14 +128,18 @@ function rowFor(m: ParsedMessage): RowSpec | null {
         agent,
       };
     }
-    case 'tool_result': {
-      const failed = looksLikeError(m.content);
+    case 'tool_result':
+    case 'verb_result': {
+      // An offloaded result has no `content` — its preview and size stand in, so the
+      // row says what came back instead of rendering blank.
+      const ref = m.contentRef;
+      const failed = m.isError === true || looksLikeError(m.content);
       return {
         cls: failed ? 'role-error' : 'role-result',
         verb: failed ? 'error' : 'result',
         name: m.toolName ? shortToolName(m.toolName) : undefined,
-        target: firstLine(m.content),
-        detail: m.content || undefined,
+        target: ref ? blobSummary(ref) : firstLine(m.content),
+        detail: ref ? blobDetail(ref) : m.content || undefined,
         time,
         agent,
       };

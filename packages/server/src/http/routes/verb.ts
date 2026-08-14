@@ -353,18 +353,25 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
 
   // Log to session logs. Data-plane verbs (an app's proxied fetch) and the devtools
   // console poll are skipped; the rest are summarized — see lib/format-verb-log.ts.
-  if (tokenEntry?.sessionId && shouldLogVerb(resolvedUri, body.payload)) {
-    const session = getSessionHub().get(tokenEntry.sessionId);
-    const logger = session?.getPool()?.getSessionLogger();
-    if (logger) {
-      const appLabel = tokenEntry.appId ?? 'unknown';
-      logger.logToolUse(
-        `iframe:${appLabel}`,
-        { verb, uri: resolvedUri, ...compactVerbPayload(body.payload) },
-        undefined,
-      );
-    }
-  }
+  //
+  // The call is logged here and its result once dispatch returns, so the pair brackets
+  // the work. Both halves resolve the logger through the same `verbLog` binding: a log
+  // holding the intent of every app-initiated call and the outcome of none is the shape
+  // this route had before, and app calls are the bulk of a busy session's entries.
+  // Resolved per use, not bound once: on the retry path below the session did not exist
+  // when this route started, so a logger captured up front would be null for exactly the
+  // calls that took the slow path.
+  const wantsVerbLog = Boolean(tokenEntry?.sessionId) && shouldLogVerb(resolvedUri, body.payload);
+  const verbLog = () =>
+    wantsVerbLog
+      ? (getSessionHub().get(tokenEntry!.sessionId!)?.getPool()?.getSessionLogger() ?? null)
+      : null;
+  const verbLabel = `iframe:${tokenEntry?.appId ?? 'unknown'}`;
+  verbLog()?.logToolUse(
+    verbLabel,
+    { verb, uri: resolvedUri, ...compactVerbPayload(body.payload) },
+    undefined,
+  );
 
   // Dispatch to ResourceRegistry — run within agent context so that handlers
   // (e.g. installApp) can resolve the session via getSessionId() for permission dialogs.
@@ -406,8 +413,22 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       : execute();
   };
 
+  // The envelope, not the raw `VerbResult`: what a replay needs is what the app was
+  // actually handed. Heavy ones (an image's base64, a large read) move to the session's
+  // blob store rather than inlining — see logging/blobs.ts.
+  const dispatchAndLog = async (): Promise<Record<string, unknown>> => {
+    const startedAt = Date.now();
+    const result = await dispatch();
+    const envelope = toEnvelope(result);
+    verbLog()?.logVerbResult(verbLabel, envelope, {
+      durationMs: Date.now() - startedAt,
+      ...(result.isError ? { isError: true } : {}),
+    });
+    return envelope;
+  };
+
   try {
-    return jsonResponse(toEnvelope(await dispatch()));
+    return jsonResponse(await dispatchAndLog());
   } catch (err) {
     if (err instanceof NoActiveSessionError && sessionId) {
       // An app's iframe boots on its own clock: a session-scoped verb can land before
@@ -423,7 +444,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       // paid the full timeout on each one just because its token named an absent id.
       if (await getSessionHub().waitFor(sessionId)) {
         try {
-          return jsonResponse(toEnvelope(await dispatch()));
+          return jsonResponse(await dispatchAndLog());
         } catch (retryErr) {
           if (!(retryErr instanceof NoActiveSessionError)) {
             const message = retryErr instanceof Error ? retryErr.message : 'Verb execution failed';

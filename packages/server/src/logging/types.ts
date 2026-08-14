@@ -1,6 +1,7 @@
 import type { OSAction } from '@yaar/shared';
 import type { ContextSource } from '../agents/context.js';
 import type { EscapeGuardRecord } from '../providers/types.js';
+import type { BlobRef } from './blobs.js';
 
 export interface AgentInfo {
   agentId: string;
@@ -38,6 +39,7 @@ export interface ParsedMessage {
     | 'thinking'
     | 'tool_use'
     | 'tool_result'
+    | 'verb_result'
     | 'interaction'
     | 'escape_guard';
   timestamp: string;
@@ -47,6 +49,12 @@ export interface ParsedMessage {
   // Natural-language messages (user/assistant/thinking) are strings; tool_result
   // content may be revived JSON (object/array) — see reviveJson in session-logger.
   content?: unknown;
+  /**
+   * Set instead of `content` when the result was too large to inline: the bytes live in
+   * the session's blob store, readable at `yaar://history/{id}/blobs/{sha256}`. Exactly
+   * one of `content` / `contentRef` is present on a result entry. See logging/blobs.ts.
+   */
+  contentRef?: BlobRef;
   action?: OSAction;
   toolName?: string;
   toolInput?: unknown;
@@ -63,4 +71,9 @@ export interface ParsedMessage {
   toolUseId?: string;
   interactionSource?: string;
   interaction?: string;
+  // Written on result entries by `logToolResult` / `logVerbResult`. Declared here
+  // because they were already being logged and read back untyped.
+  isError?: boolean;
+  errorCategory?: string;
+  durationMs?: number;
 }

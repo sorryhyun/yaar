@@ -5,6 +5,8 @@
  * is "what did this call do, to what" — verb + target — without expanding it.
  */
 
+import type { BlobRef } from './types';
+
 /** The five YAAR verb tools, where the verb is the name suffix and the target is `uri`. */
 const VERB_TOOL = /^mcp__verbs__(read|list|invoke|describe|delete)$/;
 
@@ -118,6 +120,32 @@ export function firstLine(input: unknown, max = 90): string {
       .find((l) => l.length > 0) ?? '';
   const flat = line.replace(/\s+/g, ' ');
   return flat.length > max ? `${flat.slice(0, max - 1)}…` : flat;
+}
+
+/** Human byte size for a blob row: the log reads in KB and MB, not digits. */
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+/**
+ * Collapsed-row summary for a result held in the blob store.
+ *
+ * Same question as any other row — what came back — answered from the reference alone,
+ * so the row costs nothing to render and the bytes stay unfetched until asked for.
+ */
+export function blobSummary(ref: BlobRef): string {
+  const size = formatBytes(ref.bytes);
+  if (ref.mimeType) return `${ref.mimeType}, ${size}`;
+  const preview = firstLine(ref.preview, 70);
+  return preview ? `${preview} (${size})` : size;
+}
+
+/** Expanded detail for a blob row: the preview, plus where the full bytes live. */
+export function blobDetail(ref: BlobRef): string {
+  const head = `${ref.mimeType ?? 'content'} · ${formatBytes(ref.bytes)}\nblobs/${ref.sha256}`;
+  return ref.preview ? `${head}\n\n${ref.preview}` : head;
 }
 
 /** Render a param value compactly — never multi-line, never a wall of JSON. */

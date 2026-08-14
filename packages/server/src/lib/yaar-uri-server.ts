@@ -291,16 +291,18 @@ export function buildUserUri(subKind?: UserSubKind, id?: string): string {
 
 // ============ History URIs ============
 
-export type HistorySubPath = 'transcript' | 'messages';
+export type HistorySubPath = 'transcript' | 'messages' | 'blobs';
 
 export interface ParsedHistoryUri {
   /** Session ID, or undefined for the root list. */
   sessionId?: string;
   /** Sub-resource within a session. */
   subPath?: HistorySubPath;
+  /** Blob hash, when `subPath` is `blobs` and one was named. */
+  blobRef?: string;
 }
 
-const HISTORY_SUB_PATHS: ReadonlySet<string> = new Set(['transcript', 'messages']);
+const HISTORY_SUB_PATHS: ReadonlySet<string> = new Set(['transcript', 'messages', 'blobs']);
 
 /**
  * Parse a yaar://history/... URI.
@@ -313,6 +315,8 @@ const HISTORY_SUB_PATHS: ReadonlySet<string> = new Set(['transcript', 'messages'
  *     -> { sessionId: '2025-01-01_12-00-00', subPath: 'transcript' }
  *   parseHistoryUri('yaar://history/2025-01-01_12-00-00/messages')
  *     -> { sessionId: '2025-01-01_12-00-00', subPath: 'messages' }
+ *   parseHistoryUri('yaar://history/2025-01-01_12-00-00/blobs/{sha256}')
+ *     -> { sessionId: '2025-01-01_12-00-00', subPath: 'blobs', blobRef: '{sha256}' }
  */
 export function parseHistoryUri(uri: string): ParsedHistoryUri | null {
   const parsed = parseYaarUri(uri);
@@ -326,6 +330,14 @@ export function parseHistoryUri(uri: string): ParsedHistoryUri | null {
   if (segments.length >= 2) {
     if (!HISTORY_SUB_PATHS.has(segments[1])) return null;
     result.subPath = segments[1] as HistorySubPath;
+  }
+
+  // `blobs` is the one sub-path that takes a name. A third segment under any other is
+  // not a URI this authority has ever served, so it is rejected rather than ignored —
+  // silently dropping it would answer a question that was not asked.
+  if (segments.length >= 3) {
+    if (result.subPath !== 'blobs' || segments.length > 3) return null;
+    result.blobRef = segments[2];
   }
 
   return result;

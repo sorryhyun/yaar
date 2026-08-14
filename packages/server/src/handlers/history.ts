@@ -6,6 +6,7 @@
  *   read('yaar://history/{id}')                      → session metadata
  *   read('yaar://history/{id}/transcript')            → markdown transcript
  *   read('yaar://history/{id}/messages')              → structured parsed messages
+ *   read('yaar://history/{id}/blobs/{sha256}')        → an offloaded result's bytes
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
@@ -16,12 +17,13 @@ import {
   readSessionTranscript,
   readSessionMessages,
   parseSessionMessages,
+  readSessionBlob,
 } from '../logging/session-reader.js';
 
 export function registerHistoryHandlers(registry: ResourceRegistry): void {
   registry.register('yaar://history/', {
     description:
-      'Past session logs (read-only). List for links, read for summaries, or read yaar://history/{id}[/transcript|/messages] for detail.',
+      'Past session logs (read-only). List for links, read for summaries, or read yaar://history/{id}[/transcript|/messages] for detail. A result too large to inline is logged as a contentRef; read its bytes at yaar://history/{id}/blobs/{sha256}.',
     verbs: ['describe', 'list', 'read'],
 
     async list(): Promise<VerbResult> {
@@ -57,6 +59,22 @@ export function registerHistoryHandlers(registry: ResourceRegistry): void {
             if (messagesJsonl === null) return error(`Session "${logId}" not found.`);
             const messages = parseSessionMessages(messagesJsonl);
             return okJsonResource(resolved.sourceUri, { messages });
+          }
+
+          // A result too large to inline, fetched by the hash its log entry carries.
+          // This is the second half of `contentRef` — see logging/blobs.ts.
+          if (hr.subPath === 'blobs') {
+            if (!hr.blobRef) {
+              return error(
+                'Name a blob: yaar://history/{id}/blobs/{sha256}. The hashes are the ' +
+                  "`contentRef.sha256` values in this session's /messages.",
+              );
+            }
+            const blob = await readSessionBlob(logId, hr.blobRef);
+            if (blob === null) {
+              return error(`Blob "${hr.blobRef}" not found in session "${logId}".`);
+            }
+            return okResource(resolved.sourceUri, blob, 'text/plain');
           }
 
           // yaar://history/{id} — session detail with metadata

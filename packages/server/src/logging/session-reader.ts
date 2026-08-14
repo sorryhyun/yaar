@@ -2,6 +2,7 @@ import { readdir } from 'fs/promises';
 import { join } from 'path';
 import { SESSIONS_DIR, ensureSessionsDir } from './index.js';
 import type { SessionInfo, SessionMetadata, ParsedMessage } from './types.js';
+import { blobPath, isBlobRef } from './blobs.js';
 
 /**
  * List all sessions.
@@ -68,6 +69,28 @@ export async function readSessionMessages(
 }
 
 /**
+ * Read one blob from a session's content-addressed store.
+ *
+ * `sha256` is validated as a hex digest before it becomes a path segment — it arrives
+ * from a URI, and a name that is not exactly a digest is the only way this could
+ * traverse out of the session directory.
+ */
+export async function readSessionBlob(
+  sessionId: string,
+  sha256: string,
+  dir: string = SESSIONS_DIR,
+): Promise<string | null> {
+  if (!isBlobRef(sha256)) return null;
+
+  try {
+    const file = Bun.file(blobPath(join(dir, sessionId), sha256));
+    return (await file.exists()) ? await file.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Parse session messages from JSONL format.
  */
 export function parseSessionMessages(messagesJsonl: string): ParsedMessage[] {
@@ -85,6 +108,23 @@ export function parseSessionMessages(messagesJsonl: string): ParsedMessage[] {
   }
 
   return messages;
+}
+
+/**
+ * Body of a result entry for the transcript.
+ *
+ * A transcript is a skim of the session, so an offloaded result renders as its preview
+ * and a pointer rather than pulling megabytes back in — a reader that wants the bytes
+ * reads the `yaar://history/{id}/blobs/{sha256}` this names.
+ */
+function renderResultBody(msg: ParsedMessage): string {
+  if (msg.contentRef) {
+    const { sha256, bytes, mimeType, preview } = msg.contentRef;
+    const head = `_${mimeType ?? 'content'}, ${bytes} bytes → blobs/${sha256}_`;
+    return preview ? `${head}\n\n${preview}` : head;
+  }
+  if (typeof msg.content === 'string') return msg.content;
+  return msg.content != null ? JSON.stringify(msg.content, null, 2) : '';
 }
 
 /**
@@ -111,14 +151,10 @@ export async function readSessionTranscript(sessionId: string): Promise<string |
           `### Tool: ${msg.toolName} (${ts})\n\n\`\`\`json\n${JSON.stringify(msg.toolInput, null, 2)}\n\`\`\`\n`,
         );
         break;
-      case 'tool_result': {
-        const body =
-          typeof msg.content === 'string'
-            ? msg.content
-            : msg.content != null
-              ? JSON.stringify(msg.content, null, 2)
-              : '';
-        lines.push(`### Result: ${msg.toolName} (${ts})\n\n${body}\n`);
+      case 'tool_result':
+      case 'verb_result': {
+        const label = msg.type === 'verb_result' ? 'Verb result' : 'Result';
+        lines.push(`### ${label}: ${msg.toolName} (${ts})\n\n${renderResultBody(msg)}\n`);
         break;
       }
       case 'action':

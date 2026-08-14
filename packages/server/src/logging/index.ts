@@ -26,7 +26,10 @@ export {
   readSessionTranscript,
   readSessionMessages,
   parseSessionMessages,
+  readSessionBlob,
 } from './session-reader.js';
+export { BLOB_THRESHOLD_BYTES, blobPath, isBlobRef, hashContent } from './blobs.js';
+export type { BlobRef } from './blobs.js';
 export { getWindowRestoreActions, refreshRestoredWindowActions } from './window-restore.js';
 export { getContextRestoreMessages, FULL_RESTORE_POLICY } from './context-restore.js';
 export type { ContextRestorePolicy } from './context-restore.js';
