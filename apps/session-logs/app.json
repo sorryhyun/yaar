@@ -11,7 +11,8 @@
       ]
     }
   ],
-  "version": "1.1.2",
+  "version": "1.2.0",
+  "agentType": "haiku",
   "author": "YAAR",
   "description": "Browse and audit session logs — analyze workflows, tool usage, and suggest improvements",
   "kind": "system",

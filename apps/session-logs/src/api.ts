@@ -59,6 +59,33 @@ export async function loadTranscript(sessionId: string): Promise<void> {
   }
 }
 
+/**
+ * The bytes behind a `contentRef`.
+ *
+ * Second half of the blob split (see `logging/blobs.ts`): the log entry carries the
+ * hash, the bytes stay in the session directory until someone asks. Fetching is
+ * deliberately a separate call — a session's blobs run to megabytes and an agent
+ * reading turns wants none of them.
+ *
+ * **A JSON blob does not come back as text.** The verb envelope runs `tryParseJson`
+ * over the resource body (`http/routes/verb.ts`), so bytes that happen to parse —
+ * which most offloaded tool results do, they are verb responses — arrive here as an
+ * *object*. `String(that)` is `[object Object]`, which is what this returned before
+ * and is worse than an error: the agent is told the blob is 15 characters long.
+ * Re-serialise instead. The round trip costs the original whitespace, so the length
+ * this reports is of the rendered text, not of `contentRef.bytes` on disk.
+ */
+export async function readBlob(sessionId: string, sha256: string): Promise<string> {
+  const data = await read<unknown>(`yaar://history/${sessionId}/blobs/${sha256}`);
+  if (typeof data === 'string') return data;
+  if (data == null) return '';
+  try {
+    return JSON.stringify(data, null, 2);
+  } catch {
+    return String(data);
+  }
+}
+
 // ── Message normalisation ────────────────────────────────
 //
 // `yaar://history/{id}/messages` is a trust boundary: the entries are

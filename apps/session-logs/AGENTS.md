@@ -13,6 +13,37 @@ Browses `yaar://history/`. Read-only over session data; the one write is
 - `src/transcript.ts` — turn rendering: dense log rows + prose cards.
 - `src/summarize.ts` — pure string logic for the one-line rows. Unit-testable,
   no DOM, no imports from the app.
+- `src/select.ts` — the **agent's** view of a session: filter, page, compact,
+  index. Also pure and DOM-free. Nothing in the UI reads it.
+
+## The agent reads a different session than the UI does
+
+The UI needs the whole array in memory — the transcript pane scrolls every row.
+An agent does not, and the two must not share a door: a state getter takes no
+arguments, so `query('messages')` returning the array meant a 6874-turn session
+could only be read by swallowing it whole.
+
+So the split is by *question*, not by data. `query('messages')` answers "what is
+in here" with `indexSession()` — histograms and counts, zero turns.
+`command('readTurns', …)` answers "give me these" with `selectTurns` +
+`compactTurn`, because a **command takes parameters and a state getter cannot**.
+That is the whole reason the reads are commands; do not "simplify" them back into
+state keys.
+
+Two consequences worth keeping:
+
+- **Every turn carries its `index` in the unfiltered array.** A filtered hit is
+  useless if you cannot go back and read what surrounded it, and the position in
+  the *filtered* set does not address anything.
+- **`compactTurn` must return plain data.** `state.messages` is behind a Solid
+  store proxy, so a sub-object handed back by reference (`msg.action` was the one)
+  fails the postMessage hop with `DataCloneError` — the same trap the state
+  getters have. Strings and freshly-built objects are safe; a nested proxy is not.
+
+Blob bytes stay on disk until `readBlob` asks (`api.readBlob` →
+`yaar://history/{id}/blobs/{sha256}`), and it returns a character window. A
+session's blobs run to megabytes; that call is the one place where an unbounded
+read would undo everything above.
 
 ## Invariants worth knowing
 

@@ -4,11 +4,34 @@ import { appStorage, defineApp } from '@bundled/yaar';
 import './styles/index';
 
 import { state, setState } from './store';
-import { loadSessions, loadDetail } from './api';
+import { loadSessions, loadDetail, readBlob } from './api';
 import { getDateKey, formatDateLabel, providerLabel, toPlain } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
 import { narrow, sidebarVisible, toggleSidebar, closeDrawer, watchViewport } from './ui';
+import { selectTurns, compactTurn, indexSession } from './select';
 import type { SessionSummary } from './types';
+
+/** Default and ceiling for one `readTurns` page. A page is a budget, not a preference. */
+const TURNS_DEFAULT = 40;
+const TURNS_MAX = 200;
+/** Default and ceiling for `readBlob` / `readTranscript`, in characters. */
+const CHARS_DEFAULT = 4000;
+const CHARS_MAX = 40000;
+/** How much of the transcript the `transcript` state key answers with before pointing at the command. */
+const TRANSCRIPT_PEEK = 4000;
+
+function clampInt(v: unknown, fallback: number, min: number, max: number): number {
+  const n = Math.trunc(Number(v));
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+/** The loaded session, or a refusal that names the way in. */
+function requireSelected(): string {
+  const id = state.selectedId;
+  if (!id) throw new Error('No session loaded. Call selectSession({ sessionId }) first.');
+  return id;
+}
 
 // --- Computed ---
 const filteredSessions = createMemo(() => {
@@ -149,15 +172,34 @@ export default defineApp({
       get: () => toPlain(state.detail),
     },
     transcript: {
-      description: 'Markdown transcript of the selected session',
-      get: () => state.transcript,
+      description:
+        "Head of the selected session's markdown transcript, with its total size. " +
+        'Read further with readTranscript({ offset, limit }).',
+      get: () => {
+        const full = state.transcript;
+        if (full == null) return null;
+        if (full.length <= TRANSCRIPT_PEEK)
+          return { chars: full.length, complete: true, text: full };
+        return {
+          chars: full.length,
+          complete: false,
+          text: full.slice(0, TRANSCRIPT_PEEK),
+          note: `Showing the first ${TRANSCRIPT_PEEK} of ${full.length} characters. Continue with readTranscript({ offset: ${TRANSCRIPT_PEEK} }).`,
+        };
+      },
     },
+    // An index, deliberately — not the turns.
+    //
+    // This used to return every parsed entry, which made a session unreadable rather
+    // than large: one logged session here holds 6874 of them, and a state getter takes
+    // no arguments, so there was no smaller question to ask. Orientation (what is in
+    // here) and retrieval (give me these forty) are different questions; only the
+    // second one should cost an agent anything, and it is `readTurns` that answers it.
     messages: {
-      description: 'Structured parsed messages array for the selected session',
-      get: () =>
-        state.messages
-          ? { count: state.messages.length, messages: toPlain(state.messages) ?? [] }
-          : null,
+      description:
+        'Index of the selected session: total, type/agent/tool histograms, error and blob ' +
+        'counts. Not the turns themselves — read those with readTurns.',
+      get: () => (state.messages ? indexSession(state.messages) : null),
     },
   },
   commands: {
@@ -184,6 +226,168 @@ export default defineApp({
         return { success: true, count: state.sessions.length };
       },
     },
+    // The three reads below are what the `messages` and `transcript` state keys cannot
+    // be: a state getter takes no arguments, so every question it answers is the same
+    // size. A command takes parameters, which is the only place in this app's surface
+    // where "how much" can be said at all.
+    readTurns: {
+      description:
+        "Read a page of the loaded session's turns, optionally filtered. Each result carries " +
+        'its `index` in the full log, so readTurns({ offset: index - 3, limit: 7 }) re-reads a ' +
+        'hit with its neighbours. A result too large to inline comes back as `blob` ' +
+        '({ sha256, bytes, preview }) — fetch the bytes with readBlob.',
+      replay: 'never',
+      params: {
+        type: 'object',
+        properties: {
+          offset: {
+            type: 'number',
+            description:
+              'Where to start within the *filtered* set (0-based). With no filter this is the ' +
+              'index in the full log. Negative counts back from the end: -20 is the last 20.',
+          },
+          limit: {
+            type: 'number',
+            description: `How many turns to return (default ${TURNS_DEFAULT}, max ${TURNS_MAX}).`,
+          },
+          types: {
+            type: 'array',
+            items: { type: 'string' },
+            description:
+              'Keep only these entry types: user, assistant, thinking, tool_use, tool_result, ' +
+              'verb_result, action, interaction.',
+          },
+          agentId: { type: 'string', description: 'Keep only this agent id (exact).' },
+          toolName: {
+            type: 'string',
+            description:
+              'Keep only tools whose name contains this — "read" finds mcp__verbs__read.',
+          },
+          search: {
+            type: 'string',
+            description:
+              'Case-insensitive substring over content, tool input, interaction and blob preview.',
+          },
+          errorsOnly: { type: 'boolean', description: 'Keep only failed results.' },
+          blobsOnly: {
+            type: 'boolean',
+            description: 'Keep only turns whose result was offloaded.',
+          },
+          maxChars: {
+            type: 'number',
+            description:
+              'Per-turn budget for content and tool input (default 600). A clipped turn is ' +
+              'flagged `truncated`.',
+          },
+        },
+      },
+      run: async (params) => {
+        const sessionId = requireSelected();
+        if (!state.messages) {
+          throw new Error(state.messagesError ?? 'Session turns are still loading — retry.');
+        }
+        const limit = clampInt(params.limit, TURNS_DEFAULT, 1, TURNS_MAX);
+        const maxChars = clampInt(params.maxChars, 600, 0, 20000);
+        const filter = {
+          types: Array.isArray(params.types) ? params.types.map(String) : undefined,
+          agentId: params.agentId == null ? undefined : String(params.agentId),
+          toolName: params.toolName == null ? undefined : String(params.toolName),
+          search: params.search == null ? undefined : String(params.search),
+          errorsOnly: params.errorsOnly === true,
+          blobsOnly: params.blobsOnly === true,
+        };
+        const hits = selectTurns(state.messages, filter);
+        // A negative offset counts back from the end — asking for "the last 20" without
+        // first having to learn how many there are.
+        const raw = clampInt(params.offset, 0, -hits.length, Math.max(hits.length, 0));
+        const offset = raw < 0 ? Math.max(0, hits.length + raw) : Math.min(raw, hits.length);
+        const page = hits.slice(offset, offset + limit);
+        const nextOffset = offset + page.length;
+        return {
+          sessionId,
+          total: state.messages.length,
+          matched: hits.length,
+          offset,
+          count: page.length,
+          nextOffset: nextOffset < hits.length ? nextOffset : null,
+          turns: page.map((t) => compactTurn(t, maxChars)),
+        };
+      },
+    },
+    readBlob: {
+      description:
+        "Read the content behind a turn's `blob.sha256` — a result the log offloaded because " +
+        'it exceeded 2KB. Returns a character window, not the whole thing. A blob that is ' +
+        'JSON comes back pretty-printed, so `chars` is the length of that rendering and will ' +
+        "not equal the turn's `blob.bytes` on disk.",
+      replay: 'never',
+      params: {
+        type: 'object',
+        properties: {
+          sha256: { type: 'string', description: "The hash from a turn's `blob.sha256`." },
+          offset: { type: 'number', description: 'Character offset to start at (default 0).' },
+          limit: {
+            type: 'number',
+            description: `Characters to return (default ${CHARS_DEFAULT}, max ${CHARS_MAX}).`,
+          },
+        },
+        required: ['sha256'],
+      },
+      run: async (params) => {
+        const sessionId = requireSelected();
+        const sha256 = String(params.sha256 ?? '').trim();
+        // Checked here as well as server-side: a hash that is not a hash resolves to
+        // "blob not found", which reads like missing data rather than a bad argument.
+        if (!/^[0-9a-f]{64}$/.test(sha256)) {
+          throw new Error('"sha256" must be the 64-character hex digest from a turn\'s `blob`.');
+        }
+        const full = await readBlob(sessionId, sha256);
+        const offset = clampInt(params.offset, 0, 0, full.length);
+        const limit = clampInt(params.limit, CHARS_DEFAULT, 1, CHARS_MAX);
+        const text = full.slice(offset, offset + limit);
+        const nextOffset = offset + text.length;
+        return {
+          sha256,
+          chars: full.length,
+          offset,
+          returned: text.length,
+          nextOffset: nextOffset < full.length ? nextOffset : null,
+          text,
+        };
+      },
+    },
+    readTranscript: {
+      description:
+        "Read a character window of the loaded session's markdown transcript. The `transcript` " +
+        'state key answers with the head; this reads the rest.',
+      replay: 'never',
+      params: {
+        type: 'object',
+        properties: {
+          offset: { type: 'number', description: 'Character offset to start at (default 0).' },
+          limit: {
+            type: 'number',
+            description: `Characters to return (default ${CHARS_DEFAULT}, max ${CHARS_MAX}).`,
+          },
+        },
+      },
+      run: async (params) => {
+        requireSelected();
+        const full = state.transcript;
+        if (full == null) throw new Error('Transcript is still loading — retry.');
+        const offset = clampInt(params.offset, 0, 0, full.length);
+        const limit = clampInt(params.limit, CHARS_DEFAULT, 1, CHARS_MAX);
+        const text = full.slice(offset, offset + limit);
+        const nextOffset = offset + text.length;
+        return {
+          chars: full.length,
+          offset,
+          returned: text.length,
+          nextOffset: nextOffset < full.length ? nextOffset : null,
+          text,
+        };
+      },
+    },
     // The agent's only route to storage. It used to write audits with the built-in
     // `command('storage:write', …)`, which is no longer offered to an app whose app.json
     // declares no storage permission — this app's does not, and the built-in reaching its
@@ -195,6 +399,9 @@ export default defineApp({
       description:
         'Save an analysis report into this app\'s own storage under "reports/". ' +
         'Returns the storage URI it was written to.',
+      // A write, not state restoration: replaying it on an iframe remount would rewrite
+      // a report nobody asked for a second time.
+      replay: 'never',
       params: {
         type: 'object',
         properties: {
