@@ -126,6 +126,17 @@ export class ContextPool implements PoolContext {
    */
   private timelines = new Map<string, InteractionTimeline>();
   private resetting = false;
+  /**
+   * The monitors a `resetMonitor()` is currently tearing down.
+   *
+   * `resetting` is session-wide: while it is set, `handleTask` drops *every* task with an
+   * "the agent pool is resetting" error. That is right for `reset()`, which disposes every
+   * agent, and wrong for a monitor reset, which is one desktop's business — using the
+   * boolean there would drop monitor 1's queued work because the user pressed reset on
+   * monitor 2. This set is the same guard narrowed to the monitor being rebuilt, and
+   * `resetting` still wins over it, being the superset of every monitor reset there is.
+   */
+  private resettingMonitors = new Set<string>();
   private inflightCount = 0;
   private inflightResolve: (() => void) | null = null;
 
@@ -474,6 +485,20 @@ export class ContextPool implements PoolContext {
       return;
     }
 
+    // The agent this task would run on is being disposed and rebuilt. Refusing it here is
+    // what keeps the drop visible to the user (`reportDropped`); left to proceed, it would
+    // either queue onto a monitor whose queue is about to be cleared or start a turn on an
+    // agent that disappears mid-stream.
+    const resettingMonitor = this.monitorBeingReset(task);
+    if (resettingMonitor) {
+      log.info('rejecting task — monitor is resetting', {
+        messageId: task.messageId,
+        monitorId: resettingMonitor,
+      });
+      this.reportDropped([task], `monitor ${resettingMonitor} is resetting`);
+      return;
+    }
+
     this.inflightEnter();
     try {
       if (task.requestedType === 'monitor') {
@@ -503,6 +528,22 @@ export class ContextPool implements PoolContext {
     } finally {
       this.inflightExit();
     }
+  }
+
+  /**
+   * The monitor this task would land on, if that monitor is mid-`resetMonitor()`.
+   *
+   * A window-scoped task carries no `monitorId` (see `monitorForWindowTask`), so the
+   * window has to be resolved here too — otherwise a WINDOW_MESSAGE would slip past the
+   * guard that its USER_MESSAGE sibling is stopped by. Unlike `monitorForWindowTask` this
+   * never throws: an unplaceable task is not this guard's to refuse.
+   */
+  private monitorBeingReset(task: Task): string | undefined {
+    if (this.resettingMonitors.size === 0) return undefined;
+    const monitorId =
+      task.monitorId ??
+      (task.windowId ? this.windowState.getMonitorForWindow(task.windowId) : undefined);
+    return monitorId && this.resettingMonitors.has(monitorId) ? monitorId : undefined;
   }
 
   /**
@@ -707,6 +748,50 @@ export class ContextPool implements PoolContext {
       this.windowState.clear();
     }
     this.budgetPolicy.clear();
+  }
+
+  /**
+   * Reset one monitor: dispose its agent tree, drop its slice of the shared state, and
+   * give it a fresh monitor agent. Every other monitor keeps its agents, queue, timeline
+   * and context.
+   *
+   * What is deliberately *not* touched, because none of it belongs to one desktop: the
+   * warm pool (`resetCodexProviders()` is process-wide), `savedThreadIds`, the window
+   * registry, and the `CONNECTION_STATUS` re-announce `reset()` sends for monitor 0 —
+   * that one exists to re-tell the client which session/provider it is talking to after
+   * the whole pool was rebuilt, and neither id changes here.
+   */
+  async resetMonitor(monitorId: string): Promise<void> {
+    if (this.resetting || this.resettingMonitors.has(monitorId)) return;
+    this.resettingMonitors.add(monitorId);
+
+    try {
+      // Interrupts and disposes the monitor agent, its app agents and their sub-agents,
+      // and drops this monitor's queue (reporting what it drops) and timeline.
+      await this.removeMonitorAgent(monitorId);
+
+      const pruned = this.contextTape.pruneMonitor(
+        monitorId,
+        (windowId) => this.windowState.getMonitorForWindow(windowId) === monitorId,
+      );
+      this.budgetPolicy.clearMonitor(monitorId);
+
+      const provider = await this.acquireProvider();
+      if (!provider) {
+        log.warn('reset monitor: no provider available', { monitorId });
+        return;
+      }
+      const agent = await this.agentPool.createMonitorAgent(monitorId, provider);
+      if (!agent) {
+        await provider.dispose();
+        log.warn('reset monitor: failed to recreate agent', { monitorId });
+        return;
+      }
+      this.prewarmMonitorAgent(agent, monitorId);
+      log.info('reset monitor', { monitorId, prunedMessages: pruned.length });
+    } finally {
+      this.resettingMonitors.delete(monitorId);
+    }
   }
 
   async reset(): Promise<void> {

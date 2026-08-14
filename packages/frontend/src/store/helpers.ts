@@ -50,6 +50,33 @@ export function resolveWindowKey(
 }
 
 /**
+ * Which monitor a window id belongs to, or `undefined` if it cannot be told.
+ *
+ * Callers that scope work to one monitor (see `resetDesktop`) hold ids of three shapes:
+ * a scoped store key ("1/notes"), a raw id from an iframe or a queued item ("notes"), and
+ * an id whose window has already closed. Only the first is self-describing, so the raw
+ * forms are resolved through `windows` — and an id that resolves to nothing returns
+ * `undefined` rather than a guess, because the callers treat "unknown" as "leave it
+ * alone". Guessing the active monitor here would silently drop another monitor's work.
+ */
+export function monitorOfWindowId(
+  windows: Record<string, { monitorId?: string }>,
+  windowId: string,
+): string | undefined {
+  const slashIdx = windowId.indexOf('/');
+  if (slashIdx > 0) return windowId.slice(0, slashIdx);
+
+  const own = windows[windowId];
+  if (own?.monitorId) return own.monitorId;
+
+  const suffix = `/${windowId}`;
+  for (const [key, win] of Object.entries(windows)) {
+    if (key.endsWith(suffix)) return win.monitorId ?? key.slice(0, key.indexOf('/'));
+  }
+  return undefined;
+}
+
+/**
  * Get empty content data for a given renderer type.
  */
 export function emptyContentByRenderer(renderer: string): unknown {

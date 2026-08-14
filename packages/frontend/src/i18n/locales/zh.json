@@ -29,7 +29,8 @@
     "toast": {
       "agentStopped": "助手已停止",
       "agentsStopped": "已停止 {{count}} 个助手",
-      "contextReset": "上下文已重置"
+      "contextReset": "上下文已重置",
+      "contextResetMonitor": "已重置 {{monitor}} 的上下文"
     }
   },
   "settings": {

@@ -323,4 +323,156 @@ describe('Desktop Store', () => {
       expect(useDesktopStore.getState().notifications['n1']).toBeUndefined();
     });
   });
+
+  describe('resetDesktop', () => {
+    /** A session with work in flight on two monitors, plus one agent nothing can place. */
+    function seedTwoMonitors() {
+      useDesktopStore.setState({
+        windows: {
+          '1/w1': {
+            id: '1/w1',
+            title: 'One',
+            bounds: { x: 0, y: 0, w: 100, h: 100 },
+            content: { renderer: 'text', data: '' },
+            minimized: false,
+            maximized: false,
+            monitorId: '1',
+          },
+          '2/w2': {
+            id: '2/w2',
+            title: 'Two',
+            bounds: { x: 0, y: 0, w: 100, h: 100 },
+            content: { renderer: 'text', data: '' },
+            minimized: false,
+            maximized: false,
+            monitorId: '2',
+          },
+        },
+        cliHistory: {
+          '1': [
+            {
+              id: 'c1',
+              type: 'user',
+              content: 'on one',
+              agentId: 'a1',
+              monitorId: '1',
+              timestamp: 1,
+            },
+          ],
+          '2': [
+            {
+              id: 'c2',
+              type: 'user',
+              content: 'on two',
+              agentId: 'a2',
+              monitorId: '2',
+              timestamp: 1,
+            },
+          ],
+        },
+        cliStreaming: {
+          a1: {
+            id: 's1',
+            type: 'thinking',
+            content: '...',
+            agentId: 'a1',
+            monitorId: '1',
+            timestamp: 1,
+          },
+          a2: {
+            id: 's2',
+            type: 'thinking',
+            content: '...',
+            agentId: 'a2',
+            monitorId: '2',
+            timestamp: 1,
+          },
+        },
+        activeAgents: {
+          a1: { id: 'a1', status: 'Thinking...', startedAt: 1, subagentCount: 0 },
+          a2: { id: 'a2', status: 'Thinking...', startedAt: 1, subagentCount: 0 },
+          ghost: { id: 'ghost', status: 'Thinking...', startedAt: 1, subagentCount: 0 },
+        },
+        windowAgents: {
+          '1/w1': { agentId: 'a1', windowId: '1/w1', status: 'active' },
+          '2/w2': { agentId: 'a2', windowId: '2/w2', status: 'active' },
+        },
+        queuedActions: {
+          '1/w1': [{ windowId: '1/w1', windowTitle: 'One', action: 'go', queuedAt: 1 }],
+          '2/w2': [{ windowId: '2/w2', windowTitle: 'Two', action: 'go', queuedAt: 1 }],
+        },
+        pendingFeedback: [
+          { requestId: 'r1', windowId: '1/w1', renderer: 'text', success: true },
+          { requestId: 'r2', windowId: '2/w2', renderer: 'text', success: true },
+        ],
+        pendingInteractions: [
+          { type: 'icon.click', timestamp: 1, details: 'no window at all' },
+          { type: 'window.focus', timestamp: 1, windowId: '2/w2' },
+        ],
+        pendingGestureMessages: ['a gesture nobody can attribute'],
+        messageStatuses: {
+          m1: { status: 'accepted', agentId: 'a1', timestamp: 1 },
+          m2: { status: 'accepted', agentId: 'a2', timestamp: 1 },
+          m3: { status: 'unsent', timestamp: 1 },
+        },
+        toasts: {
+          t1: { id: 't1', message: 'still here', variant: 'info', timestamp: 1 },
+        },
+      });
+    }
+
+    it('scoped reset clears only the named monitor, and keeps what it cannot attribute', () => {
+      seedTwoMonitors();
+
+      useDesktopStore.getState().resetDesktop('2');
+      const state = useDesktopStore.getState();
+
+      // Monitor 1's transcript is the whole point: it survives intact.
+      expect(state.cliHistory['1']).toHaveLength(1);
+      expect(state.cliHistory['2']).toEqual([]);
+      expect(state.cliStreaming.a1).toBeDefined();
+      expect(state.cliStreaming.a2).toBeUndefined();
+
+      // Agents: placed by the transcript / window binding, or left alone.
+      expect(state.activeAgents.a1).toBeDefined();
+      expect(state.activeAgents.a2).toBeUndefined();
+      expect(state.activeAgents.ghost).toBeDefined();
+
+      expect(Object.keys(state.windowAgents)).toEqual(['1/w1']);
+      expect(Object.keys(state.queuedActions)).toEqual(['1/w1']);
+
+      // Outbound queues are filtered, never emptied.
+      expect(state.pendingFeedback.map((f) => f.windowId)).toEqual(['1/w1']);
+      expect(state.pendingInteractions).toHaveLength(1);
+      expect(state.pendingInteractions[0].details).toBe('no window at all');
+      expect(state.pendingGestureMessages).toEqual(['a gesture nobody can attribute']);
+
+      expect(state.messageStatuses.m1).toBeDefined();
+      expect(state.messageStatuses.m2).toBeUndefined();
+      expect(state.messageStatuses.m3).toBeDefined(); // no agent yet — unattributable
+
+      // Neither branch touches the screen.
+      expect(Object.keys(state.windows).sort()).toEqual(['1/w1', '2/w2']);
+      expect(state.toasts.t1).toBeDefined();
+    });
+
+    it('unscoped reset still clears the whole session', () => {
+      seedTwoMonitors();
+
+      useDesktopStore.getState().resetDesktop();
+      const state = useDesktopStore.getState();
+
+      expect(state.cliHistory).toEqual({});
+      expect(state.cliStreaming).toEqual({});
+      expect(state.activeAgents).toEqual({});
+      expect(state.windowAgents).toEqual({});
+      expect(state.queuedActions).toEqual({});
+      expect(state.pendingFeedback).toEqual([]);
+      expect(state.pendingInteractions).toEqual([]);
+      expect(state.pendingGestureMessages).toEqual([]);
+      expect(state.messageStatuses).toEqual({});
+      expect(state.toasts).toEqual({});
+      expect(Object.keys(state.windows).sort()).toEqual(['1/w1', '2/w2']);
+    });
+  });
 });

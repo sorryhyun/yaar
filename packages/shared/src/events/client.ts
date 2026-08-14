@@ -81,6 +81,15 @@ export interface InterruptAgentEvent {
 
 export interface ResetEvent {
   type: typeof ClientEventType.RESET;
+  /**
+   * The monitor whose context to clear. A reset is issued from one desktop's command
+   * palette, so it means *this* desktop: its agent tree, its queue, its timeline, its
+   * branch of the tape. Everything on the other monitors keeps running.
+   *
+   * Omitted means the whole session — the original behavior, still what a caller with
+   * no monitor in hand gets.
+   */
+  monitorId?: string;
 }
 
 export interface RenderingFeedbackEvent {

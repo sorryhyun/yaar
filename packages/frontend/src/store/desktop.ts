@@ -49,7 +49,7 @@ import {
 
 // Import pure mutation functions for batched action processing
 import { applyWindowAction } from './slices/windowsSlice';
-import { toWindowKey } from './helpers';
+import { toWindowKey, monitorOfWindowId } from './helpers';
 import { notifyIframeClose } from './iframe-bridge';
 import { applyNotificationAction } from './slices/notificationsSlice';
 import { applyToastAction } from './slices/toastsSlice';
@@ -64,6 +64,36 @@ import {
   initWindowsSdkHandler,
   initNotificationBroadcaster,
 } from './iframe-bridge';
+
+/**
+ * agentId → the monitor it is working for, for the agents where that can be told at all.
+ *
+ * `ActiveAgent` carries no monitorId: it is minted from AGENT_THINKING, which names only
+ * the agent. Two other things in the store do know. Every CLI entry an agent produced is
+ * filed under a monitor, and a window agent is bound to a window, which is bound to a
+ * monitor — so the transcript and `windowAgents` are the witnesses.
+ *
+ * An agent whose witnesses disagree is recorded as `undefined` (unattributable) rather
+ * than last-writer-wins, so a scoped reset leaves it running instead of clearing an agent
+ * that may belong to another monitor.
+ */
+function mapAgentsToMonitors(state: DesktopStore): Map<string, string | undefined> {
+  const placed = new Map<string, string | undefined>();
+  const note = (agentId: string | undefined, monitorId: string | undefined) => {
+    if (!agentId || !monitorId) return;
+    if (placed.has(agentId) && placed.get(agentId) !== monitorId) placed.set(agentId, undefined);
+    else placed.set(agentId, monitorId);
+  };
+
+  for (const entry of Object.values(state.cliStreaming)) note(entry.agentId, entry.monitorId);
+  for (const [monitorId, entries] of Object.entries(state.cliHistory)) {
+    for (const entry of entries) note(entry.agentId, entry.monitorId || monitorId);
+  }
+  for (const [windowId, agent] of Object.entries(state.windowAgents)) {
+    note(agent.agentId, monitorOfWindowId(state.windows, windowId));
+  }
+  return placed;
+}
 
 export const useDesktopStore = create<DesktopStore>()(
   immer((...a) => ({
@@ -311,8 +341,103 @@ export const useDesktopStore = create<DesktopStore>()(
       useDesktopStore.getState().applyActions(actions);
     },
 
-    resetDesktop: () => {
-      const [set] = a;
+    /**
+     * Forget the conversation, keep the desktop.
+     *
+     * With a `monitorId` this is **scoped**: only state that carries that monitor's
+     * identity is cleared, because the reset was issued from that desktop and means that
+     * desktop. Resetting while looking at monitor 2 used to wipe monitor 1's transcript,
+     * its spinners, and every monitor's queued outbound work — a session-wide clear
+     * dressed up as a per-desktop button.
+     *
+     * Two rules make the scoped branch safe:
+     *
+     *  - **Attribute, then clear.** A field is only cleared when its own monitor can be
+     *    established — from a scoped window key, a `monitorId` the model carries, or the
+     *    agent→monitor map built below. Anything unattributable is *left*: a stale
+     *    spinner or an extra queued interaction is recoverable, another monitor's wiped
+     *    transcript is not.
+     *  - **The `pending*` arrays are filtered, not dropped.** They are outbound drain
+     *    queues, not display state — every item in them is work this client owes the
+     *    server. Emptying them because a different monitor was reset loses that work
+     *    silently: an app protocol response never answered, an interaction the agent
+     *    never hears about.
+     *
+     * Without a `monitorId` it is the original session-wide clear, unchanged.
+     *
+     * Both branches preserve windows, zOrder, focusedWindowId, monitors, shortcuts and
+     * appBadges — a reset clears context, not the screen.
+     */
+    resetDesktop: (monitorId?: string) => {
+      const [set, get] = a;
+
+      if (monitorId) {
+        // Read the agent→monitor evidence before anything is cleared: the CLI history is
+        // half of that evidence and is about to be emptied for this monitor.
+        const agentMonitors = mapAgentsToMonitors(get());
+
+        // The cli slice already owns "clear one monitor's transcript", with exactly these
+        // semantics. A second implementation here is a second thing to keep correct.
+        get().clearCliHistory(monitorId);
+
+        set((state) => {
+          const onThisMonitor = (windowId: string) =>
+            monitorOfWindowId(state.windows, windowId) === monitorId;
+
+          // Surfaces that name their monitor outright.
+          for (const [id, prompt] of Object.entries(state.userPrompts)) {
+            if (prompt.monitorId === monitorId) delete state.userPrompts[id];
+          }
+          for (const [agentId, entry] of Object.entries(state.cliStreaming)) {
+            if (entry.monitorId === monitorId) delete state.cliStreaming[agentId];
+          }
+
+          // Keyed by window, and a window belongs to exactly one monitor.
+          for (const windowId of Object.keys(state.windowAgents)) {
+            if (onThisMonitor(windowId)) delete state.windowAgents[windowId];
+          }
+          for (const windowId of Object.keys(state.queuedActions)) {
+            if (onThisMonitor(windowId)) delete state.queuedActions[windowId];
+          }
+
+          // Agent-keyed: only the agents the map could actually place. An unplaceable
+          // agent keeps its spinner — see the "attribute, then clear" rule above.
+          for (const agentId of Object.keys(state.activeAgents)) {
+            if (agentMonitors.get(agentId) === monitorId) delete state.activeAgents[agentId];
+          }
+          for (const [messageId, status] of Object.entries(state.messageStatuses)) {
+            if (status.agentId && agentMonitors.get(status.agentId) === monitorId) {
+              delete state.messageStatuses[messageId];
+            }
+          }
+
+          // Outbound drain queues: drop this monitor's items, keep everything else —
+          // including items with no window to attribute them by.
+          state.pendingFeedback = state.pendingFeedback.filter((f) => !onThisMonitor(f.windowId));
+          state.pendingAppProtocolResponses = state.pendingAppProtocolResponses.filter(
+            (r) => !onThisMonitor(r.windowId),
+          );
+          state.pendingAppInteractions = state.pendingAppInteractions.filter(
+            (i) => !onThisMonitor(i.windowId),
+          );
+          state.pendingAppEvents = state.pendingAppEvents.filter((e) => !onThisMonitor(e.windowId));
+          state.pendingInteractions = state.pendingInteractions.filter((i) => {
+            if (i.monitorId) return i.monitorId !== monitorId;
+            return i.windowId ? !onThisMonitor(i.windowId) : true;
+          });
+
+          // Deliberately untouched when scoped:
+          //  - toasts, dialogs, selectedWindowIds, attachedImages, activityLog, debugLog —
+          //    transient or session-wide shell UI, with no monitor identity to scope by.
+          //  - notifications — the model carries no monitorId (`notification.show` does not
+          //    send one), so there is nothing to filter on; the notification center is a
+          //    session-wide surface.
+          //  - pendingGestureMessages — plain strings, unattributable, and each one is an
+          //    unsent user utterance.
+        });
+        return;
+      }
+
       set((state) => {
         // Preserve windows, zOrder, focusedWindowId, monitors, shortcuts, appBadges
         // Only clear agent/context/pending state

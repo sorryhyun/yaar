@@ -163,6 +163,26 @@ export class ContextTape {
   }
 
   /**
+   * Prune one monitor's slice of the tape — its own messages, plus the branches of the
+   * windows it owns. Returns the pruned messages, like {@link pruneWindow}.
+   *
+   * `ownsWindow` is injected because a branch is filed under a window id alone: which
+   * desktop that window lives on is `WindowStateRegistry`'s answer, not the tape's. A
+   * tape that guessed would either strand another monitor's branch or delete it.
+   */
+  pruneMonitor(monitorId: string, ownsWindow: (windowId: string) => boolean): ContextMessage[] {
+    const pruned: ContextMessage[] = [];
+    this.messages = this.messages.filter((msg) => {
+      const drop = isMonitorSource(msg.source)
+        ? extractMonitorId(msg.source) === monitorId
+        : ownsWindow(extractWindowId(msg.source)!);
+      if (drop) pruned.push(msg);
+      return !drop;
+    });
+    return pruned;
+  }
+
+  /**
    * Get the number of messages in the tape.
    */
   get length(): number {

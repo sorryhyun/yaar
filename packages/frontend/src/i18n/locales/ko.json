@@ -29,7 +29,8 @@
     "toast": {
       "agentStopped": "에이전트 중지됨",
       "agentsStopped": "에이전트 {{count}}개 중지됨",
-      "contextReset": "컨텍스트 초기화됨"
+      "contextReset": "컨텍스트 초기화됨",
+      "contextResetMonitor": "{{monitor}} 컨텍스트 초기화됨"
     }
   },
   "settings": {

@@ -283,7 +283,7 @@ export class LiveSession {
         broadcast: (event) => this.broadcast(event),
         sendTo: (connectionId, event) => this.sendTo(connectionId, event),
         claimMessageId: (messageId) => this.claimMessageId(messageId),
-        resetSession: (connectionId) => this.handleReset(connectionId),
+        resetSession: (connectionId, monitorId) => this.handleReset(connectionId, monitorId),
         closeBrowsers: () => this.closeBrowsers(),
       }).routes(),
     );
@@ -575,7 +575,21 @@ export class LiveSession {
       .catch(() => {});
   }
 
-  private async handleReset(connectionId: ConnectionId): Promise<void> {
+  private async handleReset(connectionId: ConnectionId, monitorId?: string): Promise<void> {
+    if (monitorId !== undefined) {
+      // No pool means no agents, no queues and no tape — there is nothing monitor-scoped
+      // to clear, and the session-wide state below (restored context, saved threads, the
+      // warm pool) is not this monitor's to throw away.
+      if (this.pool) await this.pool.resetMonitor(monitorId);
+      // `executeLaunchHooks` emits everything onto DEFAULT_MONITOR_ID, so re-running it
+      // for another monitor replays monitor 2's reset as new windows on monitor 0.
+      if (monitorId === DEFAULT_MONITOR_ID) {
+        this.launchHooksExecuted = false;
+        await this.executeLaunchHooks(connectionId);
+      }
+      return;
+    }
+
     if (this.pool) {
       await this.pool.reset();
     } else {

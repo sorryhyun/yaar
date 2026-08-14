@@ -467,7 +467,11 @@ export type DesktopStore = WindowsSlice &
      * what is *not*. See `applySnapshot` in `desktop.ts`.
      */
     applySnapshot: (actions: OSAction[], agents: ActiveAgentSnapshot[]) => void;
-    resetDesktop: () => void;
+    /**
+     * Clear context, keep the screen. With a `monitorId` only that monitor's state goes;
+     * without one it is the session-wide clear. See `resetDesktop` in `desktop.ts`.
+     */
+    resetDesktop: (monitorId?: string) => void;
     clearDesktop: () => void;
   };
 

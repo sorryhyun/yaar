@@ -60,8 +60,13 @@ export interface ClientEventDeps {
    * Acceptance is the session's to decide, not a handler's — see `LiveSession`.
    */
   claimMessageId(messageId: string): boolean;
-  /** Clear conversation state and re-run launch hooks. Owned by the session. */
-  resetSession(connectionId: ConnectionId): Promise<void>;
+  /**
+   * Clear conversation state and re-run launch hooks. Owned by the session.
+   *
+   * With a `monitorId`, only that monitor is cleared — its agent tree, queue, timeline and
+   * branch of the tape. Without one, the whole session.
+   */
+  resetSession(connectionId: ConnectionId, monitorId?: string): Promise<void>;
   /** Close every browser session this host holds — headless sandbox and real Chrome. */
   closeBrowsers(): void;
 }
@@ -86,7 +91,8 @@ export class ClientEventController {
       [ClientEventType.APP_INTERACTION]: (event) => this.handleAppInteraction(event),
       [ClientEventType.COMPONENT_ACTION]: (event) => this.handleComponentAction(event),
       [ClientEventType.INTERRUPT]: () => this.deps.getPool()?.interruptAll(),
-      [ClientEventType.RESET]: (_event, connectionId) => this.deps.resetSession(connectionId),
+      [ClientEventType.RESET]: (event, connectionId) =>
+        this.deps.resetSession(connectionId, event.monitorId),
       [ClientEventType.INTERRUPT_AGENT]: (event) =>
         this.deps.getPool()?.agentPool.interruptByIdOrRole(event.agentId),
       [ClientEventType.RENDERING_FEEDBACK]: (event) => this.handleRenderingFeedback(event),

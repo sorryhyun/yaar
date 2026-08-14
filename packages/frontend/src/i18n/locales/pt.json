@@ -29,7 +29,8 @@
     "toast": {
       "agentStopped": "Agente parado",
       "agentsStopped": "{{count}} agentes parados",
-      "contextReset": "Contexto redefinido"
+      "contextReset": "Contexto redefinido",
+      "contextResetMonitor": "Contexto redefinido em {{monitor}}"
     }
   },
   "settings": {

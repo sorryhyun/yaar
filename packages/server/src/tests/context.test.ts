@@ -57,6 +57,29 @@ describe('ContextTape', () => {
     });
   });
 
+  describe('pruneMonitor', () => {
+    beforeEach(() => {
+      tape.append('user', 'm0 msg', monitorSource('0'));
+      tape.append('user', 'm1 msg', monitorSource('1'));
+      tape.append('user', 'w1 msg', windowSource('w1'));
+      tape.append('assistant', 'w2 msg', windowSource('w2'));
+    });
+
+    it('removes the monitor and its own windows, and returns them', () => {
+      const pruned = tape.pruneMonitor('0', (windowId) => windowId === 'w1');
+
+      expect(pruned.map((m) => m.content)).toEqual(['m0 msg', 'w1 msg']);
+      expect(tape.getMessages().map((m) => m.content)).toEqual(['m1 msg', 'w2 msg']);
+    });
+
+    it('keeps every window branch when the monitor owns none', () => {
+      const pruned = tape.pruneMonitor('1', () => false);
+
+      expect(pruned.map((m) => m.content)).toEqual(['m1 msg']);
+      expect(tape.length).toBe(3);
+    });
+  });
+
   it('clear empties all messages', () => {
     tape.append('user', 'msg', monitorSource('0'));
     tape.clear();

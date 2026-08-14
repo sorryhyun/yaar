@@ -180,6 +180,17 @@ export class MonitorBudgetPolicy {
   }
 
   /**
+   * Drop one monitor's sliding windows — a monitor whose context was reset must not be
+   * throttled for actions its previous agent tree spent.
+   *
+   * The running-slot count is deliberately untouched: a slot is held by a turn and given
+   * back by that turn's `finally`, so decrementing it here would hand out a slot twice.
+   */
+  clearMonitor(monitorId: string): void {
+    this.buckets.delete(monitorId);
+  }
+
+  /**
    * Full reset — clear all state.
    */
   clear(): void {

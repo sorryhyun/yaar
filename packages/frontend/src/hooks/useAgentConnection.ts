@@ -417,10 +417,21 @@ export function useAgentConnection(options: UseAgentConnectionOptions = {}) {
     send({ type: ClientEventType.INTERRUPT });
   }, [send]);
 
-  const reset = useCallback(() => {
-    send({ type: ClientEventType.RESET });
-    useDesktopStore.getState().resetDesktop();
-  }, [send]);
+  /**
+   * Clear the context of one monitor — the one the caller is looking at.
+   *
+   * Both halves have to be scoped together or they disagree about what was reset: the
+   * event tells the server which agent tree to forget, `resetDesktop` clears the matching
+   * client state. Omitting `monitorId` keeps the session-wide behavior for callers that
+   * have no monitor in hand.
+   */
+  const reset = useCallback(
+    (monitorId?: string) => {
+      send({ type: ClientEventType.RESET, monitorId });
+      useDesktopStore.getState().resetDesktop(monitorId);
+    },
+    [send],
+  );
 
   const interruptAgent = useCallback(
     (agentId: string) => {

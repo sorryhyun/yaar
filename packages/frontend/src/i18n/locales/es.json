@@ -29,7 +29,8 @@
     "toast": {
       "agentStopped": "Agente detenido",
       "agentsStopped": "{{count}} agentes detenidos",
-      "contextReset": "Contexto restablecido"
+      "contextReset": "Contexto restablecido",
+      "contextResetMonitor": "Contexto restablecido en {{monitor}}"
     }
   },
   "settings": {

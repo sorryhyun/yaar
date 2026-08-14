@@ -29,7 +29,8 @@
     "toast": {
       "agentStopped": "エージェントを停止しました",
       "agentsStopped": "{{count}}個のエージェントを停止しました",
-      "contextReset": "コンテキストをリセットしました"
+      "contextReset": "コンテキストをリセットしました",
+      "contextResetMonitor": "{{monitor}}のコンテキストをリセットしました"
     }
   },
   "settings": {

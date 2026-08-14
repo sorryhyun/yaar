@@ -68,6 +68,8 @@ export function CommandPalette() {
   const clearAttachedImages = useDesktopStore((state) => state.clearAttachedImages);
   const messageStatuses = useDesktopStore((state) => state.messageStatuses);
   const windows = useDesktopStore((state) => state.windows);
+  const activeMonitorId = useDesktopStore((state) => state.activeMonitorId);
+  const monitors = useDesktopStore((state) => state.monitors);
 
   // Open app windows for @mention dropdown
   const appWindows = useMemo(() => {
@@ -279,14 +281,22 @@ export function CommandPalette() {
   );
 
   const handleReset = useCallback(() => {
-    reset();
+    // The palette belongs to the desktop it sits on, so the reset does too — the other
+    // monitors' agents, transcripts and queues keep running.
+    reset(activeMonitorId);
+    // With one monitor there is nothing to disambiguate. With several, an unqualified
+    // "Context reset" reads as "all of it was reset", which is the opposite of the truth.
+    const label = monitors.find((m) => m.id === activeMonitorId)?.label;
     applyAction({
       type: 'toast.show',
       id: `reset-${Date.now()}`,
-      message: t('commandPalette.toast.contextReset'),
+      message:
+        monitors.length > 1 && label
+          ? t('commandPalette.toast.contextResetMonitor', { monitor: label })
+          : t('commandPalette.toast.contextReset'),
       variant: 'info',
     });
-  }, [reset, applyAction, t]);
+  }, [reset, applyAction, t, activeMonitorId, monitors]);
 
   return (
     <>
