@@ -49,7 +49,7 @@ export interface WsData {
   sessionId: string | null;
   monitorId: string | null;
   /**
-   * Serializes this connection's messages against each other.
+   * Serializes this connection's messages against each other, one chain per lane.
    *
    * `message()` is async, and Bun does not wait for one call to finish before making the
    * next — so two frames from the same socket ran concurrently and could land out of
@@ -58,8 +58,67 @@ export interface WsData {
    * did while I was away"*: if the buffered `window.create` in front of it is still
    * awaiting `getAppMeta` when the snapshot is built, the snapshot omits that window and
    * the client — trusting it — deletes it. Order was always the intent; now it is enforced.
+   *
+   * A single chain enforced more than that, though. `routeOne` awaits `routeMessage`, and
+   * a `USER_MESSAGE` whose monitor agent is idle is processed *inline*, so that frame held
+   * the chain for the entire streaming turn — including against a `USER_MESSAGE` for a
+   * *different monitor*, which has nothing to do with it. One desktop thinking made every
+   * other desktop on the same socket unusable until it stopped, which is the opposite of
+   * what a second monitor is for.
+   *
+   * So the unit of ordering is what the frame contends for, not the socket it arrived on:
+   * see {@link laneOf}. Frames in one lane keep their arrival order exactly as before;
+   * frames in different lanes no longer wait on each other.
    */
-  queue?: Promise<void>;
+  lanes?: Map<string, Promise<void>>;
+}
+
+/** Everything that is not addressed to one monitor's agent. Ordered as it always was. */
+const MAIN_LANE = 'main';
+
+/**
+ * The monitor a window handle names, for the scoped form the client addresses windows by
+ * (`"0/notes"`). An unscoped id belongs to no lane in particular — the monitor is resolved
+ * downstream, and guessing here would put two frames about one window in two lanes.
+ */
+function monitorOfWindow(windowId: string | undefined): string | undefined {
+  const slash = windowId?.indexOf('/') ?? -1;
+  if (!windowId || slash <= 0) return undefined;
+  const prefix = windowId.slice(0, slash);
+  return /^\d+$/.test(prefix) ? prefix : undefined;
+}
+
+/**
+ * Which serialization lane a frame belongs to.
+ *
+ * A frame that addresses one monitor — by name, or through a window that lives on it —
+ * shares that monitor's lane, because everything it can contend for belongs to that
+ * monitor's agents. Two frames for the same monitor still queue against each other, which
+ * is what `ContextPool` expects: it decides whether to steer, enqueue or reject by asking
+ * whether that agent is busy *now*, and an app interaction arriving while its app agent is
+ * idle must not overtake the message in front of it (`ws-head-of-line.test.ts`).
+ *
+ * A `target: 'session'` message names a monitor and is deliberately not laned by it. The
+ * session agent has no queue of its own (`ContextPool.handleSessionTask`), so the
+ * connection chain is the only thing keeping two of them off the same agent — they share
+ * one lane whichever desktop they were typed on.
+ *
+ * Everything else stays on the main lane, ordered exactly as it always was.
+ */
+function laneOf(event: ClientEvent | undefined): string {
+  switch (event?.type) {
+    case ClientEventType.USER_MESSAGE:
+      if (event.target === 'session') return 'session';
+      return event.monitorId ? `monitor:${event.monitorId}` : MAIN_LANE;
+    case ClientEventType.WINDOW_MESSAGE:
+    case ClientEventType.APP_INTERACTION:
+    case ClientEventType.COMPONENT_ACTION: {
+      const monitorId = monitorOfWindow(event.windowId);
+      return monitorId ? `monitor:${monitorId}` : MAIN_LANE;
+    }
+    default:
+      return MAIN_LANE;
+  }
 }
 
 export function createWsHandlers(options: WebSocketServerOptions) {
@@ -180,9 +239,25 @@ export function createWsHandlers(options: WebSocketServerOptions) {
         return routeOne(ws, event);
       }
 
-      // One at a time, in the order they arrived. See WsData.queue.
-      ws.data.queue = (ws.data.queue ?? Promise.resolve()).then(() => routeOne(ws, event));
-      return ws.data.queue;
+      // One at a time within a lane, in the order they arrived. See WsData.lanes.
+      const lanes = (ws.data.lanes ??= new Map());
+
+      // RESYNC is the one frame whose meaning *is* its position in the queue, so it is a
+      // barrier across every lane rather than a member of one: it waits for all of them,
+      // and all of them resume behind it. Splitting the chain without this would answer
+      // "tell me everything you heard" with a snapshot that had not yet heard the message
+      // running in another lane.
+      if (event?.type === ClientEventType.RESYNC) {
+        const barrier = Promise.all([...lanes.values()]).then(() => routeOne(ws, event));
+        for (const lane of lanes.keys()) lanes.set(lane, barrier);
+        lanes.set(MAIN_LANE, barrier);
+        return barrier;
+      }
+
+      const lane = laneOf(event);
+      const next = (lanes.get(lane) ?? Promise.resolve()).then(() => routeOne(ws, event));
+      lanes.set(lane, next);
+      return next;
     },
 
     close(ws: ServerWebSocket<WsData>) {
