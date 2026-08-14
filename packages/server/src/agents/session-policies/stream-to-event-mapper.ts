@@ -55,6 +55,22 @@ function classifyToolError(content: string): string {
  */
 const MAX_TOOL_OUTPUT_TAIL_BYTES = 64 * 1024;
 
+/**
+ * Coalescing window for the live AGENT_RESPONSE feed.
+ *
+ * The event carries the *cumulative* block text, not the delta, so emitting one per
+ * provider chunk ships O(n²) bytes for an n-byte block — and costs every connection in
+ * the session one JSON parse and one store write each time. On a multi-monitor desktop
+ * the CLI panel renders every monitor at once, so that cost is paid per streaming
+ * monitor and lands on one render thread.
+ *
+ * Coalescing is lossless because each event supersedes the last: the only thing a
+ * dropped emission removes is an intermediate frame of the same growing string. Every
+ * block boundary flushes (see {@link flushResponse}), so the tail is never lost.
+ * 60ms matches the stream hub's own merge tick.
+ */
+const RESPONSE_EMIT_INTERVAL_MS = 60;
+
 export interface StreamMapperOptions {
   role: string;
   providerName: string;
@@ -88,6 +104,8 @@ export class StreamToEventMapper {
   private lastThinkingEmitTime = 0;
   private lastFlushedThinkingLength = 0;
   private thinkingDirty = false;
+  private lastResponseEmitTime = 0;
+  private responseDirty = false;
   private toolStartTimes = new Map<string, { toolName: string; startTime: number }>();
   /** Live-tail bytes already forwarded per tool call, against `MAX_TOOL_OUTPUT_TAIL_BYTES`. */
   private toolOutputBytes = new Map<string, number>();
@@ -255,6 +273,13 @@ export class StreamToEventMapper {
     if (message.type !== 'thinking') {
       await this.flushThinking();
     }
+    // Same rule for the coalesced text feed, and it is what makes the coalescing
+    // safe: every message that ends a text block (`tool_use_start`, `tool_use`,
+    // `complete`, `error`) passes through here first, so the block's final state
+    // is always emitted before `blockText` is reset out from under it.
+    if (message.type !== 'text') {
+      await this.flushResponse();
+    }
 
     // Before the switch: usage can ride any message type, and on Claude it rides
     // the very terminal that latches the turn closed — folding it after that
@@ -325,14 +350,13 @@ export class StreamToEventMapper {
           }
           this.state.responseText += message.content;
           this.blockText += message.content;
-          await this.sendEvent({
-            type: ServerEventType.AGENT_RESPONSE,
-            content: this.blockText,
-            isComplete: false,
-            agentId: this.role,
-            monitorId: this.monitorId,
-            messageId: this.state.currentMessageId ?? undefined,
-          });
+          // Coalesced, not dropped: the event is cumulative, so at most one
+          // intermediate frame of the same string goes unsent and the next
+          // emission (or the block-boundary flush) carries everything.
+          this.responseDirty = true;
+          if (Date.now() - this.lastResponseEmitTime >= RESPONSE_EMIT_INTERVAL_MS) {
+            await this.flushResponse();
+          }
           // Stream subscribers get the *delta*, not the running accumulation —
           // the registry coalesces these on a tick.
           //
@@ -600,6 +624,28 @@ export class StreamToEventMapper {
           monitorId: this.monitorId,
         });
     }
+  }
+
+  /**
+   * Emit the current text block if a chunk has landed since the last emission.
+   *
+   * Public because the turn has an end the provider never announces: on an interrupt
+   * the read loop stops mid-block and no `complete` arrives, so `AgentSession`'s
+   * `finally` calls this before closing the turn. Without it the last coalescing
+   * window's text would be missing from what the CLI panel commits to history.
+   */
+  async flushResponse(): Promise<void> {
+    if (!this.responseDirty) return;
+    this.responseDirty = false;
+    this.lastResponseEmitTime = Date.now();
+    await this.sendEvent({
+      type: ServerEventType.AGENT_RESPONSE,
+      content: this.blockText,
+      isComplete: false,
+      agentId: this.role,
+      monitorId: this.monitorId,
+      messageId: this.state.currentMessageId ?? undefined,
+    });
   }
 
   /**

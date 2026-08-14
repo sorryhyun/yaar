@@ -567,6 +567,11 @@ describe('broadcast scope — window state and agent streams cross monitors', ()
       'session',
     );
     expect(monitorEventScope({ type: ServerEventType.ERROR } as ServerEvent)).toBe('session');
+    // A notice annotates a stream and renders only in that stream's CLI pane, so it
+    // travels as far as the stream does.
+    expect(monitorEventScope({ type: ServerEventType.AGENT_NOTICE } as ServerEvent)).toBe(
+      'session',
+    );
     expect(
       monitorEventScope({
         type: ServerEventType.ACTIONS,

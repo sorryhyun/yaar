@@ -549,6 +549,11 @@ export class AgentSession {
         error: errMessage(err),
       });
     } finally {
+      // The live text feed is coalesced, so a turn that ends without a provider
+      // `complete` — an interrupt, a throw — can be holding an unsent tail. Flush
+      // before closing: `finish` is sync and terminal, and the client commits what
+      // it has to CLI history on the isComplete below.
+      await mapper?.flushResponse();
       // The guaranteed close. A no-op on the clean path (the provider's
       // `complete` already latched it) and the only close on the interrupt path,
       // where the provider stream stops without a terminal message.

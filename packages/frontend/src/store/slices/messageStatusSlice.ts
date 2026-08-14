@@ -74,6 +74,10 @@ export const createMessageStatusSlice: SliceCreator<MessageStatusSlice> = (set) 
 
   clearAllMessageStatuses: () =>
     set((state) => {
+      // Called on every AGENT_THINKING, which is once per 200ms per streaming agent —
+      // and an unconditional assignment hands out a fresh object each time, re-rendering
+      // every subscriber to clear a map that is usually already empty.
+      if (Object.keys(state.messageStatuses).length === 0) return;
       state.messageStatuses = {};
     }),
 });

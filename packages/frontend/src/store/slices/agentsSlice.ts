@@ -13,6 +13,11 @@ export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
 
   setAgentActive: (agentId, status) =>
     set((state) => {
+      // Every streamed chunk re-asserts the same status ("Responding..."), and each
+      // write hands Immer a new object that re-renders every `activeAgents` subscriber.
+      // On a multi-monitor desktop that is one render per token per streaming monitor,
+      // for a value that did not change.
+      if (state.activeAgents[agentId]?.status === status) return;
       state.activeAgents[agentId] = {
         id: agentId,
         status,

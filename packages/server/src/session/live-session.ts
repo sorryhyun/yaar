@@ -90,6 +90,11 @@ export interface LiveSessionOptions {
  * the stream belongs in. Interactive surfaces (dialogs, toasts, prompts, notifications)
  * stay on the monitor that asked — with two tabs on two desktops, the same dialog on
  * both screens would leave a stale twin on one of them once the other answers.
+ *
+ * `AGENT_NOTICE` counts as a stream event for the same reason: it renders in exactly one
+ * place — the CLI pane of the monitor it names — and exists to explain a pause the user
+ * would otherwise read as a freeze. Scoped to its monitor it reached only a tab already
+ * looking at that desktop, the one case where the pause needs no explaining.
  */
 export function monitorEventScope(event: ServerEvent): 'session' | 'monitor' {
   switch (event.type) {
@@ -97,6 +102,7 @@ export function monitorEventScope(event: ServerEvent): 'session' | 'monitor' {
     case ServerEventType.AGENT_RESPONSE:
     case ServerEventType.TOOL_PROGRESS:
     case ServerEventType.ERROR:
+    case ServerEventType.AGENT_NOTICE:
       return 'session';
     case ServerEventType.ACTIONS:
       return event.actions.length > 0 &&

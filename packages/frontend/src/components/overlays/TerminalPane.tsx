@@ -1,9 +1,10 @@
 /**
  * TerminalPane - A single terminal pane for one monitor's CLI history.
  */
-import { useEffect, useLayoutEffect, useRef } from 'react';
+import { memo, useEffect, useLayoutEffect, useRef } from 'react';
 import { useDesktopStore } from '@/store';
 import { useShallow } from 'zustand/react/shallow';
+import type { CliEntry } from '@/types/state';
 import styles from '@/styles/overlays/CliPanel.module.css';
 
 interface TerminalPaneProps {
@@ -36,9 +37,60 @@ function renderContent(content: string) {
   );
 }
 
+function entryClass(type: string) {
+  switch (type) {
+    case 'user':
+      return styles.user;
+    case 'thinking':
+      return styles.thinking;
+    case 'response':
+      return styles.response;
+    case 'tool':
+      return styles.tool;
+    case 'error':
+      return styles.error;
+    case 'notice':
+      return styles.notice;
+    case 'action-summary':
+      return styles.actionSummary;
+    default:
+      return styles.response;
+  }
+}
+
+/**
+ * The committed history, rendered apart from the live tail.
+ *
+ * History only changes when a stream finalizes; the tail changes on every chunk. Left
+ * in one component, a token re-rendered every committed line as well — up to
+ * `MAX_CLI_ENTRIES` of them, per pane, per token, with every monitor's pane on screen
+ * at once. Memoized on the array identity Immer already gives us: unchanged history
+ * is the same array, so the rows are skipped entirely.
+ */
+const CliHistoryList = memo(function CliHistoryList({ history }: { history: CliEntry[] }) {
+  return (
+    <>
+      {history.map((entry) => (
+        <div key={entry.id} className={`${styles.entry} ${entryClass(entry.type)}`}>
+          {entry.type === 'user' && <span className={styles.userPrompt}>&gt; </span>}
+          {renderContent(entry.content)}
+        </div>
+      ))}
+    </>
+  );
+});
+
 export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalPaneProps) {
   const history = useDesktopStore(useShallow((s) => s.cliHistory[monitorId] ?? []));
-  const streaming = useDesktopStore(useShallow((s) => s.cliStreaming));
+  // Select this pane's entries inside the selector, not after it. Subscribed to the whole
+  // `cliStreaming` map, every pane re-rendered on every chunk of every *other* monitor —
+  // the cost of the CLI panel scaled with panes × streaming monitors. Narrowed here, the
+  // shallow compare sees an element-identical array and the pane stands still.
+  const streamingEntries = useDesktopStore(
+    useShallow((s) =>
+      Object.values(s.cliStreaming).filter((e) => (e.monitorId || '0') === monitorId),
+    ),
+  );
   const clearCliHistory = useDesktopStore((s) => s.clearCliHistory);
   const monitorLabel = useDesktopStore(
     (s) => s.monitors.find((m) => m.id === monitorId)?.label ?? monitorId,
@@ -90,32 +142,7 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
     if (shouldAutoScroll.current && bodyRef.current) {
       bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
     }
-  }, [history.length, streaming]);
-
-  const streamingEntries = Object.values(streaming).filter(
-    (e) => (e.monitorId || '0') === monitorId,
-  );
-
-  const entryClass = (type: string) => {
-    switch (type) {
-      case 'user':
-        return styles.user;
-      case 'thinking':
-        return styles.thinking;
-      case 'response':
-        return styles.response;
-      case 'tool':
-        return styles.tool;
-      case 'error':
-        return styles.error;
-      case 'notice':
-        return styles.notice;
-      case 'action-summary':
-        return styles.actionSummary;
-      default:
-        return styles.response;
-    }
-  };
+  }, [history.length, streamingEntries]);
 
   return (
     <div className={styles.pane} data-focused={isFocused} onClick={onClick}>
@@ -145,12 +172,7 @@ export function TerminalPane({ monitorId, index, isFocused, onClick }: TerminalP
         </div>
       </div>
       <div className={styles.cliBody} ref={bodyRef} onScroll={handleScroll}>
-        {history.map((entry) => (
-          <div key={entry.id} className={`${styles.entry} ${entryClass(entry.type)}`}>
-            {entry.type === 'user' && <span className={styles.userPrompt}>&gt; </span>}
-            {renderContent(entry.content)}
-          </div>
-        ))}
+        <CliHistoryList history={history} />
         {streamingEntries.map((entry) => (
           <div key={entry.id} className={`${styles.entry} ${entryClass(entry.type)}`}>
             {entry.type === 'thinking' && <span className={styles.streamingLabel}>[thinking]</span>}
