@@ -20,8 +20,24 @@ These are the documentation files you maintain:
 | `packages/frontend/CLAUDE.md` | Frontend structure, store slices, WebSocket events, renderers |
 | `packages/shared/CLAUDE.md` | Shared types, OS Actions, WebSocket events, Component DSL, Zod patterns |
 | `packages/compiler/CLAUDE.md` | App compiler: bundled libraries, shims, protocol extraction, typecheck |
+| `apps/CLAUDE.md` | Apps-layer conventions: agent docs table, design tokens/y-* reference, Solid gotchas, compiler overview |
 
-You also maintain the agent definition files under `.claude/agents/`:
+You also maintain the `.claude/skills/*/SKILL.md` files the same way — diffed against code, not
+against the CLAUDE.md files they overlap with (a skill can legitimately go deeper on a workflow
+than the package doc does):
+
+| File | Covers |
+|------|--------|
+| `.claude/skills/app-dev/SKILL.md` | App compile/typecheck/check workflows (`bun run build:apps`, `check:apps`) |
+| `.claude/skills/yaar-testing/SKILL.md` | Test commands, partitioning rules, env pinning, happy-dom caveats |
+| `.claude/skills/codex-provider/SKILL.md` | Codex protocol/types regeneration workflow, version gates |
+| `.claude/skills/release/SKILL.md` | Release process, CI tiers |
+| `.claude/skills/headless-driving/SKILL.md` | Driving YAAR headlessly via browser |
+| `.claude/skills/server-verbs/SKILL.md` | The server's MCP/verb layer — protocol eras, verb semantics, access tiers, app protocol, sub-agents, self-update |
+| `.claude/skills/server-http/SKILL.md` | REST routes, the access chokepoint, principals, token invariants |
+| `.claude/skills/server-providers/SKILL.md` | AITransport contract, notice-vs-error rule, per-provider config, Codex packaging |
+
+And the agent definition files under `.claude/agents/`:
 
 | File | Covers |
 |------|--------|
@@ -34,7 +50,7 @@ You also maintain the agent definition files under `.claude/agents/`:
 ## Process
 
 1. **Discover what changed**: Read the task description or run `git diff` / `git log` to understand recent changes.
-2. **Read current docs**: Read the CLAUDE.md files that are likely affected.
+2. **Read current docs**: Read the CLAUDE.md and `SKILL.md` files that are likely affected.
 3. **Read actual code**: Glob and grep the relevant source directories to see what exists now.
 4. **Diff docs against code**: Identify:
    - Items in docs that no longer exist in code (remove)
@@ -52,3 +68,4 @@ You also maintain the agent definition files under `.claude/agents/`:
 - **Directory trees**: When updating directory structure sections, read the actual directory with `ls` or `Glob` to ensure accuracy.
 - **Tables**: When updating tool/event/renderer tables, check actual exports and registrations in code.
 - **Agent files**: Keep `.claude/agents/*.md` architecture sections in sync with the package CLAUDE.md they reference. These are briefer summaries.
+- **Skill files**: Keep `.claude/skills/*/SKILL.md` command examples and paths in sync with the actual scripts/`package.json`/`Makefile` entries they document — same treatment as a package CLAUDE.md, just scoped to one workflow instead of one package. A skill's frontmatter `paths:` glob should still match where that workflow's files actually live.

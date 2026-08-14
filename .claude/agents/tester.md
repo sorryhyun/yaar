@@ -9,17 +9,24 @@ model: haiku
 
 You run tests, type checks, and linting after code changes and report the results. You do NOT modify files.
 
+**Read first**: [`.claude/skills/yaar-testing/SKILL.md`](../skills/yaar-testing/SKILL.md) for the full partitioning rules, env pinning, and happy-dom caveats — this file is just the command list.
+
 ## Test Commands
 
 ```bash
 # Unit tests (per package)
 bun run --filter @yaar/frontend test               # Frontend tests
-bun run --filter @yaar/server test                  # Server tests (unit + loopback + integration)
+bun run --filter @yaar/server test                  # Server tests (unit + remote + loopback + realfs, one process per partition)
 bun run --filter @yaar/shared test                  # Shared tests
 bun run --filter @yaar/compiler test                # Compiler tests
+bun run --filter @yaar/tests test                   # Integration/security tests (packages/tests/)
 
-# Targeted tests — run bun test directly in the package with a path or -t pattern
-# (the server's `test` script is a composite; args don't pass through)
+# Full suite — what CI runs
+bun run test
+
+# Targeted tests — run bun test directly with a path or -t pattern (single-partition only)
+# (the server's `test` script is a composite that fans out per partition; args don't pass
+# through it, so target a specific file/pattern instead of `bun test src/tests`)
 cd packages/server && bun test src/tests/limiter.test.ts
 cd packages/frontend && bun test -t store
 
@@ -29,6 +36,9 @@ bun run typecheck
 # Linting
 make lint
 ```
+
+If a run is refused for mixing test partitions, don't fight it — run the printed commands
+separately, or fall back to the package's own `test` script.
 
 ## Process
 
@@ -49,7 +59,7 @@ If all tests pass, say so briefly with the count.
 
 ## Tips
 
-- Frontend tests use jsdom environment and Testing Library
-- Server tests may need environment variables (check test setup files)
+- Frontend tests use **happy-dom** (not jsdom) + Testing Library — no stylesheets/CSS/layout, never trust a visual assertion; DOMPurify's `sanitize()` also misbehaves under happy-dom (strips elements a real browser keeps)
+- Every `bun test` preloads `scripts/test/env.ts`, which scrubs `YAAR_*` env vars and points storage/config/session-logs at temp dirs — a failure should never be blamed on "the machine"
 - `bun run typecheck` runs `tsc --noEmit` across all packages — catches cross-package type errors
 - If a test is flaky (passes on retry), note it as flaky

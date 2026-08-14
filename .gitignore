@@ -50,6 +50,7 @@ apps/*/credentials.json
 # Claude Code
 .claude/*
 !.claude/agents/
+!.claude/skills/
 !.claude/settings.json
 !.claude/agent-memory/
 # Root-only: a downloaded `claude` binary. Must not be bare — a bare `claude`

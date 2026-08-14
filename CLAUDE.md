@@ -12,7 +12,7 @@ YAAR is a reactive AI interface where the AI decides what to show and do next. I
 
 **SDKs:**
 - **Claude:** Uses `@anthropic-ai/claude-agent-sdk` for programmatic Claude access. See [Agent SDK TypeScript Reference](https://platform.claude.com/docs/en/agent-sdk/typescript) for API documentation.
-- **Codex:** Uses `codex app-server` for JSON-RPC communication. See [docs/reference/codex_protocol.md](./docs/reference/codex_protocol.md) for protocol details. The protocol bindings are hand-generated (`make codex-types`), so a CLI older than `CODEX_MIN_VERSION` (`providers/codex/version.ts`) is **refused** rather than driven — at generation time, at provider auto-detect, and at the `initialize` handshake. Forcing `PROVIDER=codex` with an unsupported CLI refuses the boot; auto-detect just skips it. See [Version policy](./docs/reference/codex_protocol.md#version-policy).
+- **Codex:** Uses `codex app-server` for JSON-RPC communication, with hand-generated protocol bindings (`make codex-types`); a CLI older than `CODEX_MIN_VERSION` is **refused** rather than driven. Regeneration workflow and the refusal gates: the `codex-provider` skill. Protocol details: [docs/reference/codex_protocol.md](./docs/reference/codex_protocol.md).
 
 ## Commands
 
@@ -34,17 +34,13 @@ bun run format:check             # Check formatting without writing
 # Run individual packages
 make server                                  # Start server only
 
-# Apps (see "Compiling one app" below)
-bun run build:apps                           # Compile every stale app in apps/
-bun run build:apps devtools                  # Compile just these app ids, stale or not
-bun run build:apps devtools --typecheck      # ...and run tsc over the app's src/
+# Apps (workflows: the app-dev skill)
+bun run build:apps [appId...] [--typecheck]  # Compile stale apps, or the named ids stale or not
 bun run check:apps                           # App guardrail lint (no localStorage, etc.)
 
-# Testing
-bun run --filter @yaar/frontend test                 # Run all frontend tests
-bun run --filter @yaar/server test                    # Run all server tests
-bun run --filter @yaar/shared test                    # Run all shared tests
-bun run --filter @yaar/tests test                     # Run integration/security tests
+# Testing (details: the yaar-testing skill)
+bun run --filter @yaar/<pkg> test    # Per-package: frontend, server, shared, compiler, tests
+bun run test                         # Everything (what CI runs)
 
 # Standalone executable (requires Bun)
 bun run build:exe                # Build Windows executable
@@ -52,16 +48,10 @@ bun run build:exe:bundle:linux   # Build Linux executable
 bun run build:exe:bundle:macos   # Build macOS executable
 ```
 
-Test runs are environment-pinned and process-partitioned:
-
-- Every `bun test` preloads `scripts/test/env.ts` (wired in each `bunfig.toml`), which scrubs
-  `YAAR_*` and the knobs below and points config/storage/session-logs at temp dirs — a run describes the code,
-  not the machine.
-- Some test files cannot share a Bun process (`REMOTE=1` pinning, `mock.module` leaks, real
-  sockets/git). A run mixing partitions is **refused** by `scripts/test/partition-guard.ts`, which
-  prints the correct command for each. `bun test <path>` works from the repo root for any
-  single-partition path; for everything at once use `bun run test` (what CI runs).
-- The full rationale lives in `scripts/test/partitions.ts` and `packages/server/CLAUDE.md` (Tests).
+Test runs are environment-pinned (every `bun test` preloads `scripts/test/env.ts`, so a run
+describes the code, not the machine) and process-partitioned (a run mixing partitions is
+**refused**, printing the correct command for each). Commands, partition rationale, and
+happy-dom caveats: the `yaar-testing` skill and `scripts/test/partitions.ts`.
 
 ## Environment Variables
 
@@ -79,15 +69,9 @@ Test runs are environment-pinned and process-partitioned:
 ## Running YAAR Headlessly (Agents Driving YAAR)
 
 YAAR can be launched and driven by an external agent — including from inside another Claude Code
-session (`make claude-dev` after exporting `CLAUDE_CODE_OAUTH_TOKEN`; the harness scrubs
-nested-Claude env vars before the spawn, see `providers/claude/session-provider.ts`). Drive it
-**like a user, through the browser** — Chromium at `http://127.0.0.1:8000`, type into the command
-palette textarea (the only `<textarea>` on the page), Enter to send, `Shift+Tab` for the CLI panel.
-Internal HTTP routes and WebSocket frames are YAAR's own plumbing, **not** the supported entry
-point for outside automation. Never drive YAAR through YAAR's own Browser app (recursive
-rendering), and screenshot before each action — the AI may have moved windows.
-
-Full walkthrough, caveats, log-tailing, and the Claude-in-Claude stacking details:
+session. Drive it **like a user, through the browser**; internal HTTP routes and WebSocket frames
+are YAAR's own plumbing, **not** the supported entry point, and never drive YAAR through YAAR's
+own Browser app. Workflow and hard rules: the `headless-driving` skill; full walkthrough:
 [`docs/guides/headless_driving.md`](./docs/guides/headless_driving.md).
 
 ## Monorepo Structure
@@ -190,10 +174,7 @@ WebSocket connects → SessionHub.getOrCreate(sessionId)
 - `make dev` runs `scripts/dev/start.sh` which: builds shared package first → starts server (serves both API and frontend on single port)
 - Git branches: `dev` is where work lands; `main` is the stable branch (the default, so it is what `git clone` gives you) and only receives merges from `dev`; releases are cut by publishing a GitHub draft release targeting `main`. Open PRs against `dev` unless the change is a release promotion.
 - **Pre-commit hooks**: Husky runs `lint-staged` on commit — applies Prettier + ESLint fix to staged files automatically
-- **CI** (`.github/workflows/ci.yml`): thin caller for `.github/workflows/checks.yml` — the one definition of "is this tree good?", shared by CI and release so they cannot drift. Three escalating tiers: `dev` gets the baseline, anything touching `main` gets `full` (adds lint, format:check, check:apps), a release adds the version-vs-tag assertion and artifact smoke test. A check that should guard every push goes in the baseline; one that need only hold at ship time goes behind `full`.
-- **Branch protection**: repo rulesets (not files) block deletion/force-push on `main`/`dev` and force-update on `v*` tags; `main` requires the `ci / check` status, so `ci.yml`'s job id must stay `check`.
-- **Release**: `bun run release:prepare <version>` stamps the version on `dev`; the bump is promoted to `main` like any other change, then a draft release targeting `main` is published. On publish, `release.yml` re-verifies the pinned SHA with `full: true`, builds and smoke-tests artifacts, and publishes a `SHA256SUMS` manifest.
-- Full detail — ruleset rationale, the `SHA256SUMS` integrity model, `GET /api/version`'s two version sources, `.bun-version` vs `engines.bun` — in [`docs/reference/release_process.md`](./docs/reference/release_process.md).
+- **CI & release**: `.github/workflows/checks.yml` is the one definition of "is this tree good?" (three escalating tiers; `ci.yml`'s job id must stay `check`). Releases: `bun run release:prepare <version>` on `dev`, promote to `main`, publish a draft release targeting `main`. Tiers, rulesets, and the full flow: the `release` skill and [`docs/reference/release_process.md`](./docs/reference/release_process.md).
 
 ### Subagent Model Selection
 
@@ -214,90 +195,14 @@ When the main agent is **Fable**, always pass an explicit `model` to the `Agent`
 
 ## Apps System
 
-Convention-based: each folder in `apps/` becomes an app. `app.json` for metadata, `protocol.json` for agent-iframe communication — AI context is generated from the two at read time, with `agent/prompt.md` as an opt-in override (see below). See [`docs/guides/app-development.md`](./docs/guides/app-development.md) for full URI verbs reference and [`docs/reference/app_protocol_reference.md`](./docs/reference/app_protocol_reference.md) for protocol details.
+Convention-based: each folder in `apps/` becomes an app (`app.json` metadata, `protocol.json`
+agent-iframe protocol, compiled via Bun into one self-contained HTML file). Conventions —
+app-agent architecture, agent docs, design tokens, Solid gotchas, bundled libraries — live in
+[`apps/CLAUDE.md`](./apps/CLAUDE.md); build/verify workflows in the `app-dev` skill. Guides:
+[`docs/guides/app-development.md`](./docs/guides/app-development.md) (URI verbs),
+[`docs/reference/app_protocol_reference.md`](./docs/reference/app_protocol_reference.md).
 
-### Compiling one app (checking an edit without starting the server)
+The authoritative bundled-library list is `BUNDLED_LIBRARIES` in
+`packages/compiler/src/bundled/registry.ts` — linted by `scripts/check/doc-freshness.ts`; don't
+keep a second copy anywhere.
 
-`bun run build:apps <appId>` compiles the named apps to `apps/{id}/dist/`, whether or not the
-build manifest thinks they are stale — naming an app means "compile this one", and the staleness
-hash only covers the app's own sources, so an edit outside them (a bundled-library bump,
-`agent/prompt.md`) would otherwise report "skipped". With no ids it is the release/dev-server
-sweep and staleness applies. An id matching no app fails and lists the known ids, rather than
-reporting a clean build of nothing. Run it after `bun run --filter '*' build` — the script uses
-the compiler's built `dist/`.
-
-Three checks, and each only answers its own question:
-
-- `bun run build:apps <appId>` — Bun.build, the guards (Solid `html` templates, mount targets,
-  design tokens) and protocol extraction. It **transpiles types away**, so a green compile says
-  nothing about tsc.
-- `bun run build:apps <appId> --typecheck` — adds `tsc --noEmit` over the app's `src/`, with the
-  gated `@bundled/*` types its `app.json` `bundles` allows. Opt-in because it is the slow half.
-- `bun run check:apps` — the repo's app guardrail lint (`no-web-storage`, `no-promise-sleep`, …),
-  across every app at once.
-
-None of these run the app. For a change whose effect is visual or stateful, still open it — the
-`preview` route or a real session; `docs/guides/headless_driving.md` covers driving one.
-
-### App Agent Architecture
-
-When a user interacts with an app window, an **app agent** is created — one per `monitorId::appId`, reused across all windows of that app on that monitor, **not** shared across monitors — and retired, with its memory, when the app's **last** window on that monitor closes. Closing one of several windows leaves it standing: it is driving the others.
-
-App agents have four scoped tools: `describe` (the app's manual), `query` (read iframe state), `command` (execute iframe action), `relay` (hand off to monitor agent) — plus `direct_message` when `app.json` declares `"messaging": "all"`. The first three take an optional `appId` for **cross-app control**, gated by the caller's `app.json` `controls` list (**bundled apps only**); `discovery.ts` holds the parsing and that guard.
-
-The `storage:*` built-ins those tools intercept are **declared, not automatic**: an agent holds them only if its `app.json` names an entry under `yaar://storage/`, its own tree included. Every other app persists through a command its `protocol.json` declares — the iframe holds the SDK, the agent calls the command by name. The iframe side is untouched.
-
-Full tool surface, lifecycle and containment rules: `packages/server/CLAUDE.md` (Tools/MCP).
-
-**Agent docs — three files, three readers** (`AGENT_DOCS` in `features/apps/discovery.ts`):
-
-| File | Read by |
-|---|---|
-| `agent/prompt.md` | **Replaces** the app agent's base prompt entirely (no append tier). Either way the `protocol.json` manifest is appended as rendered call signatures. |
-| `agent/hint.md` | The **monitor agent's** system prompt — orchestration hints, auto-synced with install/uninstall |
-| `agent/SKILL.md` | No prompt. It is the hand-written manual `describe('yaar://apps/{id}')` returns — workflows, ordering, when *not* to use the app. `scripts/check/apps.ts` warns when it restates the protocol, which is served separately at `yaar://apps/{id}/protocol`. |
-
-Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }`. Root `AGENTS.md` is deliberately **not** read as a prompt — it keeps its ecosystem meaning (instructions to a coding agent editing that directory). **The full rules and rationale — override handling, legacy `HINT.md`, what clone and deploy carry — live in `discovery.ts`'s doc comments.**
-
-Key files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle), `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (the four tools).
-
-### Sub-agents (app-spawned AI instances)
-
-An app declaring `"subagents": { "max": N }` in `app.json` can spawn up to N **sub-agents** from its iframe via `yaar://apps/self/agents`: AI instances with an app-supplied system prompt, each its own provider session and memory. They hold no YAAR verbs, no permissions, and no principal, and may only be given tool names that route back to the app's own iframe.
-
-`subagents` and `streams` are **granted by the user at install time**, not by the manifest alone (unlike `controls`, which stays bundled-only) — the declaration is a *request*, recorded in `config/app-grants.json` and applied as a **ceiling**.
-
-Verb surface and containment rules: `packages/server/CLAUDE.md` (Tools/MCP). Design record and the four laws every new node must satisfy: [`docs/architecture/agent_tree.md`](./docs/architecture/agent_tree.md).
-
-### Compiler & Bundled Libraries
-
-Apps are compiled via Bun into a single self-contained HTML file. Entry point is always `src/main.ts`. The compiler injects design tokens, SDK scripts (capture, storage, verb, app-protocol, etc.), and the bundled code.
-
-**`@bundled/*` imports** — no `npm install` needed. 30+ libraries across UI (Solid.js), utilities, graphics/3D, data/charts, animation, audio, media files (`mediabunny` — read/write/convert mp4/webm/mp3/wav, frame-accurate and not real-time-bound like `MediaRecorder`), parsing, diagrams (`mermaid` — `renderMermaid()` returns token-themed SVG that is already sanitized; at 3.3 MB it is by far the largest, so import it only where diagrams are drawn), sanitization (`dompurify` — mandatory for any externally-sourced HTML), and validation (`zod` Mini functional API). Plus the **YAAR SDK** (`@bundled/yaar` — `read`, `invoke`, `list`, `describe`, `defineApp()`, `appStorage`, `appDb`, etc.) and **gated SDKs** requiring `"bundles"` in `app.json`: `@bundled/yaar-dev` (compile/typecheck/deploy + per-app version history), `@bundled/yaar-web` (browser automation), `@bundled/yaar-ml` (in-browser ONNX inference — see [`docs/guides/yaar_ml_runtime.md`](./docs/guides/yaar_ml_runtime.md)).
-
-The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/bundled/registry.ts`, also served at `GET /api/dev/bundled-libraries` and linted against the docs by `scripts/check/doc-freshness.ts`. Don't keep a second copy anywhere.
-
-Key files: `packages/compiler/src/compile.ts` (Bun.build + HTML wrapper), `packages/compiler/src/bundled/` (registry.ts = the library list, plugins.ts = resolution + gated SDK enforcement), `packages/compiler/src/shims/` (per-library shims, e.g. `yaar/` the SDK barrel, plus `yaar-dev.ts`, `yaar-web.ts`), `packages/compiler/src/protocol/` (manifest extraction from source), `packages/compiler/src/bundled-types/` (.d.ts files for typecheck).
-
-### Design Tokens
-
-The visual language (GitHub-dark) has a single source of truth: `packages/shared/src/design/tokens.ts` generates both the app-iframe CSS and the OS shell's `tokens.css` — never write token values by hand anywhere else. See [`docs/architecture/design_system.md`](./docs/architecture/design_system.md) for the rules (chrome vs content, exception registry) and `bun scripts/codegen/design-tokens.ts` to regenerate after token changes.
-
-All compiled apps get YAAR CSS custom properties and utility classes injected automatically:
-- **Colors**: `--yaar-bg`, `--yaar-bg-surface`, `--yaar-text`, `--yaar-text-muted`, `--yaar-accent`, `--yaar-border`, `--yaar-success`, `--yaar-error`
-- **Washes** (tinted backgrounds): `--yaar-wash-{accent,success,error,warning}` and a `-strong` (16%) variant of each, plus `--yaar-wash-accent-border` (35%). `color-mix()` over the color var, so they follow `.y-light` and any accent override — never hand-write `rgba(88,166,255,.1)` for a tint. A tinted *border* pairs a wash background with the **opaque** color token (`border-color: var(--yaar-success)`), as `.y-badge-*` does.
-- **Spacing**: `--yaar-sp-1` through `--yaar-sp-6` (4px increments), `--yaar-sp-8`/`-10`/`-12` (32/40/48px)
-- **Layout**: `y-app` (root container), `y-flex`, `y-flex-col`, `y-toolbar`, `y-sidebar`, `y-tabs`, `y-modal`, `y-empty` (centered placeholder with `y-empty-icon`)
-- **Components**: `y-btn`, `y-btn-primary`, `y-btn-ghost`, `y-btn-danger`, `y-btn-warning`, `y-input`, `y-select`, `y-card`, `y-badge`, `y-spinner`, `y-toast`, `y-list-item` (interactive row with hover/`.active` states)
-- **Status**: `y-wash-*` (tinted fill), `y-dot` + `y-dot-ok`/`-warn`/`-err`/`-accent`/`-pulse`, `y-progress` + `y-progress-fill` (add `y-progress-indeterminate` to the track for a sliding bar)
-- **Typography**: `y-label` (uppercase muted section header), `y-truncate` (single-line), `y-clamp-2`, `y-clamp-3` (multi-line truncation)
-
-Always use `var(--yaar-*)` for colors — never hardcode. Use `y-*` utility classes for common patterns.
-
-### Solid.js Gotchas
-
-Apps use Solid.js with `html` tagged templates (not JSX). Known issues:
-- **Nothing may precede the first tag**: `solid-js/html` discards top-level text that appears before the template's first tag, and a template whose only top-level node is the expression makes it emit `.firstChild` with no parent. So `` html`${x}` ``, `` html`hi ${x}` ``, and `` html`hi` `` throw a stackless `SyntaxError`/`TypeError` from `new Function`, while `` html`lead <b>x</b>` `` silently drops `lead `. Wrap content in an element (`` html`<span>hi ${x}</span>` ``), or return the accessor (`() => x`) instead of wrapping it. The compiler fails the build on all four — see `guards/solid-html-guard.ts`.
-- **`flex: 1` breaks reactivity**: Use `position: absolute; inset: 0` instead
-- **Closing tags**: `</${Component}>` is auto-fixed by compiler plugin to `</>`
-- **Event handler props**: Can re-fire during render if passed as reactive props — bind handlers outside reactive scope

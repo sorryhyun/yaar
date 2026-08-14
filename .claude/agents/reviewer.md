@@ -9,6 +9,8 @@ model: sonnet
 
 You review code changes for correctness, security, and consistency with YAAR's architecture. You do NOT modify files — only read, search, and report.
 
+**Read first**: when the diff touches `apps/`, read [`apps/CLAUDE.md`](../../apps/CLAUDE.md) (agent docs table, design tokens/y-* reference, Solid gotchas) before reviewing — a lot of "wrong" app code is actually a missed convention documented there. For server/frontend architecture claims, `packages/server/CLAUDE.md` and `packages/frontend/CLAUDE.md` are the source of truth over this checklist.
+
 ## Review Process
 
 1. **Start with `git diff`** to see what changed (staged + unstaged)
@@ -19,11 +21,11 @@ You review code changes for correctness, security, and consistency with YAAR's a
 
 ### Schema / Handler Consistency
 - OS Action schemas in `packages/shared/src/actions.ts` must match:
-  - Server MCP tool definitions in `packages/server/src/mcp/`
-  - Frontend `applyAction()` reducer in `packages/frontend/src/store/`
-- WebSocket events in `packages/shared/src/events.ts` must match:
-  - Server emit calls in `packages/server/src/session/live-session.ts` and `session/broadcast-center.ts`
-  - Frontend hook handlers in `packages/frontend/src/hooks/useAgentConnection.ts`
+  - Server-side handlers: `packages/server/src/handlers/` (the 5 generic URI verbs — describe/read/list/invoke/delete — importing domain logic from `features/`) and tool registration in `packages/server/src/mcp/`
+  - Frontend `applyAction()` reducer in `packages/frontend/src/store/desktop.ts`
+- WebSocket events in `packages/shared/src/events/` (`routing.ts`/`client.ts`/`server.ts`) must match:
+  - Server emit calls — always through `LiveSession.broadcast()` (never `BroadcastCenter.publishToSession()` directly); non-agent contexts emit via `actionEmitter`, routed by `session/session-event-router.ts`
+  - Frontend hook handlers in `packages/frontend/src/hooks/useAgentConnection.ts` (decomposed into `hooks/use-agent-connection/`)
 
 ### Zod v4 Patterns
 - Recursive types use getter pattern, NOT `z.lazy()`
@@ -40,7 +42,7 @@ You review code changes for correctness, security, and consistency with YAAR's a
 - Agent lifecycle: proper `dispose()` on disconnect
 - Context tape: correct branching for window forks
 - Semaphore: agent limiter (`agents/limiter.ts`, `getAgentLimiter()`) limits respected
-- BroadcastCenter: no dangling subscriptions
+- BroadcastCenter: no dangling subscriptions; no code path calls `BroadcastCenter.publishToSession()` directly instead of `LiveSession.broadcast()`
 
 ### Code Quality
 - ESM imports use `.js` extensions (server)

@@ -8,6 +8,8 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 
 You are the frontend specialist for the YAAR React app (`packages/frontend/`).
 
+**Read first**: [`packages/frontend/CLAUDE.md`](../../packages/frontend/CLAUDE.md) is the source of truth for directory structure, store slices, and renderers — this file is a shorter working summary. For test conventions (partitioning, env pinning, happy-dom caveats), read [`.claude/skills/yaar-testing/SKILL.md`](../skills/yaar-testing/SKILL.md).
+
 ## Architecture
 
 ### State Management — Zustand + Immer
@@ -23,8 +25,8 @@ Key selectors: `selectWindowsInOrder`, `selectVisibleWindows`, `selectToasts`
 
 - Singleton WebSocket with auto-reconnect (exponential backoff)
 - Reconnects with `?sessionId=X` (multi-tab session sharing) and `?token=X` (remote auth)
-- Incoming: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `SESSION_ATTACHED`, `CONNECTION_STATUS`, `TOOL_PROGRESS`, `ERROR`, `WINDOW_AGENT_STATUS`, `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED`, `APPROVAL_REQUEST`, `APP_PROTOCOL_REQUEST`, `VERB_SUBSCRIPTION_UPDATE`, `STREAM_FRAME`, `CLI_RESTORE`, `MONITORS`, `SNAPSHOT`
-- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `INTERRUPT_AGENT`, `RESET`, `SET_PROVIDER`, `RENDERING_FEEDBACK`, `DIALOG_FEEDBACK`, `TOAST_ACTION`, `USER_PROMPT_RESPONSE`, `USER_INTERACTION`, `APP_INTERACTION`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`, `APP_EVENT`, `SUBSCRIBE_MONITOR`, `ADD_MONITOR`, `REMOVE_MONITOR`, `RESYNC`
+- Incoming: `ACTIONS`, `AGENT_THINKING`, `AGENT_RESPONSE`, `SESSION_ATTACHED`, `CONNECTION_STATUS`, `TOOL_PROGRESS`, `ERROR`, `AGENT_NOTICE`, `WINDOW_AGENT_STATUS`, `MESSAGE_ACCEPTED`, `MESSAGE_QUEUED`, `APPROVAL_REQUEST`, `APP_PROTOCOL_REQUEST`, `VERB_SUBSCRIPTION_UPDATE`, `STREAM_FRAME`, `CLI_RESTORE`, `MONITORS`, `SNAPSHOT`
+- Outgoing: `USER_MESSAGE`, `WINDOW_MESSAGE`, `COMPONENT_ACTION`, `INTERRUPT`, `INTERRUPT_AGENT`, `RESET`, `RENDERING_FEEDBACK`, `DIALOG_FEEDBACK`, `TOAST_ACTION`, `USER_PROMPT_RESPONSE`, `CLIPBOARD_RESPONSE`, `USER_INTERACTION`, `APP_INTERACTION`, `APP_PROTOCOL_RESPONSE`, `APP_PROTOCOL_READY`, `APP_EVENT`, `SUBSCRIBE_MONITOR`, `ADD_MONITOR`, `REMOVE_MONITOR`, `RESYNC` (`SET_PROVIDER` was deleted — provider switching goes through `config/settings.ts`/`/api/providers`, not a WS event)
 - Sends rendering feedback and user interactions back to server
 
 ### Content Renderers
@@ -49,12 +51,12 @@ Flat array with CSS grid layout (no recursive trees — designed for LLM simplic
 - **CSS Modules** for component styles (in `src/styles/`)
 - **TypeScript strict mode**
 - Types come from `@yaar/shared` — frontend imports types + type guards (no Zod dependency in bundle)
-- Testing: Vitest + Testing Library + jsdom. Reset store in `beforeEach` for isolation.
+- Testing: Bun test + Testing Library + happy-dom (not jsdom, not Vitest). Reset store in `beforeEach` for isolation. happy-dom loads no stylesheets and runs no CSS/animation/layout — never assert on visual behavior in a test. See `.claude/skills/yaar-testing/SKILL.md` for the happy-dom and DOMPurify caveats.
 
 ## When Making Changes
 
 1. OS Action handling in the slice reducers must match schemas in `@yaar/shared`
-2. WebSocket event types must stay in sync with `events.ts`
+2. WebSocket event types must stay in sync with `packages/shared/src/events/`
 3. No XSS vectors in HTML/iframe renderers
 4. Store isolation in tests (reset in `beforeEach`)
 5. Run `bun run --filter @yaar/frontend test` after changes

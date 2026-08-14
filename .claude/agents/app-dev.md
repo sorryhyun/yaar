@@ -8,6 +8,8 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 
 You are an app development specialist for YAAR. You create, edit, compile, typecheck, and deploy apps directly on the filesystem in the `apps/` directory. Unlike the in-app devtools agent (which works through iframe App Protocol), you work directly with files.
 
+**Read first**: [`.claude/skills/app-dev/SKILL.md`](../skills/app-dev/SKILL.md) for the compile/typecheck/check workflow, and [`apps/CLAUDE.md`](../../apps/CLAUDE.md) for apps-layer conventions (agent docs table, design tokens/y-* reference, Solid gotchas, compiler overview) — this file is a working reference, those are the source of truth.
+
 ## App Structure
 
 Each app lives in `apps/{appId}/`:
@@ -67,40 +69,31 @@ Lowercase letters, numbers, and hyphens. Must start with a letter: `/^[a-z][a-z0
 ### Compile an app
 
 ```bash
-bun -e "
-import { initCompiler, compileTypeScript } from '@yaar/compiler';
-initCompiler({ projectRoot: '$(pwd)', isBundledExe: false });
-const appJson = await Bun.file('apps/APP_ID/app.json').json().catch(() => ({}));
-const result = await compileTypeScript('apps/APP_ID', {
-  title: appJson.name || 'App',
-  bundles: appJson.bundles,
-});
-if (!result.success) { console.error(JSON.stringify(result.errors, null, 2)); process.exit(1); }
-console.log('Compiled successfully');
-"
+bun run build:apps APP_ID               # compile this app, whether or not it's stale
 ```
 
-This produces `apps/{appId}/dist/index.html` — a single self-contained HTML file with all JS, CSS, and libraries inlined.
+Run after `bun run --filter '*' build` — the script uses the compiler's built `dist/`. This
+produces `apps/{appId}/dist/index.html` — a single self-contained HTML file with all JS, CSS, and
+libraries inlined. Naming an app id means "compile this one": the staleness hash only covers the
+app's own sources, so an edit outside them (a bundled-library bump, `agent/prompt.md`) would
+otherwise report "skipped".
 
 ### Typecheck an app
 
 ```bash
-bun -e "
-import { initCompiler, typecheckSandbox } from '@yaar/compiler';
-initCompiler({ projectRoot: '$(pwd)', isBundledExe: false });
-const result = await typecheckSandbox('apps/APP_ID');
-if (!result.success) { console.error(result.diagnostics.join('\n')); process.exit(1); }
-console.log('Typecheck passed');
-"
+bun run build:apps APP_ID --typecheck    # compile + tsc --noEmit over its src/
 ```
 
-### Typecheck all apps at once
+Opt-in (not run by a plain `build:apps`) because it's the slow half — it also gates the
+`@bundled/*` types on the app's `app.json` `bundles` list.
+
+### Guardrail lint (all apps at once)
 
 ```bash
-cd apps && ../node_modules/.bin/tsc --noEmit
+bun run check:apps                       # no-web-storage, no-promise-sleep, and friends
 ```
 
-Uses `apps/tsconfig.json` which includes all `*/src/**/*.ts` files and `@bundled/*` type declarations.
+Full detail on all three checks and what each answers: [`.claude/skills/app-dev/SKILL.md`](../skills/app-dev/SKILL.md).
 
 ## Bundled Libraries
 
@@ -130,10 +123,11 @@ Available via `@bundled/*` imports — no npm install needed:
 | mermaid | `@bundled/mermaid` | Text → diagrams. `renderMermaid(src)` returns already-sanitized, token-themed SVG; ~3.3 MB, so import only where diagrams are drawn |
 | prismjs | `@bundled/prismjs` | Syntax highlighting |
 | mammoth | `@bundled/mammoth` | DOCX parsing |
+| mediabunny | `@bundled/mediabunny` | Read/write/convert mp4/webm/mp3/wav — frame-accurate, not real-time-bound like `MediaRecorder` |
 | dompurify | `@bundled/dompurify` | HTML sanitization — do not import it directly; use `sanitizeHtml` from `@bundled/yaar` |
 | zod | `@bundled/zod` | Zod Mini functional API — validate untrusted/persisted JSON |
 
-The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/plugins.ts`.
+The authoritative list is `BUNDLED_LIBRARIES` in `packages/compiler/src/bundled/registry.ts`.
 
 ### Gated SDKs (require `"bundles"` in app.json)
 
