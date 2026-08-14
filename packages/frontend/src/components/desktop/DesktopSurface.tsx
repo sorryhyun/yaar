@@ -77,15 +77,25 @@ export function DesktopSurface() {
   const [selectedAppIds, setSelectedAppIds] = useState<Set<string>>(new Set());
 
   // Global keyboard shortcuts: Shift+Tab for CLI mode, Ctrl+1..9 for monitors, Ctrl+W to close focused window
+  //
+  // Capture phase, and each combo is claimed with stopImmediatePropagation(). These are
+  // RESERVED_KEYBINDINGS (`@yaar/shared/app-protocol`), whose stated contract is that the
+  // shell handles them before anything else does — a bubble-phase listener gave every
+  // component in the tree first refusal instead. The iframe-side forwarder in
+  // `iframe-scripts/contextmenu.ts` is capture-phase for the same reason.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
+      const claim = () => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      };
       // Block browser refresh shortcuts (F5, Ctrl+R)
       if (e.key === 'F5' || (e.ctrlKey && e.key === 'r')) {
-        e.preventDefault();
+        claim();
         return;
       }
       if (e.key === 'Tab' && e.shiftKey) {
-        e.preventDefault();
+        claim();
         useDesktopStore.getState().toggleCliMode();
         return;
       }
@@ -93,7 +103,7 @@ export function DesktopSurface() {
         const idx = parseInt(e.key) - 1;
         const mons = useDesktopStore.getState().monitors;
         if (idx < mons.length) {
-          e.preventDefault();
+          claim();
           switchMonitor(mons[idx].id);
         }
       }
@@ -101,13 +111,13 @@ export function DesktopSurface() {
       if (e.ctrlKey && e.key === 'w') {
         const { focusedWindowId: fwId, userCloseWindow } = useDesktopStore.getState();
         if (fwId) {
-          e.preventDefault();
+          claim();
           userCloseWindow(fwId);
         }
       }
     };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
+    document.addEventListener('keydown', handler, true);
+    return () => document.removeEventListener('keydown', handler, true);
   }, [switchMonitor]);
 
   // Forward keyboard shortcuts from focused iframes (they can't bubble to document)

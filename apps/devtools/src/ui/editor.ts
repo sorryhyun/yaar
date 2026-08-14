@@ -201,7 +201,9 @@ function TextEditor() {
               e.preventDefault();
               saveNow();
             }
-            if (e.key === 'Tab') {
+            // Plain Tab only. Shift+Tab belongs to the shell (it opens the CLI panel),
+            // and indenting on it made the editor eat the OS shortcut.
+            if (e.key === 'Tab' && !e.shiftKey) {
               e.preventDefault();
               const ta = e.target as HTMLTextAreaElement;
               const start = ta.selectionStart;

@@ -88,8 +88,13 @@ import { join, basename } from 'path';
  * a devtools preview publish into the shipped app's commons directory on top of real user
  * files. An app whose source nobody edits would keep doing that forever, and the apps
  * being previewed are precisely the ones that have not been edited yet.
+ *
+ * '23': the contextmenu/shortcut-forwarding script joined the baked-in SDK set. Same
+ * reasoning as '20' and '22' — it is baked into `dist/`, so without a bump whether an
+ * origin-isolated app forwards Shift+Tab would depend on when it was last stale, and
+ * the installed apps nobody is about to edit are exactly the ones that swallow it.
  */
-export const COMPILER_VERSION = '22';
+export const COMPILER_VERSION = '23';
 
 export interface BuildManifest {
   sourceHash: string;

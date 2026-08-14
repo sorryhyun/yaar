@@ -1,13 +1,21 @@
 /**
  * Inline JS interaction helper for iframe apps.
  *
- * Handles interactions inside same-origin iframes:
+ * Handles interactions inside an app iframe:
  * 1. Right-click drawing — forwards pointer events to parent for freehand drawing
  * 2. Context menu — always suppressed (drawing uses right-click drag)
  * 3. Cursor tracking — posts `yaar:cursor-move` so parent overlays pinned to the
  *    cursor keep following it while the pointer is inside the frame
  * 4. Left click — posts `yaar:click` so parent can dismiss overlays
  * 5. Text drag — posts `yaar:drag-start` so parent can track cross-window drags
+ * 6. Reserved shortcuts — posts `yaar:keydown` for the combos the shell owns
+ *
+ * Reaches the frame two ways, and needs both. `IframeRenderer` injects it on load,
+ * which only works **same-origin** — an origin-isolated app (`source: 'user'`, the
+ * default locally) throws on `contentDocument` and got none of the above. So the
+ * compiler also bakes it into every compiled app (`compile.ts`), where it is the
+ * only copy an isolated app ever has. Every listener here is therefore registered
+ * at most once by `installGuard`, because a bundled app gets both.
  */
 import { APP_MSG } from '../app-protocol.js';
 import { installGuard } from './prelude.js';
@@ -90,14 +98,29 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
 
   // Forward global keyboard shortcuts to the parent so they work even
   // when the iframe has focus (Shift+Tab, Ctrl+1-9, Ctrl+W).
-  document.addEventListener('keydown', function(e) {
+  //
+  // Capture phase on \`window\`, and the event is *claimed* — the contract in
+  // \`app-protocol.ts\` (RESERVED_KEYBINDINGS) is that the shell handles these
+  // "before any app sees them", and a bubble-phase listener on \`document\` is
+  // the opposite of that: every app handler runs first, so an app that keys off
+  // \`e.key === 'Tab'\` (devtools' editor did) consumed Shift+Tab, and one that
+  // called stopPropagation() suppressed the forward entirely. preventDefault()
+  // alone does not help there — it stops the browser's focus walk, not the
+  // app's own handler.
+  window.addEventListener('keydown', function(e) {
     var dominated = false;
     if (e.key === 'Tab' && e.shiftKey) dominated = true;
     if (e.ctrlKey && e.key >= '1' && e.key <= '9') dominated = true;
     if (e.ctrlKey && e.key === 'w') dominated = true;
     if (!dominated) return;
     e.preventDefault();
-    window.parent.postMessage({
+    e.stopImmediatePropagation();
+    // \`top\`, not \`parent\` — the only message here that skips the intermediate frames.
+    // An app can embed another app (devtools' preview does), and \`parent\` is one hop:
+    // the inner frame's shortcut landed in the outer app, which has no handler for it,
+    // and died there. The rest of this script posts to \`parent\` because it is reporting
+    // frame-relative coordinates that only the direct embedder can place.
+    (window.top || window.parent).postMessage({
       type: '${APP_MSG.keydown}',
       key: e.key,
       shiftKey: e.shiftKey,
@@ -105,7 +128,7 @@ export const IFRAME_CONTEXTMENU_SCRIPT = `
       altKey: e.altKey,
       metaKey: e.metaKey
     }, '*');
-  });
+  }, true);
 
   // Drag: notify parent so it can track cross-window drags.
   // Handles both text selection drags and draggable element drags (e.g. storage items).

@@ -25,6 +25,7 @@ import {
   IFRAME_VERB_SDK_SCRIPT,
   IFRAME_FETCH_PROXY_SCRIPT,
   IFRAME_APP_PROTOCOL_SCRIPT,
+  IFRAME_CONTEXTMENU_SCRIPT,
   IFRAME_NOTIFICATIONS_SDK_SCRIPT,
   IFRAME_WINDOWS_SDK_SCRIPT,
   IFRAME_CONSOLE_CAPTURE_SCRIPT,
@@ -88,6 +89,13 @@ function getRawSdkScripts(): string {
     IFRAME_VERB_SDK_SCRIPT,
     IFRAME_FETCH_PROXY_SCRIPT,
     IFRAME_APP_PROTOCOL_SCRIPT,
+    // Baked in rather than injected, because `IframeRenderer` can only inject into a
+    // **same-origin** frame and an origin-isolated app (`source: 'user'`) is not one.
+    // Without it such an app forwarded none of the shell's reserved shortcuts, so
+    // Shift+Tab fell through to the browser's own focus walk inside the frame — the
+    // CLI panel never opened and focus moved to the next control instead. Idempotent
+    // (`installGuard`), so a bundled app that also gets the injected copy is unharmed.
+    IFRAME_CONTEXTMENU_SCRIPT,
     IFRAME_NOTIFICATIONS_SDK_SCRIPT,
     IFRAME_WINDOWS_SDK_SCRIPT,
     IFRAME_CONSOLE_CAPTURE_SCRIPT,
