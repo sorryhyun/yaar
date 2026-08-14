@@ -1,6 +1,29 @@
 import { formatClock } from '@bundled/yaar';
 import type { SessionSummary } from './types';
 
+/**
+ * A plain, structured-cloneable snapshot of store data.
+ *
+ * Everything in `store.ts` lives behind a Solid store **proxy**, and the
+ * structured clone algorithm does not run proxy traps — it reads internal
+ * slots — so a Proxy is simply not cloneable. Handing `state.sessions`
+ * straight to an app-protocol state getter therefore fails the postMessage
+ * hop out of the iframe with `DataCloneError`, no matter how plain the data
+ * underneath is. The JSON round-trip both unwraps the proxy and drops the
+ * things clone would reject anyway (functions, undefined, symbols), so what
+ * the getter returns is guaranteed transferable.
+ *
+ * Every protocol state getter that touches the store must go through this.
+ */
+export function toPlain<T>(v: T): T | null {
+  if (v == null) return null;
+  try {
+    return JSON.parse(JSON.stringify(v)) as T;
+  } catch {
+    return null;
+  }
+}
+
 /** YYYY-MM-DD HH:MM in local time */
 export function formatDateTime(iso: string | undefined): string {
   if (!iso) return '-';

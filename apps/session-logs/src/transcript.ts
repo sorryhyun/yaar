@@ -34,7 +34,7 @@ type Seg = { code: boolean; text: string };
 
 /** Split content into alternating text / fenced-code segments. */
 function segments(content: string): Seg[] {
-  const parts = content.split(/```/);
+  const parts = String(content ?? '').split(/```/);
   const segs: Seg[] = [];
   parts.forEach((t, i) => {
     const code = i % 2 === 1;
@@ -198,27 +198,67 @@ export const MessageCard = (m: ParsedMessage) => {
   return row ? LogRow(row) : ProseCard(m);
 };
 
+/**
+ * The ONE source of turns.
+ *
+ * The count badge and the list must read the same accessor. When they read
+ * separate expressions they can disagree — and they did: a render throw in the
+ * list left the badge showing "6874 turns" above a raw-markdown dump, because
+ * the badge's memo had already committed and the list's had aborted.
+ */
+const turns = (): ParsedMessage[] => (Array.isArray(state.messages) ? state.messages : []);
+
+/**
+ * Render one turn, never throwing.
+ *
+ * The list render happens synchronously inside `setState`, so an exception in
+ * a single row unwinds past `For` and aborts the whole DOM update — leaving
+ * whatever was on screen before. One malformed entry must cost one row.
+ */
+const SafeMessageCard = (m: ParsedMessage) => {
+  try {
+    return MessageCard(m);
+  } catch (e) {
+    console.error('Failed to render turn', m?.type, e);
+    return html`<div class="log-row log-static role-error">
+      <span class="log-verb y-font-mono">render</span>
+      <span class="log-target y-font-mono">could not display this ${m?.type ?? 'entry'}</span>
+    </div>`;
+  }
+};
+
 /** Transcript section: structured cards when available, raw markdown fallback. */
 export const TranscriptSection = () => html`
   <div class="transcript-section">
     <div class="transcript-toolbar">
       <span class="y-label transcript-title">Transcript</span>
       ${() =>
-        state.messages && state.messages.length
-          ? html`<span class="msg-count y-font-mono">${state.messages.length} turns</span>`
+        turns().length
+          ? html`<span class="msg-count y-font-mono">${turns().length} turns</span>`
           : null}
     </div>
     <div class="transcript-body">
       ${() => {
-        if (state.messages && state.messages.length) {
+        if (turns().length) {
           return html`
-            <${For} each=${() => state.messages ?? []}>
-              ${(m: ParsedMessage) => MessageCard(m)}
+            <${For} each=${turns}>
+              ${(m: ParsedMessage) => SafeMessageCard(m)}
             </${For}>
           `;
         }
         if (state.transcript) {
-          return html`<pre class="transcript-raw y-font-mono">${state.transcript}</pre>`;
+          // Falling back to the server-rendered markdown is legitimate, but it
+          // used to be silent — indistinguishable from a broken renderer. Say
+          // why there are no structured turns.
+          return html`
+            ${() =>
+              state.messagesError
+                ? html`<div class="transcript-note">
+                    Showing the raw transcript — ${state.messagesError}
+                  </div>`
+                : null}
+            <pre class="transcript-raw y-font-mono">${state.transcript}</pre>
+          `;
         }
         return html`<div class="transcript-loading">
           <span class="y-spinner"></span> Loading transcript…

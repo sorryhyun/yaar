@@ -63,6 +63,19 @@
   color: var(--yaar-text-muted);
 }
 
+/* Why the raw markdown is showing. Sits above .transcript-raw in the
+   fallback branch, so it must not shrink (see .transcript-body > *). */
+.transcript-note {
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  border: 1px solid var(--yaar-border);
+  border-left: 2px solid var(--yaar-warning);
+  border-radius: var(--yaar-radius-sm);
+  background: var(--yaar-wash-warning);
+  color: var(--yaar-text-muted);
+  font-size: var(--yaar-text-xs);
+}
+
 .transcript-raw {
   font-size: 11px;
   color: var(--yaar-text-muted);

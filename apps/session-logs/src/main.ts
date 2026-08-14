@@ -5,7 +5,7 @@ import './styles/index';
 
 import { state, setState } from './store';
 import { loadSessions, loadDetail } from './api';
-import { getDateKey, formatDateLabel, providerLabel } from './utils';
+import { getDateKey, formatDateLabel, providerLabel, toPlain } from './utils';
 import { SessionItem, DetailEmpty, DetailView } from './components';
 import { narrow, sidebarVisible, toggleSidebar, closeDrawer, watchViewport } from './ui';
 import type { SessionSummary } from './types';
@@ -133,18 +133,20 @@ export default defineApp({
   state: {
     sessions: {
       description: 'List of session summaries (id, provider, date, agentCount)',
+      // `toPlain` is not optional here: state.sessions is a store proxy and the
+      // postMessage hop out of the iframe cannot clone one. See utils.toPlain.
       get: () =>
         state.sessions.length
           ? {
               currentSessionId: state.currentSessionId || null,
               total: state.sessions.length,
-              sessions: state.sessions,
+              sessions: toPlain(state.sessions) ?? [],
             }
           : null,
     },
     selectedSession: {
       description: 'Currently selected session detail object',
-      get: () => state.detail,
+      get: () => toPlain(state.detail),
     },
     transcript: {
       description: 'Markdown transcript of the selected session',
@@ -153,7 +155,9 @@ export default defineApp({
     messages: {
       description: 'Structured parsed messages array for the selected session',
       get: () =>
-        state.messages ? { count: state.messages.length, messages: state.messages } : null,
+        state.messages
+          ? { count: state.messages.length, messages: toPlain(state.messages) ?? [] }
+          : null,
     },
   },
   commands: {

@@ -37,17 +37,39 @@ const IDENTIFYING_KEYS = [
   'text',
 ];
 
+/**
+ * Coerce anything to a string before string methods touch it.
+ *
+ * `api.normalizeMessages` already guarantees this for entries it produced, but
+ * these helpers are the last line before `.split`/`.slice`, and a throw here
+ * blanks the ENTIRE transcript rather than one row — the render runs inside
+ * setState, so the exception unwinds past the list and aborts the DOM update.
+ * Cheap insurance; do not remove it because the types say `string`.
+ */
+function str(v: unknown): string {
+  if (typeof v === 'string') return v;
+  if (v == null) return '';
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  try {
+    return JSON.stringify(v) ?? '';
+  } catch {
+    return '';
+  }
+}
+
 /** `mcp__verbs__read` → `read`, `mcp__app__command` → `command`. */
 export function shortToolName(name: string): string {
-  const parts = name.split('__').filter(Boolean);
-  return parts.length ? parts[parts.length - 1] : name;
+  const n = str(name);
+  const parts = n.split('__').filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : n;
 }
 
 /**
  * Drop the middle, keep both ends. A URI's head (scheme/app) and tail (the
  * actual resource) are both informative; it is the middle that is filler.
  */
-export function middleTruncate(s: string, max = 72): string {
+export function middleTruncate(input: unknown, max = 72): string {
+  const s = str(input);
   if (s.length <= max) return s;
   const tail = Math.max(10, Math.floor((max - 1) * 0.62));
   const head = Math.max(4, max - 1 - tail);
@@ -63,7 +85,8 @@ export function middleTruncate(s: string, max = 72): string {
  * tail that never shrinks. Truncation then adapts to the real width and the
  * resource name always survives.
  */
-export function splitTarget(s: string, maxTail = 20): { head: string; tail: string } {
+export function splitTarget(input: unknown, maxTail = 20): { head: string; tail: string } {
+  const s = str(input);
   // Only for things whose tail is the payload — a URI or a path. Prose (a
   // reasoning preview, an error message) is informative at its *head*, so it
   // gets ordinary end-clipping instead.
@@ -85,7 +108,8 @@ export function splitTarget(s: string, maxTail = 20): { head: string; tail: stri
 }
 
 /** First non-empty line, whitespace collapsed, clipped at the end. */
-export function firstLine(s: string | undefined, max = 90): string {
+export function firstLine(input: unknown, max = 90): string {
+  const s = str(input);
   if (!s) return '';
   const line =
     s
@@ -149,8 +173,8 @@ export interface ToolSummary {
  * the name suffix, the target is `input.uri`); anything else degrades to the
  * tool's short name plus its most identifying parameter.
  */
-export function toolSummary(toolName: string | undefined, toolInput: unknown): ToolSummary {
-  const name = (toolName ?? '').trim() || 'tool';
+export function toolSummary(toolName: unknown, toolInput: unknown): ToolSummary {
+  const name = str(toolName).trim() || 'tool';
   const input = asRecord(toolInput);
 
   const verbMatch = name.match(VERB_TOOL);
@@ -169,9 +193,10 @@ export function toolSummary(toolName: string | undefined, toolInput: unknown): T
 }
 
 /** Does a tool result read like a failure? Drives the row's accent color. */
-export function looksLikeError(content: string | undefined): boolean {
-  if (!content) return false;
+export function looksLikeError(content: unknown): boolean {
+  const s = str(content);
+  if (!s) return false;
   return /\b(error|failed|failure|not permitted|denied|refused|exception|traceback|enoent)\b/i.test(
-    content.slice(0, 200),
+    s.slice(0, 200),
   );
 }

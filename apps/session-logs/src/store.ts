@@ -8,6 +8,7 @@ export const [state, setState] = createStore({
   detail: null as SessionDetail | null,
   transcript: null as string | null,
   messages: null as ParsedMessage[] | null,
+  messagesError: null as string | null,
   loading: false,
   detailLoading: false,
   search: '',
