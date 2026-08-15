@@ -101,7 +101,6 @@ AI가 devtools 앱에 deploy 명령을 보냅니다.
 - `app.json` 작성. 앱을 다시 읽으면(`yaar://apps/{appId}`) 읽는 시점에 `app.json`의 `description`과 `protocol.json`으로부터 생성된 참조 문서가 항상 반환되므로, deploy가 이를 위해 따로 쓰는 파일은 없음 — 직접 작성한 `agent/prompt.md`/`agent/hint.md`는 앱 디렉터리에 있는 그대로 사용됨
 - 바탕화면에 아이콘 즉시 등장
 - `appProtocol`: App Protocol 지원 여부 표시 (설정하지 않으면 HTML에서 자동 감지)
-- `fileAssociations`: 파일 확장자를 파일 열기용 `app_command` 호출에 매핑
 
 ### 기존 앱 수정 — clone → 편집 → compile → deploy
 
@@ -662,7 +661,6 @@ apps/my-app/
 | `agent` | `{ prompt?, hint? }` | 이 앱의 프롬프트 파일 기본 경로(`agent/prompt.md`, `agent/hint.md`) 오버라이드 |
 | `messaging` | `"all"` | 앱 에이전트가 모니터/사용자뿐 아니라 다른 앱/윈도우에도 `direct_message`할 수 있게 함 |
 | `controls` | `(string \| { appId, commands?, background? })[]` | 이 앱이 조작할 수 있는 다른 앱. 호출자의 모니터에 대상 앱 윈도우가 없으면 하나를 열어 줍니다. `background: true`면 최소화 상태로 엽니다. **번들 앱 전용** |
-| `fileAssociations` | `{ extensions, command, paramKey }[]` | 프로토콜 명령을 호출해 일치하는 파일 열기 |
 | `variant` | `"widget" \| "panel"` | 윈도우 변형 |
 | `dockEdge` | `"top" \| "bottom"` | 윈도우를 화면 가장자리에 도킹 |
 | `frameless` | `boolean` | 윈도우 크롬 제거 |

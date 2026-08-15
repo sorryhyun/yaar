@@ -113,7 +113,7 @@ When a `previewEval` has to wait a long or open-ended time, don't raise the time
 
 **Deploy is destructive**: it overwrites source and deletes files no longer present. It snapshots the previous version first — see **Version History**.
 
-**All app metadata lives in `app.json`** — `appId`, `permissions`, `bundles`, `variant`, `frameless`, `windowStyle`, `capture`, `createShortcut`, `fileAssociations`, `agentType`, `controls`, `messaging`. Cloning copies it into the sandbox; edit it there before deploying and deploy picks it up automatically.
+**All app metadata lives in `app.json`** — `appId`, `permissions`, `bundles`, `variant`, `frameless`, `windowStyle`, `capture`, `createShortcut`, `agentType`, `controls`, `messaging`. Cloning copies it into the sandbox; edit it there before deploying and deploy picks it up automatically.
 
 **`appId` is the field `defineApp({ id })` is checked against** — not `id`, which nothing reads. `createProject` writes it, cloning preserves it, and deploying under a *different* id is refused rather than left to fail at the deployed app's next build. To rename, change both `appId` in `app.json` and `id` in `src/main.ts`, then deploy under that name.
 

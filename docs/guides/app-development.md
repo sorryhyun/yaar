@@ -111,7 +111,6 @@ The AI sends a deploy command to the devtools app.
   keep serving the code the deploy just replaced. The deploying window itself is spared,
   so an app can deploy itself; the closed handles come back as `closedWindows`
 - `appProtocol`: Mark app as supporting App Protocol (auto-detected from HTML if not set)
-- `fileAssociations`: Map file extensions to app_command calls for file opening
 
 ### Editing Existing Apps — clone → edit → compile → deploy
 
@@ -786,7 +785,6 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `controls` | `(string \| { appId, commands? , background? })[]` | Other apps this app may drive. A target with no window on the caller's monitor gets one opened; `background: true` opens it minimized. **Bundled apps only** |
 | `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Approved at install** |
 | `subagents` | `{ max: number }` | Ceiling on [sub-agents](#sub-agents-personas) this app may spawn per monitor. Clamped to 16; a non-integer or `≤ 0` reads as "none". **Approved at install** |
-| `fileAssociations` | `{ extensions, command, paramKey }[]` | Open matching files by invoking a protocol command |
 | `variant` | `"widget" \| "panel"` | Window variant |
 | `dockEdge` | `"top" \| "bottom"` | Dock the window to a screen edge |
 | `frameless` | `boolean` | Drop the window chrome |

@@ -6,7 +6,7 @@ import { readdir, stat } from 'fs/promises';
 import { join } from 'path';
 import { hasConfig } from './config.js';
 import { APP_ROOTS, resolveAppDir, resolveAppSource, type AppSource } from './roots.js';
-import type { AppManifest, FileAssociation } from '@yaar/shared';
+import type { AppManifest } from '@yaar/shared';
 import { buildYaarUri } from '@yaar/shared';
 // Must stay `import type`. `http/access.ts` imports `http/iframe-tokens.ts`, which
 // imports this module statically for `getAppMeta` — the cycle is closed only because
@@ -261,7 +261,6 @@ export interface AppInfo {
   run?: string; // yaar:// URI for iframe content (e.g. yaar://apps/{id} or yaar://apps/{id}/dist/index.html)
   isCompiled?: boolean; // Has index.html (TypeScript compiled app)
   protocol?: Pick<AppManifest, 'state' | 'commands' | 'keybindings' | '$defs'>; // From protocol.json — implies appProtocol support
-  fileAssociations?: FileAssociation[];
   variant?: WindowVariantType;
   dockEdge?: DockEdgeType;
   frameless?: boolean;
@@ -298,7 +297,6 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
   let run: string | undefined;
   let kind: AppKind = 'app';
   let protocol: Pick<AppManifest, 'state' | 'commands' | 'keybindings' | '$defs'> | undefined;
-  let fileAssociations: FileAssociation[] | undefined;
   let variant: WindowVariantType | undefined;
   let dockEdge: DockEdgeType | undefined;
   let frameless: boolean | undefined;
@@ -321,7 +319,6 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     if (meta.createShortcut === false || meta.hidden === true) createShortcut = false;
     if (typeof meta.run === 'string') run = meta.run;
     if (meta.kind === 'system') kind = 'system';
-    if (Array.isArray(meta.fileAssociations)) fileAssociations = meta.fileAssociations;
     if (meta.variant === 'widget' || meta.variant === 'panel') variant = meta.variant;
     if (meta.dockEdge === 'top' || meta.dockEdge === 'bottom') dockEdge = meta.dockEdge;
     if (meta.frameless === true) frameless = true;
@@ -409,7 +406,6 @@ async function readAppInfo(root: string, appId: string, source: AppSource): Prom
     ...(resolvedRun && { run: resolvedRun }),
     isCompiled,
     ...(protocol && { protocol }),
-    ...(fileAssociations && { fileAssociations }),
     ...(variant && { variant }),
     ...(dockEdge && { dockEdge }),
     ...(frameless && { frameless }),

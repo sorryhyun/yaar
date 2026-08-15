@@ -464,30 +464,6 @@ Two rules make it safe to reach for:
 
 ---
 
-## File Associations
-
-Apps can declare file types they can open in `app.json`:
-
-```json
-{
-  "fileAssociations": [
-    { "extensions": [".csv", ".xlsx"], "command": "openFile", "paramKey": "content" }
-  ]
-}
-```
-
-```typescript
-interface FileAssociation {
-  extensions: string[];   // File extensions (e.g. [".pdf", ".txt"])
-  command: string;        // App protocol command to invoke
-  paramKey: string;       // Parameter key for the file content
-}
-```
-
-When a user opens a file with a matching extension, the agent invokes `app_command` with the specified `command` and the file content in the `paramKey` parameter.
-
----
-
 ## Server-Side Internals
 
 ### ActionEmitter
