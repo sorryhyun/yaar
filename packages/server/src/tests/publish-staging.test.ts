@@ -21,7 +21,14 @@ import {
   getPendingPublication,
   __setBaselineForTest,
 } from '../features/apps/publish-staging.js';
-import { isNewerVersion, parseSemver, versionPublishError } from '../features/apps/version.js';
+import {
+  isNewerVersion,
+  notePublishedVersion,
+  parseSemver,
+  publishedVersion,
+  versionPublishError,
+  __resetPublishedHereForTest,
+} from '../features/apps/version.js';
 import { PUBLISHER_TERMS_VERSION } from '../features/apps/publisher-terms.js';
 import type { PublishResult } from '../features/apps/publish.js';
 
@@ -305,6 +312,26 @@ describe('version guard', () => {
         throw new Error('offline');
       }),
     ).toBeNull();
+  });
+
+  it('trusts what this process published over a catalog that has not caught up', async () => {
+    __resetPublishedHereForTest();
+    // The marketplace commits, then redeploys: for about a minute after a publish the
+    // catalog keeps serving the version from before it.
+    const laggingCatalog = async () => '1.4.0';
+
+    expect(await publishedVersion('x', laggingCatalog)).toBe('1.4.0');
+    notePublishedVersion('x', '1.5.0');
+    expect(await publishedVersion('x', laggingCatalog)).toBe('1.5.0');
+
+    // An unbumped second publish is caught here instead of by the marketplace.
+    expect(
+      await versionPublishError('x', '1.5.0', (id) => publishedVersion(id, laggingCatalog)),
+    ).toMatch(/not newer/);
+
+    // A catalog that has overtaken this process's memory still wins.
+    expect(await publishedVersion('x', async () => '2.0.0')).toBe('2.0.0');
+    __resetPublishedHereForTest();
   });
 
   it('refuses prepare — no freeze — when the version is already published', async () => {

@@ -11,6 +11,21 @@
 import { MARKET_URL } from '../../config.js';
 import { getIdToken } from './google-auth.js';
 
+/**
+ * How long a fetched catalog stays usable for the publish version guard.
+ *
+ * Staleness is **fail-open by construction**: an older catalog can only name a
+ * *lower* published version than reality, which makes the guard more permissive,
+ * never wrongly blocking a publish. The marketplace enforces its own version policy
+ * server-side and stays the authority — this only decides how often the local
+ * courtesy check pays a round trip in front of the Publish button.
+ */
+const CATALOG_TTL_MS = 5 * 60 * 1000;
+
+let catalogCache: { versions: Map<string, string>; fetchedAt: number } | null = null;
+/** One in-flight fetch shared by concurrent callers, so a warm + a prepare don't race two. */
+let catalogInFlight: Promise<Map<string, string> | null> | null = null;
+
 export interface PublisherIdentity {
   /** The signed-in email, or null when signed out. Mirrors the marketplace's answer. */
   email: string | null;
@@ -29,6 +44,12 @@ const SIGNED_OUT: PublisherIdentity = { email: null, apps: [] };
  * `getAuthStatus`) is the authority on whether a login exists at all.
  */
 export async function fetchMe(): Promise<PublisherIdentity> {
+  // The Market Apps window reads this on mount, and the Publish button is one press
+  // away from there. Warm the catalog now, off the critical path, so the version
+  // guard in `publish_prepare` is a memory lookup instead of a Vercel round trip
+  // the user waits on with the dialog not yet open.
+  primePublishedVersions();
+
   let idToken: string | null;
   try {
     idToken = await getIdToken();
@@ -61,15 +82,17 @@ export async function fetchMe(): Promise<PublisherIdentity> {
 }
 
 /**
- * The version the marketplace currently serves for `appId`, or null if the app is
- * unpublished or the public catalog can't be read.
+ * The whole public catalog as `id → version`, or null when it can't be read.
  *
  * The catalog (`GET /api/apps`) is public and uncredentialed — it is the same
  * listing the market-apps iframe fetches — so no ID token is attached. Sourced from
  * `MARKET_URL`, the exact origin `uploadTarball` publishes to, so the comparison is
  * against where the bytes would actually land.
+ *
+ * A failed read is **not** cached: the next caller retries rather than inheriting a
+ * five-minute "catalog unreachable".
  */
-export async function fetchPublishedVersion(appId: string): Promise<string | null> {
+async function fetchCatalogVersions(): Promise<Map<string, string> | null> {
   let res: Response;
   try {
     res = await fetch(`${MARKET_URL}/api/apps`);
@@ -82,16 +105,56 @@ export async function fetchPublishedVersion(appId: string): Promise<string | nul
     apps?: unknown[];
     marketApps?: unknown[];
   } | null;
+  if (!body) return null;
 
+  const versions = new Map<string, string>();
   const entries = [
-    ...(Array.isArray(body?.apps) ? body.apps : []),
-    ...(Array.isArray(body?.marketApps) ? body.marketApps : []),
+    ...(Array.isArray(body.apps) ? body.apps : []),
+    ...(Array.isArray(body.marketApps) ? body.marketApps : []),
   ];
   for (const entry of entries) {
     if (entry && typeof entry === 'object') {
       const e = entry as { id?: unknown; version?: unknown };
-      if (e.id === appId && typeof e.version === 'string') return e.version;
+      if (typeof e.id === 'string' && typeof e.version === 'string') versions.set(e.id, e.version);
     }
   }
-  return null;
+
+  catalogCache = { versions, fetchedAt: Date.now() };
+  return versions;
+}
+
+/** The cached catalog, refetched past its TTL. Never rejects. */
+async function catalogVersions(): Promise<Map<string, string> | null> {
+  if (catalogCache && Date.now() - catalogCache.fetchedAt < CATALOG_TTL_MS) {
+    return catalogCache.versions;
+  }
+  if (!catalogInFlight) {
+    catalogInFlight = fetchCatalogVersions().finally(() => {
+      catalogInFlight = null;
+    });
+  }
+  return catalogInFlight;
+}
+
+/**
+ * Start filling the catalog cache without waiting for it. For callers that know a
+ * publish is plausibly imminent and would rather spend the round trip now than in
+ * front of a button press.
+ */
+export function primePublishedVersions(): void {
+  void catalogVersions();
+}
+
+/**
+ * The version the marketplace currently serves for `appId`, or null if the app is
+ * unpublished or the public catalog can't be read.
+ */
+export async function fetchPublishedVersion(appId: string): Promise<string | null> {
+  return (await catalogVersions())?.get(appId) ?? null;
+}
+
+/** Test-only: drop the cached catalog so the next read refetches. */
+export function __resetCatalogCacheForTest(): void {
+  catalogCache = null;
+  catalogInFlight = null;
 }

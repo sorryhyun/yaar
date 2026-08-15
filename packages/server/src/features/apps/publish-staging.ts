@@ -32,7 +32,7 @@ import { computeSourceHash, computeAppJsonHash } from '@yaar/compiler';
 import { getStorageDir } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
 import { appIdRefusal, resolveAppDir } from './roots.js';
-import { readAppVersion, versionPublishError } from './version.js';
+import { notePublishedVersion, readAppVersion, versionPublishError } from './version.js';
 import { packageAppTarball, uploadTarball, type PublishResult } from './publish.js';
 import {
   acceptForSignedInPublisher,
@@ -349,7 +349,11 @@ export async function finalizePublication(
   // the caller can retry the same bytes while the nonce/TTL is still valid. An
   // unaccepted-terms refusal is exactly such a retryable state — the freeze stays,
   // and the dialog can send the acceptance and confirm again.
-  if (result.success) await cancelPublication(publicationId);
+  if (result.success) {
+    // The catalog will not show this for about a minute; tell the guard directly.
+    notePublishedVersion(p.appId, p.version);
+    await cancelPublication(publicationId);
+  }
   if (result.code === 'terms_required') {
     return { status: 'terms_required', result, message: result.error };
   }

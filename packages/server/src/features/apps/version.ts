@@ -60,6 +60,49 @@ export function isNewerVersion(local: string, published: string): boolean {
 }
 
 /**
+ * Versions this process has successfully published, by app id.
+ *
+ * The catalog cannot confirm a publish the moment it lands — the marketplace commits
+ * and then redeploys, so `GET /api/apps` keeps serving the *previous* version for
+ * about a minute (and `marketplace.ts` caches that answer on top). Without this, a
+ * second press of Publish on an unbumped app sails past the local guard and is
+ * refused by the marketplace instead, several seconds later and in worse words.
+ *
+ * In-memory and never expired: it only ever raises the version we compare against,
+ * and a restart falls back to the catalog, which by then has caught up.
+ */
+const publishedHere = new Map<string, string>();
+
+/** Record a successful upload so the guard stops trusting the lagging catalog. */
+export function notePublishedVersion(appId: string, version: string | null): void {
+  if (version) publishedHere.set(appId, version);
+}
+
+/** Test-only: forget what this process published. */
+export function __resetPublishedHereForTest(): void {
+  publishedHere.clear();
+}
+
+/**
+ * The production answer to "what version is out there": the catalog, raised by
+ * anything this process published that the catalog has not caught up to yet.
+ *
+ * This is the *default* `publishedVersionOf`, not a layer on top of it, so a caller
+ * that injects its own source — a test driving the policy — gets exactly what it
+ * injected and nothing from this process's memory. `catalogVersionOf` is the same
+ * seam one level down, for exercising the catalog-vs-memory choice offline.
+ */
+export async function publishedVersion(
+  appId: string,
+  catalogVersionOf: (id: string) => Promise<string | null> = fetchPublishedVersion,
+): Promise<string | null> {
+  const listed = await catalogVersionOf(appId);
+  const here = publishedHere.get(appId) ?? null;
+  if (!listed || !here) return listed ?? here;
+  return isNewerVersion(here, listed) ? here : listed;
+}
+
+/**
  * The publish-blocking reason, or null if the version is publishable.
  *
  * `publishedVersionOf` is injectable purely so tests can drive the policy without a
@@ -68,7 +111,7 @@ export function isNewerVersion(local: string, published: string): boolean {
 export async function versionPublishError(
   appId: string,
   localVersion: string | null,
-  publishedVersionOf: (id: string) => Promise<string | null> = fetchPublishedVersion,
+  publishedVersionOf: (id: string) => Promise<string | null> = publishedVersion,
 ): Promise<string | null> {
   const published = await publishedVersionOf(appId).catch(() => null);
   if (!published) return null; // first publish, or catalog unreachable → allow

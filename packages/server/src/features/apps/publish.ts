@@ -17,7 +17,7 @@ import { MARKET_URL } from '../../config.js';
 import { getAuthStatus, getIdToken } from '../market/google-auth.js';
 import { termsGateError } from './publisher-terms.js';
 import { appIdRefusal, resolveAppDir } from './roots.js';
-import { readAppVersion, versionPublishError } from './version.js';
+import { notePublishedVersion, readAppVersion, versionPublishError } from './version.js';
 import { errMessage } from '../../lib/errors.js';
 
 /** Upstream hiccups, not a rejection of this publish — worth another shot. */
@@ -197,7 +197,8 @@ export async function publishApp(appId: string): Promise<PublishResult> {
   const appDir = resolveAppDir(appId);
   if (!appDir) return { success: false, error: `App "${appId}" is not installed.` };
 
-  const versionError = await versionPublishError(appId, await readAppVersion(appDir));
+  const version = await readAppVersion(appDir);
+  const versionError = await versionPublishError(appId, version);
   if (versionError) return { success: false, error: versionError };
 
   let tarball: Buffer;
@@ -207,5 +208,8 @@ export async function publishApp(appId: string): Promise<PublishResult> {
     return { success: false, error: `Failed to package "${appId}": ${errMessage(err)}` };
   }
 
-  return uploadTarball(appId, tarball);
+  const result = await uploadTarball(appId, tarball);
+  // The catalog will not show this for about a minute; tell the guard directly.
+  if (result.success) notePublishedVersion(appId, version);
+  return result;
 }

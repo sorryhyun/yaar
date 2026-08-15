@@ -227,7 +227,10 @@ export async function confirmPublish(acknowledgeDrift = false): Promise<void> {
         setTermsAgreed(false);
         setStatus(outcome.message || `Published ${pending.app.name} to the marketplace`);
         // Ownership may have just been claimed — refresh so the badge reflects it.
-        await refreshAccount();
+        // Not awaited: the publish is already done and reported, and this is two more
+        // round trips (one of them to the marketplace) that would otherwise hold the
+        // dialog's spinner up after the only answer the user was waiting for arrived.
+        void refreshAccount();
       } else if (outcome.status === 'drift_detected') {
         setPendingPublish({
           ...pending,
