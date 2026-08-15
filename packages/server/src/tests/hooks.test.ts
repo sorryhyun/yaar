@@ -48,8 +48,15 @@ mock.module('../storage/storage-manager.js', () => ({
   storageGrep: async () => ({ success: true, matches: [] }),
 }));
 
-const { loadHooks, addHook, removeHook, getHooksByEvent, getToolUseHooks, _resetHooksCache } =
-  await import('../features/config/hooks.js');
+const {
+  loadHooks,
+  addHook,
+  removeHook,
+  getHooksByEvent,
+  getToolUseHooks,
+  markHookRun,
+  _resetHooksCache,
+} = await import('../features/config/hooks.js');
 
 describe('hooks storage', () => {
   beforeEach(async () => {
@@ -145,6 +152,59 @@ describe('hooks storage', () => {
 
     const hooks = await loadHooks();
     expect(hooks).toEqual([]);
+  });
+});
+
+describe('schedule hooks', () => {
+  beforeEach(async () => {
+    _resetHooksCache();
+    await mkdir(TEST_CONFIG_DIR, { recursive: true });
+    await rm(HOOKS_FILE, { force: true });
+  });
+
+  afterEach(async () => {
+    await rm(HOOKS_FILE, { force: true });
+  });
+
+  it('stores the cadence and target monitor', async () => {
+    const hook = await addHook(
+      'schedule',
+      { type: 'interaction', payload: 'Check the build' },
+      'Build watch',
+      undefined,
+      { schedule: { every: '30m' }, monitorId: '1' },
+    );
+
+    expect(hook.schedule).toEqual({ every: '30m' });
+    expect(hook.monitorId).toBe('1');
+    expect(hook.lastRunAt).toBeUndefined();
+
+    const [stored] = await getHooksByEvent('schedule');
+    expect(stored?.schedule).toEqual({ every: '30m' });
+  });
+
+  it('persists lastRunAt so a restart does not replay the occurrence', async () => {
+    const hook = await addHook(
+      'schedule',
+      { type: 'os_action', payload: { type: 'toast.show', id: 't', message: 'tick' } },
+      'Ticker',
+      undefined,
+      { schedule: { at: '09:00' } },
+    );
+
+    const slot = new Date('2026-08-15T09:00:00.000Z');
+    await markHookRun(hook.id, slot);
+
+    // Through the cache...
+    expect((await loadHooks())[0]?.lastRunAt).toBe(slot.toISOString());
+
+    // ...and through the file, which is the half that survives a restart.
+    _resetHooksCache();
+    expect((await loadHooks())[0]?.lastRunAt).toBe(slot.toISOString());
+  });
+
+  it('ignores a run marked against an unknown hook', async () => {
+    await expect(markHookRun('hook-999', new Date())).resolves.toBeUndefined();
   });
 });
 

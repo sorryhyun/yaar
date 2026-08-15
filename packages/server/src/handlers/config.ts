@@ -272,9 +272,19 @@ export function registerConfigHandlers(registry: ResourceRegistry): void {
       type: 'object',
       required: ['event', 'label', 'action'],
       properties: {
-        event: { type: 'string', enum: ['launch', 'tool_use'] },
+        event: { type: 'string', enum: ['launch', 'tool_use', 'schedule'] },
         label: { type: 'string' },
         filter: { type: 'object' },
+        schedule: {
+          type: 'object',
+          description:
+            'Required for event "schedule", rejected otherwise. Exactly one of `every` ("15m", "2h", "1d"; minimum 1m) or `at` (24-hour local time, "09:00"). A due occurrence is dropped, not queued, when no session is connected.',
+          properties: { every: { type: 'string' }, at: { type: 'string' } },
+        },
+        monitorId: {
+          type: 'string',
+          description: 'Which desktop a "schedule" hook acts on. Defaults to the first monitor.',
+        },
         action: { type: 'object' },
       },
     },

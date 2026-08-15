@@ -32,6 +32,7 @@ import { installProxyPortBoundary, installLoopbackAliasBoundary } from './http/o
 import { initCompiler } from '@yaar/compiler';
 import type { WebSocketServerOptions } from './websocket/index.js';
 import { initSessionHub, getSessionHub } from './session/session-hub.js';
+import { startHookScheduler, stopHookScheduler } from './features/config/hook-scheduler.js';
 import { setAccessPrincipalResolver } from './handlers/uri-registry.js';
 import { setUndelegatedUriResolver, setWindowGrantResolver } from './http/access.js';
 import { getAccessPrincipal, getLogContext } from './agents/agent-context.js';
@@ -138,6 +139,10 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
 
   // Initialize session hub (LiveSession instances created on first WS connection)
   initSessionHub();
+
+  // The clock behind `schedule` hooks. Started before any session exists — it delivers
+  // into whatever is connected when an occurrence comes due, and drops it when nothing is.
+  startHookScheduler();
 
   await initMcpServer();
 
@@ -426,6 +431,10 @@ export async function shutdown(server: Server<any>, ...alsoStop: Server<any>[]):
   }, 5_000);
 
   try {
+    // Before the sessions go: a tick that starts mid-drain would deliver into a session
+    // that is already tearing down.
+    stopHookScheduler();
+
     // First, while the deadline above still has room: every live session, so each
     // `SessionLogger` flushes its debounced write buffer. Nothing else here rescues
     // it, and the buffer is the only shutdown casualty that cannot be recreated.

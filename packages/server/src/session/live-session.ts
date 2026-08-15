@@ -59,7 +59,7 @@ import { genId } from '../lib/ids.js';
 import { getWarmPool } from '../providers/warm-pool.js';
 import type { AITransport } from '../providers/types.js';
 import { getHeadlessBrowser, getLocalBrowser } from '../lib/browser/index.js';
-import { getHooksByEvent } from '../features/config/hooks.js';
+import { getHooksByEvent, type Hook } from '../features/config/hooks.js';
 import { subscriptionRegistry } from '../http/subscriptions.js';
 import { revokeTokensForWindow } from '../http/iframe-tokens.js';
 import { storageDocumentUri } from '../features/window/helpers.js';
@@ -476,45 +476,85 @@ export class LiveSession {
     try {
       const hooks = await getHooksByEvent('launch');
       for (const hook of hooks) {
-        if (hook.action.type === 'interaction') {
-          const messageId = genId(`hook-${hook.id}`);
-          await this.routeMessage(
-            { type: ClientEventType.USER_MESSAGE, content: hook.action.payload, messageId },
-            connectionId,
-          );
-        } else if (hook.action.type === 'os_action') {
-          const action = hook.action.payload as OSAction;
-          const hookLogger = this.getSessionLogger();
-          if (action.type.startsWith('window.')) {
-            // Resolved before *and* after the registry write, for the same reason every
-            // other emit path does it: a launch hook that closes a window resolves to
-            // nothing once the close has been applied. See `window-handle-stamp.ts`.
-            const raw = actionWindowId(action);
-            const priorHandle = raw ? this.resolveWindowHandle(raw, DEFAULT_MONITOR_ID) : undefined;
-            this.windowState.handleAction(action, DEFAULT_MONITOR_ID);
-            const stamped = stampWindowHandle(
-              action,
-              windowHandleFor(action, this.resolveWindowHandle, DEFAULT_MONITOR_ID, priorHandle),
-            );
-            hookLogger?.logAction(stamped);
-            this.broadcast({
-              type: ServerEventType.ACTIONS,
-              actions: [stamped],
-              monitorId: DEFAULT_MONITOR_ID,
-            });
-          } else {
-            hookLogger?.logAction(action);
-            this.broadcast({
-              type: ServerEventType.ACTIONS,
-              actions: [action],
-              monitorId: DEFAULT_MONITOR_ID,
-            });
-          }
-        }
+        await this.runHookAction(hook, DEFAULT_MONITOR_ID, connectionId);
       }
     } catch (err) {
       this.log.error('failed to execute launch hooks', { err });
     }
+  }
+
+  /**
+   * Run one hook's action against this session.
+   *
+   * Shared by the events that fire whole hooks — `launch` above and `schedule`
+   * (`features/config/hook-scheduler.ts`) — so that what a hook *means* does not depend
+   * on what tripped it. (`tool_use` hooks emit their OS Actions through the stream
+   * mapper's own bridge, mid-turn, where the agent context is already bound.)
+   *
+   * An `interaction` enters through `routeMessage`, the same front door a typed message
+   * uses: it must be queued, acked, and logged like one, because from the agent's side
+   * that is exactly what it is.
+   */
+  async runHookAction(hook: Hook, monitorId: string, connectionId?: ConnectionId): Promise<void> {
+    if (hook.action.type === 'interaction') {
+      const target = connectionId ?? this.anyConnectionId();
+      if (!target) return;
+      const messageId = genId(`hook-${hook.id}`);
+      await this.routeMessage(
+        {
+          type: ClientEventType.USER_MESSAGE,
+          content: hook.action.payload,
+          messageId,
+          monitorId,
+        },
+        target,
+      );
+      return;
+    }
+
+    if (hook.action.type !== 'os_action') return;
+
+    const hookLogger = this.getSessionLogger();
+    for (const action of ([] as OSAction[]).concat(hook.action.payload as OSAction)) {
+      if (action.type.startsWith('window.')) {
+        // Resolved before *and* after the registry write, for the same reason every
+        // other emit path does it: a hook that closes a window resolves to nothing
+        // once the close has been applied. See `window-handle-stamp.ts`.
+        const raw = actionWindowId(action);
+        const priorHandle = raw ? this.resolveWindowHandle(raw, monitorId) : undefined;
+        this.windowState.handleAction(action, monitorId);
+        const stamped = stampWindowHandle(
+          action,
+          windowHandleFor(action, this.resolveWindowHandle, monitorId, priorHandle),
+        );
+        hookLogger?.logAction(stamped);
+        this.broadcast({ type: ServerEventType.ACTIONS, actions: [stamped], monitorId });
+      } else {
+        hookLogger?.logAction(action);
+        this.broadcast({ type: ServerEventType.ACTIONS, actions: [action], monitorId });
+      }
+    }
+  }
+
+  /**
+   * Any connection, for a server-initiated message that still has to enter through the
+   * front door. Callers that have a connection of their own pass it instead.
+   */
+  private anyConnectionId(): ConnectionId | null {
+    for (const id of this.connections.keys()) return id;
+    return null;
+  }
+
+  /**
+   * Is this monitor's main queue mid-turn, or backed up behind one?
+   *
+   * Asked by anything that fires on a clock rather than on the user: a scheduled
+   * interaction that queues behind a slow turn every time it comes due turns a 1m hook
+   * into an unbounded backlog. Never creates a queue — a monitor nobody has spoken to
+   * is idle by definition.
+   */
+  isMonitorBusy(monitorId: string): boolean {
+    return this.pool?.isMonitorBusy(monitorId) ?? false;
   }
 
   private async ensureInitialized(): Promise<boolean> {

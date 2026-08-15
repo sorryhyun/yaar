@@ -7,6 +7,7 @@
 
 import type { OSAction } from '@yaar/shared';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
+import type { HookSchedule } from './hook-schedule.js';
 
 export type HookAction =
   | { type: 'interaction'; payload: string }
@@ -27,10 +28,26 @@ export interface Hook {
   id: string;
   event: string;
   filter?: HookFilter;
+  /** When this hook fires, for `schedule` hooks. See `hook-schedule.ts`. */
+  schedule?: HookSchedule;
+  /** Which desktop a `schedule` hook acts on. Defaults to the first monitor. */
+  monitorId?: string;
   action: HookAction;
   label: string;
   enabled: boolean;
   createdAt: string;
+  /**
+   * The occurrence this hook last fired for — the scheduled slot, not the moment the
+   * tick noticed it. Persisted so a restart neither re-fires a daily hook at every
+   * boot nor replays the ones it slept through. See `hook-schedule.ts`.
+   */
+  lastRunAt?: string;
+}
+
+/** Fields only some events carry, kept out of `addHook`'s positional arguments. */
+export interface HookExtras {
+  schedule?: HookSchedule;
+  monitorId?: string;
 }
 
 interface HooksFile {
@@ -92,6 +109,7 @@ export async function addHook(
   action: HookAction,
   label: string,
   filter?: HookFilter,
+  extras?: HookExtras,
 ): Promise<Hook> {
   const data = await loadHooksFile();
   data.idCounter += 1;
@@ -100,6 +118,8 @@ export async function addHook(
     id: `hook-${data.idCounter}`,
     event,
     ...(filter && { filter }),
+    ...(extras?.schedule && { schedule: extras.schedule }),
+    ...(extras?.monitorId && { monitorId: extras.monitorId }),
     action,
     label,
     enabled: true,
@@ -109,6 +129,21 @@ export async function addHook(
   data.hooks.push(hook);
   await saveHooksFile(data);
   return hook;
+}
+
+/**
+ * Record that a hook fired for the occurrence `slot`.
+ *
+ * Written through `saveHooksFile` rather than mutating the cache in place, because the
+ * scheduler is the one hook consumer that has to survive a restart: a `lastRunAt` that
+ * lives only in memory would replay every schedule hook on the next boot.
+ */
+export async function markHookRun(hookId: string, slot: Date): Promise<void> {
+  const data = await loadHooksFile();
+  const hook = data.hooks.find((h) => h.id === hookId);
+  if (!hook) return;
+  hook.lastRunAt = slot.toISOString();
+  await saveHooksFile(data);
 }
 
 /** Check if a value matches a single-or-array filter. */

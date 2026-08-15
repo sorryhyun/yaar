@@ -56,6 +56,15 @@ export class MonitorQueuePolicy {
     return dropped;
   }
 
+  /**
+   * Mid-turn, or with work waiting behind one. Distinct from `canEnqueue()`: that asks
+   * whether there is room, this asks whether the user's monitor is already occupied —
+   * the question a clock-driven caller has to answer before adding to the pile.
+   */
+  isBusy(): boolean {
+    return this.processing || this.queue.length > 0;
+  }
+
   beginProcessing(): boolean {
     if (this.processing) return false;
     this.processing = true;

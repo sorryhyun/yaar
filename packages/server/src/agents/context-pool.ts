@@ -215,6 +215,11 @@ export class ContextPool implements PoolContext {
     return timeline;
   }
 
+  /** Whether this monitor's main queue is occupied. Never creates one. */
+  isMonitorBusy(monitorId: string): boolean {
+    return this.monitorQueues.get(monitorId)?.isBusy() ?? false;
+  }
+
   getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy {
     let queue = this.monitorQueues.get(monitorId);
     if (!queue) {
