@@ -24,10 +24,14 @@ export default defineApp({
   events: {
     worker: {
       description:
-        'A worker sub-agent task settled. Payload: { taskId, answer?, error?, elapsedMs }. ' +
-        'Emitted with wakeAgent for a task the app agent started (so it can end its turn ' +
-        'and be woken by the answer) and without it for one the user ran from the Worker ' +
-        'panel, which nobody is waiting on.',
+        'Worker sub-agent progress. Two shapes, told apart by `kind`: "result" — the task ' +
+        'settled, { kind, taskId, task, answer?, error?, reports?, elapsedMs }, exactly one ' +
+        'of answer/error always present; and "report" — an interim finding posted mid-task, ' +
+        '{ kind, taskId, task, report, reportIndex, elapsedMs }, which means the task is ' +
+        'STILL RUNNING. Emitted with wakeAgent for a task the app agent started (so it can ' +
+        'end its turn and be woken) and without it for one the user ran from the Worker ' +
+        'panel, which nobody is waiting on; a report additionally wakes only when the worker ' +
+        'marked it urgent.',
     },
   },
   state: devtoolsState,

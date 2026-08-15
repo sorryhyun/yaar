@@ -195,12 +195,14 @@ export const devtoolsState = {
   worker: {
     description:
       'The worker sub-agent (see workerTask): its status (offline | spawning | idle | ' +
-      'running | error) and the tail of its transcript — tasks, tool calls, answers, ' +
-      'errors, newest last. `activeTask` is the backgrounded task in flight ' +
-      '({ taskId, task, elapsedMs }) or null; `lastResult` is the last one to finish ' +
-      '({ taskId, answer, error, elapsedMs }). This is the poll-shaped read: it never ' +
-      'blocks, so use it to check on a task while you work. To *wait* for one, call ' +
-      'workerWait instead of polling this in a loop.',
+      'running | error) and the tail of its transcript — tasks, tool calls, interim ' +
+      'reports, answers, errors, newest last. `activeTask` is the backgrounded task in ' +
+      'flight ({ taskId, task, elapsedMs, reports }) or null — its `reports` are the ' +
+      'findings posted so far, which is how you see what a long task has turned up before ' +
+      'it ends; `lastResult` is the last one to finish ({ taskId, answer, error, reports, ' +
+      'elapsedMs }), always carrying an answer or an error. This is the poll-shaped read: ' +
+      'it never blocks, so use it to check on a task while you work. To *wait* for one, ' +
+      'call workerWait instead of polling this in a loop.',
     get: () => {
       const entries = workerEntries();
       // Tool lines are one-liners; tasks and answers can be long. Cap per entry so a
@@ -216,6 +218,7 @@ export const devtoolsState = {
               taskId: active.id,
               task: clip(active.task),
               elapsedMs: Date.now() - active.startedAt,
+              ...(active.reports?.length ? { reports: active.reports.map(clip) } : {}),
             }
           : null,
         lastResult: last
@@ -223,6 +226,7 @@ export const devtoolsState = {
               taskId: last.id,
               ...(last.answer ? { answer: clip(last.answer) } : {}),
               ...(last.error ? { error: last.error } : {}),
+              ...(last.reports?.length ? { reports: last.reports.map(clip) } : {}),
               elapsedMs: (last.endedAt ?? Date.now()) - last.startedAt,
             }
           : null,

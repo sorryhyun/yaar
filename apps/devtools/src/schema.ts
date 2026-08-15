@@ -112,6 +112,13 @@ export const WorkerFrameDataSchema = z.looseObject({
   content: z.optional(z.string()),
   text: z.optional(z.string()),
   error: z.optional(z.string()),
+  /**
+   * On a `done` frame: how the turn ended ('completed' | 'interrupted'). Read
+   * rather than ignored because the two are otherwise indistinguishable here —
+   * an interrupted turn carries whatever text it had managed, so without this a
+   * half-answer reads as a finished one.
+   */
+  status: z.optional(z.string()),
 });
 
 export type PersonaHandle = z.infer<typeof PersonaHandleSchema>;

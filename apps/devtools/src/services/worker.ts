@@ -8,10 +8,16 @@ import { PersonaHandleSchema, WorkerFrameDataSchema } from '../schema';
 // The worker sub-agent — a sonnet-tier explorer devtools spawns for itself via
 // `yaar://apps/self/agents` (requires the user-granted `subagents` capability in
 // app.json). The worker holds NO YAAR verbs and no filesystem: its only reach is
-// the three read-only tools declared at spawn, each of which the server routes
-// back to this iframe as a `persona:{name}` command (handlers: protocol/worker.ts,
-// which run against devtools' own storage grants). Containment, not plumbing —
-// the worker can never see more of the machine than devtools itself shows it.
+// the four tools declared at spawn, each of which the server routes back to this
+// iframe as a `persona:{name}` command (handlers: protocol/worker.ts, which run
+// against devtools' own storage grants). Containment, not plumbing — the worker
+// can never see more of the machine than devtools itself shows it.
+//
+// Three of the four look outward (list_files, read_file, grep). The fourth,
+// `report`, looks back: it is how the worker says something before its turn ends.
+// It needed no new capability precisely because of the shape above — a tool is
+// already just a name over the bridge to this one iframe, so the only agent a
+// report can reach is devtools' own. See `addWorkerReport` for what it buys.
 //
 // One worker, not a cast: `app.json` says `"subagents": { "max": 1 }`, the id is
 // fixed, and the provider session is persistent — successive tasks are turns of
@@ -33,7 +39,7 @@ const TURN_IDLE_TIMEOUT_MS = 180_000;
 export type WorkerStatus = 'offline' | 'spawning' | 'idle' | 'running' | 'error';
 
 export interface WorkerEntry {
-  kind: 'task' | 'answer' | 'tool' | 'error';
+  kind: 'task' | 'answer' | 'tool' | 'report' | 'error';
   text: string;
   timestamp: number;
 }
@@ -41,10 +47,15 @@ export interface WorkerEntry {
 /**
  * How one task ended. `answer` may accompany `error` — the partial draft of a
  * turn that went quiet or was interrupted is worth more than the error alone.
+ *
+ * Exactly one of `answer`/`error` is always set by the time `settle` is done
+ * with it; see the invariant there.
  */
 export interface TurnOutcome {
   answer?: string;
   error?: string;
+  /** Interim findings the worker posted with its `report` tool during the turn. */
+  reports?: string[];
 }
 
 /**
@@ -62,6 +73,17 @@ export interface WorkerTaskRecord {
   endedAt?: number;
   answer?: string;
   error?: string;
+  /**
+   * Interim findings posted with the `report` tool while the turn ran, oldest
+   * first.
+   *
+   * Mutated in place by {@link addWorkerReport} rather than replaced, because
+   * this record *is* the one `inflight` holds and the one `settle` spreads —
+   * a copy would have to be threaded back into both. Nothing renders it
+   * reactively (the panel reads the transcript signal instead), so in-place is
+   * safe here in a way it would not be for a signal-backed value.
+   */
+  reports?: string[];
   /**
    * Whether the app agent started this one, and so should be woken when it
    * settles. False for a task the user ran from the Worker panel: nobody is
@@ -112,24 +134,53 @@ function appendEntry(kind: WorkerEntry['kind'], text: string): void {
   setWorkerEntries([...workerEntries(), { kind, text, timestamp: Date.now() }]);
 }
 
+/**
+ * Why a task that produced no answer is an *error* and never a quiet success.
+ *
+ * A survey is very often a search for negative results — "most of these files
+ * are clean" is a real and expected answer — so a settled task carrying neither
+ * `answer` nor `error` is indistinguishable from "nothing found". A caller that
+ * takes it at face value concludes there was nothing to do and ships a no-op.
+ * The turn cost minutes and told us nothing; saying so is the only honest
+ * report.
+ */
+function noAnswerError(reports: string[]): string {
+  return reports.length
+    ? `The worker ended its turn without a final answer. This is NOT "nothing found" — ` +
+        `${reports.length} interim report${reports.length === 1 ? '' : 's'} arrived before it ` +
+        'stopped and are included as `reports`; treat those as partial results and re-run only ' +
+        'what they do not cover.'
+    : 'The worker ended its turn without a final answer and posted no interim reports. This is ' +
+        'NOT "nothing found" — nothing was learned. Re-run the task in smaller slices, and tell ' +
+        'the worker to report as it goes.';
+}
+
 /** Settle the turn in flight once, whatever ended it, and stop its watchdog. */
 function settle(outcome: TurnOutcome): void {
   if (!inflight) return;
   clearTimeout(inflight.timer);
   const { record, waiters } = inflight;
   inflight = null;
-  const finished: WorkerTaskRecord = {
-    ...record,
-    endedAt: Date.now(),
-    ...(outcome.answer ? { answer: outcome.answer } : {}),
-    ...(outcome.error ? { error: outcome.error } : {}),
+  const reports = record.reports ?? [];
+  const answer = outcome.answer?.trim() || undefined;
+  // The invariant every reader of this module depends on: a settled task
+  // reports *something*. Callers of `settle` normally name the shortfall
+  // themselves (they know whether the turn was interrupted, went quiet, or just
+  // came back empty); this is the backstop for the path that forgets to, and
+  // for any added later.
+  const error = outcome.error ?? (answer ? undefined : noAnswerError(reports));
+  const settled: TurnOutcome = {
+    ...(answer ? { answer } : {}),
+    ...(error ? { error } : {}),
+    ...(reports.length ? { reports } : {}),
   };
+  const finished: WorkerTaskRecord = { ...record, endedAt: Date.now(), ...settled };
   batch(() => {
     setWorkerActiveTask(null);
     setWorkerLastResult(finished);
   });
   let served = false;
-  for (const resolve of waiters) served = resolve(outcome) || served;
+  for (const resolve of waiters) served = resolve(settled) || served;
 
   // The event goes out either way — a subscriber watching this channel wants
   // every settle. What is conditional is the *wakeup*, and on two things: the
@@ -139,10 +190,12 @@ function settle(outcome: TurnOutcome): void {
   app?.emit(
     'worker',
     {
+      kind: 'result',
       taskId: finished.id,
       task: finished.task,
       ...(finished.answer ? { answer: finished.answer } : {}),
       ...(finished.error ? { error: finished.error } : {}),
+      ...(reports.length ? { reports } : {}),
       elapsedMs: (finished.endedAt ?? Date.now()) - finished.startedAt,
     },
     { wakeAgent: !!finished.wakeAgent && !served },
@@ -173,6 +226,66 @@ export function noteWorkerToolCall(summary: string): void {
   keepAlive();
 }
 
+/**
+ * Take one interim finding from the worker, mid-turn.
+ *
+ * This is the whole of the worker→caller channel, and it is deliberately not a
+ * new capability: `report` is an app-declared tool like `grep`, so it arrives
+ * over the same bridge and lands in the same iframe. Its only reach is this
+ * function, which means the one agent it can ever reach is devtools' own.
+ *
+ * It buys three things a final answer alone cannot:
+ *
+ * 1. **Partial results survive.** A turn whose answer is lost to a size cap or
+ *    an interrupt still delivered everything reported before it. The failure
+ *    degrades from "nothing" to "some".
+ * 2. **Course correction happens early.** A mis-scoped task announces itself at
+ *    the first report rather than at the end, and `workerInterrupt` is how the
+ *    caller acts on that.
+ * 3. **Progress is legible.** The transcript gains findings, not just an
+ *    `elapsedMs` that ticks up.
+ *
+ * `notify` is the difference between posting and interrupting: it wakes the app
+ * agent (as `settle` does), and so is worth a turn of an opus agent's attention.
+ * Routine progress leaves it off and is simply collected with the result.
+ * A report on a task the *user* started never wakes anyone, by the same rule
+ * `settle` follows.
+ */
+export function addWorkerReport(finding: string, notify = false): string {
+  const text = finding.trim();
+  if (!text) return 'Empty report — nothing recorded. Say what you found, or say nothing.';
+  if (!inflight) {
+    // Kept in the transcript rather than dropped: a report with no turn behind
+    // it is strange enough that hiding it would make the next bug harder.
+    appendEntry('report', text);
+    return 'Recorded, but no task is in flight — nobody is waiting on this.';
+  }
+
+  const { record } = inflight;
+  const reports = (record.reports ??= []);
+  reports.push(text);
+  appendEntry('report', text);
+  keepAlive();
+
+  const wakeAgent = !!record.wakeAgent && notify;
+  app?.emit(
+    'worker',
+    {
+      kind: 'report',
+      taskId: record.id,
+      task: record.task,
+      report: text,
+      reportIndex: reports.length,
+      elapsedMs: Date.now() - record.startedAt,
+    },
+    { wakeAgent },
+  );
+
+  return wakeAgent
+    ? `Report #${reports.length} delivered — the caller has been interrupted to read it. Keep working unless it tells you otherwise.`
+    : `Report #${reports.length} recorded. It reaches the caller with your final answer, or in place of it if this turn cannot finish.`;
+}
+
 /** Fold one stream frame into the panel state; settle the turn on a terminal. */
 function onFrame(frame: StreamFrame): void {
   const parsed = z.safeParse(WorkerFrameDataSchema, frame.data ?? {});
@@ -201,12 +314,21 @@ function onFrame(frame: StreamFrame): void {
       // `done` carries the authoritative final text; the draft is the fallback
       // for a stream that dropped a delta.
       const text = (data.text ?? workerDraft()).trim();
+      // Two ways a `done` frame is not the success it looks like: no text at
+      // all, and a turn the server stopped rather than finished. Named here,
+      // where the frame is, so `settle`'s backstop stays a backstop.
+      const shortfall = !text
+        ? noAnswerError(inflight?.record.reports ?? [])
+        : data.status === 'interrupted'
+          ? 'The turn was interrupted before the worker finished — the answer is partial.'
+          : undefined;
       batch(() => {
         if (text) appendEntry('answer', text);
+        if (shortfall) appendEntry('error', shortfall);
         setWorkerDraft('');
         setWorkerStatus('idle');
       });
-      settle({ answer: text });
+      settle({ ...(text ? { answer: text } : {}), ...(shortfall ? { error: shortfall } : {}) });
       break;
     }
     case 'error': {
@@ -241,8 +363,19 @@ your tools always answer for the project as it is now, so when results look inco
 what you remember, re-list rather than arguing with the tools.
 
 Your tools are read-only. You cannot edit files, compile, or run anything — for a task that
-needs a change, report exactly what you found and the precise edit you would make (file, line,
+needs a change, describe exactly what you found and the precise edit you would make (file, line,
 before/after), so the caller can apply it.
+
+Report as you go with the report tool — after each batch of files, not saved up for the end. Two
+reasons, both real: your final answer can be lost whole to a size cap, while a report already
+delivered cannot; and a task that turns out to be mis-scoped (the files named do not exist, the
+pattern matches nothing, the question rests on something untrue) should say so at the first sign
+with notify set, rather than spending the whole turn on it.
+
+Keep your final answer under roughly 1500 words. If the complete finding does not fit, report the
+bulk in slices as you go and make the final answer a summary of what you reported plus anything
+that did not fit a report. Never end a turn silently: if you found nothing, say you found nothing
+and what you looked at — an empty answer is indistinguishable from a crash.
 
 Answer concretely and completely, citing locations as path:line (e.g. src/main.ts:42). No
 padding, no restating the task.`;
@@ -275,6 +408,28 @@ const WORKER_TOOLS = [
     input: {
       pattern: { type: 'string', description: 'Regex pattern to search for.' },
       glob: { type: 'string', description: 'File glob filter, e.g. src/**/*.ts.', optional: true },
+    },
+  },
+  {
+    name: 'report',
+    description:
+      'Post an interim finding to the caller while you keep working. Use it per batch of ' +
+      'files rather than saving everything for the end: a report already delivered survives ' +
+      'a final answer that is lost or cut short. Set notify only when what you found should ' +
+      'change what the caller is doing right now — a mis-scoped task, a blocker, a wrong ' +
+      'assumption in your instructions — because it interrupts them to read it; leave it off ' +
+      'for routine progress, which is collected with your answer. Your final answer must still ' +
+      'stand on its own; never replace it with "see my reports".',
+    input: {
+      finding: {
+        type: 'string',
+        description: 'What you found, concretely, citing locations as path:line.',
+      },
+      notify: {
+        type: 'boolean',
+        description: 'True to interrupt the caller now. Default false.',
+        optional: true,
+      },
     },
   },
 ];
@@ -351,7 +506,7 @@ export interface StartOutcome {
  */
 export async function startWorkerTask(
   task: string,
-  opts: { wakeAgent?: boolean } = {},
+  opts: { wakeAgent?: boolean; fresh?: boolean } = {},
 ): Promise<StartOutcome> {
   const content = task.trim();
   if (!content) return { error: 'Empty task.' };
@@ -359,13 +514,19 @@ export async function startWorkerTask(
     return {
       error:
         `The worker is already on task #${inflight.record.id}. Collect that one first ` +
-        '(workerWait, or the "worker" state key) — tasks are refused, not queued.',
+        '(workerWait, or the "worker" state key), or stop it with workerInterrupt — ' +
+        'tasks are refused, not queued.',
     };
   }
   if (!activeProject()) {
     appendEntry('error', 'No active project. Open or create one first.');
     return { error: 'No active project. Open or create one first.' };
   }
+
+  // After the in-flight guard, never before it: a fresh start retires the
+  // worker, and doing that to a running task would destroy an answer the caller
+  // asked for the moment before.
+  if (opts.fresh) await resetWorker();
 
   try {
     await ensureWorker();
@@ -424,6 +585,8 @@ export interface WaitResult {
   elapsedMs: number | null;
   answer?: string;
   error?: string;
+  /** Interim findings the worker posted while it worked, oldest first. */
+  reports?: string[];
 }
 
 /** Project a settled record into the wait result shape. */
@@ -434,7 +597,13 @@ function resultOf(record: WorkerTaskRecord): WaitResult {
     status: workerStatus(),
     elapsedMs: (record.endedAt ?? Date.now()) - record.startedAt,
     ...(record.answer ? { answer: record.answer } : {}),
+    // A settled record always carries one of the two (see `settle`); the
+    // fallback is for the record that somehow reached here without going
+    // through it, and exists so this projection can never be the thing that
+    // turns a failure into a silent success.
+    ...(record.error || record.answer ? {} : { error: noAnswerError(record.reports ?? []) }),
     ...(record.error ? { error: record.error } : {}),
+    ...(record.reports?.length ? { reports: record.reports } : {}),
   };
 }
 
@@ -494,6 +663,11 @@ export function waitForWorker(
         taskId: record.id,
         status: workerStatus(),
         elapsedMs: Date.now() - record.startedAt,
+        // Reports so far ride along on a timeout too — that is the point of
+        // them. A caller whose wait expired gets what the worker has found up
+        // to now instead of only "still running", and can decide from it
+        // whether to keep waiting or interrupt.
+        ...(record.reports?.length ? { reports: [...record.reports] } : {}),
       });
     }, waitMs);
     waiters.push((outcome) => {
@@ -509,14 +683,24 @@ export function waitForWorker(
         elapsedMs: Date.now() - record.startedAt,
         ...(outcome.answer ? { answer: outcome.answer } : {}),
         ...(outcome.error ? { error: outcome.error } : {}),
+        ...(outcome.reports?.length ? { reports: outcome.reports } : {}),
       });
       return true;
     });
   });
 }
 
-/** Stop the turn in flight. The partial draft is kept as the answer so far. */
-export async function interruptWorker(): Promise<void> {
+/**
+ * Stop the turn in flight, and hand back everything it managed to produce — the
+ * partial draft plus any reports.
+ *
+ * Returns a result rather than void because interrupting is now something the
+ * app agent does (`workerInterrupt`), and the whole reason to interrupt a
+ * mis-scoped task is that the partial work is still worth reading. A caller
+ * that only wants the click, like the panel, ignores the return.
+ */
+export async function interruptWorker(): Promise<WaitResult> {
+  const stopped = inflight?.record;
   try {
     await invoke(`yaar://apps/self/agents/${WORKER_ID}`, { action: 'interrupt' });
   } catch {
@@ -530,6 +714,19 @@ export async function interruptWorker(): Promise<void> {
     setWorkerStatus('idle');
   });
   settle({ error: 'Interrupted.', ...(draft ? { answer: draft } : {}) });
+
+  // Read back through `workerLastResult` rather than from the outcome above:
+  // the turn may have settled on its own between the invoke and here, and the
+  // answer it settled with is better than the one we were about to force.
+  const last = workerLastResult();
+  if (last && (!stopped || last.id === stopped.id)) return resultOf(last);
+  return {
+    done: true,
+    taskId: stopped?.id ?? null,
+    status: workerStatus(),
+    elapsedMs: null,
+    error: 'Nothing was running.',
+  };
 }
 
 /**

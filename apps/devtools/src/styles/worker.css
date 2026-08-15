@@ -55,6 +55,21 @@
   opacity: 0.85;
 }
 
+/* An interim report: an answer's face, marked as one of several rather than the
+   end, so a transcript of six reports does not read as six finished tasks. */
+.worker-entry-report {
+  background: var(--yaar-bg-surface);
+  border-left: 2px solid var(--yaar-text-muted);
+}
+
+.worker-report-tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--yaar-text-muted);
+  margin-bottom: 2px;
+}
+
 .worker-entry-tool {
   padding: 0 var(--yaar-sp-2);
   color: var(--yaar-text-muted);

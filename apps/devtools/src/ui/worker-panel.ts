@@ -95,6 +95,9 @@ export function WorkerPanel() {
         <${For} each=${workerEntries}>
           ${(entry: WorkerEntry) => html`
             <div class=${entryClass(entry)}>
+              <${Show} when=${() => entry.kind === 'report'}>
+                <div class="worker-report-tag">interim report</div>
+              <//>
               <${Show} when=${() => entry.kind === 'tool'} fallback=${() => entry.text}>
                 <span class="worker-tool-line">⚙ ${entry.text}</span>
               <//>
