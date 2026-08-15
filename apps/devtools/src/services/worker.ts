@@ -1,6 +1,6 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { invoke, del, stream, errMsg, type StreamFrame } from '@bundled/yaar';
+import { app, invoke, del, stream, errMsg, type StreamFrame } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { activeProject } from '../core';
 import { PersonaHandleSchema, WorkerFrameDataSchema } from '../schema';
@@ -62,6 +62,13 @@ export interface WorkerTaskRecord {
   endedAt?: number;
   answer?: string;
   error?: string;
+  /**
+   * Whether the app agent started this one, and so should be woken when it
+   * settles. False for a task the user ran from the Worker panel: nobody is
+   * waiting on that, and waking an idle opus agent to tell it so costs a turn
+   * for nothing.
+   */
+  wakeAgent?: boolean;
 }
 
 export const [workerStatus, setWorkerStatus] = createSignal<WorkerStatus>('offline');
@@ -90,7 +97,9 @@ let stopStream: (() => void) | null = null;
 let inflight: {
   record: WorkerTaskRecord;
   timer: ReturnType<typeof setTimeout>;
-  waiters: Array<(outcome: TurnOutcome) => void>;
+  /** Returns whether it actually delivered — a waiter whose own wait already
+   * timed out returns false, which is what keeps the wakeup below honest. */
+  waiters: Array<(outcome: TurnOutcome) => boolean>;
 } | null = null;
 /** A spawn in flight, so two rapid Run clicks don't race two spawns. */
 let spawning: Promise<void> | null = null;
@@ -119,7 +128,25 @@ function settle(outcome: TurnOutcome): void {
     setWorkerActiveTask(null);
     setWorkerLastResult(finished);
   });
-  for (const resolve of waiters) resolve(outcome);
+  let served = false;
+  for (const resolve of waiters) served = resolve(outcome) || served;
+
+  // The event goes out either way — a subscriber watching this channel wants
+  // every settle. What is conditional is the *wakeup*, and on two things: the
+  // agent started this task, and no `workerWait` of its own just answered it.
+  // Without the second, an agent that chose to block would be woken a turn later
+  // to be told what it had already been handed.
+  app?.emit(
+    'worker',
+    {
+      taskId: finished.id,
+      task: finished.task,
+      ...(finished.answer ? { answer: finished.answer } : {}),
+      ...(finished.error ? { error: finished.error } : {}),
+      elapsedMs: (finished.endedAt ?? Date.now()) - finished.startedAt,
+    },
+    { wakeAgent: !!finished.wakeAgent && !served },
+  );
 }
 
 /** Restart the silence watchdog — any frame or tool call counts as progress. */
@@ -319,8 +346,13 @@ export interface StartOutcome {
  * Two callers, one function: the panel's Run button and the app agent's
  * `workerTask` command. Both land every task and answer in the same transcript
  * signals, which is what keeps the panel a faithful window on agent-driven work.
+ * They differ in exactly one thing, `opts.wakeAgent`: the agent's own task wakes
+ * it when the answer lands, the user's does not (see `settle`).
  */
-export async function startWorkerTask(task: string): Promise<StartOutcome> {
+export async function startWorkerTask(
+  task: string,
+  opts: { wakeAgent?: boolean } = {},
+): Promise<StartOutcome> {
   const content = task.trim();
   if (!content) return { error: 'Empty task.' };
   if (inflight) {
@@ -342,7 +374,12 @@ export async function startWorkerTask(task: string): Promise<StartOutcome> {
     return { error: `Could not spawn the worker: ${errMsg(err)}` };
   }
 
-  const record: WorkerTaskRecord = { id: ++taskSeq, task: content, startedAt: Date.now() };
+  const record: WorkerTaskRecord = {
+    id: ++taskSeq,
+    task: content,
+    startedAt: Date.now(),
+    ...(opts.wakeAgent ? { wakeAgent: true } : {}),
+  };
   batch(() => {
     appendEntry('task', content);
     setWorkerActiveTask(record);
@@ -460,7 +497,9 @@ export function waitForWorker(
       });
     }, waitMs);
     waiters.push((outcome) => {
-      if (answered) return;
+      // Already reported "still running" — this caller has moved on, and saying
+      // so is what lets `settle` know a wakeup is still owed.
+      if (answered) return false;
       answered = true;
       clearTimeout(timer);
       resolve({
@@ -471,6 +510,7 @@ export function waitForWorker(
         ...(outcome.answer ? { answer: outcome.answer } : {}),
         ...(outcome.error ? { error: outcome.error } : {}),
       });
+      return true;
     });
   });
 }

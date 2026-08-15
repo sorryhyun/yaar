@@ -268,11 +268,11 @@ Fire-and-forget, sent right before the window is destroyed (no response expected
 
 ### Event
 
-Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, payload)`. Delivered only to agents subscribed to the channel (`app_subscribe`); undeclared/unsubscribed channels are dropped server-side.
+Fire-and-forget, pushed from the app to the agent side via `app.emit(channel, payload)`. Delivered only to agents subscribed to the channel (`app_subscribe`); undeclared/unsubscribed channels are dropped server-side. `wakeAgent` additionally wakes the emitting app's own agent when one is already running (see [`app.emit`](#appemitchannel-payload-opts)).
 
 **Notification** (iframe → parent):
 ```json
-{ "type": "yaar:app-event", "channel": "cell-changed", "payload": { "address": "A1" } }
+{ "type": "yaar:app-event", "channel": "cell-changed", "payload": { "address": "A1" }, "wakeAgent": false }
 ```
 
 ---
@@ -439,7 +439,7 @@ YAAR compares all declared App Protocol state at app-agent handoff boundaries an
 `<app_state_since_handoff changed="true|false" />` to the next invocation. This is an
 aggregate net-change signal; the agent queries authoritative state when it needs details.
 
-### `app.emit(channel, payload)`
+### `app.emit(channel, payload, opts?)`
 
 Fire-and-forget event on a declared channel (see `events` in `defineApp()`). Delivered only to agents that subscribed via `app_subscribe`; undeclared/unsubscribed channels are dropped server-side.
 
@@ -448,6 +448,19 @@ import { app } from '@bundled/yaar';
 
 app.emit('item-added', { text: 'Buy milk' });
 ```
+
+**`{ wakeAgent: true }` additionally wakes this app's own agent** with the event, and is how an app hands back the result of work its agent started and stopped waiting for:
+
+```typescript
+app.emit('worker', { taskId, answer }, { wakeAgent: true });
+```
+
+Two rules make it safe to reach for:
+
+- **It never creates an agent.** With no app agent running for that (monitor, app), the flag does nothing and the emit is ordinary — otherwise an app emitting while its agent was retired would spawn one, and pay a model turn, to report work nobody asked for.
+- **It is decided per emit, not by a subscription**, because only the iframe knows whether its agent is waiting: the same event raised by a user clicking a button in the app's own UI must wake nobody. An app agent could not subscribe in any case — its four tools include no verb.
+
+**Source:** `packages/server/src/agents/window-event-coordinator.ts` (`wakeOwnAppAgent`).
 
 ---
 

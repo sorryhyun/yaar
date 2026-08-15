@@ -75,6 +75,9 @@ export function initIframeMessageHandlers() {
       windowId: ctx.source.windowId,
       channel,
       payload: ctx.data.payload,
+      // Crosses a postMessage boundary from app code, like `noReplay` above:
+      // take it only as a real boolean rather than forwarding whatever arrived.
+      ...(ctx.data.wakeAgent === true ? { wakeAgent: true } : {}),
     });
   });
 

@@ -496,3 +496,109 @@ describe('App events reach only their own monitor’s subscribers', () => {
     expect(delivered.length).toBe(1);
   });
 });
+
+/**
+ * `app.emit(channel, payload, { wakeAgent: true })` — the one recipient the
+ * subscription table cannot express, because an app agent holds no verb tools and
+ * so can never subscribe to anything. The emitting iframe asks for its own agent
+ * instead, per emit: the same event raised by the app's UI rather than by work the
+ * agent started must wake nobody.
+ *
+ * The gate under test is "an agent that already exists". Delivery routes through
+ * AppTaskProcessor, which creates an app agent on demand — so without it, an app
+ * that emitted while its agent was retired would spawn one, and pay a model turn,
+ * to report work nobody asked for.
+ */
+describe('wakeAgent wakes the emitting app’s own agent', () => {
+  let pool: InstanceType<typeof ContextPool>;
+  let windowState: WindowStateRegistry;
+  let delivered: Task[];
+
+  function appWindow(appId: string): OSAction {
+    return {
+      type: 'window.create',
+      windowId: appId,
+      title: appId,
+      bounds: { x: 0, y: 0, w: 100, h: 100 },
+      content: { renderer: 'iframe', data: `yaar://apps/${appId}` },
+      appId,
+    } as OSAction;
+  }
+
+  beforeEach(async () => {
+    windowState = new WindowStateRegistry();
+    windowState.handleAction(appWindow('ai-chat'), '0');
+    windowState.handleAction(appWindow('ai-chat'), '1');
+
+    pool = new ContextPool(
+      'test-session' as SessionId,
+      windowState as any,
+      createMockReloadCache() as any,
+      mock(() => {}),
+    );
+    await pool.initialize();
+    await pool.createMonitorAgent('1');
+
+    delivered = [];
+    (pool as any).handleTask = async (task: Task) => {
+      delivered.push(task);
+    };
+  });
+
+  afterEach(async () => {
+    await pool.cleanup();
+  });
+
+  const settle = () => new Promise((r) => setTimeout(r, 30));
+
+  it('delivers the event to the app agent that is running', async () => {
+    await pool.agentPool.getOrCreateAppAgent('0', 'ai-chat');
+
+    pool.notifyAppChannel('0/ai-chat', 'worker', { answer: 'done' }, undefined, {
+      wakeAgent: true,
+    });
+    await settle();
+
+    expect(delivered.length).toBe(1);
+    expect(delivered[0].requestedType).toBe('app');
+    expect(delivered[0].windowId).toBe('0/ai-chat');
+    expect(delivered[0].monitorId).toBe('0');
+    expect(delivered[0].content).toContain('done');
+  });
+
+  it('delivers nothing when the app has no agent running', async () => {
+    expect(pool.agentPool.hasAppAgent('0', 'ai-chat')).toBe(false);
+
+    pool.notifyAppChannel('0/ai-chat', 'worker', { answer: 'done' }, undefined, {
+      wakeAgent: true,
+    });
+    await settle();
+
+    expect(delivered).toEqual([]);
+  });
+
+  it('leaves an emit without the flag delivering to subscribers only', async () => {
+    await pool.agentPool.getOrCreateAppAgent('0', 'ai-chat');
+
+    pool.notifyAppChannel('0/ai-chat', 'worker', { answer: 'done' });
+    await settle();
+
+    expect(delivered).toEqual([]);
+  });
+
+  it('wakes the agent on the emitting window’s own monitor', async () => {
+    // Both monitors run their own copy of the app and its own agent. The raw window
+    // id is shared, so an unscoped lookup would wake whichever was found first.
+    await pool.agentPool.getOrCreateAppAgent('0', 'ai-chat');
+    await pool.agentPool.getOrCreateAppAgent('1', 'ai-chat');
+
+    pool.notifyAppChannel('1/ai-chat', 'worker', { answer: 'from monitor 1' }, undefined, {
+      wakeAgent: true,
+    });
+    await settle();
+
+    expect(delivered.length).toBe(1);
+    expect(delivered[0].monitorId).toBe('1');
+    expect(delivered[0].windowId).toBe('1/ai-chat');
+  });
+});

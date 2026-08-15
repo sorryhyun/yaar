@@ -27,7 +27,13 @@ const log = createLogger('AppWindowCoordinator');
 
 /** The pool operations this coordinator needs, narrowed so `ContextPool` stays out. */
 export interface AppChannelTarget {
-  notifyAppChannel(windowId: string, channel: string, payload: unknown): void;
+  notifyAppChannel(
+    windowId: string,
+    channel: string,
+    payload: unknown,
+    sourceAgentKey?: string,
+    opts?: { wakeAgent?: boolean },
+  ): void;
 }
 
 export interface AppWindowCoordinatorDeps {
@@ -101,7 +107,12 @@ export class AppWindowCoordinator {
     // through as-is — ContextPool indexes subscriptions by that key. Collapsing it to the
     // raw AI-facing id would deliver monitor 1's app events to a subscriber watching
     // monitor 0's copy of the same app, since both windows share the raw id.
-    this.deps.getPool()?.notifyAppChannel(event.windowId, event.channel, event.payload);
+    // `wakeAgent` is the app asking for its own agent as well as its subscribers.
+    // Passed through untouched: whether an agent exists to wake, and whether the
+    // window even belongs to an app, are the coordinator's questions to answer.
+    this.deps.getPool()?.notifyAppChannel(event.windowId, event.channel, event.payload, undefined, {
+      wakeAgent: event.wakeAgent === true,
+    });
   }
 
   /**

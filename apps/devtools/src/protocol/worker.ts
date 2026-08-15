@@ -40,10 +40,13 @@ export const workerCommands = {
       'Use it for survey and lookup work you would otherwise spend many read commands on ' +
       '("map this codebase", "find every use of X", "check these files for Y"); it cannot ' +
       'edit, compile, or deploy. RETURNS IMMEDIATELY with a taskId — it does not wait for ' +
-      'the answer, so spend the time on your own work (read, edit, compile) and collect it ' +
-      'afterwards with workerWait, or read the "worker" state key. The worker keeps its ' +
-      'memory across tasks; follow-ups like "now check the other file" work. One task at a ' +
-      'time — starting another while one runs is a refusal, not a queue.',
+      'the answer, so spend the time on your own work (read, edit, compile). You are then ' +
+      'WOKEN with the answer when it lands (an <app:event channel="worker"> message), so ' +
+      'ending your turn is safe and is the right move when you have nothing else to do — ' +
+      'workerWait is for when you want to block instead, and the "worker" state key for a ' +
+      'plain look. The worker keeps its memory across tasks; follow-ups like "now check ' +
+      'the other file" work. One task at a time — starting another while one runs is a ' +
+      'refusal, not a queue.',
     params: {
       type: 'object',
       properties: {
@@ -56,12 +59,16 @@ export const workerCommands = {
     },
     replay: 'never',
     run: async (p) => {
-      const started = await startWorkerTask(String(p.task));
+      // `wakeAgent` is what separates this call from the same task typed into the
+      // Worker panel: the agent asked, so the agent is woken when it settles.
+      const started = await startWorkerTask(String(p.task), { wakeAgent: true });
       if (started.error) throw new AppCommandError(started.error);
       return {
         taskId: started.taskId,
         status: 'running',
-        collect: `workerWait with taskId ${started.taskId}, or query the "worker" state key.`,
+        collect:
+          `You will be woken with the answer (channel "worker", taskId ${started.taskId}). ` +
+          'To block for it instead, call workerWait.',
       };
     },
   }),

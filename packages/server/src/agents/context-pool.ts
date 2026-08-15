@@ -597,8 +597,9 @@ export class ContextPool implements PoolContext {
     channel: string,
     payload: unknown,
     sourceAgentKey?: string,
+    opts?: { wakeAgent?: boolean },
   ): void {
-    this.windowEvents.notifyAppChannel(windowId, channel, payload, sourceAgentKey);
+    this.windowEvents.notifyAppChannel(windowId, channel, payload, sourceAgentKey, opts);
   }
 
   handleWindowClose(windowId: string, appId?: string, monitorId?: string): void {

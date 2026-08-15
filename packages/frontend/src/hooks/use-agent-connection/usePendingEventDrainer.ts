@@ -118,6 +118,7 @@ export function drainPendingQueues({
         windowId: item.windowId,
         channel: item.channel,
         payload: item.payload,
+        ...(item.wakeAgent ? { wakeAgent: true } : {}),
       });
     }
   });

@@ -707,8 +707,14 @@ interface YaarApp {
   /**
    * Emit a fire-and-forget event on a declared channel. Delivered only to
    * agents that subscribed to this channel (undeclared channels are dropped).
+   *
+   * `wakeAgent: true` additionally wakes **this app's own agent** with the
+   * event — the way to hand back the result of work it started and stopped
+   * waiting for. It never *creates* an agent: with none running, the emit is
+   * an ordinary one. Only the iframe knows whether its agent is waiting on
+   * this event, which is why the flag is per emit and not a subscription.
    */
-  emit(channel: string, payload?: unknown): void;
+  emit(channel: string, payload?: unknown, opts?: { wakeAgent?: boolean }): void;
 }
 
 // -- Storage SDK --

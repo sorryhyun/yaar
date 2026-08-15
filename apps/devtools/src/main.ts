@@ -21,6 +21,15 @@ import {
 export default defineApp({
   id: 'devtools',
   name: 'Devtools',
+  events: {
+    worker: {
+      description:
+        'A worker sub-agent task settled. Payload: { taskId, answer?, error?, elapsedMs }. ' +
+        'Emitted with wakeAgent for a task the app agent started (so it can end its turn ' +
+        'and be woken by the answer) and without it for one the user ran from the Worker ' +
+        'panel, which nobody is waiting on.',
+    },
+  },
   state: devtoolsState,
   commands: {
     ...projectCommands,

@@ -239,6 +239,8 @@ export interface AppEventItem {
   windowId: string;
   channel: string;
   payload: unknown;
+  /** `app.emit(..., { wakeAgent: true })` — also wake the app's own agent. */
+  wakeAgent?: boolean;
 }
 
 export interface FeedbackSliceState {

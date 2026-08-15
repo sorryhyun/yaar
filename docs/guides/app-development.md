@@ -1083,12 +1083,14 @@ app.sendInteraction('User clicked Save');
 app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection: text });
 ```
 
-**`app.emit(channel, payload)`** — fire-and-forget event on a channel declared in `defineApp({ events })`. Delivered only to agents that subscribed; undeclared or unsubscribed channels are dropped server-side.
+**`app.emit(channel, payload, opts?)`** — fire-and-forget event on a channel declared in `defineApp({ events })`. Delivered only to agents that subscribed; undeclared or unsubscribed channels are dropped server-side.
 
 ```typescript
 defineApp({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
 app.emit('item-added', { text: 'Buy milk' });
 ```
+
+Pass `{ wakeAgent: true }` to also wake **this app's own agent** — how an app hands back the result of background work the agent started and stopped waiting for, so it can end its turn instead of blocking. It never creates an agent (no agent running → an ordinary emit), and the decision is per emit rather than a standing subscription, because the same event raised by the app's own UI should wake nobody. See [`app.emit`](../reference/app_protocol_reference.md#appemitchannel-payload-opts).
 
 **`onClose`** — an optional hook on the `defineApp()` config, invoked when the window is about to be destroyed. Use it to flush unsaved state.
 

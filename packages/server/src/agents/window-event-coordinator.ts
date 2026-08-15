@@ -12,7 +12,7 @@
  * point that applies the reset guard and inflight accounting.
  */
 
-import type { WindowChangeEvent } from './context-pool-policies/index.js';
+import { frameAppEvent, type WindowChangeEvent } from './context-pool-policies/index.js';
 import type { AppTaskProcessor } from './app-task-processor.js';
 import type { WindowEventPoolContext, Task } from './pool-types.js';
 import { createLogger } from '../observability/log.js';
@@ -68,12 +68,18 @@ export class WindowEventCoordinator {
    * Matches channel subscribers and either wakes them (`wake` mode → task) or
    * buffers the framed event into their next turn (`buffer` mode → timeline).
    * Rate-capped per window; emits with no subscribers are dropped silently.
+   *
+   * `opts.wakeAgent` adds one more recipient the subscription table cannot
+   * express: the emitting app's **own** agent (see {@link wakeOwnAppAgent}).
+   * It is checked inside the rate cap, so a chatty app cannot use it to bypass
+   * the limit its subscribers are held to.
    */
   notifyAppChannel(
     windowId: string,
     channel: string,
     payload: unknown,
     sourceAgentKey?: string,
+    opts?: { wakeAgent?: boolean },
   ): void {
     const key = this.windowKey(windowId);
     if (this.isAppEventRateLimited(key)) {
@@ -101,6 +107,43 @@ export class WindowEventCoordinator {
         this.ctx.timelineFor(sub.subscriberMonitorId).pushRaw(framedContent);
       },
     );
+
+    if (opts?.wakeAgent) this.wakeOwnAppAgent(key, channel, payload);
+  }
+
+  /**
+   * Wake the emitting app's own agent with the event.
+   *
+   * The gap this fills: an app agent holds four tools and none of them is a verb,
+   * so it cannot subscribe to anything — and the one recipient an app most often
+   * wants is its own agent, waiting on work it started and stopped blocking for.
+   * The app says so at the emit (`app.emit(ch, payload, { wakeAgent: true })`),
+   * because only the iframe knows whether the agent asked for this: the same
+   * event raised by a user clicking a button in the app's own UI must wake
+   * nobody.
+   *
+   * **An existing agent only.** Delivery would otherwise route through
+   * `AppTaskProcessor`, which creates the app agent on demand — so an app that
+   * emitted while its agent was retired would spawn one to tell it about work it
+   * never asked for, and pay a model turn for it. With no agent running there is
+   * nothing to wake and the emit is an ordinary one.
+   */
+  private wakeOwnAppAgent(windowKey: string, channel: string, payload: unknown): void {
+    const appId = this.ctx.windowState.getAppIdForWindow(windowKey);
+    const monitorId = this.ctx.windowState.getMonitorForWindow(windowKey);
+    if (!appId || !monitorId) return;
+    if (!this.ctx.agentPool.hasAppAgent(monitorId, appId)) {
+      log.debug('wakeAgent emit dropped — no app agent running', { appId, monitorId, channel });
+      return;
+    }
+    this.deliver({
+      requestedType: 'app',
+      kind: 'notify',
+      messageId: `app-wake-${windowKey}-${channel}-${Date.now()}`,
+      windowId: windowKey,
+      content: frameAppEvent(windowKey, channel, payload),
+      monitorId,
+    });
   }
 
   /** True when the window has exceeded its app-event rate cap in the current window. */

@@ -56,20 +56,22 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 `workerTask` hands one task to a sonnet-tier sub-agent with its own read-only tools (list, read, grep) over the active project. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled", "check all files for Y" — then act on its report yourself; it cannot edit, compile, or deploy, and its report is its word, not yours: verify before editing on it.
 
-**It runs in the background.** `workerTask` returns a `taskId` the moment the task is accepted, not when it is answered — so the pattern is start, work, collect:
+**It runs in the background, and it comes back to you.** `workerTask` returns a `taskId` the moment the task is accepted, not when it is answered. When it settles you are **woken** with the answer as an `<app:event channel="worker">` message carrying `{ taskId, answer | error, elapsedMs }` — so the pattern is start, work, and either be woken or collect:
 
 ```
 command({ command: "workerTask", params: { task: "map every place the sidebar reads project state" } })
   → { taskId: 1, status: "running" }
 … read files, edit, compile — your own turns, while the worker explores …
-command({ command: "workerWait", params: { taskId: 1, waitMs: 90000 }, timeoutMs: 100000 })
-  → { done: true, taskId: 1, answer: "…" }
+→ end your turn; the answer wakes you            ← nothing left to do meanwhile
+→ or command({ command: "workerWait", params: { taskId: 1, waitMs: 90000 }, timeoutMs: 100000 })
+  → { done: true, taskId: 1, answer: "…" }       ← when you would rather block
 ```
 
-Four rules from that shape:
+Five rules from that shape:
 
 - **Start it before the work you can do without it, not after.** A `workerTask` immediately followed by `workerWait` is a blocking call with extra steps — it spends the whole survey waiting. Ask what you can do meanwhile first; having genuinely nothing is fine, assuming it is not.
-- **`workerWait` needs a `timeoutMs` larger than its `waitMs`** (10s of headroom), or the platform kills the call before the wait ends. `done: false` means still running — call again to resume waiting; never re-send the task. `query("worker")` is the non-blocking read of the same facts (`activeTask`, `lastResult`).
+- **Ending your turn is safe** — the wakeup is what makes it so, and it is the right move once you have run out of work that does not depend on the answer. The user sees the worker's progress in the Worker panel while you are away; say what you delegated before you go, so a wait with nothing on screen is never a mystery. The event payload is capped (it says `[truncated, N chars]` when it hits the cap) — a `workerWait` for that taskId returns the whole answer instantly once it has settled, so collect it there rather than acting on a cut-off report.
+- **`workerWait` needs a `timeoutMs` larger than its `waitMs`** (10s of headroom), or the platform kills the call before the wait ends. `done: false` means still running — call again to resume waiting; never re-send the task. `query("worker")` is the non-blocking read of the same facts (`activeTask`, `lastResult`). A task you waited on does not wake you twice: the wait answers first.
 - **Self-contained tasks.** The worker sees none of your conversation. Name files and goals explicitly. It does keep its own memory across tasks, so follow-ups ("now the other file") work.
 - **One at a time.** Starting a task while one is in flight is refused, not queued — collect the first. The user can also run it from the Worker sidebar tab: same instance, same transcript, and a task they started is one you can `workerWait` on.
 

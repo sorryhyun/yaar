@@ -154,14 +154,17 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         toMonitor: !!toMonitor
       }, '*');
     },
-    emit: function(channel, payload) {
+    emit: function(channel, payload, opts) {
       // Fire-and-forget event on a declared channel. Delivered only to agents
       // that subscribed to this channel; undeclared channels are dropped server-side.
+      // \`wakeAgent\` additionally wakes this app's OWN agent — but only one that is
+      // already running, so an event never conjures an agent nobody asked for.
       if (typeof channel !== 'string' || !channel) return;
       window.parent.postMessage({
         type: '${APP_MSG.event}',
         channel: channel,
-        payload: payload
+        payload: payload,
+        wakeAgent: !!(opts && opts.wakeAgent)
       }, '*');
     }
   };

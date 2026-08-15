@@ -255,6 +255,15 @@ export interface AppEventEvent {
   channel: string;
   payload: unknown;
   messageId: string;
+  /**
+   * Also wake this app's own agent, on top of whatever subscribed. The emitting
+   * iframe is the only party that knows whether its agent is waiting on this
+   * event — a background task the agent started is worth a wakeup, the same task
+   * started by the user from the app's own UI is not — so the decision is made
+   * per emit rather than by a standing subscription. Honoured only for an agent
+   * that already exists (`WindowEventCoordinator.wakeOwnAppAgent`).
+   */
+  wakeAgent?: boolean;
 }
 
 export interface SubscribeMonitorEvent {
