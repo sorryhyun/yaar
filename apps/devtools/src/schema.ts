@@ -95,11 +95,18 @@ export const AppManifestSchema = ManifestShapeSchema;
 // malformed one would otherwise surface as `undefined.streamUri` three frames
 // into a subscription — far from the call that produced it.
 
-/** What `spawn` hands back. Loose — the server may add fields. */
+/**
+ * What `spawn` hands back, and what `read`ing the persona serves — one shape,
+ * because the server builds both from the same projection. `lastResponse` is
+ * only ever present on the read: it is the final text of the worker's last
+ * completed turn, and the recovery path for an answer the stream could not
+ * carry (see `settleFromPersonaRead` in services/worker.ts).
+ */
 export const PersonaHandleSchema = z.looseObject({
   personaId: z.string(),
   instanceId: z.string(),
   streamUri: z.string(),
+  lastResponse: z.optional(z.string()),
 });
 
 /**
@@ -107,11 +114,23 @@ export const PersonaHandleSchema = z.looseObject({
  * purpose: one schema covers `start`, `text`, `thinking`, `done`, and `error`,
  * and which fields are present is what `kind` already says. Validating shape
  * rather than presence keeps a new frame kind from being a crash.
+ *
+ * All-optional has one cost worth naming, because it bit us: a frame the server
+ * capped in transit parses *cleanly* here and reads as a frame that simply
+ * carried nothing. `truncated` is the field that tells the two apart, so it is
+ * declared even though nothing but the cap ever sets it.
  */
 export const WorkerFrameDataSchema = z.looseObject({
-  content: z.optional(z.string()),
+  /** `text` and `thinking` frames carry an incremental `delta`, never a whole. */
+  delta: z.optional(z.string()),
   text: z.optional(z.string()),
   error: z.optional(z.string()),
+  /**
+   * Set by the server when this frame's payload exceeded the wire cap, in which
+   * case every other field here is *gone* — not empty. Never treat one as an
+   * empty turn; see the `done` case in services/worker.ts.
+   */
+  truncated: z.optional(z.boolean()),
   /**
    * On a `done` frame: how the turn ended ('completed' | 'interrupted'). Read
    * rather than ignored because the two are otherwise indistinguishable here —

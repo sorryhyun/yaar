@@ -57,13 +57,60 @@ const COALESCABLE_KINDS = new Set(['text', 'thinking']);
 /** Coalescing tick — deltas arriving within this window merge into one frame. */
 const COALESCE_MS = 60;
 
+/** `{"delta":""}` — the fixed cost of the envelope a merged delta ships in. */
+const DELTA_ENVELOPE_CHARS = 12;
+
 /**
- * Early-flush bound for a coalescing buffer. Merging keeps the buffer to one
- * string per kind, but a runaway producer could still grow that string without
- * limit between ticks; flushing at this size is the "never buffer unboundedly
- * for a slow iframe" guard, done losslessly (flush, not drop).
+ * Would `{ delta }` survive {@link capPayload} intact?
+ *
+ * A coalesced delta must never reach the cap. Every other frame kind is a
+ * self-contained payload, so truncating one costs the consumer that frame; a
+ * delta is a *fragment of an accumulation*, so truncating one puts a silent hole
+ * in the middle of the string the consumer is building and every later delta
+ * lands after the gap. Flushing early is lossless, which is why the buffer is
+ * bounded by the wire cap rather than by a round number of its own: whatever
+ * still fits goes out now and the rest starts a fresh frame.
+ *
+ * The cheap bound comes first because this runs per provider chunk: JSON
+ * escaping can at most double a string of ordinary model text, so anything under
+ * half the cap is certainly safe and is never serialized twice. Only the last
+ * couple of chunks before the flush pay for the exact measurement.
  */
-const MAX_COALESCE_CHARS = 8192;
+function deltaFitsFrame(merged: string): boolean {
+  if (merged.length * 2 + DELTA_ENVELOPE_CHARS <= MAX_FRAME_PAYLOAD_CHARS) return true;
+  return JSON.stringify({ delta: merged }).length <= MAX_FRAME_PAYLOAD_CHARS;
+}
+
+/**
+ * Cut an over-long accumulation into frame-sized pieces, keeping the tail that
+ * still has room to grow as `remainder`.
+ *
+ * The pieces are found by binary search rather than by a fixed fraction of the
+ * cap because the escape ratio is content-dependent: ASCII prose costs 1× and a
+ * run of control characters costs 6×, so any constant either splits ordinary
+ * text far too eagerly or fails to save the pathological case. The search only
+ * runs on the chunk that actually overflows, which for a token stream is roughly
+ * one chunk per 4 KB of output.
+ */
+function splitForFrames(merged: string): { ready: string[]; remainder: string } {
+  if (deltaFitsFrame(merged)) return { ready: [], remainder: merged };
+  const ready: string[] = [];
+  let rest = merged;
+  while (!deltaFitsFrame(rest)) {
+    // `lo` never drops below 1, so every pass consumes at least one character
+    // and the loop cannot spin: no single character escapes past the cap.
+    let lo = 1;
+    let hi = rest.length;
+    while (lo < hi) {
+      const mid = Math.ceil((lo + hi) / 2);
+      if (deltaFitsFrame(rest.slice(0, mid))) lo = mid;
+      else hi = mid - 1;
+    }
+    ready.push(rest.slice(0, lo));
+    rest = rest.slice(lo);
+  }
+  return { ready, remainder: rest };
+}
 
 /** Per-subscription coalescing state: pending merged delta per coalescable kind. */
 interface CoalesceState {
@@ -300,16 +347,20 @@ class SubscriptionRegistry {
       this.coalescing.set(sub.id, co);
     }
     const prev = co.pending.get(kind);
-    const merged = (prev?.delta ?? '') + delta;
-    co.pending.set(kind, { uri, delta: merged });
 
-    // Bound the buffer losslessly: a merged delta past the cap flushes now rather
-    // than growing until the tick.
-    if (merged.length >= MAX_COALESCE_CHARS) {
-      this.flushCoalesced(sub);
-      return;
+    // Bound the buffer by the wire cap, losslessly: whatever no longer fits one
+    // frame ships now and the rest keeps accumulating. Splitting rather than
+    // waiting for the tick is what keeps a merged delta from reaching
+    // `capPayload` — see {@link deltaFitsFrame} for why truncating one is not an
+    // option the consumer can recover from.
+    const { ready, remainder } = splitForFrames((prev?.delta ?? '') + delta);
+    for (const piece of ready) {
+      this.deliverFrame(sub, uri, kind, { delta: piece });
     }
-    if (!co.timer) {
+    if (remainder) co.pending.set(kind, { uri, delta: remainder });
+    else co.pending.delete(kind);
+
+    if (!co.timer && remainder) {
       co.timer = setTimeout(() => this.flushCoalesced(sub), COALESCE_MS);
     }
   }

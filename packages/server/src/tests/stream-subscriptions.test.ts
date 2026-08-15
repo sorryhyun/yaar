@@ -162,6 +162,65 @@ describe('stream subscriptions', () => {
     expect(captured).toHaveLength(0);
   });
 
+  /** Every `delta` a run of frames delivered, concatenated in arrival order. */
+  const deltasOf = (cs: Captured[]) =>
+    cs.map((c) => (frameOf(c)?.data as { delta?: string }).delta ?? '').join('');
+
+  /**
+   * The one payload the cap may not touch.
+   *
+   * A discrete frame is self-contained, so capping one costs the consumer that
+   * frame and nothing else. A delta is a *fragment of an accumulation*: capping
+   * one puts a silent hole in the middle of the string the consumer is building,
+   * and every delta after it lands on the wrong side of the gap. So an oversized
+   * run is split into whole frames instead — lossless, and visible as ordinary
+   * consecutive deltas.
+   */
+  it('splits an oversized delta run into whole frames rather than capping one', async () => {
+    streamSub();
+    const long = 'The quick brown fox. '.repeat(1000); // ~21 KB, far past the 4 KB cap
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: long }, sessionId);
+    await tick();
+
+    expect(captured.length).toBeGreaterThan(1);
+    expect(captured.some((c) => (frameOf(c)?.data as { truncated?: boolean }).truncated)).toBe(
+      false,
+    );
+    expect(deltasOf(captured)).toBe(long);
+    // seq stays monotonic across the split, so the consumer sees no gap either.
+    expect(captured.map((c) => frameOf(c)?.seq)).toEqual(captured.map((_, i) => i + 1));
+  });
+
+  it('measures a delta against its encoded size, not its raw length', async () => {
+    streamSub();
+    // Raw length fits the cap; every character escapes to two, so the payload does not.
+    // A split that trusted `String.length` would ship a frame the cap then gutted.
+    const quotes = '"'.repeat(3000);
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: quotes }, sessionId);
+    await tick();
+
+    expect(captured.length).toBeGreaterThan(1);
+    for (const c of captured) {
+      const data = frameOf(c)?.data as { delta?: string; truncated?: boolean };
+      expect(data.truncated).toBeUndefined();
+      expect(JSON.stringify(data).length).toBeLessThanOrEqual(4096);
+    }
+    expect(deltasOf(captured)).toBe(quotes);
+  });
+
+  it('carries a split across separate publishes, in order', async () => {
+    streamSub();
+    // Two chunks that each fit alone but overflow once merged: the accumulation is
+    // what gets split, so nothing is lost at the seam between them.
+    const a = 'a'.repeat(3000);
+    const b = 'b'.repeat(3000);
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: a }, sessionId);
+    subscriptionRegistry.publishFrame(uri, 'text', { delta: b }, sessionId);
+    await tick();
+
+    expect(deltasOf(captured)).toBe(a + b);
+  });
+
   it('keeps the two modes from crossing wires', () => {
     // A change sub next to a stream sub on the same URI.
     const changeId = subscriptionRegistry.subscribe('tok', 'win-1', sessionId, uri, 'change');

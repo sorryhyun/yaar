@@ -1,6 +1,6 @@
 export {};
 import { createSignal, batch } from '@bundled/solid-js';
-import { app, invoke, del, stream, errMsg, type StreamFrame } from '@bundled/yaar';
+import { app, invoke, read, del, stream, errMsg, type StreamFrame } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { activeProject } from '../core';
 import { PersonaHandleSchema, WorkerFrameDataSchema } from '../schema';
@@ -19,10 +19,10 @@ import { PersonaHandleSchema, WorkerFrameDataSchema } from '../schema';
 // already just a name over the bridge to this one iframe, so the only agent a
 // report can reach is devtools' own. See `addWorkerReport` for what it buys.
 //
-// One worker, not a cast: `app.json` says `"subagents": { "max": 1 }`, the id is
-// fixed, and the provider session is persistent — successive tasks are turns of
-// one conversation, so "now check the other file" works as a follow-up. `reset`
-// is the fresh-context escape hatch.
+// One worker, not a cast: the id below is fixed (the manifest's `subagents.max`
+// is a ceiling, not a target), and the provider session is persistent —
+// successive tasks are turns of one conversation, so "now check the other file"
+// works as a follow-up. `reset` is the fresh-context escape hatch.
 
 /** The one persona id. Spawn is idempotent on it, which is what makes reload cheap. */
 const WORKER_ID = 'worker';
@@ -305,15 +305,27 @@ function onFrame(frame: StreamFrame): void {
       });
       break;
     case 'text':
-      setWorkerDraft(workerDraft() + (data.content ?? ''));
+      setWorkerDraft(workerDraft() + (data.delta ?? ''));
       break;
     case 'thinking':
-      setWorkerThinking(workerThinking() + (data.content ?? ''));
+      setWorkerThinking(workerThinking() + (data.delta ?? ''));
       break;
     case 'done': {
       // `done` carries the authoritative final text; the draft is the fallback
       // for a stream that dropped a delta.
       const text = (data.text ?? workerDraft()).trim();
+      // Neither one, and the frame was capped in transit: the answer exists and
+      // is simply too big for one frame. That is a different fact from an empty
+      // turn and must never be reported as one — go get it from the persona
+      // itself, which keeps the last turn's final text for exactly this case.
+      if (!text && data.truncated) {
+        batch(() => {
+          setWorkerDraft('');
+          setWorkerStatus('idle');
+        });
+        void settleFromPersonaRead();
+        break;
+      }
       // Two ways a `done` frame is not the success it looks like: no text at
       // all, and a turn the server stopped rather than finished. Named here,
       // where the frame is, so `settle`'s backstop stays a backstop.
@@ -332,7 +344,11 @@ function onFrame(frame: StreamFrame): void {
       break;
     }
     case 'error': {
-      const message = data.error ?? 'stream error';
+      const message =
+        data.error ??
+        (data.truncated
+          ? 'The worker’s turn failed with an error too large to fit one stream frame.'
+          : 'stream error');
       batch(() => {
         appendEntry('error', message);
         setWorkerDraft('');
@@ -342,6 +358,47 @@ function onFrame(frame: StreamFrame): void {
       break;
     }
   }
+}
+
+/**
+ * Recover an answer the `done` frame could not carry, and settle with it.
+ *
+ * The server keeps the final text of a sub-agent's last completed turn on the
+ * persona itself, reachable with a plain `read`, precisely so a subscriber that
+ * missed the stream can still collect what the model already paid for. This is
+ * that subscriber: the frame arrived, it was over the wire's payload cap, and
+ * the cap replaces the whole payload with a marker rather than trimming a field.
+ *
+ * Safe against reading a *stale* answer, and that is the only reason this is
+ * gated on `truncated` rather than on "no text": a capped frame is proof the
+ * turn produced text, and the server records it before it publishes the `done`
+ * that carried it. A genuinely empty turn leaves an uncapped frame and takes the
+ * ordinary path, where an empty answer stays an error.
+ */
+async function settleFromPersonaRead(): Promise<void> {
+  let answer = '';
+  let failure = '';
+  try {
+    const raw = await read(`yaar://apps/self/agents/${WORKER_ID}`);
+    const parsed = z.safeParse(PersonaHandleSchema, raw);
+    if (!parsed.success) failure = 'reading the worker back returned an unexpected shape';
+    else answer = (parsed.data.lastResponse ?? '').trim();
+  } catch (err) {
+    failure = errMsg(err);
+  }
+
+  if (answer) {
+    appendEntry('answer', answer);
+    settle({ answer });
+    return;
+  }
+  const shortfall =
+    'The worker finished with an answer too large for one stream frame, and recovering it ' +
+    `from the worker itself ${failure ? `failed (${failure})` : 'came back empty'}. The turn ` +
+    'is NOT "nothing found" — re-run it in smaller slices, and tell the worker to report as ' +
+    'it goes so the findings arrive before the answer does.';
+  appendEntry('error', shortfall);
+  settle({ error: shortfall });
 }
 
 /**

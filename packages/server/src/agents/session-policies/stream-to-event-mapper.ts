@@ -252,9 +252,17 @@ export class StreamToEventMapper {
     if (this.turnClosed) return;
     this.turnClosed = true;
     // The turn's final text rides along so a subscriber that only wants the answer
-    // (an app driving a persona) never has to re-read the resource, and one that
+    // (an app driving a persona) usually needn't re-read the resource, and one that
     // accumulated deltas can reconcile against the authoritative string. Present on
     // an `interrupted` close too — a half-finished answer is still what was said.
+    //
+    // "Usually", and a consumer must handle the rest: this payload goes through the
+    // subscription registry's size cap like any other, and a cap replaces the *whole*
+    // payload with `{ truncated: true, … }` — `status` and `text` both gone — rather
+    // than trimming a field. So a long answer arrives as a `done` that carries
+    // nothing, which is indistinguishable from an empty turn unless the consumer
+    // checks `truncated`. The recovery is `SubAgent.lastResponse`, served by
+    // `read`ing the persona and written just above, before this publishes.
     this.emitStreamFrame('done', {
       status,
       ...(this.state.responseText ? { text: this.state.responseText } : {}),
