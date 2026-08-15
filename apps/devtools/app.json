@@ -10,7 +10,7 @@
   "messaging": "all",
   "streams": ["agents"],
   "subagents": {
-    "max": 1
+    "max": 2
   },
   "controls": [
     "browser-user",

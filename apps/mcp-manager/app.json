@@ -11,5 +11,6 @@
   "version": "2.0.2",
   "author": "YAAR",
   "kind": "system",
-  "id": "mcp-manager"
+  "id": "mcp-manager",
+  "appId": "mcp-manager"
 }

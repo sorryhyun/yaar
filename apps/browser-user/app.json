@@ -6,5 +6,8 @@
   "author": "YAAR",
   "description": "Observe and manage your real Chrome tabs via the YAAR Bridge extension.",
   "kind": "system",
-  "bundles": ["yaar-web"]
+  "bundles": [
+    "yaar-web"
+  ],
+  "appId": "browser-user"
 }
