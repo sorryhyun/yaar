@@ -756,8 +756,14 @@ export class ContextPool implements PoolContext {
    * give it a fresh monitor agent. Every other monitor keeps its agents, queue, timeline
    * and context.
    *
+   * `savedThreadIds` *is* keyed per monitor, so this monitor's entry goes with it: it is
+   * consumed by the monitor's first turn (`monitor-task-processor.ts`), so on a desktop
+   * that has already spoken there is nothing there — but a monitor reset before it ever
+   * ran a turn would otherwise resume the previous session's thread on the next message,
+   * which is the one thing the reset was pressed to prevent.
+   *
    * What is deliberately *not* touched, because none of it belongs to one desktop: the
-   * warm pool (`resetCodexProviders()` is process-wide), `savedThreadIds`, the window
+   * warm pool (`resetCodexProviders()` is process-wide), the window
    * registry, and the `CONNECTION_STATUS` re-announce `reset()` sends for monitor 0 —
    * that one exists to re-tell the client which session/provider it is talking to after
    * the whole pool was rebuilt, and neither id changes here.
@@ -776,6 +782,7 @@ export class ContextPool implements PoolContext {
         (windowId) => this.windowState.getMonitorForWindow(windowId) === monitorId,
       );
       this.budgetPolicy.clearMonitor(monitorId);
+      delete this.savedThreadIds?.[monitorRole(monitorId)];
 
       const provider = await this.acquireProvider();
       if (!provider) {

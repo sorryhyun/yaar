@@ -59,6 +59,26 @@ export interface ContextMessage {
 }
 
 /**
+ * Does this message belong to `monitorId` — its own messages, or a branch of a window it owns?
+ *
+ * The split a monitor-scoped reset makes, kept in one place because two callers make it at
+ * different moments: {@link ContextTape.pruneMonitor} against a live tape, and `LiveSession`
+ * against the messages restored from a previous session, before there is a tape to prune.
+ *
+ * `ownsWindow` is injected for the reason given on `pruneMonitor`: which desktop a window
+ * lives on is `WindowStateRegistry`'s answer, not something a source URI carries.
+ */
+export function belongsToMonitor(
+  msg: ContextMessage,
+  monitorId: string,
+  ownsWindow: (windowId: string) => boolean,
+): boolean {
+  return isMonitorSource(msg.source)
+    ? extractMonitorId(msg.source) === monitorId
+    : ownsWindow(extractWindowId(msg.source)!);
+}
+
+/**
  * Options for filtering messages from the context tape.
  */
 export interface GetMessagesOptions {
@@ -173,9 +193,7 @@ export class ContextTape {
   pruneMonitor(monitorId: string, ownsWindow: (windowId: string) => boolean): ContextMessage[] {
     const pruned: ContextMessage[] = [];
     this.messages = this.messages.filter((msg) => {
-      const drop = isMonitorSource(msg.source)
-        ? extractMonitorId(msg.source) === monitorId
-        : ownsWindow(extractWindowId(msg.source)!);
+      const drop = belongsToMonitor(msg, monitorId, ownsWindow);
       if (drop) pruned.push(msg);
       return !drop;
     });

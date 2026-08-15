@@ -37,6 +37,7 @@ import { tmpdir } from 'os';
 import { join } from 'path';
 import type { OSAction, WindowContent } from '@yaar/shared';
 import type { Deadlines } from '../../../config.js';
+import type { ContextMessage } from '../../../agents/context.js';
 import type { LiveSession } from '../../../session/live-session.js';
 import type { SessionLogger } from '../../../logging/index.js';
 import type { SessionId } from '../../../session/types.js';
@@ -111,7 +112,13 @@ export interface Harness {
 }
 
 export async function boot(
-  opts: { deadlines?: Partial<Deadlines>; monitorId?: string } = {},
+  opts: {
+    deadlines?: Partial<Deadlines>;
+    monitorId?: string;
+    /** What a previous session left behind — the two restore inputs `lifecycle.ts` supplies. */
+    contextMessages?: ContextMessage[];
+    savedThreadIds?: Record<string, string>;
+  } = {},
 ): Promise<Harness> {
   resetBroadcastCenter();
   // No app-protocol readiness reset here, deliberately. It used to be needed: readiness was
@@ -137,7 +144,8 @@ export async function boot(
 
   const handlers = createWsHandlers({
     restoreActions: [],
-    contextMessages: [],
+    contextMessages: opts.contextMessages ?? [],
+    savedThreadIds: opts.savedThreadIds,
     sessionLogger: createLoggerDouble(),
     // §1.3 — the provider seam.
     acquireProvider: async () => {

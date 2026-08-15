@@ -20,7 +20,8 @@
 
 import { join } from 'path';
 import { ContextPool } from '../agents/context-pool.js';
-import type { ContextMessage } from '../agents/context.js';
+import { belongsToMonitor, type ContextMessage } from '../agents/context.js';
+import { monitorRole } from '../agents/roles.js';
 import { WindowStateRegistry } from './window-state.js';
 import { LayoutContext } from './layout-context.js';
 import { ReloadCache } from '../reload/cache.js';
@@ -577,10 +578,32 @@ export class LiveSession {
 
   private async handleReset(connectionId: ConnectionId, monitorId?: string): Promise<void> {
     if (monitorId !== undefined) {
-      // No pool means no agents, no queues and no tape — there is nothing monitor-scoped
-      // to clear, and the session-wide state below (restored context, saved threads, the
-      // warm pool) is not this monitor's to throw away.
-      if (this.pool) await this.pool.resetMonitor(monitorId);
+      if (this.pool) {
+        await this.pool.resetMonitor(monitorId);
+      } else {
+        // No pool means no agents, no queues and no tape — but the previous session is
+        // still here, parked in the fields `doInitialize` hands to the pool it builds on
+        // the first message. Leaving them is the reset appearing to do nothing: the user
+        // clears the desktop, types, and the old conversation answers.
+        //
+        // Same split `resetMonitor` makes — this monitor's messages, the branches of the
+        // windows it owns, and the provider thread filed under it. The rest of the
+        // session-wide state (other monitors' context, the warm pool) is not this
+        // monitor's to throw away.
+        this.restoredContext = this.restoredContext.filter(
+          (msg) =>
+            !belongsToMonitor(
+              msg,
+              monitorId,
+              (windowId) => this.windowState.getMonitorForWindow(windowId) === monitorId,
+            ),
+        );
+        if (this.savedThreadIds) delete this.savedThreadIds[monitorRole(monitorId)];
+        this.log.info('monitor reset before pool init', {
+          monitorId,
+          remainingRestored: this.restoredContext.length,
+        });
+      }
       // `executeLaunchHooks` emits everything onto DEFAULT_MONITOR_ID, so re-running it
       // for another monitor replays monitor 2's reset as new windows on monitor 0.
       if (monitorId === DEFAULT_MONITOR_ID) {
