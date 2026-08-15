@@ -21,3 +21,4 @@ export * from './git';
 export * from './libraries';
 export * from './preview';
 export * from './manifest';
+export * from './worker';

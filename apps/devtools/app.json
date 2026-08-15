@@ -8,6 +8,10 @@
     "yaar-dev"
   ],
   "messaging": "all",
+  "streams": ["agents"],
+  "subagents": {
+    "max": 1
+  },
   "controls": [
     "browser-user",
     "search",
@@ -24,7 +28,7 @@
     "yaar://skills/"
   ],
   "run": "dist/index.html",
-  "version": "1.0.4",
+  "version": "1.1.0",
   "author": "YAAR",
   "kind": "system",
   "appId": "devtools"

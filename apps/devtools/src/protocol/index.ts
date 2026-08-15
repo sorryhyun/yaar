@@ -16,6 +16,7 @@ import {
   bundledLibs,
   consoleLogs,
 } from '../core';
+import { workerStatus, workerEntries } from '../services/worker';
 
 export { projectCommands } from './projects';
 export { fileCommands } from './files';
@@ -24,6 +25,7 @@ export { gitCommands } from './git';
 export { previewCommands } from './preview';
 export { introspectCommands } from './introspect';
 export { httpCommands } from './http';
+export { workerCommands } from './worker';
 
 /**
  * The `defineApp({ state })` map. Split from `main.ts` for the same reason the
@@ -183,6 +185,27 @@ export const devtoolsState = {
         // nothing", which is a different and much more alarming answer.
         return { error: `Could not read own manifest: ${errMsg(err)}` };
       }
+    },
+  },
+  worker: {
+    description:
+      'The worker sub-agent (see workerTask): its status (offline | spawning | idle | ' +
+      'running | error) and the tail of its transcript — tasks, tool calls, answers, ' +
+      'errors, newest last. `lastAnswer` is the most recent completed answer: read it ' +
+      'here when a workerTask call outlived your timeoutMs and status is back to idle, ' +
+      'instead of re-sending the task.',
+    get: () => {
+      const entries = workerEntries();
+      const lastAnswer = [...entries].reverse().find((e) => e.kind === 'answer');
+      // Tool lines are one-liners; tasks and answers can be long. Cap per entry so a
+      // deep transcript cannot flood a query result.
+      const clip = (text: string) =>
+        text.length > 4_000 ? `${text.slice(0, 4_000)}… (truncated)` : text;
+      return {
+        status: workerStatus(),
+        lastAnswer: lastAnswer ? clip(lastAnswer.text) : null,
+        transcript: entries.slice(-30).map((e) => ({ kind: e.kind, text: clip(e.text) })),
+      };
     },
   },
   consoleLogs: {

@@ -52,6 +52,16 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 **Check `removed` in the edit result before moving on.** It is the cheapest way to confirm a splice hit what you meant — this turn, instead of at the next compile.
 
+## The Worker (delegating exploration)
+
+`workerTask` hands one task to a sonnet-tier sub-agent with its own read-only tools (list, read, grep) over the active project. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled", "check all files for Y" — then act on its report yourself; it cannot edit, compile, or deploy, and its report is its word, not yours: verify before editing on it.
+
+Three rules from its call shape:
+
+- **It blocks.** Pass `timeoutMs: 120000` (max 180000). If your call times out, the task is still running — poll `query("worker")` until `status` is `idle` and read `lastAnswer` there. Do not re-send the task.
+- **Self-contained tasks.** The worker sees none of your conversation. Name files and goals explicitly. It does keep its own memory across tasks, so follow-ups ("now the other file") work.
+- **One at a time.** A task while one is in flight is refused, not queued. The user can also run it from the Worker sidebar tab — the same one instance, same transcript.
+
 ## Preview & Debugging
 
 **Lifecycle**, assembled here because it is otherwise spread across four descriptors: `preview` opens the window. `compile` refreshes it if one is open, which **remounts the iframe and resets all in-app state** — a new build is a new app, not a hot reload. `resizePreview` does not remount, so it keeps state. `previewQuery`/`previewCommand` work only once the preview app has registered via `defineApp()`.

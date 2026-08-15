@@ -10,7 +10,7 @@ import { mainView, sidebarTab } from './panel-state';
 /** The persistent file navigation, editor, and lower utility panels. */
 export function Workspace() {
   return html`
-    <div class=${() => `main-area${sidebarTab() === 'changes' ? ' wide-sidebar' : ''}`}>
+    <div class=${() => `main-area${sidebarTab() === 'files' ? '' : ' wide-sidebar'}`}>
       <${Sidebar} />
       <div class="editor-area">
         <${Show} when=${() => mainView() === 'changes'} fallback=${html`<${Editor} />`}>

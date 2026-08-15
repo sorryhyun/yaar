@@ -5,13 +5,18 @@ import { fileChanges } from '../core';
 import { clearChanges } from '../services';
 import { FileTree } from './file-tree';
 import { ChangeList } from './change-list';
-import { sidebarTab, showChanges, showFiles } from './panel-state';
+import { WorkerPanel } from './worker-panel';
+import { sidebarTab, showChanges, showFiles, showWorker } from './panel-state';
+import { workerStatus } from '../services';
 
-// The left pane: file tree and change history as two tabs of one sidebar.
+// The left pane: file tree, change history, and the worker sub-agent as tabs
+// of one sidebar.
 //
-// Both answer "which files are in play", so they belong in the same column; the
-// change history used to sit in the bottom panel next to Problems and Console,
-// where it was a list of paths a long way from the tree of paths.
+// Files and Changes both answer "which files are in play", so they belong in
+// the same column; the change history used to sit in the bottom panel next to
+// Problems and Console, where it was a list of paths a long way from the tree
+// of paths. The worker lives here too because its answers are about those same
+// files — it cites paths, and the tree and editor are where a citation leads.
 
 /**
  * Bring the Changes tab forward when a new change lands.
@@ -65,6 +70,16 @@ export function Sidebar() {
             >
           <//>
         </button>
+        <button
+          class=${() => `sidebar-tab y-text-xs${sidebarTab() === 'worker' ? ' active' : ''}`}
+          onClick=${showWorker}
+          title="Worker sub-agent — a sonnet explorer for the active project"
+        >
+          Worker
+          <${Show} when=${() => workerStatus() === 'running' || workerStatus() === 'spawning'}>
+            <span class="y-dot y-dot-accent y-dot-pulse"></span>
+          <//>
+        </button>
         <${Show} when=${() => sidebarTab() === 'changes' && fileChanges().length > 0}>
           <button class="sidebar-tab-action y-text-xs" onClick=${() => clearChanges()}>
             Clear
@@ -76,6 +91,9 @@ export function Sidebar() {
       <//>
       <${Show} when=${() => sidebarTab() === 'changes'}>
         <${ChangeList} />
+      <//>
+      <${Show} when=${() => sidebarTab() === 'worker'}>
+        <${WorkerPanel} />
       <//>
     </div>
   `;

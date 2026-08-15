@@ -8,3 +8,4 @@ import './diagnostics.css';
 import './diff.css';
 import './dialogs.css';
 import './statusbar.css';
+import './worker.css';

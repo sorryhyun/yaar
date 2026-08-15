@@ -11,7 +11,7 @@ import { createSignal } from '@bundled/solid-js';
 // them. This module imports nothing app-local, which is what keeps it free of the
 // import cycle a shared signal in either component would have closed.
 
-export type SidebarTab = 'files' | 'changes';
+export type SidebarTab = 'files' | 'changes' | 'worker';
 export type MainView = 'editor' | 'changes';
 export type DiffViewMode = 'side-by-side' | 'unified';
 export type ChangesMode = 'changes' | 'manual';
@@ -43,4 +43,14 @@ export function showFiles(): void {
 export function showChanges(): void {
   setSidebarTab('changes');
   setMainView('changes');
+}
+
+/**
+ * Show the worker panel. The main pane goes back to the editor: the worker
+ * cites files, and the editor is where a cited file opens — a lingering diff
+ * would make every citation open somewhere the reader cannot see.
+ */
+export function showWorker(): void {
+  setSidebarTab('worker');
+  setMainView('editor');
 }

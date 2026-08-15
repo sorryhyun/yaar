@@ -89,3 +89,32 @@ export const ProjectProtocolJsonSchema = ManifestShapeSchema;
  * whatever arbitrary in-development code passed to `defineApp()`.
  */
 export const AppManifestSchema = ManifestShapeSchema;
+
+// ── The worker sub-agent's wire (yaar://apps/self/agents) ──
+//
+// Same rationale as the manifests above: the envelope is JSON pulled out of a
+// verb result, and a malformed one would otherwise surface as
+// `undefined.streamUri` three frames into a subscription — far from the call
+// that produced it.
+
+/** What `spawn` hands back. Loose — the server may add fields. */
+export const PersonaHandleSchema = z.looseObject({
+  personaId: z.string(),
+  instanceId: z.string(),
+  streamUri: z.string(),
+});
+
+/**
+ * The `data` payload of the worker's stream frames. Every field optional on
+ * purpose: one schema covers `start`, `text`, `thinking`, `done`, and `error`,
+ * and which fields are present is what `kind` already says. Validating shape
+ * rather than presence keeps a new frame kind from being a crash.
+ */
+export const WorkerFrameDataSchema = z.looseObject({
+  content: z.optional(z.string()),
+  text: z.optional(z.string()),
+  error: z.optional(z.string()),
+});
+
+export type PersonaHandle = z.infer<typeof PersonaHandleSchema>;
+export type WorkerFrameData = z.infer<typeof WorkerFrameDataSchema>;

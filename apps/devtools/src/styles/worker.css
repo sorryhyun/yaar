@@ -1,0 +1,93 @@
+/* ── Worker panel (sidebar third tab) ── */
+
+.worker-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.worker-status {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+}
+
+.worker-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--yaar-sp-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-2);
+}
+
+.worker-empty {
+  padding: var(--yaar-sp-2);
+  line-height: 1.5;
+}
+
+.worker-entry {
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border-radius: 4px;
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+}
+
+.worker-entry-task {
+  background: var(--yaar-wash-accent);
+  border-left: 2px solid var(--yaar-accent);
+  font-weight: 600;
+}
+
+.worker-entry-answer {
+  background: var(--yaar-bg-surface);
+}
+
+/* The draft still streaming in — same face as an answer, marked as unfinished. */
+.worker-entry-live {
+  opacity: 0.85;
+}
+
+.worker-entry-tool {
+  padding: 0 var(--yaar-sp-2);
+  color: var(--yaar-text-muted);
+  font-family: var(--yaar-font-mono, monospace);
+  font-size: 11px;
+}
+
+.worker-entry-error {
+  background: var(--yaar-wash-error);
+  border-left: 2px solid var(--yaar-error);
+}
+
+.worker-thinking {
+  padding: 0 var(--yaar-sp-2);
+}
+
+.worker-thinking > div {
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--yaar-text-muted);
+  padding: var(--yaar-sp-1) 0;
+}
+
+.worker-input {
+  display: flex;
+  flex-direction: column;
+  gap: var(--yaar-sp-1);
+  padding: var(--yaar-sp-2);
+  border-top: 1px solid var(--yaar-border);
+}
+
+.worker-task-input {
+  resize: vertical;
+  min-height: 48px;
+  font-size: 12px;
+}
