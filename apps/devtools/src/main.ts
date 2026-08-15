@@ -44,8 +44,6 @@ export default defineApp({
   view: AppShell,
 });
 
-// ── Init ──
-
 loadProjects();
 loadBundledLibraries();
 startConsolePolling();

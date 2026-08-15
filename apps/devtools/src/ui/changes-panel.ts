@@ -30,8 +30,6 @@ const MAX_PATCH_LINES = 400;
 /** Which change the reader asked to see whole. An id, so a new selection re-caps. */
 const [showFullId, setShowFullId] = createSignal<string | null>(null);
 
-// ── Manual compare (paste two texts) ──
-
 const [oldText, setOldText] = createSignal('');
 const [newText, setNewText] = createSignal('');
 const [manualHtml, setManualHtml] = createSignal('');
@@ -65,8 +63,6 @@ const KIND_LABEL: Record<FileChange['kind'], string> = {
   delete: 'deleted',
 };
 
-// ── Derived diff for the selected change ──
-
 /**
  * The patch for the change on screen, already capped.
  *
@@ -89,8 +85,6 @@ const changeHtml = createMemo(() => {
   const view = patchView();
   return view ? renderPatch(view.patch) : '';
 });
-
-// ── Components ──
 
 function ChangeDetail() {
   return html`

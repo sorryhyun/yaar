@@ -45,7 +45,6 @@ export function watchViewport(): () => void {
   return () => mq.removeEventListener('change', apply);
 }
 
-/** Is the sidebar on screen right now? */
 export const sidebarVisible = () => (narrow() ? drawerOpen() : sidebarPinned());
 
 /** One button, two meanings: toggle the drawer when narrow, the pin when wide. */

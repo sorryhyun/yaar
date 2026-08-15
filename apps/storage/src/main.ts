@@ -29,8 +29,6 @@ import {
 } from './navOverlay';
 import { app, storage, showToast, showConfirm, defineApp } from '@bundled/yaar';
 
-// ── Upload ──────────────────────────────────────────────────────
-
 let uploadInput: HTMLInputElement;
 
 function openUploadDialog() {
@@ -56,8 +54,6 @@ async function handleUpload(e: Event) {
     showToast('Upload failed', 'error');
   }
 }
-
-// ── Panel width drag ────────────────────────────────────────────────
 
 // The panel is pinned to left:0, so the pointer's clientX *is* the desired
 // width — setPanelWidth applies the min/max clamp. Pointer capture keeps the
@@ -87,8 +83,6 @@ function startResize(e: PointerEvent) {
 
 // Keep the panel width within 70% of the window as it shrinks.
 window.addEventListener('resize', () => reclampPanelWidth());
-
-// ── Template ──────────────────────────────────────────────
 
 const App = () => {
   onMount(() => {
@@ -277,8 +271,6 @@ const App = () => {
   <//>
 `;
 };
-
-// ── App Protocol & View ────────────────────────────────────
 
 export default defineApp({
   id: 'storage',

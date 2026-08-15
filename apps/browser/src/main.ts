@@ -1,36 +1,19 @@
-/**
- * Browser app — entry point.
- * Wires together store, SSE, actions, UI view, and the App Protocol.
- *
- * Responsibilities:
- *   - Initialize SSE with the DOM-level refreshScreenshot callback
- *   - Define the high-level attach() orchestration (store + SSE)
- *   - Declare the Solid.js UI tree
- *   - Declare the app itself (state + commands + view) via defineApp()
- *
- * Command handlers use the @bundled/yaar-web SDK for browser automation.
- */
 import { onCleanup } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
-// Store: signals + derived state + pure state mutators
 import {
   lock, loading, showScreenshot, placeholderText, currentUrl, pageTitle,
   activeBrowserId, setActiveBrowserId,
   initialBrowserId,
   updateUrlBar, resetDisplay, clearDisplay,
 } from './store';
-// SSE: real-time connection management
 import { connectSSE, disconnectSSE, initSSE } from './sse';
-// Actions: screenshot refresh + UI event handlers
 import {
   refreshScreenshot, setScreenshotEl,
   handleNav, handleReload, handleUrlFocus, handleUrlKeydown,
 } from './actions';
 import './styles.css';
-
-// ── Bootstrap ────────────────────────────────────────────────────────────
 
 // Inject refreshScreenshot into SSE module before first connectSSE() call
 initSSE(refreshScreenshot);
@@ -45,11 +28,8 @@ function attach(browserId: string): void {
   connectSSE(browserId);
 }
 
-// Initial SSE connection
 connectSSE(initialBrowserId);
 onCleanup(() => disconnectSSE());
-
-// ── Session ──────────────────────────────────────────────────────────────
 
 /** Promise lock to prevent double-creation of browser sessions. */
 let creatingSession: Promise<string> | null = null;
@@ -85,8 +65,6 @@ async function bid() {
   return { browserId: await ensureBrowserId() };
 }
 
-// ── View ─────────────────────────────────────────────────────────────────
-
 function App() {
   return html`
     <div class="browser-chrome y-app">
@@ -118,8 +96,6 @@ function App() {
   `;
 }
 
-// ── App Protocol ─────────────────────────────────────────────────────────
-
 export default defineApp({
   id: 'browser',
   name: 'Browser',
@@ -138,7 +114,6 @@ export default defineApp({
     },
   },
   commands: {
-    // ── Navigation ──────────────────────────────────────────────────
     open: {
       description: 'Navigate to URL (auto-creates session if needed)',
       params: {
@@ -173,7 +148,6 @@ export default defineApp({
       run: async (p) => web.scroll({ ...p, ...(await bid()) }),
     },
 
-    // ── Interaction ─────────────────────────────────────────────────
     click: {
       description: 'Click an element',
       params: {
@@ -220,7 +194,6 @@ export default defineApp({
       run: async (p) => web.hover({ ...p, ...(await bid()) }),
     },
 
-    // ── Observation ─────────────────────────────────────────────────
     wait_for: {
       description: 'Wait for a selector to appear',
       params: {
@@ -314,7 +287,6 @@ export default defineApp({
       run: async (p) => web.html({ ...p, ...(await bid()) }),
     },
 
-    // ── Visual ──────────────────────────────────────────────────────
     annotate: {
       description: 'Show numbered badges on interactive elements',
       params: { type: 'object', properties: {} },
@@ -326,7 +298,7 @@ export default defineApp({
       run: async () => web.removeAnnotations((await bid()).browserId),
     },
 
-    // ── UI Controls (local, no verb call) ───────────────────────────
+    // UI controls: local, no verb call.
     refresh: {
       description: 'Refresh screenshot and optionally update URL bar',
       params: {

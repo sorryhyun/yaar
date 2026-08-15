@@ -2,10 +2,8 @@ export {};
 import { appStorage } from '@bundled/yaar';
 import type { FileEntry } from '../core/types';
 
-// Recursively list all files and directories under a storage path.
-// appStorage.list() is shallow — only returns direct children.
-// This function walks subdirectories and returns a flat list of all entries
-// with paths relative to the given prefix.
+// appStorage.list() is shallow — only returns direct children — so this walks
+// subdirectories itself to build the flat list.
 //
 // `dist/` is skipped entirely. It is compiler output — the largest entry in every
 // project (an inlined bundle runs past 100KB), never edited by hand, and excluded
@@ -23,14 +21,12 @@ export async function listAllFiles(storagePath: string, prefix: string): Promise
 
   const result: FileEntry[] = [];
   for (const entry of entries) {
-    // Strip the storage prefix to get a display-relative path
     const relativePath = entry.path.startsWith(prefix + '/')
       ? entry.path.slice(prefix.length + 1)
       : entry.path.startsWith(prefix)
         ? entry.path.slice(prefix.length)
         : entry.path;
 
-    // Normalize: remove trailing slash from directory paths
     const cleanPath = relativePath.replace(/\/$/, '');
 
     if (entry.isDirectory && GENERATED_DIRS.has(cleanPath)) continue;
@@ -45,7 +41,6 @@ export async function listAllFiles(storagePath: string, prefix: string): Promise
       ...(entry.modifiedAt ? { modifiedAt: entry.modifiedAt } : {}),
     });
 
-    // Recurse into subdirectories
     if (entry.isDirectory) {
       const subPath = entry.path.replace(/\/$/, '');
       const children = await listAllFiles(subPath, prefix);

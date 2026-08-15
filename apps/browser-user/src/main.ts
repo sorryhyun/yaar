@@ -140,8 +140,6 @@ function App() {
   `;
 }
 
-// ── App Protocol ─────────────────────────────────────────────────────────
-
 /**
  * Unwrap a Bridge envelope for an app command: return its `data` on success,
  * or throw its `error` so the App Protocol reports a proper command failure

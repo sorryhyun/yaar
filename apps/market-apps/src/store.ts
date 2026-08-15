@@ -1,10 +1,3 @@
-// ── Reactive store ────────────────────────────────────────────────────────
-//
-// All reactive state (signals) plus the small helpers that read/derive/mutate it.
-// Pure data transforms live in parsers.ts; network + business logic in api.ts /
-// actions.ts. Keeping signals in one module gives every other module a single,
-// non-circular place to import shared state from.
-
 import { createSignal } from '@bundled/solid-js';
 import {
   INSTALL_RECONCILIATION_GRACE_MS,
@@ -21,8 +14,6 @@ import type {
   ListedApp,
   PendingPublish,
 } from './types.js';
-
-// ── Signals ─────────────────────────────────────────────────────────────
 
 export const [marketApps, setMarketApps] = createSignal<ListedApp[]>([]);
 export const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
@@ -64,8 +55,6 @@ const [marketplaceInstallRecords, setMarketplaceInstallRecords] = createSignal<
   Record<string, MarketplaceInstallRecord>
 >({});
 
-// ── Status helpers ──────────────────────────────────────────────────────
-
 function timeNow(): string {
   return new Date().toLocaleString();
 }
@@ -78,8 +67,6 @@ export function setStatus(next: string, stamp = true): void {
   setStatusText(next);
   if (stamp) touch();
 }
-
-// ── Installed / ownership queries ──────────────────────────────────────────
 
 export function hasInstalled(appId: string): boolean {
   const target = normalizeId(appId);
@@ -233,8 +220,6 @@ export function markInstalledSignal(app: { id: string; name: string }, installed
   }
   syncMarketInstallationFlags();
 }
-
-// ── Derived views ────────────────────────────────────────────────────
 
 /**
  * The full card list: every marketplace app, plus apps installed locally that the

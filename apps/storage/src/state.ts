@@ -15,7 +15,6 @@ export const [state, setState] = createStore({
   previewMetaText: '',
 });
 
-// ── DOM refs ──────────────────────────────────────────────────────────
 export let elMountAlias!: HTMLInputElement;
 export let elMountHostPath!: HTMLInputElement;
 export let elMountReadonly!: HTMLInputElement;

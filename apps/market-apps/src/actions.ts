@@ -1,10 +1,3 @@
-// ── Business logic / actions ───────────────────────────────────────────
-//
-// User-facing operations that orchestrate the store (state) and api (I/O)
-// layers: refresh, install, uninstall, publish, and the Google publisher
-// sign-in flow. Each wraps its I/O in runAction for uniform loading + error
-// handling so the components stay declarative.
-
 import { showConfirm, wait, withLoading } from '@bundled/yaar';
 import { SIGNED_OUT_ACCOUNT, GITHUB_STATUS_HEALTHY, GITHUB_STATUS_POLL_MS } from './constants.js';
 import {
@@ -44,8 +37,6 @@ import { parseGithubStatus, parseMarket } from './parsers.js';
 import { AuthLoginSchema, AuthMeSchema, AuthStatusSchema, MarketPayloadSchema } from './schema.js';
 import type { ListedApp } from './types.js';
 
-// ── Async action runner ──────────────────────────────────────────────
-
 /**
  * Run an async action with loading state and unified error handling.
  * Sets status to `loadingMsg` before starting; on failure prefixes
@@ -59,8 +50,6 @@ export async function runAction(
   setStatus(loadingMsg, false);
   await withLoading(setLoading, action, (msg) => setStatus(`${errorPrefix}: ${msg}`));
 }
-
-// ── Marketplace data ───────────────────────────────────────────────
 
 export async function refreshData(): Promise<void> {
   await runAction(
@@ -267,8 +256,6 @@ export async function cancelPublish(): Promise<void> {
   setStatus('Publish cancelled.');
 }
 
-// ── Publisher sign-in ───────────────────────────────────────────────
-
 /** Pull sign-in status + owned apps from the server into the `account` signal. */
 export async function refreshAccount(): Promise<void> {
   try {
@@ -344,8 +331,6 @@ export async function signOut(): Promise<void> {
     (msg) => setStatus(`Sign-out failed: ${msg}`),
   );
 }
-
-// ── GitHub health polling ────────────────────────────────────────────
 
 /**
  * Refresh the GitHub health hint behind the publish banner.

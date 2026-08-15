@@ -1,18 +1,9 @@
-// ── Network + host verb helpers ──────────────────────────────────────────
-//
-// The I/O boundary: talking to the marketplace domain (apiGet), to YAAR's own
-// origin for publisher auth (yaarGet / yaarPost), and to the host via the apps
-// verb (install / delete / list). Everything here returns plain data; loading
-// state and status text are the caller's concern (see actions.ts).
-
 import * as z from '@bundled/zod';
 import { del, invoke, list, safeParseOr } from '@bundled/yaar';
 import { GITHUB_STATUS_URL, MARKET_DOMAIN } from './constants.js';
 import { parseInstalledAny } from './parsers.js';
 import { GithubStatusSummarySchema } from './schema.js';
 import type { ConfirmOutcome, InstalledApp, PreparedPublication } from './types.js';
-
-// ── Marketplace domain ───────────────────────────────────────────────
 
 export async function apiGet<S extends z.ZodMiniType>(
   path: string,
@@ -32,8 +23,6 @@ export async function apiGet<S extends z.ZodMiniType>(
   });
 }
 
-// ── GitHub health ────────────────────────────────────────────────────
-//
 // Cross-origin, so this goes through YAAR's fetch proxy (SSRF checks + the domain
 // allowlist) on the strength of this app's `yaar://http` permission. Unauthenticated
 // and uncredentialed by design — it is a public status page, and it must never look
@@ -49,8 +38,6 @@ export async function fetchGithubStatus(): Promise<unknown> {
     },
   });
 }
-
-// ── Host verbs (yaar://apps/) ──────────────────────────────────────────
 
 /** Install an app via yaar://apps/{appId}. Requires yaar://apps/ permission. */
 export async function hostInstall(app: { id: string }): Promise<void> {
@@ -103,8 +90,6 @@ export async function hostCancelPublish(app: { id: string }, publicationId: stri
   await invoke('yaar://apps/' + app.id, { action: 'publish_cancel', publicationId });
 }
 
-// ── Publisher auth (YAAR's own origin, relative paths) ─────────────────────────
-//
 // These hit YAAR's *own* origin (relative paths), not the marketplace domain — the
 // fetch proxy attaches this app's iframe token automatically, and the server only
 // answers because market-apps is a bundled system app. `login` opens a real Google

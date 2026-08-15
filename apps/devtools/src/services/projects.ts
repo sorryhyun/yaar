@@ -79,12 +79,11 @@ async function recordOrigin(id: string, origin: string): Promise<void> {
  * machine, one carrying a whole cloned source tree and another ~600KB of PDF and draft
  * data, none of them mappable back to the project that wrote them once the id is gone.
  *
- * ── Why `openPreview` calls this and not `loadProjects` ──
- *
- * Opening a project is a read; previewing is what *creates* these trees, so it is what
- * should retire them. Hanging the sweep off the project listing meant deleting storage on
- * a path that only meant to populate a sidebar — and running it on every create, delete
- * and tab switch, none of which can have produced a new orphan.
+ * Why `openPreview` calls this and not `loadProjects`: opening a project is a read;
+ * previewing is what *creates* these trees, so it is what should retire them. Hanging
+ * the sweep off the project listing meant deleting storage on a path that only meant to
+ * populate a sidebar — and running it on every create, delete and tab switch, none of
+ * which can have produced a new orphan.
  *
  * The orphan test is exact rather than time-based: a directory whose `{projectId}` names
  * no project. A live project's preview tree is left alone even between previews, since it
@@ -264,7 +263,6 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
   const meta = result?.meta ?? {};
   const name = typeof meta.name === 'string' ? meta.name : appId;
   const id = Date.now().toString();
-  // Preserve all meta fields (including permissions) from the original app
   await appStorage.save(projectPath(id, 'app.json'), JSON.stringify({ ...meta, name }, null, 2));
   if (result?.files) {
     for (const file of result.files) {
@@ -297,7 +295,6 @@ export async function cloneApp(appId: string): Promise<CloneAppResult> {
 export async function openProject(id: string): Promise<void> {
   const proj = projects().find((p) => p.id === id);
   if (!proj) return;
-  // Add to tabs if not present
   if (!openTabs().includes(id)) setOpenTabs([...openTabs(), id]);
   setActiveProject(proj);
   // The static manifest belongs to whichever project was last compiled — drop it
@@ -308,7 +305,6 @@ export async function openProject(id: string): Promise<void> {
   // typecheck writes it, but `compileStatus` no longer reads it as current.
   setTypecheckState('unknown');
   await refreshFiles(id);
-  // Open main.ts by default
   await openFile('src/main.ts');
   setStatusText(`Opened "${proj.name}"`);
 }
@@ -353,7 +349,6 @@ export async function deleteProject(id: string): Promise<void> {
   } catch {
     /* best effort — loadProjects prunes anything left behind */
   }
-  // Remove from tabs
   setOpenTabs(openTabs().filter((t) => t !== id));
   if (activeProject()?.id === id) {
     const remaining = openTabs();

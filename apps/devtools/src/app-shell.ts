@@ -4,7 +4,6 @@ import { ProjectToolbar } from './ui/project-toolbar';
 import { StatusBar } from './ui/status-bar';
 import { Workspace } from './ui/workspace';
 
-/** Composes the focused chrome and workspace components into the IDE layout. */
 export function AppShell() {
   return html`
     <div class="devtools">

@@ -31,8 +31,6 @@ import type {
   TabId,
 } from './types';
 
-// ── Signals ──────────────────────────────────────────────────
-
 const [agentStats, setAgentStats] = createSignal<AgentStats | null>(null);
 const [windows, setWindows] = createSignal<WindowInfo[]>([]);
 const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
@@ -51,8 +49,6 @@ export { agentActivity };
 export function selectTab(tab: TabId) {
   setActiveTab(tab);
 }
-
-// ── Derived ──────────────────────────────────────────────────
 
 export const agentList = createMemo<AgentEntry[]>(() => agentStats()?.agents ?? []);
 
@@ -92,8 +88,6 @@ export const appProcesses = createMemo<AppProcess[]>(() => {
     return a.name.localeCompare(b.name);
   });
 });
-
-// ── Fetch functions ──────────────────────────────────────────
 
 /**
  * Adapt a resource_link list — `{ uri, name, description }` — into a flat record.
@@ -306,8 +300,6 @@ export async function refreshAll() {
   setLastRefresh(new Date());
 }
 
-// ── Watching ─────────────────────────────────────────────────
-
 /**
  * Subscribe rather than poll. The server pushes a change ping whenever an agent is
  * created, disposed, or flips busy/idle, and on every window.* action — so a quiet
@@ -364,8 +356,6 @@ export function startWatching() {
 /** Ticks once a second so `updatedAt` can be rendered as elapsed time. */
 const [now, setNow] = createSignal(Date.now());
 export { now };
-
-// ── Live agent streams ───────────────────────────────────────
 
 /** Longest tail of streamed assistant text we keep per agent. */
 const TEXT_TAIL_CHARS = 200;
@@ -497,8 +487,6 @@ function reconcileStreams(agents: AgentEntry[]) {
     setAgentActivity(id, undefined!);
   }
 }
-
-// ── Actions ──────────────────────────────────────────────────
 
 // Each action re-fetches only the list it touched. The subscription would push the
 // same change a moment later, but refreshing here keeps the row from lingering if

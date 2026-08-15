@@ -17,7 +17,6 @@ const [loaded, setLoaded] = createSignal(false);
 
 export { tabs, connected, loaded };
 
-/** The currently active tab, or null. */
 export function activeTab(): Tab | null {
   return tabs().find((t) => t.active) ?? null;
 }

@@ -92,7 +92,6 @@ function bridgeHeaders(): Record<string, string> {
   return h;
 }
 
-/** POST a body to `/api/bridge` and return the parsed JSON envelope. */
 async function bridgePost<T>(body: BridgeRequest): Promise<BridgeEnvelope<T>> {
   try {
     const res = await fetch('/api/bridge', {
@@ -114,9 +113,6 @@ async function bridgePost<T>(body: BridgeRequest): Promise<BridgeEnvelope<T>> {
   }
 }
 
-// ── Typed helpers ────────────────────────────────────────────────────────
-
-/** List the user's real browser tabs. */
 export function listTabs(): Promise<BridgeEnvelope<ListTabsData>> {
   return bridgePost<ListTabsData>({ action: 'listTabs' });
 }
@@ -126,7 +122,6 @@ export function presence(): Promise<BridgeEnvelope<PresenceData>> {
   return bridgePost<PresenceData>({ action: 'presence' });
 }
 
-/** Focus (activate) a tab. */
 export function focus(tabId: number): Promise<BridgeEnvelope<string>> {
   return bridgePost<string>({ action: 'focus', tabId });
 }

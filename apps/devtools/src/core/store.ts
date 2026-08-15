@@ -16,8 +16,6 @@ import type {
 // app-local except its own type definitions, which is what keeps the layer
 // rule (ui -> services -> lib -> core) enforceable by grep.
 
-// ── Signals ──
-
 export const [activeProject, setActiveProject] = createSignal<ProjectMeta | null>(null);
 export const [projects, setProjects] = createSignal<ProjectMeta[]>([]);
 export const [files, setFiles] = createSignal<FileEntry[]>([]);
@@ -54,16 +52,12 @@ export const [compileErrors, setCompileErrors] = createSignal<string[]>([]);
 export const [previewUrl, setPreviewUrl] = createSignal<string | null>(null);
 export const [statusText, setStatusText] = createSignal('Ready');
 
-// ── Feature: Multi-Project Tabs ──
 export const [openTabs, setOpenTabs] = createSignal<string[]>([]);
 
-// ── Feature: Bundled Libraries ──
 export const [bundledLibs, setBundledLibs] = createSignal<string[]>([]);
 
-// ── Feature: Console Capture ──
 export const [consoleLogs, setConsoleLogs] = createSignal<ConsoleEntry[]>([]);
 
-// ── Feature: Preview Window ──
 export const [previewWindowId, setPreviewWindowId] = createSignal<string | null>(null);
 /**
  * Which build the open preview is showing, against which build exists.
@@ -84,7 +78,6 @@ export function previewIsStale(): boolean {
   return previewWindowId() !== null && previewBuildSerial() < buildSerial();
 }
 
-// ── Feature: File change history (the Changes panel) ──
 /**
  * Recent file mutations, newest first and bounded by the recorder.
  *
@@ -97,5 +90,4 @@ export const [fileChanges, setFileChanges] = createSignal<FileChange[]>([]);
 /** Which change the panel is showing. Null means "the newest one". */
 export const [selectedChangeId, setSelectedChangeId] = createSignal<string | null>(null);
 
-// ── Feature: Static protocol manifest (from the last successful compile) ──
 export const [staticProtocol, setStaticProtocol] = createSignal<StaticProtocolInfo | null>(null);

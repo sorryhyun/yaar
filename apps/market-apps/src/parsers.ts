@@ -1,9 +1,3 @@
-// ── Pure parsing / normalization helpers ─────────────────────────────────────
-//
-// No signals, no I/O — just data-in / data-out transforms over the shapes the
-// marketplace and host verbs return. Kept pure so they can be reasoned about
-// (and tested) in isolation from the reactive store.
-
 import { GITHUB_PUBLISH_COMPONENTS } from './constants.js';
 import type { ApiPayload, GithubStatus, InstalledApp, ListedApp } from './types.js';
 
@@ -95,7 +89,6 @@ export function compareVersions(local?: string, published?: string): VersionOrde
   return 'same';
 }
 
-/** Map a raw array to valid InstalledApp entries, dropping nulls. */
 export function parseInstalledList(items: unknown[]): InstalledApp[] {
   return items.map(coerceInstalledApp).filter((a): a is InstalledApp => a !== null);
 }

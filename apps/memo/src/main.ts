@@ -105,7 +105,6 @@ function App() {
     );
   }
 
-  // Keyboard shortcuts
   onMount(() => {
     const unN = onShortcut('ctrl+n', () => startNew());
     const unS = onShortcut('ctrl+s', () => {
@@ -122,7 +121,6 @@ function App() {
     });
   });
 
-  // Sidebar list item
   function MemoListItem(props: { id: string; title: string; content: string; updatedAt: string }) {
     return html`
       <div
@@ -136,7 +134,6 @@ function App() {
     `;
   }
 
-  // Editor panel (new or edit)
   function EditorPanel() {
     return html`
       <div class="memo-editor">
@@ -167,7 +164,6 @@ function App() {
     `;
   }
 
-  // View panel (read mode)
   function ViewPanel() {
     return html`
       <div class="memo-view">
@@ -197,7 +193,6 @@ function App() {
 
   return html`
     <div class="memo-app">
-      <!-- Toolbar -->
       <div class="memo-toolbar">
         <span class="memo-toolbar-title">📝 Memo</span>
         <input
@@ -210,9 +205,7 @@ function App() {
         <button class="y-btn y-btn-primary y-btn-sm" onClick=${startNew}>+ New</button>
       </div>
 
-      <!-- Body -->
       <div class="memo-layout">
-        <!-- Sidebar -->
         <div class="memo-sidebar">
           <div class="memo-list y-scroll">
             <${Show}
@@ -237,7 +230,6 @@ function App() {
           </div>
         </div>
 
-        <!-- Main content area -->
         <div class="memo-content">
           <${Show} when=${() => editMode() !== 'none'}>
             <${EditorPanel} />

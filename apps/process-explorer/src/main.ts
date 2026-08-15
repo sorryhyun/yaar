@@ -23,8 +23,6 @@ import {
 } from './data';
 import './styles/index';
 
-// ── Helpers ──────────────────────────────────────────────────
-
 function typeBadge(type: AgentEntry['type']) {
   const colors: Record<string, string> = {
     monitor: 'var(--yaar-accent)',
@@ -105,8 +103,6 @@ function formatUsage(usage: AgentUsage | undefined) {
   if (total === 0) return '';
   return `${formatTokens(total)} tok · ${formatTokens(input)} in · ${formatTokens(usage.outputTokens)} out`;
 }
-
-// ── Components ───────────────────────────────────────────────
 
 function StatsBar() {
   const stats = () => agentStats();

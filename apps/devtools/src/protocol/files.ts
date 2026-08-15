@@ -389,7 +389,6 @@ export const fileCommands = {
     run: async (p) => {
       const result = await grep(String(p.pattern), p.glob ? String(p.glob) : undefined);
       if (result.matches.length === 0) return 'No matches found.';
-      // Group matches by file and return as embedded resource blocks
       const proj = activeProject();
       const projectId = proj?.id ?? 'unknown';
       const byFile = new Map<string, typeof result.matches>();

@@ -90,12 +90,10 @@ export const ProjectProtocolJsonSchema = ManifestShapeSchema;
  */
 export const AppManifestSchema = ManifestShapeSchema;
 
-// ── The worker sub-agent's wire (yaar://apps/self/agents) ──
-//
-// Same rationale as the manifests above: the envelope is JSON pulled out of a
-// verb result, and a malformed one would otherwise surface as
-// `undefined.streamUri` three frames into a subscription — far from the call
-// that produced it.
+// The worker sub-agent's wire (yaar://apps/self/agents): same rationale as the
+// manifests above. The envelope is JSON pulled out of a verb result, and a
+// malformed one would otherwise surface as `undefined.streamUri` three frames
+// into a subscription — far from the call that produced it.
 
 /** What `spawn` hands back. Loose — the server may add fields. */
 export const PersonaHandleSchema = z.looseObject({

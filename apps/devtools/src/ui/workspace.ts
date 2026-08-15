@@ -7,7 +7,6 @@ import { ChangeView } from './changes-panel';
 import { DiagnosticsPanel } from './diagnostics';
 import { mainView, sidebarTab } from './panel-state';
 
-/** The persistent file navigation, editor, and lower utility panels. */
 export function Workspace() {
   return html`
     <div class=${() => `main-area${sidebarTab() === 'files' ? '' : ' wide-sidebar'}`}>

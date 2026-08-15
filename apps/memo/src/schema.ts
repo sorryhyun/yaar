@@ -21,7 +21,7 @@
 // add ~260KB.
 import * as z from '@bundled/zod';
 
-/** One row of the legacy file. Loose so an unknown extra field is carried over. */
+/** Loose so an unknown extra field is carried over. */
 export const LegacyMemoSchema = z.looseObject({
   id: z.optional(z.string()),
   title: z.optional(z.string()),
@@ -30,7 +30,6 @@ export const LegacyMemoSchema = z.looseObject({
   updatedAt: z.optional(z.string()),
 });
 
-/** The legacy `memos.json` envelope. */
 export const LegacyMemoStoreSchema = z.looseObject({
   memos: z.array(z.unknown()),
 });

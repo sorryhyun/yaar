@@ -1,6 +1,5 @@
-// Tokenizer for the graphing expression language. Ported from the graph-lite
-// prototype and typed. Deliberately tiny: numbers, identifiers, and the eight
-// operator characters the parser understands.
+// Tokenizer for the graphing expression language. Deliberately tiny: numbers,
+// identifiers, and the eight operator characters the parser understands.
 
 export type Token =
   | { t: 'num'; v: number }

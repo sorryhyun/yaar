@@ -71,7 +71,6 @@ function currentContent(): string {
   return isDirty() ? localContent() : content;
 }
 
-// Re-highlight when content or file changes
 createEffect(() => {
   const code = currentContent();
   const lang = getLanguage(openFilePath());

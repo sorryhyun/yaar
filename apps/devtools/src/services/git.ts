@@ -8,8 +8,6 @@ import {
 } from '@bundled/yaar-dev';
 import { setStatusText } from '../core';
 
-// ── Version history ──
-//
 // Deploys are snapshotted into a per-app shadow git repo (metadata lives outside
 // the app dir, so the user's own repo is never touched). These target a deployed
 // *app*, not the sandbox project — the boundary is the app directory itself.

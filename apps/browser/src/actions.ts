@@ -1,26 +1,14 @@
-/**
- * UI event handlers and screenshot actions for the Browser app.
- * All functions that touch the DOM screenshotEl or call yaar-web
- * navigation APIs live here.
- */
 import { app } from '@bundled/yaar';
 import { navigate } from '@bundled/yaar-web';
 import { activeBrowserId, setLoading, setShowScreenshot } from './store';
 import { withToken } from './token';
 
-// ── Screenshot DOM ref ──────────────────────────────────────────────
-
-/**
- * Reference to the <img> element set during render.
- * Exported so sse.ts can access it for polling updates.
- */
+// Exported so sse.ts can access it for polling updates.
 export let screenshotEl!: HTMLImageElement;
 
 export function setScreenshotEl(el: HTMLImageElement): void {
   screenshotEl = el;
 }
-
-// ── Screenshot refresh ──────────────────────────────────────────────
 
 export function refreshScreenshot(fresh = false): void {
   const bid = activeBrowserId();
@@ -37,8 +25,6 @@ export function refreshScreenshot(fresh = false): void {
   };
   screenshotEl.src = src;
 }
-
-// ── Navigation event handlers ────────────────────────────────────────
 
 /** Navigate back/forward — invoke directly for immediate effect, then notify agent. */
 export async function handleNav(direction: 'navigate_back' | 'navigate_forward'): Promise<void> {

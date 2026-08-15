@@ -12,7 +12,6 @@ export async function loadSessions(): Promise<void> {
       );
       const arr = Array.isArray(result?.sessions) ? result.sessions : [];
       if (result?.currentSessionId) setState('currentSessionId', result.currentSessionId);
-      // Sort newest first
       arr.sort((a, b) => (b.createdAt ?? '').localeCompare(a.createdAt ?? ''));
       setState('sessions', arr);
       setState('totalCount', arr.length);
@@ -37,7 +36,6 @@ export async function loadDetail(sessionId: string): Promise<void> {
     setState('detail', d);
   } catch (e) {
     console.error('Failed to load detail', e);
-    // Fallback: use summary data from the list
     const s = state.sessions.find((s) => s.sessionId === sessionId);
     if (s) setState('detail', s as unknown as SessionDetail);
   } finally {
@@ -86,8 +84,6 @@ export async function readBlob(sessionId: string, sha256: string): Promise<strin
   }
 }
 
-// ── Message normalisation ────────────────────────────────
-//
 // `yaar://history/{id}/messages` is a trust boundary: the entries are
 // heterogeneous (tool_use / tool_result / thinking / action / interaction),
 // they are produced by several different agent runtimes, and a single odd one

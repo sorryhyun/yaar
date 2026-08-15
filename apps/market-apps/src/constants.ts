@@ -1,5 +1,3 @@
-// ── Constants ────────────────────────────────────────────────────────────────
-
 import type { Account, GithubStatus } from './types.js';
 
 /**

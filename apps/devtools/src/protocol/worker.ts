@@ -9,7 +9,6 @@ import {
   waitForWorker,
 } from '../services';
 
-// ── Worker ─────────────────────────────────────────────────────────
 // Two audiences, one file. `workerTask`/`workerWait` are the app agent's door —
 // the two commands that appear in the manifest, so the concierge can delegate
 // survey work instead of spending its own turns on reads, and collect it when

@@ -1,5 +1,3 @@
-// ── Shared type definitions ──────────────────────────────────────────────────
-
 export type ListedApp = {
   id: string;
   name: string;

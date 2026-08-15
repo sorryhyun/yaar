@@ -63,8 +63,6 @@ const ContentBlock = (content: string) => html`
   </div>
 `;
 
-// ── Compact log rows ──────────────────────────────────────
-//
 // Everything that is not prose (tool calls, results, reasoning, actions, UI
 // interactions) renders as ONE line: time · verb chip · target. The row itself
 // is the disclosure control — no separate "View input" box — so a screenful

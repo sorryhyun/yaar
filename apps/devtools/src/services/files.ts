@@ -375,8 +375,6 @@ export async function deleteFile(path: string): Promise<void> {
   setStatusText(`Deleted ${path}`);
 }
 
-// ── Read (non-mutating) ──
-
 export interface ReadFileResult {
   path: string;
   content: string;

@@ -297,8 +297,6 @@ export async function previewEvaluate(
   };
 }
 
-// ── Inspect ─────────────────────────────────────────────────────────────────
-//
 // One read that puts side by side the three things a stale-render bug lives
 // between: what the app *declares* (protocol state), what it *renders* (the
 // DOM's text), and what it *said* (the console tail). Each was already reachable

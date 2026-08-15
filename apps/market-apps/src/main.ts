@@ -1,9 +1,3 @@
-// ── Entry point ─────────────────────────────────────────────────────────
-//
-// Wires the pieces together: `defineApp()` registers the App Protocol surface
-// and mounts the reactive UI (components.ts). All state lives in store.ts,
-// business logic in actions.ts, I/O in api.ts.
-
 import { onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
@@ -29,8 +23,6 @@ import {
 } from './store.js';
 import type { SearchMode } from './store.js';
 
-// ── Ambient GitHub health ───────────────────────────────────────────
-//
 // Feeds the publish banner. Started here rather than inside `onMount` below
 // because that callback is async: after its first `await`, Solid's owner is gone
 // and an `onCleanup` registered there would never fire. Independent of both the
@@ -40,10 +32,8 @@ import type { SearchMode } from './store.js';
 const stopGithubStatusPolling = startGithubStatusPolling();
 window.addEventListener('pagehide', stopGithubStatusPolling);
 
-/**
- * The mounted view. Startup I/O hangs off `onMount` here rather than at module
- * scope so it runs under the view's owner, exactly as before.
- */
+// Startup I/O hangs off `onMount` here rather than at module scope so it
+// runs under the view's owner.
 function Root() {
   onMount(() => {
     // Publisher sign-in and the catalog are independent — neither waits for the other.

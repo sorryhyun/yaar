@@ -38,16 +38,10 @@ export function FileTree() {
     });
   }
 
-  /**
-   * DFS traversal: groups entries by parent, sorts each level
-   * (directories first, then files, alphabetically), and visits
-   * children only when the parent directory is not collapsed.
-   */
   const orderedEntries = () => {
     const all = files();
     const collapsed = collapsedDirs();
 
-    // Group by immediate parent directory
     const byParent = new Map<string, FileEntry[]>();
     for (const entry of all) {
       const parent = parentDir(entry.path);
@@ -55,7 +49,6 @@ export function FileTree() {
       byParent.get(parent)!.push(entry);
     }
 
-    // Sort each group: dirs before files, then alphabetically
     for (const children of byParent.values()) {
       children.sort((a, b) => {
         if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
@@ -63,7 +56,6 @@ export function FileTree() {
       });
     }
 
-    // DFS: root entries first, then recurse into open directories
     const result: FileEntry[] = [];
 
     function visit(parentPath: string) {

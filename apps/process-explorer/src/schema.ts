@@ -22,8 +22,6 @@
 // add ~260KB.
 import * as z from '@bundled/zod';
 
-// ── resource_link envelope ────────────────────────────────────
-//
 // The verb layer's generic list entry. `uri` is where the id is encoded and
 // `name` is the display label, so both are required — an entry missing either
 // is not renderable. The absence of an `id` is what distinguishes a link from a
@@ -36,8 +34,6 @@ export const ResourceLinkSchema = z.looseObject({
   id: z.optional(z.undefined()),
 });
 
-// ── yaar://session/agents ─────────────────────────────────────
-//
 // `id` and `type` are load-bearing (the interrupt/kill target, and the filter
 // that splits app agents from monitor agents), so a row without them is
 // rejected — and rejected on its own: the adapter parses rows one at a time, so
@@ -84,8 +80,6 @@ export const AgentStatsSchema = z.looseObject({
   agents: z.optional(z.array(z.unknown())),
 });
 
-// ── yaar://windows (direct record form) ───────────────────────
-//
 // `id` is required: it is the close target and the join key against agents.
 // Everything else is display-only and defaulted.
 export const WindowInfoSchema = z.looseObject({
@@ -100,8 +94,6 @@ export const WindowInfoSchema = z.looseObject({
   appId: z.optional(z.string()),
 });
 
-// ── yaar://apps (direct record form) ──────────────────────────
-//
 // The installed-app roster is used for display names only, so `name` is
 // defaulted from the id when absent.
 export const InstalledAppSchema = z.looseObject({

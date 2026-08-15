@@ -28,8 +28,6 @@ export const JsonRpcResponse = z.looseObject({
   error: z.optional(JsonRpcError),
 });
 
-// ── Remote MCP server results ────────────────────────────────────
-//
 // These two sit behind `parseRpcResponse`, which only guarantees "some JSON-RPC
 // result came back". The result *payload* is still whatever a remote server
 // chose to send, so it gets validated rather than cast — the `as` casts these
@@ -54,8 +52,6 @@ export const McpInitializeResult = z.looseObject({
 export const McpToolsListResult = z.looseObject({
   tools: z.optional(z.array(z.unknown())),
 });
-
-// ── YAAR gateway / persisted config ──────────────────────────────
 
 // Persisted MCP config read in `loadServers` via `read('yaar://config/mcp')`.
 // The app reads `.servers` and, per entry, `.type` (with optional `url`/`command`).

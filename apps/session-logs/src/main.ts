@@ -33,7 +33,6 @@ function requireSelected(): string {
   return id;
 }
 
-// --- Computed ---
 const filteredSessions = createMemo(() => {
   const q = state.search.toLowerCase();
   if (!q) return state.sessions;
@@ -50,7 +49,6 @@ const groupedSessions = createMemo(() => {
     if (!groups[key]) groups[key] = [];
     groups[key].push(s);
   }
-  // Sort groups newest first; within each group sort newest first
   return Object.entries(groups)
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(
@@ -62,7 +60,6 @@ const groupedSessions = createMemo(() => {
     );
 });
 
-// --- Root component ---
 function Root() {
   onMount(() => {
     loadSessions();

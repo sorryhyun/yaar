@@ -13,7 +13,7 @@
 // standard Zod would add ~260KB.
 import * as z from '@bundled/zod';
 
-// ── Marketplace domain: GET /api/apps/ ────────────────────────────────
+// Marketplace domain: GET /api/apps/
 //
 // parseMarket returns `.marketApps` / `.apps` entries directly as ListedApp. An entry
 // needs at least an id (to install) and a name (to render as a card) to be usable, so
@@ -33,7 +33,7 @@ export const MarketPayloadSchema = z.looseObject({
   marketApps: z.optional(z.array(ListedAppSchema)),
 });
 
-// ── GitHub status: GET githubstatus.com/api/v2/summary.json ───────────
+// GitHub status: GET githubstatus.com/api/v2/summary.json
 //
 // parseGithubStatus only reaches `.components[].{name,status}` and
 // `.incidents[].{name, incident_updates[].body}`, and already treats every missing
@@ -53,7 +53,7 @@ export const GithubStatusSummarySchema = z.looseObject({
   ),
 });
 
-// ── YAAR origin: GET /api/auth/google/status ──────────────────────────
+// YAAR origin: GET /api/auth/google/status
 //
 // refreshAccount copies all four fields straight into the `account` signal, so a
 // well-formed status response must carry them; a malformed one degrades to the
@@ -65,7 +65,7 @@ export const AuthStatusSchema = z.looseObject({
   pending: z.boolean(),
 });
 
-// ── YAAR origin: GET /api/auth/google/me ──────────────────────────────
+// YAAR origin: GET /api/auth/google/me
 //
 // Best-effort call; the caller guards both reads (`Array.isArray(me.apps)`,
 // `me.email ?? ...`), so both fields stay optional.
@@ -74,7 +74,7 @@ export const AuthMeSchema = z.looseObject({
   apps: z.optional(z.array(z.string())),
 });
 
-// ── YAAR origin: POST /api/auth/google/login ──────────────────────────
+// YAAR origin: POST /api/auth/google/login
 //
 // The caller ignores the body; this only asserts the sign-in kickoff returned a
 // well-formed JSON object rather than an error page or HTML.

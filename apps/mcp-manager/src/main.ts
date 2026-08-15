@@ -25,8 +25,6 @@ import {
 import { deriveName, probePort, probeUrl, type DiscoveredServer, type McpTool } from './mcp';
 import './styles/index';
 
-// ── Types ────────────────────────────────────────────────
-
 interface McpServer {
   name: string;
   type: string;
@@ -36,8 +34,6 @@ interface McpServer {
   error?: string;
   toolCount?: number;
 }
-
-// ── State ────────────────────────────────────────────────
 
 const [servers, setServers] = createSignal<McpServer[]>([]);
 const [scanHost, setScanHost] = createSignal('127.0.0.1');
@@ -69,8 +65,6 @@ const configuredUrls = createMemo(
 const visibleDiscovered = createMemo(() =>
   discovered().filter((d) => !configuredUrls().has(d.url)),
 );
-
-// ── Scanning ─────────────────────────────────────────────
 
 const BATCH_SIZE = 20;
 
@@ -138,8 +132,6 @@ async function runProbe() {
     setProbing(false);
   }
 }
-
-// ── API ─────────────────────────────────────────────────
 
 async function loadServers() {
   try {
@@ -260,8 +252,6 @@ async function loadToolsFor(name: string) {
   }
 }
 
-// ── UI actions ─────────────────────────────────────────────
-
 async function addDiscovered(server: DiscoveredServer) {
   // The success message names the server by the name it actually registered
   // under (only known after the call), so it stays inline rather than
@@ -305,15 +295,11 @@ function toggleExpand(name: string) {
   }
 }
 
-// ── Helpers ───────────────────────────────────────────────
-
 function stateDot(state: string) {
   if (state === 'connected') return 'y-dot y-dot-ok';
   if (state === 'connecting') return 'y-dot y-dot-warn';
   return 'y-dot y-dot-err';
 }
-
-// ── Components ────────────────────────────────────────────
 
 function ToolList(tools: () => McpTool[]) {
   return html`
@@ -524,8 +510,7 @@ function App() {
     loadServers();
 
     // Live status: the gateway pings this URI whenever a server connects,
-    // disconnects or its tool cache changes. Replaces the old manual Reload
-    // button, which was the only way to notice a state change.
+    // disconnects or its tool cache changes.
     let unsubscribe: (() => void) | undefined;
     let disposed = false;
     subscribe('yaar://mcp', () => {
@@ -553,8 +538,6 @@ function App() {
     </div>
   `;
 }
-
-// ── App Protocol ───────────────────────────────────────────
 
 export default defineApp({
   id: 'mcp-manager',

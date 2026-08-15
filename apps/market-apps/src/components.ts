@@ -1,9 +1,3 @@
-// ── UI components ────────────────────────────────────────────────────────
-//
-// Presentation only: every Solid `html` template lives here. Components read the
-// store's signals and derived views, and wire buttons straight to the actions
-// layer. No network or state-shape logic in this file.
-
 import { createSignal } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { formatBytes } from '@bundled/yaar';
@@ -103,7 +97,6 @@ export function publishButton(app: DisplayApp) {
   `;
 }
 
-/** Render a single app card with Install / Publish / Uninstall actions. */
 export function marketCard(app: DisplayApp) {
   const updateAvailable = () => hasMarketplaceUpdate(app);
   const subtitle = app.notPublished
@@ -377,7 +370,6 @@ function termsBlock(terms: PublisherTerms) {
   </div>`;
 }
 
-/** The full application view. */
 /**
  * The publish confirmation dialog. Stable outer node + reactive inner content (the
  * `githubBanner` idiom), so it shows/hides as `pendingPublish` flips without the
@@ -468,13 +460,10 @@ export function publishModal() {
 export function App() {
   return html`
     <div class="y-app">
-      <!-- GitHub outage warning (renders nothing while healthy) -->
       ${githubBanner()}
 
-      <!-- Publish confirmation dialog (renders nothing until a publish is prepared) -->
       ${publishModal()}
 
-      <!-- Header -->
       <div class="header-bar y-surface">
         <div class="header-left">
           <div class="header-title">🛒 Market Apps</div>
@@ -507,7 +496,6 @@ export function App() {
         </div>
       </div>
 
-      <!-- Search bar (primary filter) -->
       <div class="search-bar y-surface">
         <select
           class="y-select search-mode-select"
@@ -547,7 +535,6 @@ export function App() {
         </span>
       </div>
 
-      <!-- App list -->
       <div class="y-scroll list-grid">
         ${() => {
           const apps = visibleApps();

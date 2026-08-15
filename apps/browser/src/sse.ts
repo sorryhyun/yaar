@@ -1,16 +1,7 @@
-/**
- * SSE (Server-Sent Events) and polling connection management.
- * Handles real-time screenshot updates from the browser session.
- *
- * Depends only on store.ts and token.ts — DOM callbacks (refreshScreenshot) are
- * injected via initSSE() to avoid circular imports with actions.ts.
- */
 import * as z from '@bundled/zod';
 import { setShowScreenshot, setPlaceholderText, updateUrlBar } from './store';
 import { withToken } from './token';
 import { BrowserEventSchema } from './schema';
-
-// ── Injected callbacks ───────────────────────────────────────────────
 
 let _refreshScreenshot: () => void = () => {};
 
@@ -23,15 +14,11 @@ export function initSSE(onRefresh: () => void): void {
   _refreshScreenshot = onRefresh;
 }
 
-// ── Internal state ──────────────────────────────────────────────────
-
 let currentEvtSource: EventSource | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 let lastVersion = -1;
 
 const MAX_SSE_ERRORS = 5;
-
-// ── Polling ─────────────────────────────────────────────────────────────
 
 export function stopPolling(): void {
   if (pollTimer) {
@@ -50,7 +37,6 @@ export function startPolling(bid: string): void {
   stopPolling();
   // Import lazily to avoid circular dependency at module evaluation time
   pollTimer = setInterval(() => {
-    // Delegate to the injected callback; actions.ts guards screenshotEl internally
     import('./actions').then(({ screenshotEl }) => {
       if (!screenshotEl) return;
       const ts = Date.now();
@@ -63,8 +49,6 @@ export function startPolling(bid: string): void {
     });
   }, 200);
 }
-
-// ── SSE connection ────────────────────────────────────────────────────
 
 export function disconnectSSE(): void {
   stopPolling();
@@ -129,7 +113,6 @@ export function connectSSE(bid: string): void {
   evtSource.onerror = () => {
     sseErrorCount++;
     if (sseErrorCount === 1) {
-      // First error: hide screenshot and indicate reconnection attempt
       setPlaceholderText('Reconnecting...');
       setShowScreenshot(false);
     } else if (sseErrorCount >= MAX_SSE_ERRORS) {
