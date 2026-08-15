@@ -6,7 +6,7 @@ import {
   workerEntries,
   workerDraft,
   workerThinking,
-  runWorkerTask,
+  startWorkerTask,
   interruptWorker,
   resetWorker,
   type WorkerEntry,
@@ -48,7 +48,9 @@ export function WorkerPanel() {
     const text = task().trim();
     if (!text || busy()) return;
     setTask('');
-    void runWorkerTask(text);
+    // Fire and forget: the transcript signals are the only feedback this panel
+    // has ever rendered, and they update from the stream either way.
+    void startWorkerTask(text);
   }
 
   function onKeyDown(e: KeyboardEvent): void {
@@ -86,8 +88,8 @@ export function WorkerPanel() {
       <div class="worker-list y-scroll" ref=${(el: HTMLDivElement) => (listEl = el)}>
         <${Show} when=${() => workerEntries().length === 0 && !busy()}>
           <div class="worker-empty y-text-xs y-text-muted">
-            A sonnet sub-agent that explores the active project with read-only tools (list,
-            read, grep) and reports back. Give it a task below — follow-ups share its memory.
+            A sonnet sub-agent that explores the active project with read-only tools (list, read,
+            grep) and reports back. Give it a task below — follow-ups share its memory.
           </div>
         <//>
         <${For} each=${workerEntries}>
@@ -113,8 +115,7 @@ export function WorkerPanel() {
         <textarea
           class="y-input worker-task-input"
           rows="3"
-          placeholder=${() =>
-            activeProject() ? 'Task for the worker…' : 'Open a project first'}
+          placeholder=${() => (activeProject() ? 'Task for the worker…' : 'Open a project first')}
           value=${task}
           disabled=${() => !activeProject()}
           onInput=${(e: InputEvent) => setTask((e.currentTarget as HTMLTextAreaElement).value)}

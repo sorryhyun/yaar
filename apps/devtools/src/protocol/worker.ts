@@ -1,12 +1,19 @@
 export {};
 import { AppCommandError, defineAppCommand } from '@bundled/yaar';
 import { activeProject, files } from '../core';
-import { grep, readFileContent, noteWorkerToolCall, runWorkerTask } from '../services';
+import {
+  grep,
+  readFileContent,
+  noteWorkerToolCall,
+  startWorkerTask,
+  waitForWorker,
+} from '../services';
 
 // ── Worker ─────────────────────────────────────────────────────────
-// Two audiences, one file. `workerTask` is the app agent's door — the one
-// command that appears in the manifest, so the concierge can delegate survey
-// work instead of spending its own turns on reads. The `persona:*` entries are
+// Two audiences, one file. `workerTask`/`workerWait` are the app agent's door —
+// the two commands that appear in the manifest, so the concierge can delegate
+// survey work instead of spending its own turns on reads, and collect it when
+// it has run out of work to do meanwhile. The `persona:*` entries are
 // the handler halves of the tools the worker sub-agent is spawned with
 // (services/worker.ts declares the other halves — the names and the descriptions
 // the worker reads); their prefix hides them from the app agent's manifest, so
@@ -28,16 +35,15 @@ const NO_PROJECT = 'No project is active in Dev Tools right now. Say so and stop
 export const workerCommands = {
   workerTask: defineAppCommand({
     description:
-      'Delegate one task to the worker — a sonnet-tier sub-agent that explores the active ' +
+      'Start one task on the worker — a sonnet-tier sub-agent that explores the active ' +
       'project with its own read-only tools (list files, read file, grep) and reports back. ' +
       'Use it for survey and lookup work you would otherwise spend many read commands on ' +
       '("map this codebase", "find every use of X", "check these files for Y"); it cannot ' +
-      'edit, compile, or deploy. Blocks until the answer, so pass timeoutMs (120000 is a ' +
-      'sane default; max 180000). A task that outlives your timeout keeps running — the ' +
-      'answer lands in the "worker" state key when its status returns to idle, so query ' +
-      'that instead of re-sending. The worker keeps its memory across tasks; follow-ups ' +
-      'like "now check the other file" work. One task at a time — busy is a refusal, not ' +
-      'a queue.',
+      'edit, compile, or deploy. RETURNS IMMEDIATELY with a taskId — it does not wait for ' +
+      'the answer, so spend the time on your own work (read, edit, compile) and collect it ' +
+      'afterwards with workerWait, or read the "worker" state key. The worker keeps its ' +
+      'memory across tasks; follow-ups like "now check the other file" work. One task at a ' +
+      'time — starting another while one runs is a refusal, not a queue.',
     params: {
       type: 'object',
       properties: {
@@ -50,15 +56,46 @@ export const workerCommands = {
     },
     replay: 'never',
     run: async (p) => {
-      const outcome = await runWorkerTask(String(p.task));
-      if (outcome.error) {
-        throw new AppCommandError(
-          outcome.answer
-            ? `${outcome.error} Partial answer before it ended:\n${outcome.answer}`
-            : outcome.error,
-        );
-      }
-      return { answer: outcome.answer ?? '' };
+      const started = await startWorkerTask(String(p.task));
+      if (started.error) throw new AppCommandError(started.error);
+      return {
+        taskId: started.taskId,
+        status: 'running',
+        collect: `workerWait with taskId ${started.taskId}, or query the "worker" state key.`,
+      };
+    },
+  }),
+  workerWait: defineAppCommand({
+    description:
+      'Collect a task started by workerTask: returns its answer, or `done: false` if it is ' +
+      'still working. Blocks up to waitMs (default 60000, max 170000) — always pass a ' +
+      'timeoutMs at least 10s larger than waitMs, or the platform kills the call before the ' +
+      'wait ends. Timing out is cheap: the task keeps running and calling again resumes the ' +
+      'wait, so a long survey can be collected in slices. Omit taskId to ask about the task ' +
+      'in flight (or the last one to finish). Never re-send a task to "retry" a wait.',
+    params: {
+      type: 'object',
+      properties: {
+        taskId: {
+          type: 'number',
+          description: 'The id workerTask returned. Omit for the current or most recent task.',
+        },
+        waitMs: {
+          type: 'number',
+          description: 'How long to block before reporting back. Default 60000, max 170000.',
+        },
+      },
+    },
+    replay: 'never',
+    run: async (p) => {
+      const result = await waitForWorker({
+        ...(p.taskId != null ? { taskId: Number(p.taskId) } : {}),
+        ...(p.waitMs != null ? { waitMs: Number(p.waitMs) } : {}),
+      });
+      // Reported, not thrown, even for `error`: a partial answer, a still-running
+      // task and a failure are all things the caller acts on differently, and an
+      // AppCommandError flattens the three into one refusal.
+      return result;
     },
   }),
   'persona:list_files': defineAppCommand({

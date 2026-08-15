@@ -56,11 +56,22 @@ All file commands operate **only inside the active project's sandbox**, never th
 
 `workerTask` hands one task to a sonnet-tier sub-agent with its own read-only tools (list, read, grep) over the active project. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled", "check all files for Y" — then act on its report yourself; it cannot edit, compile, or deploy, and its report is its word, not yours: verify before editing on it.
 
-Three rules from its call shape:
+**It runs in the background.** `workerTask` returns a `taskId` the moment the task is accepted, not when it is answered — so the pattern is start, work, collect:
 
-- **It blocks.** Pass `timeoutMs: 120000` (max 180000). If your call times out, the task is still running — poll `query("worker")` until `status` is `idle` and read `lastAnswer` there. Do not re-send the task.
+```
+command({ command: "workerTask", params: { task: "map every place the sidebar reads project state" } })
+  → { taskId: 1, status: "running" }
+… read files, edit, compile — your own turns, while the worker explores …
+command({ command: "workerWait", params: { taskId: 1, waitMs: 90000 }, timeoutMs: 100000 })
+  → { done: true, taskId: 1, answer: "…" }
+```
+
+Four rules from that shape:
+
+- **Start it before the work you can do without it, not after.** A `workerTask` immediately followed by `workerWait` is a blocking call with extra steps — it spends the whole survey waiting. Ask what you can do meanwhile first; having genuinely nothing is fine, assuming it is not.
+- **`workerWait` needs a `timeoutMs` larger than its `waitMs`** (10s of headroom), or the platform kills the call before the wait ends. `done: false` means still running — call again to resume waiting; never re-send the task. `query("worker")` is the non-blocking read of the same facts (`activeTask`, `lastResult`).
 - **Self-contained tasks.** The worker sees none of your conversation. Name files and goals explicitly. It does keep its own memory across tasks, so follow-ups ("now the other file") work.
-- **One at a time.** A task while one is in flight is refused, not queued. The user can also run it from the Worker sidebar tab — the same one instance, same transcript.
+- **One at a time.** Starting a task while one is in flight is refused, not queued — collect the first. The user can also run it from the Worker sidebar tab: same instance, same transcript, and a task they started is one you can `workerWait` on.
 
 ## Preview & Debugging
 

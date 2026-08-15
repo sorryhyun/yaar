@@ -16,7 +16,12 @@ import {
   bundledLibs,
   consoleLogs,
 } from '../core';
-import { workerStatus, workerEntries } from '../services/worker';
+import {
+  workerStatus,
+  workerEntries,
+  workerActiveTask,
+  workerLastResult,
+} from '../services/worker';
 
 export { projectCommands } from './projects';
 export { fileCommands } from './files';
@@ -191,19 +196,36 @@ export const devtoolsState = {
     description:
       'The worker sub-agent (see workerTask): its status (offline | spawning | idle | ' +
       'running | error) and the tail of its transcript — tasks, tool calls, answers, ' +
-      'errors, newest last. `lastAnswer` is the most recent completed answer: read it ' +
-      'here when a workerTask call outlived your timeoutMs and status is back to idle, ' +
-      'instead of re-sending the task.',
+      'errors, newest last. `activeTask` is the backgrounded task in flight ' +
+      '({ taskId, task, elapsedMs }) or null; `lastResult` is the last one to finish ' +
+      '({ taskId, answer, error, elapsedMs }). This is the poll-shaped read: it never ' +
+      'blocks, so use it to check on a task while you work. To *wait* for one, call ' +
+      'workerWait instead of polling this in a loop.',
     get: () => {
       const entries = workerEntries();
-      const lastAnswer = [...entries].reverse().find((e) => e.kind === 'answer');
       // Tool lines are one-liners; tasks and answers can be long. Cap per entry so a
       // deep transcript cannot flood a query result.
       const clip = (text: string) =>
         text.length > 4_000 ? `${text.slice(0, 4_000)}… (truncated)` : text;
+      const active = workerActiveTask();
+      const last = workerLastResult();
       return {
         status: workerStatus(),
-        lastAnswer: lastAnswer ? clip(lastAnswer.text) : null,
+        activeTask: active
+          ? {
+              taskId: active.id,
+              task: clip(active.task),
+              elapsedMs: Date.now() - active.startedAt,
+            }
+          : null,
+        lastResult: last
+          ? {
+              taskId: last.id,
+              ...(last.answer ? { answer: clip(last.answer) } : {}),
+              ...(last.error ? { error: last.error } : {}),
+              elapsedMs: (last.endedAt ?? Date.now()) - last.startedAt,
+            }
+          : null,
         transcript: entries.slice(-30).map((e) => ({ kind: e.kind, text: clip(e.text) })),
       };
     },
