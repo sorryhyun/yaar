@@ -2,38 +2,14 @@
 //
 // Kept separate from the UI so the request/response rules live in one place —
 // in particular the two headers that must ride every request after initialize.
-import { httpFetch, safeParseOr } from '@bundled/yaar';
-import { JsonRpcResponse, McpInitializeResult, McpToolInfo, McpToolsListResult } from './schema';
-
-/**
- * The MCP revision this client speaks. A server may negotiate *down* to an
- * older one in its initialize result; whatever comes back is what we echo in
- * the MCP-Protocol-Version header from then on, rather than asserting ours.
- */
-export const CLIENT_PROTOCOL_VERSION = '2025-06-18';
-
-export const CLIENT_INFO = { name: 'yaar-mcp-manager', version: '2.0.0' };
-
-export interface McpTool {
-  name: string;
-  description?: string;
-}
-
-export interface DiscoveredServer {
-  url: string;
-  /** Present for scan results, absent for a hand-entered URL. */
-  port?: number;
-  serverName?: string;
-  serverVersion?: string;
-  protocolVersion?: string;
-  tools: McpTool[];
-}
-
-/** Per-connection state from `initialize`, required on every later request. */
-export interface McpSession {
-  sessionId?: string;
-  protocolVersion?: string;
-}
+// This module talks to *remote* servers only; everything that talks to YAAR's
+// own gateway is in gateway.ts.
+import { errMsg, httpFetch, safeParseOr } from '@bundled/yaar';
+import { CLIENT_INFO, CLIENT_PROTOCOL_VERSION } from './constants';
+import { logDebug, logError } from './log';
+import { JsonRpcResponse, McpInitializeResult } from './schema';
+import { parseToolList } from './tools';
+import type { DiscoveredServer, McpSession } from './types';
 
 let rpcId = 0;
 
@@ -83,10 +59,10 @@ export function parseRpcResponse(body: string): unknown {
   if (direct !== undefined) {
     // `direct` is always a real parsed JSON value here (never JS `undefined`),
     // so `undefined` can only mean "failed validation" — safe to use as the
-    // fallback-doubles-as-failure-signal sentinel (see apps/market-apps/src/api.ts).
+    // fallback-doubles-as-failure-signal sentinel.
     const data = safeParseOr(JsonRpcResponse, direct, undefined, {
       onInvalid: (issues) => {
-        console.error('MCP JSON-RPC response failed validation', issues);
+        logError('JSON-RPC response failed validation', issues);
         throw new Error('Malformed MCP JSON-RPC response');
       },
     });
@@ -111,24 +87,6 @@ export function parseRpcResponse(body: string): unknown {
     if (data.error) throw new Error(data.error.message ?? 'JSON-RPC error');
   }
   throw new Error('Could not parse MCP response');
-}
-
-function parseTools(raw: unknown, label: string): McpTool[] {
-  const result = safeParseOr(McpToolsListResult, raw, undefined, {
-    onInvalid: (issues) => {
-      console.error(`[mcp-manager] tools/list from ${label} failed validation`, issues);
-      throw new Error('Malformed MCP tool list');
-    },
-  });
-  const tools: McpTool[] = [];
-  for (const entry of result.tools ?? []) {
-    const row = safeParseOr(McpToolInfo, entry, undefined, {
-      label: `mcp:tool-entry:${label}`,
-    });
-    if (!row) continue;
-    tools.push({ name: row.name, description: row.description });
-  }
-  return tools;
 }
 
 /**
@@ -160,7 +118,7 @@ export async function probeUrl(url: string, port?: number): Promise<DiscoveredSe
     undefined,
     {
       onInvalid: (issues) => {
-        console.error(`[mcp-manager] initialize from ${url} failed validation`, issues);
+        logError(`initialize from ${url} failed validation`, issues);
         throw new Error('Malformed MCP initialize result');
       },
     },
@@ -182,29 +140,46 @@ export async function probeUrl(url: string, port?: number): Promise<DiscoveredSe
     serverName: initResult.serverInfo?.name,
     serverVersion: initResult.serverInfo?.version,
     protocolVersion: session.protocolVersion,
-    tools: parseTools(parseRpcResponse(await toolsRes.text()), url),
+    tools: parseToolList(parseRpcResponse(await toolsRes.text()), url),
   };
 }
 
-/** Probe one port during a scan. Any failure is just "nothing here". */
+/**
+ * Probe one port during a scan. Any failure is just "nothing here".
+ *
+ * The swallow is deliberate — across a sweep, an unreachable port and a
+ * malformed reply are equally uninteresting — but it hides a *systemic*
+ * failure just as well as an empty network, so the reason is kept at debug
+ * level rather than dropped entirely.
+ */
 export async function probePort(
   host: string,
   port: number,
   path: string,
+  /** Called with the failure reason, so a sweep can tally why it found nothing. */
+  onFailure?: (reason: string) => void,
 ): Promise<DiscoveredServer | null> {
+  const url = `http://${host}:${port}${path}`;
   try {
-    return await probeUrl(`http://${host}:${port}${path}`, port);
-  } catch {
+    return await probeUrl(url, port);
+  } catch (err) {
+    logDebug(`probe ${url} failed`, err);
+    onFailure?.(errMsg(err));
     return null;
   }
 }
 
-/** Fallback name for a server that did not report one in `serverInfo`. */
-export function deriveName(url: string, port?: number): string {
+/**
+ * Fallback name for a server that did not report one in `serverInfo`, derived
+ * from its URL so two servers on different ports never collide.
+ */
+export function deriveName(url: string): string {
   try {
     const parsed = new URL(url);
     return `mcp-${parsed.hostname}-${parsed.port || (parsed.protocol === 'https:' ? '443' : '80')}`;
   } catch {
-    return `mcp-${port ?? Date.now()}`;
+    // Not a parseable URL. Nothing about it is worth naming, so fall back to
+    // something merely unique.
+    return `mcp-${Date.now()}`;
   }
 }

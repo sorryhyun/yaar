@@ -2,8 +2,8 @@ import { onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
 import './styles/index';
-import { App } from './components.js';
-import { refreshAccount, refreshData, startGithubStatusPolling } from './actions.js';
+import { App } from './components/index.js';
+import { refreshAccount, refreshData, startGithubStatusPolling } from './actions/index.js';
 import {
   marketApps,
   setMarketApps,
@@ -20,8 +20,8 @@ import {
   setSearchMode,
   setStatus,
   touch,
-} from './store.js';
-import type { SearchMode } from './store.js';
+} from './store/index.js';
+import type { SearchMode } from './store/index.js';
 
 // Feeds the publish banner. Started here rather than inside `onMount` below
 // because that callback is async: after its first `await`, Solid's owner is gone
@@ -173,6 +173,8 @@ export default defineApp({
     setSearchMode: {
       description:
         "Set the search mode: 'title' (name/description), 'author', or 'official' (YAAR-only)",
+      // The enum repeats SEARCH_MODES (store/signals.ts) as a literal because the
+      // protocol extractor reads this object statically — it cannot follow an import.
       params: {
         type: 'object',
         properties: {

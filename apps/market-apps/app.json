@@ -9,5 +9,6 @@
   ],
   "version": "1.0.7",
   "author": "YAAR",
-  "kind": "system"
+  "kind": "system",
+  "appId": "market-apps"
 }

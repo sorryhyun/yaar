@@ -3,11 +3,7 @@ import { defineApp } from '@bundled/yaar';
 import './styles/index';
 import { activeTab, setActiveTab } from './store';
 import type { Tab } from './types';
-import { SettingsView } from './views/settings-view';
-import { ShortcutsView } from './views/shortcuts-view';
-import { HooksView } from './views/hooks-view';
-import { DomainsView } from './views/domains-view';
-import { UpdatesView } from './views/updates-view';
+import { SettingsView, ShortcutsView, HooksView, DomainsView, UpdatesView } from './views/index';
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: 'settings', label: 'Settings', icon: '⚙️' },

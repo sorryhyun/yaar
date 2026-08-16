@@ -17,6 +17,15 @@ export const GITHUB_STATUS_URL = 'https://www.githubstatus.com/api/v2/summary.js
  */
 export const GITHUB_PUBLISH_COMPONENTS = ['API Requests', 'Git Operations'];
 
+/** Statuspage severities, least to most severe — index order is the comparison. */
+export const GITHUB_SEVERITY = [
+  'operational',
+  'under_maintenance',
+  'degraded_performance',
+  'partial_outage',
+  'major_outage',
+];
+
 /** Re-check while the window is open. Slow on purpose: an outage lasts minutes. */
 export const GITHUB_STATUS_POLL_MS = 60_000;
 
@@ -42,3 +51,9 @@ export const SIGNED_OUT_ACCOUNT: Account = {
   pending: false,
   ownedApps: [],
 };
+
+/**
+ * The authors treated as first-party ("YAAR Official"). Compared case-insensitively,
+ * so 'YAAR' as it displays in the UI and 'yaar' both match.
+ */
+export const OFFICIAL_AUTHORS = ['yaar', 'standingbehindnv@gmail.com'];

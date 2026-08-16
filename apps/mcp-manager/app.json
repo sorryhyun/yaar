@@ -4,11 +4,13 @@
   "description": "Discover, probe and manage external MCP servers",
   "run": "dist/index.html",
   "permissions": [
+    "yaar://mcp",
     "yaar://mcp/",
-    "yaar://http/",
+    "yaar://http",
+    "yaar://config/mcp",
     "yaar://config/mcp/"
   ],
-  "version": "2.0.2",
+  "version": "2.0.3",
   "author": "YAAR",
   "kind": "system",
   "id": "mcp-manager",

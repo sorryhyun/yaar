@@ -4,6 +4,7 @@
 // JSON-RPC / SSE responses. These schemas validate the shape of that data
 // (and of the persisted `yaar://config/mcp` blob) before the code reads
 // fields off it — they are trust-boundary checks, not domain type declarations.
+// The internal shapes the app actually passes around live in types.ts.
 // Every object is loose so additive upstream fields survive, and we validate
 // only the fields the app actually reads.
 //
@@ -28,10 +29,10 @@ export const JsonRpcResponse = z.looseObject({
   error: z.optional(JsonRpcError),
 });
 
-// These two sit behind `parseRpcResponse`, which only guarantees "some JSON-RPC
-// result came back". The result *payload* is still whatever a remote server
-// chose to send, so it gets validated rather than cast — the `as` casts these
-// replaced were unchecked assertions about an untrusted peer.
+// The schemas below sit behind `parseRpcResponse`, which only guarantees "some
+// JSON-RPC result came back". The result *payload* is still whatever a remote
+// server chose to send, so it gets validated rather than cast — the `as` casts
+// these replaced were unchecked assertions about an untrusted peer.
 
 // `initialize` result. `protocolVersion` is what the server negotiated down to;
 // the app echoes it back in the MCP-Protocol-Version header on every subsequent
@@ -46,17 +47,29 @@ export const McpInitializeResult = z.looseObject({
   ),
 });
 
-// `tools/list` result from a remote server. Rows stay `unknown` and are parsed
-// one at a time with `McpToolInfo` below, so one malformed tool costs that tool
-// and not the whole list.
-export const McpToolsListResult = z.looseObject({
+// A list of tools, from either of the two boundaries that produce one: a remote
+// server's `tools/list` RPC result, and the gateway's `list('yaar://mcp/{name}')`.
+// The two payloads are the same shape and are parsed by the same helper
+// (`parseToolList`), so they share one schema rather than two identical copies.
+//
+// Rows stay `unknown` and are parsed one at a time with `McpToolInfo` below, so
+// one malformed tool costs that tool and not the whole list — an emptied list
+// would show in the UI as the ambiguous "No tools or not connected".
+export const McpToolListEnvelope = z.looseObject({
   tools: z.optional(z.array(z.unknown())),
 });
 
-// Persisted MCP config read in `loadServers` via `read('yaar://config/mcp')`.
+// One row of that list. `name` is what renders, so it is required;
+// `description` is decoration.
+export const McpToolInfo = z.looseObject({
+  name: z.string(),
+  description: z.optional(z.string()),
+});
+
+// Persisted MCP config read in `fetchServers` via `read('yaar://config/mcp')`.
 // The app reads `.servers` and, per entry, `.type` (with optional `url`/`command`).
 // `url` is also what dedupes a scan result against an already-configured server.
-// Exported so `loadServers` can name the record's value type: `servers ?? {}`
+// Exported so `fetchServers` can name the record's value type: `servers ?? {}`
 // widens to `Record<string, McpServerConfig> | {}`, and `Object.entries` over
 // that union hands back `unknown` values.
 export const McpServerConfig = z.looseObject({
@@ -86,17 +99,4 @@ export const McpServerStatus = z.looseObject({
 
 export const McpStatusListResponse = z.looseObject({
   servers: z.optional(z.array(z.unknown())),
-});
-
-// Per-server tool list from `list('yaar://mcp/{name}')`. `name` is what the row
-// renders as, so it is required; `description` is decoration. Same per-row
-// recovery: one odd tool must not empty a server's tool list, which the UI would
-// show as the ambiguous "No tools or not connected".
-export const McpToolInfo = z.looseObject({
-  name: z.string(),
-  description: z.optional(z.string()),
-});
-
-export const McpToolListResponse = z.looseObject({
-  tools: z.optional(z.array(z.unknown())),
 });
