@@ -50,7 +50,12 @@ export interface ParsedYaarUri {
 // identical to the `YaarAuthority` union above for readability, though it has no effect on
 // matching here since none of these words is a prefix of another (if that ever changes, the
 // longer/more-specific alternative must be listed first so it wins the leftmost-alternative match).
-const AUTHORITIES = [
+//
+// Exported for a second consumer with the same stake in not drifting: the verb doors' shorthand
+// rule (`resolveShorthandUri`, server `http/uri-match.ts`) decides whether a scheme-less string
+// names an authority, and its own copy of this list would admit `storage/x` written bare today
+// and silently stop admitting a new authority tomorrow.
+export const YAAR_AUTHORITIES = [
   'apps',
   'storage',
   'windows',
@@ -65,7 +70,7 @@ const AUTHORITIES = [
 
 // None of the authority strings contain regex-special characters, so no escaping is needed here;
 // if that ever changes, escape each entry before joining.
-const YAAR_RE = new RegExp(`^yaar://(${AUTHORITIES.join('|')})/(.*)$`);
+const YAAR_RE = new RegExp(`^yaar://(${YAAR_AUTHORITIES.join('|')})/(.*)$`);
 
 export function parseYaarUri(uri: string): ParsedYaarUri | null {
   const match = uri.match(YAAR_RE);

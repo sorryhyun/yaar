@@ -24,6 +24,7 @@ import { registerFontHandlers } from './fonts.js';
 import { registerHttpHandlers } from './http.js';
 import { registerMcpGatewayHandlers } from './mcp-gateway.js';
 import { recordVerbCall } from '../mcp/tool-call-buffer.js';
+import { resolveShorthandUri } from '../http/uri-match.js';
 import { LARGE_RESULT_META } from '../mcp/result-size.js';
 import { getAgentId, getMonitorId, getWindowId } from '../agents/agent-context.js';
 
@@ -106,13 +107,21 @@ function appendLayoutContext(result: VerbResult): VerbResult {
 
 /** Spread to satisfy MCP SDK's index-signature requirement on tool results. */
 const exec = async (reg: ResourceRegistry, ...args: Parameters<ResourceRegistry['execute']>) => {
-  const [verb, uri, payload, readOptions] = args;
+  const [verb, rawUri, payload, readOptions] = args;
+
+  // The scheme is optional at this door and nowhere past it. Resolving here — ahead of
+  // brace expansion, `recordVerbCall` and the registry — is what keeps that true: the
+  // buffered call the message-mapper replays into a sub-agent's activity, and every URI
+  // the registry then compares or emits, stay in canonical form regardless of how the
+  // model spelled it. Expansion composes because the authority precedes any brace:
+  // `storage/{a,b}` becomes `yaar://storage/{a,b}` and then two canonical URIs.
+  const uri = resolveShorthandUri(rawUri);
   const expanded = expandBraceUri(uri);
 
   if (expanded.length === 1) {
     // Normal single-URI path
     recordVerbCall(verb, uri, payload);
-    const result = await reg.execute(...args);
+    const result = await reg.execute(verb, uri, payload, readOptions);
     return { ...appendLayoutContext(result) };
   }
 

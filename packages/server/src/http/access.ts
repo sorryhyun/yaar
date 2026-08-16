@@ -227,6 +227,7 @@ export {
   namesSelf,
   namesSelfPath,
   resolveSelf,
+  resolveShorthandUri,
   uriMatches,
 } from './uri-match.js';
 

@@ -24,6 +24,7 @@ import {
   requireStream,
   resolvePrincipal,
   resolveSelf,
+  resolveShorthandUri,
   type Principal,
 } from '../access.js';
 import { subscriptionRegistry } from '../subscriptions.js';
@@ -225,6 +226,14 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         return errorResponse('Missing or invalid "uri" field', 400);
       }
 
+      // Scheme-less spelling, resolved before anything reads the URI — the gate below,
+      // the two stream carve-outs that test its prefix, and the registry that stores it
+      // as a subscription *key*. Without this a shorthand subscribe would 403 (no
+      // permission matches a scheme-less string), and a permission broad enough to admit
+      // one anyway would key the subscription under a string no producer ever notifies
+      // with, so it would simply never fire.
+      const uri = resolveShorthandUri(body.uri);
+
       const mode = body.mode === 'stream' ? 'stream' : 'change';
       const kinds = Array.isArray(body.kinds)
         ? body.kinds.filter((k): k is string => typeof k === 'string')
@@ -238,7 +247,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       // rides the yaar-dev door (the same gate its producer sits behind). Everything
       // else — including a plain change ping, still a subscription to the resource's
       // state — goes through the same read gate as reading it.
-      const agentStreamId = mode === 'stream' ? parseAgentStreamUri(body.uri) : null;
+      const agentStreamId = mode === 'stream' ? parseAgentStreamUri(uri) : null;
       if (agentStreamId) {
         const pool = getSessionHub().get(principal.sessionId)?.getPool();
         const sessionAgentId = pool?.agentPool.getSessionAgent()?.instanceId;
@@ -247,11 +256,11 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
         }
         const denied = requireStream(principal, 'agents');
         if (denied) return denied;
-      } else if (mode === 'stream' && body.uri.startsWith('yaar://dev/')) {
+      } else if (mode === 'stream' && uri.startsWith('yaar://dev/')) {
         const denied = requireBundle(principal, 'yaar-dev');
         if (denied) return denied;
       } else {
-        const denied = requirePermission(principal, body.uri, 'read');
+        const denied = requirePermission(principal, uri, 'read');
         if (denied) return denied;
       }
 
@@ -259,7 +268,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       // appId URIs) reaches subscriptions made from inside the app's iframe.
       // `resolveSelf` leaves the URI alone when there is no appId to expand
       // against, so what is left bearing `self` is a token that cannot name one.
-      const subscribeUri = resolveSelf(body.uri, principal.appId);
+      const subscribeUri = resolveSelf(uri, principal.appId);
       if (namesSelf(subscribeUri)) {
         return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
       }
@@ -291,10 +300,17 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse(`Invalid verb. Must be one of: ${VALID_VERBS.join(', ')}`, 400);
   }
 
-  const uri = body.uri;
-  if (!uri || typeof uri !== 'string') {
+  if (!body.uri || typeof body.uri !== 'string') {
     return errorResponse('Missing or invalid "uri" field', 400);
   }
+
+  // The scheme is optional here for the same reason it is at the MCP door: the two doors
+  // dispatching identical strings identically is the invariant, and an app that borrows a
+  // URI out of an agent's message should not find it spelled in a dialect this door
+  // rejects. Resolved before every gate below, so `requirePermission` and the registry
+  // see one canonical form. Apps drive this door from compiled code, so the saving is
+  // nil — the agreement is the point.
+  const uri = resolveShorthandUri(body.uri);
 
   // Brace expansion lives in the MCP `exec` wrapper (handlers/index.ts); this door
   // dispatches the URI verbatim. So `yaar://storage/{a,b}` used to reach the registry

@@ -2,11 +2,13 @@
  * Matching a `yaar://` URI against a permission list — and the two normalizations that
  * have to happen first for the match to mean anything.
  *
- * Pulled out of `access.ts` so it has no imports of its own beyond a type: it is the one
+ * Pulled out of `access.ts` so it has no *server-internal* value imports: it is the one
  * definition of "does this entry cover this verb on this URI", and three callers need it
- * from the far side of a module cycle. `access.ts` asks it at the gate; `iframe-tokens.ts`
- * asks it when minting a devtools preview's identity, to cap what a project file may
- * declare against what devtools itself holds; `features/apps/discovery.ts` asks
+ * from the far side of a module cycle. (`@yaar/shared` is another package and closes no
+ * cycle, so the authority list is imported rather than copied.) `access.ts` asks it at
+ * the gate; `iframe-tokens.ts` asks it when minting a devtools preview's identity, to cap
+ * what a project file may declare against what devtools itself holds;
+ * `features/apps/discovery.ts` asks
  * `coversForeignAppStorage` when reading a manifest, to narrow an installed app's storage
  * grants to its own subtree. All three import `access.ts` for types only — `access.ts`
  * imports `iframe-tokens.js`, and `iframe-tokens.ts` imports `discovery.js`, so a value
@@ -18,6 +20,7 @@
  * callers are unchanged and it stays the place you read to learn the rule.
  */
 
+import { YAAR_AUTHORITIES } from '@yaar/shared';
 import type { Verb } from '../handlers/uri-registry.js';
 import type { PermissionEntry } from './access.js';
 
@@ -52,6 +55,50 @@ export function entryVerbs(entry: PermissionEntry): readonly Verb[] {
 /** The URI an entry names, whichever of the two spellings it uses. */
 export function entryUri(entry: PermissionEntry): string {
   return typeof entry === 'string' ? entry : entry.uri;
+}
+
+// ── Shorthand: the scheme a caller may leave off ────────────────────────────
+
+/**
+ * `yaar://http` — registered in `handlers/http.ts` but deliberately absent from
+ * `YaarAuthority`, because `parseYaarUri` is used on fields where a real `http://` URL is
+ * also a legal value. The verb registry routes it by exact pattern rather than by parsing,
+ * so it *is* an authority at the two doors, and the shorthand rule has to admit it or
+ * `describe('http')` is the one spelling the rewrite refuses.
+ */
+const SHORTHAND_AUTHORITIES = [...YAAR_AUTHORITIES, 'http'] as const;
+
+/**
+ * The one thing a bare string must look like before it is read as a yaar URI.
+ *
+ * `(/|$)` is what keeps this conservative, and it is aimed at exactly one collision:
+ * `http://example.com` has a colon where the rule demands a slash or the end of the
+ * string, so a real URL handed to a `uri` argument by mistake falls through untouched and
+ * errors as "not a yaar URI" instead of being rewritten into `yaar://http://example.com`
+ * and dispatched at the fetch handler. Anything else that fails to match — a storage
+ * *path* like `notes/todo.md`, a bare `self` — is likewise passed through unchanged for
+ * the layer that understands it (or the error that doesn't).
+ */
+const SHORTHAND_AUTHORITY = new RegExp(`^(${SHORTHAND_AUTHORITIES.join('|')})(/|$)`);
+
+/**
+ * Accept a scheme-less URI at a verb door, and hand back the canonical spelling.
+ *
+ * `storage/notes.md` → `yaar://storage/notes.md`. Nothing else in the system learns about
+ * the short form: this runs as the *first* statement at both doors, so permission checks,
+ * session logs, subscription keys, `resource_link`s and the tool-call buffer all keep
+ * seeing exactly the strings they saw before. That ordering is the whole design — a
+ * rewrite that happened later would mean a permission matched one spelling and the
+ * dispatch used another.
+ *
+ * Deliberately takes no principal and no context. What a bare *path* means depends on who
+ * is asking (an app agent's `storage/x` is its own subtree, a monitor agent's is the
+ * shared root), and that is a separate layer with its own refusals — see
+ * `docs/proposals/hierarchical_uri_shorthand_proposal.md`. This one is pure string work
+ * and answers the same for every caller.
+ */
+export function resolveShorthandUri(uri: string): string {
+  return SHORTHAND_AUTHORITY.test(uri) ? `yaar://${uri}` : uri;
 }
 
 // ── `self`, and the two spellings of app storage ────────────────────────────
