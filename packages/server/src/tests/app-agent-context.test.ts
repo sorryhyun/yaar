@@ -7,10 +7,6 @@ function contextLoaders(calls: string[]): SystemPromptLoaders {
       calls.push('environment');
       return '\n\n## Environment\n- Installed apps: OTHER APP HINT';
     },
-    async loadMemory() {
-      calls.push('memory');
-      return '\n\n## Memory\nGLOBAL MEMORY';
-    },
   };
 }
 
@@ -27,11 +23,10 @@ describe('role-aware system prompt context', () => {
 
     expect(prompt).toBe('OWN APP DOCS');
     expect(prompt).not.toContain('OTHER APP HINT');
-    expect(prompt).not.toContain('GLOBAL MEMORY');
     expect(calls).toEqual([]);
   });
 
-  it('retains global environment and memory for monitor agents', async () => {
+  it('retains the global environment for monitor agents', async () => {
     const calls: string[] = [];
     const prompt = await assembleSystemPromptForRole(
       'MONITOR PROFILE',
@@ -43,7 +38,6 @@ describe('role-aware system prompt context', () => {
 
     expect(prompt).toContain('You are the **monitor agent** for `0`');
     expect(prompt).toContain('OTHER APP HINT');
-    expect(prompt).toContain('GLOBAL MEMORY');
-    expect(calls.sort()).toEqual(['environment', 'memory']);
+    expect(calls).toEqual(['environment']);
   });
 });

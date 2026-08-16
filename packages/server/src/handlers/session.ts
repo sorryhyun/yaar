@@ -4,7 +4,6 @@
  * Maps live session operations to the verb layer:
  *
  *   read('yaar://session')              → system info
- *   invoke('yaar://session', { ... })   → memorize
  *   read('yaar://session/monitors')     → list monitors
  *   read('yaar://session/context')       → current context tape summary
  *
@@ -23,7 +22,6 @@ import {
   controlMonitor,
   disposeMonitor,
 } from '../features/session/monitors.js';
-import { memorize } from '../features/session/memorize.js';
 import { sessionBrowserRead, sessionBrowserInvoke } from '../features/session/browser.js';
 
 export function registerSessionHandlers(registry: ResourceRegistry): void {
@@ -73,19 +71,11 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
     },
   });
 
-  // ── yaar://session — system info and memorize ──
+  // ── yaar://session — system info ──
   registry.register('yaar://session', {
-    description: 'Current session. Read for system info, invoke to memorize notes.',
-    verbs: ['describe', 'read', 'invoke'],
+    description: 'Current session. Read for system info.',
+    verbs: ['describe', 'read'],
     access: 'session-principal',
-    invokeSchema: {
-      type: 'object',
-      required: ['action'],
-      properties: {
-        action: { type: 'string', enum: ['memorize'] },
-        content: { type: 'string', description: 'Note to remember across sessions' },
-      },
-    },
 
     async read(): Promise<VerbResult> {
       const info = {
@@ -97,21 +87,6 @@ export function registerSessionHandlers(registry: ResourceRegistry): void {
         cwd: process.cwd(),
       };
       return okJsonResource('yaar://session', info);
-    },
-
-    async invoke(_resolved: ResolvedUri, payload?: Record<string, unknown>): Promise<VerbResult> {
-      if (!payload?.action) return error('Payload must include "action".');
-
-      if (payload.action === 'memorize') {
-        if (typeof payload.content !== 'string' || !payload.content) {
-          return error('"content" (string) is required for memorize.');
-        }
-        const result = await memorize(payload.content);
-        if (!result.success) return error(result.error ?? 'Failed to save memory.');
-        return ok(`Memorized: "${payload.content}"`);
-      }
-
-      return error(`Unknown action "${payload.action}".`);
     },
   });
 

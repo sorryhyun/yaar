@@ -93,7 +93,7 @@ const PERMISSION_DESCRIPTIONS: readonly PermissionDescription[] = [
   { match: 'yaar://user/notifications',     icon: '🔔',  title: 'Send you notifications' },
   { match: 'yaar://user/prompts',           icon: '❓',  title: 'Ask you questions' },
   { match: 'yaar://user/clipboard',         icon: '📋',  title: 'Read and write your clipboard' },
-  { match: 'yaar://session',                icon: '🧠',  title: 'Read session info and memory' },
+  { match: 'yaar://session',                icon: '🧠',  title: 'Read session info' },
   { match: 'yaar://history/',               icon: '🕘',  title: 'Read past session logs' },
   { match: 'yaar://config/',   exact: true, icon: '⚙️',  title: 'Change system settings',               warn: true },
   { match: 'yaar://config/',                icon: '⚙️',  title: 'Change a system setting' },

@@ -2,19 +2,17 @@
  * Role-aware system prompt assembly.
  *
  * App agents already receive an app-scoped profile containing their own docs,
- * protocol, and explicitly controllable apps. Global environment and memory
- * belong to orchestrator-style agents and must not leak into that profile.
+ * protocol, and explicitly controllable apps. The global environment belongs to
+ * orchestrator-style agents and must not leak into that profile.
  */
 
 import type { ProviderType } from '../providers/types.js';
 import { buildEnvironmentSection } from '../providers/environment.js';
 import { CLAUDE_PROVIDER_SECTION, CODEX_PROVIDER_SECTION } from './profiles/shared-sections.js';
 import { isAppRole, isSessionRole } from './roles.js';
-import { configRead } from '../storage/storage-manager.js';
 
 export interface SystemPromptLoaders {
   buildEnvironment(providerType: ProviderType): Promise<string>;
-  loadMemory(): Promise<string>;
 }
 
 /** Build a scope section so an agent knows its place in the hierarchy. */
@@ -53,17 +51,8 @@ function providerSection(providerType: ProviderType): string {
   return section ? `\n\n${section}` : '';
 }
 
-async function loadMemory(): Promise<string> {
-  const result = await configRead('memory.md');
-  if (!result.success || !result.content?.trim()) {
-    return '';
-  }
-  return `\n\n## Memory\nThe following notes were saved by you from previous sessions:\n${result.content.trim()}`;
-}
-
 const DEFAULT_LOADERS: SystemPromptLoaders = {
   buildEnvironment: buildEnvironmentSection,
-  loadMemory,
 };
 
 /**
@@ -71,7 +60,7 @@ const DEFAULT_LOADERS: SystemPromptLoaders = {
  *
  * App profiles are deliberately closed over their own app context. In
  * particular, do not load the installed-app roster, other apps' monitor hints,
- * global storage/mounts, onboarding instructions, or shared memory for them.
+ * global storage/mounts, or onboarding instructions for them.
  */
 export async function assembleSystemPromptForRole(
   basePrompt: string,
@@ -86,9 +75,6 @@ export async function assembleSystemPromptForRole(
     return scopedPrompt;
   }
 
-  const [memory, environment] = await Promise.all([
-    loaders.loadMemory(),
-    loaders.buildEnvironment(providerType),
-  ]);
-  return scopedPrompt + providerSection(providerType) + environment + memory;
+  const environment = await loaders.buildEnvironment(providerType);
+  return scopedPrompt + providerSection(providerType) + environment;
 }
