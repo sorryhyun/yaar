@@ -267,6 +267,8 @@ function IframeRenderer({
    * then unreadable by definition, and that unreadability is itself the proof.
    */
   const [navigatedAway, setNavigatedAway] = useState<{ href: string | null } | null>(null);
+  /** Pending "did that load actually deliver a page?" check — see `looksBlocked`. */
+  const blockedProbeRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reportError = useCallback(
     (message: string) => {
@@ -302,6 +304,13 @@ function IframeRenderer({
       }
     };
 
+    // Worth keeping for the violations it *can* see, but note what it cannot: a
+    // `frame-ancestors` refusal is the framed site's own policy, so the violation is
+    // reported by that document and never reaches this one — and the URI it names as
+    // blocked is *our* origin, not theirs, so the hostname test above could not match
+    // it even if it arrived. Nothing here observes that case; `handleLoad`'s
+    // about:blank check below is what catches it, and `open-url.ts` asks the server
+    // before a window is opened around such a site in the first place.
     document.addEventListener('securitypolicyviolation', handleSecurityViolation);
 
     // Fallback: If iframe hasn't loaded after timeout, assume it's blocked
@@ -325,8 +334,28 @@ function IframeRenderer({
     return () => {
       document.removeEventListener('securitypolicyviolation', handleSecurityViolation);
       clearTimeout(timeoutId);
+      if (blockedProbeRef.current !== null) clearTimeout(blockedProbeRef.current);
     };
   }, [url, reportError]);
+
+  /**
+   * Whether the `load` that just fired delivered a page or a refusal.
+   *
+   * A frame the browser refused to navigate stays on the initial `about:blank`, which
+   * is same-origin with the desktop and therefore *readable*. A frame that really
+   * loaded a cross-origin document is the opposite: reading its location throws, and
+   * that throw is the proof it worked. Only meaningful for a cross-origin `url`.
+   */
+  const looksBlocked = (): boolean => {
+    const iframe = iframeRef.current;
+    if (!iframe) return false;
+    try {
+      const doc = iframe.contentDocument;
+      return !!doc && doc.location.href === 'about:blank';
+    } catch {
+      return false;
+    }
+  };
 
   /**
    * A load event after the app's first one. Tell a reload (`location.reload()`, a
@@ -412,6 +441,19 @@ function IframeRenderer({
       }
 
       setLoadState('loaded');
+
+      // A cross-origin frame that refused to load fires `load` all the same, and the
+      // 3s timeout above was the only thing that noticed — three seconds of an empty
+      // window before the error card appeared. The same test answers immediately here;
+      // the short delay is only to let a frame that fires `load` on its initial
+      // about:blank get on with the real navigation before being judged for it.
+      if (!isSameOrigin(url)) {
+        blockedProbeRef.current = setTimeout(() => {
+          if (!reportedRef.current && looksBlocked()) {
+            reportError('Site blocked iframe embedding (X-Frame-Options or CSP frame-ancestors)');
+          }
+        }, 250);
+      }
 
       // Inject capture helper into same-origin iframes (non-compiler-generated ones)
       if (iframe) {

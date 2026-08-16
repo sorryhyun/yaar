@@ -1,6 +1,6 @@
 /**
  * REST API routes — health, providers, apps, agents/stats, remote-info,
- * iframe-token, pick-directory.
+ * iframe-token, pick-directory, embeddable.
  */
 
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
@@ -12,6 +12,7 @@ import { readSettings } from '../../storage/settings.js';
 import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
+import { checkEmbeddable } from '../../features/http/embeddable.js';
 import { requireHost, resolvePrincipal } from '../access.js';
 import { IS_REMOTE, IS_BUNDLED_EXE, YAAR_VERSION } from '../../config.js';
 
@@ -97,6 +98,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     '/api/remote-info',
     '/api/agents/stats',
     '/api/iframe-token',
+    '/api/embeddable',
   ];
   if (HOST_ONLY.includes(url.pathname)) {
     const principal = resolvePrincipal(req, url);
@@ -134,6 +136,27 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       connections: broadcastStats,
       warmPool: warmPoolStats,
     });
+  }
+
+  // May the desktop frame this URL? Host-only (see HOST_ONLY above): the desktop asks
+  // before it opens a window around an iframe, and the answer is only meaningful for
+  // the desktop's own origin, which is the ancestor the browser would check.
+  //
+  // An app has no business here — it cannot open a window itself, and `yaar:open-url`
+  // already routes its links through the desktop, which asks on its behalf.
+  if (url.pathname === '/api/embeddable' && req.method === 'GET') {
+    const target = url.searchParams.get('url');
+    if (!target) return errorResponse('Missing "url" query parameter', 400);
+    // The desktop document's origin. `Origin` is absent on a same-origin GET in most
+    // browsers, so the request URL — which is the origin the desktop reached us on —
+    // is the fallback, and it is the same answer in every mode but origin isolation.
+    const ancestorOrigin = req.headers.get('origin') || url.origin;
+    try {
+      return jsonResponse(await checkEmbeddable(target, ancestorOrigin));
+    } catch (err) {
+      // Only validateUrl throws — a scheme we won't fetch, or a private-network target.
+      return errorResponse(err instanceof Error ? err.message : 'Invalid URL', 400);
+    }
   }
 
   // Generate an iframe token for client-side window creation (e.g. desktop icon click).

@@ -13,7 +13,7 @@ handling. The content below is carried over verbatim from `packages/server/CLAUD
 
 Routes in `http/routes/`: `GET /health`, `GET /api/version`, `/api/providers`, `/api/apps`,
 `/api/sessions`, `/api/shortcuts`, `/api/settings`, `/api/domains`, `/api/agents/stats`,
-`/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`,
+`/api/storage/*`, `/api/pdf/*`, `/api/browser/*`, `/api/fetch`, `/api/pick-directory`, `/api/embeddable`,
 `/api/remote-info`, `POST /api/iframe-token`, `POST /api/verb`, `POST /api/verb/subscribe`. See
 `routes/api.ts`, `routes/verb.ts`, and `routes/files.ts` for full signatures.
 
@@ -42,7 +42,7 @@ attributes a request** — read it before adding a gate. The gates it exports:
 |---|---|
 | `requirePermission()` | The main check — canonicalization, `self`, verbs |
 | `requireApp()` | Insist the caller is a real app. Needed because `requirePermission` returns `null` for `host`, so a door that only asks it is open to anyone who omits a token |
-| `requireHost()` | Routes no app can hold a permission for (`/api/iframe-token`, `/api/pick-directory`, `/api/remote-info`, `/api/agents/stats`, `/api/dev/preview/{appId}`, session restore) |
+| `requireHost()` | Routes no app can hold a permission for (`/api/iframe-token`, `/api/pick-directory`, `/api/remote-info`, `/api/agents/stats`, `/api/embeddable`, `/api/dev/preview/{appId}`, session restore) |
 | `requireBundle()` | Gated SDK doors (`/api/dev/*` → `yaar-dev`; `/api/browser`, `/api/bridge` → `yaar-web`; `/api/ml-weights*` → `yaar-ml`) |
 | `permissionsAllow()` | The matching rule as a boolean, for a caller with a permission list and no `Principal` (the app-agent storage door) |
 | `storageUriFor()` | Maps an HTTP storage path to the URI that names the same file |

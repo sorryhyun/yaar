@@ -68,9 +68,12 @@ code:
 - **`window.open(url)`** is overridden (`iframe-scripts/windows-sdk.ts`) to do the same, and
   returns a window-shaped stub so a caller's `if (!w)` popup-blocked fallback does not fire. A
   call with no URL, or a non-http(s) scheme, still reaches the browser.
-- Either way the destination opens as a **YAAR window**, not a browser tab. A site that refuses
-  framing lands on the renderer's "Cannot embed this site" state, which offers the browser as the
-  way out.
+- Either way the destination opens as a **YAAR window**, not a browser tab — and which kind of
+  window is decided by asking the site first (`GET /api/embeddable`, read by
+  `store/iframe-bridge/open-url.ts`). A framable site becomes an iframe window; one that refuses
+  (`frame-ancestors` / `X-Frame-Options`) goes to the **Browser app** instead, which drives a real
+  page server-side and so frames nothing. Framing is the target's call and no attribute of ours
+  overrides it, which is why the answer is a different surface rather than a workaround.
 
 Call it directly with `windows.openUrl(url, { title })` from `@bundled/yaar` — fire-and-forget,
 since the desktop owns window creation. Don't hand-roll a click handler around `window.open` or a

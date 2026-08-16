@@ -12,6 +12,7 @@ import {
   activeBrowserId,
   setActiveBrowserId,
   initialBrowserId,
+  parsedInitialUrl,
   updateUrlBar,
   resetDisplay,
   clearDisplay,
@@ -350,3 +351,23 @@ export default defineApp({
   },
   view: App,
 });
+
+/**
+ * `?url=` is a launch parameter, and it used to fill the URL bar and stop there — the
+ * address was displayed but never fetched, so the window opened on a blank page that
+ * claimed to be somewhere. It is now what the app opens on, which is what the desktop
+ * relies on when it hands this app a link that refuses to be framed (`open-url.ts`).
+ *
+ * Last in the file on purpose: it reaches `bid()`, and through it the module state
+ * `ensureBrowserId` closes over, none of which exists until the module has finished
+ * evaluating.
+ */
+if (parsedInitialUrl !== 'about:blank') {
+  void (async () => {
+    try {
+      await web.open(parsedInitialUrl, { ...(await bid()), visible: false });
+    } catch (err) {
+      console.error('[browser] initial navigation failed:', err);
+    }
+  })();
+}

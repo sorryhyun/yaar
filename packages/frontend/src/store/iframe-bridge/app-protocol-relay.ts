@@ -134,6 +134,31 @@ function sendAppProtocolResponse(
 }
 
 /**
+ * Run an app command the *desktop itself* wants run, with no server in the loop.
+ *
+ * The relay above exists to answer the server, so every reply it hears travels back
+ * over the socket. A command the desktop originates has nobody waiting on the other
+ * end — `yaar:open-url` handing a refused link to the already-open Browser app is the
+ * case this was written for — so the reply is only logged. Fire-and-forget, and false
+ * when there was no iframe to speak to, which is the caller's cue to open one.
+ */
+export function sendLocalAppCommand(
+  windowKey: string,
+  command: string,
+  params?: Record<string, unknown>,
+): boolean {
+  const el = findWindowElement(windowKey);
+  const iframe = el ? findIframeIn(el) : null;
+  if (!iframe?.contentWindow) return false;
+
+  // Namespaced so a reply can never be mistaken for one the server is waiting on.
+  const requestId = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  postToIframe(iframe, { type: 'yaar:app-command-request', requestId, command, params });
+  console.debug(`[AppProtocol] → local command ${command} for ${windowKey}`, params);
+  return true;
+}
+
+/**
  * Handle an App Protocol request by forwarding it to the target iframe via postMessage,
  * then sending the app's response back over the socket.
  */

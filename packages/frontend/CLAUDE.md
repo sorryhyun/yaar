@@ -80,7 +80,7 @@ src/
 ## App Protocol
 
 Bidirectional agent-to-iframe communication. Frontend relays between server (WebSocket) and iframe apps (postMessage). Apps register via `export default defineApp({...})` from `@bundled/yaar`, which calls the injected script's private `__registerApp` entry. Key files: `store/iframe-bridge/app-protocol-relay.ts` (`handleAppProtocolRequest()`), `usePendingEventDrainer.ts`, `IframeRenderer.tsx` (injects the underlying SDK scripts).
-- Decomposed into `store/iframe-bridge/`: `target.ts` (shared DOM/iframe lookup + target-origin resolution — key resolution is deliberately not universal, since some callers address the DOM by raw window id and some by monitor-scoped key), `capture.ts`, `app-protocol-relay.ts`, `subscription-relay.ts`, `app-events.ts`, `windows-sdk.ts`, `notifications.ts`, `store-access.ts` (the only module importing `desktop.ts`, containing the runtime-only circular import)
+- Decomposed into `store/iframe-bridge/`: `target.ts` (shared DOM/iframe lookup + target-origin resolution — key resolution is deliberately not universal, since some callers address the DOM by raw window id and some by monitor-scoped key), `capture.ts`, `app-protocol-relay.ts`, `subscription-relay.ts`, `app-events.ts`, `open-url.ts` (where a link out of an app lands — it asks `GET /api/embeddable` first, so a site that refuses framing goes to the Browser app instead of an iframe window that cannot paint), `windows-sdk.ts`, `notifications.ts`, `store-access.ts` (the only module importing `desktop.ts`, containing the runtime-only circular import)
 
 ## Testing
 
