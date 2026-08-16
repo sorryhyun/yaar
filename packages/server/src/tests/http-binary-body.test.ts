@@ -157,6 +157,35 @@ describe('invoke yaar://http — the saveTo gate', () => {
       expect(result.isError).toBe(true);
     }
   });
+
+  /**
+   * The scheme-less spelling the verb doors now accept, arriving at a field that is
+   * already storage-relative. Left alone, each of these is a *silent* success at a path
+   * the caller did not name — `storage/storage/…`, or another app's private tree — which
+   * is the one outcome this field's validation exists to prevent.
+   */
+  it('refuses a saveTo that leads with a yaar authority', async () => {
+    for (const saveTo of ['storage/downloads/x.jpg', 'apps/notes/x.jpg', 'windows/win-1/x.jpg']) {
+      const result = (await asMonitor(() =>
+        invoke({ url: 'https://example.com/x.jpg', saveTo }),
+      )) as VerbResult;
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain('already relative to yaar://storage/');
+      // Names where it *would* have landed, so the refusal teaches the duplication
+      // rather than just declaring the path invalid.
+      expect(textOf(result)).toContain(`yaar://storage/${saveTo.split('/')[0]}/`);
+    }
+  });
+
+  it('leaves an ordinary path that merely resembles one alone', async () => {
+    // The rule is anchored on a full segment, so a directory whose name *starts* with an
+    // authority is a normal destination and must not be refused. Reaches the fetch and
+    // fails there instead — the point is only that it got past the gate.
+    const result = (await asMonitor(() =>
+      invoke({ url: 'https://example.invalid/x.jpg', saveTo: 'storaged/x.jpg' }),
+    )) as VerbResult;
+    expect(textOf(result)).not.toContain('already relative to yaar://storage/');
+  });
 });
 
 /**

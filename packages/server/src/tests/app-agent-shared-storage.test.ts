@@ -25,6 +25,7 @@ import {
   sharedStoragePath,
   sharedStorageUri,
   authorizeSharedStorage,
+  appNamespaceStorage,
 } from '../mcp/app-agent/shared-storage.js';
 import {
   capForeignAppStorage,
@@ -242,5 +243,77 @@ describe('the refusal', () => {
     expect(denied).toContain('not permitted: read yaar://storage/devtools-friction-report.md');
     expect(denied).toContain('permissions');
     expect(denied).toContain('storage/devtools-friction-report.md');
+  });
+});
+
+/**
+ * The third spelling — the one the door *emits*.
+ *
+ * Every app-scoped result names `yaar://apps/{id}/storage/{path}` (`resolvedStorageUri`,
+ * and each `(resolved to …)`), and that spelling used to reach neither storage branch: it
+ * is not `yaar://storage/…` and not a relative `storage/` path, so it fell through to the
+ * app protocol and failed as an unknown *state key*. A model that reads a listing and asks
+ * for one of its entries by the name it was just shown is doing exactly what the reported
+ * URI invites, so the door has to accept what it prints.
+ */
+describe('reading back the URI the door printed', () => {
+  it('resolves the app’s own tree to the relative path, in both dialects', () => {
+    // Naming your own id and writing `self` are the same request — `resolveSelf` runs
+    // before the flattening, exactly as it does in `permissionsAllow`.
+    for (const arg of [
+      'yaar://apps/memo/storage/reports/x.md',
+      'yaar://apps/self/storage/reports/x.md',
+    ]) {
+      expect(appNamespaceStorage(arg, 'memo')).toEqual({ kind: 'own', path: 'reports/x.md' });
+    }
+  });
+
+  it('reads the storage root itself as the empty path, not as a miss', () => {
+    expect(appNamespaceStorage('yaar://apps/memo/storage', 'memo')).toEqual({
+      kind: 'own',
+      path: '',
+    });
+    expect(appNamespaceStorage('yaar://apps/self/storage', 'memo')).toEqual({
+      kind: 'own',
+      path: '',
+    });
+  });
+
+  it('hands another app’s tree back in the coordinates its grant is written in', () => {
+    // Flat, not namespaced: `authorizeSharedStorage` asks `permissionsAllow`, which
+    // canonicalizes to this form — so returning it is what makes the two dialects
+    // impossible to play against each other.
+    expect(appNamespaceStorage('yaar://apps/vault/storage/secrets.json', 'memo')).toEqual({
+      kind: 'foreign',
+      uri: 'yaar://storage/apps/vault/secrets.json',
+    });
+  });
+
+  it('refuses a traversing path instead of resolving it', () => {
+    expect(appNamespaceStorage('yaar://apps/memo/storage/../../etc', 'memo')).toEqual({
+      kind: 'invalid',
+    });
+  });
+
+  it('leaves every other app sub-path to the app protocol', () => {
+    // `null` means "not a storage argument" — the caller carries on to `handleAppQuery`,
+    // which is where these were always going.
+    expect(appNamespaceStorage('yaar://apps/memo/protocol', 'memo')).toBeNull();
+    expect(appNamespaceStorage('yaar://apps/memo/db/notes', 'memo')).toBeNull();
+    expect(appNamespaceStorage('yaar://apps/memo', 'memo')).toBeNull();
+    // Not this dialect at all — the other two branches own these.
+    expect(appNamespaceStorage('yaar://storage/shared/x', 'memo')).toBeNull();
+    expect(appNamespaceStorage('storage/x', 'memo')).toBeNull();
+  });
+
+  it('agrees with the gate about which tree a URI names', async () => {
+    // The point of returning the flat spelling: whatever `appNamespaceStorage` calls
+    // foreign must be the same string `permissionsAllow` would judge, or one dialect
+    // becomes a way around the other.
+    const target = appNamespaceStorage('yaar://apps/vault/storage/secrets.json', 'memo');
+    expect(target?.kind).toBe('foreign');
+    if (target?.kind !== 'foreign') throw new Error('unreachable');
+    expect(permissionsAllow(['yaar://storage/'], 'memo', target.uri, 'read')).toBe(true);
+    expect(permissionsAllow([], 'memo', target.uri, 'read')).toBe(false);
   });
 });

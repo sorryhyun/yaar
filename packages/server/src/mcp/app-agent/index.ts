@@ -16,6 +16,14 @@
  * ./shared-storage.ts for the exposure/authorization split, why the shared door exists,
  * and why it is a URI rather than a second relative spelling.
  *
+ * A third spelling is accepted rather than merely printed: `yaar://apps/{id}/storage/...`,
+ * the dialect this door emits on every app-scoped result. `appNamespaceStorage` normalizes
+ * it into one of the two above — the app's own id or `self` collapses to the relative
+ * form, another app's flattens to the URI its grant is written in — so a model that reads
+ * a listing and asks for an entry by the name it was shown reaches storage rather than
+ * failing as an unknown state key. Accept-only, exactly as at the verb doors: what the
+ * branches below then compare, authorize and report is unchanged.
+ *
  * Cross-app control: describe/query/command take an optional `appId`. Omitting it (or passing
  * your own id) targets your own window — no permission needed. Passing another app's id targets
  * that app, gated by the caller's app.json `controls` list (and, for command, its command list).
@@ -109,6 +117,7 @@ import {
 } from '../../storage/storage-manager.js';
 import type { StorageListResult } from '../../storage/types.js';
 import {
+  appNamespaceStorage,
   namesSharedStorage,
   sharedStoragePath,
   sharedStorageUri,
@@ -366,15 +375,32 @@ export function registerAppAgentTools(server: McpServer): void {
 
       const windowState = getWindowState();
 
+      // Normalize the dialect this door *emits* into the two it already speaks. Every
+      // app-scoped result names `yaar://apps/{id}/storage/{path}`, so that is the spelling
+      // a model echoes back — and it used to reach neither branch below, falling through
+      // to the app protocol to fail as an unknown state key. Rewriting here rather than
+      // adding a third branch is deliberate: own tree becomes the relative form (no
+      // permission, exposure-gated), another app's becomes the flat form its grant is
+      // written in, and both are then handled by the code that already decides those cases.
+      let stateKey = args.stateKey;
+      if (stateKey?.startsWith('yaar://apps/')) {
+        const appId = getAppId(windowState, windowId);
+        if (!appId) return error('could not resolve appId for this window.');
+        const target = appNamespaceStorage(stateKey, appId);
+        if (target?.kind === 'invalid') return error(STORAGE_PATH_ERROR);
+        if (target?.kind === 'own') stateKey = target.path ? `storage/${target.path}` : 'storage';
+        if (target?.kind === 'foreign') stateKey = target.uri;
+      }
+
       // Intercept shared-tree reads — a `yaar://storage/...` URI names the storage root,
       // and is admitted only by what app.json declares. Checked before the relative
       // branch, which would otherwise never see it (a URI is not a `storage/` path).
-      if (args.stateKey && namesSharedStorage(args.stateKey)) {
+      if (stateKey && namesSharedStorage(stateKey)) {
         if (args.appId)
           return error('shared storage is not addressed per app — drop appId to read it.');
         const appId = getAppId(windowState, windowId);
         if (!appId) return error('could not resolve appId for this window.');
-        const path = sharedStoragePath(args.stateKey);
+        const path = sharedStoragePath(stateKey);
         if (path === null) return error(SHARED_PATH_ERROR);
         // The root is a listing and a file is a read, so they are different verbs and an
         // app.json may well grant one without the other.
@@ -406,7 +432,7 @@ export function registerAppAgentTools(server: McpServer): void {
       }
 
       // Intercept storage reads — a relative path is app-scoped, so only your own app.
-      if (args.stateKey?.startsWith('storage/') || args.stateKey === 'storage') {
+      if (stateKey?.startsWith('storage/') || stateKey === 'storage') {
         if (args.appId)
           return error("storage is app-scoped; you cannot read another app's storage.");
         const appId = getAppId(windowState, windowId);
@@ -417,10 +443,11 @@ export function registerAppAgentTools(server: McpServer): void {
         // branch above is deliberately not gated: the commons is granted for being an
         // app, and `authorizeSharedStorage` already refuses the rest of that tree by name.
         if (!(await declaresSharedStorage(appId))) {
+          // Quotes what the caller *sent*, not the rewritten form: a refusal that echoes a
+          // spelling the model never typed reads as the door having misunderstood it.
           return error(storageNotDeclared(appId, `query("${args.stateKey}")`));
         }
-        const relativePath =
-          args.stateKey === 'storage' ? '' : args.stateKey.slice('storage/'.length);
+        const relativePath = stateKey === 'storage' ? '' : stateKey.slice('storage/'.length);
         const scoped = scopedAppStoragePath(appId, relativePath);
         if (!scoped) return error(STORAGE_PATH_ERROR);
         const uri = resolvedStorageUri(appId, relativePath);
@@ -448,7 +475,7 @@ export function registerAppAgentTools(server: McpServer): void {
       if (!target.ok) return error(target.error);
 
       const result = await handleAppQuery(windowState, target.windowId, {
-        stateKey: args.stateKey,
+        stateKey,
       });
       return {
         ...(target.launched ? withLaunchNote(result, args.appId!, target.windowId) : result),
@@ -501,7 +528,20 @@ export function registerAppAgentTools(server: McpServer): void {
           return error(storageNotDeclared(appId, `command("${args.command}")`));
         }
         const subCommand = args.command.slice('storage:'.length);
-        const path = (args.params?.path as string) ?? '';
+        let path = (args.params?.path as string) ?? '';
+
+        // The same normalization `query` applies, for the same reason: `storage:list`
+        // reports `yaar://apps/{id}/storage/{path}` as the `uri` of what it listed, and a
+        // caller that writes back to a path it was shown must reach the tree it was shown.
+        // Own tree collapses to the relative form the switch below already speaks;
+        // another app's becomes the flat URI `sharedStorageCommand` authorizes.
+        if (path.startsWith('yaar://apps/')) {
+          const target = appNamespaceStorage(path, appId);
+          if (target?.kind === 'invalid') return error(STORAGE_PATH_ERROR);
+          if (target?.kind === 'own') path = target.path;
+          if (target?.kind === 'foreign') path = target.uri;
+        }
+
         if (namesSharedStorage(path)) {
           return sharedStorageCommand(appId, subCommand, path, args.params?.content);
         }

@@ -14,6 +14,7 @@ import { planResponseBody } from '../features/http/binary-body.js';
 import { clearJar, jarKey } from '../features/http/cookie-jar.js';
 import { storageWrite } from '../storage/storage-manager.js';
 import { getSessionId, getAppId, getAgentRole } from '../agents/agent-context.js';
+import { resolveShorthandUri } from '../http/uri-match.js';
 
 /**
  * Where a `saveTo` path is allowed to land, and for whom.
@@ -37,11 +38,30 @@ function saveToDenial(): string | null {
   return null;
 }
 
-/** Reject anything that is not a plain relative path under the storage root. */
+/**
+ * Reject anything that is not a plain relative path under the storage root.
+ *
+ * The authority check is the counterpart to `resolveShorthandUri`. Now that both verb
+ * doors accept a scheme-less `storage/notes.md`, a caller that has learned the scheme is
+ * optional spells this field the same way — and `saveTo` is *already* relative to
+ * `yaar://storage/`, so `storage/downloads/x.jpg` writes to `storage/storage/downloads/`
+ * and `apps/notes/x` writes into another app's private tree. Both are silent successes at
+ * a path nobody asked for, which is exactly what the "not a URI" line above exists to
+ * stop; it simply predates the spelling that now reaches it.
+ *
+ * Asked of the shared rule rather than a second regex, so the authorities the door
+ * *accepts* and the ones this field must *refuse* cannot drift apart.
+ */
 function invalidSaveTo(path: string): string | null {
   if (!path.trim()) return '"saveTo" must be a non-empty storage path, e.g. "downloads/photo.jpg".';
   if (path.startsWith('yaar://') || path.startsWith('/'))
     return '"saveTo" is a path relative to yaar://storage/, not a URI — pass "downloads/photo.jpg".';
+  if (resolveShorthandUri(path) !== path)
+    return (
+      `"saveTo" is already relative to yaar://storage/, so "${path}" would land under ` +
+      `yaar://storage/${path.split('/')[0]}/ — not where the name suggests. Drop the ` +
+      'leading authority and pass a plain path, e.g. "downloads/photo.jpg".'
+    );
   if (path.split('/').includes('..')) return '"saveTo" must not contain "..".';
   return null;
 }

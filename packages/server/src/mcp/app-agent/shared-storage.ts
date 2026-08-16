@@ -53,11 +53,14 @@
 import { validateRelativePath } from '../../handlers/utils.js';
 import { getAppMeta } from '../../features/apps/discovery.js';
 import { permissionsAllow } from '../../http/access.js';
-import { entryUri, entryVerbs } from '../../http/uri-match.js';
+import { canonicalStorageUri, entryUri, entryVerbs, resolveSelf } from '../../http/uri-match.js';
 import type { Verb } from '../../handlers/uri-registry.js';
 
 /** The shared storage root, spelled as app.json spells it. */
 const SHARED_ROOT = 'yaar://storage';
+
+/** The namespaced dialect — one app each, rather than the flat tree they all live in. */
+const APP_NAMESPACE = 'yaar://apps';
 
 /**
  * Does this tool argument name the shared tree rather than the app's own?
@@ -90,6 +93,57 @@ export function sharedStoragePath(arg: string): string | null {
 /** The canonical URI for a root-relative path, as the caller should spell it back. */
 export function sharedStorageUri(path: string): string {
   return path ? `${SHARED_ROOT}/${path}` : SHARED_ROOT;
+}
+
+/** Where an app-namespace storage URI points, once `self` and the flat tree are resolved. */
+export type AppNamespaceStorage =
+  /** This app's own tree, as a path under its storage root (`''` is the root itself). */
+  | { kind: 'own'; path: string }
+  /** Another app's tree, in the flat coordinates its grant is written in. */
+  | { kind: 'foreign'; uri: string }
+  /** A traversing path: it names no resource, so it must not be matched against one. */
+  | { kind: 'invalid' };
+
+/**
+ * Read `yaar://apps/{id}/storage/…` — the dialect this door **emits** — as a target, or
+ * `null` when the argument is not one.
+ *
+ * The door reports `yaar://apps/{id}/storage/{path}` on every app-scoped result
+ * (`resolvedStorageUri`, and each `(resolved to …)`) and then accepted no such spelling
+ * back: it matched neither {@link namesSharedStorage} nor the relative `storage/` prefix,
+ * so it fell through to the app protocol and failed as an unknown *state key*. A model
+ * that reads a listing and asks for one of its entries by the name it was just shown is
+ * doing the one thing the reported URI invites, and this is what makes that work.
+ *
+ * Both dialects resolve here rather than one being privileged, because they are the same
+ * file: `resolveSelf` expands the pronoun and `canonicalStorageUri` flattens the namespace
+ * onto the tree on disk — the identical pair, in the identical order, that
+ * `permissionsAllow` applies at the gate. Naming the app's *own* id and writing `self`
+ * therefore land in the same place, and neither can mean something the gate would read
+ * differently.
+ *
+ * The own/foreign split is here and not at the doors because the two answers belong to
+ * different branches: this app's own tree is reached by the relative spelling, which
+ * needs no permission and is governed by {@link declaresSharedStorage}; another app's is
+ * reached by the flat spelling, which {@link authorizeSharedStorage} gates exactly as the
+ * verbs door would. Returning the *flat* URI for a foreign target is what keeps that
+ * second half honest — the grant is written in those coordinates, so no widening is
+ * possible by spelling the request in the other dialect.
+ *
+ * A sub-path that is not storage at all (`yaar://apps/{id}/protocol`) answers `null` and
+ * carries on to the app protocol, which is where it was always going.
+ */
+export function appNamespaceStorage(arg: string, appId: string): AppNamespaceStorage | null {
+  if (!arg.startsWith(`${APP_NAMESPACE}/`)) return null;
+
+  const flat = canonicalStorageUri(resolveSelf(arg, appId));
+  if (flat === null) return { kind: 'invalid' };
+  if (!namesSharedStorage(flat)) return null;
+
+  const own = `${SHARED_ROOT}/apps/${appId}`;
+  if (flat === own) return { kind: 'own', path: '' };
+  if (flat.startsWith(`${own}/`)) return { kind: 'own', path: flat.slice(own.length + 1) };
+  return { kind: 'foreign', uri: flat };
 }
 
 /**
