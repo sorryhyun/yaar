@@ -11,6 +11,7 @@ export * from './projects';
 export * from './console';
 export * from './grep';
 export * from './build';
+export * from './format';
 export * from './git';
 export * from './libraries';
 export * from './preview';

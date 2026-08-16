@@ -16,6 +16,7 @@ import {
   getStaticManifest,
   getRuntimeManifest,
   diffManifestNames,
+  formatFiles,
 } from '../services';
 
 export const buildCommands = {
@@ -131,6 +132,39 @@ export const buildCommands = {
                 'agents. Run the manifest command for details.',
             }
           : {}),
+      };
+    },
+  }),
+  format: defineAppCommand({
+    description:
+      "Run the host's Prettier over the project, in the repo's own style — the style " +
+      'deployed apps are read and reviewed in. Formats .ts/.tsx/.js/.jsx/.css and leaves ' +
+      'dist/ and .json alone. Each rewritten file comes back as { path, lines, added, ' +
+      'removed } — `lines` being where it changed in the NEW file ("12, 40-44"), so the ' +
+      'line numbers still hold for a read or edit that follows. Not the diff text: the ' +
+      'Changes panel holds that, and every rewrite is recorded there like any other edit. ' +
+      'A file Prettier cannot parse is skipped with its syntax error and the rest still ' +
+      'run — so a `skipped` entry after an edit is worth reading: it usually means that ' +
+      'edit left the file unparseable, which no amount of type checking will phrase as ' +
+      'clearly.',
+    params: {
+      type: 'object',
+      properties: {
+        paths: {
+          type: 'array',
+          items: { type: 'string' },
+          description:
+            'Project-relative files to format. Omit to format every formattable file in ' +
+            'the project.',
+        },
+      },
+    },
+    run: async (p) => {
+      const paths = Array.isArray(p.paths) ? p.paths.map(String) : undefined;
+      const outcome = await formatFiles(paths);
+      return {
+        status: outcome.skipped.length > 0 ? 'partial' : 'success',
+        ...outcome,
       };
     },
   }),

@@ -1010,6 +1010,21 @@ interface YaarDevTypecheckResult {
   error?: string;
 }
 
+interface YaarDevFormatResult {
+  success: boolean;
+  /** The formatted text. Present only on success. */
+  formatted?: string;
+  /** False when the file was already formatted — nothing to write. */
+  changed?: boolean;
+  /**
+   * Which refusal this is: `unsupported` (nothing formats that extension),
+   * `unavailable` (this build ships no prettier), `parse` (prettier could not read
+   * the code — `error` carries the line).
+   */
+  kind?: 'unsupported' | 'unavailable' | 'parse';
+  error?: string;
+}
+
 interface YaarDevDeployOpts {
   appId: string;
   name?: string;
@@ -1119,6 +1134,7 @@ interface YaarDevRestoreResult {
 interface YaarDev {
   compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
   typecheck(path: string): Promise<YaarDevTypecheckResult>;
+  format(path: string, source: string): Promise<YaarDevFormatResult>;
   deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
   bundledLibraries(): Promise<string[]>;
   gitHistory(appId?: string, opts?: { limit?: number }): Promise<YaarDevHistoryResult>;
@@ -2015,6 +2031,15 @@ declare module '@bundled/yaar' {
 declare module '@bundled/yaar-dev' {
   export function compile(path: string, opts?: { title?: string }): Promise<YaarDevCompileResult>;
   export function typecheck(path: string): Promise<YaarDevTypecheckResult>;
+  /**
+   * Format source text with the host's prettier, in the repo's own style.
+   *
+   * Text in, text out: the server opens no file and writes none. `path` is read for
+   * its extension (which parser to use) — write the result back yourself, so your own
+   * history and buffers stay true. Formats .ts/.tsx/.mts/.cts, .js/.jsx/.mjs/.cjs,
+   * .json and .css.
+   */
+  export function format(path: string, source: string): Promise<YaarDevFormatResult>;
   export function deploy(path: string, opts: YaarDevDeployOpts): Promise<YaarDevDeployResult>;
   /** Get all available bundled library names. */
   export function bundledLibraries(): Promise<string[]>;

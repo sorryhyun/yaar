@@ -186,6 +186,16 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/dev/format:
+    post:
+      summary: "Format a file's source text"
+      responses:
+        '200':
+          description: json
+          content:
+            application/json:
+              schema:
+                type: object
   /api/dev/git-checkpoint:
     post:
       summary: "Snapshot an app's current state"

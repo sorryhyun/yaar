@@ -6,6 +6,7 @@
  * POST /api/dev/compile       — compile a project directory
  * POST /api/dev/typecheck     — typecheck a project directory
  * POST /api/dev/deploy        — deploy a project as an installed app
+ * POST /api/dev/format        — format one file's text (text in, text out; no disk)
  * POST /api/dev/git-history   — list an app's version history
  * POST /api/dev/git-diff      — diff an app against a snapshot or the host repo
  * POST /api/dev/git-restore   — roll an app back to an earlier commit
@@ -35,6 +36,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     description: 'Typecheck a project',
   },
   { method: 'POST', path: '/api/dev/deploy', response: 'json', description: 'Deploy a project' },
+  {
+    method: 'POST',
+    path: '/api/dev/format',
+    response: 'json',
+    description: "Format a file's source text",
+  },
   {
     method: 'POST',
     path: '/api/dev/git-history',
@@ -72,16 +79,24 @@ const APP_ID = /^[A-Za-z0-9._-]+$/;
 
 const PATH_ACTIONS = ['compile', 'typecheck', 'deploy'] as const;
 const GIT_ACTIONS = ['git-history', 'git-diff', 'git-restore', 'git-checkpoint'] as const;
+/** Actions over text the caller sends, addressing no project directory at all. */
+const TEXT_ACTIONS = ['format'] as const;
 
 type PathAction = (typeof PATH_ACTIONS)[number];
 type GitAction = (typeof GIT_ACTIONS)[number];
-type DevAction = PathAction | GitAction;
+type TextAction = (typeof TEXT_ACTIONS)[number];
+type DevAction = PathAction | GitAction | TextAction;
 
 function isDevAction(action: string): action is DevAction {
   return (
     (PATH_ACTIONS as readonly string[]).includes(action) ||
-    (GIT_ACTIONS as readonly string[]).includes(action)
+    (GIT_ACTIONS as readonly string[]).includes(action) ||
+    (TEXT_ACTIONS as readonly string[]).includes(action)
   );
+}
+
+function isTextAction(action: DevAction): action is TextAction {
+  return (TEXT_ACTIONS as readonly string[]).includes(action);
 }
 
 function isGitAction(action: DevAction): action is GitAction {
@@ -310,6 +325,24 @@ async function dispatchDevAction(
         return jsonResponse(await git.appHistory(targetAppId, 1));
       }
     }
+  }
+
+  // Formatting addresses text, not a project — it opens no file and writes none, so it
+  // branches out ahead of the path resolution the compile/typecheck/deploy actions need.
+  // The caller reads its own file and writes back the answer, which is what keeps its
+  // change history and open editor buffer describing the bytes that are actually there.
+  if (isTextAction(action)) {
+    const source = body.source;
+    const filePath = body.path;
+    if (typeof source !== 'string') return errorResponse('"source" is required', 400);
+    if (typeof filePath !== 'string' || !filePath) return errorResponse('"path" is required', 400);
+
+    const { formatSource } = await import('../../features/dev/format.js');
+    const result = await formatSource(source, filePath);
+    if (!result.ok) {
+      return jsonResponse({ success: false, kind: result.kind, error: result.reason });
+    }
+    return jsonResponse({ success: true, formatted: result.formatted, changed: result.changed });
   }
 
   const path = body.path as string;

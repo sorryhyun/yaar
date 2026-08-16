@@ -45,6 +45,28 @@ export function compile(path: string, opts?: { title?: string }) {
   });
 }
 
+/**
+ * Format source text with the host's prettier, using the repo's own style.
+ *
+ * Text in, text out — the server opens no file and writes none. `path` is read for
+ * its extension (which parser to use); the caller writes the result back through
+ * whatever write path it already has, so its own history and buffers stay true.
+ *
+ * `kind` distinguishes the three refusals: `unsupported` (nothing formats that
+ * extension), `unavailable` (this build has no prettier), `parse` (prettier could
+ * not read the code — `error` carries the line).
+ */
+export function format(path: string, source: string) {
+  return devPost<{
+    success: boolean;
+    formatted?: string;
+    /** False when the file was already formatted — nothing to write. */
+    changed?: boolean;
+    kind?: 'unsupported' | 'unavailable' | 'parse';
+    error?: string;
+  }>('format', { path, source });
+}
+
 export function typecheck(path: string) {
   return devPost<{ success: boolean; diagnostics: string[] }>('typecheck', { path });
 }

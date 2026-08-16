@@ -205,6 +205,14 @@ export async function writeFile(
     before?: string | null;
     /** How the change history labels this write. Defaults to 'write'. */
     label?: string;
+    /**
+     * Skip the file-list refresh, for a caller writing many files in one pass that
+     * refreshes once at the end. A refresh re-reads every file in the project to
+     * recount lines, so paying for it per write turns a format-the-project run into
+     * a quadratic pile of reads. Everything else about the write is unchanged —
+     * the change record, the editor buffer and the typecheck state all still land.
+     */
+    deferRefresh?: boolean;
   },
 ): Promise<WriteReceipt> {
   const proj = activeProject();
@@ -221,7 +229,7 @@ export async function writeFile(
   if (openFilePath() === path) setOpenFileContent(content);
   // Whatever tsc last concluded, it concluded about the previous bytes.
   setTypecheckState('unknown');
-  await refreshFiles();
+  if (!change?.deferRefresh) await refreshFiles();
   setStatusText(`Saved ${path}`);
   return {
     path,
