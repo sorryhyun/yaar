@@ -1,5 +1,7 @@
 export {};
 
+import type { TAB_IDS } from './constants';
+
 /**
  * Token consumption for one agent (or the whole session).
  *
@@ -13,7 +15,7 @@ export {};
  * excluded**. They are the same context re-sent on every turn, so folding them
  * in makes the figure climb with turn count even when the agent takes in nothing
  * new. Cache writes are counted: that content is passing through the model for
- * the first time. `inputRead()` in `main.ts` is the one place that sum is taken;
+ * the first time. `inputRead()` in `format.ts` is the one place that sum is taken;
  * nothing should add these fields by hand.
  */
 export interface AgentUsage {
@@ -142,4 +144,29 @@ export interface AppProcess {
   orphaned: boolean;
 }
 
-export type TabId = 'agents' | 'windows' | 'apps';
+/** The three views. Derived from TAB_IDS so the tab order and the type cannot drift. */
+export type TabId = (typeof TAB_IDS)[number];
+
+/**
+ * The payload of a stream frame, as far as this app reads it.
+ *
+ * Every field is optional and none is validated: frames arrive many times a
+ * second from our own server, so this is a named shape for a single narrow cast
+ * at the fold site rather than a trust boundary worth a Zod parse. The folder
+ * defaults each field it reads.
+ */
+export interface AgentFrameData {
+  /** `text` frames: the chunk of assistant text just emitted. */
+  delta?: string;
+  /** `tool` frames: display name of the tool being called. */
+  toolName?: string;
+  /** `tool` frames: 'running' etc. On a `done` frame: 'interrupted' etc. */
+  status?: string;
+  /** `error` frames: the message to surface on the row. */
+  error?: string;
+  /** `usage` frames: cumulative lifetime totals for the agent, not turn deltas. */
+  inputTokens?: number;
+  outputTokens?: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
+}
