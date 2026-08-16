@@ -1,7 +1,7 @@
 export {};
 import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
-import { sanitizeHtml, storage } from '@bundled/yaar';
+import { sanitizeHtml, storage, windows } from '@bundled/yaar';
 import { setState, elPreviewBody } from './state';
 import {
   basename,
@@ -159,11 +159,11 @@ export async function selectFile(entry: import('./types').StorageEntry) {
     <div class="no-preview-fallback">
       <div class="no-preview-icon">${getFileIcon(name, false)}</div>
       <div class="no-preview-text">No preview available</div>
-      <button class="y-btn y-btn-sm" id="open-external">Open in browser tab ↗</button>
+      <button class="y-btn y-btn-sm" id="open-external">Open in a window ↗</button>
     </div>
   `;
   document.getElementById('open-external')?.addEventListener('click', () => {
-    window.open(storage.url(entry.path), '_blank');
+    windows.openUrl(storage.url(entry.path), { title: name });
   });
 }
 

@@ -56,6 +56,28 @@ may only be given tool names that route back to the app's own iframe.
 
 Design record and the four laws every new node must satisfy: [`docs/architecture/agent_tree.md`](../docs/architecture/agent_tree.md).
 
+## Links out of an app
+
+An app frame is same-origin and unsandboxed, so a plain `<a href>` navigates the **app's own
+document** — replacing every injected script with it, so the app protocol stops answering with no
+exception and no console line. Three things keep that from happening, and none of them needs app
+code:
+
+- The injected **link guard** (`iframe-scripts/app-protocol.ts`) cancels the activation of any
+  anchor in a registered app and hands the URL to the desktop.
+- **`window.open(url)`** is overridden (`iframe-scripts/windows-sdk.ts`) to do the same, and
+  returns a window-shaped stub so a caller's `if (!w)` popup-blocked fallback does not fire. A
+  call with no URL, or a non-http(s) scheme, still reaches the browser.
+- Either way the destination opens as a **YAAR window**, not a browser tab. A site that refuses
+  framing lands on the renderer's "Cannot embed this site" state, which offers the browser as the
+  way out.
+
+Call it directly with `windows.openUrl(url, { title })` from `@bundled/yaar` — fire-and-forget,
+since the desktop owns window creation. Don't hand-roll a click handler around `window.open` or a
+clipboard fallback; that was the pre-`openUrl` workaround and it now just duplicates the shim.
+`window.__yaarAllowPopups = true` opts out of the override, as `__yaarAllowFrameNavigation` opts
+out of the link guard.
+
 ## Design Tokens
 
 Single source of truth: `packages/shared/src/design/tokens.ts` generates both the app-iframe CSS

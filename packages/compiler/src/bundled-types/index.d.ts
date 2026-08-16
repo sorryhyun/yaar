@@ -994,8 +994,13 @@ interface YaarWindows {
    *
    * This is where an external link inside an app should go. A plain `<a href>`
    * navigates the app's *own* frame — replacing the app document and every script
-   * in it, the app protocol included — and `window.open` leaves the desktop for a
-   * browser tab. Fire-and-forget: the desktop owns window creation.
+   * in it, the app protocol included. Fire-and-forget: the desktop owns window
+   * creation.
+   *
+   * `window.open(url)` is shimmed onto this same path, so there is no need to
+   * hand-roll a popup with a clipboard fallback — an app frame cannot open a
+   * browser tab, and a "popup blocked" branch will never be the reason a link
+   * fails to open.
    */
   openUrl(url: string, opts?: { title?: string }): void;
 }

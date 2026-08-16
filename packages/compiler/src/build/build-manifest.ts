@@ -101,8 +101,15 @@ import { join, basename } from 'path';
  * a solid-js store is a Proxy, so returning store state from a state getter or command
  * always failed with a message naming no field). Both are baked into `dist/`, and the
  * apps that render foreign HTML or hand back store state are not the ones being edited.
+ *
+ * '25': the windows SDK now overrides `window.open`, so an app's popups open as YAAR
+ * windows instead of leaving for a browser tab. The whole point is that an app gets this
+ * *without* an edit — the apps reaching for `window.open` are the ones written against
+ * the open web, or written before `windows.openUrl` existed — and the baked-in copy in
+ * `dist/` wins over the injected one (both are install-once, and the baked one runs
+ * first). Without a bump the fix would reach only apps that happened to go stale.
  */
-export const COMPILER_VERSION = '24';
+export const COMPILER_VERSION = '25';
 
 export interface BuildManifest {
   sourceHash: string;

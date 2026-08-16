@@ -34,7 +34,7 @@ import {
   setNavPin,
   setNavResizing,
 } from './navOverlay';
-import { app, storage, showToast, showConfirm, defineApp } from '@bundled/yaar';
+import { app, storage, windows, showToast, showConfirm, defineApp } from '@bundled/yaar';
 
 let uploadInput: HTMLInputElement;
 
@@ -218,9 +218,9 @@ const App = () => {
                     <span class="file-size">${entry.isDirectory ? '' : formatSize(entry.size)}</span>
                     <span class="file-actions">
                       <${Show} when=${() => !entry.isDirectory}>
-                        <button title="Open in new tab" onClick=${(e: MouseEvent) => {
+                        <button title="Open in a window" onClick=${(e: MouseEvent) => {
                           e.stopPropagation();
-                          window.open(storage.url(entry.path), '_blank');
+                          windows.openUrl(storage.url(entry.path), { title: name });
                         }}>⇗</button>
                       <//>
                       <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
