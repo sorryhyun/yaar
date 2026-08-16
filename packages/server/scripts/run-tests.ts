@@ -24,6 +24,13 @@
 import { Glob } from 'bun';
 
 import { type Partition, partitionOf } from '../../../scripts/test/partitions.ts';
+import {
+  addCounts,
+  formatCounts,
+  parseCounts,
+  ZERO_COUNTS,
+  type TestCounts,
+} from '../../../scripts/test/summary.ts';
 
 /** Test processes to keep in flight at once. */
 const MAX_CONCURRENT = 4;
@@ -36,7 +43,7 @@ interface Group {
   files: string[];
 }
 
-async function run(group: Group): Promise<boolean> {
+async function run(group: Group): Promise<{ ok: boolean; counts: TestCounts }> {
   const { partition, files } = group;
   const args = [...files, ...(partition.parallel ? ['--parallel'] : [])];
   const proc = Bun.spawn(['bun', 'test', ...args], {
@@ -52,9 +59,11 @@ async function run(group: Group): Promise<boolean> {
   ]);
   // Bun writes test results to stderr; print both under one header so concurrent children stay
   // readable instead of interleaving line by line.
+  const output = `${stdout}${stderr}`;
+  const counts = parseCounts(output);
   const label = `${partition.label} (${files.length} file${files.length === 1 ? '' : 's'})`;
-  process.stdout.write(`\n───── ${label} ─────\n${stdout}${stderr}`);
-  return exitCode === 0;
+  process.stdout.write(`\n───── ${label} — ${formatCounts(counts)} ─────\n${output}`);
+  return { ok: exitCode === 0, counts };
 }
 
 /** Run `tasks` with bounded concurrency, awaiting all of them. */
@@ -100,12 +109,18 @@ const outcomes = await pooled(
   MAX_CONCURRENT,
 );
 
-const failed = ordered.filter((_, i) => !outcomes[i]);
+// The 19 partition processes each print their own block; this is the only line that adds
+// them up, so it is what `bun run --filter @yaar/server test | tail` has to land on.
+const total = outcomes.map((o) => o.counts).reduce(addCounts, ZERO_COUNTS);
+const failed = ordered.filter((_, i) => !outcomes[i].ok);
 if (failed.length > 0) {
   console.error(
-    `\n[tests] ${failed.length} of ${ordered.length} test process(es) failed: ` +
-      failed.map((g) => g.partition.label).join(', '),
+    `\n[tests] ${formatCounts(total)} — ${failed.length} of ${ordered.length} test process(es) ` +
+      `failed: ${failed.map((g) => g.partition.label).join(', ')}`,
   );
   process.exit(1);
 }
-console.log(`\n[tests] all ${ordered.length} test process(es) passed`);
+console.log(
+  `\n[tests] ${formatCounts(total)} — all ${ordered.length} test process(es) passed ` +
+    `(${total.tests} test(s) across ${total.files} file(s))`,
+);

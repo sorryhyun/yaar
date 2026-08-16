@@ -51,7 +51,7 @@
     "build": "bun run --filter '*' build",
     "typecheck": "bun run --filter '*' typecheck",
     "lint": "bun run --filter '*' lint",
-    "test": "bun run --filter '*' test",
+    "test": "bun run scripts/test/run-all.ts",
     "test:frontend": "bun run --filter @yaar/frontend test",
     "test:server": "bun run --filter @yaar/server test",
     "test:shared": "bun run --filter @yaar/shared test",

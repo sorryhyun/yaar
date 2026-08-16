@@ -32,6 +32,7 @@ import { join, resolve } from 'path';
 import { compileTypeScript } from '../compile.js';
 import { initCompiler } from '../config.js';
 import { APP_MOUNT_ID } from '../guards/mount-guard.js';
+import { createTypecheckBatch } from './helpers/typecheck-batch.js';
 import { prebundleLibrary } from '../bundled/prebundle.js';
 import { defineApp } from '../shims/yaar/define-app.js';
 import { getAppId } from '../shims/yaar/app-identity.js';
@@ -41,8 +42,6 @@ import { AppCommandError } from '../shims/yaar/ui.js';
 setDefaultTimeout(60_000);
 
 const SHIM = resolve(import.meta.dir, '../shims/yaar/define-app.ts');
-const BUNDLED_TYPES = resolve(import.meta.dir, '../bundled-types');
-const TSC_JS = resolve(import.meta.dir, '../../node_modules/typescript/lib/tsc.js');
 
 beforeAll(() => {
   initCompiler({ projectRoot: resolve(import.meta.dir, '../../../..'), isBundledExe: false });
@@ -712,56 +711,21 @@ describe('defineApp in a compiled app', () => {
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-let typeSandbox: string;
-
-/** Typecheck `source` as an app's `src/main.ts` and return tsc's diagnostics. */
-async function check(source: string): Promise<string[]> {
-  await Bun.write(join(typeSandbox, 'src', 'main.ts'), source);
-  const tsconfigPath = join(typeSandbox, 'tsconfig.json');
-  await Bun.write(
-    tsconfigPath,
-    JSON.stringify({
-      compilerOptions: {
-        strict: false,
-        noEmit: true,
-        target: 'ES2022',
-        module: 'ES2022',
-        moduleResolution: 'bundler',
-        lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-        types: [],
-        paths: { '@bundled/*': [join(BUNDLED_TYPES, '*')] },
-        skipLibCheck: true,
-      },
-      files: [join(BUNDLED_TYPES, 'index.d.ts')],
-      include: ['src/**/*.ts'],
-    }),
-  );
-
-  const proc = Bun.spawn([process.execPath, TSC_JS, '--noEmit', '-p', tsconfigPath], {
-    cwd: typeSandbox,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const stdout = await new Response(proc.stdout).text();
-  await proc.exited;
-  return stdout
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-}
+/**
+ * The type-inference fixtures share one `tsc` run — `fixture()` must therefore be called
+ * while this file is collected, not inside a test body. See `helpers/typecheck-batch.ts`;
+ * these six assertions were ~13s of this file's ~16s on their own.
+ */
+const types = createTypecheckBatch('define-app-types');
+const { fixture } = types;
 
 describe('defineApp type inference', () => {
-  beforeAll(async () => {
-    typeSandbox = await mkdtemp(join(tmpdir(), 'yaar-define-app-types-'));
-    await mkdir(join(typeSandbox, 'src'), { recursive: true });
-  });
+  beforeAll(() => types.run());
+  afterAll(() => types.cleanup());
 
-  afterAll(async () => {
-    await rm(typeSandbox, { recursive: true, force: true });
-  });
-
-  test("each run's parameter is derived from that command's own params schema", async () => {
-    const diagnostics = await check(`
+  const perCommandParams = fixture(
+    'per-command-params',
+    `
       import { defineApp } from '@bundled/yaar';
       export default defineApp({
         id: 'demo',
@@ -786,16 +750,19 @@ describe('defineApp type inference', () => {
           refresh: { description: 'Refresh', run: () => 1 },
         },
       });
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test("each run's parameter is derived from that command's own params schema", () => {
+    expect(perCommandParams()).toEqual([]);
   });
 
-  test("a Zod params types run's parameter as what the schema parses to", async () => {
-    // The two dialects share one inference site, so the Standard Schema branch
-    // has to win without disturbing the JSON-Schema one. `parsed` is the point:
-    // `run` sees the value *after* defaults and optionality are applied, not the
-    // raw bag the caller sent.
-    const diagnostics = await check(`
+  // The two dialects share one inference site, so the Standard Schema branch
+  // has to win without disturbing the JSON-Schema one. `parsed` is the point:
+  // `run` sees the value *after* defaults and optionality are applied, not the
+  // raw bag the caller sent.
+  const zodParams = fixture(
+    'zod-params',
+    `
       import { defineApp } from '@bundled/yaar';
       import * as z from '@bundled/zod';
       export default defineApp({
@@ -813,12 +780,15 @@ describe('defineApp type inference', () => {
           },
         },
       });
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test("a Zod params types run's parameter as what the schema parses to", () => {
+    expect(zodParams()).toEqual([]);
   });
 
-  test('a misspelled key on a Zod params is a compile error', async () => {
-    const diagnostics = await check(`
+  const zodMisspelled = fixture(
+    'zod-misspelled-key',
+    `
       import { defineApp } from '@bundled/yaar';
       import * as z from '@bundled/zod';
       export default defineApp({
@@ -832,14 +802,15 @@ describe('defineApp type inference', () => {
           },
         },
       });
-    `);
-    expect(diagnostics.join('\n')).toContain("Property 'txt' does not exist");
+    `,
+  );
+  test('a misspelled key on a Zod params is a compile error', () => {
+    expect(zodMisspelled().join('\n')).toContain("Property 'txt' does not exist");
   });
 
-  test('a misspelled parameter key is a compile error', async () => {
-    // The inference silently degrading to `unknown` would produce no error at
-    // all, which is why this asserts on a rejection rather than on acceptance.
-    const diagnostics = await check(`
+  const jsonMisspelled = fixture(
+    'json-misspelled-key',
+    `
       import { defineApp } from '@bundled/yaar';
       export default defineApp({
         id: 'demo',
@@ -852,12 +823,17 @@ describe('defineApp type inference', () => {
           },
         },
       });
-    `);
-    expect(diagnostics.join('\n')).toContain("Property 'txt' does not exist");
+    `,
+  );
+  test('a misspelled parameter key is a compile error', () => {
+    // The inference silently degrading to `unknown` would produce no error at
+    // all, which is why this asserts on a rejection rather than on acceptance.
+    expect(jsonMisspelled().join('\n')).toContain("Property 'txt' does not exist");
   });
 
-  test('an imperative view, events, and the lifecycle hooks all typecheck', async () => {
-    const diagnostics = await check(`
+  const imperativeView = fixture(
+    'imperative-view',
+    `
       import { defineApp, type AppView } from '@bundled/yaar';
       const grid: AppView = { mount(el) { el.textContent = ''; return () => {}; } };
       export default defineApp({
@@ -869,20 +845,25 @@ describe('defineApp type inference', () => {
         onClose: () => {},
         onCapture: () => null,
       });
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test('an imperative view, events, and the lifecycle hooks all typecheck', () => {
+    expect(imperativeView()).toEqual([]);
   });
 
-  test('a missing description is a compile error, not a runtime surprise', async () => {
-    const diagnostics = await check(`
+  const missingDescription = fixture(
+    'missing-description',
+    `
       import { defineApp } from '@bundled/yaar';
       export default defineApp({
         id: 'demo',
         name: 'Demo',
         commands: { silent: { run: () => 1 } },
       });
-    `);
-    expect(diagnostics.join('\n')).toContain('description');
+    `,
+  );
+  test('a missing description is a compile error, not a runtime surprise', () => {
+    expect(missingDescription().join('\n')).toContain('description');
   });
 });
 

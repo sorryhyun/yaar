@@ -1,7 +1,5 @@
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { mkdtemp, rm } from 'fs/promises';
-import { tmpdir } from 'os';
-import { join, resolve } from 'path';
+import { createTypecheckBatch } from './helpers/typecheck-batch.js';
 
 /**
  * `defineAppCommand` has no runtime behaviour to test — it is an identity
@@ -12,70 +10,27 @@ import { join, resolve } from 'path';
  * pinned.)
  *
  * So these tests run the real `tsc` over fixture sources and assert on the
- * diagnostics. They are slower than the rest of the suite by design: a cheaper test
- * here would not test the thing.
+ * diagnostics. A cheaper test here would not test the thing.
  *
- * The compiler options mirror `typecheckSandbox` (notably `strict: false`) so a
- * fixture that passes here passes for a real app. `tsc` is driven through Bun rather
- * than its node-shebang bin script, so the suite does not require a node install.
+ * Every fixture below shares one `tsc` run, and `fixture()` therefore has to be called
+ * while this file is being collected rather than from inside a test body — see
+ * `helpers/typecheck-batch.ts` for what that buys (this file was ~27s of a ~66s package
+ * suite) and how the rule is enforced.
  */
 
-const BUNDLED_TYPES = resolve(import.meta.dir, '../bundled-types');
-const TSC_JS = resolve(import.meta.dir, '../../node_modules/typescript/lib/tsc.js');
+const batch = createTypecheckBatch('define-app-command');
+const { fixture } = batch;
 
-let sandbox: string;
+// One tsc run for the whole file. Leave enough headroom for a loaded CI host.
+setDefaultTimeout(30_000);
 
-// These tests launch tsc, and the enum case launches it twice. Leave enough
-// headroom when workspace test suites are running in parallel on slower hosts.
-setDefaultTimeout(15_000);
-
-/** Typecheck `source` as an app's `src/main.ts` and return tsc's diagnostics. */
-async function check(source: string): Promise<string[]> {
-  await Bun.write(join(sandbox, 'src', 'main.ts'), source);
-  const tsconfigPath = join(sandbox, 'tsconfig.json');
-  await Bun.write(
-    tsconfigPath,
-    JSON.stringify({
-      compilerOptions: {
-        strict: false,
-        noEmit: true,
-        target: 'ES2022',
-        module: 'ES2022',
-        moduleResolution: 'bundler',
-        lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-        types: [],
-        paths: { '@bundled/*': [join(BUNDLED_TYPES, '*')] },
-        skipLibCheck: true,
-      },
-      files: [join(BUNDLED_TYPES, 'index.d.ts')],
-      include: ['src/**/*.ts'],
-    }),
-  );
-
-  const proc = Bun.spawn([process.execPath, TSC_JS, '--noEmit', '-p', tsconfigPath], {
-    cwd: sandbox,
-    stdout: 'pipe',
-    stderr: 'pipe',
-  });
-  const stdout = await new Response(proc.stdout).text();
-  await proc.exited;
-  return stdout
-    .split('\n')
-    .map((l) => l.trim())
-    .filter(Boolean);
-}
-
-beforeAll(async () => {
-  sandbox = await mkdtemp(join(tmpdir(), 'yaar-define-app-command-'));
-});
-
-afterAll(async () => {
-  await rm(sandbox, { recursive: true, force: true });
-});
+beforeAll(() => batch.run());
+afterAll(() => batch.cleanup());
 
 describe('defineAppCommand type inference', () => {
-  test('infers primitives, enums, arrays, nested objects and optionality', async () => {
-    const diagnostics = await check(`
+  const everything = fixture(
+    'everything-at-once',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({
         description: 'Everything at once',
@@ -107,59 +62,73 @@ describe('defineAppCommand type inference', () => {
           return [tabId, title, force, count, tabIds, mode, deep];
         },
       });
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test('infers primitives, enums, arrays, nested objects and optionality', () => {
+    expect(everything()).toEqual([]);
   });
 
-  test('a misspelled parameter key is a compile error', async () => {
-    const diagnostics = await check(`
+  const misspelledKey = fixture(
+    'misspelled-key',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({
         description: 'Focus a tab',
         params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
         run: (p) => p.tabld,
       });
-    `);
-    expect(diagnostics.join('\n')).toContain("Property 'tabld' does not exist");
+    `,
+  );
+  test('a misspelled parameter key is a compile error', () => {
+    expect(misspelledKey().join('\n')).toContain("Property 'tabld' does not exist");
   });
 
-  test('a parameter used at the wrong type is a compile error', async () => {
-    const diagnostics = await check(`
+  const wrongType = fixture(
+    'wrong-type',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({
         description: 'Focus a tab',
         params: { type: 'object', properties: { tabId: { type: 'number' } }, required: ['tabId'] },
         run: (p) => { const s: string = p.tabId; return s; },
       });
-    `);
-    expect(diagnostics.join('\n')).toContain('Type');
-    expect(diagnostics.length).toBeGreaterThan(0);
+    `,
+  );
+  test('a parameter used at the wrong type is a compile error', () => {
+    expect(wrongType().join('\n')).toContain('Type');
+    expect(wrongType().length).toBeGreaterThan(0);
   });
 
-  test('an enum becomes a literal union: widening is fine, narrowing is an error', async () => {
-    const widened = await check(`
+  const enumWidened = fixture(
+    'enum-widened',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({
         description: 'Set mode',
         params: { type: 'object', properties: { mode: { enum: ['fast', 'slow'] } }, required: ['mode'] },
         run: (p) => { const m: 'fast' | 'slow' | 'medium' = p.mode; return m; },
       });
-    `);
-    expect(widened).toEqual([]);
-
-    const narrowed = await check(`
+    `,
+  );
+  const enumNarrowed = fixture(
+    'enum-narrowed',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({
         description: 'Set mode',
         params: { type: 'object', properties: { mode: { enum: ['fast', 'slow'] } }, required: ['mode'] },
         run: (p) => { const m: 'fast' = p.mode; return m; },
       });
-    `);
-    expect(narrowed.join('\n')).toContain('not assignable to type \'"fast"\'');
+    `,
+  );
+  test('an enum becomes a literal union: widening is fine, narrowing is an error', () => {
+    expect(enumWidened()).toEqual([]);
+    expect(enumNarrowed().join('\n')).toContain('not assignable to type \'"fast"\'');
   });
 
-  test('additionalProperties describes a dictionary', async () => {
-    const diagnostics = await check(`
+  const dictionary = fixture(
+    'additional-properties',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({
         description: 'Set cells',
@@ -179,20 +148,26 @@ describe('defineAppCommand type inference', () => {
           return [cells, counts, loose];
         },
       });
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test('additionalProperties describes a dictionary', () => {
+    expect(dictionary()).toEqual([]);
   });
 
-  test('a command with no params accepts a nullary run', async () => {
-    const diagnostics = await check(`
+  const nullary = fixture(
+    'no-params',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({ description: 'Refresh', run: () => 1 });
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test('a command with no params accepts a nullary run', () => {
+    expect(nullary()).toEqual([]);
   });
 
-  test('an unsupported keyword degrades to unknown rather than a wrong type', async () => {
-    const diagnostics = await check(`
+  const unsupported = fixture(
+    'unsupported-keyword',
+    `
       import { defineAppCommand } from '@bundled/yaar';
       export const cmd = defineAppCommand({
         description: 'Union param',
@@ -203,14 +178,17 @@ describe('defineAppCommand type inference', () => {
         },
         run: (p) => { const v: unknown = p.value; return v; },
       });
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test('an unsupported keyword degrades to unknown rather than a wrong type', () => {
+    expect(unsupported()).toEqual([]);
   });
 });
 
 describe('appStorage types', () => {
-  test('list exposes the app-scoped storage entry shape', async () => {
-    const diagnostics = await check(`
+  const listShape = fixture(
+    'storage-list-shape',
+    `
       import { appStorage } from '@bundled/yaar';
       async function inspect() {
         const entries = await appStorage.list('projects/');
@@ -220,8 +198,10 @@ describe('appStorage types', () => {
         const mimeType: string | undefined = entries[0].mimeType;
         return { path, isDirectory, uri, mimeType };
       }
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test('list exposes the app-scoped storage entry shape', () => {
+    expect(listShape()).toEqual([]);
   });
 
   // The rule this test enforces has not changed: the type promises exactly what the
@@ -229,8 +209,9 @@ describe('appStorage types', () => {
   // ride on the resource links a storage listing returns, so declaring them is the
   // accurate half of that rule rather than a violation of it. Both are optional,
   // because a directory has no size and an older server sends neither.
-  test('list entries expose the metadata the listing actually carries', async () => {
-    const diagnostics = await check(`
+  const listMetadata = fixture(
+    'storage-list-metadata',
+    `
       import { appStorage } from '@bundled/yaar';
       async function inspect() {
         const entries = await appStorage.list();
@@ -238,18 +219,23 @@ describe('appStorage types', () => {
         const modifiedAt: string | undefined = entries[0].modifiedAt;
         return { size, modifiedAt };
       }
-    `);
-    expect(diagnostics).toEqual([]);
+    `,
+  );
+  test('list entries expose the metadata the listing actually carries', () => {
+    expect(listMetadata()).toEqual([]);
   });
 
-  test('list entries still do not claim fields the listing never sends', async () => {
-    const diagnostics = await check(`
+  const listOverclaim = fixture(
+    'storage-list-overclaim',
+    `
       import { appStorage } from '@bundled/yaar';
       async function inspect() {
         const entries = await appStorage.list();
         return entries[0].createdAt;
       }
-    `);
-    expect(diagnostics.join('\n')).toContain("Property 'createdAt' does not exist");
+    `,
+  );
+  test('list entries still do not claim fields the listing never sends', () => {
+    expect(listOverclaim().join('\n')).toContain("Property 'createdAt' does not exist");
   });
 });

@@ -66,7 +66,7 @@ build:
 
 # Run all tests
 test:
-	bun run --filter '*' test
+	bun run test
 
 # Run frontend tests
 test-frontend:

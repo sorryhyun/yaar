@@ -53,8 +53,11 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      # scripts/test/run-all.ts, not `--filter '*'`: it runs the same package
+      # suites but ends with one aggregate summary, so a failed CI job's log tail
+      # names the failing tests instead of whichever package finished last.
       - name: Test
-        run: bun run --filter '*' test
+        run: bun run test
 
       # scripts/ is outside every package, so `typecheck` and `lint` (both
       # `--filter '*'`, both scoped to a package's src) never read it. The build
