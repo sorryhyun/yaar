@@ -28,10 +28,16 @@ export function flashCellFor(id: string, ms = 2000): void {
 }
 
 export {
-  notebooks, setNotebooks,
-  current, setCurrent,
-  dirty, setDirty,
-  status, setStatus,
-  runningCell, setRunningCell,
-  flashCell, setFlashCell,
+  notebooks,
+  setNotebooks,
+  current,
+  setCurrent,
+  dirty,
+  setDirty,
+  status,
+  setStatus,
+  runningCell,
+  setRunningCell,
+  flashCell,
+  setFlashCell,
 };

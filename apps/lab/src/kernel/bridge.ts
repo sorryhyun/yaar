@@ -40,11 +40,19 @@ export async function handleBridgeCall(method: string, args: unknown[]): Promise
     case 'chart.png':
       return await chartToPNG(a[0] as ChartSpec, (a[1] as Record<string, number>) || undefined);
     case 'chart.save':
-      return await saveChart(a[0] as ChartSpec, (a[1] as string) || undefined, (a[2] as Record<string, number>) || undefined);
+      return await saveChart(
+        a[0] as ChartSpec,
+        (a[1] as string) || undefined,
+        (a[2] as Record<string, number>) || undefined,
+      );
     case 'graph.png':
       return await graphToPNG(a[0] as GraphSpec, (a[1] as Record<string, number>) || undefined);
     case 'graph.save':
-      return await saveGraph(a[0] as GraphSpec, (a[1] as string) || undefined, (a[2] as Record<string, number>) || undefined);
+      return await saveGraph(
+        a[0] as GraphSpec,
+        (a[1] as string) || undefined,
+        (a[2] as Record<string, number>) || undefined,
+      );
     default:
       throw new Error('unknown bridge method: ' + method);
   }

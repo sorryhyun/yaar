@@ -14,7 +14,12 @@ export const labState = {
     get: () => {
       const nb = current();
       if (!nb) return null;
-      return { id: nb.id, title: nb.title, updatedAt: nb.updatedAt, cells: cellsForState(nb.cells) };
+      return {
+        id: nb.id,
+        title: nb.title,
+        updatedAt: nb.updatedAt,
+        cells: cellsForState(nb.cells),
+      };
     },
   },
   lastRun: {

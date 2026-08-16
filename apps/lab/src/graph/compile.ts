@@ -18,15 +18,31 @@ export const CONST: Record<string, number> = {
 type AnyFn = (...args: number[]) => number;
 
 export const FN: Record<string, AnyFn> = {
-  sin: Math.sin, cos: Math.cos, tan: Math.tan,
-  asin: Math.asin, acos: Math.acos, atan: Math.atan,
-  sinh: Math.sinh, cosh: Math.cosh, tanh: Math.tanh,
-  sqrt: Math.sqrt, cbrt: Math.cbrt, abs: Math.abs,
-  exp: Math.exp, ln: Math.log, log: Math.log10, log2: Math.log2,
-  floor: Math.floor, ceil: Math.ceil, round: Math.round, sign: Math.sign,
-  min: Math.min, max: Math.max,
+  sin: Math.sin,
+  cos: Math.cos,
+  tan: Math.tan,
+  asin: Math.asin,
+  acos: Math.acos,
+  atan: Math.atan,
+  sinh: Math.sinh,
+  cosh: Math.cosh,
+  tanh: Math.tanh,
+  sqrt: Math.sqrt,
+  cbrt: Math.cbrt,
+  abs: Math.abs,
+  exp: Math.exp,
+  ln: Math.log,
+  log: Math.log10,
+  log2: Math.log2,
+  floor: Math.floor,
+  ceil: Math.ceil,
+  round: Math.round,
+  sign: Math.sign,
+  min: Math.min,
+  max: Math.max,
   mod: (a: number, b: number) => ((a % b) + b) % b,
-  atan2: Math.atan2, hypot: Math.hypot,
+  atan2: Math.atan2,
+  hypot: Math.hypot,
   nthroot: (x: number, n: number) => Math.sign(x) * Math.pow(Math.abs(x), 1 / n),
 };
 
@@ -55,26 +71,32 @@ export function compile(n: Node): Fn {
       return (s) => -a(s);
     }
     case '+': {
-      const a = compile(n.a), b = compile(n.b);
+      const a = compile(n.a),
+        b = compile(n.b);
       return (s) => a(s) + b(s);
     }
     case '-': {
-      const a = compile(n.a), b = compile(n.b);
+      const a = compile(n.a),
+        b = compile(n.b);
       return (s) => a(s) - b(s);
     }
     case '*': {
-      const a = compile(n.a), b = compile(n.b);
+      const a = compile(n.a),
+        b = compile(n.b);
       return (s) => a(s) * b(s);
     }
     case '/': {
-      const a = compile(n.a), b = compile(n.b);
+      const a = compile(n.a),
+        b = compile(n.b);
       return (s) => a(s) / b(s);
     }
     case '^': {
-      const a = compile(n.a), b = compile(n.b);
+      const a = compile(n.a),
+        b = compile(n.b);
       // Odd roots of negative numbers: (-8)^(1/3) is -2, not NaN.
       return (s) => {
-        const x = a(s), y = b(s);
+        const x = a(s),
+          y = b(s);
         if (x < 0 && Number.isInteger(1 / y)) return Math.sign(x) * Math.pow(-x, y);
         return Math.pow(x, y);
       };
@@ -88,7 +110,8 @@ export function compile(n: Node): Fn {
         return (s) => f(a(s));
       }
       if (as.length === 2) {
-        const a = as[0], b = as[1];
+        const a = as[0],
+          b = as[1];
         return (s) => f(a(s), b(s));
       }
       return (s) => f(...as.map((g) => g(s)));
@@ -177,8 +200,10 @@ export function buildExpr(raw: string): Compiled {
     return { type: 'polar', f: compile(a), free: freeVars(a) };
   }
 
-  const A = parse(lhs), B = parse(rhs);
-  const fa = compile(A), fb = compile(B);
+  const A = parse(lhs),
+    B = parse(rhs);
+  const fa = compile(A),
+    fb = compile(B);
   return {
     type: 'implicit',
     f: (s) => fa(s) - fb(s),

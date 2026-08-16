@@ -1,18 +1,25 @@
 import * as z from '@bundled/zod';
 import { defineAppCommand, AppCommandError } from '@bundled/yaar';
 import {
-  loadIndex, openNotebook as openNb, newNotebook as newNb, saveCurrent,
+  loadIndex,
+  openNotebook as openNb,
+  newNotebook as newNb,
+  saveCurrent,
 } from '../state/persistence';
 import {
-  addCell as addCellFn, updateCell as updateCellFn, deleteCell as deleteCellFn,
-  moveCell as moveCellFn, renameNotebook,
+  addCell as addCellFn,
+  updateCell as updateCellFn,
+  deleteCell as deleteCellFn,
+  moveCell as moveCellFn,
+  renameNotebook,
 } from '../state/cells';
 import { current } from '../state/signals';
 
 /** Cell editing and notebook lifecycle. Each mutation force-saves afterwards. */
 export const notebookCommands = {
   addCell: defineAppCommand({
-    description: 'Append or insert a cell. Returns the new cell id. Does not run it — follow with runCell.',
+    description:
+      'Append or insert a cell. Returns the new cell id. Does not run it — follow with runCell.',
     params: z.object({
       source: z.string(),
       type: z.optional(z.enum(['code', 'markdown'])),
@@ -27,8 +34,12 @@ export const notebookCommands = {
   }),
 
   updateCell: defineAppCommand({
-    description: 'Replace a cell\'s source (and optionally its type).',
-    params: z.object({ id: z.string(), source: z.string(), type: z.optional(z.enum(['code', 'markdown'])) }),
+    description: "Replace a cell's source (and optionally its type).",
+    params: z.object({
+      id: z.string(),
+      source: z.string(),
+      type: z.optional(z.enum(['code', 'markdown'])),
+    }),
     run: async (p) => {
       const patch: Record<string, unknown> = { source: p.source };
       if (p.type) patch.type = p.type;
@@ -54,7 +65,8 @@ export const notebookCommands = {
     params: z.object({ id: z.string(), delta: z.number() }),
     replay: 'never',
     run: async (p) => {
-      if (!moveCellFn(p.id, p.delta)) throw new AppCommandError('Cannot move cell ' + p.id + ' by ' + p.delta);
+      if (!moveCellFn(p.id, p.delta))
+        throw new AppCommandError('Cannot move cell ' + p.id + ' by ' + p.delta);
       await saveCurrent();
       return { ok: true };
     },
@@ -80,7 +92,9 @@ export const notebookCommands = {
         const nb = await openNb(p.id);
         return { id: nb.id, title: nb.title, cellCount: nb.cells.length };
       } catch (e) {
-        throw new AppCommandError('Cannot open notebook ' + p.id + ': ' + (e instanceof Error ? e.message : String(e)));
+        throw new AppCommandError(
+          'Cannot open notebook ' + p.id + ': ' + (e instanceof Error ? e.message : String(e)),
+        );
       }
     },
   }),

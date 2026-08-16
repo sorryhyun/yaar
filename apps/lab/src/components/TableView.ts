@@ -85,7 +85,7 @@ export function TableView(props: {
       </div>
       <div class="lab-table-foot">
         <span class="lab-note">
-          ${() => (props.totalRows ?? (props.rows || []).length)} rows × ${() => props.columns.length} cols${() =>
+          ${() => props.totalRows ?? (props.rows || []).length} rows × ${() => props.columns.length} cols${() =>
             props.truncated ? ' (truncated)' : ''}
         </span>
         <span class="lab-spacer"></span>

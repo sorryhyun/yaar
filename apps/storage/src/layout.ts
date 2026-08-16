@@ -40,9 +40,14 @@ export function clampPanelWidth(w: number): number {
  * literal `null` — is logged instead of quietly looking like a fresh install.
  */
 function reviveLayout(raw: unknown): LayoutPrefs {
-  const parsed = safeParseOr(LayoutPrefsSchema, raw, { panelWidth: DEFAULT_PANEL_WIDTH }, {
-    label: 'storage:layout',
-  });
+  const parsed = safeParseOr(
+    LayoutPrefsSchema,
+    raw,
+    { panelWidth: DEFAULT_PANEL_WIDTH },
+    {
+      label: 'storage:layout',
+    },
+  );
   return { panelWidth: parsed.panelWidth ?? DEFAULT_PANEL_WIDTH };
 }
 

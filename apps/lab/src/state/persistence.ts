@@ -1,9 +1,7 @@
 import { appStorage, errMsg } from '@bundled/yaar';
 import { trimOutput } from '../lib/trim';
 import { starterCells } from './starter';
-import {
-  notebooks, setNotebooks, current, setCurrent, setDirty, setStatus, uid,
-} from './signals';
+import { notebooks, setNotebooks, current, setCurrent, setDirty, setStatus, uid } from './signals';
 import type { Cell, Notebook, NotebookMeta } from '../types';
 
 /**
@@ -48,7 +46,12 @@ export async function saveCurrent(): Promise<boolean> {
   const snapshot: Notebook = {
     ...nb,
     updatedAt: Date.now(),
-    cells: nb.cells.map((c) => ({ id: c.id, type: c.type, source: c.source, output: trimOutput(c.output) })),
+    cells: nb.cells.map((c) => ({
+      id: c.id,
+      type: c.type,
+      source: c.source,
+      output: trimOutput(c.output),
+    })),
   };
   const ok = await appStorage.trySave(nbPath(nb.id), JSON.stringify(snapshot), { label: nb.title });
   if (!ok) return false;
@@ -83,7 +86,11 @@ export async function loadIndex(): Promise<NotebookMeta[]> {
 export async function openNotebook(id: string): Promise<Notebook> {
   const nb = await appStorage.readJson<Notebook>(nbPath(id));
   if (!nb || !Array.isArray(nb.cells)) throw new Error('Notebook ' + id + ' is missing or corrupt');
-  nb.cells = nb.cells.map((c) => ({ ...c, id: c.id || uid('c'), type: c.type === 'markdown' ? 'markdown' : 'code' }));
+  nb.cells = nb.cells.map((c) => ({
+    ...c,
+    id: c.id || uid('c'),
+    type: c.type === 'markdown' ? 'markdown' : 'code',
+  }));
   setCurrent(nb);
   setDirty(false);
   await appStorage.trySave(STATE_PATH, JSON.stringify({ lastOpened: id }));
@@ -115,7 +122,8 @@ export async function bootstrap(): Promise<void> {
   try {
     const list = await loadIndex();
     const st = await appStorage.readJsonOr<{ lastOpened?: string }>(STATE_PATH, {});
-    const wanted = st.lastOpened && list.some((m) => m.id === st.lastOpened) ? st.lastOpened : list[0]?.id;
+    const wanted =
+      st.lastOpened && list.some((m) => m.id === st.lastOpened) ? st.lastOpened : list[0]?.id;
     if (wanted) {
       try {
         await openNotebook(wanted);

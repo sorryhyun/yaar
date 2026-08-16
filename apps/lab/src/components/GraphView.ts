@@ -112,10 +112,14 @@ export function GraphView(props: { spec: GraphSpec }) {
       if (!view) return;
       const r = el.getBoundingClientRect();
       const tr = makeTransform(view, W, H);
-      const inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
+      const inside =
+        e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
       if (inside || drag) {
         setReadout(
-          'x = ' + tr.ux(e.clientX - r.left).toFixed(3) + '   y = ' + tr.uy(e.clientY - r.top).toFixed(3),
+          'x = ' +
+            tr.ux(e.clientX - r.left).toFixed(3) +
+            '   y = ' +
+            tr.uy(e.clientY - r.top).toFixed(3),
         );
       } else if (readout()) {
         setReadout('');
@@ -207,7 +211,10 @@ export function GraphView(props: { spec: GraphSpec }) {
         <${For} each=${plans}>
           ${(p: SeriesPlan) => html`
             <span class=${() => 'lab-graph-key' + (p.error ? ' lab-graph-key-bad' : '')} title=${() =>
-              p.error || (p.resample ? formLabel(p.compiled) + ' · re-sampled on zoom' : 'sampled points · not re-sampled')}>
+              p.error ||
+              (p.resample
+                ? formLabel(p.compiled) + ' · re-sampled on zoom'
+                : 'sampled points · not re-sampled')}>
               <span class="lab-graph-sw" style=${() => 'background:' + p.color}></span>
               ${() => p.label}
               ${() => (p.error ? ' — ' + p.error : p.resample ? '' : ' (static)')}

@@ -20,7 +20,15 @@ export let elMountHostPath!: HTMLInputElement;
 export let elMountReadonly!: HTMLInputElement;
 export let elPreviewBody!: HTMLDivElement;
 
-export function setElMountAlias(el: HTMLInputElement) { elMountAlias = el; }
-export function setElMountHostPath(el: HTMLInputElement) { elMountHostPath = el; }
-export function setElMountReadonly(el: HTMLInputElement) { elMountReadonly = el; }
-export function setElPreviewBody(el: HTMLDivElement) { elPreviewBody = el; }
+export function setElMountAlias(el: HTMLInputElement) {
+  elMountAlias = el;
+}
+export function setElMountHostPath(el: HTMLInputElement) {
+  elMountHostPath = el;
+}
+export function setElMountReadonly(el: HTMLInputElement) {
+  elMountReadonly = el;
+}
+export function setElPreviewBody(el: HTMLDivElement) {
+  elPreviewBody = el;
+}

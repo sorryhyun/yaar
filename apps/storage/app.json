@@ -3,8 +3,11 @@
   "name": "Storage",
   "description": "Visual file manager for YAAR storage",
   "run": "dist/index.html",
-  "permissions": ["yaar://storage/"],
+  "permissions": [
+    "yaar://storage/"
+  ],
   "version": "1.0.3",
   "author": "YAAR",
-  "kind": "system"
+  "kind": "system",
+  "appId": "storage"
 }

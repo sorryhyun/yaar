@@ -1,10 +1,7 @@
 // Tokenizer for the graphing expression language. Deliberately tiny: numbers,
 // identifiers, and the eight operator characters the parser understands.
 
-export type Token =
-  | { t: 'num'; v: number }
-  | { t: 'id'; v: string }
-  | { t: 'op'; v: string };
+export type Token = { t: 'num'; v: number } | { t: 'id'; v: string } | { t: 'op'; v: string };
 
 const OPS = '+-*/^(),|';
 

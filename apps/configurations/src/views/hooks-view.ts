@@ -45,12 +45,16 @@ export function HooksView() {
   const [showForm, setShowForm] = createSignal(false);
   const [selected, setSelected] = createSignal<Hook | null>(null);
 
-  const load = () => loadConfigList<Hook>('yaar://config/hooks', 'hooks', HookSchema, setHooks, 'hooks');
+  const load = () =>
+    loadConfigList<Hook>('yaar://config/hooks', 'hooks', HookSchema, setHooks, 'hooks');
 
   onMount(load);
 
   const add = async () => {
-    if (!hookLabel() || !toastMsg()) { showToast('Fill Label and Toast Message', 'error'); return; }
+    if (!hookLabel() || !toastMsg()) {
+      showToast('Fill Label and Toast Message', 'error');
+      return;
+    }
     setAdding(true);
     try {
       const filter: Record<string, unknown> = { verb: 'invoke' };
@@ -71,7 +75,10 @@ export function HooksView() {
           },
         },
       });
-      setHookLabel(''); setFilterUri(''); setFilterAction(''); setToastMsg('');
+      setHookLabel('');
+      setFilterUri('');
+      setFilterAction('');
+      setToastMsg('');
       setShowForm(false);
       await load();
       showToast('Hook added');
@@ -88,7 +95,9 @@ export function HooksView() {
       setSelected(null);
       await load();
       showToast('Hook deleted');
-    } catch { showToast('Failed to delete', 'error'); }
+    } catch {
+      showToast('Failed to delete', 'error');
+    }
   };
 
   return html`
@@ -101,7 +110,7 @@ export function HooksView() {
             <span style="color:var(--yaar-text-muted);font-weight:400;margin-left:4px">${() => `(${hooks().length})`}</span>
           </span>
           <button class="y-btn y-btn-sm y-btn-primary" onClick=${() => setShowForm((v: boolean) => !v)}>
-            ${() => showForm() ? '✕ Cancel' : '+ New Hook'}
+            ${() => (showForm() ? '✕ Cancel' : '+ New Hook')}
           </button>
         </div>
         <${Show} when=${showForm}>
@@ -137,7 +146,7 @@ export function HooksView() {
               <div>
                 <div class="field-label">Toast Variant</div>
                 <select class="y-input" style="width:100%"
-                  onChange=${onChangeHandler(v => setToastVariant(v as 'info' | 'success' | 'error'))}>
+                  onChange=${onChangeHandler((v) => setToastVariant(v as 'info' | 'success' | 'error'))}>
                   <option value="info">info</option>
                   <option value="success">success</option>
                   <option value="error">error</option>
@@ -145,7 +154,7 @@ export function HooksView() {
               </div>
             </div>
             <button class="y-btn y-btn-primary" onClick=${add} disabled=${adding}>
-              ${() => adding() ? 'Adding…' : '+ Add Hook'}
+              ${() => (adding() ? 'Adding…' : '+ Add Hook')}
             </button>
           </div>
         </${Show}>
@@ -153,10 +162,8 @@ export function HooksView() {
 
       <div class="view-split">
         <div class="view-sidebar">
-          ${() => hooks().length === 0
-            ? html`<div class="sidebar-empty">🪝 No hooks yet</div>`
-            : null
-          }
+          ${() =>
+            hooks().length === 0 ? html`<div class="sidebar-empty">🪝 No hooks yet</div>` : null}
           <${For} each=${hooks}>${(h: Hook) => html`
             <div
               class=${() => `y-list-item sidebar-item${selected()?.id === h.id ? ' active' : ''}`}
@@ -174,7 +181,8 @@ export function HooksView() {
         <div class="view-detail">
           ${() => {
             const h = selected();
-            if (!h) return html`
+            if (!h)
+              return html`
               <div class="y-empty detail-empty">
                 <span class="y-empty-icon detail-empty-icon">🪝</span>
                 <span>Select a hook to view details</span>

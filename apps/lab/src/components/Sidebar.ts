@@ -33,7 +33,12 @@ export function Sidebar() {
                 title="Delete notebook"
                 onClick=${async (e: MouseEvent) => {
                   e.stopPropagation();
-                  if (await showConfirm('Delete "' + m.title + '"?', { danger: true, okLabel: 'Delete' })) {
+                  if (
+                    await showConfirm('Delete "' + m.title + '"?', {
+                      danger: true,
+                      okLabel: 'Delete',
+                    })
+                  ) {
                     await deleteNotebook(m.id);
                   }
                 }}

@@ -9,4 +9,6 @@
   background: transparent;
   color: var(--yaar-text);
 }
-.code-preview code { font-family: inherit; }
+.code-preview code {
+  font-family: inherit;
+}

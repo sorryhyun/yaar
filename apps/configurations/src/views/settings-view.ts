@@ -8,7 +8,18 @@ import { parseJson, capitalize, onInputHandler, onChangeHandler } from '../helpe
 // A key missing here is not merely uncontrolled — it drops into the raw "extra"
 // blob, which means the app can round-trip it but never *introduce* it. Keep the
 // two lists in step when either side grows a setting.
-const KNOWN_KEYS = ['userName', 'language', 'onboardingCompleted', 'provider', 'wallpaper', 'accentColor', 'iconSize', 'theme', 'allowAllApps', 'remote'];
+const KNOWN_KEYS = [
+  'userName',
+  'language',
+  'onboardingCompleted',
+  'provider',
+  'wallpaper',
+  'accentColor',
+  'iconSize',
+  'theme',
+  'allowAllApps',
+  'remote',
+];
 
 // Accent-picker swatch colors — content, not theming: each swatch must show its
 // own fixed preset color, so var(--yaar-accent) (the *current* accent) cannot be
@@ -28,8 +39,12 @@ const ACCENT_COLORS: Record<string, string> = {
 };
 
 const WALLPAPER_LABELS: Record<string, string> = {
-  'dark-blue': '🌌 Dark Blue', midnight: '🏙️ Midnight', aurora: '🌠 Aurora',
-  ember: '🔥 Ember', ocean: '🌊 Ocean', moss: '🌿 Moss',
+  'dark-blue': '🌌 Dark Blue',
+  midnight: '🏙️ Midnight',
+  aurora: '🌠 Aurora',
+  ember: '🔥 Ember',
+  ocean: '🌊 Ocean',
+  moss: '🌿 Moss',
 };
 
 export function SettingsView() {
@@ -41,7 +56,8 @@ export function SettingsView() {
   onMount(async () => {
     try {
       const raw = await read<Record<string, unknown>>('yaar://config/settings');
-      const s: Record<string, unknown> = (raw as { settings?: Record<string, unknown> })?.settings ?? raw ?? {};
+      const s: Record<string, unknown> =
+        (raw as { settings?: Record<string, unknown> })?.settings ?? raw ?? {};
       setData(s);
       const extra: Record<string, unknown> = {};
       for (const [k, v] of Object.entries(s)) {
@@ -62,11 +78,13 @@ export function SettingsView() {
   });
 
   const get = (key: string) => data()[key];
-  const set = (key: string, value: unknown) => setData(d => ({ ...d, [key]: value }));
+  const set = (key: string, value: unknown) => setData((d) => ({ ...d, [key]: value }));
 
   const save = async () => {
     const rawStr = extraRaw().trim();
-    const extra = rawStr ? parseJson<Record<string, unknown>>(rawStr, null as unknown as Record<string, unknown>) : {};
+    const extra = rawStr
+      ? parseJson<Record<string, unknown>>(rawStr, null as unknown as Record<string, unknown>)
+      : {};
     if (rawStr && extra === null) {
       showToast('Invalid JSON in extra settings', 'error');
       return;
@@ -105,14 +123,14 @@ export function SettingsView() {
           <label class="s-label">Display Name</label>
           <input class="s-input" type="text" placeholder="Your name"
             value=${() => String(get('userName') ?? '')}
-            onInput=${onInputHandler(v => set('userName', v))}
+            onInput=${onInputHandler((v) => set('userName', v))}
           />
         </div>
         <div class="s-row">
           <label class="s-label">Language <span class="s-hint">e.g. en, ko, ja</span></label>
           <input class="s-input" type="text" placeholder="en"
             value=${() => String(get('language') ?? 'en')}
-            onInput=${onInputHandler(v => set('language', v))}
+            onInput=${onInputHandler((v) => set('language', v))}
           />
         </div>
       </div>
@@ -123,45 +141,46 @@ export function SettingsView() {
           <label class="s-label">Theme</label>
           <select class="s-select"
             value=${() => String(get('theme') ?? 'dark')}
-            onChange=${onChangeHandler(v => set('theme', v))}
+            onChange=${onChangeHandler((v) => set('theme', v))}
           >
-            ${['dark', 'light'].map(v =>
-              html`<option value=${v}>${capitalize(v)}</option>`
-            )}
+            ${['dark', 'light'].map((v) => html`<option value=${v}>${capitalize(v)}</option>`)}
           </select>
         </div>
         <div class="s-row">
           <label class="s-label">Wallpaper</label>
           <select class="s-select"
             value=${() => String(get('wallpaper') ?? '')}
-            onChange=${onChangeHandler(v => set('wallpaper', v))}
+            onChange=${onChangeHandler((v) => set('wallpaper', v))}
           >
-            ${Object.entries(WALLPAPER_LABELS).map(([val, label]) =>
-              html`<option value=${val}>${label}</option>`
+            ${Object.entries(WALLPAPER_LABELS).map(
+              ([val, label]) => html`<option value=${val}>${label}</option>`,
             )}
           </select>
         </div>
         <div class="s-row">
           <label class="s-label">Accent Color</label>
           <div class="s-accent-picker">
-            ${() => Object.keys(ACCENT_COLORS).map(color => html`
+            ${() =>
+              Object.keys(ACCENT_COLORS).map(
+                (color) => html`
               <button
                 class=${() => `s-accent-swatch ${get('accentColor') === color ? 'active' : ''}`}
                 style=${`background: ${ACCENT_COLORS[color]}`}
                 title=${color}
                 onClick=${() => set('accentColor', color)}
               ></button>
-            `)}
+            `,
+              )}
           </div>
         </div>
         <div class="s-row">
           <label class="s-label">Icon Size</label>
           <select class="s-select"
             value=${() => String(get('iconSize') ?? '')}
-            onChange=${onChangeHandler(v => set('iconSize', v))}
+            onChange=${onChangeHandler((v) => set('iconSize', v))}
           >
-            ${['small', 'medium', 'large'].map(v =>
-              html`<option value=${v}>${capitalize(v)}</option>`
+            ${['small', 'medium', 'large'].map(
+              (v) => html`<option value=${v}>${capitalize(v)}</option>`,
             )}
           </select>
         </div>
@@ -173,10 +192,10 @@ export function SettingsView() {
           <label class="s-label">AI Provider <span class="s-hint">Reload required</span></label>
           <select class="s-select"
             value=${() => String(get('provider') ?? '')}
-            onChange=${onChangeHandler(v => set('provider', v))}
+            onChange=${onChangeHandler((v) => set('provider', v))}
           >
-            ${['auto', 'claude', 'codex'].map(v =>
-              html`<option value=${v}>${capitalize(v)}</option>`
+            ${['auto', 'claude', 'codex'].map(
+              (v) => html`<option value=${v}>${capitalize(v)}</option>`,
             )}
           </select>
         </div>
@@ -211,11 +230,13 @@ export function SettingsView() {
       </div>
 
       <div class="s-section">
-        <button class="s-extra-toggle" onClick=${() => setShowExtra(v => !v)}>
-          ${() => showExtra() ? '▾' : '▸'} Advanced / Extra Settings
-          ${() => extraRaw().trim() ? html`<span class="s-extra-badge">${() => Object.keys(parseJson(extraRaw(), {})).length} keys</span>` : ''}
+        <button class="s-extra-toggle" onClick=${() => setShowExtra((v) => !v)}>
+          ${() => (showExtra() ? '▾' : '▸')} Advanced / Extra Settings
+          ${() => (extraRaw().trim() ? html`<span class="s-extra-badge">${() => Object.keys(parseJson(extraRaw(), {})).length} keys</span>` : '')}
         </button>
-        ${() => showExtra() ? html`
+        ${() =>
+          showExtra()
+            ? html`
           <textarea
             class="settings-editor"
             style="margin-top: 8px; min-height: 120px;"
@@ -224,12 +245,13 @@ export function SettingsView() {
             placeholder="{}"
           ></textarea>
           <p class="s-hint-block" style="margin-top:4px;">Unknown or custom keys (raw JSON)</p>
-        ` : ''}
+        `
+            : ''}
       </div>
 
       <div style="padding: 0 0 16px;">
         <button class="y-btn y-btn-primary" onClick=${save} disabled=${saving}>
-          ${() => saving() ? 'Saving…' : 'Save Settings'}
+          ${() => (saving() ? 'Saving…' : 'Save Settings')}
         </button>
       </div>
     </div>

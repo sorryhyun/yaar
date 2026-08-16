@@ -109,7 +109,9 @@ function exec(code: string, opts: RunOptions): Promise<RunResult> {
       resolve(
         emptyResult(
           'TimeoutError',
-          'Execution exceeded ' + timeoutMs + 'ms and was aborted. The kernel restarted, so variables from earlier cells are gone.',
+          'Execution exceeded ' +
+            timeoutMs +
+            'ms and was aborted. The kernel restarted, so variables from earlier cells are gone.',
           timeoutMs,
         ),
       );

@@ -18,11 +18,18 @@ export async function chartToPNG(
   opts?: { width?: number; height?: number; scale?: number; background?: string },
 ): Promise<string> {
   const width = Math.max(120, Math.round((opts && opts.width) || 720));
-  const height = Math.max(90, Math.round((opts && opts.height) || (spec.options && spec.options.height) || 360));
+  const height = Math.max(
+    90,
+    Math.round((opts && opts.height) || (spec.options && spec.options.height) || 360),
+  );
   const scale = Math.min(3, Math.max(1, (opts && opts.scale) || 2));
   const holder = document.createElement('div');
   holder.style.cssText =
-    'position:fixed;left:-20000px;top:0;pointer-events:none;width:' + width + 'px;height:' + height + 'px;';
+    'position:fixed;left:-20000px;top:0;pointer-events:none;width:' +
+    width +
+    'px;height:' +
+    height +
+    'px;';
   const canvas = document.createElement('canvas');
   canvas.width = width * scale;
   canvas.height = height * scale;

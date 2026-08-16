@@ -3,7 +3,14 @@ import { For, Show, onMount } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
 import './styles/index';
 import type { StorageEntry } from './types';
-import { state, setState, setElMountAlias, setElMountHostPath, setElMountReadonly, setElPreviewBody } from './state';
+import {
+  state,
+  setState,
+  setElMountAlias,
+  setElMountHostPath,
+  setElMountReadonly,
+  setElPreviewBody,
+} from './state';
 import { basename, formatSize, getFileIcon, sanitizeAlias } from './helpers';
 import { handleDragStart, handleDragEnd, requestOpenByAgent } from './drag';
 import { openMountDialog, closeMountDialog, submitMountRequest } from './mount-dialog';
@@ -97,7 +104,9 @@ const App = () => {
         <span class="y-truncate">${() => state.previewTitleText}</span>
         <button class="preview-close" onClick=${closePreview} title="Close preview">✕</button>
       </div>
-      <div class="preview-body" ref=${(el: HTMLDivElement) => { setElPreviewBody(el); }}></div>
+      <div class="preview-body" ref=${(el: HTMLDivElement) => {
+        setElPreviewBody(el);
+      }}></div>
       <div class="preview-meta y-text-xs y-text-muted">${() => state.previewMetaText}</div>
     </div>
 
@@ -144,7 +153,7 @@ const App = () => {
           ${() => {
             const parts = state.currentPath ? state.currentPath.split('/').filter(Boolean) : [];
             const crumbs: any[] = [
-              html`<button onClick=${() => navigate('')}>yaar://storage/</button>`
+              html`<button onClick=${() => navigate('')}>yaar://storage/</button>`,
             ];
             let accumulated = '';
             for (const part of parts) {
@@ -173,7 +182,9 @@ const App = () => {
           <button class="toolbar-btn y-btn y-btn-sm" onClick=${() => navigate(state.currentPath)} title="Refresh">↻</button>
           <button class="toolbar-btn y-btn y-btn-sm" onClick=${openUploadDialog} title="Upload files">⬆ Upload</button>
           <input type="file" id="upload-input" multiple style="display:none"
-            ref=${(el: HTMLInputElement) => { uploadInput = el; }}
+            ref=${(el: HTMLInputElement) => {
+              uploadInput = el;
+            }}
             onChange=${handleUpload} />
         </div>
       </div>
@@ -214,7 +225,13 @@ const App = () => {
                       <//>
                       <button class="danger" title="Delete" onClick=${async (e: MouseEvent) => {
                         e.stopPropagation();
-                        if (!(await showConfirm(`Delete "${name}"?`, { danger: true, okLabel: 'Delete' }))) return;
+                        if (
+                          !(await showConfirm(`Delete "${name}"?`, {
+                            danger: true,
+                            okLabel: 'Delete',
+                          }))
+                        )
+                          return;
                         try {
                           await storage.remove(entry.path);
                           navigate(state.currentPath);
@@ -252,13 +269,19 @@ const App = () => {
         <form class="modal-form" onSubmit=${submitMountRequest}>
           <label class="modal-label y-text-xs y-text-muted">Mount alias</label>
           <input class="modal-input y-input" name="alias" placeholder="project-files" required
-            ref=${(el: HTMLInputElement) => { setElMountAlias(el); }} />
+            ref=${(el: HTMLInputElement) => {
+              setElMountAlias(el);
+            }} />
           <label class="modal-label y-text-xs y-text-muted">Host folder path</label>
           <input class="modal-input y-input" name="hostPath" placeholder="/Users/name/projects" required
-            ref=${(el: HTMLInputElement) => { setElMountHostPath(el); }} />
+            ref=${(el: HTMLInputElement) => {
+              setElMountHostPath(el);
+            }} />
           <label class="modal-check">
             <input type="checkbox" name="readOnly"
-              ref=${(el: HTMLInputElement) => { setElMountReadonly(el); }} />
+              ref=${(el: HTMLInputElement) => {
+                setElMountReadonly(el);
+              }} />
             Read-only mount
           </label>
           <div class="y-modal-actions">

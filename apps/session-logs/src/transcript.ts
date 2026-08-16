@@ -187,9 +187,11 @@ const ProseCard = (m: ParsedMessage) => {
       <div class="msg-head">
         <span class="msg-role">${meta.label}</span>
         ${m.agentId ? html`<span class="msg-agent y-font-mono">${m.agentId}</span>` : null}
-        ${m.timestamp
-          ? html`<span class="msg-time y-font-mono">${formatTime(m.timestamp)}</span>`
-          : null}
+        ${
+          m.timestamp
+            ? html`<span class="msg-time y-font-mono">${formatTime(m.timestamp)}</span>`
+            : null
+        }
       </div>
       <div class="msg-body">${m.content ? ContentBlock(m.content) : null}</div>
     </div>

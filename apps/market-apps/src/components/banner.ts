@@ -31,9 +31,11 @@ export function githubBanner() {
                 <strong>${headline}</strong>
                 <span class="y-text-muted"> — publishing may fail until it recovers.</span>
               </div>
-              ${s.incident
-                ? html`<div class="github-banner-detail y-text-muted y-clamp-2">${s.incident}</div>`
-                : ''}
+              ${
+                s.incident
+                  ? html`<div class="github-banner-detail y-text-muted y-clamp-2">${s.incident}</div>`
+                  : ''
+              }
             </div>
             <a
               class="y-btn y-btn-sm y-btn-ghost"

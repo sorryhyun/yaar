@@ -7,7 +7,10 @@ import { onInputHandler } from '../helpers';
 import { DomainsDataSchema } from '../schema';
 
 export function DomainsView() {
-  const [data, setData] = createSignal<DomainsData>({ allow_all_domains: false, allowed_domains: [] });
+  const [data, setData] = createSignal<DomainsData>({
+    allow_all_domains: false,
+    allowed_domains: [],
+  });
   const [loading, setLoading] = createSignal(true);
   const [newDomain, setNewDomain] = createSignal('');
   const [adding, setAdding] = createSignal(false);
@@ -40,7 +43,7 @@ export function DomainsView() {
     const next = !data().allow_all_domains;
     try {
       await invoke('yaar://config/domains', { allowAll: next });
-      setData(d => ({ ...d, allow_all_domains: next }));
+      setData((d) => ({ ...d, allow_all_domains: next }));
       showToast(next ? 'All domains allowed' : 'Domain allowlist enabled');
     } catch {
       showToast('Failed to update setting', 'error');
@@ -66,7 +69,7 @@ export function DomainsView() {
   const removeDomain = async (domain: string) => {
     try {
       await del(`yaar://config/domains/${domain}`);
-      setData(d => ({ ...d, allowed_domains: d.allowed_domains.filter(x => x !== domain) }));
+      setData((d) => ({ ...d, allowed_domains: d.allowed_domains.filter((x) => x !== domain) }));
       showToast(`"${domain}" removed`);
     } catch {
       showToast('Failed to remove domain', 'error');
@@ -79,20 +82,24 @@ export function DomainsView() {
 
   return html`
     <div class="settings-wrapper">
-      ${() => loading() ? html`
+      ${() =>
+        loading()
+          ? html`
         <div style="display:flex;align-items:center;justify-content:center;height:120px;">
           <div class="y-spinner"></div>
         </div>
-      ` : html`
+      `
+          : html`
         <div class="s-section">
           <div class="y-label s-section-title">🌐 Access Control</div>
           <div class="s-row s-row-toggle">
             <div>
               <label class="s-label">Allow All Domains</label>
               <div class="s-hint-block">
-                ${() => data().allow_all_domains
-                  ? '⚠️ All HTTP domains are allowed — use with caution'
-                  : 'Only explicitly allowlisted domains can be fetched via the proxy'}
+                ${() =>
+                  data().allow_all_domains
+                    ? '⚠️ All HTTP domains are allowed — use with caution'
+                    : 'Only explicitly allowlisted domains can be fetched via the proxy'}
               </div>
             </div>
             <button
@@ -106,7 +113,7 @@ export function DomainsView() {
           </div>
         </div>
 
-        <div class="s-section" style=${() => data().allow_all_domains ? 'opacity:0.5;pointer-events:none;' : ''}>
+        <div class="s-section" style=${() => (data().allow_all_domains ? 'opacity:0.5;pointer-events:none;' : '')}>
           <div class="y-label s-section-title" style="display:flex;align-items:center;justify-content:space-between;">
             <span>📋 Allowed Domains</span>
             <span class="item-badge">${() => data().allowed_domains.length} domains</span>
@@ -127,15 +134,18 @@ export function DomainsView() {
               onClick=${addDomain}
               disabled=${() => adding() || !newDomain().trim()}
             >
-              ${() => adding() ? '…' : '+ Add'}
+              ${() => (adding() ? '…' : '+ Add')}
             </button>
           </div>
 
-          ${() => data().allowed_domains.length === 0 ? html`
+          ${() =>
+            data().allowed_domains.length === 0
+              ? html`
             <div style="text-align:center;padding:20px 0;color:var(--yaar-text-muted);font-size:12px;">
               No domains allowlisted
             </div>
-          ` : html`
+          `
+              : html`
             <div class="domain-list">
               <${For} each=${() => data().allowed_domains}>${(domain: string) => html`
                 <div class="domain-item">

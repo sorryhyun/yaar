@@ -3,15 +3,27 @@ import html from '@bundled/solid-js/html';
 import { defineApp } from '@bundled/yaar';
 import * as web from '@bundled/yaar-web';
 import {
-  lock, loading, showScreenshot, placeholderText, currentUrl, pageTitle,
-  activeBrowserId, setActiveBrowserId,
+  lock,
+  loading,
+  showScreenshot,
+  placeholderText,
+  currentUrl,
+  pageTitle,
+  activeBrowserId,
+  setActiveBrowserId,
   initialBrowserId,
-  updateUrlBar, resetDisplay, clearDisplay,
+  updateUrlBar,
+  resetDisplay,
+  clearDisplay,
 } from './store';
 import { connectSSE, disconnectSSE, initSSE } from './sse';
 import {
-  refreshScreenshot, setScreenshotEl,
-  handleNav, handleReload, handleUrlFocus, handleUrlKeydown,
+  refreshScreenshot,
+  setScreenshotEl,
+  handleNav,
+  handleReload,
+  handleUrlFocus,
+  handleUrlKeydown,
 } from './actions';
 import './styles.css';
 
@@ -83,13 +95,18 @@ function App() {
         <span class="title-text y-text-xs y-text-muted y-truncate">${() => pageTitle()}</span>
       </div>
       <div class="screenshot-area">
-        <div class=${() => loading() ? 'loading-bar active' : 'loading-bar'}></div>
-        ${() => !showScreenshot() ? html`
+        <div class=${() => (loading() ? 'loading-bar active' : 'loading-bar')}></div>
+        ${() =>
+          !showScreenshot()
+            ? html`
           <div class="placeholder y-text-muted y-text-sm">${() => placeholderText()}</div>
-        ` : null}
+        `
+            : null}
         <img
-          ref=${(el: HTMLImageElement) => { setScreenshotEl(el); }}
-          style=${() => showScreenshot() ? '' : 'display:none'}
+          ref=${(el: HTMLImageElement) => {
+            setScreenshotEl(el);
+          }}
+          style=${() => (showScreenshot() ? '' : 'display:none')}
           alt="Browser screenshot" />
       </div>
     </div>

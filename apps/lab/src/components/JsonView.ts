@@ -34,7 +34,12 @@ export function JsonNode(props: { name: string; value: unknown; depth: number })
   const rows = () => (open() ? entriesOf(props.value) : []);
   return html`
     <div class="lab-jnode">
-      <div class="lab-jrow" onClick=${(e: MouseEvent) => { if (branch()) { e.stopPropagation(); setOpen(!open()); } }}>
+      <div class="lab-jrow" onClick=${(e: MouseEvent) => {
+        if (branch()) {
+          e.stopPropagation();
+          setOpen(!open());
+        }
+      }}>
         <span class="lab-jtoggle">${() => (branch() ? (open() ? '▾' : '▸') : '')}</span>
         <${Show} when=${() => props.name !== ''}>
           <span class="lab-jkey">${() => props.name}</span><span class="lab-jsep">:</span>

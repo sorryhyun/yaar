@@ -9,7 +9,11 @@
  * should hear about it.
  */
 export function parseJson<T>(text: string, fallback: T): T {
-  try { return JSON.parse(text); } catch { return fallback; }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return fallback;
+  }
 }
 
 export function extractText(result: unknown): string {
@@ -21,13 +25,9 @@ export function capitalize(s: string): string {
 }
 
 /** Returns an InputEvent handler that pipes the element value into a setter */
-export const onInputHandler =
-  (setter: (v: string) => void) =>
-  (e: InputEvent) =>
-    setter((e.target as HTMLInputElement).value);
+export const onInputHandler = (setter: (v: string) => void) => (e: InputEvent) =>
+  setter((e.target as HTMLInputElement).value);
 
 /** Returns a change event handler for <select> elements */
-export const onChangeHandler =
-  (setter: (v: string) => void) =>
-  (e: Event) =>
-    setter((e.target as HTMLSelectElement).value);
+export const onChangeHandler = (setter: (v: string) => void) => (e: Event) =>
+  setter((e.target as HTMLSelectElement).value);

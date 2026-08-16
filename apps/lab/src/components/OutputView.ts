@@ -60,7 +60,10 @@ export function OutputView(props: { output: CellOutput | undefined }) {
         <${For} each=${parts}>${(p: OutputPart) => html`<${PartView} part=${p} />`}<//>
         <${Show} when=${() => !out()!.ok && out()!.error}>
           <pre class="lab-pre lab-err">${() =>
-            out()!.error!.name + ': ' + out()!.error!.message + (out()!.error!.stack ? '\n' + out()!.error!.stack : '')}</pre>
+            out()!.error!.name +
+            ': ' +
+            out()!.error!.message +
+            (out()!.error!.stack ? '\n' + out()!.error!.stack : '')}</pre>
         <//>
         <div class="lab-output-foot">${() => out()!.durationMs + ' ms'}</div>
       </div>

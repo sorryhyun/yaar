@@ -10,5 +10,6 @@
   "variant": "standard",
   "version": "1.0.1",
   "author": "YAAR",
-  "kind": "system"
+  "kind": "system",
+  "appId": "browser"
 }

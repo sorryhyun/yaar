@@ -167,10 +167,20 @@ export function sampleParam(
 // Marching squares: which cell edges the contour crosses, per corner sign mask.
 // Corners are a=TL, b=TR, c=BR, d=BL; edges T,R,B,L. Saddles (5, 10) emit both.
 const CASES: Record<number, string[]> = {
-  1: ['L', 'T'], 2: ['T', 'R'], 3: ['L', 'R'], 4: ['R', 'B'],
-  5: ['L', 'T', 'R', 'B'], 6: ['T', 'B'], 7: ['L', 'B'], 8: ['L', 'B'],
-  9: ['T', 'B'], 10: ['L', 'T', 'R', 'B'], 11: ['R', 'B'], 12: ['L', 'R'],
-  13: ['T', 'R'], 14: ['L', 'T'],
+  1: ['L', 'T'],
+  2: ['T', 'R'],
+  3: ['L', 'R'],
+  4: ['R', 'B'],
+  5: ['L', 'T', 'R', 'B'],
+  6: ['T', 'B'],
+  7: ['L', 'B'],
+  8: ['L', 'B'],
+  9: ['T', 'B'],
+  10: ['L', 'T', 'R', 'B'],
+  11: ['R', 'B'],
+  12: ['L', 'R'],
+  13: ['T', 'R'],
+  14: ['L', 'T'],
 };
 
 /** f(x, y) = 0 over the visible rectangle, as one 2-point polyline per crossing. */
@@ -208,7 +218,8 @@ export function sampleImplicit(
       const idx = (a > 0 ? 1 : 0) | (b > 0 ? 2 : 0) | (cc > 0 ? 4 : 0) | (d > 0 ? 8 : 0);
       const seq = CASES[idx];
       if (!seq) continue;
-      const X = i * g, Y = j * g;
+      const X = i * g,
+        Y = j * g;
       const ip = (u: number, w: number) => u / (u - w);
       const at = (edge: string): [number, number] => {
         if (edge === 'T') return [X + g * ip(a, b), Y];

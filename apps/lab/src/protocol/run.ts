@@ -11,7 +11,7 @@ import { agentLogs } from './shape';
 export const runCommands = {
   runCode: defineAppCommand({
     description:
-      'Run JavaScript in the notebook kernel WITHOUT creating a cell, and get back a COMPRESSED result. Shares the same persistent scope as the notebook cells, so variables defined here are visible to cells and vice versa. Helpers in scope: store (read/write storage), csv, df (mini dataframe), stats, plot, http, show(), sleep(). store paths are two-tier: a bare path like \'notebooks/x.json\' is this app\'s private storage, and shared storage takes an explicit URI, \'yaar://storage/shared/lab/x.png\'. Top-level await is allowed and the last expression is the result. The result is capped at resultLimit bytes; when it does not fit you get a shape summary plus a sample, and truncated: true. For the full data set saveResultTo a storage path and only the path comes back. The run is also logged to the Agent runs view in the window, which the window switches to — source, logs, rendered result and duration, so the user sees what you ran. The return value here is unaffected.',
+      "Run JavaScript in the notebook kernel WITHOUT creating a cell, and get back a COMPRESSED result. Shares the same persistent scope as the notebook cells, so variables defined here are visible to cells and vice versa. Helpers in scope: store (read/write storage), csv, df (mini dataframe), stats, plot, http, show(), sleep(). store paths are two-tier: a bare path like 'notebooks/x.json' is this app's private storage, and shared storage takes an explicit URI, 'yaar://storage/shared/lab/x.png'. Top-level await is allowed and the last expression is the result. The result is capped at resultLimit bytes; when it does not fit you get a shape summary plus a sample, and truncated: true. For the full data set saveResultTo a storage path and only the path comes back. The run is also logged to the Agent runs view in the window, which the window switches to — source, logs, rendered result and duration, so the user sees what you ran. The return value here is unaffected.",
     params: z.object({
       code: z.string(),
       timeoutMs: z.optional(z.number()),
@@ -68,7 +68,8 @@ export const runCommands = {
   }),
 
   runCell: defineAppCommand({
-    description: 'Run one notebook cell by id and render its output in the UI. The cell is scrolled into view and briefly highlighted so the user sees which one you touched. Returns a short summary, never the data.',
+    description:
+      'Run one notebook cell by id and render its output in the UI. The cell is scrolled into view and briefly highlighted so the user sees which one you touched. Returns a short summary, never the data.',
     params: z.object({ id: z.string(), timeoutMs: z.optional(z.number()) }),
     replay: 'never',
     run: async (p) => {
@@ -78,7 +79,8 @@ export const runCommands = {
   }),
 
   runAll: defineAppCommand({
-    description: 'Run every code cell top to bottom, stopping at the first failure. Each cell is scrolled into view and highlighted as it runs. Returns one summary per cell.',
+    description:
+      'Run every code cell top to bottom, stopping at the first failure. Each cell is scrolled into view and highlighted as it runs. Returns one summary per cell.',
     params: z.object({ timeoutMs: z.optional(z.number()) }),
     replay: 'never',
     run: async (p) => {
@@ -88,7 +90,8 @@ export const runCommands = {
   }),
 
   resetKernel: defineAppCommand({
-    description: 'Restart the worker. Clears every variable defined by earlier cells; notebook sources and saved outputs are untouched.',
+    description:
+      'Restart the worker. Clears every variable defined by earlier cells; notebook sources and saved outputs are untouched.',
     replay: 'never',
     run: () => {
       resetKernelFn();

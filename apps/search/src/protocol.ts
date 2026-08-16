@@ -173,7 +173,10 @@ async function listAppIds(): Promise<string[]> {
       id = e.appId ?? e.id ?? e.uri;
     }
     if (!id) continue;
-    id = id.replace(/^yaar:\/\/apps\//, '').replace(/\/+$/, '').trim();
+    id = id
+      .replace(/^yaar:\/\/apps\//, '')
+      .replace(/\/+$/, '')
+      .trim();
     if (id && !ids.includes(id)) ids.push(id);
   }
   return ids;

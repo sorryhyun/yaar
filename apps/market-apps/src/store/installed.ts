@@ -27,7 +27,9 @@ const [marketplaceInstallRecords, setMarketplaceInstallRecords] = createSignal<
 
 function syncMarketInstallationFlags(): void {
   const installedIds = new Set(installedApps().map((a) => normalizeId(a.id)));
-  setMarketApps(marketApps().map((m) => ({ ...m, installed: installedIds.has(normalizeId(m.id)) })));
+  setMarketApps(
+    marketApps().map((m) => ({ ...m, installed: installedIds.has(normalizeId(m.id)) })),
+  );
 }
 
 function isWithinInstallGrace(record: MarketplaceInstallRecord, requestStartedAt: number): boolean {

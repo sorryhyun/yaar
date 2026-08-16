@@ -1,8 +1,16 @@
 import type { ChartSpec } from '../types';
 
 const PALETTE = [
-  '#539bf5', '#57ab5a', '#c69026', '#e5534b', '#986ee2',
-  '#4cc9c0', '#f778ba', '#8ddb8c', '#daaa3f', '#6cb6ff',
+  '#539bf5',
+  '#57ab5a',
+  '#c69026',
+  '#e5534b',
+  '#986ee2',
+  '#4cc9c0',
+  '#f778ba',
+  '#8ddb8c',
+  '#daaa3f',
+  '#6cb6ff',
 ];
 const TEXT = '#adbac7';
 const GRID = 'rgba(55, 62, 71, 0.9)';
@@ -11,7 +19,9 @@ export const BG = '#1c2128';
 function hexAlpha(hex: string, a: number): string {
   const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
   if (!m) return hex;
-  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  const r = parseInt(m[1], 16),
+    g = parseInt(m[2], 16),
+    b = parseInt(m[3], 16);
   return 'rgba(' + r + ', ' + g + ', ' + b + ', ' + a + ')';
 }
 
@@ -31,7 +41,10 @@ export const bgPlugin = {
 };
 
 /** Turn a kernel chart spec into a Chart.js config. */
-export function buildConfig(spec: ChartSpec, opts?: { background?: string; animate?: boolean }): any {
+export function buildConfig(
+  spec: ChartSpec,
+  opts?: { background?: string; animate?: boolean },
+): any {
   const o = spec.options || ({} as ChartSpec['options']);
   const colors = (o.colors && o.colors.length ? o.colors : PALETTE) as string[];
   const isPie = spec.type === 'pie' || spec.type === 'doughnut';
@@ -61,7 +74,13 @@ export function buildConfig(spec: ChartSpec, opts?: { background?: string; anima
       };
     }
     if (spec.type === 'scatter') {
-      return { label: d.label, data: d.data, backgroundColor: base, borderColor: base, pointRadius: 3 };
+      return {
+        label: d.label,
+        data: d.data,
+        backgroundColor: base,
+        borderColor: base,
+        pointRadius: 3,
+      };
     }
     return {
       label: d.label,
@@ -98,7 +117,10 @@ export function buildConfig(spec: ChartSpec, opts?: { background?: string; anima
   const scales: any = isPie
     ? undefined
     : o.horizontal
-      ? { x: { ...yAxis, title: axisTitle(o.yLabel) }, y: { ...xAxis, type: 'category', title: axisTitle(o.xLabel) } }
+      ? {
+          x: { ...yAxis, title: axisTitle(o.yLabel) },
+          y: { ...xAxis, type: 'category', title: axisTitle(o.xLabel) },
+        }
       : { x: xAxis, y: yAxis };
 
   return {
@@ -118,9 +140,20 @@ export function buildConfig(spec: ChartSpec, opts?: { background?: string; anima
           position: 'bottom' as const,
         },
         title: o.title
-          ? { display: true, text: o.title, color: '#f0f6fc', font: { size: 13, weight: 'normal' as const } }
+          ? {
+              display: true,
+              text: o.title,
+              color: '#f0f6fc',
+              font: { size: 13, weight: 'normal' as const },
+            }
           : { display: false },
-        tooltip: { backgroundColor: '#22272e', borderColor: '#373e47', borderWidth: 1, titleColor: '#f0f6fc', bodyColor: TEXT },
+        tooltip: {
+          backgroundColor: '#22272e',
+          borderColor: '#373e47',
+          borderWidth: 1,
+          titleColor: '#f0f6fc',
+          bodyColor: TEXT,
+        },
       },
       scales,
     },

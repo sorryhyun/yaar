@@ -22,22 +22,29 @@ function App() {
   return html`
     <div class="cfg-layout">
       <div class="cfg-tabs">
-        ${TABS.map(tab => html`
+        ${TABS.map(
+          (tab) => html`
           <button
             class=${() => `cfg-tab${activeTab() === tab.id ? ' active' : ''}`}
             onClick=${() => setActiveTab(tab.id)}
           >
             ${tab.icon} ${tab.label}
           </button>
-        `)}
+        `,
+        )}
       </div>
 
       <div class="cfg-content">
-        ${() => activeTab() === 'settings' ? SettingsView() :
-                 activeTab() === 'shortcuts' ? ShortcutsView() :
-                 activeTab() === 'hooks' ? HooksView() :
-                 activeTab() === 'updates' ? UpdatesView() :
-                 DomainsView()}
+        ${() =>
+          activeTab() === 'settings'
+            ? SettingsView()
+            : activeTab() === 'shortcuts'
+              ? ShortcutsView()
+              : activeTab() === 'hooks'
+                ? HooksView()
+                : activeTab() === 'updates'
+                  ? UpdatesView()
+                  : DomainsView()}
       </div>
 
 
@@ -72,7 +79,9 @@ export default defineApp({
       run: (p) => {
         const tab = p.tab as Tab;
         if (!TABS.some((t) => t.id === tab)) {
-          throw new Error(`Unknown tab "${String(p.tab)}" - expected ${TABS.map((t) => t.id).join(' | ')}`);
+          throw new Error(
+            `Unknown tab "${String(p.tab)}" - expected ${TABS.map((t) => t.id).join(' | ')}`,
+          );
         }
         setActiveTab(tab);
       },

@@ -27,9 +27,9 @@ function accountControls() {
           const owned = a.ownedApps.length;
           return html`
             <span class="account-info"
-              >Signed in as <strong>${a.email}</strong>${owned
-                ? html`<span class="y-text-muted"> • ${owned} owned</span>`
-                : ''}</span
+              >Signed in as <strong>${a.email}</strong>${
+                owned ? html`<span class="y-text-muted"> • ${owned} owned</span>` : ''
+              }</span
             >
             <button
               class="y-btn y-btn-sm y-btn-ghost"

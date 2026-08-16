@@ -20,7 +20,9 @@ export const exportCommands = {
     run: async (p) => {
       const nb = current();
       if (!nb) throw new AppCommandError('No notebook is open');
-      const cells = p.cellId ? nb.cells.filter((c) => c.id === p.cellId) : nb.cells.slice().reverse();
+      const cells = p.cellId
+        ? nb.cells.filter((c) => c.id === p.cellId)
+        : nb.cells.slice().reverse();
       if (p.cellId && cells.length === 0) throw new AppCommandError('No cell with id ' + p.cellId);
 
       // One command for both output kinds: whichever the cell actually produced.
@@ -41,7 +43,9 @@ export const exportCommands = {
       if (!chart && !graph) {
         throw new AppCommandError(
           p.cellId
-            ? 'Cell ' + p.cellId + ' has no chart or graph output. Run it first, and make sure the cell ends in a plot.* or graph(...) call.'
+            ? 'Cell ' +
+                p.cellId +
+                ' has no chart or graph output. Run it first, and make sure the cell ends in a plot.* or graph(...) call.'
             : 'No cell in this notebook has a chart or graph output yet.',
         );
       }
@@ -49,7 +53,9 @@ export const exportCommands = {
       const kind = chart ? 'chart' : 'graph';
       const opts = { width: p.width, height: p.height, background: p.background };
       const target = sharedPath(p.path, kind + '-' + fromCell + '-' + Date.now());
-      const r = chart ? await saveChart(chart, target, opts) : await saveGraph(graph!, target, opts);
+      const r = chart
+        ? await saveChart(chart, target, opts)
+        : await saveGraph(graph!, target, opts);
       return { ...r, cellId: fromCell, kind };
     },
   }),

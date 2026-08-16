@@ -44,10 +44,23 @@ export async function runCell(id: string, ms?: number, origin?: RunOrigin): Prom
   if (!cell) throw new Error('No cell with id ' + id);
   if (origin?.via) flashCellFor(id);
   if (cell.type === 'markdown') {
-    const s: RunSummary = { cellId: id, ok: true, summary: 'markdown (nothing to run)', durationMs: 0, at: Date.now() };
+    const s: RunSummary = {
+      cellId: id,
+      ok: true,
+      summary: 'markdown (nothing to run)',
+      durationMs: 0,
+      at: Date.now(),
+    };
     setLastRun(s);
     if (origin?.via) {
-      logAgentRun({ kind: origin.via, cellId: id, source: cell.source, ok: true, durationMs: 0, summary: s.summary });
+      logAgentRun({
+        kind: origin.via,
+        cellId: id,
+        source: cell.source,
+        ok: true,
+        durationMs: 0,
+        summary: s.summary,
+      });
     }
     return s;
   }

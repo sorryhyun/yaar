@@ -26,7 +26,11 @@ function buildDragMetadata(entry: StorageEntry) {
 }
 
 export function safeSetDragData(dt: DataTransfer, type: string, value: string) {
-  try { dt.setData(type, value); } catch { /* ignore */ }
+  try {
+    dt.setData(type, value);
+  } catch {
+    /* ignore */
+  }
 }
 
 export function requestOpenByAgent(entry: StorageEntry) {

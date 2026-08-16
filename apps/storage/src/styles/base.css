@@ -1,31 +1,45 @@
-  #app {
-    position: relative;
-    height: 100vh;
-    background: var(--yaar-bg);
-    color: var(--yaar-text);
-    font-family: var(--yaar-font);
-    font-size: 13px;
-    overflow: hidden;
-  }
+#app {
+  position: relative;
+  height: 100vh;
+  background: var(--yaar-bg);
+  color: var(--yaar-text);
+  font-family: var(--yaar-font);
+  font-size: 13px;
+  overflow: hidden;
+}
 
-  /* ── Background layer: preview or empty hint fills the whole window ──────── */
-  .bg-layer {
-    position: absolute;
-    inset: 0;
-  }
-  .bg-empty {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    text-align: center;
-    padding: 24px;
-    color: var(--yaar-text-muted);
-  }
-  .bg-empty-icon { font-size: 56px; opacity: 0.85; }
-  .bg-empty-title { font-size: 20px; font-weight: 600; color: var(--yaar-text); }
-  .bg-empty-hint { font-size: 13px; max-width: 360px; line-height: 1.5; }
-  .bg-empty-path { margin-top: 8px; font-family: var(--yaar-font-mono); }
+/* ── Background layer: preview or empty hint fills the whole window ──────── */
+.bg-layer {
+  position: absolute;
+  inset: 0;
+}
+.bg-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-align: center;
+  padding: 24px;
+  color: var(--yaar-text-muted);
+}
+.bg-empty-icon {
+  font-size: 56px;
+  opacity: 0.85;
+}
+.bg-empty-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--yaar-text);
+}
+.bg-empty-hint {
+  font-size: 13px;
+  max-width: 360px;
+  line-height: 1.5;
+}
+.bg-empty-path {
+  margin-top: 8px;
+  font-family: var(--yaar-font-mono);
+}

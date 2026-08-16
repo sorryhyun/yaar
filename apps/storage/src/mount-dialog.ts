@@ -19,8 +19,14 @@ export async function submitMountRequest(e: Event) {
   e.preventDefault();
   const alias = sanitizeAlias(elMountAlias.value);
   const hostPath = elMountHostPath.value.trim();
-  if (!alias) { setState('statusText', 'Mount alias is required'); return; }
-  if (!hostPath) { setState('statusText', 'Host folder path is required'); return; }
+  if (!alias) {
+    setState('statusText', 'Mount alias is required');
+    return;
+  }
+  if (!hostPath) {
+    setState('statusText', 'Host folder path is required');
+    return;
+  }
   if (!app?.sendInteraction) {
     setState('statusText', 'Agent bridge unavailable: cannot send mount request');
     return;
@@ -38,11 +44,13 @@ export async function submitMountRequest(e: Event) {
 
 export async function refreshMountAliases() {
   try {
-    const items = await storage.list('mounts') as unknown as import('./types').StorageEntry[];
-    setState('mountAliases',
-      items.filter((entry) => entry.isDirectory)
+    const items = (await storage.list('mounts')) as unknown as import('./types').StorageEntry[];
+    setState(
+      'mountAliases',
+      items
+        .filter((entry) => entry.isDirectory)
         .map((entry) => basename(entry.path))
-        .sort((a, b) => a.localeCompare(b))
+        .sort((a, b) => a.localeCompare(b)),
     );
   } catch {
     setState('mountAliases', []);

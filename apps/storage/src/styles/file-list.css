@@ -1,44 +1,75 @@
-  .file-list {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 4px 0;
-  }
-  .file-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 12px;
-    cursor: pointer;
-    border-bottom: 1px solid transparent;
-  }
-  .file-row:hover { background: var(--yaar-bg-surface-hover); }
-  .file-row.selected { background: var(--yaar-accent-hover); }
-  .file-row.dragging { opacity: 0.55; }
-  .file-icon { width: 24px; text-align: center; font-size: 16px; flex-shrink: 0; }
-  .file-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .file-name.dir { color: var(--yaar-accent); }
-  .file-size { color: var(--yaar-text-muted); font-size: 12px; flex-shrink: 0; width: 60px; text-align: right; }
-  .file-actions { display: flex; gap: 4px; opacity: 0; transition: opacity 0.15s; }
-  .file-row:hover .file-actions { opacity: 1; }
-  .file-actions button {
-    background: none;
-    border: none;
-    cursor: pointer;
-    font-size: 14px;
-    padding: 2px 4px;
-    border-radius: 3px;
-    color: var(--yaar-text-muted);
-  }
-  .file-actions button:hover { background: var(--yaar-border); color: var(--yaar-text); }
-  .file-actions button.danger:hover { color: var(--yaar-error); }
-  .empty {
-    font-size: 14px;
-    padding: 40px;
-  }
+.file-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 0;
+}
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+}
+.file-row:hover {
+  background: var(--yaar-bg-surface-hover);
+}
+.file-row.selected {
+  background: var(--yaar-accent-hover);
+}
+.file-row.dragging {
+  opacity: 0.55;
+}
+.file-icon {
+  width: 24px;
+  text-align: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.file-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-name.dir {
+  color: var(--yaar-accent);
+}
+.file-size {
+  color: var(--yaar-text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+  width: 60px;
+  text-align: right;
+}
+.file-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.file-row:hover .file-actions {
+  opacity: 1;
+}
+.file-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  color: var(--yaar-text-muted);
+}
+.file-actions button:hover {
+  background: var(--yaar-border);
+  color: var(--yaar-text);
+}
+.file-actions button.danger:hover {
+  color: var(--yaar-error);
+}
+.empty {
+  font-size: 14px;
+  padding: 40px;
+}

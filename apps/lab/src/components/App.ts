@@ -70,7 +70,10 @@ export default function App() {
             <button class="lab-btn" onClick=${() => addCell('', 'markdown')}>+ Text</button>
             <button class="lab-btn" onClick=${() => clearAllOutputs()}>Clear out</button>
           <//>
-          <button class="lab-btn" onClick=${() => { resetKernel(); showToast('Kernel restarted', 'info'); }}>Reset kernel</button>
+          <button class="lab-btn" onClick=${() => {
+            resetKernel();
+            showToast('Kernel restarted', 'info');
+          }}>Reset kernel</button>
           <label class="lab-timeout">
             timeout
             <input
@@ -92,10 +95,18 @@ export default function App() {
           <span class="lab-note">${() => status()}</span>
           <span class="lab-note">${() => {
             const r = lastRun();
-            return r ? (r.ok ? 'last: ' : 'last failed: ') + r.summary.slice(0, 90) + ' (' + r.durationMs + 'ms)' : '';
+            return r
+              ? (r.ok ? 'last: ' : 'last failed: ') +
+                  r.summary.slice(0, 90) +
+                  ' (' +
+                  r.durationMs +
+                  'ms)'
+              : '';
           }}</span>
           <span class="lab-note">${() => (dirty() ? 'unsaved' : 'saved')}</span>
-          <button class="lab-mini" onClick=${async () => { (await saveCurrent()) && showToast('Saved', 'success'); }}>Save</button>
+          <button class="lab-mini" onClick=${async () => {
+            (await saveCurrent()) && showToast('Saved', 'success');
+          }}>Save</button>
         </div>
       </div>
     </div>`;

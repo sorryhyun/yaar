@@ -55,7 +55,10 @@ export function CellRow(cell: () => Cell, index: number) {
           fallback=${() => html`
             <div
               class="lab-md lab-md-cell"
-              onDblClick=${() => { startEdit(id()); queueMicrotask(() => editors.get(id())?.focus()); }}
+              onDblClick=${() => {
+                startEdit(id());
+                queueMicrotask(() => editors.get(id())?.focus());
+              }}
               innerHTML=${() => renderMarkdown(cell().source || '_(empty markdown cell — double-click to edit)_')}
             ></div>`}
         >

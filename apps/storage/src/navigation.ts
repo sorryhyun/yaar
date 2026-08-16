@@ -3,19 +3,47 @@ import { marked } from '@bundled/marked';
 import Prism from '@bundled/prismjs';
 import { sanitizeHtml, storage } from '@bundled/yaar';
 import { setState, elPreviewBody } from './state';
-import { basename, formatSize, isImage, isMarkdown, isPdf, isPreviewable, getFileIcon, getExtension } from './helpers';
+import {
+  basename,
+  formatSize,
+  isImage,
+  isMarkdown,
+  isPdf,
+  isPreviewable,
+  getFileIcon,
+  getExtension,
+} from './helpers';
 import { refreshMountAliases } from './mount-dialog';
 
 const EXT_LANG: Record<string, string> = {
-  js: 'javascript', mjs: 'javascript', cjs: 'javascript',
-  ts: 'typescript', tsx: 'tsx', jsx: 'jsx',
-  py: 'python', css: 'css', scss: 'scss',
-  html: 'html', xml: 'xml', svg: 'xml',
-  json: 'json', yaml: 'yaml', yml: 'yaml',
-  sh: 'bash', bash: 'bash', zsh: 'bash',
-  sql: 'sql', toml: 'toml', rs: 'rust',
-  go: 'go', java: 'java', c: 'c', cpp: 'cpp',
-  cs: 'csharp', rb: 'ruby', php: 'php',
+  js: 'javascript',
+  mjs: 'javascript',
+  cjs: 'javascript',
+  ts: 'typescript',
+  tsx: 'tsx',
+  jsx: 'jsx',
+  py: 'python',
+  css: 'css',
+  scss: 'scss',
+  html: 'html',
+  xml: 'xml',
+  svg: 'xml',
+  json: 'json',
+  yaml: 'yaml',
+  yml: 'yaml',
+  sh: 'bash',
+  bash: 'bash',
+  zsh: 'bash',
+  sql: 'sql',
+  toml: 'toml',
+  rs: 'rust',
+  go: 'go',
+  java: 'java',
+  c: 'c',
+  cpp: 'cpp',
+  cs: 'csharp',
+  rb: 'ruby',
+  php: 'php',
 };
 
 const PREVIEW_UNAVAILABLE = '<span class="preview-unavailable">Unable to preview</span>';
@@ -30,7 +58,7 @@ export async function navigate(path: string) {
   setState('statusText', 'Loading...');
   try {
     await refreshMountAliases();
-    const fetched = await storage.list(path) as unknown as import('./types').StorageEntry[];
+    const fetched = (await storage.list(path)) as unknown as import('./types').StorageEntry[];
     fetched.sort((a, b) => {
       if (a.isDirectory !== b.isDirectory) return a.isDirectory ? -1 : 1;
       return basename(a.path).localeCompare(basename(b.path));
@@ -38,7 +66,10 @@ export async function navigate(path: string) {
     setState('entries', fetched);
     const dirs = fetched.filter((e) => e.isDirectory).length;
     const files = fetched.length - dirs;
-    setState('statusText', `${files} file${files !== 1 ? 's' : ''}, ${dirs} folder${dirs !== 1 ? 's' : ''}`);
+    setState(
+      'statusText',
+      `${files} file${files !== 1 ? 's' : ''}, ${dirs} folder${dirs !== 1 ? 's' : ''}`,
+    );
   } catch {
     setState('entries', []);
     setState('statusText', 'Error loading directory');
@@ -88,7 +119,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
 
   if (isMarkdown(name)) {
     try {
-      const content = await storage.read(entry.path, { as: 'text' }) as string;
+      const content = (await storage.read(entry.path, { as: 'text' })) as string;
       setState('previewContent', content);
       // Stored file content is untrusted and marked does NOT escape raw HTML,
       // so the parsed fragment must be sanitized before it reaches the DOM.
@@ -106,7 +137,7 @@ export async function selectFile(entry: import('./types').StorageEntry) {
 
   if (isPreviewable(name)) {
     try {
-      const content = await storage.read(entry.path, { as: 'text' }) as string;
+      const content = (await storage.read(entry.path, { as: 'text' })) as string;
       setState('previewContent', content);
 
       const lang = EXT_LANG[ext] || 'clike';

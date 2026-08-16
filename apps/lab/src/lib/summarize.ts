@@ -8,13 +8,29 @@ import type { OutputPart, RunResult } from '../types';
 function describePart(p: OutputPart): string {
   switch (p.kind) {
     case 'table':
-      return 'table ' + (p.totalRows ?? 0) + ' rows x ' + (p.columns?.length ?? 0) + ' cols [' + (p.columns || []).slice(0, 8).join(', ') + ']';
+      return (
+        'table ' +
+        (p.totalRows ?? 0) +
+        ' rows x ' +
+        (p.columns?.length ?? 0) +
+        ' cols [' +
+        (p.columns || []).slice(0, 8).join(', ') +
+        ']'
+      );
     case 'chart':
-      return 'chart(' + (p.spec?.type || '?') + ', ' + (p.spec?.data.datasets.length || 0) + ' series)';
+      return (
+        'chart(' + (p.spec?.type || '?') + ', ' + (p.spec?.data.datasets.length || 0) + ' series)'
+      );
     case 'graph': {
       const series = p.graph?.series || [];
       const exprs = series.filter((s) => s.expr).map((s) => s.expr!);
-      return 'graph(' + series.length + ' series' + (exprs.length ? ': ' + exprs.slice(0, 4).join(', ') : '') + ')';
+      return (
+        'graph(' +
+        series.length +
+        ' series' +
+        (exprs.length ? ': ' + exprs.slice(0, 4).join(', ') : '') +
+        ')'
+      );
     }
     case 'image':
       return 'image (' + Math.round((p.src?.length || 0) / 1024) + ' KB)';

@@ -30,7 +30,10 @@ function highlightMatch(text: string, pattern: string): unknown[] {
     let last = 0;
     let m: RegExpExecArray | null;
     while ((m = re.exec(text)) !== null) {
-      if (m[0].length === 0) { re.lastIndex++; continue; }
+      if (m[0].length === 0) {
+        re.lastIndex++;
+        continue;
+      }
       if (m.index > last) parts.push(text.slice(last, m.index));
       parts.push(html`<span class="match-highlight">${m[0]}</span>`);
       last = m.index + m[0].length;
@@ -53,7 +56,9 @@ function getFileIcon(file: string): string {
 }
 
 /** Group matches by file, preserving order of first appearance. */
-function groupByFile(matches: SearchMatch[]): Map<string, { matches: SearchMatch[]; startIndex: number }> {
+function groupByFile(
+  matches: SearchMatch[],
+): Map<string, { matches: SearchMatch[]; startIndex: number }> {
   const groups = new Map<string, { matches: SearchMatch[]; startIndex: number }>();
   for (let i = 0; i < matches.length; i++) {
     const m = matches[i];
@@ -153,7 +158,7 @@ const App = () => html`
       />
       <button class="y-btn y-btn-sm y-btn-primary" onClick=${triggerSearch}
         disabled=${() => state.searching}>
-        ${() => state.searching ? '…' : 'Go'}
+        ${() => (state.searching ? '…' : 'Go')}
       </button>
     </div>
     <button class="y-btn y-btn-sm" onClick=${openCloneDialog} title="Clone app source into Search storage">Clone</button>
@@ -209,7 +214,9 @@ const App = () => html`
           <span class="y-truncate">${() => state.previewPath ?? ''}</span>
           <button class="preview-close" onClick=${closePreview}>✕</button>
         </div>
-        <div class="preview-body" ref=${(el: HTMLDivElement) => { previewBodyEl = el; }}>
+        <div class="preview-body" ref=${(el: HTMLDivElement) => {
+          previewBodyEl = el;
+        }}>
           ${() => {
             const content = state.previewContent;
             if (!content) return null;
@@ -339,7 +346,11 @@ export default defineApp({
         setState('query', pattern);
         if (params.glob) setState('glob', String(params.glob));
         if (params.scope != null) setState('scope', String(params.scope));
-        await performSearch(pattern, params.glob as string | undefined, params.scope as string | undefined);
+        await performSearch(
+          pattern,
+          params.glob as string | undefined,
+          params.scope as string | undefined,
+        );
         return {
           success: true,
           matchCount: state.matches.length,
@@ -397,7 +408,8 @@ export default defineApp({
           },
           destPath: {
             type: 'string',
-            description: 'Destination within Search’s private apps-source/ tree (single app only; default: apps-source/{appId}).',
+            description:
+              'Destination within Search’s private apps-source/ tree (single app only; default: apps-source/{appId}).',
           },
         },
         required: ['appId'],

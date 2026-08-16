@@ -25,9 +25,13 @@ export interface GraphRenderOpts {
 
 export async function graphToPNG(spec: GraphSpec, opts?: GraphRenderOpts): Promise<string> {
   const width = Math.max(120, Math.round((opts && opts.width) || 720));
-  const height = Math.max(90, Math.round((opts && opts.height) || (spec.options && spec.options.height) || 360));
+  const height = Math.max(
+    90,
+    Math.round((opts && opts.height) || (spec.options && spec.options.height) || 360),
+  );
   const scale = Math.min(3, Math.max(1, (opts && opts.scale) || 2));
-  const theme: GraphTheme = opts && opts.background ? { ...DARK_THEME, bg: opts.background } : DARK_THEME;
+  const theme: GraphTheme =
+    opts && opts.background ? { ...DARK_THEME, bg: opts.background } : DARK_THEME;
 
   const plans = planSeries(spec, theme);
   const bad = plans.find((p) => p.error);
@@ -40,7 +44,10 @@ export async function graphToPNG(spec: GraphSpec, opts?: GraphRenderOpts): Promi
   if (!ctx) throw new Error('graph: could not get a 2d canvas context');
   ctx.setTransform(scale, 0, 0, scale, 0, 0);
 
-  const view = opts && opts.bounds ? viewFromBounds(opts.bounds, width, height) : viewFromSpec(spec, width, height);
+  const view =
+    opts && opts.bounds
+      ? viewFromBounds(opts.bounds, width, height)
+      : viewFromSpec(spec, width, height);
   const params = (opts && opts.params) || defaultParams(spec, plans);
   drawGraph(ctx, width, height, spec, plans, view, params, theme);
   return canvas.toDataURL('image/png');

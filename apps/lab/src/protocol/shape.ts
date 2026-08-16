@@ -13,7 +13,10 @@ export function cellsForState(cells: Cell[]) {
   return cells.map((c) => ({
     id: c.id,
     type: c.type,
-    source: c.source.length > MAX_SOURCE_IN_STATE ? c.source.slice(0, MAX_SOURCE_IN_STATE) + '\n…(truncated)' : c.source,
+    source:
+      c.source.length > MAX_SOURCE_IN_STATE
+        ? c.source.slice(0, MAX_SOURCE_IN_STATE) + '\n…(truncated)'
+        : c.source,
     hasOutput: !!c.output,
   }));
 }

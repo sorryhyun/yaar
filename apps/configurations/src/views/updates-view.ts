@@ -90,7 +90,8 @@ export function UpdatesView() {
       setLoadError('');
       if (force) {
         if (next.checkError) showToast(next.checkError, 'error');
-        else if (next.latest?.updateAvailable) showToast(`Version ${next.latest.version} is available`);
+        else if (next.latest?.updateAvailable)
+          showToast(`Version ${next.latest.version} is available`);
         else showToast('YAAR is up to date');
       }
     } catch (err) {

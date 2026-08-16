@@ -4,8 +4,13 @@
 
 import { buildExpr, sliderVars, type Compiled, type Scope } from './compile';
 import {
-  makeTransform, niceStep, sampleExplicit, sampleImplicit, sampleParam,
-  type Poly, type View,
+  makeTransform,
+  niceStep,
+  sampleExplicit,
+  sampleImplicit,
+  sampleParam,
+  type Poly,
+  type View,
 } from './sample';
 import type { GraphSpec, GraphSeries } from '../types';
 
@@ -59,7 +64,8 @@ export function planSeries(spec: GraphSpec, theme: GraphTheme = DARK_THEME): Ser
         error = e instanceof Error ? e.message : String(e);
       }
     }
-    const label = s.label || s.expr || (s.points ? 'points (' + s.points.length + ')' : 'series ' + (i + 1));
+    const label =
+      s.label || s.expr || (s.points ? 'points (' + s.points.length + ')' : 'series ' + (i + 1));
     return { series: s, compiled, error, color, label, resample: s.resample !== false && !!s.expr };
   });
 }
@@ -118,22 +124,27 @@ export function drawGraph(
 
   const stepX = niceStep(80 / view.sx);
   const stepY = niceStep(80 / view.sy);
-  const x0 = tr.ux(0), x1 = tr.ux(W);
-  const y0 = tr.uy(H), y1 = tr.uy(0);
+  const x0 = tr.ux(0),
+    x1 = tr.ux(W);
+  const y0 = tr.uy(H),
+    y1 = tr.uy(0);
   const showGrid = opts.grid !== false;
   ctx.lineWidth = 1;
 
   if (showGrid) {
-    const subX = stepX / 5, subY = stepY / 5;
+    const subX = stepX / 5,
+      subY = stepY / 5;
     ctx.strokeStyle = theme.gridMinor;
     ctx.beginPath();
     for (let x = Math.ceil(x0 / subX) * subX; x < x1; x += subX) {
       const px = Math.round(tr.px(x)) + 0.5;
-      ctx.moveTo(px, 0); ctx.lineTo(px, H);
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, H);
     }
     for (let y = Math.ceil(y0 / subY) * subY; y < y1; y += subY) {
       const py = Math.round(tr.py(y)) + 0.5;
-      ctx.moveTo(0, py); ctx.lineTo(W, py);
+      ctx.moveTo(0, py);
+      ctx.lineTo(W, py);
     }
     ctx.stroke();
 
@@ -141,11 +152,13 @@ export function drawGraph(
     ctx.beginPath();
     for (let x = Math.ceil(x0 / stepX) * stepX; x < x1; x += stepX) {
       const px = Math.round(tr.px(x)) + 0.5;
-      ctx.moveTo(px, 0); ctx.lineTo(px, H);
+      ctx.moveTo(px, 0);
+      ctx.lineTo(px, H);
     }
     for (let y = Math.ceil(y0 / stepY) * stepY; y < y1; y += stepY) {
       const py = Math.round(tr.py(y)) + 0.5;
-      ctx.moveTo(0, py); ctx.lineTo(W, py);
+      ctx.moveTo(0, py);
+      ctx.lineTo(W, py);
     }
     ctx.stroke();
   }
@@ -154,8 +167,10 @@ export function drawGraph(
   const ay = Math.round(tr.py(0)) + 0.5;
   ctx.strokeStyle = theme.axis;
   ctx.beginPath();
-  ctx.moveTo(ax, 0); ctx.lineTo(ax, H);
-  ctx.moveTo(0, ay); ctx.lineTo(W, ay);
+  ctx.moveTo(ax, 0);
+  ctx.lineTo(ax, H);
+  ctx.moveTo(0, ay);
+  ctx.lineTo(W, ay);
   ctx.stroke();
 
   ctx.fillStyle = theme.text;
@@ -185,8 +200,10 @@ export function drawGraph(
       const s = scopeFor(params);
       const tMin = typeof plan.series.tMin === 'number' ? plan.series.tMin : 0;
       const tMax = typeof plan.series.tMax === 'number' ? plan.series.tMax : Math.PI * 2;
-      if (c.type === 'explicit' || c.type === 'explicitX') strokePolys(ctx, sampleExplicit(c, s, tr, W, H));
-      else if (c.type === 'param' || c.type === 'polar') strokePolys(ctx, sampleParam(c, s, tr, tMin, tMax, 2000));
+      if (c.type === 'explicit' || c.type === 'explicitX')
+        strokePolys(ctx, sampleExplicit(c, s, tr, W, H));
+      else if (c.type === 'param' || c.type === 'polar')
+        strokePolys(ctx, sampleParam(c, s, tr, tMin, tMax, 2000));
       else if (c.type === 'implicit') strokePolys(ctx, sampleImplicit(c, s, tr, W, H, 5));
       continue;
     }
