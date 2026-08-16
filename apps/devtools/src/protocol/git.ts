@@ -79,7 +79,9 @@ export const gitCommands = {
   gitRestore: defineAppCommand({
     description:
       'Roll a deployed app back to an earlier commit and rebuild it, overwriting current files. ' +
-      'Current state is auto-snapshotted first, so this is itself undoable via another gitRestore.',
+      'Current state is auto-snapshotted first, so this is itself undoable via another gitRestore. ' +
+      'Check `recompiled` in the result: false means the source rolled back but the rebuild ' +
+      'failed (`compileError` says why) and the app serves stale code until fixed and redeployed.',
     params: {
       type: 'object',
       properties: {

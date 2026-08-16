@@ -41,20 +41,15 @@ export const workerCommands = {
   workerTask: defineAppCommand({
     description:
       'Start one task on the worker — a sonnet-tier sub-agent that explores the active ' +
-      'project with its own read-only tools (list files, read file, grep) and reports back. ' +
-      'Use it for survey and lookup work you would otherwise spend many read commands on ' +
-      '("map this codebase", "find every use of X", "check these files for Y"); it cannot ' +
-      'edit, compile, or deploy. RETURNS IMMEDIATELY with a taskId — it does not wait for ' +
-      'the answer, so spend the time on your own work (read, edit, compile). You are then ' +
+      'project with its own read-only tools (list files, read file, grep) and reports back; ' +
+      'it cannot edit, compile, or deploy. RETURNS IMMEDIATELY with a taskId. You are then ' +
       'WOKEN with the answer when it lands (an <app:event channel="worker"> message with ' +
-      'kind "result"), so ending your turn is safe and is the right move when you have ' +
-      'nothing else to do — workerWait is for when you want to block instead, and the ' +
-      '"worker" state key for a plain look. The worker posts interim findings as it goes; ' +
-      'they arrive with the result, and an urgent one wakes you early as kind "report" — ' +
-      'that is your cue to re-scope or call workerInterrupt, not to assume the task is done. ' +
-      'The worker keeps its memory across tasks; follow-ups like "now check the other file" ' +
-      'work, and `fresh` is how you opt out of that. One task at a time — starting another ' +
-      'while one runs is a refusal, not a queue.',
+      'kind "result") — workerWait blocks for it instead, and the "worker" state key is the ' +
+      'plain look. Interim findings arrive with the result; an urgent one wakes you early ' +
+      'as kind "report" — a cue to re-scope or call workerInterrupt, not a sign the task is ' +
+      'done. The worker keeps its memory across tasks; follow-ups like "now check the other ' +
+      'file" work, and `fresh` is how you opt out of that. One task at a time — starting ' +
+      'another while one runs is a refusal, not a queue.',
     params: {
       type: 'object',
       properties: {

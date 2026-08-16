@@ -262,19 +262,19 @@ declare module '@bundled/mammoth' {
   export = mammoth;
 }
 
-// Diagrams from text: `flowchart`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`,
-// `erDiagram`, `journey`, `gantt`, `pie`, `mindmap`, `timeline`, `gitGraph`, `quadrantChart`,
-// `sankey-beta`, `xychart-beta`, `block-beta`, `C4Context`, `architecture-beta`.
-//
-// Prefer `renderMermaid(source)` over the default export: it applies the YAAR design
-// tokens, forces the strict security level, and serializes renders against mermaid's
-// global config. The SVG it returns is ALREADY SANITIZED — do not pass it through
-// `sanitizeHtml` from '@bundled/yaar', which strips the `<style>` block the diagram
-// needs to theme itself.
-//
-// Rendering is async and needs a live document (it measures text), so render after
-// mount, not during it. Insert the result with `element.innerHTML = svg`.
 declare module '@bundled/mermaid' {
+  // Diagrams from text: `flowchart`, `sequenceDiagram`, `classDiagram`, `stateDiagram-v2`,
+  // `erDiagram`, `journey`, `gantt`, `pie`, `mindmap`, `timeline`, `gitGraph`, `quadrantChart`,
+  // `sankey-beta`, `xychart-beta`, `block-beta`, `C4Context`, `architecture-beta`.
+  //
+  // Prefer `renderMermaid(source)` over the default export: it applies the YAAR design
+  // tokens, forces the strict security level, and serializes renders against mermaid's
+  // global config. The SVG it returns is ALREADY SANITIZED — do not pass it through
+  // `sanitizeHtml` from '@bundled/yaar', which strips the `<style>` block the diagram
+  // needs to theme itself.
+  //
+  // Rendering is async and needs a live document (it measures text), so render after
+  // mount, not during it. Insert the result with `element.innerHTML = svg`.
   import mermaid from 'mermaid';
 
   export type { MermaidConfig, RenderResult } from 'mermaid';
@@ -355,11 +355,25 @@ declare module '@bundled/dompurify' {
 
 // ── Validation ──────────────────────────────────────────────────────────────
 
-// Zod Mini — the tree-shakeable functional API. Standard Zod's `z` namespace pulls
-// ~260KB into every consuming app because it defeats bundler tree-shaking; Mini's
-// per-validator functions bundle to ~10KB. Functional API: `z.optional(z.string())`,
-// `z.safeParse(Schema, data)`. See https://zod.dev/packages/mini
 declare module '@bundled/zod' {
+  // Zod MINI — the tree-shakeable functional API, not standard Zod's chained one:
+  // `z.optional(z.string())` not `z.string().optional()`, and `z.safeParse(Schema, data)`
+  // not `Schema.safeParse(data)`. (Standard Zod's `z` namespace defeats tree-shaking and
+  // pulls ~260KB into every consuming app; Mini bundles to ~10KB.) The same `z` that
+  // `defineApp` accepts for command `params`. See https://zod.dev/packages/mini
+  //
+  // Validate at trust boundaries — external HTTP responses, persisted JSON whose shape
+  // may predate the current app version, command params — not ordinary internal state,
+  // and only the fields you read. Reach for `z.looseObject` when the item is spread
+  // downstream: it keeps unknown keys, so additive upstream fields survive. The shape:
+  //
+  //   const Item = z.looseObject({ id: z.optional(z.string()), title: z.optional(z.string()) });
+  //   const parsed = z.safeParse(z.array(Item), await resp.json());
+  //   if (!parsed.success) {
+  //     console.error('feed validation failed', parsed.error.issues); // full issues to console
+  //     throw new Error('The service returned an unsupported response.'); // concise user error
+  //   }
+  //   return parsed.data; // typed, no cast
   export * from 'zod/mini';
 }
 
@@ -371,24 +385,24 @@ declare module '@bundled/tone' {
 
 // ── Media Files ─────────────────────────────────────────────────────────────
 
-// Reading, writing, and converting media containers — mp4, webm/mkv, mp3, wav,
-// ogg — which the browser otherwise offers no API for. The alternative an app
-// reaches for on its own is `MediaRecorder` over `canvas.captureStream()`, and it
-// is worse in three ways that matter: it records in REAL TIME (a slow frame is a
-// dropped or duplicated frame), it only writes what the browser felt like
-// supporting, and it cannot read an existing file at all. mediabunny encodes
-// frame by frame with explicit timestamps, decoupled from wall-clock.
-//
-// Encoding and decoding need WebCodecs; muxing and demuxing alone do not.
-// Support is per codec AND per platform, so branch on the capability check
-// instead of assuming — `getFirstEncodableVideoCodec(['avc', 'vp9'], { width,
-// height })` returns null when nothing on this machine can do it, which is the
-// answer you want BEFORE rendering 900 frames.
-//
-// Two exported names shadow DOM globals: `BufferSource` (mediabunny's is an
-// input Source; the DOM's is the ArrayBuffer/-View type alias) and `MediaSource`
-// (the abstract base class here, MSE there). Alias on import if an app needs both.
 declare module '@bundled/mediabunny' {
+  // Reading, writing, and converting media containers — mp4, webm/mkv, mp3, wav,
+  // ogg — which the browser otherwise offers no API for. The alternative an app
+  // reaches for on its own is `MediaRecorder` over `canvas.captureStream()`, and it
+  // is worse in three ways that matter: it records in REAL TIME (a slow frame is a
+  // dropped or duplicated frame), it only writes what the browser felt like
+  // supporting, and it cannot read an existing file at all. mediabunny encodes
+  // frame by frame with explicit timestamps, decoupled from wall-clock.
+  //
+  // Encoding and decoding need WebCodecs; muxing and demuxing alone do not.
+  // Support is per codec AND per platform, so branch on the capability check
+  // instead of assuming — `getFirstEncodableVideoCodec(['avc', 'vp9'], { width,
+  // height })` returns null when nothing on this machine can do it, which is the
+  // answer you want BEFORE rendering 900 frames.
+  //
+  // Two exported names shadow DOM globals: `BufferSource` (mediabunny's is an
+  // input Source; the DOM's is the ArrayBuffer/-View type alias) and `MediaSource`
+  // (the abstract base class here, MSE there). Alias on import if an app needs both.
   // READ — an `Input` over a `Source`, with sinks pulling decoded media out.
   //   const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS });
   //   sources: BlobSource, BufferSource, UrlSource, StreamSource

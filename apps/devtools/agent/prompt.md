@@ -46,17 +46,13 @@ Without a raised `timeoutMs`, a slow build surfaces as "App did not respond" ins
 
 All file commands operate **only inside the active project's sandbox**, never the server filesystem. A glob like `apps/**/*.ts` means paths inside the project, not `apps/` on disk.
 
-`editFile`'s line-range and multi-edit modes anchor on content from *this* turn — a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset, with `lineNum: true` before a line-range edit. `readFile` takes an array of paths, so read everything you are about to work on in one call.
+`editFile`'s line-range and multi-edit modes anchor on content from *this* turn — a line number goes stale the instant an earlier edit shifts the file, or you read it two turns ago. Re-read for current numbers rather than guessing an offset, with `lineNum: true` before a line-range edit, and check `removed` in the edit result to confirm a splice hit what you meant — this turn, instead of at the next compile. `readFile` takes an array of paths, so read everything you are about to work on in one call.
 
-**`writeFile` takes `content` as an array of lines** — one element per line, joined with newlines, no trailing newline added. Prefer it over one long string for anything past a few lines: a whole file as a single JSON string is one long token of `\n` and `\"` escapes, and that is the payload that comes back truncated as "your JSON is bad". An object still means "serialize this as JSON" (that is how `app.json` is written), so an array of *objects* is refused rather than stringified into the file.
-
-**Check `removed` in the edit result before moving on.** It is the cheapest way to confirm a splice hit what you meant — this turn, instead of at the next compile.
+**`writeFile`'s array-of-lines `content` is the reliable form** for anything past a few lines. A top-level object still means "serialize this as JSON" (that is how `app.json` is written), so an array of *objects* is refused rather than stringified into the file.
 
 ## The Worker (delegating exploration)
 
-`workerTask` hands one task to a sonnet-tier sub-agent with its own read-only tools (list, read, grep) over the active project. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled", "check all files for Y" — then act on its report yourself; it cannot edit, compile, or deploy, and its report is its word, not yours: verify before editing on it.
-
-**It runs in the background, and it comes back to you.** `workerTask` returns a `taskId` the moment the task is accepted, not when it is answered. When it settles you are **woken** with the answer as an `<app:event channel="worker">` message carrying `{ taskId, answer | error, elapsedMs }` — so the pattern is start, work, and either be woken or collect:
+`workerTask` hands one task to a sonnet-tier sub-agent with its own read-only tools (list, read, grep) over the active project. Delegate the survey work you would otherwise spend many `command` turns on — "map this project", "find every place X is handled", "check all files for Y" — then act on its report yourself; its report is its word, not yours: verify before editing on it. The pattern is start, work, and either be woken or collect:
 
 ```
 command({ command: "workerTask", params: { task: "map every place the sidebar reads project state" } })
@@ -67,13 +63,9 @@ command({ command: "workerTask", params: { task: "map every place the sidebar re
   → { done: true, taskId: 1, answer: "…" }       ← when you would rather block
 ```
 
-Five rules from that shape:
-
 - **Start it before the work you can do without it, not after.** A `workerTask` immediately followed by `workerWait` is a blocking call with extra steps — it spends the whole survey waiting. Ask what you can do meanwhile first; having genuinely nothing is fine, assuming it is not.
-- **Ending your turn is safe** — the wakeup is what makes it so, and it is the right move once you have run out of work that does not depend on the answer. The user sees the worker's progress in the Worker panel while you are away; say what you delegated before you go, so a wait with nothing on screen is never a mystery. The event payload is capped (it says `[truncated, N chars]` when it hits the cap) — a `workerWait` for that taskId returns the whole answer instantly once it has settled, so collect it there rather than acting on a cut-off report.
-- **`workerWait` needs a `timeoutMs` larger than its `waitMs`** (10s of headroom), or the platform kills the call before the wait ends. `done: false` means still running — call again to resume waiting; never re-send the task. `query("worker")` is the non-blocking read of the same facts (`activeTask`, `lastResult`). A task you waited on does not wake you twice: the wait answers first.
-- **Self-contained tasks.** The worker sees none of your conversation. Name files and goals explicitly. It does keep its own memory across tasks, so follow-ups ("now the other file") work.
-- **One at a time.** Starting a task while one is in flight is refused, not queued — collect the first. The user can also run it from the Worker sidebar tab: same instance, same transcript, and a task they started is one you can `workerWait` on.
+- **Ending your turn is safe** — the wakeup is what makes it so, and it is the right move once you have run out of work that does not depend on the answer. The user sees the worker's progress in the Worker panel while you are away; say what you delegated before you go, so a wait with nothing on screen is never a mystery. The wake event's payload is capped (it says `[truncated, N chars]` when it hits the cap) — a `workerWait` for that taskId then returns the whole answer instantly, so collect it there rather than acting on a cut-off report.
+- Tasks the user starts from the Worker sidebar tab run on the same instance and transcript — one they started is one you can `workerWait` on.
 
 ## Preview & Debugging
 
@@ -81,13 +73,13 @@ Five rules from that shape:
 
 **A `previewCommand` that passes a storage path can 403 where the same command from the session principal succeeds.** You relay as an app-role principal, and an app may not hand its own reach to another app (`mayDelegateGrants`) — so a file *you* can read is not delegated through the relay. The refusal now says so ("cannot delegate grants"); read the text before concluding a permission is missing, because the same call made by the session agent will reach the file. This is a confinement rule, not a bug in the app under test — and it bites hardest when you are checking whether a permission is still needed.
 
-**When re-establishing preview state costs more than the build does, compile with `refreshPreview: false`.** The window keeps running — fixture loaded, form filled, scrape cached — on the *previous* build. That is a real trade, not a free one, so it is labelled: `compile` returns `previewStale`, and `previewScreenshot`/`previewQuery` lead with a stale-preview warning until you run `preview`. Take the trade while iterating on state-heavy code; refresh before you conclude anything about whether a change worked.
+**When re-establishing preview state costs more than the build does, compile with `refreshPreview: false`.** The window keeps running the *previous* build, and every preview read says so until you run `preview`. Take the trade while iterating on state-heavy code; refresh before you conclude anything about whether a change worked.
 
 **Look at the app before theorizing about it — screenshot before proposing a fix, and again after applying one.** A green compile is not evidence about anything visual; this environment has ready-made culprits (the `flex: 1` gotcha below is a favourite) that make a wrong diagnosis feel well-supported.
 
-**A screenshot can arrive incomplete, and it will say so.** Capture is a reconstruction (the DOM is cloned, styled, serialized and rasterized), so it can drop a canvas it cannot read, an image it cannot inline, or — when the composite fails outright — fall back to returning the largest `<canvas>` alone with none of the surrounding DOM. Each of those now leads the response with an `INCOMPLETE CAPTURE` block. **Under that warning, a blank region is not evidence the app rendered nothing there** — check the same region with `previewQuery`/`previewEval` before believing the picture. An app that paints imperatively (`el.innerHTML = …`, a manually driven canvas) can bypass the reconstruction entirely: `defineApp({ onCapture })` returns a data-URL image and the platform uses it verbatim.
+**A screenshot can arrive incomplete, and it will say so.** Capture is a reconstruction (the DOM is cloned, styled, serialized and rasterized), and what it dropped leads the response as an `INCOMPLETE CAPTURE` block. **Under that warning, a blank region is not evidence the app rendered nothing there** — check the same region with `previewQuery`/`previewEval` before believing the picture.
 
-**When the app looks wrong but you don't yet know where, start with the no-argument `previewQuery` snapshot.** A state that reads `42` under a DOM still showing `41` is a *reactivity* bug, not a state bug — a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` instead finds that value correct and sends you looking in the wrong half of the app.
+**When the app looks wrong but you don't yet know where, start with the no-argument `previewQuery` snapshot.** State that disagrees with the rendered DOM is a *reactivity* bug — a derived value computed outside a thunk, or a plain `let` where a signal belongs. Naming a single `stateKey` instead finds that value correct and sends you looking in the wrong half of the app.
 
 **Resource failures surface in `consoleLogs`** (`[resource] failed to load <img>: ...`) — that is how you catch a broken asset, which produces no `console.log` and does not fail the build.
 
@@ -135,17 +127,9 @@ When a `previewEval` has to wait a long or open-ended time, don't raise the time
 
 ## Version History
 
-`gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint` all target a **deployed app** (`appId`), not a sandbox project. Each deploy is one automatic commit. `gitRestore` snapshots current state first, so a rollback is itself undoable — restore the hash you rolled back *from*. `dist/` and credentials are excluded from history; never try to restore them.
+`gitHistory`, `gitDiff`, `gitRestore`, `gitCheckpoint` all target a **deployed app** (`appId`), not a sandbox project. To undo a rollback, restore the hash you rolled back *from*. `dist/` and credentials are excluded from history; never try to restore them.
 
 **Diff `against: "repo"` before telling the user an app is done** — it answers "what have we changed relative to what the user committed", not just "what changed since the last deploy" (the `snapshot` default). Bundled apps only; marketplace installs aren't in the repo.
-
-```
-command({ command: "gitHistory", params: { appId: "my-app" } })                → find the last good commit
-command({ command: "gitDiff",    params: { appId: "my-app", ref: "HEAD~1" } }) → confirm what the deploy changed
-command({ command: "gitRestore", params: { appId: "my-app", ref: "HEAD~1" } }) → roll back and rebuild
-```
-
-**Check `recompiled` in the restore result.** If `false`, the source rolled back but the rebuild failed (`compileError` says why) and the app is serving stale code until you fix and redeploy.
 
 ## App Structure
 
@@ -182,30 +166,14 @@ import { animate, createTimeline } from '@bundled/anime';
 
 ## Untrusted HTML
 
-Any HTML the app did not author — Markdown from storage, a scraped page, a feed body, an API string, anything round-tripped through `appStorage` — goes through `sanitizeHtml` from `@bundled/yaar` (`el.innerHTML = sanitizeHtml(dirty)`) before it reaches a DOM sink. Never hand-roll one, and never call `@bundled/dompurify` directly: an element denylist plus `^on` stripping misses `<svg>`/`<math>` mXSS, `srcset`, `formaction` and `xlink:href`, and closing those is exactly what `sanitizeHtml` bakes in.
+Any HTML the app did not author — Markdown from storage, a scraped page, a feed body, an API string, anything round-tripped through `appStorage` — goes through `sanitizeHtml` from `@bundled/yaar` (`el.innerHTML = sanitizeHtml(dirty)`) before it reaches a DOM sink. Never hand-roll one, and never call `@bundled/dompurify` directly: closing the mXSS holes a denylist misses is exactly what `sanitizeHtml` bakes in. Two things it cannot do for you:
 
-Two things it cannot do for you:
-
-- **Order is fixed: parse → sanitize → app-specific DOM rewrites → insert → attach behavior with `addEventListener`.** Sanitizing before rewriting means no unsafe source attribute survives into your rewrite pass. Never generate an inline handler (`setAttribute('onerror', ...)`) — any sanitizer strips it, so the behavior silently vanishes.
-- **`style` is passed through verbatim**; DOMPurify does not CSS-parse it. Treat it as presentation you allowed, not as something the sanitizer vetted.
+- **Order is fixed: parse → sanitize → app-specific DOM rewrites → insert → attach behavior with `addEventListener`.** Never generate an inline handler (`setAttribute('onerror', ...)`) — any sanitizer strips it, so the behavior silently vanishes.
+- **`style` is passed through verbatim**; treat it as presentation you allowed, not as something the sanitizer vetted.
 
 ## Validating External JSON
 
-Validate at the trust boundary — external HTTP responses, persisted JSON whose shape has changed across app versions, command `params` — with `@bundled/zod`. Not ordinary internal state.
-
-**`@bundled/zod` is Zod Mini** — the functional API, not the chained one: `z.optional(z.string())` not `z.string().optional()`, and `z.safeParse(Schema, data)` not `Schema.safeParse(data)`. Same `z` you use for `params` in the App Protocol. Reach for `z.looseObject` when you spread the item downstream — it keeps unknown keys and tolerates additive upstream fields. Validate only what you read.
-
-```ts
-import * as z from '@bundled/zod';
-
-const Item = z.looseObject({ id: z.optional(z.string()), title: z.optional(z.string()) });
-const parsed = z.safeParse(z.array(Item), await resp.json());
-if (!parsed.success) {
-  console.error('feed validation failed', parsed.error.issues); // full issues to console
-  throw new Error('The service returned an unsupported response.'); // concise user error
-}
-return parsed.data; // typed, no cast
-```
+Validate at the trust boundary — external HTTP responses, persisted JSON whose shape has changed across app versions, command `params` — with `@bundled/zod`. Not ordinary internal state, and only what you read. **It is Zod Mini** — the functional API, not the chained one: `z.optional(z.string())` not `z.string().optional()`, `z.safeParse(Schema, data)` not `Schema.safeParse(data)`; same `z` you use for `params` in the App Protocol. The usage patterns (`z.looseObject` for items spread downstream, the safeParse-log-throw shape) are in `command({ command: "describeBundledLibrary", params: { name: "zod" } })` — read it before writing schemas.
 
 ## Static Assets (images, fonts, audio)
 
@@ -224,15 +192,13 @@ The bundler inlines the bytes into `dist/index.html`, so no request is made at r
 
 ### Assets the user made in another app
 
-When the user says *"the dragon image I generated in anima"* or *"the logo I edited"*, it is almost certainly in the shared tree — `yaar://storage/shared/{producer}/`, one directory per producing app. List it with `storage:list` (or `inspectUri` with `list: true`), then `copyFile` the `yaar://storage/...` URI into the project and compile; it inlines like any other asset. Nothing there means the file exists but was never published (app storage is private to its owner): ask the user to publish it from the producing app, or `relay` to the monitor, which can reach both trees.
-
-**A `yaar://` prefix on `copyFile`'s `from` is what makes it an import** — every other spelling is a path inside the project, so `shared/anima/dragon.png` copies from the project and fails. The import re-encodes rasters to WebP by default and hands back the `import` line to paste; pass `recompress: false` for an SVG, an animated GIF, or anything that must stay lossless. **Never ask another app for the bytes** — `exportDataUrl` and anything shaped like it pushes a several-hundred-KB base64 string through the conversation, where publishing and importing moves the same bytes server-side.
+When the user says *"the dragon image I generated in anima"* or *"the logo I edited"*, it is almost certainly in the shared tree — `yaar://storage/shared/{producer}/`, one directory per producing app. List it with `storage:list` (or `inspectUri` with `list: true`), then `copyFile` the `yaar://storage/...` URI into the project and compile; it inlines like any other asset. Nothing there means the file exists but was never published (app storage is private to its owner): ask the user to publish it from the producing app, or `relay` to the monitor, which can reach both trees. **Never ask another app for the bytes** — `exportDataUrl` and anything shaped like it pushes a several-hundred-KB base64 string through the conversation, where publishing and importing moves the same bytes server-side.
 
 ## App Protocol & Verb API
 
 `createProject` already scaffolds this shape — one state key and one Zod-validated command — so a new project is agent-controllable from its first compile and there is nothing to convert later.
 
-To make a deployed app agent-controllable, end `src/main.ts` with one `export default defineApp({ id, name, state, commands, view })` from `@bundled/yaar`. It registers once at module scope before mounting and mounts the view, so the app never calls `render()` itself: state entries use `get`, commands use `run`, and `params` may be a Zod schema (`@bundled/zod`) or a JSON Schema literal. **Prefer Zod, with one exception:** a JSON Schema literal is checked for required and unknown keys only, so a `type: "string"` param accepts the number `12345` and hands it to `run` — a Zod schema validates the type and `run` receives the parsed value. Declare `replay: 'never'` on any command whose effect must not be re-applied when the iframe remounts. `view: { mount(el) }` is the escape hatch for an app that owns its own DOM.
+The `defineApp` entrypoint shape — registration timing, `get`/`run`, the imperative `view: { mount(el) }` escape hatch, keybindings — is stated in the **App Authoring Contract** appended below; read it there. On top of it: **prefer a Zod schema for `params`, with one exception below** — a JSON Schema literal is checked for required and unknown keys only, so a `type: "string"` param accepts the number `12345` and hands it to `run`, while a Zod schema validates the type and `run` receives the parsed value. Declare `replay: 'never'` on any command whose effect must not be re-applied when the iframe remounts.
 
 **The exception is an app that evaluates an `` html`` `` template at module scope** — the common shape here, since most apps build their view with `@bundled/solid-js/html`. A Zod schema is a call result, so the compiler cannot read it from source and instead *imports the app* to ask it, in a worker with a stubbed DOM. A module-scope `` html`` `` builds a `<template>` element on import, which the stub cannot do, so the whole extraction fails — one Zod command is enough to take the app's entire manifest with it. Use JSON Schema literals in those apps, or keep every `` html`` `` call inside a function so it runs at mount. The compile names this now, but it is cheaper not to hit it.
 
