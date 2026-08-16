@@ -16,7 +16,7 @@
     "test": "bun run scripts/run-tests.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.3.227",
+    "@anthropic-ai/claude-agent-sdk": "^0.3.233",
     "@modelcontextprotocol/client": "2.0.0",
     "@modelcontextprotocol/server": "2.0.0",
     "@yaar/compiler": "workspace:*",
@@ -24,7 +24,7 @@
     "node-poppler": "^9.1.1",
     "onnxruntime-web": "catalog:",
     "qrcode-terminal": "^0.12.0",
-    "ws": "^8.18.0",
+    "ws": "^8.21.3",
     "yaml": "^2.8.2",
     "zod": "catalog:"
   },
