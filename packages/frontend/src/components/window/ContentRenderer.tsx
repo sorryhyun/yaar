@@ -18,6 +18,7 @@ interface ContentRendererProps {
   iframeToken?: string;
   isolateOrigin?: boolean;
   appOrigin?: string;
+  appId?: string;
 }
 
 function ContentRenderer({
@@ -27,6 +28,7 @@ function ContentRenderer({
   iframeToken,
   isolateOrigin,
   appOrigin,
+  appId,
 }: ContentRendererProps) {
   const callbacks = useWindowCallbacks();
 
@@ -61,6 +63,7 @@ function ContentRenderer({
           iframeToken={iframeToken}
           isolateOrigin={isolateOrigin}
           appOrigin={appOrigin}
+          appId={appId}
           onRenderSuccess={handleIframeSuccess}
           onRenderError={handleIframeError}
         />

@@ -280,13 +280,188 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     return text;
   }
 
+  /**
+   * Values structured clone carries natively that a generic property copy would
+   * wreck — a Date would come out \`{}\`, a typed array a bag of numeric keys. The
+   * copy below hands these through untouched.
+   */
+  function isCloneBuiltin(v) {
+    return (typeof Date !== 'undefined' && v instanceof Date) ||
+      (typeof RegExp !== 'undefined' && v instanceof RegExp) ||
+      (typeof ArrayBuffer !== 'undefined' && (v instanceof ArrayBuffer || ArrayBuffer.isView(v))) ||
+      (typeof Blob !== 'undefined' && v instanceof Blob) ||
+      (typeof File !== 'undefined' && v instanceof File) ||
+      (typeof ImageData !== 'undefined' && v instanceof ImageData) ||
+      (typeof Error !== 'undefined' && v instanceof Error);
+  }
+
+  var MAX_PLAIN_DEPTH = 64;
+
+  /**
+   * A structured-clone-safe deep copy of a reply payload.
+   *
+   * Reads every value through its own accessors, which is exactly what unwraps a
+   * solid-js store: a value read off a store is a **Proxy**, and clone runs over
+   * internal slots rather than proxy traps, so it refuses one no matter how plain
+   * the data underneath is. Cycles and shared references survive via the seen
+   * lists. Functions, symbols and DOM nodes cannot cross at all and are recorded
+   * in \`dropped\` so the caller can say what went missing.
+   */
+  function plainifyPayload(payload) {
+    var srcs = [], outs = [], dropped = [];
+    function at(path, k) { return path ? path + '.' + k : String(k); }
+    function walk(v, path, depth) {
+      if (v === null) return null;
+      var t = typeof v;
+      if (t === 'function' || t === 'symbol') { dropped.push(path + ' (' + t + ')'); return undefined; }
+      if (t !== 'object') return v;
+      if (typeof Node !== 'undefined' && v instanceof Node) {
+        dropped.push(path + ' (DOM ' + (v.nodeName || 'node') + ')');
+        return undefined;
+      }
+      if (isCloneBuiltin(v)) return v;
+      if (depth > MAX_PLAIN_DEPTH) {
+        dropped.push(path + ' (nested deeper than ' + MAX_PLAIN_DEPTH + ' levels)');
+        return undefined;
+      }
+      var seenAt = srcs.indexOf(v);
+      if (seenAt !== -1) return outs[seenAt];
+      var copy;
+      if (Array.isArray(v)) {
+        copy = [];
+        srcs.push(v); outs.push(copy);
+        for (var i = 0; i < v.length; i++) copy.push(walk(v[i], path + '[' + i + ']', depth + 1));
+      } else if (typeof Map !== 'undefined' && v instanceof Map) {
+        copy = new Map();
+        srcs.push(v); outs.push(copy);
+        v.forEach(function(val, key) {
+          copy.set(walk(key, at(path, '<key>'), depth + 1), walk(val, at(path, String(key)), depth + 1));
+        });
+      } else if (typeof Set !== 'undefined' && v instanceof Set) {
+        copy = new Set();
+        srcs.push(v); outs.push(copy);
+        v.forEach(function(val) { copy.add(walk(val, at(path, '<value>'), depth + 1)); });
+      } else {
+        copy = {};
+        srcs.push(v); outs.push(copy);
+        // Object.keys, not for..in: own enumerable keys are exactly what structured
+        // clone copies, and a hostile proxy's ownKeys trap can throw — which has to
+        // cost this one value, not the whole reply.
+        var keys = null;
+        try { keys = Object.keys(v); } catch (err) { dropped.push((path || '(reply)') + ' (keys unreadable)'); }
+        for (var ki = 0; keys && ki < keys.length; ki++) {
+          var k = keys[ki], got;
+          try { got = v[k]; } catch (err) { dropped.push(at(path, k) + ' (getter threw)'); continue; }
+          copy[k] = walk(got, at(path, k), depth + 1);
+        }
+      }
+      return copy;
+    }
+    return { value: walk(payload, '', 0), dropped: dropped };
+  }
+
+  var MAX_REPORTED_PATHS = 5;
+
+  /**
+   * Narrow a clone failure to the exact fields that caused it.
+   *
+   * \`DataCloneError\` names nothing — "[object Object] could not be cloned" is the
+   * whole message, with no field, key or path, and a Proxy, a Date-like class, a
+   * function and a DOM node all fail identically. This probes with structuredClone
+   * from the root down and prunes every subtree that clones cleanly, so the walk
+   * costs about what the damage costs rather than what the payload costs, and it
+   * only ever runs after postMessage has already thrown.
+   */
+  function uncloneablePaths(payload) {
+    if (typeof structuredClone !== 'function') return [];
+    var found = [], seen = [];
+    function classify(v) {
+      var t = typeof v;
+      if (t === 'function' || t === 'symbol') return t;
+      if (v && typeof Node !== 'undefined' && v instanceof Node) return 'DOM ' + (v.nodeName || 'node');
+      if (v && t === 'object') {
+        // Every part clones but the whole does not: the signature of a Proxy, which
+        // is what reading a solid-js store gives you.
+        return 'Proxy - a solid-js store value reads as one; unwrap() it or return a plain copy';
+      }
+      return t;
+    }
+    function probe(v, path, depth) {
+      if (found.length >= MAX_REPORTED_PATHS) return;
+      try { structuredClone(v); return; } catch (err) {}
+      var before = found.length;
+      var isNode = typeof Node !== 'undefined' && v instanceof Node;
+      if (v && typeof v === 'object' && !isNode && depth < MAX_PLAIN_DEPTH && seen.indexOf(v) === -1) {
+        seen.push(v);
+        if (Array.isArray(v)) {
+          for (var i = 0; i < v.length && found.length < MAX_REPORTED_PATHS; i++) {
+            probe(v[i], path + '[' + i + ']', depth + 1);
+          }
+        } else {
+          var keys = null;
+          try { keys = Object.keys(v); } catch (err) {}
+          for (var ki = 0; keys && ki < keys.length; ki++) {
+            if (found.length >= MAX_REPORTED_PATHS) break;
+            var k = keys[ki];
+            var where = path ? path + '.' + k : k;
+            var child;
+            try { child = v[k]; } catch (err) { found.push(where + ' (getter threw)'); continue; }
+            probe(child, where, depth + 1);
+          }
+        }
+      }
+      // Nothing inside it explained the failure, so the value itself is the answer.
+      if (found.length === before) found.push((path || '(the whole reply)') + ' (' + classify(v) + ')');
+    }
+    probe(payload, '', 0);
+    return found;
+  }
+
+  /**
+   * Post one frame to the parent, recovering from a structured-clone refusal.
+   *
+   * Returning store state from a state getter or a command handler is the obvious
+   * thing to write against the stack YAAR recommends, and it is always wrong — so
+   * three bundled apps grew their own hand-maintained plain-copy helper for it.
+   * That belongs here instead. The plainify is on the throw path rather than on
+   * every reply: it costs nothing when the payload was already cloneable, and it
+   * cannot downgrade the Dates, Maps and typed arrays that cross fine today.
+   *
+   * Returns null when the frame crossed, or a message naming what stopped it.
+   */
+  function postToParent(payload) {
+    try {
+      window.parent.postMessage(payload, '*');
+      return null;
+    } catch (err) {
+      var plain;
+      try {
+        plain = plainifyPayload(payload);
+        window.parent.postMessage(plain.value, '*');
+      } catch (again) {
+        var paths = uncloneablePaths(payload);
+        return String(err) + (paths.length ? ' Offending value(s): ' + paths.join(', ') + '.' : '');
+      }
+      if (plain.dropped.length) {
+        // The reply did cross, but lighter than the app wrote it. Silence here would
+        // read as a handler bug in whatever consumes the missing field.
+        try {
+          console.warn('[yaar] app protocol reply carried values structured clone cannot transfer, ' +
+            'so they were dropped: ' + plain.dropped.join(', '));
+        } catch (_) {}
+      }
+      return null;
+    }
+  }
+
   // Every answer this SDK sends is the same frame — a type, the requestId it is
   // answering, and one payload — so it is written once here rather than at each
-  // of the dozen return points below.
+  // of the dozen return points below. Returns null on success, or the reason the
+  // frame could not be sent.
   function reply(type, requestId, payload) {
     payload.type = type;
     payload.requestId = requestId;
-    window.parent.postMessage(payload, '*');
+    return postToParent(payload);
   }
 
   /**
@@ -298,13 +473,16 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
    * The try wraps the reply as well as the call, not just the call: a handler
    * returning something structured-clone cannot carry makes postMessage itself
    * throw, and that has to come back as an error rather than as silence the
-   * parent can only wait out.
+   * parent can only wait out. \`postToParent\` recovers most of those by plainifying
+   * (a solid-js store proxy is the common case); \`fail\` below answers the rest
+   * with a message that names the field, which \`String(err)\` alone never did.
    */
   function settle(type, requestId, key, produce, mapValue) {
     function succeed(value) {
       var p = {};
       p[key] = mapValue ? mapValue(value) : value;
-      reply(type, requestId, p);
+      var unsent = reply(type, requestId, p);
+      if (unsent) fail(unsent);
     }
     function fail(err) {
       var p = {};
@@ -486,5 +664,62 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
       return;
     }
   });
+
+  /**
+   * Keep a link inside app content from navigating the app's own document away.
+   *
+   * An app frame is same-origin and unsandboxed, and **no** sandbox token governs a
+   * frame navigating *itself* — the \`allow-top-navigation\` family only governs the
+   * top-level context — so nothing at the frame level could have prevented this. A
+   * plain \`<a href>\` in app-rendered HTML therefore replaced the app document and
+   * every script injected into it, this SDK included: no exception, no console
+   * output, and an app that simply stopped answering the protocol. Indistinguishable
+   * from a crash, and every app rendering external or user-authored HTML had to
+   * rediscover the same hand-written guard.
+   *
+   * Deliberately narrow, and deliberately **not** capture phase: it runs on the
+   * document in bubble phase, after the app's own handlers, so a link the app
+   * already handles (a router link, a \`preventDefault()\` anywhere on the path) is
+   * left alone. It also only arms once an app has registered, so a plain HTML
+   * document previewed in a window still browses in place.
+   *
+   * Escape hatch for an app that really does want its frame navigated:
+   * \`window.__yaarAllowFrameNavigation = true\`.
+   */
+  function installLinkGuard() {
+    if (typeof document === 'undefined' || !document.addEventListener) return;
+    document.addEventListener('click', function(e) {
+      if (!registration || window.__yaarAllowFrameNavigation) return;
+      // Already handled, or not a plain left-click: a modified click is the user
+      // asking the browser for its own behavior (new tab, download, ...).
+      if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var a = null;
+      var node = e.target;
+      if (node && node.closest) {
+        try { a = node.closest('a[href]'); } catch (err) { a = null; }
+      }
+      if (!a) return;
+      // An explicit target already says where this goes; \`download\` is not a navigation.
+      var target = a.getAttribute('target');
+      if (target && target !== '_self') return;
+      if (a.hasAttribute('download')) return;
+      var href = a.getAttribute('href');
+      if (!href || href.charAt(0) === '#') return;
+      var url;
+      try { url = new URL(href, document.baseURI); } catch (err) { return; }
+      // mailto:, tel:, javascript: — the browser's business, not a page swap.
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
+      // A link to this same document (differing only by hash) stays in the app.
+      var here = String(location.href).split('#')[0];
+      if (url.href.split('#')[0] === here) return;
+      e.preventDefault();
+      window.parent.postMessage({
+        type: '${APP_MSG.openUrl}',
+        url: url.href,
+        title: String(a.textContent || '').trim().slice(0, 80)
+      }, '*');
+    });
+  }
+  installLinkGuard();
 })();
 `;

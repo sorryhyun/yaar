@@ -75,7 +75,8 @@ type RoutedMessageKey =
   // IFRAME_APP_PROTOCOL_SCRIPT — the fire-and-forget iframe → parent messages.
   | 'ready'
   | 'interaction'
-  | 'event';
+  | 'event'
+  | 'openUrl';
 
 export type YaarMessageType = (typeof APP_MSG)[RoutedMessageKey];
 

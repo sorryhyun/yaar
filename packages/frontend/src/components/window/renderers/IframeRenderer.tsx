@@ -39,6 +39,13 @@ interface IframeRendererProps {
    * browser can do correctly, since the desktop's port is not necessarily the API's.
    */
   appOrigin?: string;
+  /**
+   * Set when this frame hosts an app, which is what makes a *second* load event
+   * meaningful: an app document that gets replaced takes every injected script with
+   * it (see `navigatedAway`). A plain web page in a window browses in place, and
+   * must keep doing so.
+   */
+  appId?: string;
   onRenderSuccess?: () => void;
   onRenderError?: (error: string, url: string) => void;
 }
@@ -149,6 +156,7 @@ function IframeRenderer({
   iframeToken,
   isolateOrigin,
   appOrigin: serverAppOrigin,
+  appId,
   onRenderSuccess,
   onRenderError,
 }: IframeRendererProps) {
@@ -240,6 +248,25 @@ function IframeRenderer({
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [errorMessage, setErrorMessage] = useState<string>('');
   const reportedRef = useRef(false);
+  /**
+   * Where an app frame went when it stopped being the app.
+   *
+   * An app frame is same-origin and unsandboxed, and no sandbox token governs a
+   * frame navigating *itself* — the `allow-top-navigation` family only governs the
+   * top-level context — so a plain `<a href>`, a form submit, a `location.href` or a
+   * meta refresh in app-rendered HTML replaces the app document and every injected
+   * script with it. Nothing threw and nothing logged: the app just stopped answering
+   * the protocol, which reads from the outside as a crash.
+   *
+   * The bridge's link guard (`iframe-scripts/app-protocol.ts`) prevents the common
+   * cause. This catches the rest, and catches them for apps built before that guard
+   * existed, because it needs nothing from inside the frame: a *second* load event on
+   * a frame whose document is no longer the app's is the whole signal.
+   *
+   * `href` is null when the frame walked off to another origin — the destination is
+   * then unreadable by definition, and that unreadability is itself the proof.
+   */
+  const [navigatedAway, setNavigatedAway] = useState<{ href: string | null } | null>(null);
 
   const reportError = useCallback(
     (message: string) => {
@@ -256,6 +283,7 @@ function IframeRenderer({
   useEffect(() => {
     setLoadState('loading');
     setErrorMessage('');
+    setNavigatedAway(null);
     reportedRef.current = false;
   }, [url]);
 
@@ -300,7 +328,66 @@ function IframeRenderer({
     };
   }, [url, reportError]);
 
+  /**
+   * A load event after the app's first one. Tell a reload (`location.reload()`, a
+   * devtools preview rebuilding itself) apart from the app document being replaced,
+   * and only report the latter.
+   *
+   * Scoped to a same-origin app frame, because that is the only one whose document
+   * this can read *and* is expected to stay readable. For an origin-isolated app the
+   * frame is cross-origin from the first load, so a reload and a walk-off are
+   * indistinguishable from here and nothing is claimed either way.
+   */
+  const checkNavigatedAway = () => {
+    // `appOrigin` is set only for an isolated app — always cross-origin, never readable.
+    if (!appId || appOrigin) return;
+
+    const frame = iframeRef.current;
+    const win = frame?.contentWindow;
+    if (!win) return; // Nothing to read, so nothing to claim.
+
+    let href: string | null = null;
+    let unreadable = false;
+    try {
+      href = win.location.href;
+    } catch {
+      // A same-origin frame whose location has become unreadable *is* a frame on
+      // another origin now. Unreadability is the proof, and it is the loudest case:
+      // an external link is exactly what walks an app off its own origin.
+      unreadable = true;
+    }
+    const samePage = (a: string, b: string) => {
+      try {
+        const ua = new URL(a, window.location.origin);
+        const ub = new URL(b, window.location.origin);
+        return ua.origin === ub.origin && ua.pathname === ub.pathname;
+      } catch {
+        return a === b;
+      }
+    };
+    if (!unreadable) {
+      if (!href || href === 'about:blank') return;
+      if (samePage(href, url)) return; // The app reloaded itself; still the app.
+    }
+
+    const where = unreadable ? 'another origin' : (href ?? 'another origin');
+    setNavigatedAway({ href: unreadable ? null : href });
+    console.warn(
+      `[IframeRenderer] app "${appId}" navigated its own frame to ${where}. ` +
+        'The app document and every script in it (the app protocol bridge included) are gone. ' +
+        'Links in app-rendered HTML should carry target="_blank" or be handled by the app.',
+    );
+    onRenderError?.(`App "${appId}" navigated away to ${where}`, href ?? url);
+  };
+
   const handleLoad = () => {
+    // A load event once this frame is already `loaded` is a second document in the
+    // same frame — the signal below. Everything under it is first-load setup.
+    if (loadState === 'loaded') {
+      checkNavigatedAway();
+      return;
+    }
+
     // iframe loaded event fired - but this doesn't mean content loaded successfully
     // CSP blocks happen before this, X-Frame-Options might show error page
     // Check reportedRef to avoid reporting success after an error was already reported
@@ -417,6 +504,48 @@ function IframeRenderer({
   const handleError = () => {
     reportError('Failed to load iframe content');
   };
+
+  if (navigatedAway) {
+    return (
+      <div className={styles.iframeError}>
+        <div className={styles.iframeErrorIcon}>↪️</div>
+        <div className={styles.iframeErrorTitle}>This app navigated away</div>
+        <div className={styles.iframeErrorMessage}>
+          {navigatedAway.href ? (
+            <>
+              A link or redirect replaced the app with <code>{navigatedAway.href}</code>, so the app
+              is no longer running in this window.
+            </>
+          ) : (
+            'A link or redirect sent this frame to another site, so the app is no longer running in this window.'
+          )}
+        </div>
+        <button
+          type="button"
+          className={styles.iframeErrorButton}
+          onClick={() => {
+            // Unmounting the card remounts a fresh <iframe> at `url`, which is what
+            // actually re-fetches the app: the element never changed `src`.
+            setNavigatedAway(null);
+            setLoadState('loading');
+            reportedRef.current = false;
+          }}
+        >
+          Reload app
+        </button>
+        {navigatedAway.href && (
+          <a
+            href={navigatedAway.href}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={styles.iframeErrorLink}
+          >
+            Open that page in a new tab →
+          </a>
+        )}
+      </div>
+    );
+  }
 
   if (loadState === 'error') {
     return (

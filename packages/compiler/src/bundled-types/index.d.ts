@@ -989,6 +989,15 @@ interface YaarWindowListItem {
 interface YaarWindows {
   read(windowId: string, options?: YaarWindowReadOptions): Promise<YaarWindowReadResult>;
   list(): Promise<YaarWindowListItem[]>;
+  /**
+   * Open an http(s) URL in a window of its own, without leaving YAAR.
+   *
+   * This is where an external link inside an app should go. A plain `<a href>`
+   * navigates the app's *own* frame — replacing the app document and every script
+   * in it, the app protocol included — and `window.open` leaves the desktop for a
+   * browser tab. Fire-and-forget: the desktop owns window creation.
+   */
+  openUrl(url: string, opts?: { title?: string }): void;
 }
 
 // -- Dev Tools --

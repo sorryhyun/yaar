@@ -129,3 +129,12 @@
 .iframeErrorLink:hover {
   background: var(--bg-overlay-hover);
 }
+
+/* Same affordance as the link above, for the one case the action is local (reloading
+   an app whose document navigated itself away) rather than a URL to open. */
+.iframeErrorButton {
+  composes: iframeErrorLink;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+}

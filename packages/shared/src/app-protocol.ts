@@ -200,6 +200,18 @@ export const APP_MSG = {
   ready: 'yaar:app-ready',
   interaction: 'yaar:app-interaction',
   event: 'yaar:app-event',
+  /**
+   * A link inside app content that would otherwise have navigated the app's own
+   * document away, handed to the desktop to open in a window instead.
+   *
+   * An app frame is same-origin and unsandboxed, and no sandbox token governs a
+   * frame navigating *itself* (the `allow-top-navigation` family only governs the
+   * top-level context) — so a plain `<a href>` in app-rendered HTML replaced the
+   * app document, every injected script with it, and the app protocol simply
+   * stopped answering with no exception and no console output. The guard in
+   * `iframe-scripts/app-protocol.ts` cancels that navigation and posts this.
+   */
+  openUrl: 'yaar:open-url',
 
   // Self-capture (iframe-scripts/capture.ts).
   captureRequest: 'yaar:capture-request',

@@ -93,8 +93,16 @@ import { join, basename } from 'path';
  * reasoning as '20' and '22' — it is baked into `dist/`, so without a bump whether an
  * origin-isolated app forwards Shift+Tab would depend on when it was last stale, and
  * the installed apps nobody is about to edit are exactly the ones that swallow it.
+ *
+ * '24': the app-protocol script grew two things every app needs and none can opt into
+ * by editing its own source — a link guard (a plain `<a href>` in app-rendered HTML was
+ * navigating the app's own frame away, taking the protocol bridge with it, with nothing
+ * thrown and nothing logged) and structured-clone recovery for replies (a value read off
+ * a solid-js store is a Proxy, so returning store state from a state getter or command
+ * always failed with a message naming no field). Both are baked into `dist/`, and the
+ * apps that render foreign HTML or hand back store state are not the ones being edited.
  */
-export const COMPILER_VERSION = '23';
+export const COMPILER_VERSION = '24';
 
 export interface BuildManifest {
   sourceHash: string;
