@@ -761,6 +761,36 @@ class ActionEmitter extends EventEmitter<ActionEmitterChannels> {
   }
 
   /**
+   * A window closed: settle every app protocol request still addressed to it.
+   *
+   * Without this, a relayed command that destroys its own responder is indistinguishable
+   * from a slow one. The reply can never arrive, so the ask waits out its entire deadline
+   * and reports a timeout — whose standing advice is "retry with a larger timeoutMs", the
+   * exact wrong move for an operation that already succeeded. The one fact that separates
+   * the two cases is known here and nowhere else: the window is gone.
+   *
+   * Both spellings of the id, for the same reason the iframe tokens beside this call take
+   * both — a request filed under the raw id (`devtools-preview-x`) and one filed under the
+   * scoped handle (`0/devtools-preview-x`) are the same window, and cancelling only one
+   * spelling leaves the other waiting.
+   */
+  cancelAppRequestsForWindow(sessionId: string, windowIds: readonly string[]): void {
+    const targets = new Set(windowIds.filter(Boolean));
+    if (targets.size === 0) return;
+    const settled = this.appRequests.cancelWhere(
+      (meta, sid) => sid === sessionId && targets.has(meta.windowId),
+      'closed',
+    );
+    if (settled > 0) {
+      appProtocolLog.debug('window closed under in-flight requests — settled as closed', {
+        sessionId,
+        windowIds: [...targets],
+        settled,
+      });
+    }
+  }
+
+  /**
    * Resolve a pending app protocol request with a response from the iframe.
    * Called by the session when it receives an APP_PROTOCOL_RESPONSE from the frontend.
    *

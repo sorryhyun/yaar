@@ -8,7 +8,9 @@
     "yaar-dev"
   ],
   "messaging": "all",
-  "streams": ["agents"],
+  "streams": [
+    "agents"
+  ],
   "subagents": {
     "max": 2
   },

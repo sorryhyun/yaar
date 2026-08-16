@@ -7,7 +7,13 @@ import 'diff2html/bundles/css/diff2html.min.css';
 import { fileChanges, type FileChange } from '../core';
 import { clearChanges, currentChange } from '../services';
 import { buildPatch, truncatePatch } from '../lib';
-import { changesMode, diffViewMode, setChangesMode, setDiffViewMode, setMainView } from './panel-state';
+import {
+  changesMode,
+  diffViewMode,
+  setChangesMode,
+  setDiffViewMode,
+  setMainView,
+} from './panel-state';
 
 // The Changes view: every write, edit, copy and delete the IDE performs, with the
 // actual diff. It replaces a one-line status message ("Saved src/foo.ts") that said

@@ -16,13 +16,14 @@ import {
   setBundleStatus,
   setTypecheckState,
   setPreviewUrl,
+  setPreviewWindowId,
   setStaticProtocol,
   setStatusText,
   openTabs,
   setOpenTabs,
   type ProjectMeta,
 } from '../core';
-import { projectPath } from '../lib/paths';
+import { previewWindowIdFor, projectPath } from '../lib/paths';
 import { appIdFromName, scaffoldMain } from '../lib/scaffold';
 import { refreshFiles, openFile } from './files';
 
@@ -223,9 +224,10 @@ export interface InstalledApp {
  * read by a human picking one, not by a caller matching an id.
  */
 export async function listInstalledApps(): Promise<InstalledApp[]> {
-  const items = await list<
-    { uri?: string; name?: string; description?: string; kind?: string; version?: string }[]
-  >('yaar://apps/');
+  const items =
+    await list<
+      { uri?: string; name?: string; description?: string; kind?: string; version?: string }[]
+    >('yaar://apps/');
   const rows = Array.isArray(items) ? items : [];
   return rows
     .map((item) => {
@@ -304,6 +306,17 @@ export async function openProject(id: string): Promise<void> {
   // being switched away from. `diagnostics` is left standing until the next
   // typecheck writes it, but `compileStatus` no longer reads it as current.
   setTypecheckState('unknown');
+  // The preview binding is project-scoped in exactly the way staticProtocol above is,
+  // and was the one member of that set left standing. Both the window id and the build
+  // URL describe the project being switched *away from*: the window keeps rendering the
+  // other project's bundle under the other project's principal, and `previewUrl` still
+  // points at its dist. Left set, `previewOpen` reports `open: true, stale: false` while
+  // previewQuery/previewCommand/previewEval answer about a different app entirely --
+  // silently and with no error, which is worse than the "window not found" it looks like.
+  // Unbind rather than close: the window belongs to the other project, and openPreview
+  // already closes by id before it re-creates, so switching back cannot collide.
+  setPreviewUrl(null);
+  setPreviewWindowId(null);
   await refreshFiles(id);
   await openFile('src/main.ts');
   setStatusText(`Opened "${proj.name}"`);
@@ -339,6 +352,16 @@ export async function deleteProject(id: string): Promise<void> {
     await del(`yaar://apps/preview--${id}/storage/`);
   } catch {
     /* best effort — the project may never have been previewed */
+  }
+  try {
+    // The preview window is project-scoped too — its id is namespaced by project — and it
+    // outlived the project it was showing: a window rendering a build whose source, whose
+    // storage and whose entry in the sidebar are all gone. Nothing else closes it. Asked
+    // by id rather than gated on `previewWindowId()`, since the project being deleted need
+    // not be the active one and its window is a window all the same.
+    await invoke(`yaar://windows/${previewWindowIdFor(id)}`, { action: 'close' });
+  } catch {
+    /* no preview window for this project — the normal case */
   }
   try {
     const origins = await readOrigins();

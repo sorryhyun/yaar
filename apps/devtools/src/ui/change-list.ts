@@ -43,8 +43,7 @@ export function ChangeList() {
       <${For} each=${fileChanges}>
         ${(change: FileChange, index: () => number) => html`
           <div
-            class=${() =>
-              `change-item${isActive(change, index()) ? ' active' : ''} ${change.kind}`}
+            class=${() => `change-item${isActive(change, index()) ? ' active' : ''} ${change.kind}`}
             onClick=${() => {
               selectChange(change.id);
               setMainView('changes');

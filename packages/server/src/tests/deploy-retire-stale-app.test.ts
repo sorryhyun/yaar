@@ -46,11 +46,11 @@ function sessionWith(windows: Array<{ appId: string; monitorId: string }>) {
 function retireAs(
   appId: string,
   caller: { appId: string; windowId?: string; monitorId: string },
-): { closed: string[]; events: ActionEvent[] } {
+): { closed: string[]; staleWindow?: string; events: ActionEvent[] } {
   const events: ActionEvent[] = [];
   const off = actionEmitter.onAction((e) => events.push(e));
   try {
-    const closed = runWithAgentContext(
+    const result = runWithAgentContext(
       {
         agentId: `iframe:${caller.appId}`,
         sessionId: SESSION,
@@ -60,7 +60,7 @@ function retireAs(
       },
       () => retireStaleApp(appId),
     );
-    return { closed, events };
+    return { ...result, events };
   } finally {
     off();
   }
@@ -129,7 +129,7 @@ describe('retiring an app whose files just changed', () => {
       { appId: 'devtools', monitorId: '1' },
     ]);
 
-    const { closed } = retireAs('devtools', {
+    const { closed, staleWindow } = retireAs('devtools', {
       appId: 'devtools',
       windowId: 'devtools',
       monitorId: '0',
@@ -137,6 +137,25 @@ describe('retiring an app whose files just changed', () => {
 
     expect(closed).toEqual(['1/devtools']);
     expect(session.windowState.hasWindow('0/devtools')).toBe(true);
+    // Spared, and *named*. The window is still running the bundle the deploy replaced, so
+    // anything verified against it is a false result — the deployer has to be told, or
+    // every repo-level check reports a fix that is not the code executing.
+    expect(staleWindow).toBe('0/devtools');
+  });
+
+  it('reports no stale window when the deployer is not inside one of the app’s windows', () => {
+    // A monitor agent, or an app deploying some *other* app: nothing was spared, so
+    // there is nothing running the old build and nothing to reload.
+    sessionWith([{ appId: 'memo', monitorId: '0' }]);
+
+    const { closed, staleWindow } = retireAs('memo', {
+      appId: 'devtools',
+      windowId: 'devtools',
+      monitorId: '0',
+    });
+
+    expect(closed).toEqual(['0/memo']);
+    expect(staleWindow).toBeUndefined();
   });
 
   it('addresses each copy by handle, never by raw id', () => {

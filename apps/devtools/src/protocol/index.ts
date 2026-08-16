@@ -22,6 +22,7 @@ import {
   workerActiveTask,
   workerLastResult,
 } from '../services/worker';
+import { previewWindowIsOpen } from '../services';
 
 export { projectCommands } from './projects';
 export { fileCommands } from './files';
@@ -145,10 +146,15 @@ export const devtoolsState = {
       'of guessing, and instead of calling `preview` defensively, which remounts the iframe ' +
       'and resets all in-app state. `stale: true` means a compile ran with ' +
       '`refreshPreview: false`, so the window is rendering the *previous* build.',
-    get: () => ({
-      open: previewWindowId() !== null,
-      stale: previewIsStale(),
-    }),
+    // Asked of the server, not of our own signal. The signal records that we opened a
+    // window; only the server knows whether it is still there — the user can close it, a
+    // project delete can take it, a deploy can retire it, and none of those tell us.
+    // Answering from the signal made this key report `{open: true, stale: false}` about a
+    // window that no longer existed, which is worse than an error because nothing failed.
+    get: async () => {
+      const open = await previewWindowIsOpen();
+      return { open, stale: open && previewIsStale() };
+    },
   },
   bundledLibraries: {
     description:

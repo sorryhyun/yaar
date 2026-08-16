@@ -25,10 +25,17 @@
  * - `ok: true` — a real answer arrived.
  * - `timeout` — the deadline passed with no answer.
  * - `cancelled` — the session went away first (`clearForSession`).
+ * - `closed` — the thing being asked was destroyed while the ask was in flight.
+ *
+ * `closed` is separate from `timeout` because they call for opposite responses and are
+ * otherwise indistinguishable to the caller. A command whose job is to destroy its own
+ * responder — a window closing itself — can never be answered, but it waited out its
+ * full deadline and then reported a timeout, whose advice is "retry with a larger
+ * timeoutMs". That advice is wrong in a way that costs the caller the deadline again.
  */
 export type PendingOutcome<T> =
   | { ok: true; value: T }
-  | { ok: false; reason: 'timeout' | 'cancelled' };
+  | { ok: false; reason: 'timeout' | 'cancelled' | 'closed' };
 
 /** The value of a settled entry, or `undefined` if it timed out or was cancelled. */
 export function valueOf<T>(outcome: PendingOutcome<T>): T | undefined {
@@ -97,12 +104,33 @@ export class PendingStore<TResult, TMeta = void> {
    * so an awaiting tool unblocks now rather than at its own deadline.
    */
   clearForSession(sessionId: string): void {
+    this.cancelWhere((_meta, sessionId_) => sessionId_ === sessionId, 'cancelled');
+  }
+
+  /**
+   * Settle every entry the predicate selects, now, with the reason the caller names.
+   *
+   * The general form of {@link clearForSession}: something the pending entries were
+   * waiting on has gone away, and the wait can only end at its own deadline unless
+   * somebody says so. The predicate reads `meta`, because *which* entries died with it
+   * is a question only the owner of that metadata can answer — the store indexes by id
+   * and knows nothing about windows.
+   *
+   * Returns how many were settled, so a caller can log a cancellation that mattered
+   * without having to keep its own count.
+   */
+  cancelWhere(
+    pred: (meta: TMeta, sessionId: string | undefined) => boolean,
+    reason: 'cancelled' | 'closed',
+  ): number {
+    let settled = 0;
     for (const [id, entry] of this.entries) {
-      if (entry.sessionId === sessionId) {
-        clearTimeout(entry.timeoutId);
-        this.entries.delete(id);
-        entry.settle({ ok: false, reason: 'cancelled' });
-      }
+      if (!pred(entry.meta, entry.sessionId)) continue;
+      clearTimeout(entry.timeoutId);
+      this.entries.delete(id);
+      entry.settle({ ok: false, reason });
+      settled++;
     }
+    return settled;
   }
 }

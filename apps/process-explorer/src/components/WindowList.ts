@@ -12,7 +12,7 @@ function WindowRow(props: { win: WindowInfo }) {
       <div class="process-info">
         <div class="process-detail">
           <div class="process-title">
-            ${() => w().locked ? html`<span class="lock-icon">&#128274; </span>` : null}${() =>
+            ${() => (w().locked ? html`<span class="lock-icon">&#128274; </span>` : null)}${() =>
               w().title || '(untitled)'}
           </div>
           <div class="process-meta">

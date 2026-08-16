@@ -159,6 +159,104 @@ describe('F-15 — a timeout is never observable as a success', () => {
   });
 });
 
+describe('a deadline nobody can answer is not a deadline', () => {
+  /**
+   * The other half of F-15's rule. There, a deadline that passed was reported as an
+   * answer; here, a deadline is *waited out* for an answer that provably cannot arrive —
+   * the window holding the responder closed while the request was in flight.
+   *
+   * The two are indistinguishable to the caller, and that is what makes it a defect
+   * rather than a slow path: a relayed command whose job is to destroy its own responder
+   * (`closeWindow`) burns its full budget and then reports a timeout, whose standing
+   * advice is "retry with a larger timeoutMs". The operation had already succeeded.
+   */
+  it('settles an in-flight app request as `closed` the moment its window goes', async () => {
+    const sessionId = 'sess-window-death' as SessionId;
+    const session = new LiveSession(sessionId);
+
+    try {
+      session.windowState.handleAction(
+        {
+          type: 'window.create',
+          windowId: 'probe',
+          title: 'probe',
+          bounds: { x: 0, y: 0, w: 100, h: 100 },
+          content: { renderer: 'iframe', data: 'yaar://apps/probe' },
+          appId: 'probe',
+        } as OSAction,
+        '0',
+      );
+
+      // A budget far longer than the test could tolerate waiting out: if the cancellation
+      // does not happen, this assertion does not fail, it hangs — which is exactly the
+      // symptom being fixed.
+      const pending = actionEmitter.emitAppProtocolRequest(
+        '0/probe',
+        { kind: 'command', command: 'closeWindow' },
+        MAX_COMMAND_TIMEOUT_MS,
+        sessionId,
+      );
+      await settle(5);
+
+      const startedAt = Date.now();
+      session.windowState.handleAction({ type: 'window.close', windowId: 'probe' }, '0');
+      const outcome = await pending;
+
+      expect(outcome.ok).toBe(false);
+      // Not `timeout` — the distinction is the whole point, because it is what tells the
+      // caller that retrying is pointless and the command may well have succeeded.
+      expect((outcome as { reason: string }).reason).toBe('closed');
+      expect(Date.now() - startedAt).toBeLessThan(1000);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it('leaves requests to other windows alone', async () => {
+    const sessionId = 'sess-window-death-scope' as SessionId;
+    const session = new LiveSession(sessionId);
+
+    try {
+      for (const windowId of ['doomed', 'bystander']) {
+        session.windowState.handleAction(
+          {
+            type: 'window.create',
+            windowId,
+            title: windowId,
+            bounds: { x: 0, y: 0, w: 100, h: 100 },
+            content: { renderer: 'iframe', data: `yaar://apps/${windowId}` },
+            appId: windowId,
+          } as OSAction,
+          '0',
+        );
+      }
+
+      const bystander = actionEmitter.emitAppProtocolRequest(
+        '0/bystander',
+        { kind: 'query', stateKey: 'anything' },
+        60,
+        sessionId,
+      );
+      const doomed = actionEmitter.emitAppProtocolRequest(
+        '0/doomed',
+        { kind: 'command', command: 'closeWindow' },
+        MAX_COMMAND_TIMEOUT_MS,
+        sessionId,
+      );
+      await settle(5);
+
+      session.windowState.handleAction({ type: 'window.close', windowId: 'doomed' }, '0');
+
+      expect((await doomed) as { reason?: string }).toMatchObject({ reason: 'closed' });
+      // The survivor keeps its own deadline and reaches it on its own terms — one
+      // window's death must not cancel another's conversation.
+      expect((await bystander) as { reason?: string }).toMatchObject({ reason: 'timeout' });
+    } finally {
+      await session.cleanup();
+    }
+  });
+});
+
 describe('F-16 — no inner deadline outlives the transport carrying it', () => {
   it('keeps the request budget strictly inside the transport idle timeout', () => {
     // A tool call waiting on the user holds an HTTP request open. If the inner deadline

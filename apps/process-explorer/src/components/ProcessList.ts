@@ -37,7 +37,10 @@ export interface ProcessListProps<T> {
 export function ProcessList<T>(props: ProcessListProps<T>) {
   // Built eagerly: `icon` and `emptyText` are fixed for the life of an instance,
   // and Show wants an element rather than an accessor here.
-  const fallback = html`<div class="y-empty"><div class="y-empty-icon">${props.icon}</div>${props.emptyText}</div>`;
+  const fallback = html`<div class="y-empty">
+    <div class="y-empty-icon">${props.icon}</div>
+    ${props.emptyText}
+  </div>`;
 
   return html`
     <${Show} when=${() => props.each.length > 0} fallback=${fallback}>

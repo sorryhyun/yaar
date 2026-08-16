@@ -246,8 +246,7 @@ function PickerModal() {
             <${For} each=${visibleProjects}>
               ${(project: ProjectMeta) => html`
                 <div
-                  class=${() =>
-                    `picker-item${activeProject()?.id === project.id ? ' active' : ''}`}
+                  class=${() => `picker-item${activeProject()?.id === project.id ? ' active' : ''}`}
                   onClick=${() => chooseProject(project.id)}
                 >
                   <span class="picker-name y-truncate">${project.name}</span>
@@ -301,11 +300,7 @@ export function ProjectToolbar() {
     <div class="toolbar">
       <${ProjectMenu} />
 
-      <button
-        class="y-btn y-btn-sm"
-        onClick=${openLoadPicker}
-        title="Open an existing project"
-      >
+      <button class="y-btn y-btn-sm" onClick=${openLoadPicker} title="Open an existing project">
         Load
       </button>
 

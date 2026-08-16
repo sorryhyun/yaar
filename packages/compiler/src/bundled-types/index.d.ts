@@ -1030,6 +1030,15 @@ interface YaarDevDeployResult {
    * previous build. The deploying window itself is never among them.
    */
   closedWindows?: string[];
+  /**
+   * Set when you deployed the app you are running inside — a self-deploy. Your window is
+   * spared (closing it would kill this very request) and is therefore still executing the
+   * bundle the deploy replaced. Anything checked in it from here on is a false result.
+   * Reload it once this call has returned:
+   * `invoke('yaar://windows/{id}', { action: 'reload' })`, which re-mounts the iframe
+   * without discarding the window's app agent.
+   */
+  staleWindow?: string;
 }
 
 /** A commit in an app's version history. */

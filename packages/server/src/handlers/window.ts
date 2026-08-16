@@ -259,6 +259,7 @@ export function registerWindowHandlers(
     create: ({ windowId, p }) => handleCreate(windowId, p),
     update: ({ windowId, p }) => handleUpdate(getWindowState(), windowId, p),
     close: ({ windowId }) => handleManage(getWindowState(), windowId, 'close'),
+    reload: ({ windowId }) => handleManage(getWindowState(), windowId, 'reload'),
     lock: ({ windowId }) => handleManage(getWindowState(), windowId, 'lock'),
     unlock: ({ windowId }) => handleManage(getWindowState(), windowId, 'unlock'),
     move: ({ windowId, p }) => handleGeometry(getWindowState(), windowId, 'move', p),
@@ -528,7 +529,11 @@ export function registerWindowHandlers(
       'Every window also answers three state keys of its own, whatever it renders: ' +
       '__content (its content, no capture), __screenshot and __console (iframe windows). ' +
       'A bare read of an iframe window is __content + __screenshot, the screenshot winning. ' +
-      'Invoke actions: create, update (requires operation), close, lock, unlock, move (x, y), resize (width, height), app_query, app_command, app_eval (devtools previews only), message.',
+      'Invoke actions: create, update (requires operation), close, reload (re-mount the ' +
+      "content — the window, its app agent and its subscriptions survive, the iframe's " +
+      'in-memory state does not; this is how a window picks up a redeployed bundle without ' +
+      'losing its agent), lock, unlock, move (x, y), resize (width, height), app_query, ' +
+      'app_command, app_eval (devtools previews only), message.',
     verbs: ['describe', 'list', 'read', 'invoke', 'delete'],
     invokeSchema: {
       type: 'object',

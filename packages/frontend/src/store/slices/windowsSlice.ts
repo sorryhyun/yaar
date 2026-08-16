@@ -165,6 +165,20 @@ export function applyWindowAction(state: DesktopStore, action: WindowAction): vo
       break;
     }
 
+    case 'window.reload': {
+      // Deliberately not a close: the window record, its iframe token and its app agent
+      // all stay, and only the content subtree remounts (WindowFrame keys it on this
+      // nonce). That is the whole point — a window can pick up a redeployed bundle
+      // without its app agent losing the conversation it was in the middle of.
+      const key = resolveKey(action.windowId);
+      const win = state.windows[key];
+      const actionAgentId = (action as { agentId?: string }).agentId;
+      const reqId = (action as { requestId?: string }).requestId;
+      if (rejectIfLocked(state, win, actionAgentId, reqId, key)) break;
+      if (win) win.reloadNonce = (win.reloadNonce ?? 0) + 1;
+      break;
+    }
+
     case 'window.focus': {
       const key = resolveKey(action.windowId);
       const win = state.windows[key];

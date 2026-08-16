@@ -34,7 +34,7 @@ export const buildCommands = {
           type: 'boolean',
           description:
             'Build without type checking first. Faster, but ships blind — and typecheck is ' +
-            "the only half that reads import paths, because Bun tree-shakes an unused bad " +
+            'the only half that reads import paths, because Bun tree-shakes an unused bad ' +
             'import away and reports a clean build. Leaves `compileStatus` at "unchecked".',
         },
         refreshPreview: {
@@ -70,13 +70,7 @@ export const buildCommands = {
       // `skipTypecheck` gets its own word rather than borrowing `success`: nothing here
       // checked the code, and the `compileStatus` state key says the same thing so a
       // caller polling it cannot land on a cleaner answer than the command gave.
-      const status = !built
-        ? 'error'
-        : skip
-          ? 'unchecked'
-          : typeErrors === 0
-            ? 'success'
-            : 'error';
+      const status = !built ? 'error' : skip ? 'unchecked' : typeErrors === 0 ? 'success' : 'error';
 
       // Refresh an open preview onto the build we just made. Left alone, it went on
       // showing the previous one — so a screenshot taken to confirm a fix showed the
@@ -192,7 +186,12 @@ export const buildCommands = {
       'Deploy to apps/. Refuses type errors unless skipTypecheck, and refuses a manifest ' +
       'that drops commands the installed app has unless allowProtocolShrink. Snapshots the ' +
       'previous version — see gitRestore. Closes the preview window on success: it shows ' +
-      'the pre-deploy build, so re-open it with `preview` if you still need it.',
+      'the pre-deploy build, so re-open it with `preview` if you still need it. ' +
+      'A `staleWindow` in the result means you deployed the app you are running inside: ' +
+      'that window was spared (closing it would have killed this call) and is STILL ' +
+      'RUNNING THE OLD BUNDLE, so verifying the change in it reports the code from before ' +
+      "the deploy. Reload it — invoke('yaar://windows/{staleWindow}', {action:'reload'}) — " +
+      'which re-mounts the iframe without discarding its app agent.',
     params: {
       type: 'object',
       properties: {

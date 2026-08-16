@@ -128,6 +128,16 @@ export interface DeployResult {
    * build. Empty when none were open (or when the only one was the deployer's own).
    */
   closedWindows: string[];
+  /**
+   * Set when the deployer was itself inside a window of the app it just deployed — a
+   * self-deploy. That window is spared (see `features/apps/retire.ts`) and is therefore
+   * still running the *previous* bundle, which is the trap this field exists to close:
+   * the deploy succeeded, the files on disk are right, and the code actually executing is
+   * the code that was just replaced. Anything verified against that window is a false
+   * result. Reload it — `invoke('yaar://windows/{id}', { action: 'reload' })` — once the
+   * deploy's own answer has been delivered.
+   */
+  staleWindow?: string;
 }
 
 export interface DeployRefusal {
@@ -471,8 +481,10 @@ export async function doDeploy(
     // Everything already running this app is now running the *previous* build: an open
     // window's iframe holds the old bundle, and the app agent's cached profile holds the
     // old manifest. Close the windows and drop the profile so the next launch and the
-    // next turn both come from what was just written. See features/apps/retire.ts.
-    const closedWindows = retireStaleApp(appId);
+    // next turn both come from what was just written. The one window a deploy cannot
+    // close is the one it is being issued from, so that one is reported instead — see
+    // features/apps/retire.ts.
+    const { closed: closedWindows, staleWindow } = retireStaleApp(appId);
 
     // Emit refreshApps AFTER shortcut changes are persisted to disk.
     actionEmitter.emitAction({ type: 'desktop.refreshApps' });
@@ -481,9 +493,16 @@ export async function doDeploy(
     // rolls back to.
     await snapshotApp(appId, args.message?.trim() || `deploy: ${appId}`);
 
-    emit('done', { name: finalName, icon: finalIcon, closedWindows });
+    emit('done', { name: finalName, icon: finalIcon, closedWindows, staleWindow });
 
-    return { success: true, appId, name: finalName, icon: finalIcon, closedWindows };
+    return {
+      success: true,
+      appId,
+      name: finalName,
+      icon: finalIcon,
+      closedWindows,
+      ...(staleWindow ? { staleWindow } : {}),
+    };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
     const error = `Failed to deploy app: ${msg}`;

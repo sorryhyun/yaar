@@ -36,7 +36,11 @@ function AppRow(props: { proc: AppProcess }) {
             <span>${agentLabel}</span>
             ${() =>
               p().orphaned
-                ? html`<span class="y-badge" title="Agent still holds a slot and its context, with no window open">orphaned</span>`
+                ? html`<span
+                    class="y-badge"
+                    title="Agent still holds a slot and its context, with no window open"
+                    >orphaned</span
+                  >`
                 : null}
           </div>
         </div>

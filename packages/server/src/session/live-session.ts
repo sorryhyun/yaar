@@ -264,6 +264,11 @@ export class LiveSession {
       const raw = this.windowState.handleMap.getRawWindowId(wid);
       revokeTokensForWindow(this.sessionId, wid, monitorId);
       if (raw !== wid) revokeTokensForWindow(this.sessionId, raw, monitorId);
+      // Before anything else: nobody is going to answer the questions still addressed to
+      // this window. Left alone they wait out their own deadlines and then report a
+      // timeout, which reads as "the app is slow" for a responder that no longer exists —
+      // and is exactly what a command that closes its own window produces.
+      actionEmitter.cancelAppRequestsForWindow(this.sessionId, [wid, raw]);
       this.reloadCache.invalidateForWindow(wid);
       this.pool?.handleWindowClose(wid, appId, monitorId);
       subscriptionRegistry.clearForWindow(wid);

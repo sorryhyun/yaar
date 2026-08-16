@@ -1,5 +1,5 @@
 export {};
-import { errMsg, invoke, read, AppCommandError } from '@bundled/yaar';
+import { errMsg, invoke, list, read, AppCommandError } from '@bundled/yaar';
 import {
   activeProject,
   buildSerial,
@@ -11,6 +11,7 @@ import {
   setPreviewWindowId,
   type ConsoleEntry,
 } from '../core';
+import { previewWindowIdFor } from '../lib/paths';
 import { addConsoleEntry } from './console';
 import { getRuntimeManifest } from './manifest';
 import { reclaimOrphanedPreviewStorage } from './projects';
@@ -74,6 +75,45 @@ export function captureFailureHint(reason: string): string {
 }
 
 /**
+ * Is the preview window we are bound to actually on screen right now?
+ *
+ * Asks the server, and un-binds when the answer is no. `previewWindowId()` is a signal we
+ * set ourselves, so on its own it only records that we once opened a window — it cannot
+ * know that the user closed it, that a project delete took it, or that a deploy retired
+ * it. Every attempt to keep it honest by hand has been an enumeration of the code paths
+ * somebody thought of, and the ones nobody thought of failed *silently*, reporting
+ * confident state about a window that was gone.
+ *
+ * `list` rather than `read`: a bare read of an iframe window takes a screenshot, which is
+ * an absurd price for a liveness check, and the list is already scoped to this monitor.
+ *
+ * A failed listing is deliberately treated as "still open". The listing is how we learn
+ * the window is gone, and a transport hiccup is not that news — guessing "closed" would
+ * silently drop a live binding, which is the same class of bug in the other direction.
+ */
+export async function previewWindowIsOpen(): Promise<boolean> {
+  const wid = previewWindowId();
+  if (!wid) return false;
+  let open: boolean;
+  try {
+    const entries = await list<{ uri?: string }[]>('yaar://windows/');
+    if (!Array.isArray(entries)) return true;
+    // The listing reports raw ids (`devtools-preview-x`); `previewWindowId` holds whatever
+    // the server registered, which may be the monitor-scoped handle (`0/devtools-preview-x`).
+    // Compare on the last segment so one spelling cannot read as a missing window.
+    const bare = (id: string) => id.split('/').pop();
+    const live = new Set(
+      entries.map((e) => bare(String(e.uri ?? '').replace(/^yaar:\/\/windows\//, ''))),
+    );
+    open = live.has(bare(wid));
+  } catch {
+    return true;
+  }
+  if (!open) setPreviewWindowId(null);
+  return open;
+}
+
+/**
  * Open (or re-open) the preview window on the current build, and return where it landed.
  *
  * Re-creating the window remounts the iframe, which is how a preview picks up a new build —
@@ -92,12 +132,9 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   // grant 403'd in preview. The server reads the same list off the project's app.json when it
   // mints the preview's token instead (`previewPermissions` in http/iframe-tokens.ts), capped
   // by devtools' own reach, which is also how `bundles` already worked. Nothing to send.
-  // Address the window by an explicit, namespaced id. Left to the server, the id is
-  // derived by slugging the title — and the title is the project name, so previewing a
-  // clone of `ai-chat` produced the window id `ai-chat`, colliding with the *running*
-  // app. Window registration is last-write-wins, so the preview silently replaced the
-  // real app's window record (and its appId), severing the real app from its agent.
-  const previewId = `devtools-preview-${proj?.id ?? 'scratch'}`;
+  // Address the window by an explicit, namespaced id — see `previewWindowIdFor`, which
+  // `deleteProject` also spells the id with so it can close a window it never opened.
+  const previewId = previewWindowIdFor(proj?.id ?? 'scratch');
   // Give the preview a principal of its own, derived from the project. `self` then
   // resolves inside it — so appStorage, appDb and app-scoped permissions actually run
   // before deploy instead of 403'ing — while the storage it reaches is a throwaway
@@ -108,10 +145,10 @@ export async function openPreview(): Promise<{ previewUrl: string; windowId: str
   // hard error server-side (features/window/create.ts) — not a replace — so the create
   // below would throw and take the whole `compile` command down with it, reported as
   // "compile failing" even though the build succeeded. Gating this on previewWindowId()
-  // is not enough: that signal is set only here and cleared only in two catch blocks,
-  // and nothing subscribes to window close, so it goes stale in both directions. Asking
-  // the server to close is the only thing that knows the truth. A close that fails
-  // because there was nothing there is the expected case, not an error.
+  // would not be enough: that signal is ours, not the window's (see
+  // `previewWindowIsOpen`). Asking the server to close is the only thing that knows the
+  // truth. A close that fails because there was nothing there is the expected case, not
+  // an error.
   try {
     await invoke(`yaar://windows/${previewId}`, { action: 'close' });
   } catch {
@@ -501,9 +538,7 @@ async function collectDom(wid: string, selector?: string): Promise<InspectedValu
   }
 }
 
-async function collectConsole(
-  wid: string,
-): Promise<NonNullable<InspectSnapshot['console']>> {
+async function collectConsole(wid: string): Promise<NonNullable<InspectSnapshot['console']>> {
   try {
     const entries = await invoke<unknown>(`yaar://windows/${wid}`, {
       action: 'app_query',
@@ -578,7 +613,11 @@ export async function inspectPreview(opts: InspectOptions = {}): Promise<Inspect
   const changed = lastInspect ? diffSnapshots(lastInspect, snapshot) : undefined;
   lastInspect = snapshot;
   const stale = previewStaleNote();
-  return { ...snapshot, ...(changed ? { changed } : {}), ...(stale ? { previewStale: stale } : {}) };
+  return {
+    ...snapshot,
+    ...(changed ? { changed } : {}),
+    ...(stale ? { previewStale: stale } : {}),
+  };
 }
 
 /**

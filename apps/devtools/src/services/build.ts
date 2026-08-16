@@ -121,6 +121,12 @@ export async function typecheck(): Promise<void> {
  * The server does the same for the *installed* app's own windows and reports which ones
  * in `closedWindows`; this window is never one of them, so self-deploying is safe.
  *
+ * The one window the server cannot close is the one the deploy was issued from, which for
+ * a devtools self-deploy is this very window — still executing the bundle the deploy just
+ * replaced. It comes back as `staleWindow` and is passed straight through, because
+ * anything verified in it afterwards is a false result: the files on disk are correct, the
+ * repo agrees the fix shipped, and the code actually running is the code from before.
+ *
  * A failed deploy used to be written to the status bar and then swallowed — the caller got
  * back the same `undefined` a successful one returns. An agent, which cannot read the status
  * bar, was told nothing and moved on believing it had shipped. The server refusing to deploy
@@ -139,6 +145,7 @@ export async function deploy(opts: {
   name: string;
   previewClosed?: boolean;
   closedWindows?: string[];
+  staleWindow?: string;
 }> {
   const proj = activeProject();
   if (!proj) throw new AppCommandError('No active project. Open or create one first.');
@@ -166,8 +173,8 @@ export async function deploy(opts: {
   //
   // Best-effort, and only on success: a close that fails (or a preview that was never open)
   // must not turn a deploy that shipped into a reported failure. The signal is cleared
-  // regardless — nothing subscribes to window close, so it goes stale in both directions,
-  // and leaving it set would point the preview commands at a window that is gone.
+  // regardless — it is ours, not the window's (see `previewWindowIsOpen`) — and leaving it
+  // set would point the preview commands at a window that is gone.
   let previewClosed = false;
   const wid = previewWindowId();
   if (wid) {
@@ -184,15 +191,19 @@ export async function deploy(opts: {
   // features/apps/retire.ts). Say so: a window disappearing at the moment of a deploy
   // with nothing to explain it reads as a crash.
   const closedWindows = result.closedWindows ?? [];
+  const staleWindow = typeof result.staleWindow === 'string' ? result.staleWindow : undefined;
   setStatusText(
-    closedWindows.length > 0
-      ? `Deployed as "${name}" — closed ${closedWindows.length} stale window(s)`
-      : `Deployed as "${name}"`,
+    staleWindow
+      ? `Deployed as "${name}" — this window is still on the old build; reload it`
+      : closedWindows.length > 0
+        ? `Deployed as "${name}" — closed ${closedWindows.length} stale window(s)`
+        : `Deployed as "${name}"`,
   );
   return {
     appId: result.appId ?? opts.appId,
     name,
     ...(previewClosed ? { previewClosed } : {}),
     ...(closedWindows.length > 0 ? { closedWindows } : {}),
+    ...(staleWindow ? { staleWindow } : {}),
   };
 }

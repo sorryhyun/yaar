@@ -110,9 +110,8 @@ export function FileTree() {
                 style=${`padding-left: ${8 + indent}px`}
               >
                 <span class="file-icon">
-                  ${() => isDir
-                    ? (collapsedDirs().has(entry.path) ? '▶' : '▼')
-                    : getFileIcon(entry.path)}
+                  ${() =>
+                    isDir ? (collapsedDirs().has(entry.path) ? '▶' : '▼') : getFileIcon(entry.path)}
                 </span>
                 <span class="file-name">${name}</span>
               </div>

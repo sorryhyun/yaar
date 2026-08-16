@@ -9,12 +9,7 @@ export {};
 import { errMsg, list, showToast } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { LOG_PREFIX, URI } from './constants';
-import {
-  markRefreshed,
-  setAgentStats,
-  setInstalledApps,
-  setWindows,
-} from './store';
+import { markRefreshed, setAgentStats, setInstalledApps, setWindows } from './store';
 import {
   AgentEntrySchema,
   AgentStatsSchema,

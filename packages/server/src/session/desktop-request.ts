@@ -166,6 +166,21 @@ export class DesktopRequest<TResult, TMeta = void> {
     this.store.clearForSession(sessionId);
   }
 
+  /**
+   * Settle the entries the predicate selects, now, rather than at their own deadlines.
+   *
+   * For the narrower death: not the session going away, but one thing inside it — the
+   * window an app-protocol request was addressed to. The predicate reads the metadata
+   * the caller filed at `ask` time, since that is where the identity of the thing being
+   * asked lives. Deliberately *not* remembered as a late answer: nothing is coming.
+   */
+  cancelWhere(
+    pred: (meta: TMeta, sessionId: string | undefined) => boolean,
+    reason: 'cancelled' | 'closed',
+  ): number {
+    return this.store.cancelWhere(pred, reason);
+  }
+
   private remember(id: string, meta: TMeta): void {
     if (this.graceMs <= 0) return;
     const cutoff = Date.now() - this.graceMs;

@@ -34,7 +34,8 @@ const DEFAULT_MAX_CHARS = 4000;
 const MAX_CHARS = 50_000;
 
 /** Content types worth returning as text. Anything else is described, not transcribed. */
-const TEXT_TYPE = /^(text\/|application\/(json|xml|javascript|x-www-form-urlencoded|.*\+json|.*\+xml))/i;
+const TEXT_TYPE =
+  /^(text\/|application\/(json|xml|javascript|x-www-form-urlencoded|.*\+json|.*\+xml))/i;
 
 function clampChars(raw: unknown): number {
   if (raw == null) return DEFAULT_MAX_CHARS;
@@ -56,7 +57,7 @@ export const httpCommands = {
     description:
       'Make one outbound HTTP request and return its status, headers and a bounded slice ' +
       'of the body — for learning what an API accepts and answers while building against ' +
-      'it. Cross-origin domains need the user\'s allowlist approval, and a denial comes ' +
+      "it. Cross-origin domains need the user's allowlist approval, and a denial comes " +
       'back as an error naming the domain. The body is capped: `bodyChars` is the real ' +
       'length, `slice` is what was returned, and `offset` pages through the rest. A ' +
       'non-text response (image, zip) reports its type and size instead of its bytes. ' +
@@ -96,7 +97,7 @@ export const httpCommands = {
       if (!/^https?:\/\//i.test(url))
         throw new AppCommandError(
           `httpProbe needs an absolute http(s) URL; got "${url}". A yaar:// resource is ` +
-            'inspectUri\'s job, not this one.',
+            "inspectUri's job, not this one.",
         );
 
       const maxChars = clampChars(p.maxChars);

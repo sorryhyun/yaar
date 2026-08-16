@@ -16,11 +16,7 @@ import { appProcesses, markRefreshed } from './store';
  * and stamp the refresh time. Failures surface as a toast from `tryToast` and
  * deliberately skip the re-fetch: nothing changed, so nothing needs re-reading.
  */
-async function act(
-  run: () => Promise<unknown>,
-  success: string,
-  reload: () => Promise<void>,
-) {
+async function act(run: () => Promise<unknown>, success: string, reload: () => Promise<void>) {
   await tryToast(run, { success });
   await reload();
   markRefreshed();

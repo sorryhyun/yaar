@@ -23,6 +23,13 @@ export interface WindowModel {
   appId?: string;
   isolateOrigin?: boolean; // Render this app's iframe from the isolated app origin (see WindowState.isolateOrigin)
   appOrigin?: string; // Exact origin for the isolated iframe when the client can't derive it
+  /**
+   * Bumped by `window.reload`, and used as the content subtree's React key so the bump
+   * remounts it. A counter rather than a boolean because a reload has to be repeatable:
+   * a flag can only be set once, and the second reload of the same window would render
+   * as no change at all.
+   */
+  reloadNonce?: number;
 }
 
 export interface CliEntry {

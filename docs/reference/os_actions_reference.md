@@ -45,6 +45,23 @@ Close and remove a window.
 
 If the closed window was focused, focus moves to the topmost remaining window.
 
+Closing a window also settles every app-protocol request still addressed to it, as `closed` rather than as a timeout — see [App Protocol](./app_protocol_reference.md). A command that closes its own window can never be answered, and waiting out its deadline reports "the app did not respond" for an operation that succeeded.
+
+### `window.reload`
+
+Re-mount a window's content without destroying the window.
+
+| Field | Type | Required |
+|-------|------|----------|
+| `type` | `'window.reload'` | yes |
+| `windowId` | `string` | yes |
+
+- The window record, its bounds, its iframe token, its subscriptions and its app agent all survive — no close fires, so none of the window-close teardown runs.
+- The iframe's in-memory state does **not** survive. Anything an app needs across a reload belongs in `appStorage`/`appDb`.
+- Refused while another agent holds the window's lock, like `window.close`.
+
+This is how a window picks up a redeployed bundle without losing its app agent's context. A deploy closes the app's other windows but cannot close the one it was issued from (see `features/apps/retire.ts`), which is reported back as `staleWindow`; reloading that window is the non-destructive fix.
+
 ### `window.focus`
 
 Bring a window to the front.

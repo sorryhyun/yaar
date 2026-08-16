@@ -153,6 +153,25 @@ export interface WindowCloseAction {
   windowId: string;
 }
 
+/**
+ * Re-mount a window's content without destroying the window.
+ *
+ * The non-destructive half of what `window.close` + `window.create` used to be the only
+ * way to get. A deploy replaces an app's bundle, and every window already running it —
+ * including the one that issued the deploy, which `retireStaleApp` deliberately spares —
+ * keeps executing the code the deploy replaced. Closing and re-creating fixes the bundle
+ * and costs the window's app agent, taking its whole accumulated context with it.
+ *
+ * A reload changes nothing the server tracks: the window record, its iframe token, its
+ * subscriptions and its app agent all survive, because `onWindowClose` never fires. Only
+ * the iframe re-fetches. The app's in-memory state does not survive — it is a reload —
+ * so anything an app wants to keep across one belongs in appStorage/appDb.
+ */
+export interface WindowReloadAction {
+  type: 'window.reload';
+  windowId: string;
+}
+
 export interface WindowFocusAction {
   type: 'window.focus';
   windowId: string;
@@ -475,6 +494,7 @@ export interface DesktopUpdateSettingsAction {
 export type WindowAction =
   | WindowCreateAction
   | WindowCloseAction
+  | WindowReloadAction
   | WindowFocusAction
   | WindowMinimizeAction
   | WindowMaximizeAction

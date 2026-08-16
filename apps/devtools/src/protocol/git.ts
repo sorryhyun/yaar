@@ -29,8 +29,7 @@ export const gitCommands = {
         against: { type: 'string', enum: ['snapshot', 'repo'] },
         statOnly: {
           type: 'boolean',
-          description:
-            'Return per-file { file, added, removed } counts instead of the diff text.',
+          description: 'Return per-file { file, added, removed } counts instead of the diff text.',
         },
         paths: {
           type: 'array',

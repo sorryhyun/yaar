@@ -172,10 +172,34 @@ export async function captureDeclaredAppState(
 }
 
 /** The message an agent sees when an app never answered. */
-function noAnswer(outcome: { ok: false; reason: 'timeout' | 'cancelled' }, what: string): string {
-  return outcome.reason === 'cancelled'
-    ? `The session ended before the app answered the ${what}.`
-    : `App did not respond to the ${what} (timeout).`;
+function noAnswer(
+  outcome: { ok: false; reason: 'timeout' | 'cancelled' | 'closed' },
+  what: string,
+): string {
+  switch (outcome.reason) {
+    case 'cancelled':
+      return `The session ended before the app answered the ${what}.`;
+    case 'closed':
+      return windowClosedMessage(what);
+    default:
+      return `App did not respond to the ${what} (timeout).`;
+  }
+}
+
+/**
+ * What an agent is told when the window it was talking to closed mid-request.
+ *
+ * Says "may well have succeeded" rather than reporting a failure, because the commonest
+ * way to reach here is a command that *did what it was asked* — `closeWindow`, a deploy
+ * that retires its own window — and the responder went down with the work it completed.
+ * A flat error here would send the caller off to re-run an operation that already ran.
+ */
+function windowClosedMessage(what: string): string {
+  return (
+    `The window closed while the ${what} was in flight, so no answer can arrive. ` +
+    'If the request was what closed it, it may well have succeeded — check the ' +
+    'resulting state rather than retrying, and note that raising timeoutMs cannot help.'
+  );
 }
 
 /**
@@ -422,6 +446,7 @@ export async function handleAppEval(
   if (!outcome.ok) {
     if (outcome.reason === 'cancelled')
       return error('The session ended before the app answered the eval request.');
+    if (outcome.reason === 'closed') return error(windowClosedMessage('eval request'));
     return error(
       `Preview did not answer the eval within ${(timeoutMs / 1000).toFixed(0)}s. If the ` +
         'expression is legitimately slow — it awaits a promise, sleeps, or waits on a ' +
@@ -475,6 +500,7 @@ export async function handleAppCommand(
   if (!outcome.ok) {
     if (outcome.reason === 'cancelled')
       return error('The session ended before the app answered the command.');
+    if (outcome.reason === 'closed') return error(windowClosedMessage(`\`${req.command}\``));
     return error(
       `App did not respond within ${(timeoutMs / 1000).toFixed(0)}s. If this command is ` +
         `legitimately slow, retry with a larger timeoutMs (max ${MAX_COMMAND_TIMEOUT_MS / 1000}s).`,

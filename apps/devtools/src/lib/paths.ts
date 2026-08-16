@@ -8,6 +8,20 @@ export function projectPath(projectId: string, sub?: string): string {
 }
 
 /**
+ * The window id a project's preview is addressed by.
+ *
+ * Namespaced by project on purpose: left to the server the id is slugged from the window
+ * title, which is the project name — so previewing a clone of `ai-chat` produced the id
+ * `ai-chat` and last-write-wins registration silently replaced the *running* app's window
+ * record. It lives here, and not inline at the one place that opens the window, because a
+ * project's preview outlives that call: deleting the project has to close a window it
+ * never opened, and it can only name it by rebuilding the same id.
+ */
+export function previewWindowIdFor(projectId: string): string {
+  return `devtools-preview-${projectId}`;
+}
+
+/**
  * Rewrite host-absolute sandbox paths in tool output to project-relative ones.
  *
  * The dev server compiles from disk, so its bundler errors name

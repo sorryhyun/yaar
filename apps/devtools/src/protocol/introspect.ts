@@ -47,11 +47,7 @@ export const introspectCommands = {
               : [];
             return [
               ...preamble,
-              ...imageBlocks(
-                uri,
-                withImages.images,
-                'open it in a window instead of reading it',
-              ),
+              ...imageBlocks(uri, withImages.images, 'open it in a window instead of reading it'),
             ];
           }
           return { content: result };

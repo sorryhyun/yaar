@@ -1,5 +1,5 @@
 /**
- * Window management logic (close, lock, unlock).
+ * Window management logic (close, reload, lock, unlock).
  */
 
 import type { OSAction } from '@yaar/shared';
@@ -10,11 +10,11 @@ import { actionEmitter } from '../../session/action-emitter.js';
 import { getAgentId } from '../../agents/agent-context.js';
 import { formatWindowRef, requireWindowExists, emitActionChecked } from './helpers.js';
 
-/** Handle window management actions (close, lock, unlock). */
+/** Handle window management actions (close, reload, lock, unlock). */
 export async function handleManage(
   windowState: WindowStateRegistry,
   windowId: string,
-  action: 'close' | 'lock' | 'unlock',
+  action: 'close' | 'reload' | 'lock' | 'unlock',
 ): Promise<VerbResult> {
   const existsErr = requireWindowExists(windowState, windowId);
   if (existsErr) return existsErr;
@@ -32,6 +32,19 @@ export async function handleManage(
       );
       if (closeErr) return closeErr;
       return ok(`Closed window "${formatWindowRef(windowId)}"`);
+    }
+
+    case 'reload': {
+      // Locked like close: a reload discards whatever the iframe was holding, which is
+      // the thing the lock is there to protect. Fire-and-forget unlike close, because
+      // there is no server-side state to keep in step — the window record is untouched,
+      // and the only effect is in the browser.
+      if (lockedBy) return error(`Window "${windowId}" is locked by agent "${lockedBy}".`);
+      actionEmitter.emitAction({ type: 'window.reload', windowId } satisfies OSAction);
+      return ok(
+        `Reloaded window "${formatWindowRef(windowId)}". Its in-memory state is gone; the ` +
+          'window, its app agent and its subscriptions are not.',
+      );
     }
 
     case 'lock': {

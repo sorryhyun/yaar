@@ -65,7 +65,7 @@ export const appCommands = {
       properties: { agentId: { type: 'string' } },
       required: ['agentId'],
     },
-    run: async (p: { agentId: string }) => {
+    run: async (p) => {
       await interruptAgent(p.agentId);
       return { ok: true };
     },
@@ -77,7 +77,7 @@ export const appCommands = {
       properties: { windowId: { type: 'string' } },
       required: ['windowId'],
     },
-    run: async (p: { windowId: string }) => {
+    run: async (p) => {
       await closeWindow(p.windowId);
       return { ok: true };
     },
@@ -91,7 +91,7 @@ export const appCommands = {
       properties: { appId: { type: 'string' } },
       required: ['appId'],
     },
-    run: async (p: { appId: string }) => {
+    run: async (p) => {
       await killAppAgent(p.appId);
       return { ok: true };
     },
@@ -103,7 +103,7 @@ export const appCommands = {
       properties: { appId: { type: 'string' } },
       required: ['appId'],
     },
-    run: async (p: { appId: string }) => {
+    run: async (p) => {
       await closeAppWindows(p.appId);
       return { ok: true };
     },

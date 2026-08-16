@@ -176,7 +176,9 @@ function TextEditor() {
           <pre
             class="editor-line-numbers"
             style=${() => `transform: translateY(-${editorScrollTop()}px)`}
-          >${lineNumbers}</pre>
+          >
+${lineNumbers}</pre
+          >
         </div>
       <//>
       <div class="editor-overlay">

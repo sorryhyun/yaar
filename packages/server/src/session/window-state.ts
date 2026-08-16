@@ -447,11 +447,17 @@ export class WindowStateRegistry {
         });
         break;
 
-      // Neither is window state, and saying so explicitly is what keeps the `never` below
-      // meaningful. A maximize's bounds are the frontend's to compute (it has the viewport;
-      // this registry does not), and a capture is a request for a screenshot.
+      // None of these is window state, and saying so explicitly is what keeps the `never`
+      // below meaningful. A maximize's bounds are the frontend's to compute (it has the
+      // viewport; this registry does not), and a capture is a request for a screenshot.
+      //
+      // A reload is the interesting one: it is deliberately *not* recorded, because
+      // nothing here changes. The window keeps its id, its content, its bounds, its app
+      // agent and its subscriptions — only the browser re-fetches. A reload that touched
+      // this registry would be a close wearing a different name.
       case 'window.maximize':
       case 'window.capture':
+      case 'window.reload':
         break;
 
       default: {

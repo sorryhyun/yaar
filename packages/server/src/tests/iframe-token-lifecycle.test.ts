@@ -206,7 +206,7 @@ describe('a token dies with its window', () => {
     const minted = await openAppWindow();
     const refreshed = await reconnectToken(session);
 
-    const closed = runWithAgentContext(
+    const { closed } = runWithAgentContext(
       { agentId: 'iframe:devtools', sessionId: SESSION, monitorId: '0', appId: 'devtools' },
       () => retireStaleApp(APP),
     );

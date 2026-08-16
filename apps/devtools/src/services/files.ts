@@ -261,10 +261,7 @@ export async function editFile(
  * this protocol is project-relative — and a publication of where the sandbox lives on
  * the host.
  */
-async function readCopyText(
-  projectId: string,
-  path: string,
-): Promise<string> {
+async function readCopyText(projectId: string, path: string): Promise<string> {
   try {
     const raw = await appStorage.read(projectPath(projectId, path));
     return typeof raw === 'string' ? raw : JSON.stringify(raw, null, 2);

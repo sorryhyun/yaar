@@ -36,7 +36,7 @@ Shared types between frontend and server.
 
 The language AI uses to control the desktop. Defined in `src/actions.ts`.
 
-Window actions (create, close, focus, minimize, maximize, restore, move, resize, setTitle, setContent, updateContent, lock, unlock, capture), notifications (show, dismiss), toasts (show, dismiss), dialogs (confirm), user prompts (show, dismiss), app badge, desktop actions (refreshApps, createShortcut, removeShortcut, updateShortcut).
+Window actions (create, close, reload, focus, minimize, maximize, restore, move, resize, setTitle, setContent, updateContent, lock, unlock, capture), notifications (show, dismiss), toasts (show, dismiss), dialogs (confirm), user prompts (show, dismiss), app badge, desktop actions (refreshApps, createShortcut, removeShortcut, updateShortcut).
 
 **Window Variants:** `standard` (default), `widget` (below standard), `panel` (fixed-position, no stacking)
 

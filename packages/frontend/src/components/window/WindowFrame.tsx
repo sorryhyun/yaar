@@ -357,6 +357,10 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
         <WindowCallbackProvider callbacks={windowCallbacks}>
           <RendererErrorBoundary>
             <MemoizedContentRenderer
+              // Remount on reload. The key is what makes `window.reload` mean anything for
+              // an iframe: same `src`, so React would otherwise reconcile it to the same
+              // DOM node and the browser would never re-fetch.
+              key={window.reloadNonce ?? 0}
               content={window.content}
               windowId={windowId}
               requestId={window.requestId}
