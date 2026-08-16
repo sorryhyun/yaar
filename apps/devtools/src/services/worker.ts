@@ -429,10 +429,12 @@ delivered cannot; and a task that turns out to be mis-scoped (the files named do
 pattern matches nothing, the question rests on something untrue) should say so at the first sign
 with notify set, rather than spending the whole turn on it.
 
-Keep your final answer under roughly 1500 words. If the complete finding does not fit, report the
-bulk in slices as you go and make the final answer a summary of what you reported plus anything
-that did not fit a report. Never end a turn silently: if you found nothing, say you found nothing
-and what you looked at — an empty answer is indistinguishable from a crash.
+Keep your final answer under roughly 2000 words — enough for a real survey with code excerpts, so
+do not compress a complete finding down to a summary to stay well clear of it. If the finding
+genuinely does not fit, report the bulk in slices as you go and make the final answer a summary of
+what you reported plus anything that did not fit a report. Never end a turn silently: if you found
+nothing, say you found nothing and what you looked at — an empty answer is indistinguishable from
+a crash.
 
 Answer concretely and completely, citing locations as path:line (e.g. src/main.ts:42). No
 padding, no restating the task.`;

@@ -47,7 +47,9 @@ export const workerCommands = {
       'kind "result") — workerWait blocks for it instead, and the "worker" state key is the ' +
       'plain look. Interim findings arrive with the result; an urgent one wakes you early ' +
       'as kind "report" — a cue to re-scope or call workerInterrupt, not a sign the task is ' +
-      'done. The worker keeps its memory across tasks; follow-ups like "now check the other ' +
+      'done. A very long answer can reach you marked "[truncated, N chars]" — the wakeup is a ' +
+      'prompt injection with a context budget; call workerWait with the taskId to read the ' +
+      'full record, which is kept whole. The worker keeps its memory across tasks; follow-ups like "now check the other ' +
       'file" work, and `fresh` is how you opt out of that. One task at a time — starting ' +
       'another while one runs is a refusal, not a queue.',
     params: {

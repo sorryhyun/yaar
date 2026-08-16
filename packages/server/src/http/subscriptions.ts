@@ -39,8 +39,21 @@ export interface Subscription {
   seq: number;
 }
 
-/** Payload cap for a single stream frame (matches the app_events 4KB cap). */
-const MAX_FRAME_PAYLOAD_CHARS = 4096;
+/**
+ * Payload cap for a single stream frame.
+ *
+ * Sized for the payload that actually needs the room: a terminal `done` frame
+ * carrying a sub-agent's whole final answer. A cap replaces the *entire* payload
+ * with a marker rather than trimming a field, so a cap set to the size of a
+ * routine progress frame turns every long answer into a frame that says nothing
+ * (see `StreamToEventMapper.finish`). 32 KB holds a few thousand words of model
+ * output, which is the real upper end of one turn's text.
+ *
+ * Raising it does not raise throughput: deltas coalesce against this same bound
+ * (see {@link deltaFitsFrame}), so a bigger cap ships the same bytes in fewer,
+ * larger frames rather than more of them.
+ */
+export const MAX_FRAME_PAYLOAD_CHARS = 32_768;
 
 /**
  * Kinds whose frames carry an incremental `{ delta: string }` and may be merged.

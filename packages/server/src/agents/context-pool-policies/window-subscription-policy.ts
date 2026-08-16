@@ -22,8 +22,22 @@ import type { Task } from '../pool-types.js';
 
 export type SubscriptionMode = 'wake' | 'buffer';
 
-/** Max serialized payload length delivered to an agent; larger is truncated. */
-const MAX_PAYLOAD_CHARS = 4096;
+/**
+ * Max serialized payload length delivered to an agent; larger is truncated.
+ *
+ * This is a *context budget*, not a wire limit — the body is injected into the
+ * subscriber's prompt. It is set for the largest thing an app legitimately hands
+ * an agent through a channel: the result of work the agent itself delegated
+ * (devtools' worker sub-agent answering a survey). A cap sized for a progress
+ * ping instead makes every delegated answer arrive gutted, and the agent cannot
+ * tell a truncated finding from a thin one.
+ *
+ * ~16 KB is a few thousand tokens — affordable for an event that wakes an agent,
+ * and still a hard stop on an app that emits prose in a loop. An app with more
+ * to say than this should emit a handle and let the agent read it with a command,
+ * where the ceiling is `MAX_TEXT_BYTES` (400 KB) rather than a prompt budget.
+ */
+export const MAX_PAYLOAD_CHARS = 16_384;
 
 export interface WindowSubscription {
   id: string;

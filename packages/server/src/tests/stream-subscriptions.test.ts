@@ -11,7 +11,7 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
 import { ServerEventType, type ServerEvent, type StreamFrame } from '@yaar/shared';
-import { subscriptionRegistry } from '../http/subscriptions.js';
+import { subscriptionRegistry, MAX_FRAME_PAYLOAD_CHARS } from '../http/subscriptions.js';
 import { actionEmitter } from '../session/action-emitter.js';
 import type { SessionScopedEvent } from '../session/emitter-channels.js';
 
@@ -101,12 +101,12 @@ describe('stream subscriptions', () => {
 
   it('caps an oversized payload to a truncation marker', () => {
     streamSub();
-    const big = 'x'.repeat(5000);
+    const big = 'x'.repeat(MAX_FRAME_PAYLOAD_CHARS + 1000);
     subscriptionRegistry.publishFrame(uri, 'progress', { blob: big }, sessionId);
 
     const data = frameOf(captured[0])?.data as { truncated?: boolean; preview?: string };
     expect(data.truncated).toBe(true);
-    expect(data.preview?.length).toBe(4096);
+    expect(data.preview?.length).toBe(MAX_FRAME_PAYLOAD_CHARS);
   });
 
   const tick = (ms = 90) => new Promise((r) => setTimeout(r, ms));
@@ -178,7 +178,9 @@ describe('stream subscriptions', () => {
    */
   it('splits an oversized delta run into whole frames rather than capping one', async () => {
     streamSub();
-    const long = 'The quick brown fox. '.repeat(1000); // ~21 KB, far past the 4 KB cap
+    const sentence = 'The quick brown fox. ';
+    // Twice the cap, so the run has to split however the cap is set.
+    const long = sentence.repeat(Math.ceil((MAX_FRAME_PAYLOAD_CHARS * 2) / sentence.length));
     subscriptionRegistry.publishFrame(uri, 'text', { delta: long }, sessionId);
     await tick();
 
@@ -195,7 +197,7 @@ describe('stream subscriptions', () => {
     streamSub();
     // Raw length fits the cap; every character escapes to two, so the payload does not.
     // A split that trusted `String.length` would ship a frame the cap then gutted.
-    const quotes = '"'.repeat(3000);
+    const quotes = '"'.repeat(MAX_FRAME_PAYLOAD_CHARS - 100);
     subscriptionRegistry.publishFrame(uri, 'text', { delta: quotes }, sessionId);
     await tick();
 
@@ -203,7 +205,7 @@ describe('stream subscriptions', () => {
     for (const c of captured) {
       const data = frameOf(c)?.data as { delta?: string; truncated?: boolean };
       expect(data.truncated).toBeUndefined();
-      expect(JSON.stringify(data).length).toBeLessThanOrEqual(4096);
+      expect(JSON.stringify(data).length).toBeLessThanOrEqual(MAX_FRAME_PAYLOAD_CHARS);
     }
     expect(deltasOf(captured)).toBe(quotes);
   });
@@ -212,8 +214,9 @@ describe('stream subscriptions', () => {
     streamSub();
     // Two chunks that each fit alone but overflow once merged: the accumulation is
     // what gets split, so nothing is lost at the seam between them.
-    const a = 'a'.repeat(3000);
-    const b = 'b'.repeat(3000);
+    const each = Math.floor(MAX_FRAME_PAYLOAD_CHARS * 0.6);
+    const a = 'a'.repeat(each);
+    const b = 'b'.repeat(each);
     subscriptionRegistry.publishFrame(uri, 'text', { delta: a }, sessionId);
     subscriptionRegistry.publishFrame(uri, 'text', { delta: b }, sessionId);
     await tick();

@@ -6,6 +6,7 @@ import { ReloadCachePolicy } from '../agents/context-pool-policies/reload-cache-
 import {
   WindowSubscriptionPolicy,
   frameAppEvent,
+  MAX_PAYLOAD_CHARS,
 } from '../agents/context-pool-policies/window-subscription-policy.js';
 import type { Task } from '../agents/pool-types.js';
 
@@ -345,11 +346,12 @@ describe('WindowSubscriptionPolicy — app event channels', () => {
   });
 
   it('truncates oversized payloads in the framed event', () => {
-    const big = 'x'.repeat(5000);
-    // Plain strings pass through without JSON quoting → body length 5000.
+    const size = MAX_PAYLOAD_CHARS + 1000;
+    const big = 'x'.repeat(size);
+    // Plain strings pass through without JSON quoting → body length === size.
     const framed = frameAppEvent('w', 'dialog', big);
-    expect(framed).toContain('[truncated, 5000 chars]');
-    // Body capped at 4096 + truncation note; frame stays well under the raw 5000.
-    expect(framed.length).toBeLessThan(4200);
+    expect(framed).toContain(`[truncated, ${size} chars]`);
+    // Body capped at MAX_PAYLOAD_CHARS + truncation note; frame stays under the raw size.
+    expect(framed.length).toBeLessThan(MAX_PAYLOAD_CHARS + 200);
   });
 });
