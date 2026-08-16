@@ -45,6 +45,7 @@ export {
   formatMountFindings,
   type MountFinding,
 } from './guards/mount-guard.js';
+export { scanProjectGuards } from './guards/scan-project.js';
 export {
   knownTokens,
   suggestToken,

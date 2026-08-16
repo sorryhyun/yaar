@@ -9,6 +9,7 @@ import { dirname, join, resolve } from 'path';
 import { getCompilerConfig } from './config.js';
 import { GATED_BUNDLED_LIBRARIES, toForwardSlash } from './bundled/registry.js';
 import { loadTypeScript } from './load-typescript.js';
+import { scanProjectGuards } from './guards/scan-project.js';
 
 export interface TypecheckResult {
   success: boolean;
@@ -83,6 +84,12 @@ async function writeAllowedBundledTypes(
  * Run a loose TypeScript type check on a sandbox directory.
  *
  * Writes a temporary tsconfig, shells out to tsc --noEmit, then cleans up.
+ *
+ * The source guards ride along. They are what `compile` enforces from inside the
+ * bundler's `onLoad` hook, which means they only speak once a build runs — after
+ * the code is written, and after a second file has repeated the same mistake.
+ * Both are purely syntactic, so there is no reason for the earlier, cheaper call
+ * to stay silent about them.
  */
 export async function typecheckSandbox(
   sandboxPath: string,
@@ -92,6 +99,8 @@ export async function typecheckSandbox(
   if (getCompilerConfig().isBundledExe) {
     return { success: true, diagnostics: [] };
   }
+
+  const guardDiagnostics = await scanProjectGuards(sandboxPath);
 
   const BUNDLED_TYPES_DIR = getBundledTypesDir();
   const TSC_PATH = getTscPath();
@@ -148,7 +157,10 @@ export async function typecheckSandbox(
     const output = (stdout + '\n' + stderr).trim();
 
     if (exitCode === 0) {
-      return { success: true, diagnostics: [] };
+      // Guard findings alone still fail: each one is a build error waiting to
+      // happen, and reporting them under `success: true` would let deploy ship
+      // an app that cannot compile.
+      return { success: guardDiagnostics.length === 0, diagnostics: guardDiagnostics };
     }
 
     const diagnostics = output
@@ -158,10 +170,10 @@ export async function typecheckSandbox(
 
     if (diagnostics.length === 0) diagnostics.push(`tsc exited with code ${exitCode}`);
 
-    return { success: false, diagnostics };
+    return { success: false, diagnostics: [...guardDiagnostics, ...diagnostics] };
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Unknown error';
-    return { success: false, diagnostics: [`tsc process error: ${msg}`] };
+    return { success: false, diagnostics: [...guardDiagnostics, `tsc process error: ${msg}`] };
   } finally {
     await unlink(tsconfigPath).catch(() => {});
     if (bundledTypesPath !== bundledTypesSource) await unlink(bundledTypesPath).catch(() => {});
