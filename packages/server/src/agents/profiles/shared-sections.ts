@@ -133,7 +133,7 @@ list('yaar://storage/docs')
 delete('yaar://storage/docs/readme.txt')
 \`\`\`
 
-**Reserved prefixes.** The flat tree has four by convention:
+**Reserved prefixes.** The flat tree has five by convention:
 
 | Prefix | What lives there |
 |---|---|
@@ -141,6 +141,7 @@ delete('yaar://storage/docs/readme.txt')
 | \`temp/\` | Scratch, including OS file drops. Safe to prune. |
 | \`files/\` | The user's own documents. |
 | \`apps/{id}/\` | One app's **private** storage — the same files as \`yaar://apps/{id}/storage/\`. You can read it; the app itself cannot read any other app's. |
+| \`mounts/{alias}/\` | Host directories the user mounted, addressable like any other path. Present only when a mount exists, and then \`list('yaar://storage/')\` shows it; \`read('yaar://config/mounts')\` gives each alias's real host path and whether it is read-only. |
 
 **Moving a file — use \`copy\`, never read-then-write.**
 

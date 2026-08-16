@@ -1,15 +1,28 @@
 /**
  * Build a concise environment section for the system prompt.
  *
- * Gives the AI immediate awareness of platform, provider, installed apps,
- * and storage contents — saving tool round-trips.
+ * Gives the AI immediate awareness of platform, provider, and installed apps —
+ * saving tool round-trips.
+ *
+ * What earns a place here is a fact with **no other pointer in the prompt**. The
+ * app roster qualifies: nothing else makes an agent prefer opening an app over
+ * hand-building the UI itself, and the failure is silent when it is missing.
+ * Storage and mounts do not, and used to be here anyway:
+ *
+ *  - The storage root listing is reachable by `list('yaar://storage/')`, and the
+ *    URI namespace table in `profiles/shared-sections.ts` already names that door.
+ *  - Mounts sit one level below it at `storage/mounts`, and have two pointers:
+ *    `storageList('')` injects a virtual `mounts` entry at the root whenever any
+ *    mount exists, and `read('yaar://config/mounts')` returns the full record —
+ *    including the `hostPath` this section used to print into every single turn.
+ *
+ * Both were deferred to those doors. The rule for anything added back: state the
+ * pointer that already exists, or explain why there is none.
  */
 
 import { platform } from 'os';
 import type { ProviderType } from './types.js';
-import { listApps, loadAllAppHints } from '../features/apps/discovery.js';
-import { storageList } from '../storage/storage-manager.js';
-import { loadMounts } from '../storage/mounts.js';
+import { listApps, loadAllAppHints, type AppInfo } from '../features/apps/discovery.js';
 import { readSettings, getLanguageLabel } from '../storage/settings.js';
 import { IS_BUNDLED_EXE } from '../config.js';
 
@@ -28,10 +41,82 @@ function getProviderName(provider: ProviderType): string {
   return provider === 'claude' ? 'Claude' : 'Codex';
 }
 
+/** Sort helper — app ids and hint ids are both ordered by id. */
+function byId(a: { id: string }, b: { id: string }): number {
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
+
+/**
+ * The facts about an app that only this section carries.
+ *
+ * `list('yaar://apps')` returns id/name/description/kind/version, so an agent can
+ * recover those on demand and they are not what these bytes buy. It does **not**
+ * carry `isCompiled` — and `kind` is criticality (`system` vs `app`), not
+ * compiled-ness — so whether an app can be opened as an iframe window at all is
+ * otherwise reachable only by reading every app one at a time.
+ */
+function appSuffix(a: AppInfo): string {
+  let suffix = '';
+  if (a.isCompiled) suffix += ` (iframe: yaar://apps/${a.id})`;
+  if (a.variant && a.variant !== 'standard') {
+    suffix += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
+  }
+  if (a.createShortcut === false) suffix += ' [system]';
+  return suffix;
+}
+
+/**
+ * The app roster and the hints, merged so that **an app is stated once, not twice**.
+ *
+ * A hint supersedes a description as a selection signal — it says *when* the app
+ * fits — so a hinted app appears only under App hints, and the roster carries the
+ * rest. That is where the saving is: the two blocks used to restate every hinted
+ * app's name and description in full.
+ *
+ * The blocks are therefore disjoint, which makes neither complete on its own, and
+ * an agent reading a partial roster as exhaustive would conclude an installed app
+ * is not installed and go build the UI by hand. So the roster says the hint block
+ * holds more, and the hint block says its apps are installed. Exported and pure so
+ * that this property is testable without a filesystem — see `app-environment.test.ts`.
+ */
+export function buildAppSections(
+  apps: AppInfo[],
+  appHints: { appId: string; hint: string }[],
+): string[] {
+  const lines: string[] = [];
+  const hintById = new Map(appHints.map((h) => [h.appId, h.hint]));
+  const appById = new Map(apps.map((a) => [a.id, a]));
+
+  const unhinted = [...apps].filter((a) => !hintById.has(a.id)).sort(byId);
+  if (unhinted.length > 0) {
+    const appLines = unhinted.map(
+      (a) => `  - **${a.name}** (${a.id}): ${a.description || 'No description'}${appSuffix(a)}`,
+    );
+    const more = appHints.length > 0 ? ' (the apps under "App hints" below are installed too)' : '';
+    lines.push(`- Installed apps${more}:\n${appLines.join('\n')}`);
+  }
+
+  if (appHints.length > 0) {
+    const hintLines = [...appHints]
+      .map((h) => ({ id: h.appId, hint: h.hint }))
+      .sort(byId)
+      .map(({ id, hint }) => {
+        // A hint is found by scanning app dirs, so it can outlive its app.json.
+        // Falling back to the bare id keeps the hint rather than dropping it.
+        const app = appById.get(id);
+        const header = app ? `### ${app.name} (${app.id})${appSuffix(app)}` : `### ${id}`;
+        return `${header}\n${hint.trim()}`;
+      })
+      .join('\n\n');
+    lines.push(`- App hints — these apps are installed too:\n${hintLines}`);
+  }
+
+  return lines;
+}
+
 export async function buildEnvironmentSection(provider: ProviderType): Promise<string> {
-  const [apps, storage, settings, appHints] = await Promise.all([
+  const [apps, settings, appHints] = await Promise.all([
     listApps().catch(() => []),
-    storageList('').catch(() => ({ success: false as const, error: 'unavailable' })),
     readSettings(),
     loadAllAppHints().catch(() => []),
   ]);
@@ -44,46 +129,7 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
     lines.push('- Mode: Standalone executable');
   }
 
-  if (apps.length > 0) {
-    const appLines = [...apps]
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
-      .map((a) => {
-        let line = `  - **${a.name}** (${a.id}): ${a.description || 'No description'}`;
-        if (a.isCompiled) line += ` (iframe: yaar://apps/${a.id})`;
-        if (a.variant && a.variant !== 'standard') {
-          line += ` [${a.variant}${a.dockEdge ? `:${a.dockEdge}` : ''}]`;
-        }
-        if (a.createShortcut === false) line += ' [system]';
-        return line;
-      });
-    lines.push(`- Installed apps:\n${appLines.join('\n')}`);
-  }
-
-  if (appHints.length > 0) {
-    const hintLines = [...appHints]
-      .sort((a, b) => (a.appId < b.appId ? -1 : a.appId > b.appId ? 1 : 0))
-      .map((h) => `### ${h.appId}\n${h.hint.trim()}`)
-      .join('\n\n');
-    lines.push(`- App hints:\n${hintLines}`);
-  }
-
-  if (storage.success && storage.entries && storage.entries.length > 0) {
-    const names = storage.entries
-      .map((e) => e.path)
-      .sort()
-      .join(', ');
-    lines.push(`- Storage: ${names}`);
-  } else {
-    lines.push('- Storage: empty');
-  }
-
-  const mounts = await loadMounts();
-  if (mounts.length > 0) {
-    const mountLines = [...mounts]
-      .sort((a, b) => (a.alias < b.alias ? -1 : a.alias > b.alias ? 1 : 0))
-      .map((m) => `  - mounts/${m.alias}/ → ${m.hostPath}${m.readOnly ? ' (read-only)' : ''}`);
-    lines.push(`- Mounts:\n${mountLines.join('\n')}`);
-  }
+  lines.push(...buildAppSections(apps, appHints));
 
   let result = `\n\n## Environment\n${lines.join('\n')}`;
 
