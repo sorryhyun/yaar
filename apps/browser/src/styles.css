@@ -59,6 +59,51 @@
 }
 
 /*
+ * Live mode (pre-P0 spike). The canvas fills the area and the remote viewport is
+ * re-emulated to match it, so `object-fit` has nothing left to letterbox in the
+ * steady state — it only covers the moment between a resize and the reflowed
+ * frame that answers it.
+ */
+.screenshot-area .live-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  outline: none;
+  cursor: default;
+  background: var(--yaar-bg);
+}
+
+.url-bar .quality-select {
+  flex-shrink: 0;
+  width: auto;
+  padding-block: 2px;
+  font-size: 12px;
+}
+
+/*
+ * The spike's readout. This is instrumentation, not product chrome — the whole
+ * point of the branch is a number for fps and input-to-pixel lag, so it is on
+ * screen rather than in a console the hand-feel test cannot watch.
+ */
+.screenshot-area .live-stats {
+  position: absolute;
+  bottom: var(--yaar-sp-2);
+  right: var(--yaar-sp-2);
+  display: flex;
+  gap: var(--yaar-sp-3);
+  padding: var(--yaar-sp-1) var(--yaar-sp-2);
+  border-radius: 4px;
+  background: var(--yaar-bg-surface);
+  border: 1px solid var(--yaar-border);
+  color: var(--yaar-text-muted);
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/*
  * Trackless indeterminate indicator — a bare accent sliver over the live
  * screenshot, shown only while loading (no `display:none` footprint
  * otherwise). Declining `.y-progress`'s track+fill here: painting a 4px

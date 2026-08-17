@@ -78,6 +78,45 @@ export interface BrowserSessionUpdate {
   driving?: boolean;
 }
 
+/** CDP `Page.screencastFrame` metadata — the viewport the frame was taken of. */
+export interface ScreencastMetadata {
+  offsetTop: number;
+  pageScaleFactor: number;
+  deviceWidth: number;
+  deviceHeight: number;
+  scrollOffsetX: number;
+  scrollOffsetY: number;
+  timestamp?: number;
+}
+
+export interface ScreencastFrame {
+  /** base64 JPEG. */
+  data: string;
+  metadata: ScreencastMetadata;
+}
+
+export interface RawMouseEvent {
+  type: 'mousePressed' | 'mouseReleased' | 'mouseMoved' | 'mouseWheel';
+  x: number;
+  y: number;
+  button?: 'none' | 'left' | 'middle' | 'right' | 'back' | 'forward';
+  buttons?: number;
+  clickCount?: number;
+  modifiers?: number;
+  deltaX?: number;
+  deltaY?: number;
+}
+
+export interface RawKeyEvent {
+  type: 'keyDown' | 'keyUp' | 'rawKeyDown' | 'char';
+  modifiers?: number;
+  text?: string;
+  unmodifiedText?: string;
+  key?: string;
+  code?: string;
+  windowsVirtualKeyCode?: number;
+}
+
 export interface BrowserSessionOptions {
   mobile?: boolean;
   /**
@@ -1000,6 +1039,137 @@ export class BrowserSession extends EventEmitter {
         }
       }),
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Live mode (spike): CDP screencast out, raw human input in.
+  //
+  // Everything above this line is the agent's surface — one command, one settled
+  // page state, one screenshot. Live mode is the opposite shape: an open firehose
+  // of frames and an open firehose of input events, neither of which resolves to
+  // anything. It shares the CDP connection deliberately, because user and agent
+  // co-driving *one* tab is the whole point (see the Interactive Browser proposal).
+  // ---------------------------------------------------------------------------
+
+  /** Viewers currently attached. One CDP screencast serves all of them. */
+  private screencastViewers = 0;
+  private screencastHandler: ((params: unknown) => void) | null = null;
+
+  /**
+   * Begin (or join) the CDP screencast. Chrome only emits a frame when pixels
+   * actually change, so an idle page costs nothing.
+   *
+   * Each frame arrives as an `'screencastFrame'` event carrying base64 JPEG plus
+   * the viewport metadata a client needs to map its own pointer coordinates back
+   * into page CSS pixels. The frame is acked immediately — Chrome will not send
+   * the next one until the previous is acked, so holding the ack for client
+   * backpressure would stall the stream rather than degrade it. Dropping frames
+   * is the transport's job (see `screencast-handlers.ts`).
+   */
+  async startScreencast(opts?: {
+    quality?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    everyNthFrame?: number;
+  }): Promise<void> {
+    this.touch();
+    this.screencastViewers++;
+    if (this.screencastViewers > 1) return;
+
+    this.screencastHandler = (params: unknown) => {
+      const p = params as { data: string; sessionId: number; metadata: ScreencastMetadata };
+      this.cdp.send('Page.screencastFrameAck', { sessionId: p.sessionId }).catch(() => {});
+      this.emit('screencastFrame', {
+        data: p.data,
+        metadata: p.metadata,
+      } satisfies ScreencastFrame);
+    };
+    this.cdp.on('Page.screencastFrame', this.screencastHandler);
+
+    await this.cdp.send('Page.startScreencast', {
+      format: 'jpeg',
+      quality: opts?.quality ?? 60,
+      ...(opts?.maxWidth ? { maxWidth: opts.maxWidth } : {}),
+      ...(opts?.maxHeight ? { maxHeight: opts.maxHeight } : {}),
+      everyNthFrame: opts?.everyNthFrame ?? 1,
+    });
+  }
+
+  /** Detach one viewer; the CDP screencast stops when the last one leaves. */
+  async stopScreencast(): Promise<void> {
+    if (this.screencastViewers === 0) return;
+    this.screencastViewers--;
+    if (this.screencastViewers > 0) return;
+
+    if (this.screencastHandler) {
+      this.cdp.off('Page.screencastFrame', this.screencastHandler);
+      this.screencastHandler = null;
+    }
+    if (!this.closed) await this.cdp.send('Page.stopScreencast').catch(() => {});
+  }
+
+  get screencasting(): boolean {
+    return this.screencastViewers > 0;
+  }
+
+  /**
+   * Forward one human pointer event into the page.
+   *
+   * Fields are copied out one by one rather than spread: the caller is an iframe
+   * over a socket, and CDP's `Input` domain is not a place to pass a stranger's
+   * object through untouched.
+   */
+  async dispatchMouse(e: RawMouseEvent): Promise<void> {
+    this.touch();
+    await this.cdp.send('Input.dispatchMouseEvent', {
+      type: e.type,
+      x: e.x,
+      y: e.y,
+      button: e.button ?? 'none',
+      buttons: e.buttons ?? 0,
+      clickCount: e.clickCount ?? 0,
+      modifiers: e.modifiers ?? 0,
+      ...(e.type === 'mouseWheel' ? { deltaX: e.deltaX ?? 0, deltaY: e.deltaY ?? 0 } : {}),
+    });
+  }
+
+  /** Forward one human key event into the page. No IME composition yet — that is P0. */
+  async dispatchKey(e: RawKeyEvent): Promise<void> {
+    this.touch();
+    await this.cdp.send('Input.dispatchKeyEvent', {
+      type: e.type,
+      modifiers: e.modifiers ?? 0,
+      ...(e.text !== undefined ? { text: e.text } : {}),
+      ...(e.unmodifiedText !== undefined ? { unmodifiedText: e.unmodifiedText } : {}),
+      ...(e.key !== undefined ? { key: e.key } : {}),
+      ...(e.code !== undefined ? { code: e.code } : {}),
+      ...(e.windowsVirtualKeyCode !== undefined
+        ? {
+            windowsVirtualKeyCode: e.windowsVirtualKeyCode,
+            nativeVirtualKeyCode: e.windowsVirtualKeyCode,
+          }
+        : {}),
+    });
+  }
+
+  /** Commit a finished text run (paste, or an IME result once P0 wires composition). */
+  async insertText(text: string): Promise<void> {
+    this.touch();
+    await this.cdp.send('Input.insertText', { text });
+  }
+
+  /**
+   * Re-emulate the viewport at a new size, so the remote page reflows to match the
+   * window the human is actually looking at.
+   */
+  async setViewport(width: number, height: number, deviceScaleFactor = 1): Promise<void> {
+    this.touch();
+    await this.cdp.send('Emulation.setDeviceMetricsOverride', {
+      width: Math.max(1, Math.round(width)),
+      height: Math.max(1, Math.round(height)),
+      deviceScaleFactor,
+      mobile: this.mobile,
+    });
   }
 
   async close(): Promise<void> {

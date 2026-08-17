@@ -48,6 +48,12 @@ export const PUBLIC_ENDPOINTS: EndpointMeta[] = [
     response: 'text/event-stream',
     description: 'SSE stream for browser session updates',
   },
+  {
+    method: 'GET',
+    path: '/api/browser/{id}/screencast',
+    response: 'websocket',
+    description: 'Live screencast frames out, raw user input in (pre-P0 spike)',
+  },
 ];
 
 /** Convert a VerbResult to an HTTP Response. */

@@ -24,6 +24,11 @@ import type { ContextMessage } from '../agents/context.js';
 import type { SessionLogger } from '../logging/session-logger.js';
 import { checkWsAuth } from '../http/auth.js';
 import { handleBridgeOpen, handleBridgeMessage, handleBridgeClose } from './bridge-handlers.js';
+import {
+  handleScreencastOpen,
+  handleScreencastMessage,
+  handleScreencastClose,
+} from './screencast-handlers.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('WebSocket');
@@ -44,10 +49,15 @@ export interface WebSocketServerOptions {
 
 export interface WsData {
   /** Which WebSocket protocol this connection speaks. Defaults to 'frontend' (the /ws path). */
-  kind: 'frontend' | 'bridge';
+  kind: 'frontend' | 'bridge' | 'screencast';
   connectionId: string;
   sessionId: string | null;
   monitorId: string | null;
+  /** `kind: 'screencast'` only — which browser session's pixels this socket carries. */
+  browserId?: string;
+  /** `kind: 'screencast'` only — JPEG quality and long-edge cap for this stream. */
+  screencastQuality?: number;
+  screencastMaxWidth?: number;
   /**
    * Serializes this connection's messages against each other, one chain per lane.
    *
@@ -125,6 +135,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
   return {
     async open(ws: ServerWebSocket<WsData>) {
       if (ws.data.kind === 'bridge') return handleBridgeOpen(ws);
+      if (ws.data.kind === 'screencast') return handleScreencastOpen(ws);
       const { connectionId } = ws.data;
       const broadcastCenter = getBroadcastCenter();
 
@@ -209,6 +220,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
 
     message(ws: ServerWebSocket<WsData>, data: string | Buffer) {
       if (ws.data.kind === 'bridge') return handleBridgeMessage(ws, data);
+      if (ws.data.kind === 'screencast') return handleScreencastMessage(ws, data);
 
       let event: ClientEvent | undefined;
       try {
@@ -262,6 +274,7 @@ export function createWsHandlers(options: WebSocketServerOptions) {
 
     close(ws: ServerWebSocket<WsData>) {
       if (ws.data.kind === 'bridge') return handleBridgeClose(ws);
+      if (ws.data.kind === 'screencast') return handleScreencastClose(ws);
       const { connectionId, sessionId } = ws.data;
       log.info('client disconnected', { connectionId, sessionId });
 

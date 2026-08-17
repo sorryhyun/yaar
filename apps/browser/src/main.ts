@@ -17,7 +17,28 @@ import {
   resetDisplay,
   clearDisplay,
 } from './store';
-import { connectSSE, disconnectSSE, initSSE } from './sse';
+import { connectSSE, disconnectSSE, initSSE, startPolling, stopPolling } from './sse';
+import {
+  liveMode,
+  setLiveMode,
+  liveStatus,
+  liveStats,
+  quality,
+  setQuality,
+  type QualityPreset,
+  connectLive,
+  disconnectLive,
+  setCanvasEl,
+  syncViewport,
+  onCanvasMouseDown,
+  onCanvasMouseUp,
+  onCanvasMouseMove,
+  onCanvasWheel,
+  onCanvasContextMenu,
+  onCanvasKeyDown,
+  onCanvasKeyUp,
+  onCanvasPaste,
+} from './live';
 import {
   refreshScreenshot,
   setScreenshotEl,
@@ -39,10 +60,45 @@ function attach(browserId: string): void {
   setActiveBrowserId(browserId);
   resetDisplay('Connecting...');
   connectSSE(browserId);
+  if (liveMode()) connectLive(browserId);
+}
+
+/**
+ * Enter or leave live mode (pre-P0 spike).
+ *
+ * The two render paths are mutually exclusive on purpose: the still path polls a
+ * fresh WebP every 200 ms, and leaving that running behind a screencast would
+ * charge the same page for two encodes and make the frame-rate reading a lie.
+ */
+async function toggleLive(): Promise<void> {
+  const next = !liveMode();
+  setLiveMode(next);
+  if (next) {
+    stopPolling();
+    connectLive(await ensureBrowserId());
+  } else {
+    disconnectLive();
+    startPolling(activeBrowserId());
+  }
+}
+
+/**
+ * Change the stream's quality preset.
+ *
+ * Chrome fixes quality and the size cap when the screencast starts, so this
+ * reconnects rather than renegotiating — cheap, and the reconnect itself is a
+ * useful reading of how long a cold stream takes to show its first pixel.
+ */
+function changeQuality(preset: QualityPreset): void {
+  setQuality(preset);
+  if (liveMode()) connectLive(activeBrowserId());
 }
 
 connectSSE(initialBrowserId);
-onCleanup(() => disconnectSSE());
+onCleanup(() => {
+  disconnectSSE();
+  disconnectLive();
+});
 
 /** Promise lock to prevent double-creation of browser sessions. */
 let creatingSession: Promise<string> | null = null;
@@ -93,12 +149,30 @@ function App() {
           onKeydown=${handleUrlKeydown} />
         <button class="y-btn y-btn-sm y-btn-ghost" title="Reload" aria-label="Reload"
           onClick=${handleReload}>↻</button>
+        <button
+          class=${() => `y-btn y-btn-sm ${liveMode() ? 'y-btn-primary' : 'y-btn-ghost'}`}
+          title="Live mode — stream the page and drive it yourself"
+          aria-pressed=${() => String(liveMode())}
+          onClick=${() => void toggleLive()}>◉ Live</button>
+        ${() =>
+          liveMode()
+            ? html`
+          <select class="y-select quality-select" title="Stream quality"
+            value=${() => quality()}
+            onChange=${(e: Event) =>
+              changeQuality((e.target as HTMLSelectElement).value as QualityPreset)}>
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        `
+            : null}
         <span class="title-text y-text-xs y-text-muted y-truncate">${() => pageTitle()}</span>
       </div>
       <div class="screenshot-area">
         <div class=${() => (loading() ? 'loading-bar active' : 'loading-bar')}></div>
         ${() =>
-          !showScreenshot()
+          !liveMode() && !showScreenshot()
             ? html`
           <div class="placeholder y-text-muted y-text-sm">${() => placeholderText()}</div>
         `
@@ -107,8 +181,41 @@ function App() {
           ref=${(el: HTMLImageElement) => {
             setScreenshotEl(el);
           }}
-          style=${() => (showScreenshot() ? '' : 'display:none')}
+          style=${() => (!liveMode() && showScreenshot() ? '' : 'display:none')}
           alt="Browser screenshot" />
+        <canvas
+          class="live-canvas"
+          tabindex="0"
+          ref=${(el: HTMLCanvasElement) => {
+            setCanvasEl(el);
+            // The remote page reflows to whatever the human's window actually is,
+            // which is also what makes the remote-mode reading (a phone) honest.
+            new ResizeObserver((entries) => {
+              const box = entries[0]?.contentRect;
+              if (box && liveMode()) syncViewport(box.width, box.height);
+            }).observe(el.parentElement ?? el);
+          }}
+          style=${() => (liveMode() ? '' : 'display:none')}
+          onMouseDown=${onCanvasMouseDown}
+          onMouseUp=${onCanvasMouseUp}
+          onMouseMove=${onCanvasMouseMove}
+          onWheel=${onCanvasWheel}
+          onContextMenu=${onCanvasContextMenu}
+          onKeyDown=${onCanvasKeyDown}
+          onKeyUp=${onCanvasKeyUp}
+          onPaste=${onCanvasPaste}></canvas>
+        ${() =>
+          liveMode()
+            ? html`
+          <div class="live-stats y-text-xs">
+            <span>${() => liveStatus()}</span>
+            <span>${() => `${liveStats().fps} fps`}</span>
+            <span>${() => `${liveStats().lagMs} ms`}</span>
+            <span>${() => `${liveStats().kbps} kbps`}</span>
+            <span>${() => `${liveStats().dropped} dropped`}</span>
+          </div>
+        `
+            : null}
       </div>
     </div>
   `;

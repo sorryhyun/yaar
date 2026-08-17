@@ -140,6 +140,22 @@ paths:
             application/json:
               schema:
                 type: object
+  /api/browser/{id}/screencast:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      summary: 'Live screencast frames out, raw user input in (pre-P0 spike)'
+      responses:
+        '200':
+          description: websocket
+          content:
+            application/json:
+              schema:
+                type: object
   /api/browser/{id}/screenshot:
     parameters:
       - name: id

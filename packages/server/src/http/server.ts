@@ -35,7 +35,7 @@ import {
   handleVerbRoutes,
 } from './routes/index.js';
 import { validateIframeToken } from './iframe-tokens.js';
-import { extractIframeToken } from './access.js';
+import { extractIframeToken, requireBundledApp } from './access.js';
 import { PUBLIC_ENDPOINTS as API_PUBLIC } from './routes/api.js';
 import { PUBLIC_ENDPOINTS as AUTH_PUBLIC } from './routes/auth.js';
 import { PUBLIC_ENDPOINTS as BRIDGE_PUBLIC } from './routes/bridge.js';
@@ -111,6 +111,32 @@ export function createFetchHandler(options: FetchHandlerOptions = {}) {
     runOnAppOriginSocket(() => handle(req, server));
 }
 
+/**
+ * `?quality=` / `?maxWidth=` on the screencast upgrade, clamped.
+ *
+ * The values reach `Page.startScreencast`, so they are bounded here rather than
+ * passed on as typed: quality outside 1–100 is a CDP error, and a `maxWidth`
+ * larger than the viewport just means Chrome ignores it while the parameter
+ * still looks honored.
+ */
+function clampedStreamParams(url: URL): {
+  screencastQuality?: number;
+  screencastMaxWidth?: number;
+} {
+  const read = (name: string, lo: number, hi: number): number | undefined => {
+    const raw = url.searchParams.get(name);
+    if (raw === null) return undefined;
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : undefined;
+  };
+  const quality = read('quality', 1, 100);
+  const maxWidth = read('maxWidth', 100, 4096);
+  return {
+    ...(quality !== undefined ? { screencastQuality: quality } : {}),
+    ...(maxWidth !== undefined ? { screencastMaxWidth: maxWidth } : {}),
+  };
+}
+
 function createFetchHandlerInner() {
   return async (req: Request, server: import('bun').Server<WsData>) => {
     const url = new URL(req.url, `http://localhost:${getPort()}`);
@@ -124,6 +150,27 @@ function createFetchHandlerInner() {
       const success = server.upgrade(req, { data });
       if (success) return undefined; // Bun handles the rest
       return new Response('WebSocket upgrade failed', { status: 500 });
+    }
+
+    // Live browser screencast (pre-P0 spike) — the `browser` app dials this to receive
+    // CDP frames and send the human's pointer/key events back. A WebSocket cannot carry
+    // a header any more than `<img src>` can, so the app's iframe token rides as
+    // `?__yaar_token=`, exactly as the screenshot and SSE routes beside it do.
+    const screencastMatch = url.pathname.match(/^\/api\/browser\/([a-zA-Z0-9_-]+)\/screencast$/);
+    if (screencastMatch) {
+      const auth = requireBundledApp(req, url, 'yaar-web');
+      if (auth instanceof Response) return auth;
+      const data: WsData = {
+        kind: 'screencast',
+        connectionId: generateConnectionId(),
+        sessionId: auth.sessionId,
+        monitorId: auth.monitorId ?? null,
+        browserId: decodeURIComponent(screencastMatch[1]),
+        ...clampedStreamParams(url),
+      };
+      const success = server.upgrade(req, { data });
+      if (success) return undefined;
+      return new Response('Screencast upgrade failed', { status: 500 });
     }
 
     // YAAR Bridge WebSocket — the companion extension dials out to here (see extension/).
