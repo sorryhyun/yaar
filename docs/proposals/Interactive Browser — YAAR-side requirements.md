@@ -228,3 +228,58 @@ back into the canvas. No handoff, no second session, no state to reconcile.
 - The refcounted screencast lets the first viewer's quality settings hold for everyone. Fine for
   one viewer; the sanctioned stream channel needs per-viewer encoding or an explicit "one
   encoder, negotiated settings" rule.
+
+---
+
+## IME probe (pre-P0)
+
+Work item 3 is the one P0 item that can sink the phase — "it ships in the first cut or the first
+cut doesn't ship" — so it was probed before P0 committed to a design, on the spike's own socket.
+
+### The design it settled
+
+A canvas cannot be composed into, and an input method runs *locally*, on the desktop where the
+human's keyboard is. So the keyboard belongs to a hidden textarea parked over the canvas — the
+**anchor** — and the canvas keeps only the mouse. What crosses the wire is therefore composed
+text, not keystrokes: `compositionupdate` → `Input.imeSetComposition`, `compositionend` →
+`Input.insertText`. A key the IME has claimed (`isComposing`, or keyCode 229 for the first one,
+which Chrome fires *before* `compositionstart`) is never forwarded and never `preventDefault`ed.
+
+There is no separate commit call: Chromium routes `Input.insertText` to `ImeCommitText`, which
+replaces an active preedit exactly as a real commit does.
+
+### What it answers
+
+Driven against a real headless Chrome, straight through `BrowserSession`:
+
+| | |
+|---|---|
+| preedit while composing | `한` visible in the field before commit |
+| commit | `한글`, then `한글입력` — once each, no duplication, no re-opened preedit |
+| cancel (backspaced-away composition) | empty text tears it down, field unchanged |
+| what the *page* saw | `compositionstart` → `compositionupdate` ×N → `beforeinput`/`input` → `compositionend:한글` |
+| contenteditable | `日本語` committed, caret rect resolved |
+
+That fourth row is the load-bearing one: the page receives a native IME event sequence, not text
+appearing from nowhere, so a site whose own JS keys off composition — chat inputs, autocomplete,
+controlled React fields — behaves.
+
+Then end to end through the app, with the desktop driving a composition into the anchor: the
+anchor was focused, had already been moved onto the remote caret, and the remote page ended with
+`한글abc` — composition committed once, plain typing still flowing through the same element after
+it.
+
+### The candidate window, and what is still unknown
+
+The open question was where the candidate list would be drawn, since the OS draws it at the
+*local* caret — a hidden textarea over a canvas. The answer is that the anchor has to be moved
+onto the remote caret, so `caretRect()` reports it (measured against the text for an `<input>`,
+range-based elsewhere) and the app parks the anchor there on click, on composition start, and
+after each commit. Two blind spots, both accepted for now: a caret inside a **cross-origin
+iframe** is unreachable, and a collapsed range in `contenteditable` often has no client rects —
+both fall back to the last click, which is where a typist just was.
+
+**What no automation can answer is whether it feels right under a real input method.** The
+composition events above were synthesized; a Korean 2-set keyboard and a Japanese conversion —
+with its far longer candidate interaction — have not touched this yet. That reading, and where
+the candidate window actually lands on screen, is the probe's remaining half.

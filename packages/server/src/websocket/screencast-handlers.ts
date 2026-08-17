@@ -13,6 +13,10 @@
  * question — does remote render + input forwarding feel good in the hand? — and
  * carries the counters that answer it. P0 replaces it.
  *
+ * The `ime` / `caret` messages below are the second probe riding the same socket:
+ * whether a CJK composition survives the trip (work item 3, the one P0 item that
+ * can sink the phase). Same status — measure first, productionize in P0.
+ *
  * Frame wire format, one binary message per frame:
  *
  *   [uint32 LE headerLen][headerLen bytes of UTF-8 JSON][JPEG bytes]
@@ -180,6 +184,30 @@ export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: strin
       if (typeof msg.text === 'string' && msg.text.length > 0 && msg.text.length <= 4096) {
         state.session.insertText(msg.text).catch(() => {});
       }
+      return;
+    }
+    // The IME probe (work item 3). `text` here is a *preedit*, not a commit — the
+    // human's IME runs locally and sends already-composed text; committing comes
+    // back through `text` above. An empty string is the cancel.
+    case 'ime': {
+      if (typeof msg.text === 'string' && msg.text.length <= 4096) {
+        state.session.setComposition(msg.text, num(msg.selStart), num(msg.selEnd)).catch(() => {});
+      }
+      return;
+    }
+    // Asked for on composition start, answered once: the app parks its hidden IME
+    // anchor here so the OS draws the candidate window under the remote caret.
+    case 'caret': {
+      state.session
+        .caretRect()
+        .then((rect) => {
+          if (ws.readyState !== 1) return;
+          // A miss is an answer too — "the page would not say where its caret is"
+          // is precisely what the probe needs to hear, and silence would read as a
+          // dropped message instead.
+          ws.send(JSON.stringify(rect ? { t: 'caret', ...rect } : { t: 'caret', found: false }));
+        })
+        .catch(() => {});
       return;
     }
     case 'viewport': {

@@ -13,9 +13,13 @@
  * the next frame after it. Client and server clocks are unrelated, so nothing
  * here subtracts one from the other.
  *
- * Not here, on purpose (they are P0, not the spike): IME composition, a
- * compositor capture mode with an escape hatch, touch, file drop, the agent
- * co-drive lock.
+ * Not here, on purpose (they are P0, not the spike): a compositor capture mode
+ * with an escape hatch, touch, file drop, the agent co-drive lock.
+ *
+ * IME *is* here, as a second probe — see the anchor section at the bottom. It is
+ * P0's highest-risk item ("ships in the first cut or the first cut doesn't
+ * ship"), so it gets measured on the spike's socket before P0 commits to a
+ * design, on the same principle as the frame counters above.
  */
 
 import { createSignal } from '@bundled/solid-js';
@@ -47,6 +51,14 @@ export type QualityPreset = keyof typeof QUALITY_PRESETS;
 export const [liveMode, setLiveMode] = createSignal(false);
 export const [quality, setQuality] = createSignal<QualityPreset>('high');
 export const [liveStatus, setLiveStatus] = createSignal('');
+/**
+ * What the IME probe is doing right now — the readout that answers it.
+ *
+ * `composing` means a preedit is in flight; `caret` / `no caret` says whether the
+ * remote page could tell us where to park the candidate window, which is the
+ * probe's second question and the one no unit test can answer.
+ */
+export const [imeStatus, setImeStatus] = createSignal('');
 export const [liveStats, setLiveStats] = createSignal<LiveStats>({
   fps: 0,
   kbps: 0,
@@ -63,6 +75,8 @@ const SHIFT = 8;
 let socket: WebSocket | null = null;
 let canvas: HTMLCanvasElement | null = null;
 let ctx: CanvasRenderingContext2D | null = null;
+/** The hidden editable that owns the keyboard while live. See the IME section. */
+let anchor: HTMLTextAreaElement | null = null;
 
 /** Remote viewport in CSS px, from the last frame's metadata. Drives coordinate mapping. */
 let remoteW = 1280;
@@ -82,6 +96,10 @@ let lastDropped = 0;
 export function setCanvasEl(el: HTMLCanvasElement): void {
   canvas = el;
   ctx = el.getContext('2d', { alpha: false });
+}
+
+export function setImeAnchorEl(el: HTMLTextAreaElement): void {
+  anchor = el;
 }
 
 export function isLiveConnected(): boolean {
@@ -121,12 +139,33 @@ export function connectLive(browserId: string): void {
 export function disconnectLive(): void {
   const ws = socket;
   socket = null;
+  composing = false;
+  setImeStatus('');
+  if (anchor) anchor.value = '';
   if (ws && ws.readyState <= WebSocket.OPEN) ws.close(1000, 'left live mode');
 }
 
 function handleControlFrame(text: string): void {
   try {
-    const msg = JSON.parse(text) as { t?: string; url?: string; title?: string };
+    const msg = JSON.parse(text) as {
+      t?: string;
+      url?: string;
+      title?: string;
+      x?: number;
+      y?: number;
+      h?: number;
+      found?: boolean;
+    };
+    if (msg.t === 'caret') {
+      if (typeof msg.x === 'number' && typeof msg.y === 'number') {
+        placeAnchor(msg.x, msg.y, msg.h ?? 16);
+      } else if (msg.found === false) {
+        // The anchor stays where the last click put it — an approximation is
+        // better than a candidate window in the corner. Say so in the readout.
+        setImeStatus(composing ? 'composing (guessed caret)' : 'no caret');
+      }
+      return;
+    }
     if (msg.t === 'ready') {
       setLiveStatus('Live');
       if (msg.url) updateUrlBar(msg.url, msg.title);
@@ -282,10 +321,16 @@ export function onCanvasMouseMove(e: MouseEvent): void {
 
 export function onCanvasMouseDown(e: MouseEvent): void {
   e.preventDefault();
-  canvas?.focus();
+  focusRemoteKeyboard();
   const p = toRemote(e);
   if (!p) return;
   markInput();
+  // A click is how the caret moves in the remote page, so it is also when the
+  // anchor has to follow. Park it on the click first — right in the common case
+  // and instant — then let the page's own answer correct it once it has focused
+  // whatever was clicked.
+  placeAnchor(p.x, p.y, 18);
+  requestCaret(150);
   send({
     t: 'mouse',
     type: 'mousePressed',
@@ -337,15 +382,19 @@ export function onCanvasContextMenu(e: MouseEvent): void {
 }
 
 /**
- * Keyboard, without IME.
+ * Keyboard.
  *
  * A printable key goes as `keyDown` carrying `text`, which is what makes Chrome
  * insert the character; everything else goes as `rawKeyDown`, which fires the
- * page's handlers without inserting anything. Composed CJK input does not survive
- * this path at all — that is work item 3, and it is P0's to solve, not the spike's.
+ * page's handlers without inserting anything.
+ *
+ * A key the IME has claimed goes nowhere at all: it is not ours to forward, and
+ * `preventDefault` on it would break composition outright. What the remote page
+ * gets instead is the composed text, from the handlers below.
  */
 export function onCanvasKeyDown(e: KeyboardEvent): void {
   if (!isLiveConnected()) return;
+  if (isImeKey(e)) return;
   e.preventDefault();
   markInput();
   const printable = e.key.length === 1 && !e.ctrlKey && !e.metaKey;
@@ -362,6 +411,7 @@ export function onCanvasKeyDown(e: KeyboardEvent): void {
 
 export function onCanvasKeyUp(e: KeyboardEvent): void {
   if (!isLiveConnected()) return;
+  if (isImeKey(e)) return;
   e.preventDefault();
   send({
     t: 'key',
@@ -401,4 +451,112 @@ export function syncViewport(width: number, height: number): void {
     if (width < 320 || height < 240) return;
     send({ t: 'viewport', width: Math.round(width), height: Math.round(height) });
   }, 250);
+}
+
+// ── IME probe ───────────────────────────────────────────────────────────────
+//
+// A canvas cannot be composed into. An IME needs a real editable to attach to,
+// and it needs one *locally*, in the desktop's own Chrome, because that is where
+// the human's keyboard and their OS input method actually are. So the keyboard
+// belongs to a hidden textarea parked over the canvas — the anchor — and the
+// canvas only ever sees the mouse.
+//
+// What crosses the wire is therefore not keystrokes but composed text:
+// `compositionupdate` → `Input.imeSetComposition` (the underlined preedit),
+// `compositionend` → `Input.insertText` (the commit). Two consequences worth
+// knowing before P0 builds on this:
+//
+//   - the remote page never learns which keys were pressed to compose, which is
+//     correct — a real IME does not tell it either;
+//   - the candidate window is drawn by the local OS at the *anchor's* caret, so
+//     the anchor has to be moved onto the remote caret or the candidate list
+//     appears in the wrong place. That is what `caret` frames are for, and how
+//     well it works is the thing this probe exists to find out.
+
+/** True while the IME owns this keystroke — ours to leave alone, not to forward. */
+function isImeKey(e: KeyboardEvent): boolean {
+  // 229 is the "handled by IME" virtual key. Chrome fires the very first keydown
+  // of a composition with it *before* compositionstart, so `composing` alone is
+  // one keystroke too late.
+  return composing || e.isComposing || e.keyCode === 229;
+}
+
+let composing = false;
+
+/** Give the keyboard to the anchor, so composition has something to attach to. */
+export function focusRemoteKeyboard(): void {
+  if (anchor) anchor.focus({ preventScroll: true });
+  else canvas?.focus();
+}
+
+export function onImeStart(): void {
+  composing = true;
+  setImeStatus('composing');
+  markInput();
+  requestCaret();
+}
+
+export function onImeUpdate(e: CompositionEvent): void {
+  if (!isLiveConnected()) return;
+  markInput();
+  const text = e.data ?? '';
+  // The caret sits at the end of the preedit: this is text being assembled, not
+  // a selection the human is moving through.
+  send({ t: 'ime', text, selStart: text.length, selEnd: text.length });
+}
+
+export function onImeEnd(e: CompositionEvent): void {
+  composing = false;
+  setImeStatus('');
+  if (!isLiveConnected()) return;
+  markInput();
+  const text = e.data ?? '';
+  // No data means the composition was erased rather than committed (backspacing
+  // the last jamo). Empty text is CDP's cancel; without it the preedit would be
+  // left standing in the remote page with nothing to finish it.
+  if (text) send({ t: 'text', text });
+  else send({ t: 'ime', text: '' });
+  requestCaret(120);
+}
+
+/**
+ * The anchor is an input sink, never a text field.
+ *
+ * Whatever the IME commits lands in the anchor's own value as well as going to
+ * the remote page; left there it would accumulate a shadow copy of everything
+ * ever typed, and the next composition would compose against it.
+ */
+export function onImeInput(): void {
+  if (composing || !anchor) return;
+  anchor.value = '';
+}
+
+/**
+ * Ask the remote page where its caret is.
+ *
+ * Debounced and delayed rather than sent per keystroke: the answer is a
+ * `Runtime.evaluate` round trip, and it is only needed when the caret *moves* —
+ * a click, a commit, the start of a composition.
+ */
+let caretTimer: ReturnType<typeof setTimeout> | null = null;
+
+function requestCaret(delayMs = 0): void {
+  if (caretTimer) clearTimeout(caretTimer);
+  caretTimer = setTimeout(() => {
+    caretTimer = null;
+    send({ t: 'caret' });
+  }, delayMs);
+}
+
+/** Park the anchor at a point in the remote page — the inverse of `toRemote`. */
+function placeAnchor(x: number, y: number, h: number): void {
+  if (!anchor || !canvas) return;
+  const sx = canvas.clientWidth / (remoteW || 1);
+  const sy = canvas.clientHeight / (remoteH || 1);
+  anchor.style.left = `${Math.round(canvas.offsetLeft + x * sx)}px`;
+  anchor.style.top = `${Math.round(canvas.offsetTop + y * sy)}px`;
+  // The OS draws the candidate window immediately below the caret box, so the
+  // height is what keeps the list from covering the line being typed.
+  anchor.style.height = `${Math.max(12, Math.round(h * sy))}px`;
+  if (composing) setImeStatus('composing');
 }

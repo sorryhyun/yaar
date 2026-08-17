@@ -76,6 +76,40 @@
   background: var(--yaar-bg);
 }
 
+/*
+ * The IME anchor (see live.ts). Invisible and unclickable, but focused and
+ * genuinely editable — an IME will not attach to anything less, and the OS draws
+ * its candidate window at this element's caret, which is why live.ts keeps
+ * moving it onto the remote page's caret.
+ *
+ * `opacity: 0` rather than `visibility: hidden` or a zero size: a hidden element
+ * cannot hold focus, and a zero-height one puts the candidate list at the wrong
+ * baseline. 16px font because anything smaller makes a phone zoom on focus.
+ */
+.screenshot-area .ime-anchor {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  font-size: 16px;
+  line-height: 1;
+  caret-color: transparent;
+  background: transparent;
+  color: transparent;
+}
+
+.live-stats .ime-readout {
+  color: var(--yaar-accent);
+}
+
 .url-bar .quality-select {
   flex-shrink: 0;
   width: auto;

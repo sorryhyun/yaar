@@ -436,3 +436,57 @@ export const FIND_MAIN_CONTENT = `(function() {
   }
   return best.tagName.toLowerCase();
 })()`;
+
+// ── caretRect ─────────────────────────────────────────────────────────
+
+/**
+ * IIFE → `{x, y, h}` of the text caret in viewport CSS px, or null.
+ *
+ * The IME probe's one page-side question: a candidate window is drawn by the
+ * *local* OS at the *local* caret, and the local caret is a hidden textarea
+ * floating over a canvas. To put the candidate list where the human is typing,
+ * the app has to move that textarea onto the remote caret — which only the
+ * remote page can report.
+ *
+ * Two known blind spots, both deliberate for a probe:
+ * - a caret inside a cross-origin iframe is unreachable from here, so the
+ *   candidate window falls back to wherever the anchor last was;
+ * - a collapsed range in `contenteditable` often has no client rects at all,
+ *   and the honest fix (inserting a probe span) mutates the page — so this
+ *   settles for the containing element's box.
+ */
+export const CARET_RECT = `(function() {
+  var el = document.activeElement;
+  var tag = el && el.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
+    var r = el.getBoundingClientRect();
+    var st = getComputedStyle(el);
+    var x = r.left + (parseFloat(st.paddingLeft) || 0) + (parseFloat(st.borderLeftWidth) || 0);
+    // Measure the text before the caret so the candidate list tracks it across a
+    // field rather than pinning to the field's left edge. Single-line only: a
+    // textarea would need line splitting, and the probe does not need it.
+    if (tag === 'INPUT') {
+      try {
+        var ctx = document.createElement('canvas').getContext('2d');
+        ctx.font = st.font || (st.fontSize + ' ' + st.fontFamily);
+        x += ctx.measureText(String(el.value).slice(0, el.selectionStart || 0)).width - el.scrollLeft;
+      } catch (e) {}
+    }
+    var h = Math.min(parseFloat(st.lineHeight) || r.height, r.height);
+    return { x: Math.max(r.left, Math.min(x, r.right)), y: r.top + (r.height - h) / 2, h: h };
+  }
+  var sel = window.getSelection();
+  if (sel && sel.rangeCount) {
+    var range = sel.getRangeAt(0).cloneRange();
+    range.collapse(false);
+    var rects = range.getClientRects();
+    var rr = rects.length ? rects[rects.length - 1] : null;
+    if (!rr) {
+      var node = range.startContainer;
+      var host = node.nodeType === 1 ? node : node.parentElement;
+      rr = host ? host.getBoundingClientRect() : null;
+    }
+    if (rr && (rr.height || rr.width)) return { x: rr.right, y: rr.top, h: rr.height || 16 };
+  }
+  return null;
+})()`;

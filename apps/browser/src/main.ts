@@ -38,6 +38,13 @@ import {
   onCanvasKeyDown,
   onCanvasKeyUp,
   onCanvasPaste,
+  setImeAnchorEl,
+  focusRemoteKeyboard,
+  imeStatus,
+  onImeStart,
+  onImeUpdate,
+  onImeEnd,
+  onImeInput,
 } from './live';
 import {
   refreshScreenshot,
@@ -76,6 +83,10 @@ async function toggleLive(): Promise<void> {
   if (next) {
     stopPolling();
     connectLive(await ensureBrowserId());
+    // Take the keyboard on entry rather than on first click: the anchor is what
+    // an IME composes into, and an unfocused one means the first Korean word a
+    // user types goes nowhere at all.
+    focusRemoteKeyboard();
   } else {
     disconnectLive();
     startPolling(activeBrowserId());
@@ -200,10 +211,31 @@ function App() {
           onMouseUp=${onCanvasMouseUp}
           onMouseMove=${onCanvasMouseMove}
           onWheel=${onCanvasWheel}
-          onContextMenu=${onCanvasContextMenu}
+          onContextMenu=${onCanvasContextMenu}></canvas>
+        <!--
+          The IME anchor: hidden, unclickable, and the thing that actually owns the
+          keyboard while live. It exists because an IME cannot compose into a canvas
+          and because the OS draws its candidate window at *this* element's caret —
+          so live.ts keeps moving it onto the remote page's caret. See live.ts.
+        -->
+        <textarea
+          class="ime-anchor"
+          ref=${(el: HTMLTextAreaElement) => {
+            setImeAnchorEl(el);
+          }}
+          style=${() => (liveMode() ? '' : 'display:none')}
+          aria-hidden="true"
+          autocomplete="off"
+          autocapitalize="off"
+          autocorrect="off"
+          spellcheck="false"
           onKeyDown=${onCanvasKeyDown}
           onKeyUp=${onCanvasKeyUp}
-          onPaste=${onCanvasPaste}></canvas>
+          onPaste=${onCanvasPaste}
+          onCompositionStart=${onImeStart}
+          onCompositionUpdate=${onImeUpdate}
+          onCompositionEnd=${onImeEnd}
+          onInput=${onImeInput}></textarea>
         ${() =>
           liveMode()
             ? html`
@@ -213,6 +245,7 @@ function App() {
             <span>${() => `${liveStats().lagMs} ms`}</span>
             <span>${() => `${liveStats().kbps} kbps`}</span>
             <span>${() => `${liveStats().dropped} dropped`}</span>
+            <span class="ime-readout">${() => imeStatus()}</span>
           </div>
         `
             : null}

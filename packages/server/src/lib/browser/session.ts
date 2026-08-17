@@ -27,6 +27,7 @@ import {
   EXTRACT_CONTENT,
   EXTRACT_IMAGES,
   FIND_MAIN_CONTENT,
+  CARET_RECT,
 } from './page-scripts.js';
 
 const DESKTOP_WIDTH = 1280;
@@ -1152,10 +1153,56 @@ export class BrowserSession extends EventEmitter {
     });
   }
 
-  /** Commit a finished text run (paste, or an IME result once P0 wires composition). */
+  /** Commit a finished text run — a paste, or the result of a composition. */
   async insertText(text: string): Promise<void> {
     this.touch();
     await this.cdp.send('Input.insertText', { text });
+  }
+
+  /**
+   * Set the in-progress IME composition — the underlined preedit a CJK typist
+   * sees before committing (`한` while `한국` is still being assembled).
+   *
+   * The human's IME runs *locally*, in the desktop's own Chrome, so what crosses
+   * the wire is already-composed text rather than keystrokes: `compositionupdate`
+   * on one side, `Input.imeSetComposition` on the other. Committing is
+   * {@link insertText} — Chromium routes it to `ImeCommitText`, which replaces an
+   * active preedit exactly as a real IME commit does, so there is no separate
+   * commit call to make.
+   *
+   * Empty text is CDP's documented cancel, and it is not a hypothetical: erasing
+   * the last jamo of a composition ends it with no data at all, and without this
+   * the preedit would stay on screen with nothing left to commit it.
+   */
+  async setComposition(
+    text: string,
+    selectionStart?: number,
+    selectionEnd?: number,
+  ): Promise<void> {
+    this.touch();
+    if (text === '') {
+      await this.cdp.send('Input.imeSetComposition', {
+        text: '',
+        selectionStart: -1,
+        selectionEnd: -1,
+      });
+      return;
+    }
+    const end = selectionEnd ?? text.length;
+    await this.cdp.send('Input.imeSetComposition', {
+      text,
+      selectionStart: selectionStart ?? end,
+      selectionEnd: end,
+    });
+  }
+
+  /**
+   * Where the remote page's caret is, in viewport CSS px — so the app can park
+   * its hidden IME anchor there and the OS draws the candidate window under the
+   * text being typed instead of in the corner of the window.
+   */
+  async caretRect(): Promise<{ x: number; y: number; h: number } | null> {
+    return (await this.eval<{ x: number; y: number; h: number } | null>(CARET_RECT)) ?? null;
   }
 
   /**
