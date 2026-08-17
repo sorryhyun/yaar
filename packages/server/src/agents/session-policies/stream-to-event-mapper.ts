@@ -81,6 +81,8 @@ export interface StreamMapperOptions {
   onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
   onSessionId?: (sessionId: string) => Promise<void>;
   monitorId?: string;
+  /** The app this turn belongs to, for `tool_use` hooks that filter on one app. */
+  appId?: string;
   onOutput?: (bytes: number) => void;
   /** Agent instance id — keys this agent's `yaar://agents/{id}/stream` feed. */
   agentInstanceId?: string;
@@ -137,6 +139,7 @@ export class StreamToEventMapper {
   private readonly onContextMessage?: (role: 'user' | 'assistant', content: string) => void;
   private readonly onSessionId?: (sessionId: string) => Promise<void>;
   private readonly monitorId?: string;
+  private readonly appId?: string;
   private readonly onOutput?: (bytes: number) => void;
   private readonly agentInstanceId?: string;
   private readonly streamSessionId?: string;
@@ -168,6 +171,7 @@ export class StreamToEventMapper {
     this.onContextMessage = options.onContextMessage;
     this.onSessionId = options.onSessionId;
     this.monitorId = options.monitorId;
+    this.appId = options.appId;
     this.onOutput = options.onOutput;
     this.agentInstanceId = options.agentInstanceId;
     this.streamSessionId = options.streamSessionId;
@@ -489,7 +493,13 @@ export class StreamToEventMapper {
           });
         }
 
-        const hookCtx: ToolUseContext = { toolName: displayName };
+        // `appId` lets a hook name one app's agent — the same field a `link_open` hook
+        // points at. Undefined for a monitor or session agent, which is what makes a
+        // filter naming an app skip their calls rather than match everything.
+        const hookCtx: ToolUseContext = {
+          toolName: displayName,
+          ...(this.appId ? { appId: this.appId } : {}),
+        };
 
         if ((VERB_TOOL_NAMES as readonly string[]).includes(rawName)) {
           const input = message.toolInput as Record<string, unknown> | undefined;

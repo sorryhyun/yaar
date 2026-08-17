@@ -21,6 +21,29 @@
  * is missing or won't mint a token — none of them is a reason for a clicked link to
  * open nothing at all, and the iframe window has its own "Cannot embed this site" card
  * with a way out to a real browser tab.
+ *
+ * Ahead of both sits a question neither the site nor the app can answer: **has the user
+ * said where links to this site go?** A link to `github.com/owner/repo` framed or browsed
+ * is a worse answer than the GitHub app navigating to that repository — but only the user
+ * gets to decide that, so the rule lives in `config/hooks.json` as a `link_open` hook
+ * (`GET /api/hooks/link`, resolved by `features/config/hooks.ts`) and not in the app's own
+ * manifest. An app that declared the site itself would claim it on every desktop it was
+ * ever installed on, which is the one thing a link-routing rule must not do.
+ *
+ * Two rules past that, both about not stranding a click:
+ *
+ * - **The app's answer decides.** The hook's command returns `{ handled: true }` or the
+ *   link continues down the chain below. Anything else — an error, no reply, no such
+ *   command — is read as "not mine", because a link that opens nowhere is the outcome
+ *   this whole module exists to rule out. A rule for a site is not the ability to show
+ *   every URL under it: `github.com/settings` is not a repository.
+ * - **A closed app is opened, and closed again if it turns the link down.** The rule used
+ *   to apply only while its app happened to be on screen, on the reasoning that a window
+ *   opened for a link the app then declines is worse than the placement it replaced. That
+ *   traded the feature's main case — a link clicked in some *other* app — for a hazard
+ *   that undoes itself: the launch is reverted on `{ handled: false }`, and reported to
+ *   the agent only once the app has taken the link. `"launch": false` on the hook opts
+ *   out per rule.
  */
 import { cascadeWindowBounds, WINDOW_PLACEMENT } from '@yaar/shared';
 import type { OSAction, WindowBounds } from '@yaar/shared';
@@ -28,7 +51,11 @@ import { apiFetch } from '@/lib/api';
 import { toWindowKey } from '@/store/helpers';
 import { DEFAULT_VIEWPORT_WIDTH, DEFAULT_VIEWPORT_HEIGHT } from '@/constants/layout';
 import { getDesktopState, getDesktopStore } from './store-access';
-import { sendLocalAppCommand } from './app-protocol-relay';
+import {
+  runLocalAppCommand,
+  sendLocalAppCommand,
+  waitForAppWindowReady,
+} from './app-protocol-relay';
 
 const BROWSER_APP_ID = 'browser';
 
@@ -105,26 +132,223 @@ async function isEmbeddable(href: string): Promise<boolean> {
   }
 }
 
-/** The installed Browser app, or null. Looked up once — the app list does not move. */
-let browserAppPromise: Promise<{ id: string; name: string; run?: string } | null> | null = null;
+interface InstalledApp {
+  id: string;
+  name: string;
+  run?: string;
+}
 
-function getBrowserApp() {
-  if (!browserAppPromise) {
-    browserAppPromise = apiFetch('/api/apps')
+/** The installed apps. Looked up once — the app list does not move. */
+let appsPromise: Promise<InstalledApp[]> | null = null;
+
+function getApps(): Promise<InstalledApp[]> {
+  if (!appsPromise) {
+    appsPromise = apiFetch('/api/apps')
       .then(async (res) => {
         if (!res.ok) throw new Error(`/api/apps failed (${res.status})`);
-        const { apps } = (await res.json()) as {
-          apps: Array<{ id: string; name: string; run?: string }>;
-        };
-        return apps.find((a) => a.id === BROWSER_APP_ID) ?? null;
+        const { apps } = (await res.json()) as { apps: InstalledApp[] };
+        return apps;
       })
       .catch(() => {
-        // A failed lookup must not be remembered as "no Browser app" forever.
-        browserAppPromise = null;
-        return null;
+        // A failed lookup must not be remembered as "nothing is installed" forever.
+        appsPromise = null;
+        return [];
       });
   }
-  return browserAppPromise;
+  return appsPromise;
+}
+
+async function getApp(appId: string): Promise<InstalledApp | null> {
+  return (await getApps()).find((a) => a.id === appId) ?? null;
+}
+
+interface LinkHandler {
+  appId: string;
+  command: string;
+  /** Whether a closed app may be opened to take the link (`"launch": false` opts out). */
+  launch: boolean;
+}
+
+/** The app a `link_open` hook sends this URL to, or null when the user wired none. */
+async function linkHandlerFor(href: string): Promise<LinkHandler | null> {
+  try {
+    const res = await apiFetch(`/api/hooks/link?url=${encodeURIComponent(href)}`, {
+      signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as { handler?: Partial<LinkHandler> | null };
+    const { appId, command, launch } = body.handler ?? {};
+    return appId && command ? { appId, command, launch: launch !== false } : null;
+  } catch {
+    // No answer is no rule: the link falls to the placement below, which is where every
+    // link went before hooks could name a handler.
+    return null;
+  }
+}
+
+/** A window this module opened, in the shape `recordOpened` reports. */
+interface LaunchedWindow {
+  appId: string;
+  name: string;
+  monitorId: string;
+  bounds: WindowBounds;
+  content: { renderer: 'iframe'; data: string };
+}
+
+/**
+ * Open an app's own window on the active monitor. Null when it could not be done, which
+ * every caller treats as "this app did not take the link".
+ *
+ * Deliberately does *not* report the window to the agent: a launch may still be undone
+ * (an app that declines the link is closed again), and a `window.create` interaction for
+ * a window that no longer exists is worse than none. Callers record it once the window
+ * has earned its place.
+ */
+async function launchAppWindow(appId: string, runQuery?: string): Promise<LaunchedWindow | null> {
+  const app = await getApp(appId);
+  if (!app?.run) return null;
+
+  const store = getDesktopState();
+  const sessionId = store.sessionId;
+  if (!sessionId) return null;
+  const monitorId = store.activeMonitorId;
+
+  // A `yaar://` content URI carries its query through to the served app (see
+  // resolveContentUri) — which is how the Browser app receives `?url=`.
+  const runUrl = runQuery ? `${app.run}${app.run.includes('?') ? '&' : '?'}${runQuery}` : app.run;
+
+  // A window opened without a token can never call /api/verb, and an app is nothing but
+  // verb calls — so a failed mint is a failed launch, not a blank window.
+  let iframeToken: string;
+  try {
+    const res = await apiFetch('/api/iframe-token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ windowId: appId, sessionId, appId, monitorId }),
+    });
+    if (!res.ok) throw new Error(`iframe-token request failed (${res.status})`);
+    const { token } = await res.json();
+    if (typeof token !== 'string' || !token) throw new Error('iframe-token carried no token');
+    iframeToken = token;
+  } catch (err) {
+    console.warn(`[open-url] could not open the ${appId} app:`, err);
+    return null;
+  }
+
+  const content = { renderer: 'iframe' as const, data: runUrl };
+  const bounds = nextBounds(
+    monitorId,
+    WINDOW_PLACEMENT.defaultWidth,
+    WINDOW_PLACEMENT.defaultHeight,
+  );
+  getDesktopState().applyActions([
+    {
+      type: 'window.create',
+      windowId: appId,
+      title: app.name,
+      bounds,
+      content,
+      appId,
+      iframeToken,
+    },
+  ]);
+  return { appId, name: app.name, monitorId, bounds, content };
+}
+
+/**
+ * What an `openUrl` reply has to say for the link to be considered placed: `{ handled:
+ * true }`, or a bare `true` from an app that answered in the shorter spelling. Everything
+ * else — `{ handled: false }`, an error, a null from a command that never answered — is
+ * the same "not mine", and sends the link on down the chain.
+ */
+function tookTheLink(result: unknown): boolean {
+  if (result === true) return true;
+  if (typeof result !== 'object' || result === null) return false;
+  return (result as { handled?: unknown }).handled === true;
+}
+
+/**
+ * How long a freshly opened app gets to register before the link goes elsewhere.
+ *
+ * Bounded because the user is waiting on a click: an app that has not finished its
+ * `yaar:app-ready` handshake cannot answer, and past this point the Browser app now beats
+ * the right app later.
+ */
+const APP_LAUNCH_TIMEOUT_MS = 8_000;
+
+/**
+ * Hand `href` to the app the user wired it to, opening that app if it is closed. False
+ * when nothing took it — see the module header for why a missing rule and a declined URL
+ * are the same answer here.
+ */
+async function openInHookedApp(
+  href: string,
+  title: string,
+  sourceWindowId?: string,
+): Promise<boolean> {
+  const handler = await linkHandlerFor(href);
+  if (!handler) return false;
+
+  // Read the store *after* the await: the window list is a live thing.
+  const store = getDesktopState();
+  const key = toWindowKey(store.activeMonitorId, handler.appId);
+
+  // Never hand a link back to the window it came from. That app already saw this URL
+  // through its own `links.onOpen` hook and let it go, so it is asking for the link to
+  // land *somewhere else* — an "open the real page" link out of the app the rule points
+  // at is exactly this case, and bouncing it back would make that link unclickable.
+  if (key === sourceWindowId) return false;
+
+  // A rule that only applied while its app happened to be on screen was the feature
+  // failing in the case it exists for — a link clicked in some other app, with the
+  // handler closed. Opening it is what the rule asked for; the undo below is what makes
+  // that safe.
+  let launched: LaunchedWindow | null = null;
+  if (!store.windows[key]) {
+    if (!handler.launch) return false;
+    launched = await launchAppWindow(handler.appId);
+    if (!launched) return false;
+    // A command posted before the iframe registers is lost — nothing queues it on this
+    // path — so the launch is not complete until the app answers for itself.
+    if (!(await waitForAppWindowReady(key, APP_LAUNCH_TIMEOUT_MS))) {
+      undoLaunch(launched);
+      return false;
+    }
+  }
+
+  const result = await runLocalAppCommand(key, handler.command, { url: href });
+  if (!tookTheLink(result)) {
+    // The app has no view for this URL. Leaving the window we just opened would answer a
+    // link the user clicked with an app they did not ask for, on top of the placement
+    // that does show the page.
+    if (launched) undoLaunch(launched);
+    return false;
+  }
+
+  if (launched) {
+    recordOpened({
+      windowId: launched.appId,
+      windowTitle: launched.name,
+      monitorId: launched.monitorId,
+      bounds: launched.bounds,
+      content: launched.content,
+      appId: launched.appId,
+      details: `opened to show ${title}, which the user's link_open hook routes here`,
+    });
+    return true;
+  }
+
+  const actions: OSAction[] = [];
+  if (store.windows[key]?.minimized)
+    actions.push({ type: 'window.restore', windowId: handler.appId });
+  actions.push({ type: 'window.focus', windowId: handler.appId });
+  store.applyActions(actions);
+  return true;
+}
+
+/** Close a window this module opened for a link the app then did not take. */
+function undoLaunch(launched: LaunchedWindow): void {
+  getDesktopState().applyActions([{ type: 'window.close', windowId: launched.appId }]);
 }
 
 /**
@@ -149,63 +373,18 @@ async function openInBrowserApp(href: string, title: string): Promise<boolean> {
     return sendLocalAppCommand(key, 'open', { url: href });
   }
 
-  const app = await getBrowserApp();
-  if (!app?.run) return false;
+  // `?url=` is the Browser app's launch parameter: it opens on that page rather than on
+  // a blank one, so there is nothing to wait for and no command to send.
+  const launched = await launchAppWindow(BROWSER_APP_ID, `url=${encodeURIComponent(href)}`);
+  if (!launched) return false;
 
-  const sessionId = getDesktopState().sessionId;
-  if (!sessionId) return false;
-
-  // `?url=` is the Browser app's launch parameter — a `yaar://` content URI carries its
-  // query through to the served app (see resolveContentUri).
-  const runUrl = `${app.run}${app.run.includes('?') ? '&' : '?'}url=${encodeURIComponent(href)}`;
-
-  // A window opened without a token can never call /api/verb, and the Browser app is
-  // nothing but verb calls — so a failed mint is a failed launch, not a blank window.
-  let iframeToken: string;
-  try {
-    const res = await apiFetch('/api/iframe-token', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        windowId: BROWSER_APP_ID,
-        sessionId,
-        appId: BROWSER_APP_ID,
-        monitorId,
-      }),
-    });
-    if (!res.ok) throw new Error(`iframe-token request failed (${res.status})`);
-    const { token } = await res.json();
-    if (typeof token !== 'string' || !token) throw new Error('iframe-token carried no token');
-    iframeToken = token;
-  } catch (err) {
-    console.warn('[open-url] could not open the Browser app:', err);
-    return false;
-  }
-
-  const content = { renderer: 'iframe' as const, data: runUrl };
-  const bounds = nextBounds(
-    monitorId,
-    WINDOW_PLACEMENT.defaultWidth,
-    WINDOW_PLACEMENT.defaultHeight,
-  );
-  getDesktopState().applyActions([
-    {
-      type: 'window.create',
-      windowId: BROWSER_APP_ID,
-      title: app.name,
-      bounds,
-      content,
-      appId: BROWSER_APP_ID,
-      iframeToken,
-    },
-  ]);
   recordOpened({
-    windowId: BROWSER_APP_ID,
-    windowTitle: app.name,
-    monitorId,
-    bounds,
-    content,
-    appId: BROWSER_APP_ID,
+    windowId: launched.appId,
+    windowTitle: launched.name,
+    monitorId: launched.monitorId,
+    bounds: launched.bounds,
+    content: launched.content,
+    appId: launched.appId,
     details: `opened to show ${title}, which refuses to be framed`,
   });
   return true;
@@ -264,6 +443,7 @@ export async function openExternalUrl(
   const title = linkText || parsed.hostname || parsed.href;
   const href = parsed.href;
 
+  if (await openInHookedApp(href, title, sourceWindowId)) return;
   if (await isEmbeddable(href)) {
     openIframeWindow(href, title, sourceWindowId);
     return;

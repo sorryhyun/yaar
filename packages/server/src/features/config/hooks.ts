@@ -9,9 +9,23 @@ import type { OSAction } from '@yaar/shared';
 import { configRead, configWrite } from '../../storage/storage-manager.js';
 import type { HookSchedule } from './hook-schedule.js';
 
+/**
+ * What a hook does when it matches. Two kinds, and the difference is load-bearing:
+ *
+ * - **Reactions** (`interaction`, `os_action`) are fire-and-forget. Something happened;
+ *   the hook pushes a message or an OS Action at the session and nobody waits.
+ * - **Resolvers** (`open_in_app`) are *answers*. The desktop is holding a decision open —
+ *   where does this link go — and reads the hook to make it. A resolver never fires on
+ *   its own, so putting one on `tool_use` (or a reaction on `link_open`) does nothing,
+ *   which is why the two are named apart rather than left to look interchangeable.
+ */
 export type HookAction =
   | { type: 'interaction'; payload: string }
-  | { type: 'os_action'; payload: OSAction | OSAction[] };
+  | { type: 'os_action'; payload: OSAction | OSAction[] }
+  | { type: 'open_in_app'; payload: { appId: string; command?: string; launch?: boolean } };
+
+/** The app command a `link_open` hook calls when its payload names none. */
+export const DEFAULT_LINK_COMMAND = 'openUrl';
 
 export interface HookFilter {
   /** Verb filter: 'invoke', 'read', 'list', 'delete'. */
@@ -22,6 +36,14 @@ export interface HookFilter {
   action?: string | string[];
   /** Non-verb tool name filter: 'WebSearch', etc. */
   toolName?: string | string[];
+  /**
+   * Which app the event belongs to: the app whose agent made the tool call
+   * (`tool_use`). Absent on an event raised outside an app — a monitor agent's own tool
+   * call has no appId, and a filter naming one therefore never matches it.
+   */
+  appId?: string | string[];
+  /** URL prefix/glob pattern, for `link_open`: 'https://github.com/*'. */
+  url?: string | string[];
 }
 
 export interface Hook {
@@ -164,6 +186,8 @@ export interface ToolUseContext {
   verb?: string;
   uri?: string;
   action?: string;
+  /** The app whose agent made the call; absent for a monitor or session agent. */
+  appId?: string;
 }
 
 /**
@@ -182,8 +206,53 @@ export async function getToolUseHooks(ctx: ToolUseContext): Promise<Hook[]> {
     if (f.verb && (!ctx.verb || !matchesFilter(ctx.verb, f.verb))) return false;
     if (f.uri && (!ctx.uri || !matchesFilter(ctx.uri, f.uri))) return false;
     if (f.action && (!ctx.action || !matchesFilter(ctx.action, f.action))) return false;
+    if (f.appId && (!ctx.appId || !matchesFilter(ctx.appId, f.appId))) return false;
     return true;
   });
+}
+
+/** Which app a link should be handed to, and the command that takes it. */
+export interface LinkHandler {
+  appId: string;
+  command: string;
+  /**
+   * Whether a closed app may be opened to take the link. True unless the hook says
+   * `"launch": false`.
+   *
+   * The default is what the rule already implies — a user who wrote "github.com links go
+   * to the GitHub app" means it whether or not that app happens to be on screen, and the
+   * opposite default made the feature look broken exactly when it was most useful. The
+   * opt-out exists for a heavy app that is worth routing to when it is already up and not
+   * worth a cold start otherwise.
+   */
+  launch: boolean;
+}
+
+/**
+ * The app a `link_open` hook sends `url` to, or null when the user has wired none.
+ *
+ * This is the whole trigger for link routing: an installed app that *can* show a site
+ * changes nothing until its user says so here. An app declaring the site in its app.json
+ * was the earlier answer and it made the claim automatic for everyone who installed the
+ * app, which is the one thing a link-routing rule must not be.
+ *
+ * First match wins — `hooks.json` is an ordered list the user wrote, so the order is an
+ * answer rather than a coincidence, and a narrower rule placed above a broader one is how
+ * you say "this path elsewhere".
+ */
+export async function resolveLinkHandler(url: string): Promise<LinkHandler | null> {
+  const hooks = await getHooksByEvent('link_open');
+  for (const hook of hooks) {
+    if (hook.action.type !== 'open_in_app') continue;
+    const pattern = hook.filter?.url;
+    // An unfiltered `link_open` hook would claim every link on the desktop, including
+    // the ones nothing can show. A hook with no `url` is a hook that names no site.
+    if (!pattern || !matchesFilter(url, pattern)) continue;
+    const { appId, command, launch } = hook.action.payload;
+    if (!appId) continue;
+    return { appId, command: command || DEFAULT_LINK_COMMAND, launch: launch !== false };
+  }
+  return null;
 }
 
 /**

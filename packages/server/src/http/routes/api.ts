@@ -1,6 +1,6 @@
 /**
  * REST API routes — health, providers, apps, agents/stats, remote-info,
- * iframe-token, pick-directory, embeddable.
+ * iframe-token, pick-directory, embeddable, hooks/link.
  */
 
 import { getAvailableProviders, getWarmPool } from '../../providers/factory.js';
@@ -13,6 +13,7 @@ import { pickDirectory } from '../../lib/pick-directory.js';
 import { getRemoteInfo } from '../../lifecycle.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
 import { checkEmbeddable } from '../../features/http/embeddable.js';
+import { resolveLinkHandler } from '../../features/config/hooks.js';
 import { requireHost, resolvePrincipal } from '../access.js';
 import { IS_REMOTE, IS_BUNDLED_EXE, YAAR_VERSION } from '../../config.js';
 
@@ -99,6 +100,7 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
     '/api/agents/stats',
     '/api/iframe-token',
     '/api/embeddable',
+    '/api/hooks/link',
   ];
   if (HOST_ONLY.includes(url.pathname)) {
     const principal = resolvePrincipal(req, url);
@@ -157,6 +159,25 @@ export async function handleApiRoutes(req: Request, url: URL): Promise<Response 
       // Only validateUrl throws — a scheme we won't fetch, or a private-network target.
       return errorResponse(err instanceof Error ? err.message : 'Invalid URL', 400);
     }
+  }
+
+  // Which app, if any, the user has wired this link to (`link_open` hooks). The desktop
+  // asks before it places a clicked link; see `store/iframe-bridge/open-url.ts`.
+  //
+  // Host-only for the same reason as `/api/embeddable` above: the desktop document asks
+  // this, and the answer names an app the caller would otherwise be able to enumerate.
+  if (url.pathname === '/api/hooks/link' && req.method === 'GET') {
+    const target = url.searchParams.get('url');
+    if (!target) return errorResponse('Missing "url" query parameter', 400);
+    let href: string;
+    try {
+      // Match on the normalized form, so a default port or a mixed-case host cannot
+      // change whether a user's rule applies.
+      href = new URL(target).href;
+    } catch {
+      return errorResponse('Invalid URL', 400);
+    }
+    return jsonResponse({ handler: await resolveLinkHandler(href) });
   }
 
   // Generate an iframe token for client-side window creation (e.g. desktop icon click).

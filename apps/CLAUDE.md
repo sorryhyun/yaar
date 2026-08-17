@@ -98,6 +98,44 @@ own answer for a control that opens a URL without being an anchor.
 `window.__yaarAllowPopups = true` opts out of the `window.open` override, as
 `__yaarAllowFrameNavigation` opts out of the link guard.
 
+### Links *into* an app
+
+An app can also be where links to a site *land* — a github.com link in a memo window reaching
+the GitHub app instead of the Browser app. Your side of that is one command:
+
+```ts
+openUrl: {
+  description: 'Show a github.com URL in this app',
+  params: z.object({ url: z.string() }),
+  run: async (p) => ({ handled: await routeGitHubUrl(p.url) }),
+}
+```
+
+**The app does not declare which site is "its".** That is a `link_open` hook in the user's
+`config/hooks.json` naming a URL pattern and your app id (see
+[hooks](../docs/guides/hooks.md#link-handling)), because a claim in `app.json` would take the
+site over on every desktop the app was ever installed on. Write the command; whether it is ever
+called is the user's decision, and `describe`-ing an `openUrl` command is what lets an agent
+offer to write the rule.
+
+Three rules follow, all in `store/iframe-bridge/open-url.ts`:
+
+- `openUrl` must answer `{ handled: true }`, or `{ handled: false }` for a URL under the site
+  the app has no view for (`github.com/settings` is not a repository). Anything else — an error,
+  no reply — reads as "not mine" and the link continues to the framing probe. A link that opens
+  nowhere is the outcome that whole module exists to rule out.
+- **A closed app is opened to take the link**, and closed again if it answers `{ handled: false }`.
+  So `openUrl` may be the first thing your app is ever asked — it runs against a freshly mounted
+  app, after `defineApp` registration and not before it. The desktop reports the window to the
+  agent only once the app has taken the link.
+- A link is **never handed back to the window it came from**. That app already saw it through
+  `links.onOpen` and let it go, so it is asking for the link to land somewhere else — which is
+  what an "open the real page ↗" anchor in that app means. Mark those anchors (`data-external`)
+  and let the hook pass them through.
+
+Handling links inside your own content is still `links.onOpen` — same routing, no round trip,
+and no rule needed since your own content is your own business.
+
 ## Design Tokens
 
 Single source of truth: `packages/shared/src/design/tokens.ts` generates both the app-iframe CSS

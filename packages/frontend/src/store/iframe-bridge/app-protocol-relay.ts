@@ -53,6 +53,55 @@ const registeredAppWindows = new Map<string, string[] | undefined>();
  */
 export function markAppWindowRegistered(windowId: string, noReplay?: string[]) {
   registeredAppWindows.set(windowId, noReplay);
+  const waiting = readyWaiters.get(windowId);
+  if (waiting) {
+    readyWaiters.delete(windowId);
+    for (const resolve of waiting) resolve(true);
+  }
+}
+
+/** Resolvers waiting for a window's iframe to finish the `yaar:app-ready` handshake. */
+const readyWaiters = new Map<string, Array<(ready: boolean) => void>>();
+
+/**
+ * Wait until the app in `windowKey` has registered, for a desktop that just opened the
+ * window and has something to send it.
+ *
+ * A command posted before the handshake reaches an iframe that has not installed its
+ * listener yet, and is simply lost — there is no queue on this path (the server's replay
+ * is for windows *it* knows about). So the one caller that opens a window itself —
+ * `open-url.ts`, launching the app a `link_open` hook names — waits here instead of
+ * racing the iframe's load.
+ *
+ * False on timeout, which the caller must treat as "this app did not take it": an app
+ * that never registers can never answer either.
+ */
+export function waitForAppWindowReady(windowKey: string, timeoutMs = 10_000): Promise<boolean> {
+  // Registered *and* still mounted. A stale entry for a window that has since closed
+  // would otherwise report a frame that cannot be spoken to as ready.
+  const el = findWindowElement(windowKey);
+  if (registeredAppWindows.has(windowKey) && el && findIframeIn(el)) return Promise.resolve(true);
+
+  return new Promise<boolean>((resolve) => {
+    let settled = false;
+    const finish = (ready: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const waiting = readyWaiters.get(windowKey);
+      if (waiting) {
+        const rest = waiting.filter((r) => r !== finish);
+        if (rest.length) readyWaiters.set(windowKey, rest);
+        else readyWaiters.delete(windowKey);
+      }
+      resolve(ready);
+    };
+    const timer = setTimeout(() => {
+      console.debug(`[AppProtocol] ${windowKey} never registered; not waiting further`);
+      finish(false);
+    }, timeoutMs);
+    readyWaiters.set(windowKey, [...(readyWaiters.get(windowKey) ?? []), finish]);
+  });
 }
 
 /**
@@ -147,15 +196,80 @@ export function sendLocalAppCommand(
   command: string,
   params?: Record<string, unknown>,
 ): boolean {
-  const el = findWindowElement(windowKey);
-  const iframe = el ? findIframeIn(el) : null;
-  if (!iframe?.contentWindow) return false;
-
-  // Namespaced so a reply can never be mistaken for one the server is waiting on.
-  const requestId = `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-  postToIframe(iframe, { type: 'yaar:app-command-request', requestId, command, params });
+  const iframe = localCommandTarget(windowKey);
+  if (!iframe) return false;
+  postToIframe(iframe, {
+    type: 'yaar:app-command-request',
+    requestId: localRequestId(),
+    command,
+    params,
+  });
   console.debug(`[AppProtocol] → local command ${command} for ${windowKey}`, params);
   return true;
+}
+
+/**
+ * The same door, for a desktop that needs the app's *answer*.
+ *
+ * `sendLocalAppCommand` above is fire-and-forget because its one caller had nothing to
+ * decide. Link routing does: an app that owns an origin still cannot open every URL under
+ * it (`github.com/settings` is not a repository), and the desktop has to hear "not mine"
+ * to place the link somewhere else. Resolves to the command's result, or **null** for
+ * every other outcome — no iframe, an app that errored, an app that never answered — all
+ * of which mean the same thing to the caller: this app did not take the link.
+ */
+export function runLocalAppCommand(
+  windowKey: string,
+  command: string,
+  params: Record<string, unknown>,
+  timeoutMs = 3_000,
+): Promise<unknown> {
+  const iframe = localCommandTarget(windowKey);
+  if (!iframe) return Promise.resolve(null);
+
+  const requestId = localRequestId();
+  return new Promise<unknown>((resolve) => {
+    let settled = false;
+    const finish = (value: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      window.removeEventListener('message', handler);
+      resolve(value);
+    };
+    function handler(e: MessageEvent) {
+      if (!e.data?.requestId || e.data.requestId !== requestId) return;
+      const msg = e.data as AppProtocolPostMessage;
+      if (msg.type !== 'yaar:app-command-response') return;
+      // Same spoofing check the server-bound relay makes: only the frame we asked.
+      if (e.source !== iframe!.contentWindow) return;
+      if (msg.error) {
+        console.debug(`[AppProtocol] local command ${command} failed: ${msg.error}`);
+        finish(null);
+        return;
+      }
+      finish(msg.result ?? null);
+    }
+    const timer = setTimeout(() => {
+      console.debug(`[AppProtocol] no reply to local command ${command} for ${windowKey}`);
+      finish(null);
+    }, timeoutMs);
+    window.addEventListener('message', handler);
+    postToIframe(iframe, { type: 'yaar:app-command-request', requestId, command, params });
+    console.debug(`[AppProtocol] → local command ${command} for ${windowKey}`, params);
+  });
+}
+
+/** The iframe a local command addresses, or null when the window has none. */
+function localCommandTarget(windowKey: string): HTMLIFrameElement | null {
+  const el = findWindowElement(windowKey);
+  const iframe = el ? findIframeIn(el) : null;
+  return iframe?.contentWindow ? iframe : null;
+}
+
+/** Namespaced so a reply can never be mistaken for one the server is waiting on. */
+function localRequestId(): string {
+  return `local-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
 /**

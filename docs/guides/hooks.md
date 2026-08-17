@@ -13,15 +13,25 @@ Hooks are stored in `config/hooks.json`, addressable as `yaar://config/hooks` (o
 | Event | Description | Filter Support |
 |-------|-------------|----------------|
 | `launch` | Fires when a new session starts | None |
-| `tool_use` | Fires when the AI calls a tool | `verb`, `uri`, `action`, `toolName` filters |
+| `tool_use` | Fires when the AI calls a tool | `verb`, `uri`, `action`, `toolName`, `appId` filters |
 | `schedule` | Fires on a clock — see [Scheduled Hooks](#scheduled-hooks) | None (uses `schedule` instead) |
+| `link_open` | Asked when a link is clicked — see [Link Handling](#link-handling) | `url` filter (**required**) |
 
 ## Action Types
+
+Two kinds, and the difference decides which events they belong on:
+
+- **Reactions** (`interaction`, `os_action`) are fire-and-forget. Something happened; the hook
+  pushes a message or an OS Action at the session and nothing waits for it.
+- **Resolvers** (`open_in_app`) are *answers*. The desktop is holding a decision open and reads
+  the hook to make it. A resolver never fires on its own, so a resolver on `tool_use` — or a
+  reaction on `link_open` — does nothing at all.
 
 | Action | Description | Supported Events |
 |--------|-------------|------------------|
 | `interaction` | Injects a user message into the session (payload is a string) | `launch`, `schedule` |
 | `os_action` | Emits OS Actions directly to the frontend (payload is an action object or array) | `launch`, `tool_use`, `schedule` |
+| `open_in_app` | Answers "this link belongs to app X" (payload is `{ appId, command? }`) | `link_open` |
 
 ## Hook Structure
 
@@ -61,7 +71,57 @@ Filters match against the verb tool context. All filter fields are optional — 
 - Match any storage read: `{ "verb": "read", "uri": "yaar://storage/*" }`
 - Match any apps invoke: `{ "verb": "invoke", "uri": "yaar://apps/*" }`
 - Match non-verb tool: `{ "toolName": "WebSearch" }`
+- Match one app's agent: `{ "appId": "github" }` — a monitor or session agent's call carries no
+  `appId`, so a filter naming one skips it rather than treating "no app" as "any app"
 - Match everything (no filter): omit the `filter` field entirely
+
+## Link Handling
+
+A link clicked inside an app never navigates that app's own frame — the desktop places it, in an
+iframe window or (for a site that refuses framing, like github.com) in the Browser app. A
+`link_open` hook says that *your* links to a given site go somewhere better:
+
+```json
+{
+  "event": "link_open",
+  "filter": { "url": "https://github.com/*" },
+  "action": { "type": "open_in_app", "payload": { "appId": "github" } },
+  "label": "Open GitHub links in the GitHub app"
+}
+```
+
+With that rule, a github.com link clicked anywhere on the monitor is handed to the GitHub app,
+which navigates to the repository, issue or file instead of opening a browser view of it.
+
+This is a hook rather than something an app declares about itself on purpose: an app that claimed
+a site in its own `app.json` would claim it on **every desktop it was ever installed on**, with no
+one having agreed to it. The rule is yours, it lives in your config, and deleting it restores the
+default placement.
+
+| Field | Meaning |
+|-------|---------|
+| `filter.url` | **Required.** URL prefix/glob, matched against the normalized URL: `https://github.com/*`. A hook with no `url` names no site and is ignored rather than claiming every link. |
+| `payload.appId` | The app the link is handed to |
+| `payload.command` | The app command that takes it; defaults to `openUrl` |
+| `payload.launch` | Whether a closed app may be opened for the link. Defaults to **true**; set `false` for a heavy app worth routing to only while it is already up. |
+
+Four rules govern what happens next, all of them about not stranding a click:
+
+- **A closed app is opened to take the link** (unless `"launch": false`), and **closed again** if
+  it declines. The desktop waits for the app's `yaar:app-ready` handshake, asks, and reverts the
+  launch on `{ handled: false }` — so a rule works whether or not its app happens to be on screen,
+  without leaving a window behind for a link it could not show.
+- **The app's answer decides.** The command receives `{ url }` and must return `{ handled: true }`.
+  Anything else — `{ handled: false }` for a URL it has no view for, an error, no reply, no such
+  command — sends the link on to the normal placement.
+- **A link is never handed back to the window it came from.** That app already saw the URL through
+  its own `links.onOpen` hook and let it go, which is what an "open the real page ↗" link inside
+  it means.
+- **First matching hook wins**, so a narrow rule placed above a broad one is how you carve out an
+  exception.
+
+Writing the app side — the `openUrl` command and in-app routing — is
+[app development](../../apps/CLAUDE.md#links-into-an-app).
 
 ## Scheduled Hooks
 

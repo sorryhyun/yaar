@@ -225,6 +225,7 @@ export class AppTaskProcessor {
         prompt,
         fp,
         windowId,
+        appId,
         // The turn runs on the window's monitor, not the sender's — this scopes the
         // window handles the agent's actions resolve against, and the monitor its
         // `relay` reaches.

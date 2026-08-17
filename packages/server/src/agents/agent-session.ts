@@ -67,6 +67,15 @@ export interface HandleMessageOptions {
   model?: string;
   /** Window ID for app agent tool resolution (set in AsyncLocalStorage context) */
   windowId?: string;
+  /**
+   * The app this turn belongs to, for hooks that filter on one app's activity.
+   *
+   * Passed rather than read back off `role`: an app's per-turn role is
+   * `app-{appId}-m{monitorId}-{messageId}` and both an app id and a message id may
+   * contain the separator, so parsing it back is guesswork at the one place a wrong
+   * answer would silently fire someone else's hook.
+   */
+  appId?: string;
 }
 
 export class AgentSession {
@@ -506,6 +515,7 @@ export class AgentSession {
           }
         },
         monitorId: options.monitorId,
+        appId: options.appId,
         onOutput: this.onOutput ?? undefined,
         agentInstanceId: stableAgentId,
         streamSessionId: this.liveSessionId,

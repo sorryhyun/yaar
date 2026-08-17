@@ -22,7 +22,8 @@ import { renderSignature } from '../../lib/command-signature.js';
 import { defsOf } from '../../lib/schema-refs.js';
 
 /**
- * The parts of the app-authoring contract the compiler owns, stated by the compiler.
+ * The parts of the app-authoring contract the *platform* owns — mostly the compiler,
+ * stated by the compiler — rather than the app's own source.
  *
  * An app that writes and deploys other apps (devtools) has to know the mount
  * point id and the exact set of design tokens. Both are facts the compiler
@@ -43,6 +44,14 @@ import { defsOf } from '../../lib/schema-refs.js';
  * class tail do not, and stay one `describeBundledLibrary({ name:
  * 'design-tokens' })` away. `describeDesignTokensBrief`'s own header has the
  * asymmetry that decides which half is which.
+ *
+ * The links section is here for the same reason with a different owner: `links.onOpen`
+ * is one `describeBundledLibrary({ name: 'yaar' })` away, but the *handshake* that makes
+ * the desktop hand an app links to a site — an `openUrl` command on the app's side, a
+ * `link_open` hook on the user's — is a desktop contract with no SDK signature to look
+ * up, so an agent that has not been told cannot discover it. It carries the split as
+ * well as the shape: an agent that knows only "apps can handle links" writes the claim
+ * into app.json, which is the arrangement this one replaced.
  */
 function buildAuthoringContract(): string {
   return `
@@ -65,6 +74,20 @@ The compiled HTML wrapper contains exactly one mount element: \`<div id="${APP_M
 \`render(App, document.getElementById('${APP_MOUNT_ID}')!)\` — any other id resolves to null
 and the app renders nothing at all, with no error, because the wrapper hides an empty mount.
 The compiler rejects a wrong render target.
+
+### Links into an app
+A link the user clicks never navigates an app's own frame; the desktop places it, and a
+site that refuses framing (github.com, x.com) can only become a Browser app window. An app
+that *is* a view of some site can take those links instead. Its half is **one command**:
+\`openUrl\`, taking \`{ url }\`, answering \`{ handled: true }\` — or \`{ handled: false }\` for a
+URL under that site it has no view for (\`github.com/settings\` is not a repository), which
+sends the link on to a surface that can show it. The app does **not** declare which site is
+its own: that is a \`link_open\` hook in the user's \`config/hooks.json\` naming a URL pattern
+and an app id, because a claim in app.json would take a site over on every desktop the app
+was installed on. Write the command and say it exists; whether links are routed to it is the
+user's call. For links inside the app's own content no rule is needed — register
+\`links.onOpen((url, anchor) => ...)\` from \`@bundled/yaar\` and return \`false\` to claim one.
+Leave the app's own "open the real page ↗" anchors unclaimed.
 
 ### Design tokens
 ${describeDesignTokensBrief()}

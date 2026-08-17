@@ -54,6 +54,7 @@ const {
   removeHook,
   getHooksByEvent,
   getToolUseHooks,
+  resolveLinkHandler,
   markHookRun,
   _resetHooksCache,
 } = await import('../features/config/hooks.js');
@@ -317,5 +318,126 @@ describe('getToolUseHooks — URI-based matching', () => {
 
     const noMatch = await getToolUseHooks({ toolName: 'WebSearch' });
     expect(noMatch).toHaveLength(0);
+  });
+
+  it('scopes a tool_use hook to one app', async () => {
+    await addHook(
+      'tool_use',
+      { type: 'os_action', payload: { type: 'toast.show', id: 'test', message: 'github!' } },
+      'Only the GitHub app',
+      { appId: 'github' },
+    );
+
+    expect(await getToolUseHooks({ toolName: 'verbs:read', appId: 'github' })).toHaveLength(1);
+    expect(await getToolUseHooks({ toolName: 'verbs:read', appId: 'memo' })).toHaveLength(0);
+    // A monitor agent's call carries no appId, so a hook naming an app skips it rather
+    // than treating "no app" as "any app".
+    expect(await getToolUseHooks({ toolName: 'verbs:read' })).toHaveLength(0);
+  });
+});
+
+describe('link_open hooks', () => {
+  beforeEach(async () => {
+    _resetHooksCache();
+    await mkdir(TEST_CONFIG_DIR, { recursive: true });
+    await rm(HOOKS_FILE, { force: true });
+  });
+
+  afterEach(async () => {
+    await rm(HOOKS_FILE, { force: true });
+  });
+
+  /** The rule a user writes to send a site's links to an app. */
+  async function wire(url: string | string[], appId: string, command?: string) {
+    return addHook(
+      'link_open',
+      { type: 'open_in_app', payload: { appId, ...(command ? { command } : {}) } },
+      `Open ${Array.isArray(url) ? url.join(', ') : url} in ${appId}`,
+      { url },
+    );
+  }
+
+  it('answers with the app the user wired the site to', async () => {
+    await wire('https://github.com/*', 'github');
+
+    expect(await resolveLinkHandler('https://github.com/anthropics/claude-code')).toEqual({
+      appId: 'github',
+      command: 'openUrl',
+      launch: true,
+    });
+    // The bare origin is the same rule's subject, not a different one.
+    expect(await resolveLinkHandler('https://github.com')).toEqual({
+      appId: 'github',
+      command: 'openUrl',
+      launch: true,
+    });
+  });
+
+  it('answers null for a site with no rule', async () => {
+    await wire('https://github.com/*', 'github');
+
+    expect(await resolveLinkHandler('https://example.com/post/1')).toBeNull();
+    // A prefix match is on the URL, not the string: a lookalike host is a different site.
+    expect(await resolveLinkHandler('https://github.com.evil.test/x')).toBeNull();
+  });
+
+  it('takes the command from the hook when it names one', async () => {
+    await wire('https://news.example.com/*', 'reader', 'showArticle');
+
+    expect(await resolveLinkHandler('https://news.example.com/a/1')).toEqual({
+      appId: 'reader',
+      command: 'showArticle',
+      launch: true,
+    });
+  });
+
+  it('reports the launch opt-out, so a heavy app is not cold-started by a link', async () => {
+    await addHook(
+      'link_open',
+      { type: 'open_in_app', payload: { appId: 'lab', launch: false } },
+      'Only while it is open',
+      { url: 'https://lab.example.com/*' },
+    );
+
+    expect(await resolveLinkHandler('https://lab.example.com/x')).toEqual({
+      appId: 'lab',
+      command: 'openUrl',
+      launch: false,
+    });
+  });
+
+  it('lets an earlier rule win, so a narrow one can sit above a broad one', async () => {
+    await wire('https://github.com/anthropics/*', 'claude-watch');
+    await wire('https://github.com/*', 'github');
+
+    expect((await resolveLinkHandler('https://github.com/anthropics/x'))?.appId).toBe(
+      'claude-watch',
+    );
+    expect((await resolveLinkHandler('https://github.com/other/x'))?.appId).toBe('github');
+  });
+
+  it('ignores a rule that names no site, rather than letting it claim every link', async () => {
+    await addHook('link_open', { type: 'open_in_app', payload: { appId: 'github' } }, 'No url');
+
+    expect(await resolveLinkHandler('https://github.com/a/b')).toBeNull();
+  });
+
+  it('ignores a disabled rule and a reaction action on this event', async () => {
+    const hook = await wire('https://github.com/*', 'github');
+    await addHook(
+      'link_open',
+      { type: 'os_action', payload: { type: 'toast.show', id: 't', message: 'hi' } },
+      'A reaction, which link_open never fires',
+      { url: 'https://example.com/*' },
+    );
+
+    expect(await resolveLinkHandler('https://example.com/x')).toBeNull();
+
+    const hooks = await loadHooks();
+    hooks.find((h) => h.id === hook.id)!.enabled = false;
+    await writeFile(HOOKS_FILE, JSON.stringify({ hooks, idCounter: hooks.length }, null, 2));
+    _resetHooksCache();
+
+    expect(await resolveLinkHandler('https://github.com/a/b')).toBeNull();
   });
 });

@@ -61,6 +61,8 @@ export interface AgentTurnOptions {
   prompt: string;
   fp?: Fingerprint;
   windowId?: string;
+  /** The app whose agent is taking this turn. Absent for a monitor or session turn. */
+  appId?: string;
   canonicalAgent?: string;
   resumeSessionId?: string;
   monitorId?: string;
@@ -113,6 +115,7 @@ export async function runAgentTurn(ctx: TurnContext, opts: AgentTurnOptions): Pr
       systemPromptOverride: opts.systemPromptOverride,
       model: opts.model,
       windowId: opts.windowId,
+      appId: opts.appId,
       onContextMessage: (msgRole, content) => {
         if (msgRole === 'assistant') {
           ctx.contextAssembly.appendAssistantMessage(ctx.contextTape, content, source);
