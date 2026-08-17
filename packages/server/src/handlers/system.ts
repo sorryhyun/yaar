@@ -5,6 +5,10 @@
  *   read('yaar://system/update')                       → cached status + live install progress
  *   invoke('yaar://system/update', { action: 'check' })   → ask GitHub for the latest release
  *   invoke('yaar://system/update', { action: 'install' }) → download, verify, and swap it in
+ *   list('yaar://system/browsers')                     → the sandbox browser's sessions
+ *   read('yaar://system/browsers/{id}')                → one session
+ *   invoke('yaar://system/browsers/{id}', { action })  → revive a suspended session
+ *   delete('yaar://system/browsers/{id}')              → kill it
  *
  * `read` is deliberately network-free so a UI can poll it during an install; only
  * `check` goes out. See `features/update/updater.ts` for the reasoning behind that
@@ -12,6 +16,7 @@
  */
 
 import type { ResourceRegistry, VerbResult } from './uri-registry.js';
+import type { ResolvedUri } from './uri-resolve.js';
 import { ok, okJson, okLinks, error } from './utils.js';
 import {
   checkForUpdate,
@@ -20,6 +25,17 @@ import {
   startInstall,
   UpdateRefused,
 } from '../features/update/updater.js';
+import { getHeadlessBrowser } from '../lib/browser/index.js';
+import { actionEmitter } from '../session/action-emitter.js';
+import { getSessionId } from '../agents/agent-context.js';
+
+const BROWSERS_ROOT = 'yaar://system/browsers';
+
+/** The `{id}` in `yaar://system/browsers/{id}`, or null for the collection itself. */
+function browserIdFrom(resolved: ResolvedUri): string | null {
+  const rest = resolved.sourceUri.slice(BROWSERS_ROOT.length).replace(/^\/+|\/+$/g, '');
+  return rest ? decodeURIComponent(rest) : null;
+}
 
 export function registerSystemHandlers(registry: ResourceRegistry): void {
   // ── yaar://system — namespace root ──
@@ -39,9 +55,16 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
           name: 'fonts',
           description: 'The webfonts YAAR serves, and subsets of them inlined as data: URLs',
         },
+        {
+          uri: BROWSERS_ROOT,
+          name: 'browsers',
+          description: 'Sandbox browser sessions — live, suspended, and crashed',
+        },
       ]);
     },
   });
+
+  registerBrowserHandlers(registry);
 
   // ── yaar://system/update — version check + self-update ──
   registry.register('yaar://system/update', {
@@ -121,6 +144,115 @@ export function registerSystemHandlers(registry: ResourceRegistry): void {
           2,
         ),
       );
+    },
+  });
+}
+
+/**
+ * The sandbox browser's sessions, as processes rather than as an implementation
+ * detail of the `browser` app.
+ *
+ * Only the headless sandbox door (`getHeadlessBrowser`) is listed. The other door
+ * — `LocalUserBrowser` — drives the *user's own* Chrome, where "kill this session"
+ * would mean closing a tab they opened themselves; that browser is reached through
+ * `yaar://session/browser` by the session agent and has no business appearing in a
+ * kill list.
+ */
+function registerBrowserHandlers(registry: ResourceRegistry): void {
+  registry.register(BROWSERS_ROOT, {
+    description:
+      'Sandbox browser sessions. Each entry is one tab of the server-side Chrome: its id ' +
+      '(the `browserId` a window addresses it by), the page it is on, whether anyone is ' +
+      'watching it, how idle it is, and roughly what it weighs. `state` is "live" when a ' +
+      'CDP socket is behind it, "suspended" when only its record is (a reloaded desktop, ' +
+      'an idle-swept tab, a restarted server — reviving it restores the page and its ' +
+      'logins), or "crashed" when the tab died and could not be brought back.',
+    verbs: ['describe', 'list', 'read'],
+
+    async list(): Promise<VerbResult> {
+      const provider = getHeadlessBrowser();
+      const sessions = await provider.listSessionInfo();
+      const stats = provider.getStats();
+      return okJson({
+        chromeRunning: stats.chromeRunning,
+        maxSessions: stats.maxSessions,
+        liveSessions: sessions.filter((s) => s.state === 'live').length,
+        sessions,
+      });
+    },
+
+    async read(): Promise<VerbResult> {
+      const sessions = await getHeadlessBrowser().listSessionInfo();
+      return okJson(sessions);
+    },
+  });
+
+  registry.register(`${BROWSERS_ROOT}/*`, {
+    description:
+      'One sandbox browser session. Read for its state, invoke with action "revive" to put ' +
+      'a socket back behind a suspended id (the page is re-navigated and the persisted ' +
+      'profile still holds its cookies), delete to kill it — which also closes the window ' +
+      'showing it.',
+    verbs: ['describe', 'read', 'invoke', 'delete'],
+    // Seeing the roster is open (the collection above); reviving and killing are not.
+    // Same shape as `yaar://session/agents/*`, and for the same reason: one app must
+    // not be able to end another window's session because it happened to be granted a
+    // prefix. The session agent and bundled system apps — Process Explorer — qualify.
+    access: 'session-principal',
+    invokeSchema: {
+      type: 'object',
+      required: ['action'],
+      properties: {
+        action: {
+          type: 'string',
+          enum: ['revive'],
+          description: '"revive" reopens a suspended or crashed session under the same id.',
+        },
+      },
+    },
+
+    async exists(resolved: ResolvedUri): Promise<boolean> {
+      const id = browserIdFrom(resolved);
+      if (!id) return false;
+      const sessions = await getHeadlessBrowser().listSessionInfo();
+      return sessions.some((s) => s.id === id);
+    },
+
+    async read(resolved: ResolvedUri): Promise<VerbResult> {
+      const id = browserIdFrom(resolved);
+      if (!id) return error('Browser session id required.');
+      const info = (await getHeadlessBrowser().listSessionInfo()).find((s) => s.id === id);
+      if (!info) return error(`No browser session "${id}".`);
+      return okJson(info);
+    },
+
+    async invoke(resolved: ResolvedUri, payload): Promise<VerbResult> {
+      const id = browserIdFrom(resolved);
+      if (!id) return error('Browser session id required.');
+      const action = (payload as { action?: string } | undefined)?.action;
+      if (action !== 'revive') return error('Provide action: "revive".');
+
+      const session = await getHeadlessBrowser().reviveSession(id);
+      if (!session) return error(`Could not revive browser session "${id}".`);
+      return ok(`Browser ${id} revived at ${session.currentUrl}.`);
+    },
+
+    async delete(resolved: ResolvedUri): Promise<VerbResult> {
+      const id = browserIdFrom(resolved);
+      if (!id) return error('Browser session id required.');
+
+      const provider = getHeadlessBrowser();
+      const session = provider.getSession(id);
+      // Killing the tab without closing the window leaves a canvas painting a page
+      // that no longer exists — which is exactly the failure P1 is here to end.
+      if (session?.windowId) {
+        actionEmitter.emitAction(
+          { type: 'window.close', windowId: session.windowId },
+          getSessionId(),
+        );
+      }
+      await provider.closeSession(id);
+      return ok(`Browser ${id} closed.`);
     },
   });
 }

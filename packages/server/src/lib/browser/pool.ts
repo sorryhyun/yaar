@@ -9,15 +9,22 @@
  * default provider and the correct one for headless / cloud / no-display /
  * Claude-in-Claude / eval runs.
  *
+ * Its profile lives under `storage/.browser/profile` and is **kept** between runs,
+ * so a site the user logged into in the sandbox is still logged in tomorrow — the
+ * half of "sessions behave like processes" that a revived tab cannot supply on its
+ * own. `YAAR_BROWSER_EPHEMERAL=1` goes back to a scratch dir wiped on shutdown.
+ *
  * (Formerly `BrowserPool` — that name is kept as an alias for back-compat.)
  *
  * All the CDP/session plumbing lives in `CdpBrowserProvider`; this class adds
  * only the launch-and-own-a-private-Chrome behavior.
  */
 
+import { join } from 'path';
 import { CdpBrowserProvider } from './cdp-provider.js';
 import { LocalUserBrowser } from './local-user-browser.js';
 import type { BrowserProvider } from './types.js';
+import { getBrowserStateDir, isEphemeralBrowserProfile } from '../../config.js';
 import {
   findChrome,
   launchChrome,
@@ -69,7 +76,14 @@ export class HeadlessServerBrowser extends CdpBrowserProvider {
 
     this.initPromise = (async () => {
       await cleanupStaleChrome();
-      const instance = await launchChrome(this.chromePath!);
+      // Stale cleanup first, and that ordering is load-bearing now that the profile
+      // persists: an orphaned Chrome from a crashed run still holds this directory's
+      // singleton lock, and the new launch would sit there refusing to come up.
+      const instance = await launchChrome(this.chromePath!, {
+        ...(isEphemeralBrowserProfile()
+          ? {}
+          : { userDataDir: join(getBrowserStateDir(), 'profile') }),
+      });
       await writePidFile(instance);
       this.chrome = instance;
       console.log(`[browser] Chrome launched on port ${instance.port}`);

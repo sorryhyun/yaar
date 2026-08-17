@@ -2,7 +2,7 @@ export {};
 
 import { For } from '@bundled/solid-js';
 import html from '@bundled/solid-js/html';
-import { activeTab, agentStats, appProcesses, selectTab, windows } from '../data';
+import { activeTab, agentStats, appProcesses, browsers, selectTab, windows } from '../data';
 import type { TabId } from '../types';
 
 interface StatCard {
@@ -16,9 +16,9 @@ interface StatCard {
 }
 
 /**
- * The three cards, as data. They were three near-identical markup blocks; the
- * only real differences are the two accessors, so a card is now four fields and
- * adding a fourth tab is one entry rather than one more copy of the block.
+ * The cards, as data. They were near-identical markup blocks; the only real
+ * differences are the two accessors, so a card is four fields and a new tab is
+ * one entry rather than one more copy of the block.
  */
 const CARDS: StatCard[] = [
   {
@@ -43,6 +43,17 @@ const CARDS: StatCard[] = [
     sub: () => {
       const orphaned = appProcesses().filter((p) => p.orphaned).length;
       return orphaned > 0 ? `${orphaned} orphaned` : 'none orphaned';
+    },
+  },
+  {
+    id: 'browsers',
+    label: 'Browsers',
+    value: () => browsers().length,
+    // Suspended is the count worth surfacing: those are ids that still name a
+    // page with nothing connected to it, and the only ones with a Revive button.
+    sub: () => {
+      const suspended = browsers().filter((b) => b.state !== 'live').length;
+      return suspended > 0 ? `${suspended} suspended` : 'all live';
     },
   },
 ];

@@ -9,15 +9,24 @@ export {};
 import { errMsg, list, showToast } from '@bundled/yaar';
 import * as z from '@bundled/zod';
 import { LOG_PREFIX, URI } from './constants';
-import { markRefreshed, setAgentStats, setInstalledApps, setWindows } from './store';
+import { markRefreshed, setAgentStats, setBrowsers, setInstalledApps, setWindows } from './store';
 import {
   AgentEntrySchema,
   AgentStatsSchema,
+  BrowserListSchema,
+  BrowserSessionSchema,
   InstalledAppSchema,
   ResourceLinkSchema,
   WindowInfoSchema,
 } from './schema';
-import type { AgentEntry, AgentStats, AgentUsage, InstalledApp, WindowInfo } from './types';
+import type {
+  AgentEntry,
+  AgentStats,
+  AgentUsage,
+  BrowserSession,
+  InstalledApp,
+  WindowInfo,
+} from './types';
 
 // ── Failure reporting ────────────────────────────────────────────
 
@@ -295,7 +304,56 @@ export async function fetchApps() {
   );
 }
 
+/**
+ * The sandbox browser's sessions. Unlike the three lists above this one polls
+ * (see BROWSER_POLL_MS) — nothing on the server pushes a change when a page
+ * navigates or a tab is swept.
+ */
+export async function fetchBrowsers() {
+  await guardedFetch(
+    'browser sessions',
+    async () => {
+      const raw = await list<unknown>(URI.browsers);
+      // No Chrome has been launched yet — an empty list, not a failure.
+      if (raw == null) {
+        setBrowsers([]);
+        return;
+      }
+
+      const parsed = z.safeParse(BrowserListSchema, raw);
+      if (!parsed.success) {
+        throw new Error('Malformed browser list', { cause: parsed.error.issues });
+      }
+
+      const sessions: BrowserSession[] = [];
+      for (const entry of parsed.data.sessions ?? []) {
+        const row = z.safeParse(BrowserSessionSchema, entry);
+        if (!row.success) {
+          logInvalidRow('browser session', entry, row.error.issues);
+          continue;
+        }
+        const b = row.data;
+        sessions.push({
+          id: b.id,
+          state: b.state,
+          url: b.url ?? 'about:blank',
+          title: b.title ?? '',
+          mobile: b.mobile ?? false,
+          windowId: b.windowId,
+          driving: b.driving ?? false,
+          viewers: b.viewers ?? 0,
+          createdAt: b.createdAt ?? 0,
+          idleMs: b.idleMs ?? 0,
+          jsHeapBytes: b.jsHeapBytes ?? null,
+        });
+      }
+      setBrowsers(sessions);
+    },
+    () => setBrowsers([]),
+  );
+}
+
 export async function refreshAll() {
-  await Promise.all([fetchAgents(), fetchWindows(), fetchApps()]);
+  await Promise.all([fetchAgents(), fetchWindows(), fetchApps(), fetchBrowsers()]);
   markRefreshed();
 }

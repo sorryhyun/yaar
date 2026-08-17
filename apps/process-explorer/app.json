@@ -1,7 +1,7 @@
 {
   "icon": "🔍",
   "name": "Process Explorer",
-  "description": "Monitor and control agents, windows, and running apps",
+  "description": "Monitor and control agents, windows, running apps, and browser sessions",
   "run": "dist/index.html",
   "permissions": [
     "yaar://session/",
@@ -11,12 +11,13 @@
       "verbs": [
         "list"
       ]
-    }
+    },
+    "yaar://system/browsers/"
   ],
   "streams": [
     "agents"
   ],
-  "version": "1.1.2",
+  "version": "1.2.0",
   "author": "YAAR",
   "kind": "system",
   "appId": "process-explorer"

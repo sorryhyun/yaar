@@ -15,14 +15,18 @@ export class CDPClient {
     { resolve: (value: unknown) => void; reject: (err: Error) => void }
   >();
   private eventHandlers = new Map<string, Set<(params: unknown) => void>>();
+  private closeHandlers = new Set<(expected: boolean) => void>();
   private closed = false;
+  private closedByUs = false;
 
   private constructor(ws: WebSocket) {
     this.ws = ws;
     ws.on('message', (data) => this.handleMessage(data.toString()));
     ws.on('close', () => {
+      const expected = this.closedByUs;
       this.closed = true;
       this.rejectAll('Connection closed');
+      this.notifyClosed(expected);
     });
     ws.on('error', () => {
       /* handled by close */
@@ -103,15 +107,32 @@ export class CDPClient {
     });
   }
 
+  /**
+   * Called when the socket goes away, with whether {@link close} was what did it.
+   *
+   * `expected: false` is the only signal a tab has that its renderer died or that
+   * Chrome exited underneath it — CDP has no "goodbye" frame, the socket simply
+   * stops. `BrowserSession` turns that into its `crashed` event.
+   */
+  onClose(handler: (expected: boolean) => void): void {
+    if (this.closed) {
+      handler(this.closedByUs);
+      return;
+    }
+    this.closeHandlers.add(handler);
+  }
+
   close(): void {
     if (this.closed) return;
     this.closed = true;
+    this.closedByUs = true;
     this.rejectAll('Client closed');
     try {
       this.ws.close();
     } catch {
       /* ignore */
     }
+    this.notifyClosed(true);
   }
 
   get isClosed(): boolean {
@@ -140,6 +161,20 @@ export class CDPClient {
       }
     } catch {
       /* malformed message */
+    }
+  }
+
+  /** Fire the close handlers exactly once, whichever path got here first. */
+  private notifyClosed(expected: boolean): void {
+    if (this.closeHandlers.size === 0) return;
+    const handlers = [...this.closeHandlers];
+    this.closeHandlers.clear();
+    for (const h of handlers) {
+      try {
+        h(expected);
+      } catch {
+        /* a listener's failure is not the socket's problem */
+      }
     }
   }
 

@@ -5,7 +5,7 @@ export {};
 // tables sit side by side and a new agent tier or turn state is a one-line edit.
 
 import { AGENT_TIER } from './constants';
-import type { AgentEntry, AgentTurnState } from './types';
+import type { AgentEntry, AgentTurnState, BrowserSession } from './types';
 
 /**
  * Badge colour per agent tier. A tier this app does not know about falls back to
@@ -44,4 +44,19 @@ export const TURN_STATE_STYLE: Record<AgentTurnState, { label: string; color: st
  */
 export function statusDotClass(attention: boolean) {
   return attention ? 'y-dot y-dot-warn' : 'y-dot y-dot-ok';
+}
+
+/**
+ * Badge colour per browser-session state. `suspended` is warned rather than
+ * muted: a session whose socket is gone is not resting, it is a window that will
+ * not paint until someone revives it.
+ */
+const BROWSER_STATE_COLOR: Record<string, string> = {
+  live: 'var(--yaar-success)',
+  suspended: 'var(--yaar-warning, #f5a623)',
+  crashed: 'var(--yaar-error)',
+};
+
+export function browserStateColor(state: BrowserSession['state']) {
+  return BROWSER_STATE_COLOR[state] ?? 'var(--yaar-text-muted)';
 }

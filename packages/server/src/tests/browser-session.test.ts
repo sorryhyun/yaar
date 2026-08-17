@@ -16,6 +16,7 @@ const mockSend = mock((_method: string, _params?: Record<string, unknown>) =>
 const mockWaitForEvent = mock(() => Promise.resolve(undefined));
 const mockClose = mock(() => undefined);
 const mockOn = mock(() => {});
+const mockOnClose = mock(() => {});
 
 mock.module('../lib/browser/cdp.js', () => ({
   CDPClient: {
@@ -25,6 +26,8 @@ mock.module('../lib/browser/cdp.js', () => ({
         waitForEvent: mockWaitForEvent,
         close: mockClose,
         on: mockOn,
+        off: mock(() => {}),
+        onClose: mockOnClose,
       }),
     ),
   },

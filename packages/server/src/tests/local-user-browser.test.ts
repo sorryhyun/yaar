@@ -22,6 +22,8 @@ mock.module('../lib/browser/cdp.js', () => ({
         waitForEvent: mock(() => Promise.resolve(undefined)),
         close: mockCdpClose,
         on: mockCdpOn,
+        off: mock(() => {}),
+        onClose: mock(() => {}),
       }),
     ),
   },

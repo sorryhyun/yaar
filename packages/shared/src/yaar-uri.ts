@@ -25,6 +25,8 @@
  *
  * The running installation itself (yaar://system/...):
  *   yaar://system/update                     → version check + self-update
+ *   yaar://system/browsers                   → sandbox browser sessions
+ *   yaar://system/browsers/{id}              → one session (revive, kill)
  */
 
 export type YaarAuthority =

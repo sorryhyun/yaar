@@ -290,7 +290,8 @@ export class LiveSession {
         sendTo: (connectionId, event) => this.sendTo(connectionId, event),
         claimMessageId: (messageId) => this.claimMessageId(messageId),
         resetSession: (connectionId, monitorId) => this.handleReset(connectionId, monitorId),
-        closeBrowsers: () => this.closeBrowsers(),
+        closeBrowserForWindow: (windowId) => this.closeBrowserForWindow(windowId),
+        closeUnboundBrowsers: () => this.closeUnboundBrowsers(),
       }).routes(),
     );
 
@@ -611,14 +612,37 @@ export class LiveSession {
     return true;
   }
 
-  /** Close every browser session this host holds — headless sandbox and real Chrome. */
-  private closeBrowsers(): void {
-    getHeadlessBrowser()
-      .closeAll()
-      .catch(() => {});
-    getLocalBrowser()
-      .closeAll()
-      .catch(() => {});
+  /** Both doors, in the order a lookup should try them. */
+  private browserProviders() {
+    return [getHeadlessBrowser(), getLocalBrowser()];
+  }
+
+  /**
+   * Close the browser session this window was showing.
+   *
+   * Scoped to the one window on purpose. The user closing a browser window is a
+   * statement about that tab, not about every tab the host happens to hold — and
+   * since P1 a session is expected to outlive its window's *reload*, so "some
+   * browser window went away" is far too weak a signal to end one on.
+   */
+  private closeBrowserForWindow(windowId: string): void {
+    for (const provider of this.browserProviders()) {
+      const session = provider.findByWindowId(windowId);
+      if (session) provider.closeSession(session.id).catch(() => {});
+    }
+  }
+
+  /**
+   * Close sessions no window is showing — the `visible: false` ones, created by an
+   * agent that wanted a page without a surface. With the desktop empty there is
+   * nothing left that could be looking at them.
+   */
+  private closeUnboundBrowsers(): void {
+    for (const provider of this.browserProviders()) {
+      for (const [id, session] of provider.getAllSessions()) {
+        if (!session.windowId) provider.closeSession(id).catch(() => {});
+      }
+    }
   }
 
   private async handleReset(connectionId: ConnectionId, monitorId?: string): Promise<void> {

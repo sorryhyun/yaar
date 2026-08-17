@@ -6,6 +6,9 @@
  * BrowserSession uses the mocked CDPClient, so no separate session mock is needed.
  */
 import { mock, describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { mkdtemp, rm } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 // ── Mock CDP client ──────────────────────────────────────────────────────────
 
@@ -13,6 +16,9 @@ const mockCdpSend = mock(() => Promise.resolve({}));
 const mockCdpWaitForEvent = mock(() => Promise.resolve(undefined));
 const mockCdpClose = mock(() => {});
 const mockCdpOn = mock(() => {});
+const mockCdpOff = mock(() => {});
+/** Crash watch: `BrowserSession` arms one per socket. Never fired by these tests. */
+const mockCdpOnClose = mock(() => {});
 
 mock.module('../lib/browser/cdp.js', () => ({
   CDPClient: {
@@ -22,6 +28,8 @@ mock.module('../lib/browser/cdp.js', () => ({
         waitForEvent: mockCdpWaitForEvent,
         close: mockCdpClose,
         on: mockCdpOn,
+        off: mockCdpOff,
+        onClose: mockCdpOnClose,
       }),
     ),
   },
@@ -37,6 +45,7 @@ const mockLaunchChrome = mock(() =>
     process: { pid: 99999, kill: mockKill },
     wsUrl: 'ws://127.0.0.1:9222/devtools/browser/abc',
     userDataDir: '/tmp/yaar-browser-mock',
+    ephemeral: false,
   }),
 );
 const mockCleanupChrome = mock(() => Promise.resolve(undefined));
@@ -68,6 +77,13 @@ const mockFetch = mock(() =>
 ) as any;
 globalThis.fetch = mockFetch;
 
+// Named sessions persist to disk (see `session-store.ts`). Point that at a private
+// temp dir so these tests neither read a developer's real records nor leave any —
+// the env pin in `scripts/test/env.ts` covers `YAAR_STORAGE`, but each test here
+// wants its *own* store, not a shared one.
+const STATE_DIR = await mkdtemp(join(tmpdir(), 'yaar-browser-test-'));
+process.env.YAAR_BROWSER_STATE_DIR = STATE_DIR;
+
 // Import after mocks are set up
 const { BrowserPool } = await import('../lib/browser/pool.js');
 
@@ -82,12 +98,15 @@ function internals(pool: InstanceType<typeof BrowserPool>) {
   };
 }
 
+/** Let the store's load-then-remember chain settle before asserting on a revive. */
+const settleStore = () => new Promise((r) => setTimeout(r, 20));
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('BrowserPool', () => {
   let pool: InstanceType<typeof BrowserPool>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     mockFindChrome.mockClear();
     mockLaunchChrome.mockClear();
     mockCleanupChrome.mockClear();
@@ -98,6 +117,10 @@ describe('BrowserPool', () => {
     mockFetch.mockClear();
     // Reset CDP send to return empty objects by default
     mockCdpSend.mockImplementation(() => Promise.resolve({}));
+    // Shutdown deliberately *keeps* session records (that is what makes them
+    // survive a restart), so each test starts from an empty file rather than the
+    // previous test's tabs.
+    await rm(join(STATE_DIR, 'sessions.json'), { force: true });
     pool = new BrowserPool();
   });
 
@@ -312,4 +335,100 @@ describe('BrowserPool', () => {
 
     await freshPool.shutdown();
   });
+
+  // ── Named sessions and lifecycle (P1) ──────────────────────────────────────
+
+  it('refuses a browserId that is not addressable', async () => {
+    for (const bad of ['has space', 'a/b', '-leading', '', 'x'.repeat(65)]) {
+      const err = await pool.createSession(bad).catch((e: Error) => e);
+      expect(err).toBeInstanceOf(Error);
+      expect((err as Error).message).toMatch(/Invalid browserId/);
+    }
+    expect(pool.getStats().activeSessions).toBe(0);
+  });
+
+  it('keeps the auto-counter clear of an explicitly numeric id', async () => {
+    await pool.createSession('7');
+    const auto = await pool.createSession();
+    // Without the bump the counter would still be at 0 and collide with "7" later.
+    expect(auto.browserId).toBe('8');
+  });
+
+  it('idle cleanup spares a session someone is watching', async () => {
+    const { session } = await pool.createSession();
+    await session.startScreencast();
+    session.lastActivity = Date.now() - 60 * 60 * 1000;
+
+    await internals(pool).cleanupIdle();
+
+    // Reading a long page is not idleness — a viewer is attached, so it stays.
+    expect(pool.getSession('0')).toBe(session);
+  });
+
+  it('revives an idle-swept session under the same id, back on its page', async () => {
+    const { session } = await pool.createSession('inbox');
+    session.currentUrl = 'https://example.com/mail';
+    session.currentTitle = 'Mail';
+    // What a real navigation ends with, and what writes the record.
+    session.emit('updated', { url: session.currentUrl, title: 'Mail', version: 1 });
+    await settleStore();
+
+    // The idle sweep drops the socket but keeps the record, which is what makes
+    // the id still mean something afterwards.
+    session.lastActivity = Date.now() - 60 * 60 * 1000;
+    await internals(pool).cleanupIdle();
+    expect(pool.getSession('inbox')).toBeUndefined();
+
+    const revived = await pool.reviveSession('inbox');
+    expect(revived).not.toBeNull();
+    expect(revived!.id).toBe('inbox');
+    expect(pool.getSession('inbox')).toBe(revived!);
+  });
+
+  it('does not revive a session that was deliberately closed', async () => {
+    await pool.createSession('scratch');
+    await settleStore();
+    await pool.closeSession('scratch');
+    await settleStore();
+
+    expect(await pool.reviveSession('scratch')).toBeNull();
+  });
+
+  it('reattaches a crashed session in place, keeping its listeners', async () => {
+    const { session } = await pool.createSession('news');
+    session.currentUrl = 'https://example.com/news';
+
+    const revived = new Promise<void>((resolve) => session.once('revived', () => resolve()));
+
+    // What `Inspector.targetCrashed` / an unexpected socket close produce.
+    session.emit('crashed', { reason: 'test' });
+    await revived;
+
+    // Same object, same id, still in the map — a viewer subscribed to it never
+    // had to know anything happened.
+    expect(pool.getSession('news')).toBe(session);
+    expect(session.isCrashed).toBe(false);
+  });
+
+  it('lists live and suspended sessions for Process Explorer', async () => {
+    const { session } = await pool.createSession('one');
+    session.currentUrl = 'https://example.com/one';
+    session.emit('updated', { url: session.currentUrl, title: '', version: 1 });
+    await pool.createSession('two');
+    await settleStore();
+
+    session.lastActivity = Date.now() - 60 * 60 * 1000;
+    await internals(pool).cleanupIdle();
+
+    const info = await pool.listSessionInfo();
+    const byId = Object.fromEntries(info.map((i) => [i.id, i]));
+    expect(byId.one.state).toBe('suspended');
+    expect(byId.one.url).toBe('https://example.com/one');
+    expect(byId.two.state).toBe('live');
+  });
+});
+
+// The temp state dir must not outlive the run.
+process.on('exit', () => {
+  void rm(STATE_DIR, { recursive: true, force: true });
 });

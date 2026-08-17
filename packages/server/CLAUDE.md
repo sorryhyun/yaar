@@ -45,6 +45,8 @@ before changing a default or adding a knob.
 | `CODEX_WS_PORT` / `CODEX_HOME` | `4510` / codex's | App-server port; codex config dir, **read by YAAR before the spawn** |
 | `CHROME_PATH` / `CHROME_DEBUG_PORT` | auto / `9222` | Chrome binary; DevTools port for the session-door browser |
 | `YAAR_BROWSER_PROVIDER` | — | **Not a selector** — force-headless opt-out only |
+| `YAAR_BROWSER_STATE_DIR` / `YAAR_BROWSER_EPHEMERAL` | `storage/.browser` / off | Sandbox profile + session records; `=1` makes the profile scratch again |
+| `YAAR_BROWSER_IDLE_MINUTES` | `5` | Idle sweep for browser sessions (`0` disables; a watched session is exempt) |
 | `MARKET_URL` | `https://yaarmarket.vercel.app` | App marketplace endpoint |
 
 ## Directory Structure

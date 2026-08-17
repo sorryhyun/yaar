@@ -148,7 +148,7 @@ See [`docs/architecture/os_architecture.md`](./docs/architecture/os_architecture
 Beyond agents and providers, the server has additional subsystems:
 - **`reload/`** — Fingerprint-based cache for hot-reloading window content without re-querying AI
 - **`lib/`** — Standalone utilities with no server internal dependencies:
-  - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability)
+  - `browser/` — CDP browser automation (direct Chrome DevTools Protocol, conditional on Chrome availability). Sessions are named and process-shaped: a persisted profile, a record that outlives the socket (`session-store.ts`), an idle sweep that spares a watched tab, and crash-restart with URL replay. Listed and killable at `yaar://system/browsers`
   - `pdf/` — PDF rendering via poppler
   - `tunnel/` — Tailscale Serve tunnel setup for remote mode
   - `download/` — chunked file download handling

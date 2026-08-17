@@ -14,6 +14,34 @@ export interface BrowserProviderStats {
 }
 
 /**
+ * One browser session as an inspectable *process* — what Process Explorer lists
+ * and `read('yaar://system/browsers')` answers with.
+ *
+ * `state` is the P1 distinction that matters: a session is not simply present or
+ * absent. `suspended` means the id still names something (its page, its window,
+ * its cookies in the persisted profile) with no CDP socket behind it right now —
+ * the state a desktop reload or the idle sweep leaves behind, and the one a
+ * revive turns back into `live`.
+ */
+export interface BrowserSessionInfo {
+  id: string;
+  url: string;
+  title: string;
+  mobile: boolean;
+  windowId?: string;
+  state: 'live' | 'suspended' | 'crashed';
+  /** Whether an agent is mid-action on this tab right now. */
+  driving: boolean;
+  /** Live screencast viewers attached — 0 means nobody is looking. */
+  viewers: number;
+  createdAt: number;
+  /** Milliseconds since anything touched this session. */
+  idleMs: number;
+  /** Page JS heap, where Chrome will say. A weight proxy, not an accounting. */
+  jsHeapBytes: number | null;
+}
+
+/**
  * Info about a tab that was auto-adopted (e.g. opened via `window.open`),
  * waiting to be surfaced to the agent on its next turn.
  */
@@ -52,6 +80,12 @@ export interface BrowserProvider {
   ): Promise<{ session: BrowserSession; browserId: string }>;
   /** Look up a session by browserId. */
   getSession(browserId: string): BrowserSession | undefined;
+  /**
+   * Get a live session back for a `browserId` whose socket is gone but whose
+   * record isn't — a reloaded desktop, an idle-swept tab, a restarted server.
+   * Returns null when there is nothing to revive.
+   */
+  reviveSession(browserId: string): Promise<BrowserSession | null>;
   /** All open sessions, keyed by browserId. */
   getAllSessions(): Map<string, BrowserSession>;
   /** Close and remove one session. */
@@ -74,6 +108,8 @@ export interface BrowserProvider {
   shutdown(): Promise<void>;
   /** Snapshot of provider state for introspection. */
   getStats(): BrowserProviderStats;
+  /** Per-session detail for Process Explorer and `yaar://system/browsers`. */
+  listSessionInfo(): Promise<BrowserSessionInfo[]>;
 }
 
 export interface PageState {

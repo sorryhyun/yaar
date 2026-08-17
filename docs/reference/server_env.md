@@ -192,6 +192,31 @@ those.
 | `CHROME_PATH` | auto-detected | Chrome binary |
 | `CHROME_DEBUG_PORT` | `9222` | DevTools port the session-door browser provider attaches to |
 | `YAAR_BROWSER_PROVIDER` | — | Force-headless opt-out only (see below) |
+| `YAAR_BROWSER_STATE_DIR` | `storage/.browser` | Where the sandbox profile and session records live |
+| `YAAR_BROWSER_EPHEMERAL` | off (`=1` enables) | Throw the sandbox profile away on shutdown |
+| `YAAR_BROWSER_IDLE_MINUTES` | `5` | Idle minutes before a browser session is swept (`0` disables) |
+
+### The sandbox browser keeps its profile
+
+The headless sandbox Chrome launches against `storage/.browser/profile`, and that directory
+**survives shutdown**. A site you signed into in the sandbox is still signed in tomorrow, which is
+what makes reviving a session worth anything — a revived tab that came back to a login screen
+would be a new tab with extra steps. `storage/.browser/sessions.json` holds the records that make
+the revive possible: id, page, bound window.
+
+It is still a sandbox, not your Chrome profile. Only `getLocalBrowser()` touches that.
+
+`YAAR_BROWSER_EPHEMERAL=1` restores the pre-P1 behaviour — a `mkdtemp` dir wiped on cleanup. Set
+it when the sandbox should forget between runs, and when two YAAR instances share a checkout:
+Chrome holds a singleton lock on a profile directory, so the second launch would otherwise wait on
+the first.
+
+### `YAAR_BROWSER_IDLE_MINUTES` and what "idle" means
+
+The sweep closes a session's *socket*, not its record — the id keeps naming its page, and the next
+window (or `invoke(…, { action: 'revive' })`) brings it back. A session with a live screencast
+viewer is exempt however long it sits: someone reading a long page is not idle, and taking the
+canvas out from under them was the pre-P1 behaviour.
 
 ### `YAAR_BROWSER_PROVIDER` is no longer a selector
 

@@ -67,8 +67,10 @@ export interface ClientEventDeps {
    * branch of the tape. Without one, the whole session.
    */
   resetSession(connectionId: ConnectionId, monitorId?: string): Promise<void>;
-  /** Close every browser session this host holds — headless sandbox and real Chrome. */
-  closeBrowsers(): void;
+  /** Close the browser session bound to this window, if there is one. */
+  closeBrowserForWindow(windowId: string): void;
+  /** Close browser sessions no window is showing — the `visible: false` ones. */
+  closeUnboundBrowsers(): void;
 }
 
 export class ClientEventController {
@@ -403,9 +405,12 @@ export class ClientEventController {
       if (interaction.type === 'window.create') {
         for (const action of applied) logger?.logAction(action);
       }
-      // A stale session with no matching window must not survive its window closing either.
-      if (interaction.type === 'window.close' && interaction.windowId?.startsWith('browser-')) {
-        this.deps.closeBrowsers();
+      // Closing a browser window closes *its* tab — and only its tab. This used to
+      // close every browser session the host held, so shutting one window took the
+      // others down with it; with named sessions that survive a reload (P1, work
+      // item 4), a blanket close is also the thing that would make them not survive.
+      if (interaction.type === 'window.close' && interaction.windowId) {
+        this.deps.closeBrowserForWindow(interaction.windowId);
       }
     }
 
@@ -415,7 +420,7 @@ export class ClientEventController {
       event.interactions.some((i) => i.type === 'window.close') &&
       this.deps.windowState.listWindows().length === 0
     ) {
-      this.deps.closeBrowsers();
+      this.deps.closeUnboundBrowsers();
     }
 
     this.deps.getPool()?.pushUserInteractions(event.interactions);

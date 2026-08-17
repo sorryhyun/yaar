@@ -66,7 +66,15 @@ const viewers = new WeakMap<ServerWebSocket<WsData>, ViewerState>();
 
 export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise<void> {
   const browserId = ws.data.browserId;
-  const session = browserId ? getHeadlessBrowser().getSession(browserId) : undefined;
+  const provider = getHeadlessBrowser();
+  // A window asking for its own id is the strongest claim there is that this session
+  // should exist — it is the desktop coming back from a reload, or a tab the idle
+  // sweep collected while nobody was watching. Revive before refusing; that is the
+  // difference between the canvas repainting and it sitting dead on "No browser
+  // session 0" (P1, work item 4).
+  const session = browserId
+    ? (provider.getSession(browserId) ?? (await provider.reviveSession(browserId)))
+    : undefined;
   if (!session) {
     // 1008 (policy violation) rather than a silent close: the app shows the reason.
     ws.close(1008, `No browser session ${browserId ?? '(none)'}`);

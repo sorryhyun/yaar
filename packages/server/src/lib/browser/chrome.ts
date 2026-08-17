@@ -7,7 +7,7 @@
  */
 
 import { existsSync } from 'fs';
-import { mkdtemp, rm } from 'fs/promises';
+import { mkdir, mkdtemp, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { LINUX_WEBGPU_FLAGS_HEADLESS } from './webgpu-flags.js';
@@ -128,14 +128,32 @@ export interface ChromeInstance {
   port: number;
   wsUrl: string;
   userDataDir: string;
+  /**
+   * Whether `userDataDir` is ours to delete on shutdown. False for a profile the
+   * caller named — that one is the point of the launch, not scratch space.
+   */
+  ephemeral: boolean;
+}
+
+export interface LaunchChromeOptions {
+  /**
+   * Profile to launch against. Created if missing and **kept** on shutdown; omit
+   * for the old behaviour (a `mkdtemp` dir wiped when the process is cleaned up).
+   */
+  userDataDir?: string;
 }
 
 /**
  * Launch Chrome in headless mode with remote debugging.
  * Returns connection info once DevTools is ready.
  */
-export async function launchChrome(chromePath: string): Promise<ChromeInstance> {
-  const userDataDir = await mkdtemp(join(tmpdir(), 'yaar-browser-'));
+export async function launchChrome(
+  chromePath: string,
+  options: LaunchChromeOptions = {},
+): Promise<ChromeInstance> {
+  const ephemeral = !options.userDataDir;
+  const userDataDir = options.userDataDir ?? (await mkdtemp(join(tmpdir(), 'yaar-browser-')));
+  if (!ephemeral) await mkdir(userDataDir, { recursive: true });
 
   // Use a fixed debugging port on Windows: Chrome on Windows may fork a child process
   // and exit the parent immediately (code 0) without printing the DevTools URL. With a
@@ -250,7 +268,7 @@ export async function launchChrome(chromePath: string): Promise<ChromeInstance> 
   const portMatch = wsUrl.match(/:(\d+)\//);
   const port = portMatch ? parseInt(portMatch[1], 10) : 0;
 
-  return { process: proc, port, wsUrl, userDataDir };
+  return { process: proc, port, wsUrl, userDataDir, ephemeral };
 }
 
 export async function cleanupChrome(instance: ChromeInstance): Promise<void> {
@@ -289,10 +307,15 @@ export async function cleanupChrome(instance: ChromeInstance): Promise<void> {
 
   await new Promise((resolve) => setTimeout(resolve, 500));
 
-  try {
-    await rm(instance.userDataDir, { recursive: true, force: true });
-  } catch {
-    /* cleanup failure is non-critical */
+  // A named profile is state the next launch is meant to find — cookies, logins,
+  // the thing that makes a revived session still be signed in. Only the scratch
+  // dir we minted ourselves gets removed.
+  if (instance.ephemeral) {
+    try {
+      await rm(instance.userDataDir, { recursive: true, force: true });
+    } catch {
+      /* cleanup failure is non-critical */
+    }
   }
 
   await removePidFile();

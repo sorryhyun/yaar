@@ -101,3 +101,30 @@ export const InstalledAppSchema = z.looseObject({
   name: z.optional(z.string()),
   description: z.optional(z.string()),
 });
+
+// A browser session. `id` and `state` are load-bearing — the first is the
+// revive/kill target, the second decides which button the row offers — so a row
+// without either is dropped. Everything else is display and is defaulted by the
+// adapter, on the same "an older server omitting a field must not blank the
+// list" principle as the schemas above.
+export const BrowserSessionSchema = z.looseObject({
+  id: z.string(),
+  state: z.string(),
+  url: z.optional(z.string()),
+  title: z.optional(z.string()),
+  mobile: z.optional(z.boolean()),
+  windowId: z.optional(z.string()),
+  driving: z.optional(z.boolean()),
+  viewers: z.optional(z.number()),
+  createdAt: z.optional(z.number()),
+  idleMs: z.optional(z.number()),
+  jsHeapBytes: z.optional(z.nullable(z.number())),
+});
+
+// The envelope `list('yaar://system/browsers')` returns. Rows stay `unknown` and
+// are parsed one at a time, for the reason spelled out on AgentStatsSchema.
+export const BrowserListSchema = z.looseObject({
+  chromeRunning: z.optional(z.boolean()),
+  maxSessions: z.optional(z.number()),
+  sessions: z.optional(z.array(z.unknown())),
+});

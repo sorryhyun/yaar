@@ -5,9 +5,9 @@ export {};
 
 import { createEffect, onCleanup } from '@bundled/solid-js';
 import { showToast, subscribe } from '@bundled/yaar';
-import { CLOCK_INTERVAL_MS, LOG_PREFIX, URI } from './constants';
-import { fetchAgents, fetchWindows, refreshAll } from './fetchers';
-import { agentList, markRefreshed, setNow } from './store';
+import { BROWSER_POLL_MS, CLOCK_INTERVAL_MS, LOG_PREFIX, URI } from './constants';
+import { fetchAgents, fetchBrowsers, fetchWindows, refreshAll } from './fetchers';
+import { activeTab, agentList, markRefreshed, setNow } from './store';
 import { reconcileStreams, stopAllStreams } from './streams';
 
 /**
@@ -58,6 +58,18 @@ export function startWatching() {
   // that appears gets a stream and one that disappears has it torn down.
   createEffect(() => reconcileStreams(agentList()));
   onCleanup(stopAllStreams);
+
+  // Browser sessions are the one list with nothing pushing at it: a page
+  // navigating, a tab crashing and the idle sweep collecting one are all
+  // server-side events with no subscription behind them. So it polls — and only
+  // while its tab is the visible one, because the read costs a CDP round trip
+  // per live session to sample its heap.
+  createEffect(() => {
+    if (activeTab() !== 'browsers') return;
+    void fetchBrowsers();
+    const poll = setInterval(() => void fetchBrowsers(), BROWSER_POLL_MS);
+    onCleanup(() => clearInterval(poll));
+  });
 
   // Freshness is the one readout that changes with no frame arriving — "3s ago"
   // has to become "4s ago" on its own — so it needs a clock of its own.

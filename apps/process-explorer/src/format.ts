@@ -5,6 +5,7 @@ export {};
 
 import { formatClock } from '@bundled/yaar';
 import {
+  BYTES_PER_MB,
   MINUTES_PER_HOUR,
   SECONDS_PER_MINUTE,
   TOKENS_DECIMAL_BELOW,
@@ -69,4 +70,21 @@ export function formatUsage(usage: AgentUsage | undefined) {
   const total = input + usage.outputTokens;
   if (total === 0) return '';
   return `${formatTokens(total)} tok · ${formatTokens(input)} in · ${formatTokens(usage.outputTokens)} out`;
+}
+
+/**
+ * How long a browser session has gone untouched, in the same coarse ladder as
+ * {@link formatAge} — the number matters only against the idle sweep's minutes.
+ */
+export function formatIdle(ms: number) {
+  const secs = Math.max(0, Math.round(ms / 1000));
+  if (secs < SECONDS_PER_MINUTE) return 'active';
+  const mins = Math.floor(secs / SECONDS_PER_MINUTE);
+  if (mins < MINUTES_PER_HOUR) return `idle ${mins}m`;
+  return `idle ${Math.floor(mins / MINUTES_PER_HOUR)}h`;
+}
+
+/** Bytes as MB — the only unit a page's JS heap is ever interestingly measured in. */
+export function formatBytes(bytes: number) {
+  return `${(bytes / BYTES_PER_MB).toFixed(1)} MB`;
 }

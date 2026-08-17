@@ -183,7 +183,11 @@ export async function handleBrowserRoutes(req: Request, url: URL): Promise<Respo
     const auth = requireWeb(req, url);
     if (auth instanceof Response) return auth;
     try {
-      const session = pool.getSession(browserId);
+      // The browser app opens this the moment its window mounts, so it is the other
+      // place — beside the screencast socket — where a `browserId` shows up asking to
+      // be honoured after a reload or an idle sweep. Revive rather than 404; the
+      // window is the evidence that this session should still exist.
+      const session = pool.getSession(browserId) ?? (await pool.reviveSession(browserId));
       if (!session) return errorResponse('Browser session not found', 404);
 
       const stream = new ReadableStream({

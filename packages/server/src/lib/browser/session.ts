@@ -138,18 +138,24 @@ export class BrowserSession extends EventEmitter {
   currentTitle = '';
   lastScreenshot: Buffer | null = null;
   lastActivity = Date.now();
+  readonly createdAt = Date.now();
   version = 0;
   /** Whether an agent is currently driving this tab (Phase 3 "agent is driving" indicator). */
   driving = false;
 
   private cdp: CDPClient;
   private closed = false;
+  private adopted: boolean;
+  /** The viewport this session was last told to emulate, so a reattach restores it. */
+  private viewport: { width: number; height: number; deviceScaleFactor: number } | null = null;
+  private crashed = false;
 
-  private constructor(id: string, cdp: CDPClient, mobile: boolean) {
+  private constructor(id: string, cdp: CDPClient, mobile: boolean, adopted: boolean) {
     super();
     this.id = id;
     this.cdp = cdp;
     this.mobile = mobile;
+    this.adopted = adopted;
   }
 
   static async create(
@@ -159,11 +165,26 @@ export class BrowserSession extends EventEmitter {
   ): Promise<BrowserSession> {
     const mobile = options?.mobile ?? false;
     const cdp = await CDPClient.connect(debuggerUrl);
-    const session = new BrowserSession(id, cdp, mobile);
+    const session = new BrowserSession(id, cdp, mobile, options?.adopt === true);
+    await session.initTarget(cdp);
+    return session;
+  }
 
-    // Enable required CDP domains
+  /**
+   * Bring one freshly-connected CDP socket up to this session's expectations:
+   * domains enabled, dialogs auto-dismissed, crash watch armed, and — unless this
+   * is a passively adopted tab — the viewport / touch / UA emulation applied.
+   *
+   * Shared by {@link create} and {@link reattach} because they must produce the
+   * *same* tab. A reattach that skipped a step here would hand the human a page
+   * that reflows differently or a site that suddenly sees a different user agent.
+   */
+  private async initTarget(cdp: CDPClient): Promise<void> {
     await cdp.send('Page.enable');
     await cdp.send('Runtime.enable');
+    // Renderer death has its own CDP event; the socket dropping is the coarser
+    // signal that also covers Chrome exiting. Both land on the same handler.
+    await cdp.send('Inspector.enable').catch(() => {});
 
     // Auto-dismiss JavaScript dialogs (alert/confirm/prompt/beforeunload).
     // These block ALL CDP commands until handled, causing tool hangs.
@@ -173,24 +194,28 @@ export class BrowserSession extends EventEmitter {
       cdp.send('Page.handleJavaScriptDialog', { accept: true }).catch(() => {});
     });
 
+    cdp.on('Inspector.targetCrashed', () => this.noteCrash(cdp, 'renderer crashed'));
+    cdp.onClose((expected) => {
+      if (!expected) this.noteCrash(cdp, 'devtools socket closed');
+    });
+
     // Passive adoption of the user's own tab: leave it exactly as-is — no
     // viewport resize, no touch emulation, no UA spoof. Just CDP plumbing.
-    if (options?.adopt) {
-      return session;
-    }
+    if (this.adopted) return;
 
-    // Set viewport
-    const width = mobile ? MOBILE_WIDTH : DESKTOP_WIDTH;
-    const height = mobile ? MOBILE_HEIGHT : DESKTOP_HEIGHT;
+    const width = this.viewport?.width ?? (this.mobile ? MOBILE_WIDTH : DESKTOP_WIDTH);
+    const height = this.viewport?.height ?? (this.mobile ? MOBILE_HEIGHT : DESKTOP_HEIGHT);
+    const deviceScaleFactor = this.viewport?.deviceScaleFactor ?? (this.mobile ? 3 : 1);
+    this.viewport = { width, height, deviceScaleFactor };
     await cdp.send('Emulation.setDeviceMetricsOverride', {
       width,
       height,
-      deviceScaleFactor: mobile ? 3 : 1,
-      mobile,
+      deviceScaleFactor,
+      mobile: this.mobile,
     });
 
     // Enable touch emulation for mobile
-    if (mobile) {
+    if (this.mobile) {
       await cdp.send('Emulation.setTouchEmulationEnabled', {
         enabled: true,
         maxTouchPoints: 5,
@@ -199,10 +224,90 @@ export class BrowserSession extends EventEmitter {
 
     // Set user agent
     await cdp.send('Emulation.setUserAgentOverride', {
-      userAgent: mobile ? MOBILE_UA : DESKTOP_UA,
+      userAgent: this.mobile ? MOBILE_UA : DESKTOP_UA,
     });
+  }
 
-    return session;
+  /**
+   * The tab died without us asking. Announce it once per socket, and only for the
+   * socket that is still current — a reattach closes the old client, and that
+   * client's own close event must not be reported as a second crash.
+   */
+  private noteCrash(cdp: CDPClient, reason: string): void {
+    if (cdp !== this.cdp) return;
+    if (this.closed || this.crashed) return;
+    this.crashed = true;
+    console.log(`[browser] Session ${this.id} lost its tab (${reason})`);
+    this.emit('crashed', { reason });
+  }
+
+  /** True once the tab died on its own and nothing has revived it yet. */
+  get isCrashed(): boolean {
+    return this.crashed;
+  }
+
+  /**
+   * Point this session at a new CDP target, keeping its identity.
+   *
+   * The alternative — building a replacement `BrowserSession` and swapping it into
+   * the provider's map — would strand every listener already attached to this one:
+   * the SSE stream feeding the URL bar, the screencast viewer painting the canvas,
+   * the window binding. They are subscribed to *this object*, so this object is
+   * what has to come back. `browserId` stays the same, which is the whole contract
+   * the app and the agent hold on to.
+   *
+   * `replayUrl` is re-navigated after the swap, so a crashed tab returns to the page
+   * it was on rather than to `about:blank`.
+   */
+  async reattach(debuggerUrl: string, replayUrl?: string): Promise<void> {
+    if (this.closed) throw new Error(`Browser session ${this.id} is closed`);
+
+    const previous = this.cdp;
+    const cdp = await CDPClient.connect(debuggerUrl);
+    this.cdp = cdp;
+    previous.close();
+    this.crashed = false;
+
+    await this.initTarget(cdp);
+
+    // Viewers never detached — they were watching an object, not a socket — so the
+    // CDP screencast has to be restarted under them or the canvas stays frozen.
+    if (this.screencastViewers > 0) {
+      this.screencastHandler = null;
+      const viewers = this.screencastViewers;
+      this.screencastViewers = 0;
+      await this.startScreencast(this.lastScreencastOpts ?? undefined);
+      this.screencastViewers = viewers;
+    }
+
+    const url = replayUrl ?? this.currentUrl;
+    if (/^https?:/i.test(url)) {
+      await this.navigate(url, 'domcontentloaded').catch(() => {});
+    }
+
+    this.touch();
+    this.emit('revived', { url: this.currentUrl });
+    this.notifyUpdate();
+  }
+
+  /**
+   * The page's JS heap, in bytes — `null` where Chrome will not say.
+   *
+   * A proxy for "how expensive is this tab", not an accounting of it: it misses
+   * the renderer's own memory entirely, and `performance.memory` is quantized
+   * without `--enable-precise-memory-info`. Good enough to sort five tabs by
+   * weight in Process Explorer, which is what it is for; nothing enforces a
+   * ceiling off it.
+   */
+  async jsHeapBytes(): Promise<number | null> {
+    try {
+      const v = await this.eval<number | null>(
+        'performance && performance.memory ? performance.memory.usedJSHeapSize : null',
+      );
+      return typeof v === 'number' ? v : null;
+    } catch {
+      return null;
+    }
   }
 
   private touch() {
@@ -1055,6 +1160,13 @@ export class BrowserSession extends EventEmitter {
   /** Viewers currently attached. One CDP screencast serves all of them. */
   private screencastViewers = 0;
   private screencastHandler: ((params: unknown) => void) | null = null;
+  /** The settings the running screencast was started with, so a reattach can restore it. */
+  private lastScreencastOpts: {
+    quality?: number;
+    maxWidth?: number;
+    maxHeight?: number;
+    everyNthFrame?: number;
+  } | null = null;
 
   /**
    * Begin (or join) the CDP screencast. Chrome only emits a frame when pixels
@@ -1076,6 +1188,7 @@ export class BrowserSession extends EventEmitter {
     this.touch();
     this.screencastViewers++;
     if (this.screencastViewers > 1) return;
+    this.lastScreencastOpts = opts ?? null;
 
     this.screencastHandler = (params: unknown) => {
       const p = params as { data: string; sessionId: number; metadata: ScreencastMetadata };
@@ -1106,6 +1219,7 @@ export class BrowserSession extends EventEmitter {
       this.cdp.off('Page.screencastFrame', this.screencastHandler);
       this.screencastHandler = null;
     }
+    this.lastScreencastOpts = null;
     if (!this.closed) await this.cdp.send('Page.stopScreencast').catch(() => {});
   }
 
@@ -1211,10 +1325,13 @@ export class BrowserSession extends EventEmitter {
    */
   async setViewport(width: number, height: number, deviceScaleFactor = 1): Promise<void> {
     this.touch();
-    await this.cdp.send('Emulation.setDeviceMetricsOverride', {
+    this.viewport = {
       width: Math.max(1, Math.round(width)),
       height: Math.max(1, Math.round(height)),
       deviceScaleFactor,
+    };
+    await this.cdp.send('Emulation.setDeviceMetricsOverride', {
+      ...this.viewport,
       mobile: this.mobile,
     });
   }

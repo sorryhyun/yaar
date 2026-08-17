@@ -21,6 +21,8 @@ export const URI = {
   windows: 'yaar://windows',
   /** Installed-app roster, for display names only. */
   apps: 'yaar://apps',
+  /** Sandbox browser sessions — the server-side Chrome's tabs, as processes. */
+  browsers: 'yaar://system/browsers',
 } as const;
 
 /** One agent, as an interrupt (`invoke`) or kill (`del`) target. */
@@ -28,6 +30,9 @@ export const agentUri = (agentId: string) => `${URI.agents}/${agentId}`;
 
 /** One window, as a close (`del`) target. */
 export const windowUri = (windowId: string) => `${URI.windows}/${windowId}`;
+
+/** One browser session, as a revive (`invoke`) or kill (`del`) target. */
+export const browserUri = (browserId: string) => `${URI.browsers}/${browserId}`;
 
 /**
  * One agent's live activity feed. Note the root: `yaar://agents/`, NOT
@@ -50,8 +55,19 @@ export const AGENT_TIER = {
   ephemeral: 'ephemeral',
 } as const;
 
-/** The three views, in tab order. Drives both the stat cards and the TabId union. */
-export const TAB_IDS = ['agents', 'windows', 'apps'] as const;
+/** The views, in tab order. Drives both the stat cards and the TabId union. */
+export const TAB_IDS = ['agents', 'windows', 'apps', 'browsers'] as const;
+
+/**
+ * How often the browsers tab re-reads its list while it is the visible one.
+ *
+ * Unlike agents and windows, browser sessions push no change ping — a page
+ * navigating, a tab crashing and a session being swept are all server-side events
+ * with no subscription behind them. So this one list polls, and only while
+ * someone is looking at it: the read walks every live tab for its JS heap, which
+ * is a CDP round trip per session and not something to run against a hidden tab.
+ */
+export const BROWSER_POLL_MS = 5000;
 
 /** Frame kinds worth folding into a row. `start` resets the row per turn and
  * `error` is a terminal the row would otherwise miss, so both are as load-bearing
@@ -76,3 +92,6 @@ export const TOKENS_DECIMAL_BELOW = 10_000;
 /** Seconds per minute / minutes per hour, for {@link formatAge}'s ladder. */
 export const SECONDS_PER_MINUTE = 60;
 export const MINUTES_PER_HOUR = 60;
+
+/** Divisor for {@link formatBytes}. Binary megabytes, as every task manager reports. */
+export const BYTES_PER_MB = 1024 * 1024;

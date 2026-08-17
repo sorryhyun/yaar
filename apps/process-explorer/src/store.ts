@@ -12,6 +12,7 @@ import type {
   AgentEntry,
   AgentStats,
   AppProcess,
+  BrowserSession,
   InstalledApp,
   TabId,
   WindowInfo,
@@ -22,6 +23,7 @@ import type {
 const [agentStats, setAgentStats] = createSignal<AgentStats | null>(null);
 const [windows, setWindows] = createSignal<WindowInfo[]>([]);
 const [installedApps, setInstalledApps] = createSignal<InstalledApp[]>([]);
+const [browsers, setBrowsers] = createSignal<BrowserSession[]>([]);
 const [lastRefresh, setLastRefresh] = createSignal<Date | null>(null);
 const [activeTab, setActiveTab] = createSignal<TabId>(TAB_IDS[0]);
 
@@ -30,8 +32,8 @@ const [now, setNow] = createSignal(Date.now());
 
 // `installedApps` is deliberately not exported: it feeds display names into
 // appProcesses() and nothing outside this file has a use for the raw roster.
-export { agentStats, windows, lastRefresh, activeTab, now };
-export { setAgentStats, setWindows, setInstalledApps, setNow };
+export { agentStats, windows, browsers, lastRefresh, activeTab, now };
+export { setAgentStats, setWindows, setInstalledApps, setBrowsers, setNow };
 
 /**
  * Live per-agent activity, keyed by agent id, folded from each agent's stream.

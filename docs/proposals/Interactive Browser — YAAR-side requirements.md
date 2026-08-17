@@ -1,8 +1,10 @@
 # User-interactable browser: what YAAR itself has to grow
 
-**Status: spike done, and it says go.** Direction is remote render + input forwarding (Path B),
-shipped as a live mode of the existing `browser` app. The pre-P0 spike is built and measured —
-numbers and what they change are in [Spike results](#spike-results-pre-p0) at the bottom.
+**Status: spike done, and it says go. P1 has landed ahead of P0** — the spike found work item 4
+load-bearing sooner than the phasing assumed, so session lifecycle was built next. Direction is
+remote render + input forwarding (Path B), shipped as a live mode of the existing `browser` app.
+Numbers and what they changed are in [Spike results](#spike-results-pre-p0); what P1 settled is in
+[P1 results](#p1-results).
 
 ## Where we are now
 
@@ -96,7 +98,7 @@ Keydown forwarding is easy; **composition is not**. Korean/Japanese input means
 users — which includes this project's primary user. It ships in the first cut or the first cut
 doesn't ship.
 
-### 4. Session lifecycle as a first-class process
+### 4. Session lifecycle as a first-class process — *done, see [P1](#p1-results)*
 A headless Chrome is a heavy, long-lived process, not a request handler.
 
 - named sessions that outlive window reloads (`browserId` already hints at this);
@@ -146,11 +148,16 @@ phase; it happens only if latency measurements on real remote use say so.
 
 ```mermaid
 flowchart LR
-  S["Spike — screencast → WS → canvas\n+ mouse/wheel forwarding\n(2–3 days, go/no-go)"] --> P0["P0 — sanctioned stream channel\n+ input capture mode\n+ IME"]
-  P0 --> P1["P1 — session lifecycle\n+ Process Explorer\n+ profile persistence"]
-  P1 --> P2["P2 — consent split\n+ private sessions\n+ audit trail"]
+  S["Spike — screencast → WS → canvas\n+ mouse/wheel forwarding\n(2–3 days, go/no-go)"] --> P1["P1 — session lifecycle\n+ Process Explorer\n+ profile persistence"]
+  P1 --> P0["P0 — sanctioned stream channel\n+ input capture mode\n+ IME"]
+  P0 --> P2["P2 — consent split\n+ private sessions\n+ audit trail"]
   P2 --> P3["P3 — upload/download\n+ clipboard\n+ co-drive lock"]
 ```
+
+**P1 and P0 traded places.** The spike found a live browser window sitting on a dead canvas after
+every desktop reload, and no amount of stream-channel work fixes a session that isn't there — so
+lifecycle went first. That ordering is a finding, not a preference: see the fourth bullet of
+[what the spike changed](#what-the-spike-changed).
 
 **The spike comes before any commitment.** A branch that does only `Page.startScreencast` → ad
 hoc WS → canvas in the existing `browser` app, plus mouse/wheel forwarding — no capture-mode UI,
@@ -283,3 +290,84 @@ both fall back to the last click, which is where a typist just was.
 composition events above were synthesized; a Korean 2-set keyboard and a Japanese conversion —
 with its far longer candidate interaction — have not touched this yet. That reading, and where
 the candidate window actually lands on screen, is the probe's remaining half.
+
+---
+
+## P1 results
+
+Work item 4, built out of order for the reason in [Phasing](#phasing).
+
+### What a session is now
+
+A `BrowserSession` used to *be* its CDP socket. It now has an identity the socket does not carry,
+and the split is the whole phase:
+
+| | |
+|---|---|
+| **Name** | `browserId` accepts a caller-chosen id (`[A-Za-z0-9][A-Za-z0-9_-]{0,63}`), not just the counter. The auto-counter steps over a numeric name so it cannot mint a collision later. |
+| **Record** | `lib/browser/session-store.ts` — id, page, title, bound window, written to `storage/.browser/sessions.json` behind a debounce as the session changes, TTL'd at two weeks. |
+| **Profile** | `storage/.browser/profile`, **kept** across restarts. A revived tab comes back signed in; without this a revive is a new tab with extra steps. `YAAR_BROWSER_EPHEMERAL=1` restores the scratch dir. |
+| **State** | `live` / `suspended` / `crashed`. `suspended` is the one that didn't exist before — an id that still names a page with no socket behind it. |
+
+### The dead canvas, and the three ways it happened
+
+`No browser session 0` had three causes, and each needed a different answer:
+
+- **Any browser window closing closed every browser session.** `closeBrowsers()` was a blanket
+  `closeAll()` on both providers, fired on *any* `browser-`-prefixed `window.close` and again
+  whenever the desktop emptied. It is now `closeBrowserForWindow(windowId)` — that window's tab
+  and no other — plus `closeUnboundBrowsers()` for the `visible: false` ones the second case
+  actually meant.
+- **The idle sweep collected tabs someone was watching.** `lastActivity` only moved on input, so
+  six minutes of reading cost you the page. A session with a screencast viewer attached is now
+  exempt outright, and the timeout is `YAAR_BROWSER_IDLE_MINUTES`.
+- **Nothing brought a session back.** The two places a window announces its `browserId` — the
+  screencast socket and the SSE `/events` route — now `reviveSession(id)` before refusing. A
+  window asking for its own id is the strongest claim there is that the session should exist.
+
+A swept session keeps its record; a *closed* one does not. That is the whole difference between
+"come back to it" and "I'm done with this tab", and it is why the idle path deliberately does not
+route through `closeSession`.
+
+### Crash-restart, and why it reattaches rather than replaces
+
+`CDPClient` now reports whether its socket closed because we closed it. An unexpected close, or
+`Inspector.targetCrashed`, becomes a `crashed` event; the provider opens a fresh target and calls
+`session.reattach(url, replayUrl)` — bounded at three attempts, so a page that crashes Chrome on
+load is not revived into crashing forever.
+
+The alternative was building a replacement `BrowserSession` and swapping it into the map. That
+would strand every listener already on the old one — the SSE stream feeding the URL bar, the
+screencast viewer painting the canvas — because they subscribed to *an object*, not to a socket.
+So the object comes back instead: same id, same emitter, viewport and screencast settings
+reapplied, and the viewer never learns anything happened.
+
+### Visible and killable
+
+`yaar://system/browsers` lists every session, suspended ones included, with page, viewers, idle
+time and JS heap. `yaar://system/browsers/{id}` reads one, `invoke … { action: 'revive' }` puts a
+socket back behind it, and `delete` kills it *and closes its window* — a canvas painting a page
+that no longer exists is the failure this surface exists to end. Listing is open to any caller;
+reviving and killing are `session-principal`, the same gate `yaar://session/agents/*` uses.
+
+Process Explorer grows a fourth tab over it. It polls rather than subscribes — nothing pushes when
+a page navigates or a tab is swept — and only while that tab is visible, because the read costs a
+CDP round trip per live session to sample its heap.
+
+### The memory ceiling, deliberately not enforced
+
+Per-tab JS heap is sampled and displayed; nothing acts on it. `performance.memory` misses the
+renderer's own memory entirely and is quantized without `--enable-precise-memory-info`, so it is
+good enough to sort five tabs by weight and not good enough to evict one on. An auto-kill on that
+number would take a window out from under someone on a heuristic that cannot see most of the
+memory it claims to measure. The number is there; the policy waits for a real ceiling.
+
+### What P1 leaves for P0
+
+- **Per-profile isolation.** One profile, one cookie jar — "work" and "personal" as separate
+  identities would mean a Chrome process per profile, and the provider becoming a process manager.
+  Not needed to make a session survive a reload, which is what this phase was for.
+- **The visibility policy** the spike asked for (a hidden window must pause the stream) is still
+  P0's: it belongs to the capture mode, not to the session.
+- **Per-viewer encoding.** The screencast is still refcounted with the first viewer's settings
+  holding for everyone. Unchanged, and still P0's to settle.

@@ -1,14 +1,14 @@
 export {};
 
-// The four control actions behind the row buttons and the protocol commands.
+// The control actions behind the row buttons and the protocol commands.
 //
 // Each one re-fetches only the list it touched. The subscription would push the
 // same change a moment later, but refreshing here keeps the row from lingering if
 // the ping is lost.
 
 import { del, invoke, tryToast } from '@bundled/yaar';
-import { agentUri, windowUri } from './constants';
-import { fetchAgents, fetchWindows } from './fetchers';
+import { agentUri, browserUri, windowUri } from './constants';
+import { fetchAgents, fetchBrowsers, fetchWindows } from './fetchers';
 import { appProcesses, markRefreshed } from './store';
 
 /**
@@ -55,5 +55,27 @@ export async function closeAppWindows(appId: string) {
     () => Promise.all(targets.map((w) => del(windowUri(w.id)))),
     `Closed ${targets.length} window${targets.length === 1 ? '' : 's'}`,
     fetchWindows,
+  );
+}
+
+/**
+ * Kill a browser session: the tab closes, its record is forgotten, and the window
+ * showing it is closed with it — a canvas left painting a page that no longer
+ * exists is the failure this whole surface is here to make visible.
+ */
+export async function killBrowser(browserId: string) {
+  await act(() => del(browserUri(browserId)), `Closed browser ${browserId}`, fetchBrowsers);
+}
+
+/**
+ * Put a socket back behind a suspended session. The page is re-navigated and the
+ * persisted profile still holds its cookies, so a revived tab comes back logged
+ * in rather than at a sign-in screen.
+ */
+export async function reviveBrowser(browserId: string) {
+  await act(
+    () => invoke(browserUri(browserId), { action: 'revive' }),
+    `Revived browser ${browserId}`,
+    fetchBrowsers,
   );
 }

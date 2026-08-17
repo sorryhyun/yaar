@@ -15,22 +15,26 @@ import {
   agentList,
   agentStats,
   appProcesses,
+  browsers,
   closeAppWindows,
   closeWindow,
   interruptAgent,
   killAppAgent,
+  killBrowser,
   refreshAll,
+  reviveBrowser,
   windows,
 } from './data';
 
 export const appState = {
   stats: {
-    description: 'Overview: agent, window, and running-app counts',
+    description: 'Overview: agent, window, running-app and browser-session counts',
     get: () => ({
       agents: agentStats(),
       windowCount: windows().length,
       appCount: appProcesses().length,
       orphanedAppCount: appProcesses().filter((p) => p.orphaned).length,
+      browserCount: browsers().length,
     }),
   },
   agents: {
@@ -46,6 +50,13 @@ export const appState = {
       'Running apps — each with its open windows and its app agent. An app is "orphaned" ' +
       'when its agent is still alive with no window open, holding a slot and its context.',
     get: () => appProcesses(),
+  },
+  browsers: {
+    description:
+      'Sandbox browser sessions. State is "live" when a CDP socket is behind the id, ' +
+      '"suspended" when only its record is (reviving reopens it on the same page, still ' +
+      'logged in), or "crashed" when the tab died and could not be brought back.',
+    get: () => browsers(),
   },
 };
 
@@ -93,6 +104,34 @@ export const appCommands = {
     },
     run: async (p) => {
       await killAppAgent(p.appId);
+      return { ok: true };
+    },
+  },
+  killBrowser: {
+    description:
+      'Close a browser session by browserId, and the window showing it. Its record is ' +
+      'forgotten, so the id cannot be revived afterwards.',
+    params: {
+      type: 'object',
+      properties: { browserId: { type: 'string' } },
+      required: ['browserId'],
+    },
+    run: async (p) => {
+      await killBrowser(p.browserId);
+      return { ok: true };
+    },
+  },
+  reviveBrowser: {
+    description:
+      'Put a socket back behind a suspended browser session, re-navigating it to the page ' +
+      'it was left on. The persisted profile still holds its cookies.',
+    params: {
+      type: 'object',
+      properties: { browserId: { type: 'string' } },
+      required: ['browserId'],
+    },
+    run: async (p) => {
+      await reviveBrowser(p.browserId);
       return { ok: true };
     },
   },

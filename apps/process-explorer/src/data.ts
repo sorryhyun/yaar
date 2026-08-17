@@ -9,9 +9,9 @@ export {};
 // nothing outside the data layer should write the store.
 //
 //   store.ts     signals, derived views, mutators   (no I/O)
-//   fetchers.ts  the three verb-API list reads      (validates, fills the store)
+//   fetchers.ts  the verb-API list reads            (validates, fills the store)
 //   streams.ts   per-agent live activity feeds      (folds frames into the store)
-//   actions.ts   the four control actions           (write, then re-read)
+//   actions.ts   the control actions                (write, then re-read)
 //   watch.ts     mount-time subscriptions + clock
 
 export {
@@ -20,6 +20,7 @@ export {
   agentList,
   agentStats,
   appProcesses,
+  browsers,
   lastRefresh,
   now,
   selectTab,
@@ -28,6 +29,13 @@ export {
 
 export { refreshAll } from './fetchers';
 
-export { closeAppWindows, closeWindow, interruptAgent, killAppAgent } from './actions';
+export {
+  closeAppWindows,
+  closeWindow,
+  interruptAgent,
+  killAppAgent,
+  killBrowser,
+  reviveBrowser,
+} from './actions';
 
 export { startWatching } from './watch';

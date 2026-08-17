@@ -144,7 +144,34 @@ export interface AppProcess {
   orphaned: boolean;
 }
 
-/** The three views. Derived from TAB_IDS so the tab order and the type cannot drift. */
+/**
+ * One sandbox browser session, as `yaar://system/browsers` reports it.
+ *
+ * `state` is the field that makes this a process list rather than a tab list: a
+ * session is not simply open or closed. `suspended` means the id still names a
+ * page and a profile with nobody connected to it — what a reloaded desktop or the
+ * idle sweep leaves behind — and reviving it puts a socket back on that page.
+ */
+export interface BrowserSession {
+  /** The `browserId` a window addresses this session by. */
+  id: string;
+  url: string;
+  title: string;
+  mobile: boolean;
+  /** The YAAR window showing it, when one is. */
+  windowId?: string;
+  state: 'live' | 'suspended' | 'crashed' | (string & {});
+  /** An agent is mid-action on this tab right now. */
+  driving: boolean;
+  /** Live screencast viewers — 0 means nobody is looking at it. */
+  viewers: number;
+  createdAt: number;
+  idleMs: number;
+  /** Page JS heap where Chrome will say. A weight proxy, not an accounting. */
+  jsHeapBytes: number | null;
+}
+
+/** The views. Derived from TAB_IDS so the tab order and the type cannot drift. */
 export type TabId = (typeof TAB_IDS)[number];
 
 /**
