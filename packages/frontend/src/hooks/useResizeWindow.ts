@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import type { WindowBounds } from '@yaar/shared';
 import { useDesktopStore } from '@/store';
 import { registerMouseTracking } from '@/lib/mouseTracking';
+import { beginShellDrag } from '@/lib/selection';
 
 interface UseResizeWindowOptions {
   windowId: string;
@@ -20,7 +21,7 @@ export function useResizeWindow({ windowId, bounds, listenersRef }: UseResizeWin
   const handleResizeStart = useCallback(
     (direction: string, e: React.MouseEvent) => {
       if (e.button !== 0) return; // Only left-click initiates resize
-      e.preventDefault();
+      beginShellDrag(e);
       e.stopPropagation();
       setIsResizing(true);
       document.documentElement.classList.add('yaar-dragging');

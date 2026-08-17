@@ -32,6 +32,7 @@ import {
 import { CommandPalette } from '../command-palette/CommandPalette';
 import { DrawingOverlay } from '../drawing/DrawingOverlay';
 import { resolveWallpaper, resolveAccent, resolveIconSize } from '@/constants/appearance';
+import { beginShellDrag } from '@/lib/selection';
 import { DesktopStatusBar } from './DesktopStatusBar';
 import { DesktopIcons } from './DesktopIcons';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
@@ -223,7 +224,9 @@ export function DesktopSurface() {
       // Only start selection when clicking directly on the desktop background
       if (e.target !== e.currentTarget || e.button !== 0) return;
 
-      e.preventDefault(); // Prevent text selection during rubberband drag
+      // Prevent text selection during rubberband drag — and drop any live one,
+      // since preventDefault would otherwise leave it stuck (see beginShellDrag).
+      beginShellDrag(e);
 
       const startX = e.clientX;
       const startY = e.clientY;

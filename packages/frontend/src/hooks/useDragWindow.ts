@@ -5,6 +5,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useDesktopStore } from '@/store';
 import { detectSnapZone, getSnapBounds } from '@/lib/snapZones';
 import { registerMouseTracking } from '@/lib/mouseTracking';
+import { beginShellDrag } from '@/lib/selection';
 import type { WindowBounds } from '@yaar/shared';
 import type { WindowModel } from '@/types/state';
 import {
@@ -41,7 +42,7 @@ export function useDragWindow({
   const handleDragStart = useCallback(
     (e: React.MouseEvent) => {
       if (e.button !== 0) return; // Only left-click initiates drag
-      e.preventDefault();
+      beginShellDrag(e);
       setIsDragging(true);
       document.documentElement.classList.add(DRAGGING_CSS_CLASS);
 

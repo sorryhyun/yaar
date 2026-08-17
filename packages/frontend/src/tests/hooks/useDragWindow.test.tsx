@@ -40,6 +40,33 @@ describe('useDragWindow', () => {
     });
   });
 
+  it('collapses a stray selection on drag start', () => {
+    const host = document.createElement('p');
+    host.textContent = 'window body text';
+    document.body.append(host);
+    const range = document.createRange();
+    range.selectNodeContents(host);
+    const selection = globalThis.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    const listenersRef = { current: [] };
+    const hook = renderHook(() =>
+      useDragWindow({ windowId, bounds: originalBounds, listenersRef }),
+    );
+
+    act(() => {
+      hook.result.current.handleDragStart(startEvent(200, 110));
+      document.dispatchEvent(new MouseEvent('mouseup', { clientX: 200, clientY: 110 }));
+    });
+
+    // preventDefault on mousedown suppresses the browser's own collapse, so the
+    // titlebar would otherwise leave the selection stuck with nothing to clear it.
+    expect(selection?.rangeCount).toBe(0);
+    host.remove();
+    hook.unmount();
+  });
+
   it('uses true maximize when a window is dragged to the top edge', () => {
     const listenersRef = { current: [] };
     const hook = renderHook(() =>

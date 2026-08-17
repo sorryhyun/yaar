@@ -53,6 +53,7 @@ const domGlobals = [
   'Range',
   'Selection',
   'getComputedStyle',
+  'getSelection',
   'requestAnimationFrame',
   'cancelAnimationFrame',
   'setTimeout',

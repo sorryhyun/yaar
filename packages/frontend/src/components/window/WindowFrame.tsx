@@ -14,6 +14,7 @@ import { SnapPreview } from './SnapPreview';
 import { SelectionActionInput } from './SelectionActionInput';
 import { exportContent } from '@/lib/exportContent';
 import { useDragWindow } from '@/hooks/useDragWindow';
+import { beginShellDrag } from '@/lib/selection';
 import { useResizeWindow } from '@/hooks/useResizeWindow';
 import { useWindowDrop } from '@/hooks/useWindowDrop';
 import styles from '@/styles/window/WindowFrame.module.css';
@@ -140,8 +141,14 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   // Handle titlebar drag start — skip if clicking controls
   const handleTitleBarDragStart = useCallback(
     (e: React.MouseEvent) => {
-      if ((e.target as HTMLElement).closest(`.${styles.controls}`)) return;
-      if ((e.target as HTMLElement).closest(`.${styles.widgetClose}`)) return;
+      // The controls row and its gutters are `user-select: none`, which makes a
+      // double-click there select the whole window body in Chrome. Suppress that
+      // before bailing out of the drag, not after.
+      const target = e.target as HTMLElement;
+      if (target.closest(`.${styles.controls}`) || target.closest(`.${styles.widgetClose}`)) {
+        beginShellDrag(e);
+        return;
+      }
       titleBarMouseDownRef.current = { x: e.clientX, y: e.clientY };
       handleDragStart(e);
     },
@@ -184,7 +191,10 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
   // Widget drag: combines focus + drag on frame mousedown
   const handleWidgetDragStart = useCallback(
     (e: React.MouseEvent) => {
-      if ((e.target as HTMLElement).closest(`.${styles.widgetClose}`)) return;
+      if ((e.target as HTMLElement).closest(`.${styles.widgetClose}`)) {
+        beginShellDrag(e);
+        return;
+      }
       userFocusWindow(window.id);
       handleDragStart(e);
     },
@@ -345,6 +355,13 @@ function WindowFrameInner({ window, zIndex, isFocused, hidden }: WindowFrameProp
       {/* Content area */}
       <div
         className={styles.content}
+        onMouseDown={(e) => {
+          // Only when the press lands on the content box itself — its padding
+          // ring, or the gap below the last component. Dragging from there has no
+          // text node to anchor on, so Chrome selects the whole containing block.
+          // Presses on actual children fall through and stay selectable.
+          if (e.target === e.currentTarget) beginShellDrag(e);
+        }}
         onContextMenu={(e) => {
           // If there's a text selection, show the selection action input
           const selectedText = globalThis.getSelection()?.toString().trim();

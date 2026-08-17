@@ -111,6 +111,7 @@ ${cssLinks}
       * { margin: 0; padding: 0; box-sizing: border-box; }
       html, body, #root { width: 100%; height: 100%; overflow: hidden; font-family: var(--font-sans); }
       html.yaar-dragging iframe { pointer-events: none; }
+      html.yaar-dragging, html.yaar-dragging * { user-select: none; }
     </style>
   </head>
   <body>
