@@ -92,6 +92,12 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
         throw new Error('[yaar] defineApp(): "' + registration.appId + '" is already registered in this window; "' + config.appId + '" cannot also register here. A window may host exactly one app, and defineApp() must be called exactly once at module scope.');
       }
       registration = config;
+      // Published on \`window\` because the link guard (iframe-scripts/windows-sdk.ts)
+      // needs to know an app is running here — that is what separates an app from a
+      // plain HTML document previewed in a window, which must keep browsing in place.
+      // A cross-script boolean rather than a shared \`registration\`: the two scripts
+      // are separate IIFEs with no module system between them.
+      window.__yaarAppRegistered = true;
       // Build alias lookup map, and collect the commands this registration opts out of
       // replay for (see AppCommandDescriptor.replay). The list rides this handshake
       // instead of being read from dist/protocol.json on the server: this is the
@@ -665,61 +671,5 @@ export const IFRAME_APP_PROTOCOL_SCRIPT = `
     }
   });
 
-  /**
-   * Keep a link inside app content from navigating the app's own document away.
-   *
-   * An app frame is same-origin and unsandboxed, and **no** sandbox token governs a
-   * frame navigating *itself* — the \`allow-top-navigation\` family only governs the
-   * top-level context — so nothing at the frame level could have prevented this. A
-   * plain \`<a href>\` in app-rendered HTML therefore replaced the app document and
-   * every script injected into it, this SDK included: no exception, no console
-   * output, and an app that simply stopped answering the protocol. Indistinguishable
-   * from a crash, and every app rendering external or user-authored HTML had to
-   * rediscover the same hand-written guard.
-   *
-   * Deliberately narrow, and deliberately **not** capture phase: it runs on the
-   * document in bubble phase, after the app's own handlers, so a link the app
-   * already handles (a router link, a \`preventDefault()\` anywhere on the path) is
-   * left alone. It also only arms once an app has registered, so a plain HTML
-   * document previewed in a window still browses in place.
-   *
-   * Escape hatch for an app that really does want its frame navigated:
-   * \`window.__yaarAllowFrameNavigation = true\`.
-   */
-  function installLinkGuard() {
-    if (typeof document === 'undefined' || !document.addEventListener) return;
-    document.addEventListener('click', function(e) {
-      if (!registration || window.__yaarAllowFrameNavigation) return;
-      // Already handled, or not a plain left-click: a modified click is the user
-      // asking the browser for its own behavior (new tab, download, ...).
-      if (e.defaultPrevented || e.button || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-      var a = null;
-      var node = e.target;
-      if (node && node.closest) {
-        try { a = node.closest('a[href]'); } catch (err) { a = null; }
-      }
-      if (!a) return;
-      // An explicit target already says where this goes; \`download\` is not a navigation.
-      var target = a.getAttribute('target');
-      if (target && target !== '_self') return;
-      if (a.hasAttribute('download')) return;
-      var href = a.getAttribute('href');
-      if (!href || href.charAt(0) === '#') return;
-      var url;
-      try { url = new URL(href, document.baseURI); } catch (err) { return; }
-      // mailto:, tel:, javascript: — the browser's business, not a page swap.
-      if (url.protocol !== 'http:' && url.protocol !== 'https:') return;
-      // A link to this same document (differing only by hash) stays in the app.
-      var here = String(location.href).split('#')[0];
-      if (url.href.split('#')[0] === here) return;
-      e.preventDefault();
-      window.parent.postMessage({
-        type: '${APP_MSG.openUrl}',
-        url: url.href,
-        title: String(a.textContent || '').trim().slice(0, 80)
-      }, '*');
-    });
-  }
-  installLinkGuard();
 })();
 `;

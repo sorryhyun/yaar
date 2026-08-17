@@ -53,6 +53,39 @@ export interface CompileOptions {
   bundles?: string[];
 }
 
+/**
+ * app.json's `"links"` — what an app declares about the links in its own content,
+ * handed to the SDK as `window.__yaar_links__`.
+ *
+ * Declarative because it is provenance, not behavior: `base` says which site this
+ * app's content came from, which is the one thing the link guard cannot infer and
+ * had to be told (a root-relative href in a GitHub README means github.com, not the
+ * YAAR shell that is serving the app). Anything that needs a *decision* is
+ * `links.onOpen` in app code instead, where the app can act on it.
+ */
+export interface AppLinkConfig {
+  /** Origin (or full URL) RELATIVE hrefs in this app's content resolve against. */
+  base?: string;
+}
+
+/**
+ * Read `links` from the app.json beside `src/`. Absent, malformed, or carrying a
+ * `base` that is not a parseable absolute URL all yield `{}` — a link policy is a
+ * convenience, and a typo in it must not fail a build that would otherwise ship.
+ */
+async function readLinkConfig(sandboxPath: string): Promise<AppLinkConfig> {
+  try {
+    const json = JSON.parse(await Bun.file(join(sandboxPath, 'app.json')).text());
+    const base = json?.links?.base;
+    if (typeof base !== 'string' || !base) return {};
+    const parsed = new URL(base);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return {};
+    return { base: parsed.href };
+  } catch {
+    return {};
+  }
+}
+
 export interface CompileResult {
   success: boolean;
   outputPath?: string;
@@ -139,10 +172,16 @@ export function generateHtmlWrapper(
   title: string,
   sdkCode: string,
   manifest?: object,
+  links: AppLinkConfig = {},
 ): string {
   const manifestScript = manifest
     ? `\n<script>window.__yaar_manifest__=${escapeInlineJs(JSON.stringify(manifest))};</script>`
     : '';
+  // Always emitted, empty or not. Besides carrying app.json's "links", its mere
+  // presence is how the link guard tells a compiled app from a plain HTML document
+  // that happens to be shown in a window — the one must not navigate its own frame,
+  // the other must keep browsing in place.
+  const linksScript = `\n<script>window.__yaar_links__=${escapeInlineJs(JSON.stringify(links))};</script>`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -150,6 +189,7 @@ export function generateHtmlWrapper(
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${escapeHtml(title)}</title>
 <style>${YAAR_DESIGN_TOKENS_CSS}*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:var(--yaar-bg)}#${APP_MOUNT_ID}{height:100%}#${APP_MOUNT_ID}:empty{display:none}body{font-family:${FONT_SANS}}</style>
+${linksScript}
 <script>${escapeInlineJs(sdkCode)}</script>${manifestScript}
 </head>
 <body>
@@ -289,6 +329,7 @@ export async function compileTypeScript(
       title,
       sdkCode,
       extraction.protocol ?? undefined,
+      await readLinkConfig(sandboxPath),
     );
 
     // A YAAR app compiles to one self-contained HTML the frontend loads into an

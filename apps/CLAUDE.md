@@ -60,14 +60,16 @@ Design record and the four laws every new node must satisfy: [`docs/architecture
 
 An app frame is same-origin and unsandboxed, so a plain `<a href>` navigates the **app's own
 document** — replacing every injected script with it, so the app protocol stops answering with no
-exception and no console line. Three things keep that from happening, and none of them needs app
-code:
+exception and no console line. **`iframe-scripts/windows-sdk.ts` owns all of this**, and none of
+it needs app code:
 
-- The injected **link guard** (`iframe-scripts/app-protocol.ts`) cancels the activation of any
-  anchor in a registered app and hands the URL to the desktop.
-- **`window.open(url)`** is overridden (`iframe-scripts/windows-sdk.ts`) to do the same, and
-  returns a window-shaped stub so a caller's `if (!w)` popup-blocked fallback does not fire. A
-  call with no URL, or a non-http(s) scheme, still reaches the browser.
+- The **link guard** cancels the activation of every anchor in an app and hands the URL to the
+  desktop — `target="_blank"`, a middle click and a ctrl/cmd-click included. It stands aside only
+  for activations that do *not* replace the document (a `download`, a right click, an alt-click,
+  a target the app itself frames) and for the two cooperation points below.
+- **`window.open(url)`** is overridden to do the same, and returns a window-shaped stub so a
+  caller's `if (!w)` popup-blocked fallback does not fire. A call with no URL, or a non-http(s)
+  scheme, still reaches the browser.
 - Either way the destination opens as a **YAAR window**, not a browser tab — and which kind of
   window is decided by asking the site first (`GET /api/embeddable`, read by
   `store/iframe-bridge/open-url.ts`). A framable site becomes an iframe window; one that refuses
@@ -75,11 +77,26 @@ code:
   page server-side and so frames nothing. Framing is the target's call and no attribute of ours
   overrides it, which is why the answer is a different surface rather than a workaround.
 
-Call it directly with `windows.openUrl(url, { title })` from `@bundled/yaar` — fire-and-forget,
-since the desktop owns window creation. Don't hand-roll a click handler around `window.open` or a
-clipboard fallback; that was the pre-`openUrl` workaround and it now just duplicates the shim.
-`window.__yaarAllowPopups = true` opts out of the override, as `__yaarAllowFrameNavigation` opts
-out of the link guard.
+**Do not write a link handler.** A capture-phase listener that cancels every anchor, a resolver,
+an `openExternal` wrapper around `window.open`, a clipboard fallback — three apps grew that file
+independently and every line of it is now the default. Two things the default cannot know, and
+they are the whole app-facing surface:
+
+- **Which site a relative href belongs to.** An app rendering someone else's HTML has `/board/123`
+  in it, and resolving that against the app's own document lands on a shell 404. Declare it in
+  `app.json` — `"links": { "base": "https://m.dcinside.com" }` — because it is a fact about the
+  app, not a decision. The compiler bakes it in as `window.__yaar_links__`.
+- **Whether a URL is really yours.** `links.onOpen((url, anchor) => …)` from `@bundled/yaar`, once
+  at module scope: return a **string** to open something else (unwrap a redirect interstitial,
+  canonicalize a mirror), **`false`** to claim the link and route it in-app with no window at all,
+  or nothing for the default. It also runs for `window.open`, but not for your own `links.open`
+  calls — those already name their destination.
+
+To open a URL yourself, call `links.open(url, { title })` (or the identical `windows.openUrl`) —
+fire-and-forget, since the desktop owns window creation. `links.resolve(href)` gives the guard's
+own answer for a control that opens a URL without being an anchor.
+`window.__yaarAllowPopups = true` opts out of the `window.open` override, as
+`__yaarAllowFrameNavigation` opts out of the link guard.
 
 ## Design Tokens
 

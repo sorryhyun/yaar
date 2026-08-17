@@ -1005,6 +1005,52 @@ interface YaarWindows {
   openUrl(url: string, opts?: { title?: string }): void;
 }
 
+/**
+ * What a link in this app's content should do, when the default is not right.
+ *
+ * The default already is right for most apps: every anchor click is intercepted
+ * before it can navigate the app's own frame, and the destination opens as a YAAR
+ * window — `target="_blank"`, a middle click and a ctrl/cmd-click included. You do
+ * not need to write a click handler, and you must not write one around
+ * `window.open` with a clipboard fallback; that was the pre-`openUrl` workaround.
+ *
+ * Two things the default cannot know, one declarative and one not:
+ *   - which site a RELATIVE href in your content belongs to -> `"links": { "base" }`
+ *     in app.json, since that is a fact about the app, not a decision;
+ *   - whether a particular URL is really *yours* -> `onOpen`, below.
+ */
+interface YaarLinks {
+  /** Open an http(s) URL in a window of its own. Same door as `windows.openUrl`. */
+  open(url: string, opts?: { title?: string }): void;
+  /**
+   * Decide what a link in this app's content means. Call once, at module scope.
+   *
+   * Runs for every link activation the guard intercepts and for `window.open`,
+   * with the resolved absolute URL and the anchor it came from (`null` when there
+   * isn't one). It does NOT run for your own `links.open` calls — those already
+   * name their destination.
+   *
+   * Return a **string** to open that instead (unwrap a redirect interstitial,
+   * canonicalize a mirror), **false** to claim the link yourself (in-app routing;
+   * no window opens), or nothing to open the URL as given. A handler that throws
+   * opens the URL unchanged rather than swallowing the click.
+   *
+   *   links.onOpen((url) => {
+   *     const id = postIdInThisGallery(url);
+   *     if (id) { selectPost(id); return false; }
+   *     return unwrapRedirect(url);
+   *   });
+   */
+  onOpen(handler: (url: string, anchor: HTMLAnchorElement | null) => string | false | void): void;
+  /**
+   * The absolute, openable URL for an href — resolved against this app's declared
+   * `links.base` — or null when there is nothing to open (empty, a bare `#fragment`,
+   * `mailto:`, an unparseable value). The same answer the guard uses, for a control
+   * that opens a URL without being an anchor.
+   */
+  resolve(href: string | null | undefined): string | null;
+}
+
 // -- Dev Tools --
 
 interface YaarDevCompileResult {
@@ -1164,6 +1210,7 @@ interface YaarGlobal {
   storage: YaarStorage;
   notifications: YaarNotifications;
   windows: YaarWindows;
+  links: YaarLinks;
 
   /** Execute an action on a yaar:// resource. Returns parsed data from the JSON envelope. */
   invoke<T = unknown>(uri: string, payload?: Record<string, unknown>): Promise<T>;
@@ -1281,6 +1328,7 @@ declare module '@bundled/yaar' {
   export const app: YaarApp;
   export const notifications: YaarNotifications;
   export const windows: YaarWindows;
+  export const links: YaarLinks;
 
   /**
    * The event-channel shape for `defineApp({ events })`, for hand-annotating a

@@ -31,6 +31,14 @@ Shared types between frontend and server.
     `{source, destination}` reported "Source and destination are the same path").
 - `yaar-uri.ts` - Shared URI utilities: `parseYaarUri`, `buildYaarUri`, `isYaarUri`, `resolveContentUri`, `extractAppId`, `parseFileUri`, `parseBareWindowUri`, `expandBraceUri`, plus the devtools preview identity helpers (`PREVIEW_APP_PREFIX`, `previewAppId`, `isPreviewAppId`)
 - `iframe-scripts/` - Inline JS scripts injected into iframes (capture, fetch-proxy, contextmenu, verb-sdk, windows-sdk, storage-sdk, notifications-sdk)
+  - `windows-sdk.ts` owns **everything about a link leaving an app**: `openUrl`, the
+    `window.open` override, the click guard that keeps an anchor from navigating the app's own
+    document, and the `yaar.links` surface (`open`/`onOpen`/`resolve`) an app configures all
+    three through. It was split across two scripts once, and the halves disagreed about which
+    links they covered — which is what apps then hand-rolled a third policy to fix. The guard
+    arms on `window.__yaar_links__` (emitted for every compiled app, carrying app.json's
+    `"links"`) or on `window.__yaarAppRegistered`, so a plain HTML document previewed in a
+    window still browses in place.
 
 ## OS Actions
 

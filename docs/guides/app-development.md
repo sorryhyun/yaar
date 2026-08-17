@@ -546,7 +546,11 @@ Do not call `@bundled/dompurify` directly, and do not hand-roll a sanitizer. Ele
 denylists and `^on` attribute stripping miss `<svg>`/`<math>` mutation-XSS, `srcset`,
 `formaction`, and `xlink:href`. Relative URLs survive `sanitizeHtml` verbatim — it neither
 strips nor absolutizes them — so an app that needs them resolved rewrites the *sanitized*
-output, per step 3 above.
+output, per step 3 above. A **link** href is the exception: declare
+`"links": { "base": "https://origin.example" }` in `app.json` and the link guard resolves
+anchors against that site when they are clicked, rather than against the app's own document
+(where a root-relative href lands on a shell 404). It governs clicks only — an `<img src>`
+still has to be rewritten. See `apps/CLAUDE.md`, "Links out of an app".
 
 ### Interpolating text, not markup
 

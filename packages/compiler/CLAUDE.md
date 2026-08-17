@@ -47,7 +47,7 @@ src/
 └── shims/
     ├── yaar/              # Main SDK, split into internal modules (index.ts is the only entry)
     │   ├── index.ts       # Barrel — the entire @bundled/yaar public surface
-    │   ├── verbs.ts       # window.yaar global, read/invoke/list/describe/del/subscribe, stream, httpFetch
+    │   ├── verbs.ts       # window.yaar global, read/invoke/list/describe/del/subscribe, stream, httpFetch, + the app/notifications/windows/links pass-throughs
     │   ├── app-storage.ts # appStorage (yaar://apps/self/storage/*)
     │   ├── shared-storage.ts # sharedStorage — the commons, scoped to shared/{appId}/ (+ publish, a server-side copy)
     │   ├── app-identity.ts # setAppId/getAppId — the app's own id, recorded by defineApp for shared-storage.ts
@@ -85,7 +85,7 @@ src/
 3. **Bundle:** `Bun.build()` with 4 plugins resolves imports, transforms CSS, fixes solid-js/html closing tags, and runs the solid-html + mount guards
 4. **SDK injection:** 10 iframe SDK scripts (ime-guard, capture, storage, verbs, fetch-proxy, app-protocol, contextmenu, notifications, windows, console) minified once and cached. `contextmenu` is baked rather than injected because `IframeRenderer`'s injection only reaches a same-origin frame, and an origin-isolated app is not one — without it such an app forwards none of the shell's reserved shortcuts (Shift+Tab, Ctrl+1-9, Ctrl+W)
 5. **Protocol extraction:** AST parse of `export default defineApp({...})` for state/command/event descriptors → `dist/protocol.json`, then a gate that fails the build on anything unresolvable
-6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`
+6. **HTML wrap:** `generateHtmlWrapper()` creates self-contained HTML with design tokens CSS + `window.__yaar_links__` + SDK `<script>` + `window.__yaar_manifest__` + app `<script type="module">`. The links block is app.json's `"links"` (an origin relative hrefs in this app's content resolve against) and is emitted **for every app, empty or not** — its presence is also how the link guard tells a compiled app from a plain HTML document shown in a window
 7. **Manifest:** Write `dist/.build-manifest.json` with source hash, app.json hash, compiler version
 
 Extraction runs *after* bundling (so genuine build errors keep precedence) and *before* the

@@ -70,7 +70,17 @@ describe('windows.openUrl', () => {
   it('sends an empty title rather than a missing one when none is given', () => {
     const { windows, posted } = install();
     windows.openUrl('https://example.com');
-    expect(posted[0]).toEqual({ type: 'yaar:open-url', url: 'https://example.com', title: '' });
+    // Normalized, because it goes through the same resolver as the guard and the
+    // `window.open` shim. The desktop parses it again either way, so the URL that
+    // finally opens is this one regardless.
+    expect(posted[0]).toEqual({ type: 'yaar:open-url', url: 'https://example.com/', title: '' });
+  });
+
+  it('drops a scheme the desktop cannot host rather than posting it', () => {
+    const { windows, posted } = install();
+    windows.openUrl('mailto:someone@example.com');
+    windows.openUrl('javascript:void 0');
+    expect(posted).toEqual([]);
   });
 
   it('says nothing for a non-string or empty url', () => {

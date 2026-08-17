@@ -33,6 +33,7 @@ export {
   app,
   notifications,
   windows,
+  links,
 } from './verbs.js';
 export type { StreamFrame } from './verbs.js';
 

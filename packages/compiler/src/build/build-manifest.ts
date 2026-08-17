@@ -108,8 +108,15 @@ import { join, basename } from 'path';
  * the open web, or written before `windows.openUrl` existed — and the baked-in copy in
  * `dist/` wins over the injected one (both are install-once, and the baked one runs
  * first). Without a bump the fix would reach only apps that happened to go stale.
+ *
+ * '26': the link guard moved into the windows SDK and stopped exempting
+ * `target="_blank"`, middle clicks and ctrl/cmd-clicks — the exemptions that covered
+ * most real external links, and the reason apps kept hand-rolling a stricter guard.
+ * Same reasoning as '25': the apps this fixes are precisely the ones nobody is about
+ * to edit, and the baked-in copy wins over the injected one. The bump also gets every
+ * app the `window.__yaar_links__` block, which is what arms the guard.
  */
-export const COMPILER_VERSION = '25';
+export const COMPILER_VERSION = '26';
 
 export interface BuildManifest {
   sourceHash: string;
