@@ -152,7 +152,9 @@ function main(): void {
   const docs =
     fileArgs.length > 0
       ? fileArgs.map((f) => relative(REPO_ROOT, resolve(f)))
-      : git(['ls-files', 'docs/*.md', 'docs/**/*.md']).split('\n').filter(Boolean);
+      : // -z keeps non-ASCII paths verbatim; without it git quotes them ("...\342\200\224...")
+        // and every such doc reads as a missing file.
+        git(['ls-files', '-z', 'docs/*.md', 'docs/**/*.md']).split('\0').filter(Boolean);
 
   let staleCount = 0;
   let brokenCount = 0;
