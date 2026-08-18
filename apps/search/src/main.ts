@@ -18,6 +18,7 @@ import {
   validateSearchPattern,
 } from './protocol';
 import { AppCommandError, errMsg, showToast, defineApp } from '@bundled/yaar';
+import { analyzeDeps, getLastDepsReport } from './deps';
 
 let previewBodyEl: HTMLDivElement | undefined;
 
@@ -318,6 +319,11 @@ export default defineApp({
             }
           : null,
     },
+    deps: {
+      description:
+        'The last analyze-deps report (mode, root, stats, and the mode-specific data). Null until analyze-deps runs.',
+      get: () => getLastDepsReport(),
+    },
   },
   commands: {
     search: {
@@ -471,6 +477,58 @@ export default defineApp({
       },
       run: async (params) => {
         return await removeClone(String(params.appId), params.destPath as string | undefined);
+      },
+    },
+    'analyze-deps': {
+      description:
+        'Analyze source dependencies of a cloned app. `path` is a clone path ("memo" or "apps-source/memo") — clone-app must have run first — or a yaar://storage/… directory. Regex import parsing, no AST. Modes: cycles (circular imports), impact (what a file affects), summary (fan-in/out, entry points, orphans), mermaid (focused diagram; focus and depth are required).',
+      params: {
+        type: 'object',
+        properties: {
+          path: {
+            type: 'string',
+            description:
+              'Cloned source root: "memo", "apps-source/memo", or a yaar://storage/… directory.',
+          },
+          mode: {
+            type: 'string',
+            enum: ['cycles', 'impact', 'summary', 'mermaid'],
+            description: 'cycles | impact | summary | mermaid',
+          },
+          focus: {
+            type: 'string',
+            description:
+              'File to centre on, relative to the root ("src/store.ts"). Required for impact and mermaid.',
+          },
+          depth: {
+            type: 'number',
+            description: 'Hops around focus, 1-4. Required for mermaid.',
+          },
+          direction: {
+            type: 'string',
+            enum: ['dependents', 'dependencies', 'both'],
+            description:
+              'impact only: who reaches focus (default), what focus reaches, or both (labelled separately).',
+          },
+          includeTypeOnly: {
+            type: 'boolean',
+            description: 'Include `import type` edges. Default false — they inflate the graph.',
+          },
+          externals: {
+            type: 'string',
+            enum: ['exclude', 'leaf'],
+            description: 'Bare package imports: excluded (default) or kept as leaf nodes.',
+          },
+          limit: { type: 'number', description: 'summary only: top-N rows. Default 10, max 50.' },
+          refresh: {
+            type: 'boolean',
+            description: 'Re-read files instead of using the cached graph.',
+          },
+        },
+        required: ['path', 'mode'],
+      },
+      run: async (params) => {
+        return await analyzeDeps(params as Record<string, unknown>);
       },
     },
     clear: {

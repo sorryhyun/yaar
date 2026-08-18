@@ -20,8 +20,20 @@ Your state keys and commands are listed further down, generated from the app its
 3. To inspect a match: `command("select", { index })` then `query("preview")` for file content
 4. To clone an app: `command("clone-app", { appId })` — writes under Search's private `apps-source/` tree
 5. To search cloned source: `command("search", { pattern, scope: "apps-source" })`
-6. To clean up: `command("remove-clone", { appId })` — deletes the private cloned directory
-7. For non-search tasks (edit files, open apps, list files, etc.): `relay(message)`
+6. To map a cloned app's imports: `command("analyze-deps", { path: "memo", mode: "summary" })` — see below
+7. To clean up: `command("remove-clone", { appId })` — deletes the private cloned directory
+8. For non-search tasks (edit files, open apps, list files, etc.): `relay(message)`
+
+## analyze-deps
+
+Answers "where do I look?" without reading every file. `path` is the clone root (`"memo"` or `"apps-source/memo"`) — `clone-app` must have run first, and the command tells you so when it hasn't.
+
+- `mode: "summary"` — fan-in/fan-out, entry points, orphans, unresolved imports. Start here on an unfamiliar app.
+- `mode: "cycles"` — circular imports, each with an example path around the loop.
+- `mode: "impact", focus: "src/store.ts"` — which files a change reaches, with hop distance. `direction: "dependencies"` flips it to what that file pulls in, `"both"` returns both, labelled separately.
+- `mode: "mermaid", focus, depth` — diagram around one file. focus and depth are required: a whole-app graph is unreadable. Cycle edges are drawn red.
+
+Parsing is regex over import/export/`import()`/`require()`, not a type checker. Type-only imports are excluded by default and the result reports how many were dropped — pass `includeTypeOnly: true` when you care about type structure rather than runtime load order. The last report also stays readable at `query("deps")`.
 
 ## Rules
 

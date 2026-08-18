@@ -16,7 +16,7 @@ function isClonePath(path: string): boolean {
 }
 
 /** Keep custom clone destinations inside Search's private clone tree. */
-function clonePath(path: string): string {
+export function clonePath(path: string): string {
   const clean = cleanPath(path);
   if (clean.split('/').includes('..')) throw new Error('Clone path cannot escape apps-source.');
   if (!clean) return CLONE_ROOT;
