@@ -1,39 +1,37 @@
 import { app } from '@bundled/yaar';
 import { navigate } from '@bundled/yaar-web';
 import { activeBrowserId, setLoading, setShowScreenshot } from './store';
-import { withToken } from './token';
+import { getScreenshotEl } from './dom';
+import { screenshotUrl } from './endpoints';
 
-// Exported so sse.ts can access it for polling updates.
-export let screenshotEl!: HTMLImageElement;
-
-export function setScreenshotEl(el: HTMLImageElement): void {
-  screenshotEl = el;
+/** One wording for every fire-and-forget failure, so the console reads consistently. */
+function logFailure(what: string, err: unknown): void {
+  console.error(`[browser] ${what} failed:`, err);
 }
 
 export function refreshScreenshot(fresh = false): void {
-  const bid = activeBrowserId();
-  const ts = Date.now();
-  const src = withToken(`/api/browser/${bid}/screenshot?t=${ts}${fresh ? '&fresh' : ''}`);
+  const el = getScreenshotEl();
+  if (!el) return;
   setLoading(true);
 
-  screenshotEl.onload = () => {
+  el.onload = () => {
     setShowScreenshot(true);
     setLoading(false);
   };
-  screenshotEl.onerror = () => {
+  el.onerror = () => {
     setLoading(false);
   };
-  screenshotEl.src = src;
+  el.src = screenshotUrl(activeBrowserId(), fresh);
 }
 
 /** Navigate back/forward — invoke directly for immediate effect, then notify agent. */
 export async function handleNav(direction: 'navigate_back' | 'navigate_forward'): Promise<void> {
-  const bid = activeBrowserId();
+  const browserId = activeBrowserId();
   try {
     const dir = direction === 'navigate_back' ? 'back' : 'forward';
-    await navigate({ direction: dir, browserId: bid });
+    await navigate({ direction: dir, browserId });
   } catch (err) {
-    console.error('[browser] Nav error:', err);
+    logFailure(direction, err);
   }
   app?.sendInteraction({ event: direction });
 }
@@ -46,28 +44,27 @@ export function handleUrlFocus(e: FocusEvent): void {
   (e.target as HTMLInputElement).select();
 }
 
-export async function navigateDirect(url: string): Promise<void> {
-  const bid = activeBrowserId();
+async function navigateDirect(url: string): Promise<void> {
   setLoading(true);
   try {
-    await navigate(url, bid);
+    await navigate(url, activeBrowserId());
     // SSE will handle screenshot refresh
   } catch (err) {
-    console.error('[browser] Navigate error:', err);
+    logFailure('navigate', err);
   }
 }
 
 export function handleUrlKeydown(e: KeyboardEvent): void {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    let url = (e.target as HTMLInputElement).value.trim();
-    if (!url) return;
-    if (!/^https?:\/\//i.test(url)) {
-      url = 'https://' + url;
-    }
-    (e.target as HTMLInputElement).value = url;
-    (e.target as HTMLInputElement).blur();
-    navigateDirect(url);
-    app?.sendInteraction({ event: 'user_navigated', url });
+  if (e.key !== 'Enter') return;
+  e.preventDefault();
+  const input = e.target as HTMLInputElement;
+  let url = input.value.trim();
+  if (!url) return;
+  if (!/^https?:\/\//i.test(url)) {
+    url = 'https://' + url;
   }
+  input.value = url;
+  input.blur();
+  void navigateDirect(url);
+  app?.sendInteraction({ event: 'user_navigated', url });
 }

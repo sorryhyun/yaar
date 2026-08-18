@@ -21,6 +21,35 @@ than expecting a full list here.
 - Available keys for `press`: Enter, Tab, Escape, Backspace, ArrowUp, ArrowDown, ArrowLeft,
   ArrowRight, Space.
 
+## Tabs and the Live View
+
+A `browserId` is a **tab**, and it is also the address every command lands on — `click`,
+`extract` and the rest act on the *active* tab, so switching tabs is how you point them
+somewhere else.
+
+- `query("tabs")` — every open tab as `{ browserId, url, title, active }`. Read this
+  before switching; ids are not guessable.
+- `command("switch_tab", { tabId })` — show another tab and send later commands to it.
+  It always re-captures, so the screenshot is that tab's current page.
+- `command("new_tab", { url })` — open a tab of its own and switch to it. **At most 5
+  tabs exist at once**, so close what you are done with.
+- `command("close_tab", { tabId })` — close one. Closing the active tab moves to
+  whatever is left.
+
+All tabs share one Chrome profile: cookies and logins are shared, so a second tab is not
+a clean session.
+
+The **live view** is the user's control surface — a video stream of the page with their
+mouse and keyboard forwarded into it. The still screenshot is yours.
+
+- `query("liveMode")` — whether it is on.
+- `command("set_live_mode", { enabled })` — turn it on when the user asks to drive the
+  page themselves (a login, a captcha, anything you should not type for them), and off
+  when they hand it back.
+
+Do not turn it on to see the page yourself: `screenshot` already shows you the page, and
+live mode costs a video stream per frame.
+
 ## Browsing Workflow
 
 1. **Navigate**: `command("open", { url })` to go to a page
