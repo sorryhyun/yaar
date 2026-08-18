@@ -1202,6 +1202,18 @@ export class BrowserSession extends EventEmitter {
    * backpressure would stall the stream rather than degrade it. Dropping frames
    * is the transport's job (see `screencast-handlers.ts`).
    */
+  /**
+   * Make this tab the frontmost of its window.
+   *
+   * Chrome composites only the frontmost target: a screencast started against any
+   * other tab attaches without complaint and then emits no frames at all (see
+   * `apps/browser/src/live/fallback.ts`). Callers that attach a viewer activate
+   * the tab first so it is the one Chrome actually paints.
+   */
+  async bringToFront(): Promise<void> {
+    await this.cdp.send('Page.bringToFront');
+  }
+
   async startScreencast(opts?: {
     quality?: number;
     maxWidth?: number;

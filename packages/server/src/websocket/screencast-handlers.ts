@@ -173,6 +173,13 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
     // Refcounted, so the *first* viewer's settings hold for everyone until the
     // last one leaves. That is wrong in general and irrelevant here: the app
     // reconnects the socket to change quality, and there is one viewer.
+    //
+    // Activated first because Chrome composites only the frontmost tab of a
+    // window — a screencast on a background target streams nothing (the stall
+    // `apps/browser/src/live/fallback.ts` mitigates). Tolerated on failure: the
+    // fallback still produces stills. This socket only ever reaches the headless
+    // provider, so activation cannot steal focus in a user's own Chrome.
+    await session.bringToFront().catch(() => {});
     await session.startScreencast({
       quality: state.quality,
       ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),
@@ -285,6 +292,9 @@ function switchTab(ws: ServerWebSocket<WsData>, state: ViewerState, browserId: s
       state.tabs.add(browserId);
       next.on('screencastFrame', state.onFrame);
       next.on('closed', state.onClosed);
+      // Same reason as on open: only the frontmost tab composites, so switching
+      // the canvas to a background tab without activating it streams zero frames.
+      await next.bringToFront().catch(() => {});
       await next.startScreencast({
         quality: state.quality,
         ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),

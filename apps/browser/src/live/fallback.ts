@@ -9,11 +9,14 @@
  * moment a newer tab takes the foreground, and reads 36 again when it is frontmost.
  * Neither reconnecting the socket nor navigating the tab revives it.
  *
- * The cure is server-side: whatever handles `attach` has to activate the target
- * (`Target.activateTarget` / `Page.bringToFront`) so Chrome composites it. This module
- * is the client's half — a mitigation, not a fix. When input has been forwarded and no
- * frame has answered it for STALL_MS, it asks the still endpoint for a `fresh` capture
- * of that tab, which (unlike the screencast) does answer for a background target.
+ * The cure is server-side and is in place: the screencast handlers call
+ * `Page.bringToFront` on every viewer attach and tab switch, so the tab under the
+ * canvas is the one Chrome composites. This module stays as the safety net for the
+ * stalls activation cannot prevent — anything else taking the foreground of the same
+ * Chrome window mid-view (an agent opening or driving another tab is enough). When
+ * input has been forwarded and no frame has answered it for STALL_MS, it asks the
+ * still endpoint for a `fresh` capture of that tab, which (unlike the screencast)
+ * does answer for a background target.
  *
  * Two things can then put pixels on the canvas, and both are wins:
  *
@@ -25,7 +28,7 @@
  *
  * Measured against the unfixed build on the same kind of stalled tab: 4 wheel scrolls
  * produced 0 canvas repaints before, and 2-3 after. It is a few frames per second, not
- * a stream, which is why the fix above still needs doing.
+ * a stream, which is why activation on attach is the fix and this is the net under it.
  *
  * It costs nothing when the stream is healthy: a capture is only fetched when input is
  * outstanding AND no frame has been painted for STALL_MS, so a live stream never
