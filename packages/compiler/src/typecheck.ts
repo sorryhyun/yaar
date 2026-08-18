@@ -129,6 +129,10 @@ export async function typecheckSandbox(
       target: 'ES2022',
       module: 'ES2022',
       moduleResolution: 'bundler',
+      // Bun's bundler loads an imported .json natively, so an app may ship a data
+      // asset beside its source; without this tsc alone would call that import
+      // unresolvable and fail a build the compiler is perfectly happy with.
+      resolveJsonModule: true,
       lib: ['ES2022', 'DOM', 'DOM.Iterable'],
       types: [],
       paths: {
