@@ -36,6 +36,7 @@ import type {
   RawMouseEvent,
   RawKeyEvent,
 } from '../lib/browser/session.js';
+import type { BrowserTabEvent } from '../lib/browser/types.js';
 import { createLogger } from '../observability/log.js';
 
 const log = createLogger('screencast');
@@ -53,6 +54,21 @@ const MAX_BUFFERED_BYTES = 256 * 1024;
 
 interface ViewerState {
   session: BrowserSession;
+  /** The tab currently on the canvas. Follows `attach`, not the socket's URL. */
+  browserId: string;
+  /**
+   * Every tab this viewer is responsible for: the one it opened with, plus each
+   * popup opened from one of them. Membership is what decides whether a tab event
+   * concerns *this* viewer — two windows watching two unrelated tabs must not grow
+   * each other's strips.
+   */
+  tabs: Set<string>;
+  /** The screencast levers, kept so a tab switch restarts at the same quality. */
+  quality: number;
+  maxWidth: number;
+  unsubscribeTabs: () => void;
+  /** Serializes switches so two fast clicks can't leave two screencasts running. */
+  switching: Promise<void>;
   onFrame: (frame: ScreencastFrame) => void;
   onClosed: () => void;
   seq: number;
@@ -75,7 +91,7 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
   const session = browserId
     ? (provider.getSession(browserId) ?? (await provider.reviveSession(browserId)))
     : undefined;
-  if (!session) {
+  if (!session || !browserId) {
     // 1008 (policy violation) rather than a silent close: the app shows the reason.
     ws.close(1008, `No browser session ${browserId ?? '(none)'}`);
     return;
@@ -83,6 +99,12 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
 
   const state: ViewerState = {
     session,
+    browserId,
+    tabs: new Set([browserId]),
+    quality: ws.data.screencastQuality ?? 60,
+    maxWidth: ws.data.screencastMaxWidth ?? 0,
+    unsubscribeTabs: () => {},
+    switching: Promise.resolve(),
     onFrame: () => {},
     onClosed: () => {},
     seq: 0,
@@ -123,9 +145,20 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
     state.bytes += out.length;
   };
 
+  // The tab under the canvas dying is not automatically the end of the viewing:
+  // a popup closing itself should hand the human back to whatever opened it, the
+  // way a real browser does. Only a viewer with nowhere left to go loses its socket.
   state.onClosed = () => {
-    if (ws.readyState === 1) ws.close(1000, 'Browser session closed');
+    if (ws.readyState !== 1) return;
+    const fallback = pickFallback(state, state.browserId);
+    if (fallback) {
+      switchTab(ws, state, fallback);
+      return;
+    }
+    ws.close(1000, 'Browser session closed');
   };
+
+  state.unsubscribeTabs = provider.onTabEvent((event) => onTabEvent(ws, state, event));
 
   session.on('screencastFrame', state.onFrame);
   session.on('closed', state.onClosed);
@@ -141,26 +174,131 @@ export async function handleScreencastOpen(ws: ServerWebSocket<WsData>): Promise
     // last one leaves. That is wrong in general and irrelevant here: the app
     // reconnects the socket to change quality, and there is one viewer.
     await session.startScreencast({
-      quality: ws.data.screencastQuality ?? 60,
-      ...(ws.data.screencastMaxWidth ? { maxWidth: ws.data.screencastMaxWidth } : {}),
+      quality: state.quality,
+      ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),
     });
   } catch (err) {
     log.warn('failed to start screencast', { browserId, err });
+    state.unsubscribeTabs();
     ws.close(1011, 'Failed to start screencast');
     return;
   }
 
   // Tells the app it is live, and gives it the viewport before the first frame —
   // an empty canvas can be sized correctly rather than jumping on frame one.
+  sendReady(ws, state);
+  log.info('viewer attached', { browserId });
+}
+
+/** The `ready` frame, sent on attach and again after every tab switch. */
+function sendReady(ws: ServerWebSocket<WsData>, state: ViewerState): void {
+  if (ws.readyState !== 1) return;
   ws.send(
     JSON.stringify({
       t: 'ready',
-      browserId,
-      url: session.currentUrl,
-      title: session.currentTitle,
+      browserId: state.browserId,
+      url: state.session.currentUrl,
+      title: state.session.currentTitle,
     }),
   );
-  log.info('viewer attached', { browserId });
+}
+
+/**
+ * A tab this viewer is responsible for opened or closed.
+ *
+ * A popup is followed rather than merely announced: the human clicked something
+ * that opened a window, and a canvas that keeps painting the opener is the bug
+ * this whole path exists to fix. The strip is how they get back.
+ */
+function onTabEvent(ws: ServerWebSocket<WsData>, state: ViewerState, event: BrowserTabEvent): void {
+  if (ws.readyState !== 1) return;
+
+  if (event.type === 'opened') {
+    if (!event.openerBrowserId || !state.tabs.has(event.openerBrowserId)) return;
+    state.tabs.add(event.browserId);
+    ws.send(
+      JSON.stringify({
+        t: 'tab',
+        action: 'opened',
+        browserId: event.browserId,
+        url: event.url,
+        title: event.title,
+        openerBrowserId: event.openerBrowserId,
+      }),
+    );
+    switchTab(ws, state, event.browserId);
+    return;
+  }
+
+  if (!state.tabs.has(event.browserId)) return;
+  state.tabs.delete(event.browserId);
+  ws.send(JSON.stringify({ t: 'tab', action: 'closed', browserId: event.browserId }));
+  if (event.browserId !== state.browserId) return;
+
+  // The canvas was on the tab that just died — the `closed` handler will not fire
+  // for it if the session was dropped rather than closed, so the fallback is here too.
+  const fallback = pickFallback(state, event.browserId, event.openerBrowserId);
+  if (fallback) switchTab(ws, state, fallback);
+  else ws.close(1000, 'Browser session closed');
+}
+
+/** Where to send the canvas when the tab under it goes away: opener first, then any sibling. */
+function pickFallback(state: ViewerState, gone: string, opener?: string): string | undefined {
+  const preferred = opener ?? state.session.openerBrowserId;
+  if (preferred && preferred !== gone && state.tabs.has(preferred)) return preferred;
+  for (const id of state.tabs) {
+    if (id !== gone) return id;
+  }
+  return undefined;
+}
+
+/**
+ * Point this viewer at a different tab, in place.
+ *
+ * The socket is deliberately not reconnected: it carries the human's input and the
+ * spike's latency counters, and a reconnect per popup would blank both. Switches
+ * are chained rather than run concurrently — two fast clicks must not leave the
+ * abandoned tab still encoding JPEGs for nobody.
+ */
+function switchTab(ws: ServerWebSocket<WsData>, state: ViewerState, browserId: string): void {
+  state.switching = state.switching
+    .then(async () => {
+      if (ws.readyState !== 1) return;
+      if (browserId === state.browserId) return;
+      const provider = getHeadlessBrowser();
+      const next = provider.getSession(browserId) ?? (await provider.reviveSession(browserId));
+      if (!next) {
+        if (ws.readyState === 1) {
+          ws.send(JSON.stringify({ t: 'tab', action: 'closed', browserId }));
+        }
+        state.tabs.delete(browserId);
+        return;
+      }
+
+      const previous = state.session;
+      previous.off('screencastFrame', state.onFrame);
+      previous.off('closed', state.onClosed);
+      await previous.stopScreencast().catch(() => {});
+
+      state.session = next;
+      state.browserId = browserId;
+      state.tabs.add(browserId);
+      next.on('screencastFrame', state.onFrame);
+      next.on('closed', state.onClosed);
+      await next.startScreencast({
+        quality: state.quality,
+        ...(state.maxWidth ? { maxWidth: state.maxWidth } : {}),
+      });
+      // The tab may have navigated itself since it was adopted, and the URL bar the
+      // human reads comes from this frame.
+      await next.refreshLocation().catch(() => {});
+      sendReady(ws, state);
+      log.info('viewer switched tab', { browserId });
+    })
+    .catch((err) => {
+      log.warn('failed to switch tab', { browserId, err });
+      if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'tabError', browserId }));
+    });
 }
 
 export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: string | Buffer): void {
@@ -218,6 +356,14 @@ export function handleScreencastMessage(ws: ServerWebSocket<WsData>, data: strin
         .catch(() => {});
       return;
     }
+    // The tab strip clicking through to another tab. Everything else on this socket
+    // — input, IME, viewport — follows `state.session`, so nothing else changes.
+    case 'attach': {
+      if (typeof msg.browserId === 'string' && msg.browserId) {
+        switchTab(ws, state, msg.browserId);
+      }
+      return;
+    }
     case 'viewport': {
       const w = num(msg.width);
       const h = num(msg.height);
@@ -234,14 +380,19 @@ export function handleScreencastClose(ws: ServerWebSocket<WsData>): void {
   if (!state) return;
   viewers.delete(ws);
 
-  state.session.off('screencastFrame', state.onFrame);
-  state.session.off('closed', state.onClosed);
-  void state.session.stopScreencast().catch(() => {});
+  state.unsubscribeTabs();
+  // Through the switch chain, so a detach that lands mid-switch stops the tab that
+  // actually ends up streaming rather than the one that was streaming when it began.
+  void state.switching.then(() => {
+    state.session.off('screencastFrame', state.onFrame);
+    state.session.off('closed', state.onClosed);
+    return state.session.stopScreencast().catch(() => {});
+  });
 
   // The spike's whole deliverable. `YAAR_LOG_LEVEL=info` already shows it.
   const seconds = Math.max(0.001, (Date.now() - state.startedAt) / 1000);
   log.info('viewer detached', {
-    browserId: ws.data.browserId,
+    browserId: state.browserId,
     frames: state.sent,
     dropped: state.dropped,
     fps: Number((state.sent / seconds).toFixed(1)),

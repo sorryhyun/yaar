@@ -23,6 +23,7 @@ import type {
   BrowserProviderStats,
   AdoptedTab,
   BrowserSessionInfo,
+  BrowserTabEvent,
 } from './types.js';
 import { CDPClient } from './cdp.js';
 import { BrowserSessionStore } from './session-store.js';
@@ -62,6 +63,19 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
   protected adoptedTargets = new Set<string>();
   protected knownTargetIds = new Set<string>();
   protected pendingAdoptions = new Map<string, { browserId: string; openerBrowserId?: string }>();
+  /**
+   * Which browserId is behind each CDP target. The reverse of what the session map
+   * holds, and the only honest way to answer "who opened this popup?" — CDP names
+   * the *opener target*, not a browserId.
+   */
+  protected targetOwners = new Map<string, string>();
+  /**
+   * Sessions that exist only because a target does: adopted popups and the user's
+   * own tabs. Nothing on disk remembers them, so when their target dies there is
+   * nothing to revive and the entry is dropped rather than left as a stale id.
+   */
+  protected ephemeralSessions = new Set<string>();
+  private tabListeners = new Set<(event: BrowserTabEvent) => void>();
   private discoveryPromise: Promise<void> | null = null;
   /** The named sessions this provider has, as they survive a restart. */
   protected readonly store = new BrowserSessionStore();
@@ -202,6 +216,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const target = await this.openTarget(port);
       await session.reattach(target.webSocketDebuggerUrl, session.currentUrl);
       this.knownTargetIds.add(target.id);
+      this.targetOwners.set(target.id, browserId);
       console.log(`[browser] Session ${browserId} revived → ${session.currentUrl}`);
       this.restartCounts.delete(browserId);
     } catch (err) {
@@ -299,6 +314,11 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
           console.error('[browser] Failed to adopt new tab:', err);
         });
       });
+
+      this.browserCdp.on('Target.targetDestroyed', (params: unknown) => {
+        const { targetId } = params as { targetId?: string };
+        if (typeof targetId === 'string') this.handleTargetGone(targetId);
+      });
     } catch (err) {
       console.error('[browser] Target discovery setup failed:', err);
     }
@@ -312,17 +332,13 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
     this.adoptedTargets.add(targetInfo.targetId);
 
-    // Find opener browser ID by most recently active session
-    let openerBrowserId: string | undefined;
-    if (targetInfo.openerId) {
-      let latestActivity = 0;
-      for (const [bid, session] of this.sessions) {
-        if (session.lastActivity > latestActivity) {
-          latestActivity = session.lastActivity;
-          openerBrowserId = bid;
-        }
-      }
-    }
+    // Chrome names the opener target outright. The old reading of this — "whichever
+    // session was active most recently" — was only ever right when an agent's click
+    // was the last thing that happened, which is exactly not the case while a human
+    // is driving the page live.
+    const openerBrowserId = targetInfo.openerId
+      ? this.targetOwners.get(targetInfo.openerId)
+      : undefined;
 
     const browserId = String(this.nextId++);
 
@@ -340,20 +356,31 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
 
       this.pendingSessions++;
       try {
-        const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl);
+        // Adopted passively, and never re-navigated. A popup is a page that already
+        // exists: sending it to its own URL again replays a one-time OAuth callback,
+        // wipes an `about:blank` popup the opener is writing into, and the emulation
+        // overrides would stretch a 500×600 window to desktop metrics.
+        const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl, {
+          adopt: true,
+        });
         session.openerBrowserId = openerBrowserId;
-        // Wait a moment for the page to load
-        await new Promise((r) => setTimeout(r, 500));
-        // Get current URL
-        const urlTitle = await session
-          .navigate(target.url || session.currentUrl, 'domcontentloaded')
-          .catch(() => null);
-        if (urlTitle) {
-          session.currentUrl = urlTitle.url;
-          session.currentTitle = urlTitle.title;
-        }
+        session.currentUrl = target.url || session.currentUrl;
+        this.knownTargetIds.add(target.id);
+        this.targetOwners.set(target.id, browserId);
+        this.ephemeralSessions.add(browserId);
         this.track(browserId, session, { persist: false });
+        // A popup is usually still navigating when it is announced, so its address
+        // is read once it has settled rather than from the announcement.
+        await new Promise((r) => setTimeout(r, 500));
+        await session.refreshLocation();
         this.pendingAdoptions.set(browserId, { browserId, openerBrowserId });
+        this.emitTabEvent({
+          type: 'opened',
+          browserId,
+          url: session.currentUrl,
+          title: session.currentTitle,
+          openerBrowserId,
+        });
         console.log(
           `[browser] Auto-adopted new tab [browser:${browserId}] → ${session.currentUrl} (opened by browser:${openerBrowserId})`,
         );
@@ -363,6 +390,34 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     } catch (err) {
       console.error('[browser] Failed to adopt target:', err);
     }
+  }
+
+  /**
+   * A target went away — the page closed its popup, the user closed the tab.
+   *
+   * Announced so a viewer watching that tab can step back to whatever opened it,
+   * instead of holding a canvas that will never paint again. An ephemeral session
+   * goes with its target: there is no record to revive it from, and leaving the
+   * entry behind would offer an id that resolves to a dead socket.
+   */
+  private handleTargetGone(targetId: string): void {
+    const browserId = this.targetOwners.get(targetId);
+    this.targetOwners.delete(targetId);
+    this.adoptedTargets.delete(targetId);
+    this.knownTargetIds.delete(targetId);
+    if (!browserId) return;
+
+    const session = this.sessions.get(browserId);
+    this.emitTabEvent({
+      type: 'closed',
+      browserId,
+      openerBrowserId: session?.openerBrowserId,
+    });
+
+    if (!this.ephemeralSessions.delete(browserId) || !session) return;
+    this.sessions.delete(browserId);
+    this.pendingAdoptions.delete(browserId);
+    void session.close().catch(() => {});
   }
 
   /**
@@ -415,6 +470,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const browserId = String(this.nextId++);
       this.pendingSessions++;
       try {
+        this.targetOwners.set(t.id, browserId);
+        this.ephemeralSessions.add(browserId);
         const session = await BrowserSession.create(browserId, t.webSocketDebuggerUrl, {
           adopt: true,
         });
@@ -427,6 +484,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       } catch (err) {
         this.adoptedTargets.delete(t.id);
         this.knownTargetIds.delete(t.id);
+        this.targetOwners.delete(t.id);
+        this.ephemeralSessions.delete(browserId);
         console.error('[browser] Failed to adopt existing tab:', err);
       } finally {
         this.pendingSessions--;
@@ -447,6 +506,24 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     return result;
   }
 
+  onTabEvent(listener: (event: BrowserTabEvent) => void): () => void {
+    this.tabListeners.add(listener);
+    return () => {
+      this.tabListeners.delete(listener);
+    };
+  }
+
+  /** Fan out to viewers. A listener that throws is its own problem, not Chrome's. */
+  protected emitTabEvent(event: BrowserTabEvent): void {
+    for (const listener of this.tabListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[browser] Tab event listener failed:', err);
+      }
+    }
+  }
+
   /** Disconnect shared CDP/discovery state, then release the process (if ours). */
   protected async closeEndpoint() {
     if (this.browserCdp) {
@@ -455,6 +532,8 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     }
     this.adoptedTargets.clear();
     this.knownTargetIds.clear();
+    this.targetOwners.clear();
+    this.ephemeralSessions.clear();
     this.pendingAdoptions.clear();
     this.discoveryPromise = null;
     if (this.cleanupTimer) {
@@ -497,6 +576,7 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
       const target = await this.openTarget(port);
       const session = await BrowserSession.create(browserId, target.webSocketDebuggerUrl, options);
       this.knownTargetIds.add(target.id);
+      this.targetOwners.set(target.id, browserId);
       this.track(browserId, session, { persist: options?.adopt !== true });
       return { session, browserId };
     } finally {
@@ -523,6 +603,10 @@ export abstract class CdpBrowserProvider implements BrowserProvider {
     // through here (see `cleanupIdle`): a collected session keeps its record and
     // comes back the next time someone asks for that id.
     this.restartCounts.delete(browserId);
+    this.ephemeralSessions.delete(browserId);
+    for (const [targetId, owner] of this.targetOwners) {
+      if (owner === browserId) this.targetOwners.delete(targetId);
+    }
     this.store.forget(browserId);
 
     // Release the Chrome process if no sessions remain — only when we own it.

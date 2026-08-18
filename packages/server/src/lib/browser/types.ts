@@ -52,6 +52,26 @@ export interface AdoptedTab {
 }
 
 /**
+ * A tab appearing or disappearing, pushed the moment it happens.
+ *
+ * {@link AdoptedTab} is the *pull* half of the same fact, drained by the agent on
+ * its next click. That half is useless to a human driving the tab live: nothing
+ * in the screencast path calls a verb, so nobody would ever drain it and the
+ * canvas would sit on the opener while the popup it just opened lived on
+ * unwatched. Viewers subscribe to this instead, and follow the target.
+ */
+export type BrowserTabEvent =
+  | {
+      type: 'opened';
+      browserId: string;
+      url: string;
+      title: string;
+      /** The tab whose page called `window.open`, when CDP named one. */
+      openerBrowserId?: string;
+    }
+  | { type: 'closed'; browserId: string; openerBrowserId?: string };
+
+/**
  * BrowserProvider — the backend behind `POST /api/browser`.
  *
  * Abstracts *where browser tabs come from*. Two implementations:
@@ -96,6 +116,13 @@ export interface BrowserProvider {
   findByWindowId(windowId: string): BrowserSession | undefined;
   /** Drain tabs auto-adopted since the last call (e.g. popups). */
   consumeAdoptedTabs(): AdoptedTab[];
+  /**
+   * Subscribe to tabs opening and closing. Returns the unsubscribe.
+   *
+   * Independent of {@link consumeAdoptedTabs}: a listener never consumes, so the
+   * agent's next click still sees the popup it caused.
+   */
+  onTabEvent(listener: (event: BrowserTabEvent) => void): () => void;
   /**
    * Adopt every already-open page target not yet in the session map, so a
    * passive `list_tabs` reflects the browser's real tabs (including ones the

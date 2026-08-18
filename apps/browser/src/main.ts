@@ -45,6 +45,10 @@ import {
   onImeUpdate,
   onImeEnd,
   onImeInput,
+  liveTabs,
+  switchLiveTab,
+  closeLiveTab,
+  type LiveTab,
 } from './live';
 import {
   refreshScreenshot,
@@ -110,6 +114,16 @@ onCleanup(() => {
   disconnectSSE();
   disconnectLive();
 });
+
+/** What a tab calls itself in the strip: its title, else its host, else its id. */
+function tabLabel(tab: LiveTab): string {
+  if (tab.title) return tab.title;
+  try {
+    return new URL(tab.url).host;
+  } catch {
+    return `browser:${tab.browserId}`;
+  }
+}
 
 /** Promise lock to prevent double-creation of browser sessions. */
 let creatingSession: Promise<string> | null = null;
@@ -180,6 +194,32 @@ function App() {
             : null}
         <span class="title-text y-text-xs y-text-muted y-truncate">${() => pageTitle()}</span>
       </div>
+      <!--
+        Only shown once there is more than one tab. A popup is what usually creates
+        the second one, and a strip that is always there would be chrome charging
+        rent for the case that hasn't happened yet.
+      -->
+      ${() =>
+        liveMode() && liveTabs().length > 1
+          ? html`
+        <div class="tab-strip y-flex y-gap-1 y-px-2 y-surface y-border-b">
+          ${() =>
+            liveTabs().map(
+              (tab: LiveTab) => html`
+            <div class=${() =>
+              `live-tab ${activeBrowserId() === tab.browserId ? 'active' : ''}`}>
+              <button class="y-btn y-btn-sm y-btn-ghost tab-label y-truncate"
+                title=${() => tab.url || `browser:${tab.browserId}`}
+                onClick=${() => switchLiveTab(tab.browserId)}>${() => tabLabel(tab)}</button>
+              <button class="y-btn y-btn-sm y-btn-ghost tab-close"
+                title="Close tab" aria-label="Close tab"
+                onClick=${() => void closeLiveTab(tab.browserId)}>×</button>
+            </div>
+          `,
+            )}
+        </div>
+      `
+          : null}
       <div class="screenshot-area">
         <div class=${() => (loading() ? 'loading-bar active' : 'loading-bar')}></div>
         ${() =>

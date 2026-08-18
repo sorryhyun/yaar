@@ -23,8 +23,10 @@
  */
 
 import { createSignal } from '@bundled/solid-js';
+import { closeTab } from '@bundled/yaar-web';
 import { withToken } from './token';
-import { updateUrlBar } from './store';
+import { updateUrlBar, setActiveBrowserId, activeBrowserId } from './store';
+import { connectSSE, stopPolling } from './sse';
 
 export interface LiveStats {
   fps: number;
@@ -48,6 +50,20 @@ export const QUALITY_PRESETS = {
 
 export type QualityPreset = keyof typeof QUALITY_PRESETS;
 
+/**
+ * One tab in the live strip.
+ *
+ * A "tab" here is a remote *target*, not a Chrome tab: a popup Chrome drew as its
+ * own window is one of these too. That is the whole trick — the socket can point
+ * at any target, so a popup needs no window of its own on this side.
+ */
+export interface LiveTab {
+  browserId: string;
+  url: string;
+  title: string;
+}
+
+export const [liveTabs, setLiveTabs] = createSignal<LiveTab[]>([]);
 export const [liveMode, setLiveMode] = createSignal(false);
 export const [quality, setQuality] = createSignal<QualityPreset>('high');
 export const [liveStatus, setLiveStatus] = createSignal('');
@@ -115,6 +131,7 @@ export function connectLive(browserId: string): void {
   const ws = new WebSocket(`${scheme}://${window.location.host}${path}`);
   ws.binaryType = 'arraybuffer';
   socket = ws;
+  setLiveTabs([{ browserId, url: '', title: '' }]);
   setLiveStatus('Connecting…');
   resetStats();
 
@@ -139,6 +156,7 @@ export function connectLive(browserId: string): void {
 export function disconnectLive(): void {
   const ws = socket;
   socket = null;
+  setLiveTabs([]);
   composing = false;
   setImeStatus('');
   if (anchor) anchor.value = '';
@@ -149,6 +167,8 @@ function handleControlFrame(text: string): void {
   try {
     const msg = JSON.parse(text) as {
       t?: string;
+      action?: string;
+      browserId?: string;
       url?: string;
       title?: string;
       x?: number;
@@ -166,8 +186,22 @@ function handleControlFrame(text: string): void {
       }
       return;
     }
+    if (msg.t === 'tab') {
+      if (!msg.browserId) return;
+      if (msg.action === 'opened') {
+        upsertTab({ browserId: msg.browserId, url: msg.url ?? '', title: msg.title ?? '' });
+      } else if (msg.action === 'closed') {
+        setLiveTabs(liveTabs().filter((tab) => tab.browserId !== msg.browserId));
+      }
+      return;
+    }
+    if (msg.t === 'tabError') {
+      setLiveStatus('That tab is gone');
+      return;
+    }
     if (msg.t === 'ready') {
       setLiveStatus('Live');
+      if (msg.browserId) followTab(msg.browserId, msg.url ?? '', msg.title ?? '');
       if (msg.url) updateUrlBar(msg.url, msg.title);
       // Entering live mode is itself a resize, and the ResizeObserver will not say
       // so: it fires once at observe time — while live mode is still off — and then
@@ -178,6 +212,56 @@ function handleControlFrame(text: string): void {
     }
   } catch {
     /* the only text frames are ours; a malformed one is not worth a channel teardown */
+  }
+}
+
+function upsertTab(tab: LiveTab): void {
+  const tabs = liveTabs();
+  const at = tabs.findIndex((t) => t.browserId === tab.browserId);
+  if (at < 0) {
+    setLiveTabs([...tabs, tab]);
+    return;
+  }
+  const next = tabs.slice();
+  next[at] = { ...next[at], url: tab.url || next[at].url, title: tab.title || next[at].title };
+  setLiveTabs(next);
+}
+
+/**
+ * The canvas is now showing this tab, so everything else in the app follows it.
+ *
+ * Without this the URL bar, the reload button and the still-screenshot path would
+ * all keep addressing the tab the window opened with — a human typing an address
+ * while looking at a popup would navigate the page behind it.
+ */
+function followTab(browserId: string, url: string, title: string): void {
+  upsertTab({ browserId, url, title });
+  if (activeBrowserId() === browserId) return;
+  setActiveBrowserId(browserId);
+  connectSSE(browserId);
+  // `connectSSE` starts the 200 ms still-screenshot poll; live mode is already
+  // paying for one encode per frame and must not order a second.
+  if (liveMode()) stopPolling();
+}
+
+/** Put the canvas on another tab, in place — the socket and its counters survive. */
+export function switchLiveTab(browserId: string): void {
+  if (!socket || socket.readyState !== WebSocket.OPEN) return;
+  socket.send(JSON.stringify({ t: 'attach', browserId }));
+}
+
+/**
+ * Close a tab for real, in the remote browser.
+ *
+ * The strip is not updated here: the tab disappears when Chrome says its target
+ * is gone, which is also what happens when the *page* closes its own popup. One
+ * path, so the strip can't disagree with the browser.
+ */
+export async function closeLiveTab(browserId: string): Promise<void> {
+  try {
+    await closeTab(browserId);
+  } catch (err) {
+    console.error('[browser] Failed to close tab:', err);
   }
 }
 

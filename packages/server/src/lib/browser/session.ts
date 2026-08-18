@@ -310,6 +310,29 @@ export class BrowserSession extends EventEmitter {
     }
   }
 
+  /**
+   * Re-read where this tab actually is, straight from the page.
+   *
+   * A session learns its address from the operations that cause navigation, so a
+   * tab nobody drove through this class — a popup its opener steers, a page that
+   * redirects itself — would keep reporting the URL it was adopted at. The live
+   * tab strip lists exactly those tabs, so it needs a way to ask.
+   */
+  async refreshLocation(): Promise<void> {
+    try {
+      const info = await this.eval<{ url: string; title: string }>(
+        '({ url: location.href, title: document.title })',
+      );
+      if (!info || typeof info.url !== 'string') return;
+      if (info.url === this.currentUrl && (info.title ?? '') === this.currentTitle) return;
+      this.currentUrl = info.url;
+      this.currentTitle = info.title ?? '';
+      this.notifyUpdate();
+    } catch {
+      /* a tab that won't answer keeps the address it was adopted at */
+    }
+  }
+
   private touch() {
     this.lastActivity = Date.now();
   }
