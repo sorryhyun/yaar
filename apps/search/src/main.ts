@@ -18,7 +18,8 @@ import {
   validateSearchPattern,
 } from './protocol';
 import { AppCommandError, errMsg, showToast, defineApp } from '@bundled/yaar';
-import { analyzeDeps, getLastDepsReport } from './deps';
+import { analyzeDeps, getLastDepsReport, clearDepsGraph } from './deps';
+import { DepsPanel } from './depsgraph';
 
 let previewBodyEl: HTMLDivElement | undefined;
 
@@ -112,6 +113,11 @@ async function submitClone(e: Event) {
 
 // ── Close preview ────────────────────────────────────────────────────────────
 
+function clearAll() {
+  clearSearch();
+  clearDepsGraph();
+}
+
 function closePreview() {
   setState('selectedIndex', null);
   setState('previewPath', null);
@@ -163,12 +169,14 @@ const App = () => html`
       </button>
     </div>
     <button class="y-btn y-btn-sm" onClick=${openCloneDialog} title="Clone app source into Search storage">Clone</button>
-    <button class="y-btn y-btn-sm" onClick=${clearSearch} title="Clear results">Clear</button>
+    <button class="y-btn y-btn-sm" onClick=${clearAll} title="Clear results and diagram">Clear</button>
   </div>
 
   <div class="main">
     ${() => {
       if (state.matches.length === 0 && !state.searching) {
+        // With a diagram open the empty state is just wasted space — let it have the room.
+        if (state.depsGraph) return null;
         return html`
           <div class="empty-state">
             <div class="empty-icon">🔍</div>
@@ -208,6 +216,10 @@ const App = () => html`
         </div>
       `;
     }}
+
+    <${Show} when=${() => state.depsGraph}>
+      <${DepsPanel} />
+    <//>
 
     <${Show} when=${() => state.previewPath}>
       <div class="preview">
@@ -535,7 +547,7 @@ export default defineApp({
       description: 'Clear search results and preview',
       params: { type: 'object', properties: {} },
       run: () => {
-        clearSearch();
+        clearAll();
         return { success: true };
       },
     },

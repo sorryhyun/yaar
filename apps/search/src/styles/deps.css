@@ -1,0 +1,171 @@
+/* ── Dependency diagram panel ────────────────────────────────── */
+.deps-panel {
+  flex: 1 1 0;
+  min-width: 240px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-left: 1px solid var(--yaar-border);
+  background: var(--yaar-bg);
+}
+/* The preview pane is fixed-width on its own; beside a diagram it gives ground. */
+.deps-panel + .preview {
+  width: auto;
+  flex: 1 1 340px;
+  min-width: 220px;
+  max-width: 55%;
+}
+.deps-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-2) var(--yaar-sp-3);
+  border-bottom: 1px solid var(--yaar-border);
+  background: var(--yaar-bg-surface);
+}
+.deps-title {
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-text);
+  flex: 1 1 80px;
+  min-width: 0;
+}
+.deps-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--yaar-sp-1);
+  flex-shrink: 0;
+}
+.deps-zoom {
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+.deps-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--yaar-sp-3);
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+  border-bottom: 1px solid var(--yaar-border);
+}
+.deps-meta b {
+  color: var(--yaar-text);
+  font-weight: 600;
+}
+.deps-legend {
+  flex-shrink: 0;
+  color: var(--yaar-text-dim);
+}
+.deps-warning {
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-warning);
+  background: var(--yaar-wash-warning);
+  border-bottom: 1px solid var(--yaar-border);
+}
+
+/* The body is a positioning context: its children use inset:0 rather than flex,
+   because Solid's reactive markers break flex chains. */
+.deps-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+.deps-canvas {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  cursor: grab;
+  background: radial-gradient(circle at 1px 1px, var(--yaar-border) 1px, transparent 0) 0 0 / 24px
+    24px;
+}
+.deps-canvas.panning {
+  cursor: grabbing;
+}
+.deps-sizer {
+  position: relative;
+  margin: var(--yaar-sp-3);
+}
+.deps-graph {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+.deps-graph svg {
+  max-width: none;
+  display: block;
+}
+.deps-graph g.node.deps-node-clickable {
+  cursor: pointer;
+}
+.deps-graph g.node.deps-node-clickable:hover rect,
+.deps-graph g.node.deps-node-clickable:hover polygon,
+.deps-graph g.node.deps-node-clickable:hover circle {
+  stroke: var(--yaar-accent-emphasis);
+  stroke-width: 2px;
+}
+.deps-graph g.node.deps-node-selected rect,
+.deps-graph g.node.deps-node-selected polygon,
+.deps-graph g.node.deps-node-selected circle {
+  fill: var(--yaar-wash-accent-strong);
+  stroke: var(--yaar-accent);
+  stroke-width: 3px;
+}
+
+.deps-source {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  margin: 0;
+  padding: var(--yaar-sp-3);
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  line-height: 1.5;
+  color: var(--yaar-text);
+  white-space: pre;
+  user-select: text;
+}
+
+.deps-status {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--yaar-sp-2);
+  padding: var(--yaar-sp-6);
+  text-align: center;
+  font-size: var(--yaar-text-sm);
+  color: var(--yaar-text-muted);
+  background: var(--yaar-bg);
+}
+.deps-status-error {
+  color: var(--yaar-error);
+}
+.deps-status-title {
+  font-weight: 600;
+}
+.deps-status-msg {
+  max-width: 480px;
+  font-family: var(--yaar-font-mono);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.deps-status-actions {
+  display: flex;
+  gap: var(--yaar-sp-2);
+  margin-top: var(--yaar-sp-2);
+}
+.deps-hint {
+  padding: var(--yaar-sp-1) var(--yaar-sp-3);
+  border-top: 1px solid var(--yaar-border);
+  font-size: var(--yaar-text-xs);
+  color: var(--yaar-text-dim);
+  background: var(--yaar-bg-surface);
+}

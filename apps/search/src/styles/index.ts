@@ -4,5 +4,6 @@ import './toolbar.css';
 import './main.css';
 import './results.css';
 import './preview.css';
+import './deps.css';
 import './dialog.css';
 import './statusbar.css';

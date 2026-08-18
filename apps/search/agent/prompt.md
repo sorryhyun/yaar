@@ -31,7 +31,7 @@ Answers "where do I look?" without reading every file. `path` is the clone root 
 - `mode: "summary"` — fan-in/fan-out, entry points, orphans, unresolved imports. Start here on an unfamiliar app.
 - `mode: "cycles"` — circular imports, each with an example path around the loop.
 - `mode: "impact", focus: "src/store.ts"` — which files a change reaches, with hop distance. `direction: "dependencies"` flips it to what that file pulls in, `"both"` returns both, labelled separately.
-- `mode: "mermaid", focus, depth` — diagram around one file. focus and depth are required: a whole-app graph is unreadable. Cycle edges are drawn red.
+- `mode: "mermaid", focus, depth` — diagram around one file. focus and depth are required: a whole-app graph is unreadable. Cycle edges are drawn red. The window RENDERS this one as a real diagram (mermaid.js): Source toggles to the raw text, Copy puts it on the clipboard, and clicking a node opens that file in the preview pane — so after running it, tell the user to look at the window rather than pasting the source at them. The source is in the command result and at `query("deps")` either way.
 
 Parsing is regex over import/export/`import()`/`require()`, not a type checker. Type-only imports are excluded by default and the result reports how many were dropped — pass `includeTypeOnly: true` when you care about type structure rather than runtime load order. The last report also stays readable at `query("deps")`.
 

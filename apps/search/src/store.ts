@@ -1,6 +1,6 @@
 export {};
 import { createStore } from '@bundled/solid-js/store';
-import type { SearchMatch } from './types';
+import type { SearchMatch, DepsGraph } from './types';
 
 export const [state, setState] = createStore({
   query: '',
@@ -19,4 +19,13 @@ export const [state, setState] = createStore({
   cloneAppId: '',
   cloneDestPath: '',
   statusText: 'Ready',
+  /** ── Dependency diagram (analyze-deps mode: "mermaid") ──────────────── */
+  depsGraph: null as DepsGraph | null,
+  /** Rendered SVG for depsGraph.mermaid, or null while rendering / on failure. */
+  depsSvg: null as string | null,
+  depsError: null as string | null,
+  depsRendering: false,
+  depsShowSource: false,
+  depsZoom: 1,
+  depsSelectedFile: null as string | null,
 });

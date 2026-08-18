@@ -1,7 +1,8 @@
 export {};
 import { appStorage, storage, AppCommandError, errMsg } from '@bundled/yaar';
-import { setState } from './store';
+import { state, setState } from './store';
 import { clonePath } from './protocol';
+import type { DepsGraph } from './types';
 
 /**
  * Source dependency analysis over cloned app source.
@@ -631,7 +632,13 @@ function buildMermaid(view: GraphView, focus: string, depth: number, cycleEdges:
   if (cycleIdx.length) {
     lines.push(`  linkStyle ${cycleIdx.join(',')} stroke:#e5534b,stroke-width:2px`);
   }
-  return { mermaid: lines.join('\n'), nodeCount: nodes.length, edgeCount: edgeIndex, truncated };
+  return {
+    mermaid: lines.join('\n'),
+    nodes,
+    nodeCount: nodes.length,
+    edgeCount: edgeIndex,
+    truncated,
+  };
 }
 
 // ── Output shaping ──────────────────────────────────────────────────────────
@@ -660,6 +667,39 @@ export function getLastDepsReport() {
   return lastReport;
 }
 
+// ── Diagram → preview wiring ──────────────────────────────────────────
+
+/**
+ * Load a diagram node's file into the existing preview pane. `rel` is a node
+ * label, i.e. a path relative to the analyzed root, so it is joined with the
+ * root recorded on the graph rather than with the search scope.
+ */
+export async function previewDepsFile(rel: string): Promise<void> {
+  const g = state.depsGraph;
+  if (!g) return;
+  const ref: RootRef = { kind: g.kind, root: g.root, display: g.display };
+  setState('selectedIndex', null);
+  setState('previewHighlightLine', null);
+  setState('previewPath', rel);
+  setState('previewContent', 'Loading…');
+  try {
+    setState('previewContent', await readSource(ref, rel));
+  } catch (e: unknown) {
+    setState('previewContent', `(unable to read ${g.root}/${rel}: ${errMsg(e)})`);
+  }
+}
+
+/** Drop the diagram and everything derived from it. */
+export function clearDepsGraph(): void {
+  setState('depsGraph', null);
+  setState('depsSvg', null);
+  setState('depsError', null);
+  setState('depsRendering', false);
+  setState('depsShowSource', false);
+  setState('depsSelectedFile', null);
+  setState('depsZoom', 1);
+}
+
 // ── Command entrypoint ──────────────────────────────────────────────────────
 
 const MODES: DepMode[] = ['cycles', 'impact', 'summary', 'mermaid'];
@@ -679,6 +719,8 @@ export async function analyzeDeps(params: Record<string, unknown>) {
     : 'dependents';
 
   setState('statusText', `Analyzing ${ref.display} (${mode})…`);
+  // A new run replaces whatever diagram was on screen, whatever mode it was.
+  clearDepsGraph();
   const graph = await buildGraph(ref, params.refresh === true);
   const view = viewOf(graph, { includeTypeOnly, externals });
   const { cycles, edgeKeys } = findCycles(view);
@@ -824,6 +866,22 @@ export async function analyzeDeps(params: Record<string, unknown>) {
     const depth = Math.max(1, Math.min(Math.floor(Number(params.depth)), 4));
     const focus = resolveFocus(view, ref, params.focus);
     const built = buildMermaid(view, focus, depth, edgeKeys);
+    const fileSet = new Set(graph.files);
+    const depsGraph: DepsGraph = {
+      mermaid: built.mermaid,
+      root: ref.root,
+      kind: ref.kind,
+      display: ref.display,
+      focus,
+      depth,
+      nodeCount: built.nodeCount,
+      edgeCount: built.edgeCount,
+      truncated: built.truncated,
+      files: built.nodes.filter((n) => fileSet.has(n)),
+      warnings: [...warnings],
+    };
+    setState('depsGraph', depsGraph);
+    setState('depsSelectedFile', focus);
     result = {
       ...base,
       focus,
@@ -848,8 +906,15 @@ export async function analyzeDeps(params: Record<string, unknown>) {
   const header = warnings.length ? `${warnings.map((w) => `! ${w}`).join('\n')}\n\n` : '';
   setState('selectedIndex', null);
   setState('previewHighlightLine', null);
-  setState('previewPath', `deps · ${mode} · ${ref.display}`);
-  setState('previewContent', header + text);
+  if (mode === 'mermaid') {
+    // The diagram panel owns the display now; the preview pane is left free for
+    // the file a node click opens. Source stays reachable via its Source toggle.
+    setState('previewPath', null);
+    setState('previewContent', null);
+  } else {
+    setState('previewPath', `deps · ${mode} · ${ref.display}`);
+    setState('previewContent', header + text);
+  }
   setState(
     'statusText',
     `${mode}: ${stats.modules} modules, ${stats.edges} edges, ${stats.cycles} cycle(s)`,
