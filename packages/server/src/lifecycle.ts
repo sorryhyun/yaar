@@ -25,8 +25,10 @@ import {
   IS_REMOTE,
   IS_DEV,
   getPort,
+  getConfigDir,
   isAppOriginIsolationRequested,
   shouldPruneEmptySessions,
+  WORKSPACE_NAME,
 } from './config.js';
 import { installProxyPortBoundary, installLoopbackAliasBoundary } from './http/origin-boundary.js';
 import { initCompiler } from '@yaar/compiler';
@@ -119,7 +121,7 @@ export async function initializeSubsystems(): Promise<WebSocketServerOptions> {
   if (IS_BUNDLED_EXE) {
     await Promise.all([
       mkdir(join(PROJECT_ROOT, 'apps'), { recursive: true }),
-      mkdir(join(PROJECT_ROOT, 'config'), { recursive: true }),
+      mkdir(getConfigDir(), { recursive: true }),
     ]);
   }
 
@@ -415,6 +417,9 @@ export async function printBanner(server: Server<any>): Promise<void> {
     console.log(`YAAR server running at http://${hostname}:${port}`);
     console.log(`WebSocket endpoint: ws://${hostname}:${port}/ws`);
     console.log(`MCP endpoints: http://${hostname}:${port}/mcp/{system,window,storage,apps}`);
+  }
+  if (WORKSPACE_NAME) {
+    console.log(`Workspace: ${WORKSPACE_NAME} (state under workspaces/${WORKSPACE_NAME}/)`);
   }
 }
 

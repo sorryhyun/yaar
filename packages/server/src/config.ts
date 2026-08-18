@@ -41,6 +41,7 @@ export {
   MARKET_URL,
   GOOGLE_CLIENT_ID,
   shouldPruneEmptySessions,
+  WORKSPACE_NAME,
 } from './config/env.js';
 
 export {

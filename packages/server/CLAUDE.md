@@ -32,7 +32,8 @@ before changing a default or adding a knob.
 | `PORT` / `MAX_AGENTS` | `8000` / `10` | Server port; global agent limit |
 | `MCP_SKIP_AUTH` / `REMOTE` | off | Skip MCP auth (local dev); enable remote mode |
 | `YAAR_REMOTE_TOKEN` | — | Adopt this remote token instead of minting one (ignored under 32 chars) |
-| `YAAR_STORAGE` / `YAAR_CONFIG` / `YAAR_SESSION_LOGS` | repo dirs | Path overrides; all three pinned to temp dirs in tests |
+| `YAAR_STORAGE` / `YAAR_CONFIG` / `YAAR_SESSION_LOGS` / `YAAR_USER_APPS` | repo dirs | Path overrides; all four pinned to temp dirs in tests |
+| `YAAR_WORKSPACE` | — | Pre-fill the four path overrides from `workspaces/<name>/`; new deploys land there too |
 | `YAAR_KEEP_EMPTY_SESSIONS` | off | Keep session logs that recorded nothing |
 | `YAAR_LOG_LEVEL` / `YAAR_LOG_FORMAT` | `info` / `pretty` | Logging floor; `pretty` or `json` |
 | `YAAR_SKIP_DOTENV` | off | Skip loading the root `.env` |

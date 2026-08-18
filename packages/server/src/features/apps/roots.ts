@@ -14,19 +14,34 @@
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { PREVIEW_APP_PREFIX } from '@yaar/shared';
-import { PROJECT_ROOT } from '../../config.js';
+import { PROJECT_ROOT, WORKSPACE_NAME } from '../../config.js';
 
 /** Bundled apps shipped with the repo (git-tracked): system + optional first-party. */
 export const APPS_DIR = join(PROJECT_ROOT, 'apps');
 
-/** User-installed apps from the marketplace (git-ignored). */
-export const USER_APPS_DIR = join(PROJECT_ROOT, 'user-apps');
+/**
+ * User-installed apps from the marketplace (git-ignored). Keeps installs out of the
+ * tracked tree. `YAAR_USER_APPS` overrides the location; an active workspace
+ * (`YAAR_WORKSPACE`) pre-fills it, so installs land inside the workspace. Reading
+ * `process.env` at module scope is safe here: `config.js` runs `env.ts`'s bootstrap
+ * (`.env` load + workspace fill-in) before this constant evaluates.
+ */
+export const USER_APPS_DIR = process.env.YAAR_USER_APPS || join(PROJECT_ROOT, 'user-apps');
 
 /** Roots scanned for apps, in precedence order (bundled wins on id collision). */
 export const APP_ROOTS = [APPS_DIR, USER_APPS_DIR] as const;
 
 /** Root that marketplace installs are written to. */
 export const INSTALL_ROOT = USER_APPS_DIR;
+
+/**
+ * Root a *newly deployed* app is written to. Normally the bundled `apps/` tree
+ * (devtools-built apps ship first-party), but under a workspace new deploys go to the
+ * workspace's user-apps root instead — an experiment must not dirty the tracked tree,
+ * which is the whole point of running one. Existing apps still update in place
+ * wherever `resolveAppDir()` finds them.
+ */
+export const DEPLOY_ROOT = WORKSPACE_NAME ? USER_APPS_DIR : APPS_DIR;
 
 export type AppSource = 'bundled' | 'user';
 

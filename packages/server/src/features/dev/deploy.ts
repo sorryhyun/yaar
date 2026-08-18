@@ -16,7 +16,7 @@ import { publishFrame } from '../../streams/stream-hub.js';
 import { type AppManifest, buildYaarUri } from '@yaar/shared';
 import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
-import { APPS_DIR, appIdRefusal, resolveAppDir } from '../apps/roots.js';
+import { DEPLOY_ROOT, appIdRefusal, resolveAppDir } from '../apps/roots.js';
 import { agentDocPaths, APP_ROOT_DOCS, invalidateAppsCache } from '../apps/discovery.js';
 import { retireStaleApp } from '../apps/retire.js';
 import { snapshotApp } from './git.js';
@@ -166,9 +166,9 @@ export async function doDeploy(
   emit('progress', { step: 'start', message: `Deploying ${appId}…` });
 
   const sandboxPath = args.sourcePath ?? getSandboxPath(sandboxId);
-  // Update an existing app in place; newly deployed apps go to the bundled
-  // `apps/` tree.
-  const appPath = resolveAppDir(appId) ?? join(APPS_DIR, appId);
+  // Update an existing app in place; newly deployed apps go to DEPLOY_ROOT —
+  // the bundled `apps/` tree, or the workspace's user-apps root when one is active.
+  const appPath = resolveAppDir(appId) ?? join(DEPLOY_ROOT, appId);
 
   try {
     await stat(sandboxPath);

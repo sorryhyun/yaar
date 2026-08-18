@@ -124,6 +124,59 @@ function loadRootEnv(): void {
 loadRootEnv();
 
 /**
+ * Workspace-name rule: one path segment — a letter or digit, then letters, digits,
+ * dots, hyphens or underscores. The leading-alnum requirement is also what keeps
+ * `.`/`..` and hidden-dir names out, so the name is safe to join under `workspaces/`.
+ */
+export function workspaceNameRefusal(name: string): string | null {
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(name)) {
+    return `Invalid workspace name "${name}". Use letters, digits, dots, hyphens or underscores, starting with a letter or digit.`;
+  }
+  return null;
+}
+
+/** The path overrides a workspace stands for, derived from its directory. Pure — exported for tests. */
+export function workspaceEnvDefaults(name: string, projectRoot: string): Record<string, string> {
+  const base = join(projectRoot, 'workspaces', name);
+  return {
+    YAAR_STORAGE: join(base, 'storage'),
+    YAAR_CONFIG: join(base, 'config'),
+    YAAR_SESSION_LOGS: join(base, 'session_logs'),
+    YAAR_USER_APPS: join(base, 'user-apps'),
+  };
+}
+
+/**
+ * Apply `YAAR_WORKSPACE` onto the four state-root overrides.
+ *
+ * A workspace *is* this bundle and nothing more: `YAAR_WORKSPACE=game-dev` is shorthand
+ * for pointing storage, config, session logs and user-apps at `workspaces/game-dev/`,
+ * so a whole experiment lives in one disposable directory and the default roots stay
+ * untouched. An individually set var still wins — fill-in-if-unset, same contract as
+ * `loadRootEnv()` — which is also what keeps the test env's explicit temp-dir pins
+ * authoritative.
+ *
+ * Must run before `loadPersistedRemote()`, so the persisted `remote` preference is read
+ * from the workspace's own settings.json. An invalid name throws rather than falling
+ * back to the default roots: silently writing an experiment's state into the very
+ * directories the workspace existed to protect is the one failure mode this feature
+ * cannot have.
+ */
+function applyWorkspace(): string | null {
+  const name = process.env.YAAR_WORKSPACE?.trim();
+  if (!name) return null;
+  const refusal = workspaceNameRefusal(name);
+  if (refusal) throw new Error(`YAAR_WORKSPACE: ${refusal}`);
+  for (const [key, value] of Object.entries(workspaceEnvDefaults(name, PROJECT_ROOT))) {
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
+  return name;
+}
+
+/** Active workspace name, or null when running on the default roots. */
+export const WORKSPACE_NAME = applyWorkspace();
+
+/**
  * Apply the persisted `remote` preference (`config/settings.json`) onto
  * `process.env.REMOTE`, unless an explicit `REMOTE` env var already set it.
  *

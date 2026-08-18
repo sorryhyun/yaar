@@ -48,10 +48,39 @@ developer has the ChatGPT desktop app installed.
 | `YAAR_STORAGE` | `storage/` | Storage root |
 | `YAAR_CONFIG` | `config/` | Config directory |
 | `YAAR_SESSION_LOGS` | `session_logs/` | Session log root |
+| `YAAR_USER_APPS` | `user-apps/` | Marketplace-install root |
+| `YAAR_WORKSPACE` | — | Pre-fill all four from `workspaces/<name>/` |
 
-All three are pinned to temp dirs by `scripts/test/env.ts`. A suite that builds a `SessionLogger`
-mints a log directory — which is how `session_logs/` used to collect `app-persona-…` logs from a
-plain `bun run test`.
+All four path vars are pinned to temp dirs by `scripts/test/env.ts`. A suite that builds a
+`SessionLogger` mints a log directory — which is how `session_logs/` used to collect
+`app-persona-…` logs from a plain `bun run test` — and app discovery scanning the developer's
+real `user-apps/` is how a test passes locally and means something different in CI.
+
+### `YAAR_WORKSPACE`
+
+A workspace *is* the bundle of the four path overrides and nothing more:
+`YAAR_WORKSPACE=game-dev` is shorthand for pointing storage, config, session logs and user-apps
+at `workspaces/game-dev/`, so a whole experiment lives in one disposable, git-ignored directory
+and the default roots stay untouched. Fill-in-if-unset — an individually set path var still wins,
+which is also what keeps the test env's explicit pins authoritative.
+
+Two behaviors follow from an active workspace rather than from the path vars themselves:
+
+- **New deploys land in the workspace's user-apps root**, not the tracked `apps/` tree
+  (`DEPLOY_ROOT` in `features/apps/roots.ts`). An experiment that writes into `apps/` dirties
+  the repo, which is the exact thing the workspace exists to prevent. Existing apps still
+  update in place wherever `resolveAppDir()` finds them, and bundled apps remain visible —
+  the workspace layers over the base install, it does not replace it.
+- **An invalid name refuses boot** rather than falling back to the default roots: silently
+  writing an experiment's state into the directories the workspace was protecting is the one
+  failure mode the feature cannot have. A name is one path segment — a letter or digit, then
+  letters, digits, dots, hyphens or underscores (`workspaceNameRefusal`).
+
+Applied in `config/env.ts` after `loadRootEnv()` and before `loadPersistedRemote()`, so
+`YAAR_WORKSPACE` can come from the root `.env`, and the persisted `remote` preference is read
+from the workspace's own settings.json.
+
+**Source:** `packages/server/src/config/env.ts` (`applyWorkspace`), `packages/server/src/features/apps/roots.ts`
 
 ### `YAAR_KEEP_EMPTY_SESSIONS`
 

@@ -18,7 +18,7 @@
 
 import { join } from 'path';
 import { stat } from 'fs/promises';
-import { PROJECT_ROOT } from '../../config.js';
+import { getStorageDir } from '../../config.js';
 import { errorResponse, jsonResponse, parseJsonBody } from '../utils.js';
 import { requireBundledApp, requireHost, resolvePrincipal, type AppPrincipal } from '../access.js';
 import { generateAppIframeToken } from '../iframe-tokens.js';
@@ -106,7 +106,7 @@ function isGitAction(action: DevAction): action is GitAction {
 /** Resolve and validate a path relative to app storage. Returns absolute path or null. */
 function resolveAppPath(appId: string, path: string): string | null {
   if (!path || path.includes('..') || path.startsWith('/')) return null;
-  return join(PROJECT_ROOT, 'storage', 'apps', appId, path);
+  return join(getStorageDir(), 'apps', appId, path);
 }
 
 /**

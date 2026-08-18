@@ -21,7 +21,7 @@ import {
   grantFor,
   isEmpty,
 } from './capabilities.js';
-import { PROJECT_ROOT, MARKET_URL } from '../../config.js';
+import { getStorageDir, MARKET_URL } from '../../config.js';
 import { errMessage } from '../../lib/errors.js';
 import { getConfigDir } from '../../storage/storage-manager.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
@@ -81,7 +81,7 @@ export async function installApp(appId: string): Promise<VerbResult> {
   }
 
   // Extract to a staging directory first so we can inspect permissions before finalizing
-  const tmpDir = join(PROJECT_ROOT, 'storage', '.tmp');
+  const tmpDir = join(getStorageDir(), '.tmp');
   await mkdir(tmpDir, { recursive: true });
   const tmpFileName = `${appId}.tar.gz`;
   const stagingDirName = `staging-${appId}`;

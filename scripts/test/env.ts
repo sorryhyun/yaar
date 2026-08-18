@@ -16,9 +16,9 @@
  *      shell export cannot decide an assertion either;
  *   2. pins `REMOTE` explicitly. Explicit is what matters: `loadPersistedRemote()` only fills
  *      in when `REMOTE` is *unset*, so writing `'0'` here is what makes settings.json inert;
- *   3. points `YAAR_CONFIG` / `YAAR_STORAGE` / `YAAR_SESSION_LOGS` at fresh temp dirs, so
- *      nothing reads the developer's saved permissions, hooks, or mounts — and nothing a test
- *      writes lands in the working tree;
+ *   3. points `YAAR_CONFIG` / `YAAR_STORAGE` / `YAAR_SESSION_LOGS` / `YAAR_USER_APPS` at fresh
+ *      temp dirs, so nothing reads the developer's saved permissions, hooks, mounts, or
+ *      installed apps — and nothing a test writes lands in the working tree;
  *   4. sets `YAAR_SKIP_DOTENV`, the one seam `loadRootEnv()` honours, so the root `.env`
  *      cannot reintroduce a knob behind all of the above.
  *
@@ -103,6 +103,11 @@ process.env.YAAR_STORAGE = scratchDir('storage');
 // app-agent and sub-agent suites left `session_logs/{timestamp}/agents/app-persona-….jsonl`
 // in the working tree on every run — indistinguishable, once there, from a real session.
 process.env.YAAR_SESSION_LOGS = scratchDir('session-logs');
+// `user-apps/` is git-ignored, so CI scans an empty root while a developer's machine scans
+// whatever they have installed — app discovery would describe the machine, not the code. An
+// empty dir is the pinned answer; suites that need an installed app write a fixture into
+// `USER_APPS_DIR` (which honours this var) and clean it up.
+process.env.YAAR_USER_APPS = scratchDir('user-apps');
 // Scrubbing this one is not enough: unset means `~/.codex`, so the codex spawn args would still
 // be decided by whether the developer has the ChatGPT desktop app installed
 // (`detectUserMcpServers()` in `config/providers/codex.ts`). An empty dir is the pinned answer;

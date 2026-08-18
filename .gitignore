@@ -42,6 +42,9 @@ apps/*/credentials.json
 # separate from the git-tracked bundled apps/ tree)
 /user-apps/
 
+# Workspaces (YAAR_WORKSPACE=<name> — isolated storage/config/session_logs/user-apps bundles)
+/workspaces/
+
 # Sandbox (temporary app development)
 /sandbox/
 

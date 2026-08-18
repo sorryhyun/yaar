@@ -60,6 +60,7 @@ happy-dom caveats: the `yaar-testing` skill and `scripts/test/partitions.ts`.
 - `MAX_AGENTS` - Global agent limit (default: 10)
 - `APP_AGENT_IDLE_MINUTES` - Idle minutes before an app agent is reclaimed (default: 15, `0` disables). See `packages/server/CLAUDE.md`.
 - `MCP_SKIP_AUTH` - Skip MCP authentication for local development
+- `YAAR_WORKSPACE` - Run against an isolated state bundle: storage, config, session logs, and user-apps all under `workspaces/<name>/` (git-ignored), and new app deploys land there instead of `apps/`. See `docs/reference/server_env.md`.
 - `REMOTE` - Enable remote mode with token auth and QR code for network access. See `docs/guides/remote_mode.md`
 - `YAAR_REMOTE_TOKEN` - Use this remote-mode token instead of a freshly minted one (lets a launcher know the `#remote=<token>` URL up front). Ignored under 32 chars.
 - `LAUNCH_CHROME` - `1` opens a local debuggable Chrome on the desktop once the server is up (set by `make claude`/`make claude-dev`)
