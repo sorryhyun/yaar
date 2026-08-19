@@ -22,7 +22,7 @@ const OFFSET = 16;
 function setAgentBusy(busy: boolean) {
   useDesktopStore.setState({
     activeAgents: busy
-      ? { a1: { id: 'a1', status: 'Thinking...', startedAt: 0, subagentCount: 0 } }
+      ? { a1: { id: 'a1', status: 'Thinking...', startedAt: 0, statusSince: 0, subagentCount: 0 } }
       : {},
   } as never);
 }

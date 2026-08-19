@@ -333,6 +333,10 @@ export const useDesktopStore = create<DesktopStore>()(
             id: agent.agentId,
             status: agent.status,
             startedAt: Date.now(),
+            // The snapshot says an agent is busy, not since when — a reconnect cannot
+            // recover the phase's real start, so the timer restarts here rather than
+            // claiming a duration it does not know.
+            statusSince: Date.now(),
             subagentCount: 0,
           };
         }

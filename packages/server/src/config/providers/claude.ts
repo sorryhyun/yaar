@@ -153,6 +153,15 @@ export const CLAUDE_STATIC_SDK_OPTIONS = {
   // they don't waste turns calling a tool that can't do anything here.
   disallowedTools: ['LSP'],
   includePartialMessages: true,
+  // Ask for the reasoning summary. Opus 5 (and 4.7/4.8, Sonnet 5, Fable 5) default
+  // `display` to `omitted`, which still streams `thinking` blocks but with empty text —
+  // a silent change from Opus 4.6, where it was `summarized`. Under the default the
+  // provider sends nothing YAAR can map for the whole reasoning phase, and measured over
+  // 22 transcripts that phase is a third of all agent wall-clock (median 5.4s, p95 32s,
+  // max 136s). The status bar has no liveness signal, so it sits on the label the last
+  // event left behind and the agent reads as hung. Costs nothing: thinking is billed the
+  // same under every `display` setting, which only controls visibility.
+  thinking: { type: 'adaptive', display: 'summarized' },
   // Drop the built-in commit/PR workflow instructions from the spawned CLI's
   // system prompt. YAAR's monitor/session/app agents don't run git workflows,
   // so the instructions are pure prompt overhead. Applies to all three tiers,

@@ -117,6 +117,16 @@ export interface ActiveAgent {
   id: string;
   status: string; // e.g., "Thinking...", "Running: read_file"
   startedAt: number;
+  /**
+   * When `status` last *changed* — not when it was last re-asserted.
+   *
+   * `startedAt` measures the whole turn, which on an agentic turn reads the same
+   * alarming number whether or not anything is wrong. What distinguishes a stall is
+   * how long one phase has been the current one: "Running: Bash 2s" is fine and
+   * "Thinking... 90s" is not. The status label is last-event-wins with no heartbeat,
+   * so this is the only thing that makes silence visible.
+   */
+  statusSince: number;
   subagentCount: number; // Active collab subagents (Codex)
 }
 

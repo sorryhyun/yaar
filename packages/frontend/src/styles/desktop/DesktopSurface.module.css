@@ -81,6 +81,12 @@
   font-weight: 500;
 }
 
+.agentElapsed {
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .subagentBadge {
   font-size: var(--text-sm);
   color: var(--color-accent);

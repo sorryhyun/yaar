@@ -1,13 +1,45 @@
 /**
  * DesktopStatusBar - Connection status bar and expandable agent panel.
  */
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useDesktopStore } from '@/store';
+import type { ActiveAgent } from '@/types/state';
 import styles from '@/styles/desktop/DesktopSurface.module.css';
 
 interface DesktopStatusBarProps {
   interrupt: () => void;
   interruptAgent: (agentId: string) => void;
+}
+
+/**
+ * Below this, the phase is not worth timing — the label would flicker "0s/1s/2s" through
+ * the tool churn of a healthy turn and train the eye to ignore it. The number exists to
+ * be alarming, so it only appears once a phase has lasted longer than one plausibly does.
+ */
+const ELAPSED_VISIBLE_AFTER_MS = 3000;
+
+/** Re-render cadence while any agent is active. Matches the 1s resolution shown. */
+const TICK_MS = 1000;
+
+/** `8s`, `1m04s` — narrow enough to sit in a status bar without reflowing it. */
+function formatElapsed(ms: number): string {
+  const total = Math.floor(ms / 1000);
+  if (total < 60) return `${total}s`;
+  return `${Math.floor(total / 60)}m${String(total % 60).padStart(2, '0')}s`;
+}
+
+/**
+ * How long the agent has been in its current phase, or null while that is too short to
+ * be worth saying.
+ *
+ * The status label is last-event-wins with no heartbeat behind it (see {@link
+ * ActiveAgent.statusSince}), so a phase that has gone quiet renders exactly like one that
+ * is streaming. This is the only thing on screen that tells them apart.
+ */
+function elapsedLabel(agent: ActiveAgent, now: number): string | null {
+  const elapsed = now - agent.statusSince;
+  return elapsed >= ELAPSED_VISIBLE_AFTER_MS ? formatElapsed(elapsed) : null;
 }
 
 export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBarProps) {
@@ -21,6 +53,18 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
   const windowAgents = useDesktopStore((s) => s.windowAgents);
 
   const agentList = Object.values(activeAgents);
+
+  // Drives the elapsed counters. Runs only while something is active, so an idle desktop
+  // schedules nothing; `agentList.length` (not the array) is the dependency, or every
+  // status change would tear the interval down and restart the second.
+  const [now, setNow] = useState(() => Date.now());
+  const hasAgents = agentList.length > 0;
+  useEffect(() => {
+    if (!hasAgents) return;
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), TICK_MS);
+    return () => clearInterval(id);
+  }, [hasAgents]);
 
   return (
     <>
@@ -46,6 +90,9 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
                 <div key={agent.id} className={styles.agentIndicator}>
                   <span className={styles.agentSpinner} />
                   <span className={styles.agentStatus}>{agent.status}</span>
+                  {elapsedLabel(agent, now) && (
+                    <span className={styles.agentElapsed}>{elapsedLabel(agent, now)}</span>
+                  )}
                   {agent.subagentCount > 0 && (
                     <span className={styles.subagentBadge}>+{agent.subagentCount} sub</span>
                   )}
@@ -84,6 +131,9 @@ export function DesktopStatusBar({ interrupt, interruptAgent }: DesktopStatusBar
                   <div className={styles.agentPanelInfo}>
                     <span className={styles.agentPanelId}>{agent.id}</span>
                     <span className={styles.agentPanelStatus}>{agent.status}</span>
+                    {elapsedLabel(agent, now) && (
+                      <span className={styles.agentElapsed}>{elapsedLabel(agent, now)}</span>
+                    )}
                     {agent.subagentCount > 0 && (
                       <span className={styles.agentPanelSubagents}>
                         {t('status.subagents', { count: agent.subagentCount })}

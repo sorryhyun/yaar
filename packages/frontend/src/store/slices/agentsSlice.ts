@@ -22,6 +22,9 @@ export const createAgentsSlice: SliceCreator<AgentsSlice> = (set, _get) => ({
         id: agentId,
         status,
         startedAt: state.activeAgents[agentId]?.startedAt ?? Date.now(),
+        // Only reached when the status actually changed — the coalescing return above
+        // is what makes this the phase's start rather than the last chunk's arrival.
+        statusSince: Date.now(),
         subagentCount: state.activeAgents[agentId]?.subagentCount ?? 0,
       };
     }),
