@@ -57,6 +57,33 @@ export async function buildAppBundle(
   });
 }
 
+/**
+ * Reject a build that emitted sibling files, or null when it emitted only the bundle.
+ *
+ * A YAAR app ships as one self-contained HTML file: whatever Bun writes *beside*
+ * the entry chunk is never served. `assetDataUrlPlugin` inlines the extensions in
+ * `ASSET_MIME_TYPES`; an import of any other extension Bun does not load natively
+ * falls through to its default `file` loader, which emits the import as a sibling
+ * asset and reports `success: true`. The app then 403s at runtime fetching a file
+ * that was never part of the output — a green build, and a failure that surfaces
+ * far from its cause (this is what a `.glb` import did).
+ *
+ * Checking the artifact kinds rather than a denylist of extensions means every
+ * future format is covered the day it is imported, not the day someone adds it
+ * to a list.
+ */
+export function siblingAssetError(result: Bun.BuildOutput): string | null {
+  const assets = result.outputs.filter((output) => output.kind === 'asset');
+  if (assets.length === 0) return null;
+
+  const names = assets.map((asset) => asset.path.replace(/^\.\//, '')).join(', ');
+  return (
+    `Build emitted ${assets.length} sibling asset file(s) that a single-file app cannot serve: ${names}. ` +
+    `An imported binary must be inlined as a data URI — add its extension to ASSET_MIME_TYPES ` +
+    `(packages/compiler/src/bundled/plugins.ts), or load the bytes at runtime instead of importing them.`
+  );
+}
+
 export interface BuildLogOptions {
   /** Also report `warning` logs, which a failed build can carry alone. */
   includeWarnings?: boolean;

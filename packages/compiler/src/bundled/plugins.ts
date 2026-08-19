@@ -184,6 +184,30 @@ export function bundledLibraryPluginBun(allowedBundles?: string[]): Bun.BunPlugi
         return undefined;
       });
 
+      // Intercept bare `three` imports from within bundled code — every
+      // `examples/jsm` addon behind `@bundled/three/addons` opens with
+      // `import { ... } from 'three'`, and in exe mode that artifact has three
+      // marked external precisely so this hook can answer it. Left to Bun's
+      // default resolver it would either fail (exe: no node_modules) or resolve a
+      // second copy, and a second three is a second set of classes — `instanceof`
+      // across the seam answers false with nothing in the build to say so.
+      build.onResolve({ filter: /^three$/ }, (args: Bun.OnResolveArgs) => {
+        const embeddedLibs = getEmbeddedLibs();
+        if (embeddedLibs?.three) {
+          debugBundledLibrary(
+            `[bundled-lib] bare three (from ${args.importer}) → embedded (namespace=${NAMESPACE})`,
+          );
+          return { path: 'three', namespace: NAMESPACE };
+        }
+
+        const label = `bare three (from ${args.importer})`;
+        const resolved = resolveNpmBrowserPath(BUNDLED_LIBRARIES.three, label);
+        if (resolved) return { path: resolved };
+
+        debugBundledLibrary(`[bundled-lib] ${label} → UNRESOLVED (returning undefined)`);
+        return undefined;
+      });
+
       build.onLoad({ filter: /.*/, namespace: NAMESPACE }, async (args: Bun.OnLoadArgs) => {
         const libName = args.path;
 
@@ -288,6 +312,12 @@ export function cssFilePlugin(): Bun.BunPlugin {
  * Static-asset extensions inlined as base64 `data:` URIs, mapped to their MIME
  * type. A YAAR app compiles to a single self-contained HTML file, so an imported
  * binary can't ship as a sibling file — it has to be baked into the bundle.
+ *
+ * This list is the whole of what inlines. An import of any *other* extension Bun
+ * does not load natively falls through to its `file` loader, which emits exactly
+ * the sibling this list exists to avoid — so `siblingAssetError` (build-app.ts)
+ * fails the build rather than letting it ship green and 404 at runtime. Adding a
+ * format here is the fix that error points at: one line, extension → MIME type.
  */
 export const ASSET_MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -305,6 +335,9 @@ export const ASSET_MIME_TYPES: Record<string, string> = {
   '.wasm': 'application/wasm',
   '.mp3': 'audio/mpeg',
   '.wav': 'audio/wav',
+  '.glb': 'model/gltf-binary',
+  '.gltf': 'model/gltf+json',
+  '.bin': 'application/octet-stream',
 };
 
 const ASSET_FILTER = new RegExp(

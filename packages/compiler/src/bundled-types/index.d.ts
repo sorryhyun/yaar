@@ -80,9 +80,15 @@ declare module '@bundled/solid-js/store' {
 // CSS module imports
 declare module '*.css' {}
 
-// Static-asset imports — inlined as base64 `data:` URIs by the `dataurl` loaders
-// in compile.ts (ASSET_LOADERS). Each default export is the data-URI string,
-// usable directly in `<img src>`, CSS `url()`, `fetch()`, `new Audio()`, etc.
+// Static-asset imports — inlined as base64 `data:` URIs by `assetDataUrlPlugin`
+// (bundled/plugins.ts). Each default export is the data-URI string, usable
+// directly in `<img src>`, CSS `url()`, `fetch()`, `new Audio()`, a loader's
+// `.load(url)`, etc.
+//
+// This list is the type-side half of `ASSET_MIME_TYPES`; the two are asserted
+// equal by `asset-imports.test.ts`, because a declaration without a MIME entry
+// typechecks and then fails the build, and a MIME entry without a declaration
+// builds and then fails the typecheck.
 declare module '*.png' {
   const src: string;
   export default src;
@@ -140,6 +146,18 @@ declare module '*.mp3' {
   export default src;
 }
 declare module '*.wav' {
+  const src: string;
+  export default src;
+}
+declare module '*.glb' {
+  const src: string;
+  export default src;
+}
+declare module '*.gltf' {
+  const src: string;
+  export default src;
+}
+declare module '*.bin' {
   const src: string;
   export default src;
 }
@@ -208,6 +226,35 @@ declare module '@bundled/anime' {
 
 declare module '@bundled/three' {
   export * from 'three';
+}
+
+declare module '@bundled/three/addons' {
+  // A curated slice of three's `examples/jsm`. Reach for `GLTFLoader` rather than
+  // parsing glTF/GLB yourself — two apps each hand-rolled a reader (accessors, PBR
+  // materials, embedded textures) before this module existed.
+  //
+  // `GLTFLoader.parse(arrayBuffer, '', onLoad)` is the entry point for bytes you
+  // already hold — an imported `.glb` (inlined as a `data:` URI), or a file read out
+  // of storage. `.load(url, …)` fetches instead.
+  //
+  // Not here on purpose: `DRACOLoader`, `KTX2Loader` and `MeshoptDecoder`. They fetch
+  // a decoder (`.wasm` + a worker) from a path set at runtime, and a YAAR app is a
+  // single HTML file with no siblings to serve, so they would compile and then fail on
+  // first use. Uncompressed glTF/GLB needs none of them.
+  export { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
+  export { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+  export { MTLLoader } from 'three/addons/loaders/MTLLoader.js';
+  export { STLLoader } from 'three/addons/loaders/STLLoader.js';
+  export { FontLoader, Font } from 'three/addons/loaders/FontLoader.js';
+  export { SVGLoader } from 'three/addons/loaders/SVGLoader.js';
+  export { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
+  export { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+  export { MapControls } from 'three/addons/controls/MapControls.js';
+  export { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+  export { TransformControls } from 'three/addons/controls/TransformControls.js';
+  export { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+  export * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
+  export * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 }
 
 declare module '@bundled/cannon-es' {

@@ -12,6 +12,7 @@ export {
   BUNDLED_LIBRARIES,
   BUNDLED_SHIMS,
   GATED_BUNDLED_LIBRARIES,
+  SHARED_RUNTIME_LIBS,
   getAvailableBundledLibraries,
   resolveBrowserEntry,
   toForwardSlash,

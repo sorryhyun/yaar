@@ -32,6 +32,7 @@ import { join } from 'path';
 import {
   BUNDLED_LIBRARIES,
   BUNDLED_SHIMS,
+  SHARED_RUNTIME_LIBS,
   prebundleLibrary,
   resolvePrebundleEntrypoint,
   toForwardSlash,
@@ -60,11 +61,11 @@ function declaresDefaultExport(name: string): boolean {
 // consumer Bun.build(). Big libs (mermaid, three, mammoth) dominate the cost.
 setDefaultTimeout(120_000);
 
-// solid-js sub-package artifacts carry bare `import 'solid-js'` (its sisters are
-// marked external at prebundle time and redirected at runtime). Mark them
-// external in the consumer too so bare imports resolve — this test is about a
-// library's own exports, not about resolving solid's shared runtime.
-const SOLID_EXTERNAL = ['solid-js', 'solid-js/web', 'solid-js/html', 'solid-js/store'];
+// Some artifacts carry bare imports of a shared runtime by design — solid-js
+// sub-packages import their sisters, `three/addons` imports three core — because
+// those are marked external at prebundle time and redirected at runtime. Mark
+// them external in the consumer too so the bare imports resolve: this test is
+// about a library's own exports, not about resolving the shared runtimes.
 
 describe('prebundle completeness', () => {
   for (const name of Object.keys(BUNDLED_LIBRARIES)) {
@@ -99,7 +100,7 @@ describe('prebundle completeness', () => {
           minify: true,
           format: 'esm',
           target: 'browser',
-          external: SOLID_EXTERNAL,
+          external: SHARED_RUNTIME_LIBS,
         });
 
         const errors = result.success

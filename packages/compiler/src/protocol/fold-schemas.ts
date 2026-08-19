@@ -34,7 +34,7 @@ import { mkdir, rm } from 'fs/promises';
 import { join } from 'path';
 import type { AppManifest } from '@yaar/shared';
 import { listKeybindingIssues } from '@yaar/shared';
-import { buildAppBundle, formatBuildLogs } from '../build/build-app.js';
+import { buildAppBundle, formatBuildLogs, siblingAssetError } from '../build/build-app.js';
 
 type Protocol = Pick<AppManifest, 'state' | 'commands' | 'events' | 'keybindings' | '$defs'>;
 
@@ -467,7 +467,8 @@ export async function foldAppSchemas(options: FoldOptions): Promise<FoldResult> 
     // threw" and knowing where.
     const built = await buildAppBundle(entryPath, { minify: false, bundles });
 
-    if (!built.success || !built.outputs[0]) {
+    const entryChunk = built.outputs.find((artifact) => artifact.kind === 'entry-point');
+    if (!built.success || !entryChunk) {
       const logs = formatBuildLogs(built.logs).join('; ');
       return {
         ok: false,
@@ -475,10 +476,16 @@ export async function foldAppSchemas(options: FoldOptions): Promise<FoldResult> 
       };
     }
 
+    // The fold runs before the shipped build, so it is the first to see an
+    // import that would escape the single HTML file. Reporting it here names the
+    // real cause instead of failing later inside the worker.
+    const siblings = siblingAssetError(built);
+    if (siblings) return { ok: false, error: asAscii(siblings) };
+
     // The prelude has to run before the app's module scope, and the bundle is
     // self-contained (Bun inlines every import), so prepending is enough — no
     // second file and no import ordering to get wrong.
-    await Bun.write(workerPath, `${WORKER_PRELUDE}\n${await built.outputs[0].text()}`);
+    await Bun.write(workerPath, `${WORKER_PRELUDE}\n${await entryChunk.text()}`);
 
     const reply = await runInWorker(workerPath, timeoutMs);
     if (!reply.ok || !reply.protocol) {

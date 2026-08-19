@@ -7,7 +7,7 @@
 
 import { mkdir, stat } from 'fs/promises';
 import { join } from 'path';
-import { buildAppBundle, formatBuildLogs } from './build/build-app.js';
+import { buildAppBundle, formatBuildLogs, siblingAssetError } from './build/build-app.js';
 import { AppSourceCache } from './build/source-cache.js';
 import { formatProtocolError } from './protocol/extract-protocol-ast.js';
 import { extractProtocolFromDir } from './protocol/extract-protocol-dir.js';
@@ -233,7 +233,10 @@ async function compileWithBun(
     throw new Error(errors.join('\n') || `Bun.build() failed for ${entryPoint}`);
   }
 
-  const output = result.outputs[0];
+  const siblings = siblingAssetError(result);
+  if (siblings) throw new Error(siblings);
+
+  const output = result.outputs.find((artifact) => artifact.kind === 'entry-point');
   if (!output) {
     throw new Error(`Bun.build() produced no output for ${entryPoint}`);
   }

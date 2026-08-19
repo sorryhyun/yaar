@@ -66,6 +66,36 @@ export function solidExternals(name: string): string[] {
   return SOLID_ENTRIES.filter((n) => n !== name);
 }
 
+/**
+ * Mark `three` external without taking `three/addons/*` with it.
+ *
+ * three joins solid as a runtime that must exist once (`SHARED_RUNTIME_LIBS`):
+ * every `examples/jsm` module behind `@bundled/three/addons` opens with
+ * `import { ... } from 'three'`, and an addons artifact carrying its own three
+ * would hand the app a second `Mesh`/`Material`/`Object3D` — every `instanceof`
+ * across the two silently false, with nothing in the build to say so.
+ *
+ * It cannot ride in `Bun.build`'s `external` array: an entry there externalizes
+ * the package *and all its subpaths*, so `'three'` would also externalize the
+ * very `three/addons/*` modules this artifact exists to bundle — leaving a
+ * 1KB re-export shell that resolves to nothing. An `onResolve` hook is the only
+ * spelling that separates the package from its subpaths.
+ */
+function threeCoreExternalPlugin(): Bun.BunPlugin {
+  return {
+    name: 'three-core-external',
+    setup(build) {
+      build.onResolve({ filter: /^three$/ }, () => ({ path: 'three', external: true }));
+    },
+  };
+}
+
+/** Prebundle plugins for `name`: the Node stubs, plus shared-runtime externals. */
+function prebundlePlugins(name: string): Bun.BunPlugin[] {
+  const sharesThree = name !== 'three' && name.startsWith('three/');
+  return sharesThree ? [nodeShimPlugin, threeCoreExternalPlugin()] : [nodeShimPlugin];
+}
+
 /** Resolve the entrypoint a library is prebundled from (shim wins over the npm entry). */
 export function resolvePrebundleEntrypoint(name: string): string {
   if (name in BUNDLED_SHIMS) return BUNDLED_SHIMS[name];
@@ -88,7 +118,7 @@ export async function prebundleLibrary(name: string): Promise<string> {
     minify: true,
     format: 'esm',
     target: 'browser',
-    plugins: [nodeShimPlugin],
+    plugins: prebundlePlugins(name),
     external: solidExternals(name),
   });
   if (!result.success) {

@@ -22,11 +22,11 @@ src/
 ├── load-typescript.ts     # Memoized runtime `import('typescript')`, null in exe mode (YAAR_NO_TYPESCRIPT=1 forces it)
 ├── design-tokens.ts       # YAAR_DESIGN_TOKENS_CSS + describeDesignTokens()/…Brief() (generated token reference, two tiers)
 ├── build/
-│   ├── build-app.ts       # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs
+│   ├── build-app.ts       # buildAppBundle() — the one Bun.build call for an app (compile + fold share it) + formatBuildLogs + siblingAssetError
 │   ├── source-cache.ts    # AppSourceCache — one read of each source file per compile, never across two
 │   └── build-manifest.ts  # SHA-256 source/app.json hashing for staleness detection
 ├── bundled/
-│   ├── registry.ts        # BUNDLED_LIBRARIES / BUNDLED_SHIMS / GATED_* / resolveBrowserEntry — data, no Bun API
+│   ├── registry.ts        # BUNDLED_LIBRARIES / BUNDLED_SHIMS / GATED_* / SHARED_RUNTIME_LIBS / resolveBrowserEntry — data, no Bun API
 │   ├── plugins.ts         # 4 Bun plugins: bundledLibrary, cssFile, assetDataUrl, solidHtmlSource
 │   ├── describe-library.ts # getBundledLibraryDetail() — slices the .d.ts for an agent (+ design-tokens pseudo-library)
 │   └── prebundle.ts       # prebundleLibrary(name) — shared by scripts/build/prebundle-libs.js and the completeness test
@@ -67,6 +67,7 @@ src/
     ├── yaar-dev.ts        # Gated SDK: compile, typecheck, deploy, per-app git history (requires bundles: ["yaar-dev"])
     ├── yaar-web.ts        # Gated SDK: browser automation (requires bundles: ["yaar-web"])
     ├── yaar-ml.ts         # Gated SDK: in-browser model inference via onnxruntime-web (requires bundles: ["yaar-ml"])
+    ├── three-addons.ts    # curated examples/jsm surface (three core stays external — one copy)
     ├── anime.ts           # v3→v4 easing name compat wrapper
     ├── mammoth.ts         # CommonJS default-export workaround
     ├── mediabunny.ts      # re-export barrel workaround
@@ -210,16 +211,32 @@ each derives its expectation from the compiler's own output so it cannot drift.
 4. Fallback (`Bun.resolveSync`)
 5. Disk (`bundled-libs/` next to exe)
 
-Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires explicit `"bundles"` in app.json. Solid-js imports from bundled libs are intercepted to prevent duplicate module instances.
+Gating: any `yaar-*` extended SDK (`yaar-dev`, `yaar-web`, `yaar-ml`) requires explicit `"bundles"` in app.json.
+
+Bare imports of a **shared runtime** (`SHARED_RUNTIME_LIBS`: solid-js and its sub-packages, plus
+`three`) are intercepted and pointed at the one shared bundle. Both are correctness rules, not size
+ones: two copies of solid are two reactive runtimes with invisible signals across the seam, and two
+copies of three are two `Object3D` classes with every `instanceof` across the seam silently false.
+Held from the other side by `prebundle.ts`, which keeps the copy out of every *other* artifact —
+solid through `Bun.build`'s `external` array, three through an `onResolve` hook, because an array
+entry externalizes a package *and all its subpaths* and would take `three/addons/*` with it.
 
 **`cssFilePlugin()`** — converts `.css` imports to JS that injects a `<style>` element at runtime.
 
 **`assetDataUrlPlugin()`** — inlines imported binary assets as base64 `data:` URIs, so
 `import logo from './logo.png'` yields a string usable in `<img src>`, CSS `url()`, `fetch()`,
 `new Audio()`. Covers `ASSET_MIME_TYPES`; `*.png`-style ambient declarations in
-`bundled-types/index.d.ts` keep typecheck green. Written as a plugin because Bun's
-`loader: { '.png': 'dataurl' }` is silently a no-op in the *programmatic* bundler (1.3.14).
+`bundled-types/index.d.ts` keep typecheck green, and `asset-imports.test.ts` asserts the two
+lists are the same set — each half-edit fails later and elsewhere. Written as a plugin because
+Bun's `loader: { '.png': 'dataurl' }` is silently a no-op in the *programmatic* bundler (1.3.14).
 Inlined bytes cost ~33%; `LARGE_BUNDLE_WARN_BYTES` (5MB) warns on the total.
+
+An import of any *other* extension falls through to Bun's default `file` loader, which emits a
+sibling file beside the bundle and reports `success: true` — a green build, then a runtime 403
+fetching something the single-HTML output never carried (a `.glb` import is what found this).
+`siblingAssetError()` in `build/build-app.ts` fails the build on any `kind: 'asset'` artifact
+instead, from both the compile and the schema fold; it checks artifact kinds rather than a
+denylist of extensions, so a new format is covered the day it is imported.
 
 **`solidHtmlSourcePlugin()`** — reads each TypeScript source once, rewrites `</${Component}>` to `</>` (closing tags cause expression index misalignment in solid-js/html), then fails the build on `html` templates that would silently drop text or throw a stackless `SyntaxError`. The fast gate intentionally recognizes the current literal `` html` `` spelling and does not trace the tag's import. `typescript` is absent in exe mode, so validation no-ops there while the rewrite still runs.
 

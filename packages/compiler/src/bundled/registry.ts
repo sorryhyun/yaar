@@ -32,6 +32,7 @@ export const BUNDLED_SHIMS: Record<string, string> = {
   mediabunny: toForwardSlash(join(SHIMS_DIR, 'mediabunny.ts')),
   mermaid: toForwardSlash(join(SHIMS_DIR, 'mermaid.ts')),
   'pixi.js': toForwardSlash(join(SHIMS_DIR, 'pixi.ts')),
+  'three/addons': toForwardSlash(join(SHIMS_DIR, 'three-addons.ts')),
   uuid: toForwardSlash(join(SHIMS_DIR, 'uuid.ts')),
   zod: toForwardSlash(join(SHIMS_DIR, 'zod.ts')),
   // The yaar SDK is split into internal modules; index.ts is the barrel entry.
@@ -47,6 +48,27 @@ export const BUNDLED_SHIMS: Record<string, string> = {
  * Bare imports of these from within bundled code must resolve to the same path as
  * the @bundled/* aliased imports to prevent duplicate module copies.
  */
+/**
+ * Bare specifiers that must resolve to *one* shared bundle in a compiled app.
+ *
+ * A second copy is not a size problem, it is a correctness one: two copies of
+ * three are two `Mesh` classes, and `instanceof` across the seam answers false;
+ * two copies of solid are two reactive runtimes, and a signal created under one
+ * is invisible to an effect created under the other. Both failures are silent
+ * and neither has a build signal.
+ *
+ * Held from two sides — `prebundleExternals` keeps the copy out of every *other*
+ * prebundled artifact, and the `onResolve` hooks in `plugins.ts` point every bare
+ * import of these names at the one shared bundle.
+ */
+export const SHARED_RUNTIME_LIBS = [
+  'solid-js',
+  'solid-js/web',
+  'solid-js/html',
+  'solid-js/store',
+  'three',
+];
+
 export const CONDITIONAL_EXPORT_LIBS = [
   'solid-js',
   'solid-js/web',
@@ -80,6 +102,10 @@ export const BUNDLED_LIBRARIES: Record<string, string> = {
   'date-fns': 'date-fns',
   anime: 'animejs',
   three: 'three',
+  // Curated `examples/jsm` addons, through `shims/three-addons.ts`. Its own
+  // `three` imports resolve to the entry above, never to a second copy — see
+  // `SHARED_RUNTIME_LIBS`.
+  'three/addons': 'three/addons',
   'cannon-es': 'cannon-es',
   xlsx: '@e965/xlsx',
   'chart.js': 'chart.js',
