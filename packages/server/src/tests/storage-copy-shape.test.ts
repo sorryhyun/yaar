@@ -22,6 +22,7 @@ import {
   copyFrom,
   copySources,
   isCopyPayload,
+  resolveCopySources,
 } from '../handlers/storage-copy.js';
 import { initRegistry } from '../handlers/index.js';
 import { handleVerbRoutes } from '../http/routes/verb.js';
@@ -38,19 +39,24 @@ function appToken(): string {
   });
 }
 
-async function invoke(token: string, payload: unknown): Promise<Response> {
+async function callVerb(
+  token: string,
+  verb: string,
+  uri: string,
+  payload?: unknown,
+): Promise<Response> {
   const req = new Request('http://localhost:8000/api/verb', {
     method: 'POST',
     headers: { 'content-type': 'application/json', 'x-iframe-token': token },
-    body: JSON.stringify({
-      verb: 'invoke',
-      uri: 'yaar://apps/notes/storage/copied.txt',
-      payload,
-    }),
+    body: JSON.stringify({ verb, uri, ...(payload === undefined ? {} : { payload }) }),
   });
   const res = await handleVerbRoutes(req, new URL(req.url));
   if (!res) throw new Error('route did not handle POST /api/verb');
   return res;
+}
+
+async function invoke(token: string, payload: unknown): Promise<Response> {
+  return callVerb(token, 'invoke', 'yaar://apps/notes/storage/copied.txt', payload);
 }
 
 describe('copySources', () => {
@@ -117,5 +123,72 @@ describe('the door refuses a source the caller may not read', () => {
     const res = await invoke(appToken(), { action: COPY_ACTION });
     expect(res.status).toBe(400);
     expect(await res.text()).toContain('required for copy');
+  });
+});
+
+describe('resolveCopySources', () => {
+  it('expands `self` in a copy source, leaving everything else alone', () => {
+    expect(
+      resolveCopySources({ action: COPY_ACTION, from: 'yaar://apps/self/storage/x.txt' }, 'notes'),
+    ).toEqual({ action: COPY_ACTION, from: 'yaar://apps/notes/storage/x.txt' });
+  });
+
+  it('returns the payload itself when there is nothing to expand', () => {
+    const payload = { action: COPY_ACTION, from: 'yaar://storage/a.txt' };
+    expect(resolveCopySources(payload, 'notes')).toBe(payload);
+    // No appId to expand against — a `describe` from an anonymous caller.
+    const pronoun = { action: COPY_ACTION, from: 'yaar://apps/self/storage/x.txt' };
+    expect(resolveCopySources(pronoun, undefined)).toBe(pronoun);
+    const write = { action: 'write', content: 'x' };
+    expect(resolveCopySources(write, 'notes')).toBe(write);
+  });
+
+  it('expands every element of a batch', () => {
+    expect(
+      resolveCopySources(
+        [
+          { action: 'write', content: 'x' },
+          { action: COPY_ACTION, from: 'yaar://apps/self/storage/a.txt' },
+          { action: COPY_ACTION, from: 'yaar://storage/b.txt' },
+        ],
+        'notes',
+      ),
+    ).toEqual([
+      { action: 'write', content: 'x' },
+      { action: COPY_ACTION, from: 'yaar://apps/notes/storage/a.txt' },
+      { action: COPY_ACTION, from: 'yaar://storage/b.txt' },
+    ]);
+  });
+});
+
+/**
+ * The export direction, end to end.
+ *
+ * An app could copy *into* its own storage and not back out of it: the target URI was
+ * self-expanded before dispatch and the source was not, so `from: yaar://apps/self/...`
+ * passed the read gate and then looked for an app literally named `self`. That asymmetry
+ * is what left devtools with no way to hand a project file to another app.
+ */
+describe('a copy out of the app’s own storage', () => {
+  it('lands the bytes in the shared tree when the source names `self`', async () => {
+    initRegistry();
+    const token = appToken();
+
+    const written = await callVerb(token, 'invoke', 'yaar://apps/self/storage/level01.json', {
+      action: 'write',
+      content: '{"scene":"level01"}',
+    });
+    expect(written.status).toBe(200);
+
+    const copied = await callVerb(token, 'invoke', 'yaar://storage/shared/notes/level01.json', {
+      action: COPY_ACTION,
+      from: 'yaar://apps/self/storage/level01.json',
+    });
+    expect(copied.status).toBe(200);
+    expect(JSON.stringify(await copied.json())).not.toContain('apps/self');
+
+    const read = await callVerb(token, 'read', 'yaar://storage/shared/notes/level01.json');
+    expect(read.status).toBe(200);
+    expect(JSON.stringify(await read.json())).toContain('level01');
   });
 });

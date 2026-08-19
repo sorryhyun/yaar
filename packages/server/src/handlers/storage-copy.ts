@@ -21,6 +21,7 @@
  * live here, and every site imports them. A rename now breaks the build.
  */
 
+import { resolveSelf } from '../http/uri-match.js';
 import type { InvokePayload } from './uri-registry.js';
 
 /** The action name. Compared against, never re-spelled. */
@@ -75,4 +76,39 @@ export function copySources(
     sources.push(from);
   }
   return { sources };
+}
+
+/**
+ * The payload to dispatch, with `self` expanded in every copy source.
+ *
+ * The target URI has always been expanded before dispatch (`resolveSelf` in
+ * `routes/verb.ts`) and the permission gate expands *both* sides — `permissionsAllow`
+ * resolves the pronoun before it matches. Only the source that finally reaches the
+ * handler was left with the literal word in it, so `from: 'yaar://apps/self/storage/x'`
+ * passed the read check and then looked for an app whose id is `self`: the copy that
+ * imports *into* an app's own storage worked, and the export back out of it did not,
+ * with a "File not found" that named a path the caller never wrote.
+ *
+ * Returns the payload unchanged — same reference — when there is nothing to expand, so
+ * the ordinary call allocates nothing.
+ */
+export function resolveCopySources(
+  payload: InvokePayload | undefined,
+  appId: string | undefined,
+): InvokePayload | undefined {
+  if (!appId || payload === undefined) return payload;
+
+  const expand = (element: Record<string, unknown> | undefined) => {
+    if (!isCopyPayload(element)) return element;
+    const from = copyFrom(element);
+    if (from === null) return element;
+    const resolved = resolveSelf(from, appId);
+    return resolved === from ? element : { ...element, from: resolved };
+  };
+
+  if (!Array.isArray(payload)) return expand(payload);
+  const expanded = payload.map(expand);
+  return expanded.some((element, i) => element !== payload[i])
+    ? (expanded as InvokePayload)
+    : payload;
 }

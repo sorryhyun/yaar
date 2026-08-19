@@ -11,6 +11,7 @@ import {
   readFileContent,
   readImageFile,
   copyFromStorage,
+  exportToStorage,
   defaultAssetPath,
   isStorageRef,
   resolveStorageSource,
@@ -53,19 +54,25 @@ function joinLines(lines: unknown[]): string {
 }
 
 /**
- * A destination inside the active project, with no way out of the sandbox.
+ * A path inside the active project, with no way out of the sandbox.
  *
  * Leading slashes are tolerated because a caller pasting a path from a listing tends
  * to bring one; `..` is refused outright rather than normalized, since a caller who
  * wrote it meant somewhere this command does not go.
+ *
+ * `role` only names the offending side in the refusal. Both ends of an export are
+ * checked — the source is as much a way out of the project as the destination is,
+ * and a caller who wrote `..` on either deserves to read which one.
  */
-function projectDestination(raw: string): string {
-  const to = raw.replace(/^\/+/, '');
-  if (!to) throw new AppCommandError('Destination path is empty.');
-  if (to.split('/').includes('..'))
-    throw new AppCommandError(`Destination "${raw}" escapes the project.`);
-  return to;
+function projectRelative(raw: string, role: 'Source' | 'Destination' = 'Destination'): string {
+  const path = raw.replace(/^\/+/, '');
+  if (!path) throw new AppCommandError(`${role} path is empty.`);
+  if (path.split('/').includes('..'))
+    throw new AppCommandError(`${role} "${raw}" escapes the project.`);
+  return path;
 }
+
+const projectDestination = (raw: string): string => projectRelative(raw);
 
 export const fileCommands = {
   readFile: defineAppCommand({
@@ -263,21 +270,26 @@ export const fileCommands = {
   }),
   copyFile: defineAppCommand({
     description:
-      'Copy a file into the active project. `from` is either a project-relative path — an ' +
-      'internal copy, byte for byte — or a `yaar://storage/...` URI, which imports the file ' +
-      'from the storage tree: that is how an artifact another app published under shared/ ' +
-      'becomes a build-time asset. ONLY a `yaar://` prefix means storage, so a file in ' +
-      'storage can never shadow one in the project. `to` is required for an internal copy ' +
-      'and defaults to src/assets/<source name> for a storage import. Raster images imported ' +
-      'from storage are re-encoded to WebP unless `recompress: false`, and kept only if that ' +
-      'came out smaller; the result carries the import line when the destination is an asset ' +
-      'under src/, since the bundler inlines it as a data: URI instead of fetching it at ' +
-      'runtime. Destination directories are created automatically. One caveat for copies ' +
-      'WITHIN the project: storage serves images re-encoded to WebP, so copying a .png ' +
-      'already in the project yields WebP and the destination is renamed accordingly — to ' +
-      'preserve an original encoding, copy from its yaar://storage/... source, which is ' +
-      'server-side and byte-exact. Does NOT delete the original — pair with deleteFile to ' +
-      'move.',
+      'Copy a file, in any of three directions. Both `from` and `to` are project-relative ' +
+      'paths by default; a `yaar://storage/...` URI on either side names the storage tree ' +
+      'instead. So: project -> project is an internal copy, byte for byte; storage -> ' +
+      'project IMPORTS an artifact another app published under shared/ as a build-time ' +
+      'asset; project -> storage EXPORTS a project file so another app can open it (a ' +
+      'scene document, a generated dataset), which is the only way to hand one over — a ' +
+      'file read into this conversation and written back out is a corrupted binary and a ' +
+      'flooded transcript. Both storage directions are server-side and byte-exact: the ' +
+      'bytes never enter this app or your context. ONLY a `yaar://` prefix means storage, ' +
+      'so a file in storage can never shadow one in the project. `to` is required except ' +
+      'for a storage import, where it defaults to src/assets/<source name>. Raster images ' +
+      'imported from storage are re-encoded to WebP unless `recompress: false`, and kept ' +
+      'only if that came out smaller; the result carries the import line when the ' +
+      'destination is an asset under src/, since the bundler inlines it as a data: URI ' +
+      'instead of fetching it at runtime. Destination directories are created ' +
+      'automatically. One caveat for copies WITHIN the project: storage serves images ' +
+      're-encoded to WebP, so copying a .png already in the project yields WebP and the ' +
+      'destination is renamed accordingly — to preserve an original encoding, copy from ' +
+      'its yaar://storage/... source, which is server-side and byte-exact. Does NOT delete ' +
+      'the original — pair with deleteFile to move.',
     params: {
       type: 'object',
       properties: {
@@ -290,8 +302,10 @@ export const fileCommands = {
         to: {
           type: 'string',
           description:
-            'Destination path within the project ("src/ui/Foo.ts"). Required when copying ' +
-            'within the project; defaults to src/assets/<source name> for a storage import.',
+            'Destination: a project-relative path ("src/ui/Foo.ts"), or a yaar://storage/... ' +
+            'URI ("yaar://storage/shared/devtools/level01.json") to export the file out to ' +
+            'storage. Required except for a storage import, where it defaults to ' +
+            'src/assets/<source name>.',
         },
         recompress: {
           type: 'boolean',
@@ -307,12 +321,37 @@ export const fileCommands = {
       if (!activeProject())
         throw new AppCommandError('No active project. Open or create one first.');
       const from = String(p.from);
+      const toRef = p.to === undefined ? undefined : String(p.to);
+
+      // The export door: a project file out to storage, so another app can open it.
+      // Refused when `from` is itself a storage URI — that is a storage-to-storage
+      // copy, which the storage app does directly and this project has no part in.
+      if (toRef !== undefined && isStorageRef(toRef)) {
+        if (isStorageRef(from))
+          throw new AppCommandError(
+            'Both `from` and `to` name storage. A storage-to-storage copy does not involve ' +
+              'the project — invoke it on yaar://storage/... directly.',
+          );
+        if (p.recompress !== undefined)
+          throw new AppCommandError(
+            '`recompress` applies only to a yaar://storage/... import; an export is byte ' +
+              'for byte.',
+          );
+        const destination = resolveStorageSource(toRef);
+        if (!destination) throw new AppCommandError('`to` names the storage root, not a file.');
+        try {
+          const exported = await exportToStorage(projectRelative(from, 'Source'), destination);
+          return { from, ...exported };
+        } catch (err) {
+          throw new AppCommandError(errMsg(err));
+        }
+      }
 
       // A copy within the project: unchanged behaviour, and deliberately never
       // re-encoded. `recompress` is refused rather than ignored here — silently
       // dropping it would report a WebP conversion that did not happen.
       if (!isStorageRef(from)) {
-        if (p.to === undefined)
+        if (toRef === undefined)
           throw new AppCommandError(
             '`to` is required when copying within the project. Only a yaar://storage/... ' +
               'source defaults to src/assets/.',
@@ -322,7 +361,7 @@ export const fileCommands = {
             '`recompress` applies only to a yaar://storage/... import; a copy within the ' +
               'project is byte for byte.',
           );
-        const to = projectDestination(String(p.to));
+        const to = projectDestination(toRef);
         if (from === to) throw new AppCommandError('Source and destination are the same path');
         try {
           const landed = await copyFile(from, to);
@@ -341,12 +380,12 @@ export const fileCommands = {
         }
       }
 
-      const requested = p.to !== undefined;
+      const requested = toRef !== undefined;
       try {
         const sourcePath = resolveStorageSource(from);
         const result = await copyFromStorage(
           sourcePath,
-          projectDestination(requested ? String(p.to) : defaultAssetPath(sourcePath)),
+          projectDestination(requested ? toRef : defaultAssetPath(sourcePath)),
           {
             ...(p.recompress !== undefined ? { recompress: Boolean(p.recompress) } : {}),
             // An explicit `to` is honoured as written, extension included; only a

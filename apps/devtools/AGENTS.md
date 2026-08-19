@@ -66,11 +66,20 @@ So: **no client-side read can duplicate a non-WebP image faithfully.** `copyByte
 contents and extension disagree is the bug, not the fix.
 
 The byte-exact path is server-side — `invoke(dest, { action: 'copy', from })`, which never
-reads the file into the iframe. A storage *import* uses it and stays exact. A copy within
-the project **cannot**: `from` does not expand `self`, and an app's own storage is reachable
-by no other spelling (`yaar://apps/{id}/storage/` and `yaar://storage/apps/{id}/` are both
-refused — the flat-root grant deliberately excludes `apps/`). Do not re-litigate those three
-spellings; they were each tried and each fails differently.
+reads the file into the iframe. Both storage directions use it and stay exact: an *import*
+(`copyFile` with a `yaar://storage/...` `from`) and an *export* (`copyFile` with a
+`yaar://storage/...` `to`, via `exportToStorage`), which is how a project file reaches
+another app that can only read `shared/`.
+
+The export names the project as `yaar://apps/self/storage/…`, and that spelling only became
+usable once the verb door started expanding `self` in a copy's `from` the way it always did
+for the target (`handlers/storage-copy.ts`, `resolveCopySources`). Before that the source
+reached the handler with the literal word in it and went looking for an app whose id is
+`self`, so the import direction worked and the export did not.
+
+A copy *within* the project still cannot go through that path — it has no storage URI on
+either side — which is why `copyBytes` reads and rewrites, and why an image copy is renamed
+to `.webp`.
 
 ## compileStatus is three-valued, and that is load-bearing
 

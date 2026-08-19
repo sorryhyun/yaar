@@ -5,13 +5,19 @@ import { projectPath } from '../lib';
 import { recordChange } from './changes';
 import { refreshFiles } from './files';
 
-// Importing a file from the shared storage tree into the active project.
+// Moving a file between the storage tree and the active project, in both directions.
 //
 // The bytes never enter a model context, and with no recompression they never enter
 // this iframe either: `action: 'copy'` moves them storage -> storage on the server.
 // Only a recompress round-trips them here to be re-encoded. That is the reason this
 // is a command rather than advice to read the file and write it back — a base64 blob
 // in a transcript is the failure mode being designed out.
+//
+// The export direction (`exportToStorage`) is the same argument run backwards, and it
+// was missing: a project could take in an artifact another app had published and had
+// no way to hand one back, so a scene document another app needed to open had to be
+// read into an agent's context and written out again. The two directions now differ
+// only in which side of the copy names the project.
 
 /** Formats worth re-encoding. WebP and SVG are already what we would convert to. */
 const RECOMPRESSIBLE = new Set(['png', 'jpg', 'jpeg', 'bmp']);
@@ -122,6 +128,47 @@ async function copyIntoProject(
   // The handler reports "… (N bytes)"; fall back to the listing if that changes.
   const match = typeof result === 'string' ? result.match(/\((\d+) bytes\)/) : null;
   return match ? Number(match[1]) : ((await sourceSize(sourcePath)) ?? 0);
+}
+
+/**
+ * Copy a file out of the active project into the storage tree.
+ *
+ * The mirror of `copyFromStorage`, and server-side for the same reason: the bytes go
+ * storage -> storage without passing through this iframe or anyone's transcript.
+ * There is no recompression on the way out — an export is what the project holds,
+ * byte for byte, because the receiving app is about to parse it.
+ *
+ * The source names the project's own tree as `yaar://apps/self/storage/…`. `self` is
+ * expanded at the verb door (`handlers/storage-copy.ts` server-side), which is what
+ * makes this direction reachable at all: an app's own storage has no other spelling
+ * a copy source can use.
+ */
+export async function exportToStorage(
+  sourcePath: string,
+  destination: string,
+): Promise<{ uri: string; bytes: number }> {
+  const proj = activeProject();
+  if (!proj) throw new Error('No active project. Open or create one first.');
+
+  const uri = `yaar://storage/${destination}`;
+  let result: string;
+  try {
+    result = await invoke<string>(uri, {
+      action: 'copy',
+      from: `yaar://apps/self/storage/${projectPath(proj.id, sourcePath)}`,
+    });
+  } catch (err) {
+    throw new Error(`Could not export ${sourcePath}: ${errMsg(err)}`);
+  }
+
+  // The handler reports "… (N bytes)"; a changed wording costs the count, not the copy.
+  const match = typeof result === 'string' ? result.match(/\((\d+) bytes\)/) : null;
+  const bytes = match ? Number(match[1]) : 0;
+
+  // Nothing in the project changed, so no `recordChange` and no `refreshFiles` — the
+  // status line is the whole of the feedback an export owes the user.
+  setStatusText(`Exported ${sourcePath} to ${uri}`);
+  return { uri, bytes };
 }
 
 /**

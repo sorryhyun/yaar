@@ -14,7 +14,7 @@ import { expandBraceUri } from '@yaar/shared';
 import { errorResponse, jsonResponse, parseJsonBody, type EndpointMeta } from '../utils.js';
 import { initRegistry } from '../../handlers/index.js';
 import { NoActiveSessionError, isEmptyLinkList } from '../../handlers/utils.js';
-import { copySources } from '../../handlers/storage-copy.js';
+import { copySources, resolveCopySources } from '../../handlers/storage-copy.js';
 import type { InvokePayload, Verb, VerbResult } from '../../handlers/uri-registry.js';
 import {
   namesSelf,
@@ -367,6 +367,14 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
     return errorResponse('Cannot resolve "self": no appId in iframe token', 403);
   }
 
+  // A copy's `from` is the second URI this door dispatches, and it needs the same
+  // expansion the target just got: the gate above resolves `self` on both sides, but
+  // the handler receives the payload verbatim, so an unexpanded source went looking for
+  // an app literally named `self`. That made the copy asymmetric — an app could import
+  // *into* its own storage and not export back out of it — which is the whole of what
+  // devtools was missing to hand a project file to another app.
+  const payload = resolveCopySources(body.payload, tokenEntry?.appId);
+
   // Log to session logs. Data-plane verbs (an app's proxied fetch) and the devtools
   // console poll are skipped; the rest are summarized — see lib/format-verb-log.ts.
   //
@@ -408,7 +416,7 @@ export async function handleVerbRoutes(req: Request, url: URL): Promise<Response
       ? getSessionHub().get(sessionId)?.windowState.getMonitorForWindow(callerWindowId)
       : undefined);
   const dispatch = () => {
-    const execute = () => registry.execute(verb, resolvedUri, body.payload);
+    const execute = () => registry.execute(verb, resolvedUri, payload);
     return sessionId
       ? runWithAgentContext(
           {
