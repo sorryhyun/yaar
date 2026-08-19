@@ -24,6 +24,8 @@ import type {
   StorageImageContent,
 } from './types.js';
 import { resolveMountPath, loadMounts, type ResolvedPath } from './mounts.js';
+// A leaf, shared with window content inlining — see text-extensions.ts for why not here.
+import { isTextFile } from './text-extensions.js';
 
 /**
  * Resolve a storage-relative path to an absolute path, checking mounts first.
@@ -102,22 +104,6 @@ const IMAGE_MIME: Record<string, string> = {
 
 function imageFileMime(filePath: string): string | null {
   return IMAGE_MIME[extname(filePath).toLowerCase()] ?? null;
-}
-
-/** Extensions known to be safe to read as UTF-8 text */
-const TEXT_EXTENSIONS = new Set([
-  '.txt', '.md', '.csv', '.json', '.jsonl',
-  '.html', '.htm', '.xml', '.svg',
-  '.css', '.js', '.mjs', '.cjs', '.ts', '.mts', '.tsx', '.jsx',
-  '.yaml', '.yml', '.toml', '.ini', '.env', '.conf', '.cfg',
-  '.sh', '.bash', '.zsh', '.fish',
-  '.py', '.rb', '.go', '.rs', '.java', '.c', '.cpp', '.h', '.hpp',
-  '.sql', '.graphql', '.gql',
-  '.log', '.diff', '.patch',
-]);
-
-function isTextFile(filePath: string): boolean {
-  return TEXT_EXTENSIONS.has(extname(filePath).toLowerCase());
 }
 
 /** Cap on how many pages a single rasterize request may return, to bound token cost. */

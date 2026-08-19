@@ -23,6 +23,7 @@ import { getAppMeta } from '../apps/discovery.js';
 import { APPS_DIR, resolveAppDir, resolveAppSource } from '../apps/roots.js';
 import { isolatedAppOrigin, isOriginBoundaryActive } from '../../http/origin-boundary.js';
 import { grantsFromPayload, mayDelegateGrants, undelegatedUris } from './delegated-grants.js';
+import { namesInlinableUri, inlineUriContent } from './inline-content.js';
 import type { PermissionEntry } from '../../http/access.js';
 import {
   formatWindowRef,
@@ -202,6 +203,15 @@ export async function handleCreate(
         `Unknown app "${appId || data}". Use list to see available apps, or load_skill to learn how to use one.`,
       );
     }
+  }
+
+  // A URI where a text renderer expects text. `iframe` resolved its own above; the
+  // others used to display the pointer verbatim and report success — see
+  // inline-content.ts. Substituted into the action, so the window holds what it shows.
+  if (namesInlinableUri(renderer, data)) {
+    const inlined = await inlineUriContent(renderer, data);
+    if (!inlined.ok) return error(inlined.message);
+    data = inlined.data;
   }
 
   const appMeta = appId ? await getAppMeta(appId) : null;

@@ -548,7 +548,14 @@ export function registerWindowHandlers(
           description:
             'markdown also draws ```mermaid fenced blocks as diagrams — prefer it over describing a flow in prose.',
         },
-        content: {},
+        content: {
+          description:
+            'The body. A markdown/html/text string; { headers, rows } for table; ' +
+            '{ components: [...] } for component; a URL or yaar:// URI for iframe. ' +
+            'For markdown, html and text a bare "yaar://storage/{path}" is read and its ' +
+            'text becomes the content — a snapshot taken now, not a live view, so a later ' +
+            'write to the file does not reach the window. Anything else stays literal.',
+        },
         x: {
           type: 'number',
           description:

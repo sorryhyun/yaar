@@ -13,6 +13,7 @@ import {
   requireWindowUnlocked,
   emitActionChecked,
 } from './helpers.js';
+import { namesInlinableUri, inlineUriContent } from './inline-content.js';
 
 /** Handle window content updates (append, prepend, replace, insertAt, clear). */
 export async function handleUpdate(
@@ -30,7 +31,19 @@ export async function handleUpdate(
   const opType = payload.operation as string;
   if (!opType) return error('"operation" is required (append, prepend, replace, insertAt, clear).');
 
-  const data = (payload.content as string | { headers: string[]; rows: string[][] }) ?? '';
+  let data = (payload.content as string | { headers: string[]; rows: string[][] }) ?? '';
+
+  // The same substitution `create` makes, on the same renderers — an update that names a
+  // file must not append the pointer's own text to a window (inline-content.ts). The
+  // renderer is whatever this call sets it to, or, when it sets none, the one the window
+  // is already displaying.
+  const renderer =
+    (payload.renderer as string | undefined) ?? windowState.getWindow(windowId)?.content.renderer;
+  if (namesInlinableUri(renderer, data)) {
+    const inlined = await inlineUriContent(renderer as string, data);
+    if (!inlined.ok) return error(inlined.message);
+    data = inlined.data;
+  }
 
   let operation: ContentUpdateOperation;
   switch (opType) {

@@ -401,6 +401,7 @@ delete('yaar://config/app/github')                      -> remove app config
 
 read('yaar://windows/win-1')                            -> window state
 invoke('yaar://windows/', { action: 'create', title: 'Notes', renderer: 'markdown', content: '# Hello' })
+invoke('yaar://windows/', { action: 'create', title: 'Plan', renderer: 'markdown', content: 'yaar://storage/plan.md' })
 invoke('yaar://windows/win-1', { action: 'update', operation: 'append', content: '...' })
 invoke('yaar://windows/win-1', { action: 'subscribe', events: ['content', 'interaction'] })  -> { subscriptionId }
 invoke('yaar://windows/win-1', { action: 'unsubscribe', subscriptionId: 'wsub-...' })
@@ -421,6 +422,15 @@ read('yaar://session')                         -> session info
 
 describe('yaar://config/settings')             -> { verbs: ['describe', 'read', 'invoke'], invokeSchema: { ... } }
 ```
+
+For the text renderers — `markdown`, `html`, `text` — a `content` that is *exactly* a
+`yaar://storage/{path}` URI is read and its text becomes the window's content, mirroring the
+URI `iframe` already accepts. Two things follow: it is a **snapshot** taken at the moment of the
+call, so a later write to the file does not reach an open window (reissue the create, or
+`update` it); and it is refused, rather than silently rendered as a literal string, when the
+file is missing, is not text, is over 512 KB, or when the caller is an app — an app reads its
+own files and passes the text. A URI embedded in a longer string is ordinary content and stays
+literal.
 
 HTTP requests also flow through the verb layer: `invoke('yaar://http', { url, ... })`, with domain allowlisting at `invoke('yaar://config/domains', { domain })`. `delete('yaar://http')` clears the caller's stored cookie jar (use on app logout).
 
