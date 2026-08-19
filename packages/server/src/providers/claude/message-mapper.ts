@@ -492,24 +492,36 @@ function extractToolResult(message: unknown): StreamMessage | null {
               const link = item as { uri?: string; name?: string };
               return `[${link.name ?? 'link'}](${link.uri})`;
             }
+            // Binary blocks carry no text, and a screenshot result is *nothing but*
+            // binary. Mark them the way the Codex mapper does rather than dropping
+            // them to '': the model still receives the real image, this channel is
+            // the transcript/UI one, and an empty string here used to erase the
+            // whole result (see below).
+            if (item.type === 'image') return '[image omitted]';
+            if (item.type === 'audio') return '[audio omitted]';
             return '';
           })
           .filter(Boolean)
           .join('');
       }
 
-      if (resultText) {
-        // Look up tool name from prior content_block_start event
-        const toolName =
-          (toolResult.tool_use_id && toolNameById.get(toolResult.tool_use_id)) ?? 'mcp_tool';
-        if (toolResult.tool_use_id) toolNameById.delete(toolResult.tool_use_id);
-        return {
-          type: 'tool_result',
-          toolName,
-          content: resultText,
-          toolUseId: toolResult.tool_use_id,
-        };
-      }
+      // Emitted whether or not the blocks yielded readable text. This used to be
+      // guarded on `resultText`, so an image-only result — `previewScreenshot`,
+      // every window/browser capture — produced no `tool_result` at all: no
+      // TOOL_PROGRESS `complete`, so the status line stayed on `Running: …` and
+      // then jumped straight to `Responding…`, never showing the pause where the
+      // model is actually reading the image; no `tool` stream frame, so
+      // process-explorer left the call stuck in `using-tool`; no logged result,
+      // and a leaked `toolNameById` entry.
+      const toolName =
+        (toolResult.tool_use_id && toolNameById.get(toolResult.tool_use_id)) ?? 'mcp_tool';
+      if (toolResult.tool_use_id) toolNameById.delete(toolResult.tool_use_id);
+      return {
+        type: 'tool_result',
+        toolName,
+        content: resultText,
+        toolUseId: toolResult.tool_use_id,
+      };
     }
   }
 
