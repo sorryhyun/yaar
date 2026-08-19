@@ -337,6 +337,66 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
     }
   }
 
+  /**
+   * The style a swapped-in <img> needs to land where its <canvas> was.
+   *
+   * A canvas is the one element this pipeline does not clone — it is discarded and a
+   * freshly created <img> takes its place, and \`document.createElement('img')\` carries
+   * no class, no id, nothing the cloned <head><style> could match. Every other element
+   * keeps its class-based styling for free through that stylesheet; the replacement
+   * canvas is the single node in the document that cannot, so whatever it needs must be
+   * written onto it here.
+   *
+   * The swap used to write only the *inline* cssText cloneNode had copied, on the stated
+   * premise that "the inlined cssText already carries the canvas's layout box". That
+   * holds exactly when the author positioned the canvas with a style="" attribute. For
+   * the ordinary case — \`.overlay { position: absolute; inset: 0 }\` in a stylesheet —
+   * none of it reached the <img>, which fell back to static positioning and flowed into
+   * normal document flow: a selection mask or tracing guide drawn *below* the canvas it
+   * covers, in a capture that otherwise looks right. Agents read app state off these
+   * images, so a plausible wrong picture is the expensive kind (GitHub issue #88).
+   *
+   * A narrow allowlist of *computed* values, not a full enumeration: #73 ruled that out
+   * for every node in the document, but a handful of properties on the few canvases in a
+   * page is cheap, and these are the ones that decide where the box lands and how big it
+   * is. Size comes from \`offsetWidth\`/\`offsetHeight\` with \`box-sizing: border-box\`
+   * instead of the computed content-box width — an <img> given only a content width
+   * measures narrower than the canvas it replaced whenever the canvas had a border, and
+   * that shifts everything laid out beside it.
+   */
+  var CANVAS_SWAP_PROPS = [
+    'position', 'top', 'right', 'bottom', 'left', 'z-index',
+    'transform', 'transform-origin',
+    'display', 'float', 'vertical-align', 'opacity',
+    'margin-top', 'margin-right', 'margin-bottom', 'margin-left',
+    'border-radius', 'box-shadow', 'clip-path', 'mix-blend-mode'
+  ];
+
+  function styleSwappedImage(img, origCanvas, cloneCanvas) {
+    // The inline style first: it is the clone's own style attribute, and the computed
+    // values below are layered over it rather than replacing it, so a property nobody
+    // listed still survives the swap.
+    if (cloneCanvas.style && cloneCanvas.style.cssText) img.style.cssText = cloneCanvas.style.cssText;
+    var cs;
+    try {
+      cs = window.getComputedStyle(origCanvas);
+    } catch (ex) {
+      return; // no layout to read (detached, or a shim without getComputedStyle)
+    }
+    if (!cs) return;
+    for (var p = 0; p < CANVAS_SWAP_PROPS.length; p++) {
+      var prop = CANVAS_SWAP_PROPS[p];
+      var value = cs.getPropertyValue(prop);
+      if (value) img.style.setProperty(prop, value);
+    }
+    // Reproduce the border box exactly, so neighbours are laid out as they live.
+    if (origCanvas.offsetWidth || origCanvas.offsetHeight) {
+      img.style.setProperty('box-sizing', 'border-box');
+      img.style.setProperty('width', origCanvas.offsetWidth + 'px');
+      img.style.setProperty('height', origCanvas.offsetHeight + 'px');
+    }
+  }
+
   /** Old tier-1 behavior, kept only as a last-resort fallback. */
   function largestCanvasCapture() {
     var canvases = document.querySelectorAll('canvas');
@@ -426,8 +486,9 @@ export const IFRAME_CAPTURE_HELPER_SCRIPT = `
           var img = document.createElement('img');
           img.src = data;
           var cc = cloneCanvases[i];
-          // The inlined cssText already carries the canvas's layout box
-          if (cc.style && cc.style.cssText) img.style.cssText = cc.style.cssText;
+          // A created <img> inherits nothing — see styleSwappedImage for why the
+          // cloned inline cssText alone is not the canvas's layout box.
+          styleSwappedImage(img, origCanvases[i], cc);
           if (cc.parentNode) cc.parentNode.replaceChild(img, cc);
         }
         if (canvasesBlank > 0) {

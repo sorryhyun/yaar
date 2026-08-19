@@ -43,7 +43,8 @@ describe('capture clone styling', () => {
     // The one legitimate cssText write, and the clearest witness that clone-side
     // inline style is load-bearing: a canvas positioned or sized by `style=` keeps
     // that box after the swap. Under the wipe this copied the empty string.
-    expect(shippedCode()).toContain('img.style.cssText = cc.style.cssText');
+    // (Layered under the computed positioning allowlist — see capture-canvas-swap.test.ts.)
+    expect(shippedCode()).toContain('img.style.cssText = cloneCanvas.style.cssText');
   });
 
   it('still relies on the cloned <style> blocks it must not strip', () => {
