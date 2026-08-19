@@ -70,10 +70,16 @@ function makeAnchor(tag: string): FakeAnchor {
   cb();
   return 0;
 };
-(globalThis as any).URL = {
-  createObjectURL: () => 'blob:fake-url',
-  revokeObjectURL: (url: string) => void revoked.push(url),
+// The two statics only — never `globalThis.URL` itself. Replacing the whole binding
+// takes the *constructor* with it, and these stubs outlive the file: the compiler's
+// `readLinkConfig` does `new URL(base)` inside a catch-all, so every later test file in
+// this process silently read app.json's `links` as `{}` and reported a green compile.
+const objectUrls = URL as unknown as {
+  createObjectURL: (blob: Blob) => string;
+  revokeObjectURL: (url: string) => void;
 };
+objectUrls.createObjectURL = () => 'blob:fake-url';
+objectUrls.revokeObjectURL = (url: string) => void revoked.push(url);
 
 /** Bun has no `FileReader`; this is the two events `blobToDataUrl` listens for. */
 class FakeFileReader {

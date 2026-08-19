@@ -32,7 +32,7 @@
  * suites disagreeing about what "a real app's compiler options" means.
  */
 
-import { mkdtemp, mkdir, rm } from 'fs/promises';
+import { mkdtemp, mkdir, realpath, rm } from 'fs/promises';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
@@ -120,7 +120,13 @@ export function createTypecheckBatch(label: string): TypecheckBatch {
   }
 
   async function run(): Promise<void> {
-    sandbox = await mkdtemp(join(tmpdir(), `yaar-${label}-`));
+    // Through `realpath`, because `DIAGNOSTIC_START` expects tsc to name each file as
+    // `src/<fixture>.ts`. tsc prints paths relative to its cwd, and on macOS `tmpdir()`
+    // is `/var/folders/…` — a symlink to `/private/var/folders/…`, which is what the
+    // spawned process's cwd resolves to. The two spellings made every diagnostic arrive
+    // as `../../../../../../../var/folders/…/src/<fixture>.ts`, matching no fixture, and
+    // the whole batch failed as "the sandbox or tsconfig is wrong" on macOS only.
+    sandbox = await realpath(await mkdtemp(join(tmpdir(), `yaar-${label}-`)));
     await mkdir(join(sandbox, 'src'), { recursive: true });
 
     const files: string[] = [];
