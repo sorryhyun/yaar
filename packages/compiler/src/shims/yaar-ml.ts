@@ -50,8 +50,10 @@ const ORT_URL = '/api/ml-runtime/ort.webgpu.bundle.min.mjs';
 
 // The specifier has to be opaque to Bun's bundler: a literal `import(ORT_URL)`
 // gets resolved at build time (and fails — it's a server route, not a module on
-// disk). Going through `Function` keeps it a runtime import. No CSP problem: app
-// iframes are served with `connect-src 'self'` only, no `script-src`.
+// disk). Going through `Function` keeps it a runtime import, which the app CSP
+// permits: `script-src` names `'unsafe-eval'` for exactly this call and `'self'`
+// for the `/api/ml-runtime/` URL it imports (`server/src/http/csp.ts`). Widening
+// that directive to a host list without `'unsafe-eval'` would break this line.
 const importModule = new Function('u', 'return import(u)') as (u: string) => Promise<typeof Ort>;
 
 const ort = await importModule(ORT_URL);
