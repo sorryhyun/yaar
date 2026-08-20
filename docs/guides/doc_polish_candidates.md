@@ -103,12 +103,8 @@ fixed; what remains is untranslated content:
 
 | Location | Item | Ev. |
 |---|---|---|
-| `ko/app-development.md` | `## Sub-agents (Personas)` + 3 subsections (EN ~1295-1414, 120 lines, 4 code blocks) absent. `personas`/`subagents`, `streamUri`, `reused:true`, `persona:*`, the 12-tool/6000-char limits, and the capability laws are undocumented in Korean | ✓ |
-| `ko/app-development.md` | `### Never trust a read either — validate at the boundary` (EN ~1098-1159) absent — no `z.safeParse`, `z.looseObject`, `parsed.error.issues`, no "degraded-by-design must be distinguishable from broken" | |
-| `ko/app-development.md:~688-733` | `defineApp()` 6-bullet API reference dropped (EN ~786-822). `replay` (EN 8 / KO 0) and `keybindings`/`onShortcut` (EN 2 / KO 0) are 100% undocumented, incl. the combo grammar and reserved list. KO sample omits `replay: 'never',` | |
-| `ko/app-development.md` | `createStaleGuard` absent (EN ~406-427, EN 6 / KO 0). KO ~963 import line silently drops it mid-block; `revive` lost from the `createPersistedSignal` paragraph (EN 3 / KO 0) | |
-| `ko/app-development.md:~610-642` | `app.json` table missing 2 rows: `streams` and `personas`/`subagents` | |
-| `ko/app-development.md:~571, ~792` | Pre-`b93c96e` prompt-priority text; `buildProtocol(ctx)` where EN says `registerProtocol(ctx)` | |
+| `ko/app-development.md` | `## Sub-agents (Personas)` + 3 subsections (EN ~1151-1241, 4 code blocks) absent. `subagents`, `streamUri`, `reused:true`, `persona:*`, the 12-tool/6000-char limits, and the capability laws are undocumented in Korean — KO's 에러 처리 헬퍼 section now names the gap and links out | ✓ |
+| `ko/app-development.md` | `### Never trust a read either — validate at the boundary` (EN ~896-935) absent — no `z.safeParse`, `z.looseObject`, `safeParseOr`, no "degraded-by-design must be distinguishable from broken". Same for `sharedStorage`/`storagePath`, `rasterize`, `fonts`, and the formatting helpers | |
 | `ko/common_flow.md` | Missing `### 5. Sub-agent — the app's worker thread` (EN ~95-121) and `### App state across app-agent handoffs` (EN ~306-319) | |
 | `ko/remote_mode.md` | `### YAAR_REMOTE_TOKEN` never translated (EN ~80-89). KO ~73 omits "a fresh one per start … rescan the QR"; KO ~78 omits `/health`'s `{status, remote}` | |
 

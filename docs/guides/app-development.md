@@ -4,6 +4,13 @@ In YAAR, you tell the AI what to build and it creates the app. TypeScript author
 
 > [한국어 버전](../ko/app-development.md)
 
+This guide is the app **author's** manual. Three neighbours own the rest and are not restated
+here: [`apps/CLAUDE.md`](../../apps/CLAUDE.md) (design tokens, Solid gotchas, links in and out of
+an app), [`docs/reference/uri_reference.md`](../reference/uri_reference.md) (every `yaar://` door
+and verb), and [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md)
+(wire shapes, postMessage frames, server internals). Build and verify commands live in the
+`app-dev` skill.
+
 ## Development Flow
 
 ```
@@ -20,97 +27,30 @@ In YAAR, you tell the AI what to build and it creates the app. TypeScript author
 
 Users don't need to write code. The AI writes TypeScript through the devtools app, compiles with Bun, previews the result, and deploys it as an app. Built apps are bundled into a single self-contained HTML file — all libraries, CSS, and code are inlined, so they can run independently in any browser with zero dependencies.
 
-## URI Verbs
+Every step is a devtools protocol command, driven with `app_command` / `app_query`:
 
-All operations use 5 generic verbs (`read`, `list`, `invoke`, `delete`, `describe`) on `yaar://` URIs.
+| Step | What it does |
+|---|---|
+| **Write** | Creates source files — `src/main.ts` plus whatever else the app needs |
+| **Compile** | Bun bundles from `src/main.ts` into one self-contained HTML file, and extracts `dist/protocol.json` from the source AST |
+| **Preview** | Opens an iframe window on the compiled output |
+| **Deploy** | Copies the build to `apps/{appId}/` and writes `app.json`; the icon appears on the desktop immediately |
 
-> **Note:** `yaar://session/*` is **session-agent-only** — it is the session principal's private namespace and is not reachable by apps via `POST /api/verb`, regardless of `app.json` permissions (apps cannot self-grant it). This includes `yaar://session/browser` (the session agent's door to the user's *real* browser); apps that need browsing use `@bundled/yaar-web` → the headless sandbox instead.
+Deploy is the step with consequences worth knowing:
 
-### Devtools App
+- It is **destructive** — it overwrites source and deletes files no longer present — so it
+  snapshots the app first ([Per-app version history](#per-app-version-history)).
+- It closes any window still running the previous build, and drops the app agent's cached profile
+  so its next turn is built from the new `protocol.json`. Both would otherwise keep serving the
+  code the deploy just replaced. The deploying window itself is spared, so an app can deploy
+  itself; the closed handles come back as `closedWindows`.
+- There is no doc file for it to write. `read('yaar://apps/{appId}')` assembles the effective
+  manifest at call time and `describe` assembles the manual; the `agent/prompt.md` /
+  `agent/hint.md` / `agent/SKILL.md` you hand-authored are picked up from the app directory as-is
+  and carried through clone and deploy.
 
-App development (write, edit, compile, typecheck, deploy, clone) is handled through the **devtools app** via App Protocol commands. The devtools app runs in an iframe window and exposes these operations as protocol commands. The AI opens the devtools window and interacts with it using `app_command` and `app_query`.
-
-For the full list of available commands, `describe('yaar://apps/devtools')` — the manifest is generated from the app's own `protocol.json`.
-
-### Apps — `yaar://apps/`
-
-| Verb | URI | Description |
-|------|-----|-------------|
-| `list` | `yaar://apps` | List all installed apps |
-| `describe` | `yaar://apps/{appId}` | The app's **manual** — name/description/icon, its `protocol.json` verbatim (less `persona:*` commands), its `agent/SKILL.md` when it ships one, permissions, and this door's verbs + `invoke` actions |
-| `read` | `yaar://apps/{appId}` | The app's **effective manifest** — id, name, kind, source, version, author, `isCompiled`/`hasProtocol`/`hasConfig`, permissions, `bundles`, `controls`, `subagents`, `streams`, `messaging`, `variant`, `dockEdge` |
-| `invoke` | `yaar://apps/{appId}`, `{ action, ... }` | Run an app action (see below) |
-| `delete` | `yaar://apps/{appId}` | Uninstall app |
-
-**describe = the manual, read = the current value.** `describe` answers "what is this app and how do I drive it"; `read` answers "what is installed here". Returning `protocol.json` whole from `describe` carries no drift risk because it is a build artifact — the compiler writes it from the source AST and deploy re-derives and diffs it — which is exactly the objection that retired the previous, hand-written protocol restatement.
-
-`read`'s capability fields are **post-grant**: `subagents` and `streams` are the intersection of what `app.json` declares with what the user approved at install (`config/app-grants.json`), not what the file says. An app holding `yaar-dev` can rewrite its own manifest, so reporting the declaration would report a ceiling the app doesn't have.
-
-`yaar://apps/{appId}/state/…` and `/commands/…` are **not addressable** on any verb, and the handler refuses them by name. Protocol state belongs to a running window — `yaar://windows/{windowId}/state/{key}`. `storage/`, `db/`, and `agents/` sub-paths are unaffected.
-
-**`invoke` actions on `yaar://apps/{appId}`** (`handlers/apps/app-resource.ts`):
-
-| Action | Payload | Description |
-|--------|---------|-------------|
-| `set_badge` | `{ count }` | Set (or clear, when `0`) the badge on the app icon |
-| `install` | — | Download + install the app from the marketplace |
-| `clone` | — | Copy the app's source into the devtools workspace for editing |
-| `publish` | — | Single-phase publish of the app's current on-disk state |
-| `publish_prepare` | — | Two-phase publish, step 1: freeze bytes, return a `publicationId` + summary |
-| `publish_confirm` | `{ publicationId, acknowledgeDrift? }` | Step 2: upload the frozen bytes |
-| `publish_cancel` | `{ publicationId }` | Discard a prepared publication |
-
-See [Publishing to the Marketplace](#publishing-to-the-marketplace) for the full publish flow.
-
-### App Config — `yaar://config/app/`
-
-| Verb | URI | Description |
-|------|-----|-------------|
-| `invoke` | `yaar://config/app/{appId}`, `{ config }` | Save app config/credentials |
-| `read` | `yaar://config/app/{appId}` | Read app config |
-| `delete` | `yaar://config/app/{appId}` | Remove app config |
-
-### Skills — `yaar://skills/`
-
-| Verb | URI | Description |
-|------|-----|-------------|
-| `list` | `yaar://skills` | List available skill topics |
-| `read` | `yaar://skills/{topic}` | Load reference docs (`components`, `config`, `marketplace`, `remote`) |
-
-## Development Workflow in Detail
-
-All development operations are performed through the **devtools app** via App Protocol commands. The AI opens the devtools window and uses `app_command` to write, compile, and deploy code.
-
-### Step 1: Write Code
-
-The AI sends write/edit commands to the devtools app to create source files.
-
-- Supports multiple files (`src/main.ts`, `src/utils.ts`, ...)
-
-### Step 2: Compile
-
-The AI sends a compile command to the devtools app.
-
-- Bundles from `src/main.ts` entry point via Bun
-- Produces a **single self-contained HTML file** with embedded JS
-- Returns preview URL via `/api/dev/` routes
-
-### Step 3: Preview
-
-The AI opens an iframe window to preview the compiled result immediately.
-
-### Step 4: Deploy
-
-The AI sends a deploy command to the devtools app.
-
-- Copies compiled HTML to `apps/{appId}/`
-- Writes `app.json`. Reading the app back (`read('yaar://apps/{appId}')`) returns the effective manifest, and `describe` returns `protocol.json` plus `agent/SKILL.md` — both assembled at call time, so there's no doc file for deploy to write; the `agent/prompt.md`/`agent/hint.md`/`agent/SKILL.md` you hand-authored are picked up from the app directory as-is and carried through clone and deploy
-- Icon appears on desktop immediately
-- Closes any window still running the previous build, and drops the app agent's cached
-  profile so its next turn is built from the new `protocol.json`. Both would otherwise
-  keep serving the code the deploy just replaced. The deploying window itself is spared,
-  so an app can deploy itself; the closed handles come back as `closedWindows`
-- `appProtocol`: Mark app as supporting App Protocol (auto-detected from HTML if not set)
+For the full command list, `describe('yaar://apps/devtools')` — the manifest is generated from the
+app's own `protocol.json`.
 
 ### Editing Existing Apps — clone → edit → compile → deploy
 
@@ -127,12 +67,11 @@ frames down. Open the app as a top-level page instead:
 http://localhost:8000/api/dev/preview/{appId}
 ```
 
-This serves the deployed app's `dist/index.html` with its **real iframe token
-injected**, so token-gated SDK calls (`appStorage`, `appDb`, `/api/ml-weights`, the
-verb SDK) work exactly as they do in a window. The identity is the app's own — the
-permissions and `bundles` come off its `app.json`, never from the request — so a
-preview cannot pass anything the deployed app would be refused, and it runs under the
-same `connect-src 'self'` CSP.
+This serves the deployed app's `dist/index.html` with its **real iframe token injected**, so
+token-gated SDK calls (`appStorage`, `appDb`, `/api/ml-weights`, the verb SDK) work exactly as
+they do in a window. The identity is the app's own — permissions and `bundles` come off its
+`app.json`, never from the request — so a preview cannot pass anything the deployed app would be
+refused.
 
 ```js
 // Anything speaking CDP: Playwright, Puppeteer, claude-in-chrome, …
@@ -142,84 +81,91 @@ javascript_tool("await window.__ocr.readSample()"); // the app's own automation 
 
 Notes:
 
-- **Host-only.** The route hands out an app's token, so — like `POST /api/iframe-token`
-  — it is refused to app iframes. In `REMOTE=1` the caller must already hold the
-  remote token.
-- **`localhost`, not `127.0.0.1`.** With app-origin isolation on (the default in local
-  mode), `127.0.0.1` *is* the app origin and a token-less request carrying it is
-  refused by design. A top-level navigation there is redirected to `localhost`
-  automatically, so this mostly self-corrects — but a `fetch` of the preview URL
-  against `127.0.0.1` will not.
-- Session-scoped verbs (windows, notifications) bind to the running desktop's session
-  when one is connected. With no desktop up, the app still gets its storage, its db,
-  and its gated HTTP doors — those are keyed on the app, not the session.
-- The app must be **deployed** and compiled (`dist/index.html` present). For an
-  uncompiled project in the devtools workspace, compile first — `POST /api/dev/compile`
-  returns a `previewUrl` under `/api/storage/…`.
+- **Host-only.** The route hands out an app's token, so — like `POST /api/iframe-token` — it is
+  refused to app iframes. In `REMOTE=1` the caller must already hold the remote token.
+- **`localhost`, not `127.0.0.1`.** With app-origin isolation on, `127.0.0.1` *is* the app origin
+  and a token-less request carrying it is refused by design. A top-level navigation there is
+  redirected automatically, but a `fetch` of the preview URL is not.
+- Session-scoped verbs (windows, notifications) bind to the running desktop's session when one is
+  connected. With no desktop up, the app still gets its storage, its db, and its gated HTTP doors.
+- The app must be **deployed** and compiled. For an uncompiled project in the devtools workspace,
+  compile first — `POST /api/dev/compile` returns a `previewUrl`.
+
+Driving either surface end to end: [`docs/guides/headless_driving.md`](./headless_driving.md).
+
+## URI Verbs
+
+All operations use 5 generic verbs (`read`, `list`, `invoke`, `delete`, `describe`) on `yaar://` URIs. The full door-by-door table is [`docs/reference/uri_reference.md`](../reference/uri_reference.md); what an app author needs is below.
+
+> **Note:** `yaar://session/*` is **session-agent-only** — it is the session principal's private namespace and is not reachable by apps via `POST /api/verb`, regardless of `app.json` permissions (apps cannot self-grant it). This includes `yaar://session/browser` (the session agent's door to the user's *real* browser); apps that need browsing use `@bundled/yaar-web` → the headless sandbox instead.
+
+### Apps — `yaar://apps/`
+
+Four facts about this door, all detailed in
+[URI Reference → Apps](../reference/uri_reference.md#apps--yaarappsappid):
+
+- **`describe` is the manual, `read` is the current value.** `describe('yaar://apps/{appId}')`
+  answers "what is this app and how do I drive it": identity, `agent/SKILL.md` when it ships one,
+  permissions, and a **table of contents** for the protocol — the names of the state keys and
+  commands with the URIs that serve each in full. `read` answers "what is installed here": the
+  effective manifest.
+- **The protocol is its own resource**, `yaar://apps/{appId}/protocol` — `list` for the index,
+  `read` for the manifest, `read …/protocol/commands/{name}` for one command. It is not inlined
+  into `describe`, because identity is a fixed ~10 KB while a 52-command manifest is 41.8 KB and
+  growing, and past the CLI's inline-result threshold the combined answer is *gone* rather than
+  merely expensive.
+- **`read`'s capability fields are post-grant.** `subagents` and `streams` are the intersection of
+  what `app.json` declares with what the user approved at install (`config/app-grants.json`). An
+  app holding `yaar-dev` can rewrite its own manifest, so the declaration is a request and the
+  grant is the ceiling.
+- **`yaar://apps/{appId}/state/…` and `/commands/…` are not addressable** on any verb. Protocol
+  state belongs to a running window — `yaar://windows/{windowId}/state/{key}`. `storage/`, `db/`,
+  and `agents/` sub-paths keep all five verbs.
+
+`invoke` on `yaar://apps/{appId}` takes `set_badge` (`{ count }`, `0` clears), `install`, `clone`,
+`publish`, `publish_prepare`, `publish_confirm`, `publish_cancel` — see
+[Publishing to the Marketplace](#publishing-to-the-marketplace). `delete` uninstalls.
+
+### App Config — `yaar://config/app/`
+
+| Verb | URI | Description |
+|------|-----|-------------|
+| `invoke` | `yaar://config/app/{appId}`, `{ config }` | Save app config/credentials |
+| `read` | `yaar://config/app/{appId}` | Read app config |
+| `delete` | `yaar://config/app/{appId}` | Remove app config |
+
+### Skills — `yaar://skills/`
+
+| Verb | URI | Description |
+|------|-----|-------------|
+| `list` | `yaar://skills` | List available skill topics |
+| `read` | `yaar://skills/{topic}` | Load reference docs (`components`, `config`, `marketplace`, `remote`) |
 
 ## Publishing to the Marketplace
 
-Deploy puts an app on *your* desktop. Publishing pushes it to the shared YAAR marketplace so anyone can install it. The full lifecycle is **write → compile → deploy → publish**, and installing is the mirror image on someone else's machine.
+Deploy puts an app on *your* desktop. Publishing pushes it to the shared YAAR marketplace so anyone can install it. The full lifecycle is **write → compile → deploy → publish**, and installing is the mirror image on someone else's machine. The Market Apps app (🛒, `apps/market-apps`) is the front door for both directions; the AI can also drive every step through `yaar://apps/{appId}` verbs.
 
-The Market Apps app (🛒, `apps/market-apps`) is the front door for both directions — browse and install others' apps, sign in, and publish your own. The AI can also drive every step directly through `yaar://apps/{appId}` verbs.
+**Publisher identity is a Google ID token** — a JWT signed by Google that asserts your email, verified against Google's public keys. No API key, no shared secret, no device registry. Sign in from the Market Apps window; YAAR opens the system browser at Google's consent screen (PKCE over a loopback redirect to `/api/auth/google/callback`) and requests only the `openid email` scope. The **refresh token** is the only thing persisted locally (in the config dir); ID tokens live an hour and are minted on demand. The exchange is routed through the marketplace (`MARKET_URL/api/auth/exchange`) because Google's Desktop-client token endpoint requires a `client_secret` that an open-source app installed on user machines has nowhere safe to keep — YAAR does the half it can, the marketplace adds the secret, and only tokens come back. Auth routes are host/bundled-only (`http/routes/auth.ts`).
 
-### Publisher identity — sign in with Google
+**What gets published** is a tar.gz of the app directory, entries prefixed `{appId}/` — the same shape `GET /api/apps/{id}/download` produces, so the round trip is symmetric. It excludes `dist/` (the marketplace ships *source* and YAAR compiles on install) and macOS cruft (`.DS_Store`, `._*`). Secrets aren't a concern: credentials live under `config/{appId}.json`, never inside `apps/{appId}/` (see [Credential Management](#credential-management)).
 
-Publishing is authenticated by a **Google ID token**: a JWT signed by Google that asserts your email, which the marketplace verifies against Google's public keys. There is no API key, no shared secret, and no device registry — the email proves itself.
+The marketplace commits the app into its own git repo, so publishing is queued rather than instant — "live in ~1 minute". The app id must match `^[a-z][a-z0-9-]*$`, and two names are reserved on top of that shape: `self` (the pronoun every app writes to address its own namespace) and anything starting with `preview--` (a devtools preview's identity). `appIdRefusal` in `packages/server/src/features/apps/roots.ts` is the one definition, checked wherever an id is claimed — deploy, install, publish.
 
-- **Sign in** from the Market Apps window ("Sign in to publish"). YAAR opens the system browser at Google's consent screen (PKCE over a loopback redirect to this server's `/api/auth/google/callback`), then exchanges the code for tokens. Only the `openid email` scope is requested — publishing authorizes against your email, not any Google API.
-- The **refresh token** is the durable half and is the only thing persisted locally (in the config dir). ID tokens live an hour and are minted on demand, cached in memory only.
-- The token exchange is routed through the marketplace (`MARKET_URL/api/auth/exchange`) because Google's Desktop-client token endpoint requires a `client_secret` that an open-source app installed on user machines has nowhere safe to keep. YAAR does the half it can (open consent, hold the PKCE verifier, receive the code); the marketplace adds the secret and calls Google. Only tokens come back.
-
-Auth routes live on YAAR's own origin and are host/bundled-only — `GET /api/auth/google/status`, `POST /api/auth/google/login`, `POST /api/auth/google/logout` (`http/routes/auth.ts`).
-
-### What gets published
-
-Publishing uploads a **tar.gz of the app directory**, entries prefixed `{appId}/` — the same shape `GET /api/apps/{id}/download` produces, so the round trip is symmetric. The archive excludes:
-
-- **`dist/`** — the marketplace ships *source* and YAAR compiles on install. Uploading build output would only bloat the archive and let it go stale against the source.
-- **macOS cruft** — `.DS_Store` and `._*` AppleDouble sidecars, at any depth.
-
-App secrets are not a concern here because they don't live in the app directory in the first place: credentials are stored separately under `config/{appId}.json` (git-ignored, see [Credential Management](#credential-management)), never inside `apps/{appId}/`.
-
-The marketplace commits the app into its own git repo, so publishing is queued rather than instant — the response says "live in ~1 minute", once the redeploy lands. The app id must match `^[a-z][a-z0-9-]*$`, and two names are reserved on top of that shape: `self` (the pronoun every app writes to address its own namespace) and anything starting with `preview--` (a devtools preview's identity). `appIdRefusal` in `packages/server/src/features/apps/roots.ts` is the one definition, checked wherever an id is claimed — deploy, install, publish.
-
-### Version policy — bump before you publish
-
-The marketplace refuses a version that is not strictly newer than what it already serves, and YAAR checks the same thing locally *before* packaging so you hear "bump the version" without waiting on an upload it would only reject. Bump `"version"` in `app.json` (semver) for every update. The check is best-effort and fail-open: if the catalog is unreachable or the app was never published, the publish is allowed and the marketplace is the backstop.
-
-In the Market Apps UI, the Publish button disables itself with a "vX already published" tooltip when it can prove the local version isn't newer.
-
-### Single-phase publish
-
-Package the app's current on-disk state and upload it in one call — no window in which the source can change underneath you:
+**Bump `"version"` in `app.json` before you publish.** The marketplace refuses a version that is not strictly newer, and YAAR checks the same thing locally *before* packaging so you hear it without waiting on an upload. The check is best-effort and fail-open: an unreachable catalog or a never-published app lets the publish through, and the marketplace is the backstop.
 
 ```
+// One phase — package the current on-disk state and upload it.
 invoke('yaar://apps/{appId}', { action: 'publish' })
 // → { published: true, appId, commit, files, message }
-```
 
-Transient upstream failures (429/5xx, dropped connections) are retried up to 3 times with backoff — safe because nothing is committed until the whole upload lands.
-
-### Two-phase publish (freeze → confirm)
-
-When you want to show the user exactly what will ship and get an explicit confirmation, use the two-phase flow. `prepare` freezes the exact bytes and hashes the source; `confirm` uploads *those frozen bytes*, never a fresh re-tar:
-
-```
+// Two phases — freeze the exact bytes, show the user, then upload *those* bytes.
 invoke('yaar://apps/{appId}', { action: 'publish_prepare' })
 // → { prepared: true, publicationId, appId, version, byteLength, artifactSha256, ... }
-
 invoke('yaar://apps/{appId}', { action: 'publish_confirm', publicationId })
-// → { published: true, appId, commit, files, message }
-```
-
-Between the two calls, YAAR watches for **source drift**: if `src/` or `app.json` changed since `prepare`, `confirm` refuses with `{ published: false, status: 'drift_detected', ... }` and lists the changed files. Re-prepare, or pass `acknowledgeDrift: true` to ship the originally frozen bytes anyway. Other non-fatal states (`expired`, `not_found`) come back the same structured way rather than as hard errors. Prepared publications are swept after 15 minutes; discard one early with:
-
-```
 invoke('yaar://apps/{appId}', { action: 'publish_cancel', publicationId })
 ```
 
-Source drift is detected by content-hashing `src/` and `app.json` (deterministic), not by re-tarring — the gzip stream stamps an mtime and so is never byte-identical even when nothing changed.
+Single-phase uploads retry up to 3 times on transient upstream failures — safe because nothing is committed until the whole upload lands. Between `prepare` and `confirm`, YAAR watches for **source drift**: if `src/` or `app.json` changed, `confirm` refuses with `{ published: false, status: 'drift_detected', ... }` and lists the changed files. Re-prepare, or pass `acknowledgeDrift: true` to ship the frozen bytes anyway. Other non-fatal states (`expired`, `not_found`) come back the same structured way. Prepared publications are swept after 15 minutes. Drift is detected by content-hashing `src/` and `app.json`, not by re-tarring — the gzip stream stamps an mtime and so is never byte-identical even when nothing changed.
 
 ### Installing & uninstalling
 
@@ -232,7 +178,7 @@ list('yaar://apps')                                       // list installed
 
 `<MARKET_URL>` is the marketplace origin (server env var `MARKET_URL`). `install` downloads the tarball, extracts it, and — because the marketplace ships source — compiles the app locally. Fresh installs land in the git-ignored user-apps root so they never pollute the tracked bundled tree; re-installing an app already present updates it in place. Bundled `"kind": "system"` apps can't be replaced from the marketplace. If the app declares `permissions`, the user is prompted to approve them before the install completes.
 
-The AI reaches all of this through the `yaar://skills/marketplace` reference topic (`read('yaar://skills/marketplace')`), which documents the live marketplace API with `MARKET_URL` substituted in.
+The AI reaches all of this through `read('yaar://skills/marketplace')`, which documents the live marketplace API with `MARKET_URL` substituted in.
 
 ## Bundled Libraries
 
@@ -285,52 +231,30 @@ Some `@bundled/*` SDKs require explicit opt-in via the `"bundles"` field in `app
 
 See [`docs/guides/yaar_ml_runtime.md`](./yaar_ml_runtime.md) for the ML runtime's capabilities, memory limits, and "what fits" guidance.
 
-### Per-app version history
-
-Deploy is destructive — it overwrites source and deletes files no longer present — so every deploy is snapshotted first. Each app gets its own shadow git repo whose **work-tree is the app directory**, which is what makes "the app boundary" a boundary git enforces rather than one we filter for. The repo metadata lives in git-ignored `storage/app-git/<appId>.git`, never inside the app: the user's own repo never sees a nested `.git` and their history is never polluted with agent commits. `dist/` and `credentials.json` are excluded.
-
-`gitDiff` takes two bases. `against: "snapshot"` (default) compares the app's files to a commit in its own history — *what changed since the last deploy* — and works for every app. `against: "repo"` compares against the user's own git repo — *what changed relative to what the user committed* — and is read-only and bundled-apps-only, since `user-apps/` is git-ignored.
-
-`gitRestore(appId, ref)` rolls an app back and rebuilds it. It snapshots the current state first and appends the rollback as a new commit rather than moving `HEAD`, so history is append-only and a restore is itself undoable.
-
-Writing another app's directory (`deploy`, `gitRestore`, `gitCheckpoint`) is restricted to bundled apps — a marketplace app that declares `"bundles": ["yaar-dev"]` may only modify itself.
-
-**app.json:**
 ```json
-{
-  "bundles": ["yaar-dev"],
-  "permissions": ["yaar://storage/", "yaar://apps/"]
-}
-```
-
-**Usage:**
-```typescript
-import { compile, typecheck, deploy } from '@bundled/yaar-dev';
-import { open, click, extract } from '@bundled/yaar-web';
+{ "bundles": ["yaar-dev"], "permissions": ["yaar://storage/", "yaar://apps/"] }
 ```
 
 The base `@bundled/yaar` SDK (verbs, storage, app protocol, utilities) remains available to all apps without declaration.
 
+### Per-app version history
+
+Every deploy is snapshotted first. Each app gets its own shadow git repo whose **work-tree is the app directory**, which is what makes "the app boundary" a boundary git enforces rather than one we filter for. The repo metadata lives in git-ignored `storage/app-git/<appId>.git`, never inside the app: the user's own repo never sees a nested `.git` and their history is never polluted with agent commits. `dist/` and `credentials.json` are excluded.
+
+- `gitDiff` takes two bases. `against: "snapshot"` (default) compares the app's files to a commit in its own history — *what changed since the last deploy* — and works for every app. `against: "repo"` compares against the user's own git repo, and is read-only and bundled-apps-only, since `user-apps/` is git-ignored.
+- `gitRestore(appId, ref)` rolls an app back and rebuilds it. It snapshots first and appends the rollback as a new commit rather than moving `HEAD`, so history is append-only and a restore is itself undoable.
+- Writing another app's directory (`deploy`, `gitRestore`, `gitCheckpoint`) is restricted to bundled apps — a marketplace app declaring `"bundles": ["yaar-dev"]` may only modify itself.
+
 ## TypeScript Notes
 
-Every app's `src/main.ts` must include `export {};` at the top of the file. Because `apps/tsconfig.json` compiles all apps in a single program, files without this are treated as scripts by TypeScript, causing top-level variable name collisions across apps.
-
-```typescript
-export {};
-
-import { createSignal } from '@bundled/solid-js';
-import html from '@bundled/solid-js/html';
-import { render } from '@bundled/solid-js/web';
-
-const [count, setCount] = createSignal(0);
-render(() => html`<button onClick=${() => setCount(c => c + 1)}>Clicked ${() => count()} times</button>`, document.getElementById('app')!);
-```
-
-If you already `import` from `@bundled/*` or other modules, the file is already a module and no extra `export {};` is needed.
+`apps/tsconfig.json` compiles all apps in a single program, so a `src/main.ts` with no top-level
+`import` or `export` is treated as a script and its top-level names collide with every other app's.
+Any app that imports from `@bundled/*` — which is every app that calls `defineApp` — is already a
+module. Add `export {};` only to a file that imports nothing.
 
 ## UI Chrome & Headless Primitives
 
-The compiler injects a `y-*` utility/chrome layer into every compiled app — colors, spacing, layout, buttons, and a **document-app chrome family** (app bar, title field, formatting toolbar, status bar). Reuse these instead of hand-writing CSS: they cost zero extra bytes (the CSS ships with every app regardless), recolor with the theme, and are advertised to app agents automatically. **Never hardcode colors** — always use `var(--yaar-*)`. The full class list is in `packages/frontend`/`shared` design docs; see [`docs/architecture/design_system.md`](../architecture/design_system.md) for the chrome-vs-content rules and the exception registry.
+The compiler injects a `y-*` utility/chrome layer into every compiled app — colors, spacing, layout, buttons, and a **document-app chrome family** (app bar, title field, formatting toolbar, status bar). Reuse these instead of hand-writing CSS: they cost zero extra bytes (the CSS ships with every app regardless), recolor with the theme, and are advertised to app agents automatically. **Never hardcode colors** — always use `var(--yaar-*)`. The class list is in [`apps/CLAUDE.md`](../../apps/CLAUDE.md#design-tokens); the chrome-vs-content rules and the exception registry are in [`docs/architecture/design_system.md`](../architecture/design_system.md).
 
 ### Document-app skeleton
 
@@ -382,100 +306,58 @@ render(() => html`
 `, document.getElementById('app')!);
 ```
 
-Chrome classes: `y-appbar` / `y-appbar-actions`, `y-brand` / `-badge` / `-name`, `y-doc-field` / `y-doc-icon` / `y-doc-input`, `y-editbar`, `y-tgroup` / `y-tsep`, `y-tbtn` (`-text` / `-primary` / `-active`), `y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (`-warning` / `-muted`). A collapsible sidebar/overlay uses the `y-nav-*` family (`y-nav-root`, `y-nav-panel`, `y-nav-hover-zone`, `y-nav-pin`, `y-nav-resizer`, …).
-
-The skeleton is intentionally a **snippet, not a component**. The chrome you copy is short and yours to edit.
+Chrome classes: `y-appbar` / `y-appbar-actions`, `y-brand` / `-badge` / `-name`, `y-doc-field` / `y-doc-icon` / `y-doc-input`, `y-editbar`, `y-tgroup` / `y-tsep`, `y-tbtn` (`-text` / `-primary` / `-active`), `y-tlabel`, `y-tselect`, `y-statusbar`, `y-chip` (`-warning` / `-muted`). A collapsible sidebar/overlay uses the `y-nav-*` family (`y-nav-root`, `y-nav-panel`, `y-nav-hover-zone`, `y-nav-pin`, `y-nav-resizer`, …). The skeleton is intentionally a **snippet, not a component** — the chrome you copy is short and yours to edit.
 
 ### Headless behavior primitives
 
-Two state machines that document apps kept re-implementing now live in `@bundled/yaar` as **headless** primitives — they return state and handlers, and your app owns the markup. Both are tree-shaken, so apps that don't import them pay nothing.
+State machines that apps kept re-implementing live in `@bundled/yaar` as **headless** primitives — they return state and handlers, and your app owns the markup. All are tree-shaken, so apps that don't import them pay nothing.
 
-**`createCollapsiblePanel`** — the hover-expand + pin sidebar/overlay. Visible while pinned or hovered, with a grace period before folding so a brief cursor exit doesn't flicker it shut; pin state persists to `appStorage` when `pinKey` is given, and `setResizing(true)` suppresses auto-close while a width handle is dragged. Two predicates cover reasons the panel doesn't own: `canOpen` is consulted by `open()` (return `false` while a drag that began elsewhere is sweeping across the rail — the pending fold is still cancelled), and `holdOpen` is consulted when the fold *fires* (return `true` while a field inside the panel has focus, then call `scheduleClose()` again once it blurs).
-
-```typescript
-import { createCollapsiblePanel } from '@bundled/yaar';
-
-const panel = createCollapsiblePanel({ pinKey: 'nav.pinned', closeDelayMs: 280 });
-// panel.expanded() / pinned(), open(), scheduleClose(), close(), cancelClose(),
-// togglePin(), setPin(v), setResizing(active)
-// Wire your own pointer handlers: onMouseEnter=panel.open, onMouseLeave=panel.scheduleClose
-```
-
-**`createAutosave`** — the dirty / debounced-save / save-status lifecycle. Wraps a `save` (returning `true` on success; `false` keeps the doc dirty) with a debounce and an `editSeq` guard, so a save that started before the latest edit never clears the dirty flag. `statusLabel()` yields `"Saving…"` | `"Saved 14:22"` | `"Not saved"` — pair it with a `y-chip`.
+| Primitive | What it owns |
+|---|---|
+| `createCollapsiblePanel({ pinKey, closeDelayMs })` | Hover-expand + pin sidebar. `expanded()`, `pinned()`, `open()`, `scheduleClose()`, `close()`, `cancelClose()`, `togglePin()`, `setPin(v)`, `setResizing(active)`. Pin state persists when `pinKey` is given. Two predicates cover reasons the panel doesn't own: `canOpen` is consulted by `open()` (return `false` while a drag from elsewhere sweeps the rail), `holdOpen` when the fold *fires* (return `true` while a field inside has focus, then `scheduleClose()` on blur) |
+| `createAutosave(save, { debounceMs })` | Dirty / debounced-save / status lifecycle. `save` returns `true` on success — `false` keeps the doc dirty. An `editSeq` guard means a save that started before the latest edit never clears the dirty flag. `markDirty(value)` on input, `flush(true)` on Ctrl+S, `statusLabel()` → `"Saving…"` \| `"Saved 14:22"` \| `"Not saved"` for a `y-chip` |
+| `createPersistedSignal(path, fallback, opts?)` | A Solid signal auto-synced to `appStorage` through `trySave`. Lighter than `createAutosave` when there is no save-status to show |
+| `createStaleGuard()` | The generation counter that keeps a slow response from overwriting a newer one |
+| `createKeyState(opts?)` | Held-key tracking for a game loop — the continuous-input counterpart to declarative `keybindings` |
 
 ```typescript
-import { createAutosave } from '@bundled/yaar';
-
-const autosave = createAutosave(
-  (value: string) => appStorage.trySave('draft.txt', value),  // false ⇒ stays dirty
-  { debounceMs: 800 },
-);
-// autosave.markDirty(value) on input; autosave.flush(true) on Ctrl+S;
-// bind the status chip to autosave.statusLabel()
-```
-
-For plain persistence without a save-status machine, `createPersistedSignal` (a Solid signal auto-synced to `appStorage` through `trySave`) is the lighter choice. Its `revive` option runs on the loaded value before it reaches the signal — the place to clamp a stored width against the current window, migrate a renamed key, or `z.safeParse` JSON an older version wrote in another shape. It also runs on the fallback when nothing is stored, so keep it total; if it throws, the fallback is used and the failure is logged.
-
-**Await its third element before a one-shot side effect.** The signal starts at the fallback and updates when the load lands, which is invisible for a value that is only *rendered* — the late load re-renders and nobody sees the wrong frame. It is not invisible for a value that decides something done **once**: an `onMount` that fetches "the concept feed if concept mode is on" reads the signal a single time, fires with the fallback, and there is no un-sending that request. `ready` resolves once the load settles, with the value the signal then holds:
-
-```typescript
-const [conceptMode, setConceptMode, conceptModeReady] = createPersistedSignal(
-  'preferences/concept-mode.json',
-  false,
-);
-onMount(async () => {
-  await conceptModeReady; // otherwise the first fetch always sees `false`
-  void loadFeed(conceptMode());
-});
-```
-
-It never rejects (a failed read resolves with the fallback, logged), and a set that landed before the load still wins — awaiting it cannot hand back a value the signal no longer holds.
-
-**Bind it to a text input and pass `debounceMs`.** It writes on every set by default, which is right for the toggle it usually holds — a set is a click. An `onInput` handler is not a click: it fires per keystroke, and under an IME per composition step, so a five-letter Korean name was a dozen writes, a dozen disk hits, and a dozen lines in the session log for one field. `debounceMs: 400` collapses the burst into one write, and a pending write is flushed when the page is hidden or unloaded, so closing the window mid-debounce still saves. The signal itself is never delayed — only the write.
-
-**`createStaleGuard`** — the generation counter that keeps a slow response from overwriting a newer one.
-
-```typescript
-import { createStaleGuard } from '@bundled/yaar';
+import { createStaleGuard, createKeyState } from '@bundled/yaar';
 
 const guard = createStaleGuard();
-
 async function loadPost(id: string) {
   const fresh = guard.begin();   // supersedes anything already in flight
   const post = await fetchPost(id);
   if (!fresh()) return;          // a newer load started; drop this response
   setState('post', post);
 }
-// guard.latest() joins the current generation without superseding it (a secondary
-// fetch cancelled by the next begin() but not cancelling its siblings);
+// guard.latest() joins the current generation without superseding it;
 // guard.invalidate() bumps with no fetch attached, dropping everything in flight.
-```
-
-**`createKeyState`** — held-key tracking for continuous input, the input half of a game loop.
-Declarative `keybindings` and `onShortcut` fire discrete actions on keydown; smooth movement
-instead samples held state every animation frame:
-
-```typescript
-import { createKeyState } from '@bundled/yaar';
 
 const keys = createKeyState({ preventDefault: ['arrowup', 'arrowdown', ' '] });
-
 function frame(dt: number) {
-  if (keys.has('w') || keys.has('arrowup')) player.y -= speed * dt;
-  if (keys.has('d') || keys.has('arrowright')) player.x += speed * dt;
+  if (keys.has('w') || keys.has('arrowup')) player.y -= speed * dt;   // layout-typed key
+  if (keys.has('KeyD')) player.x += speed * dt;                        // physical key
 }
-// keys.has('KeyW') matches the physical key on any layout; keys.has('w') matches
-// what the layout typed. keys.dispose() from onClose removes the listeners.
 ```
 
-It gets the fiddly parts right by default: OS auto-repeat is ignored, held state clears on
-window blur and tab-hide (alt-tabbing with `w` held must not leave the player running
-forever), releases are keyed by `e.code` so a modifier changing `e.key` mid-hold (Alt+W
-reports `∑` on macOS) can never leave a stuck key, and presses landing in an editable
-element are skipped (typing "w" into a chat box doesn't move the player; pass
-`ignoreEditable: false` to opt out). The rule of thumb for game input: discrete action
-(pause, inventory, rotate) → declarative `keybindings`, agent-visible and validated;
-continuous movement → `createKeyState` + your `requestAnimationFrame` loop.
+`createKeyState` gets the fiddly parts right by default: OS auto-repeat is ignored, held state clears on window blur and tab-hide (alt-tabbing with `w` held must not leave the player running), releases are keyed by `e.code` so a modifier changing `e.key` mid-hold (Alt+W reports `∑` on macOS) can never stick a key, and presses landing in an editable element are skipped (`ignoreEditable: false` opts out). `keys.dispose()` from `onClose`. Rule of thumb: discrete action (pause, rotate) → declarative `keybindings`; continuous movement → `createKeyState` in your `requestAnimationFrame` loop.
+
+Three things about `createPersistedSignal` that have each cost a bug:
+
+- **`revive` runs before the value reaches the signal** — the place to clamp a stored width, migrate a renamed key, or `z.safeParse` JSON an older version wrote. It also runs on the **fallback** when nothing is stored, so keep it total; if it throws, the fallback is used and the failure is logged.
+- **Await the third element before a one-shot side effect.** The signal starts at the fallback and updates when the load lands — invisible for a value that is only *rendered*, and not invisible for a value that decides something done once. `await readyPromise` resolves with the value the signal then holds; it never rejects, and a set that landed before the load still wins.
+
+  ```typescript
+  const [conceptMode, setConceptMode, conceptModeReady] = createPersistedSignal(
+    'preferences/concept-mode.json', false,
+  );
+  onMount(async () => {
+    await conceptModeReady;      // otherwise the first fetch always sees `false`
+    void loadFeed(conceptMode());
+  });
+  ```
+
+- **Pass `debounceMs` when it is bound to a text input.** It writes on every set, which is right for the toggle it usually holds. An `onInput` handler fires per keystroke — per composition step under an IME — so a five-letter Korean name was a dozen writes and a dozen session-log lines for one field. `debounceMs: 400` collapses the burst; a pending write is flushed when the page is hidden, so closing mid-debounce still saves. The signal itself is never delayed, only the write.
 
 ## Runtime Constraints
 
@@ -514,44 +396,17 @@ el.innerHTML = doc.body.innerHTML;
 attachImageFallbacks(el);        // addEventListener, after insertion
 ```
 
-Steps 2 and 3 are in that order for a reason. Sanitizing first means no unsafe source
-attribute survives into your rewriting pass; rewriting after means the app can mint
-known-safe URLs and attributes without weakening the default policy. Reversing them
-hands your rewriter attacker-controlled input.
+Steps 2 and 3 are in that order for a reason. Sanitizing first means no unsafe source attribute survives into your rewriting pass; rewriting after means the app can mint known-safe URLs and attributes without weakening the default policy. Reversing them hands your rewriter attacker-controlled input. Step 5 matters just as much: DOMPurify strips `onerror`/`onload`/`onclick` unconditionally, so a generated `img.setAttribute('onerror', …)` fallback silently stops working once you add the sanitizer — register a real `addEventListener('error', handler, { once: true })` on the inserted node instead.
 
-Step 5 matters just as much. DOMPurify strips `onerror`/`onload`/`onclick`
-unconditionally, so a generated `img.setAttribute('onerror', '...')` fallback will
-silently stop working after you add the sanitizer. Register a real
-`addEventListener('error', handler, { once: true })` on the inserted node instead.
+Sanitize at one choke point per pipeline, ideally where foreign content first enters app state, so every downstream sink is safe by construction. Two overlapping policies are worse than one: the next editor will weaken one assuming the other covers it.
 
-Sanitize at one choke point per pipeline, ideally where foreign content first enters app
-state, so that every downstream sink is safe by construction. Two overlapping policies are
-worse than one: the next editor will weaken one assuming the other covers it.
+`sanitizeHtml(dirty)` with no options is the default policy — DOMPurify's own defaults (which already strip scripts, event handlers, and `javascript:`/`data:` URLs) plus the one deviation every YAAR app makes: `form` and its controls are forbidden. They are on DOMPurify's default `ALLOWED_TAGS`, which is right for a general-purpose sanitizer and wrong for an app iframe, where no foreign content has a legitimate reason to post and a form can navigate the frame or phish against the app's chrome. Pass an options object (`allowedTags`, `allowedAttr`, `forbidTags`, `forbidAttr`) only when the content type genuinely needs a different allowlist — a printable document needs inline `style` that prose rendering does not — and comment the reasoning next to it. The no-forms correction applies to DOMPurify's *default* allowlist; once you pass `allowedTags`, your list is the whole policy and nothing is subtracted behind your back.
 
-`sanitizeHtml(dirty)` with no options is the default policy: DOMPurify's own defaults —
-which already strip scripts, event handlers, and `javascript:`/`data:` URLs — plus the one
-deviation every YAAR app makes. `form` and its controls are on DOMPurify's default
-`ALLOWED_TAGS`, which is right for a general-purpose sanitizer and wrong for an app iframe:
-no foreign content YAAR renders has a legitimate reason to post, and a form inside the
-iframe can navigate it or phish against the app's chrome. The `FORBID_TAGS` list encoding
-that deviation lives in one place.
+Do not call `@bundled/dompurify` directly, and do not hand-roll a sanitizer — element denylists plus `^on` attribute stripping miss `<svg>`/`<math>` mutation-XSS, `srcset`, `formaction`, and `xlink:href`. Three more edges:
 
-Pass an options object (`allowedTags`, `allowedAttr`, `forbidTags`, `forbidAttr`) only when
-the content type genuinely needs a different allowlist — a printable document needs inline
-`style` that prose rendering does not — and comment the reasoning next to it. The no-forms
-correction applies to DOMPurify's *default* allowlist; once you pass `allowedTags`, your
-list is the whole policy and nothing is subtracted from it behind your back. That is why an
-explicit allowlist must simply not name a form control it doesn't want.
-
-Do not call `@bundled/dompurify` directly, and do not hand-roll a sanitizer. Element
-denylists and `^on` attribute stripping miss `<svg>`/`<math>` mutation-XSS, `srcset`,
-`formaction`, and `xlink:href`. Relative URLs survive `sanitizeHtml` verbatim — it neither
-strips nor absolutizes them — so an app that needs them resolved rewrites the *sanitized*
-output, per step 3 above. A **link** href is the exception: declare
-`"links": { "base": "https://origin.example" }` in `app.json` and the link guard resolves
-anchors against that site when they are clicked, rather than against the app's own document
-(where a root-relative href lands on a shell 404). It governs clicks only — an `<img src>`
-still has to be rewritten. See `apps/CLAUDE.md`, "Links out of an app".
+- **Relative URLs survive verbatim** — `sanitizeHtml` neither strips nor absolutizes them, so an app that needs them resolved rewrites the *sanitized* output, per step 3. A **link** href is the exception: declare `"links": { "base": "https://origin.example" }` in `app.json` and the link guard resolves anchors against that site when clicked. It governs clicks only — an `<img src>` still has to be rewritten. See [`apps/CLAUDE.md`](../../apps/CLAUDE.md#links-out-of-an-app).
+- **`USE_PROFILES` overrides `ALLOWED_TAGS`; it does not intersect with it.** Adding `USE_PROFILES: { html: true }` to a config that already has an explicit `ALLOWED_TAGS` *replaces* your list with DOMPurify's much broader HTML profile — a policy that looks strictly tighter can silently start passing `<form action="//evil">`.
+- **Test sanitizers against jsdom or a real browser, never happy-dom.** DOMPurify checks `isSupported` and silently becomes a no-op when the host DOM is too incomplete, so under happy-dom a `javascript:` href sails through while happy-dom's own parser drops benign `<table>`/`<pre>` wrappers — false passes and false failures in one green run. Assert on what must *not* survive (`<script>`, `<iframe>`, `<object>`, `<form>`, SVG-wrapped script, `javascript:` URLs, inline `on*=`) **and** on what must (tables, code blocks, images, links); a sanitizer that strips everything passes the first half perfectly.
 
 ### Interpolating text, not markup
 
@@ -565,36 +420,11 @@ import { escapeHtml } from '@bundled/yaar';
 el.innerHTML = `<li title="${escapeHtml(file.name)}">${escapeHtml(file.name)}</li>`;
 ```
 
-It always covers `& < > " '`. Three of the six apps that hand-rolled this escaped only
-`& < >` — safe in a text node, and not in `title="${…}"`, where a lone `"` ends the
-attribute and everything after it is markup. Which context a call site sits in is exactly
-what changes when someone edits the template, so there is no cheaper variant worth keeping.
-Escaping for an XML *document* is a different grammar (`&apos;` rather than `&#39;`); a
-DOCX or SVG serializer keeps its own.
-
-### Two traps that make a sanitizer look like it works
-
-**`USE_PROFILES` overrides `ALLOWED_TAGS`; it does not intersect with it.** Adding
-`USE_PROFILES: { html: true }` to a config that already has an explicit `ALLOWED_TAGS`
-list *replaces* your list with DOMPurify's much broader HTML profile. A policy that looks
-strictly tighter can silently start passing `<form action="//evil"><input name=pw>`. If
-you have an explicit `ALLOWED_TAGS`, that alone already confines output to those tags —
-SVG and MathML elements are absent by construction.
-
-**Test sanitizers against jsdom or a real browser, never happy-dom.** DOMPurify checks
-`isSupported` and silently becomes a no-op when the host DOM is too incomplete, so under
-happy-dom a `javascript:` href sails through untouched while happy-dom's own parser drops
-benign `<table>`/`<ul>`/`<pre>` wrappers. The result is false passes and false failures in
-the same run — a test suite that proves nothing while looking green.
-
-Always assert on what must *not* survive (`<script>`, `<iframe>`, `<object>`, `<form>`,
-SVG-wrapped script, `javascript:` URLs, inline `on*=`) **and** on what must survive
-(tables, code blocks, images, links). A sanitizer that strips everything passes the first
-half of that list perfectly.
+It always covers `& < > " '`. Three of the six apps that hand-rolled this escaped only `& < >` — safe in a text node, and not in `title="${…}"`, where a lone `"` ends the attribute and everything after it is markup. Which context a call site sits in is exactly what changes when someone edits the template, so there is no cheaper variant worth keeping. Escaping for an XML *document* is a different grammar (`&apos;` rather than `&#39;`); a DOCX or SVG serializer keeps its own.
 
 ## Making HTTP Requests
 
-Use `httpFetch` from `@bundled/yaar`, and declare `yaar://http` in `app.json`.
+Use `httpFetch` from `@bundled/yaar`, and declare `yaar://http` in `app.json`. Without the permission, cross-origin requests are refused with a 403 (both `"yaar://http"` and `"yaar://http/"` work).
 
 ```typescript
 import { httpFetch } from '@bundled/yaar';
@@ -604,11 +434,7 @@ if (!res.ok) throw new Error(`Request failed: ${res.status}`);
 const items = await res.json();
 ```
 
-It is `fetch`. You get a standard `Response` — `json()`, `text()`, `blob()`,
-`arrayBuffer()`, and real `Headers` (so upstream rate-limit and session headers stay
-readable). Binary bodies survive intact.
-
-What the platform does underneath:
+It is `fetch`. You get a standard `Response` — `json()`, `text()`, `blob()`, `arrayBuffer()`, and real `Headers` (so upstream rate-limit and session headers stay readable). Binary bodies survive intact.
 
 | | Cross-origin | Same-origin / relative |
 |---|---|---|
@@ -617,61 +443,27 @@ What the platform does underneath:
 | Requires `yaar://http` | yes | no |
 | Cookies | jar scoped to (session, app) | the iframe's own |
 
-Cross-origin requests are also subject to SSRF validation, the domain allowlist (the
-user is prompted once per new domain), a 10 MB response cap, and a 30-second timeout.
-`redirect: 'manual'` is honored; `redirect: 'error'` is not representable and falls
-back to `'follow'`.
+Cross-origin requests are also subject to SSRF validation, the domain allowlist (the user is prompted once per new domain), a 10 MB response cap, and a 30-second timeout. `redirect: 'manual'` is honored; `redirect: 'error'` is not representable and falls back to `'follow'`.
 
-**Declare the permission.** Without `"yaar://http"` in your `app.json` `permissions`,
-cross-origin requests are refused with a 403. Both `"yaar://http"` and `"yaar://http/"`
-work.
+**Prefer `httpFetch` over `invoke('yaar://http', …)`.** The verb form returns YAAR's internal envelope rather than a `Response`, so hand-rolling a type around it re-types an internal contract you don't own. Keep the verb form for agent-side code, where there is no `window.fetch` to patch.
 
-```json
-{ "permissions": ["yaar://http"] }
-```
+**If your app has a login, clear the cookie jar on logout.** Proxy cookies live server-side, keyed by (session, app), and nothing else clears them until the iframe token expires — so clearing your own stored session only makes the app *look* logged out while later requests keep carrying the upstream session. `await del('yaar://http')` clears only the calling app's jar; the key comes from your own token, never from a payload, so one app cannot log another out.
 
-**Prefer `httpFetch` over `invoke('yaar://http', …)`.** The verb form returns YAAR's
-internal envelope rather than a `Response`, so hand-rolling a type around it re-types an
-internal contract you don't own. Keep the verb form for agent-side code, where there is
-no `window.fetch` to patch.
-
-**If your app has a login, clear the cookie jar on logout.** Cookies the proxy stores
-live server-side, keyed by (session, app), and nothing else clears them until the iframe
-token expires — so clearing your own stored session only makes the app *look* logged out
-while later requests keep carrying the upstream session.
-
-```typescript
-import { del } from '@bundled/yaar';
-
-export async function logout() {
-  await clearMyStoredSession();
-  await del('yaar://http');   // drop the proxy's cookies for this app
-}
-```
-
-`del('yaar://http')` clears only the calling app's jar — the key comes from your own
-token, never from a payload, so one app cannot log another out.
-
-Service-specific concerns — pagination, rate limiting, JSON-RPC framing, auth refresh —
-stay in your app. `httpFetch` normalizes transport only.
+Service-specific concerns — pagination, rate limiting, JSON-RPC framing, auth refresh — stay in your app. `httpFetch` normalizes transport only.
 
 ## Anti-Patterns
 
 Common mistakes to avoid when building apps:
 
-- **Don't build OAuth clients as compiled apps** — OAuth requires server-side token exchange with a `client_secret`. Instead, build an API-based app (`app.json` + `agent/prompt.md`, no compiled source) where the user provides a personal access token, stored via `invoke('yaar://config/app/{appId}', { config })`.
-- **Don't assume external servers are running** — There is no backend at `localhost:3000` or any other port. Apps must be fully self-contained.
-- **Don't hand-roll the proxy response envelope** — Use `httpFetch` and the standard `Response` it returns. Declaring your own `{ ok, status, body }` interface around `invoke('yaar://http')` re-types an internal contract you don't own. See [Making HTTP Requests](#making-http-requests).
-- **Don't hardcode localhost URLs** — Apps run on whatever host YAAR is served from.
-- **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI still says "Saved". Use `appStorage.trySave()` and gate the success UI on its result. See [Never swallow a failed save](#never-swallow-a-failed-save).
-- **Don't re-implement SDK helpers** — `errMsg`, `showToast`, `showConfirm`, `showPrompt`, `withLoading`, `tryToast`, `wait`, `safeParseOr`, `sanitizeHtml`, `escapeHtml`, `toWebP`, `downloadBlob`, `blobToDataUrl`, `formatBytes`, `formatDuration`, `formatClock`, `createStaleGuard`, `createPersistedSignal`, `createCollapsiblePanel`, `createAutosave`, `createKeyState`, `storagePath`, `fonts`, `rasterize` are exported by `@bundled/yaar`; `debounce` by `@bundled/lodash`. Never use native `alert()`/`confirm()`/`prompt()` — they block the page (and any agent driving it); reach for `showToast` where you would have alerted.
-- **Don't hand-roll a canvas re-encode** — `toWebP(source, { quality, maxSize })` from `@bundled/yaar` is the bitmap → canvas → `convertToBlob` round-trip, including the check that the encoder did not quietly fall back to PNG and the chunked base64 conversion a storage write needs. It returns `null` (never throws) when the browser cannot do it, so the fallback is `if (!encoded) keepTheOriginal()`. No `@bundled/*` package ships a WebP codec — Chromium already has one; this is the boilerplate around it.
-- **Don't hand-roll a DOM → image pipeline** — `rasterize(element, { css })` from `@bundled/yaar` is the `foreignObject` → `img` → canvas dance with all six of its quiet failures closed: the subtree inherits no stylesheet, a webfont cannot be *fetched* into it (only inlined, which `rasterize` does for you via `fonts`), a `body {}` rule matches nothing there, the markup must be well-formed XML, every `<img>` must already be a `data:` URL, and a `blob:` URL taints the canvas. Each of those produces a blank or wrong-looking picture with no error. See [Rasterizing your own DOM](#rasterizing-your-own-dom).
-- **Don't fetch and subset a font yourself** — `fonts.inline(text, { weights })` returns YAAR's faces cut down to the characters you name, as a `data:` URL `@font-face` block, plus the glyph ids and metrics a PDF writer needs. The full face is ~1.6 MB and subsetting it in the iframe means writing an OpenType reader; the server already has the file open. Needs no permission.
-- **Don't put unsanitized HTML in `innerHTML`** — `marked.parse()` does not escape raw HTML, and neither does an RSS feed, a scraped page, or a file read from storage. Run it through `sanitizeHtml` from `@bundled/yaar` first — not `@bundled/dompurify` directly. See [Rendering Untrusted HTML](#rendering-untrusted-html).
-- **Don't duck-type JSON you read back** — `readJsonOr` answers "the file is missing" and "the file is garbage" with the same fallback, so a broken app renders as a fresh one. Validate persisted and external JSON with a `@bundled/zod` schema and log the failure. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
-- **Don't hand-roll a sanitizer** — see [the rule above](#rendering-untrusted-html) for what an element denylist plus `^on` attribute stripping misses.
-- **Don't generate inline event attributes** — `setAttribute('onerror', ...)` is stripped by any sanitizer, so the behavior it encodes disappears the moment the pipeline is secured. Use `addEventListener` on the inserted node.
+- **Don't build OAuth clients as compiled apps** — token exchange needs a server-side `client_secret`. Build an API-based app instead, with a user-provided personal access token stored via `invoke('yaar://config/app/{appId}', { config })`.
+- **Don't assume external servers are running** — there is no backend at `localhost:3000` or any other port, and no hardcoded localhost URL survives being served from another host.
+- **Don't hand-roll the proxy response envelope** — use `httpFetch`. See [Making HTTP Requests](#making-http-requests).
+- **Don't swallow a failed save** — `catch { /* ignore */ }` around `appStorage.save()` makes data loss invisible while the UI says "Saved". See [Never swallow a failed save](#never-swallow-a-failed-save).
+- **Don't duck-type JSON you read back** — a broken app then renders as a fresh one. See [Never trust a read either](#never-trust-a-read-either--validate-at-the-boundary).
+- **Don't put unsanitized HTML in `innerHTML`, and don't hand-roll a sanitizer** — see [Rendering Untrusted HTML](#rendering-untrusted-html).
+- **Don't generate inline event attributes** — `setAttribute('onerror', …)` is stripped by any sanitizer, so the behavior disappears the moment the pipeline is secured. Use `addEventListener` on the inserted node.
+- **Don't re-implement SDK helpers** — the `@bundled/yaar` surface is listed under [SDK helpers](#sdk-helpers); `debounce`/`throttle` come from `@bundled/lodash`. In particular, don't hand-roll a canvas re-encode (`toWebP`), a DOM → image pipeline (`rasterize`), or font subsetting (`fonts.inline`) — each is a short call wrapping several silent failure modes.
+- **Never use native `alert()` / `confirm()` / `prompt()`** — they block the page and any agent driving it. See [Dialog helpers](#dialog-helpers).
 
 ### Right Pattern for External Service Integration
 
@@ -699,27 +491,15 @@ Each app gets its own **app agent** when a user interacts with it. Three files i
 | `agent/hint.md` | Injected into the **monitor agent's** system prompt | Routing hints so the orchestrator knows when/how to use the app |
 | `agent/SKILL.md` | Returned by `describe('yaar://apps/{appId}')` | The manual for *whoever asks* — workflows and ordering constraints the protocol can't state |
 
-Only the first two are injected into a prompt; `SKILL.md` is read on demand or not at all.
+Only the first two are injected into a prompt; `SKILL.md` is read on demand or not at all. There is no append tier — **one file, one meaning.**
 
-There is no append tier — **one file, one meaning.** Without `agent/prompt.md`, the agent gets the generic base prompt, and either way the `protocol.json` manifest is appended: state keys as a name + description list, and each command as a call signature built from its `params` schema — `readFile(path: string|string[], startLine?: number, …)`, with `?` on optional params and enums spelled out as their values. That manifest section is appended regardless of which prompt a given turn uses, so neither the generated prompt nor a hand-written `agent/prompt.md` needs to restate a command's params — one that does will drift from the schema the app actually validates against. `describe()` still returns the full schema when per-param descriptions matter.
+Either way the `protocol.json` manifest is appended: state keys as a name + description list, and each command as a call signature built from its `params` schema — `readFile(path: string|string[], startLine?: number, …)`, with `?` on optional params and enums spelled out. That section is appended regardless of which prompt a turn uses, so **neither prompt needs to restate a command's params** — one that does will drift from the schema the app validates against. `describe()` still returns the full schema when per-param descriptions matter.
 
-All three paths are configurable in `app.json`:
-
-```json
-"agent": { "prompt": "agent/prompt.md", "hint": "agent/hint.md", "skill": "agent/SKILL.md" }
-```
-
-These are the *defaults*, applied when `agent` is absent, so most apps never need to set the field — only an app relocating its docs does. An absolute or traversing override is ignored in favor of the default: `app.json` is writable by any app holding `yaar-dev`, and these paths become file reads.
-
-**Back-compat:** if `agent/hint.md` is absent, the server falls back to a legacy root `HINT.md` and logs a `[apps]` warning naming the new path. This exists for apps written before the rename (including some market-installed apps) — write new apps at the `agent/` paths.
-
-Root `AGENTS.md` has **no** such fallback, deliberately: it is the coding agent's doc (below), and one file cannot be both an app's architecture notes and its runtime persona. An app that shipped `AGENTS.md` as its prompt gets the generic base plus its manifest, and a `[apps]` notice saying to copy it to `agent/prompt.md` if that is what it meant.
+All three paths are configurable in `app.json` — `"agent": { "prompt": "agent/prompt.md", "hint": "agent/hint.md", "skill": "agent/SKILL.md" }` — but those are the *defaults*, so most apps never set the field. An absolute or traversing override is ignored in favor of the default: `app.json` is writable by any app holding `yaar-dev`, and these paths become file reads. A missing `agent/hint.md` falls back to a legacy root `HINT.md` with an `[apps]` warning naming the new path; root `AGENTS.md` has no such fallback, deliberately (see below).
 
 ### agent/hint.md (orchestrator context)
 
-Unlike `agent/prompt.md`, which configures the **app agent**, `agent/hint.md` is injected into the **monitor (orchestrator) agent's** system prompt. This tells the orchestrator when to route tasks to the app. Hints auto-sync with installed apps — uninstalling the app removes the hint.
-
-Use this for app-dependent orchestration guidance that would otherwise go stale in a static system prompt. Example:
+Injected into the **monitor (orchestrator) agent's** system prompt: it tells the orchestrator when to route tasks to the app. Hints auto-sync with installed apps — uninstalling the app removes the hint. Use it for app-dependent orchestration guidance that would otherwise go stale in a static system prompt:
 
 ```markdown
 Use the devtools app for all app development tasks. The devtools app agent
@@ -729,26 +509,21 @@ and type checker.
 
 ### agent/prompt.md (full control)
 
-The agent's entire system prompt is replaced with the contents of `agent/prompt.md`. Use this when:
-- The agent needs a specific workflow (e.g., devtools: typecheck → compile → deploy)
-- You want to define anti-patterns, gotchas, or domain-specific rules
-- The generic prompt's behavior guidelines don't fit
-
-Since `agent/prompt.md` replaces the base prompt, you must document the available tools (`describe`, `query`, `command`, `relay`) yourself if the agent needs to know about them. (`protocol.json`, and a "Controllable Apps" section when `controls` is set, are still appended automatically.)
+The app agent's entire system prompt is replaced with this file. Use it when the agent needs a specific workflow (devtools: typecheck → compile → deploy), when you want to state anti-patterns and domain rules, or when the generic prompt's behavior guidelines don't fit. Since it replaces the base prompt, you must document the available tools (`describe`, `query`, `command`, `relay`) yourself. (`protocol.json`, and a "Controllable Apps" section when `controls` is set, are still appended automatically.)
 
 ### agent/SKILL.md (the manual anyone can ask for)
 
-`describe('yaar://apps/{appId}')` returns `protocol.json` verbatim *and* `SKILL.md`, in one payload. Write in `SKILL.md` only what a generated protocol cannot say: the order commands must run in, the workflow that ties three of them together, when *not* to reach for this app.
+`describe('yaar://apps/{appId}')` returns identity, `SKILL.md`, and the protocol's table of contents. Write in `SKILL.md` only what a generated protocol cannot say: the order commands must run in, the workflow that ties three of them together, when *not* to reach for this app.
 
-Never restate a command or state name as a heading or a bullet subject — `describe` returns both documents side by side, so a restatement is a sentence sitting next to the schema it will disagree with after the next deploy. That is why the previous SKILL.md was deleted; returning the two together is what makes the duplication cheap to prohibit, and `bun run check:apps` warns on it (`skill-restates-protocol`, advisory — a name inside a workflow sentence like "run `compile` before `deploy`" is exactly what the file is for, so the check names what it matched and lets you judge).
+Never restate a command or state name as a heading or a bullet subject — the protocol is served from `yaar://apps/{appId}/protocol` and regenerated on every deploy, so a restatement is a sentence that will disagree with the schema next to it. `bun run check:apps` warns on it (`skill-restates-protocol`, advisory — a name inside a workflow sentence like "run `compile` before `deploy`" is exactly what the file is for, so the check names what it matched and lets you judge).
 
-Not to be confused with the `SKILLS/` directory in [`docs/architecture/shell_to_userland.md`](../architecture/shell_to_userland.md): that is a namespaced set of topics reached by `read('yaar://skills/{appId}/{topic}')`. One file returned by `describe` versus many read on demand — they compose, but the names are one letter apart.
+Not to be confused with the `SKILLS/` directory in [`docs/architecture/shell_to_userland.md`](../architecture/shell_to_userland.md): that is a namespaced set of topics reached by `read('yaar://skills/{appId}/{topic}')`. One file returned by `describe` versus many read on demand.
 
 ### AGENTS.md (the coding agent's doc)
 
-`AGENTS.md` at the app's root is a different file with a different reader: it's the conventional name a coding agent looks for when *editing* a directory, and devtools is that agent. YAAR reads it for nothing. Put in it what the source cannot say for itself — architecture, invariants, why a thing is hand-rolled, what breaks if you change it. An app of any size wants one; small apps don't need it.
+`AGENTS.md` at the app's root is a different file with a different reader: it's the conventional name a coding agent looks for when *editing* a directory, and devtools is that agent. YAAR reads it for nothing. Put in it what the source cannot say for itself — architecture, invariants, why a thing is hand-rolled, what breaks if you change it. An app of any size wants one; small apps don't need it. [`apps/devtools/AGENTS.md`](../../apps/devtools/AGENTS.md) is the worked example.
 
-The line between it and `agent/prompt.md` is the reader, not the topic. "`src/gizmo.ts` is hand-rolled because the bundled one drops pointer capture" is `AGENTS.md`. "call `addPrimitive` with `{ kind: 'box' }` before setting a material" is `agent/prompt.md`. Never restate a command signature in either — `protocol.json` is generated and appended automatically, so a hand-written copy is one deploy away from being wrong.
+The line between it and `agent/prompt.md` is the reader, not the topic. "`src/gizmo.ts` is hand-rolled because the bundled one drops pointer capture" is `AGENTS.md`. "call `addPrimitive` with `{ kind: 'box' }` before setting a material" is `agent/prompt.md`. Never restate a command signature in either. An app that ships `AGENTS.md` hoping it is a prompt gets the generic base plus its manifest, and an `[apps]` notice saying to copy it to `agent/prompt.md` if that is what it meant.
 
 Clone and deploy carry it like any other source file, so it round-trips: an app you clone into devtools arrives with its `AGENTS.md`, and one you write there survives the deploy.
 
@@ -777,7 +552,7 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `name` | `string` | Display name |
 | `icon` | `string` | Emoji. An `icon.{png,jpg,svg,…}` file in the app folder overrides it |
 | `description` | `string` | Shown in launchers; also given to the agent |
-| `version` | `string` | Informational |
+| `version` | `string` | Bumped before every publish — the marketplace refuses a version that isn't newer |
 | `author` | `string` | Informational |
 | `run` | `string` | Iframe entry — `dist/index.html`, or a `yaar://apps/{id}/…` URI |
 | `kind` | `"system"` | Marks a protected/auto-trusted app. **Bundled apps only** — ignored for installed apps |
@@ -785,9 +560,10 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `permissions` | `(string \| { uri, verbs? })[]` | Pre-granted URI permissions, e.g. `"yaar://storage/"` or `{ "uri": "yaar://http", "verbs": ["read"] }` |
 | `bundles` | `string[]` | Opt in to gated SDKs (`yaar-dev`, `yaar-web`, `yaar-ml`). The compiler rejects the import without it |
 | `agentType` | `string` | Override the agent profile used for this app's agent |
-| `agent` | `{ prompt?, hint?, skill? }` | Override the default paths (`agent/prompt.md`, `agent/hint.md`, `agent/SKILL.md`) for this app's agent docs |
+| `agent` | `{ prompt?, hint?, skill? }` | Override the default paths for this app's agent docs |
+| `links` | `{ base }` | The site relative hrefs in this app's rendered content belong to — the link guard resolves anchors against it. See [`apps/CLAUDE.md`](../../apps/CLAUDE.md#links-out-of-an-app) |
 | `messaging` | `"all"` | Lets the app agent `direct_message` other apps/windows, not just monitor/user |
-| `controls` | `(string \| { appId, commands? , background? })[]` | Other apps this app may drive. A target with no window on the caller's monitor gets one opened; `background: true` opens it minimized. **Bundled apps only** |
+| `controls` | `(string \| { appId, commands?, background? })[]` | Other apps this app may drive. A target with no window on the caller's monitor gets one opened; `background: true` opens it minimized. **Bundled apps only** |
 | `streams` | `string[]` | Streamable sources this app may subscribe to (`"agents"`). **Approved at install** |
 | `subagents` | `{ max: number }` | Ceiling on [sub-agents](#sub-agents-personas) this app may spawn per monitor. Clamped to 16; a non-integer or `≤ 0` reads as "none". **Approved at install** |
 | `variant` | `"widget" \| "panel"` | Window variant |
@@ -796,15 +572,13 @@ The app's **id is its folder name**. `app.json` is parsed leniently — unknown 
 | `windowStyle` | `object` | CSS overrides applied to the window |
 | `defaultWidth` / `defaultHeight` | `number` | Initial window size in px |
 
-One gotcha that falls out of that leniency:
-
-- `id` and `appId` (`apps/memo`, `apps/mcp-manager`) — the folder name is always the id. The `id` passed to `defineApp()` in your source is a separate thing, *is* used, and must match.
+One gotcha that falls out of that leniency: the folder name is always the id, and there is no `id`/`appId` field here. The `id` passed to `defineApp()` in your source is a separate thing, *is* used, and must match the folder.
 
 ## App Types
 
 ### Compiled Apps
 
-Built by the AI: write → compile → deploy. Runs in iframe.
+Built by the AI: write → compile → deploy. Runs in an iframe.
 
 ```
 apps/falling-blocks/
@@ -812,14 +586,14 @@ apps/falling-blocks/
 │   └── prompt.md    # Optional — only if the app needs the agent to know more than its manifest
 ├── app.json         # { "icon": "🎮", "name": "Falling Blocks" }
 ├── index.html       # Compiled single HTML
-└── src/             # Source code (keepSource: true)
+└── src/             # Source code
     ├── main.ts
     └── styles.css
 ```
 
 ### API-based Apps
 
-Apps that call external APIs. Describe the API in `agent/prompt.md` and the AI handles the calls.
+Apps that call external APIs: no compiled source, just `app.json` and an `agent/prompt.md` describing the endpoints, auth flow, and workflows. List APIs like `POST /api/v1/posts`, `GET /feed`; when a user says "show my feed", the AI calls the API and renders results in a window.
 
 ```
 apps/moltbook/
@@ -828,18 +602,9 @@ apps/moltbook/
     └── prompt.md    # API endpoints, auth flow, workflows
 ```
 
-List APIs like `POST /api/v1/posts`, `GET /feed` in `agent/prompt.md`. When a user says "show my feed", the AI calls the API and renders results in a window.
-
 ### Manual prompt-only Apps
 
-You can also create apps manually with no compiled source — just `app.json` plus an `agent/prompt.md` in `apps/`.
-
-```
-apps/weather/
-├── app.json
-└── agent/
-    └── prompt.md    # API docs, auth, workflows
-```
+The same shape, written by hand rather than generated — `app.json` plus `agent/prompt.md` in `apps/`, no source at all.
 
 ## App Protocol
 
@@ -869,7 +634,7 @@ import { items, setItems } from './store';
 import { App } from './app';
 
 export default defineApp({
-  id: 'my-app',            // must equal app.json's appId — the build checks
+  id: 'my-app',            // must equal the app's folder name — the build checks
   name: 'My App',
   state: {
     items: {
@@ -892,7 +657,7 @@ export default defineApp({
 });
 ```
 
-- **`state.get` / `commands.run`** replace `handler`; everything else (`description`,
+- **`state.get` / `commands.run`** are the handlers; everything else (`description`,
   `params`, `returns`, `aliases`, `events`, `onClose`, `onCapture`) keeps its name.
 - **Schemas.** `params`/`returns`/`schema` take a Zod schema (`@bundled/zod`, the Zod Mini
   functional API) or a plain JSON Schema literal. Zod is preferred and is the single source
@@ -904,43 +669,29 @@ export default defineApp({
   string, answered only when something asks for it —
   `describe('yaar://windows/{id}/state/{key}')`. Use it for what the static `description`
   cannot say because it changes: `describe: () => \`${rows().length} rows; a row is { id, title,
-  done }\``. It never rides in the manifest, so the cheap call stays cheap; omit it and the
-  static `description` is the answer.
+  done }\``. It never rides in the manifest, so the cheap call stays cheap.
 - **`replay`.** The server re-sends recorded commands when a window's iframe remounts.
   Declare `replay: 'never'` on any command whose effect must not be applied twice (appends,
   sends, deletes); omit it for idempotent ones.
 - **`view`.** A Solid component is mounted with `render`; an imperative app that owns its own
   DOM passes `{ mount(el) { ... } }` and may return a teardown, which runs on window close
   after `onClose`.
-- **`keybindings`.** Declarative keyboard shortcuts, mapping a combo to a declared command
-  name: `keybindings: { ArrowRight: 'nextPage', 'Ctrl+s': 'save' }`. The combo grammar is
-  `[Ctrl+][Meta+][Alt+][Shift+]Key` with `KeyboardEvent.key` names, case-insensitive;
-  `Ctrl` also matches `Cmd`. The bound command runs with no params, so its `params` must be
-  absent or all-optional. Dispatch happens inside the iframe while the window has focus;
-  combos without Ctrl/Meta/Alt are suppressed when an editable element has focus, so a bare
-  `ArrowRight` never steals cursor movement from an input. The build rejects a binding to an
-  undeclared command, an unparseable combo, two spellings of one chord, and the shell's
-  reserved combos (`Shift+Tab`, `Ctrl+1-9`, `Ctrl+W`, `Ctrl+R`, `F5`). Bindings appear in
-  `dist/protocol.json` and the manifest, so agents can tell users about them. For a shortcut
-  that needs an argument or does not correspond to a command, use the imperative
-  `onShortcut(combo, handler)` from `@bundled/yaar` instead. Both fire discrete actions on
-  keydown — for held-key movement (WASD in a game loop), use `createKeyState` instead of
-  binding movement commands to keys.
+- **`keybindings`.** Declarative keyboard shortcuts mapping a combo to a declared command
+  name: `keybindings: { ArrowRight: 'nextPage', 'Ctrl+s': 'save' }`. The grammar is
+  `[Ctrl+][Meta+][Alt+][Shift+]Key` with `KeyboardEvent.key` names, case-insensitive; `Ctrl`
+  also matches `Cmd`. The bound command runs with no params, so its `params` must be absent or
+  all-optional. Dispatch happens inside the iframe while the window has focus; combos without
+  Ctrl/Meta/Alt are suppressed when an editable element has focus, so a bare `ArrowRight` never
+  steals cursor movement from an input. The build rejects a binding to an undeclared command, an
+  unparseable combo, two spellings of one chord, and the shell's reserved combos (`Shift+Tab`,
+  `Ctrl+1-9`, `Ctrl+W`, `Ctrl+R`, `F5`). Bindings appear in the manifest, so agents can tell
+  users about them. For a shortcut that needs an argument, use the imperative
+  `onShortcut(combo, handler)` from `@bundled/yaar`; for held-key movement, `createKeyState`.
 - **Splitting up.** `state`/`commands` maps may live in other modules and be spread in — see
   [Splitting a protocol by domain](#splitting-a-protocol-by-domain). The `export default`
   itself must stay in `src/main.ts`: that is what the build reads back to fold Zod schemas.
 
-`defineApp` is the only way to register: the iframe SDK's registration entry is private and
-this is its one caller. A second `defineApp()` in the same window throws rather than silently
-overwriting the first.
-
-> **Migrating off `app.register()`.** The low-level `app.register({...})` call and its
-> `AppRegistration` / `AppStateDescriptor` / `AppCommandDescriptor` types are gone, as is
-> `defineCommand`. An app that still calls `register()` fails the build with the migration in
-> the message. To port one: `appId` becomes `id`, each `state` entry's `handler` becomes
-> `get`, each command's `handler` becomes `run`, and the whole call becomes the
-> `export default` of `src/main.ts`. Registration timing and mounting stop being the app's
-> problem — drop any `onMount()` wrapper and any `render()` call of your own.
+`defineApp` is the only way to register: the iframe SDK's registration entry is private and this is its one caller. A second `defineApp()` in the same window throws rather than silently overwriting the first. The former low-level `app.register()` is removed, and a leftover call fails the build with the migration in the message.
 
 ### `defineAppCommand` — infer `run`'s params from the schema
 
@@ -966,25 +717,11 @@ export const itemCommands = {
 };
 ```
 
-It is a runtime no-op — an identity function — so `dist/protocol.json` and everything the
-agent sees are unchanged. It exists purely to make the compiler check `run`.
+It is a runtime no-op — an identity function — so `dist/protocol.json` and everything the agent sees are unchanged. It exists purely to make the compiler check `run`.
 
-It accepts a Zod schema (preferred — it also validates the call) or a JSON Schema literal.
-From a JSON Schema it infers: `enum` (as a literal union), `string` / `number` / `integer` /
-`boolean` / `null`, `array` + `items`, and `object` + `properties` / `required`, nested
-arbitrarily. Keys absent from `required` are inferred optional. An `object` with no
-`properties` but an `additionalProperties` schema is a dictionary: `{ type: 'object',
-additionalProperties: { type: 'string' } }` infers `Record<string, string>`. A bare
-`{ type: 'object' }` infers `Record<string, unknown>`.
+It accepts a Zod schema (preferred — it also validates the call) or a JSON Schema literal. From JSON Schema it infers `enum`, the scalar types, `array` + `items`, and `object` + `properties`/`required`, nested arbitrarily; keys absent from `required` infer optional, and an `object` with only `additionalProperties` infers a `Record`. `anyOf`, `oneOf`, `$ref` and other keywords infer as `unknown` — annotate that parameter explicitly, or leave the command as a plain object literal, which reaches the manifest identically.
 
-What it doesn't: `anyOf`, `oneOf`, `$ref` and other keywords infer as `unknown`. Annotate
-that `run` parameter explicitly, or leave the command as a plain object literal — descriptors
-without the wrapper still reach the manifest exactly the same way, and the two forms mix
-freely within one `commands` block.
-
-Keep the call shape literal — `defineAppCommand({ ... })` wrapping an inline object. The
-build-time protocol extractor is a source parser, not an evaluator: it steps over a single
-identifier call to find the descriptor, and a computed callee fails the build.
+Keep the call shape literal — `defineAppCommand({ ... })` wrapping an inline object. The build-time protocol extractor is a source parser, not an evaluator: it steps over a single identifier call to find the descriptor, and a computed callee fails the build.
 
 #### Splitting a protocol by domain
 
@@ -1010,28 +747,17 @@ export default defineApp({
 });
 ```
 
-One inference caveat, and it is silent: `defineApp` derives each `run`'s parameter type from
-the `params` schema **at the call site**. A command spread in from another module is
-extracted into the manifest exactly as an inline one, but its `run` parameter widens to a
-free-form bag — no error, just weaker types. Wrap those descriptors in `defineAppCommand`
-(above), annotate the parameters yourself, or keep the commands you want inference for inline
-in the `defineApp({...})` literal.
+One inference caveat, and it is silent: a command spread in from another module is extracted into the manifest exactly as an inline one, but its `run` parameter widens to a free-form bag — no error, just weaker types. Wrap those descriptors in `defineAppCommand`, annotate the parameters yourself, or keep the commands you want inference for inline.
 
-The limit is static resolvability, and it is enforced rather than tolerated: a spread of a
-**call result** (`...buildCommands()`), a descriptor imported from an npm package, a
-`${...}` template description, or a missing `description` fails the compile with a
-`file:line:col`. That is deliberate — a command the extractor skipped would still work at
-runtime while being invisible to every agent, which is the one outcome worse than a broken
-build.
+The limit is static resolvability, and it is enforced rather than tolerated: a spread of a **call result** (`...buildCommands()`), a descriptor imported from an npm package, a `${...}` template description, or a missing `description` fails the compile with a `file:line:col`. That is deliberate — a command the extractor skipped would still work at runtime while being invisible to every agent, which is the one outcome worse than a broken build.
 
 #### When handlers need a runtime context
 
 Static resolvability and a per-registration context pull in opposite directions: descriptor
-maps must be top-level `const`s, so they cannot close over the parameter of a
-`registerProtocol(ctx)`, and hoisting them into a `buildCommands(ctx)` factory produces
-exactly the call result the extractor refuses. `createProtocolContext` is the seam — the
-descriptors stay static, the context is installed at registration time, and handlers reach
-it through the accessor:
+maps must be top-level `const`s, so they cannot close over a factory parameter, and hoisting
+them into `buildCommands(ctx)` produces exactly the call result the extractor refuses.
+`createProtocolContext` is the seam — the descriptors stay static, the context is installed at
+registration time, and handlers reach it through the accessor:
 
 ```typescript
 // src/protocol/context.ts
@@ -1066,65 +792,40 @@ export default defineApp({
 });
 ```
 
-`defineApp` registers before it mounts, so the context is installed *after* registration —
-which is fine, because a descriptor only reaches `ctx()` when a command actually runs.
-
-The tradeoff is real and worth stating: the context becomes module state shared by every
-descriptor, so this suits an app that registers once per document — which is the normal
-case. Both edges are loud rather than silent: `get()` before `set()` throws instead of
-returning `undefined`, and `set()` twice with a *different* context throws instead of
-quietly retargeting the first registration's handlers.
+`defineApp` registers before it mounts, so the context is installed *after* registration — which is fine, because a descriptor only reaches `ctx()` when a command actually runs. The tradeoff: the context becomes module state shared by every descriptor, which suits an app that registers once per document (the normal case). Both edges are loud rather than silent — `get()` before `set()` throws, and `set()` twice with a *different* context throws rather than quietly retargeting the first registration's handlers.
 
 ### Talking Back to the Agent
 
-`defineApp`'s `state`/`commands` are how the agent reads *you*. These three APIs are how you reach the agent. See [`docs/reference/app_protocol_reference.md`](../reference/app_protocol_reference.md) for full signatures.
-
-**`app.sendInteraction(description)`** — push a free-form message to the agent, typically after a user action inside the iframe. Takes a string, or an object with `instructions` and `toMonitor` (route to the monitor agent instead of this window's app agent) plus arbitrary payload fields.
+`defineApp`'s `state`/`commands` are how the agent reads *you*. These are how you reach the agent — full signatures in [`app_protocol_reference.md`](../reference/app_protocol_reference.md#iframe-sdk):
 
 ```typescript
+// Free-form message to the agent, typically after a user action inside the iframe.
 app.sendInteraction('User clicked Save');
 app.sendInteraction({ instructions: 'Summarize this', toMonitor: true, selection: text });
-```
 
-**`app.emit(channel, payload, opts?)`** — fire-and-forget event on a channel declared in `defineApp({ events })`. Delivered only to agents that subscribed; undeclared or unsubscribed channels are dropped server-side.
-
-```typescript
+// Fire-and-forget event on a channel declared in defineApp({ events }).
+// Undeclared or unsubscribed channels are dropped server-side.
 defineApp({ /* ... */ events: { 'item-added': { description: 'A new item was added' } } });
 app.emit('item-added', { text: 'Buy milk' });
+
+// Hooks on the defineApp() config.
+defineApp({ /* ... */
+  onClose: () => saveDraft(editor().value),          // window about to be destroyed
+  onCapture: () => sceneCanvas.toDataURL('image/png'),  // OS captures the window
+});
 ```
 
-Pass `{ wakeAgent: true }` to also wake **this app's own agent** — how an app hands back the result of background work the agent started and stopped waiting for, so it can end its turn instead of blocking. It never creates an agent (no agent running → an ordinary emit), and the decision is per emit rather than a standing subscription, because the same event raised by the app's own UI should wake nobody. See [`app.emit`](../reference/app_protocol_reference.md#appemitchannel-payload-opts).
-
-**`onClose`** — an optional hook on the `defineApp()` config, invoked when the window is about to be destroyed. Use it to flush unsaved state.
-
-```typescript
-defineApp({ /* ... */ onClose: () => saveDraft(editor().value) });
-```
-
-**`onCapture`** — an optional hook on the `defineApp()` config, called when the OS captures the window (e.g. an agent reads it). Return a data-URL image to use instead of the default full-window screenshot (DOM + live canvas pixels composited); return `null` to fall back. May be async. Useful when the default capture can't see your content — e.g. a WebGL canvas without `preserveDrawingBuffer`, or state that renders outside the viewport.
-
-```typescript
-defineApp({ /* ... */ onCapture: () => sceneCanvas.toDataURL('image/png') });
-```
+- `sendInteraction` takes a string, or an object with `instructions` and `toMonitor` (route to the monitor agent instead of this window's app agent) plus arbitrary payload fields.
+- `app.emit(channel, payload, { wakeAgent: true })` also wakes **this app's own agent** — how an app hands back the result of background work the agent started and stopped waiting for, so the agent can end its turn instead of blocking. It never creates an agent, and the decision is per emit rather than a standing subscription, because the same event raised by the app's own UI should wake nobody.
+- `onCapture` returns a data-URL image to use instead of the default full-window screenshot (DOM + live canvas pixels composited), or `null` to fall back. May be async. Useful when the default capture can't see your content — a WebGL canvas without `preserveDrawingBuffer`, or state rendered outside the viewport.
 
 ### MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `describe('yaar://windows/{id}')` | That window's manual — its live manifest (`source: 'live'`), or the app's on-disk `protocol.json` when the iframe hasn't registered (`source: 'manifest'`) |
-| `list('yaar://windows/{id}')` | That window's state keys and commands, as sub-path URIs — each command's description prefixed with its signature |
-| `read('yaar://windows/{id}/state/{key}')` | One state value |
-| `invoke('yaar://windows/{id}/commands/{key}', { ...params })` | Run one command — the payload *is* its params (`action`, `params` and `timeoutMs` are reserved *unless the command declares one of them*, in which case it is that param). Pass an **array** of params to run it once per element, in order |
-| `describe('yaar://windows/{id}/{state,commands}/{key}')` | One key's documentation — the app's computed `describe()` if it has one, else the manifest's description. A command also carries its `signature`, a rendered `invoke` example, and its `schema` |
-| `invoke('yaar://windows/{id}', { action: 'app_query', stateKey })` | Read structured data from app by state key (use `"manifest"` to discover capabilities) |
-| `invoke('yaar://windows/{id}', { action: 'app_command', command, params })` | Execute a command on the app |
-| `invoke('yaar://windows/{id}', { action: 'message', message })` | Send a message to the app agent (monitor → app agent delegation). Fire-and-forget — same code path as user interaction. |
+An agent drives a *running* app through its window URI. The verb table (`describe`, `list`, `read` on `…/state/{key}`, `invoke` on `…/commands/{key}`) is in [URI Reference → Windows](../reference/uri_reference.md#windows--yaarwindowswindowid); the payload rules and the scoped app-agent tools are in [`app_protocol_reference.md`](../reference/app_protocol_reference.md#invocation). Three things worth knowing here:
 
-The sub-path spellings and the `action` spellings run the same executor; the first names the key in the URI, the second in the payload. An agent meeting an app for the first time either `describe`s the window or calls `app_query` with a bare window URI (both return the manifest), then reads state and runs commands.
-
-The `message` action lets **monitor agents delegate tasks to app agents** via the window URI. It queues a task through `AppTaskProcessor` exactly like a user `WINDOW_MESSAGE`, creating the app agent on demand if needed. Combine with `subscribe` to get notified when the app agent completes.
-
-### Example: Slides Lite
+- The sub-path spellings and the `action` spellings (`app_query`, `app_command`) run the same executor — the first names the key in the URI, the second in the payload. An agent meeting an app for the first time either `describe`s the window or calls `app_query` with a bare window URI; both return the manifest.
+- `invoke('yaar://windows/{id}/commands/{key}', { …params })` takes the params *as* the payload. Pass an **array** to run the command once per element, in order.
+- `invoke('yaar://windows/{id}', { action: 'message', message })` lets a **monitor agent delegate to the app agent** — it queues a task through `AppTaskProcessor` exactly like a user message, creating the app agent on demand.
 
 ```
 invoke('yaar://windows/slides-lite', { action: 'app_query' })
@@ -1148,87 +849,28 @@ config/
 
 ## App-Scoped Storage
 
-Each app gets its own folder at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token.
+Each app gets its own folder at `storage/apps/{appId}/`. Apps use `self` as a shorthand — the server resolves it to the real appId from the iframe token. No permission declaration is needed; an app's own storage, database, and sub-agents are granted to it automatically.
 
-**It is a scoped tree, not a hidden one.** `storage/apps/{appId}/` is a plain subtree of YAAR
-storage, so `yaar://apps/self/storage/x.json` and `yaar://storage/apps/{appId}/x.json` are two
-spellings of the same file. What the scope buys is that **no other installed app can reach it**: a
-market app declaring `yaar://storage/` is capped to the shared tree at install time
-(`capForeignAppStorage` in `http/uri-match.ts`), so it keeps the commons and loses the reach into
-`apps/`. What it does *not* buy is secrecy — the user sees a folder on disk, the Storage app and any
-other app shipped with YAAR hold the whole tree, and monitor/session agents address it directly as
-`yaar://storage/apps/{appId}/`. Put your app's own state here; don't put anything here on the theory
-that nothing else will look.
+**It is a scoped tree, not a hidden one.** `yaar://apps/self/storage/x.json` and `yaar://storage/apps/{appId}/x.json` are two spellings of the same file. What the scope buys is that **no other installed app can reach it**: a market app declaring `yaar://storage/` is capped to the shared tree at install time (`capForeignAppStorage` in `http/uri-match.ts`), so it keeps the commons and loses the reach into `apps/`. What it does *not* buy is secrecy — the user sees a folder on disk, the Storage app and any other app shipped with YAAR hold the whole tree, and monitor/session agents address it directly. Put your app's own state here; don't put anything here on the theory that nothing else will look.
 
 ### From App Code (`@bundled/yaar`)
 
 ```typescript
 import { appStorage } from '@bundled/yaar';
 
-// Write a file — throws on failure
-await appStorage.save('data.json', JSON.stringify({ key: 'value' }));
-
-// Write a file — reports failure and resolves false instead of throwing
-const saved = await appStorage.trySave('data.json', JSON.stringify({ key: 'value' }));
-
-// Read as JSON
+await appStorage.save('data.json', JSON.stringify({ key: 'value' }));   // throws on failure
+const saved = await appStorage.trySave('data.json', json);              // false on failure
 const data = await appStorage.readJson<{ key: string }>('data.json');
-
-// Read as text
 const text = await appStorage.read('data.json');
-
-// Read binary (returns { data, mimeType, encoding: 'base64' | 'text' })
-// Check `encoding` before decoding — only base64 payloads should be atob()'d.
-// Prefer readBlob(), which handles the branch for you.
-const binary = await appStorage.readBinary('image.png');
-
-// List files (returns [{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }])
-// Shallow — direct children only. Recurse yourself to walk subdirectories.
-const files = await appStorage.list();
-
-// Delete a file
+const binary = await appStorage.readBinary('image.png');  // { data, mimeType, encoding }
+const blob = await appStorage.readBlob('image.png');      // handles the encoding branch
+const files = await appStorage.list();  // [{ path, isDirectory, uri, mimeType?, size?, modifiedAt? }]
 await appStorage.remove('data.json');
 ```
 
-> **`size` and `modifiedAt` are optional on a listing entry.** A directory has no `size`, and neither field is present if the server predates them. They come from the listing itself, so "how big is this asset" and "which file did I touch last" need no extra read — which is what makes an audit of, say, total inlined asset bytes cheap. `size` is the bytes on disk; a JSON file read back through `readJson` and re-serialized will not match it exactly.
-
-> **`readBlob()` on a PDF does not return the PDF bytes.** `readBlob()` takes no options, so the server's page-rasterization opt-in (`pdfPages`) can never fire through this path; the default branch returns the ASCII string `PDF document with N page(s), N bytes.` wrapped in a Blob (`packages/server/src/storage/storage-manager.ts`). To get raw bytes, fetch the REST URL directly — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
-
-### Publishing for other apps (`sharedStorage`)
-
-`appStorage` is yours — no other installed app can read it. When an app *produces* something
-other apps should be able to pick up (a render, an export, a chart), that goes in the
-commons: `yaar://storage/shared/{appId}/`, granted to every app for being an app, one
-directory per producing app. `sharedStorage` is that directory, so it isn't a
-`const SHARED_DIR = 'shared/anima'` in every app that publishes. **Which directory is
-yours the server decides**, from the iframe token — paths go out as `shared/self/…`, like
-`apps/self` — so a devtools preview writes to its own directory instead of the shipped
-app's, and none of this needs `defineApp` to have run first:
-
-```typescript
-import { sharedStorage } from '@bundled/yaar';
-
-// Copy a file already in storage into the commons — the copy happens server-side.
-const { uri } = await sharedStorage.publish('yaar://apps/self/storage/generated/x.png', {
-  as: 'dragon.png',
-});                                   // → yaar://storage/shared/anima/dragon.png
-
-// Or write straight there. Names are subpaths, so subdirectories work.
-await sharedStorage.save('renders/final.png', blob);
-
-const files = await sharedStorage.list();       // this app's commons directory
-img.src = sharedStorage.url('renders/final.png'); // carries the iframe token
-```
-
-> **Prefer `publish()` over read-then-`save()`.** `from` is a reference, not bytes, so the
-> file never travels through the iframe — and once an agent asks about it, never through a
-> model context. A 550KB PNG round-tripped as base64 costs that on every hop.
-
-Names are relative to the app's own directory; a name naming *another* app's directory, or
-another top-level tree (`apps/`, `mounts/`, …), is refused rather than nested inside this
-one. Use the raw `storage` API to reach those deliberately — that is also what to use when
-you hold a path someone *else* produced. Every method needs the app's id, so call them
-after `defineApp({ id })` has run, not at module scope.
+- `list()` is **shallow** — direct children only; recurse yourself to walk subdirectories. `size` and `modifiedAt` are optional (a directory has no size), and they come from the listing itself, so "how big is this asset" needs no extra read. `size` is bytes on disk; a JSON file read back and re-serialized will not match it exactly.
+- `readBinary` returns `encoding: 'base64' | 'text'` — check it before you `atob`, or use `readBlob`.
+- **`readBlob()` on a PDF does not return the PDF bytes.** It takes no options, so the server's page-rasterization opt-in (`pdfPages`) can never fire through this path; the default branch returns the ASCII string `PDF document with N page(s), N bytes.` wrapped in a Blob. For raw bytes, fetch the REST URL — app-scoped files live at `/api/storage/apps/{appId}/{path}`.
 
 ### Never swallow a failed save
 
@@ -1249,44 +891,15 @@ if (await appStorage.trySave('draft.json', json, { label: 'draft' })) {
 }
 ```
 
-`label` names the data in the toast (`Couldn't save draft: …`). Pass `onError` to replace
-the toast with your own surface — an inline status line, say. Failures are logged either
-way, so `onError` never costs you the console trace:
-
-```typescript
-await appStorage.trySave('draft.json', json, {
-  onError: (message) => setSaveStateText(`Not saved — ${message}`),
-});
-```
-
-`createPersistedSignal()` routes its writes through `trySave` and takes the same
-`label` / `onError` options, so a signal that stops persisting says so.
-
-Keep `save()` where the caller genuinely handles the throw — propagating to an agent-facing
-command handler, for instance, where an `AppCommandError` is the right outcome.
+`label` names the data in the toast (`Couldn't save draft: …`). Pass `onError` to replace the toast with your own surface — an inline status line, say; failures are logged either way, so `onError` never costs you the console trace. `createPersistedSignal()` routes its writes through `trySave` and takes the same options, so a signal that stops persisting says so. Keep `save()` where the caller genuinely handles the throw — an agent-facing command handler, where an `AppCommandError` is the right outcome.
 
 ### Never trust a read either — validate at the boundary
 
-The mirror image of a swallowed save is a swallowed *read*. `readJsonOr(path, fallback)`
-answers "the file isn't there" and "the file is garbage" with the same value, so this:
+The mirror image of a swallowed save is a swallowed *read*. `readJsonOr(path, fallback)` answers "the file isn't there" and "the file is garbage" with the same value, so a truncated write, an older build's shape, and a first run become one state: a broken app renders identically to a fresh one, and the user's real preferences are gone with no trace.
 
-```typescript
-// Bad — a truncated write, an older build's shape, and a first run are one state.
-const prefs = await appStorage.readJsonOr<Prefs>('prefs.json', DEFAULTS);
-```
+Persisted JSON is **untrusted input** — written by an older version of your app, hand-edited through the storage app, truncated by a crashed write, or produced by another instance running concurrently. So is anything arriving from an HTTP response, an SSE frame, a `read()` of a `yaar://config/*` file, a user-picked file, or an `evaluate()` round-trip through a page.
 
-renders a broken app identically to a fresh one, and the user's real preferences are gone
-with no trace anywhere. Persisted JSON is **untrusted input**: it was written by an older
-version of your app, hand-edited through the storage app, truncated by a crashed write, or
-produced by another instance running concurrently. So is anything arriving from an HTTP
-response, an SSE frame, a `read()` of a `yaar://config/*` file, a user-picked file, or an
-`evaluate()` round-trip through a page.
-
-Validate it with `@bundled/zod` — **Zod Mini**, the functional API (`z.optional(x)`,
-`z.safeParse(Schema, value)`), not the method chaining of standard Zod. Put the schemas in
-a `src/schema.ts` with a header saying *which* boundaries they guard. Use `z.looseObject`
-so a field added by a newer build survives a round-trip through an older one, and validate
-only the fields the app actually reads:
+Validate with `@bundled/zod` — **Zod Mini**, the functional API (`z.optional(x)`, `z.safeParse(Schema, value)`), not standard Zod's method chaining. Put the schemas in a `src/schema.ts` with a header saying *which* boundaries they guard. Use `z.looseObject` so a field added by a newer build survives a round-trip through an older one, and validate only the fields the app actually reads:
 
 ```typescript
 // src/schema.ts
@@ -1306,71 +919,28 @@ const raw = await appStorage.readJsonOr<unknown>('prefs.json', undefined);
 const prefs = safeParseOr(PrefsSchema, raw, DEFAULTS, { label: 'prefs.json' });
 ```
 
-`safeParseOr` **is** that rule: `undefined` — nothing stored, first run — takes the fallback
-silently, while a value that is present and wrong takes the same fallback and logs the
-schema's own issues. It was the single most-copied block in the fleet (82 `safeParse` call
-sites across 22 apps), which is why it now lives in the SDK.
+`safeParseOr` **is** that rule: `undefined` — nothing stored, first run — takes the fallback silently, while a value that is present and wrong takes the same fallback and logs the schema's own issues. When logging is not the right answer at that boundary, pass `onInvalid` — it receives the issues and runs **instead of** the default console line, so a throw inside it reaches the caller (a parse-or-throw boundary needs no separate helper), a poll can count failures instead of writing one line per tick, and a case where the fallback would mislead can toast.
 
-When logging is *not* the right answer at that boundary, pass `onInvalid` — it receives the
-schema's issues and runs **instead of** the default console line:
+The rule is one line: **degraded-by-design must be distinguishable from broken.** A missing file is normal and stays silent; a malformed one is logged with `parsed.error.issues`, and toasted if the user would otherwise be misled about what they are looking at. Never toast from a poll or a subscription callback — log every failure, but surface only the *transition* into failure.
 
-```typescript
-// The call must fail rather than degrade: an onInvalid that throws reaches the
-// caller, so a parse-or-throw boundary needs no separate helper.
-return safeParseOr(ResponseSchema, await res.json(), undefined, {
-  onInvalid: (issues) => {
-    console.error(`GET ${path} failed validation`, issues);
-    throw new Error('The service returned an unexpected response.');
-  },
-});
+Two more edges:
 
-// A poll: one line per tick is how a real signal gets tuned out.
-safeParseOr(StateSchema, stored, undefined, { onInvalid: () => noteSyncFailure() });
+- Write the `z.safeParse` by hand when the failure branch needs something one fallback can't express — per-field recovery, or validating an array element-wise so one bad row doesn't reject the rest. Prefer per-field recovery when the fields are independent: a drifted `playbackRate` should not cost the user their `lastStoragePath`.
+- For anything persisted through `createPersistedSignal`, `revive` is where the `safeParse` goes. It also runs on the **fallback**, so a schema the fallback itself fails fires an error on every fresh install; and `revive` validates and migrates, it does not *reinterpret* — clamping a stored value against the current window belongs on the read, or a transiently narrow window overwrites the user's preference for good.
 
-// The fallback would mislead — an empty allow-list looks like a valid one.
-safeParseOr(DomainsSchema, raw, undefined, {
-  onInvalid: (issues) => { console.error(issues); showToast('Config is malformed', 'error'); },
-});
-```
+### SDK helpers
 
-Write the `z.safeParse` by hand only when the failure branch needs something the single
-fallback cannot express — per-field recovery, or validating an array element-wise so one
-bad row does not reject the rest.
-
-The rule is one line: **degraded-by-design must be distinguishable from broken.** A missing
-file is normal and stays silent; a malformed one is logged with `parsed.error.issues`, and
-toasted if the user would otherwise be misled about what they are looking at. Never toast
-from a poll or a subscription callback — log every failure, but surface only the
-*transition* into failure, or you replace one silent bug with a wall of toasts.
-
-For anything persisted through `createPersistedSignal`, `revive` is where the `safeParse`
-goes — it runs on the loaded value before it reaches the signal, and the SDK logs (never
-swallows) if it throws. Two things to get right there: it also runs on the **fallback**
-when nothing is stored, so a schema the fallback itself fails will fire an error on every
-fresh install; and `revive` validates and migrates, it does not *reinterpret* — clamping a
-stored value against the current window belongs on the read, not on the load, or a
-transiently narrow window overwrites the user's preference for good.
-
-When the parse fails, prefer per-field recovery over rejecting the whole record if the
-fields are independent: a drifted `playbackRate` should not cost the user their
-`lastStoragePath`. Reject wholesale only when the fields are load-bearing together.
-
-### Error handling helpers
-
-`@bundled/yaar` ships the small helpers apps otherwise rewrite. Prefer them over inlining:
+`@bundled/yaar` ships the small helpers apps otherwise rewrite. Prefer them over inlining — three renderings in particular must not disagree between two windows on one screen, which is why `formatBytes`/`formatDuration`/`formatClock` are SDK functions rather than a per-app choice (the audit that added them found four byte formatters with four unit ladders and six clock formatters, half hardcoding a locale the user never picked).
 
 ```typescript
-import { errMsg, showToast, withLoading, tryToast, wait, createStaleGuard, AppCommandError } from '@bundled/yaar';
+import {
+  errMsg, showToast, withLoading, tryToast, wait, AppCommandError,
+  formatBytes, formatDuration, formatClock, downloadBlob, blobToDataUrl, toWebP,
+} from '@bundled/yaar';
 
 errMsg(e);                       // not: e instanceof Error ? e.message : String(e)
 showToast('Deleted', 'success'); // 'info' | 'success' | 'error', auto-dismissing
 await wait(200);                 // not: new Promise(r => setTimeout(r, 200))
-
-// A slow response must never overwrite a newer one — not: a hand-rolled `gen` counter.
-const guard = createStaleGuard();
-const fresh = guard.begin();
-const data = await load();
-if (!fresh()) return;
 
 // Sets loading true, runs fn, routes a throw to onError, always clears loading.
 await withLoading(setLoading, () => fetchIssues(), (msg) => showToast(msg, 'error'));
@@ -1378,38 +948,19 @@ await withLoading(setLoading, () => fetchIssues(), (msg) => showToast(msg, 'erro
 // The whole try/catch/log/toast block: returns the value, or undefined if it threw.
 await tryToast(() => deleteRepo(name), { success: 'Deleted' });
 
-// Throw from a command handler to report failure to the agent.
-throw new AppCommandError('No document open');
-```
+throw new AppCommandError('No document open');   // report failure to the agent
 
-`withLoading` and `tryToast` are orthogonal — one owns a loading flag, the other owns the
-error toast. Nest them when an action needs both: `withLoading(setBusy, () => tryToast(...))`.
-
-`debounce` / `throttle` come from `@bundled/lodash` — don't hand-roll them.
-
-### Formatting and file helpers
-
-Three renderings must not disagree between two windows on one screen, so they are SDK
-functions rather than a per-app choice — the audit that added them found four byte
-formatters with four unit ladders and six clock formatters, half of them hardcoding a
-locale the user never picked:
-
-```typescript
-import { formatBytes, formatDuration, formatClock, downloadBlob, blobToDataUrl } from '@bundled/yaar';
-
-formatBytes(2_097_152);          // '2.0 MB'  — binary steps, one decimal above bytes
-formatDuration(3787);            // '1:03:07' — hours only when there are hours
-formatClock(Date.now());         // '15:04:05' — 24-hour, locale separators
+formatBytes(2_097_152);                    // '2.0 MB'  — binary steps, one decimal above bytes
+formatDuration(3787);                      // '1:03:07' — hours only when there are hours
+formatClock(Date.now());                   // '15:04:05' — 24-hour, locale separators
 formatClock(savedAt, { seconds: false });  // '15:04', for a "Saved 15:04" label
 
 downloadBlob(new Blob([csv]), 'report.csv');   // objectURL + <a download> + revoke
 const dataUrl = await blobToDataUrl(file);     // FileReader, promisified
+const encoded = await toWebP(bitmap, { quality: 0.8, maxSize: 2048 });  // null if unsupported
 ```
 
-Calendar *dates* are deliberately not here — date style is a legitimate per-app choice, and
-`@bundled/date-fns` is bundled for it. For an image you are about to store or show, prefer
-`toWebP` over `blobToDataUrl`: it re-encodes and hands back both the data URL and the raw
-base64 that `appStorage.save(..., 'base64')` wants.
+`withLoading` and `tryToast` are orthogonal — one owns a loading flag, the other owns the error toast; nest them when an action needs both. `debounce`/`throttle` come from `@bundled/lodash`. Calendar *dates* are deliberately absent — date style is a legitimate per-app choice, and `@bundled/date-fns` is bundled for it. For an image you are about to store or show, prefer `toWebP` over `blobToDataUrl`: it is the bitmap → canvas → `convertToBlob` round-trip including the check that the encoder did not quietly fall back to PNG, and it hands back both the data URL and the raw base64 that `appStorage.save(..., 'base64')` wants. It returns `null` rather than throwing, so the fallback is `if (!encoded) keepTheOriginal()`.
 
 ### Rasterizing your own DOM
 
@@ -1427,25 +978,13 @@ downloadBlob(blob, 'page.png');
 // Both are reported rather than thrown: one bad glyph should not cost the whole picture.
 ```
 
-The element must be **in the document and laid out** — `position:fixed; left:-99999px` is
-the usual trick, since a `display:none` subtree has no metrics and rasterises as nothing.
-It is cloned, so your live DOM is not touched.
+The element must be **in the document and laid out** — `position:fixed; left:-99999px` is the usual trick, since a `display:none` subtree has no metrics and rasterises as nothing. It is cloned, so your live DOM is untouched.
 
-The one thing you must supply is `css`. Chrome draws that SVG in **secure static mode**:
-the subtree reaches no page stylesheet, no `--yaar-*` tokens, and no network, so anything
-not stated in `css` is simply missing from the picture. Everything else the SDK handles —
-inlining `<img>` sources as `data:` URLs, serialising as well-formed XML (a Markdown
-renderer's `<br>` would otherwise abort the parse), avoiding the `blob:` URL that taints
-the canvas, painting a background before a JPEG encode turns transparency black, and
-putting the font stack on the subtree's root rather than on `body`, which does not exist
-inside a `foreignObject`.
+The one thing you must supply is `css`. Chrome draws that SVG in **secure static mode**: the subtree reaches no page stylesheet, no `--yaar-*` tokens, and no network, so anything not stated in `css` is simply missing from the picture. Everything else the SDK handles — inlining `<img>` sources as `data:` URLs, serialising as well-formed XML (a Markdown renderer's `<br>` would otherwise abort the parse), avoiding the `blob:` URL that taints the canvas, painting a background before a JPEG encode turns transparency black, and putting the font stack on the subtree's root rather than on `body`, which does not exist inside a `foreignObject`.
 
 ### The platform's fonts (`fonts`)
 
-Your app's own DOM gets YAAR's webfont for free. A *picture* of that DOM does not: the SVG
-rasteriser above cannot fetch a font at all, and honours only an `@font-face` whose `src`
-is a `data:` URL. A whole face is ~1.6 MB, so it has to be subsetted first — which used to
-mean an app shipping its own OpenType reader and CFF subsetter.
+Your app's own DOM gets YAAR's webfont for free. A *picture* of that DOM does not: the SVG rasteriser cannot fetch a font at all, and honours only an `@font-face` whose `src` is a `data:` URL. A whole face is ~1.6 MB, so it has to be subsetted first — which used to mean an app shipping its own OpenType reader and CFF subsetter.
 
 ```typescript
 import { fonts } from '@bundled/yaar';
@@ -1456,16 +995,7 @@ const { css, faces, missing } = await fonts.inline(pageEl.textContent, {
 });
 ```
 
-`rasterize` calls this for you; call it directly when you are driving the SVG yourself, or
-when you also need `faces[n].gids` / `advances` / `metrics` to paint the *same* glyphs as
-vectors over the raster. Take both from one call: a raster laid out with one font under
-text placed with another drifts ~10% on Latin, which is lines down a page.
-
-`fonts.faces()` lists what this build serves — currently `NanumSquareNeo` (proportional,
-four weights) and `D2Coding` (monospace, for code). `fonts.faceCss(family)` gives the
-by-URL rules for a *measuring* pass; the subset keeps every glyph index and metrics table
-identical, so measurements taken against the full face stay valid. No permission needed —
-the font files are already served unauthenticated.
+`rasterize` calls this for you; call it directly when you drive the SVG yourself, or when you also need `faces[n].gids` / `advances` / `metrics` to paint the *same* glyphs as vectors over the raster. Take both from one call: a raster laid out with one font under text placed with another drifts ~10% on Latin, which is lines down a page. `fonts.faces()` lists what this build serves — currently `NanumSquareNeo` (proportional, four weights) and `D2Coding` (monospace). `fonts.faceCss(family)` gives by-URL rules for a *measuring* pass; the subset keeps every glyph index and metrics table identical, so measurements against the full face stay valid. No permission needed.
 
 ### Dialog helpers
 
@@ -1488,8 +1018,7 @@ const title = await showPrompt('New document name:', { initial: 'Untitled' });
 if (title !== null) create(title);
 ```
 
-For custom modals beyond these, compose the same classes yourself: `y-overlay` >
-`y-modal` > `y-modal-title` / `y-modal-msg` / `y-modal-actions`.
+For custom modals beyond these, compose the same classes yourself: `y-overlay` > `y-modal` > `y-modal-title` / `y-modal-msg` / `y-modal-actions`.
 
 ### From Agent (MCP Tools)
 
@@ -1501,47 +1030,40 @@ describe('yaar://apps/my-app/storage/data.json')
 delete('yaar://apps/my-app/storage/data.json')
 ```
 
-`describe` on a storage path describes **that path**: an error when it isn't there, `{ kind: 'directory', entries, totalSize, verbs }` for a folder, `{ kind: 'file', size, modifiedAt, mimeType, verbs }` for a file (a PDF adds its page count and the `pdfText` / `pdfPages` read options). The bare `…/storage` root is the exception — it answers with the app-storage manual plus a root entry count, which is what a caller landing there is actually asking. The same shape answers for `yaar://storage/…`; they are two spellings of one directory tree.
+`describe` on a storage path describes **that path**: an error when it isn't there, `{ kind: 'directory', entries, totalSize, verbs }` for a folder, `{ kind: 'file', size, modifiedAt, mimeType, verbs }` for a file (a PDF adds its page count and the `pdfText` / `pdfPages` read options). The bare `…/storage` root is the exception — it answers with the app-storage manual plus a root entry count. The same shape answers for `yaar://storage/…`; they are two spellings of one directory tree. A `list` of a directory that does not exist is an **error**, not an empty success — except a namespace root: an app's `storage/` exists from the moment the app does, so listing it before anything is written is empty rather than missing.
 
-A `list` of a directory that does not exist is an **error**, not an empty success — the two used to be indistinguishable. A namespace root is the exception both ways: an app's `storage/` exists from the moment the app does (the directory is only created by the first write), so listing it before anything is written is empty rather than missing.
+Full server-side surface (write/copy/edit/grep payloads, mounts, REST routes, PDF options): [`docs/reference/storage_api_reference.md`](../reference/storage_api_reference.md).
 
 ## Shared Storage (`yaar://storage/shared/`)
 
-App storage is private; `yaar://storage/shared/` is the commons. It is where apps hand
-files to each other — an image generated in one app, a deck exported by another, a dataset
-a notebook computed — and **every app can read and write it without declaring anything**.
-There is no `permissions` entry to add; adding one grants nothing and the install dialog
-drops it.
+App storage is private; `yaar://storage/shared/` is the commons — where apps hand files to each other (an image generated in one app, a deck exported by another, a dataset a notebook computed). **Every app can read and write it without declaring anything.** There is no `permissions` entry to add; adding one grants nothing and the install dialog drops it.
 
-Publish under your own app id, one directory per producer:
+Publish under your own app id, one directory per producer. `sharedStorage` *is* that directory, so it isn't a `const SHARED_DIR = 'shared/anima'` in every app that publishes. **Which directory is yours the server decides**, from the iframe token — paths go out as `shared/self/…`, like `apps/self` — so a devtools preview writes to its own directory instead of the shipped app's, and none of this needs `defineApp` to have run first:
 
 ```typescript
-import { storage, invoke } from '@bundled/yaar';
+import { sharedStorage, storage } from '@bundled/yaar';
 
-// Publish: server-side copy, so the bytes never pass through the iframe.
-await invoke('yaar://storage/shared/my-app/logo.png', {
-  action: 'copy',
-  from: 'yaar://apps/self/storage/generated/logo.png',
-});
+// Copy a file already in storage into the commons — the copy happens server-side.
+const { uri } = await sharedStorage.publish('yaar://apps/self/storage/generated/x.png', {
+  as: 'dragon.png',
+});                                                // → yaar://storage/shared/anima/dragon.png
 
-// Or write directly.
-await storage.save('shared/my-app/report.md', markdown);
+await sharedStorage.save('renders/final.png', blob);  // names are subpaths
+const mine = await sharedStorage.list();              // this app's commons directory
+img.src = sharedStorage.url('renders/final.png');     // carries the iframe token
 
-// Read what another app published.
+// The raw API reaches anywhere in storage — including what someone *else* published.
 const png = await storage.read('shared/anima/dragon.png', { as: 'blob' });
 const published = await storage.list('shared');
 ```
 
-Three properties follow from it being the commons rather than a grant:
+> **Prefer `publish()` over read-then-`save()`.** `from` is a reference, not bytes, so the file never travels through the iframe — and once an agent asks about it, never through a model context. A 550KB PNG round-tripped as base64 costs that on every hop.
 
-- **It is not scoped to anyone.** Any app can read, overwrite or delete anything under
-  `shared/`. Data that must stay yours belongs in app storage (`appStorage`), which no other
-  *installed* app can reach. The per-producer directory is tidiness, not a boundary.
-- **It is a staging area.** The user prunes it; a file published last week may be gone.
-  An app that needs an asset at runtime should keep its own copy.
-- **It does not widen anything else.** `storage/apps/{id}/` is a sibling subtree, so the
-  commons never reaches another app's own tree — that still takes a declared `permissions`
-  entry, and for an installed app it is capped to the shared tree anyway.
+`sharedStorage` names are relative to your own directory; a name naming *another* app's directory, or another top-level tree (`apps/`, `mounts/`, …), is refused rather than nested inside this one — use the raw `storage` API to reach those deliberately. Three properties follow from the commons being a commons rather than a grant:
+
+- **It is not scoped to anyone.** Any app can read, overwrite or delete anything under `shared/`. Data that must stay yours belongs in `appStorage`, which no other *installed* app can reach. The per-producer directory is tidiness, not a boundary.
+- **It is a staging area.** The user prunes it; a file published last week may be gone. An app that needs an asset at runtime should keep its own copy.
+- **It does not widen anything else.** `storage/apps/{id}/` is a sibling subtree, so the commons never reaches another app's own tree.
 
 ### One file, four names (`storagePath`)
 
@@ -1555,9 +1077,7 @@ name the same bytes:
 | `yaar://apps/self/storage/x.png` | `appStorage`, an agent naming your own tree |
 | `/api/storage/shared/anima/dragon.png` | an HTTP route, an `<img src>` you built earlier |
 
-**Every `storage.*` method accepts all four**, so a reference you were handed can go
-straight into `read`/`save`/`list`/`remove`/`url` with no unwrapping. Reach for
-`storagePath` only when you need the path *itself*:
+**Every `storage.*` method accepts all four**, so a reference you were handed can go straight into `read`/`save`/`list`/`remove`/`url` with no unwrapping. Reach for `storagePath` only when you need the path *itself*:
 
 ```typescript
 import { storage, storagePath } from '@bundled/yaar';
@@ -1567,35 +1087,16 @@ const path = storagePath(slide.image);
 img.src = path ? storage.url(path) : slide.image;
 ```
 
-Two rules worth knowing, because both have cost real bugs:
+Two rules, both of which have cost real bugs:
 
-- **Never hand-roll the parsing.** Recognising only the flat spelling is how a deck ends
-  up with an image the editor shows and the export leaves blank — the namespaced URI
-  passes through verbatim and becomes a request for a directory named `yaar:`.
-- **Never hand-build a `/api/storage/…` URL.** Only `storage.url()` carries the iframe
-  token in the query string, which is the sole way a subresource fetch (`<img>`,
-  `<video>`, CSS `url()`) can present one. A hand-built URL is refused as
-  unauthenticated the moment app-origin isolation is on, and reaches the element as an
-  indistinguishable load failure.
+- **Never hand-roll the parsing.** Recognising only the flat spelling is how a deck ends up with an image the editor shows and the export leaves blank — the namespaced URI passes through verbatim and becomes a request for a directory named `yaar:`.
+- **Never hand-build a `/api/storage/…` URL.** Only `storage.url()` carries the iframe token in the query string, which is the sole way a subresource fetch (`<img>`, `<video>`, CSS `url()`) can present one. A hand-built URL is refused as unauthenticated the moment app-origin isolation is on, and reaches the element as an indistinguishable load failure.
 
-`null` from `storagePath` means "not a storage reference" (a remote URL, a `data:` URL,
-another kind of `yaar://` resource) or a path containing `..`. It does **not** mean
-forbidden — an agent may have delegated a single file to your window, a grant no code in
-the iframe can see, so a path outside your own trees still resolves and the server
-decides. `self` is left unexpanded for the same reason: the server resolves it against
-the calling app, and under a devtools preview that is `preview--{id}`, not your app id.
+`null` from `storagePath` means "not a storage reference" (a remote URL, a `data:` URL, another kind of `yaar://` resource) or a path containing `..`. It does **not** mean forbidden — an agent may have delegated a single file to your window, a grant no code in the iframe can see, so a path outside your own trees still resolves and the server decides. `self` is left unexpanded for the same reason: the server resolves it against the calling app, and under a devtools preview that is `preview--{id}`, not your app id.
 
 ## App-Scoped Database (`appDb`)
 
-For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`
-(design: [`docs/guides/sqlite.md`](./sqlite.md)). Unlike `appStorage`, it supports queries,
-counting, pagination, and full-text search server-side — no more load-all-JSON-and-filter.
-Binary blobs and simple single files should stay on `appStorage` — see the design doc above for the full storage-type breakdown.
-
-No permission declaration needed — an app's own storage, database, and personas are
-granted to it automatically.
-
-### From App Code (`@bundled/yaar`)
+For structured records, each app also gets a SQLite database at `storage/apps/{appId}/data.db`. Unlike `appStorage`, it supports queries, counting, pagination, and full-text search server-side — no load-all-JSON-and-filter. Binary blobs and simple single files stay on `appStorage`. Design, filter-to-SQL translation, and the full storage-type breakdown: [`docs/guides/sqlite.md`](./sqlite.md).
 
 ```typescript
 import { appDb } from '@bundled/yaar';
@@ -1606,44 +1107,29 @@ const notes = appDb.collection<Note>('notes');
 const id = await notes.insert({ title: 'Hello', tags: ['intro'] }); // → generated _id
 await notes.insertMany([{ title: 'A', tags: [] }, { title: 'B', tags: [] }]);
 
-const one = await notes.get(id);                    // → doc | null (has _id, _created_at, _updated_at)
+const one = await notes.get(id);                  // → doc | null (has _id, _created_at, _updated_at)
 const page = await notes.find(
-  { tags: 'intro' },                                // filter (see syntax below)
+  { tags: 'intro' },                              // Mongo-style filter, fields AND together
   { sort: { _created_at: -1 }, limit: 20, offset: 0 },
 );
-const hits = await notes.search('hello world');     // FTS5 full-text search, best matches first
+const hits = await notes.search('hello world');   // FTS5 full-text search, best matches first
 
-await notes.update(id, { title: 'Updated' });       // shallow merge
+await notes.update(id, { title: 'Updated' });     // shallow merge
 await notes.remove(id);
-await notes.removeWhere({ tags: 'draft' });         // filter must be non-empty
+await notes.removeWhere({ tags: 'draft' });       // filter must be non-empty
 const n = await notes.count({ tags: 'intro' });
 
-await appDb.collections();                          // → ['notes', ...]
-await appDb.drop('notes');                          // delete collection + documents
-```
+await appDb.collections();                        // → ['notes', ...]
+await appDb.drop('notes');                        // delete collection + documents
 
-**Filter syntax** (Mongo-style, fields AND together):
-
-```typescript
-{ status: 'active' }                 // exact match
-{ tags: 'intro' }                    // array contains (same syntax as scalar equality)
-{ age: { $gt: 18 } }                 // $gt / $gte / $lt / $lte
-{ name: { $ne: 'admin' } }           // not equal (also matches docs missing the field)
-{ kind: { $in: ['a', 'b'] } }        // one of
-{ avatar: { $exists: true } }        // field presence
-{ 'author.name': 'kim' }             // dotted paths reach into nested objects
-```
-
-**Reactive binding** — a Solid signal that tracks a query:
-
-```typescript
+// A Solid signal that tracks a query. docs() re-renders on mutations made through
+// these helpers; external changes (agent, another window) arrive via a verb subscription.
 const [docs, { insert, update, remove, refresh }] = appDb.createReactiveCollection<Note>(
-  'notes',
-  { sort: { _created_at: -1 }, limit: 50 },
+  'notes', { sort: { _created_at: -1 }, limit: 50 },
 );
-// docs() re-renders on mutations made through these helpers; external changes
-// (agent, another window) arrive via a verb subscription.
 ```
+
+Filters take exact match, array-contains (same syntax as scalar equality), `$gt`/`$gte`/`$lt`/`$lte`, `$ne` (which also matches docs missing the field), `$in`, `$exists`, and dotted paths into nested objects — [`sqlite.md`](./sqlite.md#filter-syntax) has the table.
 
 ### From Agent (MCP Tools)
 
@@ -1664,14 +1150,9 @@ delete('yaar://apps/memo/db/notes')                                      → dro
 
 ## Sub-agents (Personas)
 
-An app that declares `"subagents": { "max": N }` can spawn up to N AI instances from
-its iframe, each with a system prompt the app supplies at runtime and each its own provider
-session with its own conversation memory. This is what lets one app run several distinct
-characters *at once* instead of one agent role-playing them in turn.
+An app that declares `"subagents": { "max": N }` can spawn up to N AI instances from its iframe, each with a system prompt the app supplies at runtime and each its own provider session with its own conversation memory. This is what lets one app run several distinct characters *at once* instead of one agent role-playing them in turn.
 
-They are the bottom tier of [the agent tree](../architecture/agent_tree.md): they hold **no YAAR
-verbs, no permissions, and no principal**, so a runtime-supplied prompt never gets YAAR's hands.
-Full verb surface, limits, and response shapes: [URI Reference](../reference/uri_reference.md#app-sub-agents--yaarappsselfagents).
+They are the bottom tier of [the agent tree](../architecture/agent_tree.md): they hold **no YAAR verbs, no permissions, and no principal**, so a runtime-supplied prompt never gets YAAR's hands. Full verb surface, limits, and response shapes: [URI Reference](../reference/uri_reference.md#app-sub-agents--yaarappsselfagents).
 
 ```jsonc
 {
@@ -1680,20 +1161,7 @@ Full verb surface, limits, and response shapes: [URI Reference](../reference/uri
 }
 ```
 
-The `yaar://apps/self/` namespace is auto-granted — no `permissions` entry.
-
-> **`"personas"` is retired.** It was an accepted alias for `subagents` and is no longer read.
-> The *wire* is unchanged — `personaId` in the URI, the spawn param, and every response body — so
-> only `app.json` changes. A manifest still using the old key logs an `[apps]` warning at read and
-> refuses spawns with a message naming the rename, rather than behaving as if nothing was declared.
-
-**Both lines are requests, not grants, for an app that was installed rather than bundled.** A
-bundled manifest ships with the release and is honored as written. An installed app's is itemized
-in the install dialog ("run up to 4 AI personas of its own…"), and the user's answer is recorded in
-`config/app-grants.json` and applied as a **ceiling** — raise `max` in a later manifest and you get
-the granted number until the user approves the new one. So a market app that declares `subagents` gets
-them, but only once someone said yes; an app already installed before this existed holds nothing
-until it is updated or reinstalled. (`controls` is different, and still bundled-only.)
+The `yaar://apps/self/` namespace is auto-granted — no `permissions` entry. **Both lines are requests, not grants, for an app that was installed rather than bundled.** A bundled manifest ships with the release and is honored as written; an installed app's is itemized in the install dialog, and the user's answer is recorded in `config/app-grants.json` and applied as a **ceiling** — raise `max` in a later manifest and you get the granted number until the user approves the new one. An app installed before this existed holds nothing until it is updated or reinstalled. (`controls` is different, and still bundled-only.) The retired `"personas"` spelling is no longer read: a manifest still using it logs an `[apps]` warning and refuses spawns with a message naming the rename.
 
 ### Spawn, message, stream
 
@@ -1722,16 +1190,9 @@ await del(`yaar://apps/self/agents/${personaId}`);
 
 Three consequences worth designing around:
 
-- **Await the stream, not the verb.** `message` resolves when the turn is queued, so the answer
-  only exists on the stream. Give each turn a watchdog: a character that never produces a frame
-  should cost one slow turn, not hang the room.
-- **Spawn is idempotent, and deliberately does not update the prompt.** An iframe reload re-runs
-  your spawn calls; the personas from before are still alive with their memory intact and come
-  back with `reused: true`. Since the prompt is replayed every turn, rewriting it under a live
-  conversation would rewrite who the persona has been all along — `delete` and respawn to recast.
-- **`message` rejects rather than queues while a persona is mid-turn.** The refusal carries
-  `busy: true` on the envelope. Your app is the scheduler; only it knows whether a second
-  message is a follow-up worth waiting for or a race worth dropping.
+- **Await the stream, not the verb.** `message` resolves when the turn is queued, so the answer only exists on the stream. Give each turn a watchdog: a character that never produces a frame should cost one slow turn, not hang the room.
+- **Spawn is idempotent, and deliberately does not update the prompt.** An iframe reload re-runs your spawn calls; the personas from before are still alive with their memory intact and come back with `reused: true`. Since the prompt is replayed every turn, rewriting it under a live conversation would rewrite who the persona has been all along — `delete` and respawn to recast.
+- **`message` rejects rather than queues while a persona is mid-turn.** The refusal carries `busy: true` on the envelope. Your app is the scheduler; only it knows whether a second message is a follow-up worth waiting for or a race worth dropping.
 
 ### Giving a persona tools
 
@@ -1751,9 +1212,7 @@ await invoke('yaar://apps/self/agents', {
 });
 ```
 
-Alice calling `memorize` dispatches the protocol command `persona:memorize` to your app's active
-window with params `{ fact, personaId: 'alice' }` — the server stamps `personaId` **last**, so a
-model cannot answer as another character. Whatever your handler returns becomes the tool result:
+Alice calling `memorize` dispatches the protocol command `persona:memorize` to your app's active window with params `{ fact, personaId: 'alice' }` — the server stamps `personaId` **last**, so a model cannot answer as another character. Whatever your handler returns becomes the tool result:
 
 ```typescript
 export default defineApp({
@@ -1769,30 +1228,14 @@ export default defineApp({
 });
 ```
 
-`persona:*` commands are hidden from the app agent's `describe`/manifest — their spawn-time
-descriptions are written for a character, not an operator, and one description string cannot
-serve both audiences.
+`persona:*` commands are hidden from the app agent's `describe`/manifest — their spawn-time descriptions are written for a character, not an operator, and one description string cannot serve both audiences.
 
-Why tools rather than output sentinels: a `skip` tool *is* the signal, where `[[skip]]` in the
-text is a parse hoping to be one. And a lookup like `recall` cannot be a sentinel at all — it
-needs its result fed back mid-generation, which only the tool loop provides.
+Why tools rather than output sentinels: a `skip` tool *is* the signal, where `[[skip]]` in the text is a parse hoping to be one. And a lookup like `recall` cannot be a sentinel at all — it needs its result fed back mid-generation, which only the tool loop provides.
 
-Limits and edges: 12 tools, 6 000 chars across all names/descriptions (they are replayed every
-turn), 20 000 chars of system prompt. Tool names match `[A-Za-z][A-Za-z0-9_]{0,47}`; `input`
-values are `"string" | "number" | "boolean" | "object" | "array"`. No open window makes a tool
-call return an **error result** — the turn continues, and a persona deciding to remember
-something never launches a window. Omitting `tools` connects no MCP server at all.
+Limits and edges: 12 tools, 6 000 chars across all names/descriptions (they are replayed every turn), 20 000 chars of system prompt. Tool names match `[A-Za-z][A-Za-z0-9_]{0,47}`; `input` values are `"string" | "number" | "boolean" | "object" | "array"`. No open window makes a tool call return an **error result** — the turn continues, and a persona deciding to remember something never launches a window. Omitting `tools` connects no MCP server at all.
 
 ### Lifecycle and persistence
 
-Sub-agents are reclaimed when your app's last window on that monitor closes, when the monitor is
-removed, or on explicit `delete` — and none survive the session. **Persistence is your app's
-job** (`appDb`/`appStorage`); a respawned persona gets its history replayed in its system prompt
-or first message. `subagents.max` is per (monitor, app) and clamped to 16; each persona also takes
-a global `MAX_AGENTS` slot, so `spawn` can fail with "no provider slot" even under your own cap.
+Sub-agents are reclaimed when your app's last window on that monitor closes, when the monitor is removed, or on explicit `delete` — and none survive the session. **Persistence is your app's job** (`appDb`/`appStorage`); a respawned persona gets its history replayed in its system prompt or first message. `subagents.max` is per (monitor, app) and clamped to 16; each persona also takes a global `MAX_AGENTS` slot, so `spawn` can fail with "no provider slot" even under your own cap.
 
-**Reference consumer:** `chitchats`, which now ships from the market rather than `apps/` (rooms
-that take turns; characters get `skip`, `memorize`, and — when their memory file has chunks —
-`recall`, whose description carries the memory index so the backstory is retrieved rather than
-replayed every turn). Being a market app it holds `subagents` by the user's install-time approval
-rather than by shipping in the tree.
+**Reference consumer:** `chitchats`, which ships from the market rather than `apps/` (rooms that take turns; characters get `skip`, `memorize`, and — when their memory file has chunks — `recall`, whose description carries the memory index so the backstory is retrieved rather than replayed every turn). Being a market app it holds `subagents` by the user's install-time approval rather than by shipping in the tree.
