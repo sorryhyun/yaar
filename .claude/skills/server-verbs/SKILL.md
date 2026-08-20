@@ -1,6 +1,6 @@
 ---
 name: server-verbs
-description: The YAAR server's MCP tool and verb layer - URI verbs, protocol eras, access tiers, app protocol, sub-agents. Use when editing handlers/, mcp/, or features/ in packages/server.
+description: The YAAR server's MCP tool and verb layer - URI verbs, the 2026-07-28 protocol era, access tiers, app protocol, sub-agents. Use when editing handlers/, mcp/, or features/ in packages/server.
 paths:
   - "packages/server/src/handlers/**"
   - "packages/server/src/mcp/**"
@@ -8,7 +8,7 @@ paths:
 ---
 
 This skill covers the YAAR server's MCP tool and URI verb layer: the 5 generic verbs, the two
-protocol eras sharing one endpoint, verb semantics, batching, access tiers, the App Protocol,
+the one protocol era the endpoint serves, verb semantics, batching, access tiers, the App Protocol,
 app-agent storage declarations, monitor/app-agent communication, sub-agents, and the self-update
 feature. The content below is carried over verbatim from `packages/server/CLAUDE.md`.
 
@@ -31,23 +31,23 @@ Tools use `actionEmitter.emitAction()` to broadcast actions to frontend and opti
 rendering feedback. Window tools support lock protection — only the locking agent can modify a
 locked window.
 
-### Two protocol eras, one endpoint
+### One protocol era: 2026-07-28, stateless
 
-`handleMcpRequest` forks per request: 2025-era traffic keeps the **stateful** path (`initialize`
-mints an `mcp-session-id`), a **2026-07-28** client is stateless and routed to `createMcpHandler`.
-YAAR asks **both** providers to negotiate up — Codex via `features.mcp_2026_07_28=true`, Claude via
-`MCP_SDK_GENERATION=v2` + `MCP_PROTOCOL_NEGOTIATION=auto` (both vars required; either alone is a
-no-op).
+`handleMcpRequest` serves revision **2026-07-28** and nothing else — no `initialize`, no
+`mcp-session-id`, no per-client state; `createMcpHandler` builds the namespace's server per
+request. Both providers are asked to negotiate it: Codex via `features.mcp_2026_07_28=true`,
+Claude via `MCP_SDK_GENERATION=v2` + `MCP_PROTOCOL_NEGOTIATION=auto` (both vars required; either
+alone is a no-op).
 
 **Two traps that will cost you a day each are documented at `getModernHandler` in
-`mcp/server.ts` — read it before touching this fork.** Both rows are pinned by
-`tests/mcp-protocol-eras.test.ts`.
+`mcp/server.ts` — read it before touching this.** Pinned by `tests/mcp-protocol-eras.test.ts`.
 
-**The legacy leg is deprecated and instrumented.** Its machinery is fenced between
-`BEGIN/END deprecated: 2025-era stateful leg` banners in `mcp/server.ts` and every declaration
-inside carries `@deprecated` — the fence is where the eventual cut goes, so **don't add to it or
-reach into it from the modern path**. `getMcpEraStats()` reports the counters that gate the
-deletion; criteria in `docs/proposals/mcp_modern_only_proposal.md`.
+**A client that cannot negotiate up is refused, not downgraded.** The 2025-era stateful leg —
+session map, idle eviction, GET-stream keep-alive, and the one read of an SDK-private
+`_streamMapping` — was deleted, and with it the silent fallback that made a stale CLI or a
+renamed gate cost nothing. `refuseLegacyEra` answers such a client with a message naming both
+provider gates; that log line is the diagnostic, and it means a spawn config or a binary is
+wrong, never that the tool call was.
 
 ### Verb semantics
 

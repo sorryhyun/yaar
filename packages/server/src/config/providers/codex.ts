@@ -356,13 +356,12 @@ export const DISABLED_FEATURES = [
  *   flag only     → POST server/discover, mcp-protocol-version 2026-07-28, no session id
  *                   — the modern stateless leg, env var unset
  *
- * So the flag alone is necessary and sufficient, and without it YAAR's Codex traffic lands on
- * the deprecated leg (`mcp/server.ts`'s fenced 2025-era block) no matter what the env var
- * says. Confirm with `getMcpEraStats()`: `legacyRequestsServed` should stay 0 and the one-time
- * `[MCP] DEPRECATED protocol era:` warning should never name codex. Its stage is `under
- * development`, so this is a deliberate opt-in ahead of stabilization, not a default YAAR
- * inherits — if a codex release regresses it, drop the entry and the stateful leg silently
- * catches the fallback.
+ * So the flag alone is necessary and sufficient, and without it codex speaks an era YAAR no
+ * longer serves. That is now a hard failure rather than a quiet downgrade: the 2025-era leg
+ * that used to catch it was deleted, so every Codex tool call is refused by `refuseLegacyEra`
+ * and `[MCP] refused legacy protocol era` names codex on every one. The flag's stage is still
+ * `under development` (`codex features list`), so a codex release *can* withdraw it — that log
+ * line, not a mysterious tool failure, is what says so.
  *
  * **`code_mode_host`** is deliberately *not* here. It is the *host* half of code mode: the
  * separate runtime process codex spawns and delegates `exec` cells to ("spawned code-mode

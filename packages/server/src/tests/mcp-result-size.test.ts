@@ -39,7 +39,12 @@ async function listTools(namespace: 'verbs' | 'app') {
     idleTimeout: 30,
     fetch: (req) => handleMcpRequest(req, namespace),
   });
-  const client = new Client({ name: 'result-size-test', version: '1.0.0' });
+  // `mode: 'auto'` because the endpoint serves revision 2026-07-28 only — a client left on
+  // the SDK's 2025-era default is refused outright (see `mcp-protocol-eras.test.ts`).
+  const client = new Client(
+    { name: 'result-size-test', version: '1.0.0' },
+    { versionNegotiation: { mode: 'auto' } },
+  );
   try {
     const transport = new StreamableHTTPClientTransport(
       new URL(`http://127.0.0.1:${server.port}/mcp`),

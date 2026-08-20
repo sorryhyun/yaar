@@ -107,10 +107,21 @@ const PARENT_HARNESS_ENV_VARS = [
  * 2026-07-28 MCP leg (`mcp/server.ts`'s `getModernHandler`), which needs no session id,
  * no idle eviction, and survives a server restart with no re-handshake. Both are required
  * — `MCP_SDK_GENERATION` selects the v2 runtime arm, and only that arm reads
- * `MCP_PROTOCOL_NEGOTIATION`, so either one alone is a no-op. They are **undocumented**
- * internal gates in a CLI YAAR does not pin, which is exactly why the stateful leg stays
- * in place: a renamed gate silently falls back to legacy `initialize` and every tool keeps
- * working. Do not delete the other leg on the strength of these two lines.
+ * `MCP_PROTOCOL_NEGOTIATION`, so either one alone is a no-op.
+ *
+ * They are kept as a **floor**, not as the thing that makes it work. Measured against
+ * claude-code 2.1.237 with a probe MCP endpoint: it opens with
+ * `POST server/discover, mcp-protocol-version: 2026-07-28` *with or without* these two vars
+ * set, so negotiation is that CLI's own behavior and these only pin it for a version (or a
+ * rollout arm) where it is not yet.
+ *
+ * That floor is now **load-bearing**: the 2025-era leg that used to catch a client which
+ * failed to negotiate is gone, so a CLI that lands on legacy `initialize` loses every tool
+ * at once rather than falling back (`refuseLegacyEra`, which names these vars in its
+ * refusal). Both are undocumented internal gates in a binary YAAR does not pin, and there is
+ * no `CLAUDE_MIN_VERSION` refusal watching for their disappearance — if
+ * `[MCP] refused legacy protocol era` starts naming `claude`, re-run that probe before
+ * looking anywhere else.
  */
 const CLAUDE_ENV_OVERRIDES = {
   MAX_MCP_OUTPUT_TOKENS: '131072',

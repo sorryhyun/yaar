@@ -218,6 +218,8 @@ replacing it, so anything declared there could never be taken away from a thread
 | Code mode | N/A | Off via the **model catalog**, not the flag: `gpt-5.6-terra` ships `tool_mode = "code_mode_only"`, and `effective_tool_mode()` reads the model before the features, so `features.code_mode=false` was inert and YAAR's agents really were running model-authored JS against `ALL_TOOLS` / `tools.mcp__verbs__invoke`. `model_catalog_json` pins `tool_mode = "direct"`. The flag stays as the fallback path; `code_mode_host` stays on because turning it off leaves a broken `exec` rather than no `exec` |
 | MCP protocol era | `MCP_SDK_GENERATION=v2` + `MCP_PROTOCOL_NEGOTIATION=auto` (both required) | `features.mcp_2026_07_28=true` (`ENABLED_FEATURES`) — the gate for HTTP MCP servers, which is all of YAAR's. `CODEX_MCP_PROTOCOL_VERSION` is the stdio-server equivalent and does **not** move these |
 
+Both rows are load-bearing rather than tuning: YAAR's MCP endpoint serves revision **2026-07-28 only**, so a provider that does not negotiate up is refused (`[MCP] refused legacy protocol era`) and loses every tool, instead of quietly falling back as it did while the 2025-era leg existed.
+
 ## Image Handling
 
 ### Claude

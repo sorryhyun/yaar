@@ -361,7 +361,7 @@ export class AppServer extends EventEmitter {
         // that puts YAAR's own servers on the modern leg — those are HTTP, and the CLI reads
         // this var only on the stdio path ("unsupported CODEX_MCP_PROTOCOL_VERSION `…` for
         // stdio MCP server; expected `2026-07-28`"). Setting it alone left every YAAR thread
-        // on the 2025-era stateful leg; `features.mcp_2026_07_28` in `getCodexAppServerArgs()`
+        // speaking the 2025-era protocol; `features.mcp_2026_07_28` in `getCodexAppServerArgs()`
         // is what actually moves them, and that comment carries the measurement. Kept because
         // a stdio server can still reach a thread (the user's config declares one, YAAR's
         // blanket disable misses it) and a bad value here is refused loudly rather than

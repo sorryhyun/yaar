@@ -33,7 +33,7 @@ than the package doc does):
 | `.claude/skills/codex-provider/SKILL.md` | Codex protocol/types regeneration workflow, version gates |
 | `.claude/skills/release/SKILL.md` | Release process, CI tiers |
 | `.claude/skills/headless-driving/SKILL.md` | Driving YAAR headlessly via browser |
-| `.claude/skills/server-verbs/SKILL.md` | The server's MCP/verb layer — protocol eras, verb semantics, access tiers, app protocol, sub-agents, self-update |
+| `.claude/skills/server-verbs/SKILL.md` | The server's MCP/verb layer — the MCP protocol era, verb semantics, access tiers, app protocol, sub-agents, self-update |
 | `.claude/skills/server-http/SKILL.md` | REST routes, the access chokepoint, principals, token invariants |
 | `.claude/skills/server-providers/SKILL.md` | AITransport contract, notice-vs-error rule, per-provider config, Codex packaging |
 

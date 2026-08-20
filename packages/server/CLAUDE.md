@@ -108,7 +108,7 @@ src/
 │   ├── agents.ts / apps.ts (barrel) / storage.ts / storage-bytes.ts / config.ts / history.ts / http.ts / mcp-gateway.ts
 │   └── fonts.ts / session.ts / skills.ts / system.ts / user.ts / window.ts
 ├── mcp/                  # MCP server + tool folders (see Tools section)
-│   ├── server.ts         # Tool registration, request handling; CORE_SERVERS; the two protocol eras
+│   ├── server.ts         # Tool registration, request handling; CORE_SERVERS; the one protocol era
 │   ├── result-size.ts    # The MCP result-size cliff and the per-tool annotation that moves it
 │   ├── agent-tokens.ts   # Per-agent token minting, bound to agent id server-side
 │   ├── system/           # Always-active: reload_cached, list_reload_options
@@ -283,8 +283,8 @@ domain logic from `features/`) via `yaar://` URIs.
 | `mcp/sub-agent/` | subagent | app-defined tools of the *calling* sub-agent — empty for everyone else |
 
 Everything below this surface lives in the `server-verbs` skill, which loads when editing
-`handlers/`, `mcp/`, or `features/`: the **two protocol eras** fork (`getModernHandler` in
-`mcp/server.ts` — read its two documented traps before touching the fork), verb semantics and the
+`handlers/`, `mcp/`, or `features/`: the **stateless-only protocol era** (`getModernHandler` in
+`mcp/server.ts` — read its two documented traps first), verb semantics and the
 six false-success rules, the two batching axes, **access tiers** (`access: 'session-principal'`),
 the app protocol and its `$defs` resolution, declared-not-automatic app-agent storage,
 monitor ↔ app messaging, sub-agent containment, and self-update (`features/update/`).

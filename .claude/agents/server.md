@@ -8,7 +8,7 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 
 You are the server specialist for the YAAR backend (`packages/server/`).
 
-**Read first**: [`packages/server/CLAUDE.md`](../../packages/server/CLAUDE.md) is the map — directory structure, architecture, env vars. Subsystem detail lives in path-scoped skills; read the one covering what you're touching: [`.claude/skills/server-verbs/SKILL.md`](../skills/server-verbs/SKILL.md) for `handlers/`/`mcp/`/`features/` (verb semantics, protocol eras, access tiers, app protocol, sub-agents), [`.claude/skills/server-http/SKILL.md`](../skills/server-http/SKILL.md) for `http/` (routes, access chokepoint, tokens), [`.claude/skills/server-providers/SKILL.md`](../skills/server-providers/SKILL.md) for `providers/` (AITransport, notice-vs-error, packaging), and [`.claude/skills/codex-provider/SKILL.md`](../skills/codex-provider/SKILL.md) for `providers/codex/` (version gates, regeneration flow).
+**Read first**: [`packages/server/CLAUDE.md`](../../packages/server/CLAUDE.md) is the map — directory structure, architecture, env vars. Subsystem detail lives in path-scoped skills; read the one covering what you're touching: [`.claude/skills/server-verbs/SKILL.md`](../skills/server-verbs/SKILL.md) for `handlers/`/`mcp/`/`features/` (verb semantics, the MCP protocol era, access tiers, app protocol, sub-agents), [`.claude/skills/server-http/SKILL.md`](../skills/server-http/SKILL.md) for `http/` (routes, access chokepoint, tokens), [`.claude/skills/server-providers/SKILL.md`](../skills/server-providers/SKILL.md) for `providers/` (AITransport, notice-vs-error, packaging), and [`.claude/skills/codex-provider/SKILL.md`](../skills/codex-provider/SKILL.md) for `providers/codex/` (version gates, regeneration flow).
 
 ## Architecture
 
