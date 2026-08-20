@@ -4,12 +4,11 @@
  * One socket per (browser app window, browserId). Down the socket go CDP
  * screencast frames; up it come the human's raw pointer/key events, which are
  * dispatched into the *same* CDP session the agent drives. That sharing is the
- * point, not an accident — see `docs/proposals/Interactive Browser — YAAR-side
- * requirements.md`.
+ * point, not an accident.
  *
- * This is deliberately NOT the sanctioned stream primitive that proposal calls
- * for (work item 1): there is no `app.json` stream declaration, no per-window
- * scoping beyond the iframe token, no capture-mode UI. It exists to answer one
+ * This is deliberately NOT a sanctioned stream primitive: there is no
+ * `app.json` stream declaration, no per-window scoping beyond the iframe
+ * token, no capture-mode UI. It exists to answer one
  * question — does remote render + input forwarding feel good in the hand? — and
  * carries the counters that answer it. P0 replaces it.
  *
