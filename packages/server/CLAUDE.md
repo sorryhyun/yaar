@@ -90,7 +90,8 @@ src/
 │   ├── interaction-timeline.ts / pool-types.ts / turn-helpers.ts
 │   ├── profiles/         # one dir per profile (orchestrator/, session-agent/, app-agent/), each with a prompts/ subdir of
 │   │                     #   markdown parts; shared parts in profiles/prompts/, combined by compose.ts; plus sub-agent,
-│   │                     #   developer, turn-options, codex-roles, model-tiers, types, index (pure barrel)
+│   │                     #   developer, turn-options, codex-roles, model-tiers, types, index (pure barrel).
+│   │                     #   App-agent prompt/tool sourcing: docs/reference/app_agent_prompt.md
 │   ├── session-policies/       # StreamToEventMapper, ToolActionBridge
 │   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends
