@@ -37,6 +37,7 @@
  */
 
 import { listApps, loadAppSkill } from './discovery.js';
+import { loadAppDocs, runtimeDocs, type AppDocTopic } from './docs.js';
 import { defsOf } from '../../lib/schema-refs.js';
 import { buildProtocolIndex } from '../../lib/protocol-index.js';
 
@@ -75,7 +76,7 @@ export async function describeApp(
   const app = apps.find((a) => a.id === appId);
   if (!app) return null;
 
-  const skill = await loadAppSkill(appId);
+  const [skill, docs] = await Promise.all([loadAppSkill(appId), loadAppDocs(appId)]);
 
   return {
     name: app.name,
@@ -86,7 +87,40 @@ export async function describeApp(
     // spawn, so an operator reading them reads the wrong script (`persona-commands.ts`).
     ...(app.protocol ? protocolSection(appId, app.protocol, options.protocol ?? 'names') : {}),
     ...(skill ? { skill } : {}),
+    ...docsSection(appId, docs, options.protocol ?? 'names'),
     ...(app.permissions?.length ? { permissions: app.permissions } : {}),
+  };
+}
+
+/**
+ * The `docs` block of a describe payload: the topic index, beside the protocol's table
+ * of contents and for the same reason — the topics are the pull tier
+ * (`features/apps/docs.ts`), and a pull-based doc is only reachable if this index says
+ * it exists. Cost is one scent line per topic, so the answer's size stays governed by
+ * what authors write in descriptions, exactly as the protocol split intended.
+ *
+ * Audience-filtered to what a runtime caller can act on; `dev` topics reach their
+ * reader through the cloned tree. The door named for each detail level follows the
+ * protocol section's rule: a verbs caller is pointed at URIs, an app agent — who holds
+ * four scoped tools and no verbs — at its own `describe({ topic })` spelling.
+ */
+function docsSection(
+  appId: string,
+  allTopics: AppDocTopic[],
+  detail: ProtocolDetail,
+): Record<string, unknown> {
+  const topics = runtimeDocs(allTopics);
+  if (topics.length === 0) return {};
+  const base = `yaar://apps/${appId}/docs`;
+  return {
+    docs: {
+      uri: base,
+      topics: topics.map((t) => ({ name: t.name, description: t.description })),
+      one:
+        detail === 'names'
+          ? `read("${base}/{name}") — one topic in full, markdown.`
+          : `describe({ topic: "{name}"${appId ? `, appId: "${appId}"` : ''} }) — one topic in full.`,
+    },
   };
 }
 

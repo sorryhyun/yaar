@@ -107,6 +107,7 @@ import { genId } from '../../lib/ids.js';
 import { getAppMeta, type ControlEntry } from '../../features/apps/discovery.js';
 import type { Verb, VerbResult } from '../../handlers/uri-registry.js';
 import { describeApp } from '../../features/apps/describe.js';
+import { loadAppDocs } from '../../features/apps/docs.js';
 import { findProtocolCommand, commandDocument } from '../../handlers/apps/protocol-resource.js';
 import { renderPayloadExample } from '../../lib/command-signature.js';
 import {
@@ -611,9 +612,11 @@ export function registerAppAgentTools(server: McpServer): void {
     {
       description:
         "An app's manual — its SKILL.md if it ships one, plus an index of its protocol: " +
-        "every state key and every command's call signature with its opening sentence. " +
+        "every state key and every command's call signature with its opening sentence, " +
+        'and an index of its topic docs when it ships any. ' +
         'Pass `command` to get one command in full instead, with its complete parameter schema — ' +
         'that is the door to use when a signature leaves you unsure, not a second full describe. ' +
+        'Pass `topic` to get one topic doc in full, by the name the index shows. ' +
         'Omit appId to describe your own app; pass appId to inspect another app you are permitted to control.',
       inputSchema: {
         appId: z
@@ -627,6 +630,12 @@ export function registerAppAgentTools(server: McpServer): void {
           .optional()
           .describe(
             'One command to document in full (name as it appears in the index), instead of the whole manual.',
+          ),
+        topic: z
+          .string()
+          .optional()
+          .describe(
+            'One topic doc to read in full (name as it appears in the docs index), instead of the whole manual.',
           ),
       },
       _meta: LARGE_RESULT_META,
@@ -655,6 +664,26 @@ export function registerAppAgentTools(server: McpServer): void {
       // through the one tool it does hold, answering with the same builder.
       if (args.command) {
         return describeOneCommand(targetAppId, args.command);
+      }
+
+      // One topic doc in full — the app agent's spelling of
+      // `read('yaar://apps/{id}/docs/{name}')`, for the same reason as `command` above:
+      // this caller holds no `read` verb, so the URI the docs index would otherwise
+      // point at is a door it cannot open. The lookup is against *all* topics, not the
+      // runtime-filtered index: a `dev` topic asked for by name is answered, same as
+      // the verbs door.
+      if (args.topic) {
+        const topics = await loadAppDocs(targetAppId);
+        const topic = topics.find((t) => t.name === args.topic);
+        if (!topic) {
+          return error(
+            `"${args.topic}" is not a doc topic of "${targetAppId}". ` +
+              (topics.length
+                ? `Declared: ${topics.map((t) => t.name).join(', ')}.`
+                : 'It ships no topic docs at all.'),
+          );
+        }
+        return ok(topic.body);
       }
 
       // One shape for one verb: this is `describeApp`, the same builder behind

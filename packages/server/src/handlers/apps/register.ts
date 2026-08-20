@@ -39,6 +39,7 @@ import {
   listAppProtocol,
   rejectProtocolMutation,
 } from './protocol-resource.js';
+import { describeAppDocs, readAppDocs, listAppDocs, rejectDocsMutation } from './docs-resource.js';
 import {
   appActions,
   appsListHandler,
@@ -79,7 +80,7 @@ function rejectInstanceSubPath(uri: string): VerbResult | null {
 }
 
 /** Every sub-path under `yaar://apps/{id}` that some resource module owns. */
-const KNOWN_SUBPATHS = ['storage', 'db', 'agents', 'protocol'] as const;
+const KNOWN_SUBPATHS = ['storage', 'db', 'agents', 'protocol', 'docs'] as const;
 
 /**
  * The refusal for any sub-path that reached the terminal — `yaar://apps/notes/hamsters`.
@@ -124,6 +125,8 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       'Sub-path /protocol is the compiled protocol: list it for an index of command ' +
       'signatures, read it for the manifest in full, read /protocol/commands/{name} for one ' +
       'command self-contained. ' +
+      'Sub-path /docs is the app’s topic docs: list it for an index of topics and their ' +
+      'triggers, read /docs/{name} for one topic. ' +
       'Sub-path /storage/{path} provides app-scoped file storage. ' +
       'Sub-path /db/{collection} provides app-scoped SQLite collections (Mongo-style filters + full-text search). ' +
       "Sub-path /agents[/{personaId}] provides the app's own tool-less persona agents. " +
@@ -178,6 +181,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const protocolResult = await describeAppProtocol(resolved.sourceUri);
       if (protocolResult) return protocolResult;
 
+      const docsResult = await describeAppDocs(resolved.sourceUri);
+      if (docsResult) return docsResult;
+
       return rejectUnhandledSubPath(resolved.sourceUri) ?? describeApplication(resolved);
     },
 
@@ -196,6 +202,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
       const protocolResult = await readAppProtocol(resolved.sourceUri);
       if (protocolResult) return protocolResult;
+
+      const docsResult = await readAppDocs(resolved.sourceUri);
+      if (docsResult) return docsResult;
 
       return rejectUnhandledSubPath(resolved.sourceUri) ?? readApplication(resolved);
     },
@@ -216,6 +225,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const protocolResult = await listAppProtocol(resolved.sourceUri);
       if (protocolResult) return protocolResult;
 
+      const docsResult = await listAppDocs(resolved.sourceUri);
+      if (docsResult) return docsResult;
+
       return rejectUnhandledSubPath(resolved.sourceUri) ?? listApplication();
     },
 
@@ -235,6 +247,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
       const protocolResult = rejectProtocolMutation(resolved.sourceUri, 'invoke');
       if (protocolResult) return protocolResult;
 
+      const docsResult = rejectDocsMutation(resolved.sourceUri, 'invoke');
+      if (docsResult) return docsResult;
+
       return rejectUnhandledSubPath(resolved.sourceUri) ?? invokeApplication(resolved, payload);
     },
 
@@ -253,6 +268,9 @@ export function registerAppsHandlers(registry: ResourceRegistry): void {
 
       const protocolResult = rejectProtocolMutation(resolved.sourceUri, 'delete');
       if (protocolResult) return protocolResult;
+
+      const docsResult = rejectDocsMutation(resolved.sourceUri, 'delete');
+      if (docsResult) return docsResult;
 
       return rejectUnhandledSubPath(resolved.sourceUri) ?? deleteApplication(resolved);
     },

@@ -1,9 +1,11 @@
 # Proposal: an authoring guide for devtools — because devtools writes the canon
 
-**Status:** proposal
+**Status:** implemented 2026-08-20 (Layers 1–2 and the lint half of Layer 3; the exemplar
+cleanup pass is deliberately left as the delegated work — see Status at the end)
 **Date:** 2026-08-20
 **Sibling proposals:** [`app_agent_docs_proposal.md`](./app_agent_docs_proposal.md) (the
-docs tier this guide would live in), the instruction-channel audit and delegation proposals.
+docs tier this guide lives in — **landed**), the instruction-channel audit and delegation
+proposals.
 
 ## Problem
 
@@ -114,6 +116,11 @@ The pass is bounded (a dozen apps) and mostly mechanical once the lints exist �
 lints, fix the warns, hand-review the prose surfaces (AGENTS.md, SKILL.md, protocol
 descriptions) against the Layer 2 outline.
 
+The pass is also the guide's first real test, so it is **delegated to devtools itself**
+rather than done at the repo level: devtools clones an app, reads the guide the way every
+future session will (the `authoring-style` scent line → `describe({ topic })`), applies it,
+and deploys. What the guide fails to carry through that loop is what needs rewriting.
+
 ## What this is not
 
 - **Not a human style doc.** Prettier/ESLint already govern formatting; CLAUDE.md governs
@@ -122,3 +129,35 @@ descriptions) against the Layer 2 outline.
 - **Not new machinery.** Layer 2 rides the docs tier; Layer 3 rides the existing check
   script. Only Layer 1 touches a prompt, and it shrinks-not-grows if the docs-tier
   proposal's reference sections move out of `prompt.md` first.
+
+## Status (2026-08-20)
+
+Implemented the same day as the docs tier it rides on, with three divergences from the
+draft above — each a consequence of the tier landing first:
+
+- **Layer 1 landed** as `## Writing Code and Docs` in `apps/devtools/agent/prompt.md` —
+  the five bright lines, plus pointers to the two topics that carry the prose
+  (`authoring-style` for the how, `markdown-files` for which file serves which reader).
+- **Layer 2 landed** as `apps/devtools/agent/docs/authoring-style.md`
+  (`audience: agent`). It deliberately does **not** carry the doc-placement table the
+  outline above included — that became the `markdown-files` topic in the docs-tier
+  migration, and one owner per fact holds between topics too. The style topic covers:
+  trigger-shaped descriptions, update-don't-add, protocol description style (the worked
+  good/bad pair), comment discipline (with the house file-header idiom named as the
+  exception), CSS/chrome discipline, nouns-read/verbs-run naming, and the pre-deploy
+  exemplar question.
+- **Layer 3 lints landed** in `scripts/check/apps.ts`, all ADVISORY:
+  `narration-comment` (0 hits), `protocol-description-shape` (0 hits — the draft's
+  "multi-paragraph" check was **dropped**: the channel audit found long prose-manual
+  descriptions are the repo's *strongest* channel, so length is house style, not a smell;
+  only missing descriptions and name-restating boilerplate openers warn), and
+  `local-chrome-shadow` (3 hits — bare `.y-*` selector redefinitions and `--yaar-*`
+  assignments; scoped instance-layout overrides pass, and `yaar-check-ignore` works in
+  CSS comments). The docs-tier lints (`prompt-restates-topic`, `doc-may-be-stale`,
+  `app-doc-frontmatter`) landed with the tier itself.
+- **The exemplar pass has not been run** — it is the delegated step, per the note in
+  Layer 3. Its work queue is the advisory counts: 3 × `local-chrome-shadow`
+  (`apps/storage/src/styles/nav-overlay.css` — judge whether the deliberate pin
+  augmentation is sanctioned, then restructure or suppress with a reason) and
+  4 × `skill-restates-protocol` (`apps/browser-user/agent/SKILL.md`), plus the
+  hand-review of prose surfaces against the guide.

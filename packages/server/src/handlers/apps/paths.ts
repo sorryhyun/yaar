@@ -98,6 +98,20 @@ export function parseAppProtocolPath(uri: string): { appId: string; rest: string
   return { appId: match[1], rest: (match[2] ?? '').replace(/\/+$/, '') };
 }
 
+/**
+ * Parse `yaar://apps/{appId}/docs[/{name}]` → { appId, name? } or null.
+ *
+ * Same division of labor as the protocol parser above: the name is not validated here —
+ * a syntactically fine slug no topic answers to is a 404 from the resource, which knows
+ * the declared names and can say them; a *malformed* tail (extra segments) is also the
+ * resource's refusal, so the error can name the one-topic-per-address rule.
+ */
+export function parseAppDocsPath(uri: string): { appId: string; rest: string } | null {
+  const match = uri.match(/^yaar:\/\/apps\/([^/]+)\/docs(?:\/(.*))?$/);
+  if (!match) return null;
+  return { appId: match[1], rest: (match[2] ?? '').replace(/\/+$/, '') };
+}
+
 /** Parse `yaar://apps/{appId}/db[/{collection}[/{docId}]]` or null. */
 export function parseAppDbPath(
   uri: string,

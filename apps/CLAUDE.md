@@ -26,19 +26,20 @@ name.
 Full tool surface, lifecycle, and containment rules: the `server-verbs` skill
 (`.claude/skills/server-verbs/SKILL.md`); [`packages/server/CLAUDE.md`](../packages/server/CLAUDE.md) for the map.
 
-### Agent docs — three files, three readers
+### Agent docs — four surfaces, four readers
 
 | File | Read by |
 |---|---|
 | `agent/prompt.md` | **Replaces** the app agent's base prompt entirely (no append tier). Either way the `protocol.json` manifest is appended as rendered call signatures. |
 | `agent/hint.md` | The **monitor agent's** system prompt — orchestration hints, auto-synced with install/uninstall |
 | `agent/SKILL.md` | No prompt. It is the hand-written manual `describe('yaar://apps/{id}')` returns — workflows, ordering, when *not* to use the app. `scripts/check/apps.ts` warns when it restates the protocol, which is served separately at `yaar://apps/{id}/protocol`. |
+| `agent/docs/*.md` | Nobody, until pulled. One topic per file, frontmatter-indexed (`name`, a trigger-shaped `description`, `audience: agent\|dev\|both`); only the **index** is generated into the app agent's prompt and `describe` payloads. Served at `yaar://apps/{id}/docs/{name}`, via `describe({ topic })` on the app agent's tool, and as plain files in a clone. `features/apps/docs.ts` owns the tier; `scripts/check/apps.ts` validates frontmatter and warns when `prompt.md` restates a topic. |
 
 Paths are configurable via `app.json`'s `agent: { prompt, hint, skill }` (`AGENT_DOCS` in
-`features/apps/discovery.ts`). Root `AGENTS.md` is deliberately **not** read as a prompt — it
-keeps its ecosystem meaning (instructions to a coding agent editing that directory). The full
-rules — override handling, legacy `HINT.md`, what clone and deploy carry — live in
-`discovery.ts`'s doc comments.
+`features/apps/discovery.ts`); `agent/docs/` is a fixed location. Root `AGENTS.md` is
+deliberately **not** read as a prompt — it keeps its ecosystem meaning (instructions to a
+coding agent editing that directory). The full rules — override handling, legacy `HINT.md`,
+what clone and deploy carry — live in `discovery.ts`'s and `docs.ts`'s doc comments.
 
 Key server files: `agents/app-task-processor.ts` (routing), `agents/agent-pool.ts` (lifecycle),
 `agents/profiles/app-agent.ts` (prompt builder), `mcp/app-agent/` (the four tools).

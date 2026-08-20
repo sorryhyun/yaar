@@ -15,6 +15,7 @@
 import type { AgentProfile } from '../types.js';
 import { APP_AGENT_TOOL_NAMES } from '../types.js';
 import { loadAppPrompt, listApps } from '../../../features/apps/discovery.js';
+import { loadAppDocs, runtimeDocs } from '../../../features/apps/docs.js';
 import { APP_MOUNT_ID, describeDesignTokensBrief } from '@yaar/compiler';
 import { resolveAgentModel } from '../model-tiers.js';
 // The door this section documents, asked for the grant it is rendered from — so a prompt
@@ -187,7 +188,11 @@ missing.`;
  * generic prompt part is. Protocol manifest from app.json is appended in both cases.
  */
 export async function buildAppAgentProfile(appId: string): Promise<AgentProfile> {
-  const [appPrompt, apps] = await Promise.all([loadAppPrompt(appId), listApps()]);
+  const [appPrompt, apps, appDocs] = await Promise.all([
+    loadAppPrompt(appId),
+    listApps(),
+    loadAppDocs(appId),
+  ]);
   const appInfo = apps.find((a) => a.id === appId);
   const appName = appInfo?.name ?? appId;
   const protocol = appInfo?.protocol;
@@ -253,6 +258,22 @@ export async function buildAppAgentProfile(appId: string): Promise<AgentProfile>
           typeof desc === 'string' ? desc : ((desc as { description?: string })?.description ?? '');
         systemPrompt += `- \`${renderSignature(key, desc, defs)}\`: ${description}\n`;
       }
+    }
+  }
+
+  // The app's own topic-docs index (`agent/docs/`, `features/apps/docs.ts`) — generated
+  // from frontmatter like Available Commands, so it cannot drift. This is the *entire*
+  // always-loaded footprint of the docs tier: one scent line per topic, with the body a
+  // `describe({ topic })` away. The bodies are never auto-injected — pushing them on a
+  // heuristic would rebuild the always-loaded tier with extra steps.
+  const promptDocs = runtimeDocs(appDocs);
+  if (promptDocs.length > 0) {
+    systemPrompt += '\n## App Docs — read with `describe({ topic: "name" })`\n\n';
+    systemPrompt +=
+      'Reference topics this prompt deliberately does not carry. Each line names its ' +
+      'trigger; pull the topic when the trigger fires, not before.\n\n';
+    for (const t of promptDocs) {
+      systemPrompt += `- \`${t.name}\`: ${t.description}\n`;
     }
   }
 

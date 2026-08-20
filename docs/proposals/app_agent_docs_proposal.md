@@ -1,6 +1,7 @@
 # Proposal: `agent/docs/` — a topic tier for app knowledge
 
-**Status:** proposal
+**Status:** implemented 2026-08-20 (runtime tier + devtools migration; the `covers` lookup
+in devtools and the singularity-reader dev split remain open — see Status at the end)
 **Date:** 2026-08-20
 **Motivating examples:** `apps/devtools` (268-line `agent/prompt.md`, every turn) and
 `user-apps/thesingularity-reader` (721-line `AGENTS.md`, swallowed whole by whoever edits it)
@@ -214,8 +215,23 @@ brief, and the platform's appended sections; the gated-SDK method rosters
 (`@bundled/yaar-dev`/`yaar-web`) were also cut in favour of `describeBundledLibrary`. Two
 facts migrated *into* descriptors rather than being deleted: the no-project `"Done."` trap
 (→ the `project` state key) and writeFile's array-of-objects refusal (→ its command
-description). Still open, in order: finding C (own-app `describe({})` → docs index — this
-proposal's server work), this proposal's docs-tier migration of the prompt's remaining
-reference sections (URI table, Bundled Libraries, App Structure, Solid Gotchas), and the
-two lints. A structural refactor of the devtools prompt is planned to follow the prune —
-sequence it with (or ahead of) the docs-tier migration so sections move once, not twice.
+description).
+
+**The tier itself has landed** (same date, one pass so sections moved once):
+
+- Server: `features/apps/docs.ts` (+ the pure `doc-frontmatter.ts` leaf shared with the
+  lint), the `yaar://apps/{id}/docs` resource (`handlers/apps/docs-resource.ts`), the
+  `docs` section in `describeApp`, the `topic` param on the app agent's `describe` tool,
+  the generated `## App Docs` prompt appendix, and clone/deploy carrying `agent/docs/`.
+  Finding C rides in: own-app `describe({})` now returns the docs index, and the prompt's
+  steering sentence is gone. Pinned by `tests/app-docs-doors.test.ts`.
+- Lints (`scripts/check/apps.ts`): `app-doc-frontmatter` (ERROR), `prompt-restates-topic`
+  and `doc-may-be-stale` (ADVISORY).
+- Devtools migration: `prompt.md` restructured 30.3 KB → 11.4 KB; eleven `audience: agent`
+  topics (~22 KB) under `apps/devtools/agent/docs/`. Slightly wider than the worked split
+  above: `verb-api`, `external-json`, and `app-structure` moved too, and the preview
+  section split into an inline core loop plus a `preview-debugging` topic.
+
+**Still open:** the `covers`-based lookup in devtools (surfacing "topics covering this
+file" when a clone's file is opened for editing), and the `thesingularity-reader`
+dev-audience split — both value-adds on top of the landed tier, not dependencies of it.

@@ -24,6 +24,15 @@
 
 import { readFileSync, readdirSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
+// The one parser both the runtime and this lint read topics with — a leaf module with
+// no imports, so pulling it in does not boot the server's config. See its header.
+import {
+  AGENT_DOCS_DIR,
+  DOC_SLUG_RE,
+  DOC_DESCRIPTION_MAX,
+  DOC_AUDIENCES,
+  parseDocFrontmatter,
+} from '../../packages/server/src/features/apps/doc-frontmatter.ts';
 
 const REPO_ROOT = resolve(import.meta.dir, '..', '..');
 const APPS_DIR = join(REPO_ROOT, 'apps');
@@ -422,7 +431,48 @@ function isInsideDefineCommand(code: string, index: number): boolean {
   return false;
 }
 
-const RULES: Rule[] = [storageRule, sleepRule, dialogRule, markedRule, handlerTypeRule];
+// ---------------------------------------------------------------------------
+// Rule 6: narration comments
+// ---------------------------------------------------------------------------
+
+/**
+ * Flags comment lines shaped like narration (`// now update the state`, `// call the
+ * handler`) or task residue (`// fixed the bug where…`) — the two comment shapes the
+ * authoring guide (devtools' `agent/docs/authoring-style.md`) bans, because they rot
+ * the moment the change lands and are then copied as the house idiom by the next
+ * generated app.
+ *
+ * Heuristic on purpose, and permanently ADVISORY: it matches a handful of high-confidence
+ * openers on line-leading `//` comments in the raw source, and a matching line inside a
+ * template literal (a scaffold that *generates* code) is worth the warning too — that
+ * comment is about to be authored into another app.
+ */
+const NARRATION_OPENERS =
+  /^\s*\/\/\s*(?:(?:now|then|first|next),?\s+(?:we|let'?s|update|call|create|render|set)\b|we\s+(?:now|then|just|need to|can now)\b|call(?:ing)?\s+the\b|fixed\s+(?:the|a)\b|as\s+requested\b|per\s+the\s+(?:request|task|fix)\b)/i;
+
+const narrationRule: Rule = {
+  id: 'narration-comment',
+  severity: 'ADVISORY',
+  title: 'narration or task-residue comments — comments state what the code cannot',
+  scan(_code, raw, file) {
+    const violations: Violation[] = [];
+    for (const [i, line] of raw.split('\n').entries()) {
+      if (NARRATION_OPENERS.test(line)) {
+        violations.push({ file, line: i + 1, message: line.trim().slice(0, 100) });
+      }
+    }
+    return violations;
+  },
+};
+
+const RULES: Rule[] = [
+  storageRule,
+  sleepRule,
+  dialogRule,
+  markedRule,
+  handlerTypeRule,
+  narrationRule,
+];
 
 // ---------------------------------------------------------------------------
 // Doc rule: agent/SKILL.md must not restate protocol.json
@@ -493,6 +543,275 @@ function scanSkillDoc(appDir: string, appId: string): Violation[] {
         });
         break;
       }
+    }
+  }
+  return violations;
+}
+
+// ---------------------------------------------------------------------------
+// Doc rules: the agent/docs/ topic tier
+// ---------------------------------------------------------------------------
+
+/**
+ * `agent/docs/*.md` is the pull tier of app knowledge: one topic per file, indexed by
+ * its frontmatter `description` into every generated index (the app agent's prompt
+ * appendix, describe payloads, `yaar://apps/{id}/docs`). The index is the entire
+ * static-tier footprint of a topic — a pull-based doc is only reachable if the index
+ * says it exists — so the frontmatter is validated hard (`app-doc-frontmatter`, ERROR:
+ * the tier is new, so the count starts at zero and stays there), and two advisory rules
+ * keep the tier honest over time:
+ *
+ * - `prompt-restates-topic` — a `prompt.md` heading matching a topic's name is the
+ *   restatement smell: the section was migrated to the docs tier and then grew back.
+ *   Same detection shape as `skill-restates-protocol`, and advisory for the same
+ *   reason — a heading can legitimately share words with a topic.
+ * - `doc-may-be-stale` — a `covers` path newer (by mtime) than its topic file. Warn,
+ *   not fail: a source change may not touch what the doc describes; authors confirm
+ *   by touching (or editing) the doc.
+ */
+const DOC_FRONTMATTER_RULE_ID = 'app-doc-frontmatter';
+const PROMPT_TOPIC_RULE_ID = 'prompt-restates-topic';
+const DOC_STALE_RULE_ID = 'doc-may-be-stale';
+
+function agentPromptPath(appDir: string): string {
+  try {
+    const meta = JSON.parse(readFileSync(join(appDir, 'app.json'), 'utf8'));
+    const declared = meta?.agent?.prompt;
+    if (typeof declared === 'string' && declared && !declared.startsWith('/')) return declared;
+  } catch {
+    /* no app.json, or unreadable — the default is the answer */
+  }
+  return 'agent/prompt.md';
+}
+
+interface AppDocScan {
+  frontmatter: Violation[];
+  restates: Violation[];
+  stale: Violation[];
+}
+
+/** A heading reduced to the shape a slug has, so the two can be compared at all. */
+function slugify(heading: string): string {
+  return heading
+    .toLowerCase()
+    .replace(/[`*_]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+function scanAppDocs(appDir: string, appId: string): AppDocScan {
+  const result: AppDocScan = { frontmatter: [], restates: [], stale: [] };
+  const docsDir = join(appDir, AGENT_DOCS_DIR);
+
+  let entries: string[];
+  try {
+    entries = readdirSync(docsDir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return result; // No agent/docs/ — the common case.
+  }
+
+  const topicNames: string[] = [];
+  for (const filename of entries.sort()) {
+    const file = relative(REPO_ROOT, join(docsDir, filename));
+    const bad = (message: string) => result.frontmatter.push({ file, line: 1, message });
+
+    const stem = filename.replace(/\.md$/, '');
+    if (!DOC_SLUG_RE.test(stem)) {
+      bad(`"${filename}" is not a kebab-case slug — the topic is unaddressable.`);
+      continue;
+    }
+    topicNames.push(stem);
+
+    const content = readFileSync(join(docsDir, filename), 'utf8');
+    const { fields } = parseDocFrontmatter(content);
+
+    if (typeof fields.name === 'string' && fields.name !== stem) {
+      bad(`frontmatter name "${fields.name}" disagrees with the filename — the filename wins.`);
+    }
+    if (typeof fields.description !== 'string' || !fields.description) {
+      bad(
+        'missing frontmatter description — the description is the topic’s entire ' +
+          'always-loaded footprint; write it as the trigger ("read before touching X").',
+      );
+    } else if (fields.description.length > DOC_DESCRIPTION_MAX) {
+      bad(
+        `description is ${fields.description.length} chars (max ${DOC_DESCRIPTION_MAX}) — ` +
+          'past that length it is a summary, not a trigger.',
+      );
+    }
+    if (
+      fields.audience !== undefined &&
+      !(
+        typeof fields.audience === 'string' &&
+        (DOC_AUDIENCES as readonly string[]).includes(fields.audience)
+      )
+    ) {
+      bad(`audience must be one of ${DOC_AUDIENCES.join('/')}.`);
+    }
+
+    const covers = Array.isArray(fields.covers)
+      ? fields.covers
+      : typeof fields.covers === 'string' && fields.covers
+        ? [fields.covers]
+        : [];
+    const docMtime = statSync(join(docsDir, filename)).mtimeMs;
+    for (const pattern of covers) {
+      const matches = [...new Bun.Glob(pattern).scanSync({ cwd: appDir })];
+      if (matches.length === 0) {
+        bad(`covers "${pattern}" matches nothing under apps/${appId}/ — a broken pointer.`);
+        continue;
+      }
+      const newer = matches.filter((m) => {
+        try {
+          return statSync(join(appDir, m)).mtimeMs > docMtime;
+        } catch {
+          return false;
+        }
+      });
+      if (newer.length > 0) {
+        result.stale.push({
+          file,
+          line: 1,
+          message:
+            `${newer.slice(0, 3).join(', ')}${newer.length > 3 ? `, … (${newer.length} total)` : ''} ` +
+            'changed after this topic was last written — confirm the doc still holds, then touch it.',
+        });
+      }
+    }
+  }
+
+  // The restatement lint: a prompt heading whose slugified form is a topic's name.
+  if (topicNames.length > 0) {
+    const promptRel = agentPromptPath(appDir);
+    let prompt: string;
+    try {
+      prompt = readFileSync(join(appDir, promptRel), 'utf8');
+    } catch {
+      return result; // No prompt.md — the generic base restates nothing.
+    }
+    const file = relative(REPO_ROOT, join(appDir, promptRel));
+    for (const [i, line] of prompt.split('\n').entries()) {
+      const heading = line.match(/^#{1,6}\s+(.+)$/);
+      if (!heading) continue;
+      const slug = slugify(heading[1]);
+      const hit = topicNames.find((t) => slug === t);
+      if (hit) {
+        result.restates.push({
+          file,
+          line: i + 1,
+          message:
+            `heading matches the "${hit}" topic in ${AGENT_DOCS_DIR}/ — the prompt must carry ` +
+            'the index line, not the section. Keep bright lines; move the prose.',
+        });
+      }
+    }
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Authoring rules: shared chrome and protocol descriptions
+// ---------------------------------------------------------------------------
+
+/**
+ * Two more per-app-surface rules from the authoring guide
+ * (`apps/devtools/agent/docs/authoring-style.md`), both ADVISORY:
+ *
+ * - `local-chrome-shadow` — app CSS redefining a `.y-*` chrome class or assigning a
+ *   `--yaar-*` design token. The platform injects both into every app; a local
+ *   redefinition shadows the shared copy, and the next clone copies the shadow — the
+ *   drift the app-UI-pattern work already paid to undo once. *Using* a class in markup
+ *   is the point; *redefining* it in a stylesheet is the smell.
+ * - `protocol-description-shape` — a command description that is missing, opens with
+ *   name-restating boilerplate ("this command…", "allows the agent to…"), or runs to
+ *   multiple paragraphs. Descriptions are prompt material read by an agent deciding
+ *   whether to call the command; the shape is one line — what it does, then the
+ *   precondition that makes it fail.
+ */
+const CHROME_SHADOW_RULE_ID = 'local-chrome-shadow';
+const PROTOCOL_DESCRIPTION_RULE_ID = 'protocol-description-shape';
+
+function cssFilesUnder(dir: string, acc: string[] = []): string[] {
+  let entries: string[];
+  try {
+    entries = readdirSync(dir);
+  } catch {
+    return acc;
+  }
+  for (const entry of entries) {
+    if (entry === 'node_modules' || entry === 'dist' || entry.startsWith('.')) continue;
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) cssFilesUnder(full, acc);
+    else if (entry.endsWith('.css')) acc.push(full);
+  }
+  return acc;
+}
+
+function scanChromeShadow(appDir: string): Violation[] {
+  const violations: Violation[] = [];
+  for (const cssPath of cssFilesUnder(join(appDir, 'src'))) {
+    const file = relative(REPO_ROOT, cssPath);
+    const lines = readFileSync(cssPath, 'utf8').split('\n');
+    // Same suppression contract as the source rules: `yaar-check-ignore
+    // local-chrome-shadow -- <reason>` in a CSS comment on the line or the line above.
+    const suppressed = (i: number) =>
+      [lines[i], lines[i - 1]].some(
+        (l) => l != null && /yaar-check-ignore\s+local-chrome-shadow\s+--\s+\S/.test(l),
+      );
+    for (const [i, line] of lines.entries()) {
+      if (suppressed(i)) continue;
+      // A *bare* `.y-*` selector — the line's selector starts with the chrome class —
+      // redefines it for the whole app. A scoped override (`.account-controls .y-btn
+      // { margin-left: auto }`) is laying out an instance inside a local container and
+      // passes; restyling through a scope is possible but rare, and this is warn-tier.
+      // `var(--yaar-…)` *usage* is fine anywhere; assignment is not.
+      if (/^\s*\.y-[a-z0-9-]+[^;{}]*[{,]/.test(line)) {
+        violations.push({
+          file,
+          line: i + 1,
+          message: `redefines shared chrome: ${line.trim().slice(0, 80)} — the y-* classes are platform-injected; style your own class instead.`,
+        });
+      } else if (/--yaar-[a-z0-9-]+\s*:/.test(line)) {
+        violations.push({
+          file,
+          line: i + 1,
+          message: `assigns a design token: ${line.trim().slice(0, 80)} — --yaar-* values are the platform's; define an app-local property instead.`,
+        });
+      }
+    }
+  }
+  return violations;
+}
+
+const DESCRIPTION_BOILERPLATE =
+  /^(this (command|state key|key)\b|allows? (the agent|you|an agent)\b|(is )?used (to|for)\b)/i;
+
+function scanProtocolDescriptions(appDir: string, appId: string): Violation[] {
+  let protocol: { commands?: Record<string, unknown> };
+  try {
+    protocol = JSON.parse(readFileSync(join(appDir, 'dist', 'protocol.json'), 'utf8'));
+  } catch {
+    return []; // Nothing compiled to check.
+  }
+
+  const file = relative(REPO_ROOT, join(appDir, 'dist', 'protocol.json'));
+  const violations: Violation[] = [];
+  for (const [name, entry] of Object.entries(protocol.commands ?? {})) {
+    const description =
+      typeof entry === 'string' ? entry : ((entry as { description?: string })?.description ?? '');
+    const bad = (why: string) =>
+      violations.push({
+        file,
+        line: 1,
+        message: `${appId}: command "${name}" ${why} — fix the descriptor in src/ and recompile; dist/ is generated.`,
+      });
+
+    if (!description.trim()) {
+      bad('has no description; an agent cannot decide whether to call it');
+    } else if (DESCRIPTION_BOILERPLATE.test(description.trim())) {
+      bad(
+        `opens with boilerplate ("${description.trim().slice(0, 40)}…"); lead with the effect, then the failure precondition`,
+      );
     }
   }
   return violations;
@@ -579,9 +898,13 @@ function main(): void {
     }
   }
 
-  // Doc rule runs per app directory, not per source file — it compares two artifacts
-  // (agent/SKILL.md and dist/protocol.json), neither of which is scannable source.
+  // Doc rules run per app directory, not per source file — they compare artifacts
+  // (agent/SKILL.md, agent/docs/*.md, agent/prompt.md, dist/protocol.json), none of
+  // which is scannable source.
   const skillViolations: Violation[] = [];
+  const docScan: AppDocScan = { frontmatter: [], restates: [], stale: [] };
+  const chromeViolations: Violation[] = [];
+  const descriptionViolations: Violation[] = [];
   for (const app of readdirSync(APPS_DIR)) {
     const appDir = join(APPS_DIR, app);
     try {
@@ -592,22 +915,68 @@ function main(): void {
     if (targets.length > 0 && !targets.some((t) => resolve(REPO_ROOT, t).startsWith(appDir)))
       continue;
     skillViolations.push(...scanSkillDoc(appDir, app));
+    const scan = scanAppDocs(appDir, app);
+    docScan.frontmatter.push(...scan.frontmatter);
+    docScan.restates.push(...scan.restates);
+    docScan.stale.push(...scan.stale);
+    chromeViolations.push(...scanChromeShadow(appDir));
+    descriptionViolations.push(...scanProtocolDescriptions(appDir, app));
   }
 
-  let errorTotal = 0;
-  let advisoryTotal = skillViolations.length;
+  const docRules: Array<{ id: string; severity: Severity; title: string; found: Violation[] }> = [
+    {
+      id: SKILL_DOC_RULE_ID,
+      severity: 'ADVISORY',
+      title: 'agent/SKILL.md does not restate protocol.json',
+      found: skillViolations,
+    },
+    {
+      id: DOC_FRONTMATTER_RULE_ID,
+      severity: 'ERROR',
+      title: 'agent/docs/ topics carry valid frontmatter',
+      found: docScan.frontmatter,
+    },
+    {
+      id: PROMPT_TOPIC_RULE_ID,
+      severity: 'ADVISORY',
+      title: 'agent/prompt.md does not restate a docs topic',
+      found: docScan.restates,
+    },
+    {
+      id: DOC_STALE_RULE_ID,
+      severity: 'ADVISORY',
+      title: 'agent/docs/ topics are newer than the sources they cover',
+      found: docScan.stale,
+    },
+    {
+      id: CHROME_SHADOW_RULE_ID,
+      severity: 'ADVISORY',
+      title: 'app CSS does not redefine y-* chrome or assign --yaar-* tokens',
+      found: chromeViolations,
+    },
+    {
+      id: PROTOCOL_DESCRIPTION_RULE_ID,
+      severity: 'ADVISORY',
+      title: 'protocol command descriptions lead with the effect, not boilerplate',
+      found: descriptionViolations,
+    },
+  ];
 
-  if (skillViolations.length === 0) {
-    if (!quiet)
-      console.log(
-        `✅ [ADVISORY] ${SKILL_DOC_RULE_ID}: clean — agent/SKILL.md does not restate protocol.json`,
-      );
-  } else {
-    console.warn(
-      `⚠️  [ADVISORY] ${SKILL_DOC_RULE_ID}: ${skillViolations.length} violation(s) — ` +
-        'agent/SKILL.md restates names protocol.json already carries',
-    );
-    for (const v of skillViolations) console.warn(`     ${v.file}:${v.line}  ${v.message}`);
+  let errorTotal = 0;
+  let advisoryTotal = 0;
+
+  for (const rule of docRules) {
+    if (rule.severity === 'ERROR') errorTotal += rule.found.length;
+    else advisoryTotal += rule.found.length;
+
+    if (rule.found.length === 0) {
+      if (!quiet) console.log(`✅ [${rule.severity}] ${rule.id}: clean — ${rule.title}`);
+      continue;
+    }
+    const icon = rule.severity === 'ERROR' ? '❌' : '⚠️ ';
+    const log = rule.severity === 'ERROR' ? console.error : console.warn;
+    log(`${icon} [${rule.severity}] ${rule.id}: ${rule.found.length} violation(s) — ${rule.title}`);
+    for (const v of rule.found) log(`     ${v.file}:${v.line}  ${v.message}`);
   }
 
   for (const rule of RULES) {
@@ -632,7 +1001,9 @@ function main(): void {
       `  ${rule.severity.padEnd(8)} ${rule.id.padEnd(24)} ${byRule.get(rule.id)!.length}`,
     );
   }
-  console.log(`  ${'ADVISORY'.padEnd(8)} ${SKILL_DOC_RULE_ID.padEnd(24)} ${skillViolations.length}`);
+  for (const rule of docRules) {
+    console.log(`  ${rule.severity.padEnd(8)} ${rule.id.padEnd(24)} ${rule.found.length}`);
+  }
 
   if (errorTotal > 0) {
     console.error(

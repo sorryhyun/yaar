@@ -18,6 +18,7 @@ import { toDisplayName } from './helpers.js';
 import { ensureAppShortcut, removeAppShortcut } from '../../storage/shortcuts.js';
 import { DEPLOY_ROOT, appIdRefusal, resolveAppDir } from '../apps/roots.js';
 import { agentDocPaths, APP_ROOT_DOCS, invalidateAppsCache } from '../apps/discovery.js';
+import { agentDocsFilesFor } from '../apps/docs.js';
 import { retireStaleApp } from '../apps/retire.js';
 import { snapshotApp } from './git.js';
 
@@ -401,7 +402,13 @@ export async function doDeploy(
     // an app's architecture notes, deploy, and the file existed nowhere but the sandbox.
     // The agent-doc paths come from the sandbox's own app.json, so a doc lands where the
     // reader will look for it; the root docs are at fixed names by definition.
-    for (const relPath of [...Object.values(agentDocPaths(sandboxMeta)), ...APP_ROOT_DOCS]) {
+    // Topic docs are a directory, not fixed names — enumerated from the sandbox, since
+    // what the sandbox holds is what the deploy must carry.
+    for (const relPath of [
+      ...Object.values(agentDocPaths(sandboxMeta)),
+      ...(await agentDocsFilesFor(sandboxPath)),
+      ...APP_ROOT_DOCS,
+    ]) {
       let content: string;
       try {
         content = await Bun.file(join(sandboxPath, relPath)).text();

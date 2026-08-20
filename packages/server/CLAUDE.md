@@ -122,7 +122,7 @@ src/
 │   └── index.ts          # Re-exports for server, system tools, verb tools
 ├── features/             # Domain business logic (imported by handlers/)
 │   ├── agents/           # Agent-facing feature logic
-│   ├── apps/             # App listing, agent docs loading, describe.ts, capabilities.ts (grant ceiling), marketplace, badge
+│   ├── apps/             # App listing, agent docs loading, docs.ts (agent/docs/ topic tier), describe.ts, capabilities.ts (grant ceiling), marketplace, badge
 │   ├── browser/          # CDP browser automation actions
 │   ├── config/           # Hooks, settings, shortcuts, mounts, app config, domains
 │   ├── dev/              # Compile, typecheck, deploy, clone, git.ts (per-app version history)

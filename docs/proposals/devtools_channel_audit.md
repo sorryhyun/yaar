@@ -1,6 +1,6 @@
 # Audit: the devtools agent's instruction channels — map, duplications, prune plan
 
-**Status:** proposal (audit with actions) — prune pass (step 1) landed 2026-08-20; findings C + lints open
+**Status:** implemented — prune pass (step 1) landed 2026-08-20; docs-tier migration, finding C, and both lints landed the same day (see `app_agent_docs_proposal.md`'s Status)
 **Date:** 2026-08-20
 **Sibling proposals:** [`app_agent_docs_proposal.md`](./app_agent_docs_proposal.md),
 [`devtools_authoring_guide_proposal.md`](./devtools_authoring_guide_proposal.md),

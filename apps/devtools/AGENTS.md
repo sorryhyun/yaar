@@ -193,3 +193,9 @@ with `appId` and `timeoutMs` as top-level siblings, never nested. The document d
 positional-plus-options-object form for a long time and *every* example in it was consequently
 wrong. If you touch the Tools section, verify against the live tool schema, not against the prose
 that is already there.
+
+The prompt carries only workflow, judgment, and bright lines; reference prose lives in
+`agent/docs/` — one topic per file, indexed into the prompt by generated frontmatter scent
+lines and pulled with `describe({ topic })`. If a topic exists, the prompt must not restate
+it (`prompt-restates-topic` in `scripts/check/apps.ts` warns on a heading matching a topic's
+name); grow reference material as a new topic, not as a prompt section.
