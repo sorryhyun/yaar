@@ -251,7 +251,7 @@ describe('a window message answered on a fresh app agent', () => {
   }
 
   function currentAgentId(): string | undefined {
-    return pool.agentPool.getAppAgent(MONITOR, APP)?.instanceId;
+    return pool.agentPool.appAgents.get(MONITOR, APP)?.instanceId;
   }
 
   /**
@@ -266,7 +266,7 @@ describe('a window message answered on a fresh app agent', () => {
     session: { isRunning(): boolean; steer: unknown; interrupt: unknown };
   }> {
     for (let i = 0; i < 100; i++) {
-      const agent = pool.agentPool.getAppAgent(MONITOR, APP);
+      const agent = pool.agentPool.appAgents.get(MONITOR, APP);
       if (agent?.session.isRunning()) return agent as never;
       await new Promise((resolve) => setTimeout(resolve, 1));
     }
@@ -280,22 +280,22 @@ describe('a window message answered on a fresh app agent', () => {
 
     expect(first).toBeDefined();
     expect(currentAgentId()).toBe(first!);
-    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+    expect(pool.agentPool.appAgents.size).toBe(1);
   });
 
   it('runs on a new agent, and retires the old one, when the flag is set', async () => {
     await message('m1');
-    const first = pool.agentPool.getAppAgent(MONITOR, APP)!;
+    const first = pool.agentPool.appAgents.get(MONITOR, APP)!;
 
     await message('m2', { fresh: true });
-    const second = pool.agentPool.getAppAgent(MONITOR, APP)!;
+    const second = pool.agentPool.appAgents.get(MONITOR, APP)!;
 
     expect(second.instanceId).not.toBe(first.instanceId);
     // The predecessor's provider is ended, which is where its memory of the session
     // lived — a `fresh` agent that shared the old provider would remember everything.
     expect(first.session.cleanup).toHaveBeenCalled();
     // Retired, not accumulated: one agent per (monitor, app) still.
-    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+    expect(pool.agentPool.appAgents.size).toBe(1);
   });
 
   it('leaves the app agent in place when there was none to begin with', async () => {
@@ -304,7 +304,7 @@ describe('a window message answered on a fresh app agent', () => {
     await message('m1', { fresh: true });
 
     expect(currentAgentId()).toBeDefined();
-    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+    expect(pool.agentPool.appAgents.size).toBe(1);
   });
 
   it('does not steer a fresh task into the turn it asked not to inherit', async () => {
@@ -326,7 +326,7 @@ describe('a window message answered on a fresh app agent', () => {
     releaseHeldTurns();
     await Promise.all([first, second]);
 
-    expect(pool.agentPool.getAppAgent(MONITOR, APP)!.instanceId).not.toBe(incumbent.instanceId);
+    expect(pool.agentPool.appAgents.get(MONITOR, APP)!.instanceId).not.toBe(incumbent.instanceId);
   });
 
   it('steers a plain task into the running turn, as before', async () => {
@@ -347,13 +347,13 @@ describe('a window message answered on a fresh app agent', () => {
     // in no collection, invisible to every dispose path and to cleanup(), holding a
     // provider process and a limiter slot for the life of the session.
     const [a, b] = await Promise.all([
-      pool.agentPool.getOrCreateAppAgent(MONITOR, APP),
-      pool.agentPool.getOrCreateAppAgent(MONITOR, APP),
+      pool.agentPool.appAgents.getOrCreate(MONITOR, APP),
+      pool.agentPool.appAgents.getOrCreate(MONITOR, APP),
     ]);
 
     expect(a).not.toBeNull();
     expect(b!.instanceId).toBe(a!.instanceId);
-    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+    expect(pool.agentPool.appAgents.size).toBe(1);
     expect(pool.agentPool.listAgents().filter((e) => e.type === 'app').length).toBe(1);
   });
 
@@ -361,13 +361,13 @@ describe('a window message answered on a fresh app agent', () => {
     // The dispose arrives while the create is inside `acquireProvider`, so the agent
     // is in no collection to be found. Settling the reservation first is what keeps
     // it from landing seconds after the thing that owns it stopped existing.
-    const creating = pool.agentPool.getOrCreateAppAgent(MONITOR, APP);
-    const disposing = pool.agentPool.disposeAppAgent(MONITOR, APP);
+    const creating = pool.agentPool.appAgents.getOrCreate(MONITOR, APP);
+    const disposing = pool.agentPool.appAgents.dispose(MONITOR, APP);
 
     await Promise.all([creating, disposing]);
 
-    expect(pool.agentPool.hasAppAgent(MONITOR, APP)).toBe(false);
-    expect(pool.agentPool.getAppAgentCount()).toBe(0);
+    expect(pool.agentPool.appAgents.has(MONITOR, APP)).toBe(false);
+    expect(pool.agentPool.appAgents.size).toBe(0);
     expect(pool.agentPool.listAgents().filter((e) => e.type === 'app').length).toBe(0);
   });
 });

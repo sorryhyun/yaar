@@ -76,6 +76,7 @@ src/
 ├── agents/               # Agent lifecycle, pooling, context management
 │   ├── agent-pool.ts     # AgentPool — creation, disposal, and the global slot each agent holds
 │   ├── agent-roster.ts   # PooledAgent, the composite keys, listAgents()/buildAgentTree() — pure projections
+│   ├── app-agent-registry.ts   # AppAgentRegistry — the whole app-agent tier (reuse, idle reaper), reached via `AgentPool.appAgents`
 │   ├── sub-agent-registry.ts   # SubAgentRegistry — the whole sub-agent tier, reached via `AgentPool.subAgents`
 │   ├── spawn-reservations.ts   # SpawnReservations — reserve-before-first-await / join / settle-before-sweep
 │   ├── context-pool.ts   # ContextPool — unified task orchestration

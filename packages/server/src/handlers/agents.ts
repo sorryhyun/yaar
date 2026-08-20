@@ -236,7 +236,7 @@ export function registerAgentsHandlers(registry: ResourceRegistry): void {
         for (const a of appAgents) {
           // An app agent is keyed by (monitor, app); the roster always carries both.
           if (!a.monitorId) continue;
-          await pool.agentPool.disposeAppAgent(a.monitorId, a.appId!);
+          await pool.agentPool.appAgents.dispose(a.monitorId, a.appId!);
         }
         const names = appAgents.map((a) => `"${a.appId}" (monitor ${a.monitorId})`).join(', ');
         return ok(`App agent${appAgents.length > 1 ? 's' : ''} disposed: ${names}.`);

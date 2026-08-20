@@ -132,7 +132,7 @@ export class WindowEventCoordinator {
     const appId = this.ctx.windowState.getAppIdForWindow(windowKey);
     const monitorId = this.ctx.windowState.getMonitorForWindow(windowKey);
     if (!appId || !monitorId) return;
-    if (!this.ctx.agentPool.hasAppAgent(monitorId, appId)) {
+    if (!this.ctx.agentPool.appAgents.has(monitorId, appId)) {
       log.debug('wakeAgent emit dropped — no app agent running', { appId, monitorId, channel });
       return;
     }
@@ -241,7 +241,7 @@ export class WindowEventCoordinator {
    * Find the windowId for a given agent instanceId. Only app agents own a window.
    */
   findWindowForAgent(agentId: string): string | undefined {
-    const app = this.ctx.agentPool.findAppForAgent(agentId);
+    const app = this.ctx.agentPool.appAgents.findByAgentId(agentId);
     if (app) return this.appProcessor.getActiveWindowId(app.monitorId, app.appId);
     return undefined;
   }

@@ -46,11 +46,11 @@ function fakeProvider(): AITransport {
 
 /** Reach the private sweep — the interval that calls it is wall-clock. */
 const sweep = (pool: AgentPool) =>
-  (pool as unknown as { reapIdleAppAgents: () => Promise<void> }).reapIdleAppAgents();
+  (pool.appAgents as unknown as { reapIdle: () => Promise<void> }).reapIdle();
 
 /** Backdate an agent past the idle TTL. */
 function age(pool: AgentPool, monitorId: string, appId: string, byMs = APP_AGENT_IDLE_MS + 1) {
-  const agent = pool.getAppAgent(monitorId, appId)!;
+  const agent = pool.appAgents.get(monitorId, appId)!;
   agent.lastUsed = Date.now() - byMs;
   return agent;
 }
@@ -74,28 +74,28 @@ describe('app-agent idle reaper', () => {
   });
 
   it('disposes an app agent that has gone quiet, and returns its slot', async () => {
-    await pool.getOrCreateAppAgent('0', 'memo');
-    expect(pool.hasAppAgent('0', 'memo')).toBe(true);
+    await pool.appAgents.getOrCreate('0', 'memo');
+    expect(pool.appAgents.has('0', 'memo')).toBe(true);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 1);
 
     age(pool, '0', 'memo');
     await sweep(pool);
 
-    expect(pool.hasAppAgent('0', 'memo')).toBe(false);
+    expect(pool.appAgents.has('0', 'memo')).toBe(false);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore);
   });
 
   it('leaves an agent that is still within its TTL', async () => {
-    await pool.getOrCreateAppAgent('0', 'memo');
+    await pool.appAgents.getOrCreate('0', 'memo');
 
     age(pool, '0', 'memo', APP_AGENT_IDLE_MS - 60_000);
     await sweep(pool);
 
-    expect(pool.hasAppAgent('0', 'memo')).toBe(true);
+    expect(pool.appAgents.has('0', 'memo')).toBe(true);
   });
 
   it('never reaps a busy agent, and restarts its clock when it goes quiet', async () => {
-    await pool.getOrCreateAppAgent('0', 'memo');
+    await pool.appAgents.getOrCreate('0', 'memo');
 
     // `lastUsed` is stamped at turn *start*, so a turn longer than the TTL would leave
     // the agent instantly reapable the moment it finished. The sweep refreshes a busy
@@ -105,41 +105,41 @@ describe('app-agent idle reaper', () => {
 
     await sweep(pool);
 
-    expect(pool.hasAppAgent('0', 'memo')).toBe(true);
+    expect(pool.appAgents.has('0', 'memo')).toBe(true);
     expect(Date.now() - agent.lastUsed).toBeLessThan(APP_AGENT_IDLE_MS);
   });
 
   it('reaps each expired app independently, on the monitor that owns it', async () => {
-    await pool.getOrCreateAppAgent('0', 'memo');
-    await pool.getOrCreateAppAgent('0', 'notes');
-    await pool.getOrCreateAppAgent('1', 'memo');
+    await pool.appAgents.getOrCreate('0', 'memo');
+    await pool.appAgents.getOrCreate('0', 'notes');
+    await pool.appAgents.getOrCreate('1', 'memo');
 
     age(pool, '0', 'memo');
     age(pool, '1', 'memo');
     await sweep(pool);
 
-    expect(pool.hasAppAgent('0', 'memo')).toBe(false);
-    expect(pool.hasAppAgent('1', 'memo')).toBe(false);
+    expect(pool.appAgents.has('0', 'memo')).toBe(false);
+    expect(pool.appAgents.has('1', 'memo')).toBe(false);
     // Untouched: the key is (monitor, app), and `notes` was never idle.
-    expect(pool.hasAppAgent('0', 'notes')).toBe(true);
+    expect(pool.appAgents.has('0', 'notes')).toBe(true);
     expect(getAgentLimiter().getCurrentCount()).toBe(slotsBefore + 1);
   });
 
   it('restarts the clock when the agent is handed out, before its turn begins', async () => {
-    await pool.getOrCreateAppAgent('0', 'memo');
+    await pool.appAgents.getOrCreate('0', 'memo');
     age(pool, '0', 'memo');
 
-    // Between `getOrCreateAppAgent` returning and `runAgentTurn` stamping `lastUsed`,
+    // Between `appAgents.getOrCreate` returning and `runAgentTurn` stamping `lastUsed`,
     // the agent is neither busy nor recently used. Touching it on the reuse path is
     // what keeps the sweep from taking it out from under its caller.
-    await pool.getOrCreateAppAgent('0', 'memo');
+    await pool.appAgents.getOrCreate('0', 'memo');
     await sweep(pool);
 
-    expect(pool.hasAppAgent('0', 'memo')).toBe(true);
+    expect(pool.appAgents.has('0', 'memo')).toBe(true);
   });
 
   it("leaves the app's sub-agents alone, exactly as a `fresh` turn does", async () => {
-    await pool.getOrCreateAppAgent('0', 'memo');
+    await pool.appAgents.getOrCreate('0', 'memo');
     const spawned = await pool.subAgents.spawn('0', 'memo', 'alice', {
       systemPrompt: 'You are Alice.',
       max: 4,
@@ -149,7 +149,7 @@ describe('app-agent idle reaper', () => {
     age(pool, '0', 'memo');
     await sweep(pool);
 
-    expect(pool.hasAppAgent('0', 'memo')).toBe(false);
+    expect(pool.appAgents.has('0', 'memo')).toBe(false);
     // A sub-agent's owner is the (monitor, app) pair, not the app agent — same rule
     // that keeps them alive across `fresh: true`.
     expect(pool.subAgents.get('0', 'memo', 'alice')).toBeTruthy();

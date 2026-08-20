@@ -125,7 +125,7 @@ export class AppTaskProcessor {
     // be abandoned.
     if (!isParallel && this.ctx.windowQueuePolicy.isProcessing(processingKey)) {
       const steered =
-        !task.fresh && (await this.ctx.agentPool.steerAppAgent(monitorId, appId, task.content));
+        !task.fresh && (await this.ctx.agentPool.appAgents.steer(monitorId, appId, task.content));
       if (steered) {
         log.info('steered task into running app agent', { messageId: task.messageId, appId });
         const source = windowSource(windowId);
@@ -184,7 +184,7 @@ export class AppTaskProcessor {
       // this turn is about to ask for.
       if (task.fresh) await this.releaseAgent(monitorId, appId);
 
-      const agent = await this.ctx.agentPool.getOrCreateAppAgent(monitorId, appId);
+      const agent = await this.ctx.agentPool.appAgents.getOrCreate(monitorId, appId);
       if (!agent) {
         this.ctx.windowQueuePolicy.setProcessing(processingKey, false);
         log.error('failed to create app agent', { appId, monitorId });
@@ -306,7 +306,7 @@ export class AppTaskProcessor {
   /**
    * Retire one app's agent on one monitor so the next turn starts from nothing.
    *
-   * The agent's memory lives in its provider session, which `disposeAppAgent` ends —
+   * The agent's memory lives in its provider session, which `appAgents.dispose` ends —
    * the context tape is a log, and nothing reads it back into a prompt, so there is
    * no branch to prune here.
    *
@@ -326,13 +326,13 @@ export class AppTaskProcessor {
    * Two callers: a `fresh: true` task, which retires the agent so the message it carries
    * is answered by one that remembers nothing, and the close of an app's last window on
    * this monitor. Both mean the same thing to the agent — end of memory — which is why
-   * they share this and not merely a call to `disposeAppAgent`: the handoff fingerprints
+   * they share this and not merely a call to `appAgents.dispose`: the handoff fingerprints
    * have to go with it either way.
    */
   private async releaseAgent(monitorId: string, appId: string): Promise<void> {
-    if (!this.ctx.agentPool.hasAppAgent(monitorId, appId)) return;
+    if (!this.ctx.agentPool.appAgents.has(monitorId, appId)) return;
 
-    await this.ctx.agentPool.disposeAppAgent(monitorId, appId);
+    await this.ctx.agentPool.appAgents.dispose(monitorId, appId);
 
     for (const handle of this.ctx.windowState.handleMap.listByMonitor(monitorId)) {
       if (this.ctx.windowState.getAppIdForWindow(handle) === appId) {
@@ -385,7 +385,7 @@ export class AppTaskProcessor {
       this.activeWindows.delete(key);
     }
 
-    const agent = this.ctx.agentPool.getAppAgent(owner, appId);
+    const agent = this.ctx.agentPool.appAgents.get(owner, appId);
     if (agent?.session.isRunning()) {
       log.info('interrupting app agent — its window closed', {
         appId,

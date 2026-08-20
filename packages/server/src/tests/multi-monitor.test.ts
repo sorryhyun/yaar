@@ -343,63 +343,63 @@ describe('App agents are scoped to their monitor', () => {
   });
 
   it('the same app on two monitors gets two distinct agents', async () => {
-    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'storage');
-    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+    const onZero = await pool.agentPool.appAgents.getOrCreate('0', 'storage');
+    const onOne = await pool.agentPool.appAgents.getOrCreate('1', 'storage');
 
     expect(onZero).not.toBeNull();
     expect(onOne).not.toBeNull();
     expect(onOne!.instanceId).not.toBe(onZero!.instanceId);
-    expect(pool.agentPool.getAppAgentCount()).toBe(2);
+    expect(pool.agentPool.appAgents.size).toBe(2);
   });
 
   it('reuses one agent per (monitor, app) pair', async () => {
-    const first = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
-    const again = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+    const first = await pool.agentPool.appAgents.getOrCreate('1', 'storage');
+    const again = await pool.agentPool.appAgents.getOrCreate('1', 'storage');
 
     expect(again!.instanceId).toBe(first!.instanceId);
-    expect(pool.agentPool.getAppAgentCount()).toBe(1);
+    expect(pool.agentPool.appAgents.size).toBe(1);
   });
 
   it('a monitor cannot see another monitor’s app agent', async () => {
-    await pool.agentPool.getOrCreateAppAgent('0', 'storage');
+    await pool.agentPool.appAgents.getOrCreate('0', 'storage');
 
-    expect(pool.agentPool.hasAppAgent('0', 'storage')).toBe(true);
-    expect(pool.agentPool.hasAppAgent('1', 'storage')).toBe(false);
-    expect(pool.agentPool.getAppAgent('1', 'storage')).toBeUndefined();
+    expect(pool.agentPool.appAgents.has('0', 'storage')).toBe(true);
+    expect(pool.agentPool.appAgents.has('1', 'storage')).toBe(false);
+    expect(pool.agentPool.appAgents.get('1', 'storage')).toBeUndefined();
   });
 
   it('removing a monitor disposes only its own app agents', async () => {
-    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'storage');
-    await pool.agentPool.getOrCreateAppAgent('1', 'storage');
-    await pool.agentPool.getOrCreateAppAgent('1', 'dock');
-    expect(pool.agentPool.getAppAgentCount()).toBe(3);
+    const onZero = await pool.agentPool.appAgents.getOrCreate('0', 'storage');
+    await pool.agentPool.appAgents.getOrCreate('1', 'storage');
+    await pool.agentPool.appAgents.getOrCreate('1', 'dock');
+    expect(pool.agentPool.appAgents.size).toBe(3);
 
     await pool.removeMonitorAgent('1');
 
-    expect(pool.agentPool.getAppAgentCount()).toBe(1);
-    expect(pool.agentPool.hasAppAgent('1', 'storage')).toBe(false);
-    expect(pool.agentPool.hasAppAgent('1', 'dock')).toBe(false);
-    expect(pool.agentPool.getAppAgent('0', 'storage')!.instanceId).toBe(onZero!.instanceId);
+    expect(pool.agentPool.appAgents.size).toBe(1);
+    expect(pool.agentPool.appAgents.has('1', 'storage')).toBe(false);
+    expect(pool.agentPool.appAgents.has('1', 'dock')).toBe(false);
+    expect(pool.agentPool.appAgents.get('0', 'storage')!.instanceId).toBe(onZero!.instanceId);
   });
 
   it('findMonitorForAgent reports an app agent’s owning monitor', async () => {
     // Every MCP request scopes its window lookups by getMonitorId(), which is fed
     // from here. If app agents were absent, they'd all default to monitor 0 and an
     // app agent on monitor 1 would look for its own window on monitor 0.
-    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'devtools');
-    const onZero = await pool.agentPool.getOrCreateAppAgent('0', 'devtools');
+    const onOne = await pool.agentPool.appAgents.getOrCreate('1', 'devtools');
+    const onZero = await pool.agentPool.appAgents.getOrCreate('0', 'devtools');
 
     expect(pool.agentPool.findMonitorForAgent(onOne!.instanceId)).toBe('1');
     expect(pool.agentPool.findMonitorForAgent(onZero!.instanceId)).toBe('0');
   });
 
   it('reports the owning monitor on the roster and resolves it back from an instanceId', async () => {
-    const onOne = await pool.agentPool.getOrCreateAppAgent('1', 'storage');
+    const onOne = await pool.agentPool.appAgents.getOrCreate('1', 'storage');
 
     const entry = pool.agentPool.listAgents().find((a) => a.id === onOne!.instanceId);
     expect(entry).toMatchObject({ type: 'app', appId: 'storage', monitorId: '1' });
 
-    expect(pool.agentPool.findAppForAgent(onOne!.instanceId)).toEqual({
+    expect(pool.agentPool.appAgents.findByAgentId(onOne!.instanceId)).toEqual({
       monitorId: '1',
       appId: 'storage',
     });
@@ -552,7 +552,7 @@ describe('wakeAgent wakes the emitting app’s own agent', () => {
   const settle = () => new Promise((r) => setTimeout(r, 30));
 
   it('delivers the event to the app agent that is running', async () => {
-    await pool.agentPool.getOrCreateAppAgent('0', 'ai-chat');
+    await pool.agentPool.appAgents.getOrCreate('0', 'ai-chat');
 
     pool.notifyAppChannel('0/ai-chat', 'worker', { answer: 'done' }, undefined, {
       wakeAgent: true,
@@ -567,7 +567,7 @@ describe('wakeAgent wakes the emitting app’s own agent', () => {
   });
 
   it('delivers nothing when the app has no agent running', async () => {
-    expect(pool.agentPool.hasAppAgent('0', 'ai-chat')).toBe(false);
+    expect(pool.agentPool.appAgents.has('0', 'ai-chat')).toBe(false);
 
     pool.notifyAppChannel('0/ai-chat', 'worker', { answer: 'done' }, undefined, {
       wakeAgent: true,
@@ -578,7 +578,7 @@ describe('wakeAgent wakes the emitting app’s own agent', () => {
   });
 
   it('leaves an emit without the flag delivering to subscribers only', async () => {
-    await pool.agentPool.getOrCreateAppAgent('0', 'ai-chat');
+    await pool.agentPool.appAgents.getOrCreate('0', 'ai-chat');
 
     pool.notifyAppChannel('0/ai-chat', 'worker', { answer: 'done' });
     await settle();
@@ -589,8 +589,8 @@ describe('wakeAgent wakes the emitting app’s own agent', () => {
   it('wakes the agent on the emitting window’s own monitor', async () => {
     // Both monitors run their own copy of the app and its own agent. The raw window
     // id is shared, so an unscoped lookup would wake whichever was found first.
-    await pool.agentPool.getOrCreateAppAgent('0', 'ai-chat');
-    await pool.agentPool.getOrCreateAppAgent('1', 'ai-chat');
+    await pool.agentPool.appAgents.getOrCreate('0', 'ai-chat');
+    await pool.agentPool.appAgents.getOrCreate('1', 'ai-chat');
 
     pool.notifyAppChannel('1/ai-chat', 'worker', { answer: 'from monitor 1' }, undefined, {
       wakeAgent: true,

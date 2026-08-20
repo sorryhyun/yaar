@@ -26,7 +26,7 @@ export interface PooledAgent {
   instanceId: string;
   /**
    * When this agent last ran a turn or was handed to a caller. Read only by the
-   * app-agent idle reaper (`AgentPool.reapIdleAppAgents`); every other tier
+   * app-agent idle reaper (`AppAgentRegistry.reapIdle`); every other tier
    * writes it and nothing reads it, which is fine — the field is the reaper's clock,
    * and a tier with another reclaim path does not need one.
    */
