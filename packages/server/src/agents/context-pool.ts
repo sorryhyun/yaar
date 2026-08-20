@@ -115,16 +115,27 @@ export class ContextPool implements PoolContext {
   providerType: ProviderType | null = null;
 
   private broadcastFn: (event: ServerEvent) => void;
-  private monitorQueues = new Map<string, MonitorQueuePolicy>();
   /**
-   * One timeline per monitor — what happened on a desktop is drained into that
-   * desktop's next turn and no other's.
+   * Each monitor's slice of the pool — queue and timeline — created and dropped as a
+   * unit. They used to be two parallel maps keyed by the same monitorId, so every
+   * removal had to remember both, and a map forgotten in one teardown path is a
+   * timeline nothing will ever drain again.
    *
-   * A single session-wide timeline made every entry belong to whichever monitor spoke
-   * next: monitor 1's agent read (and drained) the windows the user moved on monitor 0,
-   * and monitor 0 never saw them at all.
+   * Per-monitor for the same reason in both halves: the queue serializes one desktop's
+   * turns, and what happened on a desktop is drained into that desktop's next turn and
+   * no other's. A single session-wide timeline made every entry belong to whichever
+   * monitor spoke next: monitor 1's agent read (and drained) the windows the user
+   * moved on monitor 0, and monitor 0 never saw them at all.
+   *
+   * Two per-monitor pieces deliberately live elsewhere: `resettingMonitors`, because
+   * the reset flag must survive the very removal that deletes this record
+   * (`resetMonitor` drops the monitor mid-guard), and the background budget, because
+   * `MonitorBudgetPolicy` owns its own rate windows and outlives any one monitor.
    */
-  private timelines = new Map<string, InteractionTimeline>();
+  private monitors = new Map<
+    string,
+    { queue: MonitorQueuePolicy; timeline: InteractionTimeline }
+  >();
   private resetting = false;
   /**
    * The monitors a `resetMonitor()` is currently tearing down.
@@ -205,28 +216,34 @@ export class ContextPool implements PoolContext {
 
   // ── PoolContext methods ─────────────────────────────────────────────
 
+  /** One monitor's slice of the pool, created whole on first use. */
+  private monitorState(monitorId: string): {
+    queue: MonitorQueuePolicy;
+    timeline: InteractionTimeline;
+  } {
+    let state = this.monitors.get(monitorId);
+    if (!state) {
+      state = {
+        queue: new MonitorQueuePolicy(MAX_QUEUE_SIZE),
+        timeline: new InteractionTimeline(),
+      };
+      this.monitors.set(monitorId, state);
+    }
+    return state;
+  }
+
   /** The timeline for one monitor, created on first use. */
   timelineFor(monitorId: string): InteractionTimeline {
-    let timeline = this.timelines.get(monitorId);
-    if (!timeline) {
-      timeline = new InteractionTimeline();
-      this.timelines.set(monitorId, timeline);
-    }
-    return timeline;
+    return this.monitorState(monitorId).timeline;
   }
 
   /** Whether this monitor's main queue is occupied. Never creates one. */
   isMonitorBusy(monitorId: string): boolean {
-    return this.monitorQueues.get(monitorId)?.isBusy() ?? false;
+    return this.monitors.get(monitorId)?.queue.isBusy() ?? false;
   }
 
   getOrCreateMonitorQueue(monitorId: string): MonitorQueuePolicy {
-    let queue = this.monitorQueues.get(monitorId);
-    if (!queue) {
-      queue = new MonitorQueuePolicy(MAX_QUEUE_SIZE);
-      this.monitorQueues.set(monitorId, queue);
-    }
-    return queue;
+    return this.monitorState(monitorId).queue;
   }
 
   async sendEvent(event: ServerEvent): Promise<void> {
@@ -343,16 +360,15 @@ export class ContextPool implements PoolContext {
   }
 
   async removeMonitorAgent(monitorId: string): Promise<void> {
-    const queue = this.monitorQueues.get(monitorId);
-    if (queue) {
+    const state = this.monitors.get(monitorId);
+    if (state) {
       this.reportDropped(
-        queue.clear().map((i) => i.task),
+        state.queue.clear().map((i) => i.task),
         `monitor ${monitorId} was removed`,
       );
-      this.monitorQueues.delete(monitorId);
+      // The timeline goes with the queue — nothing will ever drain it again.
+      this.monitors.delete(monitorId);
     }
-    // Nothing will ever drain this monitor's timeline again.
-    this.timelines.delete(monitorId);
 
     // AgentPool.removeMonitorAgent disposes the monitor's app agents too; drop the
     // processor's window tracking for them so nothing dangles.
@@ -377,7 +393,7 @@ export class ContextPool implements PoolContext {
   }
 
   resumeMonitor(monitorId: string): boolean {
-    const queue = this.monitorQueues.get(monitorId);
+    const queue = this.monitors.get(monitorId)?.queue;
     if (!queue || !queue.isSuspended()) return false;
     queue.resume();
     log.info('resumed monitor', { monitorId });
@@ -388,8 +404,7 @@ export class ContextPool implements PoolContext {
   }
 
   isMonitorSuspended(monitorId: string): boolean {
-    const queue = this.monitorQueues.get(monitorId);
-    return queue?.isSuspended() ?? false;
+    return this.monitors.get(monitorId)?.queue.isSuspended() ?? false;
   }
 
   async getOrCreateSessionAgent(): Promise<PooledAgent | null> {
@@ -668,7 +683,7 @@ export class ContextPool implements PoolContext {
    */
   async interruptAll(): Promise<void> {
     const dropped: Task[] = [];
-    this.monitorQueues.forEach((q) => dropped.push(...q.clear().map((i) => i.task)));
+    this.monitors.forEach((s) => dropped.push(...s.queue.clear().map((i) => i.task)));
     dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
     this.reportDropped(dropped, 'the agents were stopped');
     await this.agentPool.interruptAll();
@@ -679,13 +694,13 @@ export class ContextPool implements PoolContext {
     const windowQueueSizes = this.windowQueuePolicy.getQueueSizes();
     return {
       ...poolStats,
-      monitorQueueSize: Array.from(this.monitorQueues.values()).reduce(
-        (sum, q) => sum + q.size(),
+      monitorQueueSize: Array.from(this.monitors.values()).reduce(
+        (sum, s) => sum + s.queue.size(),
         0,
       ),
       windowQueueSizes,
       contextTapeSize: this.contextTape.length,
-      timelineSize: Array.from(this.timelines.values()).reduce((sum, t) => sum + t.size, 0),
+      timelineSize: Array.from(this.monitors.values()).reduce((sum, s) => sum + s.timeline.size, 0),
       monitorBudget: this.budgetPolicy.getStats(),
     };
   }
@@ -696,8 +711,11 @@ export class ContextPool implements PoolContext {
     // 1. Clear queues so no new tasks start from dequeue. Everything in them is a message
     //    the user sent and is still waiting on; say that it is not coming.
     const dropped: Task[] = [];
-    this.monitorQueues.forEach((q) => dropped.push(...q.clear().map((i) => i.task)));
-    this.monitorQueues.clear();
+    // Queues are emptied here; the records themselves are dropped in step 7, after the
+    // in-flight wait — a turn finishing during step 4 still pushes its result onto its
+    // monitor's timeline, and dropping the record now would resurrect it as a fresh one
+    // that outlives the teardown.
+    this.monitors.forEach((s) => dropped.push(...s.queue.clear().map((i) => i.task)));
     dropped.push(...this.windowQueuePolicy.clear().map((i) => i.task));
     this.reportDropped(dropped, 'the agent pool was reset');
 
@@ -747,7 +765,7 @@ export class ContextPool implements PoolContext {
 
     // 7. Clear remaining state
     this.contextTape.clear();
-    this.timelines.clear();
+    this.monitors.clear();
     this.windowEvents.clear();
     this.appProcessor.disposeAll();
     if (closeWindows) {
@@ -812,7 +830,7 @@ export class ContextPool implements PoolContext {
     this.resetting = true;
 
     // Save active monitor IDs before clearing so we can recreate agents for all of them
-    const activeMonitorIds = [...this.monitorQueues.keys()];
+    const activeMonitorIds = [...this.monitors.keys()];
     for (const monitorId of this.agentPool.getMonitorAgentIds()) {
       if (!activeMonitorIds.includes(monitorId)) {
         activeMonitorIds.push(monitorId);
