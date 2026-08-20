@@ -41,7 +41,10 @@ export { workerCommands } from './worker';
 export const devtoolsState = {
   project: {
     description:
-      'Active project. `lastModified` is the newest write anywhere in it (unix ms, 0 if ' +
+      'Active project. With no active project this is null, which a query surfaces as the ' +
+      'STRING "Done." — so test for an object with an `id`, never `=== null`; every file ' +
+      'command silently returns empty in that state rather than erroring. ' +
+      '`lastModified` is the newest write anywhere in it (unix ms, 0 if ' +
       'unknown). Files come with their size — { path, lines, bytes } for text, ' +
       '{ path, bytes } for binary (images, fonts, wasm: real bytes, no line count), ' +
       '{ path, isDirectory: true } for directories. Generated output (dist/) and ' +

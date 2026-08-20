@@ -143,7 +143,8 @@ export const fileCommands = {
       'array form for anything longer than a few lines: one line per element keeps each JSON ' +
       'string short and avoids the long escaped-newline blob that has been arriving truncated. ' +
       'Returns { path, lines, bytes } for what landed — check it when you passed an object, since ' +
-      'that is where the serialization can surprise you.',
+      'that is where the serialization can surprise you. An array of OBJECTS is refused rather ' +
+      'than stringified: the array form is for lines of text.',
     params: {
       type: 'object',
       properties: {

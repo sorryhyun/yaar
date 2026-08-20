@@ -1,6 +1,6 @@
 # Audit: the devtools agent's instruction channels — map, duplications, prune plan
 
-**Status:** proposal (audit with actions)
+**Status:** proposal (audit with actions) — prune pass (step 1) landed 2026-08-20; findings C + lints open
 **Date:** 2026-08-20
 **Sibling proposals:** [`app_agent_docs_proposal.md`](./app_agent_docs_proposal.md),
 [`devtools_authoring_guide_proposal.md`](./devtools_authoring_guide_proposal.md),
@@ -107,3 +107,58 @@ written as delta-plus-pointer by default.
 2. Docs-tier migration (`app_agent_docs_proposal.md`) — moves the reference sections.
 3. Lints land with whichever of 1–2 merges second.
 4. Finding C's platform fix rides the docs-tier server work.
+
+## Prompt-level pass (2026-08-20): verification and additional findings
+
+A line-by-line audit of `agent/prompt.md` (268 lines, 35.0 KB) against the canonical
+channels — MCP tool schemas, `src/protocol/*.ts` descriptions, the compiler's authoring
+contract and design-token brief, and the platform's appended storage sections.
+
+### Verdicts A–I verified
+
+All confirmed at the stated lines. Two refinements:
+
+- **G extends further:** the rule is also stated a 5th and 6th time inside `prompt.md`'s
+  own "Markdown Files in an App" section (lines 265, 267–268 — "duplicate neither",
+  "Never restate `protocol.json`", "never copy a command signature into prose").
+  Addressed to a different referent (apps the agent builds) but the same reader, same
+  turn. The Markdown Files section keeps ONE statement of the rule as authoring guidance;
+  the meta-statements about *this* prompt (lines 17, 19) shrink to a pointer.
+- **H extends further:** the descriptor coverage is broader than the verdict assumed.
+  `workerTask`/`workerWait`/`workerInterrupt` descriptions already carry: read-only
+  toolset, returns-immediately + wake semantics, the truncation cap and workerWait-reads-
+  the-full-record, one-task-at-a-time, memory across tasks, the waitMs/timeoutMs ratio.
+  Of the Worker section (lines 53–68), the only facts existing *nowhere else* are:
+  start-before-own-work, say-what-you-delegated-before-ending-turn, verify-the-report-
+  before-editing-on-it, and user-started-panel-tasks-share-the-instance. The section
+  shrinks to those four sentences; the code-block example goes.
+
+### New findings
+
+| # | Duplication (channels) | Verdict |
+|---|---|---|
+| K | `previewQuery` no-arg snapshot — "start here when a bug is unlocated; state that disagrees with the rendered text is a reactivity bug" stated near-verbatim in the command description and `prompt.md:82` | Description canonical. Prompt keeps only the Solid-specific causes ("a derived value computed outside a thunk, a plain `let` where a signal belongs") and the wrong-half warning |
+| L | `previewScreenshot` incomplete-capture — "a blank region under such a warning is not evidence the app drew nothing there" near-verbatim in the description and `prompt.md:80` | Description canonical. Prompt keeps the follow-up move (re-check the region with `previewQuery`/`previewEval`) |
+| M | `writeFile` array-of-lines preference + object→JSON — description and `prompt.md:51` | Description canonical. The one prompt-only fact — an array of *objects* is refused — moves into the description; the prompt paragraph goes |
+| N | Clone-cleanup rules — `projectList`'s description already states the full `origin` semantics including "delete only what you cloned this session" and "treat absent origin as the user's work"; `deleteProject`'s says "Not undoable". `prompt.md:43` restates all of it at greater length | Descriptions canonical. Prompt keeps one sentence: if old clones pile up, surface it and let the user decide |
+| O | `gitDiff` `against:"repo"` semantics + bundled-only — description and `prompt.md:132` | Description canonical. Prompt keeps the judgment ("diff against repo before telling the user an app is done") |
+| P | Preview lifecycle paragraph (`prompt.md:72`, self-described as "assembled here because it is otherwise spread across four descriptors") restates `compile` (remount, `refreshPreview: false`) and `resizePreview` (no remount); `prompt.md:76` restates the `refreshPreview` mechanics again | The assembly's value is the *contrast*, not the facts. Keep one contrast sentence (what remounts vs what doesn't, one line) and the state-heavy-iteration judgment; drop the per-command mechanics |
+| Q | Storage commons semantics — the platform's appended Shared Storage section already states the tree shape, one-directory-per-producer, and publish/read spellings; `prompt.md`'s URI Reference storage row (~line 220) and "Assets the user made in another app" (~line 195) restate them | Appended section canonical. Prompt keeps the deltas: the verbs-door view (`invoke` actions `write`/`edit`/`grep`), "never add `yaar://storage/shared/` to an app.json you write", the `copyFile` import workflow, never-ask-another-app-for-bytes |
+| R | Internal duplication: "`yaar://apps/{id}` gives metadata + protocol + skill, never source" stated at `prompt.md:39` and again in the URI table row | Same file, same fact, twice. The table row keeps it (that is what the table is for); line 39 keeps only "cloning is the only way to read source" |
+| S | Misplaced fact, not a dup: `query("project")` with no project returns the **string** `"Done."` and every file command then silently returns empty (`prompt.md:23`) — absent from the `project` state description, the decision-time channel | Move into the `project` descriptor (rule 1: closest to code); the workflow step keeps only "confirm a project is active" |
+| T | Accuracy bug: `prompt.md:17` enumerates the appended sections and omits **App Storage** — the section was later appended to both prompt branches (see `app-agent/index.ts`'s rule-2 comment) and the enumeration was never updated. Also `prompt.md:94` says "the table at the end of this prompt" for the permissions table, which sits mid-file, before ~30 KB of appended sections | Fix the enumeration (or replace it with "several sections are appended from code — do not restate them", which cannot go stale); reword "at the end of" |
+
+### Revised expected effect
+
+A–I as estimated (~4–6 KB); K–S remove a further ~2.5–3.5 KB of restatement. Prune-pass
+target for `prompt.md`: **35 KB → ~26–28 KB** before the docs-tier migration, which then
+takes the reference sections (URI table, Bundled Libraries, App Structure, Solid Gotchas
+candidates per `app_agent_docs_proposal.md`) toward the combined ~10–12 KB target.
+
+### Note on descriptor completeness
+
+The protocol descriptions turn out to be the *strongest* channel — `workerTask`,
+`copyFile`, `previewQuery`, `projectList`, `compileStatus` are already written as prose
+manuals per the AGENTS.md rule. The prune is therefore mostly deletion, not migration:
+in every finding above except M and S, the canonical copy already exists and is already
+better-maintained than the prompt's.

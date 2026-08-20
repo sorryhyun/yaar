@@ -204,3 +204,18 @@ tells it *which* 70.
   index. Pushing bodies on heuristics rebuilds the always-loaded tier with extra steps.
 - **No platform-doc migration.** `docs/`, package CLAUDE.md files, and skills already have
   their own tiers; this proposal is scoped to per-app knowledge.
+
+## Status (2026-08-20)
+
+The sibling audit's prune pass (step 1 of `devtools_channel_audit.md`, verdicts A–B, D–H,
+K–T) has **landed**: `apps/devtools/agent/prompt.md` went 35.0 KB → 30.3 KB by deleting
+restatements of the MCP schemas, the protocol descriptions, the compiler's design-token
+brief, and the platform's appended sections; the gated-SDK method rosters
+(`@bundled/yaar-dev`/`yaar-web`) were also cut in favour of `describeBundledLibrary`. Two
+facts migrated *into* descriptors rather than being deleted: the no-project `"Done."` trap
+(→ the `project` state key) and writeFile's array-of-objects refusal (→ its command
+description). Still open, in order: finding C (own-app `describe({})` → docs index — this
+proposal's server work), this proposal's docs-tier migration of the prompt's remaining
+reference sections (URI table, Bundled Libraries, App Structure, Solid Gotchas), and the
+two lints. A structural refactor of the devtools prompt is planned to follow the prune —
+sequence it with (or ahead of) the docs-tier migration so sections move once, not twice.
