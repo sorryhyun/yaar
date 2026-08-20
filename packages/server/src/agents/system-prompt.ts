@@ -8,7 +8,7 @@
 
 import type { ProviderType } from '../providers/types.js';
 import { buildEnvironmentSection } from '../providers/environment.js';
-import { CLAUDE_PROVIDER_SECTION, CODEX_PROVIDER_SECTION } from './profiles/shared-sections.js';
+import codexProviderSection from './profiles/prompts/provider-codex.md' with { type: 'text' };
 import { isAppRole, isSessionRole } from './roles.js';
 
 export interface SystemPromptLoaders {
@@ -42,12 +42,14 @@ function buildScopeSection(role: string, monitorId?: string): string {
  *
  * A provider section corrects a habit one model has and the other does not, so
  * it is selected here rather than written into a profile: the profiles are
- * built at import time, where the provider is not yet known. An empty entry
- * means that model needs no correction and nothing is appended — the section
- * separator is not emitted for it.
+ * built at import time, where the provider is not yet known. A section belongs
+ * in one of these parts only if it is about the *model*; anything true of YAAR
+ * regardless of who is driving goes in the shared parts under
+ * `profiles/prompts/`. Claude currently needs no correction, so it has no part
+ * file and nothing is appended — the section separator is not emitted for it.
  */
 function providerSection(providerType: ProviderType): string {
-  const section = providerType === 'codex' ? CODEX_PROVIDER_SECTION : CLAUDE_PROVIDER_SECTION;
+  const section = providerType === 'codex' ? codexProviderSection.trim() : '';
   return section ? `\n\n${section}` : '';
 }
 

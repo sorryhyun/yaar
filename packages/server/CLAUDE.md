@@ -87,7 +87,9 @@ src/
 │   ├── monitor-task-processor.ts / app-task-processor.ts / session-task-processor.ts
 │   ├── window-event-coordinator.ts  # subscription/notification fan-out + window-close teardown
 │   ├── interaction-timeline.ts / pool-types.ts / turn-helpers.ts
-│   ├── profiles/         # app-agent, session-agent, sub-agent, orchestrator, model-tiers, shared-sections, types, index (barrel)
+│   ├── profiles/         # one dir per profile (orchestrator/, session-agent/, app-agent/), each with a prompts/ subdir of
+│   │                     #   markdown parts; shared parts in profiles/prompts/, combined by compose.ts; plus sub-agent,
+│   │                     #   developer, turn-options, codex-roles, model-tiers, types, index (pure barrel)
 │   ├── session-policies/       # StreamToEventMapper, ToolActionBridge
 │   └── context-pool-policies/  # MonitorQueue, WindowQueue, ContextAssembly, ReloadCache, MonitorBudget, WindowSubscription
 ├── providers/            # Pluggable AI backends

@@ -10,7 +10,7 @@
  * Storage and mounts do not, and used to be here anyway:
  *
  *  - The storage root listing is reachable by `list('yaar://storage/')`, and the
- *    URI namespace table in `profiles/shared-sections.ts` already names that door.
+ *    URI namespace table in `profiles/prompts/uri-namespaces.md` already names that door.
  *  - Mounts sit one level below it at `storage/mounts`, and have two pointers:
  *    `storageList('')` injects a virtual `mounts` entry at the root whenever any
  *    mount exists, and `read('yaar://config/mounts')` returns the full record —
@@ -136,8 +136,8 @@ export async function buildEnvironmentSection(provider: ProviderType): Promise<s
   // Provider-specific prompt text is NOT here. `provider` is still an input
   // because the Environment block states which model is driving, but a section
   // that exists to correct one model's habit lives with the other prompt
-  // sections — see CODEX_PROVIDER_SECTION / CLAUDE_PROVIDER_SECTION in
-  // `agents/profiles/shared-sections.ts`, selected by `agents/system-prompt.ts`.
+  // sections — see
+  // `agents/profiles/prompts/provider-codex.md`, selected by `agents/system-prompt.ts`.
 
   if (!settings.onboardingCompleted) {
     result += `\n\n## Onboarding

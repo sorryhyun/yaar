@@ -14,6 +14,8 @@
       "@yaar/shared": ["../shared/src/index.ts"]
     }
   },
-  "include": ["src/**/*.ts"],
+  // ../server/src/md.d.ts: server sources reached via @yaar/server/* import .md files as
+  // Bun text imports; the ambient module declaration lives with them and must be loaded here.
+  "include": ["src/**/*.ts", "../server/src/md.d.ts"],
   "exclude": ["node_modules"]
 }

@@ -11,13 +11,9 @@ import { MARKET_URL } from '../../config.js';
 import { TOPIC_NAMES } from './topic-names.js';
 
 // Bun text imports — content inlined at build time for exe bundles
-// @ts-expect-error: Bun text import
 import componentsMd from './components.md' with { type: 'text' };
-// @ts-expect-error: Bun text import
 import configMd from './config.md' with { type: 'text' };
-// @ts-expect-error: Bun text import
 import marketplaceMd from './marketplace.md' with { type: 'text' };
-// @ts-expect-error: Bun text import
 import remoteMd from './remote.md' with { type: 'text' };
 
 export const TOPICS: Record<string, string> = {

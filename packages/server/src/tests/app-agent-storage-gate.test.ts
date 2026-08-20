@@ -40,7 +40,7 @@ import {
   authorizeSharedStorage,
 } from '../mcp/app-agent/shared-storage.js';
 import { APP_TOOL_DESCRIPTIONS } from '../mcp/app-agent/index.js';
-import { buildAppAgentProfile } from '../agents/profiles/app-agent.js';
+import { buildAppAgentProfile } from '../agents/profiles/app-agent/index.js';
 import { permissionsAllow, type PermissionEntry } from '../http/access.js';
 
 describe('the exposure predicate', () => {

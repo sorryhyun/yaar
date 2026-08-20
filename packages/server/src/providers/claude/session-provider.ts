@@ -20,7 +20,7 @@ import { EscapeTripwire, escapeCorrection, escapeGuardNotice } from './escape-tr
 import { buildSDKOptions, type SDKOptionsRequest } from './sdk-options.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { getClaudeSpawnArgs } from '../../config.js';
-import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator.js';
+import { getOrchestratorPrompt as getSystemPrompt } from '../../agents/profiles/orchestrator/index.js';
 import { type ImageMediaType, parseDataUrl } from '../../lib/image.js';
 import { createLogger } from '../../observability/log.js';
 

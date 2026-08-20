@@ -17,7 +17,7 @@ import type { InterruptReceipt, StreamMessage, TransportOptions, ProviderType } 
 import type { AppServer } from './app-server.js';
 import type { JsonRpcWsClient } from './jsonrpc-ws-client.js';
 import { mapNotification } from './message-mapper.js';
-import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator.js';
+import { ORCHESTRATOR_PROMPT as SYSTEM_PROMPT } from '../../agents/profiles/orchestrator/index.js';
 import { actionEmitter } from '../../session/action-emitter.js';
 import { buildMcpServerSet } from '../mcp-servers.js';
 import { SUB_AGENT_MCP_SERVER } from '../../agents/profiles/sub-agent.js';

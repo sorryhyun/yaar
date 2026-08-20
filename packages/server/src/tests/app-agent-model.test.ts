@@ -9,7 +9,7 @@ import { describe, expect, it } from 'bun:test';
 // it from source before any test file loads — early enough to beat the TTL cache
 // in `listApps()`, which a per-file `beforeAll` here could not (another file in
 // the shared --parallel process may cache the empty manifest first).
-import { buildAppAgentProfile } from '../agents/profiles/app-agent.js';
+import { buildAppAgentProfile } from '../agents/profiles/app-agent/index.js';
 import { claudeModelToCodex } from '../agents/profiles/model-tiers.js';
 
 describe('app agent model selection', () => {
