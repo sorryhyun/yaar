@@ -41,8 +41,9 @@ export function relativizeProjectPaths(messages: string[], projectId: string): s
 }
 
 // Extensions whose bytes are not meaningfully countable as text — skip metadata
-// rather than report the size of a base64/garbled decode.
-const BINARY_EXT = /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav)$/i;
+// rather than report the size of a base64/garbled decode. `.gltf` is deliberately
+// absent for the same reason `.svg` is: it is a JSON document worth reading.
+const BINARY_EXT = /\.(png|jpe?g|gif|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|glb|bin)$/i;
 
 // Raster images the editor renders as a picture. SVG is deliberately absent: it is
 // text the user may want to edit, and it highlights fine as markup.
@@ -61,10 +62,17 @@ export function isBinaryPath(path: string): boolean {
   return BINARY_EXT.test(path);
 }
 
-// What the bundler inlines as a data: URI when a module imports it. Broader than
-// BINARY_EXT because SVG belongs here and not there: it is text the editor should let
-// you edit, and still an asset an import turns into a data: URI.
-const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav)$/i;
+// What an import turns into a data: URI. Broader than BINARY_EXT because SVG and glTF
+// JSON belong here and not there: text the editor should let you edit, and still assets.
+//
+// The bundler itself inlines ANY extension it has no code loader for — measured:
+// `.glb` -> `data:model/gltf-binary`, `.gltf` -> `data:model/gltf+json`, `.bin` ->
+// `data:application/octet-stream`, with `dist/` still holding index.html alone. So this
+// list is not the bundler's capability; it is the set devtools vouches for by offering an
+// import line. An extension missing from it still builds. It was once the other way round
+// — an unlisted extension emitted an unserved sibling file — and a stale copy of this list
+// is why `.glb` was reported as unsupported long after it worked.
+const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|woff2?|ttf|otf|wasm|mp3|wav|glb|gltf|bin)$/i;
 
 /**
  * The `import` line that turns a file in the project into an inlined asset, or null

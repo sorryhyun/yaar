@@ -1,10 +1,10 @@
 ---
 name: static-assets
-description: Read before adding an image, font, or audio file — import it, never fetch it; size rules and user-made assets.
+description: Read before adding an image, font, audio file or 3D model — import it, never fetch it; size rules and user-made assets.
 audience: agent
 ---
 
-## Static Assets (images, fonts, audio)
+## Static Assets (images, fonts, audio, models)
 
 **Import the file. Do not fetch it from storage.**
 
@@ -13,11 +13,20 @@ import sprite from './sprite.png';   // → "data:image/png;base64,..."
 img.src = sprite;                    // <img>, CSS url(), new Audio(), fetch() all work
 ```
 
-The bundler inlines the bytes into `dist/index.html`, so no request is made at runtime.
-Supported: `.png .jpg .jpeg .gif .svg .webp .avif .ico .woff .woff2 .ttf .otf .wasm .mp3
-.wav`. Put the file under `src/`, next to the code importing it. Use storage only for
-genuinely dynamic files — uploads, generated output, anything that changes without a
-recompile.
+The bundler inlines the bytes into `dist/index.html`, so no request is made at runtime, and
+`dist/` stays a single HTML file. Vouched for: `.png .jpg .jpeg .gif .svg .webp .avif .ico
+.woff .woff2 .ttf .otf .wasm .mp3 .wav .glb .gltf .bin`. Anything else with no code loader
+inlines too (`.bin` arrives as `data:application/octet-stream`) — the list is what
+`copyFile` offers an import line for, not the limit of what builds. Put the file under
+`src/`, next to the code importing it. Use storage only for genuinely dynamic files —
+uploads, generated output, anything that changes without a recompile.
+
+**3D models:** `import level from './level.glb'` gives `data:model/gltf-binary;base64,...`;
+decode it with `atob` and hand the bytes to `GLTFLoader.parse(buf, '', onLoad)` from
+`@bundled/three/addons`. A `.gltf` inlines as `data:model/gltf+json` and works the same
+when its buffers are embedded — but one that names a sidecar `.bin` or texture files cannot
+resolve those relative URLs against a `data:` URI, so export the **self-contained `.glb`**
+rather than copying the sidecars in.
 
 **Why not `storage.url(...)`:** the preview runs under a throwaway principal, so anything
 hitting `/api/storage/` resolves against a different identity than the deployed app will

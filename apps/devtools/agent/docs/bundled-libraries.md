@@ -20,6 +20,13 @@ import { animate, createTimeline } from '@bundled/anime';
   `import { render } from '@bundled/solid-js/web'`. Reaching for `render` or `html` on
   `@bundled/solid-js` is the usual first-compile failure. Prefer `import './styles.css'`
   over inline styles.
+- **`three`** — core only on `@bundled/three`; the loaders and controls live behind a
+  second entry point, `@bundled/three/addons` (`GLTFLoader`, `OBJLoader`, `STLLoader`,
+  `GLTFExporter`, `OrbitControls`, `PointerLockControls`, `TransformControls`,
+  `BufferGeometryUtils`, ...). Same shape of trap as solid-js, and the expensive one: two
+  apps hand-rolled a glTF reader before anyone found it. `DRACOLoader`/`KTX2Loader` are
+  absent on purpose — they fetch a decoder from a sibling path a single-file app cannot
+  serve.
 - **`yaar`** — the Verb API (`read`, `list`, `invoke`, `describe`, `del`, `subscribe`,
   `stream`, `httpFetch`) plus helpers: `defineApp`, `defineAppCommand`,
   `createProtocolContext`, `appStorage`, `appDb`, `sanitizeHtml`, `escapeHtml`,

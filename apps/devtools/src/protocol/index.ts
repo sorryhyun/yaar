@@ -46,7 +46,8 @@ export const devtoolsState = {
       'command silently returns empty in that state rather than erroring. ' +
       '`lastModified` is the newest write anywhere in it (unix ms, 0 if ' +
       'unknown). Files come with their size — { path, lines, bytes } for text, ' +
-      '{ path, bytes } for binary (images, fonts, wasm: real bytes, no line count), ' +
+      '{ path, bytes } for binary (images, fonts, wasm, .glb models: real bytes, no ' +
+      'line count), ' +
       '{ path, isDirectory: true } for directories. Generated output (dist/) and ' +
       'directories holding nothing are left out. Summing binary `bytes` is how to check ' +
       'an app against the 5MB inlined-asset warning before the compiler raises it.',
