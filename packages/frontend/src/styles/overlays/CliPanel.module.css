@@ -255,3 +255,16 @@
   font-size: var(--text-xs);
   margin-right: 4px;
 }
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0;
+  }
+}

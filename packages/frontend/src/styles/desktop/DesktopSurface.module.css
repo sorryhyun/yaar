@@ -126,7 +126,8 @@
   backdrop-filter: blur(10px);
   z-index: var(--z-panel);
   box-shadow: var(--shadow-lg);
-  animation: slideDown var(--transition-normal);
+  animation-name: slideDown;
+  animation-duration: var(--duration-normal);
   user-select: none;
 }
 
@@ -505,9 +506,56 @@
   background: var(--bg-overlay-medium);
   backdrop-filter: blur(12px);
   border: 1px solid var(--bg-overlay-strong);
-  animation: folderExpandIn var(--transition-normal);
+  animation-name: folderExpandIn;
+  animation-duration: var(--duration-normal);
 }
 
 .folderChildIcon {
   transform: scale(0.9);
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes folderExpandIn {
+  from {
+    opacity: 0;
+    transform: scaleY(0.6);
+    transform-origin: top;
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1);
+    transform-origin: top;
+  }
 }

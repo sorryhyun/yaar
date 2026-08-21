@@ -13,7 +13,8 @@
   background: var(--color-surface);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-md);
-  animation: slideInRight var(--transition-normal);
+  animation-name: slideInRight;
+  animation-duration: var(--duration-normal);
   overflow: hidden;
 }
 
@@ -49,4 +50,18 @@
   font-size: var(--text-base);
   color: var(--color-subtext-muted);
   line-height: 1.4;
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }

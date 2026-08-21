@@ -180,7 +180,20 @@ export const SHADOWS_LIGHT = {
   '2xl': '0 16px 48px rgba(0,0,0,0.18)',
 } as const;
 
-export const TRANSITIONS = { fast: '0.15s ease', normal: '0.2s ease', slow: '0.3s ease' } as const;
+/**
+ * Bare durations, separate from TRANSITIONS, because an `animation:` shorthand holding a
+ * var() is unparseable to the CSS-modules pass — which then cannot scope the keyframe name
+ * inside it, and the animation silently never runs. Animated rules in the shell therefore
+ * say `animation-name: x; animation-duration: var(--duration-*)`, and need the duration
+ * without the timing function. TRANSITIONS composes them so there is one source for both.
+ */
+export const DURATIONS = { fast: '0.15s', normal: '0.2s', slow: '0.3s' } as const;
+
+export const TRANSITIONS = {
+  fast: `${DURATIONS.fast} ease`,
+  normal: `${DURATIONS.normal} ease`,
+  slow: `${DURATIONS.slow} ease`,
+} as const;
 
 /** Shell stacking order. */
 export const Z_INDEX = {

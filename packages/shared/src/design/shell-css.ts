@@ -20,6 +20,7 @@ import {
   FONT_MONO,
   SHADOWS_DARK,
   SHADOWS_LIGHT,
+  DURATIONS,
   TRANSITIONS,
   Z_INDEX,
   OVERLAYS,
@@ -121,6 +122,12 @@ ${Object.entries(SPACING)
   --border-strong: 1px solid var(--color-border-strong);
 
   /* === Transitions === */
+  /* --duration-* exists because animations cannot take their duration from --transition-*:
+     a var() inside an \`animation:\` shorthand stops the CSS-modules pass from scoping the
+     keyframe name, and the animation then never runs. See DURATIONS in tokens.ts. */
+  --duration-fast: ${DURATIONS.fast};
+  --duration-normal: ${DURATIONS.normal};
+  --duration-slow: ${DURATIONS.slow};
   --transition-fast: ${TRANSITIONS.fast};
   --transition-normal: ${TRANSITIONS.normal};
   --transition-slow: ${TRANSITIONS.slow};

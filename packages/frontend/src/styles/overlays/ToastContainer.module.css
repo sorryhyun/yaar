@@ -20,7 +20,8 @@
   font-size: var(--text-lg);
   box-shadow: var(--shadow-md);
   cursor: pointer;
-  animation: slideInRight var(--transition-normal);
+  animation-name: slideInRight;
+  animation-duration: var(--duration-normal);
   max-width: 360px;
 }
 
@@ -63,4 +64,18 @@
 
 .toast[data-variant='info'] {
   border-left: 3px solid var(--color-accent);
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes slideInRight {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
 }

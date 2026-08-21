@@ -377,3 +377,29 @@
   padding: var(--space-2) var(--space-4);
   overflow: hidden;
 }
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes agentGlow {
+  0%,
+  100% {
+    opacity: 0.4;
+    border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+  }
+  50% {
+    opacity: 0.9;
+    border-color: color-mix(in srgb, var(--color-warning) 80%, transparent);
+  }
+}
+
+@keyframes pulseScale {
+  0%,
+  100% {
+    opacity: 0.8;
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.1);
+  }
+}

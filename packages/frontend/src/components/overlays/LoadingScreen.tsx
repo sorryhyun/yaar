@@ -29,13 +29,17 @@ export function LoadingScreen() {
   const [visible, setVisible] = useState(true);
   const [stalled, setStalled] = useState(false);
 
+  // `fading` is deliberately not a dependency: it was one, and setting it re-ran the
+  // effect, whose cleanup cancelled the unmount timer it had just armed — so the overlay
+  // stayed mounted forever, invisible only for as long as its fade-out animation held it
+  // at opacity 0. When that animation stopped resolving, an overlay nothing could unmount
+  // sat on top of a fully connected desktop.
   useEffect(() => {
-    if (connectionStatus === 'connected' && !fading) {
-      setFading(true);
-      const timer = setTimeout(() => setVisible(false), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [connectionStatus, fading]);
+    if (connectionStatus !== 'connected') return;
+    setFading(true);
+    const timer = setTimeout(() => setVisible(false), 500);
+    return () => clearTimeout(timer);
+  }, [connectionStatus]);
 
   useEffect(() => {
     if (connectionStatus === 'connected') return;

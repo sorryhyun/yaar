@@ -5,5 +5,20 @@
   background: color-mix(in srgb, var(--color-accent) 15%, transparent);
   border: 2px solid color-mix(in srgb, var(--color-accent) 50%, transparent);
   border-radius: var(--radius-lg);
-  animation: snapIn var(--transition-fast);
+  animation-name: snapIn;
+  animation-duration: var(--duration-fast);
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes snapIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

@@ -12,7 +12,8 @@
   border-radius: var(--radius-lg);
   backdrop-filter: blur(10px);
   z-index: var(--z-panel);
-  animation: slideDownCentered var(--transition-slow);
+  animation-name: slideDownCentered;
+  animation-duration: var(--duration-slow);
 }
 
 .message {
@@ -64,4 +65,18 @@
 .dismissButton:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes slideDownCentered {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
 }

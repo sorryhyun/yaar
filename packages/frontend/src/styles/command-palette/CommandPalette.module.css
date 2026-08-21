@@ -284,7 +284,8 @@
   font-weight: 500;
   padding: var(--space-1) var(--space-3);
   text-align: center;
-  animation: statusFadeIn var(--transition-fast);
+  animation-name: statusFadeIn;
+  animation-duration: var(--duration-fast);
 }
 
 .messageStatusQueued {
@@ -305,9 +306,11 @@
 
 .messageStatusAccepted {
   color: var(--color-success);
-  animation:
-    statusFadeIn var(--transition-fast),
-    statusFadeOut 1.5s ease-in 0.5s forwards;
+  animation-name: statusFadeIn, statusFadeOut;
+  animation-duration: var(--duration-fast), 1.5s;
+  animation-timing-function: ease, ease-in;
+  animation-delay: 0s, 0.5s;
+  animation-fill-mode: none, forwards;
 }
 
 /* @mention dropdown */
@@ -365,4 +368,36 @@
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--color-accent) 30%, transparent),
     var(--shadow-lg);
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes statusFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes statusFadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }

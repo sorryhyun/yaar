@@ -94,6 +94,12 @@
   --border-strong: 1px solid var(--color-border-strong);
 
   /* === Transitions === */
+  /* --duration-* exists because animations cannot take their duration from --transition-*:
+     a var() inside an `animation:` shorthand stops the CSS-modules pass from scoping the
+     keyframe name, and the animation then never runs. See DURATIONS in tokens.ts. */
+  --duration-fast: 0.15s;
+  --duration-normal: 0.2s;
+  --duration-slow: 0.3s;
   --transition-fast: 0.15s ease;
   --transition-normal: 0.2s ease;
   --transition-slow: 0.3s ease;

@@ -4,7 +4,8 @@
   gap: var(--space-2);
   padding: 2px var(--space-2);
   overflow-x: auto;
-  animation: fadeIn var(--transition-normal);
+  animation-name: fadeIn;
+  animation-duration: var(--duration-normal);
 }
 
 .taskbar::-webkit-scrollbar {
@@ -212,4 +213,16 @@
 .newMonitorButton:hover {
   background: var(--bg-overlay-medium);
   color: var(--color-text);
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }

@@ -7,7 +7,8 @@
   justify-content: center;
   background: var(--color-bg);
   z-index: var(--z-cursor);
-  animation: fadeIn var(--transition-slow);
+  animation-name: fadeIn;
+  animation-duration: var(--duration-slow);
 }
 
 .overlay[data-fading='true'] {
@@ -58,4 +59,35 @@
 
 .retryButton:hover {
   background: var(--bg-overlay-hover);
+}
+
+/* Keyframes live in the module that names them: the CSS-modules pass scopes an
+   animation name at both its definition and its references, so a name defined in a
+   global stylesheet is unreachable from here. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
